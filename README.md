@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🚀 MiniClient
+# 🚀 MiniFeatherClient
 
 **A clean, lightweight, and customizable client for Miniblox.io.**
 
