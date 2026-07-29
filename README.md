@@ -13,30 +13,27 @@
 
 ## ✨ Features
 
-- 🎯 Clean and modern UI
-- ⚡ Lightweight and optimized
-- 🛠️ Frequently updated
-- 🎨 Customizable settings
-- 🔥 Built for Miniblox.io
+- 🎨 Clean and modern interface
+- ⚡ Lightweight and fast
+- 🛠️ Regular updates
+- 🔧 Customizable
+- 🚀 Built for Miniblox.io
 
 ---
 
 ## 📥 Installation
 
-1. Download the latest release from the **Releases** page.
-2. Follow the installation guide.
-3. Launch MiniClient.
-4. Enjoy!
+Download the latest version from the **Releases** page and follow the installation instructions.
 
 ---
 
-## 🐛 Reporting Bugs
+## 🐛 Bugs
 
 Found a bug?
 
-Please open an issue and include:
+Open an issue and include:
 - What happened
-- Steps to reproduce it
+- How to reproduce it
 - Screenshots (if applicable)
 - Your MiniClient version
 
@@ -46,38 +43,26 @@ Please open an issue and include:
 
 Have an idea?
 
-Open an issue using the **Suggestion** template or join our Discord to share your feedback.
+Open an issue or join our Discord and let us know!
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome!
+Contributions are always welcome.
 
 Feel free to:
 - Report bugs
-- Suggest features
-- Improve documentation
+- Suggest new features
+- Improve the code
 - Submit pull requests
-
----
-
-## ❤️ Credits
-
-Created by the MiniClient Team.
-
-Thanks to everyone who contributes to the project.
-
----
-
-## 📜 License
-
-This project is licensed under the **MIT License**.
 
 ---
 
 <div align="center">
 
-Made with ❤️ by the MiniClient Team
+⭐ If you enjoy MiniClient, consider starring the repository!
+
+Made with ❤️ by the MiniClient Team.
 
 </div>
