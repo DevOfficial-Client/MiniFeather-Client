@@ -5,7 +5,6 @@
 **A clean, lightweight, and customizable client for Miniblox.io.**
 
 ![Version](https://img.shields.io/badge/version-v1.0-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-active-success)
 
 </div>
