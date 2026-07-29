@@ -63,6 +63,6 @@ Feel free to:
 
 ⭐ If you enjoy MiniClient, consider starring the repository!
 
-Made with ❤️ by the MiniClient Team.
+Made by the MiniClient Team.
 
 </div>
