@@ -4,7 +4,7 @@
   const CONFIG = {
     logo: "https://i.ibb.co/Y48gfKC1/New-Project-8.png",
     background: "https://raw.githubusercontent.com/EstebanGrp/MIniFeather-Client/main/default-DKNlYibk%20(2).png",
-    discord: "https://discord.com/invite/ksmp",
+    discord: "https://discord.gg/EBHwFwSZ5q",
     title: "MiniFeather Client",
     welcomeText: `Welcome To MiniFeather Client! <span style="color:#888;font-size:12px;margin-left:8px;">Best Client Out There!</span>`,
     discordReplacements: {
