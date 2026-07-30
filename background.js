@@ -4,19 +4,51 @@ const SKINS = [
   "adele", "chris", "deadpool", "galactus", "heather", "ironman", "suit", "levi", "lexi",
   "natalie", "remus", "sara", "transformer", "vindicate", "adventure", "aether", "apex",
   "ariel", "aurora", "celeste", "cody", "ember", "finn", "glory", "hunter", "katie",
-  "nova", "panda", "raven", "seraphina", "vain", "zane"
+  "nova", "panda", "raven", "seraphina", "vain", "zane", "tester", "qhyun", "banana",
+  "sushi", "ethan", "duck", "cat", "remlin"
 ];
 
-function getRuleIdForSkin(skinName) {
-  const index = SKINS.indexOf(skinName);
-  if (index === -1) throw new Error(`Unknown skin: ${skinName}`);
-  return 1000 + index;
+const CAPES = [
+  "angry-pig", "bao", "cloud", "cow", "creeper", "golden-apple", "grass-block", "heart",
+  "pumpkin", "maki", "mushroom", "soul-creeper", "sushi", "salmon", "amethyst", "cheeser",
+  "crimson-voyager", "duck", "frie", "galaxy", "migration", "shaded-green", "skulk",
+  "withered", "yellow", "yin-yang", "wooden-sword", "stone-sword", "iron-sword",
+  "gold-sword", "diamond-sword", "emerald-sword"
+];
+
+const ASSET_TYPES = {
+  skin: {
+    names: SKINS,
+    baseUrl: "https://miniblox.io/textures/entity/skins/",
+    ruleOffset: 1000,
+    storageKey: "currentSkins"
+  },
+  cape: {
+    names: CAPES,
+    baseUrl: "https://miniblox.io/textures/entity/capes/",
+    ruleOffset: 2000,
+    storageKey: "currentCapes"
+  }
+};
+
+function getAssetConfig(type) {
+  const config = ASSET_TYPES[type];
+  if (!config) throw new Error(`Unknown asset type: ${type}`);
+  return config;
 }
 
-async function updateSkin(skinName, customUrl = null) {
-  const originalUrl = `https://miniblox.io/textures/entity/skins/${skinName}.png`;
-  const urlToRedirect = customUrl || originalUrl;
-  const ruleId = getRuleIdForSkin(skinName);
+function getRuleId(type, name) {
+  const config = getAssetConfig(type);
+  const index = config.names.indexOf(name);
+  if (index === -1) throw new Error(`Unknown ${type}: ${name}`);
+  return config.ruleOffset + index;
+}
+
+async function setAsset(type, name, customUrl) {
+  const config = getAssetConfig(type);
+  const originalUrl = `${config.baseUrl}${name}.png`;
+  const redirectUrl = customUrl || originalUrl;
+  const ruleId = getRuleId(type, name);
 
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: [ruleId],
@@ -25,81 +57,118 @@ async function updateSkin(skinName, customUrl = null) {
       priority: 1,
       action: {
         type: "redirect",
-        redirect: { url: urlToRedirect }
+        redirect: { url: redirectUrl }
       },
       condition: {
-        urlFilter: `https://miniblox.io/textures/entity/skins/${skinName}.png*`,
-        resourceTypes: ["image"]
+        urlFilter: `${originalUrl}*`,
+        resourceTypes: ["image", "other"]
       }
     }]
   });
 
-  const { currentSkins = {} } = await chrome.storage.local.get(["currentSkins"]);
-  currentSkins[skinName] = urlToRedirect;
-  await chrome.storage.local.set({ currentSkins });
+  const stored = await chrome.storage.local.get([config.storageKey]);
+  const activeAssets = stored[config.storageKey] || {};
+  activeAssets[name] = redirectUrl;
+  await chrome.storage.local.set({ [config.storageKey]: activeAssets });
 }
 
-async function resetSkin(skinName) {
-  const ruleId = getRuleIdForSkin(skinName);
+async function resetAsset(type, name) {
+  const config = getAssetConfig(type);
+  const ruleId = getRuleId(type, name);
+
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: [ruleId]
   });
 
-  const { currentSkins = {} } = await chrome.storage.local.get(["currentSkins"]);
-  delete currentSkins[skinName];
-  await chrome.storage.local.set({ currentSkins });
+  const stored = await chrome.storage.local.get([config.storageKey]);
+  const activeAssets = stored[config.storageKey] || {};
+  delete activeAssets[name];
+  await chrome.storage.local.set({ [config.storageKey]: activeAssets });
 }
 
-async function resetAllSkins() {
-  const { currentSkins = {} } = await chrome.storage.local.get(["currentSkins"]);
-  const ruleIds = Object.keys(currentSkins).map(name => {
-    try { return getRuleIdForSkin(name); } catch { return null; }
-  }).filter(Boolean);
+async function resetAllAssets(type) {
+  const config = getAssetConfig(type);
+  const stored = await chrome.storage.local.get([config.storageKey]);
+  const activeAssets = stored[config.storageKey] || {};
+  const ruleIds = Object.keys(activeAssets)
+    .map(name => {
+      try {
+        return getRuleId(type, name);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Number.isInteger);
 
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: ruleIds
+  if (ruleIds.length > 0) {
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: ruleIds
+    });
+  }
+
+  await chrome.storage.local.set({ [config.storageKey]: {} });
+}
+
+function getActiveAssets(type, sendResponse) {
+  const config = getAssetConfig(type);
+  chrome.storage.local.get([config.storageKey]).then(data => {
+    sendResponse({ success: true, assets: data[config.storageKey] || {} });
   });
-
-  await chrome.storage.local.set({ currentSkins: {} });
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "setSkin") {
-    updateSkin(message.skinName, message.customUrl)
+  const handlers = {
+    setSkin: () => setAsset("skin", message.skinName, message.customUrl),
+    resetSkin: () => resetAsset("skin", message.skinName),
+    resetAllSkins: () => resetAllAssets("skin"),
+    setCape: () => setAsset("cape", message.capeName, message.customUrl),
+    resetCape: () => resetAsset("cape", message.capeName),
+    resetAllCapes: () => resetAllAssets("cape")
+  };
+
+  if (handlers[message.type]) {
+    handlers[message.type]()
       .then(() => sendResponse({ success: true }))
-      .catch(err => sendResponse({ success: false, error: err.message }));
+      .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
-  } else if (message.type === "resetSkin") {
-    resetSkin(message.skinName)
-      .then(() => sendResponse({ success: true }))
-      .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  } else if (message.type === "resetAllSkins") {
-    resetAllSkins()
-      .then(() => sendResponse({ success: true }))
-      .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  } else if (message.type === "getSkins") {
-    chrome.storage.local.get(["currentSkins"]).then(data => {
-      sendResponse({ success: true, skins: data.currentSkins || {} });
+  }
+
+  if (message.type === "getSkins") {
+    getActiveAssets("skin", response => {
+      sendResponse({ success: true, skins: response.assets });
     });
     return true;
-  } else if (message.type === "getSkinList") {
+  }
+
+  if (message.type === "getCapes") {
+    getActiveAssets("cape", response => {
+      sendResponse({ success: true, capes: response.assets });
+    });
+    return true;
+  }
+
+  if (message.type === "getSkinList") {
     sendResponse({ success: true, skins: SKINS });
+  }
+
+  if (message.type === "getCapeList") {
+    sendResponse({ success: true, capes: CAPES });
   }
 });
 
-const SPRITESHEET_URL = "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack.png";
+const SPRITESHEET_URL = "https://raw.githubusercontent.com/EstebanGrp/MiniFeather-Client/refs/heads/main/spritesheet.png";
 const SPRITESHEET_RULE_ID = 999;
 
 async function applySpritesheet() {
   const { spritesheetEnabled } = await chrome.storage.local.get(["spritesheetEnabled"]);
+
   if (spritesheetEnabled === false) {
     await chrome.declarativeNetRequest.updateDynamicRules({
       removeRuleIds: [SPRITESHEET_RULE_ID]
     });
     return;
   }
+
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: [SPRITESHEET_RULE_ID],
     addRules: [{
@@ -119,11 +188,14 @@ async function applySpritesheet() {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "setSpritesheet") {
-    chrome.storage.local.set({ spritesheetEnabled: message.enabled }).then(() => applySpritesheet()).then(() => {
-      sendResponse({ success: true });
-    });
+    chrome.storage.local.set({ spritesheetEnabled: message.enabled })
+      .then(applySpritesheet)
+      .then(() => sendResponse({ success: true }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
-  } else if (message.type === "getSpritesheet") {
+  }
+
+  if (message.type === "getSpritesheet") {
     chrome.storage.local.get(["spritesheetEnabled"]).then(data => {
       sendResponse({ success: true, enabled: data.spritesheetEnabled !== false });
     });
@@ -132,14 +204,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.runtime.onInstalled.addListener(async () => {
+  const existing = await chrome.storage.local.get(["settings", "spritesheetEnabled"]);
   await chrome.storage.local.set({
     settings: {
-      rebrand: true,
-      supportAds: false,
-      discord: true,
-      keystrokes: true
+      rebrand: existing.settings?.rebrand ?? true,
+      supportAds: existing.settings?.supportAds ?? false,
+      discord: existing.settings?.discord ?? true,
+      keystrokes: existing.settings?.keystrokes ?? true,
+      language: existing.settings?.language ?? "en"
     },
-    spritesheetEnabled: true
+    spritesheetEnabled: existing.spritesheetEnabled !== false
   });
   await applySpritesheet();
 });
