@@ -2,7 +2,7 @@
   'use strict';
 
   const CONFIG = {
-    logo: "https://i.ibb.co/Y48gfKC1/New-Project-8.png",
+    logo: "https://media.discordapp.net/attachments/1532039481526452317/1532356762664042536/Screenshot_2026-07-29_171856.png?ex=6a6c8df2&is=6a6b3c72&hm=46390f7ba5793408101014829b052468dedb64ff7c1ad2965b65c33f98305a54&=&format=webp&quality=lossless&width=1199&height=1208",
     background: "https://raw.githubusercontent.com/EstebanGrp/MIniFeather-Client/main/default-DKNlYibk%20(2).png",
     discord: "https://discord.gg/EBHwFwSZ5q",
     title: "MiniFeather Client",
