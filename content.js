@@ -160,7 +160,7 @@
   function changeDiscordButton() {
     document.querySelectorAll("button").forEach(btn => {
       if (btn.innerText.includes("Join the Discord") && !btn.dataset.mf) {
-        btn.innerHTML = btn.innerHTML.split("Join the Discord").join("Join Kings SMP");
+        btn.innerHTML = btn.innerHTML.split("Join the Discord").join("Join MiniFeather's Discord!");
         btn.dataset.mf = "1";
       }
     });
@@ -207,7 +207,7 @@
     "click",
     e => {
       const btn = e.target.closest("button");
-      if (btn && btn.innerText.includes("Join Kings SMP")) {
+      if (btn && btn.innerText.includes("Join MiniFeather")) {
         e.preventDefault();
         e.stopImmediatePropagation();
         window.open(CONFIG.discord, "_blank");
