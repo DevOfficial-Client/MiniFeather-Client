@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MiniFeather Client",
-  "version": "3.0",
+  "version": "3.1.1",
   "description": "MiniFeather for Miniblox",
   "permissions": [
     "storage",
@@ -16,14 +16,22 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://miniblox.io/*"],
-      "js": ["inject.js"],
+      "matches": [
+        "https://miniblox.io/*"
+      ],
+      "js": [
+        "inject.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
-      "matches": ["https://miniblox.io/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://miniblox.io/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_end"
     }
   ],
@@ -35,8 +43,13 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["icon.png", "memes/gif/*"],
-      "matches": ["https://miniblox.io/*"]
+      "resources": [
+        "icon.png",
+        "memes/gif/*"
+      ],
+      "matches": [
+        "https://miniblox.io/*"
+      ]
     }
   ]
 }
