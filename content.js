@@ -36,6 +36,7 @@
 
   const DEFAULT_SETTINGS = {
     rebrand: true,
+    supportAds: false,
     discord: true,
     keystrokes: true,
     cpsCounter: true,
@@ -62,6 +63,8 @@
       sectionAbout: 'Info',
       rebrand: 'Rebrand',
       rebrandDesc: 'Logo, title and background.',
+      supportAds: 'Support Ads',
+      supportAdsDesc: 'Allow ads to support creators.',
       discordRedirect: 'Discord Redirect',
       discordRedirectDesc: 'Use the MiniFeather Client invite.',
       keystrokes: 'Keystrokes',
@@ -136,6 +139,8 @@
       sectionAbout: 'Información',
       rebrand: 'Rebrand',
       rebrandDesc: 'Logo, título y fondo.',
+      supportAds: 'Anuncios',
+      supportAdsDesc: 'Permitir anuncios para apoyar a los creadores.',
       discordRedirect: 'Redirección de Discord',
       discordRedirectDesc: 'Usar la invitación personalizada de Kings SMP.',
       keystrokes: 'Keystrokes',
@@ -210,6 +215,8 @@
       sectionAbout: '情報',
       rebrand: 'リブランド',
       rebrandDesc: 'ロゴ、タイトル、背景。',
+      supportAds: '広告',
+      supportAdsDesc: '広告を許可して制作者を支援します。',
       discordRedirect: 'Discord リダイレクト',
       discordRedirectDesc: 'Kings SMP のカスタム招待を使用します。',
       keystrokes: 'キーストローク',
@@ -284,6 +291,8 @@
       sectionAbout: 'Informazioni',
       rebrand: 'Rebrand',
       rebrandDesc: 'Logo, titolo e sfondo.',
+      supportAds: 'Pubblicità',
+      supportAdsDesc: 'Consenti gli annunci per supportare i creatori.',
       discordRedirect: 'Reindirizzamento Discord',
       discordRedirectDesc: 'Usa l’invito personalizzato di Kings SMP.',
       keystrokes: 'Keystrokes',
@@ -1418,4 +1427,800 @@
                   <span>${t('spritesheetDesc')}</span>
                 </span>
                 <input type="checkbox" id="mf-spritesheet-checkbox" class="mf-switch" checked>
-        ... (31 KB left)
+              </label>
+            </div>
+            <div class="mf-card">
+              <div class="mf-card-title">${t('sectionLogo')}</div>
+              <div class="mf-logo-preview-wrap">
+                <img id="mf-logo-preview" class="mf-logo-preview" src="${currentLogo}" alt="${t('preview')}">
+                <div class="mf-muted" id="mf-logo-preview-text">${t('preview')}</div>
+              </div>
+              <input id="mf-logo-url" class="mf-input" type="text" placeholder="${t('customLogoUrlPlaceholder')}">
+              <input id="mf-logo-file" class="mf-file" type="file" accept="image/*">
+              <div class="mf-grid-2">
+                <button id="mf-logo-apply" class="mf-btn primary">${t('applyLogo')}</button>
+                <button id="mf-logo-reset" class="mf-btn secondary">${t('resetLogo')}</button>
+              </div>
+              <div id="mf-logo-status" class="mf-status"></div>
+            </div>
+            <div class="mf-card">
+              <div class="mf-card-title">${t('sectionLinks')}</div>
+              <button id="mf-gui-discord" class="mf-btn primary">${t('joinServer')}</button>
+            </div>
+          </div>
+          <div class="mf-tab-panel ${activeTab === 'skins' ? 'active' : ''}" data-panel="skins">
+            <div class="mf-card">
+              <div class="mf-card-title">${t('sectionSkinChanger')}</div>
+              <select id="mf-skin-select" class="mf-select">
+                <option value="">${t('skinSelectPlaceholder')}</option>
+              </select>
+              <input type="text" id="mf-skin-url" class="mf-input" placeholder="${t('skinUrlPlaceholder')}">
+              <input type="file" id="mf-skin-file" class="mf-file" accept="image/*">
+              <div class="mf-grid-2">
+                <button id="mf-skin-apply" class="mf-btn primary">${t('applySkin')}</button>
+                <button id="mf-skin-reset" class="mf-btn danger">${t('resetAll')}</button>
+              </div>
+              <div id="mf-skin-status" class="mf-status"></div>
+            </div>
+            <div class="mf-card">
+              <div class="mf-card-title">${t('sectionActiveSkins')}</div>
+              <div id="mf-active-skins" class="mf-active-list"></div>
+            </div>
+            <div class="mf-card">
+              <div class="mf-card-title">${t('sectionCapeChanger')}</div>
+              <select id="mf-cape-select" class="mf-select">
+                <option value="">${t('capeSelectPlaceholder')}</option>
+              </select>
+              <input type="text" id="mf-cape-url" class="mf-input" placeholder="${t('capeUrlPlaceholder')}">
+              <input type="file" id="mf-cape-file" class="mf-file" accept="image/*">
+              <div class="mf-grid-2">
+                <button id="mf-cape-apply" class="mf-btn primary">${t('applyCape')}</button>
+                <button id="mf-cape-reset" class="mf-btn danger">${t('resetAll')}</button>
+              </div>
+              <div id="mf-cape-status" class="mf-status"></div>
+            </div>
+            <div class="mf-card">
+              <div class="mf-card-title">${t('sectionActiveCapes')}</div>
+              <div id="mf-active-capes" class="mf-active-list"></div>
+            </div>
+          </div>
+          <div class="mf-tab-panel ${activeTab === 'about' ? 'active' : ''}" data-panel="about">
+            <div class="mf-card">
+              <div class="mf-card-title">${t('sectionAbout')}</div>
+              <div class="mf-muted">${t('aboutLine1')}</div>
+              <div class="mf-muted">${t('aboutLine2')}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderToggle(key, title, description) {
+    return `
+      <label class="mf-toggle" data-key="${key}">
+        <span class="mf-toggle-copy">
+          <strong>${title}</strong>
+          <span>${description}</span>
+        </span>
+        <input type="checkbox" class="mf-switch" ${guiSettings[key] ? 'checked' : ''}>
+      </label>
+    `;
+  }
+
+  function showGUI() {
+    if (!overlay || !panel) return;
+    overlay.style.display = 'block';
+    panel.style.display = 'block';
+    panel.style.pointerEvents = 'auto';
+    requestAnimationFrame(() => {
+      panel.style.opacity = '1';
+    });
+  }
+
+  function hideGUI() {
+    if (!overlay || !panel) return;
+    overlay.style.display = 'none';
+    panel.style.opacity = '0';
+    panel.style.pointerEvents = 'none';
+    setTimeout(() => {
+      if (panel.style.opacity === '0') panel.style.display = 'none';
+    }, 140);
+  }
+
+  function toggleGUI() {
+    if (!overlay || !panel) return;
+    if (overlay.style.display === 'block') hideGUI();
+    else showGUI();
+  }
+
+  function setTab(tab) {
+    activeTab = tab;
+    if (!panel) return;
+    panel.querySelectorAll('.mf-tab-btn').forEach(button => {
+      button.classList.toggle('active', button.dataset.tab === tab);
+    });
+    panel.querySelectorAll('.mf-tab-panel').forEach(section => {
+      section.classList.toggle('active', section.dataset.panel === tab);
+    });
+  }
+
+  function saveSettings() {
+    chrome.storage.local.set({ settings });
+  }
+
+  function saveLogo(value) {
+    currentLogo = value;
+    chrome.storage.local.set({ customLogo: currentLogo });
+    replaceAllLogos();
+    refreshLogoControls();
+  }
+
+  function resetLogo() {
+    currentLogo = CONFIG.defaultLogo;
+    chrome.storage.local.remove('customLogo', () => {
+      replaceAllLogos();
+      refreshLogoControls();
+    });
+  }
+
+  function validateImage(url) {
+    return new Promise(resolve => {
+      const image = new Image();
+      const timeout = setTimeout(() => resolve(false), 10000);
+      image.onload = () => {
+        clearTimeout(timeout);
+        resolve(true);
+      };
+      image.onerror = () => {
+        clearTimeout(timeout);
+        resolve(false);
+      };
+      image.src = url;
+    });
+  }
+
+  function replaceAllLogos() {
+    replaceLogo();
+    changeFavicon();
+  }
+
+  function refreshLogoControls() {
+    if (!panel) return;
+    const preview = panel.querySelector('#mf-logo-preview');
+    const input = panel.querySelector('#mf-logo-url');
+    const brandIcon = panel.querySelector('.mf-icon');
+    if (preview) preview.src = currentLogo;
+    if (brandIcon) brandIcon.src = currentLogo;
+    if (input) {
+      if (currentLogo.startsWith('data:image/')) {
+        input.value = '';
+        input.placeholder = t('customLogoLocal');
+      } else {
+        input.value = currentLogo === CONFIG.defaultLogo ? '' : currentLogo;
+        input.placeholder = t('customLogoUrlPlaceholder');
+      }
+    }
+  }
+
+  function showSkinStatus(message, color = '#a78bfa') {
+    const element = panel?.querySelector('#mf-skin-status');
+    if (!element) return;
+    element.textContent = message;
+    element.style.color = color;
+  }
+
+  function showCapeStatus(message, color = '#a78bfa') {
+    const element = panel?.querySelector('#mf-cape-status');
+    if (!element) return;
+    element.textContent = message;
+    element.style.color = color;
+  }
+
+  function showLogoStatus(message, color = '#a78bfa') {
+    const element = panel?.querySelector('#mf-logo-status');
+    if (!element) return;
+    element.textContent = message;
+    element.style.color = color;
+  }
+
+  function refreshActiveSkins() {
+    chrome.runtime.sendMessage({ type: 'getSkins' }, response => {
+      const container = panel?.querySelector('#mf-active-skins');
+      if (!container) return;
+      container.innerHTML = '';
+      if (!response || !response.skins || Object.keys(response.skins).length === 0) {
+        container.innerHTML = `<div class="mf-muted">${t('noActiveSkins')}</div>`;
+        return;
+      }
+      Object.entries(response.skins).forEach(([name]) => {
+        const row = document.createElement('div');
+        row.className = 'mf-active-item';
+        const label = document.createElement('span');
+        label.textContent = name;
+        const remove = document.createElement('button');
+        remove.className = 'mf-small-btn danger';
+        remove.textContent = t('remove');
+        remove.addEventListener('click', () => {
+          chrome.runtime.sendMessage({ type: 'resetSkin', skinName: name }, () => {
+            showSkinStatus(t('skinRemoved', { name }), '#facc15');
+            refreshActiveSkins();
+          });
+        });
+        row.appendChild(label);
+        row.appendChild(remove);
+        container.appendChild(row);
+      });
+    });
+  }
+
+  function populateSkinSelect() {
+    const select = panel?.querySelector('#mf-skin-select');
+    if (!select) return;
+    const currentValue = select.value;
+    select.innerHTML = `<option value="">${t('skinSelectPlaceholder')}</option>`;
+    CONFIG.skins.forEach(name => {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    });
+    if ([...select.options].some(option => option.value === currentValue)) select.value = currentValue;
+  }
+
+  function refreshActiveCapes() {
+    chrome.runtime.sendMessage({ type: 'getCapes' }, response => {
+      const container = panel?.querySelector('#mf-active-capes');
+      if (!container) return;
+      container.innerHTML = '';
+      if (!response || !response.capes || Object.keys(response.capes).length === 0) {
+        container.innerHTML = `<div class="mf-muted">${t('noActiveCapes')}</div>`;
+        return;
+      }
+      Object.entries(response.capes).forEach(([name]) => {
+        const row = document.createElement('div');
+        row.className = 'mf-active-item';
+        const label = document.createElement('span');
+        label.textContent = name;
+        const remove = document.createElement('button');
+        remove.className = 'mf-small-btn danger';
+        remove.textContent = t('remove');
+        remove.addEventListener('click', () => {
+          chrome.runtime.sendMessage({ type: 'resetCape', capeName: name }, () => {
+            showCapeStatus(t('capeRemoved', { name }), '#facc15');
+            refreshActiveCapes();
+          });
+        });
+        row.appendChild(label);
+        row.appendChild(remove);
+        container.appendChild(row);
+      });
+    });
+  }
+
+  function populateCapeSelect() {
+    const select = panel?.querySelector('#mf-cape-select');
+    if (!select) return;
+    const currentValue = select.value;
+    select.innerHTML = `<option value="">${t('capeSelectPlaceholder')}</option>`;
+    CONFIG.capes.forEach(name => {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    });
+    if ([...select.options].some(option => option.value === currentValue)) select.value = currentValue;
+  }
+
+  function bindPanelControls() {
+    if (!panel) return;
+
+    panel.querySelector('#mf-gui-close')?.addEventListener('click', hideGUI);
+    panel.querySelector('#mf-gui-discord')?.addEventListener('click', () => window.open(CONFIG.discord, '_blank'));
+
+    panel.querySelectorAll('.mf-tab-btn').forEach(button => {
+      button.addEventListener('click', () => setTab(button.dataset.tab));
+    });
+
+    panel.querySelectorAll('.mf-toggle[data-key]').forEach(label => {
+      const key = label.dataset.key;
+      const input = label.querySelector('input');
+      if (!input) return;
+      input.addEventListener('change', () => {
+        guiSettings[key] = input.checked;
+        settings[key] = input.checked;
+        saveSettings();
+        applyGuiSettings();
+        update();
+      });
+    });
+
+    panel.querySelector('#mf-language-select')?.addEventListener('change', event => {
+      settings.language = event.target.value;
+      guiSettings.language = event.target.value;
+      saveSettings();
+      update();
+      renderGUI();
+    });
+
+    panel.querySelector('#mf-logo-apply')?.addEventListener('click', async () => {
+      const inputUrl = panel.querySelector('#mf-logo-url');
+      const fileInput = panel.querySelector('#mf-logo-file');
+      const file = fileInput?.files?.[0];
+      const url = inputUrl?.value?.trim() || '';
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = event => {
+          saveLogo(event.target.result);
+          showLogoStatus(t('logoUpdated'), '#22c55e');
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+      if (!url) {
+        showLogoStatus(t('logoNeedSource'), '#ef4444');
+        return;
+      }
+      const valid = await validateImage(url);
+      if (!valid) {
+        showLogoStatus(t('logoInvalid'), '#ef4444');
+        return;
+      }
+      saveLogo(url);
+      showLogoStatus(t('logoUpdated'), '#22c55e');
+    });
+
+    panel.querySelector('#mf-logo-reset')?.addEventListener('click', () => {
+      resetLogo();
+      showLogoStatus(t('logoResetDone'), '#facc15');
+    });
+
+    panel.querySelector('#mf-skin-apply')?.addEventListener('click', () => {
+      const skinName = panel.querySelector('#mf-skin-select')?.value || '';
+      const customUrl = panel.querySelector('#mf-skin-url')?.value.trim() || '';
+      const file = panel.querySelector('#mf-skin-file')?.files?.[0];
+
+      if (!skinName) {
+        showSkinStatus(t('skinNeedName'), '#ef4444');
+        return;
+      }
+
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = event => {
+          chrome.runtime.sendMessage({ type: 'setSkin', skinName, customUrl: event.target.result }, () => {
+            showSkinStatus(t('skinApplied', { name: skinName }), '#22c55e');
+            refreshActiveSkins();
+          });
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      if (!customUrl) {
+        showSkinStatus(t('skinNeedSource'), '#ef4444');
+        return;
+      }
+
+      chrome.runtime.sendMessage({ type: 'setSkin', skinName, customUrl }, () => {
+        showSkinStatus(t('skinApplied', { name: skinName }), '#22c55e');
+        refreshActiveSkins();
+      });
+    });
+
+    panel.querySelector('#mf-skin-reset')?.addEventListener('click', () => {
+      chrome.runtime.sendMessage({ type: 'resetAllSkins' }, () => {
+        showSkinStatus(t('skinsReset'), '#facc15');
+        refreshActiveSkins();
+      });
+    });
+
+    panel.querySelector('#mf-cape-apply')?.addEventListener('click', () => {
+      const capeName = panel.querySelector('#mf-cape-select')?.value || '';
+      const customUrl = panel.querySelector('#mf-cape-url')?.value.trim() || '';
+      const file = panel.querySelector('#mf-cape-file')?.files?.[0];
+
+      if (!capeName) {
+        showCapeStatus(t('capeNeedName'), '#ef4444');
+        return;
+      }
+
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = event => {
+          chrome.runtime.sendMessage({ type: 'setCape', capeName, customUrl: event.target.result }, () => {
+            showCapeStatus(t('capeApplied', { name: capeName }), '#22c55e');
+            refreshActiveCapes();
+          });
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      if (!customUrl) {
+        showCapeStatus(t('capeNeedSource'), '#ef4444');
+        return;
+      }
+
+      chrome.runtime.sendMessage({ type: 'setCape', capeName, customUrl }, () => {
+        showCapeStatus(t('capeApplied', { name: capeName }), '#22c55e');
+        refreshActiveCapes();
+      });
+    });
+
+    panel.querySelector('#mf-cape-reset')?.addEventListener('click', () => {
+      chrome.runtime.sendMessage({ type: 'resetAllCapes' }, () => {
+        showCapeStatus(t('capesReset'), '#facc15');
+        refreshActiveCapes();
+      });
+    });
+
+    chrome.runtime.sendMessage({ type: 'getSpritesheet' }, response => {
+      const checkbox = panel?.querySelector('#mf-spritesheet-checkbox');
+      if (checkbox && response && response.success) checkbox.checked = response.enabled;
+    });
+
+    panel.querySelector('#mf-spritesheet-checkbox')?.addEventListener('change', event => {
+      chrome.runtime.sendMessage({ type: 'setSpritesheet', enabled: event.target.checked });
+    });
+
+    const header = panel.querySelector('#mf-gui-header');
+    let dragging = false;
+    let offX = 0;
+    let offY = 0;
+
+    header?.addEventListener('mousedown', event => {
+      const target = event.target.closest('button, select, input');
+      if (target) return;
+      dragging = true;
+      const rect = panel.getBoundingClientRect();
+      offX = event.clientX - rect.left;
+      offY = event.clientY - rect.top;
+      panel.style.transform = 'none';
+    });
+
+    document.addEventListener('mousemove', event => {
+      if (!dragging) return;
+      const panelWidth = panel.offsetWidth;
+      const panelHeight = panel.offsetHeight;
+      const x = Math.max(10, Math.min(event.clientX - offX, window.innerWidth - panelWidth - 10));
+      const y = Math.max(10, Math.min(event.clientY - offY, window.innerHeight - panelHeight - 10));
+      panel.style.left = `${x}px`;
+      panel.style.top = `${y}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+      dragging = false;
+    });
+
+    populateSkinSelect();
+    refreshActiveSkins();
+    populateCapeSelect();
+    refreshActiveCapes();
+    refreshLogoControls();
+    applyGuiSettings();
+  }
+
+  function renderGUI() {
+    if (!panel) return;
+    panel.innerHTML = getPanelTemplate();
+    bindPanelControls();
+  }
+
+  function initGUI() {
+    injectGuiStyles();
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'mf-gui-overlay';
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', hideGUI);
+    }
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'mf-gui';
+      document.body.appendChild(panel);
+    }
+    renderGUI();
+
+    if (!guiReady) {
+      guiReady = true;
+      let rightShiftDown = false;
+      document.addEventListener('keydown', event => {
+        if (event.code === 'ShiftRight' && !rightShiftDown) {
+          rightShiftDown = true;
+          toggleGUI();
+        }
+        if (event.code === 'Escape') hideGUI();
+      });
+      document.addEventListener('keyup', event => {
+        if (event.code === 'ShiftRight') rightShiftDown = false;
+      });
+    }
+  }
+
+  function injectFeatherButton() {
+    if (document.getElementById('mf-sidebar-btn')) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.id = 'mf-sidebar-btn';
+    wrapper.className = 'css-1yohxqj';
+    wrapper.style.cssText = 'display:flex;align-items:center;justify-content:center;';
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'chakra-button css-7qs6ql';
+    button.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;color:rgb(201,184,255);';
+    button.innerHTML = `
+      <svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" style="font-size:24px;color:#a78bfa;">
+        <rect x="9" y="2" width="6" height="1"></rect>
+        <rect x="8" y="3" width="8" height="1"></rect>
+        <rect x="7" y="4" width="10" height="1"></rect>
+        <rect x="6" y="5" width="12" height="1"></rect>
+        <rect x="5" y="6" width="14" height="1"></rect>
+        <rect x="4" y="7" width="16" height="1"></rect>
+        <rect x="3" y="8" width="18" height="1"></rect>
+        <rect x="3" y="9" width="6" height="1"></rect>
+        <rect x="2" y="10" width="4" height="1"></rect>
+        <rect x="2" y="11" width="3" height="1"></rect>
+        <rect x="1" y="12" width="3" height="1"></rect>
+        <rect x="1" y="13" width="2" height="1"></rect>
+        <rect x="0" y="14" width="2" height="1"></rect>
+        <rect x="0" y="15" width="2" height="1"></rect>
+        <rect x="1" y="16" width="2" height="1"></rect>
+        <rect x="2" y="17" width="3" height="1"></rect>
+        <rect x="3" y="18" width="4" height="1"></rect>
+        <rect x="4" y="19" width="6" height="1"></rect>
+        <rect x="6" y="20" width="8" height="1"></rect>
+      </svg>
+      <span style="font-size:10px;font-weight:700;">MF</span>
+    `;
+
+    wrapper.appendChild(button);
+
+    button.addEventListener('click', showGUI);
+
+    function tryInject() {
+      if (document.getElementById('mf-sidebar-btn')) return true;
+      const buttons = document.querySelectorAll('button');
+      const settingsButton = Array.from(buttons).find(btn => {
+        const text = btn.innerText?.trim();
+        return text === 'Settings' || text === 'Ajustes' || text === 'Configuración' || text === 'Inicio' || text === 'Home';
+      });
+      if (!settingsButton) return false;
+      const sidebar = settingsButton.parentElement?.parentElement;
+      if (!sidebar) return false;
+      sidebar.insertBefore(wrapper, sidebar.firstChild);
+      return true;
+    }
+
+    if (!tryInject()) {
+      const observer = new MutationObserver(() => {
+        if (tryInject()) observer.disconnect();
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      setTimeout(() => observer.disconnect(), 15000);
+    }
+  }
+
+  function applyGuiSettings() {
+    const keystrokes = document.getElementById('mf-keystrokes');
+    const cpsCounter = document.getElementById('minifeather-cps');
+    const pingCounter = document.getElementById('minifeather-ping');
+    if (keystrokes) keystrokes.style.display = settings.keystrokes ? 'flex' : 'none';
+    if (cpsCounter) cpsCounter.style.display = settings.cpsCounter ? 'block' : 'none';
+    if (pingCounter) pingCounter.style.display = settings.pingCounter ? 'block' : 'none';
+    if (settings.supportAds) showAds();
+    else blockAds();
+  }
+
+  function initChatFeatures() {
+    const style = document.createElement('style');
+    style.textContent = `
+      .chat-gif { max-width:64px; max-height:64px; vertical-align:middle; border-radius:4px; display:inline-block; }
+      .yt-wrapper { display:block; width:100%; max-width:320px; margin:6px 0; border-radius:8px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,.5); }
+      .chat-meme-wrapper { display:block; width:100%; margin-top:5px; }
+      .chat-meme-wrapper video { max-width:240px; border-radius:8px; }
+    `;
+    document.head.appendChild(style);
+
+    const GIF_BASE = chrome.runtime.getURL('memes/gif/');
+    const GIF_LIST = [
+      '84-years.gif', '1000-yard-stare-cat-meme.gif', 'aaaah-cat.gif', 'beard-bear.gif',
+      'cat-disgusted.gif', 'cat-meme.gif', 'cat-meme-cat.gif', 'chat-pouce.gif',
+      'clappi-clappi-clappi.gif', 'devil-cat-evil.gif', 'hands-down-meme.gif', 'kermit.gif',
+      'lfg-lets-go.gif', 'memes2022funny-meme.gif', 'question-emoji.gif', 'scary-cat.gif',
+      'shocked-shocked-cat.gif', 'shrek-rizz-shrek-meme.gif', 'ugly-plankton-meme-ugly-plankton.gif'
+    ];
+
+    const gifCache = {};
+
+    function getGif(name) {
+      const key = name.toLowerCase();
+      if (gifCache[key]) return gifCache[key];
+      const file = GIF_LIST.find(entry => entry.toLowerCase() === key || entry.toLowerCase().replace(/\.gif$/, '') === key);
+      gifCache[key] = file ? GIF_BASE + file : null;
+      return gifCache[key];
+    }
+
+    const MEME_MAP = {
+      'm-no': 'https://qu.ax/STWv.mp4',
+      'm-que': 'https://qu.ax/WpYf.mp4',
+      'm-si': 'https://qu.ax/pGis.mp4',
+      'm-cry': 'https://qu.ax/mScl.mp4',
+      'm-bye': 'https://qu.ax/NlCH.mp4'
+    };
+
+    const ytRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)[\w-]+[^ \n]*)/i;
+
+    function findRealIndex(text, trigger) {
+      let textIndex = 0;
+      const cleanTrigger = trigger.replace(/-/g, '').replace(/:/g, '');
+      const lowerText = text.toLowerCase().replace(/-/g, '').replace(/:/g, '');
+      const cleanIndex = lowerText.indexOf(cleanTrigger);
+      let count = 0;
+      for (let i = 0; i < text.length && count < cleanIndex; i++) {
+        const character = text[i].toLowerCase();
+        if (character !== '-' && character !== ':') count++;
+        textIndex = i + 1;
+      }
+      return textIndex;
+    }
+
+    function processNode(node) {
+      if (!node || node.nodeType !== 3) return;
+      const text = node.nodeValue;
+      if (!text || text.length < 3) return;
+      const parent = node.parentNode;
+      if (!parent || parent.tagName === 'TEXTAREA' || parent.tagName === 'INPUT' || parent.isContentEditable) return;
+      if (parent.dataset && parent.dataset.mfProcessed) return;
+
+      let modified = false;
+      const fragments = [];
+      let remaining = text;
+
+      while (remaining.length > 0) {
+        const ytMatch = remaining.match(ytRegex);
+        const gifMatch = remaining.match(/:([\w\d\-]+?)(?:\.gif)?:/i);
+        const memeMatch = Object.keys(MEME_MAP).find(key => {
+          const clean = key.replace(/-/g, '').replace(/:/g, '');
+          return remaining.toLowerCase().replace(/-/g, '').replace(/:/g, '').includes(clean);
+        });
+
+        if (gifMatch && (!ytMatch || gifMatch.index <= ytMatch.index) && (!memeMatch || remaining.indexOf(gifMatch[0]) <= remaining.indexOf(memeMatch))) {
+          if (gifMatch.index > 0) fragments.push({ type: 'text', value: remaining.substring(0, gifMatch.index) });
+          const path = getGif(gifMatch[1]);
+          if (path) {
+            fragments.push({ type: 'gif', value: path, name: gifMatch[1] });
+            modified = true;
+          } else {
+            fragments.push({ type: 'text', value: gifMatch[0] });
+          }
+          remaining = remaining.substring(gifMatch.index + gifMatch[0].length);
+        } else if (ytMatch && (!memeMatch || ytMatch.index <= remaining.indexOf(memeMatch))) {
+          if (ytMatch.index > 0) fragments.push({ type: 'text', value: remaining.substring(0, ytMatch.index) });
+          let id = '';
+          const url = ytMatch[1];
+          if (url.includes('shorts/')) id = url.split('shorts/')[1].split(/[?#]/)[0];
+          else if (url.includes('watch?v=')) id = url.split('watch?v=')[1].split(/[&?#]/)[0];
+          else if (url.includes('youtu.be/')) id = url.split('youtu.be/')[1].split(/[?#]/)[0];
+          else if (url.includes('embed/')) id = url.split('embed/')[1].split(/[?#]/)[0];
+          if (id) {
+            fragments.push({ type: 'yt', value: id });
+            modified = true;
+          } else {
+            fragments.push({ type: 'text', value: ytMatch[0] });
+          }
+          remaining = remaining.substring(ytMatch.index + ytMatch[0].length);
+        } else if (memeMatch) {
+          const realIndex = findRealIndex(remaining, memeMatch);
+          if (realIndex > 0) fragments.push({ type: 'text', value: remaining.substring(0, realIndex) });
+          fragments.push({ type: 'meme', value: MEME_MAP[memeMatch] });
+          modified = true;
+          remaining = remaining.substring(realIndex + memeMatch.length);
+        } else {
+          fragments.push({ type: 'text', value: remaining });
+          remaining = '';
+        }
+      }
+
+      if (!modified) return;
+      parent.dataset.mfProcessed = '1';
+      const span = document.createElement('span');
+      fragments.forEach(fragment => {
+        if (fragment.type === 'text' && fragment.value) {
+          span.appendChild(document.createTextNode(fragment.value));
+        } else if (fragment.type === 'gif') {
+          const image = document.createElement('img');
+          image.src = fragment.value;
+          image.className = 'chat-gif';
+          image.alt = fragment.name;
+          image.title = fragment.name;
+          span.appendChild(image);
+        } else if (fragment.type === 'yt') {
+          const div = document.createElement('div');
+          div.className = 'yt-wrapper';
+          div.innerHTML = `<iframe width="100%" height="180" src="https://www.youtube.com/embed/${fragment.value}?autoplay=1" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+          span.appendChild(div);
+        } else if (fragment.type === 'meme') {
+          const div = document.createElement('div');
+          div.className = 'chat-meme-wrapper';
+          div.innerHTML = `<video src="${fragment.value}" style="max-width:240px;border-radius:8px;" autoplay controls></video>`;
+          span.appendChild(div);
+        }
+      });
+      parent.replaceChild(span, node);
+    }
+
+    function scan(node) {
+      if (!node) return;
+      if (node.nodeType === 3) {
+        processNode(node);
+        return;
+      }
+      if (node.nodeType !== 1 || node.tagName === 'SCRIPT' || node.tagName === 'STYLE') return;
+      if (node.dataset && node.dataset.mfProcessed) return;
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      let current;
+      while ((current = walker.nextNode())) nodes.push(current);
+      nodes.forEach(processNode);
+    }
+
+    const observer = new MutationObserver(mutations => {
+      mutations.forEach(mutation => {
+        if (mutation.type === 'childList') mutation.addedNodes.forEach(scan);
+        else if (mutation.type === 'characterData') scan(mutation.target);
+      });
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  }
+
+  function update() {
+    if (settings.rebrand) {
+      changeTitle();
+      changeFavicon();
+      replaceLogo();
+      replaceBackground();
+      if (settings.discord) {
+        replaceDiscordInput();
+        hideDiscordImage();
+        changeDiscordButton();
+        changeDiscordDescriptions();
+        changeWelcomeText();
+      }
+    }
+    if (!settings.supportAds) blockAds();
+    else showAds();
+    refreshLogoControls();
+  }
+
+  function init() {
+    injectFont();
+    initFPSCounter();
+    initCPSCounter();
+    initPingCounter();
+    initKeystrokes();
+    initGUI();
+    initChatFeatures();
+    hookClipboard();
+    injectFeatherButton();
+
+    const observer = new MutationObserver(scheduleUpdate);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    update();
+  }
+
+  function boot() {
+    chrome.storage.local.get(['settings', 'customLogo'], data => {
+      settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+      guiSettings = { ...settings };
+      currentLogo = data.customLogo || CONFIG.defaultLogo;
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+      else init();
+    });
+  }
+
+  boot();
+})();
