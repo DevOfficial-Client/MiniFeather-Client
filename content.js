@@ -2,7 +2,7 @@
   'use strict';
 
   const CONFIG = {
-    defaultLogo: 'https://i.ibb.co/Y48gfKC1/New-Project-8.png',
+    defaultLogo: 'https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/refs/heads/main/icon.png',
     background: 'https://raw.githubusercontent.com/EstebanGrp/MIniFeather-Client/main/default-DKNlYibk%20(2).png',
     discord: 'https://discord.com/invite/ksmp',
     title: 'MiniFeather Client',
