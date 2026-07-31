@@ -36,7 +36,6 @@
 
   const DEFAULT_SETTINGS = {
     rebrand: true,
-    supportAds: false,
     discord: true,
     keystrokes: true,
     language: 'en'
