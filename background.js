@@ -159,6 +159,112 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 const SPRITESHEET_URL = "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack.png";
 const SPRITESHEET_RULE_ID = 999;
 
+const EXTRA_TEXTURES = [
+  // Armor
+  {
+    id: 10000,
+    from: "https://miniblox.io/textures/armor/leather_layer_1.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/armor/leather_layer_1.png"
+  },
+  {
+    id: 10001,
+    from: "https://miniblox.io/textures/armor/leather_layer_2.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/armor/leather_layer_2.png"
+  },
+  {
+    id: 10002,
+    from: "https://miniblox.io/textures/armor/gold_layer_1.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/armor/gold_layer_1.png"
+  },
+  {
+    id: 10003,
+    from: "https://miniblox.io/textures/armor/gold_layer_2.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/armor/gold_layer_2.png"
+  },
+  {
+    id: 10004,
+    from: "https://miniblox.io/textures/armor/chainmail_layer_1.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/armor/chainmail_layer_1.png"
+  },
+  {
+    id: 10005,
+    from: "https://miniblox.io/textures/armor/chainmail_layer_2.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/armor/chainmail_layer_2.png"
+  },
+  {
+    id: 10006,
+    from: "https://miniblox.io/textures/armor/iron_layer_1.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/armor/iron_layer_1.png"
+  },
+  {
+    id: 10007,
+    from: "https://miniblox.io/textures/armor/iron_layer_2.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/armor/iron_layer_2.png"
+  },
+  {
+    id: 10008,
+    from: "https://miniblox.io/textures/armor/diamond_layer_1.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/armor/diamond_layer_1.png"
+  },
+  {
+    id: 10009,
+    from: "https://miniblox.io/textures/armor/diamond_layer_2.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/armor/diamond_layer_2.png"
+  },
+
+  // Mobs
+  {
+    id: 10010,
+    from: "https://miniblox.io/textures/entity/sheep/sheep.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/entity/sheep/sheep.png"
+  },
+  {
+    id: 10011,
+    from: "https://miniblox.io/textures/entity/spider/spider.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/entity/spider/spider.png"
+  },
+  {
+    id: 10012,
+    from: "https://miniblox.io/textures/entity/zombie/zombie.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/entity/zombie/zombie.png"
+  },
+  {
+    id: 10013,
+    from: "https://miniblox.io/textures/entity/skeleton/skeleton.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/entity/skeleton/skeleton.png"
+  },
+  {
+    id: 10014,
+    from: "https://miniblox.io/textures/entity/creeper/creeper.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/entity/creeper/creeper.png"
+  },
+  {
+    id: 10015,
+    from: "https://miniblox.io/textures/entity/slime/slime.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/entity/slime/slime.png"
+  },
+  {
+    id: 10016,
+    from: "https://miniblox.io/textures/entity/wolf/wolf.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/entity/wolf/wolf.png"
+  },
+  {
+    id: 10017,
+    from: "https://miniblox.io/textures/entity/villager/villager.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/entity/villager/villager.png"
+  },
+  {
+    id: 10018,
+    from: "https://miniblox.io/textures/entity/iron_golem/iron_golem.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/entity/iron_golem/iron_golem.png"
+  },
+  {
+    id: 10019,
+    from: "https://miniblox.io/textures/entity/chest/normal_double.png",
+    to: "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/entity/chest/normal_double.png"
+  }
+];
+
 async function applySpritesheet() {
   const { spritesheetEnabled } = await chrome.storage.local.get(["spritesheetEnabled"]);
 
