@@ -1,6 +1,10 @@
 (function () {
   'use strict';
 
+  try {
+    globalThis.__MINIFEATHER_CONTENT__?.destroy?.();
+  } catch (_) {}
+
   const CONFIG = {
     defaultLogo: 'https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/refs/heads/main/icon.png',
     background: 'https://raw.githubusercontent.com/EstebanGrp/MIniFeather-Client/main/default-DKNlYibk%20(2).png',
@@ -73,7 +77,7 @@
       cpsCounterDesc: 'Show left and right clicks per second.',
       cpsLabel: 'CPS',
       pingCounter: 'Ping Counter',
-      pingCounterDesc: 'Show estimated network latency in milliseconds.',
+      pingCounterDesc: 'Show the browser-reported connection round-trip time in milliseconds.',
       pingLabel: 'PING',
       spritesheet: 'Custom Spritesheet',
       spritesheetDesc: 'Replace the default spritesheet.',
@@ -149,7 +153,7 @@
       cpsCounterDesc: 'Mostrar los clics izquierdos y derechos por segundo.',
       cpsLabel: 'CPS',
       pingCounter: 'Contador de Ping',
-      pingCounterDesc: 'Mostrar la latencia estimada de red en milisegundos.',
+      pingCounterDesc: 'Mostrar el tiempo de ida y vuelta de la conexión reportado por el navegador.',
       pingLabel: 'PING',
       spritesheet: 'Spritesheet Personalizado',
       spritesheetDesc: 'Reemplazar el spritesheet predeterminado.',
@@ -225,7 +229,7 @@
       cpsCounterDesc: '左右の1秒あたりのクリック数を表示します。',
       cpsLabel: 'CPS',
       pingCounter: 'Ping カウンター',
-      pingCounterDesc: '推定ネットワーク遅延をミリ秒で表示します。',
+      pingCounterDesc: 'ブラウザが報告する接続の往復時間をミリ秒で表示します。',
       pingLabel: 'PING',
       spritesheet: 'カスタムスプライトシート',
       spritesheetDesc: '標準スプライトシートを置き換えます。',
@@ -301,7 +305,7 @@
       cpsCounterDesc: 'Mostra i clic sinistri e destri al secondo.',
       cpsLabel: 'CPS',
       pingCounter: 'Contatore Ping',
-      pingCounterDesc: 'Mostra la latenza di rete stimata in millisecondi.',
+      pingCounterDesc: 'Mostra il tempo di andata e ritorno della connessione rilevato dal browser.',
       pingLabel: 'PING',
       spritesheet: 'Spritesheet Personalizzato',
       spritesheetDesc: 'Sostituisce lo spritesheet predefinito.',
@@ -357,11 +361,85 @@
   let settings = { ...DEFAULT_SETTINGS };
   let guiSettings = { ...DEFAULT_SETTINGS };
   let currentLogo = CONFIG.defaultLogo;
-  let pendingTick = false;
+  let updateTimer = 0;
   let activeTab = 'client';
   let overlay = null;
   let panel = null;
   let guiReady = false;
+  let panelController = null;
+  let runtimeController = null;
+  let rootObserver = null;
+  let fontObserver = null;
+  let chatObserver = null;
+  let sidebarObserver = null;
+  let sidebarObserverTimer = 0;
+  let clipboardOriginalWrite = null;
+  let destroyed = false;
+
+  const MODULES = new Map();
+  const ORIGINALS = {
+    title: document.title,
+    textNodes: new Map()
+  };
+
+  function createLifecycle(handlers = {}) {
+    let active = false;
+    return {
+      get enabled() {
+        return active;
+      },
+      enable() {
+        if (active) return;
+        active = true;
+        handlers.enable?.();
+      },
+      disable() {
+        if (!active) return;
+        active = false;
+        handlers.disable?.();
+      },
+      refresh() {
+        if (active) handlers.refresh?.();
+      },
+      destroy() {
+        if (active) {
+          active = false;
+          handlers.disable?.();
+        }
+        handlers.destroy?.();
+      }
+    };
+  }
+
+  function registerModule(name, factory) {
+    if (!MODULES.has(name)) MODULES.set(name, factory());
+    return MODULES.get(name);
+  }
+
+  function setModuleEnabled(name, enabled) {
+    const module = MODULES.get(name);
+    if (!module) return;
+    if (enabled) module.enable();
+    else module.disable();
+  }
+
+  function destroyModules() {
+    [...MODULES.values()].reverse().forEach(module => module.destroy());
+    MODULES.clear();
+  }
+
+  function isMiniFeatherNode(node) {
+    const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    return !!element?.closest?.('#mf-gui, #mf-gui-overlay, #mf-sidebar-btn, #minifeather-fps, #minifeather-cps, #minifeather-ping, #mf-keystrokes');
+  }
+
+  function safePosition(key, fallback) {
+    try {
+      const value = JSON.parse(localStorage.getItem(key));
+      if (value && Number.isFinite(value.x) && Number.isFinite(value.y)) return value;
+    } catch (_) {}
+    return fallback;
+  }
 
   function t(key, vars = {}) {
     const table = TRANSLATIONS[settings.language] || TRANSLATIONS.en;
@@ -371,63 +449,89 @@
   }
 
   function scheduleUpdate() {
-    if (pendingTick) return;
-    pendingTick = true;
-    requestAnimationFrame(() => {
-      pendingTick = false;
+    if (destroyed) return;
+    clearTimeout(updateTimer);
+    updateTimer = window.setTimeout(() => {
+      updateTimer = 0;
       update();
-    });
+    }, 120);
   }
 
   function replaceTextNodes(targetText, replacement) {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
+        if (isMiniFeatherNode(node)) return NodeFilter.FILTER_REJECT;
         return node.nodeValue.includes(targetText) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
       }
     });
     let node;
     while ((node = walker.nextNode())) {
+      if (!ORIGINALS.textNodes.has(node)) ORIGINALS.textNodes.set(node, node.nodeValue);
       node.nodeValue = node.nodeValue.split(targetText).join(replacement);
     }
   }
 
   function injectFont() {
-    if (document.getElementById('minifeather-font')) return;
-    const style = document.createElement('style');
-    style.id = 'minifeather-font';
-    style.textContent = `
-      @font-face {
-        font-family:'Faithful';
-        src:url('${CONFIG.fontUrl}') format('truetype');
-        font-weight:100 900;
-        font-style:normal;
-        font-display:swap;
-      }
-      *,*::before,*::after {
-        font-family:'Faithful','Inter','Arial',sans-serif !important;
-      }
-    `;
-    document.head.appendChild(style);
-
-    function patchCanvas() {
-      document.querySelectorAll('canvas').forEach(canvas => {
-        const ctx = canvas.getContext('2d');
-        if (ctx && ctx.font && !ctx._minifeatherFont) {
-          ctx._minifeatherFont = true;
-          const descriptor = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'font');
-          if (descriptor) {
-            Object.defineProperty(ctx, 'font', {
-              get() { return descriptor.get.call(this); },
-              set(value) { descriptor.set.call(this, value.replace(/font-family:\s*[^;"]+/g, 'font-family: Faithful')); }
-            });
-          }
+    let style = document.getElementById('minifeather-font');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'minifeather-font';
+      style.textContent = `
+        @font-face {
+          font-family:'Faithful';
+          src:url('${CONFIG.fontUrl}') format('truetype');
+          font-weight:100 900;
+          font-style:normal;
+          font-display:swap;
         }
+        *,*::before,*::after {
+          font-family:'Faithful','Inter','Arial',sans-serif !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    const descriptor = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'font');
+
+    function patchCanvas(root) {
+      const canvases = [];
+      if (root instanceof HTMLCanvasElement) canvases.push(root);
+      if (root?.querySelectorAll) canvases.push(...root.querySelectorAll('canvas'));
+
+      canvases.forEach(canvas => {
+        let ctx = null;
+        try {
+          ctx = canvas.getContext('2d');
+        } catch (_) {}
+        if (!ctx || ctx._minifeatherFont || !descriptor) return;
+
+        ctx._minifeatherFont = true;
+        try {
+          Object.defineProperty(ctx, 'font', {
+            configurable: true,
+            get() {
+              return descriptor.get.call(this);
+            },
+            set(value) {
+              const normalized = typeof value === 'string'
+                ? value.replace(/("[^"]+"|'[^']+'|[A-Za-z][\w -]*)\s*$/, 'Faithful')
+                : value;
+              descriptor.set.call(this, normalized);
+            }
+          });
+        } catch (_) {}
       });
     }
 
-    patchCanvas();
-    const canvasObserver = new MutationObserver(patchCanvas);
-    canvasObserver.observe(document.body, { childList: true, subtree: true });
+    patchCanvas(document);
+
+    if (fontObserver) return;
+    fontObserver = new MutationObserver(mutations => {
+      for (const mutation of mutations) {
+        mutation.addedNodes.forEach(patchCanvas);
+      }
+    });
+    fontObserver.observe(document.body, { childList: true, subtree: true });
   }
 
   function changeTitle() {
@@ -439,10 +543,14 @@
     if (icons.length === 0) {
       const icon = document.createElement('link');
       icon.rel = 'icon';
+      icon.dataset.mfCreatedIcon = '1';
       document.head.appendChild(icon);
       icons = [icon];
     }
     icons.forEach(icon => {
+      if (!icon.hasAttribute('data-mf-original-href')) {
+        icon.dataset.mfOriginalHref = icon.getAttribute('href') || '';
+      }
       if (icon.getAttribute('href') !== currentLogo) icon.setAttribute('href', currentLogo);
     });
   }
@@ -460,30 +568,42 @@
   function replaceLogo() {
     document.querySelectorAll('img').forEach(img => {
       if (!isLogoImage(img)) return;
+
       img.dataset.mfLogoTarget = '1';
-      if (!img.dataset.originalSrc && img.getAttribute('src')) img.dataset.originalSrc = img.getAttribute('src');
+      if (!img.hasAttribute('data-mf-original-src')) img.dataset.mfOriginalSrc = img.getAttribute('src') || '';
+      if (!img.hasAttribute('data-mf-original-srcset')) img.dataset.mfOriginalSrcset = img.getAttribute('srcset') || '';
+
       if (img.getAttribute('src') !== currentLogo) img.setAttribute('src', currentLogo);
       if (img.hasAttribute('srcset')) img.setAttribute('srcset', currentLogo);
+
       const picture = img.closest('picture');
-      if (picture) {
-        picture.querySelectorAll('source').forEach(source => source.setAttribute('srcset', currentLogo));
-      }
+      picture?.querySelectorAll('source').forEach(source => {
+        if (!source.hasAttribute('data-mf-original-srcset')) {
+          source.dataset.mfOriginalSrcset = source.getAttribute('srcset') || '';
+        }
+        source.setAttribute('srcset', currentLogo);
+      });
     });
   }
 
   function replaceBackground() {
     document.querySelectorAll('img').forEach(img => {
       const src = img.getAttribute('src') || '';
-      if (src.includes('default-B1Dv6Hww')) {
-        if (!img.dataset.originalSrc) img.dataset.originalSrc = src;
-        if (src !== CONFIG.background) img.setAttribute('src', CONFIG.background);
-      }
+      if (!src.includes('default-B1Dv6Hww') && img.dataset.mfBackground !== '1') return;
+
+      img.dataset.mfBackground = '1';
+      if (!img.hasAttribute('data-mf-original-src')) img.dataset.mfOriginalSrc = src;
+      if (img.getAttribute('src') !== CONFIG.background) img.setAttribute('src', CONFIG.background);
     });
   }
 
   function replaceDiscordInput() {
     document.querySelectorAll('input').forEach(input => {
-      if (input.value && input.value.includes('discord.gg') && input.value !== CONFIG.discord) {
+      if (!input.value?.includes('discord.gg') && input.dataset.mfDiscordInput !== '1') return;
+
+      input.dataset.mfDiscordInput = '1';
+      if (!input.hasAttribute('data-mf-original-value')) input.dataset.mfOriginalValue = input.value || '';
+      if (input.value !== CONFIG.discord) {
         input.value = CONFIG.discord;
         input.setAttribute('value', CONFIG.discord);
       }
@@ -492,19 +612,22 @@
 
   function hideDiscordImage() {
     document.querySelectorAll('img').forEach(img => {
-      if (img.alt === 'Join our Discord' || (img.src || '').includes('join-discord')) {
-        img.style.display = 'none';
-      }
+      if (img.alt !== 'Join our Discord' && !(img.src || '').includes('join-discord') && img.dataset.mfDiscordImage !== '1') return;
+
+      img.dataset.mfDiscordImage = '1';
+      if (!img.hasAttribute('data-mf-original-display')) img.dataset.mfOriginalDisplay = img.style.display || '';
+      img.style.display = 'none';
     });
   }
 
   function changeDiscordButton() {
     document.querySelectorAll('button').forEach(btn => {
       const text = btn.innerText || '';
-      if (text.includes('Join the Discord') || btn.dataset.mfJoin === '1') {
-        btn.innerHTML = btn.innerHTML.replace(/Join the Discord/g, t('joinServer'));
-        btn.dataset.mfJoin = '1';
-      }
+      if (!text.includes('Join the Discord') && btn.dataset.mfJoin !== '1') return;
+
+      if (!btn.hasAttribute('data-mf-original-html')) btn.dataset.mfOriginalHtml = btn.innerHTML;
+      btn.innerHTML = btn.innerHTML.replace(/Join the Discord/g, t('joinServer'));
+      btn.dataset.mfJoin = '1';
     });
   }
 
@@ -522,10 +645,10 @@
     const replacements = getDiscordReplacementMap();
     Object.entries(replacements).forEach(([original, replacement]) => {
       document.querySelectorAll('p').forEach(p => {
-        if (p.innerText === original || p.dataset.mfDiscordKey === original) {
-          p.innerText = replacement;
-          p.dataset.mfDiscordKey = original;
-        }
+        if (p.innerText !== original && p.dataset.mfDiscordKey !== original) return;
+        if (!p.hasAttribute('data-mf-original-text')) p.dataset.mfOriginalText = p.innerText;
+        p.innerText = replacement;
+        p.dataset.mfDiscordKey = original;
       });
       replaceTextNodes(original, replacement);
     });
@@ -533,11 +656,128 @@
 
   function changeWelcomeText() {
     document.querySelectorAll('p.css-1dxm2zz').forEach(p => {
-      if (p.innerText.toLowerCase().startsWith('welcome back') || p.dataset.mfWelcome === '1') {
-        p.innerHTML = t('welcomeHtml');
-        p.dataset.mfWelcome = '1';
-      }
+      if (!p.innerText.toLowerCase().startsWith('welcome back') && p.dataset.mfWelcome !== '1') return;
+
+      if (!p.hasAttribute('data-mf-original-html')) p.dataset.mfOriginalHtml = p.innerHTML;
+      p.innerHTML = t('welcomeHtml');
+      p.dataset.mfWelcome = '1';
     });
+  }
+
+  function restoreRebrand() {
+    document.title = ORIGINALS.title;
+
+    document.querySelectorAll("link[rel*='icon'][data-mf-original-href]").forEach(icon => {
+      const original = icon.dataset.mfOriginalHref || '';
+      if (original) icon.setAttribute('href', original);
+      else icon.removeAttribute('href');
+      delete icon.dataset.mfOriginalHref;
+    });
+    document.querySelectorAll("link[data-mf-created-icon='1']").forEach(icon => icon.remove());
+
+    document.querySelectorAll('img[data-mf-logo-target="1"]').forEach(img => {
+      const originalSrc = img.dataset.mfOriginalSrc || '';
+      const originalSrcset = img.dataset.mfOriginalSrcset || '';
+      if (originalSrc) img.setAttribute('src', originalSrc);
+      else img.removeAttribute('src');
+      if (originalSrcset) img.setAttribute('srcset', originalSrcset);
+      else img.removeAttribute('srcset');
+      delete img.dataset.mfLogoTarget;
+      delete img.dataset.mfOriginalSrc;
+      delete img.dataset.mfOriginalSrcset;
+    });
+
+    document.querySelectorAll('source[data-mf-original-srcset]').forEach(source => {
+      const original = source.dataset.mfOriginalSrcset || '';
+      if (original) source.setAttribute('srcset', original);
+      else source.removeAttribute('srcset');
+      delete source.dataset.mfOriginalSrcset;
+    });
+
+    document.querySelectorAll('img[data-mf-background="1"]').forEach(img => {
+      const original = img.dataset.mfOriginalSrc || '';
+      if (original) img.setAttribute('src', original);
+      else img.removeAttribute('src');
+      delete img.dataset.mfBackground;
+      delete img.dataset.mfOriginalSrc;
+    });
+  }
+
+  function restoreDiscord() {
+    document.querySelectorAll('input[data-mf-discord-input="1"]').forEach(input => {
+      const original = input.dataset.mfOriginalValue || '';
+      input.value = original;
+      input.setAttribute('value', original);
+      delete input.dataset.mfDiscordInput;
+      delete input.dataset.mfOriginalValue;
+    });
+
+    document.querySelectorAll('img[data-mf-discord-image="1"]').forEach(img => {
+      img.style.display = img.dataset.mfOriginalDisplay || '';
+      delete img.dataset.mfDiscordImage;
+      delete img.dataset.mfOriginalDisplay;
+    });
+
+    document.querySelectorAll('button[data-mf-join="1"]').forEach(btn => {
+      if (btn.hasAttribute('data-mf-original-html')) btn.innerHTML = btn.dataset.mfOriginalHtml;
+      delete btn.dataset.mfJoin;
+      delete btn.dataset.mfOriginalHtml;
+    });
+
+    document.querySelectorAll('p[data-mf-discord-key]').forEach(p => {
+      if (p.hasAttribute('data-mf-original-text')) p.innerText = p.dataset.mfOriginalText;
+      delete p.dataset.mfDiscordKey;
+      delete p.dataset.mfOriginalText;
+    });
+
+    document.querySelectorAll('p[data-mf-welcome="1"]').forEach(p => {
+      if (p.hasAttribute('data-mf-original-html')) p.innerHTML = p.dataset.mfOriginalHtml;
+      delete p.dataset.mfWelcome;
+      delete p.dataset.mfOriginalHtml;
+    });
+
+    ORIGINALS.textNodes.forEach((value, node) => {
+      if (node.isConnected) node.nodeValue = value;
+    });
+    ORIGINALS.textNodes.clear();
+  }
+
+  function initLifecycleModules() {
+    registerModule('rebrand', () => createLifecycle({
+      enable: () => {
+        changeTitle();
+        changeFavicon();
+        replaceLogo();
+        replaceBackground();
+      },
+      refresh: () => {
+        changeTitle();
+        changeFavicon();
+        replaceLogo();
+        replaceBackground();
+      },
+      disable: restoreRebrand,
+      destroy: restoreRebrand
+    }));
+
+    registerModule('discord', () => createLifecycle({
+      enable: () => {
+        replaceDiscordInput();
+        hideDiscordImage();
+        changeDiscordButton();
+        changeDiscordDescriptions();
+        changeWelcomeText();
+      },
+      refresh: () => {
+        replaceDiscordInput();
+        hideDiscordImage();
+        changeDiscordButton();
+        changeDiscordDescriptions();
+        changeWelcomeText();
+      },
+      disable: restoreDiscord,
+      destroy: restoreDiscord
+    }));
   }
 
   function blockAds() {
@@ -556,490 +796,565 @@
     });
   }
 
-  document.addEventListener('click', event => {
-    const btn = event.target.closest('button');
-    if (btn && btn.dataset.mfJoin === '1' && settings.discord) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      window.open(CONFIG.discord, '_blank');
-    }
-  }, true);
+  function handleDocumentClick(event) {
+    const btn = event.target.closest?.('button');
+    if (!btn || btn.dataset.mfJoin !== '1' || !settings.discord) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    window.open(CONFIG.discord, '_blank');
+  }
 
   function hookClipboard() {
-    if (!navigator.clipboard || navigator.clipboard._mfHooked) return;
-    const originalWrite = navigator.clipboard.writeText.bind(navigator.clipboard);
+    if (!navigator.clipboard || clipboardOriginalWrite) return;
+    clipboardOriginalWrite = navigator.clipboard.writeText.bind(navigator.clipboard);
     navigator.clipboard.writeText = function (text) {
-      if (settings.discord && text && text.includes('discord.gg')) text = CONFIG.discord;
-      return originalWrite(text);
+      if (settings.discord && text?.includes('discord.gg')) text = CONFIG.discord;
+      return clipboardOriginalWrite(text);
     };
-    navigator.clipboard._mfHooked = true;
+  }
+
+  function unhookClipboard() {
+    if (!navigator.clipboard || !clipboardOriginalWrite) return;
+    navigator.clipboard.writeText = clipboardOriginalWrite;
+    clipboardOriginalWrite = null;
   }
 
   function initFPSCounter() {
-    const saved = JSON.parse(localStorage.getItem('minifeather-fps-pos')) || { x: 12, y: 12 };
-    const box = document.createElement('div');
-    box.id = 'minifeather-fps';
-    box.style.cssText = `
-      position:fixed;
-      left:${saved.x}px;
-      top:${saved.y}px;
-      padding:8px 12px;
-      background:rgba(10,12,18,.9);
-      border:1px solid rgba(255,255,255,.08);
-      border-radius:12px;
-      backdrop-filter:blur(12px);
-      -webkit-backdrop-filter:blur(12px);
-      color:white;
-      font-size:14px;
-      font-weight:700;
-      box-shadow:0 12px 28px rgba(0,0,0,.35);
-      z-index:999999;
-      user-select:none;
-      cursor:move;
-    `;
-    document.body.appendChild(box);
+    return registerModule('fpsCounter', () => {
+      let box = null;
+      let controller = null;
+      let frameId = 0;
+      let frames = 0;
+      let last = 0;
+      let visible = !document.hidden;
 
-    let frames = 0;
-    let last = performance.now();
-    let visible = true;
-
-    document.addEventListener('visibilitychange', () => {
-      visible = !document.hidden;
-      if (visible) {
-        last = performance.now();
-        frames = 0;
+      function createBox() {
+        if (box?.isConnected) return;
+        const saved = safePosition('minifeather-fps-pos', { x: 12, y: 12 });
+        box = document.createElement('div');
+        box.id = 'minifeather-fps';
+        box.style.cssText = `
+          position:fixed;
+          left:${saved.x}px;
+          top:${saved.y}px;
+          padding:8px 12px;
+          background:rgba(10,12,18,.9);
+          border:1px solid rgba(255,255,255,.08);
+          border-radius:12px;
+          backdrop-filter:blur(12px);
+          -webkit-backdrop-filter:blur(12px);
+          color:white;
+          font-size:14px;
+          font-weight:700;
+          box-shadow:0 12px 28px rgba(0,0,0,.35);
+          z-index:999999;
+          user-select:none;
+          cursor:move;
+        `;
+        document.body.appendChild(box);
       }
-    });
 
-    function loop(now) {
-      if (visible) {
-        frames++;
-        if (now - last >= 1000) {
-          const fps = frames;
-          const color = fps >= 120 ? '#22c55e' : fps >= 60 ? '#facc15' : '#ef4444';
-          box.innerHTML = `<span style="color:#7c3aed;">MF</span><span style="color:#4b5563;padding:0 6px;">•</span><span style="color:${color};">${fps}</span><span style="color:#9ca3af;"> FPS</span>`;
-          frames = 0;
-          last = now;
+      function loop(now) {
+        if (!controller) return;
+        if (visible) {
+          frames++;
+          const elapsed = now - last;
+          if (elapsed >= 1000) {
+            const fps = Math.round(frames * 1000 / elapsed);
+            const color = fps >= 120 ? '#22c55e' : fps >= 60 ? '#facc15' : '#ef4444';
+            box.innerHTML = `<span style="color:#7c3aed;">MF</span><span style="color:#4b5563;padding:0 6px;">•</span><span style="color:${color};">${fps}</span><span style="color:#9ca3af;"> FPS</span>`;
+            frames = 0;
+            last = now;
+          }
         }
+        frameId = requestAnimationFrame(loop);
       }
-      requestAnimationFrame(loop);
-    }
 
-    requestAnimationFrame(loop);
+      return createLifecycle({
+        enable() {
+          createBox();
+          box.style.display = 'block';
+          controller = new AbortController();
+          const signal = controller.signal;
+          let dragging = false;
+          let offX = 0;
+          let offY = 0;
 
-    let dragging = false;
-    let offX = 0;
-    let offY = 0;
+          document.addEventListener('visibilitychange', () => {
+            visible = !document.hidden;
+            if (visible) {
+              last = performance.now();
+              frames = 0;
+            }
+          }, { signal });
 
-    box.addEventListener('mousedown', event => {
-      dragging = true;
-      offX = event.clientX - box.offsetLeft;
-      offY = event.clientY - box.offsetTop;
-    });
+          box.addEventListener('mousedown', event => {
+            if (event.button !== 0) return;
+            dragging = true;
+            offX = event.clientX - box.offsetLeft;
+            offY = event.clientY - box.offsetTop;
+            event.preventDefault();
+            event.stopPropagation();
+          }, { signal });
 
-    document.addEventListener('mousemove', event => {
-      if (!dragging) return;
-      box.style.left = `${event.clientX - offX}px`;
-      box.style.top = `${event.clientY - offY}px`;
-    });
+          document.addEventListener('mousemove', event => {
+            if (!dragging) return;
+            const x = Math.max(0, Math.min(event.clientX - offX, window.innerWidth - box.offsetWidth));
+            const y = Math.max(0, Math.min(event.clientY - offY, window.innerHeight - box.offsetHeight));
+            box.style.left = `${x}px`;
+            box.style.top = `${y}px`;
+          }, { signal });
 
-    document.addEventListener('mouseup', () => {
-      if (!dragging) return;
-      dragging = false;
-      localStorage.setItem('minifeather-fps-pos', JSON.stringify({ x: box.offsetLeft, y: box.offsetTop }));
+          document.addEventListener('mouseup', () => {
+            if (!dragging) return;
+            dragging = false;
+            localStorage.setItem('minifeather-fps-pos', JSON.stringify({ x: box.offsetLeft, y: box.offsetTop }));
+          }, { signal });
+
+          frames = 0;
+          last = performance.now();
+          visible = !document.hidden;
+          frameId = requestAnimationFrame(loop);
+        },
+        disable() {
+          controller?.abort();
+          controller = null;
+          if (frameId) cancelAnimationFrame(frameId);
+          frameId = 0;
+          frames = 0;
+          if (box) box.style.display = 'none';
+        },
+        destroy() {
+          box?.remove();
+          box = null;
+        }
+      });
     });
   }
 
   function initCPSCounter() {
-    if (document.getElementById('minifeather-cps')) return;
+    return registerModule('cpsCounter', () => {
+      let box = null;
+      let controller = null;
+      let interval = 0;
+      let leftClicks = [];
+      let rightClicks = [];
 
-    let saved = { x: 12, y: 62 };
-    try {
-      const stored = JSON.parse(localStorage.getItem('minifeather-cps-pos'));
-      if (stored && Number.isFinite(stored.x) && Number.isFinite(stored.y)) saved = stored;
-    } catch (_) {}
+      function createBox() {
+        if (box?.isConnected) return;
+        const saved = safePosition('minifeather-cps-pos', { x: 12, y: 62 });
+        box = document.createElement('div');
+        box.id = 'minifeather-cps';
+        box.style.cssText = `
+          position:fixed;
+          left:${saved.x}px;
+          top:${saved.y}px;
+          min-width:112px;
+          padding:8px 12px;
+          background:rgba(10,12,18,.9);
+          border:1px solid rgba(255,255,255,.08);
+          border-radius:12px;
+          backdrop-filter:blur(12px);
+          -webkit-backdrop-filter:blur(12px);
+          color:white;
+          font-size:14px;
+          font-weight:700;
+          text-align:center;
+          box-shadow:0 12px 28px rgba(0,0,0,.35);
+          z-index:999997;
+          user-select:none;
+          cursor:move;
+        `;
+        document.body.appendChild(box);
+      }
 
-    const box = document.createElement('div');
-    box.id = 'minifeather-cps';
-    box.style.cssText = `
-      position:fixed;
-      left:${saved.x}px;
-      top:${saved.y}px;
-      min-width:112px;
-      padding:8px 12px;
-      background:rgba(10,12,18,.9);
-      border:1px solid rgba(255,255,255,.08);
-      border-radius:12px;
-      backdrop-filter:blur(12px);
-      -webkit-backdrop-filter:blur(12px);
-      color:white;
-      font-size:14px;
-      font-weight:700;
-      text-align:center;
-      box-shadow:0 12px 28px rgba(0,0,0,.35);
-      z-index:999997;
-      user-select:none;
-      cursor:move;
-    `;
-    document.body.appendChild(box);
+      function render() {
+        const now = performance.now();
+        leftClicks = leftClicks.filter(time => now - time < 1000);
+        rightClicks = rightClicks.filter(time => now - time < 1000);
+        if (box) {
+          box.innerHTML = `<span style="color:#9ca3af;">${t('cpsLabel')}</span> <span style="color:#f8fafc;">${leftClicks.length}</span> <span style="color:#64748b;">|</span> <span style="color:#f8fafc;">${rightClicks.length}</span>`;
+        }
+      }
 
-    let leftClicks = [];
-    let rightClicks = [];
+      return createLifecycle({
+        enable() {
+          createBox();
+          box.style.display = 'block';
+          controller = new AbortController();
+          const signal = controller.signal;
+          let dragging = false;
+          let offX = 0;
+          let offY = 0;
 
-    function trimClicks(now) {
-      leftClicks = leftClicks.filter(time => now - time < 1000);
-      rightClicks = rightClicks.filter(time => now - time < 1000);
-    }
+          document.addEventListener('mousedown', event => {
+            if (box.contains(event.target) || isMiniFeatherNode(event.target)) return;
+            const now = performance.now();
+            if (event.button === 0) leftClicks.push(now);
+            if (event.button === 2) rightClicks.push(now);
+            render();
+          }, { capture: true, signal });
 
-    function render() {
-      const now = performance.now();
-      trimClicks(now);
-      box.innerHTML = `<span style="color:#9ca3af;">${t('cpsLabel')}</span> <span style="color:#f8fafc;">${leftClicks.length}</span> <span style="color:#64748b;">|</span> <span style="color:#f8fafc;">${rightClicks.length}</span>`;
-    }
+          box.addEventListener('mousedown', event => {
+            if (event.button !== 0) return;
+            dragging = true;
+            offX = event.clientX - box.offsetLeft;
+            offY = event.clientY - box.offsetTop;
+            event.preventDefault();
+            event.stopPropagation();
+          }, { signal });
 
-    document.addEventListener('mousedown', event => {
-      if (box.contains(event.target) || event.target.closest?.('#minifeather-fps, #minifeather-ping, #mf-keystrokes, #mf-gui')) return;
-      const now = performance.now();
-      if (event.button === 0) leftClicks.push(now);
-      if (event.button === 2) rightClicks.push(now);
-      render();
-    }, true);
+          document.addEventListener('mousemove', event => {
+            if (!dragging) return;
+            const x = Math.max(0, Math.min(event.clientX - offX, window.innerWidth - box.offsetWidth));
+            const y = Math.max(0, Math.min(event.clientY - offY, window.innerHeight - box.offsetHeight));
+            box.style.left = `${x}px`;
+            box.style.top = `${y}px`;
+          }, { signal });
 
-    const interval = setInterval(render, 100);
-    window.addEventListener('beforeunload', () => clearInterval(interval), { once: true });
-    render();
+          document.addEventListener('mouseup', () => {
+            if (!dragging) return;
+            dragging = false;
+            localStorage.setItem('minifeather-cps-pos', JSON.stringify({ x: box.offsetLeft, y: box.offsetTop }));
+          }, { signal });
 
-    let dragging = false;
-    let offX = 0;
-    let offY = 0;
-
-    box.addEventListener('mousedown', event => {
-      if (event.button !== 0) return;
-      dragging = true;
-      offX = event.clientX - box.offsetLeft;
-      offY = event.clientY - box.offsetTop;
-      event.preventDefault();
-      event.stopPropagation();
-    });
-
-    document.addEventListener('mousemove', event => {
-      if (!dragging) return;
-      const x = Math.max(0, Math.min(event.clientX - offX, window.innerWidth - box.offsetWidth));
-      const y = Math.max(0, Math.min(event.clientY - offY, window.innerHeight - box.offsetHeight));
-      box.style.left = `${x}px`;
-      box.style.top = `${y}px`;
-    });
-
-    document.addEventListener('mouseup', () => {
-      if (!dragging) return;
-      dragging = false;
-      localStorage.setItem('minifeather-cps-pos', JSON.stringify({ x: box.offsetLeft, y: box.offsetTop }));
+          render();
+          interval = window.setInterval(render, 100);
+        },
+        disable() {
+          controller?.abort();
+          controller = null;
+          clearInterval(interval);
+          interval = 0;
+          leftClicks = [];
+          rightClicks = [];
+          if (box) box.style.display = 'none';
+        },
+        destroy() {
+          box?.remove();
+          box = null;
+        }
+      });
     });
   }
 
-
   function initPingCounter() {
-    if (document.getElementById('minifeather-ping')) return;
+    return registerModule('pingCounter', () => {
+      let box = null;
+      let controller = null;
+      let interval = 0;
+      let ping = null;
 
-    let saved = { x: 12, y: 112 };
-    try {
-      const stored = JSON.parse(localStorage.getItem('minifeather-ping-pos'));
-      if (stored && Number.isFinite(stored.x) && Number.isFinite(stored.y)) saved = stored;
-    } catch (_) {}
-
-    const box = document.createElement('div');
-    box.id = 'minifeather-ping';
-    box.style.cssText = `
-      position:fixed;
-      left:${saved.x}px;
-      top:${saved.y}px;
-      min-width:112px;
-      padding:8px 12px;
-      background:rgba(10,12,18,.9);
-      border:1px solid rgba(255,255,255,.08);
-      border-radius:12px;
-      backdrop-filter:blur(12px);
-      -webkit-backdrop-filter:blur(12px);
-      color:white;
-      font-size:14px;
-      font-weight:700;
-      text-align:center;
-      box-shadow:0 12px 28px rgba(0,0,0,.35);
-      z-index:999996;
-      user-select:none;
-      cursor:move;
-    `;
-    document.body.appendChild(box);
-
-    let ping = null;
-    let measuring = false;
-    const samples = [];
-
-    function render() {
-      const value = Number.isFinite(ping) ? Math.max(0, Math.round(ping)) : null;
-      const color = value === null ? '#94a3b8' : value <= 80 ? '#22c55e' : value <= 150 ? '#facc15' : '#ef4444';
-      box.innerHTML = `<span style="color:#9ca3af;">${t('pingLabel')}</span> <span style="color:${color};">${value === null ? '--' : value}</span> <span style="color:#64748b;">ms</span>`;
-    }
-
-    function connectionRtt() {
-      const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-      const value = Number(connection?.rtt);
-      return Number.isFinite(value) && value > 0 ? value : null;
-    }
-
-    async function measure() {
-      if (measuring || !settings.pingCounter || document.hidden) return;
-      if (!navigator.onLine) {
-        ping = null;
-        render();
-        return;
+      function createBox() {
+        if (box?.isConnected) return;
+        const saved = safePosition('minifeather-ping-pos', { x: 12, y: 112 });
+        box = document.createElement('div');
+        box.id = 'minifeather-ping';
+        box.style.cssText = `
+          position:fixed;
+          left:${saved.x}px;
+          top:${saved.y}px;
+          min-width:112px;
+          padding:8px 12px;
+          background:rgba(10,12,18,.9);
+          border:1px solid rgba(255,255,255,.08);
+          border-radius:12px;
+          backdrop-filter:blur(12px);
+          -webkit-backdrop-filter:blur(12px);
+          color:white;
+          font-size:14px;
+          font-weight:700;
+          text-align:center;
+          box-shadow:0 12px 28px rgba(0,0,0,.35);
+          z-index:999996;
+          user-select:none;
+          cursor:move;
+        `;
+        document.body.appendChild(box);
       }
 
-      measuring = true;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
-      const started = performance.now();
-
-      try {
-        await fetch(`${location.origin}/favicon.ico?mf_ping=${Date.now()}`, {
-          method: 'HEAD',
-          cache: 'no-store',
-          credentials: 'omit',
-          signal: controller.signal
-        });
-
-        const measured = performance.now() - started;
-        samples.push(measured);
-        if (samples.length > 5) samples.shift();
-
-        const sorted = [...samples].sort((a, b) => a - b);
-        ping = sorted[Math.floor(sorted.length / 2)];
-      } catch (_) {
-        ping = connectionRtt();
-      } finally {
-        clearTimeout(timeout);
-        measuring = false;
-        render();
+      function readRtt() {
+        if (!navigator.onLine) return null;
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        const value = Number(connection?.rtt);
+        return Number.isFinite(value) && value >= 0 ? value : null;
       }
-    }
 
-    const initialRtt = connectionRtt();
-    if (initialRtt !== null) ping = initialRtt;
-    render();
-    measure();
+      function render() {
+        ping = readRtt();
+        const value = Number.isFinite(ping) ? Math.round(ping) : null;
+        const color = value === null ? '#94a3b8' : value <= 80 ? '#22c55e' : value <= 150 ? '#facc15' : '#ef4444';
+        if (box) {
+          box.innerHTML = `<span style="color:#9ca3af;">${t('pingLabel')}</span> <span style="color:${color};">${value === null ? '--' : value}</span> <span style="color:#64748b;">ms</span>`;
+        }
+      }
 
-    const interval = setInterval(measure, 3000);
-    window.addEventListener('online', measure);
-    window.addEventListener('offline', () => {
-      ping = null;
-      render();
-    });
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) measure();
-    });
-    window.addEventListener('beforeunload', () => clearInterval(interval), { once: true });
+      return createLifecycle({
+        enable() {
+          createBox();
+          box.style.display = 'block';
+          controller = new AbortController();
+          const signal = controller.signal;
+          const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+          let dragging = false;
+          let offX = 0;
+          let offY = 0;
 
-    let dragging = false;
-    let offX = 0;
-    let offY = 0;
+          connection?.addEventListener?.('change', render, { signal });
+          window.addEventListener('online', render, { signal });
+          window.addEventListener('offline', render, { signal });
+          document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) render();
+          }, { signal });
 
-    box.addEventListener('mousedown', event => {
-      if (event.button !== 0) return;
-      dragging = true;
-      offX = event.clientX - box.offsetLeft;
-      offY = event.clientY - box.offsetTop;
-      event.preventDefault();
-      event.stopPropagation();
-    });
+          box.addEventListener('mousedown', event => {
+            if (event.button !== 0) return;
+            dragging = true;
+            offX = event.clientX - box.offsetLeft;
+            offY = event.clientY - box.offsetTop;
+            event.preventDefault();
+            event.stopPropagation();
+          }, { signal });
 
-    document.addEventListener('mousemove', event => {
-      if (!dragging) return;
-      const x = Math.max(0, Math.min(event.clientX - offX, window.innerWidth - box.offsetWidth));
-      const y = Math.max(0, Math.min(event.clientY - offY, window.innerHeight - box.offsetHeight));
-      box.style.left = `${x}px`;
-      box.style.top = `${y}px`;
-    });
+          document.addEventListener('mousemove', event => {
+            if (!dragging) return;
+            const x = Math.max(0, Math.min(event.clientX - offX, window.innerWidth - box.offsetWidth));
+            const y = Math.max(0, Math.min(event.clientY - offY, window.innerHeight - box.offsetHeight));
+            box.style.left = `${x}px`;
+            box.style.top = `${y}px`;
+          }, { signal });
 
-    document.addEventListener('mouseup', () => {
-      if (!dragging) return;
-      dragging = false;
-      localStorage.setItem('minifeather-ping-pos', JSON.stringify({ x: box.offsetLeft, y: box.offsetTop }));
+          document.addEventListener('mouseup', () => {
+            if (!dragging) return;
+            dragging = false;
+            localStorage.setItem('minifeather-ping-pos', JSON.stringify({ x: box.offsetLeft, y: box.offsetTop }));
+          }, { signal });
+
+          render();
+          interval = window.setInterval(render, 2000);
+        },
+        disable() {
+          controller?.abort();
+          controller = null;
+          clearInterval(interval);
+          interval = 0;
+          ping = null;
+          if (box) box.style.display = 'none';
+        },
+        destroy() {
+          box?.remove();
+          box = null;
+        }
+      });
     });
   }
 
   function initKeystrokes() {
-    const savedPos = JSON.parse(localStorage.getItem('minifeather-keystroke-pos')) || { x: 20, y: 200 };
+    return registerModule('keystrokes', () => {
+      let container = null;
+      let controller = null;
+      let interval = 0;
+      const buttons = {};
+      const clickCounters = { LMB: [], RMB: [] };
 
-    if (!document.getElementById('minifeather-keystroke-css')) {
-      const style = document.createElement('style');
-      style.id = 'minifeather-keystroke-css';
-      style.textContent = `
-        #mf-keystrokes * { box-sizing:border-box; }
-        .mf-key {
+      function ensureStyle() {
+        if (document.getElementById('minifeather-keystroke-css')) return;
+        const style = document.createElement('style');
+        style.id = 'minifeather-keystroke-css';
+        style.textContent = `
+          #mf-keystrokes * { box-sizing:border-box; }
+          .mf-key {
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            background:rgba(10,12,18,.88);
+            color:#6b7280;
+            border:1px solid rgba(255,255,255,.08);
+            border-radius:10px;
+            font-weight:700;
+            transition:background .06s ease,color .06s ease,border-color .06s ease,transform .06s ease,box-shadow .06s ease;
+            backdrop-filter:blur(10px);
+            -webkit-backdrop-filter:blur(10px);
+            position:relative;
+            overflow:hidden;
+          }
+          .mf-key.active {
+            background:rgba(124,58,237,.92);
+            color:#fff;
+            border-color:rgba(167,139,250,.85);
+            transform:scale(.92);
+            box-shadow:0 0 18px rgba(124,58,237,.35), inset 0 0 12px rgba(255,255,255,.08);
+          }
+          .mf-key .mf-cps {
+            position:absolute;
+            bottom:2px;
+            right:4px;
+            font-size:9px;
+            color:rgba(255,255,255,.45);
+            font-weight:700;
+          }
+          .mf-key.active .mf-cps { color:rgba(255,255,255,.82); }
+        `;
+        document.head.appendChild(style);
+      }
+
+      function makeKey(code, label, width, height, fontSize, withCps = false) {
+        const element = document.createElement('div');
+        element.className = 'mf-key';
+        element.style.width = `${width}px`;
+        element.style.height = `${height}px`;
+        element.style.fontSize = `${fontSize}px`;
+        element.innerHTML = `<span>${label}</span>`;
+        if (withCps) {
+          const cps = document.createElement('span');
+          cps.className = 'mf-cps';
+          cps.textContent = '0';
+          element.appendChild(cps);
+        }
+        buttons[code] = element;
+        return element;
+      }
+
+      function makeRow(keys) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:5px;justify-content:center;';
+        keys.forEach(key => row.appendChild(key));
+        return row;
+      }
+
+      function createContainer() {
+        if (container?.isConnected) return;
+        ensureStyle();
+        const saved = safePosition('minifeather-keystroke-pos', { x: 20, y: 200 });
+
+        container = document.createElement('div');
+        container.id = 'mf-keystrokes';
+        container.style.cssText = `
+          position:fixed;
+          left:${saved.x}px;
+          top:${saved.y}px;
+          z-index:999997;
           display:flex;
+          flex-direction:column;
           align-items:center;
-          justify-content:center;
-          background:rgba(10,12,18,.88);
-          color:#6b7280;
-          border:1px solid rgba(255,255,255,.08);
-          border-radius:10px;
-          font-weight:700;
-          transition:background .06s ease,color .06s ease,border-color .06s ease,transform .06s ease,box-shadow .06s ease;
-          backdrop-filter:blur(10px);
-          -webkit-backdrop-filter:blur(10px);
-          position:relative;
-          overflow:hidden;
-        }
-        .mf-key.active {
-          background:rgba(124,58,237,.92);
-          color:#fff;
-          border-color:rgba(167,139,250,.85);
-          transform:scale(.92);
-          box-shadow:0 0 18px rgba(124,58,237,.35), inset 0 0 12px rgba(255,255,255,.08);
-        }
-        .mf-key .mf-cps {
-          position:absolute;
-          bottom:2px;
-          right:4px;
-          font-size:9px;
-          color:rgba(255,255,255,.45);
-          font-weight:700;
-        }
-        .mf-key.active .mf-cps { color:rgba(255,255,255,.82); }
-      `;
-      document.head.appendChild(style);
-    }
+          gap:5px;
+          user-select:none;
+          cursor:move;
+        `;
 
-    const container = document.createElement('div');
-    container.id = 'mf-keystrokes';
-    container.style.cssText = `
-      position:fixed;
-      left:${savedPos.x}px;
-      top:${savedPos.y}px;
-      z-index:999997;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      gap:5px;
-      user-select:none;
-      cursor:move;
-    `;
-
-    const buttons = {};
-    const clickCounters = { LMB: [], RMB: [] };
-
-    function makeKey(code, label, width, height, fontSize) {
-      const element = document.createElement('div');
-      element.className = 'mf-key';
-      element.style.width = `${width}px`;
-      element.style.height = `${height}px`;
-      element.style.fontSize = `${fontSize}px`;
-      element.innerHTML = `<span>${label}</span>`;
-      buttons[code] = element;
-      return element;
-    }
-
-    function makeKeyWithCps(code, label, width, height, fontSize) {
-      const element = makeKey(code, label, width, height, fontSize);
-      const cps = document.createElement('span');
-      cps.className = 'mf-cps';
-      cps.textContent = '0';
-      element.appendChild(cps);
-      return element;
-    }
-
-    function updateCps(code) {
-      const now = performance.now();
-      clickCounters[code] = clickCounters[code].filter(time => now - time < 1000);
-      const element = buttons[code];
-      if (!element) return;
-      const cps = element.querySelector('.mf-cps');
-      if (cps) cps.textContent = clickCounters[code].length;
-    }
-
-    function makeRow(keys) {
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;gap:5px;justify-content:center;';
-      keys.forEach(key => row.appendChild(key));
-      return row;
-    }
-
-    container.appendChild(makeRow([makeKey('KeyW', 'W', 52, 52, 17)]));
-    container.appendChild(makeRow([
-      makeKey('KeyA', 'A', 52, 52, 17),
-      makeKey('KeyS', 'S', 52, 52, 17),
-      makeKey('KeyD', 'D', 52, 52, 17)
-    ]));
-    container.appendChild(makeRow([
-      makeKeyWithCps('LMB', 'L', 80, 36, 13),
-      makeKeyWithCps('RMB', 'R', 80, 36, 13)
-    ]));
-    const space = makeKey('Space', 'SPACE', 165, 32, 11);
-    space.style.letterSpacing = '2px';
-    container.appendChild(space);
-    document.body.appendChild(container);
-
-    function activate(code) {
-      const element = buttons[code];
-      if (element) element.classList.add('active');
-    }
-
-    function deactivate(code) {
-      const element = buttons[code];
-      if (element) element.classList.remove('active');
-    }
-
-    document.addEventListener('keydown', event => {
-      if (buttons[event.code]) activate(event.code);
-    });
-
-    document.addEventListener('keyup', event => {
-      if (buttons[event.code]) deactivate(event.code);
-    });
-
-    document.addEventListener('mousedown', event => {
-      if (event.button === 0) {
-        activate('LMB');
-        clickCounters.LMB.push(performance.now());
-        updateCps('LMB');
+        container.appendChild(makeRow([makeKey('KeyW', 'W', 52, 52, 17)]));
+        container.appendChild(makeRow([
+          makeKey('KeyA', 'A', 52, 52, 17),
+          makeKey('KeyS', 'S', 52, 52, 17),
+          makeKey('KeyD', 'D', 52, 52, 17)
+        ]));
+        container.appendChild(makeRow([
+          makeKey('LMB', 'L', 80, 36, 13, true),
+          makeKey('RMB', 'R', 80, 36, 13, true)
+        ]));
+        const space = makeKey('Space', 'SPACE', 165, 32, 11);
+        space.style.letterSpacing = '2px';
+        container.appendChild(space);
+        document.body.appendChild(container);
       }
-      if (event.button === 2) {
-        activate('RMB');
-        clickCounters.RMB.push(performance.now());
-        updateCps('RMB');
+
+      function activate(code) {
+        buttons[code]?.classList.add('active');
       }
-    });
 
-    document.addEventListener('mouseup', event => {
-      if (event.button === 0) deactivate('LMB');
-      if (event.button === 2) deactivate('RMB');
-    });
+      function deactivate(code) {
+        buttons[code]?.classList.remove('active');
+      }
 
-    setInterval(() => {
-      updateCps('LMB');
-      updateCps('RMB');
-    }, 200);
+      function updateCps(code) {
+        const now = performance.now();
+        clickCounters[code] = clickCounters[code].filter(time => now - time < 1000);
+        const cps = buttons[code]?.querySelector('.mf-cps');
+        if (cps) cps.textContent = clickCounters[code].length;
+      }
 
-    let dragging = false;
-    let offX = 0;
-    let offY = 0;
+      return createLifecycle({
+        enable() {
+          createContainer();
+          container.style.display = 'flex';
+          controller = new AbortController();
+          const signal = controller.signal;
+          let dragging = false;
+          let offX = 0;
+          let offY = 0;
 
-    container.addEventListener('mousedown', event => {
-      dragging = true;
-      offX = event.clientX - container.offsetLeft;
-      offY = event.clientY - container.offsetTop;
-    });
+          document.addEventListener('keydown', event => {
+            if (buttons[event.code]) activate(event.code);
+          }, { signal });
 
-    document.addEventListener('mousemove', event => {
-      if (!dragging) return;
-      container.style.left = `${event.clientX - offX}px`;
-      container.style.top = `${event.clientY - offY}px`;
-    });
+          document.addEventListener('keyup', event => {
+            if (buttons[event.code]) deactivate(event.code);
+          }, { signal });
 
-    document.addEventListener('mouseup', () => {
-      if (!dragging) return;
-      dragging = false;
-      localStorage.setItem('minifeather-keystroke-pos', JSON.stringify({ x: container.offsetLeft, y: container.offsetTop }));
+          document.addEventListener('mousedown', event => {
+            if (container.contains(event.target) || isMiniFeatherNode(event.target)) return;
+            if (event.button === 0) {
+              activate('LMB');
+              clickCounters.LMB.push(performance.now());
+              updateCps('LMB');
+            }
+            if (event.button === 2) {
+              activate('RMB');
+              clickCounters.RMB.push(performance.now());
+              updateCps('RMB');
+            }
+          }, { signal });
+
+          document.addEventListener('mouseup', event => {
+            if (event.button === 0) deactivate('LMB');
+            if (event.button === 2) deactivate('RMB');
+          }, { signal });
+
+          container.addEventListener('mousedown', event => {
+            if (event.button !== 0) return;
+            dragging = true;
+            offX = event.clientX - container.offsetLeft;
+            offY = event.clientY - container.offsetTop;
+            event.preventDefault();
+            event.stopPropagation();
+          }, { signal });
+
+          document.addEventListener('mousemove', event => {
+            if (!dragging) return;
+            const x = Math.max(0, Math.min(event.clientX - offX, window.innerWidth - container.offsetWidth));
+            const y = Math.max(0, Math.min(event.clientY - offY, window.innerHeight - container.offsetHeight));
+            container.style.left = `${x}px`;
+            container.style.top = `${y}px`;
+          }, { signal });
+
+          document.addEventListener('mouseup', () => {
+            if (!dragging) return;
+            dragging = false;
+            localStorage.setItem('minifeather-keystroke-pos', JSON.stringify({ x: container.offsetLeft, y: container.offsetTop }));
+          }, { signal });
+
+          interval = window.setInterval(() => {
+            updateCps('LMB');
+            updateCps('RMB');
+          }, 200);
+        },
+        disable() {
+          controller?.abort();
+          controller = null;
+          clearInterval(interval);
+          interval = 0;
+          Object.values(buttons).forEach(button => button.classList.remove('active'));
+          clickCounters.LMB = [];
+          clickCounters.RMB = [];
+          if (container) container.style.display = 'none';
+        },
+        destroy() {
+          container?.remove();
+          container = null;
+          document.getElementById('minifeather-keystroke-css')?.remove();
+          Object.keys(buttons).forEach(key => delete buttons[key]);
+        }
+      });
     });
   }
 
@@ -1552,14 +1867,14 @@
   function saveLogo(value) {
     currentLogo = value;
     chrome.storage.local.set({ customLogo: currentLogo });
-    replaceAllLogos();
+    if (MODULES.get('rebrand')?.enabled) replaceAllLogos();
     refreshLogoControls();
   }
 
   function resetLogo() {
     currentLogo = CONFIG.defaultLogo;
     chrome.storage.local.remove('customLogo', () => {
-      replaceAllLogos();
+      if (MODULES.get('rebrand')?.enabled) replaceAllLogos();
       refreshLogoControls();
     });
   }
@@ -1714,6 +2029,10 @@
 
   function bindPanelControls() {
     if (!panel) return;
+
+    panelController?.abort();
+    panelController = new AbortController();
+    const panelSignal = panelController.signal;
 
     panel.querySelector('#mf-gui-close')?.addEventListener('click', hideGUI);
     panel.querySelector('#mf-gui-discord')?.addEventListener('click', () => window.open(CONFIG.discord, '_blank'));
@@ -1887,11 +2206,11 @@
       const y = Math.max(10, Math.min(event.clientY - offY, window.innerHeight - panelHeight - 10));
       panel.style.left = `${x}px`;
       panel.style.top = `${y}px`;
-    });
+    }, { signal: panelSignal });
 
     document.addEventListener('mouseup', () => {
       dragging = false;
-    });
+    }, { signal: panelSignal });
 
     populateSkinSelect();
     refreshActiveSkins();
@@ -1931,10 +2250,10 @@
           toggleGUI();
         }
         if (event.code === 'Escape') hideGUI();
-      });
+      }, { signal: runtimeController?.signal });
       document.addEventListener('keyup', event => {
         if (event.code === 'ShiftRight') rightShiftDown = false;
-      });
+      }, { signal: runtimeController?.signal });
     }
   }
 
@@ -1994,34 +2313,48 @@
     }
 
     if (!tryInject()) {
-      const observer = new MutationObserver(() => {
-        if (tryInject()) observer.disconnect();
+      sidebarObserver?.disconnect();
+      clearTimeout(sidebarObserverTimer);
+      sidebarObserver = new MutationObserver(() => {
+        if (!tryInject()) return;
+        sidebarObserver?.disconnect();
+        sidebarObserver = null;
       });
-      observer.observe(document.body, { childList: true, subtree: true });
-      setTimeout(() => observer.disconnect(), 15000);
+      sidebarObserver.observe(document.body, { childList: true, subtree: true });
+      sidebarObserverTimer = window.setTimeout(() => {
+        sidebarObserver?.disconnect();
+        sidebarObserver = null;
+        sidebarObserverTimer = 0;
+      }, 15000);
     }
   }
 
   function applyGuiSettings() {
-    const keystrokes = document.getElementById('mf-keystrokes');
-    const cpsCounter = document.getElementById('minifeather-cps');
-    const pingCounter = document.getElementById('minifeather-ping');
-    if (keystrokes) keystrokes.style.display = settings.keystrokes ? 'flex' : 'none';
-    if (cpsCounter) cpsCounter.style.display = settings.cpsCounter ? 'block' : 'none';
-    if (pingCounter) pingCounter.style.display = settings.pingCounter ? 'block' : 'none';
+    setModuleEnabled('rebrand', settings.rebrand);
+    setModuleEnabled('discord', settings.rebrand && settings.discord);
+    setModuleEnabled('keystrokes', settings.keystrokes);
+    setModuleEnabled('cpsCounter', settings.cpsCounter);
+    setModuleEnabled('pingCounter', settings.pingCounter);
+
     if (settings.supportAds) showAds();
     else blockAds();
   }
 
   function initChatFeatures() {
-    const style = document.createElement('style');
-    style.textContent = `
+    if (chatObserver) return;
+
+    let style = document.getElementById('minifeather-chat-style');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'minifeather-chat-style';
+      style.textContent = `
       .chat-gif { max-width:64px; max-height:64px; vertical-align:middle; border-radius:4px; display:inline-block; }
       .yt-wrapper { display:block; width:100%; max-width:320px; margin:6px 0; border-radius:8px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,.5); }
       .chat-meme-wrapper { display:block; width:100%; margin-top:5px; }
       .chat-meme-wrapper video { max-width:240px; border-radius:8px; }
-    `;
-    document.head.appendChild(style);
+      `;
+      document.head.appendChild(style);
+    }
 
     const GIF_BASE = chrome.runtime.getURL('memes/gif/');
     const GIF_LIST = [
@@ -2071,7 +2404,7 @@
       const text = node.nodeValue;
       if (!text || text.length < 3) return;
       const parent = node.parentNode;
-      if (!parent || parent.tagName === 'TEXTAREA' || parent.tagName === 'INPUT' || parent.isContentEditable) return;
+      if (!parent || isMiniFeatherNode(parent) || parent.tagName === 'TEXTAREA' || parent.tagName === 'INPUT' || parent.isContentEditable) return;
       if (parent.dataset && parent.dataset.mfProcessed) return;
 
       let modified = false;
@@ -2157,7 +2490,7 @@
         processNode(node);
         return;
       }
-      if (node.nodeType !== 1 || node.tagName === 'SCRIPT' || node.tagName === 'STYLE') return;
+      if (node.nodeType !== 1 || isMiniFeatherNode(node) || node.tagName === 'SCRIPT' || node.tagName === 'STYLE') return;
       if (node.dataset && node.dataset.mfProcessed) return;
       const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
       const nodes = [];
@@ -2166,38 +2499,48 @@
       nodes.forEach(processNode);
     }
 
-    const observer = new MutationObserver(mutations => {
+    chatObserver = new MutationObserver(mutations => {
       mutations.forEach(mutation => {
         if (mutation.type === 'childList') mutation.addedNodes.forEach(scan);
         else if (mutation.type === 'characterData') scan(mutation.target);
       });
     });
 
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    chatObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
   }
 
   function update() {
-    if (settings.rebrand) {
-      changeTitle();
-      changeFavicon();
-      replaceLogo();
-      replaceBackground();
-      if (settings.discord) {
-        replaceDiscordInput();
-        hideDiscordImage();
-        changeDiscordButton();
-        changeDiscordDescriptions();
-        changeWelcomeText();
-      }
-    }
-    if (!settings.supportAds) blockAds();
-    else showAds();
+    MODULES.get('rebrand')?.refresh();
+    MODULES.get('discord')?.refresh();
+
+    if (settings.supportAds) showAds();
+    else blockAds();
+
     refreshLogoControls();
   }
 
+  function initRootObserver() {
+    if (rootObserver) return;
+
+    rootObserver = new MutationObserver(mutations => {
+      const relevant = mutations.some(mutation => {
+        if (isMiniFeatherNode(mutation.target)) return false;
+        if (mutation.type !== 'childList') return true;
+        return [...mutation.addedNodes, ...mutation.removedNodes].some(node => !isMiniFeatherNode(node));
+      });
+      if (relevant) scheduleUpdate();
+    });
+
+    rootObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
   function init() {
+    if (destroyed || runtimeController) return;
+
+    runtimeController = new AbortController();
+    initLifecycleModules();
     injectFont();
-    initFPSCounter();
+    initFPSCounter().enable();
     initCPSCounter();
     initPingCounter();
     initKeystrokes();
@@ -2206,21 +2549,74 @@
     hookClipboard();
     injectFeatherButton();
 
-    const observer = new MutationObserver(scheduleUpdate);
-    observer.observe(document.body, { childList: true, subtree: true });
+    document.addEventListener('click', handleDocumentClick, {
+      capture: true,
+      signal: runtimeController.signal
+    });
 
+    initRootObserver();
+    applyGuiSettings();
     update();
+  }
+
+  function destroy() {
+    if (destroyed) return;
+    destroyed = true;
+
+    clearTimeout(updateTimer);
+    updateTimer = 0;
+    clearTimeout(sidebarObserverTimer);
+    sidebarObserverTimer = 0;
+
+    panelController?.abort();
+    panelController = null;
+    runtimeController?.abort();
+    runtimeController = null;
+
+    rootObserver?.disconnect();
+    rootObserver = null;
+    fontObserver?.disconnect();
+    fontObserver = null;
+    chatObserver?.disconnect();
+    chatObserver = null;
+    sidebarObserver?.disconnect();
+    sidebarObserver = null;
+
+    unhookClipboard();
+    destroyModules();
+    showAds();
+
+    document.getElementById('mf-sidebar-btn')?.remove();
+    document.getElementById('mf-gui-overlay')?.remove();
+    document.getElementById('mf-gui')?.remove();
+    document.getElementById('mf-gui-style')?.remove();
+    document.getElementById('minifeather-chat-style')?.remove();
+    document.getElementById('minifeather-font')?.remove();
+
+    overlay = null;
+    panel = null;
+    guiReady = false;
+
+    if (globalThis.__MINIFEATHER_CONTENT__?.destroy === destroy) {
+      delete globalThis.__MINIFEATHER_CONTENT__;
+    }
   }
 
   function boot() {
     chrome.storage.local.get(['settings', 'customLogo'], data => {
+      if (destroyed) return;
       settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
       guiSettings = { ...settings };
       currentLogo = data.customLogo || CONFIG.defaultLogo;
-      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-      else init();
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init, { once: true });
+      } else {
+        init();
+      }
     });
   }
 
+  globalThis.__MINIFEATHER_CONTENT__ = { destroy };
   boot();
 })();
