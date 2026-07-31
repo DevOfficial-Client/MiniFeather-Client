@@ -4,7 +4,7 @@
   const CONFIG = {
     defaultLogo: 'https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/refs/heads/main/icon.png',
     background: 'https://raw.githubusercontent.com/EstebanGrp/MIniFeather-Client/main/default-DKNlYibk%20(2).png',
-    discord: 'https://discord.com/invite/ksmp',
+    discord: 'https://discord.gg/k4Ku9DTQDQ',
     title: 'MiniFeather Client',
     fontUrl: 'https://raw.githubusercontent.com/EstebanGrp/MIniFeather-Client/refs/heads/main/Faithful.ttf',
     adSelectors: [
