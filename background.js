@@ -162,52 +162,60 @@ const SPRITESHEET_RULE_ID = 999;
 async function applySpritesheet() {
   const { spritesheetEnabled } = await chrome.storage.local.get(["spritesheetEnabled"]);
 
-  const ruleIds = [
-    SPRITESHEET_RULE_ID,
-    ...EXTRA_TEXTURES.map(texture => texture.id)
-  ];
-
   if (spritesheetEnabled === false) {
     await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: ruleIds
+      removeRuleIds: [SPRITESHEET_RULE_ID]
     });
     return;
   }
 
-  const rules = [
-    {
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: [SPRITESHEET_RULE_ID],
+    addRules: [{
       id: SPRITESHEET_RULE_ID,
       priority: 1,
       action: {
         type: "redirect",
-        redirect: {
-          url: SPRITESHEET_URL
-        }
+        redirect: { url: SPRITESHEET_URL }
       },
       condition: {
         urlFilter: "miniblox.io/textures/spritesheet*",
         resourceTypes: ["image", "other"]
       }
-    },
-
-    ...EXTRA_TEXTURES.map(texture => ({
-      id: texture.id,
-      priority: 1,
-      action: {
-        type: "redirect",
-        redirect: {
-          url: texture.to
-        }
-      },
-      condition: {
-        urlFilter: `${texture.from}*`,
-        resourceTypes: ["image", "other"]
-      }
-    }))
-  ];
-
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: ruleIds,
-    addRules: rules
+    }]
   });
 }
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "setSpritesheet") {
+    chrome.storage.local.set({ spritesheetEnabled: message.enabled })
+      .then(applySpritesheet)
+      .then(() => sendResponse({ success: true }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  if (message.type === "getSpritesheet") {
+    chrome.storage.local.get(["spritesheetEnabled"]).then(data => {
+      sendResponse({ success: true, enabled: data.spritesheetEnabled !== false });
+    });
+    return true;
+  }
+});
+
+chrome.runtime.onInstalled.addListener(async () => {
+  const existing = await chrome.storage.local.get(["settings", "spritesheetEnabled"]);
+  await chrome.storage.local.set({
+    settings: {
+      rebrand: existing.settings?.rebrand ?? true,
+      supportAds: existing.settings?.supportAds ?? false,
+      discord: existing.settings?.discord ?? true,
+      keystrokes: existing.settings?.keystrokes ?? true,
+      language: existing.settings?.language ?? "en"
+    },
+    spritesheetEnabled: existing.spritesheetEnabled !== false
+  });
+  await applySpritesheet();
+});
+
+applySpritesheet();
