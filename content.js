@@ -3,7 +3,7 @@
 
   const CONFIG = {
     defaultLogo: 'https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/refs/heads/main/icon.png',
-    background: 'https://github.com/DevOfficial-Client/MiniFeather-Client/blob/main/Relaxing%20Minecraft%20Music%20to%20Study_Chill%20(no%20rain%20version!)_0_600.mp4',
+    background: 'https://raw.githubusercontent.com/EstebanGrp/MIniFeather-Client/main/default-DKNlYibk%20(2).png',
     discord: 'https://discord.com/invite/ksmp',
     title: 'MiniFeather Client',
     fontUrl: 'https://raw.githubusercontent.com/EstebanGrp/MIniFeather-Client/refs/heads/main/Faithful.ttf',
