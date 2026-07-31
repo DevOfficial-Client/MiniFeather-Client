@@ -64,7 +64,7 @@
       supportAds: 'Support Ads',
       supportAdsDesc: 'Allow ads to support creators.',
       discordRedirect: 'Discord Redirect',
-      discordRedirectDesc: 'Use the custom Kings SMP invite.',
+      discordRedirectDesc: 'Use the MiniFeather Client invite.',
       keystrokes: 'Keystrokes',
       keystrokesDesc: 'Show movement keys and CPS.',
       spritesheet: 'Custom Spritesheet',
