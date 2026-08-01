@@ -1139,8 +1139,12 @@
     return registerModule('pingCounter', () => {
       let box = null;
       let controller = null;
+      let requestController = null;
       let interval = 0;
       let ping = null;
+      let measuring = false;
+      let enabled = false;
+      const samples = [];
 
       function createBox() {
         if (box?.isConnected) return;
@@ -1170,16 +1174,14 @@
         document.body.appendChild(box);
       }
 
-      function readRtt() {
-        if (!navigator.onLine) return null;
+      function connectionRtt() {
         const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
         const value = Number(connection?.rtt);
-        return Number.isFinite(value) && value >= 0 ? value : null;
+        return Number.isFinite(value) && value > 0 ? value : null;
       }
 
       function render() {
-        ping = readRtt();
-        const value = Number.isFinite(ping) ? Math.round(ping) : null;
+        const value = Number.isFinite(ping) ? Math.max(0, Math.round(ping)) : null;
         const color = value === null ? '#94a3b8' : value <= 80 ? '#22c55e' : value <= 150 ? '#facc15' : '#ef4444';
         dashboardStats.ping = value;
         if (box) {
@@ -1187,22 +1189,65 @@
         }
       }
 
+      async function measure() {
+        if (!enabled || measuring || document.hidden) return;
+        if (!navigator.onLine) {
+          ping = null;
+          render();
+          return;
+        }
+
+        measuring = true;
+        requestController?.abort();
+        requestController = new AbortController();
+        const timeout = window.setTimeout(() => requestController?.abort(), 4000);
+        const started = performance.now();
+
+        try {
+          await fetch(`${location.origin}/favicon.ico?mf_ping=${Date.now()}`, {
+            method: 'HEAD',
+            cache: 'no-store',
+            credentials: 'omit',
+            signal: requestController.signal
+          });
+
+          if (!enabled) return;
+          const measured = performance.now() - started;
+          samples.push(measured);
+          if (samples.length > 5) samples.shift();
+
+          const sorted = [...samples].sort((a, b) => a - b);
+          ping = sorted[Math.floor(sorted.length / 2)];
+        } catch (_) {
+          if (!enabled) return;
+          ping = connectionRtt();
+        } finally {
+          clearTimeout(timeout);
+          requestController = null;
+          measuring = false;
+          if (enabled) render();
+        }
+      }
+
       return createLifecycle({
         enable() {
+          enabled = true;
           createBox();
           box.style.display = 'block';
           controller = new AbortController();
           const signal = controller.signal;
-          const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
           let dragging = false;
           let offX = 0;
           let offY = 0;
 
-          connection?.addEventListener?.('change', render, { signal });
-          window.addEventListener('online', render, { signal });
-          window.addEventListener('offline', render, { signal });
+          window.addEventListener('online', measure, { signal });
+          window.addEventListener('offline', () => {
+            requestController?.abort();
+            ping = null;
+            render();
+          }, { signal });
           document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) render();
+            if (!document.hidden) measure();
           }, { signal });
 
           box.addEventListener('mousedown', event => {
@@ -1228,18 +1273,30 @@
             localStorage.setItem('minifeather-ping-pos', JSON.stringify({ x: box.offsetLeft, y: box.offsetTop }));
           }, { signal });
 
+          const initialRtt = connectionRtt();
+          if (initialRtt !== null) ping = initialRtt;
           render();
-          interval = window.setInterval(render, 2000);
+          measure();
+          interval = window.setInterval(measure, 3000);
         },
         disable() {
+          enabled = false;
           controller?.abort();
           controller = null;
+          requestController?.abort();
+          requestController = null;
           clearInterval(interval);
           interval = 0;
+          measuring = false;
           ping = null;
+          samples.length = 0;
+          dashboardStats.ping = null;
           if (box) box.style.display = 'none';
         },
         destroy() {
+          enabled = false;
+          requestController?.abort();
+          requestController = null;
           box?.remove();
           box = null;
         }
