@@ -45,6 +45,8 @@
     keystrokes: true,
     cpsCounter: true,
     pingCounter: true,
+    chatVideos: true,
+    chatLinks: true,
     language: 'en'
   };
 
@@ -79,6 +81,11 @@
       pingCounter: 'Ping Counter',
       pingCounterDesc: 'Show the browser-reported connection round-trip time in milliseconds.',
       pingLabel: 'PING',
+      sectionChat: 'Chat',
+      chatVideos: 'Chat Videos',
+      chatVideosDesc: 'Show YouTube previews while keeping the original message visible.',
+      chatLinks: 'Clickable Chat Links',
+      chatLinksDesc: 'Open links from chat in a new browser tab when clicked.',
       spritesheet: 'Custom Spritesheet',
       spritesheetDesc: 'Replace the default spritesheet.',
       customLogoUrl: 'Logo URL',
@@ -155,6 +162,11 @@
       pingCounter: 'Contador de Ping',
       pingCounterDesc: 'Mostrar el tiempo de ida y vuelta de la conexión reportado por el navegador.',
       pingLabel: 'PING',
+      sectionChat: 'Chat',
+      chatVideos: 'Videos en el Chat',
+      chatVideosDesc: 'Mostrar vistas previas de YouTube conservando visible el mensaje original.',
+      chatLinks: 'Enlaces del Chat',
+      chatLinksDesc: 'Abrir los enlaces del chat en una nueva pestaña del navegador al hacer clic.',
       spritesheet: 'Spritesheet Personalizado',
       spritesheetDesc: 'Reemplazar el spritesheet predeterminado.',
       customLogoUrl: 'URL del logo',
@@ -231,6 +243,11 @@
       pingCounter: 'Ping カウンター',
       pingCounterDesc: 'ブラウザが報告する接続の往復時間をミリ秒で表示します。',
       pingLabel: 'PING',
+      sectionChat: 'チャット',
+      chatVideos: 'チャット動画',
+      chatVideosDesc: '元のメッセージを表示したまま、YouTubeのプレビューをチャットに表示します。',
+      chatLinks: 'クリック可能なチャットリンク',
+      chatLinksDesc: 'チャット内のリンクをクリックすると、ブラウザの新しいタブで開きます。',
       spritesheet: 'カスタムスプライトシート',
       spritesheetDesc: '標準スプライトシートを置き換えます。',
       customLogoUrl: 'ロゴ URL',
@@ -307,6 +324,11 @@
       pingCounter: 'Contatore Ping',
       pingCounterDesc: 'Mostra il tempo di andata e ritorno della connessione rilevato dal browser.',
       pingLabel: 'PING',
+      sectionChat: 'Chat',
+      chatVideos: 'Video nella Chat',
+      chatVideosDesc: 'Mostra le anteprime di YouTube mantenendo visibile il messaggio originale.',
+      chatLinks: 'Link Cliccabili nella Chat',
+      chatLinksDesc: 'Apre i link della chat in una nuova scheda del browser quando vengono cliccati.',
       spritesheet: 'Spritesheet Personalizzato',
       spritesheetDesc: 'Sostituisce lo spritesheet predefinito.',
       customLogoUrl: 'URL del logo',
@@ -374,6 +396,7 @@
   let sidebarObserver = null;
   let sidebarObserverTimer = 0;
   let clipboardOriginalWrite = null;
+  let restoreChatContent = () => {};
   let destroyed = false;
 
   const MODULES = new Map();
@@ -1745,6 +1768,11 @@
               </label>
             </div>
             <div class="mf-card">
+              <div class="mf-card-title">${t('sectionChat')}</div>
+              ${renderToggle('chatVideos', t('chatVideos'), t('chatVideosDesc'))}
+              ${renderToggle('chatLinks', t('chatLinks'), t('chatLinksDesc'))}
+            </div>
+            <div class="mf-card">
               <div class="mf-card-title">${t('sectionLogo')}</div>
               <div class="mf-logo-preview-wrap">
                 <img id="mf-logo-preview" class="mf-logo-preview" src="${currentLogo}" alt="${t('preview')}">
@@ -2335,6 +2363,8 @@
     setModuleEnabled('keystrokes', settings.keystrokes);
     setModuleEnabled('cpsCounter', settings.cpsCounter);
     setModuleEnabled('pingCounter', settings.pingCounter);
+    setModuleEnabled('chatVideos', settings.chatVideos);
+    setModuleEnabled('chatLinks', settings.chatLinks);
 
     if (settings.supportAds) showAds();
     else blockAds();
@@ -2348,10 +2378,45 @@
       style = document.createElement('style');
       style.id = 'minifeather-chat-style';
       style.textContent = `
-      .chat-gif { max-width:64px; max-height:64px; vertical-align:middle; border-radius:4px; display:inline-block; }
-      .yt-wrapper { display:block; width:100%; max-width:320px; margin:6px 0; border-radius:8px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,.5); }
-      .chat-meme-wrapper { display:block; width:100%; margin-top:5px; }
-      .chat-meme-wrapper video { max-width:240px; border-radius:8px; }
+        .mf-chat-processed { display:inline; }
+        .mf-chat-link {
+          color:#60a5fa;
+          text-decoration:underline;
+          text-underline-offset:2px;
+          cursor:pointer;
+          overflow-wrap:anywhere;
+        }
+        .chat-gif {
+          max-width:64px;
+          max-height:64px;
+          vertical-align:middle;
+          border-radius:4px;
+          display:inline-block;
+        }
+        .yt-wrapper {
+          display:block;
+          width:100%;
+          max-width:320px;
+          margin:6px 0;
+          border-radius:8px;
+          overflow:hidden;
+          box-shadow:0 4px 12px rgba(0,0,0,.5);
+        }
+        .yt-wrapper iframe {
+          display:block;
+          width:100%;
+          height:180px;
+          border:0;
+        }
+        .chat-meme-wrapper {
+          display:block;
+          width:100%;
+          margin-top:5px;
+        }
+        .chat-meme-wrapper video {
+          max-width:240px;
+          border-radius:8px;
+        }
       `;
       document.head.appendChild(style);
     }
@@ -2365,16 +2430,6 @@
       'shocked-shocked-cat.gif', 'shrek-rizz-shrek-meme.gif', 'ugly-plankton-meme-ugly-plankton.gif'
     ];
 
-    const gifCache = {};
-
-    function getGif(name) {
-      const key = name.toLowerCase();
-      if (gifCache[key]) return gifCache[key];
-      const file = GIF_LIST.find(entry => entry.toLowerCase() === key || entry.toLowerCase().replace(/\.gif$/, '') === key);
-      gifCache[key] = file ? GIF_BASE + file : null;
-      return gifCache[key];
-    }
-
     const MEME_MAP = {
       'm-no': 'https://qu.ax/STWv.mp4',
       'm-que': 'https://qu.ax/WpYf.mp4',
@@ -2383,121 +2438,247 @@
       'm-bye': 'https://qu.ax/NlCH.mp4'
     };
 
-    const ytRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)[\w-]+[^ \n]*)/i;
+    const gifCache = new Map();
+    const urlRegex = /https?:\/\/[^\s<>"']+/i;
+    const gifRegex = /:([\w\d-]+?)(?:\.gif)?:/i;
 
-    function findRealIndex(text, trigger) {
-      let textIndex = 0;
-      const cleanTrigger = trigger.replace(/-/g, '').replace(/:/g, '');
-      const lowerText = text.toLowerCase().replace(/-/g, '').replace(/:/g, '');
-      const cleanIndex = lowerText.indexOf(cleanTrigger);
-      let count = 0;
-      for (let i = 0; i < text.length && count < cleanIndex; i++) {
-        const character = text[i].toLowerCase();
-        if (character !== '-' && character !== ':') count++;
-        textIndex = i + 1;
+    function getGif(name) {
+      const key = name.toLowerCase();
+      if (gifCache.has(key)) return gifCache.get(key);
+      const file = GIF_LIST.find(entry => {
+        const normalized = entry.toLowerCase();
+        return normalized === key || normalized.replace(/\.gif$/, '') === key;
+      });
+      const value = file ? GIF_BASE + file : null;
+      gifCache.set(key, value);
+      return value;
+    }
+
+    function getYouTubeId(value) {
+      try {
+        const url = new URL(value);
+        const host = url.hostname.toLowerCase().replace(/^www\./, '');
+        let id = '';
+
+        if (host === 'youtu.be') {
+          id = url.pathname.split('/').filter(Boolean)[0] || '';
+        } else if (host === 'youtube.com' || host === 'm.youtube.com') {
+          if (url.pathname === '/watch') id = url.searchParams.get('v') || '';
+          else {
+            const parts = url.pathname.split('/').filter(Boolean);
+            if (['shorts', 'embed', 'live'].includes(parts[0])) id = parts[1] || '';
+          }
+        }
+
+        return /^[\w-]{6,}$/.test(id) ? id : '';
+      } catch (_) {
+        return '';
       }
-      return textIndex;
+    }
+
+    function splitTrailingPunctuation(value) {
+      const match = value.match(/^(.*?)([.,!?;:]+)?$/);
+      return {
+        url: match?.[1] || value,
+        trailing: match?.[2] || ''
+      };
+    }
+
+    function findMeme(text) {
+      const lower = text.toLowerCase();
+      let result = null;
+      Object.keys(MEME_MAP).forEach(key => {
+        const index = lower.indexOf(key);
+        if (index < 0 || (result && result.index <= index)) return;
+        result = { index, key, value: MEME_MAP[key] };
+      });
+      return result;
+    }
+
+    function appendText(target, value) {
+      if (value) target.appendChild(document.createTextNode(value));
+    }
+
+    function appendUrl(target, value) {
+      const { url, trailing } = splitTrailingPunctuation(value);
+      const linksEnabled = MODULES.get('chatLinks')?.enabled === true;
+      const videosEnabled = MODULES.get('chatVideos')?.enabled === true;
+
+      if (linksEnabled) {
+        const anchor = document.createElement('a');
+        anchor.className = 'mf-chat-link';
+        anchor.href = url;
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        anchor.textContent = url;
+        anchor.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          window.open(url, '_blank', 'noopener,noreferrer');
+        });
+        target.appendChild(anchor);
+      } else {
+        appendText(target, url);
+      }
+
+      appendText(target, trailing);
+
+      const videoId = videosEnabled ? getYouTubeId(url) : '';
+      if (!videoId) return;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'yt-wrapper';
+
+      const iframe = document.createElement('iframe');
+      iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(videoId)}`;
+      iframe.loading = 'lazy';
+      iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+      iframe.allowFullscreen = true;
+      iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+
+      wrapper.appendChild(iframe);
+      target.appendChild(wrapper);
+    }
+
+    function appendGif(target, path, name) {
+      const image = document.createElement('img');
+      image.src = path;
+      image.className = 'chat-gif';
+      image.alt = name;
+      image.title = name;
+      target.appendChild(image);
+    }
+
+    function appendMeme(target, source) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'chat-meme-wrapper';
+
+      const video = document.createElement('video');
+      video.src = source;
+      video.autoplay = true;
+      video.controls = true;
+      video.playsInline = true;
+
+      wrapper.appendChild(video);
+      target.appendChild(wrapper);
+    }
+
+    function renderText(target, text) {
+      let remaining = text;
+
+      while (remaining) {
+        const urlMatch = remaining.match(urlRegex);
+        const gifMatch = remaining.match(gifRegex);
+        const memeMatch = findMeme(remaining);
+        const candidates = [];
+
+        if (urlMatch) candidates.push({ type: 'url', index: urlMatch.index, raw: urlMatch[0] });
+        if (gifMatch) candidates.push({ type: 'gif', index: gifMatch.index, raw: gifMatch[0], name: gifMatch[1] });
+        if (memeMatch) candidates.push({ type: 'meme', ...memeMatch, raw: memeMatch.key });
+
+        if (!candidates.length) {
+          appendText(target, remaining);
+          break;
+        }
+
+        candidates.sort((a, b) => a.index - b.index);
+        const next = candidates[0];
+        appendText(target, remaining.slice(0, next.index));
+
+        if (next.type === 'url') {
+          appendUrl(target, next.raw);
+        } else if (next.type === 'gif') {
+          const path = getGif(next.name);
+          if (path) appendGif(target, path, next.name);
+          else appendText(target, next.raw);
+        } else {
+          appendMeme(target, next.value);
+        }
+
+        remaining = remaining.slice(next.index + next.raw.length);
+      }
+    }
+
+    function hasRenderableContent(text) {
+      if (gifRegex.test(text) || findMeme(text)) return true;
+      if (!(MODULES.get('chatVideos')?.enabled || MODULES.get('chatLinks')?.enabled)) return false;
+      return urlRegex.test(text);
+    }
+
+    function renderWrapper(wrapper) {
+      const text = wrapper.dataset.mfOriginalText;
+      if (text == null) return;
+      wrapper.replaceChildren();
+      renderText(wrapper, text);
     }
 
     function processNode(node) {
-      if (!node || node.nodeType !== 3) return;
+      if (!node || node.nodeType !== Node.TEXT_NODE) return;
       const text = node.nodeValue;
-      if (!text || text.length < 3) return;
-      const parent = node.parentNode;
-      if (!parent || isMiniFeatherNode(parent) || parent.tagName === 'TEXTAREA' || parent.tagName === 'INPUT' || parent.isContentEditable) return;
-      if (parent.dataset && parent.dataset.mfProcessed) return;
+      if (!text || text.length < 3 || !hasRenderableContent(text)) return;
 
-      let modified = false;
-      const fragments = [];
-      let remaining = text;
+      const parent = node.parentElement;
+      if (!parent || isMiniFeatherNode(parent)) return;
+      if (parent.closest('.mf-chat-processed, .yt-wrapper, .chat-meme-wrapper')) return;
+      if (['TEXTAREA', 'INPUT', 'SCRIPT', 'STYLE', 'A', 'IFRAME', 'VIDEO'].includes(parent.tagName)) return;
+      if (parent.isContentEditable) return;
 
-      while (remaining.length > 0) {
-        const ytMatch = remaining.match(ytRegex);
-        const gifMatch = remaining.match(/:([\w\d\-]+?)(?:\.gif)?:/i);
-        const memeMatch = Object.keys(MEME_MAP).find(key => {
-          const clean = key.replace(/-/g, '').replace(/:/g, '');
-          return remaining.toLowerCase().replace(/-/g, '').replace(/:/g, '').includes(clean);
-        });
-
-        if (gifMatch && (!ytMatch || gifMatch.index <= ytMatch.index) && (!memeMatch || remaining.indexOf(gifMatch[0]) <= remaining.indexOf(memeMatch))) {
-          if (gifMatch.index > 0) fragments.push({ type: 'text', value: remaining.substring(0, gifMatch.index) });
-          const path = getGif(gifMatch[1]);
-          if (path) {
-            fragments.push({ type: 'gif', value: path, name: gifMatch[1] });
-            modified = true;
-          } else {
-            fragments.push({ type: 'text', value: gifMatch[0] });
-          }
-          remaining = remaining.substring(gifMatch.index + gifMatch[0].length);
-        } else if (ytMatch && (!memeMatch || ytMatch.index <= remaining.indexOf(memeMatch))) {
-          if (ytMatch.index > 0) fragments.push({ type: 'text', value: remaining.substring(0, ytMatch.index) });
-          let id = '';
-          const url = ytMatch[1];
-          if (url.includes('shorts/')) id = url.split('shorts/')[1].split(/[?#]/)[0];
-          else if (url.includes('watch?v=')) id = url.split('watch?v=')[1].split(/[&?#]/)[0];
-          else if (url.includes('youtu.be/')) id = url.split('youtu.be/')[1].split(/[?#]/)[0];
-          else if (url.includes('embed/')) id = url.split('embed/')[1].split(/[?#]/)[0];
-          if (id) {
-            fragments.push({ type: 'yt', value: id });
-            modified = true;
-          } else {
-            fragments.push({ type: 'text', value: ytMatch[0] });
-          }
-          remaining = remaining.substring(ytMatch.index + ytMatch[0].length);
-        } else if (memeMatch) {
-          const realIndex = findRealIndex(remaining, memeMatch);
-          if (realIndex > 0) fragments.push({ type: 'text', value: remaining.substring(0, realIndex) });
-          fragments.push({ type: 'meme', value: MEME_MAP[memeMatch] });
-          modified = true;
-          remaining = remaining.substring(realIndex + memeMatch.length);
-        } else {
-          fragments.push({ type: 'text', value: remaining });
-          remaining = '';
-        }
-      }
-
-      if (!modified) return;
-      parent.dataset.mfProcessed = '1';
-      const span = document.createElement('span');
-      fragments.forEach(fragment => {
-        if (fragment.type === 'text' && fragment.value) {
-          span.appendChild(document.createTextNode(fragment.value));
-        } else if (fragment.type === 'gif') {
-          const image = document.createElement('img');
-          image.src = fragment.value;
-          image.className = 'chat-gif';
-          image.alt = fragment.name;
-          image.title = fragment.name;
-          span.appendChild(image);
-        } else if (fragment.type === 'yt') {
-          const div = document.createElement('div');
-          div.className = 'yt-wrapper';
-          div.innerHTML = `<iframe width="100%" height="180" src="https://www.youtube.com/embed/${fragment.value}?autoplay=1" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
-          span.appendChild(div);
-        } else if (fragment.type === 'meme') {
-          const div = document.createElement('div');
-          div.className = 'chat-meme-wrapper';
-          div.innerHTML = `<video src="${fragment.value}" style="max-width:240px;border-radius:8px;" autoplay controls></video>`;
-          span.appendChild(div);
-        }
-      });
-      parent.replaceChild(span, node);
+      const wrapper = document.createElement('span');
+      wrapper.className = 'mf-chat-processed';
+      wrapper.dataset.mfOriginalText = text;
+      node.replaceWith(wrapper);
+      renderWrapper(wrapper);
     }
 
     function scan(node) {
       if (!node) return;
-      if (node.nodeType === 3) {
+      if (node.nodeType === Node.TEXT_NODE) {
         processNode(node);
         return;
       }
-      if (node.nodeType !== 1 || isMiniFeatherNode(node) || node.tagName === 'SCRIPT' || node.tagName === 'STYLE') return;
-      if (node.dataset && node.dataset.mfProcessed) return;
-      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+      if (node.nodeType !== Node.ELEMENT_NODE || isMiniFeatherNode(node)) return;
+      if (node.matches('.mf-chat-processed, script, style, textarea, input, iframe, video')) return;
+
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {
+        acceptNode(textNode) {
+          const parent = textNode.parentElement;
+          if (!parent || parent.closest('.mf-chat-processed, script, style, textarea, input, iframe, video')) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+
       const nodes = [];
       let current;
       while ((current = walker.nextNode())) nodes.push(current);
       nodes.forEach(processNode);
     }
+
+    function refresh() {
+      document.querySelectorAll('.mf-chat-processed').forEach(renderWrapper);
+      if (MODULES.get('chatVideos')?.enabled || MODULES.get('chatLinks')?.enabled) scan(document.body);
+    }
+
+    restoreChatContent = () => {
+      document.querySelectorAll('.mf-chat-processed').forEach(wrapper => {
+        wrapper.replaceWith(document.createTextNode(wrapper.dataset.mfOriginalText || ''));
+      });
+    };
+
+    registerModule('chatVideos', () => createLifecycle({
+      enable: refresh,
+      disable: refresh,
+      refresh,
+      destroy: () => {}
+    }));
+
+    registerModule('chatLinks', () => createLifecycle({
+      enable: refresh,
+      disable: refresh,
+      refresh,
+      destroy: () => {}
+    }));
 
     chatObserver = new MutationObserver(mutations => {
       mutations.forEach(mutation => {
@@ -2506,7 +2687,13 @@
       });
     });
 
-    chatObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
+    chatObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+
+    scan(document.body);
   }
 
   function update() {
@@ -2579,6 +2766,8 @@
     fontObserver = null;
     chatObserver?.disconnect();
     chatObserver = null;
+    restoreChatContent();
+    restoreChatContent = () => {};
     sidebarObserver?.disconnect();
     sidebarObserver = null;
 
