@@ -58,10 +58,10 @@
     { id: 'shocked-shocked-cat', file: 'shocked-shocked-cat.gif' },
     { id: 'shrek-rizz-shrek-meme', file: 'shrek-rizz-shrek-meme.gif' },
     { id: 'ugly-plankton-meme-ugly-plankton', file: 'ugly-plankton-meme-ugly-plankton.gif' },
-    { id: 'blue-laugh', file: 'laughing.png' },
-    { id: 'happy-face', file: 'faceemoji.png' },
-    { id: 'pop-cat', file: '6pk3tk.png' },
-    { id: 'blue-kiss', file: 'son.png' },
+    { id: 'laughing', file: 'laughing.png' },
+    { id: 'faceemoji', file: 'faceemoji.png' },
+    { id: '6pk3tk', file: '6pk3tk.png' },
+    { id: 'son', file: 'son.png' },
     { id: '67-kid', file: '67-kid.png' }
   ]);
 
