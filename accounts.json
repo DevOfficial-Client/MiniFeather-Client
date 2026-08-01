@@ -1,0 +1,11 @@
+{
+  "players": {
+    "uuid1": {
+      "skin": "...",
+      "cape": "...",
+      "rank": "[OWNER]",
+      "level": 999,
+      "color": "#ff0000"
+    }
+  }
+}
