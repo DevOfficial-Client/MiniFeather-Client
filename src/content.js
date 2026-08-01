@@ -38,32 +38,32 @@
     ]
   };
 
-  const CHAT_GIF_FILES = [
-    '84-years.gif',
-    '1000-yard-stare-cat-meme.gif',
-    'aaaah-cat.gif',
-    'beard-bear.gif',
-    'cat-disgusted.gif',
-    'cat-meme.gif',
-    'cat-meme-cat.gif',
-    'chat-pouce.gif',
-    'clappi-clappi-clappi.gif',
-    'devil-cat-evil.gif',
-    'hands-down-meme.gif',
-    'kermit.gif',
-    'lfg-lets-go.gif',
-    'memes2022funny-meme.gif',
-    'question-emoji.gif',
-    'scary-cat.gif',
-    'shocked-shocked-cat.gif',
-    'shrek-rizz-shrek-meme.gif',
-    'ugly-plankton-meme-ugly-plankton.gif',
-    'blue-laugh.png',
-    'happy-face.png',
-    'pop-cat.png',
-    'blue-kiss.png',
-    '67-kid.png'
-  ];
+  const CHAT_GIFS = Object.freeze([
+    { id: '84-years', file: '84-years.gif' },
+    { id: '1000-yard-stare-cat-meme', file: '1000-yard-stare-cat-meme.gif' },
+    { id: 'aaaah-cat', file: 'aaaah-cat.gif' },
+    { id: 'beard-bear', file: 'beard-bear.gif' },
+    { id: 'cat-disgusted', file: 'cat-disgusted.gif' },
+    { id: 'cat-meme', file: 'cat-meme.gif' },
+    { id: 'cat-meme-cat', file: 'cat-meme-cat.gif' },
+    { id: 'chat-pouce', file: 'chat-pouce.gif' },
+    { id: 'clappi-clappi-clappi', file: 'clappi-clappi-clappi.gif' },
+    { id: 'devil-cat-evil', file: 'devil-cat-evil.gif' },
+    { id: 'hands-down-meme', file: 'hands-down-meme.gif' },
+    { id: 'kermit', file: 'kermit.gif' },
+    { id: 'lfg-lets-go', file: 'lfg-lets-go.gif' },
+    { id: 'memes2022funny-meme', file: 'memes2022funny-meme.gif' },
+    { id: 'question-emoji', file: 'question-emoji.gif' },
+    { id: 'scary-cat', file: 'scary-cat.gif' },
+    { id: 'shocked-shocked-cat', file: 'shocked-shocked-cat.gif' },
+    { id: 'shrek-rizz-shrek-meme', file: 'shrek-rizz-shrek-meme.gif' },
+    { id: 'ugly-plankton-meme-ugly-plankton', file: 'ugly-plankton-meme-ugly-plankton.gif' },
+    { id: 'blue-laugh', file: 'laughing.png' },
+    { id: 'happy-face', file: 'faceemoji.png' },
+    { id: 'pop-cat', file: '6pk3tk.png' },
+    { id: 'blue-kiss', file: 'son.png' },
+    { id: '67-kid', file: '67-kid.png' }
+  ]);
 
   const CHAT_VIDEOS = Object.freeze({
     'm-no': 'https://qu.ax/STWv.mp4',
@@ -2427,14 +2427,11 @@
   }
 
   function getChatMemeItems() {
-    return CHAT_GIF_FILES.map(file => {
-      const id = `:${file.replace(/\.(?:gif|png|jpe?g|webp|avif)$/i, '')}:`;
-      return {
-        id,
-        file,
-        preview: chrome.runtime.getURL(`assets/memes/gif/${file}`)
-      };
-    });
+    return CHAT_GIFS.map(({ id, file }) => ({
+      id: `:${id}:`,
+      file,
+      preview: chrome.runtime.getURL(`assets/memes/gif/${file}`)
+    }));
   }
 
   function renderMemeIdButtons(items) {
@@ -3278,7 +3275,7 @@
     }
 
     const GIF_BASE = chrome.runtime.getURL('assets/memes/gif/');
-    const GIF_LIST = CHAT_GIF_FILES;
+    const GIF_LIST = CHAT_GIFS;
     const MEME_MAP = CHAT_VIDEOS;
 
     const gifCache = new Map();
@@ -3288,11 +3285,13 @@
     function getGif(name) {
       const key = name.toLowerCase();
       if (gifCache.has(key)) return gifCache.get(key);
-      const file = GIF_LIST.find(entry => {
-        const normalized = entry.toLowerCase();
-        return normalized === key || normalized.replace(/\.(?:gif|png|jpe?g|webp|avif)$/i, '') === key;
+      const meme = GIF_LIST.find(({ id, file }) => {
+        const normalizedId = id.toLowerCase();
+        const normalizedFile = file.toLowerCase();
+        const fileId = normalizedFile.replace(/\.(?:gif|png|jpe?g|webp|avif)$/i, '');
+        return normalizedId === key || normalizedFile === key || fileId === key;
       });
-      const value = file ? GIF_BASE + file : null;
+      const value = meme ? GIF_BASE + meme.file : null;
       gifCache.set(key, value);
       return value;
     }
