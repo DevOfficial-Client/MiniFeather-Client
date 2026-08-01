@@ -38,6 +38,19 @@
     ]
   };
 
+  const NAV_ITEMS = [
+    { id: 'dashboard', icon: '🏠', labelKey: 'navDashboard' },
+    { id: 'hud', icon: '🎮', labelKey: 'navHud' },
+    { id: 'render', icon: '✨', labelKey: 'navRender' },
+    { id: 'cosmetics', icon: '👕', labelKey: 'tabSkins' },
+    { id: 'chat', icon: '💬', labelKey: 'sectionChat' },
+    { id: 'world', icon: '🌍', labelKey: 'navWorld' },
+    { id: 'settings', icon: '⚙', labelKey: 'navSettings' },
+    { id: 'about', icon: '🪶', labelKey: 'tabAbout' }
+  ];
+
+  const MODULE_VERSION = '1.0';
+
   const DEFAULT_SETTINGS = {
     rebrand: true,
     supportAds: false,
@@ -130,7 +143,22 @@
       discordDesc4: 'Chat with the MiniFeather Client community',
       discordDesc5: 'Join the MiniFeather Client community',
       preview: 'Preview',
-      customLogoLocal: 'A local image is selected'
+      customLogoLocal: 'A local image is selected',
+      navDashboard: 'Dashboard',
+      navHud: 'HUD',
+      navRender: 'Rendering',
+      navWorld: 'World',
+      navSettings: 'Settings',
+      dashboardModulesTitle: 'Enabled Modules',
+      dashboardModulesSub: 'Currently active',
+      dashboardFpsSub: 'Current FPS',
+      dashboardPingSub: 'Server latency',
+      dashboardVersionSub: 'MiniFeather Client',
+      worldComingSoon: 'World features are coming soon.',
+      searchPlaceholder: 'Search modules...',
+      searchNoResults: 'No modules match your search.',
+      searchResultsLabel: 'Search Results',
+      aboutDiscordMessage: 'Want to know more about the client and its progress? Join our Discord to follow active development and get the latest updates.'
     },
     es: {
       title: 'MiniFeather',
@@ -211,7 +239,21 @@
       discordDesc4: 'Habla con la comunidad de Kings SMP',
       discordDesc5: 'Únete a la comunidad de Kings SMP',
       preview: 'Vista previa',
-      customLogoLocal: 'Se seleccionó una imagen local'
+      customLogoLocal: 'Se seleccionó una imagen local',
+      navDashboard: 'Panel',
+      navHud: 'HUD',
+      navRender: 'Renderizado',
+      navWorld: 'Mundo',
+      navSettings: 'Ajustes',
+      dashboardModulesTitle: 'Módulos Activos',
+      dashboardModulesSub: 'Actualmente activos',
+      dashboardFpsSub: 'FPS actuales',
+      dashboardPingSub: 'Latencia del servidor',
+      dashboardVersionSub: 'MiniFeather Client',
+      worldComingSoon: 'Las funciones de mundo llegarán pronto.',
+      searchPlaceholder: 'Buscar módulos...',
+      searchNoResults: 'Ningún módulo coincide con tu búsqueda.',
+      searchResultsLabel: 'Resultados de Búsqueda'
     },
     ja: {
       title: 'MiniFeather',
@@ -292,7 +334,21 @@
       discordDesc4: 'Kings SMP コミュニティと交流する',
       discordDesc5: 'Kings SMP コミュニティに参加する',
       preview: 'プレビュー',
-      customLogoLocal: 'ローカル画像が選択されています'
+      customLogoLocal: 'ローカル画像が選択されています',
+      navDashboard: 'ダッシュボード',
+      navHud: 'HUD',
+      navRender: 'レンダリング',
+      navWorld: 'ワールド',
+      navSettings: '設定',
+      dashboardModulesTitle: '有効なモジュール',
+      dashboardModulesSub: '現在有効',
+      dashboardFpsSub: '現在のFPS',
+      dashboardPingSub: 'サーバーの遅延',
+      dashboardVersionSub: 'MiniFeather Client',
+      worldComingSoon: 'ワールド機能は近日公開予定です。',
+      searchPlaceholder: 'モジュールを検索...',
+      searchNoResults: '一致するモジュールがありません。',
+      searchResultsLabel: '検索結果'
     },
     it: {
       title: 'MiniFeather',
@@ -373,7 +429,21 @@
       discordDesc4: 'Chatta con la community di Kings SMP',
       discordDesc5: 'Unisciti alla community di Kings SMP',
       preview: 'Anteprima',
-      customLogoLocal: 'È stata selezionata un’immagine locale'
+      customLogoLocal: 'È stata selezionata un’immagine locale',
+      navDashboard: 'Dashboard',
+      navHud: 'HUD',
+      navRender: 'Rendering',
+      navWorld: 'Mondo',
+      navSettings: 'Impostazioni',
+      dashboardModulesTitle: 'Moduli Attivi',
+      dashboardModulesSub: 'Attualmente attivi',
+      dashboardFpsSub: 'FPS attuali',
+      dashboardPingSub: 'Latenza del server',
+      dashboardVersionSub: 'MiniFeather Client',
+      worldComingSoon: 'Le funzionalità del mondo arriveranno presto.',
+      searchPlaceholder: 'Cerca moduli...',
+      searchNoResults: 'Nessun modulo corrisponde alla ricerca.',
+      searchResultsLabel: 'Risultati della Ricerca'
     }
   };
 
@@ -384,7 +454,10 @@
   let guiSettings = { ...DEFAULT_SETTINGS };
   let currentLogo = CONFIG.defaultLogo;
   let updateTimer = 0;
-  let activeTab = 'client';
+  let activePage = 'dashboard';
+  let searchQuery = '';
+  let dashboardStats = { fps: 0, ping: null };
+  let dashboardTimer = 0;
   let overlay = null;
   let panel = null;
   let guiReady = false;
@@ -886,6 +959,7 @@
             const fps = Math.round(frames * 1000 / elapsed);
             const color = fps >= 120 ? '#22c55e' : fps >= 60 ? '#facc15' : '#ef4444';
             box.innerHTML = `<span style="color:#7c3aed;">MF</span><span style="color:#4b5563;padding:0 6px;">•</span><span style="color:${color};">${fps}</span><span style="color:#9ca3af;"> FPS</span>`;
+            dashboardStats.fps = fps;
             frames = 0;
             last = now;
           }
@@ -1107,6 +1181,7 @@
         ping = readRtt();
         const value = Number.isFinite(ping) ? Math.round(ping) : null;
         const color = value === null ? '#94a3b8' : value <= 80 ? '#22c55e' : value <= 150 ? '#facc15' : '#ef4444';
+        dashboardStats.ping = value;
         if (box) {
           box.innerHTML = `<span style="color:#9ca3af;">${t('pingLabel')}</span> <span style="color:${color};">${value === null ? '--' : value}</span> <span style="color:#64748b;">ms</span>`;
         }
@@ -1389,58 +1464,187 @@
       #mf-gui-overlay {
         position:fixed;
         inset:0;
-        background:rgba(2,6,12,.52);
-        backdrop-filter:blur(8px);
-        -webkit-backdrop-filter:blur(8px);
+        background:rgba(3,4,8,.6);
+        backdrop-filter:blur(12px);
+        -webkit-backdrop-filter:blur(12px);
         z-index:999998;
         display:none;
       }
       #mf-gui {
+        --mf-bg:#090b11;
+        --mf-panel:#11151d;
+        --mf-panel2:#171c26;
+        --mf-border:#252d3b;
+        --mf-accent:#7c5cff;
+        --mf-accent2:#9a84ff;
+        --mf-text:#ffffff;
+        --mf-sub:#9ea8b7;
         position:fixed;
         top:50%;
         left:50%;
         transform:translate(-50%,-50%);
-        width:min(360px, calc(100vw - 24px));
-        max-height:min(720px, calc(100vh - 24px));
-        background:rgba(8,11,18,.96);
-        border:1px solid rgba(255,255,255,.08);
-        border-radius:20px;
-        box-shadow:0 24px 70px rgba(0,0,0,.45);
+        width:min(1120px, calc(100vw - 24px));
+        height:min(700px, calc(100vh - 24px));
+        background:var(--mf-bg);
+        border:1px solid var(--mf-border);
+        border-radius:22px;
+        box-shadow:0 35px 120px rgba(0,0,0,.65);
         overflow:hidden;
-        color:#edf2f7;
+        color:var(--mf-text);
         z-index:999999;
         display:none;
         pointer-events:none;
         opacity:0;
         transition:opacity .14s ease;
       }
+      #mf-gui,
+      .mf-select {
+        color-scheme:dark;
+      }
       #mf-gui-shell {
         display:flex;
-        flex-direction:column;
-        max-height:min(720px, calc(100vh - 24px));
+        height:100%;
       }
-      #mf-gui-header {
+      #mf-gui-sidebar {
+        width:240px;
+        flex:0 0 auto;
+        background:var(--mf-panel);
+        border-right:1px solid var(--mf-border);
+        display:flex;
+        flex-direction:column;
+        overflow-y:auto;
+      }
+      #mf-gui-sidebar-brand {
+        display:flex;
+        align-items:center;
+        gap:10px;
+        padding:22px 20px 16px;
+      }
+      #mf-gui-sidebar-brand strong {
+        font-size:17px;
+        font-weight:800;
+        letter-spacing:.3px;
+        color:#fff;
+      }
+      .mf-nav-list {
+        display:flex;
+        flex-direction:column;
+        gap:2px;
+        padding:6px 12px;
+      }
+      .mf-nav {
+        display:flex;
+        align-items:center;
+        gap:10px;
+        padding:11px 14px;
+        border-radius:12px;
+        cursor:pointer;
+        font-weight:600;
+        font-size:13px;
+        color:var(--mf-sub);
+        transition:background .15s ease, color .15s ease;
+        border-left:3px solid transparent;
+        user-select:none;
+      }
+      .mf-nav-icon {
+        font-size:15px;
+        width:18px;
+        text-align:center;
+        flex:0 0 auto;
+      }
+      .mf-nav:hover {
+        background:rgba(124,92,255,.12);
+        color:#fff;
+      }
+      .mf-nav.active {
+        background:rgba(124,92,255,.18);
+        color:#fff;
+        border-left-color:var(--mf-accent);
+      }
+      #mf-gui-content {
+        flex:1;
+        min-width:0;
+        display:flex;
+        flex-direction:column;
+        background:var(--mf-bg);
+      }
+      #mf-gui-topbar {
+        height:66px;
+        flex:0 0 auto;
         display:flex;
         align-items:center;
         gap:12px;
-        padding:14px 16px;
-        border-bottom:1px solid rgba(255,255,255,.06);
-        cursor:move;
-        background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0));
+        padding:0 24px;
+        border-bottom:1px solid var(--mf-border);
       }
-      #mf-gui-brand {
+      #mf-gui-topbar h2 {
+        margin:0;
+        font-size:16px;
+        color:#fff;
+        white-space:nowrap;
+      }
+      #mf-gui-search {
+        flex:1;
+        max-width:320px;
+        margin-left:16px;
+        padding:10px 14px;
+        border-radius:10px;
+        background:var(--mf-panel2);
+        border:1px solid var(--mf-border);
+        color:#fff;
+        outline:none;
+        font-size:12px;
+      }
+      #mf-gui-search:focus {
+        border-color:rgba(154,132,255,.5);
+      }
+      #mf-gui-search::placeholder {
+        color:#64748b;
+      }
+      .mf-topbar-actions {
+        display:flex;
+        align-items:center;
+        gap:8px;
+        margin-left:auto;
+      }
+      #mf-gui-page {
+        flex:1;
+        overflow:auto;
+        padding:26px 28px;
+        scrollbar-width:thin;
+        scrollbar-color:#475569 #0b0f18;
+      }
+      #mf-gui-page::-webkit-scrollbar {
+        width:10px;
+        height:10px;
+      }
+      #mf-gui-page::-webkit-scrollbar-track {
+        background:#0b0f18;
+      }
+      #mf-gui-page::-webkit-scrollbar-thumb {
+        background:#475569;
+        border:2px solid #0b0f18;
+        border-radius:999px;
+      }
+      #mf-gui-page::-webkit-scrollbar-thumb:hover {
+        background:#64748b;
+      }
+      #mf-gui-page h1 {
+        margin:0 0 20px;
+        font-size:15px;
+        text-transform:uppercase;
+        letter-spacing:.14em;
+        color:#64748b;
+      }
+      .mf-page-stack {
         display:flex;
         flex-direction:column;
-        min-width:0;
+        gap:18px;
       }
-      #mf-gui-brand strong {
-        font-size:15px;
-        line-height:1.1;
-        color:#fff;
-      }
-      #mf-gui-brand span {
-        font-size:11px;
-        color:#94a3b8;
+      .mf-grid {
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+        gap:16px;
       }
       .mf-icon {
         width:30px;
@@ -1450,12 +1654,6 @@
         box-shadow:0 0 0 1px rgba(255,255,255,.08) inset;
         flex:0 0 auto;
       }
-      .mf-header-actions {
-        display:flex;
-        align-items:center;
-        gap:8px;
-        margin-left:auto;
-      }
       .mf-select,
       .mf-input,
       .mf-file,
@@ -1463,18 +1661,13 @@
       .mf-small-btn {
         width:100%;
         border-radius:12px;
-        border:1px solid rgba(255,255,255,.08);
+        border:1px solid var(--mf-border);
         background:rgba(255,255,255,.04);
         color:#edf2f7;
         padding:10px 12px;
         font-size:12px;
         outline:none;
         transition:border-color .15s ease, background .15s ease, transform .12s ease;
-      }
-      /* Keep native select menus readable in Chromium/Windows dark mode. */
-      #mf-gui,
-      .mf-select {
-        color-scheme:dark;
       }
       .mf-select {
         background-color:#111827;
@@ -1514,7 +1707,7 @@
         transform:translateY(-1px);
       }
       .mf-btn.primary {
-        background:linear-gradient(180deg, rgba(124,58,237,.96), rgba(91,33,182,.96));
+        background:linear-gradient(180deg, rgba(124,92,255,.96), rgba(91,33,182,.96));
         border-color:rgba(167,139,250,.3);
         color:#fff;
       }
@@ -1527,63 +1720,19 @@
         border-color:rgba(239,68,68,.2);
         color:#fecaca;
       }
-      .mf-tabs {
-        display:grid;
-        grid-template-columns:repeat(3, 1fr);
-        gap:8px;
-        padding:12px 16px 0;
-      }
-      .mf-tab-btn {
-        background:rgba(255,255,255,.03);
-        border:1px solid rgba(255,255,255,.06);
-        color:#94a3b8;
-        border-radius:12px;
-        padding:9px 10px;
-        font-size:12px;
-        cursor:pointer;
-      }
-      .mf-tab-btn.active {
-        background:rgba(124,58,237,.14);
-        border-color:rgba(167,139,250,.35);
-        color:#fff;
-      }
-      .mf-body {
-        padding:12px 16px 16px;
-        overflow:auto;
-        scrollbar-width:thin;
-        scrollbar-color:#475569 #0b0f18;
-      }
-      .mf-body::-webkit-scrollbar {
-        width:10px;
-        height:10px;
-      }
-      .mf-body::-webkit-scrollbar-track {
-        background:#0b0f18;
-      }
-      .mf-body::-webkit-scrollbar-thumb {
-        background:#475569;
-        border:2px solid #0b0f18;
-        border-radius:999px;
-      }
-      .mf-body::-webkit-scrollbar-thumb:hover {
-        background:#64748b;
-      }
-      .mf-tab-panel {
-        display:none;
-        flex-direction:column;
-        gap:12px;
-      }
-      .mf-tab-panel.active {
-        display:flex;
-      }
       .mf-card {
-        background:rgba(255,255,255,.03);
-        border:1px solid rgba(255,255,255,.06);
-        border-radius:16px;
-        padding:12px;
+        background:linear-gradient(180deg,var(--mf-panel2),var(--mf-panel));
+        border:1px solid var(--mf-border);
+        border-radius:18px;
+        padding:18px;
         display:flex;
         flex-direction:column;
         gap:10px;
+        transition:border-color .18s ease, transform .18s ease;
+      }
+      .mf-card.mf-stat-card:hover {
+        transform:translateY(-3px);
+        border-color:var(--mf-accent);
       }
       .mf-card-title {
         font-size:11px;
@@ -1591,15 +1740,59 @@
         letter-spacing:.14em;
         color:#64748b;
       }
+      .mf-stat-value {
+        margin-top:4px;
+        font-size:32px;
+        font-weight:700;
+        color:var(--mf-accent2);
+      }
+      .mf-toggle-grid {
+        display:grid;
+        grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
+        gap:10px;
+      }
       .mf-toggle {
         display:flex;
+        flex-direction:column;
         align-items:center;
-        gap:12px;
-        justify-content:space-between;
+        justify-content:center;
+        text-align:center;
+        gap:6px;
+        height:104px;
+        padding:12px 10px;
+        border-radius:16px;
+        border:1px solid var(--mf-border);
+        background:rgba(255,255,255,.03);
+        cursor:pointer;
+        position:relative;
+        transition:border-color .15s ease, background .15s ease, transform .15s ease;
+      }
+      .mf-toggle:hover {
+        transform:translateY(-2px);
+        border-color:rgba(124,92,255,.4);
+      }
+      .mf-toggle:has(.mf-switch-hidden:checked) {
+        background:rgba(124,92,255,.14);
+        border-color:var(--mf-accent);
+      }
+      .mf-toggle-dot {
+        position:absolute;
+        top:10px;
+        right:10px;
+        width:8px;
+        height:8px;
+        border-radius:50%;
+        background:#475569;
+        transition:background .15s ease, box-shadow .15s ease;
+      }
+      .mf-toggle:has(.mf-switch-hidden:checked) .mf-toggle-dot {
+        background:var(--mf-accent2);
+        box-shadow:0 0 8px rgba(154,132,255,.7);
       }
       .mf-toggle-copy {
         display:flex;
         flex-direction:column;
+        align-items:center;
         gap:2px;
         min-width:0;
       }
@@ -1609,39 +1802,20 @@
         font-weight:700;
       }
       .mf-toggle-copy span {
-        font-size:11px;
+        font-size:10px;
         color:#94a3b8;
         line-height:1.35;
+        display:-webkit-box;
+        -webkit-line-clamp:2;
+        -webkit-box-orient:vertical;
+        overflow:hidden;
       }
-      .mf-switch {
-        appearance:none;
-        width:38px;
-        height:22px;
-        border-radius:999px;
-        background:#1e293b;
-        border:1px solid rgba(255,255,255,.08);
-        position:relative;
-        cursor:pointer;
-        flex:0 0 auto;
-      }
-      .mf-switch::after {
-        content:'';
+      .mf-switch-hidden {
         position:absolute;
-        top:2px;
-        left:2px;
-        width:16px;
-        height:16px;
-        border-radius:50%;
-        background:#94a3b8;
-        transition:transform .16s ease, background .16s ease;
-      }
-      .mf-switch:checked {
-        background:rgba(124,58,237,.4);
-        border-color:rgba(167,139,250,.35);
-      }
-      .mf-switch:checked::after {
-        transform:translateX(16px);
-        background:#fff;
+        opacity:0;
+        width:1px;
+        height:1px;
+        pointer-events:none;
       }
       .mf-grid-2 {
         display:grid;
@@ -1662,7 +1836,7 @@
         width:52px;
         height:52px;
         border-radius:14px;
-        border:1px solid rgba(255,255,255,.08);
+        border:1px solid var(--mf-border);
         background:rgba(255,255,255,.04);
         object-fit:cover;
         flex:0 0 auto;
@@ -1676,7 +1850,7 @@
         display:flex;
         flex-direction:column;
         gap:8px;
-        max-height:180px;
+        max-height:220px;
         overflow:auto;
       }
       .mf-active-item {
@@ -1687,7 +1861,7 @@
         padding:10px 12px;
         border-radius:12px;
         background:rgba(255,255,255,.03);
-        border:1px solid rgba(255,255,255,.06);
+        border:1px solid var(--mf-border);
       }
       .mf-active-item span {
         font-size:12px;
@@ -1705,135 +1879,126 @@
         width:34px;
         height:34px;
         border-radius:12px;
-        border:1px solid rgba(255,255,255,.06);
+        border:1px solid var(--mf-border);
         background:rgba(255,255,255,.04);
         color:#cbd5e1;
         font-size:18px;
         line-height:1;
         cursor:pointer;
+        flex:0 0 auto;
       }
-      @media (max-width: 520px) {
+      #mf-language-select {
+        width:auto;
+        min-width:110px;
+      }
+      @media (max-width: 820px) {
         #mf-gui {
-          width:calc(100vw - 20px);
-          max-height:calc(100vh - 20px);
+          width:calc(100vw - 16px);
+          height:calc(100vh - 16px);
+        }
+        #mf-gui-shell {
+          flex-direction:column;
+        }
+        #mf-gui-sidebar {
+          width:100%;
+          flex-direction:row;
+          align-items:center;
+          overflow-x:auto;
+          overflow-y:hidden;
+          border-right:none;
+          border-bottom:1px solid var(--mf-border);
+        }
+        #mf-gui-sidebar-brand {
+          padding:12px 14px;
+        }
+        .mf-nav-list {
+          flex-direction:row;
+          padding:6px 10px;
+        }
+        .mf-nav {
+          border-left:none;
+          border-bottom:3px solid transparent;
+          white-space:nowrap;
+        }
+        .mf-nav.active {
+          border-left-color:transparent;
+          border-bottom-color:var(--mf-accent);
+        }
+        #mf-gui-topbar {
+          padding:0 14px;
+          flex-wrap:wrap;
+          height:auto;
+          gap:8px;
+          padding-top:10px;
+          padding-bottom:10px;
+        }
+        #mf-gui-search {
+          max-width:none;
+          margin-left:0;
+          order:3;
+          flex:1 1 100%;
+        }
+        #mf-gui-page {
+          padding:18px;
         }
         .mf-grid-2 {
           grid-template-columns:1fr;
+        }
+        .mf-toggle-grid {
+          grid-template-columns:1fr 1fr;
         }
       }
     `;
     document.head.appendChild(style);
   }
 
+  function getModuleIndex() {
+    return [
+      { page: 'hud', key: 'keystrokes', title: t('keystrokes'), desc: t('keystrokesDesc') },
+      { page: 'hud', key: 'cpsCounter', title: t('cpsCounter'), desc: t('cpsCounterDesc') },
+      { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc') },
+      { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
+      { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
+      { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc') },
+      { page: 'settings', key: 'discord', title: t('discordRedirect'), desc: t('discordRedirectDesc') },
+      { page: 'settings', key: 'supportAds', title: t('supportAds'), desc: t('supportAdsDesc') }
+    ];
+  }
+
+  function renderNavList() {
+    return NAV_ITEMS.map(item => `
+      <div class="mf-nav ${activePage === item.id && !searchQuery ? 'active' : ''}" data-page="${item.id}">
+        <span class="mf-nav-icon">${item.icon}</span>
+        <span>${t(item.labelKey)}</span>
+      </div>
+    `).join('');
+  }
+
   function getPanelTemplate() {
     return `
       <div id="mf-gui-shell">
-        <div id="mf-gui-header">
-          <img class="mf-icon" src="${currentLogo}" alt="MiniFeather">
-          <div id="mf-gui-brand">
+        <div id="mf-gui-sidebar">
+          <div id="mf-gui-sidebar-brand">
+            <img class="mf-icon" src="${currentLogo}" alt="MiniFeather">
             <strong>${t('title')}</strong>
-            <span>${t('subtitle')} · ${t('shortcut')}</span>
           </div>
-          <div class="mf-header-actions">
-            <select id="mf-language-select" class="mf-select" style="width:122px;padding:8px 10px;">
-              <option value="en" ${settings.language === 'en' ? 'selected' : ''}>English</option>
-              <option value="es" ${settings.language === 'es' ? 'selected' : ''}>Español</option>
-              <option value="ja" ${settings.language === 'ja' ? 'selected' : ''}>日本語</option>
-              <option value="it" ${settings.language === 'it' ? 'selected' : ''}>Italiano</option>
-            </select>
-            <button id="mf-gui-close" class="mf-close">×</button>
-          </div>
+          <div class="mf-nav-list">${renderNavList()}</div>
         </div>
-        <div class="mf-tabs">
-          <button class="mf-tab-btn ${activeTab === 'client' ? 'active' : ''}" data-tab="client">${t('tabClient')}</button>
-          <button class="mf-tab-btn ${activeTab === 'skins' ? 'active' : ''}" data-tab="skins">${t('tabSkins')}</button>
-          <button class="mf-tab-btn ${activeTab === 'about' ? 'active' : ''}" data-tab="about">${t('tabAbout')}</button>
-        </div>
-        <div class="mf-body">
-          <div class="mf-tab-panel ${activeTab === 'client' ? 'active' : ''}" data-panel="client">
-            <div class="mf-card">
-              <div class="mf-card-title">${t('sectionGeneral')}</div>
-              ${renderToggle('rebrand', t('rebrand'), t('rebrandDesc'))}
-              ${renderToggle('supportAds', t('supportAds'), t('supportAdsDesc'))}
-              ${renderToggle('discord', t('discordRedirect'), t('discordRedirectDesc'))}
-              ${renderToggle('keystrokes', t('keystrokes'), t('keystrokesDesc'))}
-              ${renderToggle('cpsCounter', t('cpsCounter'), t('cpsCounterDesc'))}
-              ${renderToggle('pingCounter', t('pingCounter'), t('pingCounterDesc'))}
-              <label class="mf-toggle" id="mf-spritesheet-toggle">
-                <span class="mf-toggle-copy">
-                  <strong>${t('spritesheet')}</strong>
-                  <span>${t('spritesheetDesc')}</span>
-                </span>
-                <input type="checkbox" id="mf-spritesheet-checkbox" class="mf-switch" checked>
-              </label>
-            </div>
-            <div class="mf-card">
-              <div class="mf-card-title">${t('sectionChat')}</div>
-              ${renderToggle('chatVideos', t('chatVideos'), t('chatVideosDesc'))}
-              ${renderToggle('chatLinks', t('chatLinks'), t('chatLinksDesc'))}
-            </div>
-            <div class="mf-card">
-              <div class="mf-card-title">${t('sectionLogo')}</div>
-              <div class="mf-logo-preview-wrap">
-                <img id="mf-logo-preview" class="mf-logo-preview" src="${currentLogo}" alt="${t('preview')}">
-                <div class="mf-muted" id="mf-logo-preview-text">${t('preview')}</div>
-              </div>
-              <input id="mf-logo-url" class="mf-input" type="text" placeholder="${t('customLogoUrlPlaceholder')}">
-              <input id="mf-logo-file" class="mf-file" type="file" accept="image/*">
-              <div class="mf-grid-2">
-                <button id="mf-logo-apply" class="mf-btn primary">${t('applyLogo')}</button>
-                <button id="mf-logo-reset" class="mf-btn secondary">${t('resetLogo')}</button>
-              </div>
-              <div id="mf-logo-status" class="mf-status"></div>
-            </div>
-            <div class="mf-card">
-              <div class="mf-card-title">${t('sectionLinks')}</div>
-              <button id="mf-gui-discord" class="mf-btn primary">${t('joinServer')}</button>
-            </div>
-          </div>
-          <div class="mf-tab-panel ${activeTab === 'skins' ? 'active' : ''}" data-panel="skins">
-            <div class="mf-card">
-              <div class="mf-card-title">${t('sectionSkinChanger')}</div>
-              <select id="mf-skin-select" class="mf-select">
-                <option value="">${t('skinSelectPlaceholder')}</option>
+        <div id="mf-gui-content">
+          <div id="mf-gui-topbar">
+            <h2 id="mf-gui-page-title"></h2>
+            <input id="mf-gui-search" type="text" placeholder="${t('searchPlaceholder')}" value="${searchQuery.replace(/"/g, '&quot;')}">
+            <div class="mf-topbar-actions">
+              <select id="mf-language-select" class="mf-select">
+                <option value="en" ${settings.language === 'en' ? 'selected' : ''}>English</option>
+                <option value="es" ${settings.language === 'es' ? 'selected' : ''}>Español</option>
+                <option value="ja" ${settings.language === 'ja' ? 'selected' : ''}>日本語</option>
+                <option value="it" ${settings.language === 'it' ? 'selected' : ''}>Italiano</option>
               </select>
-              <input type="text" id="mf-skin-url" class="mf-input" placeholder="${t('skinUrlPlaceholder')}">
-              <input type="file" id="mf-skin-file" class="mf-file" accept="image/*">
-              <div class="mf-grid-2">
-                <button id="mf-skin-apply" class="mf-btn primary">${t('applySkin')}</button>
-                <button id="mf-skin-reset" class="mf-btn danger">${t('resetAll')}</button>
-              </div>
-              <div id="mf-skin-status" class="mf-status"></div>
-            </div>
-            <div class="mf-card">
-              <div class="mf-card-title">${t('sectionActiveSkins')}</div>
-              <div id="mf-active-skins" class="mf-active-list"></div>
-            </div>
-            <div class="mf-card">
-              <div class="mf-card-title">${t('sectionCapeChanger')}</div>
-              <select id="mf-cape-select" class="mf-select">
-                <option value="">${t('capeSelectPlaceholder')}</option>
-              </select>
-              <input type="text" id="mf-cape-url" class="mf-input" placeholder="${t('capeUrlPlaceholder')}">
-              <input type="file" id="mf-cape-file" class="mf-file" accept="image/*">
-              <div class="mf-grid-2">
-                <button id="mf-cape-apply" class="mf-btn primary">${t('applyCape')}</button>
-                <button id="mf-cape-reset" class="mf-btn danger">${t('resetAll')}</button>
-              </div>
-              <div id="mf-cape-status" class="mf-status"></div>
-            </div>
-            <div class="mf-card">
-              <div class="mf-card-title">${t('sectionActiveCapes')}</div>
-              <div id="mf-active-capes" class="mf-active-list"></div>
+              <button id="mf-gui-close" class="mf-close">×</button>
             </div>
           </div>
-          <div class="mf-tab-panel ${activeTab === 'about' ? 'active' : ''}" data-panel="about">
-            <div class="mf-card">
-              <div class="mf-card-title">${t('sectionAbout')}</div>
-              <div class="mf-muted">${t('aboutLine1')}</div>
-              <div class="mf-muted">${t('aboutLine2')}</div>
-            </div>
-          </div>
+          <div id="mf-gui-page"></div>
         </div>
       </div>
     `;
@@ -1842,13 +2007,277 @@
   function renderToggle(key, title, description) {
     return `
       <label class="mf-toggle" data-key="${key}">
+        <span class="mf-toggle-dot"></span>
         <span class="mf-toggle-copy">
           <strong>${title}</strong>
           <span>${description}</span>
         </span>
-        <input type="checkbox" class="mf-switch" ${guiSettings[key] ? 'checked' : ''}>
+        <input type="checkbox" class="mf-switch-hidden" ${guiSettings[key] ? 'checked' : ''}>
       </label>
     `;
+  }
+
+  function renderDashboardPage() {
+    return `
+      <div class="mf-grid">
+        <div class="mf-card mf-stat-card">
+          <div class="mf-card-title">FPS</div>
+          <div class="mf-stat-value" id="mf-dash-fps">0</div>
+          <div class="mf-muted">${t('dashboardFpsSub')}</div>
+        </div>
+        <div class="mf-card mf-stat-card">
+          <div class="mf-card-title">${t('pingLabel')}</div>
+          <div class="mf-stat-value" id="mf-dash-ping">--</div>
+          <div class="mf-muted">${t('dashboardPingSub')}</div>
+        </div>
+        <div class="mf-card mf-stat-card">
+          <div class="mf-card-title">${t('dashboardModulesTitle')}</div>
+          <div class="mf-stat-value" id="mf-dash-modules">0</div>
+          <div class="mf-muted">${t('dashboardModulesSub')}</div>
+        </div>
+        <div class="mf-card mf-stat-card">
+          <div class="mf-card-title">${t('title')}</div>
+          <div class="mf-stat-value">${MODULE_VERSION}</div>
+          <div class="mf-muted">${t('dashboardVersionSub')}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderHudPage() {
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionGeneral')}</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('keystrokes', t('keystrokes'), t('keystrokesDesc'))}
+            ${renderToggle('cpsCounter', t('cpsCounter'), t('cpsCounterDesc'))}
+            ${renderToggle('pingCounter', t('pingCounter'), t('pingCounterDesc'))}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderRenderPage() {
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionGeneral')}</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('rebrand', t('rebrand'), t('rebrandDesc'))}
+            <label class="mf-toggle" id="mf-spritesheet-toggle">
+              <span class="mf-toggle-dot"></span>
+              <span class="mf-toggle-copy">
+                <strong>${t('spritesheet')}</strong>
+                <span>${t('spritesheetDesc')}</span>
+              </span>
+              <input type="checkbox" id="mf-spritesheet-checkbox" class="mf-switch-hidden" checked>
+            </label>
+          </div>
+        </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionLogo')}</div>
+          <div class="mf-logo-preview-wrap">
+            <img id="mf-logo-preview" class="mf-logo-preview" src="${currentLogo}" alt="${t('preview')}">
+            <div class="mf-muted" id="mf-logo-preview-text">${t('preview')}</div>
+          </div>
+          <input id="mf-logo-url" class="mf-input" type="text" placeholder="${t('customLogoUrlPlaceholder')}">
+          <input id="mf-logo-file" class="mf-file" type="file" accept="image/*">
+          <div class="mf-grid-2">
+            <button id="mf-logo-apply" class="mf-btn primary">${t('applyLogo')}</button>
+            <button id="mf-logo-reset" class="mf-btn secondary">${t('resetLogo')}</button>
+          </div>
+          <div id="mf-logo-status" class="mf-status"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderCosmeticsPage() {
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionSkinChanger')}</div>
+          <select id="mf-skin-select" class="mf-select">
+            <option value="">${t('skinSelectPlaceholder')}</option>
+          </select>
+          <input type="text" id="mf-skin-url" class="mf-input" placeholder="${t('skinUrlPlaceholder')}">
+          <input type="file" id="mf-skin-file" class="mf-file" accept="image/*">
+          <div class="mf-grid-2">
+            <button id="mf-skin-apply" class="mf-btn primary">${t('applySkin')}</button>
+            <button id="mf-skin-reset" class="mf-btn danger">${t('resetAll')}</button>
+          </div>
+          <div id="mf-skin-status" class="mf-status"></div>
+        </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionActiveSkins')}</div>
+          <div id="mf-active-skins" class="mf-active-list"></div>
+        </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionCapeChanger')}</div>
+          <select id="mf-cape-select" class="mf-select">
+            <option value="">${t('capeSelectPlaceholder')}</option>
+          </select>
+          <input type="text" id="mf-cape-url" class="mf-input" placeholder="${t('capeUrlPlaceholder')}">
+          <input type="file" id="mf-cape-file" class="mf-file" accept="image/*">
+          <div class="mf-grid-2">
+            <button id="mf-cape-apply" class="mf-btn primary">${t('applyCape')}</button>
+            <button id="mf-cape-reset" class="mf-btn danger">${t('resetAll')}</button>
+          </div>
+          <div id="mf-cape-status" class="mf-status"></div>
+        </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionActiveCapes')}</div>
+          <div id="mf-active-capes" class="mf-active-list"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderChatPage() {
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionChat')}</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('chatVideos', t('chatVideos'), t('chatVideosDesc'))}
+            ${renderToggle('chatLinks', t('chatLinks'), t('chatLinksDesc'))}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderWorldPage() {
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-muted">${t('worldComingSoon')}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderSettingsPage() {
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionGeneral')}</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('supportAds', t('supportAds'), t('supportAdsDesc'))}
+            ${renderToggle('discord', t('discordRedirect'), t('discordRedirectDesc'))}
+          </div>
+        </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionLinks')}</div>
+          <button id="mf-gui-discord" class="mf-btn primary">${t('joinServer')}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderAboutPage() {
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionAbout')}</div>
+          <div class="mf-muted">${t('aboutLine1')}</div>
+          <div class="mf-muted">${t('aboutLine2')}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderSearchResults(query) {
+    const needle = query.trim().toLowerCase();
+    const matches = getModuleIndex().filter(entry =>
+      entry.title.toLowerCase().includes(needle) || entry.desc.toLowerCase().includes(needle)
+    );
+    if (!matches.length) {
+      return `<div class="mf-page-stack"><div class="mf-card"><div class="mf-muted">${t('searchNoResults')}</div></div></div>`;
+    }
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-card-title">${t('searchResultsLabel')}</div>
+          <div class="mf-toggle-grid">
+            ${matches.map(entry => renderToggle(entry.key, entry.title, entry.desc)).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const PAGE_RENDERERS = {
+    dashboard: renderDashboardPage,
+    hud: renderHudPage,
+    render: renderRenderPage,
+    cosmetics: renderCosmeticsPage,
+    chat: renderChatPage,
+    world: renderWorldPage,
+    settings: renderSettingsPage,
+    about: renderAboutPage
+  };
+
+  function updateDashboardStats() {
+    if (!panel) return;
+    const fpsEl = panel.querySelector('#mf-dash-fps');
+    const pingEl = panel.querySelector('#mf-dash-ping');
+    const modulesEl = panel.querySelector('#mf-dash-modules');
+    if (fpsEl) fpsEl.textContent = dashboardStats.fps;
+    if (pingEl) pingEl.textContent = dashboardStats.ping === null ? '--' : dashboardStats.ping;
+    if (modulesEl) {
+      const enabledCount = [...MODULES.values()].filter(module => module.enabled).length;
+      modulesEl.textContent = enabledCount;
+    }
+  }
+
+  function startDashboardUpdater() {
+    if (dashboardTimer) return;
+    dashboardTimer = window.setInterval(() => {
+      if (activePage === 'dashboard' && !searchQuery && overlay?.style.display === 'block') {
+        updateDashboardStats();
+      }
+    }, 500);
+  }
+
+  function stopDashboardUpdater() {
+    clearInterval(dashboardTimer);
+    dashboardTimer = 0;
+  }
+
+  function renderCurrentPageContent() {
+    if (!panel) return;
+    const pageContainer = panel.querySelector('#mf-gui-page');
+    const titleEl = panel.querySelector('#mf-gui-page-title');
+    if (!pageContainer) return;
+
+    if (searchQuery.trim()) {
+      if (titleEl) titleEl.textContent = t('searchResultsLabel');
+      pageContainer.innerHTML = renderSearchResults(searchQuery);
+    } else {
+      const navItem = NAV_ITEMS.find(item => item.id === activePage) || NAV_ITEMS[0];
+      if (titleEl) titleEl.textContent = t(navItem.labelKey);
+      const renderer = PAGE_RENDERERS[activePage] || renderDashboardPage;
+      pageContainer.innerHTML = renderer();
+    }
+
+    bindPageControls();
+    if (activePage === 'dashboard' && !searchQuery.trim()) updateDashboardStats();
+  }
+
+  function setActivePage(page) {
+    activePage = page;
+    searchQuery = '';
+    if (panel) {
+      const searchInput = panel.querySelector('#mf-gui-search');
+      if (searchInput) searchInput.value = '';
+      panel.querySelectorAll('.mf-nav').forEach(nav => {
+        nav.classList.toggle('active', nav.dataset.page === page);
+      });
+    }
+    renderCurrentPageContent();
   }
 
   function showGUI() {
@@ -1859,6 +2288,8 @@
     requestAnimationFrame(() => {
       panel.style.opacity = '1';
     });
+    startDashboardUpdater();
+    if (activePage === 'dashboard') updateDashboardStats();
   }
 
   function hideGUI() {
@@ -1869,23 +2300,13 @@
     setTimeout(() => {
       if (panel.style.opacity === '0') panel.style.display = 'none';
     }, 140);
+    stopDashboardUpdater();
   }
 
   function toggleGUI() {
     if (!overlay || !panel) return;
     if (overlay.style.display === 'block') hideGUI();
     else showGUI();
-  }
-
-  function setTab(tab) {
-    activeTab = tab;
-    if (!panel) return;
-    panel.querySelectorAll('.mf-tab-btn').forEach(button => {
-      button.classList.toggle('active', button.dataset.tab === tab);
-    });
-    panel.querySelectorAll('.mf-tab-panel').forEach(section => {
-      section.classList.toggle('active', section.dataset.panel === tab);
-    });
   }
 
   function saveSettings() {
@@ -2055,19 +2476,8 @@
     if ([...select.options].some(option => option.value === currentValue)) select.value = currentValue;
   }
 
-  function bindPanelControls() {
+  function bindPageControls() {
     if (!panel) return;
-
-    panelController?.abort();
-    panelController = new AbortController();
-    const panelSignal = panelController.signal;
-
-    panel.querySelector('#mf-gui-close')?.addEventListener('click', hideGUI);
-    panel.querySelector('#mf-gui-discord')?.addEventListener('click', () => window.open(CONFIG.discord, '_blank'));
-
-    panel.querySelectorAll('.mf-tab-btn').forEach(button => {
-      button.addEventListener('click', () => setTab(button.dataset.tab));
-    });
 
     panel.querySelectorAll('.mf-toggle[data-key]').forEach(label => {
       const key = label.dataset.key;
@@ -2079,16 +2489,11 @@
         saveSettings();
         applyGuiSettings();
         update();
+        if (activePage === 'dashboard') updateDashboardStats();
       });
     });
 
-    panel.querySelector('#mf-language-select')?.addEventListener('change', event => {
-      settings.language = event.target.value;
-      guiSettings.language = event.target.value;
-      saveSettings();
-      update();
-      renderGUI();
-    });
+    panel.querySelector('#mf-gui-discord')?.addEventListener('click', () => window.open(CONFIG.discord, '_blank'));
 
     panel.querySelector('#mf-logo-apply')?.addEventListener('click', async () => {
       const inputUrl = panel.querySelector('#mf-logo-url');
@@ -2202,21 +2607,63 @@
       });
     });
 
-    chrome.runtime.sendMessage({ type: 'getSpritesheet' }, response => {
-      const checkbox = panel?.querySelector('#mf-spritesheet-checkbox');
-      if (checkbox && response && response.success) checkbox.checked = response.enabled;
+    if (panel.querySelector('#mf-spritesheet-checkbox')) {
+      chrome.runtime.sendMessage({ type: 'getSpritesheet' }, response => {
+        const checkbox = panel?.querySelector('#mf-spritesheet-checkbox');
+        if (checkbox && response && response.success) checkbox.checked = response.enabled;
+      });
+
+      panel.querySelector('#mf-spritesheet-checkbox')?.addEventListener('change', event => {
+        chrome.runtime.sendMessage({ type: 'setSpritesheet', enabled: event.target.checked });
+      });
+    }
+
+    if (panel.querySelector('#mf-skin-select')) {
+      populateSkinSelect();
+      refreshActiveSkins();
+    }
+    if (panel.querySelector('#mf-cape-select')) {
+      populateCapeSelect();
+      refreshActiveCapes();
+    }
+    if (panel.querySelector('#mf-logo-preview')) refreshLogoControls();
+  }
+
+  function bindPanelControls() {
+    if (!panel) return;
+
+    panelController?.abort();
+    panelController = new AbortController();
+    const panelSignal = panelController.signal;
+
+    panel.querySelector('#mf-gui-close')?.addEventListener('click', hideGUI, { signal: panelSignal });
+
+    panel.querySelectorAll('.mf-nav[data-page]').forEach(nav => {
+      nav.addEventListener('click', () => setActivePage(nav.dataset.page), { signal: panelSignal });
     });
 
-    panel.querySelector('#mf-spritesheet-checkbox')?.addEventListener('change', event => {
-      chrome.runtime.sendMessage({ type: 'setSpritesheet', enabled: event.target.checked });
-    });
+    panel.querySelector('#mf-gui-search')?.addEventListener('input', event => {
+      searchQuery = event.target.value;
+      panel.querySelectorAll('.mf-nav').forEach(nav => {
+        nav.classList.toggle('active', !searchQuery.trim() && nav.dataset.page === activePage);
+      });
+      renderCurrentPageContent();
+    }, { signal: panelSignal });
 
-    const header = panel.querySelector('#mf-gui-header');
+    panel.querySelector('#mf-language-select')?.addEventListener('change', event => {
+      settings.language = event.target.value;
+      guiSettings.language = event.target.value;
+      saveSettings();
+      update();
+      renderGUI();
+    }, { signal: panelSignal });
+
+    const topbar = panel.querySelector('#mf-gui-topbar');
     let dragging = false;
     let offX = 0;
     let offY = 0;
 
-    header?.addEventListener('mousedown', event => {
+    topbar?.addEventListener('mousedown', event => {
       const target = event.target.closest('button, select, input');
       if (target) return;
       dragging = true;
@@ -2224,7 +2671,7 @@
       offX = event.clientX - rect.left;
       offY = event.clientY - rect.top;
       panel.style.transform = 'none';
-    });
+    }, { signal: panelSignal });
 
     document.addEventListener('mousemove', event => {
       if (!dragging) return;
@@ -2240,11 +2687,7 @@
       dragging = false;
     }, { signal: panelSignal });
 
-    populateSkinSelect();
-    refreshActiveSkins();
-    populateCapeSelect();
-    refreshActiveCapes();
-    refreshLogoControls();
+    renderCurrentPageContent();
     applyGuiSettings();
   }
 
@@ -2754,6 +3197,8 @@
     updateTimer = 0;
     clearTimeout(sidebarObserverTimer);
     sidebarObserverTimer = 0;
+    clearInterval(dashboardTimer);
+    dashboardTimer = 0;
 
     panelController?.abort();
     panelController = null;
@@ -2785,6 +3230,8 @@
     overlay = null;
     panel = null;
     guiReady = false;
+    activePage = 'dashboard';
+    searchQuery = '';
 
     if (globalThis.__MINIFEATHER_CONTENT__?.destroy === destroy) {
       delete globalThis.__MINIFEATHER_CONTENT__;
