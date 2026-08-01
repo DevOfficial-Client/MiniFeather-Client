@@ -38,6 +38,36 @@
     ]
   };
 
+  const CHAT_GIF_FILES = [
+    '84-years.gif',
+    '1000-yard-stare-cat-meme.gif',
+    'aaaah-cat.gif',
+    'beard-bear.gif',
+    'cat-disgusted.gif',
+    'cat-meme.gif',
+    'cat-meme-cat.gif',
+    'chat-pouce.gif',
+    'clappi-clappi-clappi.gif',
+    'devil-cat-evil.gif',
+    'hands-down-meme.gif',
+    'kermit.gif',
+    'lfg-lets-go.gif',
+    'memes2022funny-meme.gif',
+    'question-emoji.gif',
+    'scary-cat.gif',
+    'shocked-shocked-cat.gif',
+    'shrek-rizz-shrek-meme.gif',
+    'ugly-plankton-meme-ugly-plankton.gif'
+  ];
+
+  const CHAT_VIDEOS = Object.freeze({
+    'm-no': 'https://qu.ax/STWv.mp4',
+    'm-que': 'https://qu.ax/WpYf.mp4',
+    'm-si': 'https://qu.ax/pGis.mp4',
+    'm-cry': 'https://qu.ax/mScl.mp4',
+    'm-bye': 'https://qu.ax/NlCH.mp4'
+  });
+
   const NAV_ITEMS = [
     { id: 'dashboard', icon: '🏠', labelKey: 'navDashboard' },
     { id: 'hud', icon: '🎮', labelKey: 'navHud' },
@@ -105,6 +135,11 @@
       chatLinksDesc: 'Open links from chat in a new browser tab when clicked.',
       chatMemes: 'Chat Memes',
       chatMemesDesc: 'Show GIF commands and meme videos in chat.',
+      memeLibraryTitle: 'Meme IDs',
+      memeLibraryDesc: 'Click a meme ID to copy the exact command used in chat.',
+      memeGifIds: 'Meme IDs',
+      memeCopy: 'Copy',
+      memeCopied: 'Copied',
       spritesheet: 'Custom Spritesheet',
       spritesheetDesc: 'Replace the default spritesheet.',
       customLogoUrl: 'Logo URL',
@@ -207,6 +242,11 @@
       chatLinksDesc: 'Abrir los enlaces del chat en una nueva pestaña del navegador al hacer clic.',
       chatMemes: 'Memes en el Chat',
       chatMemesDesc: 'Mostrar comandos de GIF y videos de memes en el chat.',
+      memeLibraryTitle: 'IDs de Memes',
+      memeLibraryDesc: 'Haz clic en una ID de meme para copiar el comando exacto que se usa en el chat.',
+      memeGifIds: 'IDs de Memes',
+      memeCopy: 'Copiar',
+      memeCopied: 'Copiado',
       spritesheet: 'Spritesheet Personalizado',
       spritesheetDesc: 'Reemplazar el spritesheet predeterminado.',
       customLogoUrl: 'URL del logo',
@@ -308,6 +348,11 @@
       chatLinksDesc: 'チャット内のリンクをクリックすると、ブラウザの新しいタブで開きます。',
       chatMemes: 'チャットミーム',
       chatMemesDesc: 'GIFコマンドとミーム動画をチャットに表示します。',
+      memeLibraryTitle: 'ミームID',
+      memeLibraryDesc: 'ミームIDをクリックすると、チャットで使用する正確なコマンドをコピーできます。',
+      memeGifIds: 'ミームID',
+      memeCopy: 'コピー',
+      memeCopied: 'コピー済み',
       spritesheet: 'カスタムスプライトシート',
       spritesheetDesc: '標準スプライトシートを置き換えます。',
       customLogoUrl: 'ロゴ URL',
@@ -409,6 +454,11 @@
       chatLinksDesc: 'Apre i link della chat in una nuova scheda del browser quando vengono cliccati.',
       chatMemes: 'Meme nella Chat',
       chatMemesDesc: 'Mostra i comandi GIF e i video meme nella chat.',
+      memeLibraryTitle: 'ID dei Meme',
+      memeLibraryDesc: 'Fai clic su un ID meme per copiare il comando esatto usato nella chat.',
+      memeGifIds: 'ID dei Meme',
+      memeCopy: 'Copia',
+      memeCopied: 'Copiato',
       spritesheet: 'Spritesheet Personalizzato',
       spritesheetDesc: 'Sostituisce lo spritesheet predefinito.',
       customLogoUrl: 'URL del logo',
@@ -484,6 +534,7 @@
   let searchQuery = '';
   let dashboardStats = { fps: 0, ping: null };
   let dashboardTimer = 0;
+  let guiCloseTimer = 0;
   let overlay = null;
   let panel = null;
   let guiReady = false;
@@ -496,6 +547,7 @@
   let sidebarObserverTimer = 0;
   let clipboardOriginalWrite = null;
   let restoreChatContent = () => {};
+  let chatFeaturesReady = false;
   let destroyed = false;
 
   const MODULES = new Map();
@@ -969,7 +1021,7 @@
           font-size:14px;
           font-weight:700;
           box-shadow:0 12px 28px rgba(0,0,0,.35);
-          z-index:999999;
+          z-index:999995;
           user-select:none;
           cursor:move;
         `;
@@ -1046,7 +1098,8 @@
           frameId = 0;
           frames = 0;
           dashboardStats.fps = 0;
-          if (box) box.style.display = 'none';
+          box?.remove();
+          box = null;
         },
         destroy() {
           box?.remove();
@@ -1152,7 +1205,8 @@
           interval = 0;
           leftClicks = [];
           rightClicks = [];
-          if (box) box.style.display = 'none';
+          box?.remove();
+          box = null;
         },
         destroy() {
           box?.remove();
@@ -1318,7 +1372,8 @@
           ping = null;
           samples.length = 0;
           dashboardStats.ping = null;
-          if (box) box.style.display = 'none';
+          box?.remove();
+          box = null;
         },
         destroy() {
           enabled = false;
@@ -1528,7 +1583,10 @@
           Object.values(buttons).forEach(button => button.classList.remove('active'));
           clickCounters.LMB = [];
           clickCounters.RMB = [];
-          if (container) container.style.display = 'none';
+          container?.remove();
+          container = null;
+          document.getElementById('minifeather-keystroke-css')?.remove();
+          Object.keys(buttons).forEach(key => delete buttons[key]);
         },
         destroy() {
           container?.remove();
@@ -1979,6 +2037,70 @@
         font-size:11px;
         line-height:1.4;
       }
+      .mf-meme-library-desc {
+        margin-top:-2px;
+      }
+      .mf-meme-group {
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+      }
+      .mf-meme-group-title {
+        font-size:11px;
+        font-weight:700;
+        color:#cbd5e1;
+      }
+      .mf-meme-id-grid {
+        display:grid;
+        grid-template-columns:repeat(auto-fill, minmax(170px, 1fr));
+        gap:8px;
+      }
+      .mf-meme-id {
+        width:100%;
+        min-width:0;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        padding:10px 11px;
+        border-radius:12px;
+        border:1px solid var(--mf-border);
+        background:rgba(255,255,255,.03);
+        color:#f8fafc;
+        cursor:pointer;
+        text-align:left;
+        transition:background .15s ease, border-color .15s ease, transform .15s ease;
+      }
+      .mf-meme-id:hover {
+        transform:translateY(-1px);
+        border-color:rgba(124,92,255,.55);
+        background:rgba(124,92,255,.1);
+      }
+      .mf-meme-id:focus-visible {
+        outline:2px solid var(--mf-accent2);
+        outline-offset:2px;
+      }
+      .mf-meme-id code {
+        min-width:0;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
+        color:#ddd6fe;
+        font-family:ui-monospace,SFMono-Regular,Consolas,monospace !important;
+        font-size:11px;
+      }
+      .mf-meme-id span {
+        flex:0 0 auto;
+        color:#94a3b8;
+        font-size:10px;
+      }
+      .mf-meme-id.copied {
+        border-color:#22c55e;
+        background:rgba(34,197,94,.12);
+      }
+      .mf-meme-id.copied span {
+        color:#86efac;
+      }
       .mf-active-list {
         display:flex;
         flex-direction:column;
@@ -2281,7 +2403,22 @@
     `;
   }
 
+  function renderMemeIdButtons(ids) {
+    return ids.map(id => `
+      <button type="button" class="mf-meme-id" data-meme-id="${id}" title="${t('memeCopy')}: ${id}">
+        <code>${id}</code>
+        <span data-copy-label>${t('memeCopy')}</span>
+      </button>
+    `).join('');
+  }
+
+  function getChatGifIds() {
+    return CHAT_GIF_FILES.map(file => `:${file.replace(/\.gif$/i, '')}:`);
+  }
+
   function renderChatPage() {
+    const gifIds = getChatGifIds();
+
     return `
       <div class="mf-page-stack">
         <div class="mf-card">
@@ -2290,6 +2427,14 @@
             ${renderToggle('chatVideos', t('chatVideos'), t('chatVideosDesc'))}
             ${renderToggle('chatLinks', t('chatLinks'), t('chatLinksDesc'))}
             ${renderToggle('chatMemes', t('chatMemes'), t('chatMemesDesc'))}
+          </div>
+        </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('memeLibraryTitle')}</div>
+          <div class="mf-muted mf-meme-library-desc">${t('memeLibraryDesc')}</div>
+          <div class="mf-meme-group">
+            <div class="mf-meme-group-title">${t('memeGifIds')} · ${gifIds.length}</div>
+            <div class="mf-meme-id-grid">${renderMemeIdButtons(gifIds)}</div>
           </div>
         </div>
       </div>
@@ -2427,13 +2572,44 @@
     renderCurrentPageContent();
   }
 
+  function ensureGUI() {
+    clearTimeout(guiCloseTimer);
+    guiCloseTimer = 0;
+    injectGuiStyles();
+
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'mf-gui-overlay';
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', hideGUI);
+    }
+
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'mf-gui';
+      document.body.appendChild(panel);
+      renderGUI();
+    }
+  }
+
+  function unloadGUI(expectedPanel = panel, expectedOverlay = overlay) {
+    if (expectedPanel !== panel || expectedOverlay !== overlay) return;
+    panelController?.abort();
+    panelController = null;
+    expectedPanel?.remove();
+    expectedOverlay?.remove();
+    document.getElementById('mf-gui-style')?.remove();
+    panel = null;
+    overlay = null;
+  }
+
   function showGUI() {
-    if (!overlay || !panel) return;
+    ensureGUI();
     overlay.style.display = 'block';
     panel.style.display = 'block';
     panel.style.pointerEvents = 'auto';
     requestAnimationFrame(() => {
-      panel.style.opacity = '1';
+      if (panel) panel.style.opacity = '1';
     });
     startDashboardUpdater();
     if (activePage === 'dashboard') updateDashboardStats();
@@ -2441,17 +2617,25 @@
 
   function hideGUI() {
     if (!overlay || !panel) return;
-    overlay.style.display = 'none';
-    panel.style.opacity = '0';
-    panel.style.pointerEvents = 'none';
-    setTimeout(() => {
-      if (panel.style.opacity === '0') panel.style.display = 'none';
-    }, 140);
+    const closingPanel = panel;
+    const closingOverlay = overlay;
+    closingOverlay.style.display = 'none';
+    closingPanel.style.opacity = '0';
+    closingPanel.style.pointerEvents = 'none';
     stopDashboardUpdater();
+
+    clearTimeout(guiCloseTimer);
+    guiCloseTimer = window.setTimeout(() => {
+      guiCloseTimer = 0;
+      if (closingPanel.style.opacity === '0') unloadGUI(closingPanel, closingOverlay);
+    }, 160);
   }
 
   function toggleGUI() {
-    if (!overlay || !panel) return;
+    if (!overlay || !panel) {
+      showGUI();
+      return;
+    }
     if (overlay.style.display === 'block') hideGUI();
     else showGUI();
   }
@@ -2637,10 +2821,47 @@
     });
   }
 
+  async function copyMemeId(value) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch (_) {
+      const input = document.createElement('textarea');
+      input.value = value;
+      input.setAttribute('readonly', '');
+      input.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;';
+      document.body.appendChild(input);
+      input.select();
+      let copied = false;
+      try {
+        copied = document.execCommand('copy');
+      } catch (_) {}
+      input.remove();
+      return copied;
+    }
+  }
+
   function bindPageControls() {
     if (!panel) return;
 
     bindLocalizedFileInputs();
+
+    panel.querySelectorAll('.mf-meme-id[data-meme-id]').forEach(button => {
+      button.addEventListener('click', async () => {
+        const value = button.dataset.memeId || '';
+        if (!value || !(await copyMemeId(value))) return;
+
+        const label = button.querySelector('[data-copy-label]');
+        button.classList.add('copied');
+        if (label) label.textContent = t('memeCopied');
+
+        window.setTimeout(() => {
+          if (!button.isConnected) return;
+          button.classList.remove('copied');
+          if (label) label.textContent = t('memeCopy');
+        }, 1100);
+      });
+    });
 
     panel.querySelectorAll('.mf-toggle[data-key]').forEach(label => {
       const key = label.dataset.key;
@@ -2861,34 +3082,21 @@
   }
 
   function initGUI() {
-    injectGuiStyles();
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'mf-gui-overlay';
-      document.body.appendChild(overlay);
-      overlay.addEventListener('click', hideGUI);
-    }
-    if (!panel) {
-      panel = document.createElement('div');
-      panel.id = 'mf-gui';
-      document.body.appendChild(panel);
-    }
-    renderGUI();
+    if (guiReady) return;
+    guiReady = true;
+    let rightShiftDown = false;
 
-    if (!guiReady) {
-      guiReady = true;
-      let rightShiftDown = false;
-      document.addEventListener('keydown', event => {
-        if (event.code === 'ShiftRight' && !rightShiftDown) {
-          rightShiftDown = true;
-          toggleGUI();
-        }
-        if (event.code === 'Escape') hideGUI();
-      }, { signal: runtimeController?.signal });
-      document.addEventListener('keyup', event => {
-        if (event.code === 'ShiftRight') rightShiftDown = false;
-      }, { signal: runtimeController?.signal });
-    }
+    document.addEventListener('keydown', event => {
+      if (event.code === 'ShiftRight' && !rightShiftDown) {
+        rightShiftDown = true;
+        toggleGUI();
+      }
+      if (event.code === 'Escape') hideGUI();
+    }, { signal: runtimeController?.signal });
+
+    document.addEventListener('keyup', event => {
+      if (event.code === 'ShiftRight') rightShiftDown = false;
+    }, { signal: runtimeController?.signal });
   }
 
   function injectFeatherButton() {
@@ -2974,15 +3182,22 @@
     setModuleEnabled('chatLinks', settings.chatLinks);
     setModuleEnabled('chatMemes', settings.chatMemes);
 
+    if (settings.rebrand && settings.discord) hookClipboard();
+    else unhookClipboard();
+
     if (settings.supportAds) showAds();
     else blockAds();
+
+    syncRootObserver();
   }
 
   function initChatFeatures() {
-    if (chatObserver) return;
+    if (chatFeaturesReady) return;
+    chatFeaturesReady = true;
 
-    let style = document.getElementById('minifeather-chat-style');
-    if (!style) {
+    function ensureChatStyle() {
+      let style = document.getElementById('minifeather-chat-style');
+      if (style) return;
       style = document.createElement('style');
       style.id = 'minifeather-chat-style';
       style.textContent = `
@@ -3030,21 +3245,8 @@
     }
 
     const GIF_BASE = chrome.runtime.getURL('assets/memes/gif/');
-    const GIF_LIST = [
-      '84-years.gif', '1000-yard-stare-cat-meme.gif', 'aaaah-cat.gif', 'beard-bear.gif',
-      'cat-disgusted.gif', 'cat-meme.gif', 'cat-meme-cat.gif', 'chat-pouce.gif',
-      'clappi-clappi-clappi.gif', 'devil-cat-evil.gif', 'hands-down-meme.gif', 'kermit.gif',
-      'lfg-lets-go.gif', 'memes2022funny-meme.gif', 'question-emoji.gif', 'scary-cat.gif',
-      'shocked-shocked-cat.gif', 'shrek-rizz-shrek-meme.gif', 'ugly-plankton-meme-ugly-plankton.gif'
-    ];
-
-    const MEME_MAP = {
-      'm-no': 'https://qu.ax/STWv.mp4',
-      'm-que': 'https://qu.ax/WpYf.mp4',
-      'm-si': 'https://qu.ax/pGis.mp4',
-      'm-cry': 'https://qu.ax/mScl.mp4',
-      'm-bye': 'https://qu.ax/NlCH.mp4'
-    };
+    const GIF_LIST = CHAT_GIF_FILES;
+    const MEME_MAP = CHAT_VIDEOS;
 
     const gifCache = new Map();
     const urlRegex = /https?:\/\/[^\s<>"']+/i;
@@ -3284,41 +3486,51 @@
       });
     };
 
-    registerModule('chatVideos', () => createLifecycle({
-      enable: refresh,
-      disable: refresh,
-      refresh,
-      destroy: () => {}
-    }));
+    function chatModulesEnabled() {
+      return MODULES.get('chatVideos')?.enabled === true ||
+        MODULES.get('chatLinks')?.enabled === true ||
+        MODULES.get('chatMemes')?.enabled === true;
+    }
 
-    registerModule('chatLinks', () => createLifecycle({
-      enable: refresh,
-      disable: refresh,
-      refresh,
-      destroy: () => {}
-    }));
-
-    registerModule('chatMemes', () => createLifecycle({
-      enable: refresh,
-      disable: refresh,
-      refresh,
-      destroy: () => {}
-    }));
-
-    chatObserver = new MutationObserver(mutations => {
-      mutations.forEach(mutation => {
-        if (mutation.type === 'childList') mutation.addedNodes.forEach(scan);
-        else if (mutation.type === 'characterData') scan(mutation.target);
+    function startChatObserver() {
+      if (chatObserver) return;
+      chatObserver = new MutationObserver(mutations => {
+        mutations.forEach(mutation => {
+          if (mutation.type === 'childList') mutation.addedNodes.forEach(scan);
+          else if (mutation.type === 'characterData') scan(mutation.target);
+        });
       });
+      chatObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
+    }
+
+    function syncChatFeatures() {
+      if (chatModulesEnabled()) {
+        ensureChatStyle();
+        startChatObserver();
+        refresh();
+        return;
+      }
+
+      chatObserver?.disconnect();
+      chatObserver = null;
+      restoreChatContent();
+      document.getElementById('minifeather-chat-style')?.remove();
+    }
+
+    const createChatLifecycle = () => createLifecycle({
+      enable: syncChatFeatures,
+      disable: syncChatFeatures,
+      refresh,
+      destroy: syncChatFeatures
     });
 
-    chatObserver.observe(document.body, {
-      childList: true,
-      subtree: true,
-      characterData: true
-    });
-
-    scan(document.body);
+    registerModule('chatVideos', createChatLifecycle);
+    registerModule('chatLinks', createChatLifecycle);
+    registerModule('chatMemes', createChatLifecycle);
   }
 
   function update() {
@@ -3346,6 +3558,19 @@
     rootObserver.observe(document.body, { childList: true, subtree: true });
   }
 
+  function syncRootObserver() {
+    const needed = settings.rebrand || !settings.supportAds;
+    if (needed) {
+      initRootObserver();
+      return;
+    }
+
+    rootObserver?.disconnect();
+    rootObserver = null;
+    clearTimeout(updateTimer);
+    updateTimer = 0;
+  }
+
   function init() {
     if (destroyed || runtimeController) return;
 
@@ -3358,7 +3583,6 @@
     initKeystrokes();
     initGUI();
     initChatFeatures();
-    hookClipboard();
     injectFeatherButton();
 
     document.addEventListener('click', handleDocumentClick, {
@@ -3366,7 +3590,6 @@
       signal: runtimeController.signal
     });
 
-    initRootObserver();
     applyGuiSettings();
     update();
   }
@@ -3381,6 +3604,8 @@
     sidebarObserverTimer = 0;
     clearInterval(dashboardTimer);
     dashboardTimer = 0;
+    clearTimeout(guiCloseTimer);
+    guiCloseTimer = 0;
 
     panelController?.abort();
     panelController = null;
@@ -3395,6 +3620,7 @@
     chatObserver = null;
     restoreChatContent();
     restoreChatContent = () => {};
+    chatFeaturesReady = false;
     sidebarObserver?.disconnect();
     sidebarObserver = null;
 
