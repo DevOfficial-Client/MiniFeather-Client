@@ -56,10 +56,12 @@
     supportAds: false,
     discord: true,
     keystrokes: true,
+    fpsCounter: true,
     cpsCounter: true,
     pingCounter: true,
     chatVideos: true,
     chatLinks: true,
+    chatMemes: true,
     language: 'en'
   };
 
@@ -88,6 +90,8 @@
       discordRedirectDesc: 'Use the MiniFeather Client invite.',
       keystrokes: 'Keystrokes',
       keystrokesDesc: 'Show movement keys and CPS.',
+      fpsCounter: 'FPS Counter',
+      fpsCounterDesc: 'Show the current frames per second.',
       cpsCounter: 'CPS Counter',
       cpsCounterDesc: 'Show left and right clicks per second.',
       cpsLabel: 'CPS',
@@ -99,6 +103,8 @@
       chatVideosDesc: 'Show YouTube previews while keeping the original message visible.',
       chatLinks: 'Clickable Chat Links',
       chatLinksDesc: 'Open links from chat in a new browser tab when clicked.',
+      chatMemes: 'Chat Memes',
+      chatMemesDesc: 'Show GIF commands and meme videos in chat.',
       spritesheet: 'Custom Spritesheet',
       spritesheetDesc: 'Replace the default spritesheet.',
       customLogoUrl: 'Logo URL',
@@ -186,6 +192,8 @@
       discordRedirectDesc: 'Usar la invitación personalizada de Kings SMP.',
       keystrokes: 'Keystrokes',
       keystrokesDesc: 'Mostrar teclas de movimiento y CPS.',
+      fpsCounter: 'Contador de FPS',
+      fpsCounterDesc: 'Mostrar los fotogramas por segundo actuales.',
       cpsCounter: 'Contador de CPS',
       cpsCounterDesc: 'Mostrar los clics izquierdos y derechos por segundo.',
       cpsLabel: 'CPS',
@@ -197,6 +205,8 @@
       chatVideosDesc: 'Mostrar vistas previas de YouTube conservando visible el mensaje original.',
       chatLinks: 'Enlaces del Chat',
       chatLinksDesc: 'Abrir los enlaces del chat en una nueva pestaña del navegador al hacer clic.',
+      chatMemes: 'Memes en el Chat',
+      chatMemesDesc: 'Mostrar comandos de GIF y videos de memes en el chat.',
       spritesheet: 'Spritesheet Personalizado',
       spritesheetDesc: 'Reemplazar el spritesheet predeterminado.',
       customLogoUrl: 'URL del logo',
@@ -283,6 +293,8 @@
       discordRedirectDesc: 'Kings SMP のカスタム招待を使用します。',
       keystrokes: 'キーストローク',
       keystrokesDesc: '移動キーと CPS を表示します。',
+      fpsCounter: 'FPS カウンター',
+      fpsCounterDesc: '現在の1秒あたりのフレーム数を表示します。',
       cpsCounter: 'CPS カウンター',
       cpsCounterDesc: '左右の1秒あたりのクリック数を表示します。',
       cpsLabel: 'CPS',
@@ -294,6 +306,8 @@
       chatVideosDesc: '元のメッセージを表示したまま、YouTubeのプレビューをチャットに表示します。',
       chatLinks: 'クリック可能なチャットリンク',
       chatLinksDesc: 'チャット内のリンクをクリックすると、ブラウザの新しいタブで開きます。',
+      chatMemes: 'チャットミーム',
+      chatMemesDesc: 'GIFコマンドとミーム動画をチャットに表示します。',
       spritesheet: 'カスタムスプライトシート',
       spritesheetDesc: '標準スプライトシートを置き換えます。',
       customLogoUrl: 'ロゴ URL',
@@ -380,6 +394,8 @@
       discordRedirectDesc: 'Usa l’invito personalizzato di Kings SMP.',
       keystrokes: 'Keystrokes',
       keystrokesDesc: 'Mostra tasti di movimento e CPS.',
+      fpsCounter: 'Contatore FPS',
+      fpsCounterDesc: 'Mostra i fotogrammi al secondo attuali.',
       cpsCounter: 'Contatore CPS',
       cpsCounterDesc: 'Mostra i clic sinistri e destri al secondo.',
       cpsLabel: 'CPS',
@@ -391,6 +407,8 @@
       chatVideosDesc: 'Mostra le anteprime di YouTube mantenendo visibile il messaggio originale.',
       chatLinks: 'Link Cliccabili nella Chat',
       chatLinksDesc: 'Apre i link della chat in una nuova scheda del browser quando vengono cliccati.',
+      chatMemes: 'Meme nella Chat',
+      chatMemesDesc: 'Mostra i comandi GIF e i video meme nella chat.',
       spritesheet: 'Spritesheet Personalizzato',
       spritesheetDesc: 'Sostituisce lo spritesheet predefinito.',
       customLogoUrl: 'URL del logo',
@@ -1027,6 +1045,7 @@
           if (frameId) cancelAnimationFrame(frameId);
           frameId = 0;
           frames = 0;
+          dashboardStats.fps = 0;
           if (box) box.style.display = 'none';
         },
         destroy() {
@@ -2069,11 +2088,13 @@
   function getModuleIndex() {
     return [
       { page: 'hud', key: 'keystrokes', title: t('keystrokes'), desc: t('keystrokesDesc') },
+      { page: 'hud', key: 'fpsCounter', title: t('fpsCounter'), desc: t('fpsCounterDesc') },
       { page: 'hud', key: 'cpsCounter', title: t('cpsCounter'), desc: t('cpsCounterDesc') },
       { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc') },
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
       { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc') },
+      { page: 'chat', key: 'chatMemes', title: t('chatMemes'), desc: t('chatMemesDesc') },
       { page: 'settings', key: 'discord', title: t('discordRedirect'), desc: t('discordRedirectDesc') },
       { page: 'settings', key: 'supportAds', title: t('supportAds'), desc: t('supportAdsDesc') }
     ];
@@ -2165,6 +2186,7 @@
           <div class="mf-card-title">${t('sectionGeneral')}</div>
           <div class="mf-toggle-grid">
             ${renderToggle('keystrokes', t('keystrokes'), t('keystrokesDesc'))}
+            ${renderToggle('fpsCounter', t('fpsCounter'), t('fpsCounterDesc'))}
             ${renderToggle('cpsCounter', t('cpsCounter'), t('cpsCounterDesc'))}
             ${renderToggle('pingCounter', t('pingCounter'), t('pingCounterDesc'))}
           </div>
@@ -2267,6 +2289,7 @@
           <div class="mf-toggle-grid">
             ${renderToggle('chatVideos', t('chatVideos'), t('chatVideosDesc'))}
             ${renderToggle('chatLinks', t('chatLinks'), t('chatLinksDesc'))}
+            ${renderToggle('chatMemes', t('chatMemes'), t('chatMemesDesc'))}
           </div>
         </div>
       </div>
@@ -2944,10 +2967,12 @@
     setModuleEnabled('rebrand', settings.rebrand);
     setModuleEnabled('discord', settings.rebrand && settings.discord);
     setModuleEnabled('keystrokes', settings.keystrokes);
+    setModuleEnabled('fpsCounter', settings.fpsCounter);
     setModuleEnabled('cpsCounter', settings.cpsCounter);
     setModuleEnabled('pingCounter', settings.pingCounter);
     setModuleEnabled('chatVideos', settings.chatVideos);
     setModuleEnabled('chatLinks', settings.chatLinks);
+    setModuleEnabled('chatMemes', settings.chatMemes);
 
     if (settings.supportAds) showAds();
     else blockAds();
@@ -3148,6 +3173,7 @@
 
     function renderText(target, text) {
       let remaining = text;
+      const memesEnabled = MODULES.get('chatMemes')?.enabled === true;
 
       while (remaining) {
         const urlMatch = remaining.match(urlRegex);
@@ -3155,9 +3181,15 @@
         const memeMatch = findMeme(remaining);
         const candidates = [];
 
-        if (urlMatch) candidates.push({ type: 'url', index: urlMatch.index, raw: urlMatch[0] });
-        if (gifMatch) candidates.push({ type: 'gif', index: gifMatch.index, raw: gifMatch[0], name: gifMatch[1] });
-        if (memeMatch) candidates.push({ type: 'meme', ...memeMatch, raw: memeMatch.key });
+        if (urlMatch && (MODULES.get('chatVideos')?.enabled || MODULES.get('chatLinks')?.enabled)) {
+          candidates.push({ type: 'url', index: urlMatch.index, raw: urlMatch[0] });
+        }
+        if (memesEnabled && gifMatch) {
+          candidates.push({ type: 'gif', index: gifMatch.index, raw: gifMatch[0], name: gifMatch[1] });
+        }
+        if (memesEnabled && memeMatch) {
+          candidates.push({ type: 'meme', ...memeMatch, raw: memeMatch.key });
+        }
 
         if (!candidates.length) {
           appendText(target, remaining);
@@ -3183,7 +3215,8 @@
     }
 
     function hasRenderableContent(text) {
-      if (gifRegex.test(text) || findMeme(text)) return true;
+      const memesEnabled = MODULES.get('chatMemes')?.enabled === true;
+      if (memesEnabled && (gifRegex.test(text) || findMeme(text))) return true;
       if (!(MODULES.get('chatVideos')?.enabled || MODULES.get('chatLinks')?.enabled)) return false;
       return urlRegex.test(text);
     }
@@ -3240,7 +3273,9 @@
 
     function refresh() {
       document.querySelectorAll('.mf-chat-processed').forEach(renderWrapper);
-      if (MODULES.get('chatVideos')?.enabled || MODULES.get('chatLinks')?.enabled) scan(document.body);
+      if (MODULES.get('chatVideos')?.enabled || MODULES.get('chatLinks')?.enabled || MODULES.get('chatMemes')?.enabled) {
+        scan(document.body);
+      }
     }
 
     restoreChatContent = () => {
@@ -3257,6 +3292,13 @@
     }));
 
     registerModule('chatLinks', () => createLifecycle({
+      enable: refresh,
+      disable: refresh,
+      refresh,
+      destroy: () => {}
+    }));
+
+    registerModule('chatMemes', () => createLifecycle({
       enable: refresh,
       disable: refresh,
       refresh,
@@ -3310,7 +3352,7 @@
     runtimeController = new AbortController();
     initLifecycleModules();
     injectFont();
-    initFPSCounter().enable();
+    initFPSCounter();
     initCPSCounter();
     initPingCounter();
     initKeystrokes();
