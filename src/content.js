@@ -62,7 +62,6 @@
     { id: 'faceemoji', file: 'faceemoji.png' },
     { id: '6pk3tk', file: '6pk3tk.png' },
     { id: 'son', file: 'son.png' },
-    { id: '67-kid', file: '67-kid.png' }
   ]);
 
   const CHAT_VIDEOS = Object.freeze({
