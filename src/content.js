@@ -104,6 +104,7 @@
       customLogoUrl: 'Logo URL',
       customLogoUrlPlaceholder: 'https://example.com/logo.png',
       customLogoFile: 'Upload logo',
+      noFileSelected: 'No file selected',
       applyLogo: 'Apply Logo',
       resetLogo: 'Reset Logo',
       logoUpdated: 'Logo updated.',
@@ -115,6 +116,7 @@
       skinUrl: 'Custom URL',
       skinUrlPlaceholder: 'https://example.com/skin.png',
       skinFile: 'Upload skin',
+      capeFile: 'Upload cape',
       applySkin: 'Apply',
       resetAll: 'Reset All',
       skinNeedName: 'Select a skin first.',
@@ -200,6 +202,7 @@
       customLogoUrl: 'URL del logo',
       customLogoUrlPlaceholder: 'https://example.com/logo.png',
       customLogoFile: 'Subir logo',
+      noFileSelected: 'Ningún archivo seleccionado',
       applyLogo: 'Aplicar Logo',
       resetLogo: 'Restablecer Logo',
       logoUpdated: 'Logo actualizado.',
@@ -211,6 +214,7 @@
       skinUrl: 'URL Personalizada',
       skinUrlPlaceholder: 'https://example.com/skin.png',
       skinFile: 'Subir skin',
+      capeFile: 'Subir capa',
       applySkin: 'Aplicar',
       resetAll: 'Restablecer Todo',
       skinNeedName: 'Selecciona una skin primero.',
@@ -295,6 +299,7 @@
       customLogoUrl: 'ロゴ URL',
       customLogoUrlPlaceholder: 'https://example.com/logo.png',
       customLogoFile: 'ロゴをアップロード',
+      noFileSelected: 'ファイルが選択されていません',
       applyLogo: 'ロゴを適用',
       resetLogo: 'ロゴをリセット',
       logoUpdated: 'ロゴを更新しました。',
@@ -306,6 +311,7 @@
       skinUrl: 'カスタム URL',
       skinUrlPlaceholder: 'https://example.com/skin.png',
       skinFile: 'スキンをアップロード',
+      capeFile: 'マントをアップロード',
       applySkin: '適用',
       resetAll: 'すべてリセット',
       skinNeedName: '先にスキンを選択してください。',
@@ -390,6 +396,7 @@
       customLogoUrl: 'URL del logo',
       customLogoUrlPlaceholder: 'https://example.com/logo.png',
       customLogoFile: 'Carica logo',
+      noFileSelected: 'Nessun file selezionato',
       applyLogo: 'Applica Logo',
       resetLogo: 'Reimposta Logo',
       logoUpdated: 'Logo aggiornato.',
@@ -401,6 +408,7 @@
       skinUrl: 'URL Personalizzato',
       skinUrlPlaceholder: 'https://example.com/skin.png',
       skinFile: 'Carica skin',
+      capeFile: 'Carica mantello',
       applySkin: 'Applica',
       resetAll: 'Reimposta Tutto',
       skinNeedName: 'Seleziona prima una skin.',
@@ -1713,7 +1721,6 @@
       }
       .mf-select,
       .mf-input,
-      .mf-file,
       .mf-btn,
       .mf-small-btn {
         width:100%;
@@ -1743,14 +1750,64 @@
         color:#94a3b8;
       }
       .mf-select:focus,
-      .mf-input:focus,
-      .mf-file:focus {
+      .mf-input:focus {
         border-color:rgba(167,139,250,.6);
         background:rgba(255,255,255,.06);
       }
-      .mf-file {
-        padding:8px 10px;
+      .mf-file-picker {
+        display:flex;
+        align-items:center;
+        width:100%;
+        min-height:40px;
+        overflow:hidden;
+        border:1px solid var(--mf-border);
+        border-radius:12px;
+        background:rgba(255,255,255,.04);
         color:#cbd5e1;
+        transition:border-color .15s ease, background .15s ease;
+      }
+      .mf-file-picker:focus-within {
+        border-color:rgba(167,139,250,.6);
+        background:rgba(255,255,255,.06);
+      }
+      .mf-file-input {
+        position:absolute;
+        width:1px;
+        height:1px;
+        opacity:0;
+        overflow:hidden;
+        pointer-events:none;
+      }
+      .mf-file-button {
+        align-self:stretch;
+        display:flex;
+        align-items:center;
+        flex:0 0 auto;
+        padding:9px 12px;
+        border-right:1px solid var(--mf-border);
+        background:rgba(255,255,255,.08);
+        color:#f8fafc;
+        font-size:12px;
+        font-weight:700;
+        cursor:pointer;
+        user-select:none;
+        transition:background .15s ease;
+      }
+      .mf-file-button:hover {
+        background:rgba(124,92,255,.22);
+      }
+      .mf-file-input:focus-visible + .mf-file-button {
+        outline:2px solid rgba(167,139,250,.75);
+        outline-offset:-2px;
+      }
+      .mf-file-name {
+        min-width:0;
+        padding:9px 12px;
+        overflow:hidden;
+        color:#94a3b8;
+        font-size:12px;
+        text-overflow:ellipsis;
+        white-space:nowrap;
       }
       .mf-input::placeholder {
         color:#64748b;
@@ -2116,6 +2173,16 @@
     `;
   }
 
+  function renderFileInput(id, labelKey) {
+    return `
+      <div class="mf-file-picker">
+        <input id="${id}" class="mf-file-input" type="file" accept="image/*">
+        <label class="mf-file-button" for="${id}">${t(labelKey)}</label>
+        <span class="mf-file-name" data-file-name>${t('noFileSelected')}</span>
+      </div>
+    `;
+  }
+
   function renderRenderPage() {
     return `
       <div class="mf-page-stack">
@@ -2140,7 +2207,7 @@
             <div class="mf-muted" id="mf-logo-preview-text">${t('preview')}</div>
           </div>
           <input id="mf-logo-url" class="mf-input" type="text" placeholder="${t('customLogoUrlPlaceholder')}">
-          <input id="mf-logo-file" class="mf-file" type="file" accept="image/*">
+          ${renderFileInput('mf-logo-file', 'customLogoFile')}
           <div class="mf-grid-2">
             <button id="mf-logo-apply" class="mf-btn primary">${t('applyLogo')}</button>
             <button id="mf-logo-reset" class="mf-btn secondary">${t('resetLogo')}</button>
@@ -2160,7 +2227,7 @@
             <option value="">${t('skinSelectPlaceholder')}</option>
           </select>
           <input type="text" id="mf-skin-url" class="mf-input" placeholder="${t('skinUrlPlaceholder')}">
-          <input type="file" id="mf-skin-file" class="mf-file" accept="image/*">
+          ${renderFileInput('mf-skin-file', 'skinFile')}
           <div class="mf-grid-2">
             <button id="mf-skin-apply" class="mf-btn primary">${t('applySkin')}</button>
             <button id="mf-skin-reset" class="mf-btn danger">${t('resetAll')}</button>
@@ -2177,7 +2244,7 @@
             <option value="">${t('capeSelectPlaceholder')}</option>
           </select>
           <input type="text" id="mf-cape-url" class="mf-input" placeholder="${t('capeUrlPlaceholder')}">
-          <input type="file" id="mf-cape-file" class="mf-file" accept="image/*">
+          ${renderFileInput('mf-cape-file', 'capeFile')}
           <div class="mf-grid-2">
             <button id="mf-cape-apply" class="mf-btn primary">${t('applyCape')}</button>
             <button id="mf-cape-reset" class="mf-btn danger">${t('resetAll')}</button>
@@ -2533,8 +2600,24 @@
     if ([...select.options].some(option => option.value === currentValue)) select.value = currentValue;
   }
 
+  function bindLocalizedFileInputs() {
+    if (!panel) return;
+    panel.querySelectorAll('.mf-file-input').forEach(input => {
+      const name = input.closest('.mf-file-picker')?.querySelector('[data-file-name]');
+      if (!name) return;
+      const updateName = () => {
+        name.textContent = input.files?.[0]?.name || t('noFileSelected');
+        name.title = input.files?.[0]?.name || '';
+      };
+      input.addEventListener('change', updateName);
+      updateName();
+    });
+  }
+
   function bindPageControls() {
     if (!panel) return;
+
+    bindLocalizedFileInputs();
 
     panel.querySelectorAll('.mf-toggle[data-key]').forEach(label => {
       const key = label.dataset.key;
