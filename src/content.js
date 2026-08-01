@@ -41,6 +41,10 @@
   const CHAT_GIF_FILES = [
     '84-years.gif',
     '1000-yard-stare-cat-meme.gif',
+    'laughing.png',
+    'faceemoji.png',
+    'son.png',
+    '6pk3tk.png',
     'aaaah-cat.gif',
     'beard-bear.gif',
     'cat-disgusted.gif',
