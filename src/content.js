@@ -40,12 +40,7 @@
 
   const CHAT_GIF_FILES = [
     '84-years.gif',
-    '67-kid.png',
     '1000-yard-stare-cat-meme.gif',
-    'laughing.png',
-    'faceemoji.png',
-    'son.png',
-    '6pk3tk.png',
     'aaaah-cat.gif',
     'beard-bear.gif',
     'cat-disgusted.gif',
@@ -62,7 +57,12 @@
     'scary-cat.gif',
     'shocked-shocked-cat.gif',
     'shrek-rizz-shrek-meme.gif',
-    'ugly-plankton-meme-ugly-plankton.gif'
+    'ugly-plankton-meme-ugly-plankton.gif',
+    'blue-laugh.png',
+    'happy-face.png',
+    'pop-cat.png',
+    'blue-kiss.png',
+    '67-kid.png'
   ];
 
   const CHAT_VIDEOS = Object.freeze({
@@ -141,7 +141,7 @@
       chatMemes: 'Chat Memes',
       chatMemesDesc: 'Show GIF commands and meme videos in chat.',
       memeLibraryTitle: 'Meme IDs',
-      memeLibraryDesc: 'Click a meme ID to copy the exact command used in chat.',
+      memeLibraryDesc: 'Preview each meme and click its ID to copy the exact command used in chat.',
       memeGifIds: 'Meme IDs',
       memeCopy: 'Copy',
       memeCopied: 'Copied',
@@ -248,7 +248,7 @@
       chatMemes: 'Memes en el Chat',
       chatMemesDesc: 'Mostrar comandos de GIF y videos de memes en el chat.',
       memeLibraryTitle: 'IDs de Memes',
-      memeLibraryDesc: 'Haz clic en una ID de meme para copiar el comando exacto que se usa en el chat.',
+      memeLibraryDesc: 'Mira la vista previa de cada meme y haz clic en su ID para copiar el comando exacto del chat.',
       memeGifIds: 'IDs de Memes',
       memeCopy: 'Copiar',
       memeCopied: 'Copiado',
@@ -354,7 +354,7 @@
       chatMemes: 'チャットミーム',
       chatMemesDesc: 'GIFコマンドとミーム動画をチャットに表示します。',
       memeLibraryTitle: 'ミームID',
-      memeLibraryDesc: 'ミームIDをクリックすると、チャットで使用する正確なコマンドをコピーできます。',
+      memeLibraryDesc: '各ミームをプレビューし、IDをクリックしてチャット用の正確なコマンドをコピーできます。',
       memeGifIds: 'ミームID',
       memeCopy: 'コピー',
       memeCopied: 'コピー済み',
@@ -460,7 +460,7 @@
       chatMemes: 'Meme nella Chat',
       chatMemesDesc: 'Mostra i comandi GIF e i video meme nella chat.',
       memeLibraryTitle: 'ID dei Meme',
-      memeLibraryDesc: 'Fai clic su un ID meme per copiare il comando esatto usato nella chat.',
+      memeLibraryDesc: 'Visualizza l’anteprima di ogni meme e fai clic sul relativo ID per copiare il comando esatto della chat.',
       memeGifIds: 'ID dei Meme',
       memeCopy: 'Copia',
       memeCopied: 'Copiato',
@@ -2057,23 +2057,24 @@
       }
       .mf-meme-id-grid {
         display:grid;
-        grid-template-columns:repeat(auto-fill, minmax(170px, 1fr));
-        gap:8px;
+        grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
+        gap:10px;
       }
       .mf-meme-id {
         width:100%;
         min-width:0;
         display:flex;
-        align-items:center;
-        justify-content:space-between;
-        gap:10px;
-        padding:10px 11px;
-        border-radius:12px;
+        flex-direction:column;
+        align-items:stretch;
+        gap:8px;
+        padding:8px;
+        border-radius:14px;
         border:1px solid var(--mf-border);
         background:rgba(255,255,255,.03);
         color:#f8fafc;
         cursor:pointer;
         text-align:left;
+        overflow:hidden;
         transition:background .15s ease, border-color .15s ease, transform .15s ease;
       }
       .mf-meme-id:hover {
@@ -2085,6 +2086,23 @@
         outline:2px solid var(--mf-accent2);
         outline-offset:2px;
       }
+      .mf-meme-preview {
+        width:100%;
+        height:92px;
+        display:block;
+        object-fit:contain;
+        border-radius:10px;
+        background:rgba(2,6,12,.7);
+        pointer-events:none;
+      }
+      .mf-meme-id-row {
+        min-width:0;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:8px;
+        padding:0 2px 2px;
+      }
       .mf-meme-id code {
         min-width:0;
         overflow:hidden;
@@ -2092,12 +2110,12 @@
         white-space:nowrap;
         color:#ddd6fe;
         font-family:ui-monospace,SFMono-Regular,Consolas,monospace !important;
-        font-size:11px;
+        font-size:10px;
       }
       .mf-meme-id span {
         flex:0 0 auto;
         color:#94a3b8;
-        font-size:10px;
+        font-size:9px;
       }
       .mf-meme-id.copied {
         border-color:#22c55e;
@@ -2408,21 +2426,31 @@
     `;
   }
 
-  function renderMemeIdButtons(ids) {
-    return ids.map(id => `
+  function getChatMemeItems() {
+    return CHAT_GIF_FILES.map(file => {
+      const id = `:${file.replace(/\.(?:gif|png|jpe?g|webp|avif)$/i, '')}:`;
+      return {
+        id,
+        file,
+        preview: chrome.runtime.getURL(`assets/memes/gif/${file}`)
+      };
+    });
+  }
+
+  function renderMemeIdButtons(items) {
+    return items.map(({ id, preview }) => `
       <button type="button" class="mf-meme-id" data-meme-id="${id}" title="${t('memeCopy')}: ${id}">
-        <code>${id}</code>
-        <span data-copy-label>${t('memeCopy')}</span>
+        <img class="mf-meme-preview" src="${preview}" alt="${id}" loading="lazy" decoding="async">
+        <span class="mf-meme-id-row">
+          <code>${id}</code>
+          <span data-copy-label>${t('memeCopy')}</span>
+        </span>
       </button>
     `).join('');
   }
 
-  function getChatGifIds() {
-    return CHAT_GIF_FILES.map(file => `:${file.replace(/\.gif$/i, '')}:`);
-  }
-
   function renderChatPage() {
-    const gifIds = getChatGifIds();
+    const memeItems = getChatMemeItems();
 
     return `
       <div class="mf-page-stack">
@@ -2438,8 +2466,8 @@
           <div class="mf-card-title">${t('memeLibraryTitle')}</div>
           <div class="mf-muted mf-meme-library-desc">${t('memeLibraryDesc')}</div>
           <div class="mf-meme-group">
-            <div class="mf-meme-group-title">${t('memeGifIds')} · ${gifIds.length}</div>
-            <div class="mf-meme-id-grid">${renderMemeIdButtons(gifIds)}</div>
+            <div class="mf-meme-group-title">${t('memeGifIds')} · ${memeItems.length}</div>
+            <div class="mf-meme-id-grid">${renderMemeIdButtons(memeItems)}</div>
           </div>
         </div>
       </div>
@@ -3255,14 +3283,14 @@
 
     const gifCache = new Map();
     const urlRegex = /https?:\/\/[^\s<>"']+/i;
-    const gifRegex = /:([\w\d-]+?)(?:\.gif)?:/i;
+    const gifRegex = /:([\w\d-]+?)(?:\.(?:gif|png|jpe?g|webp|avif))?:/i;
 
     function getGif(name) {
       const key = name.toLowerCase();
       if (gifCache.has(key)) return gifCache.get(key);
       const file = GIF_LIST.find(entry => {
         const normalized = entry.toLowerCase();
-        return normalized === key || normalized.replace(/\.gif$/, '') === key;
+        return normalized === key || normalized.replace(/\.(?:gif|png|jpe?g|webp|avif)$/i, '') === key;
       });
       const value = file ? GIF_BASE + file : null;
       gifCache.set(key, value);
