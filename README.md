@@ -43,3 +43,6 @@ The project is designed to remain lightweight, configurable, and easy to use whi
 
    ```text
    chrome://extensions
+   
+5. Click load unpacked
+6. Load the client
