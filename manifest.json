@@ -20,7 +20,8 @@
         "https://miniblox.io/*"
       ],
       "js": [
-        "src/inject.js"
+        "src/inject.js",
+        "src/mf-freelook.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"
