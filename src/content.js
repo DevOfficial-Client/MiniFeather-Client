@@ -96,6 +96,8 @@
     titanTiny: false,
     titanTinyScale: 1.00,
     titanTinyBind: '',
+    zoom: false,
+    zoomBind: 'KeyZ',
     chatVideos: true,
     chatLinks: true,
     chatMemes: true,
@@ -135,6 +137,16 @@
       titanTinyNormal: 'Normal',
       titanTinyTitan: 'Titan',
       titanTinyAlwaysSync: 'Hitbox, camera height and nametag sync are always enabled.',
+      zoom: 'Zoom',
+      zoomDesc: 'Hold the configured key and scroll to change zoom. Release the key to reset.',
+      zoomSettings: 'Zoom Settings',
+      zoomBind: 'Activation Bind',
+      zoomNoBind: 'None',
+      zoomSetBind: 'Set Bind',
+      zoomRemoveBind: 'Remove Bind',
+      zoomListening: 'Press any key...',
+      zoomSave: 'Save',
+      zoomHint: 'Hold the bind while scrolling. Zoom resets to normal when you release it.',
       supportAds: 'Support Ads',
       supportAdsDesc: 'Allow ads to support creators.',
       discordRedirect: 'Discord Redirect',
@@ -256,6 +268,16 @@
       titanTinyNormal: 'Normal',
       titanTinyTitan: 'Titan',
       titanTinyAlwaysSync: 'La hitbox, la altura de cámara y el nametag siempre se sincronizan.',
+      zoom: 'Zoom',
+      zoomDesc: 'Mantén el bind configurado y usa la rueda para cambiar el zoom. Al soltarlo vuelve a normal.',
+      zoomSettings: 'Ajustes de Zoom',
+      zoomBind: 'Bind de activación',
+      zoomNoBind: 'Ninguno',
+      zoomSetBind: 'Asignar Bind',
+      zoomRemoveBind: 'Quitar Bind',
+      zoomListening: 'Presiona una tecla...',
+      zoomSave: 'Guardar',
+      zoomHint: 'Mantén presionado el bind mientras haces scroll. Al soltarlo el zoom vuelve a 1.00×.',
       supportAds: 'Anuncios',
       supportAdsDesc: 'Permitir anuncios para apoyar a los creadores.',
       discordRedirect: 'Redirección de Discord',
@@ -376,6 +398,16 @@
       titanTinyNormal: 'Normal',
       titanTinyTitan: 'Titan',
       titanTinyAlwaysSync: 'ヒットボックス、カメラ高さ、ネームタグ同期は常に有効です。',
+      zoom: 'ズーム',
+      zoomDesc: '設定したキーを押しながらスクロールしてズームを変更します。キーを離すと元に戻ります。',
+      zoomSettings: 'ズーム設定',
+      zoomBind: '起動キー',
+      zoomNoBind: 'なし',
+      zoomSetBind: 'キーを設定',
+      zoomRemoveBind: 'キーを解除',
+      zoomListening: 'キーを押してください...',
+      zoomSave: '保存',
+      zoomHint: 'キーを押しながらスクロールします。キーを離すとズームは1.00×に戻ります。',
       supportAds: '広告',
       supportAdsDesc: '広告を許可して制作者を支援します。',
       discordRedirect: 'Discord リダイレクト',
@@ -496,6 +528,16 @@
       titanTinyNormal: 'Normal',
       titanTinyTitan: 'Titan',
       titanTinyAlwaysSync: 'Hitbox, altezza della camera e nametag sono sempre sincronizzati.',
+      zoom: 'Zoom',
+      zoomDesc: 'Tieni premuto il tasto configurato e scorri per cambiare lo zoom. Rilasciandolo torna normale.',
+      zoomSettings: 'Impostazioni Zoom',
+      zoomBind: 'Tasto di attivazione',
+      zoomNoBind: 'Nessuno',
+      zoomSetBind: 'Imposta Tasto',
+      zoomRemoveBind: 'Rimuovi Tasto',
+      zoomListening: 'Premi un tasto...',
+      zoomSave: 'Salva',
+      zoomHint: 'Tieni premuto il tasto mentre scorri. Rilasciandolo lo zoom torna a 1.00×.',
       supportAds: 'Pubblicità',
       supportAdsDesc: 'Consenti gli annunci per supportare i creatori.',
       discordRedirect: 'Reindirizzamento Discord',
@@ -612,6 +654,7 @@
   let restoreChatContent = () => {};
   let chatFeaturesReady = false;
   let titanTinySettingsCleanup = null;
+  let zoomSettingsCleanup = null;
   let destroyed = false;
 
   const MODULES = new Map();
@@ -2381,6 +2424,7 @@
       { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc') },
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc') },
+      { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
       { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc') },
       { page: 'chat', key: 'chatMemes', title: t('chatMemes'), desc: t('chatMemesDesc') },
@@ -2649,6 +2693,169 @@
     });
   }
 
+
+  function sendZoomConfig(enabled = settings.zoom) {
+    const detail = JSON.stringify({
+      enabled: !!enabled,
+      bind: String(settings.zoomBind || '')
+    });
+    document.dispatchEvent(new CustomEvent('minifeather:zoom-config', { detail }));
+  }
+
+  function setZoomBindingCapture(active) {
+    document.dispatchEvent(new CustomEvent('minifeather:zoom-binding', {
+      detail: JSON.stringify({ active: !!active })
+    }));
+  }
+
+  function initZoomModule() {
+    registerModule('zoom', () => createLifecycle({
+      enable() {
+        sendZoomConfig(true);
+      },
+      disable() {
+        sendZoomConfig(false);
+      },
+      refresh() {
+        sendZoomConfig(MODULES.get('zoom')?.enabled === true);
+      },
+      destroy() {
+        sendZoomConfig(false);
+      }
+    }));
+
+    document.addEventListener('minifeather:zoom-state', event => {
+      let state;
+      try {
+        state = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+      } catch (_) {
+        return;
+      }
+      if (!state || typeof state !== 'object') return;
+
+      let changed = false;
+      if (typeof state.enabled === 'boolean' && settings.zoom !== state.enabled) {
+        settings.zoom = state.enabled;
+        guiSettings.zoom = state.enabled;
+        setModuleEnabled('zoom', state.enabled);
+        changed = true;
+      }
+      if (typeof state.bind === 'string' && settings.zoomBind !== state.bind) {
+        settings.zoomBind = state.bind;
+        guiSettings.zoomBind = state.bind;
+        changed = true;
+      }
+
+      if (changed) saveSettings();
+      if (panel && activePage === 'render' && !searchQuery.trim()) renderCurrentPageContent();
+      if (activePage === 'dashboard') updateDashboardStats();
+    }, { signal: runtimeController?.signal });
+  }
+
+  function closeZoomSettings() {
+    if (zoomSettingsCleanup) {
+      const cleanup = zoomSettingsCleanup;
+      zoomSettingsCleanup = null;
+      cleanup();
+      return;
+    }
+    setZoomBindingCapture(false);
+    panel?.querySelector('.mf-zoom-backdrop')?.remove();
+  }
+
+  function openZoomSettings() {
+    if (!panel) return;
+    closeZoomSettings();
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop mf-zoom-backdrop';
+    const bind = String(settings.zoomBind || '');
+
+    backdrop.innerHTML = `
+      <div class="mf-tt-dialog" role="dialog" aria-modal="true">
+        <div class="mf-tt-head">
+          <div class="mf-tt-title">${t('zoomSettings')}</div>
+          <button type="button" class="mf-close" data-zoom-close>×</button>
+        </div>
+        <div class="mf-tt-row"><span>${t('zoomBind')}</span></div>
+        <div class="mf-tt-bind-box">
+          <span class="mf-muted">${t('zoomBind')}</span>
+          <span class="mf-tt-bind-code" data-zoom-bind-code>${bind || t('zoomNoBind')}</span>
+        </div>
+        <div class="mf-tt-bind-actions">
+          <button type="button" class="mf-btn secondary" data-zoom-bind>${t('zoomSetBind')}</button>
+          <button type="button" class="mf-btn danger" data-zoom-unbind>${t('zoomRemoveBind')}</button>
+        </div>
+        <div class="mf-tt-hint">${t('zoomHint')}</div>
+        <button type="button" class="mf-btn primary mf-tt-save" data-zoom-save>${t('zoomSave')}</button>
+      </div>
+    `;
+
+    panel.appendChild(backdrop);
+
+    const bindCode = backdrop.querySelector('[data-zoom-bind-code]');
+    const bindButton = backdrop.querySelector('[data-zoom-bind]');
+    let binding = false;
+
+    const stopBinding = () => {
+      binding = false;
+      setZoomBindingCapture(false);
+      if (bindButton) bindButton.textContent = t('zoomSetBind');
+    };
+
+    bindButton?.addEventListener('click', () => {
+      binding = true;
+      setZoomBindingCapture(true);
+      bindButton.textContent = t('zoomListening');
+    });
+
+    backdrop.querySelector('[data-zoom-unbind]')?.addEventListener('click', () => {
+      stopBinding();
+      settings.zoomBind = '';
+      guiSettings.zoomBind = '';
+      if (bindCode) bindCode.textContent = t('zoomNoBind');
+      saveSettings();
+      sendZoomConfig(settings.zoom);
+    });
+
+    const keyHandler = event => {
+      if (!binding) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      if (event.code === 'Escape' || event.code === 'Backspace' || event.code === 'Delete') {
+        settings.zoomBind = '';
+        guiSettings.zoomBind = '';
+        if (bindCode) bindCode.textContent = t('zoomNoBind');
+      } else {
+        settings.zoomBind = event.code;
+        guiSettings.zoomBind = event.code;
+        if (bindCode) bindCode.textContent = event.code;
+      }
+
+      saveSettings();
+      sendZoomConfig(settings.zoom);
+      stopBinding();
+    };
+
+    document.addEventListener('keydown', keyHandler, { capture: true, once: false });
+
+    const cleanup = () => {
+      stopBinding();
+      document.removeEventListener('keydown', keyHandler, true);
+      backdrop.remove();
+      if (zoomSettingsCleanup === cleanup) zoomSettingsCleanup = null;
+    };
+    zoomSettingsCleanup = cleanup;
+
+    backdrop.querySelector('[data-zoom-close]')?.addEventListener('click', cleanup);
+    backdrop.querySelector('[data-zoom-save]')?.addEventListener('click', cleanup);
+    backdrop.addEventListener('mousedown', event => {
+      if (event.target === backdrop) cleanup();
+    });
+  }
+
   function renderDashboardPage() {
     return `
       <div class="mf-grid">
@@ -2710,6 +2917,7 @@
           <div class="mf-toggle-grid">
             ${renderToggle('rebrand', t('rebrand'), t('rebrandDesc'))}
             ${renderToggle('titanTiny', t('titanTiny'), t('titanTinyDesc'))}
+            ${renderToggle('zoom', t('zoom'), t('zoomDesc'))}
             <label class="mf-toggle" id="mf-spritesheet-toggle">
               <span class="mf-toggle-dot"></span>
               <span class="mf-toggle-copy">
@@ -3001,6 +3209,7 @@
   function hideGUI() {
     if (!overlay || !panel) return;
     closeTitanTinySettings();
+    closeZoomSettings();
     const closingPanel = panel;
     const closingOverlay = overlay;
     closingOverlay.style.display = 'none';
@@ -3235,6 +3444,13 @@
       event.preventDefault();
       event.stopPropagation();
       openTitanTinySettings();
+    });
+
+    const zoomToggle = panel.querySelector('.mf-toggle[data-key="zoom"]');
+    zoomToggle?.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openZoomSettings();
     });
 
     panel.querySelectorAll('.mf-meme-id[data-meme-id]').forEach(button => {
@@ -3570,6 +3786,7 @@
     setModuleEnabled('cpsCounter', settings.cpsCounter);
     setModuleEnabled('pingCounter', settings.pingCounter);
     setModuleEnabled('titanTiny', settings.titanTiny);
+    setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('chatVideos', settings.chatVideos);
     setModuleEnabled('chatLinks', settings.chatLinks);
     setModuleEnabled('chatMemes', settings.chatMemes);
@@ -3976,6 +4193,7 @@
     initPingCounter();
     initKeystrokes();
     initTitanTinyModule();
+    initZoomModule();
     initGUI();
     initChatFeatures();
     injectFeatherButton();
@@ -4020,6 +4238,7 @@
     sidebarObserver = null;
 
     closeTitanTinySettings();
+    closeZoomSettings();
     unhookClipboard();
     destroyModules();
     showAds();
