@@ -93,6 +93,9 @@
     fpsCounter: true,
     cpsCounter: true,
     pingCounter: true,
+    titanTiny: false,
+    titanTinyScale: 1.00,
+    titanTinyBind: '',
     chatVideos: true,
     chatLinks: true,
     chatMemes: true,
@@ -118,6 +121,20 @@
       sectionAbout: 'Info',
       rebrand: 'Rebrand',
       rebrandDesc: 'Logo, title and background.',
+      titanTiny: 'Titan & Tiny',
+      titanTinyDesc: 'Scale your player model. Right-click to configure scale and bind.',
+      titanTinySettings: 'Titan & Tiny Settings',
+      titanTinyScale: 'Scale',
+      titanTinyBind: 'Bind',
+      titanTinyNoBind: 'None',
+      titanTinySetBind: 'Set Bind',
+      titanTinyRemoveBind: 'Remove Bind',
+      titanTinyListening: 'Press any key...',
+      titanTinySave: 'Save',
+      titanTinyTiny: 'Tiny',
+      titanTinyNormal: 'Normal',
+      titanTinyTitan: 'Titan',
+      titanTinyAlwaysSync: 'Hitbox, camera height and nametag sync are always enabled.',
       supportAds: 'Support Ads',
       supportAdsDesc: 'Allow ads to support creators.',
       discordRedirect: 'Discord Redirect',
@@ -225,6 +242,20 @@
       sectionAbout: 'Información',
       rebrand: 'Rebrand',
       rebrandDesc: 'Logo, título y fondo.',
+      titanTiny: 'Titan & Tiny',
+      titanTinyDesc: 'Cambia la escala de tu jugador. Clic derecho para configurar escala y bind.',
+      titanTinySettings: 'Ajustes de Titan & Tiny',
+      titanTinyScale: 'Escala',
+      titanTinyBind: 'Bind',
+      titanTinyNoBind: 'Ninguno',
+      titanTinySetBind: 'Asignar Bind',
+      titanTinyRemoveBind: 'Quitar Bind',
+      titanTinyListening: 'Presiona una tecla...',
+      titanTinySave: 'Guardar',
+      titanTinyTiny: 'Tiny',
+      titanTinyNormal: 'Normal',
+      titanTinyTitan: 'Titan',
+      titanTinyAlwaysSync: 'La hitbox, la altura de cámara y el nametag siempre se sincronizan.',
       supportAds: 'Anuncios',
       supportAdsDesc: 'Permitir anuncios para apoyar a los creadores.',
       discordRedirect: 'Redirección de Discord',
@@ -331,6 +362,20 @@
       sectionAbout: '情報',
       rebrand: 'リブランド',
       rebrandDesc: 'ロゴ、タイトル、背景。',
+      titanTiny: 'Titan & Tiny',
+      titanTinyDesc: 'プレイヤーのサイズを変更します。右クリックでサイズとキーを設定。',
+      titanTinySettings: 'Titan & Tiny 設定',
+      titanTinyScale: 'スケール',
+      titanTinyBind: 'キー',
+      titanTinyNoBind: 'なし',
+      titanTinySetBind: 'キーを設定',
+      titanTinyRemoveBind: 'キーを解除',
+      titanTinyListening: 'キーを押してください...',
+      titanTinySave: '保存',
+      titanTinyTiny: 'Tiny',
+      titanTinyNormal: 'Normal',
+      titanTinyTitan: 'Titan',
+      titanTinyAlwaysSync: 'ヒットボックス、カメラ高さ、ネームタグ同期は常に有効です。',
       supportAds: '広告',
       supportAdsDesc: '広告を許可して制作者を支援します。',
       discordRedirect: 'Discord リダイレクト',
@@ -437,6 +482,20 @@
       sectionAbout: 'Informazioni',
       rebrand: 'Rebrand',
       rebrandDesc: 'Logo, titolo e sfondo.',
+      titanTiny: 'Titan & Tiny',
+      titanTinyDesc: 'Modifica la scala del giocatore. Clic destro per configurare scala e tasto.',
+      titanTinySettings: 'Impostazioni Titan & Tiny',
+      titanTinyScale: 'Scala',
+      titanTinyBind: 'Tasto',
+      titanTinyNoBind: 'Nessuno',
+      titanTinySetBind: 'Imposta Tasto',
+      titanTinyRemoveBind: 'Rimuovi Tasto',
+      titanTinyListening: 'Premi un tasto...',
+      titanTinySave: 'Salva',
+      titanTinyTiny: 'Tiny',
+      titanTinyNormal: 'Normal',
+      titanTinyTitan: 'Titan',
+      titanTinyAlwaysSync: 'Hitbox, altezza della camera e nametag sono sempre sincronizzati.',
       supportAds: 'Pubblicità',
       supportAdsDesc: 'Consenti gli annunci per supportare i creatori.',
       discordRedirect: 'Reindirizzamento Discord',
@@ -552,6 +611,7 @@
   let clipboardOriginalWrite = null;
   let restoreChatContent = () => {};
   let chatFeaturesReady = false;
+  let titanTinySettingsCleanup = null;
   let destroyed = false;
 
   const MODULES = new Map();
@@ -2164,6 +2224,90 @@
         cursor:pointer;
         flex:0 0 auto;
       }
+      .mf-tt-backdrop {
+        position:absolute;
+        inset:0;
+        z-index:50;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:20px;
+        background:rgba(2,6,12,.62);
+        backdrop-filter:blur(5px);
+      }
+      .mf-tt-dialog {
+        width:min(430px, 100%);
+        padding:18px;
+        border-radius:18px;
+        border:1px solid var(--mf-border);
+        background:rgba(16,20,29,.98);
+        box-shadow:0 24px 70px rgba(0,0,0,.55);
+      }
+      .mf-tt-head {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        margin-bottom:14px;
+      }
+      .mf-tt-title {
+        font-size:15px;
+        font-weight:800;
+        color:#f8fafc;
+      }
+      .mf-tt-row {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        margin:12px 0 8px;
+        color:#cbd5e1;
+        font-size:12px;
+      }
+      .mf-tt-scale-value {
+        font-weight:800;
+        color:#ddd6fe;
+      }
+      .mf-tt-range {
+        width:100%;
+        accent-color:var(--mf-accent);
+      }
+      .mf-tt-presets,
+      .mf-tt-bind-actions {
+        display:grid;
+        grid-template-columns:repeat(3,1fr);
+        gap:8px;
+        margin-top:10px;
+      }
+      .mf-tt-bind-actions {
+        grid-template-columns:1fr 1fr;
+      }
+      .mf-tt-bind-box {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        padding:10px 12px;
+        margin-top:8px;
+        border-radius:12px;
+        border:1px solid var(--mf-border);
+        background:rgba(255,255,255,.035);
+      }
+      .mf-tt-bind-code {
+        font-family:ui-monospace,SFMono-Regular,Consolas,monospace !important;
+        color:#f8fafc;
+        font-size:12px;
+      }
+      .mf-tt-hint {
+        margin-top:12px;
+        color:#94a3b8;
+        font-size:10px;
+        line-height:1.45;
+      }
+      .mf-tt-save {
+        width:100%;
+        margin-top:14px;
+      }
       #mf-language-select {
         width:auto;
         min-width:110px;
@@ -2236,6 +2380,7 @@
       { page: 'hud', key: 'cpsCounter', title: t('cpsCounter'), desc: t('cpsCounterDesc') },
       { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc') },
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
+      { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc') },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
       { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc') },
       { page: 'chat', key: 'chatMemes', title: t('chatMemes'), desc: t('chatMemesDesc') },
@@ -2294,6 +2439,214 @@
         <input type="checkbox" class="mf-switch-hidden" ${guiSettings[key] ? 'checked' : ''}>
       </label>
     `;
+  }
+
+  function sendTitanTinyConfig(enabled = settings.titanTiny) {
+    const detail = JSON.stringify({
+      enabled: !!enabled,
+      scale: Math.max(0.20, Math.min(5.00, Number(settings.titanTinyScale) || 1)),
+      bind: String(settings.titanTinyBind || '')
+    });
+    document.dispatchEvent(new CustomEvent('minifeather:titantiny-config', { detail }));
+  }
+
+  function setTitanTinyBindingCapture(active) {
+    document.dispatchEvent(new CustomEvent('minifeather:titantiny-binding', {
+      detail: JSON.stringify({ active: !!active })
+    }));
+  }
+
+  function initTitanTinyModule() {
+    registerModule('titanTiny', () => createLifecycle({
+      enable() {
+        sendTitanTinyConfig(true);
+      },
+      disable() {
+        sendTitanTinyConfig(false);
+      },
+      refresh() {
+        sendTitanTinyConfig(MODULES.get('titanTiny')?.enabled === true);
+      },
+      destroy() {
+        sendTitanTinyConfig(false);
+      }
+    }));
+
+    document.addEventListener('minifeather:titantiny-state', event => {
+      let state;
+      try {
+        state = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+      } catch (_) {
+        return;
+      }
+      if (!state || typeof state !== 'object') return;
+
+      let changed = false;
+      if (typeof state.enabled === 'boolean' && settings.titanTiny !== state.enabled) {
+        settings.titanTiny = state.enabled;
+        guiSettings.titanTiny = state.enabled;
+        setModuleEnabled('titanTiny', state.enabled);
+        changed = true;
+      }
+      if (Number.isFinite(Number(state.scale))) {
+        const scale = Math.max(0.20, Math.min(5.00, Number(state.scale)));
+        if (Math.abs((Number(settings.titanTinyScale) || 1) - scale) > 0.0001) {
+          settings.titanTinyScale = scale;
+          guiSettings.titanTinyScale = scale;
+          changed = true;
+        }
+      }
+      if (typeof state.bind === 'string' && settings.titanTinyBind !== state.bind) {
+        settings.titanTinyBind = state.bind;
+        guiSettings.titanTinyBind = state.bind;
+        changed = true;
+      }
+
+      if (changed) saveSettings();
+      if (panel && activePage === 'render' && !searchQuery.trim()) renderCurrentPageContent();
+      if (activePage === 'dashboard') updateDashboardStats();
+    }, { signal: runtimeController?.signal });
+  }
+
+  function closeTitanTinySettings() {
+    if (titanTinySettingsCleanup) {
+      const cleanup = titanTinySettingsCleanup;
+      titanTinySettingsCleanup = null;
+      cleanup();
+      return;
+    }
+    setTitanTinyBindingCapture(false);
+    panel?.querySelector('.mf-tt-backdrop')?.remove();
+  }
+
+  function openTitanTinySettings() {
+    if (!panel) return;
+    closeTitanTinySettings();
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop';
+    const scale = Math.max(0.20, Math.min(5.00, Number(settings.titanTinyScale) || 1));
+    const bind = String(settings.titanTinyBind || '');
+
+    backdrop.innerHTML = `
+      <div class="mf-tt-dialog" role="dialog" aria-modal="true">
+        <div class="mf-tt-head">
+          <div class="mf-tt-title">${t('titanTinySettings')}</div>
+          <button type="button" class="mf-close" data-tt-close>×</button>
+        </div>
+        <div class="mf-tt-row">
+          <span>${t('titanTinyScale')}</span>
+          <span class="mf-tt-scale-value" data-tt-scale-value>${scale.toFixed(2)}×</span>
+        </div>
+        <input class="mf-tt-range" data-tt-scale type="range" min="0.20" max="5.00" step="0.01" value="${scale}">
+        <input class="mf-input" data-tt-scale-number type="number" min="0.20" max="5.00" step="0.01" value="${scale.toFixed(2)}">
+        <div class="mf-tt-presets">
+          <button type="button" class="mf-btn secondary" data-tt-preset="0.35">${t('titanTinyTiny')}</button>
+          <button type="button" class="mf-btn secondary" data-tt-preset="1">${t('titanTinyNormal')}</button>
+          <button type="button" class="mf-btn secondary" data-tt-preset="3">${t('titanTinyTitan')}</button>
+        </div>
+        <div class="mf-tt-row"><span>${t('titanTinyBind')}</span></div>
+        <div class="mf-tt-bind-box">
+          <span class="mf-muted">${t('titanTinyBind')}</span>
+          <span class="mf-tt-bind-code" data-tt-bind-code>${bind || t('titanTinyNoBind')}</span>
+        </div>
+        <div class="mf-tt-bind-actions">
+          <button type="button" class="mf-btn secondary" data-tt-bind>${t('titanTinySetBind')}</button>
+          <button type="button" class="mf-btn danger" data-tt-unbind>${t('titanTinyRemoveBind')}</button>
+        </div>
+        <div class="mf-tt-hint">${t('titanTinyAlwaysSync')}</div>
+        <button type="button" class="mf-btn primary mf-tt-save" data-tt-save>${t('titanTinySave')}</button>
+      </div>
+    `;
+
+    panel.appendChild(backdrop);
+
+    const slider = backdrop.querySelector('[data-tt-scale]');
+    const scaleNumber = backdrop.querySelector('[data-tt-scale-number]');
+    const scaleValue = backdrop.querySelector('[data-tt-scale-value]');
+    const bindCode = backdrop.querySelector('[data-tt-bind-code]');
+    const bindButton = backdrop.querySelector('[data-tt-bind]');
+    let binding = false;
+
+    const applyScale = value => {
+      const next = Math.max(0.20, Math.min(5.00, Number(value) || 1));
+      settings.titanTinyScale = next;
+      guiSettings.titanTinyScale = next;
+      if (slider) slider.value = String(next);
+      if (scaleNumber) scaleNumber.value = next.toFixed(2);
+      if (scaleValue) scaleValue.textContent = `${next.toFixed(2)}×`;
+      saveSettings();
+      sendTitanTinyConfig(settings.titanTiny);
+    };
+
+    slider?.addEventListener('input', event => applyScale(event.target.value));
+    scaleNumber?.addEventListener('change', event => applyScale(event.target.value));
+    scaleNumber?.addEventListener('keydown', event => {
+      if (event.code !== 'Enter') return;
+      event.preventDefault();
+      applyScale(event.target.value);
+    });
+    backdrop.querySelectorAll('[data-tt-preset]').forEach(button => {
+      button.addEventListener('click', () => applyScale(button.dataset.ttPreset));
+    });
+
+    const stopBinding = () => {
+      binding = false;
+      setTitanTinyBindingCapture(false);
+      if (bindButton) bindButton.textContent = t('titanTinySetBind');
+    };
+
+    bindButton?.addEventListener('click', () => {
+      binding = true;
+      setTitanTinyBindingCapture(true);
+      bindButton.textContent = t('titanTinyListening');
+    });
+
+    backdrop.querySelector('[data-tt-unbind]')?.addEventListener('click', () => {
+      stopBinding();
+      settings.titanTinyBind = '';
+      guiSettings.titanTinyBind = '';
+      if (bindCode) bindCode.textContent = t('titanTinyNoBind');
+      saveSettings();
+      sendTitanTinyConfig(settings.titanTiny);
+    });
+
+    const keyHandler = event => {
+      if (!binding) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      if (event.code === 'Escape' || event.code === 'Backspace' || event.code === 'Delete') {
+        settings.titanTinyBind = '';
+        guiSettings.titanTinyBind = '';
+        if (bindCode) bindCode.textContent = t('titanTinyNoBind');
+      } else {
+        settings.titanTinyBind = event.code;
+        guiSettings.titanTinyBind = event.code;
+        if (bindCode) bindCode.textContent = event.code;
+      }
+
+      saveSettings();
+      sendTitanTinyConfig(settings.titanTiny);
+      stopBinding();
+    };
+
+    document.addEventListener('keydown', keyHandler, { capture: true, once: false });
+
+    const cleanup = () => {
+      stopBinding();
+      document.removeEventListener('keydown', keyHandler, true);
+      backdrop.remove();
+      if (titanTinySettingsCleanup === cleanup) titanTinySettingsCleanup = null;
+    };
+    titanTinySettingsCleanup = cleanup;
+
+    backdrop.querySelector('[data-tt-close]')?.addEventListener('click', cleanup);
+    backdrop.querySelector('[data-tt-save]')?.addEventListener('click', cleanup);
+    backdrop.addEventListener('mousedown', event => {
+      if (event.target === backdrop) cleanup();
+    });
   }
 
   function renderDashboardPage() {
@@ -2356,6 +2709,7 @@
           <div class="mf-card-title">${t('sectionGeneral')}</div>
           <div class="mf-toggle-grid">
             ${renderToggle('rebrand', t('rebrand'), t('rebrandDesc'))}
+            ${renderToggle('titanTiny', t('titanTiny'), t('titanTinyDesc'))}
             <label class="mf-toggle" id="mf-spritesheet-toggle">
               <span class="mf-toggle-dot"></span>
               <span class="mf-toggle-copy">
@@ -2646,6 +3000,7 @@
 
   function hideGUI() {
     if (!overlay || !panel) return;
+    closeTitanTinySettings();
     const closingPanel = panel;
     const closingOverlay = overlay;
     closingOverlay.style.display = 'none';
@@ -2874,6 +3229,13 @@
     if (!panel) return;
 
     bindLocalizedFileInputs();
+
+    const titanTinyToggle = panel.querySelector('.mf-toggle[data-key="titanTiny"]');
+    titanTinyToggle?.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openTitanTinySettings();
+    });
 
     panel.querySelectorAll('.mf-meme-id[data-meme-id]').forEach(button => {
       button.addEventListener('click', async () => {
@@ -3207,6 +3569,7 @@
     setModuleEnabled('fpsCounter', settings.fpsCounter);
     setModuleEnabled('cpsCounter', settings.cpsCounter);
     setModuleEnabled('pingCounter', settings.pingCounter);
+    setModuleEnabled('titanTiny', settings.titanTiny);
     setModuleEnabled('chatVideos', settings.chatVideos);
     setModuleEnabled('chatLinks', settings.chatLinks);
     setModuleEnabled('chatMemes', settings.chatMemes);
@@ -3612,6 +3975,7 @@
     initCPSCounter();
     initPingCounter();
     initKeystrokes();
+    initTitanTinyModule();
     initGUI();
     initChatFeatures();
     injectFeatherButton();
@@ -3655,6 +4019,7 @@
     sidebarObserver?.disconnect();
     sidebarObserver = null;
 
+    closeTitanTinySettings();
     unhookClipboard();
     destroyModules();
     showAds();
