@@ -22,7 +22,8 @@
       "js": [
         "src/inject.js",
         "src/mf-freelook.js",
-        "src/TitanTiny.js"
+        "src/TitanTiny.js",
+        "src/Zoom.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"
