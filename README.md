@@ -4,7 +4,7 @@
 
 ### A lightweight, customizable browser client designed to enhance your experience on Miniblox.io.
 
-![Version](https://img.shields.io/badge/version-v3.2.1-2563eb?style=flat-square)
+![Version](https://img.shields.io/badge/version-v3.2.2-2563eb?style=flat-square)
 ![Status](https://img.shields.io/badge/status-active-16a34a?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Miniblox.io-7c3aed?style=flat-square)
 
@@ -20,27 +20,24 @@ The client is designed to remain lightweight, configurable, and easy to use whil
 
 ---
 
-## 🆕 What's New in v3.2.1
+## 🆕 What's New in v3.2.2
 
-### 📏 Player Distance
+### 🫳 PatPat
 
-A new **Player Distance** module has been added.
+A new **PatPat** module has been added to MiniFeather Client.
 
-When enabled, MiniFeather displays the current distance to players directly inside their native nametags.
-
-Example:
+When enabled, look at a nearby player or living mob and use:
 
 ```text
-PlayerName (12.4m)
+Shift + Right Click
 ```
 
-When **Player Health** and **Player Distance** are enabled together, both values are combined into the same nametag:
+PatPat triggers a short pat animation above the target, plays a randomized pat sound, swings your hand, and briefly squishes the target model for the visual effect.
 
-```text
-PlayerName (❤20 | 12.4m)
-```
+The effect follows the target while it is active and keeps the native nametag aligned with the temporary squash animation.
 
-The distance updates dynamically while players move and uses the same native nametag system as Player Health.
+PatPat can be enabled or disabled from the **Rendering** section.
+
 
 ---
 
@@ -51,6 +48,7 @@ The distance updates dynamically while players move and uses the same native nam
 - FPS, CPS, ping, and keystrokes HUD modules
 - Player Health nametags
 - Player Distance nametags
+- PatPat interaction module
 - Titan & Tiny player scaling
 - FreeLook
 - Camera Overhaul
@@ -124,6 +122,30 @@ Features:
 - Integrates with the native nametag system
 - Automatically combines with Player Health when both modules are enabled
 - Can be enabled or disabled from the **Rendering** section
+
+---
+
+## 🫳 PatPat
+
+PatPat adds a playful interaction for nearby players and living mobs.
+
+When the module is enabled:
+
+1. Look directly at a nearby player or living mob.
+2. Hold **Shift**.
+3. **Right-click** to pat the target.
+
+The interaction includes:
+
+- A pixel-style patting hand animation
+- A short squash animation on the target model
+- Native nametag movement that follows the squash effect
+- A randomized pat sound
+- Your normal hand swing animation
+- Target visibility checks so the interaction only works on valid visible targets
+- A short cooldown between pats
+
+PatPat is available from the **Rendering** section and does not require a separate keybind.
 
 ---
 
@@ -366,6 +388,7 @@ MiniFeather automatically saves supported settings using browser storage.
 Saved configuration can include:
 
 - Enabled modules
+- PatPat module state
 - HUD preferences
 - Module keybinds
 - Titan & Tiny scale
@@ -456,11 +479,21 @@ src/content.js
 src/translations.js
 src/HealthNameTags.js
 src/DistanceNameTags.js
+src/PatPat.js
 src/TitanTiny.js
 src/Zoom.js
 src/Camera Overhaul.js
 src/mf-freelook.js
 src/features.js
+```
+
+PatPat also uses its own visual and audio assets:
+
+```text
+assets/patpat.png
+assets/pat.ogg
+assets/pat1.ogg
+assets/pat2.ogg
 ```
 
 This makes features easier to maintain, update, and debug independently.
