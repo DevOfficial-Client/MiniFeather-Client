@@ -83,7 +83,89 @@
     { id: 'about', icon: '🪶', labelKey: 'tabAbout' }
   ];
 
-  const MODULE_VERSION = '1.0';
+  const MODULE_VERSION = '3.2.0';
+
+  const CAMERA_OVERHAUL_PRESETS = Object.freeze({
+    soft: Object.freeze({
+      masterStrength: 0.55,
+      strafeRoll: 0.034,
+      turnRoll: 0.021,
+      forwardPitch: 0.014,
+      verticalPitch: 0.017,
+      bobStrength: 0.013,
+      bobFrequency: 7.2,
+      landingStrength: 0.024,
+      swayStrength: 0.0010,
+      fovBoost: 1.8,
+      mouseStrength: 0.00009
+    }),
+    normal: Object.freeze({
+      masterStrength: 1.00,
+      strafeRoll: 0.055,
+      turnRoll: 0.035,
+      forwardPitch: 0.022,
+      verticalPitch: 0.028,
+      bobStrength: 0.022,
+      bobFrequency: 8.2,
+      landingStrength: 0.040,
+      swayStrength: 0.0018,
+      fovBoost: 3.5,
+      mouseStrength: 0.00016
+    }),
+    strong: Object.freeze({
+      masterStrength: 1.45,
+      strafeRoll: 0.068,
+      turnRoll: 0.046,
+      forwardPitch: 0.030,
+      verticalPitch: 0.037,
+      bobStrength: 0.030,
+      bobFrequency: 9.4,
+      landingStrength: 0.055,
+      swayStrength: 0.0026,
+      fovBoost: 5.2,
+      mouseStrength: 0.00022
+    })
+  });
+
+  const CAMERA_OVERHAUL_LIMITS = Object.freeze({
+    masterStrength: Object.freeze({ min: 0.25, max: 2.00, step: 0.05, label: 'cameraOverhaulStrength', digits: 2 }),
+    strafeRoll: Object.freeze({ min: 0, max: 0.10, step: 0.001, label: 'cameraOverhaulStrafe', digits: 3 }),
+    turnRoll: Object.freeze({ min: 0, max: 0.08, step: 0.001, label: 'cameraOverhaulTurn', digits: 3 }),
+    forwardPitch: Object.freeze({ min: 0, max: 0.06, step: 0.001, label: 'cameraOverhaulMovePitch', digits: 3 }),
+    verticalPitch: Object.freeze({ min: 0, max: 0.07, step: 0.001, label: 'cameraOverhaulVertical', digits: 3 }),
+    bobStrength: Object.freeze({ min: 0, max: 0.05, step: 0.001, label: 'cameraOverhaulBob', digits: 3 }),
+    bobFrequency: Object.freeze({ min: 4, max: 14, step: 0.1, label: 'cameraOverhaulBobFrequency', digits: 1 }),
+    landingStrength: Object.freeze({ min: 0, max: 0.08, step: 0.001, label: 'cameraOverhaulLanding', digits: 3 }),
+    swayStrength: Object.freeze({ min: 0, max: 0.005, step: 0.0001, label: 'cameraOverhaulSway', digits: 4 }),
+    fovBoost: Object.freeze({ min: 0, max: 7, step: 0.1, label: 'cameraOverhaulFov', digits: 1 }),
+    mouseStrength: Object.freeze({ min: 0, max: 0.00035, step: 0.00001, label: 'cameraOverhaulMouse', digits: 5 })
+  });
+
+  function cloneCameraValues(source = CAMERA_OVERHAUL_PRESETS.normal) {
+    return Object.fromEntries(Object.entries(source).map(([key, value]) => [key, Number(value)]));
+  }
+
+  function clampCameraValues(source) {
+    const base = cloneCameraValues(CAMERA_OVERHAUL_PRESETS.normal);
+    if (!source || typeof source !== 'object') return base;
+    for (const [key, limit] of Object.entries(CAMERA_OVERHAUL_LIMITS)) {
+      const value = Number(source[key]);
+      if (!Number.isFinite(value)) continue;
+      base[key] = Math.max(limit.min, Math.min(limit.max, value));
+    }
+    return base;
+  }
+
+  function detectCameraPreset(values) {
+    const normalized = clampCameraValues(values);
+    for (const [name, preset] of Object.entries(CAMERA_OVERHAUL_PRESETS)) {
+      const matches = Object.keys(CAMERA_OVERHAUL_LIMITS).every(key =>
+        Math.abs(Number(normalized[key]) - Number(preset[key])) <= Math.max(Number(CAMERA_OVERHAUL_LIMITS[key].step) / 2, 0.000001)
+      );
+      if (matches) return name;
+    }
+    return 'custom';
+  }
 
   const DEFAULT_SETTINGS = {
     rebrand: true,
@@ -98,535 +180,17 @@
     titanTinyBind: '',
     zoom: false,
     zoomBind: 'KeyZ',
+    cameraOverhaul: false,
+    cameraOverhaulBind: '',
+    cameraOverhaulPreset: 'normal',
+    cameraOverhaulValues: cloneCameraValues(CAMERA_OVERHAUL_PRESETS.normal),
     chatVideos: true,
     chatLinks: true,
     chatMemes: true,
     language: 'en'
   };
 
-  const TRANSLATIONS = {
-    en: {
-      title: 'MiniFeather',
-      subtitle: 'Minimal panel',
-      shortcut: 'Right Shift',
-      language: 'Language',
-      tabClient: 'Client',
-      tabSkins: 'Custom',
-      tabAbout: 'About',
-      sectionGeneral: 'General',
-      sectionLogo: 'Custom Logo',
-      sectionLinks: 'Links',
-      sectionSkinChanger: 'Skin Changer',
-      sectionActiveSkins: 'Active Skins',
-      sectionCapeChanger: 'Cape Changer',
-      sectionActiveCapes: 'Active Capes',
-      sectionAbout: 'Info',
-      rebrand: 'Rebrand',
-      rebrandDesc: 'Logo, title and background.',
-      titanTiny: 'Titan & Tiny',
-      titanTinyDesc: 'Scale your player model. Right-click to configure scale and bind.',
-      titanTinySettings: 'Titan & Tiny Settings',
-      titanTinyScale: 'Scale',
-      titanTinyBind: 'Bind',
-      titanTinyNoBind: 'None',
-      titanTinySetBind: 'Set Bind',
-      titanTinyRemoveBind: 'Remove Bind',
-      titanTinyListening: 'Press any key...',
-      titanTinySave: 'Save',
-      titanTinyTiny: 'Tiny',
-      titanTinyNormal: 'Normal',
-      titanTinyTitan: 'Titan',
-      titanTinyAlwaysSync: 'Hitbox, camera height and nametag sync are always enabled.',
-      zoom: 'Zoom',
-      zoomDesc: 'Hold the configured key and scroll to change zoom. Release the key to reset.',
-      zoomSettings: 'Zoom Settings',
-      zoomBind: 'Activation Bind',
-      zoomNoBind: 'None',
-      zoomSetBind: 'Set Bind',
-      zoomRemoveBind: 'Remove Bind',
-      zoomListening: 'Press any key...',
-      zoomSave: 'Save',
-      zoomHint: 'Hold the bind while scrolling. Zoom resets to normal when you release it.',
-      supportAds: 'Support Ads',
-      supportAdsDesc: 'Allow ads to support creators.',
-      discordRedirect: 'Discord Redirect',
-      discordRedirectDesc: 'Use the MiniFeather Client invite.',
-      keystrokes: 'Keystrokes',
-      keystrokesDesc: 'Show movement keys and CPS.',
-      fpsCounter: 'FPS Counter',
-      fpsCounterDesc: 'Show the current frames per second.',
-      cpsCounter: 'CPS Counter',
-      cpsCounterDesc: 'Show left and right clicks per second.',
-      cpsLabel: 'CPS',
-      pingCounter: 'Ping Counter',
-      pingCounterDesc: 'Show the browser-reported connection round-trip time in milliseconds.',
-      pingLabel: 'PING',
-      sectionChat: 'Chat',
-      chatVideos: 'Chat Videos',
-      chatVideosDesc: 'Show YouTube previews while keeping the original message visible.',
-      chatLinks: 'Clickable Chat Links',
-      chatLinksDesc: 'Open links from chat in a new browser tab when clicked.',
-      chatMemes: 'Chat Memes',
-      chatMemesDesc: 'Show GIF commands and meme videos in chat.',
-      memeLibraryTitle: 'Meme IDs',
-      memeLibraryDesc: 'Preview each meme and click its ID to copy the exact command used in chat.',
-      memeGifIds: 'Meme IDs',
-      memeCopy: 'Copy',
-      memeCopied: 'Copied',
-      spritesheet: 'Custom Spritesheet',
-      spritesheetDesc: 'Replace the default spritesheet.',
-      customLogoUrl: 'Logo URL',
-      customLogoUrlPlaceholder: 'https://example.com/logo.png',
-      customLogoFile: 'Upload logo',
-      noFileSelected: 'No file selected',
-      applyLogo: 'Apply Logo',
-      resetLogo: 'Reset Logo',
-      logoUpdated: 'Logo updated.',
-      logoResetDone: 'Logo reset.',
-      logoNeedSource: 'Enter a logo URL or upload a file.',
-      logoInvalid: 'The image could not be loaded.',
-      skinSelect: 'Select Skin',
-      skinSelectPlaceholder: '-- Select skin --',
-      skinUrl: 'Custom URL',
-      skinUrlPlaceholder: 'https://example.com/skin.png',
-      skinFile: 'Upload skin',
-      capeFile: 'Upload cape',
-      applySkin: 'Apply',
-      resetAll: 'Reset All',
-      skinNeedName: 'Select a skin first.',
-      skinNeedSource: 'Enter a URL or upload a file.',
-      skinApplied: 'Skin "{name}" applied.',
-      skinRemoved: 'Skin "{name}" removed.',
-      skinsReset: 'All skins reset.',
-      noActiveSkins: 'No active skins.',
-      capeSelectPlaceholder: '-- Select cape --',
-      capeUrlPlaceholder: 'https://example.com/cape.png',
-      applyCape: 'Apply',
-      capeNeedName: 'Select a cape first.',
-      capeNeedSource: 'Enter a URL or upload a file.',
-      capeApplied: 'Cape "{name}" applied.',
-      capeRemoved: 'Cape "{name}" removed.',
-      capesReset: 'All capes reset.',
-      noActiveCapes: 'No active capes.',
-      remove: 'Remove',
-      joinServer: 'Join MiniFeather Client',
-      aboutLine1: 'Open the panel with Right Shift.',
-      aboutLine2: 'Settings are saved automatically.',
-      welcomeHtml: 'Welcome To MiniFeather Client!',
-      discordDesc1: 'Find MiniFeather Client members and squad up',
-      discordDesc2: 'Get the clients updates and news',
-      discordDesc3: 'MiniClient events, giveaways and perks',
-      discordDesc4: 'Chat with the MiniFeather Client community',
-      discordDesc5: 'Join the MiniFeather Client community',
-      preview: 'Preview',
-      customLogoLocal: 'A local image is selected',
-      navDashboard: 'Dashboard',
-      navHud: 'HUD',
-      navRender: 'Rendering',
-      navWorld: 'World',
-      navSettings: 'Settings',
-      dashboardModulesTitle: 'Enabled Modules',
-      dashboardModulesSub: 'Currently active',
-      dashboardFpsSub: 'Current FPS',
-      dashboardPingSub: 'Server latency',
-      dashboardVersionSub: 'MiniFeather Client',
-      worldComingSoon: 'World features are coming soon.',
-      searchPlaceholder: 'Search modules...',
-      searchNoResults: 'No modules match your search.',
-      searchResultsLabel: 'Search Results',
-      aboutDiscordMessage: 'Want to know more about the client and its progress? Join our Discord to follow active development and get the latest updates.'
-    },
-    es: {
-      title: 'MiniFeather',
-      subtitle: 'Panel minimalista',
-      shortcut: 'Shift derecho',
-      language: 'Idioma',
-      tabClient: 'Cliente',
-      tabSkins: 'Personalizado',
-      tabAbout: 'Info',
-      sectionGeneral: 'General',
-      sectionLogo: 'Logo Personalizado',
-      sectionLinks: 'Enlaces',
-      sectionSkinChanger: 'Cambiador de Skins',
-      sectionActiveSkins: 'Skins Activas',
-      sectionCapeChanger: 'Cambiador de Capas',
-      sectionActiveCapes: 'Capas Activas',
-      sectionAbout: 'Información',
-      rebrand: 'Rebrand',
-      rebrandDesc: 'Logo, título y fondo.',
-      titanTiny: 'Titan & Tiny',
-      titanTinyDesc: 'Cambia la escala de tu jugador. Clic derecho para configurar escala y bind.',
-      titanTinySettings: 'Ajustes de Titan & Tiny',
-      titanTinyScale: 'Escala',
-      titanTinyBind: 'Bind',
-      titanTinyNoBind: 'Ninguno',
-      titanTinySetBind: 'Asignar Bind',
-      titanTinyRemoveBind: 'Quitar Bind',
-      titanTinyListening: 'Presiona una tecla...',
-      titanTinySave: 'Guardar',
-      titanTinyTiny: 'Tiny',
-      titanTinyNormal: 'Normal',
-      titanTinyTitan: 'Titan',
-      titanTinyAlwaysSync: 'La hitbox, la altura de cámara y el nametag siempre se sincronizan.',
-      zoom: 'Zoom',
-      zoomDesc: 'Mantén el bind configurado y usa la rueda para cambiar el zoom. Al soltarlo vuelve a normal.',
-      zoomSettings: 'Ajustes de Zoom',
-      zoomBind: 'Bind de activación',
-      zoomNoBind: 'Ninguno',
-      zoomSetBind: 'Asignar Bind',
-      zoomRemoveBind: 'Quitar Bind',
-      zoomListening: 'Presiona una tecla...',
-      zoomSave: 'Guardar',
-      zoomHint: 'Mantén presionado el bind mientras haces scroll. Al soltarlo el zoom vuelve a 1.00×.',
-      supportAds: 'Anuncios',
-      supportAdsDesc: 'Permitir anuncios para apoyar a los creadores.',
-      discordRedirect: 'Redirección de Discord',
-      discordRedirectDesc: 'Usar la invitación personalizada de Kings SMP.',
-      keystrokes: 'Keystrokes',
-      keystrokesDesc: 'Mostrar teclas de movimiento y CPS.',
-      fpsCounter: 'Contador de FPS',
-      fpsCounterDesc: 'Mostrar los fotogramas por segundo actuales.',
-      cpsCounter: 'Contador de CPS',
-      cpsCounterDesc: 'Mostrar los clics izquierdos y derechos por segundo.',
-      cpsLabel: 'CPS',
-      pingCounter: 'Contador de Ping',
-      pingCounterDesc: 'Mostrar el tiempo de ida y vuelta de la conexión reportado por el navegador.',
-      pingLabel: 'PING',
-      sectionChat: 'Chat',
-      chatVideos: 'Videos en el Chat',
-      chatVideosDesc: 'Mostrar vistas previas de YouTube conservando visible el mensaje original.',
-      chatLinks: 'Enlaces del Chat',
-      chatLinksDesc: 'Abrir los enlaces del chat en una nueva pestaña del navegador al hacer clic.',
-      chatMemes: 'Memes en el Chat',
-      chatMemesDesc: 'Mostrar comandos de GIF y videos de memes en el chat.',
-      memeLibraryTitle: 'IDs de Memes',
-      memeLibraryDesc: 'Mira la vista previa de cada meme y haz clic en su ID para copiar el comando exacto del chat.',
-      memeGifIds: 'IDs de Memes',
-      memeCopy: 'Copiar',
-      memeCopied: 'Copiado',
-      spritesheet: 'Spritesheet Personalizado',
-      spritesheetDesc: 'Reemplazar el spritesheet predeterminado.',
-      customLogoUrl: 'URL del logo',
-      customLogoUrlPlaceholder: 'https://example.com/logo.png',
-      customLogoFile: 'Subir logo',
-      noFileSelected: 'Ningún archivo seleccionado',
-      applyLogo: 'Aplicar Logo',
-      resetLogo: 'Restablecer Logo',
-      logoUpdated: 'Logo actualizado.',
-      logoResetDone: 'Logo restablecido.',
-      logoNeedSource: 'Escribe una URL del logo o sube un archivo.',
-      logoInvalid: 'No se pudo cargar la imagen.',
-      skinSelect: 'Seleccionar Skin',
-      skinSelectPlaceholder: '-- Selecciona una skin --',
-      skinUrl: 'URL Personalizada',
-      skinUrlPlaceholder: 'https://example.com/skin.png',
-      skinFile: 'Subir skin',
-      capeFile: 'Subir capa',
-      applySkin: 'Aplicar',
-      resetAll: 'Restablecer Todo',
-      skinNeedName: 'Selecciona una skin primero.',
-      skinNeedSource: 'Escribe una URL o sube un archivo.',
-      skinApplied: 'Skin "{name}" aplicada.',
-      skinRemoved: 'Skin "{name}" eliminada.',
-      skinsReset: 'Todas las skins fueron restablecidas.',
-      noActiveSkins: 'No hay skins activas.',
-      capeSelectPlaceholder: '-- Selecciona una capa --',
-      capeUrlPlaceholder: 'https://example.com/capa.png',
-      applyCape: 'Aplicar',
-      capeNeedName: 'Selecciona una capa primero.',
-      capeNeedSource: 'Escribe una URL o sube un archivo.',
-      capeApplied: 'Capa "{name}" aplicada.',
-      capeRemoved: 'Capa "{name}" eliminada.',
-      capesReset: 'Todas las capas fueron restablecidas.',
-      noActiveCapes: 'No hay capas activas.',
-      remove: 'Quitar',
-      joinServer: 'Unirse a Kings SMP',
-      aboutLine1: 'Abre el panel con Shift derecho.',
-      aboutLine2: 'La configuración se guarda automáticamente.',
-      welcomeHtml: '¡Bienvenido a MiniFeather Client! <span style="color:#7b8495;font-size:11px;margin-left:6px;">Kings SMP</span>',
-      discordDesc1: 'Encuentra miembros de Kings SMP y juega con ellos',
-      discordDesc2: 'Recibe noticias y actualizaciones de Kings SMP',
-      discordDesc3: 'Eventos, sorteos y ventajas de KSMP',
-      discordDesc4: 'Habla con la comunidad de Kings SMP',
-      discordDesc5: 'Únete a la comunidad de Kings SMP',
-      preview: 'Vista previa',
-      customLogoLocal: 'Se seleccionó una imagen local',
-      navDashboard: 'Panel',
-      navHud: 'HUD',
-      navRender: 'Renderizado',
-      navWorld: 'Mundo',
-      navSettings: 'Ajustes',
-      dashboardModulesTitle: 'Módulos Activos',
-      dashboardModulesSub: 'Actualmente activos',
-      dashboardFpsSub: 'FPS actuales',
-      dashboardPingSub: 'Latencia del servidor',
-      dashboardVersionSub: 'MiniFeather Client',
-      worldComingSoon: 'Las funciones de mundo llegarán pronto.',
-      searchPlaceholder: 'Buscar módulos...',
-      searchNoResults: 'Ningún módulo coincide con tu búsqueda.',
-      searchResultsLabel: 'Resultados de Búsqueda'
-    },
-    ja: {
-      title: 'MiniFeather',
-      subtitle: 'ミニマルパネル',
-      shortcut: '右Shift',
-      language: '言語',
-      tabClient: 'クライアント',
-      tabSkins: 'カスタム',
-      tabAbout: '情報',
-      sectionGeneral: '一般',
-      sectionLogo: 'カスタムロゴ',
-      sectionLinks: 'リンク',
-      sectionSkinChanger: 'スキン変更',
-      sectionActiveSkins: '有効なスキン',
-      sectionCapeChanger: 'マント変更',
-      sectionActiveCapes: '有効なマント',
-      sectionAbout: '情報',
-      rebrand: 'リブランド',
-      rebrandDesc: 'ロゴ、タイトル、背景。',
-      titanTiny: 'Titan & Tiny',
-      titanTinyDesc: 'プレイヤーのサイズを変更します。右クリックでサイズとキーを設定。',
-      titanTinySettings: 'Titan & Tiny 設定',
-      titanTinyScale: 'スケール',
-      titanTinyBind: 'キー',
-      titanTinyNoBind: 'なし',
-      titanTinySetBind: 'キーを設定',
-      titanTinyRemoveBind: 'キーを解除',
-      titanTinyListening: 'キーを押してください...',
-      titanTinySave: '保存',
-      titanTinyTiny: 'Tiny',
-      titanTinyNormal: 'Normal',
-      titanTinyTitan: 'Titan',
-      titanTinyAlwaysSync: 'ヒットボックス、カメラ高さ、ネームタグ同期は常に有効です。',
-      zoom: 'ズーム',
-      zoomDesc: '設定したキーを押しながらスクロールしてズームを変更します。キーを離すと元に戻ります。',
-      zoomSettings: 'ズーム設定',
-      zoomBind: '起動キー',
-      zoomNoBind: 'なし',
-      zoomSetBind: 'キーを設定',
-      zoomRemoveBind: 'キーを解除',
-      zoomListening: 'キーを押してください...',
-      zoomSave: '保存',
-      zoomHint: 'キーを押しながらスクロールします。キーを離すとズームは1.00×に戻ります。',
-      supportAds: '広告',
-      supportAdsDesc: '広告を許可して制作者を支援します。',
-      discordRedirect: 'Discord リダイレクト',
-      discordRedirectDesc: 'Kings SMP のカスタム招待を使用します。',
-      keystrokes: 'キーストローク',
-      keystrokesDesc: '移動キーと CPS を表示します。',
-      fpsCounter: 'FPS カウンター',
-      fpsCounterDesc: '現在の1秒あたりのフレーム数を表示します。',
-      cpsCounter: 'CPS カウンター',
-      cpsCounterDesc: '左右の1秒あたりのクリック数を表示します。',
-      cpsLabel: 'CPS',
-      pingCounter: 'Ping カウンター',
-      pingCounterDesc: 'ブラウザが報告する接続の往復時間をミリ秒で表示します。',
-      pingLabel: 'PING',
-      sectionChat: 'チャット',
-      chatVideos: 'チャット動画',
-      chatVideosDesc: '元のメッセージを表示したまま、YouTubeのプレビューをチャットに表示します。',
-      chatLinks: 'クリック可能なチャットリンク',
-      chatLinksDesc: 'チャット内のリンクをクリックすると、ブラウザの新しいタブで開きます。',
-      chatMemes: 'チャットミーム',
-      chatMemesDesc: 'GIFコマンドとミーム動画をチャットに表示します。',
-      memeLibraryTitle: 'ミームID',
-      memeLibraryDesc: '各ミームをプレビューし、IDをクリックしてチャット用の正確なコマンドをコピーできます。',
-      memeGifIds: 'ミームID',
-      memeCopy: 'コピー',
-      memeCopied: 'コピー済み',
-      spritesheet: 'カスタムスプライトシート',
-      spritesheetDesc: '標準スプライトシートを置き換えます。',
-      customLogoUrl: 'ロゴ URL',
-      customLogoUrlPlaceholder: 'https://example.com/logo.png',
-      customLogoFile: 'ロゴをアップロード',
-      noFileSelected: 'ファイルが選択されていません',
-      applyLogo: 'ロゴを適用',
-      resetLogo: 'ロゴをリセット',
-      logoUpdated: 'ロゴを更新しました。',
-      logoResetDone: 'ロゴをリセットしました。',
-      logoNeedSource: 'ロゴのURLを入力するか、ファイルをアップロードしてください。',
-      logoInvalid: '画像を読み込めませんでした。',
-      skinSelect: 'スキンを選択',
-      skinSelectPlaceholder: '-- スキンを選択 --',
-      skinUrl: 'カスタム URL',
-      skinUrlPlaceholder: 'https://example.com/skin.png',
-      skinFile: 'スキンをアップロード',
-      capeFile: 'マントをアップロード',
-      applySkin: '適用',
-      resetAll: 'すべてリセット',
-      skinNeedName: '先にスキンを選択してください。',
-      skinNeedSource: 'URLを入力するか、ファイルをアップロードしてください。',
-      skinApplied: 'スキン「{name}」を適用しました。',
-      skinRemoved: 'スキン「{name}」を削除しました。',
-      skinsReset: 'すべてのスキンをリセットしました。',
-      noActiveSkins: '有効なスキンはありません。',
-      capeSelectPlaceholder: '-- マントを選択 --',
-      capeUrlPlaceholder: 'https://example.com/cape.png',
-      applyCape: '適用',
-      capeNeedName: '先にマントを選択してください。',
-      capeNeedSource: 'URLを入力するか、ファイルをアップロードしてください。',
-      capeApplied: 'マント「{name}」を適用しました。',
-      capeRemoved: 'マント「{name}」を削除しました。',
-      capesReset: 'すべてのマントをリセットしました。',
-      noActiveCapes: '有効なマントはありません。',
-      remove: '削除',
-      joinServer: 'Kings SMP に参加',
-      aboutLine1: '右Shiftでパネルを開きます。',
-      aboutLine2: '設定は自動で保存されます。',
-      welcomeHtml: 'MiniFeather Client へようこそ！ <span style="color:#7b8495;font-size:11px;margin-left:6px;">Kings SMP</span>',
-      discordDesc1: 'Kings SMP の仲間を見つけて一緒にプレイ',
-      discordDesc2: 'Kings SMP の最新情報とニュースを受け取る',
-      discordDesc3: 'KSMP のイベント、プレゼント、特典',
-      discordDesc4: 'Kings SMP コミュニティと交流する',
-      discordDesc5: 'Kings SMP コミュニティに参加する',
-      preview: 'プレビュー',
-      customLogoLocal: 'ローカル画像が選択されています',
-      navDashboard: 'ダッシュボード',
-      navHud: 'HUD',
-      navRender: 'レンダリング',
-      navWorld: 'ワールド',
-      navSettings: '設定',
-      dashboardModulesTitle: '有効なモジュール',
-      dashboardModulesSub: '現在有効',
-      dashboardFpsSub: '現在のFPS',
-      dashboardPingSub: 'サーバーの遅延',
-      dashboardVersionSub: 'MiniFeather Client',
-      worldComingSoon: 'ワールド機能は近日公開予定です。',
-      searchPlaceholder: 'モジュールを検索...',
-      searchNoResults: '一致するモジュールがありません。',
-      searchResultsLabel: '検索結果'
-    },
-    it: {
-      title: 'MiniFeather',
-      subtitle: 'Pannello minimale',
-      shortcut: 'Shift destro',
-      language: 'Lingua',
-      tabClient: 'Client',
-      tabSkins: 'Personalizzato',
-      tabAbout: 'Info',
-      sectionGeneral: 'Generale',
-      sectionLogo: 'Logo Personalizzato',
-      sectionLinks: 'Link',
-      sectionSkinChanger: 'Cambio Skin',
-      sectionActiveSkins: 'Skin Attive',
-      sectionCapeChanger: 'Cambio Mantello',
-      sectionActiveCapes: 'Mantelli Attivi',
-      sectionAbout: 'Informazioni',
-      rebrand: 'Rebrand',
-      rebrandDesc: 'Logo, titolo e sfondo.',
-      titanTiny: 'Titan & Tiny',
-      titanTinyDesc: 'Modifica la scala del giocatore. Clic destro per configurare scala e tasto.',
-      titanTinySettings: 'Impostazioni Titan & Tiny',
-      titanTinyScale: 'Scala',
-      titanTinyBind: 'Tasto',
-      titanTinyNoBind: 'Nessuno',
-      titanTinySetBind: 'Imposta Tasto',
-      titanTinyRemoveBind: 'Rimuovi Tasto',
-      titanTinyListening: 'Premi un tasto...',
-      titanTinySave: 'Salva',
-      titanTinyTiny: 'Tiny',
-      titanTinyNormal: 'Normal',
-      titanTinyTitan: 'Titan',
-      titanTinyAlwaysSync: 'Hitbox, altezza della camera e nametag sono sempre sincronizzati.',
-      zoom: 'Zoom',
-      zoomDesc: 'Tieni premuto il tasto configurato e scorri per cambiare lo zoom. Rilasciandolo torna normale.',
-      zoomSettings: 'Impostazioni Zoom',
-      zoomBind: 'Tasto di attivazione',
-      zoomNoBind: 'Nessuno',
-      zoomSetBind: 'Imposta Tasto',
-      zoomRemoveBind: 'Rimuovi Tasto',
-      zoomListening: 'Premi un tasto...',
-      zoomSave: 'Salva',
-      zoomHint: 'Tieni premuto il tasto mentre scorri. Rilasciandolo lo zoom torna a 1.00×.',
-      supportAds: 'Pubblicità',
-      supportAdsDesc: 'Consenti gli annunci per supportare i creatori.',
-      discordRedirect: 'Reindirizzamento Discord',
-      discordRedirectDesc: 'Usa l’invito personalizzato di Kings SMP.',
-      keystrokes: 'Keystrokes',
-      keystrokesDesc: 'Mostra tasti di movimento e CPS.',
-      fpsCounter: 'Contatore FPS',
-      fpsCounterDesc: 'Mostra i fotogrammi al secondo attuali.',
-      cpsCounter: 'Contatore CPS',
-      cpsCounterDesc: 'Mostra i clic sinistri e destri al secondo.',
-      cpsLabel: 'CPS',
-      pingCounter: 'Contatore Ping',
-      pingCounterDesc: 'Mostra il tempo di andata e ritorno della connessione rilevato dal browser.',
-      pingLabel: 'PING',
-      sectionChat: 'Chat',
-      chatVideos: 'Video nella Chat',
-      chatVideosDesc: 'Mostra le anteprime di YouTube mantenendo visibile il messaggio originale.',
-      chatLinks: 'Link Cliccabili nella Chat',
-      chatLinksDesc: 'Apre i link della chat in una nuova scheda del browser quando vengono cliccati.',
-      chatMemes: 'Meme nella Chat',
-      chatMemesDesc: 'Mostra i comandi GIF e i video meme nella chat.',
-      memeLibraryTitle: 'ID dei Meme',
-      memeLibraryDesc: 'Visualizza l’anteprima di ogni meme e fai clic sul relativo ID per copiare il comando esatto della chat.',
-      memeGifIds: 'ID dei Meme',
-      memeCopy: 'Copia',
-      memeCopied: 'Copiato',
-      spritesheet: 'Spritesheet Personalizzato',
-      spritesheetDesc: 'Sostituisce lo spritesheet predefinito.',
-      customLogoUrl: 'URL del logo',
-      customLogoUrlPlaceholder: 'https://example.com/logo.png',
-      customLogoFile: 'Carica logo',
-      noFileSelected: 'Nessun file selezionato',
-      applyLogo: 'Applica Logo',
-      resetLogo: 'Reimposta Logo',
-      logoUpdated: 'Logo aggiornato.',
-      logoResetDone: 'Logo reimpostato.',
-      logoNeedSource: 'Inserisci un URL del logo o carica un file.',
-      logoInvalid: 'Impossibile caricare l’immagine.',
-      skinSelect: 'Seleziona Skin',
-      skinSelectPlaceholder: '-- Seleziona una skin --',
-      skinUrl: 'URL Personalizzato',
-      skinUrlPlaceholder: 'https://example.com/skin.png',
-      skinFile: 'Carica skin',
-      capeFile: 'Carica mantello',
-      applySkin: 'Applica',
-      resetAll: 'Reimposta Tutto',
-      skinNeedName: 'Seleziona prima una skin.',
-      skinNeedSource: 'Inserisci un URL o carica un file.',
-      skinApplied: 'Skin "{name}" applicata.',
-      skinRemoved: 'Skin "{name}" rimossa.',
-      skinsReset: 'Tutte le skin sono state reimpostate.',
-      noActiveSkins: 'Nessuna skin attiva.',
-      capeSelectPlaceholder: '-- Seleziona un mantello --',
-      capeUrlPlaceholder: 'https://example.com/cape.png',
-      applyCape: 'Applica',
-      capeNeedName: 'Seleziona prima un mantello.',
-      capeNeedSource: 'Inserisci un URL o carica un file.',
-      capeApplied: 'Mantello "{name}" applicato.',
-      capeRemoved: 'Mantello "{name}" rimosso.',
-      capesReset: 'Tutti i mantelli sono stati reimpostati.',
-      noActiveCapes: 'Nessun mantello attivo.',
-      remove: 'Rimuovi',
-      joinServer: 'Unisciti a Kings SMP',
-      aboutLine1: 'Apri il pannello con Shift destro.',
-      aboutLine2: 'Le impostazioni vengono salvate automaticamente.',
-      welcomeHtml: 'Benvenuto su MiniFeather Client! <span style="color:#7b8495;font-size:11px;margin-left:6px;">Kings SMP</span>',
-      discordDesc1: 'Trova membri di Kings SMP e gioca con loro',
-      discordDesc2: 'Ricevi aggiornamenti e notizie di Kings SMP',
-      discordDesc3: 'Eventi, giveaway e vantaggi KSMP',
-      discordDesc4: 'Chatta con la community di Kings SMP',
-      discordDesc5: 'Unisciti alla community di Kings SMP',
-      preview: 'Anteprima',
-      customLogoLocal: 'È stata selezionata un’immagine locale',
-      navDashboard: 'Dashboard',
-      navHud: 'HUD',
-      navRender: 'Rendering',
-      navWorld: 'Mondo',
-      navSettings: 'Impostazioni',
-      dashboardModulesTitle: 'Moduli Attivi',
-      dashboardModulesSub: 'Attualmente attivi',
-      dashboardFpsSub: 'FPS attuali',
-      dashboardPingSub: 'Latenza del server',
-      dashboardVersionSub: 'MiniFeather Client',
-      worldComingSoon: 'Le funzionalità del mondo arriveranno presto.',
-      searchPlaceholder: 'Cerca moduli...',
-      searchNoResults: 'Nessun modulo corrisponde alla ricerca.',
-      searchResultsLabel: 'Risultati della Ricerca'
-    }
-  };
+  const TRANSLATIONS = globalThis.MINIFEATHER_TRANSLATIONS || { en: {} };
 
   const LOGO_ALT_NAMES = ['miniblox'];
   const LOGO_SOURCE_NAMES = ['miniblox-icon', 'miniblox-logo', 'pwa-icon-192.png'];
@@ -655,6 +219,7 @@
   let chatFeaturesReady = false;
   let titanTinySettingsCleanup = null;
   let zoomSettingsCleanup = null;
+  let cameraOverhaulSettingsCleanup = null;
   let destroyed = false;
 
   const MODULES = new Map();
@@ -2351,6 +1916,55 @@
         width:100%;
         margin-top:14px;
       }
+      .mf-co-dialog {
+        max-height:min(700px, calc(100vh - 80px));
+        overflow:auto;
+      }
+      .mf-co-presets {
+        display:grid;
+        grid-template-columns:repeat(4,1fr);
+        gap:8px;
+        margin-top:10px;
+      }
+      .mf-co-presets .active {
+        background:var(--mf-accent);
+        border-color:var(--mf-accent);
+        color:#fff;
+      }
+      .mf-co-controls {
+        display:grid;
+        gap:10px;
+        margin-top:12px;
+      }
+      .mf-co-control {
+        padding:10px 11px;
+        border:1px solid var(--mf-border);
+        border-radius:12px;
+        background:rgba(255,255,255,.025);
+      }
+      .mf-co-control-head {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        margin-bottom:7px;
+        color:#cbd5e1;
+        font-size:11px;
+      }
+      .mf-co-number {
+        width:90px;
+        padding:6px 8px;
+        border-radius:9px;
+        border:1px solid var(--mf-border);
+        background:rgba(255,255,255,.04);
+        color:#f8fafc;
+        font:inherit;
+        text-align:right;
+      }
+      .mf-co-range {
+        width:100%;
+        accent-color:var(--mf-accent);
+      }
       #mf-language-select {
         width:auto;
         min-width:110px;
@@ -2425,6 +2039,7 @@
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc') },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
+      { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
       { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc') },
       { page: 'chat', key: 'chatMemes', title: t('chatMemes'), desc: t('chatMemesDesc') },
@@ -2856,6 +2471,327 @@
     });
   }
 
+  function sendCameraOverhaulConfig(enabled = settings.cameraOverhaul) {
+    const values = clampCameraValues(settings.cameraOverhaulValues);
+    const preset = detectCameraPreset(values);
+    settings.cameraOverhaulValues = values;
+    settings.cameraOverhaulPreset = preset;
+    guiSettings.cameraOverhaulValues = cloneCameraValues(values);
+    guiSettings.cameraOverhaulPreset = preset;
+
+    document.dispatchEvent(new CustomEvent('minifeather:cameraoverhaul-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        bind: String(settings.cameraOverhaulBind || ''),
+        preset,
+        values
+      })
+    }));
+  }
+
+  function setCameraOverhaulBindingCapture(active) {
+    document.dispatchEvent(new CustomEvent('minifeather:cameraoverhaul-binding', {
+      detail: JSON.stringify({ active: !!active })
+    }));
+  }
+
+  function initCameraOverhaulModule() {
+    registerModule('cameraOverhaul', () => createLifecycle({
+      enable() {
+        sendCameraOverhaulConfig(true);
+      },
+      disable() {
+        sendCameraOverhaulConfig(false);
+      },
+      refresh() {
+        sendCameraOverhaulConfig(MODULES.get('cameraOverhaul')?.enabled === true);
+      },
+      destroy() {
+        sendCameraOverhaulConfig(false);
+      }
+    }));
+
+    document.addEventListener('minifeather:cameraoverhaul-state', event => {
+      let next;
+      try {
+        next = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+      } catch (_) {
+        return;
+      }
+      if (!next || typeof next !== 'object') return;
+
+      let changed = false;
+
+      if (typeof next.enabled === 'boolean' && settings.cameraOverhaul !== next.enabled) {
+        settings.cameraOverhaul = next.enabled;
+        guiSettings.cameraOverhaul = next.enabled;
+        setModuleEnabled('cameraOverhaul', next.enabled);
+        changed = true;
+      }
+
+      if (typeof next.bind === 'string' && settings.cameraOverhaulBind !== next.bind) {
+        settings.cameraOverhaulBind = next.bind;
+        guiSettings.cameraOverhaulBind = next.bind;
+        changed = true;
+      }
+
+      if (next.values && typeof next.values === 'object') {
+        const values = clampCameraValues(next.values);
+        const previous = clampCameraValues(settings.cameraOverhaulValues);
+        const differs = Object.keys(CAMERA_OVERHAUL_LIMITS).some(key =>
+          Math.abs(Number(values[key]) - Number(previous[key])) > 0.0000001
+        );
+        if (differs) {
+          settings.cameraOverhaulValues = values;
+          guiSettings.cameraOverhaulValues = cloneCameraValues(values);
+          changed = true;
+        }
+        const preset = detectCameraPreset(values);
+        if (settings.cameraOverhaulPreset !== preset) {
+          settings.cameraOverhaulPreset = preset;
+          guiSettings.cameraOverhaulPreset = preset;
+          changed = true;
+        }
+      }
+
+      if (changed) saveSettings();
+      if (panel && activePage === 'render' && !searchQuery.trim()) renderCurrentPageContent();
+      if (activePage === 'dashboard') updateDashboardStats();
+    }, { signal: runtimeController?.signal });
+  }
+
+  function closeCameraOverhaulSettings() {
+    if (cameraOverhaulSettingsCleanup) {
+      const cleanup = cameraOverhaulSettingsCleanup;
+      cameraOverhaulSettingsCleanup = null;
+      cleanup();
+      return;
+    }
+    setCameraOverhaulBindingCapture(false);
+    panel?.querySelector('.mf-camera-overhaul-backdrop')?.remove();
+  }
+
+  function openCameraOverhaulSettings() {
+    if (!panel) return;
+    closeCameraOverhaulSettings();
+
+    settings.cameraOverhaulValues = clampCameraValues(settings.cameraOverhaulValues);
+    settings.cameraOverhaulPreset = detectCameraPreset(settings.cameraOverhaulValues);
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop mf-camera-overhaul-backdrop';
+    const bind = String(settings.cameraOverhaulBind || '');
+
+    const renderControl = (key, limit) => {
+      const value = Number(settings.cameraOverhaulValues[key]);
+      const shown = value.toFixed(limit.digits);
+      return `
+        <div class="mf-co-control" data-co-control="${key}">
+          <div class="mf-co-control-head">
+            <span>${t(limit.label)}</span>
+            <input class="mf-co-number" data-co-number="${key}" type="number" min="${limit.min}" max="${limit.max}" step="${limit.step}" value="${shown}">
+          </div>
+          <input class="mf-co-range" data-co-range="${key}" type="range" min="${limit.min}" max="${limit.max}" step="${limit.step}" value="${value}">
+        </div>
+      `;
+    };
+
+    backdrop.innerHTML = `
+      <div class="mf-tt-dialog mf-co-dialog" role="dialog" aria-modal="true">
+        <div class="mf-tt-head">
+          <div class="mf-tt-title">${t('cameraOverhaulSettings')}</div>
+          <button type="button" class="mf-close" data-co-close>×</button>
+        </div>
+
+        <div class="mf-tt-row">
+          <span>${t('cameraOverhaulProfile')}</span>
+          <span class="mf-tt-scale-value" data-co-profile-label></span>
+        </div>
+
+        <div class="mf-co-presets">
+          <button type="button" class="mf-btn secondary" data-co-preset="soft">${t('cameraOverhaulSoft')}</button>
+          <button type="button" class="mf-btn secondary" data-co-preset="normal">${t('cameraOverhaulNormal')}</button>
+          <button type="button" class="mf-btn secondary" data-co-preset="strong">${t('cameraOverhaulStrong')}</button>
+          <button type="button" class="mf-btn secondary" data-co-preset="custom">${t('cameraOverhaulCustom')}</button>
+        </div>
+
+        <div class="mf-co-controls">
+          ${Object.entries(CAMERA_OVERHAUL_LIMITS).map(([key, limit]) => renderControl(key, limit)).join('')}
+        </div>
+
+        <div class="mf-tt-hint">${t('cameraOverhaulCustomHint')}</div>
+
+        <div class="mf-tt-row"><span>${t('cameraOverhaulBind')}</span></div>
+        <div class="mf-tt-bind-box">
+          <span class="mf-muted">${t('cameraOverhaulBind')}</span>
+          <span class="mf-tt-bind-code" data-co-bind-code>${bind || t('cameraOverhaulNoBind')}</span>
+        </div>
+        <div class="mf-tt-bind-actions">
+          <button type="button" class="mf-btn secondary" data-co-bind>${t('cameraOverhaulSetBind')}</button>
+          <button type="button" class="mf-btn danger" data-co-unbind>${t('cameraOverhaulRemoveBind')}</button>
+        </div>
+
+        <button type="button" class="mf-btn primary mf-tt-save" data-co-save>${t('cameraOverhaulSave')}</button>
+      </div>
+    `;
+
+    panel.appendChild(backdrop);
+
+    const bindCode = backdrop.querySelector('[data-co-bind-code]');
+    const bindButton = backdrop.querySelector('[data-co-bind]');
+    const profileLabel = backdrop.querySelector('[data-co-profile-label]');
+    let binding = false;
+
+    const profileText = profile => {
+      if (profile === 'soft') return t('cameraOverhaulSoft');
+      if (profile === 'normal') return t('cameraOverhaulNormal');
+      if (profile === 'strong') return t('cameraOverhaulStrong');
+      return t('cameraOverhaulCustom');
+    };
+
+    const syncProfileUI = () => {
+      const profile = detectCameraPreset(settings.cameraOverhaulValues);
+      settings.cameraOverhaulPreset = profile;
+      guiSettings.cameraOverhaulPreset = profile;
+      if (profileLabel) profileLabel.textContent = profileText(profile);
+      backdrop.querySelectorAll('[data-co-preset]').forEach(button => {
+        button.classList.toggle('active', button.dataset.coPreset === profile);
+      });
+    };
+
+    const syncControlUI = () => {
+      for (const [key, limit] of Object.entries(CAMERA_OVERHAUL_LIMITS)) {
+        const value = Number(settings.cameraOverhaulValues[key]);
+        const range = backdrop.querySelector(`[data-co-range="${key}"]`);
+        const number = backdrop.querySelector(`[data-co-number="${key}"]`);
+        if (range) range.value = String(value);
+        if (number) number.value = value.toFixed(limit.digits);
+      }
+      syncProfileUI();
+    };
+
+    const applyValue = (key, raw, persist = false) => {
+      const limit = CAMERA_OVERHAUL_LIMITS[key];
+      if (!limit) return;
+      const value = Number(raw);
+      if (!Number.isFinite(value)) return;
+
+      settings.cameraOverhaulValues = clampCameraValues({
+        ...settings.cameraOverhaulValues,
+        [key]: value
+      });
+      guiSettings.cameraOverhaulValues = cloneCameraValues(settings.cameraOverhaulValues);
+      settings.cameraOverhaulPreset = detectCameraPreset(settings.cameraOverhaulValues);
+      guiSettings.cameraOverhaulPreset = settings.cameraOverhaulPreset;
+
+      const normalized = Number(settings.cameraOverhaulValues[key]);
+      const range = backdrop.querySelector(`[data-co-range="${key}"]`);
+      const number = backdrop.querySelector(`[data-co-number="${key}"]`);
+      if (range) range.value = String(normalized);
+      if (number) number.value = normalized.toFixed(limit.digits);
+
+      syncProfileUI();
+      sendCameraOverhaulConfig(settings.cameraOverhaul);
+      if (persist) saveSettings();
+    };
+
+    backdrop.querySelectorAll('[data-co-range]').forEach(input => {
+      input.addEventListener('input', () => applyValue(input.dataset.coRange, input.value, false));
+      input.addEventListener('change', () => applyValue(input.dataset.coRange, input.value, true));
+    });
+
+    backdrop.querySelectorAll('[data-co-number]').forEach(input => {
+      input.addEventListener('change', () => applyValue(input.dataset.coNumber, input.value, true));
+      input.addEventListener('keydown', event => {
+        if (event.code !== 'Enter') return;
+        event.preventDefault();
+        applyValue(input.dataset.coNumber, input.value, true);
+      });
+    });
+
+    backdrop.querySelectorAll('[data-co-preset]').forEach(button => {
+      button.addEventListener('click', () => {
+        const preset = button.dataset.coPreset;
+        if (!CAMERA_OVERHAUL_PRESETS[preset]) {
+          syncProfileUI();
+          return;
+        }
+        settings.cameraOverhaulValues = cloneCameraValues(CAMERA_OVERHAUL_PRESETS[preset]);
+        guiSettings.cameraOverhaulValues = cloneCameraValues(settings.cameraOverhaulValues);
+        settings.cameraOverhaulPreset = preset;
+        guiSettings.cameraOverhaulPreset = preset;
+        syncControlUI();
+        saveSettings();
+        sendCameraOverhaulConfig(settings.cameraOverhaul);
+      });
+    });
+
+    const stopBinding = () => {
+      binding = false;
+      setCameraOverhaulBindingCapture(false);
+      if (bindButton) bindButton.textContent = t('cameraOverhaulSetBind');
+    };
+
+    bindButton?.addEventListener('click', () => {
+      binding = true;
+      setCameraOverhaulBindingCapture(true);
+      bindButton.textContent = t('cameraOverhaulListening');
+    });
+
+    backdrop.querySelector('[data-co-unbind]')?.addEventListener('click', () => {
+      stopBinding();
+      settings.cameraOverhaulBind = '';
+      guiSettings.cameraOverhaulBind = '';
+      if (bindCode) bindCode.textContent = t('cameraOverhaulNoBind');
+      saveSettings();
+      sendCameraOverhaulConfig(settings.cameraOverhaul);
+    });
+
+    const keyHandler = event => {
+      if (!binding) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      if (event.code === 'Escape' || event.code === 'Backspace' || event.code === 'Delete') {
+        settings.cameraOverhaulBind = '';
+        guiSettings.cameraOverhaulBind = '';
+        if (bindCode) bindCode.textContent = t('cameraOverhaulNoBind');
+      } else {
+        settings.cameraOverhaulBind = event.code;
+        guiSettings.cameraOverhaulBind = event.code;
+        if (bindCode) bindCode.textContent = event.code;
+      }
+
+      saveSettings();
+      sendCameraOverhaulConfig(settings.cameraOverhaul);
+      stopBinding();
+    };
+
+    document.addEventListener('keydown', keyHandler, { capture: true, once: false });
+    syncControlUI();
+
+    const cleanup = () => {
+      stopBinding();
+      document.removeEventListener('keydown', keyHandler, true);
+      backdrop.remove();
+      if (cameraOverhaulSettingsCleanup === cleanup) cameraOverhaulSettingsCleanup = null;
+    };
+
+    cameraOverhaulSettingsCleanup = cleanup;
+
+    backdrop.querySelector('[data-co-close]')?.addEventListener('click', cleanup);
+    backdrop.querySelector('[data-co-save]')?.addEventListener('click', () => {
+      saveSettings();
+      sendCameraOverhaulConfig(settings.cameraOverhaul);
+      cleanup();
+    });
+    backdrop.addEventListener('mousedown', event => {
+      if (event.target === backdrop) cleanup();
+    });
+  }
+
   function renderDashboardPage() {
     return `
       <div class="mf-grid">
@@ -2918,6 +2854,7 @@
             ${renderToggle('rebrand', t('rebrand'), t('rebrandDesc'))}
             ${renderToggle('titanTiny', t('titanTiny'), t('titanTinyDesc'))}
             ${renderToggle('zoom', t('zoom'), t('zoomDesc'))}
+            ${renderToggle('cameraOverhaul', t('cameraOverhaul'), t('cameraOverhaulDesc'))}
             <label class="mf-toggle" id="mf-spritesheet-toggle">
               <span class="mf-toggle-dot"></span>
               <span class="mf-toggle-copy">
@@ -3210,6 +3147,7 @@
     if (!overlay || !panel) return;
     closeTitanTinySettings();
     closeZoomSettings();
+    closeCameraOverhaulSettings();
     const closingPanel = panel;
     const closingOverlay = overlay;
     closingOverlay.style.display = 'none';
@@ -3451,6 +3389,13 @@
       event.preventDefault();
       event.stopPropagation();
       openZoomSettings();
+    });
+
+    const cameraOverhaulToggle = panel.querySelector('.mf-toggle[data-key="cameraOverhaul"]');
+    cameraOverhaulToggle?.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openCameraOverhaulSettings();
     });
 
     panel.querySelectorAll('.mf-meme-id[data-meme-id]').forEach(button => {
@@ -3787,6 +3732,7 @@
     setModuleEnabled('pingCounter', settings.pingCounter);
     setModuleEnabled('titanTiny', settings.titanTiny);
     setModuleEnabled('zoom', settings.zoom);
+    setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
     setModuleEnabled('chatVideos', settings.chatVideos);
     setModuleEnabled('chatLinks', settings.chatLinks);
     setModuleEnabled('chatMemes', settings.chatMemes);
@@ -4194,6 +4140,7 @@
     initKeystrokes();
     initTitanTinyModule();
     initZoomModule();
+    initCameraOverhaulModule();
     initGUI();
     initChatFeatures();
     injectFeatherButton();
@@ -4239,6 +4186,7 @@
 
     closeTitanTinySettings();
     closeZoomSettings();
+    closeCameraOverhaulSettings();
     unhookClipboard();
     destroyModules();
     showAds();
@@ -4265,7 +4213,13 @@
     chrome.storage.local.get(['settings', 'customLogo'], data => {
       if (destroyed) return;
       settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
-      guiSettings = { ...settings };
+      settings.cameraOverhaulValues = clampCameraValues(settings.cameraOverhaulValues);
+      settings.cameraOverhaulPreset = detectCameraPreset(settings.cameraOverhaulValues);
+      settings.cameraOverhaulBind = String(settings.cameraOverhaulBind || '');
+      guiSettings = {
+        ...settings,
+        cameraOverhaulValues: cloneCameraValues(settings.cameraOverhaulValues)
+      };
       currentLogo = data.customLogo || CONFIG.defaultLogo;
 
       if (document.readyState === 'loading') {
