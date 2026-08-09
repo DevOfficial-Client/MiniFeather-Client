@@ -178,6 +178,7 @@
     titanTiny: false,
     titanTinyScale: 1.00,
     titanTinyBind: '',
+    healthNameTags: false,
     zoom: false,
     zoomBind: 'KeyX',
     freelook: false,
@@ -2044,6 +2045,7 @@
       { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc') },
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc') },
+      { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc') },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
@@ -2113,6 +2115,29 @@
       bind: String(settings.titanTinyBind || '')
     });
     document.dispatchEvent(new CustomEvent('minifeather:titantiny-config', { detail }));
+  }
+
+  function sendHealthNameTagsConfig(enabled = settings.healthNameTags) {
+    document.dispatchEvent(new CustomEvent('minifeather:healthnametags-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initHealthNameTagsModule() {
+    registerModule('healthNameTags', () => createLifecycle({
+      enable() {
+        sendHealthNameTagsConfig(true);
+      },
+      disable() {
+        sendHealthNameTagsConfig(false);
+      },
+      refresh() {
+        sendHealthNameTagsConfig(MODULES.get('healthNameTags')?.enabled === true);
+      },
+      destroy() {
+        sendHealthNameTagsConfig(false);
+      }
+    }));
   }
 
   function setTitanTinyBindingCapture(active) {
@@ -2866,6 +2891,11 @@
               'titanTiny',
               t('titanTiny'),
               t('titanTinyDesc')
+            )}
+            ${renderToggle(
+              'healthNameTags',
+              t('healthNameTags'),
+              t('healthNameTagsDesc')
             )}
             ${renderToggle(
               'zoom',
@@ -4309,6 +4339,7 @@
     setModuleEnabled('cpsCounter', settings.cpsCounter);
     setModuleEnabled('pingCounter', settings.pingCounter);
     setModuleEnabled('titanTiny', settings.titanTiny);
+    setModuleEnabled('healthNameTags', settings.healthNameTags);
     setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
     document.dispatchEvent(
@@ -4784,6 +4815,7 @@
     initPingCounter();
     initKeystrokes();
     initTitanTinyModule();
+    initHealthNameTagsModule();
     initZoomModule();
     initCameraOverhaulModule();
     initGUI();
