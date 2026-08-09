@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MiniFeather Client",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "description": "MiniFeather for Miniblox",
   "permissions": [
     "storage",
@@ -25,6 +25,7 @@
         "src/TitanTiny.js",
         "src/HealthNameTags.js",
         "src/DistanceNameTags.js",
+        "src/PatPat.js",
         "src/Zoom.js",
         "src/Camera Overhaul.js",
         "src/features.js"
@@ -55,7 +56,11 @@
         "assets/icon.png",
         "assets/background.png",
         "assets/Faithful.ttf",
-        "assets/memes/gif/*"
+        "assets/memes/gif/*",
+        "assets/patpat.png",
+        "assets/pat.ogg",
+        "assets/pat1.ogg",
+        "assets/pat2.ogg"
       ],
       "matches": [
         "https://miniblox.io/*"
