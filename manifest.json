@@ -23,6 +23,7 @@
         "src/inject.js",
         "src/mf-freelook.js",
         "src/TitanTiny.js",
+        "src/HealthNameTags.js",
         "src/Zoom.js",
         "src/Camera Overhaul.js",
         "src/features.js"
