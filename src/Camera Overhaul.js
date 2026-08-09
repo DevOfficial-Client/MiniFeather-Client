@@ -61,84 +61,64 @@ const LIMITS = Object.freeze({
     mouseStrength: Object.freeze([0, 0.00035])
 });
 
-const FIXED = Object.freeze({
-    strafeRollResponse: 0.82,
-    turnRollResponse: 0.84,
-    turnRollLimit: 0.060,
-    forwardPitchResponse: 0.88,
-    verticalPitchResponse: 0.86,
-    bobResponse: 0.78,
-    landingThreshold: 0.20,
-    landingRecovery: 0.87,
-    swayFrequency: 0.18,
-    swayIdleDelay: 0.65,
-    swayFadeIn: 2.6,
-    swayFadeOut: 0.90,
-    fovStartSpeed: 0.12,
-    fovFullSpeed: 0.50,
-    fovResponse: 0.88,
-    mouseResponse: 0.88,
-    mouseRecovery: 0.82,
-    maxRoll: 0.080,
-    maxPitchOffset: 0.055
-});
-
 const state = {
     enabled: false,
     bind: '',
     preset: 'normal',
-    values: cloneValues(PRESETS.normal),
+    values: null,
     bindingCaptureActive: false,
     game: null,
+    player: null,
     camera: null,
-    cameraPath: null,
+    pitchObject: null,
+    yawObject: null,
     lastGameScan: 0,
     lastCameraScan: 0,
     lastFrame: performance.now(),
-    baseFov: null,
-    previousBaseYaw: null,
+    viewHook: null,
+    viewHookDepth: 0,
+    projectionHook: null,
+    projectionHookDepth: 0,
+    previousYaw: null,
+    previousSpeed: 0,
     previousMotionY: 0,
     wasGrounded: false,
-    strafeRoll: 0,
-    turnRoll: 0,
-    forwardPitch: 0,
-    verticalPitch: 0,
     bobPhase: 0,
-    bobX: 0,
-    bobY: 0,
-    bobRoll: 0,
-    landingY: 0,
-    landingPitch: 0,
-    swayFactor: 0,
-    lastActionTime: 0,
+    idleTime: 0,
     mouseDX: 0,
     mouseDY: 0,
-    mouseRoll: 0,
-    mousePitch: 0,
-    fovDelta: 0,
-    appliedX: 0,
-    appliedY: 0,
-    appliedZ: 0,
-    appliedRoll: 0,
-    appliedPitch: 0,
-    appliedYaw: 0,
-    appliedFov: 0
+    projectionDirty: false,
+    channels: {},
+    effect: {
+        x: 0,
+        y: 0,
+        z: 0,
+        roll: 0,
+        pitch: 0,
+        yaw: 0,
+        fov: 0
+    }
 };
+
+const CHANNEL_NAMES = [
+    'strafeRoll',
+    'turnRoll',
+    'movePitch',
+    'verticalPitch',
+    'bobBlend',
+    'landingY',
+    'landingPitch',
+    'idleBlend',
+    'mouseRoll',
+    'mousePitch',
+    'forwardShift',
+    'fov',
+    'yawRateInput',
+    'accelerationInput'
+];
 
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
-}
-
-function lerp(a, b, t) {
-    return a + (b - a) * clamp(t, 0, 1);
-}
-
-function damp(current, target, smoothing, dt) {
-    return lerp(
-        current,
-        target,
-        1 - Math.pow(clamp(smoothing, 0.0001, 0.9999), dt)
-    );
 }
 
 function smooth01(value) {
@@ -146,10 +126,18 @@ function smooth01(value) {
     return x * x * (3 - 2 * x);
 }
 
+function normalizeAngle(value) {
+    let angle = value;
+    while (angle > Math.PI) angle -= Math.PI * 2;
+    while (angle < -Math.PI) angle += Math.PI * 2;
+    return angle;
+}
+
 function cloneValues(source) {
     const out = {};
+    const fallback = PRESETS.normal;
     for (const key of Object.keys(LIMITS)) {
-        out[key] = Number(source?.[key] ?? PRESETS.normal[key]);
+        out[key] = Number(source?.[key] ?? fallback[key]);
     }
     return out;
 }
@@ -160,8 +148,7 @@ function normalizeValues(source) {
 
     for (const [key, range] of Object.entries(LIMITS)) {
         const value = Number(source[key]);
-        if (!Number.isFinite(value)) continue;
-        out[key] = clamp(value, range[0], range[1]);
+        if (Number.isFinite(value)) out[key] = clamp(value, range[0], range[1]);
     }
 
     return out;
@@ -182,16 +169,19 @@ function detectPreset(values) {
     return 'custom';
 }
 
-const noise = (() => {
-    const grad3 = [
-        [1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],
-        [1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],
-        [0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]
-    ];
+state.values = cloneValues(PRESETS.normal);
 
+for (const name of CHANNEL_NAMES) {
+    state.channels[name] = { value: 0, velocity: 0 };
+}
+
+const noise = (() => {
+    const gradients = [
+        [1,1],[-1,1],[1,-1],[-1,-1],
+        [1,0],[-1,0],[0,1],[0,-1]
+    ];
     const p = new Uint8Array(256);
     for (let i = 0; i < 256; i++) p[i] = i;
-
     let seed = 0x6d2b79f5;
 
     const rand = () => {
@@ -212,294 +202,314 @@ const noise = (() => {
     const perm = new Uint8Array(512);
     for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
 
-    function dot(g, x, y) {
+    const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
+    const grad = (hash, x, y) => {
+        const g = gradients[hash & 7];
         return g[0] * x + g[1] * y;
-    }
+    };
 
     return function sample(x, y) {
-        const F2 = 0.5 * (Math.sqrt(3) - 1);
-        const s = (x + y) * F2;
-        const i = Math.floor(x + s);
-        const j = Math.floor(y + s);
-        const G2 = (3 - Math.sqrt(3)) / 6;
-        const t = (i + j) * G2;
-        const X0 = i - t;
-        const Y0 = j - t;
-        const x0 = x - X0;
-        const y0 = y - Y0;
-        const i1 = x0 > y0 ? 1 : 0;
-        const j1 = x0 > y0 ? 0 : 1;
-        const x1 = x0 - i1 + G2;
-        const y1 = y0 - j1 + G2;
-        const x2 = x0 - 1 + 2 * G2;
-        const y2 = y0 - 1 + 2 * G2;
-        const ii = i & 255;
-        const jj = j & 255;
-        const gi0 = perm[ii + perm[jj]] % 12;
-        const gi1 = perm[ii + i1 + perm[jj + j1]] % 12;
-        const gi2 = perm[ii + 1 + perm[jj + 1]] % 12;
-
-        let n0 = 0;
-        let n1 = 0;
-        let n2 = 0;
-
-        let t0 = 0.5 - x0 * x0 - y0 * y0;
-        if (t0 >= 0) {
-            t0 *= t0;
-            n0 = t0 * t0 * dot(grad3[gi0], x0, y0);
-        }
-
-        let t1 = 0.5 - x1 * x1 - y1 * y1;
-        if (t1 >= 0) {
-            t1 *= t1;
-            n1 = t1 * t1 * dot(grad3[gi1], x1, y1);
-        }
-
-        let t2 = 0.5 - x2 * x2 - y2 * y2;
-        if (t2 >= 0) {
-            t2 *= t2;
-            n2 = t2 * t2 * dot(grad3[gi2], x2, y2);
-        }
-
-        return 70 * (n0 + n1 + n2);
+        const xi = Math.floor(x) & 255;
+        const yi = Math.floor(y) & 255;
+        const xf = x - Math.floor(x);
+        const yf = y - Math.floor(y);
+        const u = fade(xf);
+        const v = fade(yf);
+        const aa = perm[perm[xi] + yi];
+        const ab = perm[perm[xi] + yi + 1];
+        const ba = perm[perm[xi + 1] + yi];
+        const bb = perm[perm[xi + 1] + yi + 1];
+        const x1 = grad(aa, xf, yf) + u * (grad(ba, xf - 1, yf) - grad(aa, xf, yf));
+        const x2 = grad(ab, xf, yf - 1) + u * (grad(bb, xf - 1, yf - 1) - grad(ab, xf, yf - 1));
+        return x1 + v * (x2 - x1);
     };
 })();
+
+function spring(channel, target, frequency, damping, dt) {
+    const f = Math.max(0.01, Number(frequency) || 1);
+    const d = clamp(Number(damping) || 1, 0.45, 1.5);
+    const step = clamp(dt, 0.001, 0.05);
+    const omega = Math.PI * 2 * f * (0.82 + d * 0.18);
+    const x = omega * step;
+    const decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+    const change = channel.value - target;
+    const temp = (channel.velocity + omega * change) * step;
+    channel.velocity = (channel.velocity - omega * temp) * decay;
+    channel.value = target + (change + temp) * decay;
+
+    if (!Number.isFinite(channel.value) || !Number.isFinite(channel.velocity)) {
+        channel.value = Number.isFinite(Number(target)) ? Number(target) : 0;
+        channel.velocity = 0;
+    }
+
+    if (Math.abs(channel.value) < 0.0000001 && Math.abs(channel.velocity) < 0.0000001 && Math.abs(target) < 0.0000001) {
+        channel.value = 0;
+        channel.velocity = 0;
+    }
+
+    return channel.value;
+}
+
+function impulse(channel, value, velocity = 0) {
+    channel.value += Number(value) || 0;
+    channel.velocity += Number(velocity) || 0;
+}
+
+function findGameFromFiber(element) {
+    if (!element) return null;
+    const key = Object.keys(element).find(name =>
+        name.startsWith('__reactFiber$') ||
+        name.startsWith('__reactInternalInstance$') ||
+        name.startsWith('__reactContainer$')
+    );
+    if (!key) return null;
+
+    let fiber = element[key];
+    let depth = 0;
+
+    while (fiber && depth < 120) {
+        const stateNode = fiber.stateNode;
+        const props = fiber.memoizedProps;
+
+        if (stateNode?.player && (stateNode.gameScene || stateNode.player?.game)) return stateNode;
+        if (stateNode?.game?.player) return stateNode.game;
+        if (props?.game?.player) return props.game;
+
+        if (props && typeof props === 'object') {
+            for (const value of Object.values(props)) {
+                if (value?.player && (value.gameScene || value.player?.game)) return value;
+            }
+        }
+
+        fiber = fiber.return;
+        depth++;
+    }
+
+    return null;
+}
 
 function getGame(force = false) {
     const now = performance.now();
 
-    if (!force && state.game?.player && now - state.lastGameScan < 1200) {
+    if (window.miniblox?.player) {
+        state.game = window.miniblox;
+        state.player = window.miniblox.player;
+        return state.game;
+    }
+
+    if (!force && state.game?.player && now - state.lastGameScan < 1000) {
         return state.game;
     }
 
     state.lastGameScan = now;
 
+    let game = null;
+
     try {
         const react = document.querySelector('#react');
-        if (!react) return state.game?.player ? state.game : null;
-
-        for (const root of Object.values(react)) {
-            const game = root?.updateQueue?.baseState?.element?.props?.game;
-
-            if (game?.player) {
-                if (state.game !== game) {
-                    resetEffects();
-                    state.game = game;
-                    state.camera = null;
-                    state.cameraPath = null;
-                    state.baseFov = null;
-                    state.previousBaseYaw = null;
+        if (react) {
+            for (const root of Object.values(react)) {
+                const candidate = root?.updateQueue?.baseState?.element?.props?.game;
+                if (candidate?.player) {
+                    game = candidate;
+                    break;
                 }
-
-                return game;
             }
         }
     } catch (_) {}
+
+    if (!game) {
+        try {
+            const candidates = [
+                document.getElementById('root'),
+                document.querySelector('canvas'),
+                document.body
+            ];
+
+            for (const element of candidates) {
+                game = findGameFromFiber(element);
+                if (game) break;
+            }
+        } catch (_) {}
+    }
+
+    if (game?.player) {
+        window.miniblox = game;
+        state.game = game;
+        state.player = game.player;
+        return game;
+    }
 
     return state.game?.player ? state.game : null;
 }
 
-function validPosition(value) {
+function validCamera(camera) {
     return !!(
-        value &&
-        Number.isFinite(Number(value.x)) &&
-        Number.isFinite(Number(value.y)) &&
-        Number.isFinite(Number(value.z))
+        camera &&
+        camera.position &&
+        Number.isFinite(Number(camera.position.x)) &&
+        Number.isFinite(Number(camera.position.y)) &&
+        Number.isFinite(Number(camera.position.z)) &&
+        (camera.rotation || camera.quaternion)
     );
 }
 
-function looksLikeCamera(value) {
-    if (
-        !value ||
-        (typeof value !== 'object' && typeof value !== 'function') ||
-        !validPosition(value.position)
-    ) {
-        return false;
-    }
-
-    let score = 0;
-    if (value.isCamera === true) score += 100;
-    if (Number.isFinite(Number(value.fov))) score += 30;
-    if (value.projectionMatrix) score += 30;
-    if (value.matrixWorldInverse) score += 25;
-    if (value.rotation) score += 20;
-    if (value.quaternion) score += 20;
-    return score >= 40;
-}
-
-function cameraScore(value, path) {
-    if (!looksLikeCamera(value)) return -Infinity;
-
-    const p = String(path || '').toLowerCase();
-    let score = 0;
-
-    if (value.isCamera === true) score += 300;
-    if (p === 'game.camera') score += 500;
-    if (p.endsWith('.camera')) score += 260;
-    if (p.includes('gamescene.camera')) score += 350;
-    if (p.includes('scene.camera')) score += 300;
-    if (p.includes('renderer.camera')) score += 250;
-    if (p.includes('controls.camera')) score += 250;
-    if (p.includes('controller.camera')) score += 220;
-    if (p.includes('maincamera')) score += 280;
-    if (p.includes('shadow') || p.includes('light') || p.includes('cube') || p.includes('reflection')) score -= 700;
-    if (Number.isFinite(Number(value.fov))) score += 60;
-    if (value.projectionMatrix) score += 40;
-    if (value.matrixWorldInverse) score += 40;
-
-    return score;
-}
-
-function resolveCamera(game, force = false) {
+function resolveCamera(force = false) {
+    const game = getGame(force);
     if (!game) return null;
 
     const now = performance.now();
 
-    if (state.camera && looksLikeCamera(state.camera)) {
+    if (!force && validCamera(state.camera) && now - state.lastCameraScan < 1000) {
         return state.camera;
     }
 
-    if (!force && now - state.lastCameraScan < 700) return null;
     state.lastCameraScan = now;
 
-    const direct = [
-        ['game.camera', game?.camera],
-        ['game.gameScene.camera', game?.gameScene?.camera],
-        ['game.scene.camera', game?.scene?.camera],
-        ['game.renderer.camera', game?.renderer?.camera],
-        ['game.controls.camera', game?.controls?.camera],
-        ['game.controller.camera', game?.controller?.camera],
-        ['game.client.camera', game?.client?.camera]
-    ];
+    const camera =
+        game?.gameScene?.camera ||
+        game?.player?.game?.gameScene?.camera ||
+        game?.scene?.camera ||
+        game?.controls?.camera ||
+        game?.controller?.camera ||
+        game?.camera ||
+        null;
 
-    let best = null;
+    if (!validCamera(camera)) return state.camera;
 
-    for (const [path, candidate] of direct) {
-        const score = cameraScore(candidate, path);
-        if (Number.isFinite(score) && (!best || score > best.score)) {
-            best = { value: candidate, path, score };
-        }
+    if (state.camera !== camera) {
+        state.camera = camera;
+        state.pitchObject = camera.parent || null;
+        state.yawObject = camera.parent?.parent || null;
+        state.previousYaw = null;
+        installViewHooks(camera);
+        installProjectionHook(camera);
+        state.projectionDirty = true;
+    } else {
+        state.pitchObject = camera.parent || state.pitchObject;
+        state.yawObject = camera.parent?.parent || state.yawObject;
     }
 
-    const queue = [{ value: game, path: 'game', depth: 0 }];
-    const seen = new WeakSet();
-    let visited = 0;
-
-    while (queue.length && visited < 1600) {
-        const current = queue.shift();
-        const value = current.value;
-
-        if (
-            !value ||
-            (typeof value !== 'object' && typeof value !== 'function') ||
-            seen.has(value)
-        ) {
-            continue;
-        }
-
-        seen.add(value);
-        visited++;
-
-        const score = cameraScore(value, current.path);
-        if (Number.isFinite(score) && (!best || score > best.score)) {
-            best = { value, path: current.path, score };
-        }
-
-        if (current.depth >= 4) continue;
-
-        let keys = [];
-        try {
-            keys = Object.keys(value);
-        } catch (_) {
-            continue;
-        }
-
-        for (const key of keys) {
-            if (
-                key === 'parent' ||
-                key === 'world' ||
-                key === 'entities' ||
-                key === 'inventory' ||
-                key === 'material' ||
-                key === 'geometry'
-            ) {
-                continue;
-            }
-
-            let child;
-            try {
-                child = value[key];
-            } catch (_) {
-                continue;
-            }
-
-            if (
-                !child ||
-                (typeof child !== 'object' && typeof child !== 'function') ||
-                child === window ||
-                child === document ||
-                child instanceof Element
-            ) {
-                continue;
-            }
-
-            queue.push({
-                value: child,
-                path: `${current.path}.${key}`,
-                depth: current.depth + 1
-            });
-        }
-    }
-
-    if (!best || best.score <= 0) return null;
-
-    state.camera = best.value;
-    state.cameraPath = best.path;
-
-    if (state.baseFov === null && Number.isFinite(Number(best.value.fov))) {
-        state.baseFov = Number(best.value.fov);
-    }
-
-    return best.value;
+    return camera;
 }
 
-function removePrevious(camera) {
-    if (!camera) return;
+function applyViewEffect(camera, original, thisArg, args) {
+    if (
+        !state.enabled ||
+        state.camera !== camera ||
+        state.viewHookDepth > 0 ||
+        !document.pointerLockElement
+    ) {
+        return original.apply(thisArg, args);
+    }
+
+    const position = camera.position;
+    const rotation = camera.rotation;
+    const effect = state.effect;
+
+    if (!position || !rotation) return original.apply(thisArg, args);
+
+    state.viewHookDepth++;
+
+    const px = Number(position.x);
+    const py = Number(position.y);
+    const pz = Number(position.z);
+    const rx = Number(rotation.x);
+    const ry = Number(rotation.y);
+    const rz = Number(rotation.z);
 
     try {
-        camera.position.x -= state.appliedX;
-        camera.position.y -= state.appliedY;
-        camera.position.z -= state.appliedZ;
-    } catch (_) {}
+        position.x = px + effect.x;
+        position.y = py + effect.y;
+        position.z = pz + effect.z;
+        rotation.x = rx + effect.pitch;
+        rotation.y = ry + effect.yaw;
+        rotation.z = rz + effect.roll;
+        return original.apply(thisArg, args);
+    } finally {
+        try {
+            position.x = px;
+            position.y = py;
+            position.z = pz;
+            rotation.x = rx;
+            rotation.y = ry;
+            rotation.z = rz;
+        } catch (_) {}
+        state.viewHookDepth--;
+    }
+}
 
-    try {
-        if (camera.rotation) {
-            camera.rotation.z -= state.appliedRoll;
-            camera.rotation.x -= state.appliedPitch;
-            camera.rotation.y -= state.appliedYaw;
+function installViewHooks(camera) {
+    if (state.viewHook?.camera === camera) return;
+
+    const hook = {
+        camera,
+        updateMatrixWorldOriginal: typeof camera.updateMatrixWorld === 'function' ? camera.updateMatrixWorld : null,
+        updateWorldMatrixOriginal: typeof camera.updateWorldMatrix === 'function' ? camera.updateWorldMatrix : null,
+        updateMatrixWorld: null,
+        updateWorldMatrix: null
+    };
+
+    if (hook.updateMatrixWorldOriginal) {
+        hook.updateMatrixWorld = function (...args) {
+            return applyViewEffect(camera, hook.updateMatrixWorldOriginal, this, args);
+        };
+        try {
+            camera.updateMatrixWorld = hook.updateMatrixWorld;
+        } catch (_) {}
+    }
+
+    if (hook.updateWorldMatrixOriginal) {
+        hook.updateWorldMatrix = function (...args) {
+            return applyViewEffect(camera, hook.updateWorldMatrixOriginal, this, args);
+        };
+        try {
+            camera.updateWorldMatrix = hook.updateWorldMatrix;
+        } catch (_) {}
+    }
+
+    state.viewHook = hook;
+}
+
+function installProjectionHook(camera) {
+    if (state.projectionHook?.camera === camera) return;
+    if (typeof camera.updateProjectionMatrix !== 'function') return;
+
+    const original = camera.updateProjectionMatrix;
+    const hook = function (...args) {
+        if (
+            !state.enabled ||
+            state.camera !== camera ||
+            state.projectionHookDepth > 0 ||
+            !Number.isFinite(Number(camera.fov)) ||
+            Math.abs(state.effect.fov) < 0.000001
+        ) {
+            return original.apply(this, args);
         }
-    } catch (_) {}
+
+        state.projectionHookDepth++;
+        const fov = Number(camera.fov);
+
+        try {
+            camera.fov = clamp(fov + state.effect.fov, 20, 140);
+            return original.apply(this, args);
+        } finally {
+            camera.fov = fov;
+            state.projectionHookDepth--;
+        }
+    };
 
     try {
-        if (state.appliedFov !== 0 && Number.isFinite(Number(camera.fov))) {
-            camera.fov -= state.appliedFov;
-            camera.updateProjectionMatrix?.();
-        }
+        camera.updateProjectionMatrix = hook;
+        state.projectionHook = { camera, original, hook };
     } catch (_) {}
-
-    state.appliedX = 0;
-    state.appliedY = 0;
-    state.appliedZ = 0;
-    state.appliedRoll = 0;
-    state.appliedPitch = 0;
-    state.appliedYaw = 0;
-    state.appliedFov = 0;
 }
 
 function motionData(player) {
-    const x = Number(player?.motion?.x);
-    const y = Number(player?.motion?.y);
-    const z = Number(player?.motion?.z);
+    const source = player?.motion || player?.velocity || player?.vel || {};
+    const x = Number(source.x);
+    const y = Number(source.y);
+    const z = Number(source.z);
 
     return {
         x: Number.isFinite(x) ? x : 0,
@@ -509,7 +519,12 @@ function motionData(player) {
 }
 
 function relativeMotion(player, motion) {
-    const yaw = Number(player?.yaw);
+    let yaw = Number(player?.yaw);
+
+    if (!Number.isFinite(yaw)) {
+        yaw = Number(state.yawObject?.rotation?.y);
+    }
+
     if (!Number.isFinite(yaw)) return { forward: 0, strafe: 0 };
 
     const sin = Math.sin(yaw);
@@ -521,338 +536,261 @@ function relativeMotion(player, motion) {
     };
 }
 
-function effectiveConfig() {
-    const v = state.values;
+function perspectiveFactors(player) {
+    const perspective = Number(player?.perspective);
+    const firstPerson = !Number.isFinite(perspective) || perspective === 0;
 
-    return {
-        masterStrength: v.masterStrength,
-        strafeRoll: v.strafeRoll,
-        strafeRollResponse: FIXED.strafeRollResponse,
-        turnRoll: v.turnRoll,
-        turnRollResponse: FIXED.turnRollResponse,
-        turnRollLimit: FIXED.turnRollLimit,
-        forwardPitch: v.forwardPitch,
-        forwardPitchResponse: FIXED.forwardPitchResponse,
-        verticalPitch: v.verticalPitch,
-        verticalPitchResponse: FIXED.verticalPitchResponse,
-        bobVertical: v.bobStrength,
-        bobHorizontal: v.bobStrength * 0.50,
-        bobRoll: v.bobStrength * 0.3181818,
-        bobFrequency: v.bobFrequency,
-        bobResponse: FIXED.bobResponse,
-        landingPosition: v.landingStrength,
-        landingPitch: v.landingStrength * 0.50,
-        landingThreshold: FIXED.landingThreshold,
-        landingRecovery: FIXED.landingRecovery,
-        swayPosition: v.swayStrength,
-        swayRotation: v.swayStrength * 1.2222222,
-        swayFrequency: FIXED.swayFrequency,
-        swayIdleDelay: FIXED.swayIdleDelay,
-        swayFadeIn: FIXED.swayFadeIn,
-        swayFadeOut: FIXED.swayFadeOut,
-        fovBoost: v.fovBoost,
-        fovStartSpeed: FIXED.fovStartSpeed,
-        fovFullSpeed: FIXED.fovFullSpeed,
-        fovResponse: FIXED.fovResponse,
-        mouseRoll: v.mouseStrength,
-        mousePitch: v.mouseStrength * 0.375,
-        mouseResponse: FIXED.mouseResponse,
-        mouseRecovery: FIXED.mouseRecovery,
-        maxRoll: FIXED.maxRoll,
-        maxPitchOffset: FIXED.maxPitchOffset
-    };
+    return firstPerson
+        ? { position: 1, rotation: 1, fov: 1 }
+        : { position: 0.48, rotation: 0.78, fov: 0.82 };
 }
 
-function updateEffects(camera, player, timestamp, dt) {
-    removePrevious(camera);
+function clearChannels() {
+    for (const channel of Object.values(state.channels)) {
+        channel.value = 0;
+        channel.velocity = 0;
+    }
 
-    if (!state.enabled) return;
+    state.effect.x = 0;
+    state.effect.y = 0;
+    state.effect.z = 0;
+    state.effect.roll = 0;
+    state.effect.pitch = 0;
+    state.effect.yaw = 0;
+    state.effect.fov = 0;
+    state.previousYaw = null;
+    state.previousSpeed = 0;
+    state.previousMotionY = 0;
+    state.wasGrounded = false;
+    state.bobPhase = 0;
+    state.idleTime = 0;
+    state.mouseDX = 0;
+    state.mouseDY = 0;
+    state.projectionDirty = true;
+}
 
-    const config = effectiveConfig();
-    const strength = clamp(Number(config.masterStrength) || 1, 0.25, 2);
+function updateEffects(timestamp, dt) {
+    const camera = resolveCamera();
+    const game = state.game;
+    const player = game?.player;
+
+    if (!camera || !player) return;
+
+    if (!document.pointerLockElement) {
+        if (
+            Math.abs(state.effect.x) +
+            Math.abs(state.effect.y) +
+            Math.abs(state.effect.z) +
+            Math.abs(state.effect.roll) +
+            Math.abs(state.effect.pitch) +
+            Math.abs(state.effect.yaw) +
+            Math.abs(state.effect.fov) > 0.000001
+        ) {
+            clearChannels();
+        }
+        return;
+    }
+
+    const config = state.values;
+    const strength = clamp(Number(config.masterStrength) || 1, LIMITS.masterStrength[0], LIMITS.masterStrength[1]);
+    const factors = perspectiveFactors(player);
     const motion = motionData(player);
     const relative = relativeMotion(player, motion);
     const speed = Math.hypot(motion.x, motion.z);
-    const grounded = !!player.onGround;
-    const baseYaw = Number(camera?.rotation?.y);
+    const grounded = player.onGround === true || player.grounded === true || player.isGrounded === true;
+    const speedFactor = smooth01(clamp((speed - 0.012) / 0.34, 0, 1));
+    const sprintFactor = smooth01(clamp((speed - 0.12) / 0.38, 0, 1));
+    const strafe = clamp(relative.strafe / 0.34, -1, 1);
+    const forward = clamp(relative.forward / 0.34, -1, 1);
+    const vertical = clamp(motion.y / 0.55, -1, 1);
 
-    if (Number.isFinite(baseYaw)) {
-        if (state.previousBaseYaw !== null) {
-            let deltaYaw = baseYaw - state.previousBaseYaw;
-            if (deltaYaw > Math.PI) deltaYaw -= Math.PI * 2;
-            if (deltaYaw < -Math.PI) deltaYaw += Math.PI * 2;
+    const yaw = Number(state.yawObject?.rotation?.y);
+    let rawYawRate = 0;
 
-            const turnTarget = clamp(
-                -deltaYaw * 18 * config.turnRoll * strength,
-                -config.turnRollLimit,
-                config.turnRollLimit
-            );
-
-            state.turnRoll = damp(
-                state.turnRoll,
-                turnTarget,
-                config.turnRollResponse,
-                dt
-            );
-
-            if (Math.abs(deltaYaw) > 0.0008) state.lastActionTime = timestamp;
+    if (Number.isFinite(yaw)) {
+        if (state.previousYaw !== null) {
+            rawYawRate = clamp(normalizeAngle(yaw - state.previousYaw) / Math.max(dt, 0.001), -7, 7);
         }
-
-        state.previousBaseYaw = baseYaw;
+        state.previousYaw = yaw;
     }
 
-    state.strafeRoll = damp(
-        state.strafeRoll,
-        clamp(-relative.strafe * 2.8, -1, 1) * config.strafeRoll * strength,
-        config.strafeRollResponse,
+    const yawRate = spring(state.channels.yawRateInput, rawYawRate, 3.6, 1.0, dt);
+    const rawAcceleration = clamp((speed - state.previousSpeed) / Math.max(dt, 0.001), -2.2, 2.2);
+    const acceleration = spring(state.channels.accelerationInput, rawAcceleration, 3.0, 1.0, dt);
+    state.previousSpeed = speed;
+
+    spring(
+        state.channels.strafeRoll,
+        -strafe * config.strafeRoll * strength,
+        3.8,
+        1.0,
         dt
     );
 
-    state.forwardPitch = damp(
-        state.forwardPitch,
-        clamp(Math.abs(relative.forward) * 2.4, 0, 1) * config.forwardPitch * strength,
-        config.forwardPitchResponse,
+    spring(
+        state.channels.turnRoll,
+        clamp(-yawRate * config.turnRoll * 0.20 * strength, -0.060, 0.060),
+        4.2,
+        1.0,
         dt
     );
 
-    state.verticalPitch = damp(
-        state.verticalPitch,
-        clamp(-motion.y * 1.7, -1, 1) * config.verticalPitch * strength,
-        config.verticalPitchResponse,
+    spring(
+        state.channels.movePitch,
+        -forward * speedFactor * config.forwardPitch * strength,
+        3.3,
+        1.0,
         dt
     );
 
-    const moving = speed > 0.025;
+    spring(
+        state.channels.verticalPitch,
+        -vertical * config.verticalPitch * strength,
+        3.5,
+        1.0,
+        dt
+    );
 
-    if (moving || Math.abs(motion.y) > 0.025) {
-        state.lastActionTime = timestamp;
+    spring(
+        state.channels.forwardShift,
+        clamp(-acceleration * 0.0024 * strength, -0.012, 0.012),
+        3.1,
+        1.0,
+        dt
+    );
+
+    spring(
+        state.channels.bobBlend,
+        grounded ? speedFactor : 0,
+        grounded ? 3.1 : 4.6,
+        1.0,
+        dt
+    );
+
+    if (grounded && state.channels.bobBlend.value > 0.001) {
+        state.bobPhase += config.bobFrequency * (0.35 + speedFactor * 0.90) * dt;
     }
 
-    if (grounded && moving && config.bobVertical > 0) {
-        const speedFactor = clamp(speed / 0.32, 0, 1.65);
-
-        state.bobPhase += config.bobFrequency * speedFactor * dt * 0.0166667;
-
-        state.bobY = damp(
-            state.bobY,
-            Math.abs(Math.sin(state.bobPhase)) * config.bobVertical * speedFactor * strength,
-            config.bobResponse,
-            dt
-        );
-
-        state.bobX = damp(
-            state.bobX,
-            Math.sin(state.bobPhase * 0.5) * config.bobHorizontal * speedFactor * strength,
-            config.bobResponse,
-            dt
-        );
-
-        state.bobRoll = damp(
-            state.bobRoll,
-            Math.sin(state.bobPhase * 0.5) * config.bobRoll * speedFactor * strength,
-            config.bobResponse,
-            dt
-        );
-    } else {
-        state.bobY = damp(state.bobY, 0, 0.16, dt);
-        state.bobX = damp(state.bobX, 0, 0.16, dt);
-        state.bobRoll = damp(state.bobRoll, 0, 0.16, dt);
-    }
+    const bobBlend = clamp(state.channels.bobBlend.value, 0, 1.25);
+    const bobAmp = config.bobStrength * strength * bobBlend * 0.78;
+    const bobX = Math.sin(state.bobPhase) * bobAmp * 0.34;
+    const bobY = Math.cos(state.bobPhase * 2) * bobAmp * 0.24;
+    const bobRoll = Math.sin(state.bobPhase) * bobAmp * 0.15;
 
     if (
         grounded &&
         !state.wasGrounded &&
-        state.previousMotionY < -config.landingThreshold &&
-        config.landingPosition > 0
+        state.previousMotionY < -0.20
     ) {
-        const impact = smooth01(
-            clamp(
-                (Math.abs(state.previousMotionY) - config.landingThreshold) / 0.55,
-                0,
-                1
-            )
-        );
-
-        state.landingY = -config.landingPosition * impact * strength;
-        state.landingPitch = config.landingPitch * impact * strength;
+        const impact = smooth01(clamp((Math.abs(state.previousMotionY) - 0.20) / 0.55, 0, 1));
+        impulse(state.channels.landingY, -config.landingStrength * impact * strength * 0.58, 0);
+        impulse(state.channels.landingPitch, config.landingStrength * 0.30 * impact * strength, 0);
     }
 
-    state.landingY = damp(
-        state.landingY,
-        0,
-        config.landingRecovery,
-        dt
-    );
-
-    state.landingPitch = damp(
-        state.landingPitch,
-        0,
-        config.landingRecovery,
-        dt
-    );
+    spring(state.channels.landingY, 0, 3.7, 1.0, dt);
+    spring(state.channels.landingPitch, 0, 3.9, 1.0, dt);
 
     state.wasGrounded = grounded;
     state.previousMotionY = motion.y;
 
-    let swayX = 0;
-    let swayY = 0;
-    let swayPitch = 0;
-    let swayYaw = 0;
+    const idle = speed < 0.018 && Math.abs(motion.y) < 0.018;
+    state.idleTime = idle ? state.idleTime + dt : 0;
 
-    if (config.swayPosition > 0) {
-        const idleSeconds = (timestamp - state.lastActionTime) / 1000;
-        const targetSway = idleSeconds > config.swayIdleDelay ? 1 : 0;
-        const fade = targetSway > state.swayFactor
-            ? Math.max(0.001, config.swayFadeIn)
-            : Math.max(0.001, config.swayFadeOut);
-
-        state.swayFactor = lerp(
-            state.swayFactor,
-            targetSway,
-            clamp(dt * 0.0166667 / fade, 0, 1)
-        );
-
-        const t = timestamp / 1000 * config.swayFrequency;
-        const swayStrength = Math.pow(state.swayFactor, 2.2) * strength;
-
-        swayX = noise(t, 10.31) * config.swayPosition * swayStrength;
-        swayY = noise(t, 23.77) * config.swayPosition * 0.55 * swayStrength;
-        swayPitch = noise(t, 41.93) * config.swayRotation * swayStrength;
-        swayYaw = noise(t, 67.11) * config.swayRotation * 0.70 * swayStrength;
-    }
-
-    const mouseRollTarget = clamp(
-        -state.mouseDX * config.mouseRoll * strength,
-        -0.11,
-        0.11
-    );
-
-    const mousePitchTarget = clamp(
-        -state.mouseDY * config.mousePitch * strength,
-        -0.045,
-        0.045
-    );
-
-    state.mouseRoll = damp(
-        state.mouseRoll,
-        mouseRollTarget,
-        config.mouseResponse,
+    spring(
+        state.channels.idleBlend,
+        state.idleTime > 0.55 ? 1 : 0,
+        state.idleTime > 0.55 ? 0.55 : 2.4,
+        1.0,
         dt
     );
 
-    state.mousePitch = damp(
-        state.mousePitch,
-        mousePitchTarget,
-        config.mouseResponse,
+    const idleBlend = clamp(state.channels.idleBlend.value, 0, 1);
+    const time = timestamp / 1000;
+    const swayBase = config.swayStrength * strength * idleBlend;
+    const swayX = Math.sin(time * 0.72) * swayBase * 0.28;
+    const swayY = Math.sin(time * 1.05 + 0.8) * swayBase * 0.16;
+    const swayPitch = Math.sin(time * 0.66 + 1.7) * swayBase * 0.32;
+    const swayYaw = Math.sin(time * 0.52 + 2.4) * swayBase * 0.20;
+
+    const mouseDX = state.mouseDX;
+    const mouseDY = state.mouseDY;
+    state.mouseDX = 0;
+    state.mouseDY = 0;
+
+    spring(
+        state.channels.mouseRoll,
+        clamp(-mouseDX * config.mouseStrength * strength * 0.55, -0.024, 0.024),
+        4.8,
+        1.0,
         dt
     );
 
-    state.mouseDX = damp(
-        state.mouseDX,
-        0,
-        config.mouseRecovery,
+    spring(
+        state.channels.mousePitch,
+        clamp(-mouseDY * config.mouseStrength * 0.16 * strength, -0.010, 0.010),
+        4.6,
+        1.0,
         dt
     );
 
-    state.mouseDY = damp(
-        state.mouseDY,
-        0,
-        config.mouseRecovery,
-        dt
-    );
+    const fovTarget = config.fovBoost * sprintFactor * strength * factors.fov;
+    spring(state.channels.fov, fovTarget, 2.4, 1.0, dt);
 
     const roll = clamp(
-        state.strafeRoll +
-        state.turnRoll +
-        state.bobRoll +
-        state.mouseRoll,
-        -config.maxRoll,
-        config.maxRoll
+        (
+            state.channels.strafeRoll.value +
+            state.channels.turnRoll.value +
+            state.channels.mouseRoll.value +
+            bobRoll
+        ) * factors.rotation,
+        -0.075,
+        0.075
     );
 
     const pitch = clamp(
-        state.forwardPitch +
-        state.verticalPitch +
-        state.landingPitch +
-        state.mousePitch +
-        swayPitch,
-        -config.maxPitchOffset,
-        config.maxPitchOffset
+        (
+            state.channels.movePitch.value +
+            state.channels.verticalPitch.value +
+            state.channels.landingPitch.value +
+            state.channels.mousePitch.value +
+            swayPitch
+        ) * factors.rotation,
+        -0.055,
+        0.055
     );
 
-    const posX = state.bobX + swayX;
-    const posY = state.bobY + state.landingY + swayY;
+    const positionScale = factors.position;
 
-    try {
-        camera.position.x += posX;
-        camera.position.y += posY;
-    } catch (_) {}
+    state.effect.x = (bobX + swayX) * positionScale;
+    state.effect.y = (bobY + state.channels.landingY.value + swayY) * positionScale;
+    state.effect.z = state.channels.forwardShift.value * positionScale;
+    state.effect.roll = roll;
+    state.effect.pitch = pitch;
+    state.effect.yaw = swayYaw * factors.rotation;
 
-    try {
-        if (camera.rotation) {
-            camera.rotation.z += roll;
-            camera.rotation.x += pitch;
-            camera.rotation.y += swayYaw;
-        }
-    } catch (_) {}
+    const previousFov = state.effect.fov;
+    state.effect.fov = clamp(state.channels.fov.value, 0, 12);
 
-    state.appliedX = posX;
-    state.appliedY = posY;
-    state.appliedZ = 0;
-    state.appliedRoll = roll;
-    state.appliedPitch = pitch;
-    state.appliedYaw = swayYaw;
+    if (Math.abs(previousFov - state.effect.fov) > 0.001) {
+        state.projectionDirty = true;
+    }
 
-    if (Number.isFinite(Number(camera.fov))) {
-        if (state.baseFov === null) state.baseFov = Number(camera.fov);
-
-        const normalized = smooth01(
-            clamp(
-                (speed - config.fovStartSpeed) /
-                Math.max(0.001, config.fovFullSpeed - config.fovStartSpeed),
-                0,
-                1
-            )
-        );
-
-        state.fovDelta = damp(
-            state.fovDelta,
-            config.fovBoost * normalized * strength,
-            config.fovResponse,
-            dt
-        );
-
-        camera.fov += state.fovDelta;
-        state.appliedFov = state.fovDelta;
-
+    if (state.projectionDirty && typeof camera.updateProjectionMatrix === 'function') {
+        state.projectionDirty = false;
         try {
-            camera.updateProjectionMatrix?.();
+            camera.updateProjectionMatrix();
         } catch (_) {}
     }
 }
 
 function resetEffects() {
-    if (state.camera) removePrevious(state.camera);
-
-    state.strafeRoll = 0;
-    state.turnRoll = 0;
-    state.forwardPitch = 0;
-    state.verticalPitch = 0;
-    state.bobPhase = 0;
-    state.bobX = 0;
-    state.bobY = 0;
-    state.bobRoll = 0;
-    state.landingY = 0;
-    state.landingPitch = 0;
-    state.swayFactor = 0;
-    state.mouseDX = 0;
-    state.mouseDY = 0;
-    state.mouseRoll = 0;
-    state.mousePitch = 0;
-    state.fovDelta = 0;
-    state.previousBaseYaw = null;
-    state.previousMotionY = 0;
-    state.wasGrounded = false;
+    clearChannels();
+    const camera = state.camera;
+    if (camera && typeof camera.updateProjectionMatrix === 'function') {
+        try {
+            camera.updateProjectionMatrix();
+        } catch (_) {}
+    }
 }
 
 function normalizeBind(value) {
@@ -885,7 +823,12 @@ function setEnabled(enabled, notify = false) {
     state.enabled = next;
     state.lastFrame = performance.now();
 
-    if (!next) resetEffects();
+    if (next) {
+        resolveCamera(true);
+        clearChannels();
+    } else {
+        resetEffects();
+    }
 
     if (notify) emitState('enabled');
 }
@@ -893,12 +836,7 @@ function setEnabled(enabled, notify = false) {
 function setValues(values, notify = false) {
     state.values = normalizeValues(values);
     state.preset = detectPreset(state.values);
-
-    if (state.enabled) {
-        resetEffects();
-        state.lastFrame = performance.now();
-    }
-
+    clearChannels();
     if (notify) emitState('values');
 }
 
@@ -906,12 +844,7 @@ function setPreset(name, notify = false) {
     if (!PRESETS[name]) return;
     state.values = cloneValues(PRESETS[name]);
     state.preset = name;
-
-    if (state.enabled) {
-        resetEffects();
-        state.lastFrame = performance.now();
-    }
-
+    clearChannels();
     if (notify) emitState('preset');
 }
 
@@ -958,19 +891,10 @@ document.addEventListener(EVENT_BINDING, event => {
 }, true);
 
 window.addEventListener('mousemove', event => {
-    if (!state.enabled) return;
+    if (!state.enabled || !document.pointerLockElement) return;
 
-    state.mouseDX = clamp(
-        state.mouseDX + Number(event.movementX || 0),
-        -100,
-        100
-    );
-
-    state.mouseDY = clamp(
-        state.mouseDY + Number(event.movementY || 0),
-        -100,
-        100
-    );
+    state.mouseDX = clamp(state.mouseDX + Number(event.movementX || 0), -80, 80);
+    state.mouseDY = clamp(state.mouseDY + Number(event.movementY || 0), -80, 80);
 }, true);
 
 window.addEventListener('keydown', event => {
@@ -998,26 +922,26 @@ window.addEventListener('keydown', event => {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-
     setEnabled(!state.enabled, true);
 }, true);
 
+document.addEventListener('pointerlockchange', () => {
+    if (!document.pointerLockElement) {
+        clearChannels();
+        if (state.camera && typeof state.camera.updateProjectionMatrix === 'function') {
+            try {
+                state.camera.updateProjectionMatrix();
+            } catch (_) {}
+        }
+    }
+}, true);
+
 function loop(timestamp) {
-    const rawDt = (timestamp - state.lastFrame) / 16.6667;
-    const dt = clamp(Number.isFinite(rawDt) ? rawDt : 1, 0.25, 3);
+    const dt = clamp((timestamp - state.lastFrame) / 1000, 0.001, 0.05);
     state.lastFrame = timestamp;
 
     if (state.enabled) {
-        const game = getGame();
-        const player = game?.player;
-
-        if (game && player) {
-            const camera = resolveCamera(game);
-
-            if (camera) {
-                updateEffects(camera, player, timestamp, dt);
-            }
-        }
+        updateEffects(timestamp, dt);
     }
 
     requestAnimationFrame(loop);
@@ -1058,8 +982,17 @@ globalThis.CameraOverhaul = {
     get values() {
         return cloneValues(state.values);
     },
-    get cameraPath() {
-        return state.cameraPath;
+    get camera() {
+        return state.camera;
+    },
+    get rig() {
+        return {
+            pitchObject: state.pitchObject,
+            yawObject: state.yawObject
+        };
+    },
+    get effect() {
+        return { ...state.effect };
     },
     get presets() {
         return {
