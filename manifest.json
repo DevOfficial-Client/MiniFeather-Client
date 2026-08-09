@@ -24,7 +24,8 @@
         "src/mf-freelook.js",
         "src/TitanTiny.js",
         "src/Zoom.js",
-        "src/Camera Overhaul.js"
+        "src/Camera Overhaul.js",
+        "src/features.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"
