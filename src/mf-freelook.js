@@ -397,31 +397,21 @@
           if (e.repeat) {
               return;
           }
-          if (
-              window.MF_FREELOOK?._binding
-          ) {
+          if (window.MF_FREELOOK?._binding) {
               if (
                   e.code !== 'Escape' &&
-                  e.code !== 'Backspace'
+                  e.code !== 'Backspace' &&
+                  e.code !== 'Delete'
               ) {
-                  FREELOOK_KEY =
-                      e.code;
-                  window.MF_FREELOOK._binding =
-                      false;
-                  if (
-                      typeof window
-                          .MF_FREELOOK
-                          .onKeyChanged === 'function'
-                  ) {
-                      window.MF_FREELOOK
-                          .onKeyChanged(
-                              FREELOOK_KEY
-                          );
-                  }
+                  FREELOOK_KEY = e.code;           
+                  window.MF_FREELOOK._binding = false;             
+                  window.MF_FREELOOK.onKeyChanged?.(
+                      FREELOOK_KEY
+                  );           
                   console.log(
                       `${TAG} Key rebound to ${FREELOOK_KEY}`
                   );
-              }
+              }            
               return;
           }
           if (
@@ -463,6 +453,78 @@
           }
       },
       true
+  );
+
+  document.addEventListener(
+      'minifeather:freelook-config',
+      event => {
+          let config;      
+          try {
+              config =
+                  typeof event.detail === 'string'
+                      ? JSON.parse(event.detail)
+                      : event.detail;
+          } catch (_) {
+              return;
+          }        
+          if (!config || typeof config !== 'object') {
+              return;
+          }        
+          if (
+              typeof config.bind === 'string'
+          ) {
+              FREELOOK_KEY =
+                  config.bind || 'KeyZ';
+          }        
+          if (
+              config.mode === 'hold' ||
+              config.mode === 'toggle'
+          ) {
+              FREELOOK_MODE =
+                  config.mode;
+          }        
+          if (
+              typeof config.enabled === 'boolean'
+          ) {
+              if (
+                  config.enabled &&
+                  FREELOOK_MODE !== 'off'
+              ) {
+              } else if (!config.enabled) {
+                  setFL(false);
+              }
+          }        
+          console.log(
+              `${TAG} UI config applied:`,
+              {
+                  enabled: config.enabled,
+                  key: FREELOOK_KEY,
+                  mode: FREELOOK_MODE
+              }
+          );
+      }
+  );       
+
+  document.addEventListener(
+      'minifeather:freelook-binding',
+      event => {
+          let data;        
+          try {
+              data =
+                  typeof event.detail === 'string'
+                      ? JSON.parse(event.detail)
+                      : event.detail;
+          } catch (_) {
+              return;
+          }        
+          if (!data) return;       
+          window.MF_FREELOOK._binding =
+              !!data.active;       
+          console.log(
+              `${TAG} UI key binding mode:`,
+              !!data.active
+          );
+      }
   );
 
   window.MF_FREELOOK = {
