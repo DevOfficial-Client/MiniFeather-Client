@@ -83,7 +83,7 @@
     { id: 'about', icon: '🪶', labelKey: 'tabAbout' }
   ];
 
-  const MODULE_VERSION = '3.2.0';
+  const MODULE_VERSION = '3.4.0';
 
   const CAMERA_OVERHAUL_PRESETS = Object.freeze({
     soft: Object.freeze({
@@ -180,6 +180,7 @@
     titanTinyBind: '',
     healthNameTags: false,
     distanceNameTags: false,
+    patPat: false,
     zoom: false,
     zoomBind: 'KeyX',
     freelook: false,
@@ -2048,6 +2049,7 @@
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc') },
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc') },
       { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc') },
+      { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc') },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
@@ -2164,6 +2166,37 @@
       },
       destroy() {
         sendDistanceNameTagsConfig(false);
+      }
+    }));
+  }
+
+  function sendPatPatConfig(enabled = settings.patPat) {
+    document.dispatchEvent(new CustomEvent('minifeather:patpat-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        textureUrl: chrome.runtime.getURL('assets/patpat.png'),
+        soundUrls: [
+          chrome.runtime.getURL('assets/pat.ogg'),
+          chrome.runtime.getURL('assets/pat1.ogg'),
+          chrome.runtime.getURL('assets/pat2.ogg')
+        ]
+      })
+    }));
+  }
+
+  function initPatPatModule() {
+    registerModule('patPat', () => createLifecycle({
+      enable() {
+        sendPatPatConfig(true);
+      },
+      disable() {
+        sendPatPatConfig(false);
+      },
+      refresh() {
+        sendPatPatConfig(MODULES.get('patPat')?.enabled === true);
+      },
+      destroy() {
+        sendPatPatConfig(false);
       }
     }));
   }
@@ -2929,6 +2962,11 @@
               'distanceNameTags',
               t('distanceNameTags'),
               t('distanceNameTagsDesc')
+            )}
+            ${renderToggle(
+              'patPat',
+              t('patPat'),
+              t('patPatDesc')
             )}
             ${renderToggle(
               'zoom',
@@ -4375,6 +4413,7 @@
     setModuleEnabled('titanTiny', settings.titanTiny);
     setModuleEnabled('healthNameTags', settings.healthNameTags);
     setModuleEnabled('distanceNameTags', settings.distanceNameTags);
+    setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
     document.dispatchEvent(
@@ -4852,6 +4891,7 @@
     initTitanTinyModule();
     initHealthNameTagsModule();
     initDistanceNameTagsModule();
+    initPatPatModule();
     initZoomModule();
     initCameraOverhaulModule();
     initGUI();
