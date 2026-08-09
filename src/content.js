@@ -179,7 +179,13 @@
     titanTinyScale: 1.00,
     titanTinyBind: '',
     zoom: false,
-    zoomBind: 'KeyZ',
+    zoomBind: 'KeyX',
+    freelook: false,
+    freelookBind: 'KeyZ',
+    freelookMode: 'hold',
+    blockHighlight: true,
+    blockHighlightColor: '#ffffff',
+    blockHighlightThickness: 1,
     cameraOverhaul: false,
     cameraOverhaulBind: '',
     cameraOverhaulPreset: 'normal',
@@ -2851,33 +2857,95 @@
         <div class="mf-card">
           <div class="mf-card-title">${t('sectionGeneral')}</div>
           <div class="mf-toggle-grid">
-            ${renderToggle('rebrand', t('rebrand'), t('rebrandDesc'))}
-            ${renderToggle('titanTiny', t('titanTiny'), t('titanTinyDesc'))}
-            ${renderToggle('zoom', t('zoom'), t('zoomDesc'))}
-            ${renderToggle('cameraOverhaul', t('cameraOverhaul'), t('cameraOverhaulDesc'))}
+            ${renderToggle(
+              'rebrand',
+              t('rebrand'),
+              t('rebrandDesc')
+            )}
+            ${renderToggle(
+              'titanTiny',
+              t('titanTiny'),
+              t('titanTinyDesc')
+            )}
+            ${renderToggle(
+              'zoom',
+              t('zoom'),
+              t('zoomDesc')
+            )}
+            ${renderToggle(
+              'cameraOverhaul',
+              t('cameraOverhaul'),
+              t('cameraOverhaulDesc')
+            )}
+            ${renderToggle(
+              'freelook',
+              'Freelook',
+              'Look around independently while keeping your player facing direction unchanged.'
+            )}
+            ${renderToggle(
+              'blockHighlight',
+              'Block Highlight',
+              'Customize the outline shown around the block you are looking at.'
+            )}
             <label class="mf-toggle" id="mf-spritesheet-toggle">
               <span class="mf-toggle-dot"></span>
               <span class="mf-toggle-copy">
                 <strong>${t('spritesheet')}</strong>
                 <span>${t('spritesheetDesc')}</span>
               </span>
-              <input type="checkbox" id="mf-spritesheet-checkbox" class="mf-switch-hidden" checked>
+              <input
+                type="checkbox"
+                id="mf-spritesheet-checkbox"
+                class="mf-switch-hidden"
+                checked
+              >
             </label>
           </div>
         </div>
         <div class="mf-card">
           <div class="mf-card-title">${t('sectionLogo')}</div>
           <div class="mf-logo-preview-wrap">
-            <img id="mf-logo-preview" class="mf-logo-preview" src="${currentLogo}" alt="${t('preview')}">
-            <div class="mf-muted" id="mf-logo-preview-text">${t('preview')}</div>
+            <img
+              id="mf-logo-preview"
+              class="mf-logo-preview"
+              src="${currentLogo}"
+              alt="${t('preview')}"
+            >
+            <div
+              class="mf-muted"
+              id="mf-logo-preview-text"
+            >
+              ${t('preview')}
+            </div>
           </div>
-          <input id="mf-logo-url" class="mf-input" type="text" placeholder="${t('customLogoUrlPlaceholder')}">
-          ${renderFileInput('mf-logo-file', 'customLogoFile')}
+          <input
+            id="mf-logo-url"
+            class="mf-input"
+            type="text"
+            placeholder="${t('customLogoUrlPlaceholder')}"
+          >
+          ${renderFileInput(
+            'mf-logo-file',
+            'customLogoFile'
+          )}
           <div class="mf-grid-2">
-            <button id="mf-logo-apply" class="mf-btn primary">${t('applyLogo')}</button>
-            <button id="mf-logo-reset" class="mf-btn secondary">${t('resetLogo')}</button>
+            <button
+              id="mf-logo-apply"
+              class="mf-btn primary"
+            >
+              ${t('applyLogo')}
+            </button>
+            <button
+              id="mf-logo-reset"
+              class="mf-btn secondary"
+            >
+              ${t('resetLogo')}
+            </button>
           </div>
-          <div id="mf-logo-status" class="mf-status"></div>
+          <div
+            id="mf-logo-status"
+            class="mf-status"
+          ></div>
         </div>
       </div>
     `;
@@ -3372,6 +3440,487 @@
     }
   }
 
+  function openFreelookSettings() {
+    if (!panel) return;
+    const existing = panel.querySelector('.mf-freelook-backdrop');
+    existing?.remove();
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop mf-freelook-backdrop';
+    const currentMode =
+      settings.freelookMode === 'toggle'
+        ? 'toggle'
+        : 'hold';
+    const currentBind =
+      String(settings.freelookBind || '');
+    backdrop.innerHTML = `
+      <div
+        class="mf-tt-dialog"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="mf-tt-head">
+          <div class="mf-tt-title">
+            Freelook Settings
+          </div>
+          <button
+            type="button"
+            class="mf-close"
+            data-fl-close
+          >
+            ×
+          </button>
+        </div>
+        <div class="mf-tt-row">
+          <span>Activation Mode</span>
+        </div>
+        <div class="mf-grid-2">
+          <button
+            type="button"
+            class="mf-btn secondary ${currentMode === 'hold' ? 'active' : ''}"
+            data-fl-mode="hold"
+          >
+            Hold
+          </button>
+          <button
+            type="button"
+            class="mf-btn secondary ${currentMode === 'toggle' ? 'active' : ''}"
+            data-fl-mode="toggle"
+          >
+            Toggle
+          </button>
+        </div>
+        <div class="mf-tt-row">
+          <span>Keybind</span>
+        </div>
+        <div class="mf-tt-bind-box">
+          <span class="mf-muted">
+            Freelook Key
+          </span>
+          <span
+            class="mf-tt-bind-code"
+            data-fl-bind-code
+          >
+            ${currentBind || 'Not Bound'}
+          </span>
+        </div>
+        <div class="mf-tt-bind-actions">
+          <button
+            type="button"
+            class="mf-btn secondary"
+            data-fl-bind
+          >
+            Set Keybind
+          </button>
+          <button
+            type="button"
+            class="mf-btn danger"
+            data-fl-unbind
+          >
+            Remove
+          </button>
+        </div>
+        <div class="mf-tt-hint">
+          Hold mode keeps freelook active while the key is held.
+          Toggle mode switches freelook on and off each time the key is pressed.
+        </div>
+        <button
+          type="button"
+          class="mf-btn primary mf-tt-save"
+          data-fl-save
+        >
+          Save
+        </button>
+      </div>
+    `;
+    panel.appendChild(backdrop);
+    const bindCode =
+      backdrop.querySelector('[data-fl-bind-code]');
+    const bindButton =
+      backdrop.querySelector('[data-fl-bind]');
+    let binding = false;
+    const updateModeButtons = () => {
+      backdrop
+        .querySelectorAll('[data-fl-mode]')
+        .forEach(button => {
+          button.classList.toggle(
+            'active',
+            button.dataset.flMode === settings.freelookMode
+          );
+        });
+    };
+    backdrop
+      .querySelectorAll('[data-fl-mode]')
+      .forEach(button => {
+        button.addEventListener('click', () => {
+          settings.freelookMode =
+            button.dataset.flMode === 'toggle'
+              ? 'toggle'
+              : 'hold';
+          guiSettings.freelookMode =
+            settings.freelookMode;
+          updateModeButtons();
+        });
+      });
+    const stopBinding = () => {
+      binding = false;
+      document.dispatchEvent(
+        new CustomEvent(
+          'minifeather:freelook-binding',
+          {
+            detail: JSON.stringify({
+              active: false
+            })
+          }
+        )
+      );
+      if (bindButton) {
+        bindButton.textContent = 'Set Keybind';
+      }
+    };
+    bindButton?.addEventListener('click', () => {
+      binding = true;
+      document.dispatchEvent(
+        new CustomEvent(
+          'minifeather:freelook-binding',
+          {
+            detail: JSON.stringify({
+              active: true
+            })
+          }
+        )
+      );
+      bindButton.textContent =
+        'Press a Key...';
+    });
+    backdrop
+      .querySelector('[data-fl-unbind]')
+      ?.addEventListener('click', () => {
+        stopBinding();
+        settings.freelookBind = '';
+        guiSettings.freelookBind = '';
+        if (bindCode) {
+          bindCode.textContent = 'Not Bound';
+        }
+        document.dispatchEvent(
+          new CustomEvent(
+            'minifeather:freelook-config',
+            {
+              detail: JSON.stringify({
+                enabled:
+                  !!settings.freelook,
+                bind: '',
+                mode:
+                  settings.freelookMode
+              })
+            }
+          )
+        );
+        saveSettings();
+      });
+    const keyHandler = event => {
+      if (!binding) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      if (
+        event.code === 'Escape' ||
+        event.code === 'Backspace' ||
+        event.code === 'Delete'
+      ) {
+        settings.freelookBind = '';
+        guiSettings.freelookBind = '';
+        if (bindCode) {
+          bindCode.textContent = 'Not Bound';
+        }
+      } else {
+        settings.freelookBind = event.code;
+        guiSettings.freelookBind = event.code;
+        if (bindCode) {
+          bindCode.textContent = event.code;
+        }
+      }
+      stopBinding();
+    };
+    document.addEventListener(
+      'keydown',
+      keyHandler,
+      true
+    );
+    const cleanup = () => {
+      stopBinding();
+      document.removeEventListener(
+        'keydown',
+        keyHandler,
+        true
+      );
+      backdrop.remove();
+    };
+    backdrop
+      .querySelector('[data-fl-close]')
+      ?.addEventListener('click', cleanup);
+    backdrop
+      .querySelector('[data-fl-save]')
+      ?.addEventListener('click', () => {
+        saveSettings();
+        document.dispatchEvent(
+          new CustomEvent(
+            'minifeather:freelook-config',
+            {
+              detail: JSON.stringify({
+                enabled:
+                  !!settings.freelook,
+                bind:
+                  String(settings.freelookBind || ''),
+                mode:
+                  settings.freelookMode
+              })
+            }
+          )
+        );
+        cleanup();
+      });
+    backdrop.addEventListener(
+      'mousedown',
+      event => {
+        if (event.target === backdrop) {
+          cleanup();
+        }
+      }
+    );
+    updateModeButtons();
+  }
+
+  function openBlockHighlightSettings() {
+    if (!panel) return;   
+    const existing =
+      panel.querySelector('.mf-block-highlight-backdrop');    
+    existing?.remove();   
+    const backdrop = document.createElement('div');   
+    backdrop.className =
+      'mf-tt-backdrop mf-block-highlight-backdrop';   
+    const color =
+      settings.blockHighlightColor || '#ffffff';    
+    const thickness =
+      Number(settings.blockHighlightThickness) || 1;    
+    backdrop.innerHTML = `
+      <div
+        class="mf-tt-dialog"
+        role="dialog"
+        aria-modal="true"
+      >   
+        <div class="mf-tt-head">
+          <div class="mf-tt-title">
+            Block Highlight Settings
+          </div>    
+          <button
+            type="button"
+            class="mf-close"
+            data-bh-close
+          >
+            ×
+          </button>
+        </div>    
+        <div class="mf-tt-row">
+          <span>Highlight Color</span>
+        </div>    
+        <div style="
+          display:flex;
+          align-items:center;
+          gap:10px;
+          margin-bottom:16px;
+        ">    
+          <input
+            type="color"
+            data-bh-color
+            value="${color}"
+            style="
+              width:52px;
+              height:40px;
+              padding:3px;
+              border-radius:10px;
+              border:1px solid var(--mf-border);
+              background:transparent;
+              cursor:pointer;
+            "
+          >   
+          <input
+            type="text"
+            class="mf-input"
+            data-bh-color-text
+            value="${color}"
+            maxlength="7"
+            placeholder="#ffffff"
+          >   
+        </div>    
+        <div class="mf-tt-row">
+          <span>Thickness</span>    
+          <span
+            class="mf-tt-scale-value"
+            data-bh-thickness-value
+          >
+            ${thickness}
+          </span>
+        </div>    
+        <input
+          class="mf-tt-range"
+          data-bh-thickness
+          type="range"
+          min="1"
+          max="4"
+          step="1"
+          value="${thickness}"
+        >   
+        <div class="mf-grid-2" style="margin-top:12px;">    
+          <button
+            type="button"
+            class="mf-btn secondary"
+            data-bh-preset="1"
+          >
+            Thin
+          </button>   
+          <button
+            type="button"
+            class="mf-btn secondary"
+            data-bh-preset="2"
+          >
+            Medium
+          </button>   
+          <button
+            type="button"
+            class="mf-btn secondary"
+            data-bh-preset="3"
+          >
+            Thick
+          </button>   
+          <button
+            type="button"
+            class="mf-btn secondary"
+            data-bh-preset="4"
+          >
+            Extra Thick
+          </button>   
+        </div>    
+        <div class="mf-tt-hint">
+          Changes are applied immediately while this window is open.
+        </div>    
+        <button
+          type="button"
+          class="mf-btn primary mf-tt-save"
+          data-bh-save
+        >
+          Save
+        </button>   
+      </div>
+    `;    
+    panel.appendChild(backdrop);    
+    const colorInput =
+      backdrop.querySelector('[data-bh-color]');    
+    const colorText =
+      backdrop.querySelector('[data-bh-color-text]');   
+    const thicknessInput =
+      backdrop.querySelector('[data-bh-thickness]');    
+    const thicknessValue =
+      backdrop.querySelector('[data-bh-thickness-value]');    
+    const apply = () => {
+      const selectedColor =
+        colorInput?.value || '#ffffff';   
+      const selectedThickness =
+        Math.max(
+          1,
+          Math.min(
+            4,
+            Number(thicknessInput?.value) || 1
+          )
+        );    
+      settings.blockHighlightColor =
+        selectedColor;    
+      settings.blockHighlightThickness =
+        selectedThickness;    
+      guiSettings.blockHighlightColor =
+        selectedColor;    
+      guiSettings.blockHighlightThickness =
+        selectedThickness;    
+      if (colorText) {
+        colorText.value = selectedColor;
+      }   
+      if (thicknessValue) {
+        thicknessValue.textContent =
+          String(selectedThickness);
+      }   
+      document.dispatchEvent(
+          new CustomEvent(
+              'minifeather:block-highlight-config',
+              {
+                  detail: JSON.stringify({
+                      enabled:
+                          !!settings.blockHighlight,    
+                      color:
+                          selectedColor,    
+                      thickness:
+                          selectedThickness
+                  })
+              }
+          )
+      );
+    };    
+    colorInput?.addEventListener(
+      'input',
+      apply
+    );    
+    colorText?.addEventListener(
+      'change',
+      () => {
+        let value =
+          colorText.value.trim();   
+        if (!/^#[0-9a-fA-F]{6}$/.test(value)) {
+          value = '#ffffff';
+        }   
+        colorInput.value = value;   
+        apply();
+      }
+    );    
+    thicknessInput?.addEventListener(
+      'input',
+      apply
+    );    
+    backdrop
+      .querySelectorAll('[data-bh-preset]')
+      .forEach(button => {
+        button.addEventListener(
+          'click',
+          () => {
+            thicknessInput.value =
+              button.dataset.bhPreset;    
+            apply();
+          }
+        );
+      });   
+    const cleanup = () => {
+      saveSettings();
+      backdrop.remove();
+    };    
+    backdrop
+      .querySelector('[data-bh-close]')
+      ?.addEventListener(
+        'click',
+        cleanup
+      );    
+    backdrop
+      .querySelector('[data-bh-save]')
+      ?.addEventListener(
+        'click',
+        cleanup
+      );    
+    backdrop.addEventListener(
+      'mousedown',
+      event => {
+        if (event.target === backdrop) {
+          cleanup();
+        }
+      }
+    );
+  }
+
   function bindPageControls() {
     if (!panel) return;
 
@@ -3397,6 +3946,35 @@
       event.stopPropagation();
       openCameraOverhaulSettings();
     });
+
+    const freelookToggle =
+      panel.querySelector(
+        '.mf-toggle[data-key="freelook"]'
+      );
+    
+    freelookToggle?.addEventListener(
+      'contextmenu',
+      event => {
+        event.preventDefault();
+        event.stopPropagation();
+        openFreelookSettings();
+      }
+    );
+
+    const blockHighlightToggle =
+      panel.querySelector(
+        '.mf-toggle[data-key="blockHighlight"]'
+      );
+    
+    blockHighlightToggle?.addEventListener(
+      'contextmenu',
+      event => {
+        event.preventDefault();
+        event.stopPropagation();
+      
+        openBlockHighlightSettings();
+      }
+    );
 
     panel.querySelectorAll('.mf-meme-id[data-meme-id]').forEach(button => {
       button.addEventListener('click', async () => {
@@ -3733,6 +4311,73 @@
     setModuleEnabled('titanTiny', settings.titanTiny);
     setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
+    document.dispatchEvent(
+      new CustomEvent(
+        'minifeather:freelook-config',
+        {
+          detail: JSON.stringify({
+            enabled:
+              !!settings.freelook,
+          
+            bind:
+              String(settings.freelookBind || ''),
+          
+            mode:
+              settings.freelookMode === 'toggle'
+                ? 'toggle'
+                : 'hold'
+          })
+        }
+      )
+    );
+    document.dispatchEvent(
+        new CustomEvent(
+            'minifeather:block-highlight-config',
+            {
+                detail: JSON.stringify({
+                    enabled:
+                        !!settings.blockHighlight,
+                
+                    color:
+                        settings.blockHighlightColor ||
+                        '#ffffff',
+                
+                    thickness:
+                        Number(
+                            settings.blockHighlightThickness
+                        ) || 1
+                })
+            }
+        )
+    );
+
+    localStorage.setItem(
+      'miniblox_blockhighlight',
+      settings.blockHighlight
+        ? 'true'
+        : 'false'
+    );
+
+    localStorage.setItem(
+      'miniblox_blockhighlight_color',
+      settings.blockHighlightColor ||
+        '#ffffff'
+    );
+
+    localStorage.setItem(
+      'miniblox_blockhighlight_thickness',
+      String(
+        Number(settings.blockHighlightThickness) || 1
+      )
+    );
+
+    window.postMessage(
+      {
+        type:
+          'MINIBLOX_REFRESH_BLOCK_HIGHLIGHT'
+      },
+      '*'
+    );
     setModuleEnabled('chatVideos', settings.chatVideos);
     setModuleEnabled('chatLinks', settings.chatLinks);
     setModuleEnabled('chatMemes', settings.chatMemes);
