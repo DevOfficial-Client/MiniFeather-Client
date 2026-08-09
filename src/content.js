@@ -179,6 +179,7 @@
     titanTinyScale: 1.00,
     titanTinyBind: '',
     healthNameTags: false,
+    distanceNameTags: false,
     zoom: false,
     zoomBind: 'KeyX',
     freelook: false,
@@ -2046,6 +2047,7 @@
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc') },
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc') },
+      { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc') },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
@@ -2136,6 +2138,32 @@
       },
       destroy() {
         sendHealthNameTagsConfig(false);
+      }
+    }));
+  }
+
+  function sendDistanceNameTagsConfig(enabled = settings.distanceNameTags) {
+    document.dispatchEvent(new CustomEvent('minifeather:distancenametags-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        unit: t('distanceUnit')
+      })
+    }));
+  }
+
+  function initDistanceNameTagsModule() {
+    registerModule('distanceNameTags', () => createLifecycle({
+      enable() {
+        sendDistanceNameTagsConfig(true);
+      },
+      disable() {
+        sendDistanceNameTagsConfig(false);
+      },
+      refresh() {
+        sendDistanceNameTagsConfig(MODULES.get('distanceNameTags')?.enabled === true);
+      },
+      destroy() {
+        sendDistanceNameTagsConfig(false);
       }
     }));
   }
@@ -2896,6 +2924,11 @@
               'healthNameTags',
               t('healthNameTags'),
               t('healthNameTagsDesc')
+            )}
+            ${renderToggle(
+              'distanceNameTags',
+              t('distanceNameTags'),
+              t('distanceNameTagsDesc')
             )}
             ${renderToggle(
               'zoom',
@@ -4198,6 +4231,7 @@
       settings.language = event.target.value;
       guiSettings.language = event.target.value;
       saveSettings();
+      sendDistanceNameTagsConfig(settings.distanceNameTags);
       update();
       renderGUI();
     }, { signal: panelSignal });
@@ -4340,6 +4374,7 @@
     setModuleEnabled('pingCounter', settings.pingCounter);
     setModuleEnabled('titanTiny', settings.titanTiny);
     setModuleEnabled('healthNameTags', settings.healthNameTags);
+    setModuleEnabled('distanceNameTags', settings.distanceNameTags);
     setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
     document.dispatchEvent(
@@ -4816,6 +4851,7 @@
     initKeystrokes();
     initTitanTinyModule();
     initHealthNameTagsModule();
+    initDistanceNameTagsModule();
     initZoomModule();
     initCameraOverhaulModule();
     initGUI();
