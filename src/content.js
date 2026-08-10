@@ -83,7 +83,7 @@
     { id: 'about', icon: '🪶', labelKey: 'tabAbout' }
   ];
 
-  const MODULE_VERSION = '3.4.0';
+  const MODULE_VERSION = '3.5.0';
 
   const CAMERA_OVERHAUL_PRESETS = Object.freeze({
     soft: Object.freeze({
@@ -167,6 +167,78 @@
     return 'custom';
   }
 
+  const PATPAT_PRESETS = Object.freeze({
+    soft: Object.freeze({
+      squishStrength: 45,
+      duration: 0.50,
+      handMovement: 70,
+      pushStrength: 15
+    }),
+    normal: Object.freeze({
+      squishStrength: 73,
+      duration: 0.36,
+      handMovement: 100,
+      pushStrength: 35
+    }),
+    strong: Object.freeze({
+      squishStrength: 88,
+      duration: 0.32,
+      handMovement: 100,
+      pushStrength: 55
+    }),
+    extreme: Object.freeze({
+      squishStrength: 100,
+      duration: 0.28,
+      handMovement: 100,
+      pushStrength: 80
+    })
+  });
+
+  const PATPAT_LIMITS = Object.freeze({
+    squishStrength: Object.freeze({ min: 0, max: 100, step: 1, label: 'patPatSquishStrength', digits: 0 }),
+    duration: Object.freeze({ min: 0.20, max: 1.20, step: 0.01, label: 'patPatDuration', digits: 2 }),
+    handMovement: Object.freeze({ min: 0, max: 100, step: 1, label: 'patPatHandMovement', digits: 0 }),
+    pushStrength: Object.freeze({ min: 0, max: 100, step: 1, label: 'patPatPushStrength', digits: 0 }),
+    soundVolume: Object.freeze({ min: 0, max: 100, step: 1, label: 'patPatSoundVolume', digits: 0 })
+  });
+
+  const PATPAT_PROFILE_KEYS = Object.freeze(['squishStrength', 'duration', 'handMovement', 'pushStrength']);
+
+  function clonePatPatValues(source) {
+    const base = {
+      ...PATPAT_PRESETS.normal,
+      soundVolume: 36,
+      randomSounds: true,
+      nameTagFollow: true
+    };
+    if (!source || typeof source !== 'object') return base;
+    return { ...base, ...source };
+  }
+
+  function clampPatPatValues(source) {
+    const values = clonePatPatValues(source);
+    for (const [key, limit] of Object.entries(PATPAT_LIMITS)) {
+      const value = Number(values[key]);
+      if (!Number.isFinite(value)) continue;
+      values[key] = Math.max(limit.min, Math.min(limit.max, value));
+    }
+    values.randomSounds = values.randomSounds !== false;
+    values.nameTagFollow = values.nameTagFollow !== false;
+    return values;
+  }
+
+  function detectPatPatPreset(values) {
+    const normalized = clampPatPatValues(values);
+    for (const [name, preset] of Object.entries(PATPAT_PRESETS)) {
+      const matches = PATPAT_PROFILE_KEYS.every(key => {
+        const limit = PATPAT_LIMITS[key];
+        return Math.abs(Number(normalized[key]) - Number(preset[key])) <= Math.max(Number(limit.step) / 2, 0.000001);
+      });
+      if (matches) return name;
+    }
+    return 'custom';
+  }
+
   const DEFAULT_SETTINGS = {
     rebrand: true,
     supportAds: false,
@@ -181,6 +253,9 @@
     healthNameTags: false,
     distanceNameTags: false,
     patPat: false,
+    itemPhysics: false,
+    patPatPreset: 'normal',
+    patPatValues: clonePatPatValues(),
     zoom: false,
     zoomBind: 'KeyX',
     freelook: false,
@@ -227,6 +302,7 @@
   let restoreChatContent = () => {};
   let chatFeaturesReady = false;
   let titanTinySettingsCleanup = null;
+  let patPatSettingsCleanup = null;
   let zoomSettingsCleanup = null;
   let cameraOverhaulSettingsCleanup = null;
   let destroyed = false;
@@ -2050,6 +2126,7 @@
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc') },
       { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc') },
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc') },
+      { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc') },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
@@ -2171,6 +2248,11 @@
   }
 
   function sendPatPatConfig(enabled = settings.patPat) {
+    settings.patPatValues = clampPatPatValues(settings.patPatValues);
+    settings.patPatPreset = detectPatPatPreset(settings.patPatValues);
+    guiSettings.patPatValues = clonePatPatValues(settings.patPatValues);
+    guiSettings.patPatPreset = settings.patPatPreset;
+
     document.dispatchEvent(new CustomEvent('minifeather:patpat-config', {
       detail: JSON.stringify({
         enabled: !!enabled,
@@ -2179,7 +2261,8 @@
           chrome.runtime.getURL('assets/pat.ogg'),
           chrome.runtime.getURL('assets/pat1.ogg'),
           chrome.runtime.getURL('assets/pat2.ogg')
-        ]
+        ],
+        options: clonePatPatValues(settings.patPatValues)
       })
     }));
   }
@@ -2199,6 +2282,239 @@
         sendPatPatConfig(false);
       }
     }));
+  }
+
+  function sendItemPhysicsConfig(enabled = settings.itemPhysics) {
+    document.dispatchEvent(new CustomEvent('minifeather:item-physics-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initItemPhysicsModule() {
+    registerModule('itemPhysics', () => createLifecycle({
+      enable() {
+        sendItemPhysicsConfig(true);
+      },
+      disable() {
+        sendItemPhysicsConfig(false);
+      },
+      refresh() {
+        sendItemPhysicsConfig(MODULES.get('itemPhysics')?.enabled === true);
+      },
+      destroy() {
+        sendItemPhysicsConfig(false);
+      }
+    }));
+  }
+
+  function closePatPatSettings() {
+    if (patPatSettingsCleanup) {
+      const cleanup = patPatSettingsCleanup;
+      patPatSettingsCleanup = null;
+      cleanup();
+      return;
+    }
+    panel?.querySelector('.mf-patpat-backdrop')?.remove();
+  }
+
+  function openPatPatSettings() {
+    if (!panel) return;
+    closePatPatSettings();
+
+    settings.patPatValues = clampPatPatValues(settings.patPatValues);
+    settings.patPatPreset = detectPatPatPreset(settings.patPatValues);
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop mf-patpat-backdrop';
+
+    const renderControl = (key, limit) => {
+      const value = Number(settings.patPatValues[key]);
+      const shown = value.toFixed(limit.digits);
+      return `
+        <div class="mf-co-control" data-pp-control="${key}">
+          <div class="mf-co-control-head">
+            <span>${t(limit.label)}</span>
+            <input class="mf-co-number" data-pp-number="${key}" type="number" min="${limit.min}" max="${limit.max}" step="${limit.step}" value="${shown}">
+          </div>
+          <input class="mf-co-range" data-pp-range="${key}" type="range" min="${limit.min}" max="${limit.max}" step="${limit.step}" value="${value}">
+        </div>
+      `;
+    };
+
+    const boolText = value => value ? t('patPatOn') : t('patPatOff');
+
+    backdrop.innerHTML = `
+      <div class="mf-tt-dialog mf-co-dialog" role="dialog" aria-modal="true">
+        <div class="mf-tt-head">
+          <div class="mf-tt-title">${t('patPatSettings')}</div>
+          <button type="button" class="mf-close" data-pp-close>×</button>
+        </div>
+
+        <div class="mf-tt-row">
+          <span>${t('patPatStyle')}</span>
+          <span class="mf-tt-scale-value" data-pp-profile-label></span>
+        </div>
+
+        <div class="mf-co-presets">
+          <button type="button" class="mf-btn secondary" data-pp-preset="soft">${t('patPatSoft')}</button>
+          <button type="button" class="mf-btn secondary" data-pp-preset="normal">${t('patPatNormal')}</button>
+          <button type="button" class="mf-btn secondary" data-pp-preset="strong">${t('patPatStrong')}</button>
+          <button type="button" class="mf-btn secondary" data-pp-preset="extreme">${t('patPatExtreme')}</button>
+        </div>
+
+        <div class="mf-co-controls">
+          ${Object.entries(PATPAT_LIMITS).map(([key, limit]) => renderControl(key, limit)).join('')}
+        </div>
+
+        <div class="mf-tt-bind-box">
+          <span>${t('patPatRandomSounds')}</span>
+          <button type="button" class="mf-btn secondary" data-pp-random></button>
+        </div>
+
+        <div class="mf-tt-bind-box">
+          <span>${t('patPatNameTagFollow')}</span>
+          <button type="button" class="mf-btn secondary" data-pp-nametag></button>
+        </div>
+
+        <div class="mf-tt-hint">${t('patPatSettingsHint')}</div>
+        <button type="button" class="mf-btn primary mf-tt-save" data-pp-save>${t('patPatSave')}</button>
+      </div>
+    `;
+
+    panel.appendChild(backdrop);
+
+    const profileLabel = backdrop.querySelector('[data-pp-profile-label]');
+    const randomButton = backdrop.querySelector('[data-pp-random]');
+    const nameTagButton = backdrop.querySelector('[data-pp-nametag]');
+
+    const profileText = profile => {
+      if (profile === 'soft') return t('patPatSoft');
+      if (profile === 'normal') return t('patPatNormal');
+      if (profile === 'strong') return t('patPatStrong');
+      if (profile === 'extreme') return t('patPatExtreme');
+      return t('patPatCustom');
+    };
+
+    const syncProfileUI = () => {
+      const profile = detectPatPatPreset(settings.patPatValues);
+      settings.patPatPreset = profile;
+      guiSettings.patPatPreset = profile;
+      if (profileLabel) profileLabel.textContent = profileText(profile);
+      backdrop.querySelectorAll('[data-pp-preset]').forEach(button => {
+        button.classList.toggle('active', button.dataset.ppPreset === profile);
+      });
+    };
+
+    const syncBooleanUI = () => {
+      if (randomButton) {
+        randomButton.textContent = boolText(settings.patPatValues.randomSounds);
+        randomButton.classList.toggle('active', settings.patPatValues.randomSounds === true);
+      }
+      if (nameTagButton) {
+        nameTagButton.textContent = boolText(settings.patPatValues.nameTagFollow);
+        nameTagButton.classList.toggle('active', settings.patPatValues.nameTagFollow === true);
+      }
+    };
+
+    const syncControlUI = () => {
+      for (const [key, limit] of Object.entries(PATPAT_LIMITS)) {
+        const value = Number(settings.patPatValues[key]);
+        const range = backdrop.querySelector(`[data-pp-range="${key}"]`);
+        const number = backdrop.querySelector(`[data-pp-number="${key}"]`);
+        if (range) range.value = String(value);
+        if (number) number.value = value.toFixed(limit.digits);
+      }
+      syncProfileUI();
+      syncBooleanUI();
+    };
+
+    const applyValue = (key, raw, persist = false) => {
+      const limit = PATPAT_LIMITS[key];
+      if (!limit) return;
+      const value = Number(raw);
+      if (!Number.isFinite(value)) return;
+
+      settings.patPatValues = clampPatPatValues({
+        ...settings.patPatValues,
+        [key]: value
+      });
+      guiSettings.patPatValues = clonePatPatValues(settings.patPatValues);
+      settings.patPatPreset = detectPatPatPreset(settings.patPatValues);
+      guiSettings.patPatPreset = settings.patPatPreset;
+
+      const normalized = Number(settings.patPatValues[key]);
+      const range = backdrop.querySelector(`[data-pp-range="${key}"]`);
+      const number = backdrop.querySelector(`[data-pp-number="${key}"]`);
+      if (range) range.value = String(normalized);
+      if (number) number.value = normalized.toFixed(limit.digits);
+
+      syncProfileUI();
+      sendPatPatConfig(settings.patPat);
+      if (persist) saveSettings();
+    };
+
+    backdrop.querySelectorAll('[data-pp-range]').forEach(input => {
+      input.addEventListener('input', () => applyValue(input.dataset.ppRange, input.value, false));
+      input.addEventListener('change', () => applyValue(input.dataset.ppRange, input.value, true));
+    });
+
+    backdrop.querySelectorAll('[data-pp-number]').forEach(input => {
+      input.addEventListener('change', () => applyValue(input.dataset.ppNumber, input.value, true));
+      input.addEventListener('keydown', event => {
+        if (event.code !== 'Enter') return;
+        event.preventDefault();
+        applyValue(input.dataset.ppNumber, input.value, true);
+      });
+    });
+
+    backdrop.querySelectorAll('[data-pp-preset]').forEach(button => {
+      button.addEventListener('click', () => {
+        const preset = button.dataset.ppPreset;
+        if (!PATPAT_PRESETS[preset]) return;
+        settings.patPatValues = clampPatPatValues({
+          ...settings.patPatValues,
+          ...PATPAT_PRESETS[preset]
+        });
+        guiSettings.patPatValues = clonePatPatValues(settings.patPatValues);
+        settings.patPatPreset = preset;
+        guiSettings.patPatPreset = preset;
+        syncControlUI();
+        saveSettings();
+        sendPatPatConfig(settings.patPat);
+      });
+    });
+
+    randomButton?.addEventListener('click', () => {
+      settings.patPatValues.randomSounds = !settings.patPatValues.randomSounds;
+      guiSettings.patPatValues = clonePatPatValues(settings.patPatValues);
+      syncBooleanUI();
+      saveSettings();
+      sendPatPatConfig(settings.patPat);
+    });
+
+    nameTagButton?.addEventListener('click', () => {
+      settings.patPatValues.nameTagFollow = !settings.patPatValues.nameTagFollow;
+      guiSettings.patPatValues = clonePatPatValues(settings.patPatValues);
+      syncBooleanUI();
+      saveSettings();
+      sendPatPatConfig(settings.patPat);
+    });
+
+    syncControlUI();
+
+    const cleanup = () => {
+      saveSettings();
+      backdrop.remove();
+      if (patPatSettingsCleanup === cleanup) patPatSettingsCleanup = null;
+    };
+
+    patPatSettingsCleanup = cleanup;
+
+    backdrop.querySelector('[data-pp-close]')?.addEventListener('click', cleanup);
+    backdrop.querySelector('[data-pp-save]')?.addEventListener('click', cleanup);
+    backdrop.addEventListener('mousedown', event => {
+      if (event.target === backdrop) cleanup();
+    });
   }
 
   function setTitanTinyBindingCapture(active) {
@@ -2969,6 +3285,11 @@
               t('patPatDesc')
             )}
             ${renderToggle(
+              'itemPhysics',
+              t('itemPhysics'),
+              t('itemPhysicsDesc')
+            )}
+            ${renderToggle(
               'zoom',
               t('zoom'),
               t('zoomDesc')
@@ -3315,6 +3636,7 @@
   function hideGUI() {
     if (!overlay || !panel) return;
     closeTitanTinySettings();
+    closePatPatSettings();
     closeZoomSettings();
     closeCameraOverhaulSettings();
     const closingPanel = panel;
@@ -4034,6 +4356,13 @@
       openTitanTinySettings();
     });
 
+    const patPatToggle = panel.querySelector('.mf-toggle[data-key="patPat"]');
+    patPatToggle?.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openPatPatSettings();
+    });
+
     const zoomToggle = panel.querySelector('.mf-toggle[data-key="zoom"]');
     zoomToggle?.addEventListener('contextmenu', event => {
       event.preventDefault();
@@ -4414,6 +4743,7 @@
     setModuleEnabled('healthNameTags', settings.healthNameTags);
     setModuleEnabled('distanceNameTags', settings.distanceNameTags);
     setModuleEnabled('patPat', settings.patPat);
+    setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
     document.dispatchEvent(
@@ -4892,6 +5222,7 @@
     initHealthNameTagsModule();
     initDistanceNameTagsModule();
     initPatPatModule();
+    initItemPhysicsModule();
     initZoomModule();
     initCameraOverhaulModule();
     initGUI();
@@ -4966,11 +5297,14 @@
     chrome.storage.local.get(['settings', 'customLogo'], data => {
       if (destroyed) return;
       settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+      settings.patPatValues = clampPatPatValues(settings.patPatValues);
+      settings.patPatPreset = detectPatPatPreset(settings.patPatValues);
       settings.cameraOverhaulValues = clampCameraValues(settings.cameraOverhaulValues);
       settings.cameraOverhaulPreset = detectCameraPreset(settings.cameraOverhaulValues);
       settings.cameraOverhaulBind = String(settings.cameraOverhaulBind || '');
       guiSettings = {
         ...settings,
+        patPatValues: clonePatPatValues(settings.patPatValues),
         cameraOverhaulValues: cloneCameraValues(settings.cameraOverhaulValues)
       };
       currentLogo = data.customLogo || CONFIG.defaultLogo;
