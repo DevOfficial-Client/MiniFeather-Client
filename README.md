@@ -4,7 +4,7 @@
 
 ### A lightweight, customizable browser client designed to enhance your experience on Miniblox.io.
 
-![Version](https://img.shields.io/badge/version-v3.2.2-2563eb?style=flat-square)
+![Version](https://img.shields.io/badge/version-v4.0.0-2563eb?style=flat-square)
 ![Status](https://img.shields.io/badge/status-active-16a34a?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Miniblox.io-7c3aed?style=flat-square)
 
@@ -20,112 +20,27 @@ The client is designed to remain lightweight, configurable, and easy to use whil
 
 ---
 
-## 🆕 What's New in v3.2.2
+## 🆕 What's New in v4.0.0
+
+### 📦 Item Physics
+
+A new **Item Physics** module has been added to MiniFeather Client.
+
+When enabled, dropped items receive improved client-side visual physics instead of keeping the same static orientation.
+
+Item Physics adds:
+
+- Natural spinning while items are moving through the air
+- Different settling behavior depending on the item's visual shape
+- Landing bounce and rotation response
+- Wall collision spin response
+- Smoother resting positions when items reach the ground
+- More natural movement for flat and thin item models
+- Visual physics without changing the item's native collision behavior
+
+The module can be enabled or disabled from the **Rendering** section.
 
 ### 🫳 PatPat
-
-A new **PatPat** module has been added to MiniFeather Client.
-
-When enabled, look at a nearby player or living mob and use:
-
-```text
-Shift + Right Click
-```
-
-PatPat triggers a short pat animation above the target, plays a randomized pat sound, swings your hand, and briefly squishes the target model for the visual effect.
-
-The effect follows the target while it is active and keeps the native nametag aligned with the temporary squash animation.
-
-PatPat can be enabled or disabled from the **Rendering** section.
-
-
----
-
-## ✨ Features
-
-- Modern and customizable MiniFeather control panel
-- Dashboard with active module, FPS, and ping information
-- FPS, CPS, ping, and keystrokes HUD modules
-- Player Health nametags
-- Player Distance nametags
-- PatPat interaction module
-- Titan & Tiny player scaling
-- FreeLook
-- Camera Overhaul
-- Zoom up to `20×`
-- Custom Block Highlight
-- Configurable module keybinds
-- Right-click module configuration
-- Chat videos, links, GIFs, memes, and media support
-- Built-in meme library
-- Custom skins, capes, logos, backgrounds, textures, and spritesheets
-- English, Spanish, Japanese, and Italian support
-- Custom Miniblox.io interface branding
-- Optional ad visibility
-- Automatically saved settings
-- Performance-focused module lifecycle
-- Frequent compatibility fixes and feature updates
-
----
-
-## 🎮 Module Controls
-
-Most MiniFeather modules follow the same control system:
-
-- **Left-click** → Enable or disable the module
-- **Right-click** → Open the module configuration when available
-- **Keybind** → Quickly activate or use supported modules while playing
-
-Module settings and keybinds are saved automatically.
-
----
-
-## ❤️ Player Health
-
-Player Health displays each player's current health directly next to their native nametag.
-
-Example:
-
-```text
-PlayerName (❤20)
-```
-
-Features:
-
-- Dynamic health updates
-- Integrated directly into native player nametags
-- Works together with Player Distance
-- Can be enabled or disabled from the **Rendering** section
-
-When combined with Player Distance:
-
-```text
-PlayerName (❤20 | 12.4m)
-```
-
----
-
-## 📏 Player Distance
-
-Player Distance displays how far away a player is directly inside their native nametag.
-
-Example:
-
-```text
-PlayerName (12.4m)
-```
-
-Features:
-
-- Updates dynamically as players move
-- Uses the player's current position
-- Integrates with the native nametag system
-- Automatically combines with Player Health when both modules are enabled
-- Can be enabled or disabled from the **Rendering** section
-
----
-
-## 🫳 PatPat
 
 PatPat adds a playful interaction for nearby players and living mobs.
 
@@ -139,13 +54,60 @@ The interaction includes:
 
 - A pixel-style patting hand animation
 - A short squash animation on the target model
-- Native nametag movement that follows the squash effect
-- A randomized pat sound
+- Native nametag movement that can follow the squash effect
+- Randomized pat sounds
 - Your normal hand swing animation
-- Target visibility checks so the interaction only works on valid visible targets
+- Target visibility checks
 - A short cooldown between pats
 
-PatPat is available from the **Rendering** section and does not require a separate keybind.
+### PatPat Settings
+
+Right-click the **PatPat** module to open its configuration.
+
+#### Presets
+
+- **Soft** – lighter and slower movement
+- **Normal** – balanced default behavior
+- **Strong** – stronger squish and push effects
+- **Extreme** – maximum preset intensity
+- **Custom** – used automatically when manual values no longer match a preset
+
+#### Custom Options
+
+You can configure:
+
+- **Squish Strength** – controls how strongly the target model is visually compressed
+- **Pat Duration** – controls how long the pat animation lasts
+- **Hand Movement** – controls the amount of movement in the patting hand animation
+- **Push Strength** – controls the strength of the visual push effect
+- **Sound Volume** – controls PatPat sound volume
+- **Random Sounds** – enables or disables randomized PatPat sounds
+- **Nametag Follow** – controls whether the native nametag follows the temporary squash movement
+
+PatPat settings are saved automatically.
+
+
+---
+
+## 📦 Item Physics
+
+Item Physics improves the visual behavior of dropped items in Miniblox.
+
+Instead of every dropped item keeping the same basic orientation, the module adds client-side movement and rotation that reacts to how the item is moving.
+
+Features include:
+
+- Air rotation and spin
+- Landing bounce
+- Rotation response when hitting walls
+- Ground settling
+- Shape-aware resting behavior
+- Different handling for flatter or thinner item models
+- Smooth visual recovery when the module is disabled
+
+Item Physics is designed as a visual enhancement and does **not** replace or modify the game's native item collision behavior.
+
+The module can be enabled or disabled from the **Rendering** section.
 
 ---
 
@@ -389,6 +351,7 @@ Saved configuration can include:
 
 - Enabled modules
 - PatPat module state
+- Item Physics module state
 - HUD preferences
 - Module keybinds
 - Titan & Tiny scale
@@ -480,6 +443,7 @@ src/translations.js
 src/HealthNameTags.js
 src/DistanceNameTags.js
 src/PatPat.js
+src/ItemPhysics.js
 src/TitanTiny.js
 src/Zoom.js
 src/Camera Overhaul.js
