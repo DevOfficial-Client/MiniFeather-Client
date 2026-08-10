@@ -20,6 +20,7 @@
         "https://miniblox.io/*"
       ],
       "js": [
+        "src/CustomSkins.js",
         "src/inject.js",
         "src/mf-freelook.js",
         "src/TitanTiny.js",
@@ -29,6 +30,7 @@
         "src/ItemPhysics.js",
         "src/Zoom.js",
         "src/Camera Overhaul.js",
+        "src/DynamicCrosshair.js",
         "src/features.js"
       ],
       "run_at": "document_start",
@@ -61,7 +63,8 @@
         "assets/patpat.png",
         "assets/pat.ogg",
         "assets/pat1.ogg",
-        "assets/pat2.ogg"
+        "assets/pat2.ogg",
+        "assets/crosshair/*"
       ],
       "matches": [
         "https://miniblox.io/*"

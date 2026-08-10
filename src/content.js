@@ -268,6 +268,14 @@
     cameraOverhaulBind: '',
     cameraOverhaulPreset: 'normal',
     cameraOverhaulValues: cloneCameraValues(CAMERA_OVERHAUL_PRESETS.normal),
+    dynamicCrosshair: false,
+    dynamicCrosshairSize: 28,
+    dynamicCrosshairMap: {
+      air: 'empty.png', block: 'crosshair.png', entity: 'cross-open.png',
+      player: 'diamond.png', enemy: 'cross-diagonal-small.png', friendly: 'circle.png',
+      item: 'dot.png', projectile: 'caret.png', building: 'brackets.png',
+      bridging: 'brackets-bottom.png', default: 'crosshair.png'
+    },
     chatVideos: true,
     chatLinks: true,
     chatMemes: true,
@@ -2050,6 +2058,53 @@
         width:100%;
         accent-color:var(--mf-accent);
       }
+      .mf-dc-dialog {
+        max-height:80vh;
+        overflow-y:auto;
+      }
+      .mf-dc-situations {
+        display:grid;
+        gap:8px;
+        margin-top:12px;
+      }
+      .mf-dc-row {
+        display:flex;
+        align-items:center;
+        gap:10px;
+        padding:8px 11px;
+        border:1px solid var(--mf-border);
+        border-radius:10px;
+        background:rgba(255,255,255,.025);
+      }
+      .mf-dc-label {
+        flex:1;
+        color:#cbd5e1;
+        font-size:11px;
+      }
+      .mf-dc-preview {
+        width:24px;
+        height:24px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        flex-shrink:0;
+      }
+      .mf-dc-preview img {
+        width:20px;
+        height:20px;
+        image-rendering:pixelated;
+        filter:drop-shadow(0 0 1px rgba(0,0,0,.8));
+      }
+      .mf-dc-select {
+        width:130px;
+        padding:5px 8px;
+        border-radius:8px;
+        border:1px solid var(--mf-border);
+        background:rgba(255,255,255,.04);
+        color:#f8fafc;
+        font:inherit;
+        font-size:11px;
+      }
       #mf-language-select {
         width:auto;
         min-width:110px;
@@ -2121,6 +2176,7 @@
       { page: 'hud', key: 'fpsCounter', title: t('fpsCounter'), desc: t('fpsCounterDesc') },
       { page: 'hud', key: 'cpsCounter', title: t('cpsCounter'), desc: t('cpsCounterDesc') },
       { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc') },
+      { page: 'hud', key: 'dynamicCrosshair', title: 'Dynamic Crosshair', desc: 'Changes crosshair based on situation' },
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc') },
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc') },
@@ -2979,6 +3035,156 @@
     panel?.querySelector('.mf-camera-overhaul-backdrop')?.remove();
   }
 
+  function sendDynamicCrosshairConfig(enabled = settings.dynamicCrosshair) {
+    const detail = JSON.stringify({
+      enabled: !!enabled,
+      size: Number(settings.dynamicCrosshairSize) || 28,
+      crosshairs: settings.dynamicCrosshairMap || {},
+      assetBaseUrl: chrome.runtime.getURL('assets/crosshair/')
+    });
+    document.dispatchEvent(new CustomEvent('minifeather:dynamiccrosshair-config', { detail }));
+  }
+
+  function initDynamicCrosshairModule() {
+    registerModule('dynamicCrosshair', () => createLifecycle({
+      enable() { sendDynamicCrosshairConfig(true); },
+      disable() { sendDynamicCrosshairConfig(false); },
+      refresh() { sendDynamicCrosshairConfig(MODULES.get('dynamicCrosshair')?.enabled === true); },
+      destroy() { sendDynamicCrosshairConfig(false); }
+    }));
+
+    document.addEventListener('minifeather:dynamiccrosshair-state', event => {
+      let next;
+      try {
+        next = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+      } catch (_) { return; }
+      if (!next || typeof next !== 'object') return;
+
+      let changed = false;
+
+      if (typeof next.enabled === 'boolean' && settings.dynamicCrosshair !== next.enabled) {
+        settings.dynamicCrosshair = next.enabled;
+        guiSettings.dynamicCrosshair = next.enabled;
+        setModuleEnabled('dynamicCrosshair', next.enabled);
+        changed = true;
+      }
+
+      if (changed) saveSettings();
+      if (panel && activePage === 'render' && !searchQuery.trim()) renderCurrentPageContent();
+      if (activePage === 'dashboard') updateDashboardStats();
+    }, { signal: runtimeController?.signal });
+  }
+
+  const DC_SITUATIONS = [
+    ['default', 'Default'], ['block', 'Targeting Block'], ['player', 'Player'],
+    ['enemy', 'Enemy Mob'], ['entity', 'Entity'], ['item', 'Item/Drop'],
+    ['projectile', 'Projectile'], ['air', 'In Air'], ['building', 'Building'],
+    ['bridging', 'Bridging']
+  ];
+
+  const DC_PNGS = [
+    'crosshair.png', 'cross-open.png', 'cross-open-diagonal.png', 'cross-diagonal-small.png',
+    'circle.png', 'circle-large.png', 'dot.png', 'diamond.png', 'diamond-large.png',
+    'square.png', 'square-large.png', 'brackets.png', 'brackets-bottom.png',
+    'brackets-top.png', 'brackets-round.png', 'caret.png', 'lines.png',
+    'line-bottom.png', 'empty.png'
+  ];
+
+  let dynamicCrosshairSettingsCleanup = null;
+
+  function closeDynamicCrosshairSettings() {
+    if (dynamicCrosshairSettingsCleanup) {
+      const fn = dynamicCrosshairSettingsCleanup;
+      dynamicCrosshairSettingsCleanup = null;
+      fn();
+      return;
+    }
+    panel?.querySelector('.mf-dc-backdrop')?.remove();
+  }
+
+  function openDynamicCrosshairSettings() {
+    if (!panel) return;
+    closeDynamicCrosshairSettings();
+
+    const assetBase = chrome.runtime.getURL('assets/crosshair/');
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop mf-dc-backdrop';
+
+    const situationRow = ([key, label]) => {
+      const current = settings.dynamicCrosshairMap[key] || 'crosshair.png';
+      const options = DC_PNGS.map(png => {
+        const sel = png === current ? 'selected' : '';
+        return `<option value="${png}" ${sel}>${png.replace('.png', '')}</option>`;
+      }).join('');
+      return `
+        <div class="mf-dc-row">
+          <span class="mf-dc-label">${label}</span>
+          <div class="mf-dc-preview"><img src="${assetBase}${current}" alt=""></div>
+          <select class="mf-dc-select" data-dc-situation="${key}">${options}</select>
+        </div>`;
+    };
+
+    const sizeVal = Number(settings.dynamicCrosshairSize) || 28;
+
+    backdrop.innerHTML = `
+      <div class="mf-tt-dialog mf-dc-dialog" role="dialog" aria-modal="true">
+        <div class="mf-tt-head">
+          <div class="mf-tt-title">Dynamic Crosshair</div>
+          <button type="button" class="mf-close" data-dc-close>×</button>
+        </div>
+
+        <div class="mf-tt-row">
+          <span>Crosshair Size</span>
+          <span class="mf-tt-scale-value" data-dc-size-val>${sizeVal}px</span>
+        </div>
+        <input class="mf-co-range" data-dc-size type="range" min="8" max="64" step="1" value="${sizeVal}">
+
+        <div class="mf-dc-situations">
+          ${DC_SITUATIONS.map(situationRow).join('')}
+        </div>
+
+        <button type="button" class="mf-btn primary mf-tt-save" data-dc-save>Save</button>
+      </div>`;
+
+    panel.appendChild(backdrop);
+
+    const sizeInput = backdrop.querySelector('[data-dc-size]');
+    const sizeValEl = backdrop.querySelector('[data-dc-size-val]');
+
+    sizeInput?.addEventListener('input', () => {
+      const v = Number(sizeInput.value) || 28;
+      sizeValEl.textContent = v + 'px';
+      settings.dynamicCrosshairSize = v;
+      guiSettings.dynamicCrosshairSize = v;
+      sendDynamicCrosshairConfig(settings.dynamicCrosshair);
+      saveSettings();
+    });
+
+    backdrop.querySelectorAll('[data-dc-situation]').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const situation = sel.dataset.dcSituation;
+        const png = sel.value;
+        settings.dynamicCrosshairMap[situation] = png;
+        guiSettings.dynamicCrosshairMap = { ...settings.dynamicCrosshairMap };
+        const preview = sel.parentElement.querySelector('.mf-dc-preview img');
+        if (preview) preview.src = assetBase + png;
+        sendDynamicCrosshairConfig(settings.dynamicCrosshair);
+        saveSettings();
+      });
+    });
+
+    const close = () => {
+      backdrop.remove();
+      dynamicCrosshairSettingsCleanup = null;
+    };
+
+    backdrop.querySelector('[data-dc-close]')?.addEventListener('click', close);
+    backdrop.querySelector('[data-dc-save]')?.addEventListener('click', close);
+    backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) close(); });
+
+    dynamicCrosshairSettingsCleanup = close;
+  }
+
   function openCameraOverhaulSettings() {
     if (!panel) return;
     closeCameraOverhaulSettings();
@@ -3237,6 +3443,7 @@
             ${renderToggle('fpsCounter', t('fpsCounter'), t('fpsCounterDesc'))}
             ${renderToggle('cpsCounter', t('cpsCounter'), t('cpsCounterDesc'))}
             ${renderToggle('pingCounter', t('pingCounter'), t('pingCounterDesc'))}
+            ${renderToggle('dynamicCrosshair', 'Dynamic Crosshair', 'Changes crosshair based on situation')}
           </div>
         </div>
       </div>
@@ -4377,6 +4584,13 @@
       openCameraOverhaulSettings();
     });
 
+    const dynamicCrosshairToggle = panel.querySelector('.mf-toggle[data-key="dynamicCrosshair"]');
+    dynamicCrosshairToggle?.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openDynamicCrosshairSettings();
+    });
+
     const freelookToggle =
       panel.querySelector(
         '.mf-toggle[data-key="freelook"]'
@@ -4746,6 +4960,7 @@
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
+    setModuleEnabled('dynamicCrosshair', settings.dynamicCrosshair);
     document.dispatchEvent(
       new CustomEvent(
         'minifeather:freelook-config',
@@ -5225,6 +5440,7 @@
     initItemPhysicsModule();
     initZoomModule();
     initCameraOverhaulModule();
+    initDynamicCrosshairModule();
     initGUI();
     initChatFeatures();
     injectFeatherButton();
@@ -5271,6 +5487,7 @@
     closeTitanTinySettings();
     closeZoomSettings();
     closeCameraOverhaulSettings();
+    closeDynamicCrosshairSettings();
     unhookClipboard();
     destroyModules();
     showAds();
@@ -5302,6 +5519,7 @@
       settings.cameraOverhaulValues = clampCameraValues(settings.cameraOverhaulValues);
       settings.cameraOverhaulPreset = detectCameraPreset(settings.cameraOverhaulValues);
       settings.cameraOverhaulBind = String(settings.cameraOverhaulBind || '');
+      settings.dynamicCrosshairMap = { ...DEFAULT_SETTINGS.dynamicCrosshairMap, ...(settings.dynamicCrosshairMap || {}) };
       guiSettings = {
         ...settings,
         patPatValues: clonePatPatValues(settings.patPatValues),
