@@ -3,17 +3,27 @@
 
 const EVENT_CONFIG = 'minifeather:patpat-config';
 
+const DEFAULT_OPTIONS = Object.freeze({
+    squishStrength: 73,
+    duration: 0.36,
+    handMovement: 100,
+    pushStrength: 35,
+    soundVolume: 36,
+    randomSounds: true,
+    nameTagFollow: true
+});
+
 const state = {
     enabled: false,
     textureUrl: '',
     soundUrls: [],
+    options: { ...DEFAULT_OPTIONS },
     game: null,
     entityMap: null,
     camera: null,
     lastGameScan: 0,
     lastEntityScan: 0,
     lastCameraScan: 0,
-    cooldownUntil: 0,
     activeHands: new Set(),
     squishes: new Map()
 };
@@ -342,10 +352,13 @@ function swing(game) {
 function playSound() {
     if (!state.soundUrls.length) return;
     try {
-        const src = state.soundUrls[Math.floor(Math.random() * state.soundUrls.length)];
+        const random = state.options.randomSounds === true;
+        const src = random
+            ? state.soundUrls[Math.floor(Math.random() * state.soundUrls.length)]
+            : state.soundUrls[0];
         const audio = new Audio(src);
-        audio.volume = 0.36;
-        audio.playbackRate = 0.94 + Math.random() * 0.12;
+        audio.volume = Math.max(0, Math.min(1, Number(state.options.soundVolume) / 100));
+        audio.playbackRate = random ? 0.94 + Math.random() * 0.12 : 1;
         audio.play().catch(() => {});
     } catch {}
 }
@@ -423,23 +436,82 @@ function applySquishScale(record) {
     } catch {}
 }
 
+function capturePushBase(record) {
+    const position = record?.mesh?.position;
+    if (!position) return;
+    const x = Number(position.x);
+    const y = Number(position.y);
+    const z = Number(position.z);
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
+    record.basePosition.x = x;
+    record.basePosition.y = y;
+    record.basePosition.z = z;
+}
+
+function restorePushPosition(record) {
+    const position = record?.mesh?.position;
+    const base = record?.basePosition;
+    if (!position || !base) return;
+    try {
+        if (typeof position.set === 'function') position.set(base.x, base.y, base.z);
+        else {
+            position.x = base.x;
+            position.y = base.y;
+            position.z = base.z;
+        }
+    } catch {}
+}
+
+function applyPushPosition(record) {
+    const position = record?.mesh?.position;
+    const base = record?.basePosition;
+    const direction = record?.pushDirection;
+    if (!position || !base || !direction) return;
+    const amount = Number.isFinite(record.pushAmount) ? record.pushAmount : 0;
+    try {
+        if (typeof position.set === 'function') {
+            position.set(
+                base.x + direction.x * amount,
+                base.y,
+                base.z + direction.z * amount
+            );
+        } else {
+            position.x = base.x + direction.x * amount;
+            position.y = base.y;
+            position.z = base.z + direction.z * amount;
+        }
+    } catch {}
+}
+
 function installSquishHooks(record) {
     const renderables = collectRenderables(record.mesh);
     for (const object of renderables) {
-        const previous = object.onBeforeRender;
-        const hook = function (...args) {
+        const previousBefore = object.onBeforeRender;
+        const previousAfter = object.onAfterRender;
+        const beforeHook = function (...args) {
             restoreSquishScale(record);
-            if (typeof previous === 'function') {
+            if (typeof previousBefore === 'function') {
                 try {
-                    previous.apply(this, args);
+                    previousBefore.apply(this, args);
                 } catch {}
             }
             captureSquishBase(record);
+            capturePushBase(record);
             applySquishScale(record);
+            applyPushPosition(record);
+        };
+        const afterHook = function (...args) {
+            if (typeof previousAfter === 'function') {
+                try {
+                    previousAfter.apply(this, args);
+                } catch {}
+            }
+            restorePushPosition(record);
         };
         try {
-            object.onBeforeRender = hook;
-            record.hooks.push({ object, previous, hook });
+            object.onBeforeRender = beforeHook;
+            object.onAfterRender = afterHook;
+            record.hooks.push({ object, previousBefore, previousAfter, beforeHook, afterHook });
         } catch {}
     }
     const mesh = record.mesh;
@@ -452,7 +524,7 @@ function installSquishHooks(record) {
             } catch {
                 return previousNameTagHeight.apply(this, args);
             }
-            if (!Number.isFinite(height)) return height;
+            if (!Number.isFinite(height) || state.options.nameTagFollow !== true) return height;
             const factor = Number.isFinite(record.factor) ? record.factor : 1;
             const gap = 0.7;
             return gap + (height - gap) * factor;
@@ -467,12 +539,16 @@ function installSquishHooks(record) {
 function uninstallSquishHooks(record) {
     for (const entry of record?.hooks || []) {
         try {
-            if (entry.object.onBeforeRender === entry.hook) {
-                entry.object.onBeforeRender = entry.previous;
+            if (entry.object.onBeforeRender === entry.beforeHook) {
+                entry.object.onBeforeRender = entry.previousBefore;
+            }
+            if (entry.object.onAfterRender === entry.afterHook) {
+                entry.object.onAfterRender = entry.previousAfter;
             }
         } catch {}
     }
     record.hooks.length = 0;
+    restorePushPosition(record);
     const mesh = record?.mesh;
     const nameTagHook = record?.nameTagHook;
     if (mesh && nameTagHook) {
@@ -485,10 +561,15 @@ function uninstallSquishHooks(record) {
     }
 }
 
-function squishFactor(progress) {
+function squishCurve(progress) {
     const t = Math.max(0, Math.min(1, progress));
     const eased = 1 - Math.pow(1 - t, 2);
-    return 1 - 0.425 * Math.sin(Math.PI * eased);
+    return Math.sin(Math.PI * eased);
+}
+
+function squishFactor(progress) {
+    const strength = Math.max(0, Math.min(100, Number(state.options.squishStrength))) / 100;
+    return 1 - 0.58 * strength * squishCurve(progress);
 }
 
 function squish(entity) {
@@ -503,13 +584,33 @@ function squish(entity) {
     const y = Number(mesh.scale.y);
     const z = Number(mesh.scale.z);
     if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
+    const entityPos = getPos(entity);
+    const playerPos = getPos(getGame(false)?.player);
+    let directionX = 0;
+    let directionZ = 0;
+    if (entityPos && playerPos) {
+        const dx = entityPos.x - playerPos.x;
+        const dz = entityPos.z - playerPos.z;
+        const length = Math.hypot(dx, dz);
+        if (length > 0.0001) {
+            directionX = dx / length;
+            directionZ = dz / length;
+        }
+    }
     const record = {
         entity,
         mesh,
         start: performance.now(),
-        duration: 360,
+        duration: Math.max(200, Math.min(1200, Number(state.options.duration) * 1000)),
         factor: 1,
+        pushAmount: 0,
+        pushDirection: { x: directionX, z: directionZ },
         base: { x, y, z },
+        basePosition: {
+            x: Number(mesh.position?.x) || 0,
+            y: Number(mesh.position?.y) || 0,
+            z: Number(mesh.position?.z) || 0
+        },
         hooks: [],
         nameTagHook: null
     };
@@ -520,6 +621,7 @@ function squish(entity) {
         const elapsed = performance.now() - record.start;
         const t = Math.min(1, elapsed / record.duration);
         record.factor = squishFactor(t);
+        record.pushAmount = 0.55 * Math.max(0, Math.min(100, Number(state.options.pushStrength))) / 100 * squishCurve(t);
         restoreSquishScale(record);
         captureSquishBase(record);
         applySquishScale(record);
@@ -528,7 +630,9 @@ function squish(entity) {
             return;
         }
         record.factor = 1;
+        record.pushAmount = 0;
         restoreSquishScale(record);
+        restorePushPosition(record);
         uninstallSquishHooks(record);
         state.squishes.delete(entity);
     };
@@ -551,7 +655,8 @@ function createHand(entity, game) {
     element.style.transformOrigin = '50% 80%';
     element.style.willChange = 'left,top,transform,opacity,background-position';
     document.body.appendChild(element);
-    const record = { element, entity, game, start: performance.now(), duration: 330 };
+    const duration = Math.max(184, Math.min(1104, Number(state.options.duration) * 1000 * (330 / 360)));
+    const record = { element, entity, game, start: performance.now(), duration };
     state.activeHands.add(record);
     const frame = () => {
         if (!state.activeHands.has(record) || !element.isConnected) return;
@@ -577,12 +682,13 @@ function createHand(entity, game) {
                 } else {
                     const frameIndex = Math.min(4, Math.floor(t * 5));
                     const arc = Math.sin(Math.PI * t);
+                    const hand = Math.max(0, Math.min(100, Number(state.options.handMovement))) / 100;
                     element.style.display = 'block';
                     element.style.left = `${point.x}px`;
-                    element.style.top = `${point.y + arc * 16}px`;
+                    element.style.top = `${point.y + arc * 16 * hand}px`;
                     element.style.backgroundPosition = `${frameIndex * 25}% 0%`;
                     element.style.opacity = String(t > 0.82 ? Math.max(0, (1 - t) / 0.18) : 1);
-                    element.style.transform = `translate(-50%,-78%) scale(${0.62 + arc * 0.12}) rotate(${8 - t * 15}deg)`;
+                    element.style.transform = `translate(-50%,-78%) scale(${0.62 + arc * 0.12 * hand}) rotate(${8 - t * 15}deg)`;
                 }
             }
         }
@@ -597,12 +703,11 @@ function createHand(entity, game) {
 }
 
 function pat() {
-    if (!state.enabled || performance.now() < state.cooldownUntil) return false;
+    if (!state.enabled) return false;
     const game = getGame(true);
     if (!game?.player) return false;
     const target = findTarget(game);
     if (!target) return false;
-    state.cooldownUntil = performance.now() + 180;
     swing(game);
     squish(target);
     createHand(target, game);
@@ -623,7 +728,6 @@ function clearVisuals() {
         uninstallSquishHooks(record);
         state.squishes.delete(entity);
     }
-    state.cooldownUntil = 0;
 }
 
 function setEnabled(value) {
@@ -643,6 +747,21 @@ function applyConfig(detail) {
     if (!config || typeof config !== 'object') return;
     if (typeof config.textureUrl === 'string') state.textureUrl = config.textureUrl;
     if (Array.isArray(config.soundUrls)) state.soundUrls = config.soundUrls.filter(value => typeof value === 'string' && value.length);
+    if (config.options && typeof config.options === 'object') {
+        const next = config.options;
+        const squishStrength = Number(next.squishStrength);
+        const duration = Number(next.duration);
+        const handMovement = Number(next.handMovement);
+        const pushStrength = Number(next.pushStrength);
+        const soundVolume = Number(next.soundVolume);
+        if (Number.isFinite(squishStrength)) state.options.squishStrength = Math.max(0, Math.min(100, squishStrength));
+        if (Number.isFinite(duration)) state.options.duration = Math.max(0.2, Math.min(1.2, duration));
+        if (Number.isFinite(handMovement)) state.options.handMovement = Math.max(0, Math.min(100, handMovement));
+        if (Number.isFinite(pushStrength)) state.options.pushStrength = Math.max(0, Math.min(100, pushStrength));
+        if (Number.isFinite(soundVolume)) state.options.soundVolume = Math.max(0, Math.min(100, soundVolume));
+        if (typeof next.randomSounds === 'boolean') state.options.randomSounds = next.randomSounds;
+        if (typeof next.nameTagFollow === 'boolean') state.options.nameTagFollow = next.nameTagFollow;
+    }
     if ('enabled' in config) setEnabled(config.enabled);
 }
 
@@ -676,6 +795,9 @@ globalThis.MiniFeatherPatPat = {
     pat,
     get enabled() {
         return state.enabled;
+    },
+    get options() {
+        return { ...state.options };
     }
 };
 })();
