@@ -255,6 +255,7 @@
     distanceNameTags: false,
     patPat: false,
     itemPhysics: false,
+    noWeather: false,
     patPatPreset: 'normal',
     patPatValues: clonePatPatValues(),
     zoom: false,
@@ -2184,6 +2185,7 @@
       { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc') },
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc') },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc') },
+      { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc') },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
@@ -2360,6 +2362,29 @@
       },
       destroy() {
         sendItemPhysicsConfig(false);
+      }
+    }));
+  }
+
+  function sendNoWeatherConfig(enabled = settings.noWeather) {
+    document.dispatchEvent(new CustomEvent('minifeather:no-weather-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initNoWeatherModule() {
+    registerModule('noWeather', () => createLifecycle({
+      enable() {
+        sendNoWeatherConfig(true);
+      },
+      disable() {
+        sendNoWeatherConfig(false);
+      },
+      refresh() {
+        sendNoWeatherConfig(MODULES.get('noWeather')?.enabled === true);
+      },
+      destroy() {
+        sendNoWeatherConfig(false);
       }
     }));
   }
@@ -3527,6 +3552,11 @@
               'itemPhysics',
               t('itemPhysics'),
               t('itemPhysicsDesc')
+            )}
+            ${renderToggle(
+              'noWeather',
+              t('noWeather'),
+              t('noWeatherDesc')
             )}
             ${renderToggle(
               'zoom',
@@ -5350,6 +5380,7 @@
     setModuleEnabled('distanceNameTags', settings.distanceNameTags);
     setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('itemPhysics', settings.itemPhysics);
+    setModuleEnabled('noWeather', settings.noWeather);
     setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
     setModuleEnabled('dynamicCrosshair', settings.dynamicCrosshair);
@@ -5830,6 +5861,7 @@
     initDistanceNameTagsModule();
     initPatPatModule();
     initItemPhysicsModule();
+    initNoWeatherModule();
     initZoomModule();
     initCameraOverhaulModule();
     initDynamicCrosshairModule();
