@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MiniFeather Client",
-  "version": "4.0.0",
+  "version": "4.2.0",
   "description": "MiniFeather for Miniblox",
   "permissions": [
     "storage",
@@ -28,6 +28,8 @@
         "src/DistanceNameTags.js",
         "src/PatPat.js",
         "src/ItemPhysics.js",
+        "src/NoWeather.js",
+        "src/AntiAFK.js",
         "src/Zoom.js",
         "src/Camera Overhaul.js",
         "src/DynamicCrosshair.js",
