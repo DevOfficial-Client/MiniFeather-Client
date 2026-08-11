@@ -30,8 +30,12 @@
         "src/ItemPhysics.js",
         "src/Zoom.js",
         "src/Camera Overhaul.js",
+<<<<<<< Updated upstream
         "src/DynamicCrosshair.js",
         "src/Baritone.js",
+=======
+        "src/Dynamic Crosshair.js",
+>>>>>>> Stashed changes
         "src/features.js"
       ],
       "run_at": "document_start",
@@ -61,10 +65,13 @@
         "assets/background.png",
         "assets/Faithful.ttf",
         "assets/memes/gif/*",
+<<<<<<< Updated upstream
         "assets/patpat.png",
         "assets/pat.ogg",
         "assets/pat1.ogg",
         "assets/pat2.ogg",
+=======
+>>>>>>> Stashed changes
         "assets/crosshair/*"
       ],
       "matches": [
