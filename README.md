@@ -4,7 +4,7 @@
 
 ### A lightweight, customizable browser client designed to enhance your experience on Miniblox.io.
 
-![Version](https://img.shields.io/badge/version-v4.0.0-2563eb?style=flat-square)
+![Version](https://img.shields.io/badge/version-v4.2.0-2563eb?style=flat-square)
 ![Status](https://img.shields.io/badge/status-active-16a34a?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Miniblox.io-7c3aed?style=flat-square)
 
@@ -20,7 +20,7 @@ The client is designed to remain lightweight, configurable, and easy to use whil
 
 ---
 
-## 🆕 What's New in v4.0.0
+## 🆕 What's New in v4.2.0
 
 ### 📦 Item Physics
 
@@ -108,6 +108,84 @@ Features include:
 Item Physics is designed as a visual enhancement and does **not** replace or modify the game's native item collision behavior.
 
 The module can be enabled or disabled from the **Rendering** section.
+
+---
+
+## 🌦️ No Weather
+
+No Weather removes distracting weather effects from the local Miniblox experience while the module is active.
+
+The module works directly with the game's local weather systems and suppresses the weather state used by the client.
+
+### What It Does
+
+- Hides rain
+- Hides snow
+- Removes visible lightning bolts
+- Sets local rain strength to `0`
+- Sets local thunder strength to `0`
+- Makes the local client report that it is not raining
+- Makes the local client report that it is not thundering
+
+When No Weather is disabled, MiniFeather restores the original weather methods and visibility state.
+
+No Weather only affects your local client. It does not change the world's actual server-side weather for other players.
+
+The module can be enabled or disabled from the **World Utilities** section.
+
+---
+
+## 💤 Anti-AFK
+
+Anti-AFK helps keep the player active after a period without real input.
+
+After the configured inactivity delay is reached, the module begins generating short native movement actions at intervals.
+
+The actions are selected automatically and can include:
+
+- Moving forward
+- Moving backward
+- Moving left
+- Moving right
+- Jumping
+
+Anti-AFK does not remain active once you return.
+
+As soon as MiniFeather detects real activity, the automatic movement stops and normal control is restored.
+
+### Activity Detection
+
+Anti-AFK watches for:
+
+- Keyboard input
+- Mouse clicks
+- Pointer input
+- Mouse movement
+- Mouse wheel activity
+- Touch input
+- Actual player movement
+
+### Configuration
+
+Right-click the **Anti-AFK** module to open its settings.
+
+You can configure the AFK detection delay from:
+
+```text
+5 seconds — 2 minutes 30 seconds
+```
+
+The value changes in `5-second` steps.
+
+The default inactivity delay is:
+
+```text
+2 minutes
+```
+
+The configured delay is saved automatically.
+
+The module can be enabled or disabled from the **World Utilities** section.
 
 ---
 
@@ -352,6 +430,9 @@ Saved configuration can include:
 - Enabled modules
 - PatPat module state
 - Item Physics module state
+- No Weather module state
+- Anti-AFK module state
+- Anti-AFK inactivity delay
 - HUD preferences
 - Module keybinds
 - Titan & Tiny scale
@@ -444,6 +525,8 @@ src/HealthNameTags.js
 src/DistanceNameTags.js
 src/PatPat.js
 src/ItemPhysics.js
+src/NoWeather.js
+src/AntiAFK.js
 src/TitanTiny.js
 src/Zoom.js
 src/Camera Overhaul.js
