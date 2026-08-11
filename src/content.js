@@ -247,6 +247,7 @@
     fpsCounter: true,
     cpsCounter: true,
     pingCounter: true,
+    armorHud: false,
     titanTiny: false,
     titanTinyScale: 1.00,
     titanTinyBind: '',
@@ -3437,13 +3438,44 @@
     return `
       <div class="mf-page-stack">
         <div class="mf-card">
-          <div class="mf-card-title">${t('sectionGeneral')}</div>
+          <div class="mf-card-title">${t('sectionGeneral')}</div>   
           <div class="mf-toggle-grid">
-            ${renderToggle('keystrokes', t('keystrokes'), t('keystrokesDesc'))}
-            ${renderToggle('fpsCounter', t('fpsCounter'), t('fpsCounterDesc'))}
-            ${renderToggle('cpsCounter', t('cpsCounter'), t('cpsCounterDesc'))}
-            ${renderToggle('pingCounter', t('pingCounter'), t('pingCounterDesc'))}
+            ${renderToggle(
+              'keystrokes',
+              t('keystrokes'),
+              t('keystrokesDesc')
+            )}    
+            ${renderToggle(
+              'fpsCounter',
+              t('fpsCounter'),
+              t('fpsCounterDesc')
+            )}    
+            ${renderToggle(
+              'cpsCounter',
+              t('cpsCounter'),
+              t('cpsCounterDesc')
+            )}    
+            ${renderToggle(
+              'pingCounter',
+              t('pingCounter'),
+              t('pingCounterDesc')
+            )}    
+            ${renderToggle(
+              'armorHud',
+              'Armor HUD',
+              'Show your equipped helmet, chestplate, leggings and boots on screen.'
+            )}
             ${renderToggle('dynamicCrosshair', 'Dynamic Crosshair', 'Changes crosshair based on situation')}
+          </div>
+          <div style="margin-top:12px;">
+              <button
+                  type="button"
+                  id="mf-armorhud-configure"
+                  class="mf-btn secondary"
+                  style="width:100%;"
+              >
+                  Configure Armor HUD
+              </button>
           </div>
         </div>
       </div>
@@ -4551,6 +4583,350 @@
     );
   }
 
+  const ARMOR_HUD_SLOT_NAMES = [
+    'helmet',
+    'chestplate',
+    'leggings',
+    'boots'
+  ];
+
+  function openArmorHudSettings() {
+    if (!panel) return; 
+    panel.querySelector('.mf-armorhud-editor-backdrop')?.remove();  
+    const backdrop = document.createElement('div'); 
+    backdrop.className =
+        'mf-armorhud-editor-backdrop';  
+    Object.assign(backdrop.style, {
+        position: 'fixed',
+        inset: '0',
+        zIndex: '1000000',  
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center', 
+        background: 'rgba(0, 0, 0, 0.78)',  
+        padding: '20px',
+        boxSizing: 'border-box'
+    }); 
+    const editor = document.createElement('div'); 
+    editor.className =
+        'mf-armorhud-editor'; 
+    Object.assign(editor.style, {
+        width: 'min(1400px, 96vw)',
+        height: 'min(820px, 92vh)', 
+        display: 'flex',
+        flexDirection: 'column',  
+        background: '#111',
+        border: '1px solid rgba(255,255,255,0.12)',
+        borderRadius: '12px', 
+        overflow: 'hidden', 
+        boxShadow:
+            '0 20px 70px rgba(0,0,0,0.6)'
+    });  
+    const header =
+        document.createElement('div');  
+    Object.assign(header.style, {
+        height: '54px',
+        minHeight: '54px',  
+        display: 'flex',
+        alignItems: 'center', 
+        padding: '0 16px',  
+        boxSizing: 'border-box',  
+        background: '#181818',  
+        borderBottom:
+            '1px solid rgba(255,255,255,0.08)'
+    }); 
+    const title =
+        document.createElement('div');  
+    title.textContent =
+        'Configure Armor HUD';  
+    Object.assign(title.style, {
+        fontSize: '17px',
+        fontWeight: '700',
+        color: '#fff'
+    }); 
+    const subtitle =
+        document.createElement('div');  
+    subtitle.textContent =
+        'Drag the armor slots to position them on your screen.';  
+    Object.assign(subtitle.style, {
+        marginLeft: '14px', 
+        fontSize: '12px',
+        color: 'rgba(255,255,255,0.55)'
+    }); 
+    header.appendChild(title);
+    header.appendChild(subtitle); 
+    const preview =
+        document.createElement('div');  
+    Object.assign(preview.style, {
+        position: 'relative', 
+        flex: '1',  
+        overflow: 'hidden', 
+        background: '#000'
+    }); 
+    const screenshot =
+        document.createElement('img');  
+    screenshot.src =
+        chrome.runtime.getURL(
+            'assets/armor-hud-editor.png'
+        );  
+    screenshot.alt =
+        'Armor HUD editor preview'; 
+    Object.assign(screenshot.style, {
+        position: 'absolute', 
+        inset: '0', 
+        width: '100%',
+        height: '100%', 
+        objectFit: 'contain', 
+        userSelect: 'none', 
+        pointerEvents: 'none'
+    }); 
+    preview.appendChild(screenshot);  
+    const names = [
+        'Helmet',
+        'Chestplate',
+        'Leggings',
+        'Boots'
+    ];  
+    const markerColors = [
+        '#ffffff',
+        '#ffffff',
+        '#ffffff',
+        '#ffffff'
+    ];  
+    const markers = []; 
+    const defaultPositions = [
+        { x: 0.88, y: 0.28 },
+        { x: 0.88, y: 0.39 },
+        { x: 0.88, y: 0.50 },
+        { x: 0.88, y: 0.61 }
+    ];  
+    for (let i = 0; i < 4; i++) { 
+        const marker =
+            document.createElement('div');  
+        marker.className =
+            'mf-armorhud-editor-marker';  
+        marker.dataset.slot =
+            ARMOR_HUD_SLOT_NAMES[i];  
+        Object.assign(marker.style, {
+            position: 'absolute', 
+            left:
+                `${defaultPositions[i].x * 100}%`,  
+            top:
+                `${defaultPositions[i].y * 100}%`,  
+            transform:
+                'translate(-50%, -50%)',  
+            width: '58px',
+            height: '58px', 
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center', 
+            boxSizing: 'border-box',  
+            border:
+                `2px solid ${markerColors[i]}`, 
+            borderRadius: '8px',  
+            background:
+                'rgba(0,0,0,0.35)', 
+            color: '#fff',  
+            fontSize: '10px',
+            fontWeight: '700',  
+            textAlign: 'center',  
+            cursor: 'grab', 
+            userSelect: 'none', 
+            zIndex: '2',  
+            textShadow:
+                '0 1px 3px #000'
+        }); 
+        marker.textContent =
+            names[i]; 
+        preview.appendChild(marker);  
+        markers.push({
+            element: marker,  
+            x: defaultPositions[i].x,
+            y: defaultPositions[i].y
+        });
+    } 
+    for (const markerData of markers) { 
+        const marker =
+            markerData.element; 
+        let dragging = false; 
+        marker.addEventListener(
+            'pointerdown',
+            event => {  
+                event.preventDefault();
+                event.stopPropagation();  
+                dragging = true;  
+                marker.setPointerCapture(
+                    event.pointerId
+                );  
+                marker.style.cursor =
+                    'grabbing'; 
+                marker.style.transform =
+                    'translate(-50%, -50%) scale(1.05)';
+                marker.style.borderColor =
+                    'rgba(255,255,255,0.9)';
+                marker.style.background =
+                    'rgba(30,30,30,0.88)';
+                marker.style.boxShadow =
+                    '0 4px 14px rgba(0,0,0,0.65)';
+            }
+        );  
+        marker.addEventListener(
+            'pointermove',
+            event => {  
+                if (!dragging) return;  
+                const rect =
+                    preview.getBoundingClientRect();  
+                let x = (event.clientX - rect.left) / rect.width; 
+                let y = (event.clientY - rect.top) / rect.height;
+                // Snap to a grid.
+                const SNAP_X = 0.025;
+                const SNAP_Y = 0.025;
+                x = Math.round(x / SNAP_X) * SNAP_X;
+                y = Math.round(y / SNAP_Y) * SNAP_Y;  
+                x = Math.max(0.02, Math.min(0.98, x));  
+                y = Math.max(0.02, Math.min(0.98, y));  
+                markerData.x = x;
+                markerData.y = y; 
+                marker.style.left = `${x * 100}%`;  
+                marker.style.top = `${y * 100}%`;
+            }
+        );  
+        const stopDragging =
+            event => {  
+                if (!dragging) return;  
+                dragging = false; 
+                marker.style.cursor =
+                    'grab'; 
+                marker.style.transform =
+                    'translate(-50%, -50%)';
+                marker.style.borderColor =
+                    'rgba(255,255,255,0.45)';
+                marker.style.background =
+                    'rgba(20,20,20,0.72)';                          
+                marker.style.boxShadow =
+                    '0 2px 8px rgba(0,0,0,0.45)';
+            };  
+        marker.addEventListener(
+            'pointerup',
+            stopDragging
+        );  
+        marker.addEventListener(
+            'pointercancel',
+            stopDragging
+        );
+    } 
+    const footer =
+        document.createElement('div');  
+    Object.assign(footer.style, {
+        height: '58px',
+        minHeight: '58px',  
+        display: 'flex',
+        alignItems: 'center', 
+        justifyContent: 'flex-end', 
+        gap: '8px', 
+        padding: '0 14px',  
+        boxSizing: 'border-box',  
+        background: '#181818',  
+        borderTop:
+            '1px solid rgba(255,255,255,0.08)'
+    }); 
+    const reset =
+        document.createElement('button'); 
+    reset.type =
+        'button'; 
+    reset.textContent =
+        'Reset';  
+    reset.className =
+        'mf-btn secondary'; 
+    reset.addEventListener(
+        'click',
+        () => { 
+            markers.forEach(
+                (markerData, index) => {  
+                    const position =
+                        defaultPositions[index];  
+                    markerData.x =
+                        position.x; 
+                    markerData.y =
+                        position.y; 
+                    markerData.element.style.left =
+                        `${position.x * 100}%`; 
+                    markerData.element.style.top =
+                        `${position.y * 100}%`;
+                }
+            );
+        }
+    );  
+    const cancel =
+        document.createElement('button'); 
+    cancel.type =
+        'button'; 
+    cancel.textContent =
+        'Cancel'; 
+    cancel.className =
+        'mf-btn secondary'; 
+    cancel.addEventListener(
+        'click',
+        () => {
+            backdrop.remove();
+        }
+    );  
+    const save =
+        document.createElement('button'); 
+    save.type =
+        'button'; 
+    save.textContent =
+        'Save Layout';  
+    save.className =
+        'mf-btn primary'; 
+    save.addEventListener(
+        'click',
+        () => { 
+            const positions = {}; 
+            for (const markerData of markers) { 
+                positions[
+                    markerData.element.dataset.slot
+                ] = {
+                    x: markerData.x,
+                    y: markerData.y
+                };
+            } 
+            console.log(
+                '[MiniFeather Armor HUD] Saving layout:',
+                positions
+            );
+            
+            document.dispatchEvent(
+                new CustomEvent(
+                    'minifeather:armorhud-layout',
+                    {
+                        detail: JSON.stringify(positions)
+                    }
+                )
+            );
+            
+            backdrop.remove();
+            
+        }
+    );  
+    footer.appendChild(reset);
+    footer.appendChild(cancel);
+    footer.appendChild(save); 
+    editor.appendChild(header);
+    editor.appendChild(preview);
+    editor.appendChild(footer); 
+    backdrop.appendChild(editor); 
+    panel.appendChild(backdrop);  
+    backdrop.addEventListener(
+        'mousedown',
+        event => {  
+            if (event.target === backdrop) {
+                backdrop.remove();
+            }
+        }
+    );
+  }
+
   function bindPageControls() {
     if (!panel) return;
 
@@ -4617,6 +4993,13 @@
         event.stopPropagation();
       
         openBlockHighlightSettings();
+      }
+    );
+
+    const armorHudConfigure =
+      panel.querySelector('#mf-armorhud-configure');
+      armorHudConfigure?.addEventListener('click', () => {
+          openArmorHudSettings();
       }
     );
 
@@ -4953,6 +5336,15 @@
     setModuleEnabled('fpsCounter', settings.fpsCounter);
     setModuleEnabled('cpsCounter', settings.cpsCounter);
     setModuleEnabled('pingCounter', settings.pingCounter);
+    window.__MINIFEATHER_ARMOR_HUD_ENABLED__ = !!settings.armorHud;
+      document.dispatchEvent(
+          new CustomEvent('minifeather:armorhud-config', {
+            detail: JSON.stringify({
+              enabled: !!settings.armorHud
+            
+        })
+      })
+    );
     setModuleEnabled('titanTiny', settings.titanTiny);
     setModuleEnabled('healthNameTags', settings.healthNameTags);
     setModuleEnabled('distanceNameTags', settings.distanceNameTags);
