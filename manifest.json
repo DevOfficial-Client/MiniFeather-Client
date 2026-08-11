@@ -32,7 +32,8 @@
         "src/Camera Overhaul.js",
         "src/DynamicCrosshair.js",
         "src/Baritone.js",
-        "src/features.js"
+        "src/features.js",
+        "src/armorhud.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"
