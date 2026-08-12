@@ -83,7 +83,7 @@
     { id: 'about', icon: '🪶', labelKey: 'tabAbout' }
   ];
 
-  const MODULE_VERSION = '3.5.0';
+  const MODULE_VERSION = '4.2.0';
 
   const CAMERA_OVERHAUL_PRESETS = Object.freeze({
     soft: Object.freeze({
@@ -239,6 +239,21 @@
     return 'custom';
   }
 
+  function clampAntiAfkDelay(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return 120;
+    return Math.max(5, Math.min(150, Math.round(parsed / 5) * 5));
+  }
+
+  function formatAntiAfkDelay(value) {
+    const seconds = clampAntiAfkDelay(value);
+    const minutes = Math.floor(seconds / 60);
+    const remaining = seconds % 60;
+    if (!minutes) return `${seconds}s`;
+    if (!remaining) return `${minutes}m`;
+    return `${minutes}m ${remaining}s`;
+  }
+
   const DEFAULT_SETTINGS = {
     rebrand: true,
     supportAds: false,
@@ -256,6 +271,8 @@
     patPat: false,
     itemPhysics: false,
     noWeather: false,
+    antiAfk: false,
+    antiAfkDelay: 120,
     patPatPreset: 'normal',
     patPatValues: clonePatPatValues(),
     zoom: false,
@@ -2188,6 +2205,7 @@
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc') },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
+      { page: 'world', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc') },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
       { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc') },
       { page: 'chat', key: 'chatMemes', title: t('chatMemes'), desc: t('chatMemesDesc') },
@@ -2387,6 +2405,123 @@
         sendNoWeatherConfig(false);
       }
     }));
+  }
+
+  function sendAntiAfkConfig(enabled = settings.antiAfk) {
+    settings.antiAfkDelay = clampAntiAfkDelay(settings.antiAfkDelay);
+    guiSettings.antiAfkDelay = settings.antiAfkDelay;
+
+    document.dispatchEvent(new CustomEvent('minifeather:anti-afk-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        delaySeconds: settings.antiAfkDelay
+      })
+    }));
+  }
+
+  function initAntiAfkModule() {
+    registerModule('antiAfk', () => createLifecycle({
+      enable() {
+        sendAntiAfkConfig(true);
+      },
+      disable() {
+        sendAntiAfkConfig(false);
+      },
+      refresh() {
+        sendAntiAfkConfig(MODULES.get('antiAfk')?.enabled === true);
+      },
+      destroy() {
+        sendAntiAfkConfig(false);
+      }
+    }));
+  }
+
+  function closeAntiAfkSettings() {
+    panel?.querySelector('.mf-antiafk-backdrop')?.remove();
+  }
+
+  function openAntiAfkSettings() {
+    if (!panel) return;
+    closeAntiAfkSettings();
+
+    settings.antiAfkDelay = clampAntiAfkDelay(settings.antiAfkDelay);
+    guiSettings.antiAfkDelay = settings.antiAfkDelay;
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop mf-antiafk-backdrop';
+
+    backdrop.innerHTML = `
+      <div class="mf-tt-dialog" role="dialog" aria-modal="true">
+        <div class="mf-tt-head">
+          <div class="mf-tt-title">${t('antiAfkSettings')}</div>
+          <button type="button" class="mf-close" data-aa-close>×</button>
+        </div>
+
+        <div class="mf-tt-row">
+          <span>${t('antiAfkDelay')}</span>
+          <span class="mf-tt-scale-value" data-aa-delay-value>${formatAntiAfkDelay(settings.antiAfkDelay)}</span>
+        </div>
+
+        <input
+          class="mf-tt-range"
+          data-aa-delay
+          type="range"
+          min="5"
+          max="150"
+          step="5"
+          value="${settings.antiAfkDelay}"
+        >
+
+        <div class="mf-tt-presets">
+          <button type="button" class="mf-btn secondary" data-aa-preset="5">5s</button>
+          <button type="button" class="mf-btn secondary" data-aa-preset="30">30s</button>
+          <button type="button" class="mf-btn secondary" data-aa-preset="60">1m</button>
+        </div>
+        <div class="mf-tt-presets">
+          <button type="button" class="mf-btn secondary" data-aa-preset="90">1m 30s</button>
+          <button type="button" class="mf-btn secondary" data-aa-preset="120">2m</button>
+          <button type="button" class="mf-btn secondary" data-aa-preset="150">2m 30s</button>
+        </div>
+
+        <div class="mf-tt-hint">${t('antiAfkDelayHint')}</div>
+        <div class="mf-tt-hint">${t('antiAfkRangeHint')}</div>
+        <button type="button" class="mf-btn primary mf-tt-save" data-aa-save>${t('antiAfkSave')}</button>
+      </div>
+    `;
+
+    panel.appendChild(backdrop);
+
+    const slider = backdrop.querySelector('[data-aa-delay]');
+    const valueLabel = backdrop.querySelector('[data-aa-delay-value]');
+
+    const applyDelay = value => {
+      const next = clampAntiAfkDelay(value);
+      settings.antiAfkDelay = next;
+      guiSettings.antiAfkDelay = next;
+      if (slider) slider.value = String(next);
+      if (valueLabel) valueLabel.textContent = formatAntiAfkDelay(next);
+      backdrop.querySelectorAll('[data-aa-preset]').forEach(button => {
+        button.classList.toggle('active', Number(button.dataset.aaPreset) === next);
+      });
+      saveSettings();
+      sendAntiAfkConfig(settings.antiAfk);
+    };
+
+    slider?.addEventListener('input', () => applyDelay(slider.value));
+    backdrop.querySelectorAll('[data-aa-preset]').forEach(button => {
+      button.addEventListener('click', () => applyDelay(button.dataset.aaPreset));
+    });
+
+    backdrop.querySelector('[data-aa-close]')?.addEventListener('click', closeAntiAfkSettings);
+    backdrop.querySelector('[data-aa-save]')?.addEventListener('click', () => {
+      applyDelay(slider?.value ?? settings.antiAfkDelay);
+      closeAntiAfkSettings();
+    });
+    backdrop.addEventListener('mousedown', event => {
+      if (event.target === backdrop) closeAntiAfkSettings();
+    });
+
+    applyDelay(settings.antiAfkDelay);
   }
 
   function closePatPatSettings() {
@@ -3732,7 +3867,11 @@
     return `
       <div class="mf-page-stack">
         <div class="mf-card">
-          <div class="mf-muted">${t('worldComingSoon')}</div>
+          <div class="mf-card-title">${t('sectionWorldUtilities')}</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('antiAfk', t('antiAfk'), t('antiAfkDesc'))}
+          </div>
+          <div class="mf-tt-hint">${t('antiAfkRightClickHint')}</div>
         </div>
       </div>
     `;
@@ -3906,6 +4045,7 @@
     if (!overlay || !panel) return;
     closeTitanTinySettings();
     closePatPatSettings();
+    closeAntiAfkSettings();
     closeZoomSettings();
     closeCameraOverhaulSettings();
     const closingPanel = panel;
@@ -4976,6 +5116,13 @@
       openPatPatSettings();
     });
 
+    const antiAfkToggle = panel.querySelector('.mf-toggle[data-key="antiAfk"]');
+    antiAfkToggle?.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openAntiAfkSettings();
+    });
+
     const zoomToggle = panel.querySelector('.mf-toggle[data-key="zoom"]');
     zoomToggle?.addEventListener('contextmenu', event => {
       event.preventDefault();
@@ -5381,6 +5528,7 @@
     setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
+    setModuleEnabled('antiAfk', settings.antiAfk);
     setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
     setModuleEnabled('dynamicCrosshair', settings.dynamicCrosshair);
@@ -5862,6 +6010,7 @@
     initPatPatModule();
     initItemPhysicsModule();
     initNoWeatherModule();
+    initAntiAfkModule();
     initZoomModule();
     initCameraOverhaulModule();
     initDynamicCrosshairModule();
@@ -5909,6 +6058,7 @@
     sidebarObserver = null;
 
     closeTitanTinySettings();
+    closeAntiAfkSettings();
     closeZoomSettings();
     closeCameraOverhaulSettings();
     closeDynamicCrosshairSettings();
@@ -5938,6 +6088,7 @@
     chrome.storage.local.get(['settings', 'customLogo'], data => {
       if (destroyed) return;
       settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+      settings.antiAfkDelay = clampAntiAfkDelay(settings.antiAfkDelay);
       settings.patPatValues = clampPatPatValues(settings.patPatValues);
       settings.patPatPreset = detectPatPatPreset(settings.patPatValues);
       settings.cameraOverhaulValues = clampCameraValues(settings.cameraOverhaulValues);
