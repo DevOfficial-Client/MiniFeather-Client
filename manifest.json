@@ -35,11 +35,8 @@
         "src/DynamicCrosshair.js",
         "src/Baritone.js",
         "src/Dynamic Crosshair.js",
-        "src/features.js"
-=======
         "src/features.js",
         "src/armorhud.js"
->>>>>>> 22a2205f0f200c3c58a197b766ebaaa300fb1dd5
       ],
       "run_at": "document_start",
       "world": "MAIN"
@@ -72,11 +69,8 @@
         "assets/pat.ogg",
         "assets/pat1.ogg",
         "assets/pat2.ogg",
-        "assets/crosshair/*"
-=======
         "assets/crosshair/*",
         "assets/armor-hud-editor.png"
->>>>>>> 22a2205f0f200c3c58a197b766ebaaa300fb1dd5
       ],
       "matches": [
         "https://miniblox.io/*"
