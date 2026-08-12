@@ -5346,6 +5346,20 @@
                     'rgba(20,20,20,0.72)';                          
                 marker.style.boxShadow =
                     '0 2px 8px rgba(0,0,0,0.45)';
+
+                const positions = {};
+                for (const md of markers) {
+                    positions[md.element.dataset.slot] = {
+                        x: md.x,
+                        y: md.y
+                    };
+                }
+                document.dispatchEvent(
+                    new CustomEvent(
+                        'minifeather:armorhud-layout',
+                        { detail: JSON.stringify(positions) }
+                    )
+                );
             };  
         marker.addEventListener(
             'pointerup',
@@ -5369,7 +5383,9 @@
         boxSizing: 'border-box',  
         background: '#181818',  
         borderTop:
-            '1px solid rgba(255,255,255,0.08)'
+            '1px solid rgba(255,255,255,0.08)',
+        position: 'relative',
+        zIndex: '10'
     }); 
     const reset =
         document.createElement('button'); 
@@ -5395,6 +5411,19 @@
                     markerData.element.style.top =
                         `${position.y * 100}%`;
                 }
+            );
+            const positions = {};
+            for (const md of markers) {
+                positions[md.element.dataset.slot] = {
+                    x: md.x,
+                    y: md.y
+                };
+            }
+            document.dispatchEvent(
+                new CustomEvent(
+                    'minifeather:armorhud-layout',
+                    { detail: JSON.stringify(positions) }
+                )
             );
         }
     );  
@@ -5432,10 +5461,6 @@
                     y: markerData.y
                 };
             } 
-            console.log(
-                '[MiniFeather Armor HUD] Saving layout:',
-                positions
-            );
             
             document.dispatchEvent(
                 new CustomEvent(

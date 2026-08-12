@@ -626,10 +626,6 @@
         }       
         return main[selected] || null;
     }
-    console.log(
-        '[MiniFeather Held Item]',
-        getHeldItem()
-    );
     function updateHeldItem() {
         if (!heldItemSlot) {
             return;
