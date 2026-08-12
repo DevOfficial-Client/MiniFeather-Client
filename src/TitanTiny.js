@@ -504,9 +504,12 @@
         let eyeHeight =
             state.cameraBaseEyeHeight;
 
+        // Refresh eye height every ~2s in case the game changes it
+        // (e.g. player respawns, eats, etc.)
         if (
             !Number.isFinite(eyeHeight) ||
-            eyeHeight <= 0
+            eyeHeight <= 0 ||
+            performance.now() - (state.lastCameraScan || 0) > 2000
         ) {
             eyeHeight =
                 getNativeEyeHeight(player);
@@ -566,17 +569,6 @@
             }
         } catch {}
 
-        try {
-            if (
-                hook.originalUpdateWorldMatrix &&
-                camera.updateWorldMatrix ===
-                    hook.updateWorldMatrix
-            ) {
-                camera.updateWorldMatrix =
-                    hook.originalUpdateWorldMatrix;
-            }
-        } catch {}
-
         state.cameraHook = null;
         state.cameraHookDepth = 0;
     }
@@ -589,8 +581,7 @@
     ) {
         if (
             !state.cameraHeightEnabled ||
-            !camera ||
-            !validPosition(camera.position)
+            !camera
         ) {
             return original.apply(
                 thisArg,
@@ -623,24 +614,30 @@
 
         state.cameraHookDepth++;
 
-        const originalY =
-            Number(camera.position.y);
-
         try {
-            camera.position.y =
-                originalY +
-                offset;
-
-            return original.apply(
+            // Let the game update the matrix normally
+            const result = original.apply(
                 thisArg,
                 args
             );
-        } finally {
-            try {
-                camera.position.y =
-                    originalY;
-            } catch {}
 
+            // Apply Y offset directly to the matrixWorld translation
+            // matrixWorld.elements[13] = Y translation component
+            // This avoids touching camera.position (which the game's
+            // logic reads for raycasting, audio, etc.)
+            const mx = camera.matrixWorld;
+            if (mx && mx.elements) {
+                mx.elements[13] += offset;
+            }
+
+            // Also update matrixWorldInverse if it exists (used by projection)
+            const mxi = camera.matrixWorldInverse;
+            if (mxi && mxi.elements) {
+                mxi.elements[13] -= offset;
+            }
+
+            return result;
+        } finally {
             state.cameraHookDepth--;
         }
     }
@@ -656,55 +653,34 @@
 
         uninstallCameraHook();
 
+        // Only hook updateMatrixWorld — it's the single entry point
+        // for matrix updates. Hooking updateWorldMatrix too caused
+        // double-offset application and jitter.
+        const originalUpdateMatrixWorld =
+            typeof camera.updateMatrixWorld ===
+                'function'
+                ? camera.updateMatrixWorld
+                : null;
+
+        if (!originalUpdateMatrixWorld) return;
+
         const hook = {
             camera,
-            originalUpdateMatrixWorld:
-                typeof camera.updateMatrixWorld ===
-                    'function'
-                    ? camera.updateMatrixWorld
-                    : null,
-            originalUpdateWorldMatrix:
-                typeof camera.updateWorldMatrix ===
-                    'function'
-                    ? camera.updateWorldMatrix
-                    : null,
-            updateMatrixWorld: null,
-            updateWorldMatrix: null
+            originalUpdateMatrixWorld,
+            updateMatrixWorld: function (...args) {
+                return withCameraHeight(
+                    camera,
+                    originalUpdateMatrixWorld,
+                    this,
+                    args
+                );
+            }
         };
 
-        if (hook.originalUpdateMatrixWorld) {
-            hook.updateMatrixWorld =
-                function (...args) {
-                    return withCameraHeight(
-                        camera,
-                        hook.originalUpdateMatrixWorld,
-                        this,
-                        args
-                    );
-                };
-
-            try {
-                camera.updateMatrixWorld =
-                    hook.updateMatrixWorld;
-            } catch {}
-        }
-
-        if (hook.originalUpdateWorldMatrix) {
-            hook.updateWorldMatrix =
-                function (...args) {
-                    return withCameraHeight(
-                        camera,
-                        hook.originalUpdateWorldMatrix,
-                        this,
-                        args
-                    );
-                };
-
-            try {
-                camera.updateWorldMatrix =
-                    hook.updateWorldMatrix;
-            } catch {}
-        }
+        try {
+            camera.updateMatrixWorld =
+                hook.updateMatrixWorld;
+        } catch {}
 
         state.cameraHook = hook;
     }

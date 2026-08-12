@@ -39,6 +39,8 @@
         "src/Dynamic Crosshair.js",
         "src/features.js",
         "src/armorhud.js",
+        "src/MinimapCache.js",
+        "src/WorldMap.js",
         "src/RhythmParkour.js"
       ],
       "run_at": "document_start",
