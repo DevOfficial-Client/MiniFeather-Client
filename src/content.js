@@ -78,12 +78,13 @@
     { id: 'render', icon: '✨', labelKey: 'navRender' },
     { id: 'cosmetics', icon: '👕', labelKey: 'tabSkins' },
     { id: 'chat', icon: '💬', labelKey: 'sectionChat' },
+    { id: 'waypoints', icon: '📍', labelKey: 'navWaypoints' },
     { id: 'world', icon: '🌍', labelKey: 'navWorld' },
     { id: 'settings', icon: '⚙', labelKey: 'navSettings' },
     { id: 'about', icon: '🪶', labelKey: 'tabAbout' }
   ];
 
-  const MODULE_VERSION = '4.2.0';
+  const MODULE_VERSION = '4.4.0';
 
   const CAMERA_OVERHAUL_PRESETS = Object.freeze({
     soft: Object.freeze({
@@ -263,6 +264,9 @@
     cpsCounter: true,
     pingCounter: true,
     armorHud: false,
+    coordinates: false,
+    waypoints: true,
+    moduleBinds: {},
     titanTiny: false,
     titanTinyScale: 1.00,
     titanTinyBind: '',
@@ -333,6 +337,7 @@
   let patPatSettingsCleanup = null;
   let zoomSettingsCleanup = null;
   let cameraOverhaulSettingsCleanup = null;
+  let waypointStatus = '';
   let destroyed = false;
 
   const MODULES = new Map();
@@ -389,7 +394,7 @@
 
   function isMiniFeatherNode(node) {
     const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
-    return !!element?.closest?.('#mf-gui, #mf-gui-overlay, #mf-sidebar-btn, #minifeather-fps, #minifeather-cps, #minifeather-ping, #mf-keystrokes');
+    return !!element?.closest?.('#mf-gui, #mf-gui-overlay, #mf-sidebar-btn, #minifeather-fps, #minifeather-cps, #minifeather-ping, #mf-keystrokes, #mf-coordinates-hud, #mf-waypoint-layer');
   }
 
   function safePosition(key, fallback) {
@@ -2196,7 +2201,9 @@
       { page: 'hud', key: 'fpsCounter', title: t('fpsCounter'), desc: t('fpsCounterDesc') },
       { page: 'hud', key: 'cpsCounter', title: t('cpsCounter'), desc: t('cpsCounterDesc') },
       { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc') },
+      { page: 'hud', key: 'coordinates', title: t('coordinates'), desc: t('coordinatesDesc') },
       { page: 'hud', key: 'dynamicCrosshair', title: 'Dynamic Crosshair', desc: 'Changes crosshair based on situation' },
+      { page: 'waypoints', key: 'waypoints', title: t('waypoints'), desc: t('waypointsDesc') },
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc') },
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc') },
@@ -2266,6 +2273,233 @@
         <input type="checkbox" class="mf-switch-hidden" ${guiSettings[key] ? 'checked' : ''}>
       </label>
     `;
+  }
+
+  const COMMAND_MODULE_ALIASES = Object.freeze({
+    afk: 'antiAfk', antiafk: 'antiAfk',
+    armor: 'armorHud', armorhud: 'armorHud',
+    camera: 'cameraOverhaul', cameraoverhaul: 'cameraOverhaul',
+    coords: 'coordinates', coordinates: 'coordinates',
+    crosshair: 'dynamicCrosshair', dynamiccrosshair: 'dynamicCrosshair',
+    cps: 'cpsCounter', cpscounter: 'cpsCounter',
+    distance: 'distanceNameTags', distancenametags: 'distanceNameTags',
+    fps: 'fpsCounter', fpscounter: 'fpsCounter',
+    freelook: 'freelook',
+    health: 'healthNameTags', healthnametags: 'healthNameTags',
+    highlight: 'blockHighlight', blockhighlight: 'blockHighlight',
+    item: 'itemPhysics', itemphysics: 'itemPhysics', physics: 'itemPhysics',
+    keys: 'keystrokes', keystrokes: 'keystrokes',
+    noweather: 'noWeather', weather: 'noWeather',
+    pat: 'patPat', patpat: 'patPat',
+    ping: 'pingCounter', pingcounter: 'pingCounter',
+    titan: 'titanTiny', tiny: 'titanTiny', titantiny: 'titanTiny',
+    waypoint: 'waypoints', waypoints: 'waypoints',
+    zoom: 'zoom'
+  });
+
+  const COMMAND_MODULE_LABELS = Object.freeze({
+    antiAfk: 'Anti-AFK', armorHud: 'Armor HUD', cameraOverhaul: 'Camera Overhaul',
+    coordinates: 'Coordinates', dynamicCrosshair: 'Dynamic Crosshair', cpsCounter: 'CPS Counter',
+    distanceNameTags: 'Player Distance', fpsCounter: 'FPS Counter', freelook: 'FreeLook',
+    healthNameTags: 'Player Health', blockHighlight: 'Block Highlight', itemPhysics: 'Item Physics',
+    keystrokes: 'Keystrokes', noWeather: 'No Weather', patPat: 'PatPat', pingCounter: 'Ping Counter',
+    titanTiny: 'Titan & Tiny', waypoints: 'Waypoints', zoom: 'Zoom'
+  });
+
+  function resolveCommandModule(value) {
+    const normalized = String(value || '').toLowerCase().replace(/[\s_-]+/g, '');
+    return COMMAND_MODULE_ALIASES[normalized] || null;
+  }
+
+  function normalizeBindCode(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    if (/^[a-z]$/i.test(raw)) return `Key${raw.toUpperCase()}`;
+    if (/^[0-9]$/.test(raw)) return `Digit${raw}`;
+    if (/^f(?:[1-9]|1[0-2])$/i.test(raw)) return raw.toUpperCase();
+    const aliases = {
+      space: 'Space', tab: 'Tab', enter: 'Enter', escape: 'Escape', esc: 'Escape',
+      rightshift: 'ShiftRight', rshift: 'ShiftRight', leftshift: 'ShiftLeft', lshift: 'ShiftLeft',
+      rightctrl: 'ControlRight', rctrl: 'ControlRight', leftctrl: 'ControlLeft', lctrl: 'ControlLeft',
+      rightalt: 'AltRight', ralt: 'AltRight', leftalt: 'AltLeft', lalt: 'AltLeft',
+      backquote: 'Backquote', grave: 'Backquote', minus: 'Minus', equal: 'Equal',
+      bracketleft: 'BracketLeft', bracketright: 'BracketRight', semicolon: 'Semicolon',
+      quote: 'Quote', comma: 'Comma', period: 'Period', slash: 'Slash', backslash: 'Backslash'
+    };
+    const compact = raw.toLowerCase().replace(/[\s_-]+/g, '');
+    if (aliases[compact]) return aliases[compact];
+    if (/^(Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2])|Space|Tab|Enter|Escape|Shift(?:Left|Right)|Control(?:Left|Right)|Alt(?:Left|Right)|Backquote|Minus|Equal|BracketLeft|BracketRight|Semicolon|Quote|Comma|Period|Slash|Backslash)$/.test(raw)) return raw;
+    return null;
+  }
+
+  function bindLabel(code) {
+    const value = String(code || '');
+    if (/^Key[A-Z]$/.test(value)) return value.slice(3);
+    if (/^Digit[0-9]$/.test(value)) return value.slice(5);
+    return value;
+  }
+
+  function sendWaypointsConfig() {
+    document.dispatchEvent(new CustomEvent('minifeather:waypoints-config', {
+      detail: JSON.stringify({
+        enabled: !!settings.waypoints,
+        coordinatesEnabled: !!settings.coordinates
+      })
+    }));
+  }
+
+  function initWaypointsModule() {
+    registerModule('waypoints', () => createLifecycle({
+      enable: sendWaypointsConfig,
+      disable: sendWaypointsConfig,
+      refresh: sendWaypointsConfig,
+      destroy() {
+        document.dispatchEvent(new CustomEvent('minifeather:waypoints-config', {
+          detail: JSON.stringify({ enabled: false, coordinatesEnabled: false })
+        }));
+      }
+    }));
+
+    registerModule('coordinates', () => createLifecycle({
+      enable: sendWaypointsConfig,
+      disable: sendWaypointsConfig,
+      refresh: sendWaypointsConfig,
+      destroy: sendWaypointsConfig
+    }));
+  }
+
+  function sendClientBindsConfig() {
+    document.dispatchEvent(new CustomEvent('minifeather:client-binds-config', {
+      detail: JSON.stringify({ binds: { ...(settings.moduleBinds || {}) } })
+    }));
+  }
+
+  function respondClientCommand(requestId, messages) {
+    document.dispatchEvent(new CustomEvent('minifeather:client-command-response', {
+      detail: JSON.stringify({ requestId, messages: Array.isArray(messages) ? messages : [messages] })
+    }));
+  }
+
+  function handleClientCommand(event) {
+    let request = null;
+    try {
+      request = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+    } catch (_) {}
+    if (!request || typeof request !== 'object') return;
+
+    const args = Array.isArray(request.args) ? request.args : [];
+    const requestId = String(request.requestId || '');
+    const response = [];
+    const push = (text, status = 'normal') => response.push({ text, status });
+
+    if (request.action === 'toggle') {
+      const key = resolveCommandModule(args[0]);
+      if (!key) {
+        push('Usage: /toggle <module>. Modules: afk, armor, camera, coords, crosshair, cps, distance, fps, freelook, health, highlight, itemphysics, keystrokes, noweather, patpat, ping, titan, waypoints, zoom', 'error');
+      } else {
+        settings[key] = !settings[key];
+        guiSettings[key] = settings[key];
+        saveSettings();
+        applyGuiSettings();
+        if (panel && !searchQuery.trim()) renderCurrentPageContent();
+        if (activePage === 'dashboard') updateDashboardStats();
+        push(`${COMMAND_MODULE_LABELS[key] || key} ${settings[key] ? 'enabled' : 'disabled'}.`, 'success');
+      }
+      respondClientCommand(requestId, response);
+      return;
+    }
+
+    if (request.action === 'bind') {
+      const key = resolveCommandModule(args[0]);
+      const code = normalizeBindCode(args[1]);
+      if (!key || !code) {
+        push('Usage: /bind <module> <key>. Example: /bind coords C', 'error');
+      } else {
+        settings.moduleBinds = { ...(settings.moduleBinds || {}), [key]: code };
+        guiSettings.moduleBinds = { ...settings.moduleBinds };
+        saveSettings();
+        sendClientBindsConfig();
+        push(`${COMMAND_MODULE_LABELS[key] || key} bound to ${bindLabel(code)}.`, 'success');
+      }
+      respondClientCommand(requestId, response);
+      return;
+    }
+
+    if (request.action === 'unbind') {
+      const key = resolveCommandModule(args[0]);
+      if (!key) {
+        push('Usage: /unbind <module>', 'error');
+      } else if (!settings.moduleBinds?.[key]) {
+        push(`${COMMAND_MODULE_LABELS[key] || key} does not have a bind.`);
+      } else {
+        settings.moduleBinds = { ...(settings.moduleBinds || {}) };
+        delete settings.moduleBinds[key];
+        guiSettings.moduleBinds = { ...settings.moduleBinds };
+        saveSettings();
+        sendClientBindsConfig();
+        push(`${COMMAND_MODULE_LABELS[key] || key} bind removed.`, 'success');
+      }
+      respondClientCommand(requestId, response);
+      return;
+    }
+
+    if (request.action === 'binds') {
+      const binds = Object.entries(settings.moduleBinds || {});
+      if (!binds.length) {
+        push('No MiniFeather module binds are configured.');
+      } else {
+        push(`Module binds: ${binds.length}`);
+        binds.forEach(([key, code]) => push(`\\yellow\\${COMMAND_MODULE_LABELS[key] || key}\\reset\\ - ${bindLabel(code)}`));
+      }
+      respondClientCommand(requestId, response);
+      return;
+    }
+
+    if (request.action === 'afk') {
+      const raw = Number(args[0]);
+      if (!Number.isFinite(raw) || raw < 5 || raw > 150) {
+        push('Usage: /afk <5-150>', 'error');
+      } else {
+        settings.antiAfkDelay = clampAntiAfkDelay(raw);
+        guiSettings.antiAfkDelay = settings.antiAfkDelay;
+        saveSettings();
+        sendAntiAfkConfig(settings.antiAfk);
+        push(`Anti-AFK delay changed to ${settings.antiAfkDelay}s.`, 'success');
+      }
+      respondClientCommand(requestId, response);
+    }
+  }
+
+  function requestWaypointUI(action, payload = {}) {
+    const requestId = `ui_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    document.dispatchEvent(new CustomEvent('minifeather:waypoint-ui-request', {
+      detail: JSON.stringify({ requestId, action, ...payload })
+    }));
+    return requestId;
+  }
+
+  function injectWaypointsPanelStyles() {
+    if (document.getElementById('mf-waypoints-panel-style')) return;
+    const style = document.createElement('style');
+    style.id = 'mf-waypoints-panel-style';
+    style.textContent = `
+      .mf-waypoint-add-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+      .mf-waypoint-input{flex:1;min-width:180px;border:1px solid rgba(255,255,255,.14);background:rgba(10,12,18,.7);color:#fff;border-radius:8px;padding:10px 12px;outline:none;font:inherit}
+      .mf-waypoint-input:focus{border-color:rgba(139,92,246,.8);box-shadow:0 0 0 2px rgba(139,92,246,.18)}
+      .mf-waypoint-status{min-height:18px;margin-top:9px;color:#c4b5fd;font-size:12px}
+      .mf-waypoint-list{display:flex;flex-direction:column;gap:8px}
+      .mf-waypoint-row{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border-radius:9px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08)}
+      .mf-waypoint-swatch{width:10px;height:34px;border-radius:5px;box-shadow:0 0 10px rgba(255,255,255,.12)}
+      .mf-waypoint-copy{min-width:0;display:flex;flex-direction:column;gap:3px}
+      .mf-waypoint-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .mf-waypoint-copy span{color:#aeb3c2;font-size:12px}
+      .mf-waypoint-actions{display:flex;gap:6px}
+      .mf-waypoint-actions .mf-btn{padding:7px 9px;font-size:11px}
+      .mf-waypoint-empty{padding:20px;text-align:center;color:#9ca3af;border:1px dashed rgba(255,255,255,.12);border-radius:9px}
+      .mf-waypoint-count{font-size:12px;color:#a78bfa;margin-left:6px}
+      @media(max-width:760px){.mf-waypoint-row{grid-template-columns:10px 1fr}.mf-waypoint-actions{grid-column:2;justify-content:flex-start}.mf-waypoint-add-row{align-items:stretch}.mf-waypoint-add-row .mf-btn{width:100%}}
+    `;
+    document.head.appendChild(style);
   }
 
   function sendTitanTinyConfig(enabled = settings.titanTiny) {
@@ -3642,6 +3876,11 @@
               'Armor HUD',
               'Show your equipped helmet, chestplate, leggings and boots on screen.'
             )}
+            ${renderToggle(
+              'coordinates',
+              t('coordinates'),
+              t('coordinatesDesc')
+            )}
             ${renderToggle('dynamicCrosshair', 'Dynamic Crosshair', 'Changes crosshair based on situation')}
           </div>
           <div style="margin-top:12px;">
@@ -3880,6 +4119,70 @@
     `;
   }
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function readStoredWaypoints() {
+    try {
+      const value = JSON.parse(localStorage.getItem('minifeather_waypoints_v1') || '[]');
+      if (!Array.isArray(value)) return [];
+      return value.filter(item => item && item.id && item.name &&
+        Number.isFinite(Number(item.x)) && Number.isFinite(Number(item.y)) && Number.isFinite(Number(item.z))
+      );
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function renderWaypointsPage() {
+    const waypoints = readStoredWaypoints();
+    const rows = waypoints.length
+      ? waypoints.map(wp => `
+          <div class="mf-waypoint-row" data-waypoint-id="${escapeHtml(wp.id)}" data-x="${Number(wp.x)}" data-y="${Number(wp.y)}" data-z="${Number(wp.z)}">
+            <span class="mf-waypoint-swatch" style="background:${escapeHtml(wp.color || '#8b5cf6')}"></span>
+            <div class="mf-waypoint-copy">
+              <strong>${escapeHtml(wp.name)}</strong>
+              <span>XYZ ${Math.floor(Number(wp.x))} ${Math.floor(Number(wp.y))} ${Math.floor(Number(wp.z))}</span>
+            </div>
+            <div class="mf-waypoint-actions">
+              <button type="button" class="mf-btn secondary mf-waypoint-copy-btn" data-waypoint-copy>${t('waypointCopy')}</button>
+              <button type="button" class="mf-btn danger mf-waypoint-delete-btn" data-waypoint-delete>${t('waypointDelete')}</button>
+            </div>
+          </div>
+        `).join('')
+      : `<div class="mf-waypoint-empty">${t('waypointEmpty')}</div>`;
+
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-card-title">${t('waypoints')}</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('waypoints', t('waypoints'), t('waypointsDesc'))}
+          </div>
+          <div class="mf-tt-hint">${t('waypointsHint')}</div>
+        </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('waypointAddTitle')}</div>
+          <div class="mf-waypoint-add-row">
+            <input id="mf-waypoint-name" class="mf-waypoint-input" type="text" maxlength="40" placeholder="${t('waypointNamePlaceholder')}">
+            <button id="mf-waypoint-add" type="button" class="mf-btn primary">${t('waypointAddCurrent')}</button>
+          </div>
+          <div id="mf-waypoint-status" class="mf-waypoint-status">${escapeHtml(waypointStatus)}</div>
+        </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('waypointSaved')} <span class="mf-waypoint-count">${waypoints.length}</span></div>
+          <div class="mf-waypoint-list">${rows}</div>
+        </div>
+      </div>
+    `;
+  }
+
   function renderWorldPage() {
     return `
       <div class="mf-page-stack">
@@ -3951,6 +4254,7 @@
     render: renderRenderPage,
     cosmetics: renderCosmeticsPage,
     chat: renderChatPage,
+    waypoints: renderWaypointsPage,
     world: renderWorldPage,
     settings: renderSettingsPage,
     about: renderAboutPage
@@ -5198,6 +5502,45 @@
       }
     );
 
+    panel.querySelector('#mf-waypoint-add')?.addEventListener('click', () => {
+      const input = panel.querySelector('#mf-waypoint-name');
+      const name = input?.value?.trim() || '';
+      if (!name) {
+        waypointStatus = t('waypointNeedName');
+        const status = panel.querySelector('#mf-waypoint-status');
+        if (status) status.textContent = waypointStatus;
+        return;
+      }
+      waypointStatus = t('waypointAdding');
+      const status = panel.querySelector('#mf-waypoint-status');
+      if (status) status.textContent = waypointStatus;
+      requestWaypointUI('add', { name });
+    });
+
+    panel.querySelectorAll('[data-waypoint-delete]').forEach(button => {
+      button.addEventListener('click', () => {
+        const row = button.closest('.mf-waypoint-row');
+        const id = row?.dataset.waypointId;
+        if (id) requestWaypointUI('remove', { id });
+      });
+    });
+
+    panel.querySelectorAll('[data-waypoint-copy]').forEach(button => {
+      button.addEventListener('click', async () => {
+        const row = button.closest('.mf-waypoint-row');
+        if (!row) return;
+        const text = `${Math.floor(Number(row.dataset.x))} ${Math.floor(Number(row.dataset.y))} ${Math.floor(Number(row.dataset.z))}`;
+        try {
+          await navigator.clipboard.writeText(text);
+          waypointStatus = `${t('waypointCopied')}: ${text}`;
+        } catch (_) {
+          waypointStatus = text;
+        }
+        const status = panel.querySelector('#mf-waypoint-status');
+        if (status) status.textContent = waypointStatus;
+      });
+    });
+
     panel.querySelectorAll('.mf-meme-id[data-meme-id]').forEach(button => {
       button.addEventListener('click', async () => {
         const value = button.dataset.memeId || '';
@@ -5531,6 +5874,8 @@
     setModuleEnabled('fpsCounter', settings.fpsCounter);
     setModuleEnabled('cpsCounter', settings.cpsCounter);
     setModuleEnabled('pingCounter', settings.pingCounter);
+    setModuleEnabled('coordinates', settings.coordinates);
+    setModuleEnabled('waypoints', settings.waypoints);
     window.__MINIFEATHER_ARMOR_HUD_ENABLED__ = !!settings.armorHud;
       document.dispatchEvent(
           new CustomEvent('minifeather:armorhud-config', {
@@ -6023,6 +6368,7 @@
     initCPSCounter();
     initPingCounter();
     initKeystrokes();
+    initWaypointsModule();
     initTitanTinyModule();
     initHealthNameTagsModule();
     initDistanceNameTagsModule();
@@ -6043,6 +6389,26 @@
       signal: runtimeController.signal
     });
 
+    document.addEventListener('minifeather:client-command', handleClientCommand, { signal: runtimeController.signal });
+    document.addEventListener('minifeather:waypoints-changed', () => {
+      if (panel && activePage === 'waypoints' && !searchQuery.trim()) renderCurrentPageContent();
+    }, { signal: runtimeController.signal });
+    document.addEventListener('minifeather:waypoint-ui-response', event => {
+      let result = null;
+      try { result = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail; } catch (_) {}
+      if (!result) return;
+      if (result.ok && result.waypoint) {
+        waypointStatus = result.waypoint.name ? `${result.waypoint.name}: ${result.waypoint.x} ${result.waypoint.y} ${result.waypoint.z}` : t('waypointSaved');
+      } else if (result.error === 'DUPLICATE_NAME') waypointStatus = t('waypointDuplicate');
+      else if (result.error === 'NO_PLAYER') waypointStatus = t('waypointNoPlayer');
+      else if (result.error === 'NOT_FOUND') waypointStatus = t('waypointNotFound');
+      else if (!result.ok) waypointStatus = t('waypointError');
+      if (panel && activePage === 'waypoints' && !searchQuery.trim()) renderCurrentPageContent();
+    }, { signal: runtimeController.signal });
+
+    injectWaypointsPanelStyles();
+    sendClientBindsConfig();
+    sendWaypointsConfig();
     applyGuiSettings();
     update();
   }
@@ -6092,6 +6458,7 @@
     document.getElementById('mf-gui-style')?.remove();
     document.getElementById('minifeather-chat-style')?.remove();
     document.getElementById('minifeather-font')?.remove();
+    document.getElementById('mf-waypoints-panel-style')?.remove();
 
     overlay = null;
     panel = null;
@@ -6115,8 +6482,10 @@
       settings.cameraOverhaulPreset = detectCameraPreset(settings.cameraOverhaulValues);
       settings.cameraOverhaulBind = String(settings.cameraOverhaulBind || '');
       settings.dynamicCrosshairMap = { ...DEFAULT_SETTINGS.dynamicCrosshairMap, ...(settings.dynamicCrosshairMap || {}) };
+      settings.moduleBinds = { ...DEFAULT_SETTINGS.moduleBinds, ...(settings.moduleBinds || {}) };
       guiSettings = {
         ...settings,
+        moduleBinds: { ...settings.moduleBinds },
         patPatValues: clonePatPatValues(settings.patPatValues),
         cameraOverhaulValues: cloneCameraValues(settings.cameraOverhaulValues)
       };
