@@ -30,13 +30,14 @@
         "src/ItemPhysics.js",
         "src/Zoom.js",
         "src/Camera Overhaul.js",
-<<<<<<< Updated upstream
         "src/DynamicCrosshair.js",
         "src/Baritone.js",
-=======
         "src/Dynamic Crosshair.js",
->>>>>>> Stashed changes
         "src/features.js"
+=======
+        "src/features.js",
+        "src/armorhud.js"
+>>>>>>> 22a2205f0f200c3c58a197b766ebaaa300fb1dd5
       ],
       "run_at": "document_start",
       "world": "MAIN"
@@ -65,14 +66,15 @@
         "assets/background.png",
         "assets/Faithful.ttf",
         "assets/memes/gif/*",
-<<<<<<< Updated upstream
         "assets/patpat.png",
         "assets/pat.ogg",
         "assets/pat1.ogg",
         "assets/pat2.ogg",
-=======
->>>>>>> Stashed changes
         "assets/crosshair/*"
+=======
+        "assets/crosshair/*",
+        "assets/armor-hud-editor.png"
+>>>>>>> 22a2205f0f200c3c58a197b766ebaaa300fb1dd5
       ],
       "matches": [
         "https://miniblox.io/*"
