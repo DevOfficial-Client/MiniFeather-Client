@@ -298,6 +298,7 @@
     chatVideos: true,
     chatLinks: true,
     chatMemes: true,
+    rhythmParkour: false,
     language: 'en'
   };
 
@@ -2206,6 +2207,7 @@
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
       { page: 'world', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc') },
+      { page: 'world', key: 'rhythmParkour', title: 'Rhythm Parkour', desc: 'Transforms Miniblox into a rhythm parkour game' },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
       { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc') },
       { page: 'chat', key: 'chatMemes', title: t('chatMemes'), desc: t('chatMemesDesc') },
@@ -2433,6 +2435,21 @@
       destroy() {
         sendAntiAfkConfig(false);
       }
+    }));
+  }
+
+  function sendRhythmParkourConfig(enabled = settings.rhythmParkour) {
+    document.dispatchEvent(new CustomEvent('minifeather:rhythmparkour-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initRhythmParkourModule() {
+    registerModule('rhythmParkour', () => createLifecycle({
+      enable() { sendRhythmParkourConfig(true); },
+      disable() { sendRhythmParkourConfig(false); },
+      refresh() { sendRhythmParkourConfig(MODULES.get('rhythmParkour')?.enabled === true); },
+      destroy() { sendRhythmParkourConfig(false); }
     }));
   }
 
@@ -3870,6 +3887,7 @@
           <div class="mf-card-title">${t('sectionWorldUtilities')}</div>
           <div class="mf-toggle-grid">
             ${renderToggle('antiAfk', t('antiAfk'), t('antiAfkDesc'))}
+            ${renderToggle('rhythmParkour', 'Rhythm Parkour', 'Transforms Miniblox into a rhythm parkour game. Load a song and dodge obstacles to the beat.')}
           </div>
           <div class="mf-tt-hint">${t('antiAfkRightClickHint')}</div>
         </div>
@@ -5529,6 +5547,7 @@
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
     setModuleEnabled('antiAfk', settings.antiAfk);
+    setModuleEnabled('rhythmParkour', settings.rhythmParkour);
     setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
     setModuleEnabled('dynamicCrosshair', settings.dynamicCrosshair);
@@ -6011,6 +6030,7 @@
     initItemPhysicsModule();
     initNoWeatherModule();
     initAntiAfkModule();
+    initRhythmParkourModule();
     initZoomModule();
     initCameraOverhaulModule();
     initDynamicCrosshairModule();
