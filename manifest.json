@@ -30,6 +30,8 @@
         "src/ItemPhysics.js",
         "src/NoWeather.js",
         "src/AntiAFK.js",
+        "src/Waypoints.js",
+        "src/ClientCommands.js",
         "src/Zoom.js",
         "src/Camera Overhaul.js",
         "src/DynamicCrosshair.js",
