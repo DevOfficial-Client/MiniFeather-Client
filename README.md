@@ -4,7 +4,7 @@
 
 ### A lightweight, customizable browser client designed to enhance your experience on Miniblox.io.
 
-![Version](https://img.shields.io/badge/version-v4.2.0-2563eb?style=flat-square)
+![Version](https://img.shields.io/badge/version-v4.3.0-2563eb?style=flat-square)
 ![Status](https://img.shields.io/badge/status-active-16a34a?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Miniblox.io-7c3aed?style=flat-square)
 
@@ -20,71 +20,90 @@ The client is designed to remain lightweight, configurable, and easy to use whil
 
 ---
 
-## 🆕 What's New in v4.2.0
+## ✨ Features
 
-### 📦 Item Physics
+- Modern and customizable MiniFeather control panel
+- Waypoints with world markers and live distance
+- Coordinates HUD
+- Built-in MiniFeather client commands
+- Configurable module keybinds
+- Player Health and Player Distance nametags
+- Item Physics
+- PatPat with configurable presets and effects
+- No Weather
+- Anti-AFK
+- FreeLook
+- Zoom up to `20×`
+- Titan & Tiny player scaling
+- Camera Overhaul
+- Block Highlight
+- FPS, CPS, ping, keystrokes, and Armor HUD
+- Dynamic Crosshair
+- Chat videos, links, GIFs, memes, and media support
+- Custom skins, capes, logos, backgrounds, textures, and spritesheets
+- English, Spanish, Japanese, and Italian support
+- Automatically saved settings
+- Performance-focused modular design
 
-A new **Item Physics** module has been added to MiniFeather Client.
+---
 
-When enabled, dropped items receive improved client-side visual physics instead of keeping the same static orientation.
+## 🆕 What's New in v4.3.0
 
-Item Physics adds:
+### 📍 Waypoints
 
-- Natural spinning while items are moving through the air
-- Different settling behavior depending on the item's visual shape
-- Landing bounce and rotation response
-- Wall collision spin response
-- Smoother resting positions when items reach the ground
-- More natural movement for flat and thin item models
-- Visual physics without changing the item's native collision behavior
+A new **Waypoints** system has been added to MiniFeather Client.
 
-The module can be enabled or disabled from the **Rendering** section.
+Waypoints let you save important locations and see them directly in the world with a marker, name, and live distance display.
 
-### 🫳 PatPat
+You can:
 
-PatPat adds a playful interaction for nearby players and living mobs.
+- Save your current position as a waypoint
+- Give each waypoint a custom name
+- View waypoint markers directly in the world
+- See the live distance to each visible waypoint
+- Manage saved waypoints from the dedicated **Waypoints** page
+- Copy saved coordinates
+- Delete waypoints
+- Store up to `100` waypoints
+- Keep waypoints saved locally in your browser
 
-When the module is enabled:
+MiniFeather automatically assigns a marker color based on the waypoint name.
 
-1. Look directly at a nearby player or living mob.
-2. Hold **Shift**.
-3. **Right-click** to pat the target.
+### 🧭 Coordinates
 
-The interaction includes:
+A new **Coordinates** HUD module is also included.
 
-- A pixel-style patting hand animation
-- A short squash animation on the target model
-- Native nametag movement that can follow the squash effect
-- Randomized pat sounds
-- Your normal hand swing animation
-- Target visibility checks
-- A short cooldown between pats
+When enabled, your current position is displayed on screen as:
 
-### PatPat Settings
+```text
+XYZ 120 64 -35
+```
 
-Right-click the **PatPat** module to open its configuration.
+The coordinates update while you move and can also be used together with the new waypoint and command systems.
 
-#### Presets
+### ⌨️ Client Commands
 
-- **Soft** – lighter and slower movement
-- **Normal** – balanced default behavior
-- **Strong** – stronger squish and push effects
-- **Extreme** – maximum preset intensity
-- **Custom** – used automatically when manual values no longer match a preset
+MiniFeather now includes its own client-side command system.
 
-#### Custom Options
+Recognized MiniFeather commands are handled directly by the client instead of being sent as regular chat messages.
 
-You can configure:
+Available commands:
 
-- **Squish Strength** – controls how strongly the target model is visually compressed
-- **Pat Duration** – controls how long the pat animation lasts
-- **Hand Movement** – controls the amount of movement in the patting hand animation
-- **Push Strength** – controls the strength of the visual push effect
-- **Sound Volume** – controls PatPat sound volume
-- **Random Sounds** – enables or disables randomized PatPat sounds
-- **Nametag Follow** – controls whether the native nametag follows the temporary squash movement
+```text
+/mf help
+/toggle <module>
+/bind <module> <key>
+/unbind <module>
+/binds
+/afk <5-150>
+/copycoord
+/waypoint add <name>
+/waypoint list
+/waypoint remove <name>
+/waypoint <name>
+```
 
-PatPat settings are saved automatically.
+These commands allow you to manage modules, keybinds, Anti-AFK settings, coordinates, and waypoints without opening the MiniFeather panel.
 
 
 ---
@@ -186,6 +205,223 @@ The default inactivity delay is:
 The configured delay is saved automatically.
 
 The module can be enabled or disabled from the **World Utilities** section.
+
+---
+
+## 📍 Waypoints
+
+Waypoints allow you to save locations in the Miniblox world and return to them more easily.
+
+Each waypoint stores:
+
+- A custom name
+- X coordinate
+- Y coordinate
+- Z coordinate
+- A generated marker color
+- Creation time
+
+Waypoints are stored locally in your browser and are not uploaded to a MiniFeather server.
+
+### World Markers
+
+When the Waypoints module is enabled, saved locations can appear directly in the world.
+
+Visible waypoint markers include:
+
+- Waypoint name
+- Colored marker
+- Name initials inside the marker
+- Live distance from your current position
+
+Distances are displayed in meters and automatically switch to kilometers for very distant locations.
+
+### Waypoints Page
+
+MiniFeather includes a dedicated **Waypoints** page in the client panel.
+
+From this page you can:
+
+- Enable or disable waypoint markers
+- Add your current position as a waypoint
+- View all saved waypoints
+- See their XYZ coordinates
+- Copy coordinates
+- Delete saved waypoints
+
+Waypoint names can contain up to `40` characters.
+
+A maximum of `100` waypoints can be stored.
+
+### Waypoint Commands
+
+Waypoints are also integrated with MiniFeather commands:
+
+```text
+/waypoint add <name>
+```
+
+Saves your current position.
+
+```text
+/waypoint list
+```
+
+Lists your saved waypoints and their current distance.
+
+```text
+/waypoint remove <name>
+```
+
+Deletes a saved waypoint.
+
+```text
+/waypoint <name>
+```
+
+Shows the coordinates and current distance for a specific waypoint.
+
+---
+
+## 🧭 Coordinates
+
+The **Coordinates** HUD displays your current XYZ position while playing.
+
+Example:
+
+```text
+XYZ 120 64 -35
+```
+
+The values update in real time as your player moves.
+
+Coordinates can be enabled or disabled from the HUD section and are also used by:
+
+```text
+/copycoord
+```
+
+This command copies your current coordinates to the clipboard.
+
+---
+
+## ⌨️ Client Commands
+
+MiniFeather now includes a built-in client command system.
+
+Commands are entered through the normal Miniblox chat input, but recognized MiniFeather commands are intercepted and handled locally by the client.
+
+### Help
+
+```text
+/mf help
+```
+
+Displays the MiniFeather command list.
+
+### Module Control
+
+```text
+/toggle <module>
+```
+
+Enables or disables a supported module.
+
+Examples:
+
+```text
+/toggle fps
+/toggle coords
+/toggle waypoints
+/toggle itemphysics
+/toggle noweather
+/toggle patpat
+```
+
+Supported module names include:
+
+```text
+afk
+armor
+camera
+coords
+crosshair
+cps
+distance
+fps
+freelook
+health
+highlight
+itemphysics
+keystrokes
+noweather
+patpat
+ping
+titan
+waypoints
+zoom
+```
+
+### Module Binds
+
+```text
+/bind <module> <key>
+```
+
+Assigns a keybind to a supported module.
+
+Example:
+
+```text
+/bind coords C
+```
+
+Remove a bind with:
+
+```text
+/unbind <module>
+```
+
+View all configured binds with:
+
+```text
+/binds
+```
+
+Supported bind inputs include letters, numbers, function keys, Space, Tab, Enter, Escape, Shift, Control, Alt, and several punctuation keys.
+
+### Anti-AFK
+
+```text
+/afk <5-150>
+```
+
+Changes the Anti-AFK inactivity delay in seconds.
+
+Example:
+
+```text
+/afk 60
+```
+
+### Coordinates
+
+```text
+/copycoord
+```
+
+Copies your current XYZ coordinates.
+
+### Waypoints
+
+```text
+/waypoint add <name>
+/waypoint list
+/waypoint remove <name>
+/waypoint <name>
+```
+
+The command system works together with MiniFeather's saved settings, so module toggles and keybind changes remain available after reloading.
 
 ---
 
@@ -427,6 +663,10 @@ MiniFeather automatically saves supported settings using browser storage.
 
 Saved configuration can include:
 
+- Waypoint module state and saved waypoint locations
+- Coordinates HUD state
+- Client command module binds
+
 - Enabled modules
 - PatPat module state
 - Item Physics module state
@@ -507,7 +747,7 @@ Performance-focused improvements include:
 - Reduced unnecessary DOM observation
 - Independent module lifecycle handling
 - Separate translation handling
-- Separate files for larger modules
+- Separate files for larger modules and client systems
 - Cleanup when supported features are disabled
 
 ---
@@ -527,6 +767,8 @@ src/PatPat.js
 src/ItemPhysics.js
 src/NoWeather.js
 src/AntiAFK.js
+src/Waypoints.js
+src/ClientCommands.js
 src/TitanTiny.js
 src/Zoom.js
 src/Camera Overhaul.js
