@@ -10,6 +10,7 @@ const EVENT_STATE = 'minifeather:rhythmparkour-state';
 const state = {
   enabled: false,
   game: null,
+  world: null,
   audioContext: null,
   analyser: null,
   audioSource: null,
@@ -17,8 +18,8 @@ const state = {
   beats: [],
   beatCount: 0,
   currentBeat: 0,
-  blocks: [],
-  nextBlockId: 0,
+  obstacles: [],      // grupos de obstáculos (cada uno con offsets relativos)
+  nextObstacleId: 0,
   isPlaying: false,
   score: 0,
   combo: 0,
@@ -32,7 +33,9 @@ const state = {
   blockSpeed: 11.75,
   detectedBPM: 120,
   beatIntervalSeconds: 0.5,
-  ui: null
+  ui: null,
+  lastStateSync: 0,
+  lastCollisionCheck: 0
 };
 
 const config = {
@@ -44,7 +47,21 @@ const config = {
   travelTime: 4.0
 };
 
-// ---- Captura de la instancia del juego (patrón MiniFeather) ----
+// ---- Cachés de bloques y conversiones ----
+const blockStateCache = new Map();   // blockName → blockState
+const blockNameCache = {
+  stone: 'stone', dirt: 'dirt', cobblestone: 'cobblestone',
+  oak_planks: 'oak_planks', bricks: 'bricks',
+  white_wool: 'white_wool', orange_wool: 'orange_wool', magenta_wool: 'magenta_wool',
+  light_blue_wool: 'light_blue_wool', yellow_wool: 'yellow_wool', lime_wool: 'lime_wool',
+  pink_wool: 'pink_wool', gray_wool: 'gray_wool', light_gray_wool: 'light_gray_wool',
+  cyan_wool: 'cyan_wool', purple_wool: 'purple_wool', blue_wool: 'blue_wool',
+  brown_wool: 'brown_wool', green_wool: 'green_wool', red_wool: 'red_wool', black_wool: 'black_wool'
+};
+
+const AIR_STATE = { __air: true };
+
+// ---- Captura de la instancia del juego ----
 function getGame(force = false) {
   if (globalThis.miniblox?.player && globalThis.miniblox?.world) {
     return globalThis.miniblox;
@@ -64,46 +81,34 @@ function getGame(force = false) {
   return state.game?.player && state.game?.world ? state.game : null;
 }
 
-// ---- Utilidades de bloques ----
-function pvFindBlockByName(name) {
-  const q = String(name || '').trim();
-  if (!q) return null;
+// ---- Utilidades de bloques (con caché) ----
+function getBlockState(blockName) {
+  if (blockName === 'air') return AIR_STATE;
+  const cached = blockStateCache.get(blockName);
+  if (cached) return cached;
   const B = window.Blocks || globalThis.Blocks;
   if (!B) return null;
-  if (B[q]) return B[q];
-  const low = q.toLowerCase();
-  if (B[low]) return B[low];
-  try {
-    const k = Object.keys(B).find(x => String(x).toLowerCase() === low);
-    return k ? B[k] : null;
-  } catch { return null; }
+  const resolvedName = blockNameCache[blockName] || blockName;
+  let blk = B[resolvedName] || B[blockName];
+  if (!blk) {
+    try {
+      const k = Object.keys(B).find(x => String(x).toLowerCase() === resolvedName.toLowerCase());
+      blk = k ? B[k] : null;
+    } catch { blk = null; }
+  }
+  if (!blk) blk = B?.stone || null;
+  if (!blk) return null;
+  const blockState = blk.defaultState || (typeof blk.getDefaultState === 'function' ? blk.getDefaultState() : null);
+  if (blockState) blockStateCache.set(blockName, blockState);
+  return blockState;
 }
 
-function localPvSetBlockAt(x, y, z, blockName) {
-  try {
-    const w = state.game?.world;
-    if (!w || typeof w.setBlockState !== 'function') return false;
-    const blk = pvFindBlockByName(blockName) || pvFindBlockByName('stone');
-    if (!blk) return false;
-    const blockState = blk.defaultState || (typeof blk.getDefaultState === 'function' ? blk.getDefaultState() : null);
-    if (!blockState) return false;
-    w.setBlockState({ x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) }, blockState, 3);
-    return true;
-  } catch { return false; }
+function setBlockRaw(x, y, z, blockState) {
+  if (!state.world || !blockState) return;
+  try { state.world.setBlockState({ x, y, z }, blockState, 3); } catch {}
 }
 
-function convertBlockType(blockType) {
-  const map = {
-    stone: 'stone', dirt: 'dirt', cobblestone: 'cobblestone',
-    oak_planks: 'oak_planks', bricks: 'bricks',
-    white_wool: 'white_wool', orange_wool: 'orange_wool', magenta_wool: 'magenta_wool',
-    light_blue_wool: 'light_blue_wool', yellow_wool: 'yellow_wool', lime_wool: 'lime_wool',
-    pink_wool: 'pink_wool', gray_wool: 'gray_wool', light_gray_wool: 'light_gray_wool',
-    cyan_wool: 'cyan_wool', purple_wool: 'purple_wool', blue_wool: 'blue_wool',
-    brown_wool: 'brown_wool', green_wool: 'green_wool', red_wool: 'red_wool', black_wool: 'black_wool'
-  };
-  return map[blockType] || 'stone';
-}
+function clearBlock(x, y, z) { setBlockRaw(x, y, z, AIR_STATE); }
 
 // ---- Análisis de audio y detección de beats ----
 async function loadAudioFile(file) {
@@ -196,17 +201,24 @@ async function loadAudioFile(file) {
   }
 }
 
-// ---- Generación de obstáculos ----
-function generatePatternBlock(beat) {
-  const blockId = state.nextBlockId++;
+// ---- Generación de obstáculos (como grupo con offsets) ----
+// Cada obstáculo es un objeto con:
+//   x, y, z = posición de origen (esquina)
+//   cells = Set de claves "dx,dy,dz" que forman el obstáculo (relativas a x,y,z)
+//   cellCount, type, prevCellX
+// Esto permite mover el grupo entero con un solo seguimiento de X.
+function generateObstacle(beat) {
+  const id = state.nextObstacleId++;
   const spawnX = config.spawnArea.minX;
   const endX = config.spawnArea.maxX;
+  const minY = config.spawnArea.minY;
   const minZ = config.spawnArea.minZ;
   const maxZ = config.spawnArea.maxZ;
-  const centerZ = minZ + (maxZ - minZ) / 2;
-  const blockSpeed = state.blockSpeed;
+  const centerZ = Math.floor(minZ + (maxZ - minZ) / 2);
+  const zStart = Math.floor(minZ);
+  const zEnd = Math.floor(maxZ);
 
-  let spawnY = config.spawnArea.minY, blockType, pattern;
+  let blockType, pattern;
   switch (beat.type) {
     case 'jump': blockType = 'cyan_wool'; pattern = 'jump_barrier'; break;
     case 'jump_high': blockType = 'cyan_wool'; pattern = 'jump_high_wall'; break;
@@ -220,14 +232,9 @@ function generatePatternBlock(beat) {
     default: blockType = 'stone'; pattern = 'single';
   }
 
-  createObstaclePattern(blockId, pattern, spawnX, spawnY, centerZ, endX, blockSpeed, blockType, minZ, maxZ);
-}
+  const cells = [];
 
-function createObstaclePattern(blockId, pattern, spawnX, spawnY, centerZ, endX, blockSpeed, blockType, minZ, maxZ) {
-  const blocks = [];
-  const zStart = Math.floor(minZ);
-  const zEnd = Math.floor(maxZ);
-
+  // Generar offsets relativos (dx=0 siempre para obstáculos de pared)
   switch (pattern) {
     case 'duck_with_jump_base': {
       const gapOnLeft = Math.random() < 0.5;
@@ -236,13 +243,13 @@ function createObstaclePattern(blockId, pattern, spawnX, spawnY, centerZ, endX, 
       for (let dy = 0; dy < 2; dy++) {
         for (let z = zStart; z <= zEnd; z++) {
           if (z >= gapStart && z <= gapEnd) continue;
-          blocks.push({ x: spawnX, y: spawnY + dy, z, type: 'yellow_wool' });
+          cells.push([0, dy, z - zStart]);
         }
       }
       break;
     }
     case 'jump_barrier':
-      for (let z = zStart; z <= zEnd; z++) blocks.push({ x: spawnX, y: spawnY, z, type: blockType });
+      for (let z = zStart; z <= zEnd; z++) cells.push([0, 0, z - zStart]);
       break;
     case 'jump_high_wall': {
       const totalWidth = zEnd - zStart;
@@ -250,7 +257,7 @@ function createObstaclePattern(blockId, pattern, spawnX, spawnY, centerZ, endX, 
         for (let z = zStart; z <= zEnd; z++) {
           const distFromCenter = Math.abs(z - centerZ);
           if (dy === 1 && distFromCenter > totalWidth / 4) continue;
-          blocks.push({ x: spawnX, y: spawnY + dy, z, type: blockType });
+          cells.push([0, dy, z - zStart]);
         }
       }
       break;
@@ -263,7 +270,7 @@ function createObstaclePattern(blockId, pattern, spawnX, spawnY, centerZ, endX, 
       for (let dy = 0; dy < 3; dy++) {
         for (let z = zStart; z <= zEnd; z++) {
           if (z >= gapStart && z <= gapEnd) continue;
-          blocks.push({ x: spawnX, y: spawnY + dy, z, type: blockType });
+          cells.push([0, dy, z - zStart]);
         }
       }
       break;
@@ -271,119 +278,162 @@ function createObstaclePattern(blockId, pattern, spawnX, spawnY, centerZ, endX, 
     case 'platform_wide':
       for (let dx = 0; dx < 2; dx++)
         for (let z = zStart; z <= zEnd; z++)
-          blocks.push({ x: spawnX + dx, y: spawnY, z, type: blockType });
+          cells.push([dx, 0, z - zStart]);
       break;
     case 'platform_with_base': {
       const platformIsLeft = Math.random() < 0.5;
-      const pzc = platformIsLeft ? (zStart + centerZ) / 2 : (centerZ + zEnd) / 2;
+      const pzc = Math.floor(platformIsLeft ? (zStart + centerZ) / 2 : (centerZ + zEnd) / 2);
+      const baseDz = pzc - zStart;
       for (let dx = -1; dx <= 1; dx++)
         for (let dz = -1; dz <= 1; dz++)
-          blocks.push({ x: spawnX + dx, y: spawnY, z: pzc + dz, type: 'green_wool' });
+          cells.push([dx, 0, baseDz + dz, 'green_wool']);
       for (let dx = 0; dx < 2; dx++)
         for (let dz = 0; dz < 2; dz++)
-          blocks.push({ x: spawnX + dx, y: spawnY, z: pzc + dz, type: blockType });
+          cells.push([dx, 0, baseDz + dz, blockType]);
       break;
     }
-    case 'gap': break;
-    default: blocks.push({ x: spawnX, y: spawnY, z: centerZ, type: blockType });
+    case 'gap': break; // sin celdas
+    default: cells.push([0, 0, Math.floor(centerZ - zStart)]);
   }
 
-  for (let i = 0; i < blocks.length; i++) {
-    const b = blocks[i];
-    const block = {
-      id: i === 0 ? blockId : `${blockId}_${i}`,
-      position: { x: b.x, y: b.y, z: b.z },
-      targetPosition: { x: endX, y: b.y, z: b.z },
-      type: b.type,
-      velocity: blockSpeed,
-      finished: false,
-      collided: false,
-      createdAt: Date.now()
-    };
-    state.blocks.push(block);
-    localPvSetBlockAt(b.x, b.y, b.z, convertBlockType(b.type));
+  if (!cells.length) return; // gap/tunnel no generan obstáculo
+
+  const obstacle = {
+    id,
+    x: spawnX,           // posición X actual (entera)
+    y: minY,
+    z: zStart,
+    targetX: endX,
+    cells,                // [[dx,dy,dz,typeOverride?], ...]
+    type: blockType,
+    velocity: state.blockSpeed,
+    finished: false,
+    collided: false,
+    prevCellX: spawnX,
+    floatX: spawnX        // posición X de coma flotante para suavidad
+  };
+
+  // Pre-cachear el blockState para este tipo
+  getBlockState(blockType);
+  for (const cell of cells) {
+    if (cell[3]) getBlockState(cell[3]);
+  }
+
+  state.obstacles.push(obstacle);
+  placeObstacle(obstacle);  // render inicial
+}
+
+// Coloca todas las celdas del obstáculo en su posición actual
+function placeObstacle(obs) {
+  const baseState = getBlockState(obs.type);
+  if (!baseState) return;
+  for (const [dx, dy, dz, typeOverride] of obs.cells) {
+    const st = typeOverride ? getBlockState(typeOverride) : baseState;
+    if (st) setBlockRaw(obs.x + dx, obs.y + dy, obs.z + dz, st);
+  }
+  obs.prevCellX = obs.x;
+}
+
+// Limpia todas las celdas del obstáculo en su posición previa
+function clearObstacleAt(obs, cellX) {
+  for (const [dx, dy, dz] of obs.cells) {
+    clearBlock(cellX + dx, obs.y + dy, obs.z + dz);
   }
 }
 
-// ---- Game loop y movimiento de bloques ----
+// ---- Game loop optimizado ----
 function gameLoop(timestamp) {
   if (!state.isPlaying) return;
   const now = timestamp || performance.now();
   const deltaTime = state.lastFrameTime ? (now - state.lastFrameTime) / 1000 : 0.016;
   state.lastFrameTime = now;
-  updateRhythmGame(deltaTime);
+  updateRhythmGame(deltaTime, now);
   state.gameLoopId = requestAnimationFrame(gameLoop);
 }
 
-function updateRhythmGame(deltaTime) {
-  if (!state.blocks.length) return;
+function updateRhythmGame(deltaTime, now) {
+  if (!state.obstacles.length) return;
 
-  for (const block of state.blocks) {
-    if (block.finished) continue;
-    const prevX = Math.floor(block.position.x);
-    const prevZ = Math.floor(block.position.z);
-    const newX_raw = block.position.x + block.velocity * deltaTime;
-    if (isNaN(newX_raw)) { block.finished = true; continue; }
-    block.position.x = newX_raw;
+  let hasFinished = false;
 
-    if (block.position.x >= block.targetPosition.x) {
-      block.position.x = block.targetPosition.x;
-      block.finished = true;
-      const passed = checkIfPlayerPassed(block);
-      if (!passed && !block.collided) showHitMessage('miss');
-      else if (passed) { state.score += 10; state.combo++; showHitMessage('good'); }
-      localPvSetBlockAt(prevX, block.position.y, prevZ, 'air');
+  for (const obs of state.obstacles) {
+    if (obs.finished) { hasFinished = true; continue; }
+
+    obs.floatX += obs.velocity * deltaTime;
+    if (isNaN(obs.floatX)) { obs.finished = true; hasFinished = true; continue; }
+
+    const newCellX = Math.floor(obs.floatX);
+
+    if (obs.floatX >= obs.targetX) {
+      // Llegó al final
+      obs.finished = true;
+      hasFinished = true;
+      clearObstacleAt(obs, obs.prevCellX);
+      const passed = checkIfPlayerPassed(obs);
+      if (passed) { state.score += 10; state.combo++; if (state.combo > state.maxCombo) state.maxCombo = state.combo; showHitMessage('good'); }
+      else if (!obs.collided) showHitMessage('miss');
       continue;
     }
 
-    const newX = Math.floor(block.position.x);
-    if (newX !== prevX) {
-      localPvSetBlockAt(prevX, block.position.y, prevZ, 'air');
-      localPvSetBlockAt(newX, block.position.y, Math.floor(block.position.z), convertBlockType(block.type));
+    // Solo actualizar bloques si la celda X cambió
+    if (newCellX !== obs.prevCellX) {
+      clearObstacleAt(obs, obs.prevCellX);
+      obs.x = newCellX;
+      placeObstacle(obs);
     }
   }
 
-  state.blocks = state.blocks.filter(b => !b.finished);
-  checkPlayerCollisions();
-  dispatchState();
+  // Limpiar obstáculos terminados sin crear array nuevo cada frame
+  if (hasFinished) {
+    state.obstacles = state.obstacles.filter(o => !o.finished);
+  }
+
+  // Throttle de collision check a ~10fps (cada 100ms)
+  if (now - state.lastCollisionCheck > 100) {
+    state.lastCollisionCheck = now;
+    checkPlayerCollisions();
+  }
+
+  // Throttle de dispatchState a ~5fps (cada 200ms)
+  if (now - state.lastStateSync > 200) {
+    state.lastStateSync = now;
+    dispatchState();
+  }
 }
 
-function checkIfPlayerPassed(block) {
-  const g = state.game;
-  if (!g?.player) return true;
-  const p = g.player;
+function checkIfPlayerPassed(obs) {
+  const p = state.game?.player;
+  if (!p) return true;
   const pX = Math.floor(p.position?.x ?? 0);
   const pY = Math.floor(p.position?.y ?? 0);
   const pZ = Math.floor(p.position?.z ?? 0);
-  const bY = Math.floor(block.position.y);
-  const bZ = Math.floor(block.position.z);
-  const bX = Math.floor(block.position.x);
+  const oY = obs.y;
+  const oZ = obs.z;
+  const oX = obs.x;
 
-  if (block.type === 'cyan_wool') return (pY - bY) >= 2 || Math.abs(pZ - bZ) > 5 || pX > bX;
-  if (block.type === 'yellow_wool') return (pY - bY) <= 0 || Math.abs(pZ - bZ) > 5 || pX > bX;
+  if (obs.type === 'cyan_wool') return (pY - oY) >= 2 || Math.abs(pZ - oZ) > 5 || pX > oX;
+  if (obs.type === 'yellow_wool') return (pY - oY) <= 0 || Math.abs(pZ - oZ) > 5 || pX > oX;
   return true;
 }
 
 function checkPlayerCollisions() {
-  const g = state.game;
-  if (!g?.player) return;
-  const p = g.player;
+  const p = state.game?.player;
+  if (!p) return;
   const pX = Math.floor(p.position?.x ?? 0);
   const pY = Math.floor(p.position?.y ?? 0);
   const pZ = Math.floor(p.position?.z ?? 0);
 
-  for (const block of state.blocks) {
-    if (block.finished || block.collided) continue;
-    const bX = Math.floor(block.position.x);
-    const bY = Math.floor(block.position.y);
-    const bZ = Math.floor(block.position.z);
-    if (Math.abs(pX - bX) <= 1 && Math.abs(pY - bY) <= 1 && Math.abs(pZ - bZ) <= 8) {
-      if (block.type === 'cyan_wool' || block.type === 'yellow_wool') {
-        applyDamage(2);
-        block.collided = true;
-        state.combo = 0;
-        showHitMessage('miss');
-      }
+  for (const obs of state.obstacles) {
+    if (obs.finished || obs.collided) continue;
+    if (obs.type !== 'cyan_wool' && obs.type !== 'yellow_wool') continue;
+    const oX = obs.x;
+    const oY = obs.y;
+    const oZ = obs.z;
+    if (Math.abs(pX - oX) <= 1 && Math.abs(pY - oY) <= 1 && Math.abs(pZ - oZ) <= 8) {
+      applyDamage(2);
+      obs.collided = true;
+      state.combo = 0;
+      showHitMessage('miss');
     }
   }
 }
@@ -410,7 +460,7 @@ function startGame() {
   if (state.isPlaying) return;
 
   state.score = 0; state.combo = 0; state.maxCombo = 0; state.health = 5;
-  state.currentBeat = 0; state.blocks = []; state.nextBlockId = 0;
+  state.currentBeat = 0; state.obstacles = []; state.nextObstacleId = 0;
 
   state.audioSource = state.audioContext.createBufferSource();
   state.audioSource.buffer = state.currentSong;
@@ -423,6 +473,8 @@ function startGame() {
   state.lookAheadTime = config.travelTime;
   state.audioStartTime = Date.now();
   state.lastFrameTime = null;
+  state.lastStateSync = 0;
+  state.lastCollisionCheck = 0;
 
   state.audioSource.onended = () => { stopGame(); showNotification('Song completed!', 'success'); };
 
@@ -432,7 +484,7 @@ function startGame() {
     while (state.currentBeat < state.beats.length) {
       const beat = state.beats[state.currentBeat];
       if (beat.time <= targetTime && beat.time > audioTime - 0.1) {
-        generatePatternBlock(beat);
+        generateObstacle(beat);
         state.currentBeat++;
       } else if (beat.time > targetTime) break;
       else state.currentBeat++;
@@ -444,7 +496,7 @@ function startGame() {
   }, 100);
 
   state.gameLoopId = requestAnimationFrame(gameLoop);
-  showNotification(`Game started! ${state.beats.length} blocks`, 'success');
+  showNotification(`Game started! ${state.beats.length} obstacles`, 'success');
   dispatchState();
 }
 
@@ -452,18 +504,18 @@ function stopGame() {
   if (state.audioSource) { try { state.audioSource.stop(); } catch {} state.audioSource = null; }
   if (state.beatInterval) { clearInterval(state.beatInterval); state.beatInterval = null; }
   if (state.gameLoopId) { cancelAnimationFrame(state.gameLoopId); state.gameLoopId = null; }
-  removeAllBlocks();
+  removeAllObstacles();
   state.isPlaying = false;
   state.currentBeat = 0;
   state.lastFrameTime = null;
   dispatchState();
 }
 
-function removeAllBlocks() {
-  for (const block of state.blocks) {
-    localPvSetBlockAt(Math.floor(block.position.x), Math.floor(block.position.y), Math.floor(block.position.z), 'air');
+function removeAllObstacles() {
+  for (const obs of state.obstacles) {
+    clearObstacleAt(obs, obs.prevCellX);
   }
-  state.blocks = [];
+  state.obstacles = [];
 }
 
 // ---- Comunicación de estado hacia content.js ----
@@ -581,12 +633,14 @@ function setEnabled(value) {
 
   if (enabled) {
     state.game = getGame(true);
+    state.world = state.game?.world || null;
     createUI();
     showNotification('Rhythm Parkour enabled! Load a song to start.', 'info');
   } else {
     stopGame();
     removeUI();
     state.game = null;
+    state.world = null;
   }
 }
 

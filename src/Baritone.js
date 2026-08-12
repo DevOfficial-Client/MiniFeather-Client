@@ -65,15 +65,21 @@ const state = {
     repathTimer: 0,
     maxPathTime: 5000,
     chunkCache: new Map(),
-    cacheVersion: 0
+    cacheVersion: 0,
+    // Input hook state (patrón AntiAFK)
+    player: null,
+    readerName: null,
+    originalReader: null,
+    nativeApply: null,
+    _lastPos: null
 };
 
 function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
 
 // Desired input that Baritone wants to inject each tick
 const desiredInput = {
-    strafe: 0,      // -1 to 1
-    forward: 0,     // -1 to 1
+    strafe: 0,      // -1 (left) to 1 (right)
+    forward: 0,     // -1 (back) to 1 (forward)
     jump: false,
     sneak: false,
     yaw: null       // target yaw to set
@@ -81,74 +87,146 @@ const desiredInput = {
 
 let inputHooked = false;
 
-function findMethodOnProtoChain(obj, methodName, maxDepth = 6) {
-    let p = Object.getPrototypeOf(obj);
-    for (let i = 0; i < maxDepth && p; i++) {
-        if (typeof p[methodName] === 'function') return p;
-        p = Object.getPrototypeOf(p);
+// --- Búsqueda de métodos por firma (robusto a obfuscación) ---
+function getMethods(obj) {
+    const methods = [];
+    const seen = new Set();
+    let proto = obj;
+    for (let depth = 0; proto && depth < 10; depth++) {
+        let names = [];
+        try { names = Object.getOwnPropertyNames(proto); } catch (_) {}
+        for (const name of names) {
+            if (name === 'constructor' || seen.has(name)) continue;
+            seen.add(name);
+            let fn = null;
+            try { fn = proto[name]; } catch (_) {}
+            if (typeof fn !== 'function') continue;
+            let source = '';
+            try { source = Function.prototype.toString.call(fn); } catch (_) {}
+            methods.push({ name, fn, source });
+        }
+        proto = Object.getPrototypeOf(proto);
     }
-    return null;
+    return methods;
+}
+
+function resolveNativeInput(player) {
+    const methods = getMethods(player);
+
+    // Reader: lee input del teclado, tiene sentInputThisTick, currentInput, jumping, inputSequenceNumber
+    const reader =
+        methods.find(m => m.source.includes('sentInputThisTick') &&
+                          m.source.includes('currentInput') &&
+                          m.source.includes('jumping') &&
+                          m.source.includes('inputSequenceNumber'));
+
+    // Apply: aplica el input al jugador, tiene this.wWQmwuDLqA, this.YApHmhhGagG, this.jumping
+    const apply =
+        methods.find(m => m.source.includes('this.wWQmwuDLqA') &&
+                          m.source.includes('this.YApHmhhGagG') &&
+                          m.source.includes('this.jumping'));
+
+    if (!reader || !apply) return null;
+
+    return {
+        readerName: reader.name,
+        applyName: apply.name,
+        originalReader: player[reader.name],
+        nativeApply: player[apply.name]
+    };
+}
+
+function createNativeInput(player, controls) {
+    const data = {
+        sequenceNumber: ++player.inputSequenceNumber,
+        left: controls.strafe < -0.3,
+        right: controls.strafe > 0.3,
+        up: controls.forward > 0.3,
+        down: controls.forward < -0.3,
+        yaw: controls.yaw !== null ? controls.yaw : player.yaw,
+        pitch: player.pitch,
+        jump: controls.jump,
+        sneak: controls.sneak,
+        sprint: false,
+        pos: null,
+        ackId: player.lastServerAckId > 0 ? player.lastServerAckId : undefined,
+        onGround: player.onGround,
+        usingItem: false
+    };
+
+    try {
+        const InputClass = player.currentInput?.constructor;
+        if (InputClass && InputClass !== Object) return new InputClass(data);
+    } catch (_) {}
+
+    return data;
+}
+
+function neutralMovement(player) {
+    if (!player) return;
+    try {
+        player.wWQmwuDLqA = 0;
+        player.YApHmhhGagG = 0;
+        player.jumping = false;
+    } catch (_) {}
+}
+
+function restorePlayerHook() {
+    const player = state.player;
+    if (player && state.readerName && typeof state.originalReader === 'function') {
+        try {
+            if (player[state.readerName] !== state.originalReader) {
+                player[state.readerName] = state.originalReader;
+            }
+        } catch (_) {}
+    }
+    neutralMovement(player);
+    state.player = null;
+    state.readerName = null;
+    state.originalReader = null;
+    state.nativeApply = null;
+    inputHooked = false;
 }
 
 function hookPlayerInput() {
-    if (inputHooked) return;
+    if (inputHooked) return true;
     const game = getGame();
-    if (!game?.player) return;
+    if (!game?.player) return false;
     const player = game.player;
 
-    // The input method that resets strafe/forward, reads keyboard, builds packet
-    const inputProto = findMethodOnProtoChain(player, 'cwUlQghwbXGysIbLwFMtw');
-    // The method that actually sets strafe/forward from input booleans
-    const applyProto = findMethodOnProtoChain(player, 'qcWSTxdfzJ');
-
-    if (!inputProto && !applyProto) {
-        console.warn(`${TAG} Could not find input methods to hook`);
-        return;
+    const native = resolveNativeInput(player);
+    if (!native) {
+        console.warn(`${TAG} Could not resolve native input methods`);
+        return false;
     }
 
-    // Hook cwUlQghwbXGysIbLwFMtw — runs BEFORE physics
-    if (inputProto) {
-        const origInput = inputProto.cwUlQghwbXGysIbLwFMtw;
-        inputProto.cwUlQghwbXGysIbLwFMtw = function (...args) {
-            // Call original — reads keyboard, builds+sends packet, calls qcWSTxdfzJ
-            origInput.apply(this, args);
+    state.player = player;
+    state.readerName = native.readerName;
+    state.originalReader = native.originalReader;
+    state.nativeApply = native.nativeApply;
 
-            // Override AFTER original — physics hasn't run yet (runs in super.onLivingUpdate)
-            if (state.enabled && state.status === 'moving') {
-                // Game convention: FYwYZZgqKAr: up/W=-1, down/S=+1
-                this.FYwYZZgqKAr = -desiredInput.forward;
-                // Game convention: jidcIFbLoW: right/D=+1, left/A=-1
-                this.jidcIFbLoW = desiredInput.strafe;
-                this.jumping = desiredInput.jump;
-                this.sneak = desiredInput.sneak;
-                if (desiredInput.yaw !== null) {
-                    this.yaw = desiredInput.yaw;
-                    this.pitch = 0; // look straight ahead
-                }
-            }
-        };
-    }
+    const readerName = state.readerName;
+    const originalReader = state.originalReader;
+    const nativeApply = state.nativeApply;
 
-    // ALSO hook qcWSTxdfzJ — override the input object BEFORE it sets strafe/forward
-    if (applyProto) {
-        const origApply = applyProto.qcWSTxdfzJ;
-        applyProto.qcWSTxdfzJ = function (input, ...rest) {
-            if (state.enabled && state.status === 'moving' && input) {
-                // Override the booleans that qcWSTxdfzJ reads
-                input.up = desiredInput.forward > 0.3;    // forward → W/up
-                input.down = desiredInput.forward < -0.3;  // backward → S/down
-                input.left = desiredInput.strafe < -0.3;   // left → A
-                input.right = desiredInput.strafe > 0.3;    // right → D
-                input.jump = desiredInput.jump;
-                input.sneak = desiredInput.sneak;
-                if (desiredInput.yaw !== null) input.yaw = desiredInput.yaw;
-            }
-            return origApply.call(this, input, ...rest);
-        };
-    }
+    player[readerName] = function (...args) {
+        if (!state.enabled || state.status !== 'moving' || state.player !== this) {
+            return originalReader.apply(this, args);
+        }
+
+        const input = createNativeInput(this, desiredInput);
+
+        this.sentInputThisTick = false;
+        this.wWQmwuDLqA = 0;
+        this.YApHmhhGagG = 0;
+        this.currentInput = input;
+
+        return nativeApply.call(this, input);
+    };
 
     inputHooked = true;
-    console.log(`${TAG} Hooks installed: cwUlQghwbXGysIbLwFMtw=${!!inputProto}, qcWSTxdfzJ=${!!applyProto}`);
+    console.log(`${TAG} Input hooked: reader=${readerName}`);
+    return true;
 }
 
 function getGame(force = false) {
@@ -392,12 +470,12 @@ function getLookVector(player) {
 }
 
 function applyMovementInput(player, strafe, forward, jump, sneak) {
-    // Set desiredInput — the hooked cwUlQghwbXGysIbLwFMtw will apply these each tick
+    // Set desiredInput — the hooked reader will inject these as native input each tick
     desiredInput.strafe = strafe;
     desiredInput.forward = forward;
     desiredInput.jump = jump;
     desiredInput.sneak = sneak;
-    desiredInput.yaw = player.yaw; // Keep yaw in sync so the hook applies it
+    desiredInput.yaw = player.yaw;
 }
 
 function executePath(player) {
@@ -524,6 +602,8 @@ function stop(status = 'idle', reason = '') {
     desiredInput.jump = false;
     desiredInput.sneak = false;
     desiredInput.yaw = null;
+    // Neutralize movement fields on the player
+    neutralMovement(state.player);
     console.log(`${TAG} Stopped: ${reason}`);
     emitState();
 }
@@ -535,7 +615,11 @@ function loop() {
         const player = game?.player;
 
         if (game && player && player.ticksExisted > 0) {
-            if (!inputHooked) hookPlayerInput();
+            // Re-hook if player instance changed or not hooked yet
+            if (!inputHooked || state.player !== player) {
+                restorePlayerHook();
+                hookPlayerInput();
+            }
             if (state.status === 'moving' && state.path.length > 0) {
                 executePath(player);
             }
@@ -546,6 +630,22 @@ function loop() {
 }
 
 // --- Events ---
+document.addEventListener(EVENT_CONFIG, event => {
+    let cfg;
+    try { cfg = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail; }
+    catch (_) { return; }
+    if (!cfg || !('enabled' in cfg)) return;
+
+    if (cfg.enabled) {
+        state.enabled = true;
+    } else {
+        state.enabled = false;
+        stop('idle', 'Disabled via config');
+        restorePlayerHook();
+    }
+    emitState();
+}, true);
+
 document.addEventListener(EVENT_COMMAND, event => {
     let cmd;
     try { cmd = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail; }
@@ -584,15 +684,6 @@ function emitState() {
     } catch (_) {}
 }
 
-// --- Chat Command Integration ---
-const originalChatSend = window.WebSocket?.prototype?.send;
-function hookChat() {
-    // Listen for chat input to intercept #goto, #stop etc.
-    const chatInput = document.querySelector('input[type="text"]') ||
-                      document.querySelector('textarea');
-    // Will be handled via event system instead
-}
-
 // --- Public API ---
 globalThis.Baritone = {
     goto(x, y, z) {
@@ -606,7 +697,13 @@ globalThis.Baritone = {
     },
     stop() { stop('idle', 'API stop'); },
     enable() { state.enabled = true; emitState(); return state.enabled; },
-    disable() { state.enabled = false; stop('idle', 'Disabled'); return state.enabled; },
+    disable() {
+        stop('idle', 'Disabled');
+        state.enabled = false;
+        restorePlayerHook();
+        emitState();
+        return state.enabled;
+    },
     get status() { return state.status; },
     get goal() { return state.goal; },
     get pathLength() { return state.path.length; }
