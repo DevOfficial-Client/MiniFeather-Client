@@ -38,7 +38,8 @@
         "src/Baritone.js",
         "src/Dynamic Crosshair.js",
         "src/features.js",
-        "src/armorhud.js"
+        "src/armorhud.js",
+        "src/RhythmParkour.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"

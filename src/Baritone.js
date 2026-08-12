@@ -264,9 +264,6 @@ function isChunkLoaded(x, z) {
     return true;
 }
 
-let _suppressErrors = false;
-const _origConsoleError = console.error.bind(console);
-
 function getBlockState(x, y, z) {
     if (y < 0 || y > 255) return null;
     if (!isChunkLoaded(x, z)) return null;
@@ -275,17 +272,9 @@ function getBlockState(x, y, z) {
     try {
         const proto = Object.getPrototypeOf(world);
         if (typeof proto.getBlockState !== 'function') return null;
-        // Suppress game's internal error logging for invalid positions
-        _suppressErrors = true;
         return proto.getBlockState.call(world, { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) });
     } catch (_) { return null; }
-    finally { _suppressErrors = false; }
 }
-
-console.error = function (...args) {
-    if (_suppressErrors) return;
-    return _origConsoleError.apply(console, args);
-};
 
 // Returns: true = solid, false = air/empty, null = unknown/unloaded
 function blockSolidity(x, y, z) {

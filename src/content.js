@@ -4393,8 +4393,57 @@
     else showGUI();
   }
 
-  function saveSettings() {
-    chrome.storage.local.set({ settings });
+  let saveTimer = null;
+  let saveGeneration = 0;
+
+  function saveSettings(immediate = false) {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    const gen = ++saveGeneration;
+    const doSave = () => {
+      chrome.storage.local.set({ settings: { ...settings } }, () => {
+        // Solo actualizamos si no hay un guardado más nuevo pendiente
+        if (gen === saveGeneration) {
+          chrome.storage.local.get('settings', () => {});
+        }
+      });
+    };
+    if (immediate) doSave();
+    else saveTimer = setTimeout(doSave, 150);
+  }
+
+  // Flush al cerrar/cambiar de pestaña
+  window.addEventListener('beforeunload', () => {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    chrome.storage.local.set({ settings: { ...settings } });
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && saveTimer) {
+      clearTimeout(saveTimer); saveTimer = null;
+      chrome.storage.local.set({ settings: { ...settings } });
+    }
+  });
+
+  // Sync entre pestañas: si otra pestaña guardó settings, aplicarlos
+  if (chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local' || !changes.settings) return;
+      const incoming = changes.settings.newValue;
+      if (!incoming) return;
+      // No sobreescribir si tenemos cambios sin guardar pendientes
+      if (saveTimer) return;
+      Object.assign(settings, incoming);
+      Object.assign(guiSettings, incoming);
+      applyGuiSettings();
+      // Actualizar UI si está abierta
+      const panel = document.getElementById('mf-gui');
+      if (panel) {
+        panel.querySelectorAll('.mf-toggle[data-key]').forEach(label => {
+          const key = label.dataset.key;
+          const input = label.querySelector('input');
+          if (input && key in guiSettings) input.checked = guiSettings[key];
+        });
+      }
+    });
   }
 
   function saveLogo(value) {
@@ -5565,7 +5614,7 @@
       input.addEventListener('change', () => {
         guiSettings[key] = input.checked;
         settings[key] = input.checked;
-        saveSettings();
+        saveSettings(true);
         applyGuiSettings();
         update();
         if (activePage === 'dashboard') updateDashboardStats();
