@@ -84,7 +84,96 @@
     { id: 'about', icon: '🪶', labelKey: 'tabAbout' }
   ];
 
-  const MODULE_VERSION = '4.5.0';
+  const MODULE_VERSION = '4.6.0';
+
+  const ELYTRA_FLIGHT_PRESETS = Object.freeze({
+    soft: Object.freeze({
+      rollSensitivity: 0.00145,
+      pitchSensitivity: 0.82,
+      yawSpeed: 42,
+      bankingStrength: 0.35,
+      smoothing: 7.5,
+      autoLevelStrength: 2.8,
+      invertPitch: false,
+      autoLevel: true,
+      showHorizon: false
+    }),
+    normal: Object.freeze({
+      rollSensitivity: 0.00215,
+      pitchSensitivity: 1.00,
+      yawSpeed: 68,
+      bankingStrength: 0.62,
+      smoothing: 10.5,
+      autoLevelStrength: 4.2,
+      invertPitch: false,
+      autoLevel: true,
+      showHorizon: false
+    }),
+    strong: Object.freeze({
+      rollSensitivity: 0.00305,
+      pitchSensitivity: 1.12,
+      yawSpeed: 92,
+      bankingStrength: 0.92,
+      smoothing: 14.0,
+      autoLevelStrength: 5.8,
+      invertPitch: false,
+      autoLevel: true,
+      showHorizon: true
+    })
+  });
+
+  const ELYTRA_FLIGHT_LIMITS = Object.freeze({
+    rollSensitivity: Object.freeze({ min: 0.0005, max: 0.006, step: 0.00005, label: 'elytraFlightRollSensitivity', digits: 5 }),
+    pitchSensitivity: Object.freeze({ min: 0.4, max: 1.6, step: 0.01, label: 'elytraFlightPitchSensitivity', digits: 2 }),
+    yawSpeed: Object.freeze({ min: 15, max: 150, step: 1, label: 'elytraFlightYawSpeed', digits: 0 }),
+    bankingStrength: Object.freeze({ min: 0, max: 1.5, step: 0.01, label: 'elytraFlightBanking', digits: 2 }),
+    smoothing: Object.freeze({ min: 3, max: 22, step: 0.1, label: 'elytraFlightSmoothing', digits: 1 }),
+    autoLevelStrength: Object.freeze({ min: 0.5, max: 10, step: 0.1, label: 'elytraFlightAutoLevelStrength', digits: 1 })
+  });
+
+  function cloneElytraFlightValues(source = ELYTRA_FLIGHT_PRESETS.normal) {
+    return {
+      rollSensitivity: Number(source.rollSensitivity),
+      pitchSensitivity: Number(source.pitchSensitivity),
+      yawSpeed: Number(source.yawSpeed),
+      bankingStrength: Number(source.bankingStrength),
+      smoothing: Number(source.smoothing),
+      autoLevelStrength: Number(source.autoLevelStrength),
+      invertPitch: source.invertPitch === true,
+      autoLevel: source.autoLevel !== false,
+      showHorizon: source.showHorizon === true
+    };
+  }
+
+  function clampElytraFlightValues(source) {
+    const base = cloneElytraFlightValues(ELYTRA_FLIGHT_PRESETS.normal);
+    if (!source || typeof source !== 'object') return base;
+    for (const [key, limit] of Object.entries(ELYTRA_FLIGHT_LIMITS)) {
+      const value = Number(source[key]);
+      if (!Number.isFinite(value)) continue;
+      base[key] = Math.max(limit.min, Math.min(limit.max, value));
+    }
+    base.invertPitch = source.invertPitch === true;
+    base.autoLevel = source.autoLevel !== false;
+    base.showHorizon = source.showHorizon === true;
+    return base;
+  }
+
+  function detectElytraFlightPreset(values) {
+    const normalized = clampElytraFlightValues(values);
+    for (const [name, preset] of Object.entries(ELYTRA_FLIGHT_PRESETS)) {
+      const matches = Object.keys(ELYTRA_FLIGHT_LIMITS).every(key =>
+        Math.abs(Number(normalized[key]) - Number(preset[key])) <= Math.max(Number(ELYTRA_FLIGHT_LIMITS[key].step) / 2, 0.000001)
+      );
+      if (
+        matches &&
+        normalized.invertPitch === preset.invertPitch &&
+        normalized.autoLevel === preset.autoLevel &&
+        normalized.showHorizon === preset.showHorizon
+      ) return name;
+    }
+    return 'custom';
+  }
 
   const CAMERA_OVERHAUL_PRESETS = Object.freeze({
     soft: Object.freeze({
@@ -296,6 +385,9 @@
     cameraOverhaulBind: '',
     cameraOverhaulPreset: 'normal',
     cameraOverhaulValues: cloneCameraValues(CAMERA_OVERHAUL_PRESETS.normal),
+    elytraFlight: false,
+    elytraFlightPreset: 'normal',
+    elytraFlightValues: cloneElytraFlightValues(ELYTRA_FLIGHT_PRESETS.normal),
     dynamicCrosshair: false,
     dynamicCrosshairSize: 28,
     vanillaAnimations: false,
@@ -344,6 +436,7 @@
   let patPatSettingsCleanup = null;
   let zoomSettingsCleanup = null;
   let cameraOverhaulSettingsCleanup = null;
+  let elytraFlightSettingsCleanup = null;
   let freecamSettingsCleanup = null;
   let freecamAccess = { known: false, allowed: false, permissionLevel: 0 };
   let lastFreecamDeniedAt = 0;
@@ -2225,6 +2318,7 @@
       { page: 'render', key: 'vanillaAnimations', title: 'Vanilla Animations', desc: 'Freezes elbow and knee joints rigid for all players' },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
+      { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc') },
       { page: 'render', key: 'freecam', title: t('freecam'), desc: t('freecamDesc') },
       { page: 'world', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc') },
       { page: 'world', key: 'rhythmParkour', title: 'Rhythm Parkour', desc: 'Transforms Miniblox into a rhythm parkour game' },
@@ -2292,6 +2386,7 @@
     afk: 'antiAfk', antiafk: 'antiAfk',
     armor: 'armorHud', armorhud: 'armorHud',
     camera: 'cameraOverhaul', cameraoverhaul: 'cameraOverhaul',
+    elytra: 'elytraFlight', elytraflight: 'elytraFlight', barrelroll: 'elytraFlight', flight: 'elytraFlight',
     coords: 'coordinates', coordinates: 'coordinates',
     crosshair: 'dynamicCrosshair', dynamiccrosshair: 'dynamicCrosshair',
     cps: 'cpsCounter', cpscounter: 'cpsCounter',
@@ -2314,7 +2409,7 @@
   });
 
   const COMMAND_MODULE_LABELS = Object.freeze({
-    antiAfk: 'Anti-AFK', armorHud: 'Armor HUD', cameraOverhaul: 'Camera Overhaul',
+    antiAfk: 'Anti-AFK', armorHud: 'Armor HUD', cameraOverhaul: 'Camera Overhaul', elytraFlight: 'Elytra Flight',
     coordinates: 'Coordinates', dynamicCrosshair: 'Dynamic Crosshair', cpsCounter: 'CPS Counter',
     distanceNameTags: 'Player Distance', fpsCounter: 'FPS Counter', freelook: 'FreeLook', freecam: 'FreeCam',
     guiPatch: 'GUI Patch',
@@ -2425,7 +2520,7 @@
     if (request.action === 'toggle') {
       const key = resolveCommandModule(args[0]);
       if (!key) {
-        push('Usage: /toggle <module>. Modules: afk, armor, camera, coords, crosshair, cps, distance, fps, freecam, freelook, health, highlight, itemphysics, keystrokes, noweather, patpat, ping, titan, waypoints, zoom', 'error');
+        push('Usage: /toggle <module>. Modules: afk, armor, camera, coords, crosshair, cps, distance, elytra, fps, freecam, freelook, health, highlight, itemphysics, keystrokes, noweather, patpat, ping, titan, waypoints, zoom', 'error');
       } else {
         const enabling = !settings[key];
         if (key === 'freecam' && enabling && !requestFreecamAccess()) {
@@ -2655,6 +2750,35 @@
       },
       destroy() {
         sendItemPhysicsConfig(false);
+      }
+    }));
+  }
+
+  function sendElytraFlightConfig(enabled = settings.elytraFlight) {
+    settings.elytraFlightValues = clampElytraFlightValues(settings.elytraFlightValues);
+    settings.elytraFlightPreset = detectElytraFlightPreset(settings.elytraFlightValues);
+    document.dispatchEvent(new CustomEvent('minifeather:elytra-flight-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        preset: settings.elytraFlightPreset,
+        values: cloneElytraFlightValues(settings.elytraFlightValues)
+      })
+    }));
+  }
+
+  function initElytraFlightModule() {
+    registerModule('elytraFlight', () => createLifecycle({
+      enable() {
+        sendElytraFlightConfig(true);
+      },
+      disable() {
+        sendElytraFlightConfig(false);
+      },
+      refresh() {
+        sendElytraFlightConfig(MODULES.get('elytraFlight')?.enabled === true);
+      },
+      destroy() {
+        sendElytraFlightConfig(false);
       }
     }));
   }
@@ -3716,6 +3840,224 @@
     });
   }
 
+  function closeElytraFlightSettings() {
+    if (elytraFlightSettingsCleanup) {
+      const cleanup = elytraFlightSettingsCleanup;
+      elytraFlightSettingsCleanup = null;
+      cleanup();
+      return;
+    }
+    panel?.querySelector('.mf-elytra-flight-backdrop')?.remove();
+  }
+
+  function openElytraFlightSettings() {
+    if (!panel) return;
+    closeElytraFlightSettings();
+    closeCameraOverhaulSettings();
+
+    settings.elytraFlightValues = clampElytraFlightValues(settings.elytraFlightValues);
+    settings.elytraFlightPreset = detectElytraFlightPreset(settings.elytraFlightValues);
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop mf-elytra-flight-backdrop';
+
+    const renderControl = (key, limit) => {
+      const value = Number(settings.elytraFlightValues[key]);
+      return `
+        <div class="mf-co-control" data-ef-control="${key}">
+          <div class="mf-co-control-head">
+            <span>${t(limit.label)}</span>
+            <input class="mf-co-number" data-ef-number="${key}" type="number" min="${limit.min}" max="${limit.max}" step="${limit.step}" value="${value.toFixed(limit.digits)}">
+          </div>
+          <input class="mf-co-range" data-ef-range="${key}" type="range" min="${limit.min}" max="${limit.max}" step="${limit.step}" value="${value}">
+        </div>
+      `;
+    };
+
+    const boolText = value => value ? t('elytraFlightOn') : t('elytraFlightOff');
+
+    backdrop.innerHTML = `
+      <div class="mf-tt-dialog mf-co-dialog" role="dialog" aria-modal="true">
+        <div class="mf-tt-head">
+          <div class="mf-tt-title">${t('elytraFlightSettings')}</div>
+          <button type="button" class="mf-close" data-ef-close>×</button>
+        </div>
+
+        <div class="mf-tt-row">
+          <span>${t('elytraFlightProfile')}</span>
+          <span class="mf-tt-scale-value" data-ef-profile-label></span>
+        </div>
+
+        <div class="mf-co-presets">
+          <button type="button" class="mf-btn secondary" data-ef-preset="soft">${t('elytraFlightSoft')}</button>
+          <button type="button" class="mf-btn secondary" data-ef-preset="normal">${t('elytraFlightNormal')}</button>
+          <button type="button" class="mf-btn secondary" data-ef-preset="strong">${t('elytraFlightStrong')}</button>
+        </div>
+
+        <div class="mf-co-controls">
+          ${Object.entries(ELYTRA_FLIGHT_LIMITS).map(([key, limit]) => renderControl(key, limit)).join('')}
+        </div>
+
+        <div class="mf-tt-bind-box">
+          <span>${t('elytraFlightInvertPitch')}</span>
+          <button type="button" class="mf-btn secondary" data-ef-invert></button>
+        </div>
+
+        <div class="mf-tt-bind-box">
+          <span>${t('elytraFlightAutoLevel')}</span>
+          <button type="button" class="mf-btn secondary" data-ef-autolevel></button>
+        </div>
+
+        <div class="mf-tt-bind-box">
+          <span>${t('elytraFlightHorizon')}</span>
+          <button type="button" class="mf-btn secondary" data-ef-horizon></button>
+        </div>
+
+        <div class="mf-tt-hint">${t('elytraFlightControlsHint')}</div>
+        <div class="mf-tt-hint">${t('elytraFlightSafeHint')}</div>
+        <button type="button" class="mf-btn primary mf-tt-save" data-ef-save>${t('elytraFlightSave')}</button>
+      </div>
+    `;
+
+    panel.appendChild(backdrop);
+
+    const profileLabel = backdrop.querySelector('[data-ef-profile-label]');
+    const invertButton = backdrop.querySelector('[data-ef-invert]');
+    const autoLevelButton = backdrop.querySelector('[data-ef-autolevel]');
+    const horizonButton = backdrop.querySelector('[data-ef-horizon]');
+
+    const profileText = profile => {
+      if (profile === 'soft') return t('elytraFlightSoft');
+      if (profile === 'normal') return t('elytraFlightNormal');
+      if (profile === 'strong') return t('elytraFlightStrong');
+      return t('elytraFlightCustom');
+    };
+
+    const syncProfileUI = () => {
+      const profile = detectElytraFlightPreset(settings.elytraFlightValues);
+      settings.elytraFlightPreset = profile;
+      guiSettings.elytraFlightPreset = profile;
+      if (profileLabel) profileLabel.textContent = profileText(profile);
+      backdrop.querySelectorAll('[data-ef-preset]').forEach(button => {
+        button.classList.toggle('active', button.dataset.efPreset === profile);
+      });
+    };
+
+    const syncBooleanUI = () => {
+      const pairs = [
+        [invertButton, 'invertPitch'],
+        [autoLevelButton, 'autoLevel'],
+        [horizonButton, 'showHorizon']
+      ];
+      for (const [button, key] of pairs) {
+        if (!button) continue;
+        const value = settings.elytraFlightValues[key] === true;
+        button.textContent = boolText(value);
+        button.classList.toggle('active', value);
+      }
+    };
+
+    const syncControlUI = () => {
+      for (const [key, limit] of Object.entries(ELYTRA_FLIGHT_LIMITS)) {
+        const value = Number(settings.elytraFlightValues[key]);
+        const range = backdrop.querySelector(`[data-ef-range="${key}"]`);
+        const number = backdrop.querySelector(`[data-ef-number="${key}"]`);
+        if (range) range.value = String(value);
+        if (number) number.value = value.toFixed(limit.digits);
+      }
+      syncProfileUI();
+      syncBooleanUI();
+    };
+
+    const persist = () => {
+      guiSettings.elytraFlightValues = cloneElytraFlightValues(settings.elytraFlightValues);
+      settings.elytraFlightPreset = detectElytraFlightPreset(settings.elytraFlightValues);
+      guiSettings.elytraFlightPreset = settings.elytraFlightPreset;
+      saveSettings();
+      sendElytraFlightConfig(settings.elytraFlight);
+    };
+
+    const applyValue = (key, raw, save = false) => {
+      const limit = ELYTRA_FLIGHT_LIMITS[key];
+      if (!limit) return;
+      const value = Number(raw);
+      if (!Number.isFinite(value)) return;
+      settings.elytraFlightValues = clampElytraFlightValues({ ...settings.elytraFlightValues, [key]: value });
+      guiSettings.elytraFlightValues = cloneElytraFlightValues(settings.elytraFlightValues);
+      const normalized = Number(settings.elytraFlightValues[key]);
+      const range = backdrop.querySelector(`[data-ef-range="${key}"]`);
+      const number = backdrop.querySelector(`[data-ef-number="${key}"]`);
+      if (range) range.value = String(normalized);
+      if (number) number.value = normalized.toFixed(limit.digits);
+      syncProfileUI();
+      sendElytraFlightConfig(settings.elytraFlight);
+      if (save) persist();
+    };
+
+    backdrop.querySelectorAll('[data-ef-range]').forEach(input => {
+      input.addEventListener('input', () => applyValue(input.dataset.efRange, input.value, false));
+      input.addEventListener('change', () => applyValue(input.dataset.efRange, input.value, true));
+    });
+
+    backdrop.querySelectorAll('[data-ef-number]').forEach(input => {
+      input.addEventListener('change', () => applyValue(input.dataset.efNumber, input.value, true));
+      input.addEventListener('keydown', event => {
+        if (event.code !== 'Enter') return;
+        event.preventDefault();
+        applyValue(input.dataset.efNumber, input.value, true);
+      });
+    });
+
+    backdrop.querySelectorAll('[data-ef-preset]').forEach(button => {
+      button.addEventListener('click', () => {
+        const preset = button.dataset.efPreset;
+        if (!ELYTRA_FLIGHT_PRESETS[preset]) return;
+        settings.elytraFlightValues = cloneElytraFlightValues(ELYTRA_FLIGHT_PRESETS[preset]);
+        guiSettings.elytraFlightValues = cloneElytraFlightValues(settings.elytraFlightValues);
+        settings.elytraFlightPreset = preset;
+        guiSettings.elytraFlightPreset = preset;
+        syncControlUI();
+        persist();
+      });
+    });
+
+    invertButton?.addEventListener('click', () => {
+      settings.elytraFlightValues.invertPitch = !settings.elytraFlightValues.invertPitch;
+      syncBooleanUI();
+      syncProfileUI();
+      persist();
+    });
+
+    autoLevelButton?.addEventListener('click', () => {
+      settings.elytraFlightValues.autoLevel = !settings.elytraFlightValues.autoLevel;
+      syncBooleanUI();
+      syncProfileUI();
+      persist();
+    });
+
+    horizonButton?.addEventListener('click', () => {
+      settings.elytraFlightValues.showHorizon = !settings.elytraFlightValues.showHorizon;
+      syncBooleanUI();
+      syncProfileUI();
+      persist();
+    });
+
+    syncControlUI();
+
+    const cleanup = () => {
+      persist();
+      backdrop.remove();
+      if (elytraFlightSettingsCleanup === cleanup) elytraFlightSettingsCleanup = null;
+    };
+
+    elytraFlightSettingsCleanup = cleanup;
+    backdrop.querySelector('[data-ef-close]')?.addEventListener('click', cleanup);
+    backdrop.querySelector('[data-ef-save]')?.addEventListener('click', cleanup);
+    backdrop.addEventListener('mousedown', event => {
+      if (event.target === backdrop) cleanup();
+    });
+  }
+
   function closeCameraOverhaulSettings() {
     if (cameraOverhaulSettingsCleanup) {
       const cleanup = cameraOverhaulSettingsCleanup;
@@ -3880,6 +4222,7 @@
   function openCameraOverhaulSettings() {
     if (!panel) return;
     closeCameraOverhaulSettings();
+    closeElytraFlightSettings();
 
     settings.cameraOverhaulValues = clampCameraValues(settings.cameraOverhaulValues);
     settings.cameraOverhaulPreset = detectCameraPreset(settings.cameraOverhaulValues);
@@ -4248,6 +4591,11 @@
               'cameraOverhaul',
               t('cameraOverhaul'),
               t('cameraOverhaulDesc')
+            )}
+            ${renderToggle(
+              'elytraFlight',
+              t('elytraFlight'),
+              t('elytraFlightDesc')
             )}
             ${renderToggle(
               'freelook',
@@ -4697,6 +5045,7 @@
     closeAntiAfkSettings();
     closeZoomSettings();
     closeCameraOverhaulSettings();
+    closeElytraFlightSettings();
     closeFreecamSettings();
     const closingPanel = panel;
     const closingOverlay = overlay;
@@ -5861,6 +6210,13 @@
       openCameraOverhaulSettings();
     });
 
+    const elytraFlightToggle = panel.querySelector('.mf-toggle[data-key="elytraFlight"]');
+    elytraFlightToggle?.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openElytraFlightSettings();
+    });
+
     const dynamicCrosshairToggle = panel.querySelector('.mf-toggle[data-key="dynamicCrosshair"]');
     dynamicCrosshairToggle?.addEventListener('contextmenu', event => {
       event.preventDefault();
@@ -6428,6 +6784,7 @@
     setModuleEnabled('rhythmParkour', settings.rhythmParkour);
     setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
+    setModuleEnabled('elytraFlight', settings.elytraFlight);
     setModuleEnabled('freecam', settings.freecam);
     setModuleEnabled('dynamicCrosshair', settings.dynamicCrosshair);
     setModuleEnabled('vanillaAnimations', settings.vanillaAnimations);
@@ -6917,6 +7274,7 @@
     initGuiPatchModule();
     initZoomModule();
     initCameraOverhaulModule();
+    initElytraFlightModule();
     initFreecamModule();
     initDynamicCrosshairModule();
     initGUI();
@@ -7020,6 +7378,8 @@
       settings.patPatPreset = detectPatPatPreset(settings.patPatValues);
       settings.cameraOverhaulValues = clampCameraValues(settings.cameraOverhaulValues);
       settings.cameraOverhaulPreset = detectCameraPreset(settings.cameraOverhaulValues);
+      settings.elytraFlightValues = clampElytraFlightValues(settings.elytraFlightValues);
+      settings.elytraFlightPreset = detectElytraFlightPreset(settings.elytraFlightValues);
       settings.cameraOverhaulBind = String(settings.cameraOverhaulBind || '');
       settings.freecamSpeed = Math.max(1, Math.min(30, Number(settings.freecamSpeed) || 7));
       settings.freecamSensitivity = Math.max(0.1, Math.min(3, Number(settings.freecamSensitivity) || 1));
@@ -7030,7 +7390,8 @@
         ...settings,
         moduleBinds: { ...settings.moduleBinds },
         patPatValues: clonePatPatValues(settings.patPatValues),
-        cameraOverhaulValues: cloneCameraValues(settings.cameraOverhaulValues)
+        cameraOverhaulValues: cloneCameraValues(settings.cameraOverhaulValues),
+        elytraFlightValues: cloneElytraFlightValues(settings.elytraFlightValues)
       };
       currentLogo = data.customLogo || CONFIG.defaultLogo;
 
