@@ -396,6 +396,7 @@ function resolveCamera(force = false) {
 function applyViewEffect(camera, original, thisArg, args) {
     if (
         !state.enabled ||
+        globalThis.__MINIFEATHER_FREECAM_ACTIVE__ ||
         state.camera !== camera ||
         state.viewHookDepth > 0 ||
         !document.pointerLockElement
@@ -570,6 +571,10 @@ function clearChannels() {
 }
 
 function updateEffects(timestamp, dt) {
+    if (globalThis.__MINIFEATHER_FREECAM_ACTIVE__) {
+        clearChannels();
+        return;
+    }
     const camera = resolveCamera();
     const game = state.game;
     const player = game?.player;

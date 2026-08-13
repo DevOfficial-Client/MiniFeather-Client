@@ -314,6 +314,9 @@
   })();
 
   function setFL(on) {
+      if (on && globalThis.__MINIFEATHER_FREECAM_ACTIVE__) {
+          return;
+      }
       if (on === active) {
           return;
       }
