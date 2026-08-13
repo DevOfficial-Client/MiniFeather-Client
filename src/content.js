@@ -84,7 +84,7 @@
     { id: 'about', icon: '🪶', labelKey: 'tabAbout' }
   ];
 
-  const MODULE_VERSION = '4.4.0';
+  const MODULE_VERSION = '4.5.0';
 
   const CAMERA_OVERHAUL_PRESETS = Object.freeze({
     soft: Object.freeze({
@@ -258,6 +258,7 @@
   const DEFAULT_SETTINGS = {
     rebrand: true,
     supportAds: false,
+    startupAnimation: true,
     discord: true,
     keystrokes: true,
     fpsCounter: true,
@@ -284,6 +285,10 @@
     freelook: false,
     freelookBind: 'KeyZ',
     freelookMode: 'hold',
+    freecam: false,
+    freecamSpeed: 7.0,
+    freecamSensitivity: 1.0,
+    freecamFastMultiplier: 3.0,
     blockHighlight: true,
     blockHighlightColor: '#ffffff',
     blockHighlightThickness: 1,
@@ -339,6 +344,9 @@
   let patPatSettingsCleanup = null;
   let zoomSettingsCleanup = null;
   let cameraOverhaulSettingsCleanup = null;
+  let freecamSettingsCleanup = null;
+  let freecamAccess = { known: false, allowed: false, permissionLevel: 0 };
+  let lastFreecamDeniedAt = 0;
   let waypointStatus = '';
   let destroyed = false;
 
@@ -2217,6 +2225,7 @@
       { page: 'render', key: 'vanillaAnimations', title: 'Vanilla Animations', desc: 'Freezes elbow and knee joints rigid for all players' },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
+      { page: 'render', key: 'freecam', title: t('freecam'), desc: t('freecamDesc') },
       { page: 'world', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc') },
       { page: 'world', key: 'rhythmParkour', title: 'Rhythm Parkour', desc: 'Transforms Miniblox into a rhythm parkour game' },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
@@ -2290,6 +2299,7 @@
     fps: 'fpsCounter', fpscounter: 'fpsCounter',
     gui: 'guiPatch', guipatch: 'guiPatch',
     freelook: 'freelook',
+    freecam: 'freecam', freecamera: 'freecam',
     health: 'healthNameTags', healthnametags: 'healthNameTags',
     highlight: 'blockHighlight', blockhighlight: 'blockHighlight',
     item: 'itemPhysics', itemphysics: 'itemPhysics', physics: 'itemPhysics',
@@ -2306,7 +2316,7 @@
   const COMMAND_MODULE_LABELS = Object.freeze({
     antiAfk: 'Anti-AFK', armorHud: 'Armor HUD', cameraOverhaul: 'Camera Overhaul',
     coordinates: 'Coordinates', dynamicCrosshair: 'Dynamic Crosshair', cpsCounter: 'CPS Counter',
-    distanceNameTags: 'Player Distance', fpsCounter: 'FPS Counter', freelook: 'FreeLook',
+    distanceNameTags: 'Player Distance', fpsCounter: 'FPS Counter', freelook: 'FreeLook', freecam: 'FreeCam',
     guiPatch: 'GUI Patch',
     healthNameTags: 'Player Health', blockHighlight: 'Block Highlight', itemPhysics: 'Item Physics',
     keystrokes: 'Keystrokes', noWeather: 'No Weather', patPat: 'PatPat', pingCounter: 'Ping Counter',
@@ -2387,6 +2397,19 @@
     }));
   }
 
+  function requestFreecamAccess() {
+    freecamAccess = { ...freecamAccess, known: false };
+    document.dispatchEvent(new CustomEvent('minifeather:freecam-access-request'));
+    return freecamAccess.known && freecamAccess.allowed;
+  }
+
+  function showFreecamDenied() {
+    const now = performance.now();
+    if (now - lastFreecamDeniedAt < 300) return;
+    lastFreecamDeniedAt = now;
+    respondClientCommand(`freecam_denied_${Date.now()}`, [{ text: t('freecamNoAccess'), status: 'error' }]);
+  }
+
   function handleClientCommand(event) {
     let request = null;
     try {
@@ -2402,15 +2425,22 @@
     if (request.action === 'toggle') {
       const key = resolveCommandModule(args[0]);
       if (!key) {
-        push('Usage: /toggle <module>. Modules: afk, armor, camera, coords, crosshair, cps, distance, fps, freelook, health, highlight, itemphysics, keystrokes, noweather, patpat, ping, titan, waypoints, zoom', 'error');
+        push('Usage: /toggle <module>. Modules: afk, armor, camera, coords, crosshair, cps, distance, fps, freecam, freelook, health, highlight, itemphysics, keystrokes, noweather, patpat, ping, titan, waypoints, zoom', 'error');
       } else {
-        settings[key] = !settings[key];
-        guiSettings[key] = settings[key];
-        saveSettings();
-        applyGuiSettings();
-        if (panel && !searchQuery.trim()) renderCurrentPageContent();
-        if (activePage === 'dashboard') updateDashboardStats();
-        push(`${COMMAND_MODULE_LABELS[key] || key} ${settings[key] ? 'enabled' : 'disabled'}.`, 'success');
+        const enabling = !settings[key];
+        if (key === 'freecam' && enabling && !requestFreecamAccess()) {
+          settings.freecam = false;
+          guiSettings.freecam = false;
+          push(t('freecamNoAccess'), 'error');
+        } else {
+          settings[key] = enabling;
+          guiSettings[key] = settings[key];
+          saveSettings();
+          applyGuiSettings();
+          if (panel && !searchQuery.trim()) renderCurrentPageContent();
+          if (activePage === 'dashboard') updateDashboardStats();
+          push(`${COMMAND_MODULE_LABELS[key] || key} ${settings[key] ? 'enabled' : 'disabled'}.`, 'success');
+        }
       }
       respondClientCommand(requestId, response);
       return;
@@ -2421,6 +2451,8 @@
       const code = normalizeBindCode(args[1]);
       if (!key || !code) {
         push('Usage: /bind <module> <key>. Example: /bind coords C', 'error');
+      } else if (key === 'freecam' && !requestFreecamAccess()) {
+        push(t('freecamNoAccess'), 'error');
       } else {
         settings.moduleBinds = { ...(settings.moduleBinds || {}), [key]: code };
         guiSettings.moduleBinds = { ...settings.moduleBinds };
@@ -3481,6 +3513,209 @@
     }, { signal: runtimeController?.signal });
   }
 
+  function sendFreecamConfig(enabled = settings.freecam) {
+    settings.freecamSpeed = Math.max(1, Math.min(30, Number(settings.freecamSpeed) || 7));
+    settings.freecamSensitivity = Math.max(0.1, Math.min(3, Number(settings.freecamSensitivity) || 1));
+    settings.freecamFastMultiplier = Math.max(1, Math.min(8, Number(settings.freecamFastMultiplier) || 3));
+
+    document.dispatchEvent(new CustomEvent('minifeather:freecam-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        speed: settings.freecamSpeed,
+        sensitivity: settings.freecamSensitivity,
+        fastMultiplier: settings.freecamFastMultiplier
+      })
+    }));
+  }
+
+  function initFreecamModule() {
+    registerModule('freecam', () => createLifecycle({
+      enable() { sendFreecamConfig(true); },
+      disable() { sendFreecamConfig(false); },
+      refresh() { sendFreecamConfig(MODULES.get('freecam')?.enabled === true); },
+      destroy() { sendFreecamConfig(false); }
+    }));
+
+    document.addEventListener('minifeather:freecam-state', event => {
+      let next = null;
+      try { next = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail; } catch (_) {}
+      if (!next || typeof next !== 'object') return;
+
+      if (typeof next.canAccess === 'boolean') {
+        freecamAccess = {
+          known: true,
+          allowed: next.canAccess,
+          permissionLevel: Number(next.permissionLevel) || 0
+        };
+      }
+
+      if (next.error !== 'NO_SERVER_ADMIN') return;
+
+      settings.freecam = false;
+      guiSettings.freecam = false;
+      setModuleEnabled('freecam', false);
+      const input = panel?.querySelector('.mf-toggle[data-key="freecam"] input');
+      if (input) input.checked = false;
+      saveSettings(true);
+      showFreecamDenied();
+      if (activePage === 'dashboard') updateDashboardStats();
+    }, { signal: runtimeController?.signal });
+
+    requestFreecamAccess();
+  }
+
+  function closeFreecamSettings() {
+    if (!freecamSettingsCleanup) return;
+    const cleanup = freecamSettingsCleanup;
+    freecamSettingsCleanup = null;
+    cleanup();
+  }
+
+  function openFreecamSettings() {
+    if (!panel) return;
+    if (!requestFreecamAccess()) {
+      showFreecamDenied();
+      return;
+    }
+    closeFreecamSettings();
+
+    settings.freecamSpeed = Math.max(1, Math.min(30, Number(settings.freecamSpeed) || 7));
+    settings.freecamSensitivity = Math.max(0.1, Math.min(3, Number(settings.freecamSensitivity) || 1));
+    settings.freecamFastMultiplier = Math.max(1, Math.min(8, Number(settings.freecamFastMultiplier) || 3));
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop mf-freecam-backdrop';
+    const currentBind = String(settings.moduleBinds?.freecam || '');
+
+    backdrop.innerHTML = `
+      <div class="mf-tt-dialog" role="dialog" aria-modal="true">
+        <div class="mf-tt-head">
+          <div class="mf-tt-title">${t('freecamSettings')}</div>
+          <button type="button" class="mf-close" data-fc-close>×</button>
+        </div>
+        <div class="mf-tt-row"><span>${t('freecamSpeed')}</span><strong data-fc-speed-value>${settings.freecamSpeed.toFixed(1)}</strong></div>
+        <input type="range" min="1" max="30" step="0.5" value="${settings.freecamSpeed}" data-fc-speed style="width:100%">
+        <div class="mf-tt-row"><span>${t('freecamSensitivity')}</span><strong data-fc-sens-value>${settings.freecamSensitivity.toFixed(2)}</strong></div>
+        <input type="range" min="0.1" max="3" step="0.05" value="${settings.freecamSensitivity}" data-fc-sens style="width:100%">
+        <div class="mf-tt-row"><span>${t('freecamBoost')}</span><strong data-fc-boost-value>${settings.freecamFastMultiplier.toFixed(1)}x</strong></div>
+        <input type="range" min="1" max="8" step="0.5" value="${settings.freecamFastMultiplier}" data-fc-boost style="width:100%">
+        <div class="mf-tt-row"><span>${t('freecamBind')}</span></div>
+        <div class="mf-tt-bind-box"><span class="mf-muted">${t('freecamToggleKey')}</span><span class="mf-tt-bind-code" data-fc-bind-code>${currentBind || t('freecamNoBind')}</span></div>
+        <div class="mf-tt-bind-actions">
+          <button type="button" class="mf-btn secondary" data-fc-bind>${t('freecamSetBind')}</button>
+          <button type="button" class="mf-btn danger" data-fc-unbind>${t('freecamRemoveBind')}</button>
+        </div>
+        <div class="mf-tt-hint">${t('freecamControls')}</div>
+        <button type="button" class="mf-btn primary mf-tt-save" data-fc-save>${t('freecamSave')}</button>
+      </div>
+    `;
+
+    panel.appendChild(backdrop);
+
+    const speed = backdrop.querySelector('[data-fc-speed]');
+    const sens = backdrop.querySelector('[data-fc-sens]');
+    const boost = backdrop.querySelector('[data-fc-boost]');
+    const speedValue = backdrop.querySelector('[data-fc-speed-value]');
+    const sensValue = backdrop.querySelector('[data-fc-sens-value]');
+    const boostValue = backdrop.querySelector('[data-fc-boost-value]');
+    const bindCode = backdrop.querySelector('[data-fc-bind-code]');
+    const bindButton = backdrop.querySelector('[data-fc-bind]');
+    let binding = false;
+
+    const refreshRuntime = () => {
+      guiSettings.freecamSpeed = settings.freecamSpeed;
+      guiSettings.freecamSensitivity = settings.freecamSensitivity;
+      guiSettings.freecamFastMultiplier = settings.freecamFastMultiplier;
+      sendFreecamConfig(settings.freecam);
+    };
+
+    speed?.addEventListener('input', () => {
+      settings.freecamSpeed = Math.max(1, Math.min(30, Number(speed.value) || 7));
+      if (speedValue) speedValue.textContent = settings.freecamSpeed.toFixed(1);
+      refreshRuntime();
+    });
+
+    sens?.addEventListener('input', () => {
+      settings.freecamSensitivity = Math.max(0.1, Math.min(3, Number(sens.value) || 1));
+      if (sensValue) sensValue.textContent = settings.freecamSensitivity.toFixed(2);
+      refreshRuntime();
+    });
+
+    boost?.addEventListener('input', () => {
+      settings.freecamFastMultiplier = Math.max(1, Math.min(8, Number(boost.value) || 3));
+      if (boostValue) boostValue.textContent = `${settings.freecamFastMultiplier.toFixed(1)}x`;
+      refreshRuntime();
+    });
+
+    const stopBinding = () => {
+      binding = false;
+      if (bindButton) bindButton.textContent = t('freecamSetBind');
+    };
+
+    bindButton?.addEventListener('click', () => {
+      if (!requestFreecamAccess()) {
+        showFreecamDenied();
+        return;
+      }
+      binding = true;
+      bindButton.textContent = t('freecamListening');
+    });
+
+    backdrop.querySelector('[data-fc-unbind]')?.addEventListener('click', () => {
+      stopBinding();
+      settings.moduleBinds = { ...(settings.moduleBinds || {}) };
+      delete settings.moduleBinds.freecam;
+      guiSettings.moduleBinds = { ...settings.moduleBinds };
+      if (bindCode) bindCode.textContent = t('freecamNoBind');
+      sendClientBindsConfig();
+      saveSettings();
+    });
+
+    const keyHandler = event => {
+      if (!binding) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      if (!requestFreecamAccess()) {
+        stopBinding();
+        showFreecamDenied();
+        return;
+      }
+      if (event.code === 'Escape' || event.code === 'Backspace' || event.code === 'Delete') {
+        settings.moduleBinds = { ...(settings.moduleBinds || {}) };
+        delete settings.moduleBinds.freecam;
+        if (bindCode) bindCode.textContent = t('freecamNoBind');
+      } else {
+        settings.moduleBinds = { ...(settings.moduleBinds || {}), freecam: event.code };
+        if (bindCode) bindCode.textContent = bindLabel(event.code);
+      }
+      guiSettings.moduleBinds = { ...settings.moduleBinds };
+      sendClientBindsConfig();
+      saveSettings();
+      stopBinding();
+    };
+
+    document.addEventListener('keydown', keyHandler, true);
+
+    const cleanup = () => {
+      stopBinding();
+      document.removeEventListener('keydown', keyHandler, true);
+      backdrop.remove();
+      if (freecamSettingsCleanup === cleanup) freecamSettingsCleanup = null;
+    };
+    freecamSettingsCleanup = cleanup;
+    backdrop.querySelector('[data-fc-close]')?.addEventListener('click', cleanup);
+    backdrop.querySelector('[data-fc-save]')?.addEventListener('click', () => {
+      saveSettings();
+      sendClientBindsConfig();
+      sendFreecamConfig(settings.freecam);
+      cleanup();
+    });
+    backdrop.addEventListener('mousedown', event => {
+      if (event.target === backdrop) cleanup();
+    });
+  }
+
   function closeCameraOverhaulSettings() {
     if (cameraOverhaulSettingsCleanup) {
       const cleanup = cameraOverhaulSettingsCleanup;
@@ -4020,6 +4255,11 @@
               'Look around independently while keeping your player facing direction unchanged.'
             )}
             ${renderToggle(
+              'freecam',
+              t('freecam'),
+              t('freecamDesc')
+            )}
+            ${renderToggle(
               'blockHighlight',
               'Block Highlight',
               'Customize the outline shown around the block you are looking at.'
@@ -4280,6 +4520,15 @@
     return `
       <div class="mf-page-stack">
         <div class="mf-card">
+          <div class="mf-card-title">${t('sectionStartup')}</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('startupAnimation', t('startupAnimation'), t('startupAnimationDesc'))}
+          </div>
+          <div style="margin-top:12px;">
+            <button id="mf-replay-intro" class="mf-btn">${t('replayIntro')}</button>
+          </div>
+        </div>
+        <div class="mf-card">
           <div class="mf-card-title">${t('sectionGeneral')}</div>
           <div class="mf-toggle-grid">
             ${renderToggle('supportAds', t('supportAds'), t('supportAdsDesc'))}
@@ -4448,6 +4697,7 @@
     closeAntiAfkSettings();
     closeZoomSettings();
     closeCameraOverhaulSettings();
+    closeFreecamSettings();
     const closingPanel = panel;
     const closingOverlay = overlay;
     closingOverlay.style.display = 'none';
@@ -5632,6 +5882,17 @@
       }
     );
 
+    const freecamToggle = panel.querySelector('.mf-toggle[data-key="freecam"]');
+    freecamToggle?.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!requestFreecamAccess()) {
+        showFreecamDenied();
+        return;
+      }
+      openFreecamSettings();
+    });
+
     const blockHighlightToggle =
       panel.querySelector(
         '.mf-toggle[data-key="blockHighlight"]'
@@ -5715,6 +5976,14 @@
       const input = label.querySelector('input');
       if (!input) return;
       input.addEventListener('change', () => {
+        if (key === 'freecam' && input.checked && !requestFreecamAccess()) {
+          input.checked = false;
+          guiSettings.freecam = false;
+          settings.freecam = false;
+          saveSettings(true);
+          showFreecamDenied();
+          return;
+        }
         guiSettings[key] = input.checked;
         settings[key] = input.checked;
         saveSettings(true);
@@ -5722,6 +5991,10 @@
         update();
         if (activePage === 'dashboard') updateDashboardStats();
       });
+    });
+
+    panel.querySelector('#mf-replay-intro')?.addEventListener('click', () => {
+      document.dispatchEvent(new CustomEvent('minifeather:splash-replay'));
     });
 
     panel.querySelector('#mf-gui-discord')?.addEventListener('click', () => window.open(CONFIG.discord, '_blank'));
@@ -6155,6 +6428,7 @@
     setModuleEnabled('rhythmParkour', settings.rhythmParkour);
     setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
+    setModuleEnabled('freecam', settings.freecam);
     setModuleEnabled('dynamicCrosshair', settings.dynamicCrosshair);
     setModuleEnabled('vanillaAnimations', settings.vanillaAnimations);
     setModuleEnabled('guiPatch', settings.guiPatch);
@@ -6643,6 +6917,7 @@
     initGuiPatchModule();
     initZoomModule();
     initCameraOverhaulModule();
+    initFreecamModule();
     initDynamicCrosshairModule();
     initGUI();
     initChatFeatures();
@@ -6711,6 +6986,7 @@
     closeAntiAfkSettings();
     closeZoomSettings();
     closeCameraOverhaulSettings();
+    closeFreecamSettings();
     closeDynamicCrosshairSettings();
     unhookClipboard();
     destroyModules();
@@ -6745,6 +7021,9 @@
       settings.cameraOverhaulValues = clampCameraValues(settings.cameraOverhaulValues);
       settings.cameraOverhaulPreset = detectCameraPreset(settings.cameraOverhaulValues);
       settings.cameraOverhaulBind = String(settings.cameraOverhaulBind || '');
+      settings.freecamSpeed = Math.max(1, Math.min(30, Number(settings.freecamSpeed) || 7));
+      settings.freecamSensitivity = Math.max(0.1, Math.min(3, Number(settings.freecamSensitivity) || 1));
+      settings.freecamFastMultiplier = Math.max(1, Math.min(8, Number(settings.freecamFastMultiplier) || 3));
       settings.dynamicCrosshairMap = { ...DEFAULT_SETTINGS.dynamicCrosshairMap, ...(settings.dynamicCrosshairMap || {}) };
       settings.moduleBinds = { ...DEFAULT_SETTINGS.moduleBinds, ...(settings.moduleBinds || {}) };
       guiSettings = {
