@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MiniFeather Client",
-  "version": "4.5.0",
+  "version": "4.6.0",
   "description": "MiniFeather for Miniblox",
   "permissions": [
     "storage",
@@ -34,6 +34,7 @@
         "src/inject.js",
         "src/FreeCam.js",
         "src/mf-freelook.js",
+        "src/ElytraFlight.js",
         "src/TitanTiny.js",
         "src/HealthNameTags.js",
         "src/DistanceNameTags.js",
