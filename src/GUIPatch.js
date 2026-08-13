@@ -420,30 +420,23 @@
 
       const bars = findOriginalBars();
 
+      const nuke = (el) => {
+        if (!el) return;
+        el.style.background = 'transparent';
+        el.style.backgroundColor = 'transparent';
+        el.style.backgroundImage = 'none';
+        el.style.border = 'none';
+        el.style.boxShadow = 'none';
+        el.style.outline = 'none';
+        el.dataset.mfReplaced = '1';
+      };
+
       // --- Reemplazar barra de vida con corazones ---
       if (bars.healthBar) {
         const bar = bars.healthBar;
-        // Limpiar estilos del contenedor y sus padres
-        [bar, bar.parentElement, bar.parentElement?.parentElement].forEach(el => {
-          if (!el) return;
-          el.style.background = 'transparent';
-          el.style.backgroundColor = 'transparent';
-          el.style.backgroundImage = 'none';
-          el.style.border = 'none';
-          el.style.boxShadow = 'none';
-          el.style.outline = 'none';
-          el.dataset.mfReplaced = '1';
-        });
-
-        const nuke = (el) => {
-          if (!el) return;
-          el.style.background = 'transparent';
-          el.style.backgroundColor = 'transparent';
-          el.style.backgroundImage = 'none';
-          el.style.border = 'none';
-          el.style.boxShadow = 'none';
-          el.style.outline = 'none';
-        };
+        nuke(bar);
+        nuke(bar.parentElement);
+        nuke(bar.parentElement?.parentElement);
 
         // Nukear hijos recursivamente
         bar.querySelectorAll('*').forEach(child => {
@@ -454,35 +447,19 @@
           child.style.border = 'none';
           child.style.boxShadow = 'none';
         });
-          if (!el) return;
-          el.style.background = 'transparent';
-          el.style.backgroundColor = 'transparent';
-          el.style.border = 'none';
-          el.style.boxShadow = 'none';
-          el.style.outline = 'none';
-          el.dataset.mfReplaced = '1';
+
         let hearts = bar.querySelector('.mf-hearts');
         if (!hearts) {
           bar.innerHTML = '';
           hearts = document.createElement('div');
           hearts.className = 'mf-hearts';
-        let hearts = bar.querySelector('.mf-hearts');
-        if (!hearts) {
-          bar.innerHTML = '';
-          hearts = document.createElement('div');
-          hearts.className = 'mf-hearts';
-          hearts.style.cssText = 'display:flex;gap:2px;align-items:center;';
           bar.appendChild(hearts);
         } else {
-          // Remover cualquier hijo que no sea .mf-hearts (React los re-inserta)
           Array.from(bar.children).forEach(child => {
             if (child !== hearts) child.remove();
           });
         }
-          Array.from(bar.children).forEach(child => {
-            if (child !== hearts) child.remove();
-          });
-        }
+
         hearts.innerHTML = '';
         hearts.style.cssText = 'position:relative;display:flex;gap:2px;align-items:center;';
 
@@ -522,47 +499,15 @@
               'height:' + iconSize + 'px', 'width:' + iconSize + 'px',
               'image-rendering:pixelated', 'object-fit:contain'
             ].join(';');
-            const img = document.createElement('img');
-            img.src = GUI_BASE + iconFile;
-            img.style.cssText = [
-              'height:' + iconSize + 'px', 'width:' + iconSize + 'px',
-              'image-rendering:pixelated', 'object-fit:contain'
-            ].join(';');
             goldRow.appendChild(img);
           }
           hearts.appendChild(goldRow);
         }
       }
 
-      // Reemplazar barra de comida con sprites
+      // --- Reemplazar barra de comida con sprites ---
       if (bars.foodBar) {
         const bar = bars.foodBar;
-        [bar, bar.parentElement, bar.parentElement?.parentElement].forEach(el => {
-          if (!el) return;
-          el.style.background = 'transparent';
-          el.style.backgroundColor = 'transparent';
-          el.style.backgroundImage = 'none';
-          el.style.border = 'none';
-          el.style.boxShadow = 'none';
-          el.style.outline = 'none';
-          el.dataset.mfReplaced = '1';
-        });
-          if (!el) return;
-          el.style.background = 'transparent';
-          el.style.backgroundColor = 'transparent';
-          el.style.border = 'none';
-          el.style.boxShadow = 'none';
-          el.style.outline = 'none';
-          el.dataset.mfReplaced = '1';
-        const nuke = (el) => {
-          if (!el) return;
-          el.style.background = 'transparent';
-          el.style.backgroundColor = 'transparent';
-          el.style.backgroundImage = 'none';
-          el.style.border = 'none';
-          el.style.boxShadow = 'none';
-          el.style.outline = 'none';
-        };
         nuke(bar);
         nuke(bar.parentElement);
         nuke(bar.parentElement?.parentElement);
@@ -574,7 +519,6 @@
           child.style.backgroundImage = 'none';
           child.style.border = 'none';
           child.style.boxShadow = 'none';
-        });
         });
 
         let foodIcons = bar.querySelector('.mf-food');
@@ -589,22 +533,21 @@
             if (child !== foodIcons) child.remove();
           });
         }
-        if (foodIcons) {
-          foodIcons.innerHTML = '';
-          for (let i = 0; i < 10; i++) {
-            const foodValue = food - i * 2;
-            let iconFile;
-            if (foodValue >= 1.5) iconFile = 'food_full.png';
-            else if (foodValue >= 0.5) iconFile = 'food_half.png';
-            else iconFile = 'food_empty.png';
-            const img = document.createElement('img');
-            img.src = GUI_BASE + iconFile;
-            img.style.cssText = [
-              'height:' + iconSize + 'px', 'width:' + iconSize + 'px',
-              'image-rendering:pixelated', 'object-fit:contain'
-            ].join(';');
-            foodIcons.appendChild(img);
-          }
+
+        foodIcons.innerHTML = '';
+        for (let i = 0; i < 10; i++) {
+          const foodValue = food - i * 2;
+          let iconFile;
+          if (foodValue >= 1.5) iconFile = 'food_full.png';
+          else if (foodValue >= 0.5) iconFile = 'food_half.png';
+          else iconFile = 'food_empty.png';
+          const img = document.createElement('img');
+          img.src = GUI_BASE + iconFile;
+          img.style.cssText = [
+            'height:' + iconSize + 'px', 'width:' + iconSize + 'px',
+            'image-rendering:pixelated', 'object-fit:contain'
+          ].join(';');
+          foodIcons.appendChild(img);
         }
       }
     }, 200);
@@ -647,11 +590,8 @@
     state.xpBarRef = null;
     document.querySelectorAll('.wifi-icon-patch, .wifi-debug-icon, .mf-xp-icons, .mf-xp-level').forEach(el => el.remove());
     document.querySelectorAll('[data-mf-xp-replaced]').forEach(el => {
+      el.style.cssText = '';
       delete el.dataset.mfXpReplaced;
-    });
-    document.querySelectorAll('.xp-bar-patched').forEach(el => {
-      el.classList.remove('xp-bar-patched');
-      el.style.position = '';
     });
   }
 
