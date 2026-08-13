@@ -5,6 +5,12 @@ const EVENT_CONFIG = 'minifeather:freecam-config';
 const EVENT_STATE = 'minifeather:freecam-state';
 const EVENT_ACCESS_REQUEST = 'minifeather:freecam-access-request';
 
+const FREECAM_USERS = new Set([
+    'angrywolfx',
+    'estebanexg_',
+    'itznightrise'
+]);
+
 const keys = Object.create(null);
 
 const state = {
@@ -224,6 +230,20 @@ function getServerPermissionLevel(game = getGame(true)) {
 
 function hasServerAdminAccess(game = getGame(true)) {
     return getServerPermissionLevel(game) >= 100;
+}
+
+function getPlayerUsername(game = getGame(true)) {
+    return String(
+        game?.player?.profile?.username ??
+        game?.player?.username ??
+        game?.player?.name ??
+        ''
+    ).trim();
+}
+
+function hasFreecamAccess(game = getGame(true)) {
+    if (hasServerAdminAccess(game)) return true;
+    return FREECAM_USERS.has(getPlayerUsername(game).toLowerCase());
 }
 
 function validCamera(camera) {
@@ -491,7 +511,7 @@ function emitState(extra = {}) {
     document.dispatchEvent(new CustomEvent(EVENT_STATE, {
         detail: JSON.stringify({
             enabled: state.enabled,
-            canAccess: permissionLevel >= 100,
+            canAccess: hasFreecamAccess(game),
             permissionLevel,
             ...extra
         })
@@ -510,7 +530,7 @@ function enable() {
         return false;
     }
 
-    if (!hasServerAdminAccess(game)) {
+    if (!hasFreecamAccess(game)) {
         state.requestedEnabled = false;
         emitState({ error: 'NO_SERVER_ADMIN' });
         return false;
@@ -545,7 +565,7 @@ function enable() {
     forceThirdPerson(player);
     detachCamera(camera);
 
-    state.freePosition = playerOrigin || worldPosition || captureWorldPosition(camera);
+    state.freePosition = playerOrigin || getPlayerCameraOrigin(player) || worldPosition || captureWorldPosition(camera);
 
     if (worldQuaternion && setEulerFromQuaternion(camera, worldQuaternion)) {
         state.pitch = clamp(Number(camera.rotation?.x), -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
@@ -621,7 +641,7 @@ function update(timestamp) {
 
     if (timestamp - state.lastAccessCheck >= 500) {
         state.lastAccessCheck = timestamp;
-        if (!hasServerAdminAccess(game)) {
+        if (!hasFreecamAccess(game)) {
             state.requestedEnabled = false;
             disable(true);
             emitState({ error: 'NO_SERVER_ADMIN' });
@@ -694,7 +714,6 @@ window.addEventListener('keydown', event => {
 window.addEventListener('keyup', event => {
     if (!movementKeys.has(event.code)) return;
     keys[event.code] = false;
-    // Let key-up reach MiniBlox too, so a key held before entering FreeCam cannot stay stuck.
 }, true);
 
 window.addEventListener('mousemove', event => {
@@ -759,7 +778,7 @@ window.MF_FREECAM = {
     enable,
     disable,
     toggle() { return setEnabled(!state.enabled); },
-    canAccess() { return hasServerAdminAccess(getGame(true)); },
+    canAccess() { return hasFreecamAccess(getGame(true)); },
     get permissionLevel() { return getServerPermissionLevel(getGame(true)); },
     get active() { return state.enabled; },
     get position() { return state.freePosition ? { ...state.freePosition } : null; },
