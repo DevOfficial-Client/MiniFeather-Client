@@ -108,23 +108,37 @@
         var originalFetch = window.fetch;
         window.fetch = function (input, init) {
             var args = arguments;
+
+            var reqUrl = "";
+            try {
+                reqUrl = typeof input === "string" ? input : (input && input.url ? input.url : "");
+            } catch (e) {}
+
             var promise = originalFetch.apply(this, args);
 
-            promise.then(function (response) {
-                try {
-                    var contentType = response.headers && response.headers.get
-                        ? (response.headers.get("content-type") || "")
-                        : "";
-                    if (contentType.indexOf("application/json") === -1 &&
-                        contentType.indexOf("text/plain") === -1) {
-                        return;
-                    }
-                    var clone = response.clone();
-                    clone.json().then(function (data) {
-                        tryCaptureProfile(data);
-                    }).catch(function () {});
-                } catch (e) {}
-            }).catch(function () {});
+            if (reqUrl.indexOf("miniblox.io") !== -1 &&
+                (reqUrl.indexOf("auth-api") !== -1 ||
+                 reqUrl.indexOf("/api/") !== -1 ||
+                 reqUrl.indexOf("profile") !== -1 ||
+                 reqUrl.indexOf("player") !== -1 ||
+                 reqUrl.indexOf("user") !== -1)) {
+
+                promise.then(function (response) {
+                    try {
+                        var contentType = response.headers && response.headers.get
+                            ? (response.headers.get("content-type") || "")
+                            : "";
+                        if (contentType.indexOf("application/json") === -1 &&
+                            contentType.indexOf("text/plain") === -1) {
+                            return;
+                        }
+                        var clone = response.clone();
+                        clone.json().then(function (data) {
+                            tryCaptureProfile(data);
+                        }).catch(function () {});
+                    } catch (e) {}
+                }).catch(function () {});
+            }
 
             return promise;
         };

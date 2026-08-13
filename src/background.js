@@ -159,6 +159,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 const SPRITESHEET_URL = "https://raw.githubusercontent.com/EstebanGrp/MiniFeather-Client/refs/heads/main/pvtexpack.png";
 const SPRITESHEET_RULE_ID = 999;
 
+async function getActiveSpritesheetUrl() {
+  const { mfCustomSpritesheetUrl } = await chrome.storage.local.get(["mfCustomSpritesheetUrl"]);
+  return mfCustomSpritesheetUrl || SPRITESHEET_URL;
+}
+
 const EXTRA_TEXTURES = [
   // Armor
   {
@@ -270,14 +275,14 @@ const TEXTURE_PACK_RULE_IDS = [
   ...EXTRA_TEXTURES.map(texture => texture.id)
 ];
 
-function createTexturePackRules() {
+function createTexturePackRules(spritesheetUrl) {
   return [
     {
       id: SPRITESHEET_RULE_ID,
       priority: 1,
       action: {
         type: "redirect",
-        redirect: { url: SPRITESHEET_URL }
+        redirect: { url: spritesheetUrl }
       },
       condition: {
         urlFilter: "miniblox.io/textures/spritesheet*",
@@ -301,10 +306,11 @@ function createTexturePackRules() {
 
 async function applySpritesheet() {
   const { spritesheetEnabled } = await chrome.storage.local.get(["spritesheetEnabled"]);
+  const spritesheetUrl = await getActiveSpritesheetUrl();
 
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: TEXTURE_PACK_RULE_IDS,
-    addRules: spritesheetEnabled === false ? [] : createTexturePackRules()
+    addRules: spritesheetEnabled === false ? [] : createTexturePackRules(spritesheetUrl)
   });
 }
 
@@ -320,6 +326,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "getSpritesheet") {
     chrome.storage.local.get(["spritesheetEnabled"]).then(data => {
       sendResponse({ success: true, enabled: data.spritesheetEnabled !== false });
+    });
+    return true;
+  }
+
+  if (message.type === "setCustomSpritesheet") {
+    const url = message.url || null;
+    chrome.storage.local.set({ mfCustomSpritesheetUrl: url })
+      .then(applySpritesheet)
+      .then(() => sendResponse({ success: true }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  if (message.type === "getCustomSpritesheet") {
+    chrome.storage.local.get(["mfCustomSpritesheetUrl"]).then(data => {
+      sendResponse({ success: true, url: data.mfCustomSpritesheetUrl || null });
     });
     return true;
   }

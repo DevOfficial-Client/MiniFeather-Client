@@ -293,6 +293,7 @@
     cameraOverhaulValues: cloneCameraValues(CAMERA_OVERHAUL_PRESETS.normal),
     dynamicCrosshair: false,
     dynamicCrosshairSize: 28,
+    vanillaAnimations: false,
     dynamicCrosshairMap: {
       air: 'empty.png', block: 'crosshair.png', entity: 'cross-open.png',
       player: 'diamond.png', enemy: 'cross-diagonal-small.png', friendly: 'circle.png',
@@ -303,6 +304,7 @@
     chatLinks: true,
     chatMemes: true,
     rhythmParkour: false,
+    guiPatch: false,
     language: 'en'
   };
 
@@ -2201,6 +2203,7 @@
       { page: 'hud', key: 'fpsCounter', title: t('fpsCounter'), desc: t('fpsCounterDesc') },
       { page: 'hud', key: 'cpsCounter', title: t('cpsCounter'), desc: t('cpsCounterDesc') },
       { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc') },
+      { page: 'hud', key: 'guiPatch', title: 'GUI Patch', desc: 'Classic Minecraft hearts, food, XP and WiFi icons' },
       { page: 'hud', key: 'coordinates', title: t('coordinates'), desc: t('coordinatesDesc') },
       { page: 'hud', key: 'dynamicCrosshair', title: 'Dynamic Crosshair', desc: 'Changes crosshair based on situation' },
       { page: 'waypoints', key: 'waypoints', title: t('waypoints'), desc: t('waypointsDesc') },
@@ -2211,6 +2214,7 @@
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc') },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc') },
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc') },
+      { page: 'render', key: 'vanillaAnimations', title: 'Vanilla Animations', desc: 'Freezes elbow and knee joints rigid for all players' },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
       { page: 'world', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc') },
@@ -2284,6 +2288,7 @@
     cps: 'cpsCounter', cpscounter: 'cpsCounter',
     distance: 'distanceNameTags', distancenametags: 'distanceNameTags',
     fps: 'fpsCounter', fpscounter: 'fpsCounter',
+    gui: 'guiPatch', guipatch: 'guiPatch',
     freelook: 'freelook',
     health: 'healthNameTags', healthnametags: 'healthNameTags',
     highlight: 'blockHighlight', blockhighlight: 'blockHighlight',
@@ -2293,6 +2298,7 @@
     pat: 'patPat', patpat: 'patPat',
     ping: 'pingCounter', pingcounter: 'pingCounter',
     titan: 'titanTiny', tiny: 'titanTiny', titantiny: 'titanTiny',
+    vanilla: 'vanillaAnimations', vanillaanimations: 'vanillaAnimations',
     waypoint: 'waypoints', waypoints: 'waypoints',
     zoom: 'zoom'
   });
@@ -2301,9 +2307,10 @@
     antiAfk: 'Anti-AFK', armorHud: 'Armor HUD', cameraOverhaul: 'Camera Overhaul',
     coordinates: 'Coordinates', dynamicCrosshair: 'Dynamic Crosshair', cpsCounter: 'CPS Counter',
     distanceNameTags: 'Player Distance', fpsCounter: 'FPS Counter', freelook: 'FreeLook',
+    guiPatch: 'GUI Patch',
     healthNameTags: 'Player Health', blockHighlight: 'Block Highlight', itemPhysics: 'Item Physics',
     keystrokes: 'Keystrokes', noWeather: 'No Weather', patPat: 'PatPat', pingCounter: 'Ping Counter',
-    titanTiny: 'Titan & Tiny', waypoints: 'Waypoints', zoom: 'Zoom'
+    titanTiny: 'Titan & Tiny', vanillaAnimations: 'Vanilla Animations', waypoints: 'Waypoints', zoom: 'Zoom'
   });
 
   function resolveCommandModule(value) {
@@ -2640,6 +2647,44 @@
       destroy() {
         sendNoWeatherConfig(false);
       }
+    }));
+  }
+
+  function sendVanillaAnimationsConfig(enabled = settings.vanillaAnimations) {
+    document.dispatchEvent(new CustomEvent('minifeather:vanillaanimations-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initVanillaAnimationsModule() {
+    registerModule('vanillaAnimations', () => createLifecycle({
+      enable() {
+        sendVanillaAnimationsConfig(true);
+      },
+      disable() {
+        sendVanillaAnimationsConfig(false);
+      },
+      refresh() {
+        sendVanillaAnimationsConfig(MODULES.get('vanillaAnimations')?.enabled === true);
+      },
+      destroy() {
+        sendVanillaAnimationsConfig(false);
+      }
+    }));
+  }
+
+  function sendGuiPatchConfig(enabled = settings.guiPatch) {
+    document.dispatchEvent(new CustomEvent('minifeather:guipatch-config', {
+      detail: JSON.stringify({ enabled: !!enabled, guiBase: chrome.runtime.getURL('assets/gui/') })
+    }));
+  }
+
+  function initGuiPatchModule() {
+    registerModule('guiPatch', () => createLifecycle({
+      enable() { sendGuiPatchConfig(true); },
+      disable() { sendGuiPatchConfig(false); },
+      refresh() { sendGuiPatchConfig(MODULES.get('guiPatch')?.enabled === true); },
+      destroy() { sendGuiPatchConfig(false); }
     }));
   }
 
@@ -3870,7 +3915,12 @@
               'pingCounter',
               t('pingCounter'),
               t('pingCounterDesc')
-            )}    
+            )}
+            ${renderToggle(
+              'guiPatch',
+              'GUI Patch',
+              'Classic Minecraft hearts, food, XP and WiFi icons'
+            )}
             ${renderToggle(
               'armorHud',
               'Armor HUD',
@@ -3950,6 +4000,11 @@
               t('noWeatherDesc')
             )}
             ${renderToggle(
+              'vanillaAnimations',
+              'Vanilla Animations',
+              'Freezes elbow and knee joints rigid for all players'
+            )}
+            ${renderToggle(
               'zoom',
               t('zoom'),
               t('zoomDesc')
@@ -3982,6 +4037,29 @@
                 checked
               >
             </label>
+            <div id="mf-custom-tp-container" style="margin-top: 8px; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
+              <div style="font-size: 12px; color: #aaa; margin-bottom: 8px;">
+                <strong style="color: #e0e0e0;">Custom Texture Pack</strong><br>
+                Upload a <code style="color: #4a9eff;">.zip</code> file or individual <code style="color: #4a9eff;">.png</code> files. Names must match the original (e.g. <code style="color: #4a9eff;">stone.png</code>, <code style="color: #4a9eff;">grass_block.png</code>).
+              </div>
+              <input type="file" id="mf-custom-tp-files" accept=".png,.zip,application/zip" multiple style="font-size: 11px; color: #ccc; margin-bottom: 8px; width: 100%;">
+              <div id="mf-custom-tp-preview" style="display: none; margin-bottom: 8px;">
+                <img id="mf-custom-tp-preview-img" style="max-width: 128px; max-height: 128px; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; image-rendering: pixelated;">
+                <div id="mf-custom-tp-stats" style="font-size: 11px; color: #888; margin-top: 4px;"></div>
+              </div>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <button id="mf-custom-tp-generate" class="mf-btn primary" style="font-size: 11px; padding: 5px 12px; background: #2a6dc4; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Generate &amp; Apply</button>
+                <button id="mf-custom-tp-disable" class="mf-btn" style="font-size: 11px; padding: 5px 12px; background: #333; color: #ccc; border: 1px solid #444; border-radius: 5px; cursor: pointer;">Use Default</button>
+              </div>
+              <div id="mf-custom-tp-status" style="font-size: 11px; margin-top: 6px;"></div>
+              <div id="mf-custom-tp-manager" style="margin-top: 10px; display: none;">
+                <div style="font-size: 12px; color: #e0e0e0; margin-bottom: 6px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px;">
+                  <strong>Active Textures</strong>
+                </div>
+                <div id="mf-custom-tp-list" style="max-height: 150px; overflow-y: auto; font-size: 11px;"></div>
+                <button id="mf-custom-tp-clear" style="font-size: 10px; padding: 3px 10px; background: #5a2020; color: #ff8080; border: 1px solid #804040; border-radius: 4px; cursor: pointer; margin-top: 6px;">Clear All</button>
+              </div>
+            </div>
           </div>
         </div>
         <div class="mf-card">
@@ -5771,6 +5849,114 @@
       });
     }
 
+    const tpGenerate = panel.querySelector('#mf-custom-tp-generate');
+    const tpDisable = panel.querySelector('#mf-custom-tp-disable');
+    const tpFiles = panel.querySelector('#mf-custom-tp-files');
+    const tpStatus = panel.querySelector('#mf-custom-tp-status');
+    const tpPreview = panel.querySelector('#mf-custom-tp-preview');
+    const tpPreviewImg = panel.querySelector('#mf-custom-tp-preview-img');
+    const tpStats = panel.querySelector('#mf-custom-tp-stats');
+    const tpManager = panel.querySelector('#mf-custom-tp-manager');
+    const tpList = panel.querySelector('#mf-custom-tp-list');
+    const tpClear = panel.querySelector('#mf-custom-tp-clear');
+
+    function refreshTextureList() {
+      if (!tpList || !tpManager) return;
+      const stored = localStorage.getItem('mf_texture_list');
+      const textures = stored ? JSON.parse(stored) : [];
+      if (textures.length === 0) {
+        tpManager.style.display = 'none';
+        return;
+      }
+      tpManager.style.display = 'block';
+      tpList.innerHTML = textures.map((t, i) =>
+        `<div style="display: flex; align-items: center; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04);">
+          <span style="color: #ccc;">${t}</span>
+          <button data-tp-idx="${i}" style="font-size: 10px; padding: 1px 6px; background: #5a2020; color: #ff8080; border: 1px solid #804040; border-radius: 3px; cursor: pointer;">✕</button>
+        </div>`
+      ).join('');
+      tpList.querySelectorAll('button[data-tp-idx]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.tpIdx);
+          textures.splice(idx, 1);
+          localStorage.setItem('mf_texture_list', JSON.stringify(textures));
+          refreshTextureList();
+        });
+      });
+    }
+
+    if (tpGenerate && tpFiles) {
+      chrome.runtime.sendMessage({ type: 'getCustomSpritesheet' }, resp => {
+        if (resp?.url) {
+          tpStatus.innerHTML = '<span style="color: #4caf50;">✓ Custom texture pack active</span>';
+          if (tpPreviewImg) tpPreviewImg.src = resp.url;
+          if (tpPreview) tpPreview.style.display = 'block';
+        }
+        refreshTextureList();
+      });
+
+      tpGenerate.addEventListener('click', async () => {
+        const files = tpFiles.files;
+        if (!files || files.length === 0) {
+          tpStatus.innerHTML = '<span style="color: #f44336;">Select a .zip or .png file</span>';
+          return;
+        }
+
+        tpStatus.innerHTML = '<span style="color: #4a9eff;">Generating spritesheet...</span>';
+        tpGenerate.disabled = true;
+
+        try {
+          if (window.MF_TEXTURE_PACK) {
+            const result = await MF_TEXTURE_PACK.generateAndApply(files);
+            if (result.success) {
+              const dataUrl = MF_TEXTURE_PACK.getCustomSpritesheetUrl();
+              if (dataUrl && tpPreviewImg) tpPreviewImg.src = dataUrl;
+              if (tpPreview) tpPreview.style.display = 'block';
+              if (tpStats) tpStats.textContent = `Custom: ${result.stats.custom} | Total: ${result.stats.placeholder} placeholders`;
+
+              chrome.runtime.sendMessage({
+                type: 'setCustomSpritesheet',
+                url: dataUrl
+              });
+
+              const stored = localStorage.getItem('mf_texture_list');
+              const existing = stored ? JSON.parse(stored) : [];
+              const newNames = Array.from(files).map(f => f.name.replace(/\.zip$/i, '.zip').replace(/\.png$/i, '.png'));
+              const merged = [...new Set([...existing, ...result.textureNames])];
+              localStorage.setItem('mf_texture_list', JSON.stringify(merged));
+
+              tpStatus.innerHTML = `<span style="color: #4caf50;">✓ Applied! ${result.stats.custom} textures replaced. Reload page to see changes.</span>`;
+              refreshTextureList();
+            } else {
+              tpStatus.innerHTML = `<span style="color: #f44336;">Error: ${result.error}</span>`;
+            }
+          } else {
+            tpStatus.innerHTML = '<span style="color: #f44336;">TexturePack module not loaded</span>';
+          }
+        } catch (e) {
+          tpStatus.innerHTML = `<span style="color: #f44336;">Error: ${e.message}</span>`;
+        }
+
+        tpGenerate.disabled = false;
+      });
+
+      tpDisable?.addEventListener('click', () => {
+        if (window.MF_TEXTURE_PACK) MF_TEXTURE_PACK.disable();
+        chrome.runtime.sendMessage({ type: 'setCustomSpritesheet', url: null });
+        tpStatus.innerHTML = '<span style="color: #888;">Reverted to default. Reload page.</span>';
+        if (tpPreview) tpPreview.style.display = 'none';
+      });
+
+      tpClear?.addEventListener('click', () => {
+        if (window.MF_TEXTURE_PACK) MF_TEXTURE_PACK.clearAll();
+        chrome.runtime.sendMessage({ type: 'setCustomSpritesheet', url: null });
+        localStorage.removeItem('mf_texture_list');
+        tpStatus.innerHTML = '<span style="color: #888;">All textures cleared. Reload page.</span>';
+        if (tpPreview) tpPreview.style.display = 'none';
+        refreshTextureList();
+      });
+    }
+
     if (panel.querySelector('#mf-skin-select')) {
       populateSkinSelect();
       refreshActiveSkins();
@@ -5970,6 +6156,8 @@
     setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
     setModuleEnabled('dynamicCrosshair', settings.dynamicCrosshair);
+    setModuleEnabled('vanillaAnimations', settings.vanillaAnimations);
+    setModuleEnabled('guiPatch', settings.guiPatch);
     document.dispatchEvent(
       new CustomEvent(
         'minifeather:freelook-config',
@@ -6449,8 +6637,10 @@
     initPatPatModule();
     initItemPhysicsModule();
     initNoWeatherModule();
+    initVanillaAnimationsModule();
     initAntiAfkModule();
     initRhythmParkourModule();
+    initGuiPatchModule();
     initZoomModule();
     initCameraOverhaulModule();
     initDynamicCrosshairModule();
