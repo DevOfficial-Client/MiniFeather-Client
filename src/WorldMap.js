@@ -95,7 +95,7 @@
         if (_blockRegistry) return _blockRegistry;
         try {
             const worldProto2 = getWorldProto2(world);
-            const chunk = worldProto2.getChunk.call(world, 0, 0);
+            const chunk = worldProto2.getChunkByID.call(world, 0, 0);
             if (!chunk?.cells?.[0]) return null;
             const cell = chunk.cells[0];
             const cellProto = Object.getPrototypeOf(cell);
@@ -208,7 +208,7 @@
         let proto = Object.getPrototypeOf(world);
         for (let i = 0; i < 5; i++) {
             if (typeof proto?.isChunkLoaded === 'function' &&
-                typeof proto?.getChunk === 'function') {
+                typeof proto?.getChunkByID === 'function') {
                 return proto;
             }
             proto = Object.getPrototypeOf(proto);
@@ -264,7 +264,7 @@
     }
 
     function getChunkHeightMap(world, worldProto2, cx, cz) {
-        const chunk = worldProto2.getChunk.call(world, cx, cz);
+        const chunk = worldProto2.getChunkByID.call(world, cx, cz);
         if (!chunk || !chunk.cells) return null;
 
         const heights = new Int16Array(256);

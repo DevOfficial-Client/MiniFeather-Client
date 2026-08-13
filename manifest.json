@@ -20,6 +20,7 @@
         "https://miniblox.io/*"
       ],
       "js": [
+        "src/TextureInterceptor.js",
         "src/CustomSkins.js",
         "src/inject.js",
         "src/mf-freelook.js",
@@ -41,7 +42,9 @@
         "src/armorhud.js",
         "src/MinimapCache.js",
         "src/WorldMap.js",
-        "src/RhythmParkour.js"
+        "src/RhythmParkour.js",
+        "src/VanillaAnimations.js",
+        "src/GUIPatch.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"
@@ -52,6 +55,8 @@
       ],
       "js": [
         "src/translations.js",
+        "src/jszip.min.js",
+        "src/TexturePackManager.js",
         "src/content.js"
       ],
       "run_at": "document_end"
@@ -75,7 +80,11 @@
         "assets/pat1.ogg",
         "assets/pat2.ogg",
         "assets/crosshair/*",
-        "assets/armor-hud-editor.png"
+        "assets/armor-hud-editor.png",
+        "assets/spritesheets generator",
+        "assets/frames.json",
+        "assets/gui/*",
+        "src/jszip.min.js"
       ],
       "matches": [
         "https://miniblox.io/*"
