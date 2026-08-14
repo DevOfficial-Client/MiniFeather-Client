@@ -515,8 +515,123 @@
                 u.uCsTime.value += dt;
                 u.uCsStrength.value = state.strength;
             }
+        },
+
+        // ─── LINTERNA (punto de luz con tecla F) ─────────────────────
+        // Oscurece el mundo y crea un punto de luz en la posición de la cámara
+        // que se activa/desactiva pulsando F. El radio de luz se controla
+        // con la rueda del ratón.
+        flashlight: {
+            uniforms: {
+                uCsTime: { value: 0 },
+                uCsStrength: { value: 1.0 },
+                uCsLightOn: { value: 0 },
+                uCsLightRadius: { value: 20.0 },
+                uCsConeAngle: { value: 0.35 }  // coseno del ángulo del cono (~70°)
+            },
+            vertexCode: `
+                uniform float uCsTime;
+                uniform float uCsStrength;
+                uniform float uCsLightOn;
+                uniform float uCsLightRadius;
+                uniform float uCsConeAngle;
+                varying vec3 mfCsWorldPos;
+                varying vec3 mfCsWorldNormal;
+            `,
+            vertexMain: `
+                mfCsWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+                mfCsWorldNormal = normalize(mat3(modelMatrix) * normal);
+            `,
+            fragmentCode: `
+                uniform float uCsTime;
+                uniform float uCsStrength;
+                uniform float uCsLightOn;
+                uniform float uCsLightRadius;
+                uniform float uCsConeAngle;
+                varying vec3 mfCsWorldPos;
+                varying vec3 mfCsWorldNormal;
+
+                // Linterna cónica: cono de luz en la dirección de mirada
+                float mfFlashlight(vec3 worldPos) {
+                    // Dirección de mirada de la cámara (derivada de viewMatrix)
+                    // viewMatrix transforma world→view; su fila 2 (negada) es el forward
+                    vec3 mfCamDir = normalize(cameraPosition - worldPos);
+                    vec3 mfCamForward = -vec3(viewMatrix[0].z, viewMatrix[1].z, viewMatrix[2].z);
+
+                    // Distancia al jugador
+                    float mfDist = distance(worldPos, cameraPosition);
+
+                    // Cono de luz: dot entre dirección-de-superficie-a-cámara y forward de cámara
+                    // Cuanto más alineado, más luz (como spotlight)
+                    float mfCone = dot(mfCamDir, mfCamForward);
+
+                    // Ángulo del cono: solo ilumina si mfCone > uCsConeAngle
+                    // smoothstep para borde suave del cono
+                    float mfSpotMask = smoothstep(uCsConeAngle, uCsConeAngle + 0.12, mfCone);
+
+                    // Atenuación por distancia (decaimiento suave)
+                    float mfAtten = 1.0 - smoothstep(uCsLightRadius * 0.3, uCsLightRadius, mfDist);
+
+                    // Hotspot central: más brillante en el centro del cono
+                    float mfHotspot = smoothstep(uCsConeAngle + 0.25, 1.0, mfCone);
+
+                    return mfSpotMask * mfAtten * (0.6 + 0.4 * mfHotspot);
+                }
+            `,
+            postMain: `
+                // Calcular intensidad de la linterna para este fragmento
+                float mfLightAmount = mfFlashlight(mfCsWorldPos);
+
+                // Sin luz: mundo muy oscuro (casi negro)
+                float mfDarkness = 0.03;
+
+                // Con luz: solo se ilumina lo que está dentro del cono
+                float mfBright = mix(mfDarkness, 1.0, mfLightAmount * uCsLightOn);
+                gl_FragColor.rgb *= mfBright;
+
+                // Tinte cálido de la linterna sobre las zonas iluminadas
+                vec3 mfTorch = vec3(1.0, 0.93, 0.7) * mfLightAmount * uCsLightOn;
+                gl_FragColor.rgb += mfTorch * 0.4;
+            `,
+            update: (u, dt) => {
+                u.uCsTime.value += dt;
+                u.uCsStrength.value = state.strength;
+            }
         }
     };
+
+    // ─── Tecla F para toggle de linterna + rueda para radio ──────────
+    // Solo se activa cuando el preset 'flashlight' está en uso
+    if (!window.__MF_FLASHLIGHT_KEYS__) {
+        window.__MF_FLASHLIGHT_KEYS__ = true;
+        const keyHandler = (e) => {
+            if (!state.enabled || state.preset !== 'flashlight') return;
+            if (e.key === 'f' || e.key === 'F') {
+                e.preventDefault();
+                for (const [, entry] of state.hooked) {
+                    const u = entry.liveUniforms;
+                    if (u.uCsLightOn) {
+                        u.uCsLightOn.value = u.uCsLightOn.value > 0.5 ? 0 : 1;
+                        console.log(`${TAG} Linterna: ${u.uCsLightOn.value > 0.5 ? 'ON' : 'OFF'}`);
+                    }
+                }
+            }
+        };
+        const wheelHandler = (e) => {
+            if (!state.enabled || state.preset !== 'flashlight') return;
+            e.preventDefault();
+            for (const [, entry] of state.hooked) {
+                const u = entry.liveUniforms;
+                if (u.uCsLightRadius) {
+                    u.uCsLightRadius.value = Math.max(3, Math.min(40,
+                        u.uCsLightRadius.value - Math.sign(e.deltaY) * 1.5
+                    ));
+                }
+            }
+        };
+        window.addEventListener('keydown', keyHandler);
+        window.addEventListener('wheel', wheelHandler, { passive: false });
+    }
 
     // ─── Encontrar el game object (React fiber mining) ───────────────
     function findGame() {
@@ -567,21 +682,18 @@
         return result;
     }
 
-    // ─── Inyección GLSL: wrapper de main() para post-procesado ───────
-    // Renombra la primera ocurrencia de "void main() {" → "void mfCsMain() {"
-    // y añade un nuevo main() que llama al original y luego ejecuta postMain.
-    function wrapMain(src, postMainCode) {
-        const mainPattern = /void\s+main\s*\(\s*\)\s*\{/;
-        const match = src.match(mainPattern);
-        if (!match) return src;
+    // ─── Inyección GLSL: insertar antes del cierre de main() ─────────
+    // Busca el último "}" del shader (que cierra main) e inserta el código
+    // justo antes. Esto mantiene intacto el main original y funciona con
+    // cualquier material de Three.js.
+    function injectBeforeMainEnd(src, code) {
+        // Encontrar el último cierre de llave (fin de main)
+        const lastBrace = src.lastIndexOf('}');
+        if (lastBrace < 0) return src;
 
-        const originalMain = src.replace(mainPattern, 'void mfCsMain() {');
-
-        return originalMain + '\n' +
-               'void main() {\n' +
-               '    mfCsMain();\n' +
-               postMainCode + '\n' +
-               '}\n';
+        return src.slice(0, lastBrace) +
+               '\n' + code + '\n' +
+               src.slice(lastBrace);
     }
 
     // ─── Hookear onBeforeCompile de un material ──────────────────────
@@ -634,9 +746,9 @@
                 shader.fragmentShader = preset.fragmentCode + '\n' + shader.fragmentShader;
             }
 
-            // 6. Fragment shader: envolver main con post-procesado
+            // 6. Fragment shader: inyectar postMain antes del cierre de main()
             if (preset.postMain) {
-                shader.fragmentShader = wrapMain(shader.fragmentShader, preset.postMain);
+                shader.fragmentShader = injectBeforeMainEnd(shader.fragmentShader, preset.postMain);
             }
         };
 

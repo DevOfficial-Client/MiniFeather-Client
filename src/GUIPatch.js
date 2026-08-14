@@ -7,6 +7,62 @@
   let cachedGame = null;
   let lastGameScan = 0;
 
+  // El parche SOLO debe afectar al bundle de GUI de miniblox (assets/GuiHud-*.js).
+  // El hash del nombre cambia con cada deploy, por eso se detecta dinámicamente.
+  // IMPORTANTE: el buffer de performance.getEntriesByType() se llena (250) antes
+  // de que cargue el GuiHud, así que se usa PerformanceObserver en tiempo real.
+  const GUI_BUNDLE_RE = /\/assets\/GuiHud[^/]*\.js(\?.*)?$/i;
+  let guiBundleActive = false;
+
+  function testGuiHudUrl(url) {
+    return GUI_BUNDLE_RE.test(url || '');
+  }
+
+  // Observar scripts que se cargan a partir de ahora (captura el GuiHud aunque
+  // el buffer de recursos ya esté lleno). buffered:true cubre los ya cargados.
+  try {
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) {
+        if (e.initiatorType === 'script' && testGuiHudUrl(e.name)) {
+          guiBundleActive = true;
+          break;
+        }
+      }
+    }).observe({ type: 'resource', buffered: true });
+  } catch (_) {}
+
+  // Interceptar <script src=".../GuiHud-*.js"> insertados en el DOM
+  const scriptObserver = new MutationObserver((muts) => {
+    for (const m of muts) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType === 1 && n.tagName === 'SCRIPT' && testGuiHudUrl(n.getAttribute('src'))) {
+          guiBundleActive = true;
+          return;
+        }
+      }
+    }
+  });
+  scriptObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+  function isGuiHudBundleActive() {
+    if (guiBundleActive) return true;
+    try {
+      // Scripts estáticos presentes en el documento
+      for (const s of document.scripts) {
+        if (testGuiHudUrl(s.getAttribute('src'))) return (guiBundleActive = true);
+      }
+      // Por si acaso: entradas aún visibles en el buffer de recursos
+      for (const e of performance.getEntriesByType('resource')) {
+        if (e.initiatorType === 'script' && testGuiHudUrl(e.name)) return (guiBundleActive = true);
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  function canPatch() {
+    return state.enabled && GUI_BASE && isGuiHudBundleActive();
+  }
+
   const state = {
     enabled: false,
     observers: [],
@@ -165,7 +221,7 @@
   // =========================================================================
   function patchPlayerList() {
     const observer = new MutationObserver(() => {
-      if (!state.enabled || !GUI_BASE) return;
+      if (!canPatch()) return;
       schedulePatch(() => {
         const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
         const nodes = [];
@@ -217,7 +273,7 @@
   function patchXPBar() {
     let lastXpKey = '';
     const interval = setInterval(() => {
-      if (!state.enabled || !GUI_BASE) return;
+      if (!canPatch()) return;
       const game = getGame();
       if (!game || !game.info) return;
 
@@ -381,7 +437,7 @@
 
   function patchDebugStats() {
     const observer = new MutationObserver(() => {
-      if (!state.enabled || !GUI_BASE) return;
+      if (!canPatch()) return;
       schedulePatch(() => {
         const pingElements = document.querySelectorAll('[class*="debug"], [class*="stat"]');
         pingElements.forEach(el => {
@@ -416,7 +472,7 @@
     state.overlay = true;
 
     state.overlayInterval = setInterval(() => {
-      if (!state.enabled || !GUI_BASE) return;
+      if (!canPatch()) return;
 
       const game = getGame();
       if (!game || !game.info) return;
