@@ -66,7 +66,7 @@
   function findOriginalBars() {
     const result = { healthBar: null, foodBar: null };
     try {
-      // 1. Usar referencias cacheadas si siguen conectadas y tienen nuestro contenido
+      // 1. Usar referencias cacheadas si siguen conectadas y con nuestro contenido
       if (state.healthBarRef && state.healthBarRef.isConnected) {
         if (state.healthBarRef.querySelector('.mf-hearts')) {
           result.healthBar = state.healthBarRef;
@@ -83,7 +83,7 @@
       }
       if (result.healthBar && result.foodBar) return result;
 
-      // 2. Buscar por texto "X / 20" o "X/20" (incluso en elementos ya reemplazados)
+      // 2. Buscar por texto "X / 20" o "X/20"
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
       const textBars = [];
       while (walker.nextNode()) {
@@ -91,7 +91,7 @@
         if (txt.match(/^\d+\.?\d*\s*\/\s*\d+$/)) {
           let el = walker.currentNode.parentElement;
           for (let i = 0; i < 5 && el; i++) el = el.parentElement;
-          if (el && !el.querySelector('.mf-hearts, .mf-food, .mf-xp-icons')) textBars.push(el);
+          if (el && !el.dataset.mfReplaced) textBars.push(el);
         }
       }
       if (textBars.length >= 2) {
@@ -231,15 +231,9 @@
       // --- Buscar la barra de XP ---
       let xpBar = null;
 
-      // 1. Referencia cacheada (solo si aún tiene nuestro contenedor)
+      // 1. Referencia cacheada
       if (state.xpBarRef && state.xpBarRef.isConnected) {
-        if (state.xpBarRef.querySelector('.mf-xp-icons')) {
-          xpBar = state.xpBarRef;
-        } else {
-          // React re-renderizó el elemento, invalidar caché
-          state.xpBarRef = null;
-          lastXpKey = '';
-        }
+        xpBar = state.xpBarRef;
       }
 
       // 2. Escanear todo el DOM buscando barras con color
@@ -583,7 +577,6 @@
 
   function initPatches() {
     patchPlayerList();
-    patchXPBar();
     patchDebugStats();
     createHealthFoodOverlay();
   }

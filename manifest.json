@@ -55,6 +55,7 @@
         "src/WorldMap.js",
         "src/RhythmParkour.js",
         "src/VanillaAnimations.js",
+        "src/CustomShader.js",
         "src/GUIPatch.js"
       ],
       "run_at": "document_start",
