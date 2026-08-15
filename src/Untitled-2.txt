@@ -1,0 +1,2578 @@
+// MinibloxRhythmParkour - Integración de Rhythm Parkour en el mundo de Miniblox
+// Este mod transforma el juego base de Miniblox en un juego de ritmo
+
+(function() {
+    console.log('[MinibloxRhythmParkour] Mod cargando...');
+    
+    // Variables globales del mod
+    const mod = {
+        name: 'MinibloxRhythmParkour',
+        version: '1.0.0',
+        isActive: false,
+        gameInstance: null,
+        audioContext: null,
+        analyser: null,
+        audioSource: null,
+        currentSong: null,
+        beatInterval: null,
+        blocks: [],
+        nextBlockId: 0,
+        isPlaying: false,
+        score: 0,
+        combo: 0,
+        maxCombo: 0,
+        health: 5,
+        beatCount: 0,
+        currentBeat: 0
+    };
+    
+    // Configuración
+    const config = {
+        // Coordenadas específicas para aparición de bloques
+        spawnArea: {
+            minX: -400,  // Punto de inicio (más lejos)
+            minY: 11,
+            minZ: -441,
+            maxX: -348,  // Punto final (más cerca)
+            maxY: 14,
+            maxZ: -425
+        },
+        blockSpeed: 2, // Velocidad muy reducida: 2 unidades/segundo
+        beatThreshold: 0.7,
+        blockTypes: ['stone', 'dirt', 'cobblestone', 'oak_planks', 'bricks', 
+                     'white_wool', 'orange_wool', 'magenta_wool', 'light_blue_wool', 
+                     'yellow_wool', 'lime_wool', 'pink_wool', 'gray_wool', 
+                     'light_gray_wool', 'cyan_wool', 'purple_wool', 'blue_wool', 
+                     'brown_wool', 'green_wool', 'red_wool', 'black_wool'],
+        difficulty: 'medium',
+        minBeatInterval: 2.5  // Reducido de 5s a 2.5s porque el detector es más sensible
+    };
+    
+    // API pública del mod
+    window.MinibloxRhythmParkour = {
+        version: mod.version,
+        config: config,
+        
+        // Métodos públicos
+        startGame: function() {
+            return startRhythmGame();
+        },
+        
+        loadSong: function(file) {
+            return loadAudioFile(file);
+        },
+        
+        stopGame: function() {
+            return stopRhythmGame();
+        },
+        
+        getStatus: function() {
+            return {
+                isActive: mod.isActive,
+                isPlaying: mod.isPlaying,
+                score: mod.score,
+                combo: mod.combo,
+                maxCombo: mod.maxCombo,
+                health: mod.health,
+                beatCount: mod.beatCount,
+                currentBeat: mod.currentBeat
+            };
+        },
+        
+        // Métodos de diagnóstico
+        diagnose: function() {
+            return {
+                gameInstance: !!mod.gameInstance,
+                audioContext: !!mod.audioContext,
+                analyser: !!mod.analyser,
+                audioSource: !!mod.audioSource,
+                currentSong: !!mod.currentSong,
+                isActive: mod.isActive,
+                blocksCount: mod.blocks.length,
+                serverCompatible: isServerCompatible(),
+                spawnArea: config.spawnArea,
+                windowGame: !!window.game,
+                windowGameType: typeof window.game,
+                windowGameCapital: !!window.Game,
+                windowMinibloxGame: !!window.minibloxGame,
+                windowMiniblox: !!window.miniblox
+            };
+        },
+        
+        // Diagnóstico avanzado con logs
+        debug: function() {
+            console.log('[MinibloxRhythmParkour] === DEBUG MODE ===');
+            console.log('[MinibloxRhythmParkour] Estado del mod:', this.diagnose());
+            console.log('[MinibloxRhythmParkour] URL:', window.location.href);
+            console.log('[MinibloxRhythmParkour] Título:', document.title);
+            console.log('[MinibloxRhythmParkour] Objetos en window:', Object.keys(window).filter(key => 
+                key.toLowerCase().includes('game') || key.toLowerCase().includes('miniblox') || key.toLowerCase().includes('pixelvortex')
+            ));
+            if (mod.gameInstance) {
+                console.log('[MinibloxRhythmParkour] Propiedades de gameInstance:', Object.keys(mod.gameInstance));
+                if (mod.gameInstance.world) {
+                    console.log('[MinibloxRhythmParkour] Propiedades de gameInstance.world:', Object.keys(mod.gameInstance.world));
+                    if (mod.gameInstance.world.chunkProvider) {
+                        console.log('[MinibloxRhythmParkour] Propiedades de gameInstance.world.chunkProvider:', Object.keys(mod.gameInstance.world.chunkProvider));
+                    }
+                    if (mod.gameInstance.world.serverInterface) {
+                        console.log('[MinibloxRhythmParkour] Propiedades de gameInstance.world.serverInterface:', Object.keys(mod.gameInstance.world.serverInterface));
+                    }
+                }
+                if (mod.gameInstance.player) {
+                    console.log('[MinibloxRhythmParkour] Propiedades de gameInstance.player:', Object.keys(mod.gameInstance.player));
+                }
+            }
+            
+            // Forzar inicialización si no está activo
+            if (!mod.isActive) {
+                console.log('[MinibloxRhythmParkour] Intentando inicializar manualmente...');
+                initializeMod();
+            }
+            
+            return 'Debug completado. Revisa la consola.';
+        },
+        
+        // Métodos de comandos
+        executeCommand: function(command) {
+            if (command.startsWith('/pr load')) {
+                // Simular la carga de un archivo de música
+                showNotification(`🎵 Comando ejecutado: ${command}`, 'info');
+                
+                // Crear un input de archivo para simular la carga
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'audio/*';
+                input.style.display = 'none';
+                document.body.appendChild(input);
+                
+                input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        loadAudioFile(file);
+                        showNotification(`🎵 Música cargada: ${file.name}`, 'success');
+                    }
+                    document.body.removeChild(input);
+                };
+                
+                input.click();
+                
+                return { success: true, command: command };
+            } else if (command === '/rp start') {
+                const result = startRhythmGame();
+                return { success: result, command: command };
+            } else if (command === '/rp stop') {
+                const result = stopRhythmGame();
+                return { success: result, command: command };
+            } else if (command === '/rp debug') {
+                // Comando de diagnóstico
+                const result = window.MinibloxRhythmParkour.debug();
+                return { success: true, message: result, command: command };
+            } else if (command === '/rp status') {
+                // Comando de estado
+                const status = window.MinibloxRhythmParkour.getStatus();
+                const diagnose = window.MinibloxRhythmParkour.diagnose();
+                return { success: true, status: status, diagnose: diagnose, command: command };
+            } else {
+                return { success: false, error: 'Comando no reconocido' };
+            }
+        }
+    };
+    
+    // Detectar si el servidor actual es compatible con Rhythm Parkour
+    function isServerCompatible() {
+        try {
+            // Modo desarrollo: siempre compatible para pruebas
+            const isDevelopmentMode = true; // Cambiar a false para producción
+            
+            if (isDevelopmentMode) {
+                console.log('[MinibloxRhythmParkour] Modo desarrollo activado - Servidor compatible');
+                return true;
+            }
+            
+            // Verificar si estamos en un servidor con {"rp"} en el nombre
+            const serverName = window.location.hostname || document.title || '';
+            const urlParams = new URLSearchParams(window.location.search);
+            const serverData = urlParams.get('server') || '';
+            
+            // Buscar {"rp"} en múltiples ubicaciones
+            const hasRP = serverName.includes('{"rp"}') || 
+                         document.title.includes('{"rp"}') ||
+                         serverData.includes('{"rp"}') ||
+                         (window.game && window.game.serverName && window.game.serverName.includes('{"rp"}')) ||
+                         (window.game && window.game.serverData && window.game.serverData.includes('{"rp"}'));
+            
+            console.log('[MinibloxRhythmParkour] Verificando compatibilidad del servidor:', {
+                serverName,
+                serverData,
+                hasRP,
+                location: window.location.href,
+                title: document.title
+            });
+            
+            return hasRP;
+        } catch (error) {
+            console.warn('[MinibloxRhythmParkour] Error al verificar compatibilidad del servidor:', error);
+            return false;
+        }
+    }
+    
+    // Inicializar el mod cuando el juego esté listo
+    function initializeMod() {
+        console.log('[MinibloxRhythmParkour] Inicializando mod...');
+        console.log('[MinibloxRhythmParkour] URL actual:', window.location.href);
+        console.log('[MinibloxRhythmParkour] Título:', document.title);
+        
+        // Verificar si el servidor es compatible
+        const compatible = isServerCompatible();
+        console.log('[MinibloxRhythmParkour] Resultado compatibilidad:', compatible);
+        
+        if (!compatible) {
+            console.log('[MinibloxRhythmParkour] Servidor no compatible con Rhythm Parkour. Mod no se activará.');
+            return;
+        }
+        
+        console.log('[MinibloxRhythmParkour] Servidor compatible detectado. Inicializando mod...');
+        
+        // Esperar a que el juego esté cargado
+        const checkGame = setInterval(() => {
+            // Buscar el juego en múltiples ubicaciones posibles (incluyendo PVC)
+            const game = window.game || window.Game || window.minibloxGame || window.miniblox || window.pixelVortexGame;
+            
+            console.log('[MinibloxRhythmParkour] Buscando juego en PVC...', {
+                hasWindowGame: !!window.game,
+                hasWindowGameType: typeof window.game,
+                hasWindowGameCapital: !!window.Game,
+                hasWindowMinibloxGame: !!window.minibloxGame,
+                hasWindowMiniblox: !!window.miniblox,
+                hasWindowPixelVortexGame: !!window.pixelVortexGame,
+                gameFound: !!game,
+                gameHasWorld: game ? !!game.world : false,
+                gameHasPlayer: game ? !!game.player : false,
+                // Inspeccionar propiedades del juego si existe
+                gameKeys: game ? Object.keys(game) : []
+            });
+            
+            if (game && game.world && game.player) {
+                clearInterval(checkGame);
+                mod.gameInstance = game;
+                console.log('[MinibloxRhythmParkour] Juego de Miniblox detectado:', game);
+                
+                // Crear interfaz de usuario
+                createUI();
+                
+                // Inyectar lógica de Rhythm Parkour
+                injectRhythmLogic();
+                
+                // Inyectar sistema de comandos
+                injectCommandSystem();
+                
+                mod.isActive = true;
+                console.log('[MinibloxRhythmParkour] Mod inicializado correctamente');
+            }
+        }, 1000); // Reducido a 1 segundo para menos spam
+        
+        // Timeout de seguridad
+        setTimeout(() => {
+            clearInterval(checkGame);
+            if (!mod.gameInstance) {
+                console.warn('[MinibloxRhythmParkour] No se pudo detectar el juego de Miniblox después de 10 segundos');
+                console.warn('[MinibloxRhythmParkour] Objetos disponibles en window:', Object.keys(window).filter(key => 
+                    key.toLowerCase().includes('game') || key.toLowerCase().includes('miniblox')
+                ));
+            }
+        }, 10000);
+    }
+    
+    // Crear interfaz de usuario para Rhythm Parkour
+    function createUI() {
+        console.log('[MinibloxRhythmParkour] Creando interfaz de usuario...');
+        
+        // Crear contenedor principal
+        const container = document.createElement('div');
+        container.id = 'rhythm-parkour-ui';
+        container.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #4ade80;
+            z-index: 9999;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-width: 300px;
+            display: none;
+        `;
+        
+        // Título
+        const title = document.createElement('h3');
+        title.textContent = '🎵 Rhythm Parkour - Miniblox';
+        title.style.cssText = 'margin: 0 0 10px 0; color: #4ade80; text-align: center;';
+        container.appendChild(title);
+        
+        // Controles de música
+        const musicControls = document.createElement('div');
+        musicControls.innerHTML = `
+            <div style="margin-bottom: 10px;">
+                <label style="display: block; margin-bottom: 5px; font-size: 14px;">🎵 Cargar música:</label>
+                <input type="file" id="rhythm-song-input" accept="audio/*" style="width: 100%; padding: 5px; border-radius: 5px; border: 1px solid #ccc;">
+            </div>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button id="rhythm-start-btn" style="flex: 1; padding: 8px; background: #4ade80; color: white; border: none; border-radius: 5px; cursor: pointer;">▶ Iniciar</button>
+                <button id="rhythm-stop-btn" style="flex: 1; padding: 8px; background: #ef4444; color: white; border: none; border-radius: 5px; cursor: pointer;">⏹ Detener</button>
+            </div>
+        `;
+        container.appendChild(musicControls);
+        
+        // Estadísticas
+        const stats = document.createElement('div');
+        stats.id = 'rhythm-stats';
+        stats.innerHTML = `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                <div style="text-align: center;">
+                    <div style="font-size: 12px; opacity: 0.8;">Puntuación</div>
+                    <div id="rhythm-score" style="font-size: 20px; font-weight: bold;">0</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 12px; opacity: 0.8;">Combo</div>
+                    <div id="rhythm-combo" style="font-size: 20px; font-weight: bold;">0</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 12px; opacity: 0.8;">Salud</div>
+                    <div id="rhythm-health" style="font-size: 20px; font-weight: bold;">5</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 12px; opacity: 0.8;">Beat</div>
+                    <div id="rhythm-beat" style="font-size: 20px; font-weight: bold;">0/0</div>
+                </div>
+            </div>
+        `;
+        container.appendChild(stats);
+        
+        // Botón para mostrar/ocultar la interfaz
+        const toggleBtn = document.createElement('button');
+        toggleBtn.id = 'rhythm-toggle-ui';
+        toggleBtn.textContent = '🎵 Rhythm Parkour';
+        toggleBtn.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            background: #4ade80;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 9998;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-weight: bold;
+        `;
+        
+        // Añadir elementos al DOM
+        document.body.appendChild(container);
+        document.body.appendChild(toggleBtn);
+        
+        // Event listeners
+        toggleBtn.addEventListener('click', () => {
+            container.style.display = container.style.display === 'none' ? 'block' : 'none';
+        });
+        
+        document.getElementById('rhythm-song-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                loadAudioFile(file);
+            }
+        });
+        
+        document.getElementById('rhythm-start-btn').addEventListener('click', () => {
+            startRhythmGame();
+        });
+        
+        document.getElementById('rhythm-stop-btn').addEventListener('click', () => {
+            stopRhythmGame();
+        });
+        
+        console.log('[MinibloxRhythmParkour] Interfaz de usuario creada');
+    }
+    
+    // Inyectar lógica de Rhythm Parkour en el juego
+    function injectRhythmLogic() {
+        console.log('[MinibloxRhythmParkour] Inyectando lógica de Rhythm Parkour...');
+        
+        // Guardar referencia original del update del juego
+        const originalUpdate = mod.gameInstance.update;
+        
+        // Sobrescribir el método update para añadir lógica de Rhythm Parkour
+        mod.gameInstance.update = function(deltaTime) {
+            // Llamar al update original
+            if (originalUpdate) {
+                originalUpdate.call(this, deltaTime);
+            }
+            
+            // Lógica de Rhythm Parkour si está activo
+            if (mod.isPlaying) {
+                updateRhythmGame(deltaTime);
+            }
+        };
+        
+        console.log('[MinibloxRhythmParkour] Lógica de Rhythm Parkour inyectada');
+    }
+    
+    // Inyectar sistema de comandos de chat
+    function injectCommandSystem() {
+        console.log('[MinibloxRhythmParkour] Inyectando sistema de comandos...');
+        
+        // Guardar referencia original del chat si existe
+        const originalChatSend = window.sendChatMessage || 
+                                (window.game && window.game.sendChat) ||
+                                (window.game && window.game.chat && window.game.chat.send);
+        
+        // Función para procesar comandos
+        function processCommand(message) {
+            const trimmed = message.trim();
+            
+            // Usar el método executeCommand del mod para manejar comandos
+            if (trimmed.startsWith('/pr load') || trimmed === '/rp start' || trimmed === '/rp stop') {
+                const result = window.MinibloxRhythmParkour.executeCommand(trimmed);
+                
+                if (result.success) {
+                    showNotification(`✅ Comando ejecutado: ${trimmed}`, 'success');
+                } else {
+                    showNotification(`❌ Error: ${result.error || 'Comando falló'}`, 'error');
+                }
+                
+                return true;
+            }
+            
+            return false;
+        }
+        
+        // Sobrescribir función de envío de chat si existe
+        if (originalChatSend && typeof originalChatSend === 'function') {
+            // Crear wrapper para interceptar comandos
+            const newChatSend = function(message) {
+                // Procesar comando primero
+                if (processCommand(message)) {
+                    // Comando manejado, no enviar al chat normal
+                    return;
+                }
+                
+                // Si no es un comando nuestro, enviar al chat normal
+                return originalChatSend.call(this, message);
+            };
+            
+            // Reemplazar la función original
+            if (window.sendChatMessage) {
+                window.sendChatMessage = newChatSend;
+            } else if (window.game && window.game.sendChat) {
+                window.game.sendChat = newChatSend;
+            } else if (window.game && window.game.chat && window.game.chat.send) {
+                window.game.chat.send = newChatSend;
+            }
+            
+            console.log('[MinibloxRhythmParkour] Sistema de comandos inyectado');
+        } else {
+            console.warn('[MinibloxRhythmParkour] No se pudo encontrar función de chat para inyectar comandos');
+            
+            // Crear función de chat alternativa si no existe
+            window.sendChatMessage = function(message) {
+                if (processCommand(message)) {
+                    return;
+                }
+                
+                // Mostrar en consola como fallback
+                console.log('[Chat]', message);
+            };
+            
+            console.log('[MinibloxRhythmParkour] Sistema de comandos creado (fallback)');
+        }
+        
+        // Añadir también a la interfaz de usuario
+        const chatInput = document.querySelector('input[type="text"], textarea, [contenteditable="true"]');
+        if (chatInput) {
+            const originalKeyDown = chatInput.onkeydown;
+            
+            chatInput.onkeydown = function(e) {
+                if (e.key === 'Enter') {
+                    const message = this.value || this.textContent;
+                    if (message && processCommand(message)) {
+                        e.preventDefault();
+                        this.value = '';
+                        if (this.textContent) this.textContent = '';
+                        return false;
+                    }
+                }
+                
+                if (originalKeyDown) {
+                    return originalKeyDown.call(this, e);
+                }
+            };
+            
+            console.log('[MinibloxRhythmParkour] Interceptación de teclado configurada');
+        }
+        
+        // Mostrar ayuda de comandos
+        setTimeout(() => {
+            showNotification('Disfruta del parcour!', 'info');
+        }, 2000);
+    }
+    
+    // Cargar archivo de audio con análisis de espectrograma para generación de obstáculos
+    async function loadAudioFile(file) {
+        console.log('[MinibloxRhythmParkour] Cargando archivo de audio:', file.name);
+        
+        try {
+            // Crear contexto de audio
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const ab = await file.arrayBuffer();
+            const audioBuffer = await ctx.decodeAudioData(ab);
+            const raw = audioBuffer.getChannelData(0);
+            const sr = audioBuffer.sampleRate;
+            const duration = audioBuffer.duration;
+
+            // Análisis simplificado del audio para detectar beats
+            // Usamos energía de onda + FFT liviano en lugar de espectrograma completo
+            const winSize = Math.floor(sr * 0.04);
+            const hop = Math.floor(winSize / 2);
+            
+            const energies = [];
+            for (let i = 0; i < raw.length - winSize; i += hop) {
+                let e = 0;
+                for (let j = 0; j < winSize; j++) e += raw[i + j] * raw[i + j];
+                energies.push(e / winSize);
+            }
+
+            // Normalizar energías
+            const maxE = Math.max(...energies, 0.0001);
+            for (let i = 0; i < energies.length; i++) energies[i] /= maxE;
+
+            // Detectar beats con umbral adaptativo
+            const beats = [];
+            const hist = 43;
+            const minInt = 0.8;  // Más corto = bloques más juntos
+            let lastT = -1;
+
+            for (let i = hist; i < energies.length - 1; i++) {
+                const t = (i * hop) / sr;
+                if (t < 0.5 || t > duration - 0.5) continue;
+                if (t - lastT < minInt) continue;
+
+                // Calcular promedio histórico
+                let avg = 0;
+                for (let j = i - hist; j < i; j++) avg += energies[j];
+                avg /= hist;
+
+                // Umbral adaptativo más sensible
+                const thresh = avg * 1.2 + 0.03;
+                
+                // Detectar pico
+                if (energies[i] > thresh && energies[i] > energies[i - 1] && energies[i] >= energies[i + 1]) {
+                    const strength = Math.min(energies[i], 1);
+                    
+                    // Generar tipo de obstáculo basado en fuerza y pseudo-aleatorio
+                    const h = Math.abs(Math.sin(t * 12345.6789) * 10000);
+                    const r = h - Math.floor(h);
+                    
+                    let type;
+                    if (strength > 0.85) {
+                        type = 'double_wall'; // Muy fuerte = pared doble
+                    } else if (strength > 0.7) {
+                        type = r < 0.5 ? 'jump_high' : 'duck';
+                    } else if (strength > 0.5) {
+                        type = r < 0.33 ? 'jump' : (r < 0.66 ? 'platform' : 'tunnel');
+                    } else {
+                        // Menos fuerte = obstáculos variados
+                        if (r < 0.15) type = 'stair_up';
+                        else if (r < 0.3) type = 'stair_down';
+                        else if (r < 0.45) type = 'gap';
+                        else if (r < 0.6) type = 'platform_tall';
+                        else if (r < 0.75) type = 'tunnel';
+                        else type = 'jump';
+                    }
+                    
+                    beats.push({ 
+                        time: t, 
+                        strength, 
+                        type, 
+                        lane: 0
+                    });
+                    lastT = t;
+                }
+            }
+
+            await ctx.close();
+
+            // Calcular BPM
+            let estimatedBPM = 120;
+            if (beats.length >= 2) {
+                let totalInterval = 0;
+                let intervalCount = 0;
+                for (let i = 1; i < beats.length; i++) {
+                    const interval = beats[i].time - beats[i-1].time;
+                    if (interval > 0.3 && interval < 2.0) {
+                        totalInterval += interval;
+                        intervalCount++;
+                    }
+                }
+                if (intervalCount > 0) {
+                    const avgInterval = totalInterval / intervalCount;
+                    estimatedBPM = Math.round(60 / avgInterval);
+                    estimatedBPM = Math.max(60, Math.min(180, estimatedBPM));
+                }
+            }
+            
+            const beatIntervalSeconds = 60 / estimatedBPM;
+            
+            console.log('[MinibloxRhythmParkour] Espectrograma analizado:', {
+                duration: duration,
+                beatCount: beats.length,
+                bpm: estimatedBPM,
+                bass_beats: beats.filter(b => b.dominantFreq === 'low').length,
+                mid_beats: beats.filter(b => b.dominantFreq === 'mid').length,
+                high_beats: beats.filter(b => b.dominantFreq === 'high').length,
+                types: beats.reduce((acc, b) => {
+                    acc[b.type] = (acc[b.type] || 0) + 1;
+                    return acc;
+                }, {})
+            });
+
+            // Guardar datos
+            mod.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            mod.analyser = mod.audioContext.createAnalyser();
+            mod.analyser.fftSize = 2048;
+            
+            mod.currentSong = audioBuffer;
+            mod.beats = beats;
+            mod.beatCount = beats.length;
+            mod.songDuration = duration;
+            mod.currentBeatIndex = 0;
+            mod.detectedBPM = estimatedBPM;
+            mod.beatIntervalSeconds = beatIntervalSeconds;
+            
+            showNotification(`🎵 ${beats.length} obstáculos generados de espectrograma`, 'success');
+            return true;
+            
+        } catch (error) {
+            console.error('[MinibloxRhythmParkour] Error al cargar audio:', error);
+            showNotification('❌ Error al cargar el archivo de audio', 'error');
+            return false;
+        }
+    }
+    
+    // Iniciar juego de Rhythm Parkour
+    function startRhythmGame() {
+        if (!mod.currentSong || !mod.beats) {
+            showNotification('❌ Primero carga una canción', 'error');
+            return false;
+        }
+        
+        if (mod.isPlaying) {
+            showNotification('⚠ El juego ya está en progreso', 'warning');
+            return false;
+        }
+        
+        console.log('[MinibloxRhythmParkour] Iniciando juego...', {
+            totalBeats: mod.beats.length,
+            bpm: mod.detectedBPM,
+            interval: mod.beatIntervalSeconds
+        });
+        
+        // Reiniciar estadísticas
+        mod.score = 0;
+        mod.combo = 0;
+        mod.maxCombo = 0;
+        mod.health = 5;
+        mod.currentBeat = 0;
+        mod.blocks = [];
+        mod.nextBlockId = 0;
+        
+        // Crear fuente de audio y conectar
+        mod.audioSource = mod.audioContext.createBufferSource();
+        mod.audioSource.buffer = mod.currentSong;
+        mod.audioSource.connect(mod.audioContext.destination);
+        
+        // Iniciar reproducción
+        mod.audioSource.start(0);
+        mod.isPlaying = true;
+        
+        // Configurar intervalo para generar bloques basado en BPM detectado
+        const beatIntervalMs = (mod.beatIntervalSeconds || 2.5) * 1000;
+        console.log(`[MinibloxRhythmParkour] Intervalo de generación: ${beatIntervalMs}ms (BPM: ${mod.detectedBPM || 120})`);
+        
+        // Limpiar intervalo anterior si existe
+        if (mod.beatInterval) {
+            console.log('[MinibloxRhythmParkour] Limpiando intervalo anterior');
+            clearInterval(mod.beatInterval);
+        }
+        
+        mod.generationCount = 0;
+        mod.lastGenerationTime = Date.now();
+        
+        // Configurar callback cuando el audio termine
+        mod.audioSource.onended = () => {
+            console.log('[MinibloxRhythmParkour] Audio terminado, finalizando juego...');
+            stopRhythmGame();
+            showNotification('🎉 ¡Canción completada!', 'success');
+        };
+        
+        // Calcular look-ahead time: tiempo que tarda un bloque en viajar desde spawn hasta el jugador
+        // AUMENTADO a 4 segundos para que los bloques vayan más LENTOS
+        const spawnX = config.spawnArea.minX;
+        const playerX = -353;
+        const travelDistance = Math.abs(playerX - spawnX); // 47 bloques
+        const travelTime = 4.0; // SEGUNDOS DE VIAJE - más lento (antes era beatIntervalSeconds ~1.5s)
+        mod.blockSpeed = travelDistance / travelTime; // ~11.75 bloques/s (más lento)
+        mod.lookAheadTime = travelTime; // Segundos de anticipación para spawneado
+        
+        console.log(`[MinibloxRhythmParkour] Look-ahead: ${mod.lookAheadTime.toFixed(2)}s, Velocidad: ${mod.blockSpeed.toFixed(2)} blocks/s (DISTANCIA: ${travelDistance} bloques)`);
+        
+        // Marcar tiempo de inicio del audio
+        mod.audioStartTime = Date.now();
+        
+        mod.beatInterval = setInterval(() => {
+            const now = Date.now();
+            const audioTime = (now - mod.audioStartTime) / 1000; // Tiempo actual del audio en segundos
+            mod.generationCount++;
+            
+            // Generar bloques con look-ahead: buscar beats que ocurrirán en 'lookAheadTime' segundos
+            const targetTime = audioTime + mod.lookAheadTime;
+            
+            // Encontrar beats que deben spawnearse ahora (aquellos cuyo tiempo de beat está dentro de la ventana de look-ahead)
+            while (mod.currentBeat < mod.beats.length) {
+                const beat = mod.beats[mod.currentBeat];
+                const beatTime = beat.time; // Tiempo en segundos cuando suena el beat
+                
+                // Si el beat suena dentro del look-ahead window, spawnearlo ahora
+                if (beatTime <= targetTime && beatTime > audioTime - 0.1) {
+                    generatePatternBlock(beat);
+                    mod.currentBeat++;
+                    console.log(`[MinibloxRhythmParkour] Beat ${mod.currentBeat}/${mod.beats.length} spawneado con look-ahead (beatTime: ${beatTime.toFixed(2)}s, audioTime: ${audioTime.toFixed(2)}s)`);
+                } else if (beatTime > targetTime) {
+                    // El beat está demasiado lejos, esperar
+                    break;
+                } else {
+                    // Beat antiguo, saltarlo
+                    mod.currentBeat++;
+                }
+            }
+            
+            updateUI();
+            
+            if (mod.currentBeat >= mod.beats.length) {
+                console.log('[MinibloxRhythmParkour] Todos los beats generados, limpiando intervalo');
+                clearInterval(mod.beatInterval);
+                mod.beatInterval = null;
+            }
+        }, 100); // Verificar cada 100ms para precisión
+        
+        // Iniciar loop de actualización continua (60fps)
+        mod.gameLoopId = requestAnimationFrame(gameLoop);
+        
+        showNotification(`🎮 ¡Juego iniciado! ${mod.beats.length} bloques`, 'success');
+        
+        return true;
+    }
+    
+    // Loop principal del juego (60fps)
+    function gameLoop(timestamp) {
+        if (!mod.isPlaying) {
+            console.log('[MinibloxRhythmParkour] Game loop detenido - isPlaying false');
+            return;
+        }
+        
+        // Calcular delta time
+        const now = timestamp || performance.now();
+        const deltaTime = mod.lastFrameTime ? (now - mod.lastFrameTime) / 1000 : 0.016;
+        mod.lastFrameTime = now;
+        
+        // Debug cada 2 segundos
+        if (Math.floor(now / 2000) !== Math.floor((now - deltaTime * 1000) / 2000)) {
+            console.log(`[MinibloxRhythmParkour] Game loop - bloques activos: ${mod.blocks.length}, delta: ${deltaTime.toFixed(4)}`);
+        }
+        
+        // Actualizar lógica del juego
+        updateRhythmGame(deltaTime);
+        
+        // El juego ahora termina cuando el audio termina (onended callback)
+        // No verificamos más aquí - dejamos que el audio controle el final
+        
+        // Continuar loop
+        mod.gameLoopId = requestAnimationFrame(gameLoop);
+    }
+    
+    // Detener juego de Rhythm Parkour
+    function stopRhythmGame() {
+        if (!mod.isPlaying) return;
+        
+        console.log('[MinibloxRhythmParkour] Deteniendo juego...');
+        
+        // Detener audio
+        if (mod.audioSource) {
+            mod.audioSource.stop();
+            mod.audioSource = null;
+        }
+        
+        // Limpiar intervalo
+        if (mod.beatInterval) {
+            clearInterval(mod.beatInterval);
+            mod.beatInterval = null;
+        }
+        
+        // Detener game loop
+        if (mod.gameLoopId) {
+            cancelAnimationFrame(mod.gameLoopId);
+            mod.gameLoopId = null;
+        }
+        
+        // Limpiar bloques del mundo
+        removeAllBlocks();
+        
+        // Actualizar estado
+        mod.isPlaying = false;
+        mod.currentBeat = 0;
+        mod.lastFrameTime = null;
+        
+        showNotification('⏹ Juego detenido', 'info');
+        console.log('[MinibloxRhythmParkour] Juego detenido');
+    }
+    
+    // Generar bloque con patrón basado en el tipo de beat (del rhythm-parkour-level-generator)
+    function generatePatternBlock(beat) {
+        if (!mod.gameInstance || !mod.gameInstance.world) return;
+        
+        const blockId = mod.nextBlockId++;
+        
+        // Posición base: spawnea en minX y se mueve hacia maxX
+        const spawnX = config.spawnArea.minX;
+        const playerX = -353;  // Posición exacta del jugador donde debe llegar el bloque
+        
+        // Calcular velocidad para que llegue exactamente al jugador en el momento del beat
+        // AUMENTADO travel time a 4s para bloques más LENTOS
+        const distance = Math.abs(playerX - spawnX); // 47 bloques
+        const travelTime = 4.0; // 4 segundos de viaje = más lento
+        const blockSpeed = distance / travelTime;
+        
+        console.log(`[MinibloxRhythmParkour] Velocidad calculada: ${blockSpeed.toFixed(2)} bloques/s (distancia: ${distance}, tiempo: ${travelTime}s)`);
+        
+        const endX = config.spawnArea.maxX;
+        
+        // Obstáculos ahora abarcan toda la pista (3 carriles)
+        const laneWidth = (config.spawnArea.maxZ - config.spawnArea.minZ) / 3;
+        const centerZ = config.spawnArea.minZ + laneWidth * 1.5; // Centro de la pista
+        
+        // Altura y tipo según el tipo de obstáculo
+        let spawnY, blockType, pattern;
+        
+        // Nuevos tipos basados en espectrograma
+        switch (beat.type) {
+            case 'jump':
+                spawnY = config.spawnArea.minY;
+                blockType = 'cyan_wool';
+                pattern = 'jump_barrier';
+                console.log(`[MinibloxRhythmParkour] Obstáculo JUMP`);
+                break;
+                
+            case 'jump_high':
+                spawnY = config.spawnArea.minY; // Nivel del suelo, NO elevado
+                blockType = 'cyan_wool';
+                pattern = 'jump_high_wall'; // Pared alta de 2 bloques para saltar
+                console.log(`[MinibloxRhythmParkour] Obstáculo JUMP HIGH`);
+                break;
+                
+            case 'duck':
+                spawnY = config.spawnArea.minY; // Pegada al suelo (no flota)
+                blockType = 'yellow_wool';
+                pattern = 'duck_with_jump_base'; // Barrera duck de 3 bloques con base verde para saltar
+                console.log(`[MinibloxRhythmParkour] Obstáculo DUCK WITH BASE (3 bloques, pegada al suelo)`);
+                break;
+                
+            case 'double_wall':
+                spawnY = config.spawnArea.minY;
+                blockType = 'red_wool';
+                pattern = 'double_wall'; // Pared doble de 3 bloques de alto (muy alta)
+                console.log(`[MinibloxRhythmParkour] Obstáculo DOUBLE WALL (bass heavy)`);
+                break;
+                
+            case 'platform':
+                spawnY = config.spawnArea.minY;
+                blockType = 'lime_wool';
+                pattern = 'platform_wide';
+                console.log(`[MinibloxRhythmParkour] Obstáculo PLATFORM`);
+                break;
+                
+            case 'platform_tall':
+                spawnY = config.spawnArea.minY; // Pegada al suelo
+                blockType = 'lime_wool';
+                pattern = 'platform_with_base'; // Plataforma con base 3x3 pegada al suelo
+                console.log(`[MinibloxRhythmParkour] Obstáculo PLATFORM WITH BASE`);
+                break;
+                
+            case 'stair_up':
+                spawnY = config.spawnArea.minY;
+                blockType = 'orange_wool';
+                pattern = 'jump_barrier'; // Barrera simple en lugar de escalera imposible
+                console.log(`[MinibloxRhythmParkour] Obstáculo ORANGE BARRIER`);
+                break;
+                
+            case 'stair_down':
+                spawnY = config.spawnArea.minY;
+                blockType = 'purple_wool';
+                pattern = 'platform_wide'; // Plataforma simple en lugar de escalera imposible
+                console.log(`[MinibloxRhythmParkour] Obstáculo PURPLE PLATFORM`);
+                break;
+                
+            case 'gap':
+                spawnY = config.spawnArea.minY;
+                blockType = 'air'; // Hueco - no se colocan bloques
+                pattern = 'gap'; // Hueco/salto largo
+                console.log(`[MinibloxRhythmParkour] Obstáculo GAP (hueco)`);
+                break;
+                
+            case 'tunnel':
+                // Barrera de piedra desactivada - no se genera ningún bloque
+                spawnY = config.spawnArea.minY;
+                blockType = 'air';
+                pattern = 'gap'; // Sin bloques
+                console.log(`[MinibloxRhythmParkour] Obstáculo TUNNEL (desactivado - sin bloques)`);
+                break;
+                
+            default:
+                spawnY = config.spawnArea.minY + Math.floor(Math.random() * (config.spawnArea.maxY - config.spawnArea.minY + 1));
+                blockType = config.blockTypes[Math.floor(Math.random() * config.blockTypes.length)];
+                pattern = 'single';
+        }
+        
+        // Crear el patrón de bloques según el tipo (abarca toda la pista)
+        createObstaclePattern(blockId, pattern, spawnX, spawnY, centerZ, endX, blockSpeed, blockType, laneWidth);
+        
+        console.log(`[MinibloxRhythmParkour] Bloque #${blockId} generado: tipo=${beat.type}, abarca toda la pista, X=${spawnX} -> ${endX}`);
+    }
+    
+    // Crear patrón de obstáculo según el tipo
+    function createObstaclePattern(blockId, pattern, spawnX, spawnY, centerZ, endX, blockSpeed, blockType, laneWidth) {
+        const blocks = [];
+        // Calcular el rango Z completo de la pista para crear pared continua
+        const minZ = config.spawnArea.minZ;
+        const maxZ = config.spawnArea.maxZ;
+        const zStart = Math.floor(minZ);
+        const zEnd = Math.floor(maxZ);
+        
+        switch (pattern) {
+            case 'duck_wall':
+                // Pared para obstáculo duck: lana amarilla arriba, slabs de oak abajo
+                for (let dy = 0; dy < 2; dy++) {
+                    for (let zPos = zStart; zPos <= zEnd; zPos++) {
+                        const blockTypeForLayer = dy === 0 ? 'oak_slab' : 'yellow_wool';
+                        blocks.push({
+                            x: spawnX,
+                            y: spawnY + dy,
+                            z: zPos,
+                            type: blockTypeForLayer
+                        });
+                    }
+                }
+                break;
+                
+            case 'duck_with_jump_base':
+                // Muro amarillo de 2 bloques de alto, abarca TODO el ancho de la pista
+                // Hueco 2x2 aleatorio en IZQUIERDA o DERECHA (no en el centro)
+                const gapOnLeft = Math.random() < 0.5;
+                let duckGapStart, duckGapEnd;
+                
+                if (gapOnLeft) {
+                    // Hueco en la izquierda (zStart)
+                    duckGapStart = zStart;
+                    duckGapEnd = zStart + 2;
+                } else {
+                    // Hueco en la derecha (zEnd)
+                    duckGapEnd = zEnd;
+                    duckGapStart = zEnd - 2;
+                }
+                
+                // Muro amarillo de 2 bloques de alto, toda la pista, con hueco 2x2 en un lado
+                for (let dy = 0; dy < 2; dy++) {
+                    for (let zPos = zStart; zPos <= zEnd; zPos++) {
+                        // Saltar el hueco 2x2
+                        if (zPos >= duckGapStart && zPos <= duckGapEnd) continue;
+                        
+                        blocks.push({
+                            x: spawnX,
+                            y: spawnY + dy,
+                            z: zPos,
+                            type: 'yellow_wool'
+                        });
+                    }
+                }
+                break;
+                
+            case 'jump_barrier':
+                // Barrera baja para saltar (1 bloque de alto) - abarca toda la pista
+                for (let zPos = zStart; zPos <= zEnd; zPos++) {
+                    blocks.push({
+                        x: spawnX,
+                        y: spawnY,
+                        z: zPos,
+                        type: blockType
+                    });
+                }
+                break;
+                
+            case 'jump_barrier_half':
+                // Barrera ALTA en UNA mitad de la pista (4 bloques de alto, imposible de saltar)
+                // Hay que esquivarla, no saltarla
+                const halfIsLeft = Math.random() < 0.5;
+                const halfStart = halfIsLeft ? zStart : centerZ;
+                const halfEnd = halfIsLeft ? centerZ : zEnd;
+                
+                for (let dy = 0; dy < 4; dy++) {
+                    for (let zPos = halfStart; zPos <= halfEnd; zPos++) {
+                        blocks.push({
+                            x: spawnX,
+                            y: spawnY + dy,
+                            z: zPos,
+                            type: blockType
+                        });
+                    }
+                }
+                break;
+                
+            case 'jump_high_wall':
+                // Pared alta tipo arco: 2 bloques en el centro, 1 bloque en los lados
+                // Esto crea un "arco" donde los lados son más bajos
+                const totalWidth = zEnd - zStart;
+                const sideWidth = Math.floor(totalWidth / 4); // 1/4 de cada lado es bajo
+                
+                for (let dy = 0; dy < 2; dy++) {
+                    for (let zPos = zStart; zPos <= zEnd; zPos++) {
+                        // Calcular distancia desde el centro
+                        const distFromCenter = Math.abs(zPos - centerZ);
+                        const isSide = distFromCenter > (totalWidth / 4);
+                        
+                        // En los lados (dy=1, la parte alta), no poner bloques
+                        if (dy === 1 && isSide) continue;
+                        
+                        blocks.push({
+                            x: spawnX,
+                            y: spawnY + dy,
+                            z: zPos,
+                            type: blockType
+                        });
+                    }
+                }
+                break;
+                
+            case 'double_wall':
+                // Pared doble de 3 bloques de alto (bass heavy)
+                // Ahora con huecos: 1/3 de la pared está vacío para poder pasar
+                const zRange = zEnd - zStart;
+                const gapSize = Math.floor(zRange / 3); // Tamaño del hueco = 1/3 del ancho
+                const gapStart = zStart + Math.floor(gapSize); // Hueco en el medio
+                const gapEnd = gapStart + gapSize;
+                
+                for (let dy = 0; dy < 3; dy++) {
+                    for (let zPos = zStart; zPos <= zEnd; zPos++) {
+                        // Saltar el hueco central (1/3 de la pared)
+                        if (zPos >= gapStart && zPos <= gapEnd) continue;
+                        
+                        blocks.push({
+                            x: spawnX,
+                            y: spawnY + dy,
+                            z: zPos,
+                            type: blockType
+                        });
+                    }
+                }
+                break;
+                
+            case 'platform_wide':
+            case 'platform':
+                // Plataforma ancha (2 bloques de largo)
+                for (let dx = 0; dx < 2; dx++) {
+                    for (let zPos = zStart; zPos <= zEnd; zPos++) {
+                        blocks.push({
+                            x: spawnX + dx,
+                            y: spawnY,
+                            z: zPos,
+                            type: blockType
+                        });
+                    }
+                }
+                break;
+                
+            case 'platform_with_base':
+                // Plataforma con base 3x3 verde cuadrada - TODO pegado al suelo
+                // La base aparece en izquierda o derecha aleatoriamente
+                const platformIsLeft = Math.random() < 0.5;
+                const platformZCenter = platformIsLeft ? (zStart + centerZ) / 2 : (centerZ + zEnd) / 2;
+                
+                // Base 3x3 cuadrada en el suelo (green_wool)
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dz = -1; dz <= 1; dz++) {
+                        blocks.push({
+                            x: spawnX + dx,
+                            y: spawnY, // Pegada al suelo
+                            z: platformZCenter + dz,
+                            type: 'green_wool' // Base verde
+                        });
+                    }
+                }
+                
+                // Plataforma superior (lime_wool) encima - también pegada al suelo
+                for (let dx = 0; dx < 2; dx++) {
+                    for (let dz = 0; dz < 2; dz++) {
+                        blocks.push({
+                            x: spawnX + dx,
+                            y: spawnY, // Pegada al suelo
+                            z: platformZCenter + dz,
+                            type: blockType // lime_wool
+                        });
+                    }
+                }
+                break;
+                
+            case 'stair_up':
+                // Escalera subiendo: 3 bloques en diagonal ascendente
+                for (let dx = 0; dx < 3; dx++) {
+                    for (let zPos = zStart; zPos <= zEnd; zPos++) {
+                        blocks.push({
+                            x: spawnX + dx,
+                            y: spawnY + dx, // Sube 1 bloque cada paso
+                            z: zPos,
+                            type: blockType
+                        });
+                    }
+                }
+                break;
+                
+            case 'stair_down':
+                // Escalera bajando: 3 bloques en diagonal descendente
+                for (let dx = 0; dx < 3; dx++) {
+                    for (let zPos = zStart; zPos <= zEnd; zPos++) {
+                        blocks.push({
+                            x: spawnX + dx,
+                            y: spawnY - dx, // Baja 1 bloque cada paso
+                            z: zPos,
+                            type: blockType
+                        });
+                    }
+                }
+                break;
+                
+            case 'gap':
+                // Hueco: no se colocan bloques, es un espacio vacío
+                // El jugador debe saltar sobre el hueco
+                break;
+                
+            case 'tunnel':
+                // Túnel bajo: solo bloques en los lados y arriba, espacio en medio
+                // Crea un túnel de 1 bloque de alto en el centro
+                for (let zPos = zStart; zPos <= zEnd; zPos++) {
+                    // Paredes laterales del túnel
+                    blocks.push({
+                        x: spawnX,
+                        y: spawnY,
+                        z: zPos,
+                        type: blockType
+                    });
+                    // Techo del túnel
+                    blocks.push({
+                        x: spawnX,
+                        y: spawnY + 2,
+                        z: zPos,
+                        type: blockType
+                    });
+                }
+                break;
+                
+            case 'single':
+            default:
+                // Bloque simple en centro
+                blocks.push({
+                    x: spawnX,
+                    y: spawnY,
+                    z: centerZ,
+                    type: blockType
+                });
+                break;
+        }
+        
+        // Crear cada bloque del patrón
+        for (let i = 0; i < blocks.length; i++) {
+            const b = blocks[i];
+            const isMain = i === 0;
+            
+            const block = {
+                id: isMain ? blockId : `${blockId}_${i}`,
+                position: {
+                    x: b.x,
+                    y: b.y,
+                    z: b.z
+                },
+                targetPosition: {
+                    x: endX,
+                    y: b.y,
+                    z: b.z
+                },
+                startPosition: { x: b.x, y: b.y, z: b.z },
+                type: b.type,
+                velocity: blockSpeed,
+                finished: false,
+                createdAt: Date.now(),
+                isPartOfPattern: !isMain,
+                parentId: isMain ? null : blockId
+            };
+            
+            mod.blocks.push(block);
+            
+            try {
+                createGameBlock(block);
+            } catch (error) {
+                console.warn(`[MinibloxRhythmParkour] No se pudo crear bloque:`, error);
+            }
+        }
+    }
+    
+    // Actualizar lógica del juego - Movimiento en X
+    function updateRhythmGame(deltaTime) {
+        if (!mod.gameInstance || !mod.gameInstance.world) {
+            console.warn('[MinibloxRhythmParkour] updateRhythmGame: No gameInstance o world');
+            return;
+        }
+        
+        if (mod.blocks.length === 0) return;
+        
+        console.log(`[MinibloxRhythmParkour] updateRhythmGame: Procesando ${mod.blocks.length} bloques, deltaTime: ${deltaTime.toFixed(4)}`);
+        
+        for (const block of mod.blocks) {
+            if (block.finished) continue;
+            
+            // Guardar posición anterior
+            const prevX = Math.floor(block.position.x);
+            const prevY = Math.floor(block.position.y);
+            const prevZ = Math.floor(block.position.z);
+            
+            // Mover bloque en X (de minX hacia maxX)
+            const moveDistance = block.velocity * deltaTime;
+            const newPositionX = block.position.x + moveDistance;
+            
+            console.log(`[MinibloxRhythmParkour] Bloque #${block.id}: X=${block.position.x.toFixed(2)} + ${moveDistance.toFixed(4)} = ${newPositionX.toFixed(2)}`);
+            
+            // Protección contra NaN
+            if (isNaN(newPositionX)) {
+                console.error(`[MinibloxRhythmParkour] Bloque #${block.id} - NaN detectado! X=${block.position.x}, velocity=${block.velocity}, deltaTime=${deltaTime}`);
+                block.finished = true;
+                continue;
+            }
+            
+            block.position.x = newPositionX;
+            
+            // Calcular tiempo transcurrido desde creación
+            const elapsed = (Date.now() - block.createdAt) / 1000;
+            
+            // Verificar si llegó al final
+            if (block.position.x >= block.targetPosition.x) {
+                block.position.x = block.targetPosition.x;
+                block.finished = true;
+                
+                console.log(`[MinibloxRhythmParkour] Bloque #${block.id} TERMINADO - duró ${elapsed.toFixed(1)}s`);
+                
+                // Verificar si el jugador pasó correctamente el obstáculo
+                const passedCorrectly = checkIfPlayerPassedCorrectly(block);
+                if (passedCorrectly) {
+                    showHitMessage('good');
+                } else if (!block.collided) {
+                    // Si no pasó correctamente pero tampoco colisionó, es un fail silencioso
+                    // Opcional: mostrar miss aquí también
+                    showHitMessage('miss');
+                }
+                
+                // Eliminar bloque al llegar
+                try {
+                    localPvSetBlockAt(prevX, prevY, prevZ, 'air');
+                } catch (e) {}
+                continue;
+            }
+            
+            // Calcular nueva posición
+            const newX = Math.floor(block.position.x);
+            const newZ = Math.floor(block.position.z);
+            
+            // Solo actualizar si cambió de celda
+            if (newX !== prevX) {
+                try {
+                    localPvSetBlockAt(prevX, prevY, prevZ, 'air');
+                    localPvSetBlockAt(newX, prevY, newZ, block.type);
+                } catch (error) {}
+            }
+        }
+        
+        // Limpiar bloques terminados
+        const finishedCount = mod.blocks.filter(b => b.finished).length;
+        if (finishedCount > 0) {
+            console.log(`[MinibloxRhythmParkour] Limpiando ${finishedCount} bloques terminados`);
+        }
+        mod.blocks = mod.blocks.filter(b => !b.finished);
+        
+        // Verificar colisiones con el jugador
+        checkPlayerCollisions();
+        
+        // Actualizar UI
+        updateUI();
+        
+        // Actualizar UI de P2P si está activo
+        if (typeof p2pManager !== 'undefined' && p2pManager.connections && p2pManager.connections.size > 0) {
+            // La UI se actualiza automáticamente via callback en PeerJS
+        }
+    }
+    
+    // Verificar si el jugador pasó correctamente el obstáculo
+    function checkIfPlayerPassedCorrectly(block) {
+        const g = window.game || globalThis.game;
+        if (!g || !g.player) return true; // Si no hay datos del jugador, asumir que pasó
+        
+        const player = g.player;
+        const playerX = Math.floor(player.position ? player.position.x : (player.posX || 0));
+        const playerY = Math.floor(player.position ? player.position.y : (player.posY || 0));
+        const playerZ = Math.floor(player.position ? player.position.z : (player.posZ || 0));
+        
+        const blockX = Math.floor(block.position.x);
+        const blockY = Math.floor(block.position.y);
+        const blockZ = Math.floor(block.position.z);
+        
+        // Para obstáculos de salto (cyan_wool) - debe haber saltado (estar más alto)
+        if (block.type === 'cyan_wool') {
+            // Considerar "good" si está significativamente más alto que el bloque
+            // o si está muy lejos en Z (esquivó por los lados)
+            const yDiff = playerY - blockY;
+            const zDist = Math.abs(playerZ - blockZ);
+            
+            // Good si: está 2+ bloques más alto, o está lejos en Z (esquivó), o está detrás del bloque
+            const jumped = yDiff >= 2;
+            const dodged = zDist > 5;
+            const pastBlock = playerX > blockX;
+            
+            return jumped || dodged || pastBlock;
+        }
+        
+        // Para obstáculos de duck (yellow_wool) - debe estar agachado/pasado
+        if (block.type === 'yellow_wool') {
+            const yDiff = playerY - blockY;
+            const zDist = Math.abs(playerZ - blockZ);
+            
+            // Good si: está a la misma altura o más bajo (pasó por el hueco),
+            // o está lejos en Z (esquivó por los lados), o está detrás del bloque
+            const ducked = yDiff <= 0;
+            const dodged = zDist > 5;
+            const pastBlock = playerX > blockX;
+            
+            return ducked || dodged || pastBlock;
+        }
+        
+        // Para slabs (oak_slab) - similar a duck
+        if (block.type === 'oak_slab') {
+            const yDiff = playerY - blockY;
+            const zDist = Math.abs(playerZ - blockZ);
+            
+            const ducked = yDiff <= 0;
+            const dodged = zDist > 5;
+            const pastBlock = playerX > blockX;
+            
+            return ducked || dodged || pastBlock;
+        }
+        
+        // Para otros tipos de bloques, asumir que pasó correctamente
+        return true;
+    }
+    
+    // Verificar colisiones entre jugador y bloques
+    function checkPlayerCollisions() {
+        const g = window.game || globalThis.game;
+        if (!g || !g.player) return;
+        
+        const player = g.player;
+        const playerX = Math.floor(player.position ? player.position.x : (player.posX || 0));
+        const playerY = Math.floor(player.position ? player.position.y : (player.posY || 0));
+        const playerZ = Math.floor(player.position ? player.position.z : (player.posZ || 0));
+        
+        for (const block of mod.blocks) {
+            if (block.finished || block.collided) continue;
+            
+            const blockX = Math.floor(block.position.x);
+            const blockY = Math.floor(block.position.y);
+            const blockZ = Math.floor(block.position.z);
+            
+            // Verificar si el jugador está en la misma posición X que el bloque
+            // y dentro del rango Z de la pista (los bloques ahora abarcan toda la pista)
+            const xDist = Math.abs(playerX - blockX);
+            const yDist = Math.abs(playerY - blockY);
+            const zDist = Math.abs(playerZ - blockZ);
+            
+            // Colisión: jugador está dentro de 1 bloque de distancia en X, Y y Z
+            if (xDist <= 1 && yDist <= 1 && zDist <= 8) {
+                // El jugador está en la pista donde está el bloque
+                // Verificar si el bloque es sólido (jump o duck obstáculos)
+                if (block.type === 'cyan_wool' || block.type === 'yellow_wool' || block.type === 'oak_slab') {
+                    // Colisión con obstáculo - aplicar daño
+                    applyDamageToPlayer(2); // 1 corazón = 2 puntos de daño (medio corazón = 1 punto)
+                    block.collided = true; // Marcar como colisionado para no dañar repetidamente
+                    
+                    // Notificar a otros jugadores en modo P2P cooperativo
+                    if (typeof p2pManager !== 'undefined' && p2pManager.gameMode === 'cooperative') {
+                        p2pManager.notifyHit(2);
+                    }
+                    
+                    console.log(`[MinibloxRhythmParkour] 💥 Colisión! Bloque #${block.id} tipo=${block.type} en X=${blockX},Y=${blockY},Z=${blockZ} - Jugador en X=${playerX},Y=${playerY},Z=${playerZ}`);
+                    showNotification('💥 ¡Ouch! -1 corazón', 'error');
+                    showHitMessage('miss');
+                }
+            }
+        }
+    }
+    
+    // Aplicar daño al jugador
+    function applyDamageToPlayer(damage) {
+        const g = window.game || globalThis.game;
+        if (!g || !g.player) return;
+        
+        try {
+            const player = g.player;
+            
+            // Intentar diferentes métodos de aplicar daño
+            if (typeof player.setHealth === 'function') {
+                const currentHealth = player.getHealth ? player.getHealth() : 20;
+                player.setHealth(currentHealth - damage);
+            } else if (player.health !== undefined) {
+                player.health = Math.max(0, player.health - damage);
+            } else if (typeof player.hurt === 'function') {
+                player.hurt(damage);
+            } else if (typeof player.damage === 'function') {
+                player.damage(damage);
+            }
+            
+            // Actualizar salud del mod
+            mod.health = Math.max(0, mod.health - 1);
+            
+            console.log(`[MinibloxRhythmParkour] Daño aplicado: -${damage} (1 corazón)`);
+        } catch (error) {
+            console.warn('[MinibloxRhythmParkour] Error al aplicar daño:', error);
+            // Fallback: solo actualizar UI
+            mod.health = Math.max(0, mod.health - 1);
+        }
+    }
+    
+    // Eliminar todos los bloques del mundo
+    function removeAllBlocks() {
+        console.log('[MinibloxRhythmParkour] removeAllBlocks llamado - eliminando todos los bloques');
+        const g = window.game || globalThis.game;
+        if (!g || !g.world) {
+            mod.blocks = [];
+            return;
+        }
+        
+        for (const block of mod.blocks) {
+            try {
+                localPvSetBlockAt(
+                    block.position.x,
+                    block.position.y, 
+                    block.position.z,
+                    'air'
+                );
+            } catch (error) {
+                console.warn(`[MinibloxRhythmParkour] Error al eliminar bloque #${block.id}:`, error);
+            }
+        }
+        
+        mod.blocks = [];
+        console.log('[MinibloxRhythmParkour] Todos los bloques eliminados del mundo');
+    }
+    
+    // Crear bloque en el juego usando la API real de PixelVortex Client
+    
+    // Implementación de BlockPos compatible con PVC
+    class BlockPos {
+        constructor(x, y, z) {
+            this.x = Math.floor(x);
+            this.y = Math.floor(y);
+            this.z = Math.floor(z);
+        }
+        getX() { return this.x; }
+        getY() { return this.y; }
+        getZ() { return this.z; }
+        static fromVector(v) {
+            return new BlockPos(v.x, v.y, v.z);
+        }
+        static fromJSON(obj) {
+            return new BlockPos(obj.x || 0, obj.y || 0, obj.z || 0);
+        }
+    }
+    
+    // Implementación propia de pvSetBlockAt (la función original está en PVC pero no es global)
+    function localPvSetBlockAt(x, y, z, blockName) {
+        try {
+            const g = window.game || globalThis.game;
+            const w = g && g.world ? g.world : null;
+            if (!w || typeof w.setBlockState !== 'function') return false;
+            
+            // Debug cuando se pone aire (eliminar bloque)
+            if (blockName === 'air') {
+                console.log(`[MinibloxRhythmParkour] Eliminando bloque en X=${x}, Y=${y}, Z=${z}`);
+            }
+            
+            const blk = pvFindBlockByName(blockName) || pvFindBlockByName('stone');
+            if (!blk) return false;
+            
+            let state;
+            // Para oak_slab, intentar ponerla en la parte superior (top half)
+            if (blockName === 'oak_slab') {
+                try {
+                    // Intentar diferentes métodos para obtener top slab
+                    if (blk.getState && typeof blk.getState === 'function') {
+                        // Método 1: Usar getState con propiedades
+                        state = blk.getState({ half: 'top', type: 'top' });
+                    }
+                    if (!state && blk.states) {
+                        // Método 2: Buscar en states por nombre
+                        const stateNames = Object.keys(blk.states);
+                        const topState = stateNames.find(s => 
+                            s.toLowerCase().includes('top') || 
+                            s.toLowerCase().includes('upper')
+                        );
+                        if (topState) {
+                            state = blk.states[topState];
+                        }
+                    }
+                    if (!state && blk.defaultState) {
+                        // Método 3: Modificar el defaultState si es posible
+                        state = blk.defaultState;
+                    }
+                    if (!state && typeof blk.getDefaultState === 'function') {
+                        state = blk.getDefaultState();
+                    }
+                } catch (e) {
+                    console.warn('[MinibloxRhythmParkour] Error obteniendo estado de slab:', e);
+                    // Fallback al estado por defecto
+                    state = blk.defaultState || (typeof blk.getDefaultState === 'function' ? blk.getDefaultState() : null);
+                }
+            } else {
+                state = blk.defaultState || (typeof blk.getDefaultState === 'function' ? blk.getDefaultState() : null);
+            }
+            
+            if (!state) return false;
+            
+            w.setBlockState(new BlockPos(x, y, z), state, 3);
+            return true;
+        } catch (e) {
+            console.warn('[MinibloxRhythmParkour] Error en localPvSetBlockAt:', e);
+            return false;
+        }
+    }
+    
+    // Convertir tipo de bloque a nombre de bloque de PVC
+    function convertBlockTypeToState(blockType) {
+        const blockNames = {
+            'stone': 'stone',
+            'dirt': 'dirt',
+            'cobblestone': 'cobblestone',
+            'oak_planks': 'planks',
+            'bricks': 'bricks',
+            'white_wool': 'white_wool',
+            'orange_wool': 'orange_wool',
+            'magenta_wool': 'magenta_wool',
+            'light_blue_wool': 'light_blue_wool',
+            'yellow_wool': 'yellow_wool',
+            'lime_wool': 'lime_wool',
+            'pink_wool': 'pink_wool',
+            'gray_wool': 'gray_wool',
+            'light_gray_wool': 'light_gray_wool',
+            'cyan_wool': 'cyan_wool',
+            'purple_wool': 'purple_wool',
+            'blue_wool': 'blue_wool',
+            'brown_wool': 'brown_wool',
+            'green_wool': 'green_wool',
+            'red_wool': 'red_wool',
+            'black_wool': 'black_wool'
+        };
+        return blockNames[blockType] || 'stone';
+    }
+    
+    function createGameBlock(block) {
+        // Usar nuestra implementación local de pvSetBlockAt
+        const blockName = convertBlockTypeToState(block.type);
+        const success = localPvSetBlockAt(
+            block.position.x,
+            block.position.y, 
+            block.position.z,
+            blockName
+        );
+        
+        if (success) {
+            console.log(`[MinibloxRhythmParkour] Bloque #${block.id} creado:`, block.position, blockName);
+        } else {
+            console.warn(`[MinibloxRhythmParkour] Falló al crear bloque #${block.id}`);
+        }
+    }
+    function pvFindBlockByName(name) {
+        const q = String(name || "").trim();
+        if (!q) return null;
+        const B = window.Blocks || globalThis.Blocks;
+        if (!B) return null;
+        if (B[q]) return B[q];
+        const low = q.toLowerCase();
+        if (B[low]) return B[low];
+        try {
+            const k = Object.keys(B).find(x => String(x).toLowerCase() === low);
+            return k ? B[k] : null;
+        } catch {
+            return null;
+        }
+    }
+    
+    // Actualizar interfaz de usuario
+    function updateUI() {
+        const scoreEl = document.getElementById('rhythm-score');
+        const comboEl = document.getElementById('rhythm-combo');
+        const healthEl = document.getElementById('rhythm-health');
+        const beatEl = document.getElementById('rhythm-beat');
+        
+        if (scoreEl) scoreEl.textContent = mod.score;
+        if (comboEl) comboEl.textContent = mod.combo;
+        if (healthEl) healthEl.textContent = mod.health;
+        if (beatEl) beatEl.textContent = `${mod.currentBeat}/${mod.beatCount}`;
+    }
+    
+    // Mostrar notificación
+    function showNotification(message, type = 'info') {
+        // Crear elemento de notificación
+        const notification = document.createElement('div');
+        notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: ${type === 'success' ? '#4ade80' : type === 'error' ? '#ef4444' : '#3b82f6'};
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            z-index: 10000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            animation: slideIn 0.3s ease-out;
+        `;
+        
+        // Añadir animación CSS
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        document.body.appendChild(notification);
+        
+        // Auto-eliminar después de 3 segundos
+        setTimeout(() => {
+            notification.style.animation = 'slideIn 0.3s ease-out reverse';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
+    }
+    
+    // Mostrar mensaje miss/good encima del item bar (hotbar)
+    function showHitMessage(type) {
+        const message = type === 'miss' ? '❌ miss' : '✅ good';
+        const color = type === 'miss' ? '#ef4444' : '#4ade80';
+        
+        // Crear o actualizar el elemento de mensaje
+        let hitMessageEl = document.getElementById('rhythm-hit-message');
+        if (!hitMessageEl) {
+            // Inyectar fuente Faithful si no existe
+            if (!document.getElementById('faithful-font')) {
+                const fontStyle = document.createElement('style');
+                fontStyle.id = 'faithful-font';
+                fontStyle.textContent = `
+                    @font-face {
+                        font-family: 'Faithful';
+                        src: url('assets/Faithful.ttf') format('truetype');
+                        font-weight: normal;
+                        font-style: normal;
+                    }
+                `;
+                document.head.appendChild(fontStyle);
+            }
+            
+            hitMessageEl = document.createElement('div');
+            hitMessageEl.id = 'rhythm-hit-message';
+            hitMessageEl.style.cssText = `
+                position: fixed;
+                bottom: 80px;
+                left: 50%;
+                transform: translateX(-50%);
+                font-size: 32px;
+                font-weight: normal;
+                font-family: 'Faithful', 'Minecraft', monospace;
+                text-shadow: 2px 2px 0px #000000, -2px -2px 0px #000000, 2px -2px 0px #000000, -2px 2px 0px #000000;
+                z-index: 99999;
+                pointer-events: none;
+                transition: all 0.2s ease-out;
+                letter-spacing: 2px;
+            `;
+            document.body.appendChild(hitMessageEl);
+        }
+        
+        hitMessageEl.textContent = message;
+        hitMessageEl.style.color = color;
+        hitMessageEl.style.opacity = '1';
+        hitMessageEl.style.transform = 'translateX(-50%) scale(1.2)';
+        
+        // Animación de desvanecimiento
+        setTimeout(() => {
+            hitMessageEl.style.transform = 'translateX(-50%) scale(1)';
+        }, 100);
+        
+        setTimeout(() => {
+            hitMessageEl.style.opacity = '0';
+            hitMessageEl.style.transform = 'translateX(-50%) scale(0.8)';
+        }, 800);
+    }
+    
+    // Inicializar el mod cuando el DOM esté listo
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeMod);
+    } else {
+        initializeMod();
+    }
+    
+    // Configurar atajo de teclado Ctrl+Shift+D para abrir DevTools
+    document.addEventListener('keydown', (event) => {
+        // Verificar Ctrl+Shift+D
+        if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd') {
+            event.preventDefault();
+            console.log('[MinibloxRhythmParkour] Atajo Ctrl+Shift+D detectado - Abriendo DevTools');
+            
+            // Intentar abrir DevTools de diferentes maneras
+            try {
+                // Método 1: Usar window.require si está disponible (Electron)
+                if (typeof window.require === 'function') {
+                    const { remote } = window.require('electron');
+                    const currentWindow = remote.getCurrentWindow();
+                    if (currentWindow && currentWindow.webContents) {
+                        currentWindow.webContents.openDevTools();
+                        console.log('[MinibloxRhythmParkour] DevTools abiertas via Electron');
+                        return;
+                    }
+                }
+                
+                // Método 2: Usar window.chrome si está disponible
+                if (window.chrome && window.chrome.devtools) {
+                    window.chrome.devtools.inspectedWindow.reload();
+                    console.log('[MinibloxRhythmParkour] DevTools abiertas via Chrome');
+                    return;
+                }
+                
+                // Método 3: Usar F12 como fallback
+                console.log('[MinibloxRhythmParkour] Enviando evento F12 como fallback');
+                const f12Event = new KeyboardEvent('keydown', {
+                    key: 'F12',
+                    code: 'F12',
+                    keyCode: 123,
+                    which: 123,
+                    ctrlKey: false,
+                    shiftKey: false,
+                    altKey: false,
+                    metaKey: false
+                });
+                document.dispatchEvent(f12Event);
+                
+            } catch (error) {
+                console.error('[MinibloxRhythmParkour] Error al abrir DevTools:', error);
+                // Mostrar notificación de error
+                showNotification('❌ Error al abrir DevTools. Usa F12 manualmente.', 'error');
+            }
+        }
+    });
+    
+    console.log('[MinibloxRhythmParkour] Script cargado, esperando inicialización...');
+    console.log('[MinibloxRhythmParkour] Atajo de teclado configurado: Ctrl+Shift+D para abrir DevTools');
+    
+    // ==================== SISTEMA P2P MULTIJUGADOR DINÁMICO ====================
+    
+    class P2PManager {
+        constructor() {
+            this.peer = null;
+            this.connections = [];
+            this.isHost = false;
+            this.roomId = null;
+            this.gameMode = 'competitive';
+            this.playerId = Math.random().toString(36).substring(2, 15);
+            this.playerName = 'Jugador ' + Math.floor(Math.random() * 1000);
+            this.remotePlayers = new Map();
+            this.gameState = {
+                isPlaying: false,
+                song: null,
+                startTime: null
+            };
+            this.signalingChannel = null;
+            this.discoveryChannel = null;
+            this.availableRooms = new Map();
+            this.isSearching = false;
+            this.autoMatchmaking = false;
+            this.maxPlayers = 4;
+            this.searchInterval = null;
+            this.heartbeatInterval = null;
+        }
+        
+        // Iniciar descubrimiento dinámico de salas
+        startDynamicDiscovery() {
+            // Canal global para descubrir salas
+            this.discoveryChannel = new BroadcastChannel('rhythm_p2p_discovery');
+            
+            this.discoveryChannel.onmessage = (event) => {
+                const data = event.data;
+                if (data.senderId === this.playerId) return;
+                
+                switch (data.type) {
+                    case 'room-announce':
+                        // Sala anunciada, agregar a lista
+                        this.availableRooms.set(data.roomId, {
+                            roomId: data.roomId,
+                            hostName: data.hostName,
+                            mode: data.mode,
+                            players: data.players,
+                            maxPlayers: data.maxPlayers,
+                            timestamp: Date.now()
+                        });
+                        this.updateRoomListUI && this.updateRoomListUI();
+                        break;
+                    case 'room-removed':
+                        this.availableRooms.delete(data.roomId);
+                        this.updateRoomListUI && this.updateRoomListUI();
+                        break;
+                    case 'searching-for-room':
+                        // Alguien busca sala, si soy host anunciar mi sala
+                        if (this.isHost && this.roomId) {
+                            this.announceRoom();
+                        }
+                        break;
+                }
+            };
+            
+            // Limpiar salas antiguas cada 5 segundos
+            setInterval(() => {
+                const now = Date.now();
+                for (const [roomId, room] of this.availableRooms) {
+                    if (now - room.timestamp > 10000) { // 10 segundos sin heartbeat
+                        this.availableRooms.delete(roomId);
+                    }
+                }
+                this.updateRoomListUI && this.updateRoomListUI();
+            }, 5000);
+        }
+        
+        // Anunciar sala disponible
+        announceRoom() {
+            if (!this.discoveryChannel || !this.isHost) return;
+            
+            this.discoveryChannel.postMessage({
+                type: 'room-announce',
+                senderId: this.playerId,
+                roomId: this.roomId,
+                hostName: this.playerName,
+                mode: this.gameMode,
+                players: this.connections.length + 1,
+                maxPlayers: this.maxPlayers,
+                timestamp: Date.now()
+            });
+        }
+        
+        // Buscar salas disponibles
+        searchRooms() {
+            this.isSearching = true;
+            this.availableRooms.clear();
+            
+            // Pedir a hosts que anuncien sus salas
+            if (this.discoveryChannel) {
+                this.discoveryChannel.postMessage({
+                    type: 'searching-for-room',
+                    senderId: this.playerId
+                });
+            }
+            
+            showNotification('🔍 Buscando salas...', 'info');
+            
+            // Mostrar resultados después de 2 segundos
+            setTimeout(() => {
+                this.isSearching = false;
+                if (this.availableRooms.size === 0) {
+                    showNotification('❌ No se encontraron salas. ¡Crea una!', 'info');
+                } else {
+                    showNotification(`✅ ${this.availableRooms.size} sala(s) encontrada(s)`, 'success');
+                }
+                this.updateRoomListUI && this.updateRoomListUI();
+            }, 2000);
+        }
+        
+        // Matchmaking automático - unirse a la primera sala disponible
+        async autoMatchmake(mode = 'competitive') {
+            this.autoMatchmaking = true;
+            showNotification('🎮 Buscando partida automáticamente...', 'info');
+            
+            // Buscar salas
+            this.searchRooms();
+            
+            // Esperar y unirse
+            setTimeout(() => {
+                if (this.availableRooms.size > 0) {
+                    // Unirse a la sala con más jugadores o la primera
+                    const rooms = Array.from(this.availableRooms.values());
+                    const bestRoom = rooms.sort((a, b) => b.players - a.players)[0];
+                    
+                    if (bestRoom && bestRoom.players < bestRoom.maxPlayers) {
+                        this.joinRoom(bestRoom.roomId);
+                        showNotification(`🎮 ¡Unido a sala de ${bestRoom.hostName}!`, 'success');
+                    } else {
+                        // Crear sala si no hay espacio
+                        this.createRoom(mode);
+                        showNotification('🏠 Sala creada (no había espacio en otras)', 'info');
+                    }
+                } else {
+                    // Crear sala si no hay ninguna
+                    this.createRoom(mode);
+                    showNotification('🏠 Sala creada (no se encontraron salas)', 'info');
+                }
+                this.autoMatchmaking = false;
+            }, 3000);
+        }
+        
+        // Crear sala dinámica
+        async createRoom(mode = 'competitive', maxPlayers = 4) {
+            this.isHost = true;
+            this.gameMode = mode;
+            this.maxPlayers = maxPlayers;
+            this.roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+            
+            console.log(`[P2P] Sala dinámica creada: ${this.roomId}, modo: ${mode}`);
+            showNotification(`🏠 Sala creada: ${this.roomId} (${mode})`, 'success');
+            
+            // Iniciar canales
+            this.startDynamicDiscovery();
+            this.startSignalingListener();
+            
+            // Anunciar sala periódicamente
+            this.heartbeatInterval = setInterval(() => {
+                this.announceRoom();
+            }, 3000);
+            
+            return this.roomId;
+        }
+        
+        // Unirse a sala
+        async joinRoom(roomId) {
+            this.isHost = false;
+            this.roomId = roomId.toUpperCase();
+            
+            console.log(`[P2P] Uniéndose a sala: ${this.roomId}`);
+            showNotification(`🔗 Conectando a sala ${this.roomId}...`, 'info');
+            
+            // Iniciar canales
+            this.startDynamicDiscovery();
+            this.startSignalingListener();
+            
+            // Enviar mensaje de unión
+            await this.sendSignal('join', {
+                playerId: this.playerId,
+                playerName: this.playerName
+            });
+        }
+        
+        // Unirse a sala desde la lista dinámica
+        async joinDynamicRoom(roomId) {
+            const room = this.availableRooms.get(roomId);
+            if (!room) {
+                showNotification('❌ Sala no encontrada', 'error');
+                return;
+            }
+            
+            if (room.players >= room.maxPlayers) {
+                showNotification('❌ Sala llena', 'error');
+                return;
+            }
+            
+            await this.joinRoom(roomId);
+            this.gameMode = room.mode;
+        }
+        
+        // Sistema de señalización simple usando localStorage (para demo)
+        startSignalingListener() {
+            this.signalingChannel = new BroadcastChannel('rhythm_p2p_' + this.roomId);
+            
+            this.signalingChannel.onmessage = async (event) => {
+                const data = event.data;
+                if (data.senderId === this.playerId) return; // Ignorar mensajes propios
+                
+                console.log('[P2P] Señal recibida:', data.type);
+                
+                switch (data.type) {
+                    case 'join':
+                        if (this.isHost) {
+                            await this.handlePlayerJoin(data);
+                        }
+                        break;
+                    case 'offer':
+                        await this.handleOffer(data);
+                        break;
+                    case 'answer':
+                        await this.handleAnswer(data);
+                        break;
+                    case 'ice-candidate':
+                        await this.handleIceCandidate(data);
+                        break;
+                    case 'game-state':
+                        this.handleGameState(data);
+                        break;
+                    case 'player-update':
+                        this.handlePlayerUpdate(data);
+                        break;
+                }
+            };
+        }
+        
+        // Enviar señal
+        async sendSignal(type, data) {
+            if (!this.signalingChannel) return;
+            
+            this.signalingChannel.postMessage({
+                type,
+                senderId: this.playerId,
+                roomId: this.roomId,
+                ...data
+            });
+        }
+        
+        // Manejar unión de jugador (host)
+        async handlePlayerJoin(data) {
+            console.log(`[P2P] Jugador se unió: ${data.playerName}`);
+            
+            // Crear conexión WebRTC
+            const connection = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
+            
+            // Crear canal de datos
+            const dataChannel = connection.createDataChannel('gameData', {
+                ordered: true
+            });
+            
+            this.setupDataChannel(dataChannel, data.playerId);
+            this.connections.push({ peerId: data.playerId, connection, dataChannel });
+            
+            // Crear oferta
+            const offer = await connection.createOffer();
+            await connection.setLocalDescription(offer);
+            
+            // Esperar ICE candidates
+            connection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    this.sendSignal('ice-candidate', {
+                        targetId: data.playerId,
+                        candidate: event.candidate
+                    });
+                }
+            };
+            
+            // Enviar oferta
+            this.sendSignal('offer', {
+                targetId: data.playerId,
+                offer: connection.localDescription,
+                gameMode: this.gameMode,
+                hostName: this.playerName
+            });
+            
+            showNotification(`👋 ${data.playerName} se unió!`, 'success');
+        }
+        
+        // Manejar oferta (cliente)
+        async handleOffer(data) {
+            if (data.targetId !== this.playerId) return;
+            
+            console.log('[P2P] Oferta recibida del host');
+            this.gameMode = data.gameMode;
+            
+            showNotification(`✅ Conectado a ${data.hostName}! Modo: ${this.gameMode}`, 'success');
+            
+            // Crear conexión
+            const connection = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
+            
+            this.connections.push({ peerId: data.senderId, connection, dataChannel: null });
+            
+            // Configurar canal de datos
+            connection.ondatachannel = (event) => {
+                const dataChannel = event.channel;
+                this.setupDataChannel(dataChannel, data.senderId);
+                
+                // Actualizar conexión con canal
+                const conn = this.connections.find(c => c.peerId === data.senderId);
+                if (conn) conn.dataChannel = dataChannel;
+            };
+            
+            // Configurar ICE
+            connection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    this.sendSignal('ice-candidate', {
+                        targetId: data.senderId,
+                        candidate: event.candidate
+                    });
+                }
+            };
+            
+            // Aplicar oferta y crear respuesta
+            await connection.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const answer = await connection.createAnswer();
+            await connection.setLocalDescription(answer);
+            
+            // Enviar respuesta
+            this.sendSignal('answer', {
+                targetId: data.senderId,
+                answer: connection.localDescription
+            });
+        }
+        
+        // Manejar respuesta (host)
+        async handleAnswer(data) {
+            if (!this.isHost || data.targetId !== this.playerId) return;
+            
+            console.log('[P2P] Respuesta recibida');
+            
+            const conn = this.connections.find(c => c.peerId === data.senderId);
+            if (conn) {
+                await conn.connection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            }
+        }
+        
+        // Manejar ICE candidate
+        async handleIceCandidate(data) {
+            if (data.targetId !== this.playerId) return;
+            
+            const conn = this.connections.find(c => c.peerId === data.senderId);
+            if (conn) {
+                await conn.connection.addIceCandidate(new RTCIceCandidate(data.candidate));
+            }
+        }
+        
+        // Configurar canal de datos
+        setupDataChannel(channel, peerId) {
+            channel.onopen = () => {
+                console.log(`[P2P] Canal abierto con ${peerId}`);
+                showNotification('🎮 Conexión P2P establecida!', 'success');
+            };
+            
+            channel.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                this.handleGameMessage(data, peerId);
+            };
+            
+            channel.onclose = () => {
+                console.log(`[P2P] Canal cerrado con ${peerId}`);
+                this.remotePlayers.delete(peerId);
+                this.updateP2PUI();
+            };
+        }
+        
+        // Manejar mensaje de juego
+        handleGameMessage(data, peerId) {
+            switch (data.type) {
+                case 'score-update':
+                    this.remotePlayers.set(peerId, {
+                        ...this.remotePlayers.get(peerId),
+                        score: data.score,
+                        combo: data.combo,
+                        health: data.health
+                    });
+                    this.updateP2PUI();
+                    break;
+                case 'game-start':
+                    if (!this.isHost) {
+                        this.startGame(data.song);
+                    }
+                    break;
+                case 'game-end':
+                    this.showResults(data);
+                    break;
+                case 'player-hit':
+                    if (this.gameMode === 'cooperative') {
+                        // En modo cooperativo, daño afecta a todos
+                        applyDamageToPlayer(data.damage);
+                        showNotification(`💔 ${data.playerName} fue golpeado!`, 'error');
+                    }
+                    break;
+            }
+        }
+        
+        // Enviar mensaje a todos los peers
+        broadcast(data) {
+            const message = JSON.stringify(data);
+            this.connections.forEach(conn => {
+                if (conn.dataChannel && conn.dataChannel.readyState === 'open') {
+                    conn.dataChannel.send(message);
+                }
+            });
+        }
+        
+        // Actualizar UI de P2P
+        updateP2PUI() {
+            const p2pPanel = document.getElementById('p2p-panel');
+            if (!p2pPanel) return;
+            
+            let html = `<div style="font-weight: bold; margin-bottom: 5px;">👥 Jugadores:</div>`;
+            html += `<div style="color: #4ade80;">🟢 Tú: ${this.playerName} (${mod.score} pts)</div>`;
+            
+            this.remotePlayers.forEach((player, id) => {
+                html += `<div style="color: #60a5fa;">🔵 ${player.name || 'Jugador'}: ${player.score || 0} pts`;
+                if (this.gameMode === 'competitive') {
+                    html += ` (Combo: ${player.combo || 0})`;
+                }
+                html += `</div>`;
+            });
+            
+            p2pPanel.innerHTML = html;
+        }
+        
+        // Sincronizar estado del juego
+        syncGameState() {
+            if (this.connections.length === 0) return;
+            
+            this.broadcast({
+                type: 'score-update',
+                score: mod.score,
+                combo: mod.combo,
+                health: mod.health,
+                timestamp: Date.now()
+            });
+        }
+        
+        // Iniciar juego (host)
+        startGame(song) {
+            this.gameState.isPlaying = true;
+            this.gameState.song = song;
+            this.gameState.startTime = Date.now();
+            
+            if (this.isHost) {
+                this.broadcast({
+                    type: 'game-start',
+                    song: song,
+                    startTime: this.gameState.startTime
+                });
+            }
+            
+            // Iniciar sincronización periódica
+            this.syncInterval = setInterval(() => this.syncGameState(), 100);
+        }
+        
+        // Notificar golpe (cooperativo)
+        notifyHit(damage) {
+            if (this.gameMode === 'cooperative' && this.connections.length > 0) {
+                this.broadcast({
+                    type: 'player-hit',
+                    playerName: this.playerName,
+                    damage: damage
+                });
+            }
+        }
+        
+        // Finalizar juego
+        endGame() {
+            this.gameState.isPlaying = false;
+            if (this.syncInterval) {
+                clearInterval(this.syncInterval);
+            }
+            
+            // Calcular resultados
+            const results = {
+                type: 'game-end',
+                players: [{
+                    name: this.playerName,
+                    score: mod.score,
+                    isHost: this.isHost
+                }]
+            };
+            
+            this.remotePlayers.forEach((player, id) => {
+                results.players.push({
+                    name: player.name || 'Jugador',
+                    score: player.score || 0,
+                    isHost: false
+                });
+            });
+            
+            if (this.isHost) {
+                this.broadcast(results);
+            }
+            
+            this.showResults(results);
+        }
+        
+        // Mostrar resultados
+        showResults(data) {
+            const sorted = data.players.sort((a, b) => b.score - a.score);
+            const winner = sorted[0];
+            
+            let message = '🏆 Resultados:\n';
+            sorted.forEach((p, i) => {
+                message += `${i + 1}. ${p.name}: ${p.score} pts\n`;
+            });
+            
+            if (this.gameMode === 'competitive') {
+                message += `\n👑 Ganador: ${winner.name}!`;
+            }
+            
+            showNotification(message, winner.name === this.playerName ? 'success' : 'info');
+        }
+        
+        // Desconectar
+        disconnect() {
+            if (this.syncInterval) {
+                clearInterval(this.syncInterval);
+                this.syncInterval = null;
+            }
+            
+            if (this.heartbeatInterval) {
+                clearInterval(this.heartbeatInterval);
+                this.heartbeatInterval = null;
+            }
+            
+            // Anunciar que la sala se cierra (si soy host)
+            if (this.isHost && this.discoveryChannel && this.roomId) {
+                this.discoveryChannel.postMessage({
+                    type: 'room-removed',
+                    senderId: this.playerId,
+                    roomId: this.roomId
+                });
+            }
+            
+            this.connections.forEach(conn => {
+                if (conn.dataChannel) conn.dataChannel.close();
+                if (conn.connection) conn.connection.close();
+            });
+            
+            this.connections = [];
+            this.remotePlayers.clear();
+            this.isHost = false;
+            this.roomId = null;
+            
+            if (this.signalingChannel) {
+                this.signalingChannel.close();
+                this.signalingChannel = null;
+            }
+            
+            showNotification('👋 Desconectado', 'info');
+        }
+    }
+    
+    // Instancia global del P2P manager usando PeerJS
+    const p2pManager = new P2PManagerPeerJS();
+    
+    // Crear UI de P2P dinámica
+    function createP2PUI() {
+        const ui = document.createElement('div');
+        ui.id = 'p2p-ui';
+        ui.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 9999;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-width: 250px;
+            max-width: 300px;
+            border: 2px solid #4ade80;
+            max-height: 400px;
+            overflow-y: auto;
+        `;
+        
+        ui.innerHTML = `
+            <div style="font-weight: bold; margin-bottom: 10px; color: #4ade80; font-size: 14px;">🌐 Multijugador P2P</div>
+            <div id="p2p-status" style="margin-bottom: 10px; font-size: 11px; color: #9ca3af;">
+                No conectado
+            </div>
+            
+            <!-- Panel de sala actual -->
+            <div id="p2p-current-room" style="display: none; margin-bottom: 10px; padding: 8px; background: rgba(74, 222, 128, 0.2); border-radius: 5px; font-size: 11px;">
+                <div style="font-weight: bold; color: #4ade80;">Sala: <span id="current-room-id" style="cursor: pointer; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; user-select: all;" title="Clic para copiar">-</span> 📋</div>
+                <div id="current-room-players" style="color: #9ca3af;">1/4 jugadores</div>
+                <div id="current-player-list" style="margin-top: 5px; font-size: 10px;"></div>
+            </div>
+            
+            <!-- Controles -->
+            <div id="p2p-controls" style="display: flex; flex-direction: column; gap: 5px;">
+                <input type="text" id="p2p-name" placeholder="Tu nombre" value="${p2pManager.playerName}" 
+                    style="padding: 6px; border-radius: 3px; border: none; font-size: 12px;">
+                <select id="p2p-mode" style="padding: 6px; border-radius: 3px; border: none; font-size: 12px;">
+                    <option value="competitive">🏆 Competitivo</option>
+                    <option value="cooperative">🤝 Cooperativo</option>
+                </select>
+                
+                <button id="btn-create-room" style="padding: 8px; background: #4ade80; color: black; border: none; border-radius: 3px; cursor: pointer; font-weight: bold; font-size: 12px;">
+                    🏠 Crear Sala
+                </button>
+                
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="p2p-room-id" placeholder="ID del Host" 
+                        style="flex: 1; padding: 6px; border-radius: 3px; border: none; font-size: 12px;">
+                    <button id="btn-join-room" style="padding: 8px; background: #f59e0b; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">
+                        🔗
+                    </button>
+                </div>
+                
+                <button id="btn-disconnect" style="padding: 8px; background: #ef4444; color: white; border: none; border-radius: 3px; cursor: pointer; display: none; font-size: 12px;">
+                    ❌ Desconectar
+                </button>
+            </div>
+            
+            <div id="p2p-info" style="margin-top: 8px; font-size: 10px; color: #6b7280; font-style: italic;">
+                Tu ID aparecerá al crear sala
+            </div>
+        `;
+        
+        document.body.appendChild(ui);
+        
+        // Event listeners - PeerJS style
+        document.getElementById('p2p-name').addEventListener('change', (e) => {
+            p2pManager.playerName = e.target.value;
+        });
+        
+        document.getElementById('btn-create-room').addEventListener('click', async () => {
+            const mode = document.getElementById('p2p-mode').value;
+            try {
+                const roomId = await p2pManager.createRoom(mode);
+                document.getElementById('current-room-id').textContent = roomId;
+                document.getElementById('p2p-info').innerHTML = `<span style="color: #4ade80;">Comparte este ID: <b>${roomId}</b></span>`;
+                updateUIState('host');
+                
+                // Configurar callback para actualizar jugadores
+                p2pManager.onConnectionStatusChange = (status) => {
+                    updatePlayerList(status.players);
+                };
+            } catch (err) {
+                console.error('Error al crear sala:', err);
+            }
+        });
+        
+        document.getElementById('btn-join-room').addEventListener('click', async () => {
+            const roomId = document.getElementById('p2p-room-id').value.trim();
+            if (roomId) {
+                try {
+                    await p2pManager.joinRoom(roomId);
+                    updateUIState('connected');
+                    
+                    // Configurar callback
+                    p2pManager.onConnectionStatusChange = (status) => {
+                        updatePlayerList(status.players);
+                    };
+                } catch (err) {
+                    console.error('Error al unirse:', err);
+                    document.getElementById('p2p-status').innerHTML = '<span style="color: #ef4444;">❌ Error al conectar</span>';
+                }
+            }
+        });
+        
+        document.getElementById('btn-disconnect').addEventListener('click', () => {
+            p2pManager.disconnect();
+            updateUIState('disconnected');
+        });
+        
+        // Click para copiar ID de sala
+        document.getElementById('current-room-id').addEventListener('click', function() {
+            const roomId = this.textContent;
+            if (roomId && roomId !== '-') {
+                navigator.clipboard.writeText(roomId).then(() => {
+                    const originalBg = this.style.background;
+                    this.style.background = '#4ade80';
+                    this.style.color = '#000';
+                    setTimeout(() => {
+                        this.style.background = originalBg;
+                        this.style.color = '';
+                    }, 500);
+                    console.log('[P2P] ID copiado:', roomId);
+                }).catch(err => {
+                    console.error('[P2P] Error al copiar:', err);
+                    // Fallback para navegadores sin clipboard API
+                    const textArea = document.createElement('textarea');
+                    textArea.value = roomId;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                });
+            }
+        });
+    }
+    
+    // Actualizar lista de jugadores en la UI
+    function updatePlayerList(players) {
+        const container = document.getElementById('current-player-list');
+        if (!container || !players) return;
+        
+        let html = '';
+        players.forEach(p => {
+            const color = p.id === p2pManager.playerId ? '#4ade80' : '#9ca3af';
+            const icon = p.isHost ? '👑' : '👤';
+            html += `<div style="color: ${color};">${icon} ${p.name}</div>`;
+        });
+        
+        container.innerHTML = html;
+        
+        // Actualizar contador
+        const countEl = document.getElementById('current-room-players');
+        if (countEl) {
+            countEl.textContent = `${players.length}/${p2pManager.maxPlayers} jugadores`;
+        }
+    }
+    
+    function updateUIState(state) {
+        const btnCreate = document.getElementById('btn-create-room');
+        const btnJoin = document.getElementById('btn-join-room');
+        const btnDisconnect = document.getElementById('btn-disconnect');
+        const roomInput = document.getElementById('p2p-room-id');
+        const currentRoom = document.getElementById('p2p-current-room');
+        const status = document.getElementById('p2p-status');
+        const info = document.getElementById('p2p-info');
+        
+        if (state === 'host' || state === 'connected') {
+            btnCreate.style.display = 'none';
+            btnJoin.style.display = 'none';
+            roomInput.style.display = 'none';
+            btnDisconnect.style.display = 'block';
+            currentRoom.style.display = 'block';
+            if (info) info.style.display = 'none';
+            
+            status.innerHTML = state === 'host' 
+                ? '🏠 <span style="color: #4ade80;">Eres el host</span>' 
+                : '🔌 <span style="color: #60a5fa;">Conectado</span>';
+        } else {
+            btnCreate.style.display = 'block';
+            btnJoin.style.display = 'block';
+            roomInput.style.display = 'block';
+            btnDisconnect.style.display = 'none';
+            currentRoom.style.display = 'none';
+            if (info) {
+                info.style.display = 'block';
+                info.textContent = 'Tu ID aparecerá al crear sala';
+            }
+            status.innerHTML = '<span style="color: #9ca3af;">No conectado</span>';
+        }
+    }
+    
+    // Crear UI cuando se inicialice
+    setTimeout(createP2PUI, 2000);
+    
+})();

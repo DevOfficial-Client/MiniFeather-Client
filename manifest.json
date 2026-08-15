@@ -54,6 +54,7 @@
         "src/MinimapCache.js",
         "src/WorldMap.js",
         "src/RhythmParkour.js",
+        "src/LocalGames.js",
         "src/VanillaAnimations.js",
         "src/CustomShader.js",
         "src/GUIPatch.js"

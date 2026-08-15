@@ -1,5 +1,8 @@
 // RhythmParkour - Transforma Miniblox en un juego de ritmo/parkour
-// Los obstáculos se generan al ritmo de la música cargada
+// Port del mod original MinibloxRhythmParkour adaptado a MiniFeather Client.
+// Los obstáculos se generan al ritmo de la música cargada.
+// Incluye: comandos de chat (/rp), P2P multijugador (BroadcastChannel + WebRTC)
+// y mensajes good/miss sobre la hotbar.
 (function () {
 'use strict';
 
@@ -35,7 +38,8 @@ const state = {
   beatIntervalSeconds: 0.5,
   ui: null,
   lastStateSync: 0,
-  lastCollisionCheck: 0
+  lastCollisionCheck: 0,
+  chatHooked: false
 };
 
 const config = {
@@ -59,13 +63,28 @@ const blockNameCache = {
   brown_wool: 'brown_wool', green_wool: 'green_wool', red_wool: 'red_wool', black_wool: 'black_wool'
 };
 
-const AIR_STATE = { __air: true };
+// ---- BlockPos compatible con el juego (port del original) ----
+// El mundo espera un BlockPos con getters; un objeto plano rompe
+// setBlockState silenciosamente.
+class MFBlockPos {
+  constructor(x, y, z) {
+    this.x = Math.floor(x);
+    this.y = Math.floor(y);
+    this.z = Math.floor(z);
+  }
+  getX() { return this.x; }
+  getY() { return this.y; }
+  getZ() { return this.z; }
+}
 
 // ---- Captura de la instancia del juego ----
+// Prioridad: globales del juego (como el mod original) y luego React fiber.
 function getGame(force = false) {
   if (globalThis.miniblox?.player && globalThis.miniblox?.world) {
     return globalThis.miniblox;
   }
+  const w = globalThis.game || globalThis.Game || globalThis.minibloxGame;
+  if (w?.player && w?.world) return w;
   if (!force && state.game?.player && state.game?.world) {
     return state.game;
   }
@@ -83,7 +102,6 @@ function getGame(force = false) {
 
 // ---- Utilidades de bloques (con caché) ----
 function getBlockState(blockName) {
-  if (blockName === 'air') return AIR_STATE;
   const cached = blockStateCache.get(blockName);
   if (cached) return cached;
   const B = window.Blocks || globalThis.Blocks;
@@ -96,6 +114,8 @@ function getBlockState(blockName) {
       blk = k ? B[k] : null;
     } catch { blk = null; }
   }
+  // 'air' debe resolverse al bloque real del juego; nunca caer a stone
+  if (!blk && blockName === 'air') return null;
   if (!blk) blk = B?.stone || null;
   if (!blk) return null;
   const blockState = blk.defaultState || (typeof blk.getDefaultState === 'function' ? blk.getDefaultState() : null);
@@ -104,11 +124,28 @@ function getBlockState(blockName) {
 }
 
 function setBlockRaw(x, y, z, blockState) {
-  if (!state.world || !blockState) return;
-  try { state.world.setBlockState({ x, y, z }, blockState, 3); } catch {}
+  if (!blockState) return;
+  // Resolver el world fresco (el juego puede recrearlo al cambiar de mundo)
+  let w = state.world;
+  if (!w || typeof w.setBlockState !== 'function') {
+    const g = getGame();
+    w = g?.world || null;
+    if (w) state.world = w;
+  }
+  if (!w) return;
+  try {
+    w.setBlockState(new MFBlockPos(x, y, z), blockState, 3);
+  } catch (e) {
+    // Avisar una sola vez: un fallo silencioso aquí hace que los bloques
+    // nunca se borren y la pista se llene de basura
+    if (!setBlockRaw.__warned) {
+      setBlockRaw.__warned = true;
+      console.warn('[MiniFeather RhythmParkour] setBlockState falló:', e);
+    }
+  }
 }
 
-function clearBlock(x, y, z) { setBlockRaw(x, y, z, AIR_STATE); }
+function clearBlock(x, y, z) { setBlockRaw(x, y, z, getBlockState('air')); }
 
 // ---- Análisis de audio y detección de beats ----
 async function loadAudioFile(file) {
@@ -193,10 +230,10 @@ async function loadAudioFile(file) {
     state.beatIntervalSeconds = 60 / bpm;
 
     dispatchState();
-    showNotification(`${beats.length} obstacles generated (BPM: ${bpm})`, 'success');
+    showNotification(`🎵 ${beats.length} obstáculos generados (BPM: ${bpm})`, 'success');
     return true;
   } catch (e) {
-    showNotification('Error loading audio file', 'error');
+    showNotification('❌ Error al cargar el audio', 'error');
     return false;
   }
 }
@@ -204,8 +241,7 @@ async function loadAudioFile(file) {
 // ---- Generación de obstáculos (como grupo con offsets) ----
 // Cada obstáculo es un objeto con:
 //   x, y, z = posición de origen (esquina)
-//   cells = Set de claves "dx,dy,dz" que forman el obstáculo (relativas a x,y,z)
-//   cellCount, type, prevCellX
+//   cells = [[dx,dy,dz,typeOverride?], ...] relativas a x,y,z
 // Esto permite mover el grupo entero con un solo seguimiento de X.
 function generateObstacle(beat) {
   const id = state.nextObstacleId++;
@@ -234,9 +270,10 @@ function generateObstacle(beat) {
 
   const cells = [];
 
-  // Generar offsets relativos (dx=0 siempre para obstáculos de pared)
+  // Generar offsets relativos (dx=0 para obstáculos de pared)
   switch (pattern) {
     case 'duck_with_jump_base': {
+      // Muro amarillo de 2 de alto con hueco 2x2 en izquierda o derecha
       const gapOnLeft = Math.random() < 0.5;
       const gapStart = gapOnLeft ? zStart : zEnd - 2;
       const gapEnd = gapOnLeft ? zStart + 2 : zEnd;
@@ -252,6 +289,7 @@ function generateObstacle(beat) {
       for (let z = zStart; z <= zEnd; z++) cells.push([0, 0, z - zStart]);
       break;
     case 'jump_high_wall': {
+      // Pared tipo arco: 2 bloques en el centro, 1 en los lados
       const totalWidth = zEnd - zStart;
       for (let dy = 0; dy < 2; dy++) {
         for (let z = zStart; z <= zEnd; z++) {
@@ -263,6 +301,7 @@ function generateObstacle(beat) {
       break;
     }
     case 'double_wall': {
+      // Pared doble de 3 de alto con hueco central de 1/3
       const zRange = zEnd - zStart;
       const gapSize = Math.floor(zRange / 3);
       const gapStart = zStart + Math.floor(gapSize);
@@ -281,6 +320,7 @@ function generateObstacle(beat) {
           cells.push([dx, 0, z - zStart]);
       break;
     case 'platform_with_base': {
+      // Base 3x3 verde + plataforma encima, en izquierda o derecha
       const platformIsLeft = Math.random() < 0.5;
       const pzc = Math.floor(platformIsLeft ? (zStart + centerZ) / 2 : (centerZ + zEnd) / 2);
       const baseDz = pzc - zStart;
@@ -300,17 +340,17 @@ function generateObstacle(beat) {
 
   const obstacle = {
     id,
-    x: spawnX,           // posición X actual (entera)
+    x: spawnX,
     y: minY,
     z: zStart,
     targetX: endX,
-    cells,                // [[dx,dy,dz,typeOverride?], ...]
+    cells,
     type: blockType,
     velocity: state.blockSpeed,
     finished: false,
     collided: false,
     prevCellX: spawnX,
-    floatX: spawnX        // posición X de coma flotante para suavidad
+    floatX: spawnX
   };
 
   // Pre-cachear el blockState para este tipo
@@ -320,7 +360,7 @@ function generateObstacle(beat) {
   }
 
   state.obstacles.push(obstacle);
-  placeObstacle(obstacle);  // render inicial
+  placeObstacle(obstacle);
 }
 
 // Coloca todas las celdas del obstáculo en su posición actual
@@ -365,7 +405,6 @@ function updateRhythmGame(deltaTime, now) {
     const newCellX = Math.floor(obs.floatX);
 
     if (obs.floatX >= obs.targetX) {
-      // Llegó al final
       obs.finished = true;
       hasFinished = true;
       clearObstacleAt(obs, obs.prevCellX);
@@ -375,7 +414,6 @@ function updateRhythmGame(deltaTime, now) {
       continue;
     }
 
-    // Solo actualizar bloques si la celda X cambió
     if (newCellX !== obs.prevCellX) {
       clearObstacleAt(obs, obs.prevCellX);
       obs.x = newCellX;
@@ -383,24 +421,42 @@ function updateRhythmGame(deltaTime, now) {
     }
   }
 
-  // Limpiar obstáculos terminados sin crear array nuevo cada frame
   if (hasFinished) {
     state.obstacles = state.obstacles.filter(o => !o.finished);
   }
 
-  // Throttle de collision check a ~10fps (cada 100ms)
+  // Throttle de collision check a ~10fps
   if (now - state.lastCollisionCheck > 100) {
     state.lastCollisionCheck = now;
     checkPlayerCollisions();
   }
 
-  // Throttle de dispatchState a ~5fps (cada 200ms)
+  // Throttle de dispatchState a ~5fps
   if (now - state.lastStateSync > 200) {
     state.lastStateSync = now;
     dispatchState();
   }
+
+  // Sincronizar P2P si hay peers conectados
+  if (p2pManager?.connections?.length > 0) p2pManager.syncGameState();
 }
 
+// ¿Hay alguna celda sólida del obstáculo en (px, py) con |dz| <= 1?
+// (como el original, que chequeaba cada bloque individualmente — el
+// hueco del muro duck debe salvar al jugador que está dentro de él)
+function obstacleHasCellNear(obs, px, py, pz, yTol = 1, zTol = 1) {
+  for (const [dx, dy, dz] of obs.cells) {
+    const cx = obs.x + dx;
+    if (Math.abs(px - cx) > 1) continue;
+    const cy = obs.y + dy;
+    if (Math.abs(py - cy) > yTol) continue;
+    const cz = obs.z + dz;
+    if (Math.abs(pz - cz) <= zTol) return true;
+  }
+  return false;
+}
+
+// Verificar si el jugador pasó correctamente el obstáculo (port del original)
 function checkIfPlayerPassed(obs) {
   const p = state.game?.player;
   if (!p) return true;
@@ -411,8 +467,11 @@ function checkIfPlayerPassed(obs) {
   const oZ = obs.z;
   const oX = obs.x;
 
+  // Saltar (cyan): estar 2+ bloques más alto, esquivar en Z o ya haber pasado
   if (obs.type === 'cyan_wool') return (pY - oY) >= 2 || Math.abs(pZ - oZ) > 5 || pX > oX;
-  if (obs.type === 'yellow_wool') return (pY - oY) <= 0 || Math.abs(pZ - oZ) > 5 || pX > oX;
+  // Agacharse/pasar por hueco (yellow / slab)
+  if (obs.type === 'yellow_wool' || obs.type === 'oak_slab')
+    return (pY - oY) <= 0 || Math.abs(pZ - oZ) > 5 || pX > oX;
   return true;
 }
 
@@ -425,15 +484,15 @@ function checkPlayerCollisions() {
 
   for (const obs of state.obstacles) {
     if (obs.finished || obs.collided) continue;
-    if (obs.type !== 'cyan_wool' && obs.type !== 'yellow_wool') continue;
-    const oX = obs.x;
-    const oY = obs.y;
-    const oZ = obs.z;
-    if (Math.abs(pX - oX) <= 1 && Math.abs(pY - oY) <= 1 && Math.abs(pZ - oZ) <= 8) {
+    if (obs.type !== 'cyan_wool' && obs.type !== 'yellow_wool' && obs.type !== 'oak_slab') continue;
+    if (obstacleHasCellNear(obs, pX, pY, pZ)) {
       applyDamage(2);
       obs.collided = true;
       state.combo = 0;
+      showNotification('💥 ¡Ouch! -1 corazón', 'error');
       showHitMessage('miss');
+      // Notificar a otros jugadores en modo cooperativo
+      if (p2pManager?.gameMode === 'cooperative') p2pManager.notifyHit(2);
     }
   }
 }
@@ -449,6 +508,8 @@ function applyDamage(damage) {
       p.health = Math.max(0, p.health - damage);
     } else if (typeof p.hurt === 'function') {
       p.hurt(damage);
+    } else if (typeof p.damage === 'function') {
+      p.damage(damage);   // fallback extra del original
     }
     state.health = Math.max(0, state.health - 1);
   } catch {}
@@ -456,8 +517,8 @@ function applyDamage(damage) {
 
 // ---- Control del juego ----
 function startGame() {
-  if (!state.currentSong || !state.beats.length) { showNotification('Load a song first', 'error'); return; }
-  if (state.isPlaying) return;
+  if (!state.currentSong || !state.beats.length) { showNotification('❌ Primero carga una canción (/rp load)', 'error'); return false; }
+  if (state.isPlaying) { showNotification('⚠ El juego ya está en progreso', 'info'); return false; }
 
   state.score = 0; state.combo = 0; state.maxCombo = 0; state.health = 5;
   state.currentBeat = 0; state.obstacles = []; state.nextObstacleId = 0;
@@ -476,7 +537,7 @@ function startGame() {
   state.lastStateSync = 0;
   state.lastCollisionCheck = 0;
 
-  state.audioSource.onended = () => { stopGame(); showNotification('Song completed!', 'success'); };
+  state.audioSource.onended = () => { stopGame(); showNotification('🎉 ¡Canción completada!', 'success'); };
 
   state.beatInterval = setInterval(() => {
     const audioTime = (Date.now() - state.audioStartTime) / 1000;
@@ -496,8 +557,10 @@ function startGame() {
   }, 100);
 
   state.gameLoopId = requestAnimationFrame(gameLoop);
-  showNotification(`Game started! ${state.beats.length} obstacles`, 'success');
+  p2pManager?.startGame?.();
+  showNotification(`🎮 ¡Juego iniciado! ${state.beats.length} obstáculos`, 'success');
   dispatchState();
+  return true;
 }
 
 function stopGame() {
@@ -508,6 +571,7 @@ function stopGame() {
   state.isPlaying = false;
   state.currentBeat = 0;
   state.lastFrameTime = null;
+  if (p2pManager?.gameState?.isPlaying) p2pManager.endGame();
   dispatchState();
 }
 
@@ -518,8 +582,600 @@ function removeAllObstacles() {
   state.obstacles = [];
 }
 
+// ---- Comandos de chat (port del original) ----
+// /rp start | /rp stop | /rp load | /rp status | /rp debug | /pr load
+function statusText() {
+  return `Jugando: ${state.isPlaying} | Score: ${state.score} | Combo: ${state.combo} | Vidas: ${state.health} | Beat: ${state.currentBeat}/${state.beatCount} | BPM: ${state.detectedBPM}`;
+}
+
+function debugInfo() {
+  const g = state.game;
+  console.log('[MiniFeather RhythmParkour] === DEBUG ===');
+  console.log('[MiniFeather RhythmParkour] Estado:', statusText());
+  console.log('[MiniFeather RhythmParkour] game:', !!g, '| world:', !!g?.world, '| player:', !!g?.player);
+  console.log('[MiniFeather RhythmParkour] world tiene setBlockState:', typeof g?.world?.setBlockState);
+  console.log('[MiniFeather RhythmParkour] Bloques (window.Blocks):', !!(window.Blocks || globalThis.Blocks));
+  console.log('[MiniFeather RhythmParkour] Canción:', !!state.currentSong, '| Obstáculos activos:', state.obstacles.length);
+  console.log('[MiniFeather RhythmParkour] P2P:', p2pManager ? { host: p2pManager.isHost, room: p2pManager.roomId, peers: p2pManager.connections.length } : null);
+  showNotification('Debug completado — mira la consola (F12)', 'info');
+}
+
+function triggerSongPicker() {
+  // Usar el input de la UI si existe; si no, crear uno temporal (port del original)
+  const existing = document.getElementById('mf-rhythm-file');
+  if (existing) { existing.click(); return; }
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'audio/*';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (file) loadAudioFile(file);
+    input.remove();
+  };
+  input.click();
+}
+
+function executeCommand(raw) {
+  const cmd = String(raw || '').trim();
+  if (cmd === '/rp start' || cmd === '/rp play') { startGame(); return true; }
+  if (cmd === '/rp stop') { stopGame(); showNotification('⏹ Juego detenido', 'info'); return true; }
+  if (cmd === '/rp load' || cmd.startsWith('/pr load')) { triggerSongPicker(); return true; }
+  if (cmd === '/rp status') { showNotification(statusText(), 'info'); return true; }
+  if (cmd === '/rp debug') { debugInfo(); return true; }
+  if (cmd === '/rp help') {
+    showNotification('Comandos: /rp load | /rp start | /rp stop | /rp status | /rp debug', 'info');
+    return true;
+  }
+  return false;
+}
+
+// Intercepción del chat: listener delegado en capture (más robusto que
+// asignar onkeydown a un input concreto que puede re-crearse)
+function installChatCommands() {
+  if (state.chatHooked) return;
+  state.chatHooked = true;
+  document.addEventListener('keydown', (e) => {
+    if (!state.enabled || e.key !== 'Enter') return;
+    const el = e.target;
+    if (!el || !el.tagName) return;
+    const isTextInput = (el.tagName === 'INPUT' && (el.type === 'text' || !el.type)) ||
+                        el.tagName === 'TEXTAREA' || el.isContentEditable;
+    if (!isTextInput) return;
+    const msg = String(el.value ?? el.textContent ?? '');
+    if (!msg.startsWith('/rp') && !msg.startsWith('/pr')) return;
+    if (executeCommand(msg)) {
+      e.preventDefault();
+      e.stopPropagation();
+      el.value = '';
+      if (el.isContentEditable) el.textContent = '';
+    }
+  }, true);
+}
+
+// ==================== SISTEMA P2P MULTIJUGADOR (port del original) ====================
+// Descubrimiento de salas via BroadcastChannel + WebRTC data channels.
+class P2PManager {
+  constructor() {
+    this.connections = [];
+    this.isHost = false;
+    this.roomId = null;
+    this.gameMode = 'competitive';
+    this.playerId = Math.random().toString(36).substring(2, 15);
+    this.playerName = 'Jugador ' + Math.floor(Math.random() * 1000);
+    this.remotePlayers = new Map();
+    this.gameState = { isPlaying: false, song: null, startTime: null };
+    this.signalingChannel = null;
+    this.discoveryChannel = null;
+    this.availableRooms = new Map();
+    this.isSearching = false;
+    this.autoMatchmaking = false;
+    this.maxPlayers = 4;
+    this.searchInterval = null;
+    this.heartbeatInterval = null;
+    this.cleanupInterval = null;
+    this.syncInterval = null;
+  }
+
+  hasBroadcast() { return typeof BroadcastChannel === 'function'; }
+
+  // Descubrimiento dinámico de salas
+  startDynamicDiscovery() {
+    if (!this.hasBroadcast() || this.discoveryChannel) return;
+    this.discoveryChannel = new BroadcastChannel('rhythm_p2p_discovery');
+
+    this.discoveryChannel.onmessage = (event) => {
+      const data = event.data;
+      if (data.senderId === this.playerId) return;
+      switch (data.type) {
+        case 'room-announce':
+          this.availableRooms.set(data.roomId, {
+            roomId: data.roomId,
+            hostName: data.hostName,
+            mode: data.mode,
+            players: data.players,
+            maxPlayers: data.maxPlayers,
+            timestamp: Date.now()
+          });
+          updateP2PRoomUI();
+          break;
+        case 'room-removed':
+          this.availableRooms.delete(data.roomId);
+          updateP2PRoomUI();
+          break;
+        case 'searching-for-room':
+          if (this.isHost && this.roomId) this.announceRoom();
+          break;
+      }
+    };
+
+    // Limpiar salas sin heartbeat cada 5s
+    this.cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [roomId, room] of this.availableRooms) {
+        if (now - room.timestamp > 10000) this.availableRooms.delete(roomId);
+      }
+      updateP2PRoomUI();
+    }, 5000);
+  }
+
+  announceRoom() {
+    if (!this.discoveryChannel || !this.isHost) return;
+    this.discoveryChannel.postMessage({
+      type: 'room-announce',
+      senderId: this.playerId,
+      roomId: this.roomId,
+      hostName: this.playerName,
+      mode: this.gameMode,
+      players: this.connections.length + 1,
+      maxPlayers: this.maxPlayers,
+      timestamp: Date.now()
+    });
+  }
+
+  searchRooms() {
+    this.isSearching = true;
+    this.availableRooms.clear();
+    if (this.discoveryChannel) {
+      this.discoveryChannel.postMessage({
+        type: 'searching-for-room',
+        senderId: this.playerId
+      });
+    }
+    showNotification('🔍 Buscando salas...', 'info');
+    setTimeout(() => {
+      this.isSearching = false;
+      if (this.availableRooms.size === 0) {
+        showNotification('❌ No se encontraron salas. ¡Crea una!', 'info');
+      } else {
+        showNotification(`✅ ${this.availableRooms.size} sala(s) encontrada(s)`, 'success');
+      }
+      updateP2PRoomUI();
+    }, 2000);
+  }
+
+  // Matchmaking automático
+  autoMatchmake(mode = 'competitive') {
+    this.autoMatchmaking = true;
+    showNotification('🎮 Buscando partida automáticamente...', 'info');
+    this.searchRooms();
+    setTimeout(() => {
+      if (this.availableRooms.size > 0) {
+        const rooms = Array.from(this.availableRooms.values());
+        const bestRoom = rooms.sort((a, b) => b.players - a.players)[0];
+        if (bestRoom && bestRoom.players < bestRoom.maxPlayers) {
+          this.joinRoom(bestRoom.roomId);
+          showNotification(`🎮 ¡Unido a sala de ${bestRoom.hostName}!`, 'success');
+        } else {
+          this.createRoom(mode);
+          showNotification('🏠 Sala creada (no había espacio)', 'info');
+        }
+      } else {
+        this.createRoom(mode);
+        showNotification('🏠 Sala creada (no se encontraron salas)', 'info');
+      }
+      this.autoMatchmaking = false;
+    }, 3000);
+  }
+
+  async createRoom(mode = 'competitive', maxPlayers = 4) {
+    this.isHost = true;
+    this.gameMode = mode;
+    this.maxPlayers = maxPlayers;
+    this.roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    showNotification(`🏠 Sala creada: ${this.roomId} (${mode})`, 'success');
+
+    this.startDynamicDiscovery();
+    this.startSignalingListener();
+
+    this.heartbeatInterval = setInterval(() => this.announceRoom(), 3000);
+    updateP2PRoomUI();
+    return this.roomId;
+  }
+
+  async joinRoom(roomId) {
+    this.isHost = false;
+    this.roomId = String(roomId).toUpperCase();
+    showNotification(`🔗 Conectando a sala ${this.roomId}...`, 'info');
+    this.startDynamicDiscovery();
+    this.startSignalingListener();
+    await this.sendSignal('join', {
+      playerId: this.playerId,
+      playerName: this.playerName
+    });
+    updateP2PRoomUI();
+  }
+
+  async joinDynamicRoom(roomId) {
+    const room = this.availableRooms.get(roomId);
+    if (!room) { showNotification('❌ Sala no encontrada', 'error'); return; }
+    if (room.players >= room.maxPlayers) { showNotification('❌ Sala llena', 'error'); return; }
+    await this.joinRoom(roomId);
+    this.gameMode = room.mode;
+  }
+
+  // Señalización via BroadcastChannel
+  startSignalingListener() {
+    if (!this.hasBroadcast()) {
+      showNotification('❌ BroadcastChannel no disponible en este navegador', 'error');
+      return;
+    }
+    this.signalingChannel?.close();
+    this.signalingChannel = new BroadcastChannel('rhythm_p2p_' + this.roomId);
+
+    this.signalingChannel.onmessage = async (event) => {
+      const data = event.data;
+      if (data.senderId === this.playerId) return;
+      try {
+        switch (data.type) {
+          case 'join': if (this.isHost) await this.handlePlayerJoin(data); break;
+          case 'offer': await this.handleOffer(data); break;
+          case 'answer': await this.handleAnswer(data); break;
+          case 'ice-candidate': await this.handleIceCandidate(data); break;
+        }
+      } catch (err) {
+        console.warn('[MiniFeather RhythmParkour P2P] Error en señal:', err);
+      }
+    };
+  }
+
+  async sendSignal(type, data) {
+    if (!this.signalingChannel) return;
+    this.signalingChannel.postMessage({
+      type,
+      senderId: this.playerId,
+      roomId: this.roomId,
+      ...data
+    });
+  }
+
+  async handlePlayerJoin(data) {
+    showNotification(`👋 ${data.playerName} se unió!`, 'success');
+    const connection = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
+    const dataChannel = connection.createDataChannel('gameData', { ordered: true });
+    this.setupDataChannel(dataChannel, data.playerId);
+    this.connections.push({ peerId: data.playerId, connection, dataChannel });
+
+    const offer = await connection.createOffer();
+    await connection.setLocalDescription(offer);
+
+    connection.onicecandidate = (event) => {
+      if (event.candidate) {
+        this.sendSignal('ice-candidate', { targetId: data.playerId, candidate: event.candidate });
+      }
+    };
+
+    await this.sendSignal('offer', {
+      targetId: data.playerId,
+      offer: connection.localDescription,
+      gameMode: this.gameMode,
+      hostName: this.playerName
+    });
+  }
+
+  async handleOffer(data) {
+    if (data.targetId !== this.playerId) return;
+    this.gameMode = data.gameMode;
+    showNotification(`✅ Conectado a ${data.hostName}! Modo: ${this.gameMode}`, 'success');
+
+    const connection = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
+    this.connections.push({ peerId: data.senderId, connection, dataChannel: null });
+
+    connection.ondatachannel = (event) => {
+      this.setupDataChannel(event.channel, data.senderId);
+      const conn = this.connections.find(c => c.peerId === data.senderId);
+      if (conn) conn.dataChannel = event.channel;
+    };
+
+    connection.onicecandidate = (event) => {
+      if (event.candidate) {
+        this.sendSignal('ice-candidate', { targetId: data.senderId, candidate: event.candidate });
+      }
+    };
+
+    await connection.setRemoteDescription(new RTCSessionDescription(data.offer));
+    const answer = await connection.createAnswer();
+    await connection.setLocalDescription(answer);
+    await this.sendSignal('answer', { targetId: data.senderId, answer: connection.localDescription });
+  }
+
+  async handleAnswer(data) {
+    if (!this.isHost || data.targetId !== this.playerId) return;
+    const conn = this.connections.find(c => c.peerId === data.senderId);
+    if (conn) await conn.connection.setRemoteDescription(new RTCSessionDescription(data.answer));
+  }
+
+  async handleIceCandidate(data) {
+    if (data.targetId !== this.playerId) return;
+    const conn = this.connections.find(c => c.peerId === data.senderId);
+    if (conn) await conn.connection.addIceCandidate(new RTCIceCandidate(data.candidate));
+  }
+
+  setupDataChannel(channel, peerId) {
+    channel.onopen = () => {
+      showNotification('🎮 Conexión P2P establecida!', 'success');
+      updateP2PRoomUI();
+    };
+    channel.onmessage = (event) => {
+      try {
+        this.handleGameMessage(JSON.parse(event.data), peerId);
+      } catch {}
+    };
+    channel.onclose = () => {
+      this.remotePlayers.delete(peerId);
+      this.connections = this.connections.filter(c => c.peerId !== peerId);
+      updateP2PRoomUI();
+    };
+  }
+
+  handleGameMessage(data, peerId) {
+    switch (data.type) {
+      case 'score-update':
+        this.remotePlayers.set(peerId, {
+          ...this.remotePlayers.get(peerId),
+          score: data.score,
+          combo: data.combo,
+          health: data.health
+        });
+        break;
+      case 'game-start':
+        if (!this.isHost && !state.isPlaying) startGame();
+        break;
+      case 'game-end':
+        this.showResults(data);
+        break;
+      case 'player-hit':
+        if (this.gameMode === 'cooperative') {
+          applyDamage(data.damage);
+          showNotification(`💔 ${data.playerName} fue golpeado!`, 'error');
+        }
+        break;
+    }
+  }
+
+  broadcast(data) {
+    const message = JSON.stringify(data);
+    for (const conn of this.connections) {
+      if (conn.dataChannel?.readyState === 'open') conn.dataChannel.send(message);
+    }
+  }
+
+  syncGameState() {
+    if (this.connections.length === 0) return;
+    this.broadcast({
+      type: 'score-update',
+      score: state.score,
+      combo: state.combo,
+      health: state.health,
+      timestamp: Date.now()
+    });
+  }
+
+  startGame() {
+    this.gameState.isPlaying = true;
+    this.gameState.startTime = Date.now();
+    if (this.isHost) {
+      this.broadcast({ type: 'game-start', startTime: this.gameState.startTime });
+    }
+    this.syncInterval = setInterval(() => this.syncGameState(), 100);
+  }
+
+  notifyHit(damage) {
+    if (this.gameMode === 'cooperative' && this.connections.length > 0) {
+      this.broadcast({
+        type: 'player-hit',
+        playerName: this.playerName,
+        damage
+      });
+    }
+  }
+
+  endGame() {
+    this.gameState.isPlaying = false;
+    if (this.syncInterval) { clearInterval(this.syncInterval); this.syncInterval = null; }
+    const results = {
+      type: 'game-end',
+      players: [{ name: this.playerName, score: state.score, isHost: this.isHost }]
+    };
+    this.remotePlayers.forEach((player) => {
+      results.players.push({ name: player.name || 'Jugador', score: player.score || 0, isHost: false });
+    });
+    if (this.isHost) this.broadcast(results);
+    this.showResults(results);
+  }
+
+  showResults(data) {
+    const sorted = [...data.players].sort((a, b) => b.score - a.score);
+    const winner = sorted[0];
+    let message = '🏆 Resultados:\n';
+    sorted.forEach((p, i) => { message += `${i + 1}. ${p.name}: ${p.score} pts\n`; });
+    if (this.gameMode === 'competitive' && winner) message += `\n👑 Ganador: ${winner.name}!`;
+    showNotification(message, winner?.name === this.playerName ? 'success' : 'info');
+  }
+
+  disconnect() {
+    if (this.syncInterval) { clearInterval(this.syncInterval); this.syncInterval = null; }
+    if (this.heartbeatInterval) { clearInterval(this.heartbeatInterval); this.heartbeatInterval = null; }
+    if (this.cleanupInterval) { clearInterval(this.cleanupInterval); this.cleanupInterval = null; }
+
+    if (this.isHost && this.discoveryChannel && this.roomId) {
+      this.discoveryChannel.postMessage({
+        type: 'room-removed',
+        senderId: this.playerId,
+        roomId: this.roomId
+      });
+    }
+
+    for (const conn of this.connections) {
+      try { conn.dataChannel?.close(); } catch {}
+      try { conn.connection?.close(); } catch {}
+    }
+    this.connections = [];
+    this.remotePlayers.clear();
+    this.isHost = false;
+    this.roomId = null;
+
+    this.signalingChannel?.close();
+    this.signalingChannel = null;
+    this.discoveryChannel?.close();
+    this.discoveryChannel = null;
+
+    showNotification('👋 Desconectado', 'info');
+    updateP2PRoomUI();
+  }
+}
+
+let p2pManager = null;
+function ensureP2P() {
+  if (!p2pManager) p2pManager = new P2PManager();
+  return p2pManager;
+}
+
+// ---- UI del panel P2P (port de createP2PUI, integrado en la UI del mod) ----
+function getP2PPanelHtml() {
+  const m = p2pManager;
+  return `
+    <div id="mf-rhythm-p2p" style="display:none;margin-top:10px;border-top:1px solid #7c5cff;padding-top:8px;">
+      <div style="font-weight:bold;margin-bottom:6px;color:#7c5cff;font-size:12px;">🌐 Multijugador P2P</div>
+      <div id="mf-rhythm-p2p-status" style="margin-bottom:6px;font-size:10px;color:#9ca3af;">No conectado</div>
+      <div id="mf-rhythm-p2p-current" style="display:none;margin-bottom:6px;padding:6px;background:rgba(124,92,255,0.15);border-radius:4px;font-size:11px;">
+        <div>Sala: <span id="mf-rhythm-room-id" style="cursor:pointer;background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px;user-select:all;" title="Clic para copiar">-</span> 📋</div>
+        <div id="mf-rhythm-room-count" style="color:#9ca3af;font-size:10px;">1/4 jugadores</div>
+        <div id="mf-rhythm-player-list" style="margin-top:4px;font-size:10px;"></div>
+      </div>
+      <input type="text" id="mf-rhythm-p2p-name" placeholder="Tu nombre" value="${m ? m.playerName : ''}"
+        style="width:100%;box-sizing:border-box;padding:4px;border-radius:3px;border:none;font-size:11px;margin-bottom:4px;">
+      <select id="mf-rhythm-p2p-mode" style="width:100%;padding:4px;border-radius:3px;border:none;font-size:11px;margin-bottom:4px;">
+        <option value="competitive">🏆 Competitivo</option>
+        <option value="cooperative">🤝 Cooperativo</option>
+      </select>
+      <div style="display:flex;gap:4px;margin-bottom:4px;">
+        <input type="text" id="mf-rhythm-p2p-join-id" placeholder="ID del Host"
+          style="flex:1;padding:4px;border-radius:3px;border:none;font-size:11px;">
+        <button id="mf-rhythm-p2p-join" class="mf-rhythm-btn" style="background:#f59e0b;padding:4px 8px;">🔗</button>
+      </div>
+      <div style="display:flex;gap:4px;">
+        <button id="mf-rhythm-p2p-create" class="mf-rhythm-btn" style="flex:1;background:#4ade80;color:#000;font-size:11px;">🏠 Crear Sala</button>
+        <button id="mf-rhythm-p2p-disconnect" class="mf-rhythm-btn" style="flex:1;background:#ef4444;font-size:11px;display:none;">❌ Salir</button>
+      </div>
+      <div style="margin-top:6px;font-size:9px;color:#6b7280;font-style:italic;">
+        /rp start también inicia la partida para los peers conectados
+      </div>
+    </div>
+  `;
+}
+
+function updateP2PRoomUI() {
+  const ui = state.ui;
+  if (!ui) return;
+  const m = p2pManager;
+  const statusEl = ui.querySelector('#mf-rhythm-p2p-status');
+  const currentEl = ui.querySelector('#mf-rhythm-p2p-current');
+  const roomIdEl = ui.querySelector('#mf-rhythm-room-id');
+  const countEl = ui.querySelector('#mf-rhythm-room-count');
+  const listEl = ui.querySelector('#mf-rhythm-player-list');
+  const createBtn = ui.querySelector('#mf-rhythm-p2p-create');
+  const joinBtn = ui.querySelector('#mf-rhythm-p2p-join');
+  const joinInput = ui.querySelector('#mf-rhythm-p2p-join-id');
+  const discBtn = ui.querySelector('#mf-rhythm-p2p-disconnect');
+  if (!statusEl) return;
+
+  const connected = m && m.roomId;
+  if (connected) {
+    currentEl.style.display = 'block';
+    createBtn.style.display = 'none';
+    joinBtn.style.display = 'none';
+    joinInput.style.display = 'none';
+    discBtn.style.display = 'block';
+    if (roomIdEl && roomIdEl.textContent === '-') roomIdEl.textContent = m.roomId;
+    statusEl.innerHTML = m.isHost
+      ? '🏠 <span style="color:#4ade80;">Eres el host</span>'
+      : '🔌 <span style="color:#60a5fa;">Conectado</span>';
+
+    let html = `<div style="color:#4ade80;">🟢 Tú: ${m.playerName} (${state.score} pts)</div>`;
+    m.remotePlayers.forEach((pl) => {
+      html += `<div style="color:#60a5fa;">🔵 ${pl.name || 'Jugador'}: ${pl.score || 0} pts`;
+      if (m.gameMode === 'competitive') html += ` (Combo: ${pl.combo || 0})`;
+      html += `</div>`;
+    });
+    if (listEl) listEl.innerHTML = html;
+    if (countEl) countEl.textContent = `${m.connections.length + 1}/${m.maxPlayers} jugadores`;
+  } else {
+    currentEl.style.display = 'none';
+    createBtn.style.display = 'block';
+    joinBtn.style.display = 'block';
+    joinInput.style.display = 'block';
+    discBtn.style.display = 'none';
+    if (roomIdEl) roomIdEl.textContent = '-';
+    statusEl.innerHTML = '<span style="color:#9ca3af;">No conectado</span>';
+    if (listEl) listEl.innerHTML = '';
+    if (countEl) countEl.textContent = '';
+  }
+}
+
+function bindP2PControls(container) {
+  const m = ensureP2P();
+
+  container.querySelector('#mf-rhythm-p2p-name')?.addEventListener('change', (e) => {
+    m.playerName = e.target.value || m.playerName;
+  });
+
+  container.querySelector('#mf-rhythm-p2p-create')?.addEventListener('click', async () => {
+    const mode = container.querySelector('#mf-rhythm-p2p-mode')?.value || 'competitive';
+    await m.createRoom(mode);
+  });
+
+  container.querySelector('#mf-rhythm-p2p-join')?.addEventListener('click', async () => {
+    const roomId = container.querySelector('#mf-rhythm-p2p-join-id')?.value?.trim();
+    if (roomId) await m.joinRoom(roomId);
+  });
+
+  container.querySelector('#mf-rhythm-p2p-disconnect')?.addEventListener('click', () => {
+    m.disconnect();
+  });
+
+  // Clic para copiar el ID de sala
+  container.querySelector('#mf-rhythm-room-id')?.addEventListener('click', function () {
+    const roomId = this.textContent;
+    if (roomId && roomId !== '-') {
+      navigator.clipboard?.writeText(roomId).then(() => {
+        const bg = this.style.background;
+        this.style.background = '#4ade80';
+        this.style.color = '#000';
+        setTimeout(() => { this.style.background = bg; this.style.color = ''; }, 500);
+      }).catch(() => {});
+    }
+  });
+}
+
 // ---- Comunicación de estado hacia content.js ----
 function dispatchState() {
+  updateHud();
   document.dispatchEvent(new CustomEvent(EVENT_STATE, {
     detail: JSON.stringify({
       isPlaying: state.isPlaying,
@@ -538,139 +1194,144 @@ function dispatchState() {
 // ---- UI Overlay (creada cuando el modulo está activo) ----
 function createUI() {
   removeUI();
+  ensureP2P();
   const container = document.createElement('div');
   container.id = 'mf-rhythm-ui';
   container.innerHTML = `
     <div style="font-weight:bold;margin-bottom:8px;color:#7c5cff;">🎵 Rhythm Parkour</div>
-    <div style="margin-bottom:8px;">
-      <input type="file" id="mf-rhythm-file" accept="audio/*" style="display:none;">
-      <button id="mf-rhythm-load" class="mf-rhythm-btn">Load Song</button>
+    <div id="mf-rhythm-hud" style="font-size:11px;line-height:1.6;color:#d1d5db;"></div>
+    <input type="file" id="mf-rhythm-file" accept="audio/*" style="display:none;">
+    <div style="display:flex;gap:4px;margin-top:8px;">
+      <button id="mf-rhythm-load" class="mf-rhythm-btn" style="flex:1;background:#4ade80;color:#000;font-size:11px;">🎵 Canción</button>
+      <button id="mf-rhythm-start" class="mf-rhythm-btn" style="flex:1;background:#7c5cff;font-size:11px;">▶</button>
+      <button id="mf-rhythm-stop" class="mf-rhythm-btn" style="flex:1;background:#ef4444;font-size:11px;">⏹</button>
     </div>
-    <div style="display:flex;gap:5px;margin-bottom:8px;">
-      <button id="mf-rhythm-start" class="mf-rhythm-btn" style="flex:1;background:#4ade80;">▶ Start</button>
-      <button id="mf-rhythm-stop" class="mf-rhythm-btn" style="flex:1;background:#ef4444;">⏹ Stop</button>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;">
-      <div>Score: <span id="mf-rhythm-score" style="font-weight:bold;">0</span></div>
-      <div>Combo: <span id="mf-rhythm-combo" style="font-weight:bold;">0</span></div>
-      <div>Health: <span id="mf-rhythm-health" style="font-weight:bold;">5</span></div>
-      <div>Beat: <span id="mf-rhythm-beat" style="font-weight:bold;">0/0</span></div>
-    </div>
-    <div id="mf-rhythm-status" style="margin-top:6px;font-size:10px;color:#6b7280;">No song loaded</div>
+    <div id="mf-rhythm-p2p-toggle" style="margin-top:8px;font-size:11px;color:#7c5cff;cursor:pointer;user-select:none;">🌐 Multijugador ▸</div>
+    ${getP2PPanelHtml()}
   `;
-  const style = document.createElement('style');
-  style.id = 'mf-rhythm-style';
-  style.textContent = `
-    #mf-rhythm-ui{position:fixed;top:20px;right:20px;background:rgba(15,15,25,0.95);color:#fff;padding:12px;border-radius:8px;border:1px solid #7c5cff;z-index:99999;font-family:sans-serif;min-width:220px;font-size:13px;}
-    .mf-rhythm-btn{padding:6px 10px;border:none;border-radius:4px;cursor:pointer;color:#fff;background:#3b82f6;font-size:12px;}
-    .mf-rhythm-btn:hover{opacity:0.85;}
-  `;
-  document.head.appendChild(style);
+  container.style.cssText = 'position:fixed;top:60px;right:10px;z-index:99998;background:rgba(15,15,20,0.92);border:1px solid #7c5cff;border-radius:8px;padding:10px;width:190px;font-family:monospace;color:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.5);';
   document.body.appendChild(container);
   state.ui = container;
 
-  container.querySelector('#mf-rhythm-load').addEventListener('click', () => {
-    container.querySelector('#mf-rhythm-file').click();
-  });
-  container.querySelector('#mf-rhythm-file').addEventListener('change', (e) => {
+  const fileInput = container.querySelector('#mf-rhythm-file');
+  fileInput?.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) loadAudioFile(file);
+    fileInput.value = '';
   });
-  container.querySelector('#mf-rhythm-start').addEventListener('click', startGame);
-  container.querySelector('#mf-rhythm-stop').addEventListener('click', stopGame);
+  container.querySelector('#mf-rhythm-load')?.addEventListener('click', () => fileInput?.click());
+  container.querySelector('#mf-rhythm-start')?.addEventListener('click', () => startGame());
+  container.querySelector('#mf-rhythm-stop')?.addEventListener('click', () => { stopGame(); showNotification('⏹ Juego detenido', 'info'); });
 
-  document.addEventListener(EVENT_STATE, updateUIFromState, true);
+  // Toggle del panel P2P
+  const p2pToggle = container.querySelector('#mf-rhythm-p2p-toggle');
+  const p2pPanel = container.querySelector('#mf-rhythm-p2p');
+  p2pToggle?.addEventListener('click', () => {
+    if (!p2pPanel) return;
+    const visible = p2pPanel.style.display !== 'none';
+    p2pPanel.style.display = visible ? 'none' : 'block';
+    p2pToggle.textContent = visible ? '🌐 Multijugador ▸' : '🌐 Multijugador ▾';
+  });
+
+  bindP2PControls(container);
+  updateHud();
+  updateP2PRoomUI();
+}
+
+function updateHud() {
+  if (!state.ui) return;
+  const hud = state.ui.querySelector('#mf-rhythm-hud');
+  if (!hud) return;
+  if (!state.currentSong) {
+    hud.innerHTML = '<span style="color:#9ca3af;">Sin canción. Usa 🎵 Canción o /rp load</span>';
+    return;
+  }
+  hud.innerHTML = `
+    <div>Estado: ${state.isPlaying ? '▶ <span style="color:#4ade80;">Jugando</span>' : '⏸ Detenido'}</div>
+    <div>Score: <span style="color:#fbbf24;">${state.score}</span> | Combo: ${state.combo}</div>
+    <div>Vidas: ${'❤️'.repeat(state.health)}${'🖤'.repeat(Math.max(0, 5 - state.health))}</div>
+    <div>Beat: ${state.currentBeat}/${state.beatCount} | BPM: ${state.detectedBPM}</div>
+  `;
 }
 
 function removeUI() {
   document.getElementById('mf-rhythm-ui')?.remove();
-  document.getElementById('mf-rhythm-style')?.remove();
-  document.removeEventListener(EVENT_STATE, updateUIFromState, true);
   state.ui = null;
 }
 
-function updateUIFromState(event) {
-  if (!state.ui) return;
-  try {
-    const s = JSON.parse(event.detail);
-    const scoreEl = state.ui.querySelector('#mf-rhythm-score');
-    const comboEl = state.ui.querySelector('#mf-rhythm-combo');
-    const healthEl = state.ui.querySelector('#mf-rhythm-health');
-    const beatEl = state.ui.querySelector('#mf-rhythm-beat');
-    const statusEl = state.ui.querySelector('#mf-rhythm-status');
-    if (scoreEl) scoreEl.textContent = s.score;
-    if (comboEl) comboEl.textContent = s.combo;
-    if (healthEl) healthEl.textContent = s.health;
-    if (beatEl) beatEl.textContent = `${s.currentBeat}/${s.beatCount}`;
-    if (statusEl) statusEl.textContent = s.hasSong ? `BPM: ${s.detectedBPM} | ${s.isPlaying ? 'Playing...' : 'Ready'}` : 'No song loaded';
-  } catch {}
-}
-
-function showNotification(message, type) {
+// ---- Notificaciones y mensajes good/miss ----
+function showNotification(msg, type = 'info') {
+  const colors = { success: '#4ade80', error: '#ef4444', info: '#7c5cff' };
   const n = document.createElement('div');
-  n.textContent = message;
-  n.style.cssText = `position:fixed;top:60px;right:20px;background:${type === 'success' ? '#4ade80' : type === 'error' ? '#ef4444' : '#3b82f6'};color:#fff;padding:8px 14px;border-radius:4px;z-index:100000;font-family:sans-serif;font-size:13px;`;
+  n.style.cssText = `position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;background:rgba(15,15,20,0.95);border:2px solid ${colors[type] || colors.info};border-radius:8px;padding:12px 20px;font-family:monospace;font-size:14px;color:${colors[type] || colors.info};white-space:pre-line;text-align:center;pointer-events:none;`;
+  n.textContent = msg;
   document.body.appendChild(n);
   setTimeout(() => n.remove(), 3000);
 }
 
-function showHitMessage(type) {
-  const msg = type === 'miss' ? '✗ miss' : '✓ good';
-  const color = type === 'miss' ? '#ef4444' : '#4ade80';
-  const el = document.createElement('div');
-  el.textContent = msg;
-  el.style.cssText = `position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:${color};font-size:32px;font-weight:bold;z-index:100001;font-family:sans-serif;text-shadow:2px 2px 4px rgba(0,0,0,0.8);`;
-  document.body.appendChild(el);
-  setTimeout(() => { el.style.transition = 'opacity 0.3s'; el.style.opacity = '0'; }, 600);
-  setTimeout(() => el.remove(), 900);
+// Mensaje good/miss flotante sobre la hotbar con fuente Faithful
+function showHitMessage(kind) {
+  const isGood = kind === 'good';
+  const msg = document.createElement('div');
+  msg.textContent = isGood ? '✔ ¡Bien!' : '✘ ¡Fallo!';
+  msg.style.cssText = `position:fixed;bottom:120px;left:50%;transform:translateX(-50%);z-index:99999;font-family:'Faithful',monospace;font-size:24px;font-weight:bold;color:${isGood ? '#4ade80' : '#ef4444'};text-shadow:2px 2px 0 #000;pointer-events:none;transition:opacity 0.6s ease-out, transform 0.6s ease-out;`;
+  document.body.appendChild(msg);
+  requestAnimationFrame(() => {
+    msg.style.opacity = '0';
+    msg.style.transform = 'translateX(-50%) translateY(-40px)';
+  });
+  setTimeout(() => msg.remove(), 650);
 }
 
-// ---- Enable / Disable ----
-function setEnabled(value) {
-  const enabled = !!value;
-  if (state.enabled === enabled) return;
-  state.enabled = enabled;
-
-  if (enabled) {
-    state.game = getGame(true);
-    state.world = state.game?.world || null;
-    createUI();
-    showNotification('Rhythm Parkour enabled! Load a song to start.', 'info');
-  } else {
-    stopGame();
-    removeUI();
-    state.game = null;
-    state.world = null;
+// ---- Ciclo de vida del módulo ----
+function enable() {
+  state.enabled = true;
+  const g = getGame(true);
+  state.game = g || null;
+  state.world = g?.world || null;
+  installChatCommands();
+  createUI();
+  // Vigilar la aparición del world (al entrar a una partida)
+  if (!state.world) {
+    const finder = setInterval(() => {
+      if (!state.enabled) { clearInterval(finder); return; }
+      const gg = getGame(true);
+      if (gg?.world) {
+        state.game = gg;
+        state.world = gg.world;
+        clearInterval(finder);
+      }
+    }, 1500);
+    setTimeout(() => clearInterval(finder), 120000);
   }
+  dispatchState();
 }
 
-// ---- Listeners de eventos desde content.js ----
-document.addEventListener(EVENT_CONFIG, event => {
-  let cfg = event.detail;
-  if (typeof cfg === 'string') { try { cfg = JSON.parse(cfg); } catch { return; } }
-  if (cfg && 'enabled' in cfg) setEnabled(cfg.enabled);
-}, true);
+function disable() {
+  if (state.isPlaying) stopGame();
+  state.enabled = false;
+  p2pManager?.disconnect?.();
+  removeUI();
+}
 
-document.addEventListener(EVENT_COMMAND, event => {
-  let cmd = event.detail;
-  if (typeof cmd === 'string') { try { cmd = JSON.parse(cmd); } catch { return; } }
-  if (!cmd || !state.enabled) return;
-  switch (cmd.action) {
-    case 'start': startGame(); break;
-    case 'stop': stopGame(); break;
-  }
-}, true);
+// ---- Escucha de configuración desde content.js ----
+document.addEventListener(EVENT_CONFIG, (e) => {
+  try {
+    const cfg = JSON.parse(e.detail || '{}');
+    if (cfg.enabled === true) enable();
+    else if (cfg.enabled === false) disable();
+  } catch {}
+});
 
-window.addEventListener('beforeunload', () => { stopGame(); removeUI(); }, { once: true });
-
-globalThis.MiniFeatherRhythmParkour = {
-  setEnabled,
-  loadAudioFile,
-  startGame,
-  stopGame,
-  getStatus() {
-    return { isPlaying: state.isPlaying, score: state.score, combo: state.combo, health: state.health, beatCount: state.beatCount };
-  },
-  get enabled() { return state.enabled; }
+// ---- Exposición para depuración / comandos manuales ----
+window.MF_RhythmParkour = {
+  enable, disable,
+  start: startGame, stop: stopGame,
+  loadFile: (f) => loadAudioFile(f),
+  status: statusText,
+  command: executeCommand,
+  p2p: () => ensureP2P()
 };
+
+console.log('[MiniFeather RhythmParkour] Módulo cargado. Usa el toggle en la GUI o window.MF_RhythmParkour');
 })();

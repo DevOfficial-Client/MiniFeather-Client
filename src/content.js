@@ -76,6 +76,7 @@
     { id: 'dashboard', icon: '🏠', labelKey: 'navDashboard' },
     { id: 'hud', icon: '🎮', labelKey: 'navHud' },
     { id: 'render', icon: '✨', labelKey: 'navRender' },
+    { id: 'shaders', icon: '🌈', labelKey: 'navShaders' },
     { id: 'cosmetics', icon: '👕', labelKey: 'tabSkins' },
     { id: 'chat', icon: '💬', labelKey: 'sectionChat' },
     { id: 'waypoints', icon: '📍', labelKey: 'navWaypoints' },
@@ -401,7 +402,26 @@
     chatLinks: true,
     chatMemes: true,
     rhythmParkour: false,
+    localGamesWorldName: '',
     guiPatch: false,
+    customShader: false,
+    customShaderPreset: 'spooklementary',
+    customShaderStrength: 0.5,
+    customShaderRenderScale: 1.0,
+    customShaderFxVhs: 0.6,
+    customShaderFxCrt: 0.6,
+    customShaderFxCel: 0.6,
+    customShaderFxFog: 0.7,
+    customShaderFxGrain: 0.5,
+    customShaderFxGlitch: 0.4,
+    customShaderFxFlash: 0.5,
+    customShaderFxSharp: 0.5,
+    customShaderFxUfsat: 1.35,
+    customShaderFxUfcontrast: 0.45,
+    customShaderFxUftone: 0.35,
+    cloudsShapeBrush: 12,
+    cloudsShapeMix: 0.85,
+    cloudsShapeTile: 512,
     language: 'en'
   };
 
@@ -1835,6 +1855,29 @@
         grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
         gap:10px;
       }
+      .mf-shader-grid {
+        display:grid;
+        grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));
+        gap:8px;
+      }
+      .mf-shader-grid .mf-btn {
+        width:100%;
+      }
+      .mf-shader-strength {
+        display:flex;
+        align-items:center;
+        gap:12px;
+      }
+      .mf-shader-strength input[type="range"] {
+        flex:1;
+        accent-color:var(--mf-accent2);
+      }
+      .mf-shader-strength span {
+        min-width:44px;
+        text-align:right;
+        font-weight:600;
+        color:var(--mf-accent2);
+      }
       .mf-toggle {
         display:flex;
         flex-direction:column;
@@ -2320,6 +2363,7 @@
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
       { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc') },
       { page: 'render', key: 'freecam', title: t('freecam'), desc: t('freecamDesc') },
+      { page: 'shaders', key: 'customShader', title: t('navShaders'), desc: t('shadersDesc') },
       { page: 'world', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc') },
       { page: 'world', key: 'rhythmParkour', title: 'Rhythm Parkour', desc: 'Transforms Miniblox into a rhythm parkour game' },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
@@ -2844,6 +2888,45 @@
     }));
   }
 
+  function sendCustomShaderConfig(enabled = settings.customShader) {
+    const preset = settings.customShaderPreset || 'spooklementary';
+    const fx = {};
+    // Efectos comunes (spooklementary)
+    const spookFx = ['vhs', 'crt', 'cel', 'fog', 'grain', 'glitch', 'flash', 'sharp'];
+    const ufFx = ['ufsat', 'ufcontrast', 'uftone'];
+    for (const name of preset === 'ultrafast' ? ufFx : spookFx) {
+      const fallback = { vhs: 0.6, crt: 0.6, cel: 0.6, fog: 0.7, grain: 0.5, glitch: 0.4, flash: 0.5, sharp: 0.5, ufsat: 1.35, ufcontrast: 0.45, uftone: 0.35 }[name];
+      fx[name] = Number(settings['customShaderFx' + name.charAt(0).toUpperCase() + name.slice(1)] ?? fallback);
+    }
+
+    document.dispatchEvent(new CustomEvent('minifeather:custom-shader-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        preset,
+        strength: Number(settings.customShaderStrength) || 0.5,
+        renderScale: Number(settings.customShaderRenderScale) || 1.0,
+        effects: fx,
+        clouds: {
+          coverage: Number(settings.cloudsCoverage ?? 0.5),
+          scale: Number(settings.cloudsScale ?? 0.012),
+          wind: Number(settings.cloudsWind ?? 0.02),
+          thickness: Number(settings.cloudsThickness ?? 30),
+          height: Number(settings.cloudsHeight ?? 128),
+          opacity: Number(settings.cloudsOpacity ?? 0.9)
+        }
+      })
+    }));
+  }
+
+  function initCustomShaderModule() {
+    registerModule('customShader', () => createLifecycle({
+      enable() { sendCustomShaderConfig(true); },
+      disable() { sendCustomShaderConfig(false); },
+      refresh() { sendCustomShaderConfig(MODULES.get('customShader')?.enabled === true); },
+      destroy() { sendCustomShaderConfig(false); }
+    }));
+  }
+
   function sendAntiAfkConfig(enabled = settings.antiAfk) {
     settings.antiAfkDelay = clampAntiAfkDelay(settings.antiAfkDelay);
     guiSettings.antiAfkDelay = settings.antiAfkDelay;
@@ -2886,6 +2969,141 @@
       refresh() { sendRhythmParkourConfig(MODULES.get('rhythmParkour')?.enabled === true); },
       destroy() { sendRhythmParkourConfig(false); }
     }));
+  }
+
+  // ─── Local Games (mundos locales / LAN via ntfy+WebRTC) ───────────
+  let localGamesState = null;
+
+  function sendLocalGamesCommand(action, extra = {}) {
+    document.dispatchEvent(new CustomEvent('minifeather:localgames-command', {
+      detail: JSON.stringify({ action, ...extra })
+    }));
+  }
+
+  function initLocalGamesModule() {
+    document.addEventListener('minifeather:localgames-state', (e) => {
+      try { localGamesState = JSON.parse(e.detail || '{}'); } catch (_) {}
+      refreshLocalGamesView();
+    });
+
+    registerModule('localGames', () => createLifecycle({
+      enable() { sendLocalGamesCommand('status'); },
+      disable() { sendLocalGamesCommand('stop'); },
+      refresh() { sendLocalGamesCommand('status'); },
+      destroy() { sendLocalGamesCommand('stop'); }
+    }));
+  }
+
+  function refreshLocalGamesView() {
+    if (!panel) return;
+    const container = panel.querySelector('#mf-localgames-view');
+    if (!container) return;
+
+    const lg = localGamesState || {};
+    const servers = Array.isArray(lg.savedServers) ? lg.savedServers.filter(s => s?.online) : [];
+    const serverRows = servers.slice(0, 12).map(server => `
+      <div class="mf-shader-strength" style="margin-bottom:6px;">
+        <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(server.worldName || '')} · ${escapeHtml(server.hostName || '')}">${escapeHtml(server.worldName || 'World')} <span class="mf-muted" style="font-size:10px;">· ${escapeHtml(server.hostName || '')} · ${Number(server.players || 1)}/${Number(server.maxPlayers || 8)}</span></span>
+        <button class="mf-btn primary" style="padding:2px 8px;font-size:11px;" data-lg-join="${escapeHtml(String(server.address || ''))}">${t('localGamesJoin')}</button>
+      </div>`).join('');
+
+    container.innerHTML = `
+      <div class="mf-card-title">${t('localGamesServers')} <button id="mf-lg-refresh" class="mf-btn secondary" style="padding:2px 8px;font-size:11px;">⟳</button></div>
+      <div id="mf-lg-status" class="mf-muted" style="font-size:11px;margin:6px 0;">${escapeHtml(lg.status || 'Idle')}</div>
+      ${lg.active ? `
+        <div style="background:rgba(124,92,255,0.15);border-radius:6px;padding:8px;margin-bottom:8px;font-size:11px;">
+          <div>🎮 <b>${escapeHtml(lg.worldName || 'Local')}</b> · ${escapeHtml(lg.mode || '')} · 👥 ${Number(lg.playerCount || 1)}/${Number(lg.maxPlayers || 8)}</div>
+          <div class="mf-muted">${t('localGamesAddress')}: <code>${escapeHtml(lg.serverAddress || '-')}</code></div>
+          ${lg.renderStats ? `<div class="mf-muted" style="margin-top:2px;font-size:10px;opacity:0.8;">${t('localGamesRender')}: ${Number(lg.renderStats.visible || 0)}/${Number(lg.renderStats.meshes || 0)} · ${t('localGamesTextures')}: ${Number(lg.renderStats.textured || 0)}/${Number(lg.renderStats.nativeMaterials || 0)}</div>` : ''}
+        </div>
+        <div class="mf-card-title" style="margin-top:6px;">${t('localGamesModeTitle')}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;">
+          <button class="mf-btn ${(lg.gameMode||'survival')==='survival'?'primary':'secondary'}" style="padding:4px;font-size:11px;" data-lg-mode="survival">⚔️ ${t('localGamesModeSurvival')}</button>
+          <button class="mf-btn ${(lg.gameMode||'')==='creative'?'primary':'secondary'}" style="padding:4px;font-size:11px;" data-lg-mode="creative">🧱 ${t('localGamesModeCreative')}</button>
+          <button class="mf-btn ${(lg.gameMode||'')==='adventure'?'primary':'secondary'}" style="padding:4px;font-size:11px;" data-lg-mode="adventure">🗺️ ${t('localGamesModeAdventure')}</button>
+          <button class="mf-btn ${(lg.gameMode||'')==='spectator'?'primary':'secondary'}" style="padding:4px;font-size:11px;" data-lg-mode="spectator">👁️ ${t('localGamesModeSpectator')}</button>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:8px;cursor:pointer;user-select:none;">
+          <input type="checkbox" id="mf-lg-hardcore" ${lg.hardcore ? 'checked' : ''} style="cursor:pointer;">
+          <span>💀 <b>${t('localGamesHardcore')}</b> <span class="mf-muted">· ${t('localGamesHardcoreHint')}</span></span>
+        </label>
+        <div class="mf-card-title" style="margin-top:6px;">${t('localGamesChatTitle')}</div>
+        <div style="display:flex;gap:4px;margin-bottom:8px;">
+          <input id="mf-lg-chat-input" type="text" placeholder="${t('localGamesChatPlaceholder')}" maxlength="256"
+            style="flex:1;padding:4px 8px;border-radius:4px;border:1px solid var(--mf-border,#444);background:var(--mf-bg2,rgba(0,0,0,0.3));color:inherit;font-size:12px;">
+          <button id="mf-lg-chat-send" class="mf-btn primary" style="padding:4px 10px;font-size:11px;">${t('localGamesChatSend')}</button>
+        </div>
+        <button id="mf-lg-stop" class="mf-btn danger" style="width:100%;padding:6px;font-size:12px;">${t('localGamesStop')}</button>
+      ` : `
+        <div class="mf-shader-strength" style="margin-bottom:6px;">
+          <input id="mf-lg-worldname" type="text" placeholder="${t('localGamesWorldName')}" value="${escapeHtml(settings.localGamesWorldName || '')}"
+            style="flex:1;padding:4px 8px;border-radius:4px;border:1px solid var(--mf-border,#444);background:var(--mf-bg2,rgba(0,0,0,0.3));color:inherit;font-size:12px;">
+        </div>
+        <div class="mf-shader-grid">
+          <button id="mf-lg-create" class="mf-btn primary">${t('localGamesCreate')}</button>
+          <button id="mf-lg-sandbox" class="mf-btn secondary">${t('localGamesSandbox')}</button>
+        </div>
+        <div style="margin-top:8px;">${serverRows || `<div class="mf-muted" style="font-size:11px;">${t('localGamesNoServers')}</div>`}</div>
+      `}
+    `;
+
+    container.querySelector('#mf-lg-refresh')?.addEventListener('click', () => {
+      sendLocalGamesCommand('refresh-servers');
+    });
+
+    container.querySelector('#mf-lg-stop')?.addEventListener('click', () => {
+      sendLocalGamesCommand('stop');
+    });
+
+    container.querySelector('#mf-lg-create')?.addEventListener('click', () => {
+      const name = container.querySelector('#mf-lg-worldname')?.value?.trim();
+      settings.localGamesWorldName = name || '';
+      guiSettings.localGamesWorldName = settings.localGamesWorldName;
+      saveSettings(true);
+      sendLocalGamesCommand('create-world', { worldName: name });
+    });
+
+    container.querySelector('#mf-lg-sandbox')?.addEventListener('click', () => {
+      sendLocalGamesCommand('start-single');
+    });
+
+    container.querySelectorAll('[data-lg-mode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        sendLocalGamesCommand('set-mode', { mode: btn.getAttribute('data-lg-mode') });
+      });
+    });
+
+    container.querySelector('#mf-lg-hardcore')?.addEventListener('change', (e) => {
+      sendLocalGamesCommand('set-hardcore', { enabled: !!e.target.checked });
+    });
+
+    const sendChat = () => {
+      const input = container.querySelector('#mf-lg-chat-input');
+      if (!input) return;
+      const text = input.value.trim();
+      if (!text) return;
+      sendLocalGamesCommand('chat', { text });
+      input.value = '';
+    };
+
+    container.querySelector('#mf-lg-chat-send')?.addEventListener('click', sendChat);
+
+    container.querySelector('#mf-lg-chat-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sendChat();
+      }
+    });
+
+    container.querySelectorAll('[data-lg-join]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        sendLocalGamesCommand('join-server', { address: btn.getAttribute('data-lg-join') });
+      });
+    });
+  }
+
+  function sendLocalGamesConfig(enabled) {
+    sendLocalGamesCommand(enabled ? 'status' : 'stop');
   }
 
   function closeAntiAfkSettings() {
@@ -4699,6 +4917,171 @@
     `;
   }
 
+  function renderShadersPage() {
+    const strength = Number(settings.customShaderStrength) || 0.5;
+    const renderScale = Number(settings.customShaderRenderScale) || 1.0;
+    const preset = settings.customShaderPreset || 'spooklementary';
+    const isUltrafast = preset === 'ultrafast';
+
+    // Sliders de efectos según el preset activo
+    const fxSliders = isUltrafast
+      ? [
+          { id: 'ufsat', label: t('shadersUfSat'), value: Number(settings.customShaderFxUfsat ?? 1.35), min: 0.5, max: 2, step: 0.05, fmt: v => v.toFixed(2) },
+          { id: 'ufcontrast', label: t('shadersUfContrast'), value: Number(settings.customShaderFxUfcontrast ?? 0.45), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'uftone', label: t('shadersUfTone'), value: Number(settings.customShaderFxUftone ?? 0.35), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' }
+        ]
+      : [
+          { id: 'vhs', label: t('shadersVhs'), value: Number(settings.customShaderFxVhs ?? 0.6), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'crt', label: t('shadersCrt'), value: Number(settings.customShaderFxCrt ?? 0.6), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'cel', label: t('shadersFxCel'), value: Number(settings.customShaderFxCel ?? 0.6), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'fog', label: t('shadersFxFog'), value: Number(settings.customShaderFxFog ?? 0.7), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'grain', label: t('shadersFxGrain'), value: Number(settings.customShaderFxGrain ?? 0.5), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'glitch', label: t('shadersFxGlitch'), value: Number(settings.customShaderFxGlitch ?? 0.4), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'flash', label: t('shadersFxFlash'), value: Number(settings.customShaderFxFlash ?? 0.5), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'sharp', label: t('shadersFxSharp'), value: Number(settings.customShaderFxSharp ?? 0.5), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' }
+        ];
+
+    const fxSlidersHtml = fxSliders.map((fx, i) => `
+          <div class="mf-shader-strength"${i < fxSliders.length - 1 ? ' style="margin-bottom:10px;"' : ''}>
+            <span style="min-width:90px;font-size:12px;">${fx.label}</span>
+            <input id="mf-shader-fx-${fx.id}" type="range" min="${fx.min}" max="${fx.max}" step="${fx.step}" value="${fx.value}">
+            <span id="mf-shader-fx-${fx.id}-value">${fx.fmt(fx.value)}</span>
+          </div>`).join('');
+
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-card-title">${t('navShaders')}</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('customShader', t('navShaders'), t('shadersDesc'))}
+          </div>
+        </div>
+
+        <div class="mf-card">
+          <div class="mf-card-title">${t('shadersPreset')}</div>
+          <select id="mf-shader-preset" class="mf-select">
+            <option value="spooklementary"${preset === 'spooklementary' ? ' selected' : ''}>Spooklementary</option>
+            <option value="ultrafast"${preset === 'ultrafast' ? ' selected' : ''}>UltraFast</option>
+          </select>
+          <div class="mf-muted" style="margin-top:8px;font-size:11px;">${isUltrafast ? t('shadersUfDesc') : t('shadersHint')}</div>
+        </div>
+
+        <div class="mf-card">
+          <div class="mf-card-title">${t('shadersStrength')}</div>
+          <div class="mf-shader-strength">
+            <input
+              id="mf-shader-strength"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value="${strength}"
+            >
+            <span id="mf-shader-strength-value">${Math.round(strength * 100)}%</span>
+          </div>
+        </div>
+
+        <div class="mf-card">
+          <div class="mf-card-title">${t('shadersRenderScale')}</div>
+          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">${t('shadersRenderScaleDesc')}</div>
+          <div class="mf-shader-strength">
+            <input
+              id="mf-shader-renderscale"
+              type="range"
+              min="0.5"
+              max="1"
+              step="0.05"
+              value="${renderScale}"
+            >
+            <span id="mf-shader-renderscale-value">${Math.round(renderScale * 100)}%</span>
+          </div>
+        </div>
+
+        <div class="mf-card">
+          <div class="mf-card-title">${t('cloudsTitle')}</div>
+          <div class="mf-shader-grid" style="margin-bottom:10px;">
+            <button class="mf-btn secondary mf-cloud-preset" data-clouds="default">${t('cloudsDefault')}</button>
+            <button class="mf-btn secondary mf-cloud-preset" data-clouds="overcast">${t('cloudsOvercast')}</button>
+            <button class="mf-btn secondary mf-cloud-preset" data-clouds="storm">${t('cloudsStorm')}</button>
+            <button class="mf-btn secondary mf-cloud-preset" data-clouds="scattered">${t('cloudsScattered')}</button>
+            <button class="mf-btn secondary mf-cloud-preset" data-clouds="giant">${t('cloudsGiant')}</button>
+            <button class="mf-btn secondary mf-cloud-preset" data-clouds="flat">${t('cloudsFlat')}</button>
+          </div>
+          <div class="mf-shader-strength" style="margin-bottom:10px;">
+            <span style="min-width:90px;font-size:12px;">${t('cloudsCoverage')}</span>
+            <input id="mf-cloud-coverage" type="range" min="0" max="1" step="0.05" value="${Number(settings.cloudsCoverage ?? 0.5)}">
+            <span id="mf-cloud-coverage-value">${Math.round(Number(settings.cloudsCoverage ?? 0.5) * 100)}%</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-bottom:10px;">
+            <span style="min-width:90px;font-size:12px;">${t('cloudsScale')}</span>
+            <input id="mf-cloud-scale" type="range" min="0.002" max="0.06" step="0.002" value="${Number(settings.cloudsScale ?? 0.012)}">
+            <span id="mf-cloud-scale-value">${Number(settings.cloudsScale ?? 0.012).toFixed(3)}</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-bottom:10px;">
+            <span style="min-width:90px;font-size:12px;">${t('cloudsWind')}</span>
+            <input id="mf-cloud-wind" type="range" min="0" max="0.3" step="0.01" value="${Number(settings.cloudsWind ?? 0.02)}">
+            <span id="mf-cloud-wind-value">${Number(settings.cloudsWind ?? 0.02).toFixed(2)}</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-bottom:10px;">
+            <span style="min-width:90px;font-size:12px;">${t('cloudsThickness')}</span>
+            <input id="mf-cloud-thickness" type="range" min="1" max="200" step="1" value="${Number(settings.cloudsThickness ?? 30)}">
+            <span id="mf-cloud-thickness-value">${Math.round(Number(settings.cloudsThickness ?? 30))}</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-bottom:10px;">
+            <span style="min-width:90px;font-size:12px;">${t('cloudsHeight')}</span>
+            <input id="mf-cloud-height" type="range" min="60" max="400" step="5" value="${Number(settings.cloudsHeight ?? 128)}">
+            <span id="mf-cloud-height-value">${Math.round(Number(settings.cloudsHeight ?? 128))}</span>
+          </div>
+          <div class="mf-shader-strength">
+            <span style="min-width:90px;font-size:12px;">${t('cloudsOpacity')}</span>
+            <input id="mf-cloud-opacity" type="range" min="0" max="1" step="0.05" value="${Number(settings.cloudsOpacity ?? 0.9)}">
+            <span id="mf-cloud-opacity-value">${Math.round(Number(settings.cloudsOpacity ?? 0.9) * 100)}%</span>
+          </div>
+        </div>
+
+        <div class="mf-card">
+          <div class="mf-card-title">${t('cloudsShapeTitle')}</div>
+          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">${t('cloudsShapeHint')}</div>
+          <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px;">
+            <canvas id="mf-cloud-shape-canvas" width="256" height="256"
+              style="width:200px;height:200px;background:#000;border:1px solid var(--mf-border,#444);border-radius:6px;cursor:crosshair;touch-action:none;image-rendering:pixelated;flex-shrink:0;"></canvas>
+            <div style="flex:1;min-width:150px;">
+              <div class="mf-shader-strength" style="margin-bottom:8px;">
+                <span style="min-width:80px;font-size:12px;">${t('cloudsShapeBrush')}</span>
+                <input id="mf-cloud-shape-brush" type="range" min="2" max="40" step="1" value="${Number(settings.cloudsShapeBrush ?? 12)}">
+                <span id="mf-cloud-shape-brush-value">${Math.round(Number(settings.cloudsShapeBrush ?? 12))}px</span>
+              </div>
+              <div class="mf-shader-strength" style="margin-bottom:8px;">
+                <span style="min-width:80px;font-size:12px;">${t('cloudsShapeMix')}</span>
+                <input id="mf-cloud-shape-mix" type="range" min="0" max="1" step="0.05" value="${Number(settings.cloudsShapeMix ?? 0.85)}">
+                <span id="mf-cloud-shape-mix-value">${Math.round(Number(settings.cloudsShapeMix ?? 0.85) * 100)}%</span>
+              </div>
+              <div class="mf-shader-strength">
+                <span style="min-width:80px;font-size:12px;">${t('cloudsShapeTile')}</span>
+                <input id="mf-cloud-shape-tile" type="range" min="64" max="2048" step="32" value="${Number(settings.cloudsShapeTile ?? 512)}">
+                <span id="mf-cloud-shape-tile-value">${Math.round(Number(settings.cloudsShapeTile ?? 512))}</span>
+              </div>
+            </div>
+          </div>
+          <div class="mf-shader-grid">
+            <button id="mf-cloud-shape-apply" class="mf-btn primary">${t('cloudsShapeApply')}</button>
+            <button id="mf-cloud-shape-clear" class="mf-btn secondary">${t('cloudsShapeClear')}</button>
+            <button id="mf-cloud-shape-remove" class="mf-btn danger">${t('cloudsShapeRemove')}</button>
+          </div>
+        </div>
+
+        <div class="mf-card">
+          <div class="mf-card-title">${t('shadersFxConfig')}</div>
+          ${fxSlidersHtml}
+        </div>
+
+        <div class="mf-card">
+          <div class="mf-card-title">${t('shadersHint')}</div>
+        </div>
+      </div>
+    `;
+  }
+
   function renderCosmeticsPage() {
     return `
       <div class="mf-page-stack">
@@ -4860,6 +5243,10 @@
           </div>
           <div class="mf-tt-hint">${t('antiAfkRightClickHint')}</div>
         </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('localGamesTitle')}</div>
+          <div id="mf-localgames-view"></div>
+        </div>
       </div>
     `;
   }
@@ -4927,6 +5314,7 @@
     dashboard: renderDashboardPage,
     hud: renderHudPage,
     render: renderRenderPage,
+    shaders: renderShadersPage,
     cosmetics: renderCosmeticsPage,
     chat: renderChatPage,
     waypoints: renderWaypointsPage,
@@ -6175,6 +6563,269 @@
 
     bindLocalizedFileInputs();
 
+    // Local Games: render inicial del contenedor (el resto llega por eventos)
+    if (panel.querySelector('#mf-localgames-view')) {
+      refreshLocalGamesView();
+      sendLocalGamesCommand('status');
+    }
+
+    // ─── Shaders: slider de intensidad ──────────
+    const shaderStrength = panel.querySelector('#mf-shader-strength');
+    shaderStrength?.addEventListener('input', () => {
+      const value = parseFloat(shaderStrength.value);
+      settings.customShaderStrength = value;
+      guiSettings.customShaderStrength = value;
+      const valueLabel = panel.querySelector('#mf-shader-strength-value');
+      if (valueLabel) valueLabel.textContent = Math.round(value * 100) + '%';
+      if (settings.customShader) {
+        sendCustomShaderConfig(true);
+      }
+    });
+    shaderStrength?.addEventListener('change', () => {
+      saveSettings(true);
+    });
+
+    const shaderRenderScale = panel.querySelector('#mf-shader-renderscale');
+    shaderRenderScale?.addEventListener('input', () => {
+      const value = parseFloat(shaderRenderScale.value);
+      settings.customShaderRenderScale = value;
+      guiSettings.customShaderRenderScale = value;
+      const valueLabel = panel.querySelector('#mf-shader-renderscale-value');
+      if (valueLabel) valueLabel.textContent = Math.round(value * 100) + '%';
+      if (settings.customShader) {
+        sendCustomShaderConfig(true);
+      }
+    });
+    shaderRenderScale?.addEventListener('change', () => {
+      saveSettings(true);
+    });
+
+    // Selector de preset (Spooklementary / UltraFast)
+    const presetSelect = panel.querySelector('#mf-shader-preset');
+    presetSelect?.addEventListener('change', () => {
+      settings.customShaderPreset = presetSelect.value;
+      guiSettings.customShaderPreset = presetSelect.value;
+      saveSettings(true);
+      if (settings.customShader) {
+        sendCustomShaderConfig(true);
+      }
+      renderCurrentPageContent();
+    });
+
+    // Sliders de sub-efectos (según el preset activo)
+    const fxMap = {
+      vhs: { key: 'customShaderFxVhs', fmt: v => Math.round(v * 100) + '%' },
+      crt: { key: 'customShaderFxCrt', fmt: v => Math.round(v * 100) + '%' },
+      cel: { key: 'customShaderFxCel', fmt: v => Math.round(v * 100) + '%' },
+      fog: { key: 'customShaderFxFog', fmt: v => Math.round(v * 100) + '%' },
+      grain: { key: 'customShaderFxGrain', fmt: v => Math.round(v * 100) + '%' },
+      glitch: { key: 'customShaderFxGlitch', fmt: v => Math.round(v * 100) + '%' },
+      flash: { key: 'customShaderFxFlash', fmt: v => Math.round(v * 100) + '%' },
+      sharp: { key: 'customShaderFxSharp', fmt: v => Math.round(v * 100) + '%' },
+      ufsat: { key: 'customShaderFxUfsat', fmt: v => v.toFixed(2) },
+      ufcontrast: { key: 'customShaderFxUfcontrast', fmt: v => Math.round(v * 100) + '%' },
+      uftone: { key: 'customShaderFxUftone', fmt: v => Math.round(v * 100) + '%' }
+    };
+    for (const [fxName, { key, fmt }] of Object.entries(fxMap)) {
+      const slider = panel.querySelector(`#mf-shader-fx-${fxName}`);
+      if (!slider) continue;
+      slider.addEventListener('input', () => {
+        const value = parseFloat(slider.value);
+        settings[key] = value;
+        guiSettings[key] = value;
+        const valueLabel = panel.querySelector(`#mf-shader-fx-${fxName}-value`);
+        if (valueLabel) valueLabel.textContent = fmt(value);
+        if (settings.customShader) {
+          sendCustomShaderConfig(true);
+        }
+      });
+      slider.addEventListener('change', () => {
+        saveSettings(true);
+      });
+    }
+
+    // ─── Nubes: presets rápidos y sliders ───────────────────────────
+    const CLOUD_PRESETS = {
+      default:   { coverage: 0.5, scale: 0.012, wind: 0.02, thickness: 30, height: 128, opacity: 0.9 },
+      overcast:  { coverage: 0.75, scale: 0.02, wind: 0.03, thickness: 60, height: 128, opacity: 0.95 },
+      storm:     { coverage: 0.9, scale: 0.03, wind: 0.12, thickness: 120, height: 110, opacity: 1.0 },
+      scattered: { coverage: 0.3, scale: 0.012, wind: 0.02, thickness: 25, height: 140, opacity: 0.85 },
+      giant:     { coverage: 0.45, scale: 0.004, wind: 0.01, thickness: 80, height: 160, opacity: 0.95 },
+      flat:      { coverage: 0.55, scale: 0.015, wind: 0.02, thickness: 6, height: 128, opacity: 0.9 }
+    };
+
+    panel.querySelectorAll('.mf-cloud-preset').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const preset = CLOUD_PRESETS[btn.dataset.clouds];
+        if (!preset) return;
+        Object.assign(settings, {
+          cloudsCoverage: preset.coverage,
+          cloudsScale: preset.scale,
+          cloudsWind: preset.wind,
+          cloudsThickness: preset.thickness,
+          cloudsHeight: preset.height,
+          cloudsOpacity: preset.opacity
+        });
+        saveSettings(true);
+        sendCustomShaderConfig(true);
+        renderCurrentPageContent();
+      });
+    });
+
+    const cloudSliders = [
+      { id: 'coverage', key: 'cloudsCoverage', fmt: v => Math.round(v * 100) + '%' },
+      { id: 'scale', key: 'cloudsScale', fmt: v => v.toFixed(3) },
+      { id: 'wind', key: 'cloudsWind', fmt: v => v.toFixed(2) },
+      { id: 'thickness', key: 'cloudsThickness', fmt: v => String(Math.round(v)) },
+      { id: 'height', key: 'cloudsHeight', fmt: v => String(Math.round(v)) },
+      { id: 'opacity', key: 'cloudsOpacity', fmt: v => Math.round(v * 100) + '%' }
+    ];
+    for (const { id, key, fmt } of cloudSliders) {
+      const slider = panel.querySelector(`#mf-cloud-${id}`);
+      if (!slider) continue;
+      slider.addEventListener('input', () => {
+        const value = parseFloat(slider.value);
+        settings[key] = value;
+        guiSettings[key] = value;
+        const valueLabel = panel.querySelector(`#mf-cloud-${id}-value`);
+        if (valueLabel) valueLabel.textContent = fmt(value);
+        if (settings.customShader) {
+          sendCustomShaderConfig(true);
+        }
+      });
+      slider.addEventListener('change', () => {
+        saveSettings(true);
+      });
+    }
+
+    // ─── Nubes: editor de dibujo para forma custom ──────────────────
+    const shapeCanvas = panel.querySelector('#mf-cloud-shape-canvas');
+    if (shapeCanvas) {
+      const ctx = shapeCanvas.getContext('2d');
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, shapeCanvas.width, shapeCanvas.height);
+      // Restaurar dibujo guardado si existe
+      try {
+        const saved = localStorage.getItem('miniblox_clouds_shape');
+        if (saved) {
+          const img = new Image();
+          img.onload = () => ctx.drawImage(img, 0, 0, shapeCanvas.width, shapeCanvas.height);
+          img.src = saved;
+        }
+      } catch (_) {}
+
+      const brushLabel = () => panel.querySelector('#mf-cloud-shape-brush-value');
+      const brushSize = () => Math.max(2, parseFloat(shapeBrushSlider.value) || 12);
+      let shapeBrushSlider = panel.querySelector('#mf-cloud-shape-brush');
+
+      const canvasPos = (e) => {
+        const rect = shapeCanvas.getBoundingClientRect();
+        return {
+          x: (e.clientX - rect.left) / rect.width * shapeCanvas.width,
+          y: (e.clientY - rect.top) / rect.height * shapeCanvas.height
+        };
+      };
+
+      const paint = (x, y) => {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(x, y, brushSize() / 2, 0, Math.PI * 2);
+        ctx.fill();
+      };
+
+      let drawing = false;
+      let lastX = 0;
+      let lastY = 0;
+
+      shapeCanvas.addEventListener('pointerdown', (e) => {
+        drawing = true;
+        shapeCanvas.setPointerCapture(e.pointerId);
+        const p = canvasPos(e);
+        lastX = p.x; lastY = p.y;
+        paint(p.x, p.y);
+        e.preventDefault();
+      });
+      shapeCanvas.addEventListener('pointermove', (e) => {
+        if (!drawing) return;
+        const p = canvasPos(e);
+        // Interpolar para trazos continuos
+        const dist = Math.hypot(p.x - lastX, p.y - lastY);
+        const steps = Math.max(1, Math.ceil(dist / (brushSize() * 0.3)));
+        for (let i = 1; i <= steps; i++) {
+          paint(lastX + (p.x - lastX) * i / steps, lastY + (p.y - lastY) * i / steps);
+        }
+        lastX = p.x; lastY = p.y;
+        e.preventDefault();
+      });
+      const stopDraw = () => { drawing = false; };
+      shapeCanvas.addEventListener('pointerup', stopDraw);
+      shapeCanvas.addEventListener('pointercancel', stopDraw);
+
+      // Botones
+      const applyBtn = panel.querySelector('#mf-cloud-shape-apply');
+      applyBtn?.addEventListener('click', () => {
+        if (!settings.customShader) return;
+        document.dispatchEvent(new CustomEvent('minifeather:custom-shader-config', {
+          detail: JSON.stringify({
+            cloudsShape: { dataUrl: shapeCanvas.toDataURL('image/png'), mix: Number(settings.cloudsShapeMix ?? 0.85), tile: Number(settings.cloudsShapeTile ?? 512) }
+          })
+        }));
+      });
+
+      const clearBtn = panel.querySelector('#mf-cloud-shape-clear');
+      clearBtn?.addEventListener('click', () => {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, shapeCanvas.width, shapeCanvas.height);
+      });
+
+      const removeBtn = panel.querySelector('#mf-cloud-shape-remove');
+      removeBtn?.addEventListener('click', () => {
+        document.dispatchEvent(new CustomEvent('minifeather:custom-shader-config', {
+          detail: JSON.stringify({ cloudsShape: { dataUrl: null } })
+        }));
+      });
+
+      // Sliders: pincel / mezcla / tile
+      shapeBrushSlider?.addEventListener('input', () => {
+        const v = parseFloat(shapeBrushSlider.value);
+        settings.cloudsShapeBrush = v;
+        guiSettings.cloudsShapeBrush = v;
+        const lbl = brushLabel();
+        if (lbl) lbl.textContent = Math.round(v) + 'px';
+      });
+      shapeBrushSlider?.addEventListener('change', () => saveSettings(true));
+
+      const mixSlider = panel.querySelector('#mf-cloud-shape-mix');
+      mixSlider?.addEventListener('input', () => {
+        const v = parseFloat(mixSlider.value);
+        settings.cloudsShapeMix = v;
+        guiSettings.cloudsShapeMix = v;
+        const lbl = panel.querySelector('#mf-cloud-shape-mix-value');
+        if (lbl) lbl.textContent = Math.round(v * 100) + '%';
+        if (settings.customShader) {
+          document.dispatchEvent(new CustomEvent('minifeather:custom-shader-config', {
+            detail: JSON.stringify({ cloudsShape: { mix: v } })
+          }));
+        }
+      });
+      mixSlider?.addEventListener('change', () => saveSettings(true));
+
+      const tileSlider = panel.querySelector('#mf-cloud-shape-tile');
+      tileSlider?.addEventListener('input', () => {
+        const v = parseFloat(tileSlider.value);
+        settings.cloudsShapeTile = v;
+        guiSettings.cloudsShapeTile = v;
+        const lbl = panel.querySelector('#mf-cloud-shape-tile-value');
+        if (lbl) lbl.textContent = String(Math.round(v));
+        if (settings.customShader) {
+          document.dispatchEvent(new CustomEvent('minifeather:custom-shader-config', {
+            detail: JSON.stringify({ cloudsShape: { tile: v } })
+          }));
+        }
+      });
+      tileSlider?.addEventListener('change', () => saveSettings(true));
+    }
+
     const titanTinyToggle = panel.querySelector('.mf-toggle[data-key="titanTiny"]');
     titanTinyToggle?.addEventListener('contextmenu', event => {
       event.preventDefault();
@@ -7271,7 +7922,9 @@
     initVanillaAnimationsModule();
     initAntiAfkModule();
     initRhythmParkourModule();
+    initLocalGamesModule();
     initGuiPatchModule();
+    initCustomShaderModule();
     initZoomModule();
     initCameraOverhaulModule();
     initElytraFlightModule();
