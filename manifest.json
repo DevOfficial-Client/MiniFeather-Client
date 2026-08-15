@@ -97,6 +97,7 @@
         "assets/spritesheets generator",
         "assets/frames.json",
         "assets/gui/*",
+        "assets/shadertextures/*",
         "src/jszip.min.js"
       ],
       "matches": [

@@ -1,0 +1,704 @@
+
+
+option.iterationT_VERSION=iterationT by Tahnass
+value.iterationT_VERSION.AT=3.2.0
+value.iterationT_VERSION.BT=r3.2.0
+option.iterationT_VERSION_TYPE=开发阶段
+value.iterationT_VERSION_TYPE.AT=正式发布
+value.iterationT_VERSION_TYPE.BT=241004
+option.iterationT_INFO=§f§n按钮悬停
+option.iterationT_INFO.comment=这是示例
+value.iterationT_INFO.AT=§f§n以显示详细信息
+value.iterationT_INFO.BT=§f§n以显示详细信息
+
+option.TITLE=启动标题
+
+profile.Low=低
+profile.Medium=中
+profile.High=高 (推荐)
+profile.Ultra=非常高
+profile.Extreme=极高
+
+
+
+
+
+screen.LIGHTING=§e§l光照
+
+
+screen.LIGHT_SOURCE=§a光照设置
+option.sunPathRotation=日月倾角
+suffix.sunPathRotation=°
+option.sunPathRotation.comment=日月运动轨迹与原版轨迹的夹角
+option.SUNLIGHT_INTENSITY=阳光强度
+option.SUNLIGHT_INTENSITY.comment=阳光与月光的直射强度. 同时影响全局光照的强度
+option.SKYLIGHT_INTENSITY=环境光强度
+option.SKYLIGHT_INTENSITY.comment=来自天空的光照强度
+option.NIGHT_BRIGHTNESS=夜间亮度比值
+option.NIGHT_BRIGHTNESS.comment=夜间环境光照与日间环境光照强度的比值. 更大的值使得夜晚更明亮.
+option.COLD_MOONLIGHT=冷色月光
+option.COLD_MOONLIGHT.comment=使月光的直射颜色偏向冷色
+option.TORCHLIGHT_BRIGHTNESS=方块光照强度
+option.TORCHLIGHT_BRIGHTNESS.comment=光源方块自身发光与照亮周围的光照强度. §e[*]§r 同时影响资源包PBR自发光的强度
+option.TORCHLIGHT_COLOR_TEMPERATURE=方块光照色温
+suffix.TORCHLIGHT_COLOR_TEMPERATURE= K
+option.TORCHLIGHT_COLOR_TEMPERATURE.comment=光源方块自身发光与照亮周围的光照色温. §e[*]§r 不影响资源包PBR自发光的颜色
+option.DIRECTIONAL_BLOCKLIGHT=指向性方块光照 §e[*]§r
+option.DIRECTIONAL_BLOCKLIGHT.comment=在法线贴图上显示光照方向. §e[*]§r 需要支持法线贴图的资源包. §c[!]§r 会出现较为明显的光照衔接错误. §7§o性能影响: §a低
+option.DIRECTIONAL_BLOCKLIGHT_STRENGTH=指向性权重
+option.DIRECTIONAL_BLOCKLIGHT_STRENGTH.comment=控制指向性方块光照的强度. 较高的值会使光照错误更加明显
+option.NOLIGHT_BRIGHTNESS=无光基础亮度
+option.NOLIGHT_BRIGHTNESS.comment=主世界无光照区域的基础亮度
+option.NETHER_BRIGHTNESS=下界环境亮度
+option.NETHER_BRIGHTNESS.comment=下界无光照区域的基础亮度
+
+
+screen.HELDLIGHT=§e手持光源设置
+option.HELDLIGHT_MODE=§e手持光源模式
+value.HELDLIGHT_MODE.0=火把
+value.HELDLIGHT_MODE.1=手电筒
+option.SPECULAR_HELDLIGHT=影响高光
+option.SPECULAR_HELDLIGHT.comment=在反射中映射出手持光源. §e[*]§r 需要支持高光贴图的资源包,并开启PBR. §7§o性能影响: §a低
+option.HELDLIGHT_SHADOW=启用阴影
+option.HELDLIGHT_SHADOW.comment=使手持光源投射出阴影. §e[*]§r 可能出现轻微的错误遮挡. §7§o性能影响: §a低
+option.HELDLIGHT_BRIGHTNESS=光源强度
+option.HELDLIGHT_BRIGHTNESS.comment=手持光源的强度
+option.HELDLIGHT_FALLOFF=火把衰减系数
+option.HELDLIGHT_FALLOFF.comment=火把模式下亮度随距离衰减的速度. 更高的值使得衰减更快
+option.FLASHLIGHT_HELDLIGHT_FALLOFF=手电筒衰减系数
+option.FLASHLIGHT_HELDLIGHT_FALLOFF.comment=手电筒模式下亮度随距离衰减的速度. 更高的值使得衰减更快
+
+screen.FLASHLIGHT=手电筒模式设置
+option.FLASHLIGHT_FOV=手电筒光束角度
+option.FLASHLIGHT_FOV.comment=影响手电筒照亮范围的大小
+option.FLASHLIGHT_CAMERA_SMOOTH=手电筒指向平滑
+option.FLASHLIGHT_CAMERA_SMOOTH.comment=使手电筒指向方向滞后于视角变化
+option.FLASHLIGHT_CAMERA_SMOOTH_TIME=过渡时长
+option.FLASHLIGHT_CAMERA_SMOOTH_TIME.comment=手电筒指向平滑的过渡时长
+option.FLASHLIGHT_COLOR_R=手电筒颜色-红
+option.FLASHLIGHT_COLOR_G=手电筒颜色-绿
+option.FLASHLIGHT_COLOR_B=手电筒颜色-蓝
+option.FLASHLIGHT_POS_L_X=水平位置-左持
+option.FLASHLIGHT_POS_L_X.comment=控制左手光源的位置. 正值方向为右
+option.FLASHLIGHT_POS_L_Y=垂直位置-左持
+option.FLASHLIGHT_POS_L_Y.comment=控制左手光源的位置. 正值方向为上
+option.FLASHLIGHT_POS_R_X=水平位置-右持
+option.FLASHLIGHT_POS_R_X.comment=控制右手光源的位置. 正值方向为右
+option.FLASHLIGHT_POS_R_Y=垂直位置-右持
+option.FLASHLIGHT_POS_R_Y.comment=控制右手光源的位置. 正值方向为上
+
+
+screen.SHADOW=§6阴影设置
+option.shadowMapResolution=阴影贴图分辨率
+option.shadowMapResolution.comment=阴影贴图的精细程度. 更高的值会减少阴影的锯齿. §7§o性能影响: §6高
+option.shadowDistance=阴影渲染距离
+option.shadowDistance.comment=更高的值会降低阴影的精细程度. §7§o性能影响: §e中
+value.shadowDistance.64.0=4 区块
+value.shadowDistance.96.0=6 区块
+value.shadowDistance.128.0=8 区块
+value.shadowDistance.192.0=12 区块
+value.shadowDistance.256.0=16 区块
+value.shadowDistance.384.0=24 区块
+value.shadowDistance.512.0=32 区块
+value.shadowDistance.768.0=48 区块
+value.shadowDistance.1024.0=64 区块
+value.shadowDistance.1536.0=96 区块
+value.shadowDistance.2048.0=128 区块
+option.SHADOW_MAP_BIAS=投影变形系数
+option.SHADOW_MAP_BIAS.comment=控制阴影贴图精度的分配. 更高的值使得近处质量提升但远处质量降低.
+option.SHADOW_BASIC_BLUR=基础模糊量
+option.SHADOW_BASIC_BLUR.comment=对阴影锯齿的模糊.
+option.VARIABLE_PENUMBRA_SHADOWS=启用半影
+option.VARIABLE_PENUMBRA_SHADOWS.comment=使阴影随着投影距离增加而模糊. §7§o性能影响: §e中
+option.VPS_QUALITY=阴影采样质量
+option.VPS_QUALITY.comment=更高的值能减少阴影噪点. §7§o性能影响: §e中
+option.VPS_SPREAD=半影模糊比率
+option.VPS_SPREAD.comment=更高的值使得投影距离对模糊量的影响更明显
+option.COLORED_SHADOWS=半透明阴影染色
+option.COLORED_SHADOWS.comment=阳光透过染色玻璃后的染色. §7§o性能影响: §a低
+option.CAUSTICS=水体焦散
+option.CAUSTICS.comment=水面下的阴影焦散效果. §7§o性能影响: §a低
+option.SCREEN_SPACE_SHADOWS=屏幕空间阴影
+option.SCREEN_SPACE_SHADOWS.comment=对阴影贴图的补足. §c[!]§r 关闭后植物渲染会出现异常. §7§o性能影响: §a低
+option.SUNLIGHT_LEAK_FIX=漏光修复
+option.SUNLIGHT_LEAK_FIX.comment=无天空区域屏蔽阴影渲染. §e[*]§r 会同时屏蔽全局光照.
+
+
+screen.GI=§c全局光照设置
+option.GI_RSM=§cRSM全局光照
+option.GI_RSM.comment=阳光的全局光照效果. §7§o性能影响: §6高
+option.GI_QUALITY=采样质量
+option.GI_QUALITY.comment=更高的值能减少全局光照闪烁. §7§o性能影响: §6高
+option.GI_RENDER_RESOLUTION=渲染分辨率
+option.GI_RENDER_RESOLUTION.comment=全局光照的渲染分辨率. §e[*]§r 更低的渲染分辨率会出现更多闪烁. §7§o性能影响: §6高
+value.GI_RENDER_RESOLUTION.0.25=25%
+value.GI_RENDER_RESOLUTION.0.5=50%
+option.GI_RADIUS=采样距离
+option.GI_RADIUS.comment=全局光照的传播距离. §7§o性能影响: §e中
+option.GI_BRIGHTNESS=强度
+option.GI_BRIGHTNESS.comment=全局光照的亮度
+option.GI_FALLOFF=衰减系数
+option.GI_FALLOFF.comment=全局光照亮度随距离衰减的速度. 更高的值使得衰减更快
+option.GI_SKYLIGHT_FALLOFF=随光照衰减
+option.GI_SKYLIGHT_FALLOFF.comment=使全局光照亮度随天空光照等级衰减. 
+
+
+screen.AO=§4环境光遮蔽设置
+option.GTAO=§4GTAO
+option.GTAO.comment=高质量的环境光遮蔽(AO). 关闭后会使用原版AO代替. §7§o性能影响: §e中
+option.GTAO_QUALITY=采样质量
+option.GTAO_QUALITY.comment=更高的值能减少环境光遮蔽噪点. §7§o性能影响: §e中
+option.GTAO_SLICE_QUALITY=几何采样质量
+option.GTAO_SLICE_QUALITY.comment=更高的值能增加细节,并小幅减少环境光遮蔽噪点. §7§o性能影响: §e中
+option.GTAO_RADIUS_MODE=半径参考对象
+option.GTAO_RADIUS_MODE.comment=衰减半径参考对象
+value.GTAO_RADIUS_MODE.0=地形距离
+value.GTAO_RADIUS_MODE.1=屏幕占比
+option.GTAO_WORLD_RADIUS=距离参考半径
+option.GTAO_WORLD_RADIUS.comment="地形距离"参考对象下的设置值
+option.GTAO_MAX_RADIUS=距离参考最大半径
+option.GTAO_MAX_RADIUS.comment=距离参考半径的最大屏幕占比
+option.GTAO_SCREEN_RADIUS=屏幕参考半径
+option.GTAO_SCREEN_RADIUS.comment="屏幕占比"参考对象下的设置值
+option.GTAO_FALLOFF_START=衰减起始点
+option.GTAO_FALLOFF_START.comment=更高的值会降低衰减过渡范围. 设置为1.0将无衰减
+option.GTAO_STRENGTH=强度
+option.GTAO_STRENGTH.comment=遮蔽强度
+option.GTAO_MULTIBOUNCE=间接光照拟合
+option.GTAO_MULTIBOUNCE.comment=在明亮的表面降低遮蔽强度. 以拟合间接光照的影响
+
+
+
+
+
+screen.SURFACE=§a§l材质
+
+option.TEXTURE_RESOLUTION=方块纹理分辨率
+option.TEXTURE_RESOLUTION.comment=需要设置为资源包分辨率. §c[!]§r 不建议设置为"自动"以外的值. §c[!]§r 错误的值会使方块视差出现异常
+value.TEXTURE_RESOLUTION.0=自动
+option.ENTITIES_TEXTURE_RESOLUTION=实体纹理分辨率 §e[*]§r
+option.ENTITIES_TEXTURE_RESOLUTION.comment=§e[*]§r 需要设置为资源包分辨率. §c[!]§r 错误的值会使实体视差出现异常
+option.ANISOTROPIC_FILTERING_QUALITY=各向异性过滤 §e[*]§r
+option.ANISOTROPIC_FILTERING_QUALITY.comment=提升倾斜表面的纹理清晰度. §e[*]§r 建议将视频设置中"Mipmap级别"设为最高,以获取最佳效果. §e[*]§r 开启视差时会禁用各向异性过滤. §7§o性能影响: §a低
+value.ANISOTROPIC_FILTERING_QUALITY.0=关
+value.ANISOTROPIC_FILTERING_QUALITY.2=2x
+value.ANISOTROPIC_FILTERING_QUALITY.4=4x
+value.ANISOTROPIC_FILTERING_QUALITY.8=8x
+value.ANISOTROPIC_FILTERING_QUALITY.16=16x
+value.ANISOTROPIC_FILTERING_QUALITY.32=32x
+option.ANISOTROPIC_FILTERING_NORMAL_SPECULAR=应用至高光法线
+option.ANISOTROPIC_FILTERING_NORMAL_SPECULAR.comment=将各向异性过滤应用至高光法线. §7§o性能影响: §a低
+
+
+screen.POM=§6视差设置
+option.PARALLAX_MODE=§6视差模式
+option.PARALLAX_MODE.comment=视差的渲染类型. "锐利"模式将保持像素的外观. §7§o性能影响: §e中
+value.PARALLAX_MODE.0=关
+value.PARALLAX_MODE.1=锐利
+value.PARALLAX_MODE.2=平滑
+option.ENTITIES_PARALLAX=实体视差 §e[*]§r
+option.ENTITIES_PARALLAX.comment=将视差应用至实体. §e[*]§r 需要正确设置实体纹理分辨率.
+option.PARALLAX_DEPTH=视差深度
+option.PARALLAX_SHADOW=视差阴影
+option.PARALLAX_SHADOW.comment=使视差像素投射出阳光阴影. §7§o性能影响: §a低
+option.PARALLAX_QUALITY=采样质量
+option.PARALLAX_QUALITY.comment="锐利"模式下提升视差渲染范围. "平滑"模式下能减少伪影. §7§o性能影响: §e中
+option.PARALLAX_SHADOW_QUALITY=视差阴影质量
+option.PARALLAX_SHADOW_QUALITY.comment="锐利"模式下提升视差阴影渲染范围 "平滑"模式下能减少视差阴影噪声. §7§o性能影响: §e中
+option.PARALLAX_BASED_NORMAL=由视差生成法线
+option.PARALLAX_BASED_NORMAL.comment=使得法线的效果与视差保持一致. "平滑"模式下"仅侧面"无效果. §7§o性能影响: §a低
+value.PARALLAX_BASED_NORMAL.0=关
+value.PARALLAX_BASED_NORMAL.1=仅侧面
+value.PARALLAX_BASED_NORMAL.2=全部
+option.PARALLAX_FADE=视差淡出
+option.PARALLAX_FADE.comment=在纹理像素较小时淡出视差. §c[!]§r 关闭后可能导致严重的闪烁
+
+
+screen.PBR=§ePBR贴图设置
+option.ENABLE_PBR=§e启用PBR
+option.ENABLE_PBR.comment=§e[*]§r 需要支持labPBR孔隙率的资源包. 关闭后会禁用下述所有效果
+option.TEXTURE_PBR_FORMAT=PBR标准类型
+value.TEXTURE_PBR_FORMAT.0=labPBR
+value.TEXTURE_PBR_FORMAT.1=labPBR (无预设)
+value.TEXTURE_PBR_FORMAT.2=PTGI
+
+screen.REFLECTION=反射设置
+option.SKY_IMAGE_RESOLUTION=反射天空盒分辨率
+option.SKY_IMAGE_RESOLUTION.comment=反射中天空贴图的分辨率. §7§o性能影响: §a低
+option.ROUGHNESS_CLAMP=限制最大粗糙度
+option.ROUGHNESS_CLAMP.comment=屏蔽高粗糙面的反射以提升性能表现. §7§o性能影响: §e中
+option.TERRAIN_NORMAL_CLAMP=限制方块法线强度
+option.TERRAIN_NORMAL_CLAMP.comment=限制方块法线强度以减少噪点.
+option.HAND_NORMAL_CLAMP=限制手部法线强度
+option.HAND_NORMAL_CLAMP.comment=限制手部法线强度以减少噪点.
+option.ENTITIES_NORMAL_CLAMP=限制实体法线强度
+option.ENTITIES_NORMAL_CLAMP.comment=限制实体法线强度以减少噪点.
+
+screen.SSS=次表面散射设置
+option.SSS_QUALITY=采样质量
+option.SSS_QUALITY.comment=更高的值能减少次表面散射噪点 §7§o性能影响: §e中
+option.SSS_STRENGTH=强度乘数
+option.SSS_STRENGTH.comment=控制光照穿透深度. 与"强度偏移"共同设置为0.0时将关闭次表面散射
+option.SSS_STRENGTH_OFFSET=强度偏移
+option.SSS_STRENGTH_OFFSET.comment=提升光照穿透深度的最小值. 与"强度乘数"共同设置为0.0时将关闭次表面散射
+option.SSS_BRIGHTNESS=亮度
+option.SSS_BRIGHTNESS.comment=散射亮度
+option.SSS_NORMAL=考虑法线
+option.SSS_NORMAL.comment=启用后法线贴图会影响光照穿透深度
+
+screen.EMISSIVE=自发光设置
+option.TEXTURE_EMISSIVENESS_MODE=自发光贴图模式
+option.TEXTURE_EMISSIVENESS_MODE.comment=§e[*]§r "仅PBR贴图"模式需要支持自发光贴图的资源包
+value.TEXTURE_EMISSIVENESS_MODE.0=仅硬编码
+value.TEXTURE_EMISSIVENESS_MODE.1=仅PBR贴图
+value.TEXTURE_EMISSIVENESS_MODE.2=PBR贴图 + 硬编码
+option.TEXTURE_BRIGHTNESS=硬编码亮度
+option.EMISSIVENESS_BRIGHTNESS=PBR贴图亮度
+option.EMISSIVENESS_GAMMA=PBR贴图Gamma曲线
+option.EMISSIVENESS_GAMMA.comment=更高的值使得PBR自发光的亮暗差异更明显
+
+screen.POROSITY=孔隙率设置
+option.TEXTURE_PBR_POROSITY=labPBR孔隙率 §e[*]§r
+option.TEXTURE_PBR_POROSITY.comment=§e[*]§r 需要支持labPBR孔隙率的资源包
+option.TEXTURE_DEFAULT_POROSITY=默认孔隙率
+option.TEXTURE_DEFAULT_POROSITY.comment=更低的值使得表面透水性更差,水洼更明显
+option.POROSITY_ABSORPTION=潮湿表面反照吸收率
+option.POROSITY_ABSORPTION.comment=潮湿表面变暗的强度. 孔隙率越大,效果越明显
+option.SURFACE_WETNESS=覆盖最低潮湿度
+option.SURFACE_WETNESS.comment=覆盖天气影响的最低潮湿度
+
+
+screen.WATER_RAIN=§a水面与雨雪
+option.WATER_PARALLAX=水面视差
+option.WATER_PARALLAX.comment=水波的视差效果. §7§o性能影响: §e中
+option.WAVE_SCALE=水波缩放
+option.WAVE_SCALE.comment=更高的值使得水波更紧凑
+option.WAVE_HEIGHT=水波高度
+option.RAIN_SHADOW=雨天阳光遮蔽
+option.RAIN_SHADOW.comment=雨天遮蔽阳光的程度. 同时影响雨天的云影
+option.drynessHalflife=干燥>>潮湿过渡时长
+option.drynessHalflife.comment=天气转换的过渡时长
+option.wetnessHalflife=潮湿>>干燥过渡时长
+option.wetnessHalflife.comment=天气转换的过渡时长
+option.RAIN_SPLASH_EFFECT=雨滴涟漪
+option.RAIN_VISIBILITY=雨滴可见度
+option.RAIN_WIND_X=雨滴X轴风向
+option.RAIN_WIND_X.comment=控制雨滴的方向. §c[!]§r 过大的值会使雨滴穿过物体
+option.RAIN_WIND_Z=雨滴Z轴风向
+option.RAIN_WIND_Z.comment=控制雨滴的方向. §c[!]§r 过大的值会使雨滴穿过物体
+option.RAIN_DISTURBANCE=雨滴随机扰动强度
+option.RAIN_DISTURBANCE.comment=控制雨滴方向分散程度. §c[!]§r 过大的值会使雨滴穿过物体
+option.DISABLE_LOCAL_PRECIPITATION=禁用降水类型检测
+option.DISABLE_LOCAL_PRECIPITATION.comment=强制将降水类型设为降雨
+
+
+screen.SKY_TEXTURE=§b天空材质
+option.STAR_TYPE=星星类型
+value.STAR_TYPE.0=关
+value.STAR_TYPE.1=点状
+value.STAR_TYPE.2=原版
+option.SKY_TEXTURE_BRIGHTNESS=纹理亮度
+option.SKY_TEXTURE_BRIGHTNESS.comment=控制原版星星,月亮纹理,天空盒的亮度
+option.MOON_TEXTURE=月亮纹理
+option.BILINEAR_MOON_TEXTURE=月亮纹理平滑 §e[*]§r
+option.BILINEAR_MOON_TEXTURE.comment=§e[*]§r 不建议低分辨率资源包使用
+option.SKYBOX_TEXTURE=天空盒纹理
+option.BILINEAR_SKYBOX_TEXTURE=天空盒纹理平滑 §e[*]§r
+option.BILINEAR_SKYBOX_TEXTURE.comment=§e[*]§r 不建议低分辨率资源包使用
+
+
+screen.END_SKY=§d末地天空
+option.END_PLANET_CYCLE=末地公转周期
+option.END_PLANET_CYCLE.comment=末地行星围绕旋转一周的时间
+suffix.END_PLANET_CYCLE=分钟
+option.END_MANUAL_PLANET_CYCLE=手动相位控制
+option.END_MANUAL_PLANET_CYCLE.comment=手动指定末地行星位置
+option.END_MANUAL_PLANET_ANGLE=相位角
+option.END_MANUAL_PLANET_ANGLE.comment="手动相位控制"的设置值
+suffix.END_MANUAL_PLANET_ANGLE=°
+option.ACCRETIONDISC_DETAIL_ALONG_LONGTITUDE=尘埃状吸积盘
+option.ACCRETIONDISC_DETAIL_ALONG_LONGTITUDE.comment=黑洞尘埃状吸积盘
+option.ACCRETIONDISC_DOPPLER_EFFECT=吸积盘多普勒效应
+option.ACCRETIONDISC_DOPPLER_EFFECT.comment=模拟黑洞吸积盘快速旋转的多普勒效应. 靠近玩家旋转的吸积盘将变亮
+
+
+screen.SURFMISC=杂项
+option.ENTITIES_STATUS_COLOR=实体状态颜色
+option.ENTITIES_STATUS_COLOR.comment=实体受伤状态颜色
+option.EYES_LIGHTING=实体眼部发光
+option.EYES_LIGHTING.comment=末影人,蜘蛛,坚守者等实体的部分纹理发光
+option.WAVING_PLANTS=植物晃动
+option.WAVING_PLANTS.comment=§7§o性能影响: §a低
+option.SHADOW_WAVING_PLANTS=阴影贴图植物晃动 §c[!]§r
+option.SHADOW_WAVING_PLANTS.comment=§c[!]§r 会导致阴影贴图中植物闪烁. §7§o性能影响: §a低
+option.GENERAL_GRASS_FIX=给未指定的cutout方块以植物渲染 §e[*]§r
+option.GENERAL_GRASS_FIX.comment=将倾斜表面作为植物渲染. §e[*]§r 可能导致错误的植物渲染应用.
+option.LINE_IMAGE_OUTPUT=禁用选择框深度写入 §c[!]§r
+option.LINE_IMAGE_OUTPUT.comment=减少选择框导致的错误阴影. §c[!]§r 不兼容1.18以下游戏版本
+option.SELECTION_BOX_COLOR_R=选择框颜色-红
+option.SELECTION_BOX_COLOR_G=选择框颜色-绿
+option.SELECTION_BOX_COLOR_B=选择框颜色-蓝
+option.HAND_FOV_MODE=手部视场角模式
+option.HAND_FOV_MODE.comment=覆盖默认手部视场角. "跟随游戏设置"会使用选项中"视场角"的设置值
+value.HAND_FOV_MODE.0=默认
+value.HAND_FOV_MODE.1=跟随游戏设置
+value.HAND_FOV_MODE.2=跟随光影设置
+option.HAND_FOV=手部视场角
+option.HAND_FOV.comment="跟随光影设置"的手部视场角
+option.ENTITIES_VS_TBN=实体顶点法线平滑
+option.ENTITIES_VS_TBN.comment=为某些模组提供实体法线平滑. §7§o性能影响: §a低
+option.TERRAIN_VS_TBN=方块顶点法线平滑
+option.TERRAIN_VS_TBN.comment=为某些模组提供方块法线平滑. §7§o性能影响: §a低
+
+
+
+
+
+screen.VOL=§b§l体积渲染
+
+option.VFOG_REFLECTION=反射中渲染
+option.VFOG_REFLECTION.comment=在反射中渲染体积雾. §7§o性能影响: §e中
+option.VFOG_REFRACTION=折射后渲染
+option.VFOG_REFRACTION.comment=在折射后(染色玻璃后)渲染体积雾. §7§o性能影响: §e中
+option.LANDSCATTERING_REFLECTION=反射中渲染
+option.LANDSCATTERING_REFLECTION.comment=在反射中渲染地面大气散射. §7§o性能影响: §a低
+option.LANDSCATTERING_REFRACTION=折射后渲染
+option.LANDSCATTERING_REFRACTION.comment=在折射后(染色玻璃后)渲染地面大气散射. §7§o性能影响: §a低
+option.INDOOR_FOG=禁用光照衰减
+option.INDOOR_FOG.comment=体积雾与地面大气散射的强度会随玩家所处位置的天空光照等级降低而衰减. §e[*]§r 关闭后暗处雾气可能会过强
+
+
+option.PLANAR_CLOUDS=§b平面云
+option.PLANAR_CLOUDS.comment=§7§o性能影响: §a低
+screen.PC=设置
+option.PC_COVERAGE=覆盖率
+option.PC_NOISE_SCALE=缩放
+option.PC_ALTITUDE=高度
+
+
+option.VOLUMETRIC_CLOUDS=§b体积云
+option.VOLUMETRIC_CLOUDS.comment=§9████████§f████§9██████. §9█████§f█████████§9████. §9███§f██████§7█§f████§7█§9███. §9███§f██████§7█§f████§7██§9██. §9████§f█§7████§f███§7███§9███. §9███████§f██§7███§9██████. §7§o性能影响: §6高
+screen.VC=设置
+option.CLOUD_QUALITY=采样质量
+option.CLOUD_QUALITY.comment=更高的值能减少体积云的噪点. §7§o性能影响: §6高
+option.CLOUD_FADE=远距过渡
+option.CLOUD_FADE.comment=降低远处体积云的能见度
+option.CLOUD_SPEED=风速
+option.CLOUD_SPEED.comment=同时影响平面云,体积云,体积雾(团雾模式)的移动速度
+option.CLOUD_SHADOW=云影
+option.CLOUD_SHADOW.comment=§7§o性能影响: §a低
+
+option.CLOUD_DETAILED_NOISE_STRENGTH=细节噪声强度
+option.CLOUD_BASE_NOISE_SCALE=基础噪声缩放
+option.CLOUD_COVERAGE_NOISE_OFFSET=分布噪声偏移
+option.CLOUD_DETAILED_NOISE_SCALE=细节噪声缩放
+option.CLOUD_BOTTOM_BRIGHTNESS=云底亮度
+option.CLOUD_OUTSCATTER_FACTOR=外散射系数
+
+screen.CLEAR_SETTING=晴天设置
+option.CLOUD_CLEAR_ALTITUDE=高度
+option.CLOUD_CLEAR_THICKNESS=厚度
+option.CLOUD_CLEAR_COVERY=覆盖率
+option.CLOUD_CLEAR_DENSITY=密度
+option.CLOUD_CLEAR_SUNLIGHTING=阳光强度
+option.CLOUD_CLEAR_SKYLIGHTING=环境光强度
+option.CLOUD_CLEAR_SCALE=缩放
+
+screen.RAIN_SETTING=雨天设置
+option.CLOUD_RAIN_ALTITUDE=高度
+option.CLOUD_RAIN_THICKNESS=厚度
+option.CLOUD_RAIN_COVERY=覆盖率
+option.CLOUD_RAIN_DENSITY=密度
+option.CLOUD_RAIN_SUNLIGHTING=阳光强度
+option.CLOUD_RAIN_SKYLIGHTING=环境光强度
+option.CLOUD_RAIN_SCALE=缩放
+
+screen.CLOUD_SHADOW_SETTING=云影设置
+option.CLOUD_SHADOW_FADE=云影过渡
+option.CLOUD_SHADOW_FADE.comment=降低日出日落时的云影强度
+option.CLOUD_SHADOW_RANGE=云影渲染范围 §e[*]§r
+option.CLOUD_SHADOW_RANGE.comment=§e[*]§r 过高的值会使云影丢失细节
+value.CLOUD_SHADOW_RANGE.2048.0=64 区块
+value.CLOUD_SHADOW_RANGE.3072.0=96 区块
+value.CLOUD_SHADOW_RANGE.4096.0=128 区块
+value.CLOUD_SHADOW_RANGE.6144.0=192 区块
+value.CLOUD_SHADOW_RANGE.8192.0=256 区块
+value.CLOUD_SHADOW_RANGE.12288.0=384 区块
+value.CLOUD_SHADOW_RANGE.16384.0=512 区块
+option.CLOUD_SHADOWTEX_SIZE=云影贴图分辨率 §e[*]§r
+option.CLOUD_SHADOWTEX_SIZE.comment=更高的值能提升云影细节表现. §e[*]§r 实际值会限制在(窗口垂直分辨率*0.45). §7§o性能影响: §a低
+
+
+option.VFOG=§e体积雾
+option.VFOG.comment=§7§o性能影响: §e中
+screen.VFOG=设置
+option.VFOG_NOISE_TYPE=噪声类型
+option.VFOG_NOISE_TYPE.comment=§7§o性能影响: §e中
+value.VFOG_NOISE_TYPE.0=仅高度衰减
+value.VFOG_NOISE_TYPE.1=团雾
+option.VFOG_QUALITY=采样质量
+option.VFOG_QUALITY.comment=更高的值能减少体积雾及水下体积雾的噪点. §7§o性能影响: §6高
+option.VFOG_DENSITY=密度
+option.VFOG_DENSITY.comment="噪声类型"控制的体积雾密度
+option.VFOG_DENSITY_BASE=基础密度
+option.VFOG_DENSITY_BASE.comment=非"噪声类型"控制的体积雾基础密度
+option.VFOG_SUNLIGHT_DENSITY=阳光强度
+option.VFOG_FOG_DENSITY=环境光强度
+option.VFOG_HEIGHT=衰减高度 §e[*]§r
+option.VFOG_HEIGHT.comment=§e[*]§r "仅高度衰减"模式下,密度在两者之间保持最高值,超出后开始衰减. §e[*]§r "团雾"模式下,密度最高值会处于更高的设置值上.
+option.VFOG_HEIGHT_2=衰减高度 §e[*]§r
+option.VFOG_HEIGHT_2.comment=§e[*]§r "仅高度衰减"模式下,密度在两者之间保持最高值,超出后开始衰减. §e[*]§r "团雾"模式下,密度最高值会处于更高的设置值上.
+option.VFOG_FALLOFF=衰减距离
+option.VFOG_FALLOFF.comment=更高的值使得衰减更缓慢
+option.VFOG_IGNORE_WORLDTIME=全时段启用
+option.VFOG_IGNORE_WORLDTIME.comment=关闭时会在白天降低体积雾的密度
+option.VFOG_STAINED=半透明方块染色 §e[*]§r 
+option.VFOG_STAINED.comment=透过染色玻璃的阳光会被染色. §e[*]§r 仅支持NVIDIA显卡. §7§o性能影响: §a低
+option.VFOG_CLOUD_SHADOW=云影光照遮蔽
+option.VFOG_CLOUD_SHADOW.comment=§7§o性能影响: §a低
+option.VFOG_VOLUMETRIC_LIGHTING=体积光照
+option.VFOG_VOLUMETRIC_LIGHTING.comment=体积雾自身对光照的吸收. 7§o性能影响: §e中
+option.VFOG_SUNLIGHT_ABSORPTION=体积光照吸收率
+option.VFOG_SUNLIGHT_ABSORPTION.comment=更高的值会使光照吸收更明显
+option.UNDERWATER_VFOG=水下体积雾
+option.UNDERWATER_VFOG.comment=§7§o性能影响: §e中
+option.UNDERWATER_VFOG_DENSITY=水下雾密度
+
+
+option.LANDSCATTERING=§a地面大气散射
+option.LANDSCATTERING.comment=§7§o性能影响: §a低
+screen.LANDSCATTERING=设置
+option.LANDSCATTERING_STRENGTH=强度
+option.LANDSCATTERING_SHADOW=阴影遮蔽
+option.LANDSCATTERING_SHADOW.comment=在阴影区降低地面大气散射的强度. §7§o性能影响: §a低
+option.LANDSCATTERING_SHADOW_QUALITY=阴影采样质量
+option.LANDSCATTERING_SHADOW_QUALITY.comment=更高的值能减少阴影遮蔽的噪点. §7§o性能影响: §e中
+
+
+screen.VOL_MISC=杂项
+option.UNDERWATER_FOG=水雾
+option.UNDERWATER_FOG.comment=§7§o性能影响: §a低
+option.WATERFOG_DENSITY=水雾能见度
+option.NETHERFOG_DENSITY=下界雾强度
+option.ATMO_HORIZON=天空地平线
+option.ATMO_REFLECTION_HORIZON=反射天空盒地平线
+
+
+
+
+
+screen.POSTPROCESSING=§d§l后处理
+
+
+screen.TAA_SETTING=时间性抗锯齿 (TAA)
+option.TAA=TAA §c[!]§r
+option.TAA.comment=§c[!]§r 不建议关闭TAA,可能导致严重的渲染错误
+option.TAA_BLENDWEIGHT=历史帧混合比率
+option.TAA_BLENDWEIGHT.comment=较高的值能降低闪烁,但会增加伪影.
+option.TAA_AGGRESSION=历史帧限缩强度
+option.TAA_AGGRESSION.comment=较高的值能降低闪烁,但会增加伪影.
+
+
+screen.FIDELITY_FX_SETTING=§4AMD FidelityFX
+option.FSR=§4FSR 1.0 §c[!]§r
+option.FSR.comment=可以调整"光影"右边栏的"渲染精细度"设置来控制实际渲染分辨率. "渲染精细度"小于1x时将启用FSR. §c[!]§r 不兼容1.18以下游戏版本,不兼容iris
+option.FSR_SHARPNESS=FSR 锐化等级
+option.FSR_DENOISE=FSR 降低噪声锐化
+option.CAS_SHARPNESS=CAS 锐化等级
+option.CAS_SHARPNESS.comment=基础的后处理锐化
+value.CAS_SHARPNESS.0=关
+option.CAS_DENOISE=CAS 降低噪声锐化
+
+
+screen.DOF_SETTING=§d景深
+option.DOF=§d景深
+option.DOF.comment=模拟相机离焦虚化. §7§o性能影响: §e中
+option.DOF_BLUR=虚化量
+option.DOF_BLUR.comment=控制虚化光斑的大小
+option.DOF_QUALITY=质量
+option.DOF_QUALITY.comment=更高的值能减少景深噪点. §7§o性能影响: §e中
+option.DOF_COCSPREAD_QUALITY=前景弥散圆扩散质量
+option.DOF_COCSPREAD_QUALITY.comment=更高的值能使前景过渡更平滑,噪点更少. §7§o性能影响: §e中
+option.DOF_MAX_COC=最大模糊半径
+option.DOF_MAX_COC.comment=限制虚化光斑的最大半径
+option.DOF_CATSEYE=口径蚀
+option.DOF_CATSEYE.comment=模拟柠檬状的边缘光斑. §7§o性能影响: §a低
+option.DOF_CATSEYE_STRENGTH=强度
+option.DOF_CATSEYE_STRENGTH.comment=口径蚀强度
+option.DOF_CATSEYE_MIDPOINT=中点
+option.DOF_CATSEYE_MIDPOINT.comment=口径蚀开始影响的起始点. 为屏幕中心到起始点的距离
+option.CAMERA_FOCUS_MODE=对焦模式
+option.CAMERA_FOCUS_MODE.comment=自动模式下,将对焦于屏幕中心处(光标处)物体
+value.CAMERA_FOCUS_MODE.0=自动
+value.CAMERA_FOCUS_MODE.1=手动
+option.CAMERA_FOCAL_POINT=手动对焦距离
+suffix.CAMERA_FOCAL_POINT= m
+option.DOF_DEPTH_SMMOOTH_HALFLIFE=焦点平滑速度
+option.DOF_DEPTH_SMMOOTH_HALFLIFE.comment=自动对焦改变焦点时过渡时长
+option.DOF_FOCUS_IGNORE_HAND_PARTICLE=不对焦于手部或粒子
+option.DOF_FOCUS_IGNORE_HAND_PARTICLE.comment=屏幕中心经过手部或粒子时会保持焦点. 避免对焦于手部或粒子产生闪烁. 手持地图时为例外
+
+
+screen.EXPOSURE_SETTING=§b曝光
+option.AE_MODE=§b自动曝光模式
+option.AE_MODE.comment=限制自动曝光计算的屏幕范围
+value.AE_MODE.0=默认
+value.AE_MODE.1=中央权重
+value.AE_MODE.2=仅中央平均
+value.AE_MODE.3=全屏幕平均
+option.AE_CURVE=曝光曲线
+option.AE_CURVE.comment=更高的值会使暗处更亮
+option.AE_OFFSET=自动曝光微调
+option.AE_OFFSET.comment=更高的值会自动曝光时画面更亮
+suffix.AE_OFFSET= EV
+option.LUMINANCE_WEIGHT_MODE=亮度权重模式
+option.LUMINANCE_WEIGHT_MODE.comment=推荐优先使用预设. 预设2相比预设1提高了暗部的亮度. "阴影优先""高光优先"为手动模式. 
+value.LUMINANCE_WEIGHT_MODE.0=关
+value.LUMINANCE_WEIGHT_MODE.1=预设1
+value.LUMINANCE_WEIGHT_MODE.2=预设2
+value.LUMINANCE_WEIGHT_MODE.3=阴影优先
+value.LUMINANCE_WEIGHT_MODE.4=高光优先
+option.LUMINANCE_WEIGHT_STRENGTH=权重强度
+option.LUMINANCE_WEIGHT_STRENGTH.comment=调整亮度权重为手动模式时的权重等级
+option.SMOOTH_EXPOSURE=平滑曝光
+option.EXPOSURE_TIME=过渡时长
+option.EXPOSURE_TIME.comment=平滑曝光的过渡时长
+option.MANUAL_EXPOSURE=§b手动曝光
+option.EV_VALUE=手动曝光EV值
+option.EV_VALUE.comment=更高的值使得画面更暗
+suffix.EV_VALUE= EV
+
+
+screen.MOTION_BLUR_SETTING=§a动态模糊
+option.MOTION_BLUR=§a动态模糊
+option.MOTION_BLUR.comment=§7§o性能影响: §a低
+option.MOTION_BLUR_DITHER=启用噪声
+option.MOTION_BLUR_DITHER.comment=使用固定噪声来模糊采样
+option.MOTION_BLUR_QUALITY=采样质量
+option.MOTION_BLUR_QUALITY.comment=§7§o性能影响: §a低
+option.MOTION_BLUR_SUTTER_ANGLE=快门角度
+option.MOTION_BLUR_SUTTER_ANGLE.comment=更高的值会增加模糊量
+suffix.MOTION_BLUR_SUTTER_ANGLE=°
+
+
+screen.VIGNETTE_SETTING=§e暗角
+option.VIGNETTE=§e暗角
+option.VIGNETTE_FALLOFF=衰减
+option.VIGNETTE_FALLOFF.comment=暗角的强度
+option.VIGNETTE_ROUNDNESS=圆度
+option.VIGNETTE_ROUNDNESS.comment=暗角形状的圆度
+option.SNEAKING_VIGNETTE=启用潜行暗角
+option.SNEAKING_VIGNETTE.comment=潜行时屏幕上下边缘出现额外暗角
+
+
+screen.BLOOM_SETTING=§6泛光
+option.BLOOM=§6泛光
+option.泛光.comment=§7§o性能影响: §e中
+option.BLOOM_AMOUNT=强度
+option.BLOOM_AMOUNT.comment=泛光的强度
+option.NETHER_END_BLOOM_BOOST=下界末地泛光增益强度
+option.VFOG_BLOOM=体积雾散射泛光 §e[*]§r
+option.VFOG_BLOOM.comment=泛光随着体积雾浓度而增强,模拟散射.§e[*]§r 可能导致额外噪声与错误的泛光. §e[*]§r 开启景深时禁用
+option.LENS_GLARE=§6镜头眩光
+option.LENS_GLARE.comment=§7§o性能影响: §a低
+option.LENS_FLARE=§6镜头炫光
+option.LENS_FLARE.comment=§7§o性能影响: §e中
+option.GLARE_BRIGHTNESS=眩光与星芒强度
+option.FLARE_BRIGHTNESS=炫光强度
+option.FLARE_GHOSTING=炫光鬼影
+option.GLARE_FLARE_SHADOWBASED=基于阴影遮蔽 §c[!]§r
+option.GLARE_FLARE_SHADOWBASED.comment=基于阴影的眩光与炫光遮蔽. §c[!]§r 可能出现遮蔽错误. §7§o性能影响: §a低
+
+
+screen.COLOR=§c色彩调整
+option.TONEMAP_OPERATOR=§cTonemap类型
+value.TONEMAP_OPERATOR.None=无
+option.AGX_EV=AgX 动态范围
+option.AGX_EV.comment=更高的值会降低画面反差
+suffix.AGX_EV=EV
+option.ABNEY_EFFECT_CORRECTION=阿布尼效应(Abney Effect)校正
+option.ADVANCED_COLOR=启用进阶色彩调整
+screen.ADVANCED_COLOR=设置
+option.SATURATION=饱和度
+option.GAMMA=Gamma
+option.LUMA_GAMMA=亮度Gamma
+option.WHITE_CLIP=白点
+
+
+screen.POSTMISC=杂项
+option.SEREEN_RATIO=黑幕宽高比
+option.SEREEN_RATIO.comment=仅增加黑幕,不影响实际渲染分辨率
+value.SEREEN_RATIO.0.0=当前
+value.SEREEN_RATIO.1.333333=4:3
+value.SEREEN_RATIO.1.435052=IMAX
+value.SEREEN_RATIO.1.5=35mm 胶片
+value.SEREEN_RATIO.1.6=16:10
+value.SEREEN_RATIO.1.777778=16:9
+value.SEREEN_RATIO.2.0=18:9
+value.SEREEN_RATIO.2.333333=21:9
+value.SEREEN_RATIO.2.39=35mm 变形宽幕
+option.PURKINJE_EFFECT=暗光褪色
+option.PURKINJE_EFFECT_THRESHOLD=触发阈值
+option.PURKINJE_EFFECT_STRENGTH=混合强度
+
+
+
+
+
+screen.MOD_SUPPORT=§l兼容模组选项
+
+
+screen.DH_SETTING=§6Distant Horizons§r 设置
+option.DH_SHADOW=阴影贴图中渲染
+option.DH_SHADOW.comment=在阴影贴图中渲染DH区块. §7§o性能影响: §6高
+option.DH_SHADOW_FIX=阴影伪影修复
+option.DH_SHADOW_FIX.comment=§e[*]§r 仍会存在一部分的阴影错误
+option.DH_TERRAIN_CULLING=地形防混叠
+option.DH_TERRAIN_CULLING.comment=剔除近处的DH区块,减少与正常区块的混叠. §e[*]§r 可能会导致地形空缺
+option.DH_SHADOW_CULLING=阴影防混叠
+option.DH_SHADOW_CULLING.comment=剔除阴影中近处的DH区块,减少与正常区块的混叠. §e[*]§r 可能会导致阴影空缺
+option.DH_TEXTURE_NOISE=应用噪声
+option.DH_TEXTURE_NOISE.comment=在DH区块应用噪声
+option.DH_TEXTURE_NOISE_STEPS=缩放
+option.DH_TEXTURE_NOISE_STEPS.comment=更高的值会使噪声更细腻
+option.DH_TEXTURE_NOISE_STRENGTH=强度
+option.DH_LIMIT_VFOG_DIST=限制体积雾渲染距离 §e[*]§r
+option.DH_LIMIT_VFOG_DIST.comment=将体积雾渲染范围限制在100区块. 以防止体积雾质量严重下降. §e[*]§r 可能会导致远处体积雾缺失
+
+
+screen.TACZ_SETTING=§bTACZ§r 设置
+option.DISABLE_HAND_TAA=禁用手部TAA
+option.DISABLE_HAND_TAA.comment=减少TAA对手部运动的模糊
+option.DISABLE_HAND_GI=禁用手部全局光照 §e[*]§r
+option.DISABLE_HAND_GI.comment=§e[*]§r 建议优先使用"禁用全局光照中手部运动计算"
+option.DISABLE_HAND_GI_VELOCITY=禁用全局光照中手部运动计算
+option.DISABLE_HAND_GI_VELOCITY.comment=减少手部全局光照伪影
+option.DISABLE_HAND_SPECULAR=禁用手部高光
+option.DISABLE_HAND_SPECULAR.comment=解决启用"禁用手部TAA"后反射出现的噪点
+
+
+screen.YSM_SETTING=§aYes Steve Model§r 设置
+option.DISABLE_PLAYER_TAA_MOTION_BLUR=禁用玩家TAA与动态模糊
+option.DISABLE_PLAYER_TAA_MOTION_BLUR.comment=减少对玩家运动的模糊
+option.DISABLE_PLAYER_GI=禁用玩家全局光照 §e[*]§r
+option.DISABLE_PLAYER_GI.comment=§e[*]§r 建议优先使用"禁用全局光照中玩家运动计算"
+option.DISABLE_PLAYER_GI_VELOCITY=禁用全局光照中玩家运动计算
+option.DISABLE_PLAYER_GI_VELOCITY.comment=减少玩家全局光照伪影
+option.DISABLE_PLAYER_SPECULAR=禁用玩家高光
+option.DISABLE_PLAYER_SPECULAR.comment=解决启用"禁用玩家TAA"后反射出现的噪点
+option.DISABLE_PLAYER_SCREEN_SPACE_SHADOWS=禁用玩家屏幕空间阴影
+option.DISABLE_PLAYER_SCREEN_SPACE_SHADOWS.comment=解决启用"禁用玩家TAA"后屏幕空间阴影出现的噪点
+
+
+
+
+
+screen.SHORTCUT=快捷选项
+
+option.CAVE_MODE=探窟模式
+
+
+
+
+
+screen.DEBUG=§7调试选项

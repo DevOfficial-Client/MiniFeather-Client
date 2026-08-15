@@ -1,4 +1,4 @@
-﻿// MiniFeather â€” Custom Shader System
+// MiniFeather â€” Custom Shader System
 // Inyecta GLSL custom en los materiales del juego vÃ­a Three.js onBeforeCompile.
 //
 // Settings (localStorage):
@@ -300,23 +300,233 @@
             update: (u) => {
                 u.uUfStrength.value = state.strength;
             }
+        },
+
+        // ─────────── PHOTON (port del shaderpack de Minecraft) ───────────
+        // Porte del look de Photon (SixthSurge): tonemapping AgX con las
+        // matrices EXACTAS del pack (Lib/Programs/Final.glsl, AGX_EV=13),
+        // niebla atmosférica estilo VolumetricFog y un agujero negro
+        // interactivo (horizonte de sucesos + disco de acreción + lente
+        // gravitacional) como efecto de pantalla.
+        photon: {
+            uniforms: {
+                uPhTime: { value: 0 },
+                uPhStrength: { value: 0.6 },   // mezcla global (slider Intensidad)
+                uPhAgx: { value: 0.8 },        // cantidad de tonemap AgX
+                uPhFog: { value: 0.5 },        // niebla atmosférica
+                uPhEnd: { value: 0.0 },        // cielo del End (0 = off)
+                uPhBH: { value: 0.0 },         // agujero negro (0 = off)
+                uPhBHSize: { value: 0.35 },    // radio angular de la sombra
+                uPhBHSpin: { value: 1.0 },     // velocidad del disco de acreción
+                uPhCamPos: { value: [0.0, 0.0, 0.0] }, // cámara (coords de mundo)
+                uPhResolution: { value: [1600.0, 900.0] }
+            },
+            vertexCode: `
+                uniform float uPhTime;
+                varying vec3 mfPhWorldPos;
+                varying float mfPhDepth;
+            `,
+            vertexMain: `
+                mfPhWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+                vec4 mfPhMvPos = modelViewMatrix * vec4(transformed, 1.0);
+                mfPhDepth = -mfPhMvPos.z;
+            `,
+            fragmentCode: `
+                uniform float uPhTime;
+                uniform float uPhStrength;
+                uniform float uPhAgx;
+                uniform float uPhFog;
+                uniform float uPhEnd;
+                uniform float uPhBH;
+                uniform float uPhBHSize;
+                uniform float uPhBHSpin;
+                uniform vec2 uPhResolution;
+                uniform vec3 uPhCamPos;
+                varying vec3 mfPhWorldPos;
+                varying float mfPhDepth;
+
+                float mfPhHash(vec2 p) {
+                    p = fract(p * vec2(123.34, 456.21));
+                    p += dot(p, p + 45.32);
+                    return fract(p.x * p.y);
+                }
+
+                // ─── AgX (Photon, Lib/Programs/Final.glsl) ───
+                // Matrices y curva exactas del shaderpack.
+                vec3 mfAgxDefaultContrastApprox(vec3 x) {
+                    return (((((15.5 * x - 40.14) * x + 31.96) * x - 6.868) * x + 0.4298) * x + 0.1191) * x - 0.00232;
+                }
+
+                vec3 mfAgX(vec3 color) {
+                    color *= 2.3;
+
+                    color *= mat3(
+                        0.842479062253094, 0.0784335999999992, 0.0792237451477643,
+                        0.0423282422610123, 0.878468636469772, 0.0791661274605434,
+                        0.0423756549057051, 0.0784336, 0.879142973793104);
+
+                    const float hev = 6.5; // AGX_EV(13) * 0.5
+                    const float middle_grey = 0.18;
+                    color = clamp(log2(color / middle_grey), -6.5, 6.5);
+                    color = (color + 6.5) / 13.0;
+
+                    color = mfAgxDefaultContrastApprox(color);
+
+                    color *= mat3(
+                        1.19687900512017, -0.0980208811401368, -0.0990297440797205,
+                        -0.0528968517574562, 1.15190312990417, -0.0989611768448433,
+                        -0.0529716355144438, -0.0980434501171241, 1.15107367264116);
+
+                    return color;
+                }
+
+                // ─── Cielo del End (DIMENSION_END de Photon) ───
+                // Void oscuro + nebulosa ender púrpura + estrellas densas.
+                // Direccional: usa la posición de mundo del fragmento.
+                vec3 mfEndSky(vec3 color, vec3 wpos, vec3 camPos) {
+                    if (uPhEnd < 0.001) return color;
+
+                    vec3 dir = normalize(wpos - camPos);
+                    float h = dir.y;                       // -1 (nadir) .. 1 (cenit)
+
+                    // Void: casi negro arriba, tinte púrpura al horizonte
+                    vec3 voidCol = mix(vec3(0.035, 0.02, 0.05),
+                                       vec3(0.10, 0.05, 0.14),
+                                       smoothstep(-0.1, 0.45, h));
+                    // Nebulosa ender: bandas de ruido púrpura
+                    vec2 nUv = dir.xz / max(abs(dir.y) + 0.18, 0.12);
+                    float n1 = sin(nUv.x * 3.1 + sin(nUv.y * 2.3) * 1.7) * 0.5 + 0.5;
+                    float n2 = sin(nUv.y * 4.7 - sin(nUv.x * 1.9) * 2.1) * 0.5 + 0.5;
+                    float neb = pow(n1 * n2, 2.2);
+                    vec3 nebCol = vec3(0.28, 0.10, 0.38) * neb * 1.4;
+
+                    // Estrellas densas: hash por dirección (celda proyectada)
+                    vec2 sUv = dir.xz * (1.6 / max(abs(h) + 0.25, 0.08));
+                    vec2 cell = floor(sUv * 14.0);
+                    float star = mfPhHash(cell);
+                    float star2 = step(0.955, star);
+                    float twinkle = 0.75 + 0.25 * sin(uPhTime * 1.7 + star * 40.0);
+                    vec3 stars = vec3(0.9, 0.85, 1.0) * star2 * twinkle * 1.2;
+
+                    vec3 sky = voidCol + nebCol + stars;
+                    return mix(color, sky, uPhEnd);
+                }
+
+                // ─── Agujero negro (direccional, anclado al mundo) ───
+                // Sombras grav. + anillo de fotones + disco de acreción con
+                // espiral animada y Doppler beaming. Dirección fija NE-arriba.
+                vec3 mfBlackHoleDir(vec3 color, vec3 wpos, vec3 camPos) {
+                    if (uPhBH < 0.001) return color;
+
+                    // Dirección del BH en el cielo (fija, como un astro)
+                    vec3 bhDir = normalize(vec3(0.45, 0.38, -0.8));
+                    vec3 dir = normalize(wpos - camPos);
+
+                    // Radio angular del impacto del rayo vs el centro del BH
+                    float impact = length(cross(dir, bhDir)); // sin(ángulo), ~ángulo
+                    float shadowR = uPhBHSize * 0.62;         // radio angular de la sombra
+
+                    // ── Disco de acreción ──
+                    // Anillo alrededor del BH en el plano que pasa por su
+                    // centro, perpendicular a la vista (aprox. skybox).
+                    float ang = atan(dir.y * 0.9 - bhDir.y * 0.9, dot(dir.xz, vec2(1.0, 0.0)) - bhDir.x);
+                    float r = impact;
+                    float inR = shadowR * 1.15;
+                    float outR = shadowR * 3.4;
+                    float disk = 0.0;
+                    if (r > inR && r < outR) {
+                        float swirl = ang + uPhTime * uPhBHSpin * 1.5 + 3.2 * log(r / inR);
+                        float bands = 0.55 + 0.45 * sin(swirl * 3.0);
+                        float fall = smoothstep(inR, inR * 1.25, r) * smoothstep(outR, outR * 0.55, r);
+                        disk = bands * fall;
+                    }
+
+                    // Doppler: lado que se acerca (tangente al disco) más brillante
+                    vec3 tang = normalize(cross(bhDir, vec3(0.0, 1.0, 0.0)));
+                    float dop = 1.0 + 0.6 * dot(normalize(dir - bhDir), tang);
+
+                    // Colores: interior blanco-azulado → exterior naranja
+                    vec3 diskCol = mix(vec3(1.75, 1.35, 0.95), vec3(1.2, 0.35, 0.05),
+                                       smoothstep(inR, outR, r));
+                    diskCol *= (0.35 + 0.65 * disk) * (0.8 + 0.4 * dop);
+
+                    // Anillo de fotones: aro fino en el borde de la sombra
+                    float ring = exp(-pow((r - shadowR * 1.02) / (shadowR * 0.055), 2.0));
+
+                    // Halo de lente (arco de Einstein)
+                    float halo = exp(-pow((r - shadowR * 1.6) / (shadowR * 0.75), 2.0)) * 0.18;
+
+                    vec3 out3 = color;
+                    out3 += diskCol * disk;
+                    out3 += vec3(1.9, 1.5, 1.0) * ring * 1.4 * dop;
+                    out3 += color * halo * 2.0;
+
+                    // Sombra: negro puro dentro del horizonte
+                    out3 *= 1.0 - smoothstep(shadowR, shadowR * 0.9, r);
+
+                    return out3 * uPhBH + color * (1.0 - uPhBH);
+                }
+            `,
+            postMain: `
+                vec2 mfPhUv = gl_FragCoord.xy / uPhResolution;
+
+                // ─── 1. Cielo del End (direccional) ───
+                gl_FragColor.rgb = mfEndSky(gl_FragColor.rgb, mfPhWorldPos, uPhCamPos);
+
+                // ─── 2. Agujero negro (direccional) ───
+                gl_FragColor.rgb = mfBlackHoleDir(gl_FragColor.rgb, mfPhWorldPos, uPhCamPos);
+
+                // ─── 3. Niebla atmosférica (VolumetricFog-style) ───
+                // Niebla exponencial azul-grisácea con densidad por distancia.
+                if (uPhFog > 0.001) {
+                    float mfPhFogAmt = 1.0 - exp(-mfPhDepth * 0.012 * uPhFog);
+                    vec3 mfPhFogCol = mix(vec3(0.55, 0.62, 0.72), vec3(0.68, 0.73, 0.80),
+                                          smoothstep(0.0, 1.0, mfPhUv.y));
+                    gl_FragColor.rgb = mix(gl_FragColor.rgb, mfPhFogCol, mfPhFogAmt * 0.85);
+                }
+
+                // ─── 4. Tonemap AgX (Photon exact) ───
+                if (uPhAgx > 0.001) {
+                    vec3 mfPhAgxCol = mfAgX(max(gl_FragColor.rgb, 0.0));
+                    gl_FragColor.rgb = mix(gl_FragColor.rgb, mfPhAgxCol, uPhAgx);
+                }
+            `,
+            update: (u, dt) => {
+                u.uPhTime.value += dt;
+                u.uPhStrength.value = state.strength;
+
+                // Posición de cámara (mundo) para efectos direccionales
+                const cam = state.camera || state.game?.camera ||
+                    state.game?.gameScene?.camera;
+                if (cam && Number.isFinite(cam.x)) {
+                    u.uPhCamPos.value[0] = cam.x;
+                    u.uPhCamPos.value[1] = cam.y;
+                    u.uPhCamPos.value[2] = cam.z;
+                }
+            }
         }
     };
 
     // â”€â”€â”€â”€â”€â”€ DefiniciÃ³n de sub-efectos persistibles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Compartido por presets: nombre de la GUI â†’ uniform + lÃ­mite.
     const EFFECT_DEFS = {
-        vhs:        { key: 'uCsVhs',      max: 1 },
-        crt:        { key: 'uCsCrt',      max: 1 },
-        cel:        { key: 'uCsCel',      max: 1 },
-        fog:        { key: 'uCsFog',      max: 1 },
-        grain:      { key: 'uCsGrain',    max: 1 },
-        glitch:     { key: 'uCsGlitch',   max: 1 },
-        flash:      { key: 'uCsFlash',    max: 1 },
-        sharp:      { key: 'uCsSharp',    max: 1 },
-        ufsat:      { key: 'uUfSat',      max: 2 },
+        vhs: { key: 'uCsVhs', max: 1 },
+        crt: { key: 'uCsCrt', max: 1 },
+        cel: { key: 'uCsCel', max: 1 },
+        fog: { key: 'uCsFog', max: 1 },
+        grain: { key: 'uCsGrain', max: 1 },
+        glitch: { key: 'uCsGlitch', max: 1 },
+        flash: { key: 'uCsFlash', max: 1 },
+        sharp: { key: 'uCsSharp', max: 1 },
+        ufsat: { key: 'uUfSat', max: 2 },
         ufcontrast: { key: 'uUfContrast', max: 1 },
-        uftone:     { key: 'uUfTone',     max: 1 }
+        uftone: { key: 'uUfTone', max: 1 },
+        phagx: { key: 'uPhAgx', max: 1 },
+        phfog: { key: 'uPhFog', max: 1 },
+        phend: { key: 'uPhEnd', max: 1 },
+        phbh: { key: 'uPhBH', max: 1 },
+        phbhsize: { key: 'uPhBHSize', max: 1 },
+        phbhspin: { key: 'uPhBHSpin', max: 3 }
     };
 
     // â”€â”€â”€ Tecla F para toggle de linterna + rueda para radio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -365,17 +575,17 @@
             try {
                 const game = root?.updateQueue?.baseState?.element?.props?.game;
                 if (game && game.player) return game;
-            } catch (_) {}
+            } catch (_) { }
         }
         return null;
     }
 
     function getScene(game) {
         return game?.gameScene?.scene ||
-               game?.scene?.scene ||
-               game?.gameScene ||
-               game?.scene ||
-               null;
+            game?.scene?.scene ||
+            game?.gameScene ||
+            game?.scene ||
+            null;
     }
 
     // â”€â”€â”€ Resolver el WebGLRenderer de Three.js â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -385,8 +595,8 @@
         if (!value || typeof value !== 'object') return false;
         if (value.isWebGLRenderer === true) return true;
         return typeof value.setPixelRatio === 'function' &&
-               typeof value.setSize === 'function' &&
-               value.domElement instanceof HTMLCanvasElement;
+            typeof value.setSize === 'function' &&
+            value.domElement instanceof HTMLCanvasElement;
     }
 
     // Rutas directas candidatas primero; BFS de respaldo si fallan.
@@ -436,7 +646,7 @@
                         !(child instanceof Element)) {
                         queue.push({ value: child, depth: depth + 1 });
                     }
-                } catch (_) {}
+                } catch (_) { }
             }
         }
 
@@ -497,7 +707,7 @@
             const w = canvas.clientWidth || window.innerWidth;
             const h = canvas.clientHeight || window.innerHeight;
             renderer.setSize(w, h, false);
-        } catch (_) {}
+        } catch (_) { }
 
         state.renderScale = clamped;
         return true;
@@ -778,8 +988,8 @@
         if (lastBrace < 0) return src;
 
         return src.slice(0, lastBrace) +
-               '\n' + code + '\n' +
-               src.slice(lastBrace);
+            '\n' + code + '\n' +
+            src.slice(lastBrace);
     }
 
     // â”€â”€â”€ Hookear onBeforeCompile de un material â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -864,14 +1074,14 @@
 
         // Callback del preset (ej: xray necesita transparent=true)
         if (preset.onHook) {
-            try { preset.onHook(material); } catch (_) {}
+            try { preset.onHook(material); } catch (_) { }
         }
 
         state.hooked.set(material, {
             liveUniforms,
             originalOnBeforeCompile,
             originalCacheKey,
-            update: preset.update || (() => {}),
+            update: preset.update || (() => { }),
             onUnhook: preset.onUnhook || null
         });
 
@@ -884,7 +1094,7 @@
 
         // Restaurar propiedades del material modificadas por onHook
         if (entry.onUnhook) {
-            try { entry.onUnhook(material); } catch (_) {}
+            try { entry.onUnhook(material); } catch (_) { }
         }
 
         material.onBeforeCompile = entry.originalOnBeforeCompile;
@@ -920,8 +1130,12 @@
                     entry.liveUniforms.uCsResolution.value[0] = resX;
                     entry.liveUniforms.uCsResolution.value[1] = resY;
                 }
+                if (resX > 0 && entry.liveUniforms.uPhResolution) {
+                    entry.liveUniforms.uPhResolution.value[0] = resX;
+                    entry.liveUniforms.uPhResolution.value[1] = resY;
+                }
                 entry.update(entry.liveUniforms, dt);
-            } catch (_) {}
+            } catch (_) { }
         }
 
         rafId = requestAnimationFrame(animate);
@@ -967,7 +1181,7 @@
         // Re-aplicar la forma de nubes dibujada si el juego recreó el mesh
         // (p.ej. al cambiar de mundo). Barato si ya está parcheado.
         if (localStorage.getItem(LS_SHAPE)) {
-            try { applyCloudsShapeToMesh(); } catch (_) {}
+            try { applyCloudsShapeToMesh(); } catch (_) { }
         }
     }
 

@@ -419,6 +419,8 @@
     customShaderFxUfsat: 1.35,
     customShaderFxUfcontrast: 0.45,
     customShaderFxUftone: 0.35,
+    customShaderFxPhagx: 0.8,
+    customShaderFxPhfog: 0.5,
     cloudsShapeBrush: 12,
     cloudsShapeMix: 0.85,
     cloudsShapeTile: 512,
@@ -2894,8 +2896,10 @@
     // Efectos comunes (spooklementary)
     const spookFx = ['vhs', 'crt', 'cel', 'fog', 'grain', 'glitch', 'flash', 'sharp'];
     const ufFx = ['ufsat', 'ufcontrast', 'uftone'];
-    for (const name of preset === 'ultrafast' ? ufFx : spookFx) {
-      const fallback = { vhs: 0.6, crt: 0.6, cel: 0.6, fog: 0.7, grain: 0.5, glitch: 0.4, flash: 0.5, sharp: 0.5, ufsat: 1.35, ufcontrast: 0.45, uftone: 0.35 }[name];
+    const phFx = ['phagx', 'phfog', 'phend', 'phbh', 'phbhsize', 'phbhspin'];
+    const fxList = preset === 'ultrafast' ? ufFx : preset === 'photon' ? phFx : spookFx;
+    for (const name of fxList) {
+      const fallback = { vhs: 0.6, crt: 0.6, cel: 0.6, fog: 0.7, grain: 0.5, glitch: 0.4, flash: 0.5, sharp: 0.5, ufsat: 1.35, ufcontrast: 0.45, uftone: 0.35, phagx: 0.8, phfog: 0.5, phend: 0, phbh: 0, phbhsize: 0.35, phbhspin: 1 }[name];
       fx[name] = Number(settings['customShaderFx' + name.charAt(0).toUpperCase() + name.slice(1)] ?? fallback);
     }
 
@@ -2913,7 +2917,8 @@
           thickness: Number(settings.cloudsThickness ?? 30),
           height: Number(settings.cloudsHeight ?? 128),
           opacity: Number(settings.cloudsOpacity ?? 0.9)
-        }
+        },
+        cloudsPackNoise: !!settings.cloudsPackNoise
       })
     }));
   }
@@ -4922,6 +4927,7 @@
     const renderScale = Number(settings.customShaderRenderScale) || 1.0;
     const preset = settings.customShaderPreset || 'spooklementary';
     const isUltrafast = preset === 'ultrafast';
+    const isPhoton = preset === 'photon';
 
     // Sliders de efectos según el preset activo
     const fxSliders = isUltrafast
@@ -4929,6 +4935,15 @@
           { id: 'ufsat', label: t('shadersUfSat'), value: Number(settings.customShaderFxUfsat ?? 1.35), min: 0.5, max: 2, step: 0.05, fmt: v => v.toFixed(2) },
           { id: 'ufcontrast', label: t('shadersUfContrast'), value: Number(settings.customShaderFxUfcontrast ?? 0.45), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
           { id: 'uftone', label: t('shadersUfTone'), value: Number(settings.customShaderFxUftone ?? 0.35), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' }
+        ]
+      : isPhoton
+      ? [
+          { id: 'phagx', label: t('shadersPhAgx'), value: Number(settings.customShaderFxPhagx ?? 0.8), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'phfog', label: t('shadersPhFog'), value: Number(settings.customShaderFxPhfog ?? 0.5), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'phend', label: t('shadersPhEnd'), value: Number(settings.customShaderFxPhend ?? 0), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'phbh', label: t('shadersPhBH'), value: Number(settings.customShaderFxPhbh ?? 0), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'phbhsize', label: t('shadersPhBHSize'), value: Number(settings.customShaderFxPhbhsize ?? 0.35), min: 0.05, max: 1, step: 0.05, fmt: v => v.toFixed(2) },
+          { id: 'phbhspin', label: t('shadersPhBHSpin'), value: Number(settings.customShaderFxPhbhspin ?? 1), min: 0, max: 3, step: 0.1, fmt: v => v.toFixed(1) }
         ]
       : [
           { id: 'vhs', label: t('shadersVhs'), value: Number(settings.customShaderFxVhs ?? 0.6), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
@@ -4962,8 +4977,9 @@
           <select id="mf-shader-preset" class="mf-select">
             <option value="spooklementary"${preset === 'spooklementary' ? ' selected' : ''}>Spooklementary</option>
             <option value="ultrafast"${preset === 'ultrafast' ? ' selected' : ''}>UltraFast</option>
+            <option value="photon"${preset === 'photon' ? ' selected' : ''}>Photon</option>
           </select>
-          <div class="mf-muted" style="margin-top:8px;font-size:11px;">${isUltrafast ? t('shadersUfDesc') : t('shadersHint')}</div>
+          <div class="mf-muted" style="margin-top:8px;font-size:11px;">${isUltrafast ? t('shadersUfDesc') : isPhoton ? t('shadersPhDesc') : t('shadersHint')}</div>
         </div>
 
         <div class="mf-card">
@@ -5011,6 +5027,9 @@
             <span style="min-width:90px;font-size:12px;">${t('cloudsCoverage')}</span>
             <input id="mf-cloud-coverage" type="range" min="0" max="1" step="0.05" value="${Number(settings.cloudsCoverage ?? 0.5)}">
             <span id="mf-cloud-coverage-value">${Math.round(Number(settings.cloudsCoverage ?? 0.5) * 100)}%</span>
+          </div>
+          <div class="mf-toggle-grid" style="margin-bottom:10px;">
+            ${renderToggle('cloudsPackNoise', t('cloudsPackNoise'), t('cloudsPackNoiseHint'), () => sendCloudsConfig())}
           </div>
           <div class="mf-shader-strength" style="margin-bottom:10px;">
             <span style="min-width:90px;font-size:12px;">${t('cloudsScale')}</span>
@@ -5461,13 +5480,26 @@
   let saveTimer = null;
   let saveGeneration = 0;
 
+  // Tras recargar/desinstalar la extensión, el content script huérfano pierde
+  // el contexto de chrome.* → cualquier llamada lanza "Extension context
+  // invalidated". Helper centralizado con guarda.
+  function extAlive() {
+    try {
+      return !!(chrome?.runtime?.id);
+    } catch (_) {
+      return false;
+    }
+  }
+
   function saveSettings(immediate = false) {
+    if (!extAlive()) return;
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     const gen = ++saveGeneration;
     const doSave = () => {
+      if (!extAlive()) return;
       chrome.storage.local.set({ settings: { ...settings } }, () => {
         // Solo actualizamos si no hay un guardado más nuevo pendiente
-        if (gen === saveGeneration) {
+        if (gen === saveGeneration && extAlive()) {
           chrome.storage.local.get('settings', () => {});
         }
       });
@@ -5478,11 +5510,12 @@
 
   // Flush al cerrar/cambiar de pestaña
   window.addEventListener('beforeunload', () => {
+    if (!extAlive()) return;
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     chrome.storage.local.set({ settings: { ...settings } });
   });
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && saveTimer) {
+    if (document.visibilityState === 'hidden' && saveTimer && extAlive()) {
       clearTimeout(saveTimer); saveTimer = null;
       chrome.storage.local.set({ settings: { ...settings } });
     }
@@ -5513,7 +5546,7 @@
 
   function saveLogo(value) {
     currentLogo = value;
-    chrome.storage.local.set({ customLogo: currentLogo });
+    if (extAlive()) chrome.storage.local.set({ customLogo: currentLogo });
     if (MODULES.get('rebrand')?.enabled) replaceAllLogos();
     refreshLogoControls();
   }
@@ -6624,7 +6657,13 @@
       sharp: { key: 'customShaderFxSharp', fmt: v => Math.round(v * 100) + '%' },
       ufsat: { key: 'customShaderFxUfsat', fmt: v => v.toFixed(2) },
       ufcontrast: { key: 'customShaderFxUfcontrast', fmt: v => Math.round(v * 100) + '%' },
-      uftone: { key: 'customShaderFxUftone', fmt: v => Math.round(v * 100) + '%' }
+      uftone: { key: 'customShaderFxUftone', fmt: v => Math.round(v * 100) + '%' },
+      phagx: { key: 'customShaderFxPhagx', fmt: v => Math.round(v * 100) + '%' },
+      phfog: { key: 'customShaderFxPhfog', fmt: v => Math.round(v * 100) + '%' },
+      phend: { key: 'customShaderFxPhend', fmt: v => Math.round(v * 100) + '%' },
+      phbh: { key: 'customShaderFxPhbh', fmt: v => Math.round(v * 100) + '%' },
+      phbhsize: { key: 'customShaderFxPhbhsize', fmt: v => v.toFixed(2) },
+      phbhspin: { key: 'customShaderFxPhbhspin', fmt: v => v.toFixed(1) }
     };
     for (const [fxName, { key, fmt }] of Object.entries(fxMap)) {
       const slider = panel.querySelector(`#mf-shader-fx-${fxName}`);
