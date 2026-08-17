@@ -1,0 +1,1 @@
+const fs=require('fs');const p='C:/Users/etc/Desktop/MiniFeather-Client/src/content.js';let s=fs.readFileSync(p,'utf8');const r=/<span>\$\{t\(item\.labelKey\)\}<\/span>/;if(!r.test(s))throw Error('label missing');s=s.replace(r,'<span>${item.id === \'youtubeMusic\' ? \'YouTube Music\' : t(item.labelKey)}</span>');fs.writeFileSync(p,s,'utf8');console.log('NAV_LABEL_OK');

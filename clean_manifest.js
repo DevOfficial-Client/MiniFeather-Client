@@ -1,0 +1,1 @@
+const fs=require('fs');const p='C:/Users/etc/Desktop/MiniFeather-Client/manifest.json';let s=fs.readFileSync(p,'utf8');s=s.replace(/\s*"src\/YouTubeMusic\.js"\s*,?/g,'');fs.writeFileSync(p,s,'utf8');console.log('MANIFEST_CLEAN');

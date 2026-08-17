@@ -504,29 +504,207 @@
                     u.uPhCamPos.value[2] = cam.z;
                 }
             }
-        }
+        },
+
+        // ─────────── COMPLEMENTARY REIMAGINED (port del pack r5.8.1) ───────────
+        // Port de la matemática exacta de Complementary Shaders (EminGT):
+        //  - DoCompTonemap (composite5.glsl:36): Lottes 2016 modificado
+        //    con darkLift, path-to-white y desaturación de sombras.
+        //    Defaults: TM_EXPOSURE=1.0, TM_CONTRAST=1.05,
+        //    TM_DARK_DESATURATION=0.25, TM_WHITE_PATH=1.0
+        //  - DoBSLColorSaturation (composite5.glsl:89): vibrance real BSL.
+        //  - Viñeta VIGNETTE_R (final.glsl:153): modulada por luminancia.
+        //  - Niebla: adaptación del look (tinte por altura).
+        complementaryInspired: {
+            uniforms: {
+                uCrStrength: { value: 0.8 },    // mezcla global (slider Intensidad)
+                uCrTonemap: { value: 0.8 },     // cantidad de Lottes tonemap
+                uCrExposure: { value: 1.0 },    // TM_EXPOSURE
+                uCrContrast: { value: 1.05 },   // TM_CONTRAST
+                uCrSaturation: { value: 1.0 },  // T_SATURATION
+                uCrVibrance: { value: 1.0 },    // T_VIBRANCE
+                uCrVignette: { value: 0.5 },    // VIGNETTE_R amount
+                uCrFog: { value: 0.4 },         // niebla (adaptación)
+                uCrTime: { value: 0 },
+                uCrResolution: { value: [1600.0, 900.0] }
+            },
+            vertexCode: `
+                varying float mfCrDepth;
+            `,
+            vertexMain: `
+                vec4 mfCrMvPos = modelViewMatrix * vec4(transformed, 1.0);
+                mfCrDepth = -mfCrMvPos.z;
+            `,
+            fragmentCode: `
+                uniform float uCrStrength;
+                uniform float uCrTonemap;
+                uniform float uCrExposure;
+                uniform float uCrContrast;
+                uniform float uCrSaturation;
+                uniform float uCrVibrance;
+                uniform float uCrVignette;
+                uniform float uCrFog;
+                uniform vec2 uCrResolution;
+                varying float mfCrDepth;
+
+                float mfCrGetLuminance(vec3 color) {
+                    return dot(color, vec3(0.299, 0.587, 0.114));
+                }
+                float mfCrMax0(float x) {
+                    return max(x, 0.0);
+                }
+
+                // LinearToRGB (composite5.glsl:31)
+                vec3 mfCrLinearToRGB(vec3 color) {
+                    const vec3 k = vec3(0.055);
+                    return mix((vec3(1.0) + k) * pow(color, vec3(1.0 / 2.4)) - k,
+                               12.92 * color,
+                               vec3(lessThan(color, vec3(0.0031308))));
+                }
+
+                // DoCompTonemap (composite5.glsl:36) — Lottes modificado
+                vec3 mfCrDoCompTonemap(vec3 color) {
+                    color = uCrExposure * color;
+
+                    float initialLuminance = mfCrGetLuminance(color);
+
+                    vec3 a      = vec3(uCrContrast);
+                    vec3 d      = vec3(1.0);
+                    vec3 hdrMax = vec3(8.0);
+                    vec3 midIn  = vec3(0.25);
+                    vec3 midOut = vec3(0.25);
+
+                    vec3 a_d = a * d;
+                    vec3 hdrMaxA = pow(hdrMax, a);
+                    vec3 hdrMaxAD = pow(hdrMax, a_d);
+                    vec3 midInA = pow(midIn, a);
+                    vec3 midInAD = pow(midIn, a_d);
+                    vec3 HM1 = hdrMaxA * midOut;
+                    vec3 HM2 = hdrMaxAD - midInAD;
+
+                    vec3 b = (-midInA + HM1) / (HM2 * midOut);
+                    vec3 c = (hdrMaxAD * midInA - HM1 * midInAD) / (HM2 * midOut);
+
+                    vec3 colorOut = pow(color, a) / (pow(color, a_d) * b + c);
+
+                    colorOut = mfCrLinearToRGB(colorOut);
+
+                    // Dark lift para legibilidad
+                    const float darkLiftStart = 0.1;
+                    const float darkLiftMix = 0.75;
+                    float darkLift = smoothstep(darkLiftStart, 0.0, initialLuminance);
+                    vec3 smoothColor = pow(color, vec3(1.0 / 2.2));
+                    colorOut = mix(colorOut, smoothColor,
+                                   darkLift * darkLiftMix *
+                                   mfCrMax0(0.55 - abs(1.05 - uCrContrast)) / 0.55);
+
+                    // Path to white
+                    const float wpInputCurveStart = 0.0;
+                    const float wpInputCurveMax = 16.0;
+                    float modifiedLuminance = pow(initialLuminance / wpInputCurveMax,
+                                                  2.0 - 1.0) * wpInputCurveMax;
+                    float whitePath = smoothstep(wpInputCurveStart, wpInputCurveMax,
+                                                 modifiedLuminance);
+                    colorOut = mix(colorOut, vec3(1.0), whitePath);
+
+                    // Desaturar sombras
+                    const float dpInputCurveStart = 0.1;
+                    const float dpInputCurveMax = 0.0;
+                    float desaturatePath = smoothstep(dpInputCurveStart, dpInputCurveMax,
+                                                      initialLuminance);
+                    colorOut = mix(colorOut, vec3(mfCrGetLuminance(colorOut)),
+                                   desaturatePath * 0.25);
+
+                    return clamp(colorOut, 0.0, 1.0);
+                }
+
+                // DoBSLColorSaturation (composite5.glsl:89)
+                vec3 mfCrDoBSLSaturation(vec3 color) {
+                    float saturationFactor = uCrSaturation + 0.07;
+
+                    float grayVibrance = (color.r + color.g + color.b) / 3.0;
+                    float graySaturation = grayVibrance;
+                    if (saturationFactor < 1.00) {
+                        graySaturation = mfCrGetLuminance(color);
+                    }
+
+                    float mn = min(color.r, min(color.g, color.b));
+                    float mx = max(color.r, max(color.g, color.b));
+                    float sat = (1.0 - (mx - mn)) * (1.0 - mx) * grayVibrance * 5.0;
+                    vec3 lightness = vec3((mn + mx) * 0.5);
+
+                    color = mix(color, mix(color, lightness, 1.0 - uCrVibrance), sat);
+                    color = mix(color, lightness,
+                                (1.0 - lightness) * (2.0 - uCrVibrance) / 2.0 *
+                                abs(uCrVibrance - 1.0));
+                    color = color * saturationFactor -
+                            graySaturation * (saturationFactor - 1.0);
+                    return color;
+                }
+            `,
+            postMain: `
+                // ─── 1. Tonemap Lottes (DoCompTonemap) ───
+                if (uCrTonemap > 0.001) {
+                    vec3 mfCrTm = mfCrDoCompTonemap(gl_FragColor.rgb);
+                    gl_FragColor.rgb = mix(gl_FragColor.rgb, mfCrTm, uCrTonemap);
+                }
+
+                // ─── 2. Saturación BSL (DoBSLColorSaturation) ───
+                gl_FragColor.rgb = mfCrDoBSLSaturation(gl_FragColor.rgb);
+
+                // ─── 3. Niebla con tinte por altura ───
+                if (uCrFog > 0.001) {
+                    vec2 mfCrUv = gl_FragCoord.xy / uCrResolution;
+                    float mfCrFogAmt = 1.0 - exp(-mfCrDepth * 0.012 * uCrFog);
+                    vec3 mfCrFogCol = mix(vec3(0.52, 0.60, 0.72), vec3(0.75, 0.80, 0.88),
+                                          smoothstep(0.0, 1.0, mfCrUv.y));
+                    gl_FragColor.rgb = mix(gl_FragColor.rgb, mfCrFogCol, mfCrFogAmt * 0.8);
+                }
+
+                // ─── 4. Viñeta del pack (VIGNETTE_R) ───
+                if (uCrVignette > 0.001) {
+                    vec2 mfCrUvV = gl_FragCoord.xy / uCrResolution;
+                    vec2 texCoordMin = mfCrUvV - 0.5;
+                    float mfCrVig = 1.0 - dot(texCoordMin, texCoordMin) *
+                                    (1.0 - mfCrGetLuminance(gl_FragColor.rgb));
+                    gl_FragColor.rgb *= mix(1.0, mfCrVig, uCrVignette);
+                }
+            `,
+            update: (u, dt) => {
+                u.uCrTime.value += dt;
+                u.uCrStrength.value = state.strength;
+            }
+        },
     };
+
 
     // â”€â”€â”€â”€â”€â”€ DefiniciÃ³n de sub-efectos persistibles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Compartido por presets: nombre de la GUI â†’ uniform + lÃ­mite.
     const EFFECT_DEFS = {
-        vhs: { key: 'uCsVhs', max: 1 },
-        crt: { key: 'uCsCrt', max: 1 },
-        cel: { key: 'uCsCel', max: 1 },
-        fog: { key: 'uCsFog', max: 1 },
-        grain: { key: 'uCsGrain', max: 1 },
-        glitch: { key: 'uCsGlitch', max: 1 },
-        flash: { key: 'uCsFlash', max: 1 },
-        sharp: { key: 'uCsSharp', max: 1 },
-        ufsat: { key: 'uUfSat', max: 2 },
+        vhs:        { key: 'uCsVhs',      max: 1 },
+        crt:        { key: 'uCsCrt',      max: 1 },
+        cel:        { key: 'uCsCel',      max: 1 },
+        fog:        { key: 'uCsFog',      max: 1 },
+        grain:      { key: 'uCsGrain',    max: 1 },
+        glitch:     { key: 'uCsGlitch',   max: 1 },
+        flash:      { key: 'uCsFlash',    max: 1 },
+        sharp:      { key: 'uCsSharp',    max: 1 },
+        ufsat:      { key: 'uUfSat',      max: 2 },
         ufcontrast: { key: 'uUfContrast', max: 1 },
-        uftone: { key: 'uUfTone', max: 1 },
-        phagx: { key: 'uPhAgx', max: 1 },
-        phfog: { key: 'uPhFog', max: 1 },
-        phend: { key: 'uPhEnd', max: 1 },
-        phbh: { key: 'uPhBH', max: 1 },
-        phbhsize: { key: 'uPhBHSize', max: 1 },
-        phbhspin: { key: 'uPhBHSpin', max: 3 }
+        uftone:     { key: 'uUfTone',     max: 1 },
+        phagx:      { key: 'uPhAgx',      max: 1 },
+        phfog:      { key: 'uPhFog',      max: 1 },
+        phend:      { key: 'uPhEnd',      max: 1 },
+        phbh:       { key: 'uPhBH',       max: 1 },
+        phbhsize:   { key: 'uPhBHSize',   max: 1 },
+        phbhspin:   { key: 'uPhBHSpin',   max: 3 },
+        crtm:       { key: 'uCrTonemap',  max: 1 },
+        crexp:      { key: 'uCrExposure', max: 2.8 },
+        crc:        { key: 'uCrContrast', max: 2 },
+        crsat:      { key: 'uCrSaturation', max: 2 },
+        crvib:      { key: 'uCrVibrance', max: 2 },
+        crvig:      { key: 'uCrVignette', max: 1 },
+        crfog:      { key: 'uCrFog',      max: 1 }
     };
 
     // â”€â”€â”€ Tecla F para toggle de linterna + rueda para radio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -575,17 +753,17 @@
             try {
                 const game = root?.updateQueue?.baseState?.element?.props?.game;
                 if (game && game.player) return game;
-            } catch (_) { }
+            } catch (_) {}
         }
         return null;
     }
 
     function getScene(game) {
         return game?.gameScene?.scene ||
-            game?.scene?.scene ||
-            game?.gameScene ||
-            game?.scene ||
-            null;
+               game?.scene?.scene ||
+               game?.gameScene ||
+               game?.scene ||
+               null;
     }
 
     // â”€â”€â”€ Resolver el WebGLRenderer de Three.js â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -595,8 +773,8 @@
         if (!value || typeof value !== 'object') return false;
         if (value.isWebGLRenderer === true) return true;
         return typeof value.setPixelRatio === 'function' &&
-            typeof value.setSize === 'function' &&
-            value.domElement instanceof HTMLCanvasElement;
+               typeof value.setSize === 'function' &&
+               value.domElement instanceof HTMLCanvasElement;
     }
 
     // Rutas directas candidatas primero; BFS de respaldo si fallan.
@@ -646,7 +824,7 @@
                         !(child instanceof Element)) {
                         queue.push({ value: child, depth: depth + 1 });
                     }
-                } catch (_) { }
+                } catch (_) {}
             }
         }
 
@@ -707,7 +885,7 @@
             const w = canvas.clientWidth || window.innerWidth;
             const h = canvas.clientHeight || window.innerHeight;
             renderer.setSize(w, h, false);
-        } catch (_) { }
+        } catch (_) {}
 
         state.renderScale = clamped;
         return true;
@@ -905,6 +1083,124 @@
         cloudsShape.textureFor = null;
     }
 
+    // ─── NUBES: texturas 3D reales del pack Photon ──────────────────────
+    // CloudNoise_128_128_128.bin (RGBA, 128³, 8MB) reemplaza el ruido
+    // procedural (uNoiseTex). El formato se deriva del tamaño real del
+    // archivo: el pack usa RGBA en 128³; si un .bin viniera en RGB se
+    // expande a RGBA (formato garantizado por Data3DTexture del juego).
+    const LS_PACK_NOISE = 'miniblox_clouds_packnoise';
+
+    const packNoise = {
+        enabled: localStorage.getItem(LS_PACK_NOISE) === 'true',
+        texture: null,
+        loading: false,
+        failed: false
+    };
+
+    function fetchPackTexture(file) {
+        const url = typeof chrome !== 'undefined' && chrome.runtime?.getURL
+            ? chrome.runtime.getURL('assets/shadertextures/' + file)
+            : null;
+        if (!url) return Promise.resolve(null);
+        return fetch(url)
+            .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
+            .then(buf => new Uint8Array(buf));
+    }
+
+    // Construye la Data3DTexture con la clase real del juego (misma clase
+    // que su uNoiseTex), derivando el formato del conteo de bytes.
+    function buildPack3DTexture(bytes, w, h, d) {
+        const noiseTex = state.cloudsMesh?.material?.uniforms?.uNoiseTex?.value;
+        if (!noiseTex || typeof noiseTex.constructor !== 'function') return null;
+        const voxels = w * h * d;
+        const bytesPerVoxel = bytes.length / voxels;
+        let format, type;
+        if (bytesPerVoxel === 4) {
+            format = 1023;  // THREE.RGBAFormat
+            type = 1009;    // THREE.UnsignedByteType
+        } else if (bytesPerVoxel === 3) {
+            // RGB → RGBA (Data3DTexture sólo soporta 1/2/4 canales)
+            const rgba = new Uint8Array(voxels * 4);
+            for (let i = 0; i < voxels; i++) {
+                const s = i * 3, t = i * 4;
+                rgba[t] = bytes[s];
+                rgba[t + 1] = bytes[s + 1];
+                rgba[t + 2] = bytes[s + 2];
+                rgba[t + 3] = 255;
+            }
+            bytes = rgba;
+            format = 1023;
+            type = 1009;
+        } else if (bytesPerVoxel === 1) {
+            format = 1022;  // THREE.RedFormat
+            type = 1009;
+        } else {
+            console.warn(`${TAG} Bytes por vóxel inesperados: ${bytesPerVoxel}`);
+            return null;
+        }
+        try {
+            const tex = new noiseTex.constructor(bytes, w, h, d);
+            tex.format = format;
+            tex.type = type;
+            tex.minFilter = noiseTex.minFilter;
+            tex.magFilter = noiseTex.magFilter;
+            tex.wrapS = noiseTex.wrapS;
+            tex.wrapT = noiseTex.wrapT;
+            tex.wrapR = noiseTex.wrapR;
+            tex.unpackAlignment = 1;
+            tex.needsUpdate = true;
+            return tex;
+        } catch (err) {
+            console.warn(`${TAG} Textura 3D del pack falló:`, err);
+            return null;
+        }
+    }
+
+    function applyPackNoiseToMesh() {
+        if (!packNoise.enabled || !packNoise.texture) return false;
+        const mesh = resolveClouds();
+        if (!mesh) return false;
+        const u = mesh.material?.uniforms;
+        if (u?.uNoiseTex && packNoise.texture) {
+            if (u.uNoiseTex.value !== packNoise.texture) {
+                u.uNoiseTex.value = packNoise.texture;
+                console.log(`${TAG} ✓ Ruido de nubes del pack aplicado (128³ RGBA).`);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    function setPackNoise(enabled) {
+        packNoise.enabled = !!enabled;
+        localStorage.setItem(LS_PACK_NOISE, String(packNoise.enabled));
+
+        if (packNoise.enabled && !packNoise.texture && !packNoise.loading && !packNoise.failed) {
+            packNoise.loading = true;
+            fetchPackTexture('CloudNoise_128_128_128.bin')
+                .then(bytes => {
+                    packNoise.texture = bytes
+                        ? buildPack3DTexture(bytes, 128, 128, 128)
+                        : null;
+                    packNoise.failed = packNoise.texture === null;
+                })
+                .catch(() => { packNoise.failed = true; })
+                .finally(() => {
+                    packNoise.loading = false;
+                    applyPackNoiseToMesh();
+                });
+        } else if (packNoise.enabled && packNoise.texture) {
+            applyPackNoiseToMesh();
+        } else if (!packNoise.enabled && packNoise.texture) {
+            // Desactivado: marcar needsUpdate no basta si el material fue
+            // recreado por el juego; el sampler seguirá con nuestra textura
+            // hasta que el usuario recargue. Aceptable para un toggle.
+            const mesh = resolveClouds();
+            const u = mesh?.material?.uniforms;
+            if (u?.uNoiseTex) u.uNoiseTex.value.needsUpdate = true;
+        }
+    }
+
     // cfg: { dataUrl: string|null|undefined, mix, tile }
     //   string  → aplicar ese dibujo
     //   null    → quitar la forma (restaura shader original)
@@ -964,7 +1260,9 @@
             seen.add(obj);
             visited++;
 
-            if (obj.isMesh === true && obj.material) {
+            // Cualquier objeto con material sirve (Mesh, Sprite, Points,
+            // sky domes custom). El filtro isMesh dejaba el cielo fuera.
+            if (obj.material) {
                 result.push(obj);
             }
 
@@ -988,8 +1286,8 @@
         if (lastBrace < 0) return src;
 
         return src.slice(0, lastBrace) +
-            '\n' + code + '\n' +
-            src.slice(lastBrace);
+               '\n' + code + '\n' +
+               src.slice(lastBrace);
     }
 
     // â”€â”€â”€ Hookear onBeforeCompile de un material â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1074,14 +1372,14 @@
 
         // Callback del preset (ej: xray necesita transparent=true)
         if (preset.onHook) {
-            try { preset.onHook(material); } catch (_) { }
+            try { preset.onHook(material); } catch (_) {}
         }
 
         state.hooked.set(material, {
             liveUniforms,
             originalOnBeforeCompile,
             originalCacheKey,
-            update: preset.update || (() => { }),
+            update: preset.update || (() => {}),
             onUnhook: preset.onUnhook || null
         });
 
@@ -1094,7 +1392,7 @@
 
         // Restaurar propiedades del material modificadas por onHook
         if (entry.onUnhook) {
-            try { entry.onUnhook(material); } catch (_) { }
+            try { entry.onUnhook(material); } catch (_) {}
         }
 
         material.onBeforeCompile = entry.originalOnBeforeCompile;
@@ -1134,8 +1432,12 @@
                     entry.liveUniforms.uPhResolution.value[0] = resX;
                     entry.liveUniforms.uPhResolution.value[1] = resY;
                 }
+                if (resX > 0 && entry.liveUniforms.uCrResolution) {
+                    entry.liveUniforms.uCrResolution.value[0] = resX;
+                    entry.liveUniforms.uCrResolution.value[1] = resY;
+                }
                 entry.update(entry.liveUniforms, dt);
-            } catch (_) { }
+            } catch (_) {}
         }
 
         rafId = requestAnimationFrame(animate);
@@ -1154,7 +1456,16 @@
         if (!scene) return;
         state.scene = scene;
 
+        // Recolectar de la escena Y de la cámara (el skybox de Miniblox
+        // puede colgar de la cámara en vez de la escena).
         const meshes = collectMeshes(scene);
+        const cam = state.camera || state.game?.camera ||
+            state.game?.gameScene?.camera;
+        if (cam) {
+            for (const extra of collectMeshes(cam)) {
+                if (!meshes.includes(extra)) meshes.push(extra);
+            }
+        }
         let hooked = 0;
 
         for (const mesh of meshes) {
@@ -1181,7 +1492,7 @@
         // Re-aplicar la forma de nubes dibujada si el juego recreó el mesh
         // (p.ej. al cambiar de mundo). Barato si ya está parcheado.
         if (localStorage.getItem(LS_SHAPE)) {
-            try { applyCloudsShapeToMesh(); } catch (_) { }
+            try { applyCloudsShapeToMesh(); } catch (_) {}
         }
     }
 
@@ -1377,6 +1688,11 @@
         // Nubes: forma custom por dibujo (máscara)
         if (cfg.cloudsShape && typeof cfg.cloudsShape === 'object') {
             handleCloudsShape(cfg.cloudsShape);
+        }
+
+        // Nubes: ruido 3D del pack Photon (CloudNoise 128³)
+        if (cfg.cloudsPackNoise !== undefined) {
+            setPackNoise(!!cfg.cloudsPackNoise);
         }
 
         if (typeof cfg.enabled === 'boolean') {
