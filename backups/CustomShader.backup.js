@@ -524,16 +524,20 @@
                 uCrSaturation: { value: 1.0 },  // T_SATURATION
                 uCrVibrance: { value: 1.0 },    // T_VIBRANCE
                 uCrVignette: { value: 0.5 },    // VIGNETTE_R amount
-                uCrFog: { value: 0.4 },         // niebla (adaptación)
+                uCrFog: { value: 0.4 },         // ATM_FOG_MULT adaptado
+                uCrDayFactor: { value: 1.0 },   // 0=noche 1=día (desde el juego)
+                uCrDither: { value: 1.0 },      // dither final (final.glsl:159)
                 uCrTime: { value: 0 },
                 uCrResolution: { value: [1600.0, 900.0] }
             },
             vertexCode: `
                 varying float mfCrDepth;
+                varying vec3 mfCrWorldPos;
             `,
             vertexMain: `
                 vec4 mfCrMvPos = modelViewMatrix * vec4(transformed, 1.0);
                 mfCrDepth = -mfCrMvPos.z;
+                mfCrWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             `,
             fragmentCode: `
                 uniform float uCrStrength;
@@ -544,14 +548,20 @@
                 uniform float uCrVibrance;
                 uniform float uCrVignette;
                 uniform float uCrFog;
+                uniform float uCrDayFactor;
+                uniform float uCrDither;
                 uniform vec2 uCrResolution;
                 varying float mfCrDepth;
+                varying vec3 mfCrWorldPos;
 
                 float mfCrGetLuminance(vec3 color) {
                     return dot(color, vec3(0.299, 0.587, 0.114));
                 }
                 float mfCrMax0(float x) {
                     return max(x, 0.0);
+                }
+                float mfCrPow2(float x) {
+                    return x * x;
                 }
 
                 // LinearToRGB (composite5.glsl:31)
@@ -641,6 +651,42 @@
                             graySaturation * (saturationFactor - 1.0);
                     return color;
                 }
+
+                // GetAtmFogColor (mainFog.glsl:94) — colores reales del pack
+                vec3 mfCrGetAtmFogColor(float altitudeFactorRaw, float VdotS, float dayFactor) {
+                    float nightFogMult = 2.5 - 0.625 * max(mfCrPow2(mfCrPow2(altitudeFactorRaw)), 0.0);
+                    float dayNightFogBlend = pow(1.0 - dayFactor, 4.0 - VdotS - 2.5 * dayFactor * dayFactor);
+                    // skyColors.glsl: nightUpSkyColor y dayDownSkyColor
+                    vec3 nightUpSkyColor = vec3(0.0005, 0.0008, 0.0019);
+                    vec3 dayDownSkyColor = vec3(0.22, 0.35, 0.56);
+                    return mix(
+                        nightUpSkyColor * (nightFogMult - dayNightFogBlend * nightFogMult),
+                        dayDownSkyColor * (0.9 + 0.3 * dayFactor),
+                        dayNightFogBlend
+                    );
+                }
+
+                // DoAtmosphericFog (mainFog.glsl:120) — adaptado a forward
+                vec3 mfCrDoAtmosphericFog(vec3 color, float lViewPos, float altitude) {
+                    // SRATA=63.1, CRFTM=60 (defaults del pack en overworld)
+                    float atmFogSRATA = 63.1;
+                    float atmFogCRFTM = 60.0;
+
+                    // renDisFactor: renderDistance 192 default, sin DH/VOXY
+                    float renDisFactor = min(192.0 / 160.0, 1.0);
+                    float fog = 1.0 - exp(-pow(lViewPos * 0.001, 2.0) * lViewPos * renDisFactor);
+
+                    float altitudeFactorRaw = mfCrPow2(1.0 - clamp(altitude - atmFogSRATA, 0.0, atmFogCRFTM) / atmFogCRFTM);
+                    float altitudeFactor = altitudeFactorRaw * 0.9 + 0.1;
+
+                    fog *= uCrFog - 0.1;
+
+                    // VdotS sin datos del sol en forward: 0 neutral
+                    vec3 fogColor = mfCrGetAtmFogColor(altitudeFactorRaw, 0.0, uCrDayFactor);
+
+                    float fogAmount = fog * altitudeFactor;
+                    return mix(color, fogColor, clamp(fogAmount, 0.0, 1.0));
+                }
             `,
             postMain: `
                 // ─── 1. Tonemap Lottes (DoCompTonemap) ───
@@ -652,16 +698,13 @@
                 // ─── 2. Saturación BSL (DoBSLColorSaturation) ───
                 gl_FragColor.rgb = mfCrDoBSLSaturation(gl_FragColor.rgb);
 
-                // ─── 3. Niebla con tinte por altura ───
+                // ─── 3. Niebla atmosférica (DoAtmosphericFog del pack) ───
                 if (uCrFog > 0.001) {
-                    vec2 mfCrUv = gl_FragCoord.xy / uCrResolution;
-                    float mfCrFogAmt = 1.0 - exp(-mfCrDepth * 0.012 * uCrFog);
-                    vec3 mfCrFogCol = mix(vec3(0.52, 0.60, 0.72), vec3(0.75, 0.80, 0.88),
-                                          smoothstep(0.0, 1.0, mfCrUv.y));
-                    gl_FragColor.rgb = mix(gl_FragColor.rgb, mfCrFogCol, mfCrFogAmt * 0.8);
+                    gl_FragColor.rgb = mfCrDoAtmosphericFog(
+                        gl_FragColor.rgb, mfCrDepth, mfCrWorldPos.y);
                 }
 
-                // ─── 4. Viñeta del pack (VIGNETTE_R) ───
+                // ─── 4. Viñeta del pack (VIGNETTE_R, final.glsl:153) ───
                 if (uCrVignette > 0.001) {
                     vec2 mfCrUvV = gl_FragCoord.xy / uCrResolution;
                     vec2 texCoordMin = mfCrUvV - 0.5;
@@ -669,10 +712,25 @@
                                     (1.0 - mfCrGetLuminance(gl_FragColor.rgb));
                     gl_FragColor.rgb *= mix(1.0, mfCrVig, uCrVignette);
                 }
+
+                // ─── 5. Dither final (final.glsl:159) — quita banding ───
+                if (uCrDither > 0.001) {
+                    float mfCrDith = fract(sin(dot(gl_FragCoord.xy,
+                                     vec2(12.9898, 78.233))) * 43758.5453);
+                    gl_FragColor.rgb += vec3((mfCrDith - 0.25) / 128.0);
+                }
             `,
             update: (u, dt) => {
                 u.uCrTime.value += dt;
                 u.uCrStrength.value = state.strength;
+                // worldTime: 0-24000 ticks; día 6000-18000, noche 18000-6000
+                // Convertir a factor 0=noche 1=día para el fog del pack
+                try {
+                    const wt = Number(state.game?.world?.worldTime ?? 12000);
+                    // Coseno: 6000=mediodía(1.0), 18000=medianoche(0.0)
+                    const dayF = 0.5 + 0.5 * Math.cos((wt - 6000) / 24000 * Math.PI * 2);
+                    u.uCrDayFactor.value = dayF;
+                } catch (_) {}
             }
         },
     };
@@ -704,7 +762,8 @@
         crsat:      { key: 'uCrSaturation', max: 2 },
         crvib:      { key: 'uCrVibrance', max: 2 },
         crvig:      { key: 'uCrVignette', max: 1 },
-        crfog:      { key: 'uCrFog',      max: 1 }
+        crfog:      { key: 'uCrFog',      max: 1 },
+        crdith:     { key: 'uCrDither',   max: 1 }
     };
 
     // â”€â”€â”€ Tecla F para toggle de linterna + rueda para radio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

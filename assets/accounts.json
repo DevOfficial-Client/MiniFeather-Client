@@ -1,0 +1,24 @@
+{
+  "players": {
+    "Not_Senpai": {
+      "skin": "https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/refs/heads/main/skins/devs/notsenpai.png",
+      "rank": "MFC"
+    },
+    "ItzNightrise": {
+      "skin": "https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/refs/heads/main/skins/devs/nightrise.png",
+      "rank": "MFC"
+    },
+    "EstebanExG_": {
+      "skin": "https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/refs/heads/main/skins/devs/itzesteban.png",
+      "rank": "DEV"
+    },
+    "_Xx_Yukiji_xX_": {
+      "skin": "https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/refs/heads/main/skins/devs/gab.png",
+      "rank": ""
+    },
+    "xZ_Lilit_Wolf_Zx": {
+      "skin": "https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/refs/heads/main/skins/devs/eve.png",
+      "rank": ""
+    }
+  }
+}

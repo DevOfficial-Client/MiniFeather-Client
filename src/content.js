@@ -2898,11 +2898,11 @@
     const spookFx = ['vhs', 'crt', 'cel', 'fog', 'grain', 'glitch', 'flash', 'sharp'];
     const ufFx = ['ufsat', 'ufcontrast', 'uftone'];
     const phFx = ['phagx', 'phfog', 'phend', 'phbh', 'phbhsize', 'phbhspin'];
-    const crFx = ['crtm', 'crexp', 'crc', 'crsat', 'crvib', 'crvig', 'crfog'];
+    const crFx = ['crtm', 'crexp', 'crc', 'crsat', 'crvib', 'crvig', 'crfog', 'crdith'];
     const fxList = preset === 'ultrafast' ? ufFx : preset === 'photon' ? phFx
       : preset === 'complementaryInspired' ? crFx : spookFx;
     for (const name of fxList) {
-      const fallback = { vhs: 0.6, crt: 0.6, cel: 0.6, fog: 0.7, grain: 0.5, glitch: 0.4, flash: 0.5, sharp: 0.5, ufsat: 1.35, ufcontrast: 0.45, uftone: 0.35, phagx: 0.8, phfog: 0.5, phend: 0, phbh: 0, phbhsize: 0.35, phbhspin: 1, crtm: 0.8, crexp: 1.0, crc: 1.05, crsat: 1.0, crvib: 1.0, crvig: 0.5, crfog: 0.4 }[name];
+      const fallback = { vhs: 0.6, crt: 0.6, cel: 0.6, fog: 0.7, grain: 0.5, glitch: 0.4, flash: 0.5, sharp: 0.5, ufsat: 1.35, ufcontrast: 0.45, uftone: 0.35, phagx: 0.8, phfog: 0.5, phend: 0, phbh: 0, phbhsize: 0.35, phbhspin: 1, crtm: 0.8, crexp: 1.0, crc: 1.05, crsat: 1.0, crvib: 1.0, crvig: 0.5, crfog: 0.4, crdith: 1 }[name];
       fx[name] = Number(settings['customShaderFx' + name.charAt(0).toUpperCase() + name.slice(1)] ?? fallback);
     }
 
@@ -4957,7 +4957,8 @@
           { id: 'crsat', label: t('shadersCrSat'), value: Number(settings.customShaderFxcrsat ?? 1.0), min: 0, max: 2, step: 0.05, fmt: v => v.toFixed(2) },
           { id: 'crvib', label: t('shadersCrVib'), value: Number(settings.customShaderFxcrvib ?? 1.0), min: 0, max: 2, step: 0.05, fmt: v => v.toFixed(2) },
           { id: 'crvig', label: t('shadersCrVig'), value: Number(settings.customShaderFxcrvig ?? 0.5), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
-          { id: 'crfog', label: t('shadersCrFog'), value: Number(settings.customShaderFxcrfog ?? 0.4), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' }
+          { id: 'crfog', label: t('shadersCrFog'), value: Number(settings.customShaderFxcrfog ?? 0.4), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'crdith', label: t('shadersCrDith'), value: Number(settings.customShaderFxcrdith ?? 1), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' }
         ]
       : [
           { id: 'vhs', label: t('shadersVhs'), value: Number(settings.customShaderFxVhs ?? 0.6), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },

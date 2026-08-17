@@ -97,6 +97,8 @@
         "assets/spritesheets generator",
         "assets/frames.json",
         "assets/gui/*",
+        "assets/accounts.json",
+        "assets/pvtexpack.png",
         "assets/shadertextures/*",
         "src/jszip.min.js"
       ],
