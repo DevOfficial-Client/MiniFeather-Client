@@ -11,11 +11,12 @@
         yawDelta: 0,
         strafe: 0,
         idle: 0,
-        breath: 0,
-        breathTarget: 0,
-        breathY: 0,
-        breathTargetY: 0,
-        breathNext: 0
+        breathFrom: 0,
+        breathTo: 0,
+        breathYFrom: 0,
+        breathYTo: 0,
+        breathStart: 0,
+        breathDur: 1
     };
 
     try {
@@ -126,13 +127,18 @@
         } catch {}
 
         const t = performance.now() / 1000;
-        if (t >= state.breathNext) {
-            state.breathNext = t + IDLE_STEP_MIN + Math.random() * (IDLE_STEP_MAX - IDLE_STEP_MIN);
-            state.breathTarget = (Math.random() * 2 - 1) * IDLE_AMP;
-            state.breathTargetY = (Math.random() * 2 - 1) * IDLE_POS;
+        if (t - state.breathStart >= state.breathDur) {
+            state.breathFrom = state.breathTo;
+            state.breathYFrom = state.breathYTo;
+            state.breathTo = (Math.random() * 2 - 1) * IDLE_AMP;
+            state.breathYTo = (Math.random() * 2 - 1) * IDLE_POS;
+            state.breathStart = t;
+            state.breathDur = IDLE_STEP_MIN + Math.random() * (IDLE_STEP_MAX - IDLE_STEP_MIN);
         }
-        state.breath += (state.breathTarget - state.breath) * Math.min(1, k * 2.5);
-        state.breathY += (state.breathTargetY - state.breathY) * Math.min(1, k * 2.5);
+        const u = Math.min(1, (t - state.breathStart) / state.breathDur);
+        const s = u * u * (3 - 2 * u);
+        const breath = state.breathFrom + (state.breathTo - state.breathFrom) * s;
+        const breathY = state.breathYFrom + (state.breathYTo - state.breathYFrom) * s;
 
         const fallRot = Math.max(-1, Math.min(1, state.vy * 2)) * MAX_FALL_ROT * useDamp;
         const fallPos = Math.max(-1, Math.min(1, state.vy * 2)) * MAX_FALL_POS * useDamp;
@@ -142,8 +148,8 @@
             Math.max(-0.5, Math.min(0.5, state.yawDelta)) *
             YAW_LAG_K *
             useDamp;
-        const idleRotX = state.breath * state.idle * useDamp;
-        const idlePosY = state.breathY * state.idle * useDamp;
+        const idleRotX = breath * state.idle * useDamp;
+        const idlePosY = breathY * state.idle * useDamp;
 
         const it = lf.item;
         const ra = lf.rightArm;

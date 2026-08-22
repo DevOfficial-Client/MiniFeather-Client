@@ -1218,6 +1218,26 @@
         }
       }
 
+      let pingTarget = null;
+      async function findPingTarget() {
+        if (pingTarget !== null) return pingTarget;
+        for (const path of ['/favicon.ico', '/manifest.json', '/index.html', '/']) {
+          try {
+            const res = await fetch(`${location.origin}${path}`, {
+              method: 'HEAD',
+              cache: 'no-store',
+              credentials: 'omit'
+            });
+            if (res.ok) {
+              pingTarget = path;
+              return pingTarget;
+            }
+          } catch {}
+        }
+        pingTarget = '';
+        return pingTarget;
+      }
+
       async function measure() {
         if (!enabled || measuring || document.hidden) return;
         if (!navigator.onLine) {
@@ -1233,7 +1253,10 @@
         const started = performance.now();
 
         try {
-          await fetch(`${location.origin}/favicon.ico?mf_ping=${Date.now()}`, {
+          const target = pingTarget !== null ? pingTarget : await findPingTarget();
+          if (!target) throw new Error('no endpoint');
+
+          await fetch(`${location.origin}${target}?mf_ping=${Date.now()}`, {
             method: 'HEAD',
             cache: 'no-store',
             credentials: 'omit',

@@ -61,6 +61,7 @@
         "src/LocalGames.js",
         "src/VanillaAnimations.js",
         "src/HandSway.js",
+        "src/HandLayer.js",
         "src/CustomShader.js",
         "src/GUIPatch.js"
       ],
