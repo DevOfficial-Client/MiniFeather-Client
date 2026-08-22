@@ -44,6 +44,7 @@
         "src/PatPat.js",
         "src/ItemPhysics.js",
         "src/NoWeather.js",
+        "src/LeafWind.js",
         "src/AntiAFK.js",
         "src/Waypoints.js",
         "src/ClientCommands.js",
