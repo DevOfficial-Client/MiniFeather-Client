@@ -367,6 +367,7 @@
     patPat: false,
     itemPhysics: false,
     noWeather: false,
+    leafWind: false,
     antiAfk: false,
     antiAfkDelay: 120,
     patPatPreset: 'normal',
@@ -1217,6 +1218,26 @@
         }
       }
 
+      let pingTarget = null;
+      async function findPingTarget() {
+        if (pingTarget !== null) return pingTarget;
+        for (const path of ['/favicon.ico', '/manifest.json', '/index.html', '/']) {
+          try {
+            const res = await fetch(`${location.origin}${path}`, {
+              method: 'HEAD',
+              cache: 'no-store',
+              credentials: 'omit'
+            });
+            if (res.ok) {
+              pingTarget = path;
+              return pingTarget;
+            }
+          } catch {}
+        }
+        pingTarget = '';
+        return pingTarget;
+      }
+
       async function measure() {
         if (!enabled || measuring || document.hidden) return;
         if (!navigator.onLine) {
@@ -1232,7 +1253,10 @@
         const started = performance.now();
 
         try {
-          await fetch(`${location.origin}/favicon.ico?mf_ping=${Date.now()}`, {
+          const target = pingTarget !== null ? pingTarget : await findPingTarget();
+          if (!target) throw new Error('no endpoint');
+
+          await fetch(`${location.origin}${target}?mf_ping=${Date.now()}`, {
             method: 'HEAD',
             cache: 'no-store',
             credentials: 'omit',
@@ -2392,6 +2416,7 @@
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc') },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc') },
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc') },
+      { page: 'render', key: 'leafWind', title: t('leafWind'), desc: t('leafWindDesc') },
       { page: 'render', key: 'vanillaAnimations', title: 'Vanilla Animations', desc: 'Freezes elbow and knee joints rigid for all players' },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
@@ -2478,6 +2503,7 @@
     item: 'itemPhysics', itemphysics: 'itemPhysics', physics: 'itemPhysics',
     keys: 'keystrokes', keystrokes: 'keystrokes',
     noweather: 'noWeather', weather: 'noWeather',
+    leafwind: 'leafWind', leaves: 'leafWind', foliage: 'leafWind',
     pat: 'patPat', patpat: 'patPat',
     ping: 'pingCounter', pingcounter: 'pingCounter',
     titan: 'titanTiny', tiny: 'titanTiny', titantiny: 'titanTiny',
@@ -2492,7 +2518,7 @@
     distanceNameTags: 'Player Distance', fpsCounter: 'FPS Counter', freelook: 'FreeLook', freecam: 'FreeCam',
     guiPatch: 'GUI Patch',
     healthNameTags: 'Player Health', blockHighlight: 'Block Highlight', itemPhysics: 'Item Physics',
-    keystrokes: 'Keystrokes', noWeather: 'No Weather', patPat: 'PatPat', pingCounter: 'Ping Counter',
+    keystrokes: 'Keystrokes', noWeather: 'No Weather', leafWind: 'Leaf Movement', patPat: 'PatPat', pingCounter: 'Ping Counter',
     titanTiny: 'Titan & Tiny', vanillaAnimations: 'Vanilla Animations', waypoints: 'Waypoints', zoom: 'Zoom'
   });
 
@@ -2598,7 +2624,7 @@
     if (request.action === 'toggle') {
       const key = resolveCommandModule(args[0]);
       if (!key) {
-        push('Usage: /toggle <module>. Modules: afk, armor, camera, coords, crosshair, cps, distance, elytra, fps, freecam, freelook, health, highlight, itemphysics, keystrokes, noweather, patpat, ping, titan, waypoints, zoom', 'error');
+        push('Usage: /toggle <module>. Modules: afk, armor, camera, coords, crosshair, cps, distance, elytra, fps, freecam, freelook, health, highlight, itemphysics, keystrokes, leafwind, noweather, patpat, ping, titan, waypoints, zoom', 'error');
       } else {
         const enabling = !settings[key];
         if (key === 'freecam' && enabling && !requestFreecamAccess()) {
@@ -2880,6 +2906,29 @@
       },
       destroy() {
         sendNoWeatherConfig(false);
+      }
+    }));
+  }
+
+  function sendLeafWindConfig(enabled = settings.leafWind) {
+    document.dispatchEvent(new CustomEvent('minifeather:leaf-wind-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initLeafWindModule() {
+    registerModule('leafWind', () => createLifecycle({
+      enable() {
+        sendLeafWindConfig(true);
+      },
+      disable() {
+        sendLeafWindConfig(false);
+      },
+      refresh() {
+        sendLeafWindConfig(MODULES.get('leafWind')?.enabled === true);
+      },
+      destroy() {
+        sendLeafWindConfig(false);
       }
     }));
   }
@@ -4841,6 +4890,11 @@
               'noWeather',
               t('noWeather'),
               t('noWeatherDesc')
+            )}
+            ${renderToggle(
+              'leafWind',
+              t('leafWind'),
+              t('leafWindDesc')
             )}
             ${renderToggle(
               'vanillaAnimations',
@@ -7607,6 +7661,7 @@
     setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
+    setModuleEnabled('leafWind', settings.leafWind);
     setModuleEnabled('antiAfk', settings.antiAfk);
     setModuleEnabled('rhythmParkour', settings.rhythmParkour);
     setModuleEnabled('zoom', settings.zoom);
@@ -8095,6 +8150,7 @@
     initPatPatModule();
     initItemPhysicsModule();
     initNoWeatherModule();
+    initLeafWindModule();
     initVanillaAnimationsModule();
     initAntiAfkModule();
     initRhythmParkourModule();
