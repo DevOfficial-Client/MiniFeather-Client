@@ -266,6 +266,7 @@
         // texturas, cero bucles, cero derivadas, ni siquiera vertex extra.
         // Pensado para ganar FPS, sobre todo junto a Render Scale.
         ultrafast: {
+            version: 2,
             uniforms: {
                 uUfStrength: { value: 0.8 },   // mezcla global (slider Intensidad)
                 uUfSat: { value: 1.35 },       // vibrance (1 = neutro, >1 vibrante)
@@ -1928,6 +1929,7 @@
                 !shader.fragmentShader.includes('mfHash') &&
                 !shader.fragmentShader.includes('mfCrGetLuminance') &&
                 !shader.fragmentShader.includes('mfUfHash') &&
+                !shader.fragmentShader.includes('uUfStrength') &&
                 !shader.fragmentShader.includes('mfXrayColor') &&
                 !shader.fragmentShader.includes('mfGvHash')) {
                 shader.fragmentShader = preset.fragmentCode + '\n' + shader.fragmentShader;

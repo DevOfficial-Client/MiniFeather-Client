@@ -109,6 +109,11 @@
         "assets/accounts.json",
         "assets/pvtexpack.png",
         "assets/shadertextures/*",
+        "assets/menu/*",
+        "textures/*",
+        "textures/*/*",
+        "textures/*/*/*",
+        "textures/*/*/*/*",
         "src/jszip.min.js"
       ],
       "matches": [
