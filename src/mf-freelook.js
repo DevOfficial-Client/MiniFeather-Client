@@ -178,6 +178,10 @@
                   options
               );
           }
+          // Chrome bloquea 'unload' vía Permissions Policy; convertirlo a
+          // 'pagehide' (reemplazo oficial) evita la violación y mantiene
+          // el callback del script original.
+          if (type === 'unload') type = 'pagehide';
           return originalAddEventListener.call(
               this,
               type,

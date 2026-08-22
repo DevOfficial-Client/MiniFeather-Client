@@ -14,7 +14,7 @@
        durabilityBarHeight: 4,       
        updateInterval: 150,       
        atlas:
-           'https://miniblox.io/textures/spritesheet.36511680aea3.png',       
+           (location.origin || 'https://miniblox.io') + '/textures/spritesheet.36511680aea3.png',
        atlasSize: 1024,
        tileSize: 16
    };       

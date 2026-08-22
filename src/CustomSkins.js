@@ -38,15 +38,22 @@
         log("fetching JSON:", CUSTOM_SKINS_URL);
 
         customSkinsLoading = fetch(CUSTOM_SKINS_URL, { cache: "no-store" })
+            .catch(function (err) {
+                // GitHub caído / sin red: fetch rechaza sin respuesta HTTP.
+                if (!CUSTOM_SKINS_FALLBACK_URL) throw err;
+                warn("network error, trying local fallback:", (err && err.message) || err);
+                return null; // marca para usar el local abajo
+            })
             .then(function (response) {
-                if (!response.ok && CUSTOM_SKINS_FALLBACK_URL) {
-                    warn("remote non-OK, trying local fallback");
+                const nonOk = !response || !response.ok;
+                if (nonOk && CUSTOM_SKINS_FALLBACK_URL) {
+                    warn("remote unavailable, using local copy");
                     return fetch(CUSTOM_SKINS_FALLBACK_URL).then(function (r) {
                         if (!r.ok) throw new Error("local non-OK");
                         return r.json();
                     });
                 }
-                if (!response.ok) throw new Error("non-OK " + response.status);
+                if (nonOk) throw new Error("non-OK " + (response ? response.status : "network"));
                 return response.json();
             })
             .then(function (data) {
@@ -123,7 +130,7 @@
 
             var promise = originalFetch.apply(this, args);
 
-            if (reqUrl.indexOf("miniblox.io") !== -1 &&
+            if ((reqUrl.indexOf("miniblox.io") !== -1 || reqUrl.indexOf("miniblox.online") !== -1) &&
                 (reqUrl.indexOf("auth-api") !== -1 ||
                  reqUrl.indexOf("/api/") !== -1 ||
                  reqUrl.indexOf("profile") !== -1 ||

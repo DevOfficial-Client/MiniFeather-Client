@@ -169,11 +169,11 @@
 
     function getSpritesheetPatterns() {
         const resolution = parseInt(localStorage.getItem(RES_KEY)) || TILE_SIZE;
-        const patterns = ['miniblox.io/textures/spritesheet'];
+        const patterns = ['/textures/spritesheet'];
         if (resolution > TILE_SIZE) {
-            patterns.push('miniblox.io/auth-api/texturepacks/default/highres.png');
+            patterns.push('/auth-api/texturepacks/default/highres.png');
         } else {
-            patterns.push('miniblox.io/auth-api/texturepacks/default/lowres.png');
+            patterns.push('/auth-api/texturepacks/default/lowres.png');
         }
         return patterns;
     }
@@ -190,9 +190,9 @@
             if (!dataUrl) { console.warn('[MiniFeather TexturePack] No dataUrl in localStorage'); return; }
 
             var res = parseInt(localStorage.getItem(RES_KEY)) || 16;
-            var patterns = ['miniblox.io/textures/spritesheet'];
-            if (res > 16) { patterns.push('miniblox.io/auth-api/texturepacks/default/highres.png'); }
-            else { patterns.push('miniblox.io/auth-api/texturepacks/default/lowres.png'); }
+            var patterns = ['/textures/spritesheet'];
+            if (res > 16) { patterns.push('/auth-api/texturepacks/default/highres.png'); }
+            else { patterns.push('/auth-api/texturepacks/default/lowres.png'); }
 
             function matches(url){
                 for(var i=0;i<patterns.length;i++){ if(url.indexOf(patterns[i])!==-1) return true; }

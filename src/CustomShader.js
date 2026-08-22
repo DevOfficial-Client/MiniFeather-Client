@@ -506,6 +506,109 @@
             }
         },
 
+        // ─────────── CEMENTERIO (graveyard) ───────────
+        // Niebla densa gris-verdosa con poca visibilidad, color frío
+        // desaturado, grano sutil y luz que muere rápido con la
+        // distancia. Look de cementerio al amanecer.
+        graveyard: {
+            version: 2,
+            uniforms: {
+                uGvTime: { value: 0 },
+                uGvStrength: { value: 0.7 },   // mezcla global
+                uGvFog: { value: 0.8 },        // densidad de la niebla
+                uGvFogDist: { value: 30.0 },   // distancia (bloques) de visibilidad
+                uGvDesat: { value: 0.55 },     // desaturación del color
+                uGvBlue: { value: 0.35 },      // tinte frío azulado
+                uGvGrain: { value: 0.3 },      // grano de película vieja
+                uGvLight: { value: 0.3 }       // luz cenital pálida (difusa)
+            },
+            vertexCode: `
+                varying vec3 mfGvWorldPos;
+                varying float mfGvDepth;
+            `,
+            vertexMain: `
+                mfGvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+                vec4 mfGvMvPos = modelViewMatrix * vec4(transformed, 1.0);
+                mfGvDepth = -mfGvMvPos.z;
+            `,
+            fragmentCode: `
+                uniform float uGvTime;
+                uniform float uGvStrength;
+                uniform float uGvFog;
+                uniform float uGvFogDist;
+                uniform float uGvDesat;
+                uniform float uGvBlue;
+                uniform float uGvGrain;
+                uniform float uGvLight;
+                varying vec3 mfGvWorldPos;
+                varying float mfGvDepth;
+
+                float mfGvHash(vec2 p) {
+                    p = fract(p * vec2(123.34, 456.21));
+                    p += dot(p, p + 45.32);
+                    return fract(p.x * p.y);
+                }
+                float mfGvNoise(vec2 p) {
+                    vec2 i = floor(p), f = fract(p);
+                    f = f * f * (3.0 - 2.0 * f);
+                    float a = mfGvHash(i);
+                    float b = mfGvHash(i + vec2(1.0, 0.0));
+                    float c = mfGvHash(i + vec2(0.0, 1.0));
+                    float d = mfGvHash(i + vec2(1.0, 1.0));
+                    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                }
+                // FBM ligero para bancos de niebla a la deriva
+                float mfGvFbm(vec2 p) {
+                    float v = 0.0, a = 0.5;
+                    for (int i = 0; i < 3; i++) {
+                        v += a * mfGvNoise(p);
+                        p = p * 2.02 + vec2(11.7, 7.3);
+                        a *= 0.5;
+                    }
+                    return v;
+                }
+            `,
+            postMain: `
+                vec3 mfGvOrig = gl_FragColor.rgb;
+
+                // ─── 1. Color base frío, desaturado y MUY OSCURO ───
+                float mfGvLum = dot(mfGvOrig, vec3(0.2126, 0.7152, 0.0722));
+                vec3 mfGvBase = mix(mfGvOrig, vec3(mfGvLum), uGvDesat);
+                // Oscurecimiento global: noche cerrada sin luna
+                mfGvBase *= 0.30;
+                // Tinte frío: sombras hacia azul-gris
+                mfGvBase = mix(mfGvBase, mfGvBase * vec3(0.82, 0.90, 1.08), uGvBlue);
+                // Luz pálida: aplastar a casi negro salvo el residuo frío
+                mfGvBase = mix(mfGvBase, mfGvBase * 0.25 + 0.008, uGvLight);
+
+                // ─── 2. Niebla densa por distancia ───
+                // Exponencial dura: visibilidad ~uGvFogDist bloques
+                float mfGvFogAmt = 1.0 - exp(-pow(mfGvDepth / uGvFogDist, 2.2) * uGvFog * 4.0);
+
+                // Bancos de niebla animados (proyectados sobre el mundo)
+                vec2 mfGvFogUv = mfGvWorldPos.xz * 0.035 + vec2(uGvTime * 0.015, uGvTime * 0.008);
+                float mfGvBanks = mfGvFbm(mfGvFogUv);
+                mfGvFogAmt = clamp(mfGvFogAmt + (mfGvBanks - 0.5) * 0.25 * uGvFog, 0.0, 1.0);
+
+                // Color de niebla: verde-gris casi negro (noche en el cementerio)
+                vec3 mfGvFogCol = vec3(0.075, 0.095, 0.088);
+                mfGvBase = mix(mfGvBase, mfGvFogCol, mfGvFogAmt);
+
+                // ─── 3. Grano de película vieja ───
+                if (uGvGrain > 0.001) {
+                    float mfGvG = mfGvHash(gl_FragCoord.xy + fract(uGvTime) * 100.0);
+                    mfGvBase += (mfGvG - 0.5) * uGvGrain * 0.08;
+                }
+
+                // ─── 4. Mezcla con la intensidad del slider ───
+                gl_FragColor.rgb = mix(mfGvOrig, mfGvBase, uGvStrength);
+            `,
+            update: (u, dt) => {
+                u.uGvTime.value += dt;
+                u.uGvStrength.value = state.strength;
+            }
+        },
+
         // ─────────── COMPLEMENTARY REIMAGINED (port del pack r5.8.1) ───────────
         // Port de la matemática exacta de Complementary Shaders (EminGT):
         //  - DoCompTonemap (composite5.glsl:36): Lottes 2016 modificado
@@ -763,7 +866,13 @@
         crvib:      { key: 'uCrVibrance', max: 2 },
         crvig:      { key: 'uCrVignette', max: 1 },
         crfog:      { key: 'uCrFog',      max: 1 },
-        crdith:     { key: 'uCrDither',   max: 1 }
+        crdith:     { key: 'uCrDither',   max: 1 },
+        gvfog:      { key: 'uGvFog',      max: 1 },
+        gvdist:     { key: 'uGvFogDist',  max: 120 },
+        gvdesat:    { key: 'uGvDesat',    max: 1 },
+        gvblue:     { key: 'uGvBlue',     max: 1 },
+        gvgrain:    { key: 'uGvGrain',    max: 1 },
+        gvlight:    { key: 'uGvLight',    max: 1 }
     };
 
     // â”€â”€â”€ Tecla F para toggle de linterna + rueda para radio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -900,6 +1009,23 @@
     // se multiplica por el factor de escala. AsÃ­ sobrevive a cualquier
     // resize del juego o de la ventana.
     function applyRenderScale(scale) {
+        const clamped = Math.max(0.5, Math.min(1.0, parseFloat(scale) || 1.0));
+
+        // A escala nativa no hay nada que escalar: evitar el warning
+        // del renderer (el juego no lo expone fuera de su closure).
+        if (clamped >= 1.0) {
+            // Si había un hook activo con factor < 1, restaurar nativo
+            const g = state.game || findGame();
+            const r = g ? resolveRenderer(g) : null;
+            if (r && r.__mfScaleHook) {
+                r.__mfScaleHook.factor = 1.0;
+                r.__mfScaleHook.originalSetPixelRatio(window.devicePixelRatio || 1);
+            }
+            state.renderScale = 1.0;
+            localStorage.setItem('miniblox_customshader_renderscale', '1.0');
+            return true;
+        }
+
         const game = state.game || findGame();
         if (!game) return false;
 
@@ -908,8 +1034,6 @@
             console.warn(`${TAG} WebGLRenderer no encontrado para render scale.`);
             return false;
         }
-
-        const clamped = Math.max(0.5, Math.min(1.0, parseFloat(scale) || 1.0));
 
         // Instalar el hook persistente una sola vez
         if (!renderer.__mfScaleHook) {
@@ -948,6 +1072,371 @@
 
         state.renderScale = clamped;
         return true;
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // POSTFX: pass full-screen propio (raw WebGL, sin clases THREE)
+    // ══════════════════════════════════════════════════════════════════
+    // Desbloquea efectos que requieren muestrear píxeles vecinos:
+    // bloom, aberración cromática real, DOF radial, lens dirt.
+    //
+    // Estrategia: hookear renderer.render(). Tras el render del juego:
+    //   1. copiar el framebuffer a una textura nuestra
+    //   2. dibujar un quad con un shader que mezcla: base + bloom blur
+    //      + aberración cromática + DOF radial + lens dirt animado
+    // Todo en UN solo fragment (una pasada, mínimo coste).
+    //
+    // Raw WebGL: el juego puede no exponer THREE global, así que usamos
+    // el contexto GL del canvas directamente (compatible siempre).
+    const postfx = {
+        enabled: false,
+        gl: null,
+        program: null,
+        uniforms: null,
+        quad: null,
+        sceneTex: null,
+        origRender: null,
+        time: 0,
+        lastT: performance.now(),
+        params: { bloom: 0.35, ca: 0.0, dof: 0.0, dirt: 0.0, vignette: 0.0 },
+        active: false
+    };
+
+    const POSTFX_FS_SRC = `
+        precision highp float;
+        varying vec2 vUv;
+        uniform sampler2D uScene;
+        uniform vec2 uResolution;
+        uniform float uTime;
+        uniform float uBloom;
+        uniform float uCA;
+        uniform float uDof;
+        uniform float uDirt;
+        uniform float uVignette;
+
+        float mfPxHash(vec2 p) {
+            p = fract(p * vec2(123.34, 456.21));
+            p += dot(p, p + 45.32);
+            return fract(p.x * p.y);
+        }
+        float mfPxBright(vec3 c) {
+            return dot(c, vec3(0.2126, 0.7152, 0.0722));
+        }
+
+        // Blur de 12 taps (2 anillos de 6): aprox gaussiano para bloom/DOF
+        vec3 mfRingBlur(vec2 uv, float radiusPx) {
+            vec2 px = radiusPx / uResolution;
+            vec3 sum = vec3(0.0);
+            for (int i = 0; i < 6; i++) {
+                float a = float(i) * 1.0472 + 0.26;
+                vec2 dir = vec2(cos(a), sin(a));
+                sum += texture2D(uScene, uv + dir * px).rgb;
+                sum += texture2D(uScene, uv - dir * px * 1.6).rgb;
+            }
+            return sum / 12.0;
+        }
+
+        void main() {
+            vec2 uv = vUv;
+            vec2 fromCenter = uv - 0.5;
+            float r = length(fromCenter);
+
+            // ── 1. Aberración cromática: samplear R y B con offset radial ──
+            vec3 col;
+            if (uCA > 0.001) {
+                vec2 off = fromCenter * uCA * 0.012;
+                col.r = texture2D(uScene, uv - off).r;
+                col.g = texture2D(uScene, uv).g;
+                col.b = texture2D(uScene, uv + off).b;
+            } else {
+                col = texture2D(uScene, uv).rgb;
+            }
+
+            // ── 2. Bloom: extraer brillo, difuminar, sumar suave ──
+            if (uBloom > 0.001) {
+                vec3 blur = mfRingBlur(uv, 6.0);
+                float lum = mfPxBright(blur);
+                vec3 brightPart = blur * smoothstep(0.55, 0.85, lum);
+                // segundo anillo más ancho = halo grande
+                vec3 wide = mfRingBlur(uv, 16.0);
+                brightPart += wide * smoothstep(0.65, 0.95, mfPxBright(wide)) * 0.5;
+                col += brightPart * uBloom * 0.8;
+            }
+
+            // ── 3. DOF radial: mezclar blur según distancia al centro ──
+            if (uDof > 0.001) {
+                float focusMask = smoothstep(0.18, 0.62, r) * uDof;
+                vec3 blurred = mfRingBlur(uv, 4.0);
+                col = mix(col, blurred, focusMask * 0.85);
+            }
+
+            // ── 4. Lens dirt: manchas procedurales que brillan con bloom ──
+            if (uDirt > 0.001) {
+                vec2 dirtUv = uv * 3.0 + vec2(uTime * 0.008, uTime * 0.005);
+                float d = mfPxHash(floor(dirtUv * 40.0));
+                float spots = smoothstep(0.82, 1.0, d);
+                float glow = mfPxBright(col);
+                col += vec3(0.9, 0.85, 0.75) * spots * glow * uDirt * 0.6;
+            }
+
+            // ── 5. Viñeta ──
+            if (uVignette > 0.001) {
+                col *= 1.0 - r * r * uVignette;
+            }
+
+            gl_FragColor = vec4(col, 1.0);
+        }
+    `;
+
+    const POSTFX_VS_SRC = `
+        attribute vec2 aPos;
+        varying vec2 vUv;
+        void main() {
+            vUv = aPos * 0.5 + 0.5;
+            gl_Position = vec4(aPos, 0.0, 1.0);
+        }
+    `;
+
+    function postfxCompile(gl, type, src) {
+        const sh = gl.createShader(type);
+        gl.shaderSource(sh, src);
+        gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+            console.warn('[MiniFeather PostFX] Shader error:', gl.getShaderInfoLog(sh));
+            gl.deleteShader(sh);
+            return null;
+        }
+        return sh;
+    }
+
+    // Instalar el pass. El renderer del juego NO es alcanzable desde el
+    // objeto game (vive en un closure del módulo) — lo verificado con BFS
+    // exhaustivo (7000+ objetos). En su lugar: el canvas principal + su
+    // contexto GL + un rAF encadenado. Si registramos nuestro rAF callback
+    // en cada frame DESPUÉS de que el juego registre el suyo, corremos
+    // tras su render en el mismo frame (antes del compositing del browser)
+    // y podemos leer/escribir el framebuffer.
+    function findMainGameCanvas() {
+        // Vía preferida: registro temprano de canvases GL (TextureInterceptor
+        // hookea getContext desde document_start). El primer canvas GL grande
+        // creado por el juego es el principal.
+        const registry = window.__MF_GL_CANVASES__;
+        if (Array.isArray(registry) && registry.length) {
+            const live = registry.filter(c =>
+                c.isConnected && !c.__mfIsHUD &&
+                c.width >= 300 && c.height >= 200);
+            // El del mayor área (el juego escala el principal al viewport)
+            live.sort((a, b) => b.width * b.height - a.width * a.height);
+            if (live[0]) return live[0];
+        }
+        // Fallback: heurística por tamaño (sesiones sin el registro)
+        const canvases = [...document.querySelectorAll('canvas')];
+        return canvases
+            .filter(c => c.width >= 300 && c.height >= 200)
+            .sort((a, b) => b.width * b.height - a.width * a.height)[0] || null;
+    }
+
+    function installPostFx() {
+        if (postfx.active) return true;
+
+        const canvas = findMainGameCanvas();
+        if (!canvas) return false;
+
+        const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        if (!gl) {
+            console.warn('[MiniFeather PostFX] Sin contexto WebGL en el canvas principal.');
+            return false;
+        }
+
+        const vs = postfxCompile(gl, gl.VERTEX_SHADER, POSTFX_VS_SRC);
+        const fs = postfxCompile(gl, gl.FRAGMENT_SHADER, POSTFX_FS_SRC);
+        if (!vs || !fs) return false;
+
+        const prog = gl.createProgram();
+        gl.attachShader(prog, vs);
+        gl.attachShader(prog, fs);
+        gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+            console.warn('[MiniFeather PostFX] Link error:', gl.getProgramInfoLog(prog));
+            return false;
+        }
+
+        const quad = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+            -1, -1, 1, -1, -1, 1,
+            -1, 1, 1, -1, 1, 1
+        ]), gl.STATIC_DRAW);
+
+        const sceneTex = gl.createTexture();
+
+        // VAO propio: aísla el estado de vertex attribs del juego para
+        // que nuestro quad no contamine sus draw calls posteriores.
+        let vao = null;
+        if (typeof gl.createVertexArray === 'function') {
+            vao = gl.createVertexArray();
+            gl.bindVertexArray(vao);
+            gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+            const aPos = gl.getAttribLocation(prog, 'aPos');
+            gl.enableVertexAttribArray(aPos);
+            gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+            gl.bindVertexArray(null);
+        }
+
+        postfx.gl = gl;
+        postfx.program = prog;
+        postfx.quad = quad;
+        postfx.sceneTex = sceneTex;
+        postfx.vao = vao;
+        postfx.uniforms = {
+            uScene: gl.getUniformLocation(prog, 'uScene'),
+            uResolution: gl.getUniformLocation(prog, 'uResolution'),
+            uTime: gl.getUniformLocation(prog, 'uTime'),
+            uBloom: gl.getUniformLocation(prog, 'uBloom'),
+            uCA: gl.getUniformLocation(prog, 'uCA'),
+            uDof: gl.getUniformLocation(prog, 'uDof'),
+            uDirt: gl.getUniformLocation(prog, 'uDirt'),
+            uVignette: gl.getUniformLocation(prog, 'uVignette')
+        };
+        postfx.active = true;
+        postfx.canvas = canvas;
+
+        // rAF encadenado: nuestro callback corre después del render del
+        // juego en el mismo frame. Nos re-registramos cada frame para
+        // mantenernos SIEMPRE al final de la cola de callbacks.
+        const loop = () => {
+            if (!postfx.active) return;
+            try { postfxDraw(gl); } catch (_) {}
+            requestAnimationFrame(loop);
+        };
+        requestAnimationFrame(loop);
+
+        console.log('[MiniFeather PostFX] ✓ Pass full-screen instalado vía canvas+rAF (bloom/CA/DOF/dirt).');
+        return true;
+    }
+
+    function postfxDraw(gl) {
+        if (!postfx.active || !postfx.enabled) return;
+        if (gl.isContextLost()) return;
+
+        // ¿Algún efecto activo? Si no, ni gastar un frame.
+        const p = postfx.params;
+        if (p.bloom <= 0.001 && p.ca <= 0.001 && p.dof <= 0.001 &&
+            p.dirt <= 0.001 && p.vignette <= 0.001) return;
+
+        const canvas = gl.canvas;
+        const w = canvas.width, h = canvas.height;
+        if (!w || !h) return;
+
+        const now = performance.now();
+        postfx.time += (now - postfx.lastT) / 1000;
+        postfx.lastT = now;
+
+        // ── Guardar TODO el estado GL que tocamos ──────────────────
+        // Three.js cachea el estado GL: si cambiamos algo detrás de su
+        // espalda sin restaurar, su caché miente y el juego se rompe
+        // (texturas negras, reflejos corruptos, feedback loops).
+        const lastProg = gl.getParameter(gl.CURRENT_PROGRAM);
+        const lastActiveTex = gl.getParameter(gl.ACTIVE_TEXTURE);
+        const lastFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+        const lastViewport = gl.getParameter(gl.VIEWPORT);
+        const lastArrayBuf = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
+        const lastVao = gl.VERTEX_ARRAY_BINDING !== undefined
+            ? gl.getParameter(gl.VERTEX_ARRAY_BINDING) : null;
+
+        // Binding de textura de la unidad 0 (la única que tocamos)
+        gl.activeTexture(gl.TEXTURE0);
+        const lastTex0 = gl.getParameter(gl.TEXTURE_BINDING_2D);
+
+        let lastEnabled = [];
+        [gl.BLEND, gl.DEPTH_TEST, gl.CULL_FACE, gl.SCISSOR_TEST].forEach(cap => {
+            if (gl.isEnabled(cap)) lastEnabled.push(cap);
+        });
+
+        try {
+            // ── 1. Copiar la imagen final (framebuffer por defecto) ──
+            // copyTexSubImage2D lee del READ framebuffer: bindear null
+            // garantiza que leemos el canvas visible, no un FBO interno
+            // del juego (reflexiones/pases). Es GPU→GPU, sin readback.
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.viewport(0, 0, w, h);
+
+            // Bindear NUESTRA textura ANTES de copiar (copyTex* escribe a
+            // la textura bindeada — sería copiar dentro de la del juego)
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, postfx.sceneTex);
+
+            const sizeChanged = postfx.texW !== w || postfx.texH !== h;
+            if (sizeChanged) {
+                gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, w, h, 0);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                postfx.texW = w;
+                postfx.texH = h;
+            } else {
+                gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, w, h);
+            }
+
+            // ── 2. Dibujar el quad al framebuffer por defecto ──
+            gl.disable(gl.BLEND);
+            gl.disable(gl.DEPTH_TEST);
+            gl.disable(gl.CULL_FACE);
+            gl.useProgram(postfx.program);
+
+            // VAO propio: el estado de vertex attribs queda aislado
+            if (postfx.vao) gl.bindVertexArray(postfx.vao);
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, postfx.sceneTex);
+            gl.uniform1i(postfx.uniforms.uScene, 0);
+            gl.uniform2f(postfx.uniforms.uResolution, w, h);
+            gl.uniform1f(postfx.uniforms.uTime, postfx.time);
+            gl.uniform1f(postfx.uniforms.uBloom, p.bloom);
+            gl.uniform1f(postfx.uniforms.uCA, p.ca);
+            gl.uniform1f(postfx.uniforms.uDof, p.dof);
+            gl.uniform1f(postfx.uniforms.uDirt, p.dirt);
+            gl.uniform1f(postfx.uniforms.uVignette, p.vignette);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+            if (postfx.vao) gl.bindVertexArray(null);
+        } finally {
+            // ── 3. Restaurar TODO el estado en orden inverso ──
+            gl.bindFramebuffer(gl.FRAMEBUFFER, lastFbo);
+            gl.bindBuffer(gl.ARRAY_BUFFER, lastArrayBuf);
+            if (lastVao !== null && gl.bindVertexArray) gl.bindVertexArray(lastVao);
+            gl.useProgram(lastProg);
+            lastEnabled.forEach(cap => gl.enable(cap));
+            [gl.BLEND, gl.DEPTH_TEST, gl.CULL_FACE, gl.SCISSOR_TEST].forEach(cap => {
+                if (!lastEnabled.includes(cap)) gl.disable(cap);
+            });
+            gl.viewport(lastViewport[0], lastViewport[1], lastViewport[2], lastViewport[3]);
+            // Textura original de la unidad 0 (Three cachea esto)
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, lastTex0);
+            gl.activeTexture(lastActiveTex);
+        }
+    }
+
+    function setPostFx(cfg) {
+        if (cfg) {
+            if (cfg.bloom !== undefined) postfx.params.bloom = Math.max(0, Math.min(1, +cfg.bloom || 0));
+            if (cfg.ca !== undefined) postfx.params.ca = Math.max(0, Math.min(1, +cfg.ca || 0));
+            if (cfg.dof !== undefined) postfx.params.dof = Math.max(0, Math.min(1, +cfg.dof || 0));
+            if (cfg.dirt !== undefined) postfx.params.dirt = Math.max(0, Math.min(1, +cfg.dirt || 0));
+            if (cfg.vignette !== undefined) postfx.params.vignette = Math.max(0, Math.min(1, +cfg.vignette || 0));
+        }
+        postfx.enabled = !!(postfx.params.bloom > 0 || postfx.params.ca > 0 ||
+            postfx.params.dof > 0 || postfx.params.dirt > 0 || postfx.params.vignette > 0);
+        if (postfx.enabled && !postfx.active) {
+            // El renderer puede no existir aún: reintentar breve
+            const retry = setInterval(() => {
+                if (installPostFx() || !postfx.enabled) clearInterval(retry);
+            }, 1000);
+            setTimeout(() => clearInterval(retry), 30000);
+        }
     }
 
     // ─── NUBES: localizar el mesh 'clouds' y ajustar sus uniforms ────
@@ -1368,6 +1857,20 @@
         ];
         if (!SAFE_MATERIALS.includes(matType)) return false;
 
+        // ── Desenredar hooks de una sesión anterior de la extensión ──
+        // Recargar la extensión sin F5 deja materiales hookeados: nuestro
+        // hook nuevo capturaría el viejo como "original" y las uniforms
+        // se inyectarían DOS veces (redefinition → link fail).
+        if (material.__mfHooked) {
+            // Restaurar el onBeforeCompile ORIGINAL del juego guardado
+            // por la sesión previa y limpiar la marca.
+            material.onBeforeCompile = material.__mfOriginalOnBeforeCompile || material.onBeforeCompile;
+            if (material.__mfOriginalCacheKey !== undefined) {
+                material.customProgramCacheKey = material.__mfOriginalCacheKey;
+            }
+            delete material.__mfHooked;
+        }
+
         const originalOnBeforeCompile = material.onBeforeCompile.bind(material);
         const originalCacheKey = material.customProgramCacheKey;
 
@@ -1397,34 +1900,63 @@
                 shader.uniforms[key] = liveUniforms[key];
             }
 
-            // 3. Vertex shader: prependar declaraciones
-            if (preset.vertexCode) {
+            // 3. Vertex: prepend declaraciones — solo si no hay inyección
+            // previa de otra sesión de la extensión (evita redefinition).
+            // La marca es una varying única que TODO preset declara primero.
+            if (preset.vertexCode && !shader.vertexShader.includes('uPhTime') &&
+                !shader.vertexShader.includes('uCsTime') &&
+                !shader.vertexShader.includes('mfCrDepth') &&
+                !shader.vertexShader.includes('uGvTime')) {
                 shader.vertexShader = preset.vertexCode + '\n' + shader.vertexShader;
             }
 
             // 4. Vertex shader: inyectar lÃ³gica tras begin_vertex.
             // Solo si existe el include (garantiza que 'transformed' existe).
-            if (preset.vertexMain && shader.vertexShader.includes('#include <begin_vertex>')) {
+            if (preset.vertexMain && shader.vertexShader.includes('#include <begin_vertex>') &&
+                !shader.vertexShader.includes('mfCrMvPos =') &&
+                !shader.vertexShader.includes('mfPhDepth =') &&
+                !shader.vertexShader.includes('mfGvDepth =')) {
                 shader.vertexShader = shader.vertexShader.replace(
                     '#include <begin_vertex>',
                     '#include <begin_vertex>\n' + preset.vertexMain
                 );
             }
 
-            // 5. Fragment shader: prependar declaraciones
-            if (preset.fragmentCode) {
+            // 5. Fragment: prepend declaraciones — solo si no hay inyección
+            // previa (la marca es un identificador único de cada preset)
+            if (preset.fragmentCode && !shader.fragmentShader.includes('mfPhHash') &&
+                !shader.fragmentShader.includes('mfHash') &&
+                !shader.fragmentShader.includes('mfCrGetLuminance') &&
+                !shader.fragmentShader.includes('mfUfHash') &&
+                !shader.fragmentShader.includes('mfXrayColor') &&
+                !shader.fragmentShader.includes('mfGvHash')) {
                 shader.fragmentShader = preset.fragmentCode + '\n' + shader.fragmentShader;
             }
 
             // 6. Fragment shader: inyectar postMain antes del cierre de main()
-            if (preset.postMain) {
-                shader.fragmentShader = injectBeforeMainEnd(shader.fragmentShader, preset.postMain);
+            // Guarda idempotente: el marcador local evita doble inyección si
+            // una sesión anterior de la extensión ya inyectó su postMain.
+            if (preset.postMain && !shader.fragmentShader.includes('mfPostMainInjected')) {
+                shader.fragmentShader = injectBeforeMainEnd(
+                    shader.fragmentShader,
+                    'float mfPostMainInjected = 1.0;\n' + preset.postMain
+                );
             }
         };
 
+        // Marca de hookeado + originales: si se recarga la extensión sin
+        // F5, la sesión nueva restaura el ORIGINAL DEL JUEGO (no nuestro
+        // hook viejo) — evita inyectar el preset dos veces
+        material.__mfHooked = true;
+        material.__mfOriginalOnBeforeCompile = originalOnBeforeCompile;
+        material.__mfOriginalCacheKey = originalCacheKey;
+
         material.customProgramCacheKey = function () {
             const base = originalCacheKey ? originalCacheKey.call(material) : '';
-            return 'mfcs_' + state.preset + '_' + base;
+            // La versión del preset invalida el caché de programas de
+            // Three.js: al cambiar el GLSL del preset (tweaks), la clave
+            // cambia y fuerza recompilación en vez de reusar el viejo.
+            return 'mfcs_' + state.preset + '_v' + (preset.version || 1) + '_' + base;
         };
 
         material.needsUpdate = true;
@@ -1617,9 +2149,9 @@
                     applied = true;
                 }
             }
-            if (!applied) {
-                console.warn(`${TAG} El uniform ${def.key} no existe en el preset ${state.preset}.`);
-            }
+            // Uniforms de otros presets (ej. sliders VHS al usar Complementary)
+            // son esperados: no loguear warning.
+            if (!applied) return;
             // Persistir para restaurarlo al recargar
             localStorage.setItem('miniblox_customshader_fx_' + name, String(value));
         },
@@ -1754,6 +2286,11 @@
             setPackNoise(!!cfg.cloudsPackNoise);
         }
 
+        // PostFX: pass full-screen (bloom, aberración cromática, DOF, dirt)
+        if (cfg.postfx && typeof cfg.postfx === 'object') {
+            setPostFx(cfg.postfx);
+        }
+
         if (typeof cfg.enabled === 'boolean') {
             if (cfg.enabled) {
                 state.enabled = true;
@@ -1764,8 +2301,9 @@
                     setTimeout(() => applyRenderScale(state.renderScale), 500);
                 }
             } else {
-                // Al desactivar, restaurar resoluciÃ³n nativa
+                // Al desactivar, restaurar resolución nativa + apagar PostFX
                 if (state.renderScale < 1.0) applyRenderScale(1.0);
+                postfx.enabled = false;
                 window.MF_CustomShader.disable();
                 return;
             }
@@ -1791,6 +2329,51 @@
         scan();
         state.lastScan = performance.now();
     }, 2000);
+
+    // ─── Diagnóstico de link GLSL ─────────────────────────────────────
+    // El build de producción del juego desactiva checkShaderErrors de
+    // Three.js, así que un programa que falla al linkear NO se loguea:
+    // solo explota después como "useProgram: program not valid" (×256).
+    // Este hook revela el error real de compilación/link la primera vez.
+    (function installLinkDiagnostic() {
+        if (window.__MF_LINK_DIAG__) return;
+        window.__MF_LINK_DIAG__ = true;
+        const proto = WebGL2RenderingContext?.prototype || WebGLRenderingContext.prototype;
+
+        // Mapa shader → fuente (para poder volcar el GLSL que falla)
+        const shaderSources = new WeakMap();
+
+        const origShaderSource = proto.shaderSource;
+        proto.shaderSource = function (shader, source) {
+            try { shaderSources.set(shader, source); } catch (_) {}
+            return origShaderSource.call(this, shader, source);
+        };
+
+        const origCompile = proto.compileShader;
+        proto.compileShader = function (shader) {
+            origCompile.call(this, shader);
+            if (this.getShaderParameter(shader, this.COMPILE_STATUS)) return;
+            try {
+                const log = this.getShaderInfoLog(shader) || 'sin log';
+                const src = shaderSources.get(shader) || '';
+                // Marcar las líneas para ubicar el error citado en el log
+                const numbered = src.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n');
+                console.error('[MiniFeather] Shader falló al COMPILAR. Log:', log,
+                    '\n— Fuente numerada —\n', numbered.slice(0, 4000));
+            } catch (_) {}
+        };
+
+        const origLink = proto.linkProgram;
+        proto.linkProgram = function (program) {
+            origLink.call(this, program);
+            try {
+                if (!this.getProgramParameter(program, this.LINK_STATUS)) {
+                    const info = this.getProgramInfoLog(program) || 'sin log';
+                    console.error('[MiniFeather] Programa GLSL falló al linkear:', info);
+                }
+            } catch (_) {}
+        };
+    })();
 
     if (state.enabled) {
         setTimeout(scan, 3000);

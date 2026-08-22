@@ -422,6 +422,11 @@
     customShaderFxUftone: 0.35,
     customShaderFxPhagx: 0.8,
     customShaderFxPhfog: 0.5,
+    customShaderPfbloom: 0.35,
+    customShaderPfca: 0,
+    customShaderPfdof: 0,
+    customShaderPfdirt: 0,
+    customShaderPfvignette: 0,
     cloudsShapeBrush: 12,
     cloudsShapeMix: 0.85,
     cloudsShapeTile: 512,
@@ -676,15 +681,36 @@
     });
   }
 
+  // El fondo del menú vive en /assets/default-<hash>.webp (el hash cambia con
+  // cada deploy del sitio, así que se matchea por patrón) y también como
+  // background-image CSS del <body>.
+  const MENU_BG_PATTERN = /\/assets\/default-[A-Za-z0-9_-]+\.(?:webp|png|jpg)/;
+
   function replaceBackground() {
     document.querySelectorAll('img').forEach(img => {
       const src = img.getAttribute('src') || '';
-      if (!src.includes('default-B1Dv6Hww') && img.dataset.mfBackground !== '1') return;
+      if (!MENU_BG_PATTERN.test(src) && img.dataset.mfBackground !== '1') return;
 
       img.dataset.mfBackground = '1';
       if (!img.hasAttribute('data-mf-original-src')) img.dataset.mfOriginalSrc = src;
       if (img.getAttribute('src') !== CONFIG.background) img.setAttribute('src', CONFIG.background);
     });
+
+    const bodyStyle = document.body?.style;
+    if (bodyStyle) {
+      const bg = getComputedStyle(document.body).backgroundImage || '';
+      if (MENU_BG_PATTERN.test(bg)) {
+        if (!document.body.dataset.mfBgOriginal) {
+          document.body.dataset.mfBgOriginal = bodyStyle.backgroundImage || '';
+        }
+        const local = `url("${CONFIG.background}")`;
+        if (bodyStyle.backgroundImage !== local) bodyStyle.backgroundImage = local;
+      } else if (document.body.dataset.mfBgOriginal) {
+        // restaurar si el sitio ya no usa el fondo default
+        bodyStyle.backgroundImage = document.body.dataset.mfBgOriginal;
+        delete document.body.dataset.mfBgOriginal;
+      }
+    }
   }
 
   function replaceDiscordInput() {
@@ -791,6 +817,11 @@
       delete img.dataset.mfBackground;
       delete img.dataset.mfOriginalSrc;
     });
+
+    if (document.body?.dataset.mfBgOriginal !== undefined) {
+      document.body.style.backgroundImage = document.body.dataset.mfBgOriginal || '';
+      delete document.body.dataset.mfBgOriginal;
+    }
   }
 
   function restoreDiscord() {
@@ -2899,10 +2930,11 @@
     const ufFx = ['ufsat', 'ufcontrast', 'uftone'];
     const phFx = ['phagx', 'phfog', 'phend', 'phbh', 'phbhsize', 'phbhspin'];
     const crFx = ['crtm', 'crexp', 'crc', 'crsat', 'crvib', 'crvig', 'crfog', 'crdith'];
+    const gvFx = ['gvfog', 'gvdist', 'gvdesat', 'gvblue', 'gvgrain', 'gvlight'];
     const fxList = preset === 'ultrafast' ? ufFx : preset === 'photon' ? phFx
-      : preset === 'complementaryInspired' ? crFx : spookFx;
+      : preset === 'complementaryInspired' ? crFx : preset === 'graveyard' ? gvFx : spookFx;
     for (const name of fxList) {
-      const fallback = { vhs: 0.6, crt: 0.6, cel: 0.6, fog: 0.7, grain: 0.5, glitch: 0.4, flash: 0.5, sharp: 0.5, ufsat: 1.35, ufcontrast: 0.45, uftone: 0.35, phagx: 0.8, phfog: 0.5, phend: 0, phbh: 0, phbhsize: 0.35, phbhspin: 1, crtm: 0.8, crexp: 1.0, crc: 1.05, crsat: 1.0, crvib: 1.0, crvig: 0.5, crfog: 0.4, crdith: 1 }[name];
+      const fallback = { vhs: 0.6, crt: 0.6, cel: 0.6, fog: 0.7, grain: 0.5, glitch: 0.4, flash: 0.5, sharp: 0.5, ufsat: 1.35, ufcontrast: 0.45, uftone: 0.35, phagx: 0.8, phfog: 0.5, phend: 0, phbh: 0, phbhsize: 0.35, phbhspin: 1, crtm: 0.8, crexp: 1.0, crc: 1.05, crsat: 1.0, crvib: 1.0, crvig: 0.5, crfog: 0.4, crdith: 1, gvfog: 0.8, gvdist: 30, gvdesat: 0.55, gvblue: 0.35, gvgrain: 0.3, gvlight: 0.3 }[name];
       fx[name] = Number(settings['customShaderFx' + name.charAt(0).toUpperCase() + name.slice(1)] ?? fallback);
     }
 
@@ -2913,6 +2945,13 @@
         strength: Number(settings.customShaderStrength) || 0.5,
         renderScale: Number(settings.customShaderRenderScale) || 1.0,
         effects: fx,
+        postfx: {
+            bloom: Number(settings.customShaderPfbloom ?? 0.35),
+            ca: Number(settings.customShaderPfca ?? 0),
+            dof: Number(settings.customShaderPfdof ?? 0),
+            dirt: Number(settings.customShaderPfdirt ?? 0),
+            vignette: Number(settings.customShaderPfvignette ?? 0)
+        },
         clouds: {
           coverage: Number(settings.cloudsCoverage ?? 0.5),
           scale: Number(settings.cloudsScale ?? 0.012),
@@ -4932,6 +4971,7 @@
     const isUltrafast = preset === 'ultrafast';
     const isPhoton = preset === 'photon';
     const isComplementary = preset === 'complementaryInspired';
+    const isGraveyard = preset === 'graveyard';
 
     // Sliders de efectos según el preset activo
     const fxSliders = isUltrafast
@@ -4959,6 +4999,15 @@
           { id: 'crvig', label: t('shadersCrVig'), value: Number(settings.customShaderFxcrvig ?? 0.5), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
           { id: 'crfog', label: t('shadersCrFog'), value: Number(settings.customShaderFxcrfog ?? 0.4), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
           { id: 'crdith', label: t('shadersCrDith'), value: Number(settings.customShaderFxcrdith ?? 1), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' }
+        ]
+      : isGraveyard
+      ? [
+          { id: 'gvfog', label: t('shadersGvFog'), value: Number(settings.customShaderFxGvfog ?? 0.8), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'gvdist', label: t('shadersGvDist'), value: Number(settings.customShaderFxGvdist ?? 30), min: 8, max: 120, step: 2, fmt: v => Math.round(v) + 'm' },
+          { id: 'gvdesat', label: t('shadersGvDesat'), value: Number(settings.customShaderFxGvdesat ?? 0.55), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'gvblue', label: t('shadersGvBlue'), value: Number(settings.customShaderFxGvblue ?? 0.35), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'gvgrain', label: t('shadersGvGrain'), value: Number(settings.customShaderFxGvgrain ?? 0.3), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'gvlight', label: t('shadersGvLight'), value: Number(settings.customShaderFxGvlight ?? 0.3), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' }
         ]
       : [
           { id: 'vhs', label: t('shadersVhs'), value: Number(settings.customShaderFxVhs ?? 0.6), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
@@ -4994,8 +5043,9 @@
             <option value="complementaryInspired"${preset === 'complementaryInspired' ? ' selected' : ''}>Complementary Inspired</option>
             <option value="ultrafast"${preset === 'ultrafast' ? ' selected' : ''}>UltraFast</option>
             <option value="photon"${preset === 'photon' ? ' selected' : ''}>Photon</option>
+            <option value="graveyard"${preset === 'graveyard' ? ' selected' : ''}>Cementerio</option>
           </select>
-          <div class="mf-muted" style="margin-top:8px;font-size:11px;">${isUltrafast ? t('shadersUfDesc') : isPhoton ? t('shadersPhDesc') : isComplementary ? t('shadersCrDesc') : t('shadersHint')}</div>
+          <div class="mf-muted" style="margin-top:8px;font-size:11px;">${isUltrafast ? t('shadersUfDesc') : isPhoton ? t('shadersPhDesc') : isComplementary ? t('shadersCrDesc') : isGraveyard ? t('shadersGvDesc') : t('shadersHint')}</div>
         </div>
 
         <div class="mf-card">
@@ -5027,6 +5077,23 @@
             >
             <span id="mf-shader-renderscale-value">${Math.round(renderScale * 100)}%</span>
           </div>
+        </div>
+
+        <div class="mf-card">
+          <div class="mf-card-title">${t('postfxTitle')}</div>
+          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">${t('postfxDesc')}</div>
+          ${[
+            { id: 'bloom', label: t('postfxBloom'), value: Number(settings.customShaderPfbloom ?? 0.35) },
+            { id: 'ca', label: t('postfxCA'), value: Number(settings.customShaderPfca ?? 0) },
+            { id: 'dof', label: t('postfxDof'), value: Number(settings.customShaderPfdof ?? 0) },
+            { id: 'dirt', label: t('postfxDirt'), value: Number(settings.customShaderPfdirt ?? 0) },
+            { id: 'vignette', label: t('postfxVignette'), value: Number(settings.customShaderPfvignette ?? 0) }
+          ].map((fx, i, arr) => `
+          <div class="mf-shader-strength"${i < arr.length - 1 ? ' style="margin-bottom:10px;"' : ''}>
+            <span style="min-width:90px;font-size:12px;">${fx.label}</span>
+            <input id="mf-postfx-${fx.id}" type="range" min="0" max="1" step="0.05" value="${fx.value}">
+            <span id="mf-postfx-${fx.id}-value">${Math.round(fx.value * 100)}%</span>
+          </div>`).join('')}
         </div>
 
         <div class="mf-card">
@@ -6700,6 +6767,32 @@
         settings[key] = value;
         guiSettings[key] = value;
         const valueLabel = panel.querySelector(`#mf-shader-fx-${fxName}-value`);
+        if (valueLabel) valueLabel.textContent = fmt(value);
+        if (settings.customShader) {
+          sendCustomShaderConfig(true);
+        }
+      });
+      slider.addEventListener('change', () => {
+        saveSettings(true);
+      });
+    }
+
+    // ─── PostFX: sliders del pass full-screen ──────────
+    const postfxMap = {
+      bloom: { key: 'customShaderPfbloom', fmt: v => Math.round(v * 100) + '%' },
+      ca: { key: 'customShaderPfca', fmt: v => Math.round(v * 100) + '%' },
+      dof: { key: 'customShaderPfdof', fmt: v => Math.round(v * 100) + '%' },
+      dirt: { key: 'customShaderPfdirt', fmt: v => Math.round(v * 100) + '%' },
+      vignette: { key: 'customShaderPfvignette', fmt: v => Math.round(v * 100) + '%' }
+    };
+    for (const [fxName, { key, fmt }] of Object.entries(postfxMap)) {
+      const slider = panel.querySelector(`#mf-postfx-${fxName}`);
+      if (!slider) continue;
+      slider.addEventListener('input', () => {
+        const value = parseFloat(slider.value);
+        settings[key] = value;
+        guiSettings[key] = value;
+        const valueLabel = panel.querySelector(`#mf-postfx-${fxName}-value`);
         if (valueLabel) valueLabel.textContent = fmt(value);
         if (settings.customShader) {
           sendCustomShaderConfig(true);

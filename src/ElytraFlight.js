@@ -550,6 +550,10 @@ if (!globalThis.__MINIFEATHER_ELYTRA_MOUSE_HOOK__) {
             };
             return previousAddEventListener.call(this, type, wrappedHandler, options);
         }
+        // Chrome bloquea 'unload' vía Permissions Policy; convertirlo a
+        // 'pagehide' (reemplazo oficial) evita la violación y mantiene
+        // el callback del script original.
+        if (type === 'unload') type = 'pagehide';
         return previousAddEventListener.call(this, type, handler, options);
     };
 }

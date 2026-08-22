@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "MiniFeather Client",
-  "version": "4.6.0",
-  "description": "MiniFeather for Miniblox",
+  "name": "MiniFeatherClient",
+  "version": "4.7.0",
+  "description": "MiniFeather Client for Miniblox",
   "permissions": [
     "storage",
     "declarativeNetRequest",
     "activeTab"
   ],
   "host_permissions": [
-    "https://miniblox.io/*"
+    "https://miniblox.io/*",
+    "https://miniblox.online/*"
   ],
   "background": {
     "service_worker": "src/background.js"
@@ -17,7 +18,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://miniblox.io/*"
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
       ],
       "js": [
         "src/SplashScreen.js"
@@ -26,7 +28,8 @@
     },
     {
       "matches": [
-        "https://miniblox.io/*"
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
       ],
       "js": [
         "src/TextureInterceptor.js",
@@ -56,15 +59,18 @@
         "src/RhythmParkour.js",
         "src/LocalGames.js",
         "src/VanillaAnimations.js",
+        "src/HandSway.js",
         "src/CustomShader.js",
         "src/GUIPatch.js"
       ],
       "run_at": "document_start",
-      "world": "MAIN"
+      "world": "MAIN",
+      "all_frames": true
     },
     {
       "matches": [
-        "https://miniblox.io/*"
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
       ],
       "js": [
         "src/translations.js",
@@ -72,7 +78,8 @@
         "src/TexturePackManager.js",
         "src/content.js"
       ],
-      "run_at": "document_end"
+      "run_at": "document_end",
+      "all_frames": true
     }
   ],
   "action": {
@@ -97,13 +104,15 @@
         "assets/spritesheets generator",
         "assets/frames.json",
         "assets/gui/*",
+        "assets/mfpack/*",
         "assets/accounts.json",
         "assets/pvtexpack.png",
         "assets/shadertextures/*",
         "src/jszip.min.js"
       ],
       "matches": [
-        "https://miniblox.io/*"
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
       ]
     }
   ]
