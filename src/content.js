@@ -84,7 +84,7 @@
     { id: 'world', icon: '🌍', labelKey: 'navWorld' },
     { id: 'settings', icon: '⚙', labelKey: 'navSettings' },
     { id: 'about', icon: '🪶', labelKey: 'tabAbout' },
-    { id: 'credits', icon: '🏆', labelKey: 'tabCredits' }
+    { id: 'credits', icon: '🏆', labelKey: 'Credits' }
   ];
 
   const MODULE_VERSION = '4.6.0';
