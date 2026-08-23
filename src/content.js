@@ -83,7 +83,7 @@
     { id: 'waypoints', icon: '📍', labelKey: 'navWaypoints' },
     { id: 'world', icon: '🌍', labelKey: 'navWorld' },
     { id: 'settings', icon: '⚙', labelKey: 'navSettings' },
-    { id: 'about', icon: '🪶', labelKey: 'tabAbout' }
+    { id: 'about', icon: '🪶', labelKey: 'tabAbout' },
     { id: 'credits', icon: '🏆', labelKey: 'tabCredits' }
   ];
 
