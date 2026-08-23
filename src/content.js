@@ -5603,7 +5603,7 @@ function renderCreditsPage() {
     waypoints: renderWaypointsPage,
     world: renderWorldPage,
     settings: renderSettingsPage,
-    about: renderAboutPage
+    about: renderAboutPage,
     credits: renderCreditsPage
   };
 
