@@ -221,6 +221,10 @@
                 disableCullingDeep(inst.root);
                 inst.root.matrixAutoUpdate = true;
                 scene.add(inst.root);
+                // las clases del juego auto-registran instancias en el rig de camara;
+                // purgar inmediatamente para que el "fantasma" ni asome
+                setTimeout(() => { try { purgeUnderCam(); } catch {} }, 0);
+                setTimeout(() => { try { purgeUnderCam(); } catch {} }, 500);
                 const animInfo = inst.anims.length ? ' anims: ' + inst.anims.map((a) => a.name).join(', ') : '';
                 console.log(TAG + ' entidad client-side "' + id + '" spawneada' + (rec.anim ? ' animando "' + rec.anim + '"' : '') + animInfo);
             }).catch((e) => {
@@ -309,6 +313,105 @@
             if (res) playIntro('verity', res);
             return res;
         },
+        // Caja de invocacion: spawnea en el suelo; click derecho encima la abre
+        // (sube/abre/encoge) y de ahi cae Verity del cielo.
+        // Guard: solo un listener y solo mientras exista la caja.
+        spawnIaBox(offset = 2, opts = {}) {
+            const p = getGame()?.player?.pos;
+            if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
+            if (state.customs.has('verity')) MF_CustomModels.despawn('verity');
+            if (state.customs.has('caja_intro')) MF_CustomModels.despawn('caja_intro');
+            // quitar listener previo si quedo vivo
+            if (state.iaBoxListener) {
+                document.removeEventListener('mousedown', state.iaBoxListener, true);
+                state.iaBoxListener = null;
+            }
+            const bx = p.x + offset, bz = p.z;
+            const boxId = 'caja_intro';
+            MF_CustomModels.spawn('box.geo.json', bx, p.y, bz, {
+                id: boxId,
+                height: opts.boxHeight || 1.0,
+                bodyHalf: 0.56
+                // sin anim: quieta en el suelo, esperando el click
+            });
+            let opened = false;
+            const listener = (ev) => {
+                if (ev.button !== 2 || opened) return;
+                const rec = state.customs.get(boxId);
+                if (!rec || !rec.root) { cleanup(); return; }
+                // direccion de mirada: preferir la CAMARA (columna -Z de matrixWorld),
+                // fallback lookDirection / yaw+pitch
+                const game = getGame();
+                const player = game?.player;
+                const origin = player?.pos;
+                if (!origin) return;
+                let dx = 0, dy = 0, dz = -1;
+                let src = 'camera';
+                try {
+                    const cam = game?.gameScene?.camera;
+                    const e = cam?.matrixWorld?.elements;
+                    if (e && e.length >= 16) {
+                        // en three.js la camara mira hacia -Z local; en world es -colZ
+                        dx = -e[8]; dy = -e[9]; dz = -e[10];
+                    } else throw 0;
+                } catch {
+                    const look = player?.lookDirection || player?.look || player?.direction;
+                    if (look && Number.isFinite(look.x)) {
+                        src = 'lookDirection';
+                        const l = Math.hypot(look.x, look.y, look.z) || 1;
+                        dx = look.x / l; dy = look.y / l; dz = look.z / l;
+                    } else {
+                        src = 'yaw+pitch';
+                        const yaw = Number(player?.yaw) || 0, pitch = Number(player?.pitch) || 0;
+                        const cp = Math.cos(pitch);
+                        dx = -Math.sin(yaw) * cp; dy = -Math.sin(pitch); dz = Math.cos(yaw) * cp;
+                    }
+                }
+                const l2 = Math.hypot(dx, dy, dz) || 1;
+                dx /= l2; dy /= l2; dz /= l2;
+                const cx = rec.root.position.x, cy = rec.root.position.y + (rec.height || 1) / 2, cz = rec.root.position.z;
+                const ex = origin.x, ey = origin.y + 1.58, ez = origin.z;
+                const ox = cx - ex, oy = cy - ey, oz = cz - ez;
+                const along = ox * dx + oy * dy + oz * dz;
+                const dist = Math.hypot(ox, oy, oz);
+                const perpSq = Math.max(0, dist * dist - along * along);
+                const r = Math.max(0.9, (rec.height || 1) * 0.8);
+                console.log(TAG + ' click: src=' + src + ' dist=' + dist.toFixed(2) + ' along=' + along.toFixed(2) + ' perp=' + Math.sqrt(perpSq).toFixed(2) + ' (r=' + r.toFixed(2) + ')');
+                if (along <= 0 || along > 5.5 || perpSq > r * r) return; // no apunta a la caja
+                // ¡click valido!
+                opened = true;
+                ev.preventDefault?.();
+                cleanup();
+                MF_CustomModels.setAnim(boxId, 'open');
+                console.log(TAG + ' caja: abriendo (click derecho)...');
+                const OPEN_MS = 2600;
+                setTimeout(() => {
+                    if (!state.customs.has(boxId)) return;
+                    MF_CustomModels.despawn(boxId);
+                    console.log(TAG + ' caja: desaparecio, soltando a Verity');
+                    const res = MF_CustomModels.spawn('verity_full_model.glb', cx, cy + (opts.fallHeight || 14), cz, {
+                        id: 'verity',
+                        height: opts.height || 0.85,
+                        followPlayer: true,
+                        fallingSpawn: true, // caer recto sobre la caja, sin perseguir
+                        stopDistance: opts.stopDistance || offset,
+                        autoAnim: true,
+                        maxSpeed: opts.maxSpeed || 4.3,
+                        loseDistance: opts.loseDistance != null ? opts.loseDistance : 12,
+                        lostTimeMs: opts.lostTimeMs != null ? opts.lostTimeMs : 5000
+                    });
+                    if (res) playIntro('verity', res);
+                }, OPEN_MS);
+            };
+            const cleanup = () => {
+                document.removeEventListener('mousedown', listener, true);
+                if (state.iaBoxListener === listener) state.iaBoxListener = null;
+            };
+            state.iaBoxListener = listener;
+            document.addEventListener('mousedown', listener, true);
+            console.log(TAG + ' caja de invocacion lista — click derecho sobre ella para abrir');
+            return boxId;
+        },
         spawnBox(offset = 2, opts = {}) {
             const p = getGame()?.player?.pos;
             if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
@@ -378,6 +481,26 @@
         return null;
     }
 
+    // red de seguridad: si algun objeto de CustomModels quedo colgado del rig de
+    // la camara (clase del juego con side-effects), lo remueve y avisa.
+    // Traverse profundo: el eco puede estar a varios niveles bajo la camara.
+    function purgeUnderCam() {
+        const cam = getGame()?.gameScene?.axesHelper?.parent;
+        if (!cam) return;
+        let purged = 0;
+        const walk = (o) => {
+            for (const c of [...(o.children || [])]) {
+                if (c?.userData?.__mfCM) {
+                    try { o.remove(c); purged++; } catch {}
+                    continue; // sus hijos marcados ya no cuelgan de la camara
+                }
+                walk(c);
+            }
+        };
+        walk(cam);
+        if (purged) console.warn(TAG + ' purgados ' + purged + ' objetos pegados a la camara');
+    }
+
     function grabCtors() {
         if (state.ctors) return state.ctors;
         try {
@@ -385,6 +508,10 @@
             const arm = lf?.rightArm;
             if (!arm?.geometry?.attributes?.position) return null;
             const armMat = arm.material;
+            // OJO: el renderer del juego SOLO dibuja sus propias clases (traversal
+            // custom) — con clases vanilla de three.js el modelo queda INVISIBLE.
+            // Usamos las clases exactas del juego; el side-effect de auto-registro
+            // en el rig de la camara lo neutraliza purgeUnderCam().
             state.ctors = {
                 Mesh: arm.constructor,
                 Group: lf.constructor,
@@ -614,12 +741,16 @@
         }
         const mat = await buildMaterial(parsed, prim, ctors, fallbackMat);
         if (!mat) return null;
-        return new ctors.Mesh(geo, mat);
+        const mesh = new ctors.Mesh(geo, mat);
+        try { (mesh.userData = mesh.userData || {}).__mfCM = true; } catch {}
+        return mesh;
     }
 
     async function buildScene(parsed, ctors, fallbackMat) {
         const { json: gltf } = parsed;
         const root = new ctors.Group();
+        // marca de agua tambien en los originales (el cache los conserva vivos)
+        try { (root.userData = root.userData || {}).__mfCM = true; } catch {}
         const groups = new Map();
         const min = [Infinity, Infinity, Infinity];
         const max = [-Infinity, -Infinity, -Infinity];
@@ -629,6 +760,7 @@
             if (!node) return;
             const worldMat = mat4Mul(parentMat, nodeMatrix(node));
             const g = new ctors.Group();
+            try { (g.userData = g.userData || {}).__mfCM = true; } catch {}
             groups.set(idx, g);
             if (node.matrix) {
                 const m = node.matrix;
@@ -943,7 +1075,8 @@
                         else values.push(rest[0] + vec[0] * S, rest[1] + vec[1] * S, rest[2] + vec[2] * S);
                     }
                     if (times.length > 1) {
-                        tracks.push({ nodeIdx, path, times, values, eases, interp: 'LINEAR', comps: path === 'rotation' ? 4 : 3 });
+                        // path glTF: 'position' bedrock == 'translation' en el sampler
+                        tracks.push({ nodeIdx, path: path === 'position' ? 'translation' : path, times, values, eases, interp: 'LINEAR', comps: path === 'rotation' ? 4 : 3 });
                         if (times[times.length - 1] > duration) duration = times[times.length - 1];
                     }
                 }
@@ -1208,6 +1341,9 @@
             root.scale.multiplyScalar(s);
             root.position.y = -built.minY * root.scale.y;
             mesh.add(root);
+            // purgar el eco en el rig de camara inmediatamente
+            setTimeout(() => { try { purgeUnderCam(); } catch {} }, 0);
+            setTimeout(() => { try { purgeUnderCam(); } catch {} }, 500);
 
             const anim = state.entityAnims?.[name];
             const startT = performance.now();
@@ -1251,6 +1387,8 @@
         if (!myStamp.alive) return;
         if (!state.enabled && Object.keys(state.mappings).length === 0) return;
         try { rescan(); } catch {}
+        // red de seguridad: nada creado por CustomModels debe vivir bajo la camara
+        try { purgeUnderCam(); } catch {}
     }, 2000);
 
     // ── Anti-instancia-zombi ──
@@ -1419,6 +1557,14 @@
         if (rec.smooth === false) {
             root.position.set(p.x, p.y, p.z);
             movingThisTick = true;
+        } else if (rec.fallingSpawn && rec.onGround === false) {
+            // spawn aereo: caer RECTO (solo gravedad) hasta aterrizar; sin esto
+            // la persecucion horizontal la arrastra hasta el player mientras cae
+            physicsStep(rec, dt, 0, 0);
+            movingThisTick = false;
+        } else if (rec.fallingSpawn && rec.onGround !== false) {
+            rec.fallingSpawn = false; // aterrizo: comportamiento normal desde ya
+            physicsStep(rec, dt, 0, 0);
         } else if (distToPlayer > stopDist) {
             const speed = rec.maxSpeed > 0 ? rec.maxSpeed : 4.3;
             const dx = p.x - root.position.x;

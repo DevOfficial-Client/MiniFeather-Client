@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'caja']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja']);
 
   function parseDetail(event) {
     try {
@@ -51,7 +51,8 @@
       '\\yellow\\/waypoint list\\reset\\ - List saved waypoints',
       '\\yellow\\/waypoint remove <name>\\reset\\ - Delete a waypoint',
       '\\yellow\\/waypoint <name>\\reset\\ - Show waypoint info',
-      '\\yellow\\/verity spawn\\reset\\ - Spawn Verity companion',
+      '\\yellow\\/verity spawn\\reset\\ - Place the IA box (right-click to open)',
+      '\\yellow\\/iaassistant\\reset\\ - Same as /verity spawn',
       '\\yellow\\/verity ask <text>\\reset\\ - Talk with Verity (AI + voice)',
       '\\yellow\\/mf models\\reset\\ - List mob model replacements',
       '\\yellow\\/mf models clear\\reset\\ - Restore all mob models',
@@ -263,7 +264,7 @@
     addChat('Usage: /waypoint add <name> | list | remove <name>', 'error');
   }
 
-  function handleVerity(args) {
+  function handleVerity(args, forceBox = false) {
     const api = globalThis.MF_CustomModels;
     const ai = globalThis.MF_Verity;
     if (!api?.followVerity) {
@@ -274,8 +275,14 @@
     const action = (args[0] || 'spawn').toLowerCase();
 
     if (action === 'spawn') {
-      api.followVerity();
-      addChat('Verity spawned. She will follow you like a wolf.', 'success');
+      // caja en el suelo; click derecho encima la abre y suelta a Verity
+      if (api.spawnIaBox) {
+        const id = api.spawnIaBox();
+        addChat(id ? 'IA box placed. Right-click it to summon Verity!' : 'Could not place the IA box.', id ? 'success' : 'error');
+      } else {
+        api.followVerity();
+        addChat('Verity spawned (no box).', 'success');
+      }
       return;
     }
 
@@ -407,8 +414,8 @@
       return;
     }
 
-    if (command === 'verity') {
-      handleVerity(args);
+    if (command === 'verity' || command === 'iaassistant') {
+      handleVerity(args, command === 'iaassistant');
       return;
     }
 

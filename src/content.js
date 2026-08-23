@@ -2581,7 +2581,9 @@
       nonce = req.nonce;
       const file = String(req.file || '').replace(/[\\/]+/g, '');
       if (!file || file.includes('..')) throw new Error('nombre invalido');
-      const url = chrome.runtime.getURL('models/entities/' + file);
+      // dir: carpeta base ("models/entities" por defecto, "assets" para audio)
+      const dir = String(req.dir || '').replace(/[\\/]+/g, '') || 'models/entities';
+      const url = chrome.runtime.getURL(dir + '/' + file);
       const resp = await fetch(url);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const blob = await resp.blob();
