@@ -62,6 +62,7 @@
         "src/VanillaAnimations.js",
         "src/HandSway.js",
         "src/HandLayer.js",
+        "src/CustomModels.js",
         "src/CustomShader.js",
         "src/GUIPatch.js"
       ],
@@ -115,6 +116,9 @@
         "textures/*/*",
         "textures/*/*/*",
         "textures/*/*/*/*",
+        "models/*",
+        "models/*/*",
+        "models/*/*/*",
         "src/jszip.min.js"
       ],
       "matches": [

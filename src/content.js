@@ -2564,6 +2564,32 @@
     }));
   }
 
+  // Puente de modelos: el mundo MAIN pide un GLB de models/entities/,
+  // aqui (ISOLATED) lo fetch-eamos como blob y devolvemos la URL.
+  document.addEventListener('minifeather:model-fetch-request', async (e) => {
+    let nonce = null;
+    try {
+      const req = JSON.parse(e.detail || '{}');
+      nonce = req.nonce;
+      const file = String(req.file || '').replace(/[\\/]+/g, '');
+      if (!file || file.includes('..')) throw new Error('nombre invalido');
+      const url = chrome.runtime.getURL('models/entities/' + file);
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      document.dispatchEvent(new CustomEvent('minifeather:model-fetch-response', {
+        detail: JSON.stringify({ nonce, url: blobUrl, ok: true })
+      }));
+    } catch (err) {
+      if (!nonce) return;
+      document.dispatchEvent(new CustomEvent('minifeather:model-fetch-response', {
+        detail: JSON.stringify({ nonce, ok: false, status: (err && err.message) || 'error' })
+      }));
+    }
+  });
+
+
   function initWaypointsModule() {
     registerModule('waypoints', () => createLifecycle({
       enable: sendWaypointsConfig,
