@@ -57,6 +57,116 @@
             console.log(TAG + ' mapeos: ' + JSON.stringify(state.mappings));
             return state.mappings;
         },
+        diag() {
+            const game = getGame();
+            const cam = game?.gameScene?.axesHelper?.parent;
+            const rows = [];
+            const wp = (o) => { const e = o?.matrixWorld?.elements; return e ? [e[12], e[13], e[14]] : null; };
+            const scanTree = (root, donde) => {
+                const p0 = wp(root) || [0, 0, 0];
+                const walk = (o, depth, path) => {
+                    if (!o || depth > 40) return;
+                    const p = wp(o) || p0;
+                    rows.push({
+                        donde, tipo: o.geometry ? 'Mesh' : (o.isGroup || o.children ? 'Group' : '?'),
+                        nombre: o.name || (o.constructor && o.constructor.name) || '?',
+                        pos: p.map((v) => +v.toFixed(1)).join(','),
+                        distCam: cam ? +Math.hypot(p[0] - cp[0], p[1] - cp[1], p[2] - cp[2]).toFixed(2) : '-',
+                        vis: o.visible, hijos: (o.children || []).length,
+                        path: path.slice(0, 60)
+                    });
+                    for (const c of (o.children || [])) walk(c, depth + 1, path + '/' + (c.name || c.constructor?.name || '?'));
+                };
+                walk(root, 0, (root.name || root.constructor?.name || '?'));
+            };
+            const cp = wp(cam) || [0, 0, 0];
+            console.log(TAG + ' === DIAG ===');
+            console.log(TAG + ' game: ' + (game ? 'ok' : 'NO') + ' | cam: ' + (cam ? (cam.constructor?.name || '?') : 'NO') + ' @ ' + cp.map((v) => +v.toFixed(1)).join(','));
+            // 1) reemplazos a mobs: a que mesh esta pegado cada root y quien es su parent
+            // state.applied es WeakMap (no iterable): escanear entidades del mundo y ver si tienen rec
+            let appliedCount = 0;
+            try {
+                const check = (e) => {
+                    const mesh = e?.mesh;
+                    if (!mesh) return;
+                    const rec = state.applied.get(mesh);
+                    if (!rec) return;
+                    appliedCount++;
+                    const parent = mesh?.parent;
+                    rows.push({
+                        donde: 'APPLIED->' + rec.file.slice(0, 24), tipo: 'root',
+                        nombre: (parent ? (parent.name || parent.constructor?.name) : 'SIN PARENT') + (parent === cam ? ' <<< ES LA CAMARA!' : ''),
+                        pos: '-', distCam: '-', vis: mesh.visible, hijos: (mesh.children || []).length,
+                        path: 'meshType=' + (mesh.constructor?.name || '?')
+                    });
+                };
+                try { game?.world?.entities?.forEach?.(check); } catch {}
+                try { for (const p of game?.world?.playersIterator?.() ?? []) check(p); } catch {}
+                if (!appliedCount) console.log(TAG + ' applied: 0 (sin reemplazos activos)');
+            } catch (e) { console.warn(TAG + ' applied scan fallo: ' + e); }
+            // 2) customs: donde esta cada root
+            for (const rec of state.customs.values()) {
+                rows.push({
+                    donde: 'CUSTOM ' + rec.id, tipo: 'root', nombre: rec.file.slice(0, 40),
+                    pos: rec.root ? [rec.root.position.x, rec.root.position.y, rec.root.position.z].map((v) => +v.toFixed(1)).join(',') : 'sin-root',
+                    distCam: '-', vis: !rec.dead, hijos: rec.root ? rec.root.children.length : 0,
+                    path: 'parent=' + (rec.root?.parent ? (rec.root.parent.name || rec.root.parent.constructor?.name) : 'NINGUNO')
+                });
+            }
+            // 3) arbol de la camara y de la escena
+            if (cam) scanTree(cam, '>>> CAMARA');
+            if (game?.gameScene?.scene) scanTree(game.gameScene.scene, 'escena');
+            // 3) caza por huella: cualquier mesh creado por CustomModels (userData.__mfCM)
+            //    o con textura de la extension, colgado en CUALQUIER arbol de la pagina
+            const extOrigin = 'chrome-extension://';
+            const chain = (o) => {
+                const parts = [];
+                let n = o;
+                while (n && parts.length < 12) {
+                    parts.unshift(n.name || n.constructor?.name || '?');
+                    n = n.parent;
+                }
+                return parts.join(' <- ');
+            };
+            const texInfo = (m) => {
+                try {
+                    const mats = Array.isArray(m.material) ? m.material : [m.material];
+                    for (const mat of mats) {
+                        const src = mat?.map?.image?.src || mat?.map?.source?.data?.src;
+                        if (typeof src === 'string' && src.includes(extOrigin)) return 'EXT:' + src.split('/').pop();
+                    }
+                } catch {}
+                return null;
+            };
+            const hunted = [];
+            const seen = new Set();
+            const hunt = (o, donde) => {
+                if (!o || seen.has(o) || hunted.length > 200) return;
+                seen.add(o);
+                if (o.userData?.__mfCM) {
+                    hunted.push({ donde, tipo: o.geometry ? 'Mesh' : 'Group', nombre: o.name || '?', mf: 'SI (userData)', tex: texInfo(o) || '-', cadena: chain(o) });
+                } else if (o.geometry) {
+                    const t = texInfo(o);
+                    if (t) hunted.push({ donde, tipo: 'Mesh', nombre: o.name || '?', mf: 'textura-extension', tex: t, cadena: chain(o) });
+                }
+                for (const c of (o.children || [])) hunt(c, donde);
+            };
+            if (cam) hunt(cam, 'CAMARA');
+            if (game?.gameScene?.scene) hunt(game.gameScene.scene, 'escena');
+            if (hunted.length) {
+                console.log('%c[MF] ENCONTRADOS ' + hunted.length + ' objetos de CustomModels:', 'color:red;font-weight:bold');
+                console.table(hunted);
+            } else {
+                console.log(TAG + ' huella CustomModels: NINGUNA (ni bajo camara ni en escena)');
+            }
+            rows.sort((a, b) => {
+                const na = a.donde.startsWith('>>>') ? 0 : 1, nb = b.donde.startsWith('>>>') ? 0 : 1;
+                return na - nb;
+            });
+            console.table(rows);
+            console.log(TAG + ' overlays DOM: ' + document.querySelectorAll('canvas, iframe, video').length + ' elementos');
+            return rows.length;
+        },
         get yawSign() { return state.yawSign; },
         set yawSign(v) { state.yawSign = v < 0 ? -1 : 1; },
         spawn(modelFile, x, y, z, opts = {}) {
@@ -951,6 +1061,12 @@
             for (const k of orig.children) c.add(cp(k));
             return c;
         })(built.root);
+        // marca de agua: identificar todo lo creado por CustomModels
+        try {
+            root2.userData = root2.userData || {};
+            root2.userData.__mfCM = true;
+            root2.traverse((o) => { try { (o.userData = o.userData || {}).__mfCM = true; } catch {} });
+        } catch {}
         const groups = new Map();
         for (const [idx, g] of built.groups) {
             const n = map.get(g);

@@ -55,6 +55,7 @@
       '\\yellow\\/verity ask <text>\\reset\\ - Talk with Verity (AI + voice)',
       '\\yellow\\/mf models\\reset\\ - List mob model replacements',
       '\\yellow\\/mf models clear\\reset\\ - Restore all mob models',
+      '\\yellow\\/mf diag\\reset\\ - Dump scene diag to console (F12)',
       '\\yellow\\/mf help\\reset\\ - Show this help'
     ];
     for (const line of lines) state.chat?.addChat?.({ text: line });
@@ -371,6 +372,17 @@
     if (command === 'mf') {
       const sub = (args[0] || 'help').toLowerCase();
       if (sub === 'help' || sub === '') { showHelp(); return; }
+      if (sub === 'diag') {
+        const api = globalThis.MF_CustomModels;
+        if (!api?.diag) { addChat('CustomModels is not ready yet.', 'error'); return; }
+        try {
+          const n = api.diag();
+          addChat(`Diag written to console (${n} rows). Open F12 -> Console.`, 'success');
+        } catch (e) {
+          addChat('Diag failed: ' + (e?.message || e), 'error');
+        }
+        return;
+      }
       if (sub === 'models') {
         const api = globalThis.MF_CustomModels;
         if (!api) { addChat('CustomModels is not ready yet.', 'error'); return; }
