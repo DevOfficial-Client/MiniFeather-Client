@@ -84,6 +84,7 @@
     { id: 'world', icon: '🌍', labelKey: 'navWorld' },
     { id: 'settings', icon: '⚙', labelKey: 'navSettings' },
     { id: 'about', icon: '🪶', labelKey: 'tabAbout' }
+    { id: 'credits', icon: '🏆', labelKey: 'tabCredits' }
   ];
 
   const MODULE_VERSION = '4.6.0';
@@ -5554,6 +5555,18 @@
       </div>
     `;
   }
+  
+  function renderCreditsPage() {
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-card-title">Credits</div>
+          <div class="mf-muted">MiniFeather Client</div>
+          <div class="mf-muted">Developed by ItzNightrise</div>
+        </div>
+      </div>
+    `;
+  }
 
   function renderSearchResults(query) {
     const needle = query.trim().toLowerCase();
@@ -5588,6 +5601,7 @@
     world: renderWorldPage,
     settings: renderSettingsPage,
     about: renderAboutPage
+    credits: renderCreditsPage
   };
 
   function updateDashboardStats() {
