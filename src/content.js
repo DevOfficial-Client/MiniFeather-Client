@@ -2573,8 +2573,7 @@
       nonce = req.nonce;
       const file = String(req.file || '').replace(/[\\/]+/g, '');
       if (!file || file.includes('..')) throw new Error('nombre invalido');
-      const dir = req.dir === 'assets' ? 'assets/' : 'models/entities/';
-      const url = chrome.runtime.getURL(dir + file);
+      const url = chrome.runtime.getURL('models/entities/' + file);
       const resp = await fetch(url);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const blob = await resp.blob();
@@ -6800,7 +6799,7 @@
       saveSettings(true);
     });
 
-    if (activePage === 'youtubeMusic') { const input=panel.querySelector('#mf-yt-module-url'), frame=panel.querySelector('#mf-yt-module-frame'), stat=panel.querySelector('#mf-yt-module-status'), btn=panel.querySelector('#mf-yt-module-load'); const load=()=>{const x=String(input?.value||'').trim();const id=((x.match(/^[\w-]{11}$/)||x.match(/[?&]v=([\w-]{11})/)||x.match(/youtu\.be\/([\w-]{11})/)||x.match(/\/(?:embed|shorts|live)\/([\w-]{11})/))||[])[1]||x;const list=(x.match(/[?&]list=([\w-]+)/)||[])[1];if(!id&&!list){if(stat)stat.textContent='URL o ID no válido';return}if(frame)frame.src='https://www.youtube.com/embed/'+(list&&!/[?&]v=/.test(x)?'?listType=playlist&list='+list:id+'?playsinline=1&rel=0&controls=1'+(list?'&list='+list:''));if(stat)stat.textContent='Cargado. Pulsa reproducir en YouTube.';try{localStorage.setItem('minifeather_yt_module_url',x)}catch(_){}};btn?.addEventListener('click',load,{signal:panelSignal});input?.addEventListener('keydown',e=>{if(e.key==='Enter')load()},{signal:panelSignal});try{if(input)input.value=localStorage.getItem('minifeather_yt_module_url')||''}catch(_){} }
+    if (activePage === 'youtubeMusic') { const input=panel.querySelector('#mf-yt-module-url'), frame=panel.querySelector('#mf-yt-module-frame'), stat=panel.querySelector('#mf-yt-module-status'), btn=panel.querySelector('#mf-yt-module-load'); const load=()=>{const x=String(input?.value||'').trim();const id=((x.match(/^[\w-]{11}$/)||x.match(/[?&]v=([\w-]{11})/)||x.match(/youtu\.be\/([\w-]{11})/)||x.match(/\/(?:embed|shorts|live)\/([\w-]{11})/))||[])[1]||x;const list=(x.match(/[?&]list=([\w-]+)/)||[])[1];if(!id&&!list){if(stat)stat.textContent='URL o ID no válido';return}if(frame)frame.src='https://www.youtube.com/embed/'+(list&&!/[?&]v=/.test(x)?'?listType=playlist&list='+list:id+'?playsinline=1&rel=0&controls=1'+(list?'&list='+list:''));if(stat)stat.textContent='Cargado. Pulsa reproducir en YouTube.';try{localStorage.setItem('minifeather_yt_module_url',x)}catch(_){}};btn?.addEventListener('click',load);input?.addEventListener('keydown',e=>{if(e.key==='Enter')load()});try{if(input)input.value=localStorage.getItem('minifeather_yt_module_url')||''}catch(_){} }
     // Selector de preset (Spooklementary / UltraFast)
     const presetSelect = panel.querySelector('#mf-shader-preset');
     presetSelect?.addEventListener('change', () => {
