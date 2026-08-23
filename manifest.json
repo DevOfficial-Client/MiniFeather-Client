@@ -63,6 +63,7 @@
         "src/HandSway.js",
         "src/HandLayer.js",
         "src/CustomModels.js",
+        "src/VerityAI.js",
         "src/CustomShader.js",
         "src/GUIPatch.js"
       ],

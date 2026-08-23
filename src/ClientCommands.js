@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity']);
 
   function parseDetail(event) {
     try {
@@ -51,6 +51,8 @@
       '\\yellow\\/waypoint list\\reset\\ - List saved waypoints',
       '\\yellow\\/waypoint remove <name>\\reset\\ - Delete a waypoint',
       '\\yellow\\/waypoint <name>\\reset\\ - Show waypoint info',
+      '\\yellow\\/verity spawn\\reset\\ - Spawn Verity companion',
+      '\\yellow\\/verity ask <text>\\reset\\ - Talk with Verity (AI + voice)',
       '\\yellow\\/mf help\\reset\\ - Show this help'
     ];
     for (const line of lines) state.chat?.addChat?.({ text: line });
@@ -257,6 +259,62 @@
     addChat('Usage: /waypoint add <name> | list | remove <name>', 'error');
   }
 
+  function handleVerity(args) {
+    const api = globalThis.MF_CustomModels;
+    const ai = globalThis.MF_Verity;
+    if (!api?.followVerity) {
+      addChat('CustomModels is not ready yet.', 'error');
+      return;
+    }
+
+    const action = (args[0] || 'spawn').toLowerCase();
+
+    if (action === 'spawn') {
+      api.followVerity();
+      addChat('Verity spawned. She will follow you like a wolf.', 'success');
+      return;
+    }
+
+    if (action === 'despawn' || action === 'remove' || action === 'kill') {
+      const ok = api.despawn('verity');
+      addChat(ok ? 'Verity despawned.' : 'Verity is not spawned.', ok ? 'success' : 'error');
+      return;
+    }
+
+    if (action === 'say' || action === 'ask') {
+      const text = args.slice(1).join(' ').trim();
+      if (!text) {
+        addChat(`Usage: /verity ${action} <text>`, 'error');
+        return;
+      }
+      if (!ai) {
+        addChat('VerityAI is not loaded.', 'error');
+        return;
+      }
+      addChat('...');
+      if (action === 'say') {
+        ai.say(text).catch(err => addChat(`TTS failed: ${err?.message || err}`, 'error'));
+      } else {
+        ai.ask(text)
+          .then(reply => { if (reply) addChat(`Verity: ${reply}`, 'success'); })
+          .catch(err => addChat(`AI failed: ${err?.message || err}`, 'error'));
+      }
+      return;
+    }
+
+    if (action === 'help') {
+      for (const line of [
+        '\\yellow\\/verity spawn\\reset\\ - Spawn Verity following you',
+        '\\yellow\\/verity despawn\\reset\\ - Remove Verity',
+        '\\yellow\\/verity say <text>\\reset\\ - Verity speaks (TTS)',
+        '\\yellow\\/verity ask <text>\\reset\\ - Chat with Verity (AI + TTS)'
+      ]) state.chat?.addChat?.({ text: line });
+      return;
+    }
+
+    addChat('Usage: /verity spawn | despawn | say <text> | ask <text>', 'error');
+  }
+
   function execute(line) {
     const { command, args } = parseCommand(line);
 
@@ -267,6 +325,11 @@
 
     if (command === 'waypoint') {
       handleWaypoint(args);
+      return;
+    }
+
+    if (command === 'verity') {
+      handleVerity(args);
       return;
     }
 
