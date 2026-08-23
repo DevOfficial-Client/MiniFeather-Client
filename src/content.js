@@ -394,6 +394,9 @@
     dynamicCrosshair: false,
     dynamicCrosshairSize: 28,
     vanillaAnimations: false,
+    leafWind: false,
+    leafWindStrength: 0.085,
+    handSway: false,
     dynamicCrosshairMap: {
       air: 'empty.png', block: 'crosshair.png', entity: 'cross-open.png',
       player: 'diamond.png', enemy: 'cross-diagonal-small.png', friendly: 'circle.png',
@@ -2418,6 +2421,8 @@
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc') },
       { page: 'render', key: 'leafWind', title: t('leafWind'), desc: t('leafWindDesc') },
       { page: 'render', key: 'vanillaAnimations', title: 'Vanilla Animations', desc: 'Freezes elbow and knee joints rigid for all players' },
+      { page: 'render', key: 'leafWind', title: t('leafWind'), desc: t('leafWindDesc') },
+      { page: 'render', key: 'handSway', title: t('handSway'), desc: t('handSwayDesc') },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
       { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc') },
@@ -2508,6 +2513,8 @@
     ping: 'pingCounter', pingcounter: 'pingCounter',
     titan: 'titanTiny', tiny: 'titanTiny', titantiny: 'titanTiny',
     vanilla: 'vanillaAnimations', vanillaanimations: 'vanillaAnimations',
+    leaf: 'leafWind', leafwind: 'leafWind', wind: 'leafWind',
+    hand: 'handSway', handsway: 'handSway', sway: 'handSway',
     waypoint: 'waypoints', waypoints: 'waypoints',
     zoom: 'zoom'
   });
@@ -2517,6 +2524,7 @@
     coordinates: 'Coordinates', dynamicCrosshair: 'Dynamic Crosshair', cpsCounter: 'CPS Counter',
     distanceNameTags: 'Player Distance', fpsCounter: 'FPS Counter', freelook: 'FreeLook', freecam: 'FreeCam',
     guiPatch: 'GUI Patch',
+    handSway: 'Hand Sway',
     healthNameTags: 'Player Health', blockHighlight: 'Block Highlight', itemPhysics: 'Item Physics',
     keystrokes: 'Keystrokes', noWeather: 'No Weather', leafWind: 'Leaf Movement', patPat: 'PatPat', pingCounter: 'Ping Counter',
     titanTiny: 'Titan & Tiny', vanillaAnimations: 'Vanilla Animations', waypoints: 'Waypoints', zoom: 'Zoom'
@@ -2979,6 +2987,55 @@
       },
       destroy() {
         sendVanillaAnimationsConfig(false);
+      }
+    }));
+  }
+
+  function sendLeafWindConfig(enabled = settings.leafWind, strength = settings.leafWindStrength) {
+    document.dispatchEvent(new CustomEvent('minifeather:leaf-wind-config', {
+      detail: JSON.stringify({ enabled: !!enabled, strength: Number(strength) || 0.085 })
+    }));
+  }
+
+  function initLeafWindModule() {
+    registerModule('leafWind', () => createLifecycle({
+      enable() {
+        sendLeafWindConfig(true);
+      },
+      disable() {
+        sendLeafWindConfig(false);
+      },
+      refresh() {
+        sendLeafWindConfig(
+          MODULES.get('leafWind')?.enabled === true,
+          settings.leafWindStrength
+        );
+      },
+      destroy() {
+        sendLeafWindConfig(false);
+      }
+    }));
+  }
+
+  function sendHandSwayConfig(enabled = settings.handSway) {
+    document.dispatchEvent(new CustomEvent('minifeather:handsway-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initHandSwayModule() {
+    registerModule('handSway', () => createLifecycle({
+      enable() {
+        sendHandSwayConfig(true);
+      },
+      disable() {
+        sendHandSwayConfig(false);
+      },
+      refresh() {
+        sendHandSwayConfig(MODULES.get('handSway')?.enabled === true);
+      },
+      destroy() {
+        sendHandSwayConfig(false);
       }
     }));
   }
@@ -4971,6 +5028,32 @@
                 checked
               >
             </label>
+            <label class="mf-toggle" id="mf-local-textures-toggle">
+              <span class="mf-toggle-dot"></span>
+              <span class="mf-toggle-copy">
+                <strong>${t('localTextures')}</strong>
+                <span>${t('localTexturesDesc')}</span>
+              </span>
+              <input
+                type="checkbox"
+                id="mf-local-textures-checkbox"
+                class="mf-switch-hidden"
+                checked
+              >
+            </label>
+            <label class="mf-toggle" id="mf-menu-ui-toggle">
+              <span class="mf-toggle-dot"></span>
+              <span class="mf-toggle-copy">
+                <strong>${t('menuUiOverride')}</strong>
+                <span>${t('menuUiOverrideDesc')}</span>
+              </span>
+              <input
+                type="checkbox"
+                id="mf-menu-ui-checkbox"
+                class="mf-switch-hidden"
+                checked
+              >
+            </label>
             <div id="mf-custom-tp-container" style="margin-top: 8px; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
               <div style="font-size: 12px; color: #aaa; margin-bottom: 8px;">
                 <strong style="color: #e0e0e0;">Custom Texture Pack</strong><br>
@@ -5493,7 +5576,7 @@
     `;
   }
 
-  function renderYouTubeMusicPage() { return `<div class="mf-page-stack"><div class="mf-card"><div class="mf-card-title">YouTube Music</div><div class="mf-muted" style="margin:6px 0 12px;">Reproduce mediante el reproductor oficial de YouTube.</div><div style="display:flex;gap:8px"><input id="mf-yt-module-url" class="mf-input" style="flex:1" placeholder="URL o ID de YouTube"><button id="mf-yt-module-load" class="mf-btn mf-btn-primary" type="button">Cargar</button></div><div id="mf-yt-module-status" class="mf-muted" style="min-height:18px;margin-top:8px"></div><iframe id="mf-yt-module-frame" title="Reproductor de YouTube" style="width:100%;height:360px;margin-top:12px;border:0;border-radius:10px" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div></div>`; }
+  function renderYouTubeMusicPage() { return `<div class="mf-page-stack"><div class="mf-card"><div class="mf-card-title">YouTube Music</div><div class="mf-muted" style="margin:6px 0 12px;">Reproduce en el mini-reproductor persistente: puedes cerrar la GUI y la música sigue.</div><div style="display:flex;gap:8px"><input id="mf-yt-module-url" class="mf-input" style="flex:1" placeholder="URL o ID de YouTube (video o playlist)"><button id="mf-yt-module-load" class="mf-btn mf-btn-primary" type="button">Reproducir</button></div><div id="mf-yt-module-status" class="mf-muted" style="min-height:18px;margin-top:8px"></div></div></div>`; }
   const PAGE_RENDERERS = {
     dashboard: renderDashboardPage,
     hud: renderHudPage,
@@ -6758,6 +6841,95 @@
     );
   }
 
+  // ── Mini reproductor de música persistente ──
+  // Vive en document.body, fuera del ciclo de vida de la GUI:
+  // cerrar la GUI NO corta la música (la GUI se auto-descarga al cerrarse).
+  let musicMini = null;
+
+  function parseYouTubeMusicUrl(raw) {
+    const x = String(raw || '').trim();
+    if (!x) return {};
+    if (/^[\w-]{11}$/.test(x)) return { id: x, list: '' };
+    try {
+      const url = new URL(x.startsWith('http') ? x : 'https://' + x);
+      const host = url.hostname.toLowerCase().replace(/^www\./, '');
+      const parts = url.pathname.split('/').filter(Boolean);
+      let id = '';
+      if (host === 'youtu.be') id = parts[0] || '';
+      else if (host.endsWith('youtube.com')) {
+        if (url.searchParams.get('v')) id = url.searchParams.get('v');
+        else if (['shorts', 'embed', 'live'].includes(parts[0])) id = parts[1] || '';
+      }
+      if (id && !/^[\w-]{11}$/.test(id)) id = '';
+      const list = url.searchParams.get('list') || '';
+      return { id, list: /^[\w-]+$/.test(list) ? list : '' };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function ensureMusicMini() {
+    if (musicMini && document.body.contains(musicMini)) return musicMini;
+    musicMini = document.createElement('div');
+    musicMini.id = 'mf-music-mini';
+    musicMini.style.cssText =
+      'position:fixed;right:16px;bottom:16px;width:320px;z-index:2147483000;' +
+      'display:none;box-shadow:0 8px 24px rgba(0,0,0,.45);border-radius:10px;' +
+      'overflow:hidden;background:#000';
+    const bar = document.createElement('div');
+    bar.style.cssText =
+      'display:flex;align-items:center;gap:8px;padding:6px 8px;' +
+      'background:#1f1f1f;color:#eee;font-size:12px;user-select:none';
+    const title = document.createElement('span');
+    title.id = 'mf-music-mini-title';
+    title.textContent = 'MiniFeather Music';
+    title.style.cssText = 'flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+    const btn = document.createElement('button');
+    btn.textContent = '\u2715';
+    btn.title = 'Detener y cerrar';
+    btn.style.cssText = 'background:none;border:0;color:#eee;cursor:pointer;font-size:14px;padding:0 4px';
+    btn.addEventListener('click', stopMusicMini);
+    bar.append(title, btn);
+    const frame = document.createElement('iframe');
+    frame.id = 'mf-music-mini-frame';
+    frame.style.cssText = 'width:100%;height:180px;border:0;display:block';
+    frame.allow = 'autoplay; encrypted-media; picture-in-picture';
+    frame.allowFullscreen = true;
+    frame.referrerPolicy = 'strict-origin-when-cross-origin';
+    musicMini.append(bar, frame);
+    document.body.appendChild(musicMini);
+    return musicMini;
+  }
+
+  function stopMusicMini() {
+    const frame = document.getElementById('mf-music-mini-frame');
+    if (frame) frame.src = 'about:blank';
+    const box = document.getElementById('mf-music-mini');
+    if (box) box.style.display = 'none';
+  }
+
+  // Devuelve { ok, msg }
+  function playMusicMini(url) {
+    const { id, list } = parseYouTubeMusicUrl(url);
+    if (!id && !list) return { ok: false, msg: 'URL o ID de YouTube no válido' };
+    const box = ensureMusicMini();
+    const frame = document.getElementById('mf-music-mini-frame');
+    const title = document.getElementById('mf-music-mini-title');
+    if (!frame) return { ok: false, msg: 'Reproductor no disponible' };
+    let src;
+    if (list && !id) {
+      src = 'https://www.youtube.com/embed/videoseries?listType=playlist&list=' + encodeURIComponent(list);
+      if (title) title.textContent = 'Playlist';
+    } else {
+      src = 'https://www.youtube.com/embed/' + encodeURIComponent(id) +
+        '?playsinline=1&rel=0&controls=1' + (list ? '&list=' + encodeURIComponent(list) : '');
+      if (title) title.textContent = 'YouTube';
+    }
+    frame.src = src;
+    box.style.display = 'block';
+    return { ok: true, msg: 'Reproduciendo en el mini-reproductor (abajo a la derecha).' };
+  }
+
   function bindPageControls() {
     if (!panel) return;
 
@@ -6802,54 +6974,16 @@
 
     if (activePage === 'youtubeMusic') {
       const input = panel.querySelector('#mf-yt-module-url');
-      const frame = panel.querySelector('#mf-yt-module-frame');
       const stat = panel.querySelector('#mf-yt-module-status');
       const btn = panel.querySelector('#mf-yt-module-load');
 
-      // Parser robusto: soporta watch?v=, youtu.be/, shorts|embed|live/,
-      // music.youtube.com, m.youtube.com y playlist?list= (solo lista o mixta)
-      const parseYouTube = raw => {
-        const x = String(raw || '').trim();
-        if (!x) return {};
-        if (/^[\w-]{11}$/.test(x)) return { id: x };
-        try {
-          const url = new URL(x.startsWith('http') ? x : 'https://' + x);
-          const host = url.hostname.toLowerCase().replace(/^www\./, '');
-          const parts = url.pathname.split('/').filter(Boolean);
-          let id = '';
-          if (host === 'youtu.be') id = parts[0] || '';
-          else if (host.endsWith('youtube.com')) {
-            if (url.searchParams.get('v')) id = url.searchParams.get('v');
-            else if (['shorts', 'embed', 'live'].includes(parts[0])) id = parts[1] || '';
-          }
-          if (id && !/^[\w-]{11}$/.test(id)) id = '';
-          const list = url.searchParams.get('list') || '';
-          return { id, list: /^[\w-]+$/.test(list) ? list : '' };
-        } catch (_) {
-          return {};
-        }
-      };
-
       const load = () => {
         const x = String(input?.value || '').trim();
-        const { id, list } = parseYouTube(x);
-        if (!id && !list) {
-          if (stat) stat.textContent = 'URL o ID de YouTube no válido';
-          if (frame) frame.src = 'about:blank';
-          return;
+        const result = playMusicMini(x);
+        if (stat) stat.textContent = result.msg;
+        if (result.ok) {
+          try { localStorage.setItem('minifeather_yt_module_url', x); } catch (_) {}
         }
-        let src;
-        if (list && !id) {
-          src = 'https://www.youtube.com/embed/videoseries?listType=playlist&list=' + encodeURIComponent(list);
-        } else {
-          src = 'https://www.youtube.com/embed/' + encodeURIComponent(id) +
-            '?playsinline=1&rel=0&controls=1' + (list ? '&list=' + encodeURIComponent(list) : '');
-        }
-        if (frame) frame.src = src;
-        if (stat) stat.textContent = id
-          ? 'Cargado. Pulsa reproducir.'
-          : 'Playlist cargada. Pulsa reproducir.';
-        try { localStorage.setItem('minifeather_yt_module_url', x); } catch (_) {}
       };
 
       btn?.addEventListener('click', load, { signal: panelSignal });
@@ -7441,6 +7575,28 @@
       });
     }
 
+    if (panel.querySelector('#mf-local-textures-checkbox')) {
+      chrome.runtime.sendMessage({ type: 'getLocalTextures' }, response => {
+        const checkbox = panel?.querySelector('#mf-local-textures-checkbox');
+        if (checkbox && response && response.success) checkbox.checked = response.enabled;
+      });
+
+      panel.querySelector('#mf-local-textures-checkbox')?.addEventListener('change', event => {
+        chrome.runtime.sendMessage({ type: 'setLocalTextures', enabled: event.target.checked });
+      });
+    }
+
+    if (panel.querySelector('#mf-menu-ui-checkbox')) {
+      chrome.runtime.sendMessage({ type: 'getMenuUiOverride' }, response => {
+        const checkbox = panel?.querySelector('#mf-menu-ui-checkbox');
+        if (checkbox && response && response.success) checkbox.checked = response.enabled;
+      });
+
+      panel.querySelector('#mf-menu-ui-checkbox')?.addEventListener('change', event => {
+        chrome.runtime.sendMessage({ type: 'setMenuUiOverride', enabled: event.target.checked });
+      });
+    }
+
     const tpGenerate = panel.querySelector('#mf-custom-tp-generate');
     const tpDisable = panel.querySelector('#mf-custom-tp-disable');
     const tpFiles = panel.querySelector('#mf-custom-tp-files');
@@ -7752,6 +7908,8 @@
     setModuleEnabled('freecam', settings.freecam);
     setModuleEnabled('dynamicCrosshair', settings.dynamicCrosshair);
     setModuleEnabled('vanillaAnimations', settings.vanillaAnimations);
+    setModuleEnabled('leafWind', settings.leafWind);
+    setModuleEnabled('handSway', settings.handSway);
     setModuleEnabled('guiPatch', settings.guiPatch);
     document.dispatchEvent(
       new CustomEvent(
@@ -8234,6 +8392,8 @@
     initNoWeatherModule();
     initLeafWindModule();
     initVanillaAnimationsModule();
+    initLeafWindModule();
+    initHandSwayModule();
     initAntiAfkModule();
     initRhythmParkourModule();
     initLocalGamesModule();

@@ -556,6 +556,12 @@ function applyConfig(detail) {
     }
 
     if (!config || typeof config !== 'object') return;
+    if ('strength' in config) {
+        const value = Number(config.strength);
+        if (Number.isFinite(value) && value >= 0 && value <= 1) {
+            uniforms.strength.value = value;
+        }
+    }
     if ('enabled' in config) setEnabled(config.enabled);
 }
 

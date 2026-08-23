@@ -60,6 +60,7 @@
         "src/RhythmParkour.js",
         "src/LocalGames.js",
         "src/VanillaAnimations.js",
+        "src/LeafWind.js",
         "src/HandSway.js",
         "src/HandLayer.js",
         "src/CustomModels.js",
