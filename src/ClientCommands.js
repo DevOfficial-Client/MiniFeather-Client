@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'caja']);
 
   function parseDetail(event) {
     try {
@@ -53,6 +53,8 @@
       '\\yellow\\/waypoint <name>\\reset\\ - Show waypoint info',
       '\\yellow\\/verity spawn\\reset\\ - Spawn Verity companion',
       '\\yellow\\/verity ask <text>\\reset\\ - Talk with Verity (AI + voice)',
+      '\\yellow\\/mf models\\reset\\ - List mob model replacements',
+      '\\yellow\\/mf models clear\\reset\\ - Restore all mob models',
       '\\yellow\\/mf help\\reset\\ - Show this help'
     ];
     for (const line of lines) state.chat?.addChat?.({ text: line });
@@ -141,7 +143,8 @@
   function shouldIntercept(line) {
     const { command, args } = parseCommand(line);
     if (!RECOGNIZED.has(command)) return false;
-    if (command === 'mf') return (args[0] || '').toLowerCase() === 'help';
+    // /mf: interceptar siempre (help, models, models clear...)
+    if (command === 'mf') return true;
     return true;
   }
 
@@ -302,24 +305,88 @@
       return;
     }
 
+    if (action === 'provider' || action === 'key' || action === 'model' || action === 'status' || action === 'api') {
+      if (!ai) {
+        addChat('VerityAI is not loaded.', 'error');
+        return;
+      }
+      if (action === 'status' || (action === 'api' && !args[1])) {
+        const cfg = { provider: ai.provider, model: ai.model };
+        for (const [name, p] of Object.entries(ai.providers)) {
+          addChat(`\\yellow\\${name}\\reset\\ - ${p.label}${p.defaultModel ? ` (default: ${p.defaultModel})` : ''}`);
+        }
+        addChat(`Active: \\green\\${cfg.provider} / ${cfg.model}\\reset\\`);
+        return;
+      }
+      if (action === 'provider') {
+        const name = (args[1] || '').toLowerCase();
+        try {
+          ai.config({ provider: name });
+          addChat(`Provider: \\green\\${ai.provider}\\reset\\ (${ai.providers[name].label})`, 'success');
+          if (ai.providers[name].needsKey && !ai.config({}).hasKey) {
+            addChat('That provider needs an API key: /verity key <your-key>', 'error');
+          }
+        } catch (err) {
+          addChat(err?.message || 'Invalid provider', 'error');
+        }
+        return;
+      }
+      if (action === 'key') {
+        const key = args.slice(1).join(' ').trim();
+        if (!key) { addChat('Usage: /verity key <api-key>', 'error'); return; }
+        ai.config({ apiKey: key });
+        addChat('API key saved.', 'success');
+        return;
+      }
+      if (action === 'model') {
+        const model = args.slice(1).join(' ').trim();
+        if (!model) { addChat(`Usage: /verity model <name> (current: ${ai.model})`, 'error'); return; }
+        ai.config({ model });
+        addChat(`Model: \\green\\${ai.model}\\reset\\`, 'success');
+        return;
+      }
+      return;
+    }
+
     if (action === 'help') {
       for (const line of [
         '\\yellow\\/verity spawn\\reset\\ - Spawn Verity following you',
         '\\yellow\\/verity despawn\\reset\\ - Remove Verity',
         '\\yellow\\/verity say <text>\\reset\\ - Verity speaks (TTS)',
-        '\\yellow\\/verity ask <text>\\reset\\ - Chat with Verity (AI + TTS)'
+        '\\yellow\\/verity ask <text>\\reset\\ - Chat with Verity (AI + TTS)',
+        '\\yellow\\/verity provider <name>\\reset\\ - puter | openrouter | glm',
+        '\\yellow\\/verity key <api-key>\\reset\\ - Set the provider API key',
+        '\\yellow\\/verity model <name>\\reset\\ - Set the model for the provider',
+        '\\yellow\\/verity status\\reset\\ - Show AI providers and active config'
       ]) state.chat?.addChat?.({ text: line });
       return;
     }
 
-    addChat('Usage: /verity spawn | despawn | say <text> | ask <text>', 'error');
+    addChat('Usage: /verity spawn | despawn | say <t> | ask <t> | provider | key | model | status', 'error');
   }
 
   function execute(line) {
     const { command, args } = parseCommand(line);
 
     if (command === 'mf') {
-      if ((args[0] || '').toLowerCase() === 'help') showHelp();
+      const sub = (args[0] || 'help').toLowerCase();
+      if (sub === 'help' || sub === '') { showHelp(); return; }
+      if (sub === 'models') {
+        const api = globalThis.MF_CustomModels;
+        if (!api) { addChat('CustomModels is not ready yet.', 'error'); return; }
+        const map = api.mappings || {};
+        const entries = Object.entries(map);
+        if (!entries.length) addChat('No mob model replacements active.', 'success');
+        else {
+          addChat('\\yellow\\Active mob replacements:\\reset\\', 'info');
+          for (const [name, file] of entries) addChat(`  ${name} -> ${file}`, 'info');
+        }
+        if (sub === 'models' && (args[1] || '').toLowerCase() === 'clear') {
+          api.clear();
+          addChat('All mob replacements restored.', 'success');
+        }
+        return;
+      }
       return;
     }
 
@@ -330,6 +397,46 @@
 
     if (command === 'verity') {
       handleVerity(args);
+      return;
+    }
+
+    if (command === 'caja') {
+      const api = globalThis.MF_CustomModels;
+      if (!api?.spawnBox) {
+        addChat('CustomModels is not ready yet.', 'error');
+        return;
+      }
+      const action = (args[0] || 'spawn').toLowerCase();
+      if (action === 'spawn') {
+        const opts = {};
+        if (args[1] === 'follow') { opts.followPlayer = true; opts.stopDistance = 1.6; opts.maxSpeed = 4.3; }
+        const id = api.spawnBox(2, opts);
+        addChat(id ? `Box spawned${opts.followPlayer ? ' and following you' : ''}.` : 'Could not spawn box.', id ? 'success' : 'error');
+        return;
+      }
+      if (action === 'despawn' || action === 'remove') {
+        const ok = api.despawn('caja');
+        addChat(ok ? 'Box despawned.' : 'Box is not spawned.', ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'open') {
+        // setAnim (permanente): "open" tiene hold_on_last_frame, se queda abierta
+        const ok = api.setAnim('caja', 'open');
+        addChat(ok ? 'Box opening...' : 'Box is not spawned.', ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'anim') {
+        const name = args[1];
+        if (!name) {
+          const list = api.anims('caja');
+          addChat(list ? 'Box anims: ' + list.join(', ') : 'Box is not spawned.', list ? 'success' : 'error');
+          return;
+        }
+        const ok = api.setAnim('caja', name);
+        addChat(ok ? `Anim set: ${name}` : 'No such anim (or box not spawned).', ok ? 'success' : 'error');
+        return;
+      }
+      addChat('Usage: /caja spawn [follow] | open | anim <name> | despawn', 'error');
       return;
     }
 

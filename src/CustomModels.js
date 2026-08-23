@@ -18,6 +18,10 @@
         state.mappings = JSON.parse(localStorage.getItem('miniblox_custommodels_map') || '{}');
         state.entityAnims = JSON.parse(localStorage.getItem('miniblox_custommodels_anims') || '{}');
     } catch {}
+    // avisar si quedan reemplazos de mobs guardados (faciles de olvidar)
+    if (Object.keys(state.mappings).length) {
+        console.log(TAG + ' mapeos activos guardados: ' + JSON.stringify(state.mappings) + ' — usa MF_CustomModels.clear() para restaurar');
+    }
 
     window.MF_CustomModels = {
         get enabled() { return state.enabled; },
@@ -136,11 +140,22 @@
             console.log(TAG + ' anims (' + rec.file + '): ' + names.join(', '));
             return names;
         },
+        despawnAll() {
+            const ids = [...state.customs.keys()];
+            for (const id of ids) MF_CustomModels.despawn(id);
+            return ids;
+        },
         playAnim(id, animName, ms) {
             const rec = state.customs.get(id);
             if (!rec?.inst) return false;
             if (!rec.inst.anims.some((a) => a.name === animName)) return false;
             const now = performance.now();
+            const prev = rec.animOverride;
+            // si ya suena la misma anim y sigue vigente, extender sin reiniciar (loop suave)
+            if (prev && prev.name === animName && now < prev.until) {
+                prev.until = Math.max(prev.until, now + (+ms || 1500));
+                return true;
+            }
             rec.animOverride = { name: animName, start: now, until: now + (+ms || 1500) };
             return true;
         },
@@ -170,7 +185,7 @@
             const p = getGame()?.player?.pos;
             if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
             if (state.customs.has('verity')) MF_CustomModels.despawn('verity');
-            return MF_CustomModels.spawn('verity_full_model.glb', p.x + offset, p.y, p.z, {
+            const res = MF_CustomModels.spawn('verity_full_model.glb', p.x + offset, p.y, p.z, {
                 id: 'verity',
                 height: opts.height || 0.85,
                 followPlayer: true,
@@ -181,10 +196,52 @@
                 lostTimeMs: opts.lostTimeMs != null ? opts.lostTimeMs : 5000,
                 ...opts
             });
+            if (res) playIntro('verity', res);
+            return res;
+        },
+        spawnBox(offset = 2, opts = {}) {
+            const p = getGame()?.player?.pos;
+            if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
+            if (state.customs.has('caja')) MF_CustomModels.despawn('caja');
+            const res = MF_CustomModels.spawn('box.geo.json', p.x + offset, p.y, p.z, {
+                id: 'caja',
+                height: opts.height || 1.0,
+                bodyHalf: opts.bodyHalf || 0.56,
+                followPlayer: !!opts.followPlayer,
+                anim: opts.anim || 'hover',
+                ...opts
+            });
+            return res;
         },
         rescan
     };
     state.yawSign = 1;
+
+    // Reproduce el intro.ogg cuando aparece Verity, con la anim "talk"
+    // viva durante TODO el audio (keep-alive, igual que el TTS de VerityAI).
+    async function playIntro(id, recId) {
+        try {
+            const url = await bridgeFetchUrl('intro.ogg', 'assets');
+            const audio = new Audio(url);
+            audio.volume = 0.9;
+            // anim talk extendida mientras suene el intro
+            MF_CustomModels.playAnim(recId, 'talk', 10000);
+            const keeper = setInterval(() => {
+                const rec = state.customs.get(recId);
+                if (!rec || rec.dead || audio.ended || audio.paused) {
+                    clearInterval(keeper);
+                    return;
+                }
+                MF_CustomModels.playAnim(recId, 'talk', 700);
+            }, 500);
+            audio.addEventListener('ended', () => clearInterval(keeper), { once: true });
+            audio.addEventListener('pause', () => clearInterval(keeper), { once: true });
+            await audio.play();
+            console.log(TAG + ' intro.ogg reproduciendose');
+        } catch (err) {
+            console.warn(TAG + ' intro falló: ' + (err?.message || err));
+        }
+    }
 
     function getGame() {
         if (globalThis.miniblox?.player) return globalThis.miniblox;
@@ -389,6 +446,11 @@
                 if ('alphaTest' in mat) mat.alphaTest = 0;
                 if ('transparent' in mat) mat.transparent = false;
                 if ('fog' in mat) mat.fog = false;
+                // CRITICO: el material del brazo 1a persona usa depthTest=false
+                // (para no ser cortado por el mundo). Sin forzar esto, TODOS los
+                // modelos custom se dibujan encima de todo = "pegados a la camara"
+                if ('depthTest' in mat) mat.depthTest = true;
+                if ('depthWrite' in mat) mat.depthWrite = true;
                 if (mat.color?.set) mat.color.set(0xffffff);
             }
         } catch {
@@ -514,11 +576,11 @@
         } catch {}
     });
 
-    function bridgeFetchUrl(file) {
+    function bridgeFetchUrl(file, dir) {
         return new Promise((resolve, reject) => {
             const nonce = 'mf' + (++reqSeq) + '_' + Date.now();
             pendingFetches.set(nonce, { resolve, reject });
-            document.dispatchEvent(new CustomEvent('minifeather:model-fetch-request', { detail: JSON.stringify({ nonce, file }) }));
+            document.dispatchEvent(new CustomEvent('minifeather:model-fetch-request', { detail: JSON.stringify({ nonce, file, dir }) }));
             setTimeout(() => {
                 if (pendingFetches.has(nonce)) {
                     pendingFetches.delete(nonce);
@@ -540,11 +602,251 @@
         return resp.arrayBuffer();
     }
 
+    // ─── Bedrock .geo.json → pseudo-GLTF (cajas/entidades estilo MCPE) ──
+    // Convierte bones/cubes con UV de caja Bedrock a la misma forma que
+    // produce parseGLB, para que buildScene/cloneInstance funcionen igual.
+    // 1 unidad Bedrock = 1 pixel = 1/16 bloque.
+    let geoImageSeq = 1000;
+
+    function parseBedrockGeo(json, texUri) {
+        const geo = json['minecraft:geometry']?.[0];
+        if (!geo?.bones?.length) throw new Error('geo.json sin bones');
+        const desc = geo.description || {};
+        const TW = desc.texture_width || 16;
+        const TH = desc.texture_height || 16;
+        const S = 1 / 16;
+
+        const bufferViews = [];
+        const accessors = [];
+        const chunks = [];
+        let offset = 0;
+
+        function pushView(typedArr) {
+            const pad = (4 - (offset % 4)) % 4;
+            if (pad) { chunks.push(new Uint8Array(pad)); offset += pad; }
+            const bytes = new Uint8Array(typedArr.buffer, typedArr.byteOffset, typedArr.byteLength);
+            bufferViews.push({ buffer: 0, byteOffset: offset, byteLength: bytes.byteLength });
+            chunks.push(bytes);
+            offset += bytes.byteLength;
+            return bufferViews.length - 1;
+        }
+
+        function addAccessor(typedArr, type, componentType) {
+            const count = typedArr.length / { SCALAR: 1, VEC2: 2, VEC3: 3 }[type];
+            accessors.push({ bufferView: pushView(typedArr), componentType, count, type });
+            return accessors.length - 1;
+        }
+
+        // UV de caja Bedrock: norte (u+d,v+d,w,h), sur (u+2d+w,...), este,
+        // oeste, up, down. Cubos con una dimension 0 = plano (una sola cara).
+        function faceQuads(cube) {
+            const [ox, oy, oz] = cube.origin;
+            const [sx, sy, sz] = cube.size;
+            const minX = ox, maxX = ox + sx, minY = oy, maxY = oy + sy, minZ = oz, maxZ = oz + sz;
+            const u = cube.uv?.[0] || 0, v = cube.uv?.[1] || 0;
+            const w = sx, h = sy, d = sz;
+            const quads = [];
+            const F = (tl, bl, br, tr, reg, n) => quads.push({ tl, bl, br, tr, reg, n });
+            if (h === 0) {
+                F([minX, maxY, minZ], [minX, maxY, maxZ], [maxX, maxY, maxZ], [maxX, maxY, minZ], [u + d, v, w, d], [0, 1, 0]);
+                return quads;
+            }
+            if (d === 0) {
+                F([maxX, maxY, minZ], [maxX, minY, minZ], [minX, minY, minZ], [minX, maxY, minZ], [u + d, v + d, w, h], [0, 0, -1]);
+                return quads;
+            }
+            if (w === 0) {
+                F([minX, maxY, minZ], [minX, minY, minZ], [minX, minY, maxZ], [minX, maxY, maxZ], [u, v + d, d, h], [-1, 0, 0]);
+                return quads;
+            }
+            F([maxX, maxY, minZ], [maxX, minY, minZ], [minX, minY, minZ], [minX, maxY, minZ], [u + d, v + d, w, h], [0, 0, -1]); // norte
+            F([minX, maxY, maxZ], [minX, minY, maxZ], [maxX, minY, maxZ], [maxX, maxY, maxZ], [u + 2 * d + w, v + d, w, h], [0, 0, 1]); // sur
+            F([maxX, maxY, maxZ], [maxX, minY, maxZ], [maxX, minY, minZ], [maxX, maxY, minZ], [u + d + w, v + d, d, h], [1, 0, 0]); // este
+            F([minX, maxY, minZ], [minX, minY, minZ], [minX, minY, maxZ], [minX, maxY, maxZ], [u, v + d, d, h], [-1, 0, 0]); // oeste
+            F([minX, maxY, minZ], [minX, maxY, maxZ], [maxX, maxY, maxZ], [maxX, maxY, minZ], [u + d, v, w, d], [0, 1, 0]); // arriba
+            F([maxX, minY, minZ], [maxX, minY, maxZ], [minX, minY, maxZ], [minX, minY, minZ], [u + d + w, v, w, d], [0, -1, 0]); // abajo
+            return quads;
+        }
+
+        function buildCube(cube, pivot) {
+            const pos = [], nor = [], uvs = [], idx = [];
+            let vi = 0;
+            for (const q of faceQuads(cube)) {
+                const [ru, rv, rw, rh] = q.reg;
+                const corners = [q.tl, q.bl, q.br, q.tr];
+                const uvc = [[ru, rv], [ru, rv + rh], [ru + rw, rv + rh], [ru + rw, rv]];
+                for (let i = 0; i < 4; i++) {
+                    const c = corners[i];
+                    pos.push((c[0] - pivot[0]) * S, (c[1] - pivot[1]) * S, (c[2] - pivot[2]) * S);
+                    nor.push(q.n[0], q.n[1], q.n[2]);
+                    uvs.push(uvc[i][0] / TW, uvc[i][1] / TH);
+                }
+                idx.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+                vi += 4;
+            }
+            return { pos: new Float32Array(pos), nor: new Float32Array(nor), uv: new Float32Array(uvs), idx: new Uint32Array(idx) };
+        }
+
+        const bones = geo.bones;
+        const boneByName = new Map(bones.map((b) => [b.name, b]));
+        const nodes = [];
+        const nodeOf = new Map();
+        for (const b of bones) { const n = { name: b.name }; nodeOf.set(b.name, n); nodes.push(n); }
+
+        const meshes = [];
+        for (const b of bones) {
+            const node = nodeOf.get(b.name);
+            const pivot = b.pivot || [0, 0, 0];
+            const pp = b.parent ? (boneByName.get(b.parent)?.pivot || [0, 0, 0]) : [0, 0, 0];
+            node.translation = [(pivot[0] - pp[0]) * S, (pivot[1] - pp[1]) * S, (pivot[2] - pp[2]) * S];
+            if (b.cubes?.length) {
+                const prims = [];
+                for (const cube of b.cubes) {
+                    const dt = buildCube(cube, pivot);
+                    prims.push({
+                        attributes: {
+                            POSITION: addAccessor(dt.pos, 'VEC3', 5126),
+                            NORMAL: addAccessor(dt.nor, 'VEC3', 5126),
+                            TEXCOORD_0: addAccessor(dt.uv, 'VEC2', 5126)
+                        },
+                        indices: addAccessor(dt.idx, 'SCALAR', 5125),
+                        material: 0
+                    });
+                }
+                node.mesh = meshes.length;
+                meshes.push({ primitives: prims });
+            }
+        }
+
+        const roots = [];
+        for (const b of bones) {
+            const i = nodes.indexOf(nodeOf.get(b.name));
+            if (b.parent && nodeOf.has(b.parent)) {
+                const p = nodeOf.get(b.parent);
+                p.children = [...(p.children || []), i];
+            } else roots.push(i);
+        }
+
+        // indice de imagen unico (evita colisionar el cache de texturas con GLBs)
+        const imgIdx = geoImageSeq++;
+        const images = [];
+        images[imgIdx] = { uri: texUri, mimeType: 'image/png' };
+
+        const bin = new ArrayBuffer(offset);
+        const binU8 = new Uint8Array(bin);
+        let at = 0;
+        for (const c of chunks) { binU8.set(c, at); at += c.byteLength; }
+
+        const nodeIdxOf = new Map();
+        for (let i = 0; i < nodes.length; i++) if (nodes[i]?.name) nodeIdxOf.set(nodes[i].name, i);
+
+        return {
+            bin,
+            json: {
+                asset: { version: '2.0' },
+                scene: 0,
+                scenes: [{ nodes: roots }],
+                nodes,
+                meshes,
+                materials: [{ pbrMetallicRoughness: { baseColorTexture: { index: 0 } }, alphaMode: 'BLEND', doubleSided: true }],
+                textures: [{ source: imgIdx }],
+                images,
+                accessors,
+                bufferViews,
+                buffers: [{ byteLength: offset }]
+            },
+            nodeIdxOf,
+            nodes
+        };
+    }
+
+    async function parseGeoModel(file) {
+        const json = JSON.parse(new TextDecoder().decode(await fetchModelArrayBuffer(file)));
+        const texBytes = new Uint8Array(await fetchModelArrayBuffer(file.replace(/\.geo\.json$/i, '') + '.png'));
+        let s = '';
+        for (let i = 0; i < texBytes.length; i += 0x8000) s += String.fromCharCode.apply(null, texBytes.subarray(i, i + 0x8000));
+        const parsed = parseBedrockGeo(json, 'data:image/png;base64,' + btoa(s));
+        // Animaciones Bedrock: mismo nombre base + .animation.json (opcional)
+        const animFile = file.replace(/\.geo\.json$/i, '') + '.animation.json';
+        try {
+            const animJson = JSON.parse(new TextDecoder().decode(await fetchModelArrayBuffer(animFile)));
+            parsed.json.animations = bedrockAnimToTracks(animJson, parsed.nodeIdxOf, parsed.nodes);
+            console.log(TAG + ' bedrock anims: ' + parsed.json.animations.map((a) => a.name).join(', '));
+        } catch {
+            console.log(TAG + ' sin animaciones bedrock para ' + file);
+        }
+        return parsed;
+    }
+
+    // ─── Animaciones Bedrock (.animation.json) → tracks glTF ───
+    // Bedrock rota en GRADOS con pitch/roll de signo invertido a three.js
+    // (yaw igual; verificado con las tapas de la caja: sin invertir Z se
+    // clavan a traves de la caja en "open"). Positions en px → ×1/16.
+    function deg2quat(x, y, z) {
+        const d = Math.PI / 180;
+        const hx = -x * d / 2, hy = y * d / 2, hz = -z * d / 2;
+        const cx = Math.cos(hx), sx = Math.sin(hx);
+        const cy = Math.cos(hy), sy = Math.sin(hy);
+        const cz = Math.cos(hz), sz = Math.sin(hz);
+        // Euler XYZ → quaternion
+        const w = cx * cy * cz + sx * sy * sz;
+        const qx = sx * cy * cz - cx * sy * sz;
+        const qy = cx * sy * cz + sx * cy * sz;
+        const qz = cx * cy * sz - sx * sy * cz;
+        return [qx, qy, qz, w];
+    }
+
+    const EASINGS = {
+        linear: (u) => u,
+        easeOutCirc: (u) => 1 - Math.sqrt(1 - u * u),
+        easeInExpo: (u) => (u === 0 ? 0 : Math.pow(2, 10 * (u - 1))),
+        easeInOutSine: (u) => -(Math.cos(Math.PI * u) - 1) / 2
+    };
+
+    // nodeIdxOf: Map boneName → indice de nodo; nodes: array glTF (rest pose)
+    function bedrockAnimToTracks(animJson, nodeIdxOf, nodes) {
+        const anims = [];
+        const S = 1 / 16;
+        for (const [name, a] of Object.entries(animJson.animations || {})) {
+            const tracks = [];
+            let duration = a.animation_length || 0;
+            for (const [boneName, channels] of Object.entries(a.bones || {})) {
+                const nodeIdx = nodeIdxOf.get(boneName);
+                if (nodeIdx == null) continue;
+                const rest = nodes[nodeIdx]?.translation || [0, 0, 0];
+                for (const path of ['position', 'rotation', 'scale']) {
+                    const chan = channels[path];
+                    if (!chan) continue;
+                    // iterar con la clave ORIGINAL: Number→String rompe "1.0"→"1"
+                    const entries = Object.entries(chan)
+                        .map(([k, kf]) => ({ ts: +k, kf }))
+                        .filter((e) => Number.isFinite(e.ts))
+                        .sort((a, b) => a.ts - b.ts);
+                    const times = [], values = [], eases = ['linear'];
+                    for (const { ts, kf } of entries) {
+                        const vec = kf?.post?.vector ?? kf?.vector ?? [0, 0, 0];
+                        times.push(ts);
+                        eases.push(kf?.easing || 'linear');
+                        if (path === 'rotation') values.push(...deg2quat(vec[0], vec[1], vec[2]));
+                        else if (path === 'scale') values.push(vec[0], vec[1], vec[2]);
+                        // Bedrock ANADE a la pose rest; glTF la reemplaza → sumar rest
+                        else values.push(rest[0] + vec[0] * S, rest[1] + vec[1] * S, rest[2] + vec[2] * S);
+                    }
+                    if (times.length > 1) {
+                        tracks.push({ nodeIdx, path, times, values, eases, interp: 'LINEAR', comps: path === 'rotation' ? 4 : 3 });
+                        if (times[times.length - 1] > duration) duration = times[times.length - 1];
+                    }
+                }
+            }
+            if (tracks.length) anims.push({ name, duration, tracks, holdOnLast: a.loop === 'hold_on_last_frame' });
+        }
+        return anims;
+    }
+
     async function loadModel(file) {
         if (modelCache.has(file)) return modelCache.get(file);
         const p = (async () => {
-            const buf = await fetchModelArrayBuffer(file);
-            const parsed = parseGLB(buf);
+            const parsed = /\.geo\.json$/i.test(file) ? await parseGeoModel(file) : parseGLB(await fetchModelArrayBuffer(file));
             const ctors = grabCtors();
             if (!ctors) throw new Error('constructores Three no disponibles todavia');
             const game = getGame();
@@ -604,6 +906,8 @@
         const { json: gltf } = parsed;
         const anims = [];
         for (const a of gltf.animations || []) {
+            // ya convertidas (bedrockAnimToTracks) → passthrough directo
+            if (Array.isArray(a.tracks)) { anims.push(a); continue; }
             const tracks = [];
             let duration = 0;
             for (const ch of a.channels || []) {
@@ -672,8 +976,11 @@
     function sampleAnim(inst, animName, t) {
         const anim = inst.anims.find((a) => a.name === animName);
         if (!anim) return false;
-        if (anim.duration > 0) t = t % anim.duration;
-        else t = 0;
+        if (anim.duration > 0) {
+            // hold_on_last_frame: congela al final en vez de loopear
+            if (anim.holdOnLast && t > anim.duration) t = anim.duration - 0.0001;
+            else t = t % anim.duration;
+        } else t = 0;
         for (const tr of anim.tracks) {
             const g = inst.groups.get(tr.nodeIdx);
             if (!g) continue;
@@ -686,6 +993,11 @@
             let u = t1 > t0 ? (t - t0) / (t1 - t0) : 0;
             if (u < 0) u = 0; if (u > 1) u = 1;
             if (tr.interp === 'STEP') u = 0;
+            // easing del keyframe DESTINO (eases[i+2]; eases[0] es padding)
+            if (tr.eases && !last) {
+                const fn = EASINGS[tr.eases[i + 2]] || EASINGS.linear;
+                u = fn(u);
+            }
             if (tr.path === 'rotation') {
                 const x0 = values[a0], y0 = values[a0 + 1], z0 = values[a0 + 2], w0 = values[a0 + 3];
                 let x1 = values[a1], y1 = values[a1 + 1], z1 = values[a1 + 2], w1 = values[a1 + 3];
@@ -820,9 +1132,45 @@
     }
 
     setInterval(() => {
+        if (!myStamp.alive) return;
         if (!state.enabled && Object.keys(state.mappings).length === 0) return;
         try { rescan(); } catch {}
     }, 2000);
+
+    // ── Anti-instancia-zombi ──
+    // Recargar la extension sin F5 deja el script MAIN viejo corriendo:
+    // materiales depthTest=false, mapeos en memoria, tick duplicado.
+    // Solo una instancia puede ser la activa; las viejas se apagan solas.
+    const myStamp = { alive: true };
+    try {
+        const prev = window.__MF_CustomModels_Active;
+        if (prev && prev !== myStamp && typeof prev.shutdown === 'function') {
+            prev.alive = false;
+            prev.shutdown();
+        } else if (prev) {
+            prev.alive = false;
+        }
+    } catch {}
+    window.__MF_CustomModels_Active = myStamp;
+
+    function shutdown() {
+        try {
+            for (const mesh of [...state.applied.keys()]) {
+                const rec = state.applied.get(mesh);
+                try { rec.root?.parent?.remove(rec.root); } catch {}
+                for (const c of rec.hidden || []) c.visible = true;
+                if (rec.origRender && mesh.render === rec.wrapper) mesh.render = rec.origRender;
+            }
+            state.applied = new WeakMap();
+            for (const rec of [...state.customs.values()]) {
+                rec.dead = true;
+                try { rec.root?.parent?.remove(rec.root); } catch {}
+            }
+            state.customs.clear();
+        } catch {}
+        console.log(TAG + ' instancia anterior apagada (reload)');
+    }
+    myStamp.shutdown = shutdown;
 
     function disableCullingDeep(root) {
         (function walk(n) {
@@ -920,7 +1268,12 @@
 
     function followTick(rec, dt, t) {
         const root = rec.root;
-        if (!rec.followPlayer) return;
+        if (!rec.followPlayer) {
+            // entidad estatica: solo gravedad, para asentarse en el suelo
+            // (sin esto flota a la altura del spawn = altura de camara)
+            physicsStep(rec, dt, 0, 0);
+            return;
+        }
         const p = getGame()?.player?.pos;
         if (!p) return;
         const distToPlayer = Math.hypot(p.x - root.position.x, p.y - root.position.y, p.z - root.position.z);
@@ -1058,7 +1411,7 @@
                 }
             } catch {}
         }
-        requestAnimationFrame(tickCustoms);
+        requestAnimationFrame(() => { if (myStamp.alive) tickCustoms(); });
     })();
 
     console.log(TAG + ' cargado. Ejemplos:');
