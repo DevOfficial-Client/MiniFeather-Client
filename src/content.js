@@ -6800,7 +6800,62 @@
       saveSettings(true);
     });
 
-    if (activePage === 'youtubeMusic') { const input=panel.querySelector('#mf-yt-module-url'), frame=panel.querySelector('#mf-yt-module-frame'), stat=panel.querySelector('#mf-yt-module-status'), btn=panel.querySelector('#mf-yt-module-load'); const load=()=>{const x=String(input?.value||'').trim();const id=((x.match(/^[\w-]{11}$/)||x.match(/[?&]v=([\w-]{11})/)||x.match(/youtu\.be\/([\w-]{11})/)||x.match(/\/(?:embed|shorts|live)\/([\w-]{11})/))||[])[1]||x;const list=(x.match(/[?&]list=([\w-]+)/)||[])[1];if(!id&&!list){if(stat)stat.textContent='URL o ID no válido';return}if(frame)frame.src='https://www.youtube.com/embed/'+(list&&!/[?&]v=/.test(x)?'?listType=playlist&list='+list:id+'?playsinline=1&rel=0&controls=1'+(list?'&list='+list:''));if(stat)stat.textContent='Cargado. Pulsa reproducir en YouTube.';try{localStorage.setItem('minifeather_yt_module_url',x)}catch(_){}};btn?.addEventListener('click',load,{signal:panelSignal});input?.addEventListener('keydown',e=>{if(e.key==='Enter')load()},{signal:panelSignal});try{if(input)input.value=localStorage.getItem('minifeather_yt_module_url')||''}catch(_){} }
+    if (activePage === 'youtubeMusic') {
+      const input = panel.querySelector('#mf-yt-module-url');
+      const frame = panel.querySelector('#mf-yt-module-frame');
+      const stat = panel.querySelector('#mf-yt-module-status');
+      const btn = panel.querySelector('#mf-yt-module-load');
+
+      // Parser robusto: soporta watch?v=, youtu.be/, shorts|embed|live/,
+      // music.youtube.com, m.youtube.com y playlist?list= (solo lista o mixta)
+      const parseYouTube = raw => {
+        const x = String(raw || '').trim();
+        if (!x) return {};
+        if (/^[\w-]{11}$/.test(x)) return { id: x };
+        try {
+          const url = new URL(x.startsWith('http') ? x : 'https://' + x);
+          const host = url.hostname.toLowerCase().replace(/^www\./, '');
+          const parts = url.pathname.split('/').filter(Boolean);
+          let id = '';
+          if (host === 'youtu.be') id = parts[0] || '';
+          else if (host.endsWith('youtube.com')) {
+            if (url.searchParams.get('v')) id = url.searchParams.get('v');
+            else if (['shorts', 'embed', 'live'].includes(parts[0])) id = parts[1] || '';
+          }
+          if (id && !/^[\w-]{11}$/.test(id)) id = '';
+          const list = url.searchParams.get('list') || '';
+          return { id, list: /^[\w-]+$/.test(list) ? list : '' };
+        } catch (_) {
+          return {};
+        }
+      };
+
+      const load = () => {
+        const x = String(input?.value || '').trim();
+        const { id, list } = parseYouTube(x);
+        if (!id && !list) {
+          if (stat) stat.textContent = 'URL o ID de YouTube no válido';
+          if (frame) frame.src = 'about:blank';
+          return;
+        }
+        let src;
+        if (list && !id) {
+          src = 'https://www.youtube.com/embed/videoseries?listType=playlist&list=' + encodeURIComponent(list);
+        } else {
+          src = 'https://www.youtube.com/embed/' + encodeURIComponent(id) +
+            '?playsinline=1&rel=0&controls=1' + (list ? '&list=' + encodeURIComponent(list) : '');
+        }
+        if (frame) frame.src = src;
+        if (stat) stat.textContent = id
+          ? 'Cargado. Pulsa reproducir.'
+          : 'Playlist cargada. Pulsa reproducir.';
+        try { localStorage.setItem('minifeather_yt_module_url', x); } catch (_) {}
+      };
+
+      btn?.addEventListener('click', load, { signal: panelSignal });
+      input?.addEventListener('keydown', e => { if (e.key === 'Enter') load(); }, { signal: panelSignal });
+      try { if (input) input.value = localStorage.getItem('minifeather_yt_module_url') || ''; } catch (_) {}
+    }
     // Selector de preset (Spooklementary / UltraFast)
     const presetSelect = panel.querySelector('#mf-shader-preset');
     presetSelect?.addEventListener('change', () => {
