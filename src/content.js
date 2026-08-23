@@ -5556,17 +5556,20 @@
     `;
   }
   
-  function renderCreditsPage() {
-    return `
-      <div class="mf-page-stack">
-        <div class="mf-card">
-          <div class="mf-card-title">Credits</div>
-          <div class="mf-muted">MiniFeather Client</div>
-          <div class="mf-muted">Developed by ItzNightrise</div>
-        </div>
+function renderCreditsPage() {
+  return `
+    <div class="mf-page-stack">
+      <div class="mf-card">
+        <div class="mf-card-title">Credits</div>
+        <div class="mf-muted">EstebanGxE_</div>
+        <div class="mf-muted">ItzNightrise</div>
+        <div class="mf-muted">Not_Senpai</div>
+        <div class="mf-muted">Botless</div>
+        <div class="mf-muted">AngryWolfX</div>
       </div>
-    `;
-  }
+    </div>
+  `;
+}
 
   function renderSearchResults(query) {
     const needle = query.trim().toLowerCase();
