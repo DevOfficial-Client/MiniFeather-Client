@@ -2581,8 +2581,7 @@
       nonce = req.nonce;
       const file = String(req.file || '').replace(/[\\/]+/g, '');
       if (!file || file.includes('..')) throw new Error('nombre invalido');
-      const dir = req.dir === 'assets' ? 'assets/' : 'models/entities/';
-      const url = chrome.runtime.getURL(dir + file);
+      const url = chrome.runtime.getURL('models/entities/' + file);
       const resp = await fetch(url);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const blob = await resp.blob();
