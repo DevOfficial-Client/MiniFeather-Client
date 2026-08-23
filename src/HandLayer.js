@@ -160,6 +160,22 @@
         }
 
         const cnt = lf.rightArm.geometry.attributes.position?.count ?? 0;
+
+        // sincronizar material: si el juego cargo/actualizo la skin del brazo
+        // original despues de nuestro rebuild, copiarla al mesh overlay
+        try {
+            const orig = lf.__mfOrigArm;
+            if (orig && lf.rightArm.material !== orig.material) {
+                lf.rightArm.material = orig.material;
+                lf.armSkin = model.skin;
+                const a2 = sleeveAlphaRatio(orig.material);
+                console.log(
+                    TAG + ' skin de la mano actualizada (skin=' + model.skin +
+                    ', alfa manga=' + (a2 === null ? '?' : Math.round(a2 * 100) + '%') + ')'
+                );
+            }
+        } catch {}
+
         if (cnt >= 48) return;
 
         try {
@@ -169,7 +185,11 @@
             neu.position.copy(old.position);
             neu.quaternion.copy(old.quaternion);
             lf.remove(old);
-            old.geometry.dispose();
+            // mantener el original en escena oculto: el juego sigue actualizando
+            // su material cuando carga la skin, y nosotros lo sincronizamos arriba
+            old.visible = false;
+            lf.add(old);
+            lf.__mfOrigArm = old;
             lf.add(neu);
             lf.rightArm = neu;
             lf.armSkin = model.skin;
