@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow']);
 
   function parseDetail(event) {
     try {
@@ -53,10 +53,20 @@
       '\\yellow\\/waypoint <name>\\reset\\ - Show waypoint info',
       '\\yellow\\/verity spawn\\reset\\ - Place the IA box (right-click to open)',
       '\\yellow\\/iaassistant\\reset\\ - Same as /verity spawn',
+      '\\yellow\\/verity stay\\reset\\ - Verity stays where she is',
+      '\\yellow\\/verity follow\\reset\\ - Resume following',
+      '\\yellow\\/verity autoreply [on|off]\\reset\\ - Reply to all chat messages',
       '\\yellow\\/verity ask <text>\\reset\\ - Talk with Verity (AI + voice)',
       '\\yellow\\/mf models\\reset\\ - List mob model replacements',
       '\\yellow\\/mf models clear\\reset\\ - Restore all mob models',
       '\\yellow\\/mf diag\\reset\\ - Dump scene diag to console (F12)',
+      '\\yellow\\/caballo spawn [stay]\\reset\\ - Spawn the Minecraft horse (follows you)',
+      '\\yellow\\/caballo despawn\\reset\\ - Remove the horse',
+      '\\yellow\\/maternal spawn [stay]\\reset\\ - Spawn the Maternal Wraith (floating, always watching)',
+      '\\yellow\\/stalker spawn\\reset\\ - Spawn the Stalker (freezes when you look at it!)',
+      '\\yellow\\/baritone goto <x y z|waypoint>\\reset\\ - Walk to coords or waypoint',
+      '\\yellow\\/baritone follow <player>\\reset\\ - Follow a player',
+      '\\yellow\\/baritone stop\\reset\\ - Stop walking',
       '\\yellow\\/mf help\\reset\\ - Show this help'
     ];
     for (const line of lines) state.chat?.addChat?.({ text: line });
@@ -292,6 +302,35 @@
       return;
     }
 
+    if (action === 'stay' || action === 'sit' || action === 'wait' || action === 'quieto') {
+      if (!api.stay) { addChat('Update CustomModels first (reload).', 'error'); return; }
+      const ok = api.stay('verity', true);
+      addChat(ok ? 'Verity will stay there. (/verity follow to resume)' : 'Verity is not spawned.', ok ? 'success' : 'error');
+      return;
+    }
+
+    if (action === 'follow' || action === 'come' || action === 'unstay') {
+      if (!api.stay) { addChat('Update CustomModels first (reload).', 'error'); return; }
+      const ok = api.stay('verity', false);
+      addChat(ok ? 'Verity is following you again.' : 'Verity is not spawned.', ok ? 'success' : 'error');
+      return;
+    }
+
+    if (action === 'autoreply' || action === 'auto') {
+      const on = (args[1] || '').toLowerCase();
+      if (!ai?.autoReplyChat) { addChat('VerityAI is not loaded.', 'error'); return; }
+      if (on === 'on' || on === 'off' || on === '') {
+        const val = on === '' ? !ai.autoReply : on === 'on';
+        ai.autoReply = val;
+        // mostrar las respuestas de verity en el chat del juego
+        try { ai.setChatHook?.((txt) => addChat('\\aqua\\Verity: \\reset\\' + String(txt).slice(0, 200), 'normal')); } catch (_) {}
+        addChat(val ? 'Verity will reply to everything you type in chat (not commands).' : 'Verity auto-reply OFF.', 'success');
+      } else {
+        addChat('Usage: /verity autoreply [on|off]', 'error');
+      }
+      return;
+    }
+
     if (action === 'say' || action === 'ask') {
       const text = args.slice(1).join(' ').trim();
       if (!text) {
@@ -459,6 +498,169 @@
       return;
     }
 
+    if (command === 'caballo' || command === 'horse') {
+      const api = globalThis.MF_CustomModels;
+      if (!api?.spawnHorse) {
+        addChat('CustomModels is not ready yet.', 'error');
+        return;
+      }
+      const action = (args[0] || 'spawn').toLowerCase();
+      if (action === 'spawn') {
+        const opts = {};
+        if (args[1] === 'stay' || args[1] === 'quieto') { opts.followPlayer = false; }
+        const res = api.spawnHorse(2, opts);
+        addChat(res ? `Horse spawned${opts.followPlayer === false ? ' (staying)' : ' and following you'}.` : 'Could not spawn horse.', res ? 'success' : 'error');
+        return;
+      }
+      if (action === 'despawn' || action === 'remove') {
+        const ok = api.despawn('caballo');
+        addChat(ok ? 'Horse despawned.' : 'Horse is not spawned.', ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'stay' || action === 'quieto') {
+        const ok = api.stay('caballo', true);
+        addChat(ok ? 'Horse will stay there. (/caballo follow to resume)' : 'Horse is not spawned.', ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'follow' || action === 'come') {
+        const ok = api.stay('caballo', false);
+        addChat(ok ? 'Horse is following you again.' : 'Horse is not spawned.', ok ? 'success' : 'error');
+        return;
+      }
+      addChat('Usage: /caballo spawn [stay] | stay | follow | despawn', 'error');
+      return;
+    }
+
+    if (command === 'maternal' || command === 'wraith' || command === 'madre') {
+      const api = globalThis.MF_CustomModels;
+      if (!api?.spawnMaternal) {
+        addChat('CustomModels is not ready yet.', 'error');
+        return;
+      }
+      const action = (args[0] || 'spawn').toLowerCase();
+      if (action === 'spawn') {
+        const opts = {};
+        if (args[1] === 'stay' || args[1] === 'quieto') { opts.followPlayer = false; }
+        const res = api.spawnMaternal(4, opts);
+        addChat(res ? `Maternal Wraith spawned${opts.followPlayer === false ? ' (staying)' : ' and floating towards you'}...` : 'Could not spawn Maternal Wraith.', res ? 'success' : 'error');
+        return;
+      }
+      if (action === 'despawn' || action === 'remove') {
+        const ok = api.despawn('maternal');
+        addChat(ok ? 'Maternal Wraith despawned. Rest in peace.' : 'Maternal Wraith is not spawned.', ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'stay' || action === 'quieto') {
+        const ok = api.stay('maternal', true);
+        addChat(ok ? 'Maternal Wraith holds her place... for now.' : 'Maternal Wraith is not spawned.', ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'follow' || action === 'come') {
+        const ok = api.stay('maternal', false);
+        addChat(ok ? 'She is coming for you...' : 'Maternal Wraith is not spawned.', ok ? 'success' : 'error');
+        return;
+      }
+      addChat('Usage: /maternal spawn [stay] | stay | follow | despawn', 'error');
+      return;
+    }
+
+    if (command === 'stalker' || command === 'weeping') {
+      const api = globalThis.MF_CustomModels;
+      if (!api?.spawnStalker) {
+        addChat('CustomModels is not ready yet.', 'error');
+        return;
+      }
+      const action = (args[0] || 'spawn').toLowerCase();
+      if (action === 'spawn') {
+        const res = api.spawnStalker(12);
+        addChat(res ? 'Stalker spawned. DO NOT BLINK.' : 'Could not spawn Stalker.', res ? 'success' : 'error');
+        return;
+      }
+      if (action === 'despawn' || action === 'remove') {
+        const ok = api.despawn('stalker');
+        addChat(ok ? 'Stalker despawned.' : 'Stalker is not spawned.', ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'stay' || action === 'quieto') {
+        const ok = api.stay('stalker', true);
+        addChat(ok ? 'Stalker will stay there.' : 'Stalker is not spawned.', ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'follow' || action === 'come') {
+        const ok = api.stay('stalker', false);
+        addChat(ok ? 'Stalker resumed hunting you.' : 'Stalker is not spawned.', ok ? 'success' : 'error');
+        return;
+      }
+      addChat('Usage: /stalker spawn | stay | follow | despawn', 'error');
+      return;
+    }
+
+    if (command === 'baritone' || command === 'goto' || command === 'follow') {
+      const api = globalThis.Baritone;
+      if (!api) {
+        addChat('Baritone is not ready yet.', 'error');
+        return;
+      }
+      // /goto y /follow como atajos directos
+      let action, rest;
+      if (command === 'goto') { action = 'goto'; rest = args; }
+      else if (command === 'follow') { action = 'follow'; rest = args; }
+      else { action = (args[0] || 'status').toLowerCase(); rest = args.slice(1); }
+
+      if (action === 'goto') {
+        // coordenadas directas: /baritone goto 100 64 -200
+        const nums = rest.slice(0, 3).map(Number);
+        if (rest.length >= 3 && nums.every(n => Number.isFinite(n))) {
+          const ok = api.goto(nums[0], nums[1], nums[2]);
+          if (ok) addChat(`Walking to ${nums[0]}, ${nums[1]}, ${nums[2]}...`, 'success');
+          else addChat('No path found to those coords.', 'error');
+          return;
+        }
+        // waypoint por nombre: /baritone goto casa
+        const name = rest.join(' ').trim();
+        if (!name) {
+          addChat('Usage: /baritone goto <x y z> | <waypoint name>', 'error');
+          return;
+        }
+        const wpApi = globalThis.__MINIFEATHER_WAYPOINTS__;
+        const wp = wpApi?.findWaypoint?.(name);
+        if (!wp) {
+          addChat(`Waypoint "${name}" was not found.`, 'error');
+          return;
+        }
+        api.goto(wp.x, wp.y, wp.z);
+        addChat(`Walking to "${wp.name}" (${wp.x}, ${wp.y}, ${wp.z})...`, 'success');
+        return;
+      }
+
+      if (action === 'follow') {
+        const username = rest.join(' ').trim();
+        if (!username) {
+          addChat('Usage: /baritone follow <player>', 'error');
+          return;
+        }
+        const ok = api.follow(username);
+        if (ok) addChat(`Following "${username}"...`, 'success');
+        else addChat(`Player "${username}" was not found.`, 'error');
+        return;
+      }
+
+      if (action === 'stop' || action === 'cancel') {
+        api.stop();
+        addChat('Baritone stopped.', 'success');
+        return;
+      }
+
+      if (action === 'status' || action === '') {
+        const st = api.status;
+        addChat(st === 'moving' ? `Baritone: ${st}` : `Baritone: ${st || 'idle'}`);
+        return;
+      }
+
+      addChat('Usage: /baritone goto <x y z|waypoint> | follow <player> | stop | status', 'error');
+      return;
+    }
+
     if (command === 'copycoord') {
       const coords = currentCoords();
       if (!coords) {
@@ -500,6 +702,13 @@
         try { this.setInputValue?.(''); } catch (_) { try { this.inputValue = ''; } catch (_) {} }
         try { this.closeInput?.(); } catch (_) {}
         return true;
+      }
+      // mensaje normal del chat global → respuesta automatica de Verity
+      if (line && line.trim()) {
+        try {
+          const verity = globalThis.MF_Verity;
+          if (verity?.autoReplyChat) verity.autoReplyChat(line);
+        } catch (_) {}
       }
       return state.originalSubmit.call(this, gameArg);
     };

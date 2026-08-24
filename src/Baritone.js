@@ -71,7 +71,12 @@ const state = {
     readerName: null,
     originalReader: null,
     nativeApply: null,
-    _lastPos: null
+    _lastPos: null,
+    // follow mode
+    followTarget: null,      // username a seguir
+    followEntity: null,      // entity cacheada
+    lastFollowScan: 0,
+    followRepathAt: 0
 };
 
 function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
@@ -86,24 +91,108 @@ const desiredInput = {
 };
 
 let inputHooked = false;
+// diagnostico: cuantas veces el reader hookeado inyecto input nativo
+let injectedTicks = 0;
+let lastInjectAt = 0;
+
+// --- Probe: test autonomo de inyeccion de movimiento ---
+// camina recto ~1s midiendo todo; diagnostica DONDE se corta el pipeline:
+//   reader no llamado / input inyectado pero no mueve / todo OK
+let probeState = null;
+
+function startProbe(ms = 1000) {
+    const game = getGame(true);
+    const player = game?.player;
+    if (!player?.pos) { console.warn(`${TAG} probe: no player`); return false; }
+    const p = player.pos;
+    probeState = {
+        player,
+        startedAt: performance.now(),
+        until: performance.now() + ms,
+        startPos: { x: p.x, y: p.y, z: p.z },
+        startInjected: injectedTicks,
+        prevEnabled: state.enabled,
+        prevDesired: { ...desiredInput }
+    };
+    // OJO: loop y hook estan gated en state.enabled — sin esto el probe
+    // arrancaba y nunca terminaba (reporte que no sale)
+    state.enabled = true;
+    state.status = 'moving';       // activar la condicion de inyeccion del hook
+    state.path = [];               // sin executePath: solo caminar recto
+    state.followTarget = null;     // probe exclusivo
+    desiredInput.strafe = 0;
+    desiredInput.forward = 1;
+    desiredInput.jump = false;
+    desiredInput.sneak = false;
+    desiredInput.yaw = Number(player.yaw) || 0;
+    // asegurar hook instalado ya (no esperar al loop)
+    if (!inputHooked || state.player !== player) {
+        restorePlayerHook();
+        hookPlayerInput();
+    }
+    console.log(`${TAG} probe: caminando recto ${ms}ms...`);
+    return true;
+}
+
+function finishProbe() {
+    const pr = probeState;
+    probeState = null;
+    if (!pr) return null;
+    const player = pr.player;
+    const p = player.pos;
+    const moved = Math.hypot(p.x - pr.startPos.x, p.y - pr.startPos.y, p.z - pr.startPos.z);
+    const injected = injectedTicks - pr.startInjected;
+    const report = {
+        seconds: +((performance.now() - pr.startedAt) / 1000).toFixed(2),
+        injectedTicks: injected,
+        movedBlocks: +moved.toFixed(3),
+        inputTookEffect: {
+            currentInputUp: player.currentInput?.up ?? null,
+            wWQmwuDLqA: typeof player.wWQmwuDLqA === 'number' ? +player.wWQmwuDLqA.toFixed(3) : (player.wWQmwuDLqA ?? null),
+            YApHmhhGagG: typeof player.YApHmhhGagG === 'number' ? +player.YApHmhhGagG.toFixed(3) : (player.YApHmhhGagG ?? null),
+            jumping: !!player.jumping
+        },
+        conclusion: injected === 0
+            ? 'EL READER NO SE LLAMA: el metodo hookeado no es el que el juego usa por tick'
+            : (moved < 0.05
+                ? 'INYECTA PERO NO MUEVE: el apply no aplica el input (metodo equivocado o campos rotados)'
+                : 'OK: input inyectado y el player se mueve')
+    };
+    console.log(`${TAG} probe result:`, report);
+    // restaurar el input que habia
+    Object.assign(desiredInput, pr.prevDesired);
+    if (!state.followTarget && state.path.length === 0) {
+        stop('idle', 'probe done');
+    }
+    return report;
+}
 
 // --- Búsqueda de métodos por firma (robusto a obfuscación) ---
+// own:true = propiedad directa de la instancia (típicamente un hook wrapper
+// de OTRO módulo); el original nativo vive más abajo en el prototipo.
+// Acceso PRIMARIO vía instancia (obj[name]) — igual que AntiAFK: los getters
+// necesitan this correcto; proto[name] directo puede devolver undefined.
 function getMethods(obj) {
     const methods = [];
-    const seen = new Set();
+    const seenFns = new Set();
     let proto = obj;
     for (let depth = 0; proto && depth < 10; depth++) {
         let names = [];
         try { names = Object.getOwnPropertyNames(proto); } catch (_) {}
         for (const name of names) {
-            if (name === 'constructor' || seen.has(name)) continue;
-            seen.add(name);
+            if (name === 'constructor') continue;
             let fn = null;
-            try { fn = proto[name]; } catch (_) {}
-            if (typeof fn !== 'function') continue;
+            try { fn = obj[name]; } catch (_) { fn = null; }
+            if (typeof fn !== 'function' || seenFns.has(fn)) {
+                // fallback: version directa del nivel (nativo tapado por un
+                // wrapper own de otro mod en la instancia)
+                try { fn = proto[name]; } catch (_) { fn = null; }
+                if (typeof fn !== 'function' || seenFns.has(fn)) continue;
+            }
+            seenFns.add(fn);
             let source = '';
             try { source = Function.prototype.toString.call(fn); } catch (_) {}
-            methods.push({ name, fn, source });
+            methods.push({ name, fn, source, own: depth === 0 });
         }
         proto = Object.getPrototypeOf(proto);
     }
@@ -113,21 +202,86 @@ function getMethods(obj) {
 function resolveNativeInput(player) {
     const methods = getMethods(player);
 
-    // Reader: lee input del teclado, tiene sentInputThisTick, currentInput, jumping, inputSequenceNumber
+    // Reader: firma con campos NO ofuscados (estables entre versiones)
+    const readerBySig = m =>
+        m.source.includes('sentInputThisTick') &&
+        m.source.includes('currentInput') &&
+        m.source.includes('jumping') &&
+        m.source.includes('inputSequenceNumber');
+    const readerBySigLoose = m =>
+        m.source.includes('currentInput') &&
+        m.source.includes('inputSequenceNumber');
+
     const reader =
-        methods.find(m => m.source.includes('sentInputThisTick') &&
-                          m.source.includes('currentInput') &&
-                          m.source.includes('jumping') &&
-                          m.source.includes('inputSequenceNumber'));
+        methods.find(m => m.name === 'bkkAvIfjEgvYuYRLXBgtj') ||
+        methods.find(m => !m.own && readerBySig(m)) ||
+        methods.find(readerBySig) ||
+        methods.find(m => !m.own && readerBySigLoose(m)) ||
+        methods.find(readerBySigLoose);
 
-    // Apply: aplica el input al jugador, tiene this.wWQmwuDLqA, this.YApHmhhGagG, this.jumping
+    // Apply: escribe campos de movimiento del player desde el input.
+    // 1) nombres ofuscados conocidos (la version que tenia AntiAFK)
+    // 2) POR LLAMADA DEL READER: el reader construye el input y llama
+    //    this.XXX(input) — extraer los this.xxx( de su source y quedarse
+    //    con el que escribe >=2 campos y lee campos de input (ROBUSTO a
+    //    rotacion total de nombres: la relacion estructural no cambia)
+    // 3) heuristica de firma (fallback)
+    const applyObf = m =>
+        m.source.includes('this.wWQmwuDLqA') &&
+        m.source.includes('this.YApHmhhGagG') &&
+        m.source.includes('this.jumping');
+    const readsInputFields = s =>
+        ['.left', '.right', '.up', '.down', '.forward', '.strafe', '.sneak', '.sprint', '.jump']
+            .some(f => s.includes(f));
+    const writesFields = s => (s.match(/this\.[A-Za-z_$][\w$]*\s*=(?!=)/g) || []).length;
+
+    // candidatos que el reader llama directamente
+    const readerCalls = [...reader.source.matchAll(/this\.([A-Za-z_$][\w$]*)\s*\(/g)]
+        .map(mm => mm[1]);
+    const applyFromReader = readerCalls
+        .map(name => methods.find(m => m.name === name && m.fn !== reader.fn))
+        .find(m => m && readsInputFields(m.source) && writesFields(m.source) >= 2);
+
+    const applyHeuristic = m =>
+        m.source.includes('this.jumping') &&
+        readsInputFields(m.source) &&
+        writesFields(m.source) >= 3;
+
     const apply =
-        methods.find(m => m.source.includes('this.wWQmwuDLqA') &&
-                          m.source.includes('this.YApHmhhGagG') &&
-                          m.source.includes('this.jumping'));
+        methods.find(m => m.name === 'OBHUlAPATf') ||
+        applyFromReader ||
+        methods.find(m => !m.own && applyObf(m)) ||
+        methods.find(applyObf) ||
+        methods.find(m => !m.own && applyHeuristic(m)) ||
+        methods.find(applyHeuristic);
 
-    if (!reader || !apply) return null;
+    // nombres de campos que el apply escribe (para diagnostico/verificacion)
+    let applyWrites = [];
+    if (apply) {
+        applyWrites = [...new Set(
+            [...apply.source.matchAll(/this\.([A-Za-z_$][\w$]*)\s*=(?!=)/g)].map(mm => mm[1])
+        )].slice(0, 10);
+    }
 
+    if (!reader || !apply) {
+        // diagnostico: que fallo + candidatos que mencionan input/jumping
+        const candidates = methods
+            .filter(m => m.source.includes('inputSequenceNumber') ||
+                         m.source.includes('this.jumping') ||
+                         m.source.includes('currentInput'))
+            .map(m => ({ name: m.name, own: m.own, len: m.source.length, head: m.source.slice(0, 100) }));
+        state._resolveError = {
+            readerFound: !!reader,
+            applyFound: !!apply,
+            methodCount: methods.length,
+            candidates: candidates.slice(0, 8)
+        };
+        return null;
+    }
+    state._resolveError = null;
+
+    // originalReader = valor ACTUAL del slot: si otro mod ya lo hookeo,
+    // encadenamos sobre su wrapper (semántica correcta de hook chain)
     return {
         readerName: reader.name,
         applyName: apply.name,
@@ -196,9 +350,14 @@ function hookPlayerInput() {
 
     const native = resolveNativeInput(player);
     if (!native) {
-        console.warn(`${TAG} Could not resolve native input methods`);
+        // no spamear cada frame: avisar solo si cambia el player
+        if (state._lastHookFail !== player) {
+            state._lastHookFail = player;
+            console.warn(`${TAG} Could not resolve native input methods (patron AntiAFK)`);
+        }
         return false;
     }
+    state._lastHookFail = null;
 
     state.player = player;
     state.readerName = native.readerName;
@@ -214,6 +373,8 @@ function hookPlayerInput() {
             return originalReader.apply(this, args);
         }
 
+        injectedTicks++;
+        lastInjectAt = performance.now();
         const input = createNativeInput(this, desiredInput);
 
         this.sentInputThisTick = false;
@@ -238,13 +399,65 @@ function getGame(force = false) {
         if (!react) return state.game?.player ? state.game : null;
         for (const root of Object.values(react)) {
             const game = root?.updateQueue?.baseState?.element?.props?.game;
-            if (game?.player) { state.game = game; return game; }
+            // mismo criterio que AntiAFK: pos Y world (baritone necesita world
+            // para leer bloques y calcular rutas)
+            if (game?.player?.pos && game?.world) { state.game = game; return game; }
         }
     } catch (_) {}
     return state.game?.player ? state.game : null;
 }
 
 function getWorld() { return state.game?.world || null; }
+
+// --- Entity access (patrón HealthNameTags) ---
+function looksLikeEntityMap(value) {
+    if (!value || typeof value !== 'object') return false;
+    try {
+        if (typeof value.values !== 'function') return false;
+        let checked = 0, found = 0;
+        for (const v of value.values()) {
+            if (++checked >= 8) break;
+            if (v && v.pos && (v.mesh || v.profile)) found++;
+        }
+        return checked > 0 && found > 0;
+    } catch (_) { return false; }
+}
+
+let entityMapCache = null;
+function resolveEntityMap(game) {
+    if (entityMapCache && looksLikeEntityMap(entityMapCache)) return entityMapCache;
+    const direct = [
+        game?.world?.entitiesDump,
+        game?.world?.entities,
+        game?.world?.entityMap,
+        game?.entityManager?.entities
+    ];
+    for (const candidate of direct) {
+        if (!looksLikeEntityMap(candidate)) continue;
+        entityMapCache = candidate;
+        return candidate;
+    }
+    return null;
+}
+
+// busca la entity de un jugador por username (patrón HealthNameTags:
+// entity.profile.username + entity.mesh)
+function findPlayerEntity(username) {
+    const game = getGame();
+    if (!game) return null;
+    const entities = resolveEntityMap(game);
+    if (!entities) return null;
+    const wanted = String(username).toLowerCase();
+    try {
+        for (const entity of entities.values()) {
+            const name = entity?.profile?.username;
+            if (typeof name === 'string' && name.toLowerCase() === wanted && entity?.pos) {
+                return entity;
+            }
+        }
+    } catch (_) {}
+    return null;
+}
 
 // --- Block Access ---
 function isChunkLoaded(x, z) {
@@ -331,6 +544,25 @@ function canStand(x, y, z) {
 }
 
 // --- A* Pathfinding ---
+// busca el bloque standeable mas cercano al goal (columna): si el destino
+// pedido no es parado-able (agua, interior de roca...), anclar a un vecino
+// util en vez de dejar que A* explore el mapa entero en vano
+function findStandableNear(x, y, z) {
+    for (let r = 0; r <= 12; r++) {
+        for (let dy = 0; dy >= -12; dy--) {
+            for (let dx = -r; dx <= r; dx++) {
+                for (let dz = -r; dz <= r; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue; // solo el anillo
+                    const ny = y + dy;
+                    if (ny < 1 || ny > 254) continue;
+                    if (canStand(x + dx, ny, z + dz)) return { x: x + dx, y: ny, z: z + dz };
+                }
+            }
+        }
+    }
+    return null;
+}
+
 function heuristic(x1, y1, z1, x2, y2, z2) {
     const dx = Math.abs(x1 - x2);
     const dy = Math.abs(y1 - y2);
@@ -389,6 +621,16 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ) {
     startX = Math.floor(startX); startY = Math.floor(startY); startZ = Math.floor(startZ);
     goalX = Math.floor(goalX); goalY = Math.floor(goalY); goalZ = Math.floor(goalZ);
 
+    // si el goal no es parado-able, anclar al mas cercano que si (evita que
+    // A* explore el mapa entero cuando el destino esta en agua/roca)
+    if (!canStand(goalX, goalY, goalZ)) {
+        const alt = findStandableNear(goalX, goalY, goalZ);
+        if (alt) {
+            console.log(`${TAG} Goal ${goalX},${goalY},${goalZ} not standable — anchored to ${alt.x},${alt.y},${alt.z}`);
+            goalX = alt.x; goalY = alt.y; goalZ = alt.z;
+        }
+    }
+
     const open = new MinHeap();
     const cameFrom = new Map();
     const gScore = new Map();
@@ -402,11 +644,32 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ) {
 
     const startTime = performance.now();
     let iterations = 0;
-    const MAX_ITER = 8000;
+    // rutas largas: heuristic weight 1.5 (greedy-ish) para no explorar en
+    // anillos — con peso 1 puro, 160 bloques de distancia puede necesitar
+    // >100k nodos; con 1.5 prioriza avanzar hacia el goal
+    const H_WEIGHT = 1.5;
+    const MAX_ITER = 12000;
+
+    // best-effort: recordar el nodo mas cercano al goal; si se agota el
+    // limite, devolver ruta hasta ahi (y repath desde alla) en vez de null
+    let bestKey = null;
+    let bestH = Infinity;
+
+    const reconstruct = (endKey, endNode) => {
+        const path = [];
+        let ck = endKey;
+        while (ck && cameFrom.has(ck)) {
+            const [px, py, pz] = ck.split(',').map(Number);
+            path.unshift({ x: px, y: py, z: pz });
+            ck = cameFrom.get(ck);
+        }
+        path.push({ x: endNode.x, y: endNode.y, z: endNode.z });
+        return path;
+    };
 
     while (open.size > 0) {
         if (++iterations > MAX_ITER || performance.now() - startTime > state.maxPathTime) {
-            console.warn(`${TAG} Path search exceeded limit (${iterations} iterations)`);
+            console.warn(`${TAG} Path search exceeded limit (${iterations} iterations) — using best-effort path`);
             break;
         }
 
@@ -416,27 +679,18 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ) {
         if (closed.has(cKey)) continue;
         closed.add(cKey);
 
+        const h = heuristic(current.x, current.y, current.z, goalX, goalY, goalZ);
+        if (h < bestH) { bestH = h; bestKey = cKey; }
+
         // Goal check (within 1 block)
         if (Math.abs(current.x - goalX) <= 1 && Math.abs(current.z - goalZ) <= 1 &&
             Math.abs(current.y - goalY) <= 2) {
-            // Reconstruct path
-            const path = [];
-            let ck = cKey;
-            while (ck && cameFrom.has(ck)) {
-                const [px, py, pz] = ck.split(',').map(Number);
-                path.unshift({ x: px, y: py, z: pz });
-                ck = cameFrom.get(ck);
-            }
-            path.push({ x: current.x, y: current.y, z: current.z });
+            const path = reconstruct(cKey, current);
             console.log(`${TAG} Path found: ${path.length} nodes in ${iterations} iterations`);
             return path;
         }
 
         const neighbors = getNeighbors(current.x, current.y, current.z);
-
-        if (iterations <= 2) {
-            console.log(`${TAG} Iteration ${iterations} at (${current.x},${current.y},${current.z}): ${neighbors.length} neighbors`);
-        }
 
         for (const n of neighbors) {
             const nKey = key(n.x, n.y, n.z);
@@ -448,10 +702,19 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ) {
             if (existingG === undefined || tentG < existingG) {
                 gScore.set(nKey, tentG);
                 cameFrom.set(nKey, cKey);
-                const f = tentG + heuristic(n.x, n.y, n.z, goalX, goalY, goalZ);
+                const f = tentG + heuristic(n.x, n.y, n.z, goalX, goalY, goalZ) * H_WEIGHT;
                 open.push({ x: n.x, y: n.y, z: n.z, f });
             }
         }
+    }
+
+    // best-effort: llegar al punto mas proximo explorado (solo si avanzo de
+    // verdad: al menos 8 bloques mas cerca que al empezar)
+    if (bestKey && bestH < heuristic(startX, startY, startZ, goalX, goalY, goalZ) - 8) {
+        const [bx, by, bz] = bestKey.split(',').map(Number);
+        const path = reconstruct(bestKey, { x: bx, y: by, z: bz });
+        console.log(`${TAG} Best-effort path: ${path.length} nodes (h=${bestH.toFixed(1)}), will re-path from there`);
+        return path;
     }
 
     console.warn(`${TAG} No path found after ${iterations} iterations`);
@@ -471,18 +734,30 @@ function getLookVector(player) {
     return { x: -Math.sin(yaw) * cp, y: -Math.sin(pitch), z: Math.cos(yaw) * cp };
 }
 
-function applyMovementInput(player, strafe, forward, jump, sneak) {
+function applyMovementInput(player, strafe, forward, jump, sneak, yaw) {
     // Set desiredInput — the hooked reader will inject these as native input each tick
     desiredInput.strafe = strafe;
     desiredInput.forward = forward;
     desiredInput.jump = jump;
     desiredInput.sneak = sneak;
-    desiredInput.yaw = player.yaw;
+    // el yaw va DENTRO del input: el pipeline del juego lo aplica al player
+    // (player.yaw lo pisa la camara cada tick, escribirlo directo no sirve)
+    desiredInput.yaw = yaw != null ? yaw : Number(player.yaw) || 0;
 }
 
-function executePath(player) {
+function executePath(player, keepAlive = false) {
     if (state.path.length === 0 || state.pathIndex >= state.path.length) {
-        stop('idle', 'Path complete');
+        if (!keepAlive) {
+            // fin de ruta: si el goal real sigue lejos (ruta best-effort),
+            // recalcular desde la pos actual en vez de declarar victoria
+            const g = state.goal;
+            if (g && Math.hypot(g.x - player.pos.x, g.y - player.pos.y, g.z - player.pos.z) > 3) {
+                console.log(`${TAG} Local path done, goal still far — re-pathing`);
+                repath();
+                return true;
+            }
+            stop('idle', 'Path complete');
+        }
         return false;
     }
 
@@ -499,25 +774,30 @@ function executePath(player) {
     if (distSq < 0.36) { // within ~0.6 blocks
         state.pathIndex++;
         if (state.pathIndex >= state.path.length) {
-            stop('idle', 'Destination reached');
+            if (!keepAlive) {
+                const g = state.goal;
+                if (g && Math.hypot(g.x - player.pos.x, g.y - player.pos.y, g.z - player.pos.z) > 3) {
+                    console.log(`${TAG} Local path done, goal still far — re-pathing`);
+                    repath();
+                    return true;
+                }
+                stop('idle', 'Destination reached');
+            }
             return false;
         }
-        return executePath(player);
+        return executePath(player, keepAlive);
     }
 
     // Calculate yaw to face the target
     const targetYaw = Math.atan2(-dx, dz);
 
-    // Smoothly rotate towards target
-    let yawDiff = targetYaw - player.yaw;
+    // Smoothly rotate towards target (via input.yaw — el mecanismo nativo)
+    let yawDiff = targetYaw - Number(player.yaw || 0);
     while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
     while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
 
     const yawSpeed = 0.3;
-    if (Math.abs(yawDiff) > yawSpeed) {
-        player.yaw += Math.sign(yawDiff) * yawSpeed;
-    }
-    desiredInput.yaw = player.yaw;
+    const newYaw = Number(player.yaw || 0) + clamp(yawDiff, -yawSpeed, yawSpeed);
 
     // Check if we need to jump
     const dy = target.y - py;
@@ -528,7 +808,7 @@ function executePath(player) {
     const forward = facingTarget ? 1.0 : 0.1;
     const strafe = facingTarget ? 0 : (yawDiff > 0 ? 0.3 : -0.3);
 
-    applyMovementInput(player, strafe, forward, needJump, false);
+    applyMovementInput(player, strafe, forward, needJump, false, newYaw);
 
     // Re-path if stuck
     state.repathTimer++;
@@ -537,7 +817,15 @@ function executePath(player) {
         if (lastPos) {
             const moved = Math.hypot(px - lastPos.x, pz - lastPos.z);
             if (moved < 0.5) {
-                console.log(`${TAG} Stuck detected, re-pathing`);
+                state._stuckCount = (state._stuckCount || 0) + 1;
+                console.log(`${TAG} Stuck detected (x${state._stuckCount}), re-pathing`);
+                // al 2do stuck seguido: diagnosticar automaticamente por que
+                // no se mueve (reader no llamado vs input que no aplica)
+                if (state._stuckCount === 2 && injectedTicks === 0) {
+                    console.warn(`${TAG} 0 inyecciones desde el start — corriendo probe...`);
+                    startProbe(1000);
+                    return false;
+                }
                 repath();
                 return false;
             }
@@ -549,11 +837,104 @@ function executePath(player) {
     return true;
 }
 
+// --- Follow ---
+function follow(username) {
+    const game = getGame(true);
+    if (!game?.player) { console.warn(`${TAG} No player`); return false; }
+
+    const entity = findPlayerEntity(username);
+    if (!entity?.pos) {
+        console.warn(`${TAG} Player "${username}" not found`);
+        return false;
+    }
+
+    state.enabled = true;
+    state.followTarget = String(username);
+    state.followEntity = entity;
+    state.goal = { x: Math.floor(entity.pos.x), y: Math.floor(entity.pos.y), z: Math.floor(entity.pos.z) };
+    state.status = 'moving';
+    state.path = [];
+    state.pathIndex = 0;
+    state.followRepathAt = 0;
+
+    console.log(`${TAG} Following "${username}"`);
+    emitState();
+    return true;
+}
+
+function stopFollow(silent = false) {
+    state.followTarget = null;
+    state.followEntity = null;
+    if (!silent) console.log(`${TAG} Follow stopped`);
+}
+
+// re-target cada ~1.5s: el objetivo se mueve, la ruta no puede ser fija
+function followTick(player, now) {
+    const username = state.followTarget;
+    if (!username) return false;
+
+    // refrescar entity cacheada si se invalido / se fue
+    let entity = state.followEntity;
+    if (!entity?.pos || now - state.lastFollowScan > 1000) {
+        state.lastFollowScan = now;
+        entity = findPlayerEntity(username);
+        state.followEntity = entity;
+    }
+    if (!entity?.pos) {
+        // objetivo fuera de rango: quedarse esperando (sigue activo)
+        applyMovementInput(player, 0, 0, false, false);
+        return true;
+    }
+
+    const dx = entity.pos.x - player.pos.x;
+    const dz = entity.pos.z - player.pos.z;
+    const distH = Math.hypot(dx, dz);
+
+    // goal fresco para repath/diagnostico
+    state.goal = { x: Math.floor(entity.pos.x), y: Math.floor(entity.pos.y), z: Math.floor(entity.pos.z) };
+
+    // cerca: quedarse mirandolo sin empujar
+    if (distH < 2.5) {
+        applyMovementInput(player, 0, 0, false, false);
+        return true;
+    }
+
+    // lejos: persecucion directa (misma navegacion que executePath:
+    // yaw suave + forward), con re-path A* si hay obstaculos
+    if (distH > 24 || now >= state.followRepathAt) {
+        state.followRepathAt = now + 1500;
+        const path = findPath(player.pos.x, player.pos.y, player.pos.z,
+                              entity.pos.x, entity.pos.y, entity.pos.z);
+        if (path && path.length > 0) {
+            // usar solo los primeros nodos: el objetivo se mueve
+            state.path = path.slice(0, 10);
+            state.pathIndex = 0;
+        }
+    }
+
+    // seguir la ruta local si existe, si no perseguir directo
+    if (state.path.length > 0 && state.pathIndex < state.path.length) {
+        const ok = executePath(player, true);
+        if (!ok && state.status !== 'moving') return true; // ruta completa → seguir esperando
+    } else {
+        // persecucion directa: girar via input.yaw y avanzar
+        const targetYaw = Math.atan2(-dx, dz);
+        let yawDiff = targetYaw - Number(player.yaw || 0);
+        while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+        while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+        const newYaw = Number(player.yaw || 0) + clamp(yawDiff, -0.3, 0.3);
+        const facing = Math.abs(yawDiff) < 0.8;
+        applyMovementInput(player, 0, facing ? 1.0 : 0.1, false, false, newYaw);
+    }
+    return true;
+}
+
 // --- Commands ---
 function goto(x, y, z) {
     const game = getGame(true);
-    if (!game?.player) { console.warn(`${TAG} No player`); return; }
+    if (!game?.player) { console.warn(`${TAG} No player`); return false; }
 
+    stopFollow(true);
     state.enabled = true;
     state.goal = { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) };
     state.status = 'pathfinding';
@@ -567,12 +948,14 @@ function goto(x, y, z) {
         state.pathIndex = 0;
         state.repathTimer = 0;
         state._lastPos = null;
+        state._stuckCount = 0;
         state.status = 'moving';
         emitState();
-    } else {
-        console.warn(`${TAG} No path found to destination`);
-        stop('failed', 'No path found');
+        return true;
     }
+    console.warn(`${TAG} No path found to destination`);
+    stop('failed', 'No path found');
+    return false;
 }
 
 function repath() {
@@ -598,6 +981,9 @@ function stop(status = 'idle', reason = '') {
     state.pathIndex = 0;
     state.goal = null;
     state.status = status;
+    state.followTarget = null;
+    state.followEntity = null;
+    state._loopErr = false;
     // Reset desired input so the hook doesn't keep moving us
     desiredInput.strafe = 0;
     desiredInput.forward = 0;
@@ -613,17 +999,35 @@ function stop(status = 'idle', reason = '') {
 // --- Main Loop ---
 function loop() {
     if (state.enabled) {
-        const game = getGame();
-        const player = game?.player;
+        try {
+            const game = getGame();
+            const player = game?.player;
 
-        if (game && player && player.ticksExisted > 0) {
-            // Re-hook if player instance changed or not hooked yet
-            if (!inputHooked || state.player !== player) {
-                restorePlayerHook();
-                hookPlayerInput();
+            if (game && player) {
+                // Re-hook if player instance changed or not hooked yet
+                // (mismo patron que AntiAFK: sin checks extra como ticksExisted,
+                // que puede ser undefined y bloquear el hook para siempre)
+                if (!inputHooked || state.player !== player) {
+                    restorePlayerHook();
+                    hookPlayerInput();
+                }
+                if (state.status === 'moving') {
+                // probe activo: solo caminar recto y terminar al vencer
+                if (probeState) {
+                    if (performance.now() >= probeState.until) finishProbe();
+                } else if (state.followTarget) {
+                    followTick(player, performance.now());
+                } else if (state.path.length > 0) {
+                    executePath(player);
+                }
             }
-            if (state.status === 'moving' && state.path.length > 0) {
-                executePath(player);
+            }
+        } catch (err) {
+            // un throw aqui mataria el loop para siempre (rAF esta al final):
+            // tragar y seguir vivo, avisando solo la primera vez
+            if (!state._loopErr) {
+                state._loopErr = true;
+                console.warn(`${TAG} Loop error (suprimidos los siguientes):`, err);
             }
         }
     }
@@ -658,6 +1062,9 @@ document.addEventListener(EVENT_COMMAND, event => {
         case 'goto':
             goto(cmd.x, cmd.y || 0, cmd.z);
             break;
+        case 'follow':
+            follow(cmd.username);
+            break;
         case 'stop':
             stop('idle', 'User stopped');
             break;
@@ -679,6 +1086,7 @@ function emitState() {
                 enabled: state.enabled,
                 status: state.status,
                 goal: state.goal,
+                following: state.followTarget,
                 pathLength: state.path.length,
                 pathIndex: state.pathIndex
             })
@@ -695,8 +1103,11 @@ globalThis.Baritone = {
             if (game?.player) y = Math.floor(game.player.pos.y);
             else y = 64;
         }
-        goto(x, y, z);
+        return goto(x, y, z);
     },
+    follow(username) { return follow(username); },
+    unfollow() { stopFollow(); },
+    probe(ms) { return startProbe(ms); },
     stop() { stop('idle', 'API stop'); },
     enable() { state.enabled = true; emitState(); return state.enabled; },
     disable() {
@@ -708,7 +1119,22 @@ globalThis.Baritone = {
     },
     get status() { return state.status; },
     get goal() { return state.goal; },
-    get pathLength() { return state.path.length; }
+    get pathLength() { return state.path.length; },
+    debug() {
+        return {
+            enabled: state.enabled,
+            status: state.status,
+            hooked: inputHooked,
+            readerName: state.readerName,
+            resolveError: state._resolveError,
+            injectedTicks,
+            msSinceLastInject: lastInjectAt ? Math.round(performance.now() - lastInjectAt) : null,
+            desired: { ...desiredInput },
+            followTarget: state.followTarget,
+            path: state.path.length,
+            pathIndex: state.pathIndex
+        };
+    }
 };
 
 console.log(`${TAG} Baritone loaded. Use Baritone.goto(x, y, z) or Baritone.stop()`);

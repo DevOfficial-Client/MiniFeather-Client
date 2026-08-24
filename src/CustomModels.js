@@ -196,6 +196,14 @@
                 lostSince: 0,
                 anim: opts.anim || null,
                 animSpeed: +(opts.animSpeed || 1),
+                hover: !!opts.hover,          // flota: sin gravedad ni colision
+                weeping: !!opts.weeping,      // se congela si el player lo mira
+                lookAtPlayer: opts.lookAtPlayer !== false,
+                stay: !!opts.stay,
+                spawnAnim: opts.spawnAnim || null,   // anim de aparicion (una vez)
+                catchAnim: opts.catchAnim || null,   // anim al acercarse al player
+                despawnAnim: opts.despawnAnim || null, // anim de despedida
+                caught: false,
                 root: null, inst: null, animStart: 0
             };
             state.customs.set(id, rec);
@@ -217,6 +225,17 @@
                     rec.anim = null;
                 }
                 rec.animStart = performance.now();
+                // anim de aparicion (terror): reproducir una vez como override
+                if (rec.spawnAnim) {
+                    const an = findAnim(inst, rec.spawnAnim);
+                    if (an) {
+                        const anim = inst.anims.find((a) => a.name === an);
+                        const ms = Math.max(1200, (anim?.duration || 1.2) * 1000);
+                        rec.animOverride = { name: an, start: performance.now(), until: performance.now() + ms };
+                        rec.spawnAnim = null;
+                        console.log(TAG + ' "' + id + '" aparece con "' + an + '"');
+                    }
+                }
                 inst.root.position.set(rec.pos.x, rec.pos.y, rec.pos.z);
                 disableCullingDeep(inst.root);
                 inst.root.matrixAutoUpdate = true;
@@ -237,12 +256,13 @@
             const rec = state.customs.get(id);
             if (!rec) return false;
             if (!rec.inst) { rec.anim = animName; return true; }
-            if (animName && !rec.inst.anims.some((a) => a.name === animName)) {
+            const resolved = animName ? (findAnim(rec.inst, animName) || animName) : null;
+            if (animName && resolved !== animName && !rec.inst.anims.some((a) => a.name === resolved)) {
                 console.warn(TAG + ' anim "' + animName + '" no existe. Disponibles: ' + rec.inst.anims.map((a) => a.name).join(', '));
                 return false;
             }
-            if (!animName) { restoreRest(rec.inst); }
-            rec.anim = animName || null;
+            if (!resolved) { restoreRest(rec.inst); }
+            rec.anim = resolved;
             rec.animStart = performance.now();
             if (speed != null) rec.animSpeed = +speed;
             return true;
@@ -273,9 +293,24 @@
             rec.animOverride = { name: animName, start: now, until: now + (+ms || 1500) };
             return true;
         },
-        despawn(id) {
+        despawn(id, force) {
             const rec = state.customs.get(id);
             if (!rec) return false;
+            // anim de despedida (terror): desvanecerse antes de desaparecer
+            // (force=true la mata al instante, para respawn sin overlap)
+            if (!force && rec.despawnAnim && rec.inst && !rec.dying && !rec.dead) {
+                const an = findAnim(rec.inst, rec.despawnAnim);
+                if (an) {
+                    const anim = rec.inst.anims.find((a) => a.name === an);
+                    const ms = Math.max(900, (anim?.duration || 1) * 1000);
+                    rec.dying = true;
+                    rec.stay = true; // quieto mientras se despide
+                    rec.animOverride = { name: an, start: performance.now(), until: performance.now() + ms };
+                    console.log(TAG + ' "' + id + '" se despide con "' + an + '"');
+                    setTimeout(() => { if (state.customs.get(id) === rec) MF_CustomModels.despawn(id); }, ms);
+                    return true;
+                }
+            }
             rec.dead = true;
             try { rec.root?.parent?.remove(rec.root); } catch {}
             state.customs.delete(id);
@@ -287,6 +322,19 @@
             rec.pos.x = +x || 0; rec.pos.y = +y || 0; rec.pos.z = +z || 0;
             if (yaw != null) rec.yaw = +yaw;
             if (rec.root) rec.root.position.set(rec.pos.x, rec.pos.y, rec.pos.z);
+            return true;
+        },
+        // congelar en el sitio / reanudar persecucion
+        stay(id, on = true) {
+            const rec = state.customs.get(id);
+            if (!rec) return false;
+            rec.stay = !!on;
+            if (rec.stay) {
+                rec.actuallyMoving = false;
+                console.log(TAG + ' "' + rec.id + '" se queda quieta en (' + (rec.root?.position.x ?? 0).toFixed(1) + ', ' + (rec.root?.position.y ?? 0).toFixed(1) + ', ' + (rec.root?.position.z ?? 0).toFixed(1) + ')');
+            } else {
+                console.log(TAG + ' "' + rec.id + '" reanuda la persecucion');
+            }
             return true;
         },
         listCustoms() {
@@ -426,8 +474,75 @@
             });
             return res;
         },
+        // Caballo de Minecraft (minecraft_-_horse.glb): spawnea en el suelo
+        // y persigue al jugador como Verity. Sin anims (el GLB no trae).
+        spawnHorse(offset = 2, opts = {}) {
+            const p = getGame()?.player?.pos;
+            if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
+            if (state.customs.has('caballo')) MF_CustomModels.despawn('caballo');
+            return MF_CustomModels.spawn('minecraft_-_horse.glb', p.x + offset, p.y, p.z, {
+                id: 'caballo',
+                height: opts.height || 1.6,      // un caballo mide ~1.6 bloques
+                bodyHalf: opts.bodyHalf || 0.7,
+                followPlayer: opts.followPlayer !== false,
+                stopDistance: opts.stopDistance != null ? opts.stopDistance : Math.max(1.5, offset),
+                maxSpeed: opts.maxSpeed || 5.6,  // los caballos corren mas que el jugador
+                loseDistance: opts.loseDistance != null ? opts.loseDistance : 12,
+                lostTimeMs: opts.lostTimeMs != null ? opts.lostTimeMs : 5000,
+                lookAtPlayer: true,
+                ...opts
+            });
+        },
+        // Maternal Wraith (oldest_maternal_wraith.glb): fantasma de terror.
+        // Flota (sin gravedad), te acecha despacio y SIEMPRE te mira.
+        spawnMaternal(offset = 4, opts = {}) {
+            const p = getGame()?.player?.pos;
+            if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
+            if (state.customs.has('maternal')) MF_CustomModels.despawn('maternal', true);
+            return MF_CustomModels.spawn('oldest_maternal_wraith.glb', p.x + offset, p.y + 2, p.z, {
+                id: 'maternal',
+                height: opts.height || 2.6,
+                bodyHalf: opts.bodyHalf || 0.6,
+                followPlayer: opts.followPlayer !== false,
+                stopDistance: opts.stopDistance != null ? opts.stopDistance : 2.5,
+                maxSpeed: opts.maxSpeed || 2.2,   // lenta... pero constante
+                loseDistance: opts.loseDistance != null ? opts.loseDistance : 30,
+                lostTimeMs: opts.lostTimeMs != null ? opts.lostTimeMs : 8000,
+                lookAtPlayer: true,
+                autoAnim: true,
+                hover: true,                      // flota: sin gravedad
+                spawnAnim: 'up',                  // emerge al aparecer
+                catchAnim: 'spotted',             // te vio... de cerca
+                despawnAnim: 'despawn',           // se desvanece
+                ...opts
+            });
+        },
+        // Stalker (stalker_3d_angry.glb): Weeping Angel. Corre hacia ti,
+        // pero se CONGELA cuando lo miras. Parpadea y ya esta mas cerca.
+        spawnStalker(offset = 12, opts = {}) {
+            const p = getGame()?.player?.pos;
+            if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
+            if (state.customs.has('stalker')) MF_CustomModels.despawn('stalker');
+            const rec = MF_CustomModels.spawn('stalker_3d_angry.glb', p.x + offset, p.y + 1, p.z, {
+                id: 'stalker',
+                height: opts.height || 1.9,
+                bodyHalf: opts.bodyHalf || 0.5,
+                followPlayer: true,
+                stopDistance: opts.stopDistance != null ? opts.stopDistance : 1.2,
+                maxSpeed: opts.maxSpeed || 3.4,
+                loseDistance: opts.loseDistance != null ? opts.loseDistance : 40,
+                lostTimeMs: opts.lostTimeMs != null ? opts.lostTimeMs : 10000,
+                lookAtPlayer: true,
+                autoAnim: true,
+                weeping: true,   // se congela si lo miras
+                ...opts
+            });
+            return rec;
+        },
         rescan
     };
+    // reproducir un sonido de assets/sounds/ (para comandos)
+    window.MF_CustomModels.playSound = (file, vol = 0.8) => playSoundUrl(file, vol);
     state.yawSign = 1;
 
     // Reproduce el intro.ogg cuando aparece Verity, con la anim "talk"
@@ -453,6 +568,19 @@
             console.log(TAG + ' intro.ogg reproduciendose');
         } catch (err) {
             console.warn(TAG + ' intro falló: ' + (err?.message || err));
+        }
+    }
+
+    // Reproduce un .ogg de assets/sounds/ (silencioso si no existe)
+    async function playSoundUrl(file, volume = 0.8) {
+        try {
+            const url = await bridgeFetchUrl(file, 'assets/sounds');
+            const audio = new Audio(url);
+            audio.volume = volume;
+            await audio.play();
+            return audio;
+        } catch {
+            return null; // sonido opcional: no existe → silencio
         }
     }
 
@@ -1089,7 +1217,9 @@
     async function loadModel(file) {
         if (modelCache.has(file)) return modelCache.get(file);
         const p = (async () => {
-            const parsed = /\.geo\.json$/i.test(file) ? await parseGeoModel(file) : parseGLB(await fetchModelArrayBuffer(file));
+            let parsed;
+            if (/\.geo\.json$/i.test(file)) parsed = await parseGeoModel(file);
+            else parsed = parseGLB(await fetchModelArrayBuffer(file));
             const ctors = grabCtors();
             if (!ctors) throw new Error('constructores Three no disponibles todavia');
             const game = getGame();
@@ -1205,13 +1335,22 @@
             const n = map.get(g);
             if (n) groups.set(idx, n);
         }
+        // buscar el grupo de la cabeza por nombre (head/cabeza/face) para el pitch
+        let headNode = null;
+        try {
+            root2.traverse((o) => {
+                if (headNode || !o.name) return;
+                if (/^(head|cabeza|face|cara)$/i.test(o.name) || /head|cabeza/i.test(o.name)) headNode = o;
+            });
+            if (headNode) headNode.userData.__mfHeadRestQ = headNode.quaternion.clone();
+        } catch {}
         const rest = [];
         const restScale = new Map();
         for (const g of groups.values()) {
             rest.push({ g, p: g.position.clone(), q: g.quaternion.clone(), s: g.scale.clone() });
             restScale.set(g, g.scale.clone());
         }
-        return { root: root2, height: built.height, minY: built.minY, groups, anims: built.anims, rest, restScale, dbg: new Set() };
+        return { root: root2, height: built.height, minY: built.minY, groups, anims: built.anims, rest, restScale, headNode, dbg: new Set() };
     }
 
     function restoreRest(inst) {
@@ -1473,8 +1612,61 @@
         return false;
     }
 
-    function physicsStep(rec, dt, wantX, wantZ) {
-        const root = rec.root;
+    // ¿el jugador esta mirando a la entidad? (dot de mirada de camara vs dir a la entidad)
+    // busca una anim por nombre exacto o sufijo ("run" → "animation.stalker.run")
+    function findAnim(inst, wanted) {
+        if (!inst?.anims?.length || !wanted) return null;
+        for (const a of inst.anims) if (a.name === wanted) return a.name;
+        const lower = String(wanted).toLowerCase();
+        for (const a of inst.anims) {
+            const n = a.name.toLowerCase();
+            if (n.endsWith('.' + lower) || n.endsWith('/' + lower) || n.endsWith('_' + lower)) return a.name;
+        }
+        for (const a of inst.anims) if (a.name.toLowerCase().includes(lower)) return a.name;
+        return null;
+    }
+
+    function isPlayerLookingAt(rec, threshold = 0.86) {
+        try {
+            const cam = getGame()?.gameScene?.camera;
+            if (!cam?.matrixWorld) return false;
+            const e = cam.matrixWorld.elements;
+            // -Z de la camara = hacia donde miras
+            const fx = -e[8], fy = -e[9], fz = -e[10];
+            const root = rec.root;
+            const cx = root.position.x, cy = root.position.y + (rec.height || 1) * 0.6, cz = root.position.z;
+            const p = getGame()?.player?.pos;
+            const ox = p.x, oy = p.y + 1.6, oz = p.z; // ojos del player
+            let dx = cx - ox, dy = cy - oy, dz = cz - oz;
+            const d = Math.hypot(dx, dy, dz);
+            if (d < 1e-4) return true;
+            dx /= d; dy /= d; dz /= d;
+            return (fx * dx + fy * dy + fz * dz) >= threshold;
+        } catch {
+            return false;
+        }
+    }
+
+    function physicsStep(rec, dt, wantX, wantZ) {        const root = rec.root;
+        // hover: flota — sin gravedad ni colision, movimiento directo
+        if (rec.hover) {
+            let moved = false;
+            if (Math.abs(wantX) > 1e-9) { root.position.x += wantX; moved = true; }
+            if (Math.abs(wantZ) > 1e-9) { root.position.z += wantZ; moved = true; }
+            // mantener la altura objetivo (flota ~1 bloque sobre el suelo, si hay)
+            const half = rec.bodyHalf || 0.21;
+            const targetY = rec.hoverY != null ? rec.hoverY : root.position.y;
+            const c = boxCollides(root.position.x, targetY - 0.5, root.position.z, half, 0.5);
+            if (c === true) {
+                // sube suave hasta salir del suelo
+                root.position.y += 2 * dt;
+            } else {
+                root.position.y += (targetY - root.position.y) * Math.min(1, dt * 2);
+            }
+            rec.onGround = false;
+            rec.vy = 0;
+            return moved;
+        }
         const half = rec.bodyHalf || 0.21;
         const height = rec.height || 0.85;
         let moved = false;
@@ -1522,21 +1714,37 @@
 
     function followTick(rec, dt, t) {
         const root = rec.root;
-        if (!rec.followPlayer) {
-            // entidad estatica: solo gravedad, para asentarse en el suelo
-            // (sin esto flota a la altura del spawn = altura de camara)
+        if (!rec.followPlayer || rec.stay) {
+            // entidad estatica (o en modo "stay"): solo gravedad, para asentarse
+            // en el suelo. "stay" congela la persecucion pero NO despawnea.
             physicsStep(rec, dt, 0, 0);
+            rec.actuallyMoving = false;
             return;
         }
         const p = getGame()?.player?.pos;
         if (!p) return;
         const distToPlayer = Math.hypot(p.x - root.position.x, p.y - root.position.y, p.z - root.position.z);
-        if (rec.loseDistance > 0 && distToPlayer > rec.loseDistance * 4) {
-            root.position.set(p.x, p.y, p.z);
-            rec.vy = 0;
-            console.log(TAG + ' "' + rec.id + '" teleportada a tu lado (cambio de mundo?)');
+        // modo persistente: si te alejas demasiado NO desaparece; se queda
+        // esperando en su pos actual (los chunks descargados congelan la fisica
+        // solos via boxCollides→null) y reaparece al volver / recargar chunks
+        if (rec.persist !== false && rec.loseDistance > 0 && distToPlayer > rec.loseDistance * 4) {
+            if (rec.smooth === false) {
+                // solo el modo teleport directo se recupera asi (cambio de mundo)
+                root.position.set(p.x, p.y, p.z);
+                rec.vy = 0;
+                console.log(TAG + ' "' + rec.id + '" teleportada a tu lado (cambio de mundo?)');
+            } else {
+                if (!rec.waitingFar) {
+                    rec.waitingFar = true;
+                    console.log(TAG + ' "' + rec.id + '" esperando en (' + root.position.x.toFixed(1) + ', ' + root.position.y.toFixed(1) + ', ' + root.position.z.toFixed(1) + ') hasta que vuelvas');
+                }
+                physicsStep(rec, dt, 0, 0); // gravedad si el terreno lo permite
+                rec.actuallyMoving = false;
+                return;
+            }
             return;
         }
+        if (rec.waitingFar) rec.waitingFar = false;
         if (rec.loseDistance > 0 && distToPlayer > rec.loseDistance) {
             if (!rec.lost) {
                 rec.lost = true;
@@ -1544,9 +1752,13 @@
                 console.log(TAG + ' "' + rec.id + '" te perdio (dist=' + distToPlayer.toFixed(1) + ')');
             }
             if (t - rec.lostSince > rec.lostTimeMs) {
-                MF_CustomModels.despawn(rec.id);
-                console.log(TAG + ' "' + rec.id + '" desaparecio tras perderte.');
-                return false;
+                if (rec.persist === false) {
+                    MF_CustomModels.despawn(rec.id);
+                    console.log(TAG + ' "' + rec.id + '" desaparecio tras perderte.');
+                    return false;
+                }
+                // persistente: se queda esperando, no despawnea
+                return;
             }
         } else if (rec.lost) {
             rec.lost = false;
@@ -1554,6 +1766,16 @@
         }
         const stopDist = rec.stopDistance || 1.8;
         let movingThisTick = false;
+        // weeping (Weeping Angel): si lo estas mirando, se congela
+        if (rec.weeping && isPlayerLookingAt(rec, 0.86)) {
+            rec.frozen = true;
+            rec.actuallyMoving = false;
+            return; // ni fisica: estatua total
+        }
+        if (rec.frozen) {
+            rec.frozen = false;
+            console.log(TAG + ' "' + rec.id + '" se mueve otra vez...');
+        }
         if (rec.smooth === false) {
             root.position.set(p.x, p.y, p.z);
             movingThisTick = true;
@@ -1616,7 +1838,7 @@
                     if (rec.autoAnim && rec.inst) {
                         if (!rec.lastPos) rec.lastPos = root.position.clone();
                         rec.lastPos.copy(root.position);
-                        const airborne = rec.onGround === false;
+                        const airborne = rec.onGround === false && !rec.hover;
                         const moving = rec.actuallyMoving === true;
                         if (moving !== !!rec.wasMoving) {
                             rec.moveChangeAt = t;
@@ -1627,17 +1849,37 @@
                         if (airborne) {
                             const vy = rec.vy || 0;
                             const jumpName = vy > 1 ? 'jumpup' : (vy < -1 ? 'jumpdown' : null);
-                            want = (jumpName && rec.inst.anims.some((a) => a.name === jumpName)) ? jumpName : 'jump';
+                            want = (jumpName && findAnim(rec.inst, jumpName)) || findAnim(rec.inst, 'jump') || findAnim(rec.inst, 'idle');
                         } else if (moving && stable) {
-                            want = 'walk';
-                        } else if (!moving && stable) {
-                            want = rec.anim || 'idle';
+                            want = findAnim(rec.inst, 'walk') || findAnim(rec.inst, 'run') || rec.anim || findAnim(rec.inst, 'idle');
+                        } else if (moving && !stable) {
+                            // transicion: mantener la anim actual si ya corre
+                            want = (rec.curAnim && findAnim(rec.inst, rec.curAnim) ? rec.curAnim : (findAnim(rec.inst, 'run') || findAnim(rec.inst, 'walk')));
                         } else {
-                            want = rec.curAnim || 'idle';
+                            want = rec.anim || findAnim(rec.inst, 'idle') || findAnim(rec.inst, 'calm');
                         }
-                        const has = rec.inst.anims.some((a) => a.name === want);
-                        if (has && rec.curAnim !== want) {
-                            rec.curAnim = want;
+                        // catchAnim (terror): al llegar por primera vez a distancia
+                        // de contacto, reproducir la anim de "te atrape" una vez
+                        if (rec.catchAnim && !rec.caught && !(rec.animOverride && t < rec.animOverride.until)) {
+                            const pp2 = getGame()?.player?.pos;
+                            const distNow = pp2 ? Math.hypot(pp2.x - root.position.x, pp2.z - root.position.z) : Infinity;
+                            if (distNow <= (rec.stopDistance || 1.8) + 0.4) {
+                                rec.caught = true;
+                                const cn = findAnim(rec.inst, rec.catchAnim);
+                                if (cn) {
+                                    const anim = rec.inst.anims.find((a) => a.name === cn);
+                                    const ms = Math.max(1500, (anim?.duration || 1.5) * 1000);
+                                    rec.animOverride = { name: cn, start: t, until: t + ms };
+                                    rec.curAnim = cn;
+                                    rec.animStart = t;
+                                    console.log(TAG + ' "' + rec.id + '" te tiene. "' + cn + '"');
+                                }
+                            }
+                        }
+                        const resolved = want ? findAnim(rec.inst, want) : null;
+                        if (resolved && rec.curAnim !== resolved) {
+                            if (!rec.curAnim) console.log(TAG + ' "' + rec.id + '" anim: ' + resolved);
+                            rec.curAnim = resolved;
                             rec.animStart = t;
                         }
                         const dx = root.position.x - (rec.prevX ?? root.position.x);
@@ -1650,6 +1892,33 @@
                             while (delta > Math.PI) delta -= 2 * Math.PI;
                             while (delta < -Math.PI) delta += 2 * Math.PI;
                             root.rotation.y += delta * Math.min(1, dt * 8);
+                            // al caminar la cara vuelve a nivel (pitch 0)
+                            rec.headPitch = (rec.headPitch || 0) * (1 - Math.min(1, dt * 6));
+                        } else if (rec.lookAtPlayer !== false && !rec.frozen) {
+                            // quieta: mirar al jugador (a la camara)
+                            const pp = getGame()?.player?.pos;
+                            if (pp) {
+                                const pdx = pp.x - root.position.x, pdz = pp.z - root.position.z;
+                                const dHoriz2 = pdx * pdx + pdz * pdz;
+                                if (dHoriz2 > 0.04) {
+                                    const targetYaw = Math.atan2(-pdx, -pdz) + (rec.yawOffset || 0);
+                                    let delta = targetYaw - root.rotation.y;
+                                    while (delta > Math.PI) delta -= 2 * Math.PI;
+                                    while (delta < -Math.PI) delta += 2 * Math.PI;
+                                    root.rotation.y += delta * Math.min(1, dt * 4); // giro lento y suave
+                                }
+                                // pitch: inclinar la cara hacia arriba/abajo segun tu altura
+                                // (se aplica despues de sampleAnim para que la anim no lo pise)
+                                if (rec.lookUp !== false) {
+                                    const headY = root.position.y + (rec.headHeight ?? 1.3);
+                                    const dy = pp.y - headY;
+                                    const dHoriz = Math.sqrt(Math.max(dHoriz2, 0.04));
+                                    let pitch = Math.atan2(dy, dHoriz);
+                                    if (pitch > 0.75) pitch = 0.75;   // ~43 grados arriba
+                                    if (pitch < -0.75) pitch = -0.75; // ~43 grados abajo
+                                    rec.headPitch = (rec.headPitch || 0) + (pitch - (rec.headPitch || 0)) * Math.min(1, dt * 4);
+                                }
+                            }
                         }
                         const now = t;
                         const ov = rec.animOverride;
@@ -1658,7 +1927,35 @@
                         if (animToPlay) {
                             restoreRest(rec.inst);
                             const animT0 = (ov && now < ov.until) ? ov.start : rec.animStart;
-                            sampleAnim(rec.inst, animToPlay, (now - animT0) / 1000 * rec.animSpeed);
+                            // estatua (weeping angel congelado): el tiempo de anim
+                            // tambien se congela — queda en un pose fija
+                            if (rec.frozen) {
+                                if (rec.frozenAnimT == null) rec.frozenAnimT = (now - animT0) / 1000 * rec.animSpeed;
+                            } else {
+                                rec.frozenAnimT = null;
+                            }
+                            const at = rec.frozen ? rec.frozenAnimT : (now - animT0) / 1000 * rec.animSpeed;
+                            sampleAnim(rec.inst, animToPlay, at);
+                        }
+                        // pitch de mirada (aplicado DESPUES de sampleAnim para que la
+                        // animacion no lo pise): inclinar la cabeza hacia el jugador
+                        // (excepto congelado: una estatua no gira la cabeza)
+                        if (rec.headPitch && !rec.frozen) {
+                            try {
+                                const hn = rec.inst.headNode;
+                                if (hn) {
+                                    // restaurar pose de reposo y aplicar UNA sola rotacion
+                                    // (rotateX acumula; sin reset gira sin parar)
+                                    const restQ = hn.userData.__mfHeadRestQ;
+                                    if (restQ) hn.quaternion.copy(restQ);
+                                    hn.rotateX(rec.headPitch);
+                                } else {
+                                    // sin bone cabeza: inclinar el cuerpo (asignacion directa,
+                                    // sin acumular). Base = rotation.x del root al primer uso.
+                                    if (typeof rec.rootPitchBase !== 'number') rec.rootPitchBase = root.rotation.x;
+                                    root.rotation.x = rec.rootPitchBase + rec.headPitch;
+                                }
+                            } catch {}
                         }
                         continue;
                     }

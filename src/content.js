@@ -2582,8 +2582,11 @@
       nonce = req.nonce;
       const file = String(req.file || '').replace(/[\\/]+/g, '');
       if (!file || file.includes('..')) throw new Error('nombre invalido');
-      // dir: carpeta base ("models/entities" por defecto, "assets" para audio)
-      const dir = String(req.dir || '').replace(/[\\/]+/g, '') || 'models/entities';
+      // dir: carpeta base ("models/entities" por defecto, "assets" o
+      // "assets/sounds" para audio). Se permite UN nivel de subcarpeta.
+      const dirRaw = String(req.dir || '') || 'models/entities';
+      const parts = dirRaw.replace(/[\\/]+/g, '/').split('/').filter(Boolean).slice(0, 2);
+      const dir = parts.join('/');
       const url = chrome.runtime.getURL(dir + '/' + file);
       const resp = await fetch(url);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
