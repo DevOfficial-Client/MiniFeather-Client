@@ -386,7 +386,6 @@ function entsTick() {
         }
     }
     // 2) interpolar puppets remotos hacia su target
-    const now = performance.now();
     for (const [id, r] of ents.remote) {
         if (now - r.seenAt > 3000) { // el peer lo despawneo: limpiar
             try { CM.despawn(id); } catch {}

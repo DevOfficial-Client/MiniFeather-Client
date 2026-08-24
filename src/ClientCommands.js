@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p']);
 
   function parseDetail(event) {
     try {
@@ -64,6 +64,9 @@
       '\\yellow\\/caballo despawn\\reset\\ - Remove the horse',
       '\\yellow\\/maternal spawn [stay]\\reset\\ - Spawn the Maternal Wraith (floating, always watching)',
       '\\yellow\\/stalker spawn\\reset\\ - Spawn the Stalker (freezes when you look at it!)',
+      '\\yellow\\/model spawn <file.glb> [height] [anim] [stay]\\reset\\ - Load any GLB from models/entities/',
+      '\\yellow\\/model list | despawn <id> | stay <id> | follow <id>\\reset\\ - Manage spawned models',
+      '\\yellow\\/model anim <id> <name|stop> | anims <id> | move <id> <x y z>\\reset\\ - Anims & teleport',
       '\\yellow\\/baritone goto <x y z|waypoint>\\reset\\ - Walk to coords or waypoint',
       '\\yellow\\/baritone follow <player>\\reset\\ - Follow a player',
       '\\yellow\\/baritone stop\\reset\\ - Stop walking',
@@ -531,6 +534,97 @@
         return;
       }
       addChat('Usage: /caballo spawn [stay] | stay | follow | despawn', 'error');
+      return;
+    }
+
+    if (command === 'model' || command === 'modelo') {
+      const api = globalThis.MF_CustomModels;
+      if (!api?.spawn) {
+        addChat('CustomModels is not ready yet.', 'error');
+        return;
+      }
+      const action = (args[0] || '').toLowerCase();
+      if (action === 'spawn' || action === 'load' || action === 'cargar') {
+        const file = args[1];
+        if (!file) {
+          addChat('Usage: /model spawn <file.glb> [height] [anim] [stay]', 'error');
+          return;
+        }
+        const pos = currentCoords();
+        if (!pos) {
+          addChat('Player coordinates are not available yet.', 'error');
+          return;
+        }
+        const opts = { followPlayer: true };
+        // parse simple: 3er arg numero → height, 4to → anim, 'stay' en cualquier lado
+        const rest = args.slice(2).map(a => a.toLowerCase());
+        if (rest.includes('stay') || rest.includes('quieto')) opts.followPlayer = false;
+        const h = rest.find(a => /^\d+(\.\d+)?$/.test(a));
+        if (h) opts.height = parseFloat(h);
+        const anim = rest.find(a => !/^stay$|^quieto$/.test(a) && !/^\d+(\.\d+)?$/.test(a));
+        if (anim) { opts.anim = anim; opts.autoAnim = false; }
+        const id = api.spawn(file, pos.x + 2, pos.y, pos.z, opts);
+        addChat(id ? `Model "${file}" spawned${opts.height ? ` (height ${opts.height})` : ''}${anim ? ` anim "${anim}"` : ''}${opts.followPlayer === false ? ' (staying)' : ''}.` : `Could not load "${file}". Check the console for errors.`, id ? 'success' : 'error');
+        return;
+      }
+      if (action === 'despawn' || action === 'remove') {
+        const id = args[1];
+        if (!id) { addChat('Usage: /model despawn <id>', 'error'); return; }
+        const ok = api.despawn(id);
+        addChat(ok ? `"${id}" despawned.` : `"${id}" is not spawned.`, ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'stay' || action === 'quieto') {
+        const id = args[1];
+        if (!id) { addChat('Usage: /model stay <id>', 'error'); return; }
+        const ok = api.stay(id, true);
+        addChat(ok ? `"${id}" will stay there.` : `"${id}" is not spawned.`, ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'follow' || action === 'come') {
+        const id2 = args[1];
+        if (!id2) { addChat('Usage: /model follow <id>', 'error'); return; }
+        const ok = api.stay(id2, false);
+        addChat(ok ? `"${id2}" is following you.` : `"${id2}" is not spawned.`, ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'anim') {
+        const id = args[1];
+        const anim = args[2];
+        if (!id || !anim) { addChat('Usage: /model anim <id> <animName|stop>', 'error'); return; }
+        if (anim === 'stop') { api.setAnim(id, null); addChat(`Stopped anim on "${id}".`); return; }
+        const ok = api.setAnim(id, anim);
+        addChat(ok ? `Playing "${anim}" on "${id}".` : `Anim "${anim}" not found. Check console for available anims.`, ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'anims' || action === 'listanim') {
+        const id = args[1];
+        const anims = api.anims(id);
+        if (anims && anims.length) addChat(`Anims on "${id}": ${anims.join(', ')}`);
+        else addChat(`No anims found on "${id}".`, 'error');
+        return;
+      }
+      if (action === 'move') {
+        const id = args[1];
+        if (!id) { addChat('Usage: /model move <id> <x y z> [yaw]', 'error'); return; }
+        const nums = args.slice(2).map(Number);
+        if (nums.length < 3 || nums.some(n => !Number.isFinite(n))) { addChat('Usage: /model move <id> <x y z> [yaw]', 'error'); return; }
+        const ok = api.move(id, nums[0], nums[1], nums[2], nums[3]);
+        addChat(ok ? `"${id}" moved to ${nums[0]} ${nums[1]} ${nums[2]}.` : `"${id}" is not spawned.`, ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'list') {
+        const customs = api.listCustoms();
+        const ids = Object.keys(customs);
+        if (!ids.length) { addChat('No custom models spawned.'); return; }
+        addChat(`Custom models: ${ids.length}`);
+        ids.forEach(id => {
+          const c = customs[id];
+          addChat(`\\yellow\\${id}\\reset\\ - ${c.file} @ ${c.pos.x}, ${c.pos.y}, ${c.pos.z}`);
+        });
+        return;
+      }
+      addChat('Usage: /model spawn <file.glb> [height] [anim] [stay] | despawn <id> | stay <id> | follow <id> | anim <id> <name|stop> | anims <id> | move <id> <x y z> | list', 'error');
       return;
     }
 
