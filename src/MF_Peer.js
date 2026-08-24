@@ -142,6 +142,11 @@ function myName() {
 // { t:'hello', name, role }               handshake
 // { t:'sync', p:{x,y,z,yaw,anim,moving} } host → guest (20 Hz)
 // { t:'pos',  p:{x,y,z} }                 guest → host (reporta su pos, 5 Hz)
+// { t:'ents', ents:[{id,file,x,y,z,yaw,anim,scale,height}] } 10 Hz, ambos roles
+// { t:'need-file', file }                 "no tengo ese .glb, envialo"
+// { t:'file-h', file, size, chunks }      inicio de transferencia
+// { t:'file-c', file, i, data }           chunk base64 (32 KB)
+// { t:'file-e', file }                    fin de transferencia
 // { t:'despawn' }                         verity se fue
 // { t:'chat', text }                      lo que verity dijo en el host
 
@@ -353,10 +358,164 @@ function peerScaleTick() {
     } catch {}
 }
 
+// ---- modelos genericos compartidos por P2P ----
+// cada custom local (maternal, stalker, caballo...) se replica en el otro
+// cliente como puppet interpolado. Si el otro no tiene el .glb, se lo
+// enviamos por chunks base64 y lo cacheamos en CustomModels.
+
+const ents = {
+    local: null,        // ultimo snapshot mio enviado
+    remote: new Map(),  // id -> { x,y,z,yaw,anim,scale,height, file, seenAt, rec }
+    knownFiles: new Set(), // archivos que ya se que el peer NO tiene (no re-pedir)
+    sending: new Set(), // archivos en envio actual
+    recv: new Map()     // file -> { size, chunks:Map(i->base64), received }
+};
+
+function entsTick() {
+    const CM = window.MF_CustomModels;
+    if (!CM?.listLive) return;
+    // 1) emitir mi snapshot (10 Hz, solo si cambio)
+    const now = performance.now();
+    if (now - (ents._lastSend || 0) > 100) {
+        const snap = CM.listLive();
+        const key = JSON.stringify(snap);
+        if (key !== ents._lastKey) {
+            ents._lastKey = key;
+            ents._lastSend = now;
+            send({ t: 'ents', ents: snap });
+        }
+    }
+    // 2) interpolar puppets remotos hacia su target
+    const now = performance.now();
+    for (const [id, r] of ents.remote) {
+        if (now - r.seenAt > 3000) { // el peer lo despawneo: limpiar
+            try { CM.despawn(id); } catch {}
+            ents.remote.delete(id);
+            continue;
+        }
+        const rec = CM.getRecord(id);
+        if (!rec?.root) {
+            // no existe: spawnearlo (el archivo ya fue resuelto al recibir ents)
+            if (!r.file || ents.pendingSpawn === id) continue;
+            CM.tryLoad(r.file).then((ok) => {
+                ents.pendingSpawn = null;
+                if (!ok && !ents.knownFiles.has(r.file)) {
+                    log('no tengo "' + r.file + '" — pidiendolo al peer');
+                    ents.knownFiles.add(r.file);
+                    send({ t: 'need-file', file: r.file });
+                } else if (ok) {
+                    spawnPuppetEnt(id, r);
+                }
+            });
+            ents.pendingSpawn = id;
+            setTimeout(() => { if (ents.pendingSpawn === id) ents.pendingSpawn = null; }, 2000);
+            continue;
+        }
+        // interpolar hacia el target
+        const L = 0.25;
+        rec.root.position.x += (r.x - rec.root.position.x) * L;
+        rec.root.position.y += (r.y - rec.root.position.y) * L;
+        rec.root.position.z += (r.z - rec.root.position.z) * L;
+        let dyaw = r.yaw - (rec.yaw || 0);
+        while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+        while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+        rec.yaw = (rec.yaw || 0) + dyaw * L;
+        rec.root.rotation.y = rec.yaw;
+    }
+    // 3) des-spawnear mis customs que el peer ya no reporta (fue remoto y desaparecio)
+    //    (los remotos viven en ents.remote; los que no estan y son peer_* ya se limpiaron arriba)
+}
+
+function spawnPuppetEnt(id, r) {
+    const CM = window.MF_CustomModels;
+    try { CM.despawn(id, true); } catch {}
+    CM.spawn(r.file, r.x, r.y, r.z, {
+        id,
+        height: r.height || 0,
+        scale: r.scale || 1,
+        puppet: true,
+        anim: r.anim || null,
+        followPlayer: false
+    });
+    log('puppet "' + id + '" (' + r.file + ') spawneado en (' + r.x + ', ' + r.y + ', ' + r.z + ')');
+}
+
+// ---- transferencia de .glb por chunks base64 ----
+const CHUNK = 32 * 1024;
+
+async function sendFile(file) {
+    const CM = window.MF_CustomModels;
+    if (ents.sending.has(file)) return;
+    ents.sending.add(file);
+    try {
+        const buf = await CM.getGLBBytes(file);
+        const bytes = new Uint8Array(buf);
+        const total = Math.ceil(bytes.length / CHUNK);
+        send({ t: 'file-h', file, size: bytes.length, chunks: total });
+        const b64 = bytesToBase64(bytes);
+        const stride = Math.ceil(b64.length / total); // trozos EXACTOS de b64
+        for (let i = 0; i < total; i++) {
+            send({ t: 'file-c', file, i, data: b64.substr(i * stride, stride) });
+            if (i % 8 === 7) await new Promise((res) => setTimeout(res, 30)); // no saturar
+        }
+        send({ t: 'file-e', file });
+        log('archivo "' + b64name(file) + '" enviado (' + bytes.length + ' B)');
+    } catch (e) {
+        warn('no pude leer "' + file + '": ' + (e?.message || e));
+    } finally {
+        ents.sending.delete(file);
+    }
+}
+
+function b64name(f) { return String(f).slice(0, 40); }
+
+function bytesToBase64(bytes) {
+    let bin = '';
+    const step = 0x8000;
+    for (let i = 0; i < bytes.length; i += step) {
+        bin += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+    }
+    return btoa(bin);
+}
+
+function base64ToBytes(b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+}
+
+// enfile: reensamblar chunks recibidos y cachear el modelo
+function handleFileEnd(file) {
+    const CM = window.MF_CustomModels;
+    const st = ents.recv.get(file);
+    if (!st) return;
+    ents.recv.delete(file);
+    let b64 = '';
+    for (let i = 0; i < st.total; i++) {
+        const part = st.chunks.get(i);
+        if (!part) { warn('transferencia incompleta de ' + file + ' (falta chunk ' + i + ')'); return; }
+        b64 += part;
+    }
+    const bytes = base64ToBytes(b64);
+    if (bytes.length !== st.size) {
+        warn('tamaño incorrecto en ' + file + ': ' + bytes.length + ' vs ' + st.size);
+        return;
+    }
+    log('recibido "' + file + '" (' + st.size + ' B) — cacheando modelo');
+    CM.registerModelBytes(file, bytes.buffer).then(() => {
+        // reintentar spawn de todos los puppets que esperaban este archivo
+        for (const [id, r] of ents.remote) {
+            if (r.file === file && !CM.getRecord(id)?.root) spawnPuppetEnt(id, r);
+        }
+    }).catch((e) => warn('no pude parsear "' + file + '": ' + (e?.message || e)));
+}
+
 (function puppetLoop() {
     if (state.role === 'guest' || state.role === 'host') {
         try { puppetTick(); } catch {}
         try { peerScaleTick(); } catch {}
+        try { entsTick(); } catch {}
     }
     requestAnimationFrame(puppetLoop);
 })();
@@ -400,6 +559,56 @@ function handleMsg(msg) {
             state.peerScale = Number(msg.scale) || 1;
             log('escala remota recibida: ' + msg.name + ' → x' + state.peerScale);
             break;
+        case 'ents': {
+            // customs genericos del peer: actualizar/crear targets.
+            // id local del peer 'X' → mi puppet 'peer_X' (evita colision si
+            // yo tmbn tengo un custom con el mismo id)
+            if (!Array.isArray(msg.ents)) break;
+            const now = performance.now();
+            const seen = new Set();
+            for (const e of msg.ents) {
+                if (!e?.id || !e?.file) continue;
+                const pid = 'peer_' + e.id;
+                seen.add(pid);
+                const prev = ents.remote.get(pid);
+                ents.remote.set(pid, {
+                    id: pid, srcId: e.id, file: e.file,
+                    x: +e.x || 0, y: +e.y || 0, z: +e.z || 0,
+                    yaw: +e.yaw || 0, anim: e.anim || null,
+                    scale: +e.scale || 1, height: +e.height || 0,
+                    seenAt: now
+                });
+                // anim cambio y ya tengo el puppet: aplicarla
+                if (prev && prev.anim !== e.anim && e.anim) {
+                    try { window.MF_CustomModels?.setAnim?.(pid, e.anim); } catch {}
+                }
+            }
+            // los que ya no reporta: eliminar de remote (el tick los limpia)
+            for (const id of [...ents.remote.keys()]) {
+                if (!seen.has(id)) ents.remote.delete(id);
+            }
+            break;
+        }
+        case 'need-file':
+            // el peer no tiene este .glb: enviarselo entero por chunks
+            if (msg.file && /\.glb$/i.test(msg.file)) sendFile(msg.file);
+            break;
+        case 'file-h':
+            if (msg.file) ents.recv.set(msg.file, {
+                size: +msg.size || 0, total: +msg.chunks || 0,
+                chunks: new Map(), at: performance.now()
+            });
+            break;
+        case 'file-c': {
+            const st = ents.recv.get(msg.file);
+            if (st && typeof msg.i === 'number' && typeof msg.data === 'string') {
+                st.chunks.set(msg.i, msg.data);
+            }
+            break;
+        }
+        case 'file-e':
+            if (msg.file) handleFileEnd(msg.file);
+            break;
     }
 }
 
@@ -426,6 +635,13 @@ function wireConn(conn) {
     conn.on('close', () => {
         log('conexion cerrada');
         if (state.role === 'guest') killPuppet();
+        // limpiar customs genericos remotos (puppets)
+        for (const id of [...ents.remote.keys()]) {
+            try { window.MF_CustomModels?.despawn?.(id, true); } catch {}
+            ents.remote.delete(id);
+        }
+        ents._lastKey = null;
+        ents.recv.clear();
         stopBroadcast();
         state.conn = null;
         state.status = 'off';

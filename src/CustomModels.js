@@ -352,6 +352,7 @@
             return {
                 get root() { return rec.root; },
                 get yaw() { return rec.yaw; },
+                set yaw(v) { rec.yaw = +v || 0; },
                 get curAnim() { return rec.curAnim; },
                 get anim() { return rec.anim; },
                 get puppet() { return rec.puppet === true; },
@@ -363,6 +364,52 @@
         setPeerTarget(tag, pos) {
             state.peerTarget = pos ? { ...pos, at: performance.now() } : null;
             return true;
+        },
+        // ---- P2P: modelos genericos compartidos (MF_Peer) ----
+        // snapshot de customs locales vivos (excluye puppets remotos y a
+        // verity, que tiene canal dedicado)
+        listLive() {
+            const out = [];
+            for (const rec of state.customs.values()) {
+                if (rec.dead || rec.puppet) continue;
+                if (rec.id === 'verity') continue;
+                if (!rec.root) continue;
+                out.push({
+                    id: rec.id, file: rec.file,
+                    x: +rec.root.position.x.toFixed(2),
+                    y: +rec.root.position.y.toFixed(2),
+                    z: +rec.root.position.z.toFixed(2),
+                    yaw: +(rec.yaw ?? 0).toFixed(2),
+                    anim: rec.curAnim || rec.anim || null,
+                    scale: +rec.scale || 1,
+                    height: +rec.height || 0
+                });
+            }
+            return out;
+        },
+        // ¿puedo cargar este archivo localmente? (para saber si pedirlo por P2P)
+        async tryLoad(file) {
+            try { await loadModel(file); return true; } catch { return false; }
+        },
+        // bytes del .glb para enviar al peer
+        async getGLBBytes(file) {
+            if (!/\.glb$/i.test(file)) throw new Error('solo archivos .glb via P2P');
+            return fetchModelArrayBuffer(file);
+        },
+        // registrar un .glb recibido por red en el cache de modelos
+        registerModelBytes(file, arrayBuffer) {
+            const p = (async () => {
+                const parsed = parseGLB(arrayBuffer);
+                const ctors = grabCtors();
+                if (!ctors) throw new Error('constructores Three no disponibles todavia');
+                const lf = findHandRenderer(getGame());
+                const built = await buildScene(parsed, ctors, lf?.rightArm?.material);
+                if (!built.root.children.length) throw new Error('GLB sin geometria visible');
+                return built;
+            })();
+            modelCache.set(file, p);
+            p.catch(() => modelCache.delete(file));
+            return p.then(() => true);
         },
         followVerity(offset = 1.8, opts = {}) {
             const p = getGame()?.player?.pos;
