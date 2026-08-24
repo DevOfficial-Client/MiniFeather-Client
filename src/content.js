@@ -87,7 +87,7 @@
     { id: 'credits', icon: '🏆', labelKey: 'Credits' }
   ];
 
-  const MODULE_VERSION = '4.6.0';
+  const MODULE_VERSION = chrome.runtime?.getManifest?.().version || '4.7.0';
 
   const ELYTRA_FLIGHT_PRESETS = Object.freeze({
     soft: Object.freeze({
@@ -5557,8 +5557,104 @@
           <div class="mf-muted">${t('aboutLine1')}</div>
           <div class="mf-muted">${t('aboutLine2')}</div>
         </div>
+        <div class="mf-card" id="mf-updater-card">
+          <div class="mf-card-title">${t('updaterTitle')}</div>
+          <div class="mf-muted" id="mf-updater-status">${t('updaterChecking')}</div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px;margin-top:12px;align-items:center;">
+            <div class="mf-muted">${t('updaterInstalledVersion')}</div><div id="mf-updater-local-version">${escapeHtml(MODULE_VERSION)}</div>
+            <div class="mf-muted">${t('updaterGithubVersion')}</div><div id="mf-updater-remote-version">--</div>
+            <div class="mf-muted">${t('updaterBuild')}</div><div id="mf-updater-build">--</div>
+          </div>
+          <div id="mf-updater-commit-message" class="mf-muted" style="margin-top:10px;"></div>
+          <div class="mf-toggle-grid" style="margin-top:12px;">
+            <label class="mf-toggle" style="cursor:pointer;">
+              <span class="mf-toggle-copy"><span class="mf-toggle-title">${t('updaterAutoCheck')}</span><span class="mf-toggle-desc">${t('updaterAutoCheckDesc')}</span></span>
+              <input type="checkbox" id="mf-updater-auto-check"><span class="mf-switch"></span>
+            </label>
+            <label class="mf-toggle" style="cursor:pointer;">
+              <span class="mf-toggle-copy"><span class="mf-toggle-title">${t('updaterAutoDownload')}</span><span class="mf-toggle-desc">${t('updaterAutoDownloadDesc')}</span></span>
+              <input type="checkbox" id="mf-updater-auto-download"><span class="mf-switch"></span>
+            </label>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">
+            <button id="mf-updater-check" class="mf-btn primary">${t('updaterCheckNow')}</button>
+            <button id="mf-updater-download" class="mf-btn" style="display:none;">${t('updaterDownload')}</button>
+            <button id="mf-updater-github" class="mf-btn">GitHub</button>
+          </div>
+        </div>
       </div>
     `;
+  }
+
+  async function refreshUpdaterCard(forceCheck = false) {
+    if (!panel || activePage !== 'about' || !globalThis.MF_AutoUpdater) return;
+    const status = panel.querySelector('#mf-updater-status');
+    const checkButton = panel.querySelector('#mf-updater-check');
+    if (forceCheck && status) status.textContent = t('updaterChecking');
+    if (forceCheck && checkButton) checkButton.disabled = true;
+
+    const response = forceCheck
+      ? await globalThis.MF_AutoUpdater.check()
+      : await globalThis.MF_AutoUpdater.getState();
+
+    if (forceCheck && checkButton) checkButton.disabled = false;
+    if (!response?.success) {
+      if (status) status.textContent = t('updaterError');
+      return;
+    }
+
+    let state = response.state;
+    const updaterSettings = response.settings || {};
+    if (!state && !forceCheck) {
+      const checked = await globalThis.MF_AutoUpdater.check();
+      if (checked?.success) state = checked.state;
+    }
+
+    const localVersion = panel.querySelector('#mf-updater-local-version');
+    const remoteVersion = panel.querySelector('#mf-updater-remote-version');
+    const build = panel.querySelector('#mf-updater-build');
+    const message = panel.querySelector('#mf-updater-commit-message');
+    const download = panel.querySelector('#mf-updater-download');
+    const autoCheck = panel.querySelector('#mf-updater-auto-check');
+    const autoDownload = panel.querySelector('#mf-updater-auto-download');
+
+    if (localVersion) localVersion.textContent = state?.installedVersion || MODULE_VERSION;
+    if (remoteVersion) remoteVersion.textContent = state?.remoteVersion || '--';
+    if (build) build.textContent = state?.remoteShortCommit || '--';
+    if (message) message.textContent = state?.remoteMessage || '';
+    if (autoCheck) autoCheck.checked = updaterSettings.autoCheck !== false;
+    if (autoDownload) autoDownload.checked = updaterSettings.autoDownload === true;
+
+    if (status) {
+      if (!state || state.reason === 'error' || state.success === false) status.textContent = t('updaterError');
+      else if (state.updateAvailable && state.reason === 'version') status.textContent = t('updaterNewVersion', { version: state.remoteVersion || '?' });
+      else if (state.updateAvailable) status.textContent = t('updaterNewBuild', { build: state.remoteShortCommit || '?' });
+      else if (state.reason === 'local_modified') status.textContent = t('updaterLocalBuild');
+      else status.textContent = t('updaterCurrent');
+    }
+
+    if (download) download.style.display = state?.updateAvailable ? '' : 'none';
+  }
+
+  function bindUpdaterControls() {
+    if (!panel || activePage !== 'about' || !globalThis.MF_AutoUpdater) return;
+
+    panel.querySelector('#mf-updater-check')?.addEventListener('click', () => refreshUpdaterCard(true));
+    panel.querySelector('#mf-updater-download')?.addEventListener('click', async () => {
+      const button = panel.querySelector('#mf-updater-download');
+      if (button) button.disabled = true;
+      await globalThis.MF_AutoUpdater.download();
+      if (button) button.disabled = false;
+    });
+    panel.querySelector('#mf-updater-github')?.addEventListener('click', () => globalThis.MF_AutoUpdater.openRepository());
+    panel.querySelector('#mf-updater-auto-check')?.addEventListener('change', async event => {
+      await globalThis.MF_AutoUpdater.setSettings({ autoCheck: !!event.target.checked });
+    });
+    panel.querySelector('#mf-updater-auto-download')?.addEventListener('change', async event => {
+      await globalThis.MF_AutoUpdater.setSettings({ autoDownload: !!event.target.checked });
+    });
+
+    refreshUpdaterCard(false);
   }
   
 function renderCreditsPage() {
@@ -6956,6 +7052,8 @@ function renderCreditsPage() {
 
     bindLocalizedFileInputs();
 
+    if (activePage === 'about') bindUpdaterControls();
+
     // Local Games: render inicial del contenedor (el resto llega por eventos)
     if (panel.querySelector('#mf-localgames-view')) {
       refreshLocalGamesView();
@@ -7007,8 +7105,8 @@ function renderCreditsPage() {
         }
       };
 
-      btn?.addEventListener('click', load, { signal: panelSignal });
-      input?.addEventListener('keydown', e => { if (e.key === 'Enter') load(); }, { signal: panelSignal });
+      btn?.addEventListener('click', load);
+      input?.addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
       try { if (input) input.value = localStorage.getItem('minifeather_yt_module_url') || ''; } catch (_) {}
     }
     // Selector de preset (Spooklementary / UltraFast)

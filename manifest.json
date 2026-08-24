@@ -6,11 +6,16 @@
   "permissions": [
     "storage",
     "declarativeNetRequest",
-    "activeTab"
+    "activeTab",
+    "alarms",
+    "downloads"
   ],
   "host_permissions": [
     "https://miniblox.io/*",
-    "https://miniblox.online/*"
+    "https://miniblox.online/*",
+    "https://api.github.com/*",
+    "https://raw.githubusercontent.com/*",
+    "https://github.com/*"
   ],
   "background": {
     "service_worker": "src/background.js"
@@ -82,6 +87,7 @@
         "src/translations.js",
         "src/jszip.min.js",
         "src/TexturePackManager.js",
+        "src/AutoUpdater.js",
         "src/content.js"
       ],
       "run_at": "document_end",
