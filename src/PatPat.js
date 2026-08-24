@@ -712,7 +712,80 @@ function pat() {
     squish(target);
     createHand(target, game);
     playSound();
+    // P2P: compartir el pat — el otro jugador vera la mano y el squish
+    // sobre ESTA entidad (identificada por username o pos)
+    try {
+        const P2P = globalThis.MF_Peer;
+        if (P2P?.status === 'host' || P2P?.status === 'guest') {
+            const pos = getPos(target);
+            const name = target?.profile?.username || null;
+            const from = getPos(game.player);
+            if (pos) P2P.sendPat({ target: { x: pos.x, y: pos.y, z: pos.z, name }, from: from ? { x: from.x, y: from.y, z: from.z } : null });
+        }
+    } catch {}
+    // si el objetivo es el peer P2P, ademas "agachar" su camara alla
     return true;
+}
+
+// ---- P2P: pat recibido del otro jugador ----
+// el otro cliente hizo pat sobre una entidad (posiblemente Y). Reproducir
+// el squish + mano localmente sobre esa entidad si la tenemos a la vista.
+function remotePat(msg) {
+    if (!state.enabled) return;
+    const game = getGame(false);
+    if (!game?.player) return;
+    const tp = msg?.target;
+    if (!tp) return;
+    // 1) ¿el pat fue para MI? (la pos del objetivo ~= mi pos) → agachar camara
+    const me = getPos(game.player);
+    if (me) {
+        const d = Math.hypot(tp.x - me.x, tp.y - me.y, tp.z - me.z);
+        if (d < 1.2) {
+            duckCamera(game);
+        }
+    }
+    // 2) buscar la entidad local que coincide (por username o por cercania)
+    const entities = resolveEntityMap(game);
+    if (!entities) return;
+    let target = null;
+    try {
+        for (const entity of entities.values()) {
+            if (!entity?.mesh) continue;
+            const name = entity?.profile?.username;
+            if (tp.name && name && name.toLowerCase() === String(tp.name).toLowerCase()) { target = entity; break; }
+            const pos = getPos(entity);
+            if (pos && Math.hypot(pos.x - tp.x, pos.y - tp.y, pos.z - tp.z) < 1.5) { target = entity; break; }
+        }
+    } catch {}
+    if (!target) return;
+    // mano + squish sobre la entidad encontrada (swing no: no es nuestro brazo)
+    squish(target);
+    createHand(target, game);
+    playSound();
+}
+
+// "agachar" la camara del que recibio el pat: bajar el rig (yawObject)
+// con un impulso suave tipo "le apretaron la cabecita"
+function duckCamera(game) {
+    try {
+        const camera = resolveCamera(game);
+        if (!camera?.parent?.parent) return;
+        const yawObject = camera.parent.parent;
+        const baseY = yawObject.position.y;
+        const start = performance.now();
+        const DURATION = 420;
+        const DROP = 0.28; // bloques que "baja" la camara
+        const frame = () => {
+            const t = Math.min(1, (performance.now() - start) / DURATION);
+            // curva: baja rapido, sube suave (squish invertido)
+            const dip = Math.sin(Math.PI * t) * DROP;
+            yawObject.position.y = baseY - dip;
+            if (t < 1) requestAnimationFrame(frame);
+            else yawObject.position.y = baseY;
+        };
+        requestAnimationFrame(frame);
+        playSound();
+    } catch {}
 }
 
 function clearVisuals() {
@@ -793,6 +866,7 @@ document.addEventListener('contextmenu', onContextMenu, true);
 globalThis.MiniFeatherPatPat = {
     setEnabled,
     pat,
+    remotePat,
     get enabled() {
         return state.enabled;
     },

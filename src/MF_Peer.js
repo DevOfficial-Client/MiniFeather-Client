@@ -180,6 +180,11 @@ function handleMsg(msg) {
         case 'chat':
             if (state.role === 'guest') showRemoteChat(msg.text);
             break;
+        case 'pat':
+            // pat compartido: reproducirlo localmente (mano + squish + agachada
+            // de camara si el que lo recibio soy yo)
+            try { globalThis.MiniFeatherPatPat?.remotePat?.(msg); } catch {}
+            break;
     }
 }
 
@@ -272,7 +277,13 @@ window.MF_Peer = {
     get role() { return state.role; },
     get code() { return state.peerId; },
     _chatHook: null,
-    host, join, off
+    host, join, off,
+    // pat compartido (PatPat): envia la info del pat al otro cliente
+    sendPat(info) {
+        if (!state.conn) return false;
+        send({ t: 'pat', target: info?.target || null, from: info?.from || null });
+        return true;
+    }
 };
 
 // retransmitir lo que verity dice (host) via patch de say()
