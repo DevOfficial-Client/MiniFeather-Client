@@ -10,7 +10,8 @@
         applied: new WeakMap(),
         loading: new Set(),
         customs: new Map(),
-        customSeq: 0
+        customSeq: 0,
+        peerTarget: null   // pos del otro jugador via P2P (multi-target)
     };
 
     try {
@@ -356,6 +357,12 @@
                 get puppet() { return rec.puppet === true; },
                 id: rec.id
             };
+        },
+        // pos del otro jugador via P2P (multi-target): con esto, las entidades
+        // followPlayer persiguen al MAS CERCANO entre el player local y el peer
+        setPeerTarget(tag, pos) {
+            state.peerTarget = pos ? { ...pos, at: performance.now() } : null;
+            return true;
         },
         followVerity(offset = 1.8, opts = {}) {
             const p = getGame()?.player?.pos;
@@ -1661,7 +1668,67 @@
         }
     }
 
-    function physicsStep(rec, dt, wantX, wantZ) {        const root = rec.root;
+    // posiciones de jugadores reales cercanos (para colision): entidad de cada
+    // jugador del server (patron HealthNameTags) + peer P2P + player local
+    function getPlayerBodies(rec) {
+        const bodies = [];
+        const r = rec.bodyHalf || 0.21;
+        const root = rec.root;
+        try {
+            const game = getGame();
+            const ents = game?.world?.entitiesDump || game?.world?.entities || game?.world?.entityMap;
+            if (ents?.values) {
+                for (const e of ents.values()) {
+                    if (!e?.pos || !e?.profile?.username) continue;
+                    const d = Math.hypot(e.pos.x - root.position.x, e.pos.z - root.position.z);
+                    if (d > 8) continue; // solo cercanos (perf)
+                    bodies.push({ x: e.pos.x, y: e.pos.y, z: e.pos.z, half: 0.3, height: 1.8, name: e.profile.username });
+                }
+            }
+        } catch {}
+        // peer P2P
+        const pt = state.peerTarget;
+        if (pt && performance.now() - pt.at < 3000) {
+            bodies.push({ x: pt.x, y: pt.y, z: pt.z, half: 0.3, height: 1.8, name: 'peer' });
+        }
+        return bodies;
+    }
+
+    // colision AABB entidad ↔ cuerpo de jugador (empuje en XZ, bloqueo de paso)
+    function resolvePlayerCollisions(rec, wantX, wantZ) {
+        const root = rec.root;
+        const myHalf = rec.bodyHalf || 0.21;
+        const myY0 = root.position.y, myY1 = root.position.y + (rec.height || 0.85);
+        let blockedX = false, blockedZ = false;
+        for (const b of getPlayerBodies(rec)) {
+            // solape vertical?
+            if (b.y + b.height <= myY0 + 0.05 || b.y >= myY1 - 0.05) continue;
+            // ¿estaria solapando en X tras moverse en X?
+            if (wantX !== 0) {
+                const nx = root.position.x + wantX;
+                const overlapX = Math.abs(nx - b.x) < (myHalf + b.half);
+                const overlapZ = Math.abs(root.position.z - b.z) < (myHalf + b.half);
+                if (overlapX && overlapZ) blockedX = true;
+            }
+            if (wantZ !== 0) {
+                const nz = root.position.z + wantZ;
+                const overlapX2 = Math.abs(root.position.x - b.x) < (myHalf + b.half);
+                const overlapZ2 = Math.abs(nz - b.z) < (myHalf + b.half);
+                if (overlapX2 && overlapZ2) blockedZ = true;
+            }
+        }
+        return { blockedX, blockedZ };
+    }
+
+    function physicsStep(rec, dt, wantX, wantZ) {
+        const root = rec.root;
+        // colision con cuerpos de jugadores: si el paso caeria dentro de un
+        // jugador cercano, cancelar ese eje (la entidad no atraviesa gente)
+        if (!rec.puppet && (wantX !== 0 || wantZ !== 0)) {
+            const { blockedX, blockedZ } = resolvePlayerCollisions(rec, wantX, wantZ);
+            if (blockedX) wantX = 0;
+            if (blockedZ) wantZ = 0;
+        }
         // hover: flota — sin gravedad ni colision, movimiento directo
         if (rec.hover) {
             let moved = false;
@@ -1726,6 +1793,27 @@
         return moved;
     }
 
+    // objetivo multi-jugador: si hay peer P2P activo, elegir al MAS CERCANO
+    // entre el player local y el peer. Devuelve { x,y,z, peer:bool } y setea
+    // rec._targetPeer para que la mirada sepa a quien mirar.
+    function getTargetPos(rec, p) {
+        const pt = state.peerTarget;
+        // peer valido solo si es fresco (< 3s) — si se fue, ignorarlo
+        if (!pt || performance.now() - pt.at > 3000) {
+            rec._targetPeer = false;
+            return p;
+        }
+        const root = rec.root;
+        const dLocal = Math.hypot(p.x - root.position.x, p.z - root.position.z);
+        const dPeer = Math.hypot(pt.x - root.position.x, pt.z - root.position.z);
+        if (dPeer < dLocal * 0.9) { // histéresis: el peer debe ser claramente más cerca
+            rec._targetPeer = true;
+            return pt;
+        }
+        rec._targetPeer = false;
+        return p;
+    }
+
     function followTick(rec, dt, t) {
         const root = rec.root;
         if (rec.puppet) return; // marioneta P2P: la mueve la red (MF_Peer), no la IA local
@@ -1736,8 +1824,9 @@
             rec.actuallyMoving = false;
             return;
         }
-        const p = getGame()?.player?.pos;
-        if (!p) return;
+        const local = getGame()?.player?.pos;
+        if (!local) return;
+        const p = getTargetPos(rec, local);
         const distToPlayer = Math.hypot(p.x - root.position.x, p.y - root.position.y, p.z - root.position.z);
         // modo persistente: si te alejas demasiado NO desaparece; se queda
         // esperando en su pos actual (los chunks descargados congelan la fisica
@@ -1804,10 +1893,37 @@
             physicsStep(rec, dt, 0, 0);
         } else if (distToPlayer > stopDist) {
             const speed = rec.maxSpeed > 0 ? rec.maxSpeed : 4.3;
-            const dx = p.x - root.position.x;
-            const dz = p.z - root.position.z;
+            let dx = p.x - root.position.x;
+            let dz = p.z - root.position.z;
             const dy = p.y - root.position.y;
             const distH = Math.hypot(dx, dz);
+            // esquivar jugadores en el camino (steering): si un cuerpo esta en
+            // la linea al objetivo, deslizar el rumbo perpendicular alrededor
+            if (!rec.puppet && distH > 1e-4) {
+                const ux = dx / distH, uz = dz / distH; // rumbo unitario
+                for (const b of getPlayerBodies(rec)) {
+                    const bx = b.x - root.position.x, bz = b.z - root.position.z;
+                    const along = bx * ux + bz * uz;          // distancia al objetivo por delante
+                    if (along <= 0 || along > distH) continue; // fuera de la linea
+                    const side = bx * -uz + bz * ux;           // desvio lateral
+                    const clear = (rec.bodyHalf || 0.21) + b.half + 0.1;
+                    if (Math.abs(side) < clear) {
+                        // empujar el rumbo hacia el lado con mas espacio
+                        const push = (clear - Math.abs(side)) + 0.3;
+                        const s = side >= 0 ? 1 : -1;
+                        dx = dx + (-uz) * s * push * 2;
+                        dz = dz + (ux) * s * push * 2;
+                    }
+                }
+                const d2 = Math.hypot(dx, dz);
+                if (d2 > 1e-4) { dx /= d2; dz /= d2; } else { dx = ux; dz = uz; }
+                const step = Math.min(speed * dt, distH);
+                const movedNow = physicsStep(rec, dt, dx * step, dz * step);
+                movingThisTick = movedNow;
+                if (dy > 1.2 && rec.onGround && distH < 2.5) rec.vy = 8.2;
+                rec.actuallyMoving = movingThisTick;
+                return;
+            }
             let wantX = 0, wantZ = 0;
             if (distH > 1e-4) {
                 let step = speed * dt;
@@ -1910,10 +2026,22 @@
                             // al caminar la cara vuelve a nivel (pitch 0)
                             rec.headPitch = (rec.headPitch || 0) * (1 - Math.min(1, dt * 6));
                         } else if (rec.lookAtPlayer !== false && !rec.frozen) {
-                            // quieta: mirar al jugador (a la camara)
-                            const pp = getGame()?.player?.pos;
-                            if (pp) {
-                                const pdx = pp.x - root.position.x, pdz = pp.z - root.position.z;
+                            // quieta: mirar al objetivo (player local o peer P2P).
+                            // con peer activo: ALTERNAR la mirada entre los dos
+                            // (cada ~2.2s cambia de "interlocutor") — verity
+                            // "conversa" con ambos a la vez
+                            let look = getGame()?.player?.pos;
+                            const pt = state.peerTarget;
+                            const peerAlive = pt && performance.now() - pt.at < 3000;
+                            if (peerAlive) {
+                                // reloj de alternancia: mitad del tiempo cada uno
+                                const phase = Math.floor(t / 2200) % 2;
+                                const peerFirst = (rec._lookPhaseSeed || 0) === 0;
+                                const usePeer = phase === 0 ? peerFirst : !peerFirst;
+                                look = usePeer ? pt : look;
+                            }
+                            if (look) {
+                                const pdx = look.x - root.position.x, pdz = look.z - root.position.z;
                                 const dHoriz2 = pdx * pdx + pdz * pdz;
                                 if (dHoriz2 > 0.04) {
                                     const targetYaw = Math.atan2(-pdx, -pdz) + (rec.yawOffset || 0);
@@ -1922,11 +2050,11 @@
                                     while (delta < -Math.PI) delta += 2 * Math.PI;
                                     root.rotation.y += delta * Math.min(1, dt * 4); // giro lento y suave
                                 }
-                                // pitch: inclinar la cara hacia arriba/abajo segun tu altura
+                                // pitch: inclinar la cara hacia arriba/abajo segun su altura
                                 // (se aplica despues de sampleAnim para que la anim no lo pise)
                                 if (rec.lookUp !== false) {
                                     const headY = root.position.y + (rec.headHeight ?? 1.3);
-                                    const dy = pp.y - headY;
+                                    const dy = look.y - headY;
                                     const dHoriz = Math.sqrt(Math.max(dHoriz2, 0.04));
                                     let pitch = Math.atan2(dy, dHoriz);
                                     if (pitch > 0.75) pitch = 0.75;   // ~43 grados arriba

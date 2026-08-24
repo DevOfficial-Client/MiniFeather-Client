@@ -50,12 +50,16 @@ function myName() {
 // ---------- protocolo ----------
 // { t:'hello', name, role }               handshake
 // { t:'sync', p:{x,y,z,yaw,anim,moving} } host → guest (20 Hz)
+// { t:'pos',  p:{x,y,z} }                 guest → host (reporta su pos, 5 Hz)
 // { t:'despawn' }                         verity se fue
 // { t:'chat', text }                      lo que verity dijo en el host
 
 function send(obj) {
     try { state.conn?.send?.(obj); } catch {}
 }
+
+// posicion del invitado tal como la conoce el host (para multi-target)
+state.guestPos = null;
 
 // ---------- HOST: broadcast del transform ----------
 function startBroadcast() {
@@ -73,11 +77,30 @@ function startBroadcast() {
                 anim: rec.curAnim || rec.anim || null
             }
         });
+        // multi-target: publicar la pos del invitado a CustomModels para que
+        // verity (host, autoridad) persiga al MAS CERCANO de los dos jugadores
+        if (state.guestPos) {
+            try { window.MF_CustomModels?.setPeerTarget?.('verity_peer', state.guestPos); } catch {}
+        }
     }, 50); // 20 Hz
+    // guest → host: reportar mi pos (5 Hz basta, solo para elegir objetivo)
+    state.posTimer = setInterval(() => {
+        if (state.role !== 'guest') return;
+        const p = getPos();
+        if (p) send({ t: 'pos', p: { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2) } });
+    }, 200);
 }
 
 function stopBroadcast() {
     if (state.sendTimer) { clearInterval(state.sendTimer); state.sendTimer = null; }
+    if (state.posTimer) { clearInterval(state.posTimer); state.posTimer = null; }
+}
+
+function getPos() {
+    try {
+        const g = globalThis.miniblox || window.miniblox;
+        return g?.player?.pos || null;
+    } catch { return null; }
 }
 
 // ---------- GUEST: puppet ----------
@@ -144,6 +167,12 @@ function handleMsg(msg) {
             break;
         case 'sync':
             if (state.role === 'guest') onSyncGuest(msg);
+            break;
+        case 'pos':
+            // guest → host: actualizar pos conocida del invitado
+            if (state.role === 'host' && msg.p) {
+                state.guestPos = { x: msg.p.x, y: msg.p.y, z: msg.p.z };
+            }
             break;
         case 'despawn':
             if (state.role === 'guest') { killPuppet(); log('verity remota despawneada'); }
