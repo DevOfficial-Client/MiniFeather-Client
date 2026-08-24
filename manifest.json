@@ -65,6 +65,7 @@
         "src/HandLayer.js",
         "src/CustomModels.js",
         "src/VerityAI.js",
+        "src/MF_Peer.js",
         "src/CustomShader.js",
         "src/GUIPatch.js"
       ],

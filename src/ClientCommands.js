@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p']);
 
   function parseDetail(event) {
     try {
@@ -67,6 +67,9 @@
       '\\yellow\\/baritone goto <x y z|waypoint>\\reset\\ - Walk to coords or waypoint',
       '\\yellow\\/baritone follow <player>\\reset\\ - Follow a player',
       '\\yellow\\/baritone stop\\reset\\ - Stop walking',
+      '\\yellow\\/p2p host [code]\\reset\\ - Share your Verity (friend: /p2p join <code>)',
+      '\\yellow\\/p2p join <code>\\reset\\ - See friend\\\'s Verity',
+      '\\yellow\\/p2p off\\reset\\ - End the shared session',
       '\\yellow\\/mf help\\reset\\ - Show this help'
     ];
     for (const line of lines) state.chat?.addChat?.({ text: line });
@@ -658,6 +661,41 @@
       }
 
       addChat('Usage: /baritone goto <x y z|waypoint> | follow <player> | stop | status', 'error');
+      return;
+    }
+
+    if (command === 'p2p') {
+      const api = globalThis.MF_Peer;
+      if (!api) {
+        addChat('P2P module is not ready yet.', 'error');
+        return;
+      }
+      const action = (args[0] || 'status').toLowerCase();
+      if (action === 'host') {
+        const code = args[1];
+        api.host(code).then(id => {
+          if (!id) { addChat('Could not create the room (check console).', 'error'); return; }
+          addChat(`Room created! Your friend joins with: /p2p join ${id}`, 'success');
+          addChat('(also printed in console — copy it from there)');
+        });
+        return;
+      }
+      if (action === 'join') {
+        const code = args[1];
+        if (!code) { addChat('Usage: /p2p join <code>', 'error'); return; }
+        api.join(code);
+        addChat(`Connecting to room ${code}...`, 'success');
+        return;
+      }
+      if (action === 'off' || action === 'stop') {
+        api.off();
+        addChat('P2P session ended.', 'success');
+        return;
+      }
+      // status
+      const st = api.status;
+      const role = api.role ? ` (${api.role})` : '';
+      addChat(st === 'off' ? 'P2P: off — use /p2p host or /p2p join <code>' : `P2P: ${st}${role}`);
       return;
     }
 

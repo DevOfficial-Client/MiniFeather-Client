@@ -286,19 +286,42 @@ function resolveNativeInput(player) {
         readerName: reader.name,
         applyName: apply.name,
         originalReader: player[reader.name],
-        nativeApply: player[apply.name]
+        nativeApply: player[apply.name],
+        applyWrites
     };
 }
 
+// secuencia monotona robusta: si el campo rotó de nombre, derivar de los
+// seq de los inputs vivos (el ultimo visto +1) — nunca NaN/undefined
+let fallbackSeq = 0;
+function nextSequenceNumber(player) {
+    try {
+        const n = player.inputSequenceNumber;
+        if (typeof n === 'number' && Number.isFinite(n)) {
+            player.inputSequenceNumber = n + 1;
+            fallbackSeq = n + 1;
+            return n + 1;
+        }
+    } catch (_) {}
+    fallbackSeq = Math.max(fallbackSeq + 1, (player.currentInput?.sequenceNumber ?? 0) + 1);
+    return fallbackSeq;
+}
+
 function createNativeInput(player, controls) {
-    const data = {
-        sequenceNumber: ++player.inputSequenceNumber,
+    // base: clon del currentInput VIVO (shape siempre correcto para esta
+    // version; campos desconocidos heredan valores validos del juego)
+    let data;
+    try {
+        data = { ...player.currentInput } || {};
+    } catch (_) { data = {}; }
+    Object.assign(data, {
+        sequenceNumber: nextSequenceNumber(player),
         left: controls.strafe < -0.3,
         right: controls.strafe > 0.3,
         up: controls.forward > 0.3,
         down: controls.forward < -0.3,
-        yaw: controls.yaw !== null ? controls.yaw : player.yaw,
-        pitch: player.pitch,
+        yaw: controls.yaw !== null ? controls.yaw : Number(player.yaw) || 0,
+        pitch: Number(player.pitch) || 0,
         jump: controls.jump,
         sneak: controls.sneak,
         sprint: false,
@@ -306,7 +329,7 @@ function createNativeInput(player, controls) {
         ackId: player.lastServerAckId > 0 ? player.lastServerAckId : undefined,
         onGround: player.onGround,
         usingItem: false
-    };
+    });
 
     try {
         const InputClass = player.currentInput?.constructor;
@@ -363,10 +386,12 @@ function hookPlayerInput() {
     state.readerName = native.readerName;
     state.originalReader = native.originalReader;
     state.nativeApply = native.nativeApply;
+    state.applyWrites = native.applyWrites || [];
 
     const readerName = state.readerName;
     const originalReader = state.originalReader;
     const nativeApply = state.nativeApply;
+    const applyWrites = state.applyWrites;
 
     player[readerName] = function (...args) {
         if (!state.enabled || state.status !== 'moving' || state.player !== this) {
@@ -378,15 +403,35 @@ function hookPlayerInput() {
         const input = createNativeInput(this, desiredInput);
 
         this.sentInputThisTick = false;
-        this.wWQmwuDLqA = 0;
-        this.YApHmhhGagG = 0;
         this.currentInput = input;
 
-        return nativeApply.call(this, input);
+        // log del primer input: verificar shape/valores
+        if (injectedTicks === 1) {
+            try {
+                console.log(`${TAG} primer input inyectado:`, {
+                    ...input,
+                    pos: input.pos === null ? 'null' : input.pos
+                });
+            } catch (_) {}
+        }
+
+        try {
+            return nativeApply.call(this, input);
+        } finally {
+            // verificacion post-apply: que campos del player cambiaron con
+            // nuestro input (diagnostico automatico del primer tick)
+            if (injectedTicks === 1 && applyWrites.length) {
+                try {
+                    const after = {};
+                    for (const f of applyWrites) after[f] = this[f];
+                    console.log(`${TAG} campos del player tras apply:`, after);
+                } catch (_) {}
+            }
+        }
     };
 
     inputHooked = true;
-    console.log(`${TAG} Input hooked: reader=${readerName}`);
+    console.log(`${TAG} Input hooked: reader=${readerName}, apply=${native.applyName}, applyWrites=[${applyWrites.join(',')}]`);
     return true;
 }
 
@@ -617,7 +662,7 @@ function getNeighbors(x, y, z) {
     return result;
 }
 
-function findPath(startX, startY, startZ, goalX, goalY, goalZ) {
+function findPath(startX, startY, startZ, goalX, goalY, goalZ, maxIterOverride) {
     startX = Math.floor(startX); startY = Math.floor(startY); startZ = Math.floor(startZ);
     goalX = Math.floor(goalX); goalY = Math.floor(goalY); goalZ = Math.floor(goalZ);
 
@@ -648,7 +693,7 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ) {
     // anillos — con peso 1 puro, 160 bloques de distancia puede necesitar
     // >100k nodos; con 1.5 prioriza avanzar hacia el goal
     const H_WEIGHT = 1.5;
-    const MAX_ITER = 12000;
+    const MAX_ITER = maxIterOverride || 12000;
 
     // best-effort: recordar el nodo mas cercano al goal; si se agota el
     // limite, devolver ruta hasta ahi (y repath desde alla) en vez de null
@@ -734,7 +779,47 @@ function getLookVector(player) {
     return { x: -Math.sin(yaw) * cp, y: -Math.sin(pitch), z: Math.cos(yaw) * cp };
 }
 
-function applyMovementInput(player, strafe, forward, jump, sneak, yaw) {
+// girar la CAMARA (rig FPS: yawObject > pitchObject > camera). La camara
+// manda: player.yaw la sigue cada tick, asi que girarla gira al player y
+// resuelve tanto el rumbo de movimiento como la vista del usuario.
+function turnCamera(player, yaw, pitch, speed = 0.35) {
+    try {
+        const camera = player?.game?.gameScene?.camera || player?.game?.player?.game?.gameScene?.camera;
+        if (!camera?.parent?.parent) return false;
+        const pitchObject = camera.parent;
+        const yawObject = camera.parent.parent;
+        if (yaw != null && typeof yawObject.rotation?.y === 'number') {
+            let yawDiff = yaw - yawObject.rotation.y;
+            while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+            while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+            yawObject.rotation.y += clamp(yawDiff, -speed, speed);
+        }
+        if (pitch != null && typeof pitchObject.rotation?.x === 'number') {
+            let pitchDiff = pitch - pitchObject.rotation.x;
+            while (pitchDiff > Math.PI) pitchDiff -= Math.PI * 2;
+            while (pitchDiff < -Math.PI) pitchDiff += Math.PI * 2;
+            pitchObject.rotation.x += clamp(pitchDiff, -speed * 0.7, speed * 0.7);
+        }
+        return true;
+    } catch (_) { return false; }
+}
+
+// apuntar la camara a un punto del mundo estilo aimbot: yaw+pitch hacia el
+// objetivo desde el ojo del player, con giro suavizado y velocidad alta
+function aimCameraAt(player, tx, ty, tz, speed = 0.35) {
+    const ex = player.pos.x;
+    const ey = player.pos.y + 1.62; // altura de ojo
+    const ez = player.pos.z;
+    const dx = tx - ex;
+    const dy = ty - ey;
+    const dz = tz - ez;
+    const distH = Math.hypot(dx, dz);
+    const yaw = Math.atan2(-dx, dz);
+    const pitch = Math.atan2(dy, distH || 1e-6);
+    return turnCamera(player, yaw, pitch, speed);
+}
+
+function applyMovementInput(player, strafe, forward, jump, sneak, yaw, pitch) {
     // Set desiredInput — the hooked reader will inject these as native input each tick
     desiredInput.strafe = strafe;
     desiredInput.forward = forward;
@@ -743,6 +828,9 @@ function applyMovementInput(player, strafe, forward, jump, sneak, yaw) {
     // el yaw va DENTRO del input: el pipeline del juego lo aplica al player
     // (player.yaw lo pisa la camara cada tick, escribirlo directo no sirve)
     desiredInput.yaw = yaw != null ? yaw : Number(player.yaw) || 0;
+    // girar la camara hacia el rumbo SOLO si no hay follow activo: en follow
+    // la mira aimbot sobre la cabeza del objetivo manda (no pelear con ella)
+    if (yaw != null && !state.followTarget) turnCamera(player, yaw, pitch);
 }
 
 function executePath(player, keepAlive = false) {
@@ -803,11 +891,34 @@ function executePath(player, keepAlive = false) {
     const dy = target.y - py;
     const needJump = dy > 0.5 && Math.abs(dx) < 1.2 && Math.abs(dz) < 1.2;
 
-    // Movement: walk forward when roughly facing the right direction
-    const facingTarget = Math.abs(yawDiff) < 0.8;
-    const forward = facingTarget ? 1.0 : 0.1;
-    const strafe = facingTarget ? 0 : (yawDiff > 0 ? 0.3 : -0.3);
+    // Caminar en ARCO (como bots reales): forward SIEMPRE activo (>0.3 para
+    // el boton up), strafe corrige el rumbo. Asi caminamos aunque el campo
+    // yaw del input no aplique en esta version (rotado) — el strafe es el
+    // motor de giro. El signo del strafe se auto-calibra mas abajo.
+    const forward = 1.0;
+    let strafe = 0;
+    if (Math.abs(yawDiff) > 0.12) {
+        const dir = state._strafeSign || 1;
+        strafe = 0.6 * dir * Math.sign(yawDiff);
+        if (strafe > 1) strafe = 1;
+        if (strafe < -1) strafe = -1;
+    }
 
+    // auto-calibracion del signo del strafe: cada 40 ticks, si el error de
+    // yaw NO disminuyo, el arco va al lado equivocado → invertir
+    state._calibTicks = (state._calibTicks || 0) + 1;
+    if (state._calibTicks % 40 === 0) {
+        const err = Math.abs(yawDiff);
+        if (state._yawErrPrev != null && err > state._yawErrPrev + 0.03 && Math.abs(yawDiff) > 0.3) {
+            state._strafeSign = -(state._strafeSign || 1);
+            console.log(`${TAG} strafe invertido (auto-calibrado) → ${state._strafeSign > 0 ? 'derecha' : 'izquierda'}`);
+            state._yawErrPrev = null;
+        } else {
+            state._yawErrPrev = err;
+        }
+    }
+
+    // yaw objetivo via input (si el juego lo aplica, gira de verdad y mas rapido)
     applyMovementInput(player, strafe, forward, needJump, false, newYaw);
 
     // Re-path if stuck
@@ -868,6 +979,42 @@ function stopFollow(silent = false) {
     if (!silent) console.log(`${TAG} Follow stopped`);
 }
 
+// persecucion directa EN ARCO: forward siempre activo (>0.3 umbral del
+// boton up), strafe corrige el rumbo, yaw via input por si aplica. Con
+// auto-calibracion del signo: si tras 40 ticks el error de yaw empeoro,
+// el arco gira al lado equivocado para esta version → invertir.
+function directChase(player, dx, dz) {
+    const targetYaw = Math.atan2(-dx, dz);
+    let yawDiff = targetYaw - Number(player.yaw || 0);
+    while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+    while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+
+    const forward = 1.0;
+    let strafe = 0;
+    if (Math.abs(yawDiff) > 0.12) {
+        const dir = state._strafeSign || 1;
+        strafe = 0.6 * dir * Math.sign(yawDiff);
+        if (strafe > 1) strafe = 1;
+        if (strafe < -1) strafe = -1;
+    }
+
+    // auto-calibracion (cada 40 frames)
+    state._calibTicks = (state._calibTicks || 0) + 1;
+    if (state._calibTicks % 40 === 0) {
+        const err = Math.abs(yawDiff);
+        if (state._yawErrPrev != null && err > state._yawErrPrev + 0.03 && Math.abs(yawDiff) > 0.3) {
+            state._strafeSign = -(state._strafeSign || 1);
+            console.log(`${TAG} strafe invertido (auto-calibrado) → ${state._strafeSign > 0 ? 'derecha' : 'izquierda'}`);
+            state._yawErrPrev = null;
+        } else {
+            state._yawErrPrev = err;
+        }
+    }
+
+    const newYaw = Number(player.yaw || 0) + clamp(yawDiff, -0.3, 0.3);
+    applyMovementInput(player, strafe, forward, false, false, newYaw);
+}
+
 // re-target cada ~1.5s: el objetivo se mueve, la ruta no puede ser fija
 function followTick(player, now) {
     const username = state.followTarget;
@@ -890,25 +1037,45 @@ function followTick(player, now) {
     const dz = entity.pos.z - player.pos.z;
     const distH = Math.hypot(dx, dz);
 
+    // MODO AIMBOT: la camara fija la mirada en la CABEZA del jugador
+    // seguido cada frame (velocidad alta = tracking agresivo). Ocurre en
+    // todos los estados de follow: caminando, esperando y cerca.
+    aimCameraAt(player,
+        entity.pos.x,
+        entity.pos.y + 1.5, // cabeza
+        entity.pos.z,
+        0.45);
+
     // goal fresco para repath/diagnostico
     state.goal = { x: Math.floor(entity.pos.x), y: Math.floor(entity.pos.y), z: Math.floor(entity.pos.z) };
 
-    // cerca: quedarse mirandolo sin empujar
+    // cerca: quedarse mirandolo (la camara ya lo rastrea) sin empujar
     if (distH < 2.5) {
         applyMovementInput(player, 0, 0, false, false);
         return true;
     }
 
-    // lejos: persecucion directa (misma navegacion que executePath:
-    // yaw suave + forward), con re-path A* si hay obstaculos
-    if (distH > 24 || now >= state.followRepathAt) {
+    // MUY lejos: persecucion directa SIEMPRE (sin A*). Un A* de 100+ bloques
+    // puede tardar segundos y congelar el frame; en persecucion lo que importa
+    // es avanzar hacia el objetivo, no la ruta optima
+    if (distH > 24) {
+        directChase(player, dx, dz);
+        return true;
+    }
+
+    // cerca (<=24): A* local con presupuesto bajo (el objetivo se mueve, la
+    // ruta se recalcula igual cada poco) — nunca congelar el frame por follow
+    if (now >= state.followRepathAt) {
         state.followRepathAt = now + 1500;
         const path = findPath(player.pos.x, player.pos.y, player.pos.z,
-                              entity.pos.x, entity.pos.y, entity.pos.z);
+                              entity.pos.x, entity.pos.y, entity.pos.z, 3000);
         if (path && path.length > 0) {
             // usar solo los primeros nodos: el objetivo se mueve
             state.path = path.slice(0, 10);
             state.pathIndex = 0;
+        } else {
+            // sin ruta local: perseguir directo
+            state.path = [];
         }
     }
 
@@ -917,14 +1084,8 @@ function followTick(player, now) {
         const ok = executePath(player, true);
         if (!ok && state.status !== 'moving') return true; // ruta completa → seguir esperando
     } else {
-        // persecucion directa: girar via input.yaw y avanzar
-        const targetYaw = Math.atan2(-dx, dz);
-        let yawDiff = targetYaw - Number(player.yaw || 0);
-        while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
-        while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
-        const newYaw = Number(player.yaw || 0) + clamp(yawDiff, -0.3, 0.3);
-        const facing = Math.abs(yawDiff) < 0.8;
-        applyMovementInput(player, 0, facing ? 1.0 : 0.1, false, false, newYaw);
+        // persecucion directa en arco (forward siempre + strafe corrige rumbo)
+        directChase(player, dx, dz);
     }
     return true;
 }

@@ -200,6 +200,7 @@
                 weeping: !!opts.weeping,      // se congela si el player lo mira
                 lookAtPlayer: opts.lookAtPlayer !== false,
                 stay: !!opts.stay,
+                puppet: !!opts.puppet,        // marioneta P2P: la mueve la red, no la IA
                 spawnAnim: opts.spawnAnim || null,   // anim de aparicion (una vez)
                 catchAnim: opts.catchAnim || null,   // anim al acercarse al player
                 despawnAnim: opts.despawnAnim || null, // anim de despedida
@@ -342,6 +343,19 @@
             for (const [id, r] of state.customs) out[id] = { file: r.file, pos: { ...r.pos }, yaw: r.yaw, scale: r.scale };
             console.log(TAG + ' entidades client-side: ' + JSON.stringify(out));
             return out;
+        },
+        // record interno (para MF_Peer: leer transform de verity sin exponer todo)
+        getRecord(id) {
+            const rec = state.customs.get(id);
+            if (!rec || rec.dead) return null;
+            return {
+                get root() { return rec.root; },
+                get yaw() { return rec.yaw; },
+                get curAnim() { return rec.curAnim; },
+                get anim() { return rec.anim; },
+                get puppet() { return rec.puppet === true; },
+                id: rec.id
+            };
         },
         followVerity(offset = 1.8, opts = {}) {
             const p = getGame()?.player?.pos;
@@ -1714,6 +1728,7 @@
 
     function followTick(rec, dt, t) {
         const root = rec.root;
+        if (rec.puppet) return; // marioneta P2P: la mueve la red (MF_Peer), no la IA local
         if (!rec.followPlayer || rec.stay) {
             // entidad estatica (o en modo "stay"): solo gravedad, para asentarse
             // en el suelo. "stay" congela la persecucion pero NO despawnea.
