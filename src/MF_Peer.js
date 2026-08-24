@@ -40,12 +40,102 @@ function loadPeerJS() {
     return peerjsPromise;
 }
 
+// ---------- acceso al juego (patron PatPat: global → React fiber) ----------
+const scan = { game: null, entityMap: null, lastGameScan: 0 };
+
+function getGame(force = false) {
+    const now = performance.now();
+    if (globalThis.miniblox?.player) {
+        if (scan.game !== globalThis.miniblox) { scan.game = globalThis.miniblox; scan.entityMap = null; }
+        return scan.game;
+    }
+    if (!force && scan.game?.player && now - scan.lastGameScan < 900) return scan.game;
+    scan.lastGameScan = now;
+    try {
+        const react = document.querySelector('#react');
+        if (react) {
+            for (const root of Object.values(react)) {
+                const game = root?.updateQueue?.baseState?.element?.props?.game;
+                if (!game?.player) continue;
+                if (scan.game !== game) { scan.game = game; scan.entityMap = null; }
+                return game;
+            }
+        }
+    } catch {}
+    return scan.game?.player ? scan.game : null;
+}
+
+function isMapLike(v) {
+    return !!(v && typeof v.get === 'function' && typeof v.values === 'function');
+}
+
+function validPos(p) {
+    return !!(p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)) && Number.isFinite(Number(p.z)));
+}
+
+function looksLikeEntityMap(v) {
+    if (!isMapLike(v)) return false;
+    let checked = 0, found = 0;
+    try {
+        for (const e of v.values()) {
+            checked++;
+            if (e && validPos(e.pos) && (e.mesh || e.id !== undefined)) found++;
+            if (checked >= 12) break;
+        }
+    } catch { return false; }
+    return checked > 0 && found > 0;
+}
+
+function resolveEntityMap(game) {
+    if (scan.entityMap && isMapLike(scan.entityMap)) return scan.entityMap;
+    const direct = [
+        game?.world?.entitiesDump,
+        game?.world?.entities,
+        game?.world?.entityMap,
+        game?.entityManager?.entities
+    ];
+    for (const c of direct) {
+        if (looksLikeEntityMap(c)) { scan.entityMap = c; return c; }
+    }
+    const world = game?.world;
+    if (!world) return null;
+    const queue = [{ value: world, depth: 0 }];
+    const seen = new WeakSet();
+    let visited = 0;
+    while (queue.length && visited < 360) {
+        const cur = queue.shift();
+        const v = cur.value;
+        if (!v || typeof v !== 'object' || seen.has(v)) continue;
+        seen.add(v);
+        visited++;
+        if (looksLikeEntityMap(v)) { scan.entityMap = v; return v; }
+        if (cur.depth >= 2) continue;
+        let keys = [];
+        try { keys = Object.keys(v); } catch { continue; }
+        for (const k of keys) {
+            let child;
+            try { child = v[k]; } catch { continue; }
+            if (child && typeof child === 'object') queue.push({ value: child, depth: cur.depth + 1 });
+        }
+    }
+    return null;
+}
+
 // ---------- helpers ----------
 function myName() {
     try {
-        const g = globalThis.miniblox || window.miniblox;
-        return g?.player?.profile?.username || g?.player?.username || 'yo';
-    } catch { return 'yo'; }
+        const game = getGame();
+        const p = game?.player;
+        if (p?.profile?.username) return p.profile.username;
+        if (p?.username) return p.username;
+        // fallback: mi propia entidad esta en el entityMap — buscar por id
+        const ents = p ? resolveEntityMap(game) : null;
+        if (ents?.get && p?.id !== undefined) {
+            const me = ents.get(p.id) || ents.get(String(p.id));
+            if (me?.profile?.username) return me.profile.username;
+        }
+    } catch { }
+    return 'yo';
 }
 
 // ---------- protocolo ----------
@@ -65,7 +155,9 @@ state.guestPos = null;
 // ---------- HOST: broadcast del transform ----------
 function startBroadcast() {
     stopBroadcast();
+    // sync de verity: SOLO host (el guest no tiene autoridad sobre verity)
     state.sendTimer = setInterval(() => {
+        if (state.role !== 'host') return;
         const rec = window.MF_CustomModels?.getRecord?.('verity');
         if (!rec?.root) return; // sin verity local: no emitir
         send({
@@ -111,8 +203,7 @@ function stopBroadcast() {
 
 function getPos() {
     try {
-        const g = globalThis.miniblox || window.miniblox;
-        return g?.player?.pos || null;
+        return getGame()?.player?.pos || null;
     } catch { return null; }
 }
 
@@ -169,6 +260,42 @@ function puppetTick() {
 // ---- TitanTiny P2P: escalar la entidad del peer en mi mundo ----
 // El juego resetea mesh.scale periodicamente (anims, respawn), asi que se
 // re-aplica cada frame. La escala base se captura UNA vez por mesh.
+
+// hooks onBeforeRender sobre el mesh del peer (patron TitanTiny): el juego
+// pisa mesh.scale en su propio update; re-aplicar justo antes de dibujar
+function installPeerRenderHooks(root) {
+    try {
+        const queue = [root];
+        const seen = new WeakSet();
+        while (queue.length) {
+            const obj = queue.shift();
+            if (!obj || typeof obj !== 'object' || seen.has(obj)) continue;
+            seen.add(obj);
+            if ((obj.isMesh === true || obj.isLine === true || obj.isPoints === true || obj.geometry) &&
+                typeof obj.onBeforeRender !== 'undefined') {
+                const prev = obj.onBeforeRender;
+                obj.onBeforeRender = function (...args) {
+                    if (typeof prev === 'function') { try { prev.apply(this, args); } catch {} }
+                    applyPeerScale(state._peerMesh);
+                };
+            }
+            if (Array.isArray(obj.children)) {
+                for (const c of obj.children) queue.push(c);
+            }
+        }
+    } catch {}
+}
+
+function applyPeerScale(mesh) {
+    const b = state._peerBase;
+    const f = Number(state.peerScale) || 1;
+    if (!mesh?.scale || !b || !Number.isFinite(f)) return;
+    try {
+        mesh.scale.set(b.x * f, b.y * f, b.z * f);
+        if (mesh.matrixAutoUpdate === false && typeof mesh.updateMatrix === 'function') mesh.updateMatrix();
+    } catch {}
+}
+
 function peerScaleTick() {
     if (!state.peerName || !state.conn) return;
     const factor = Number(state.peerScale) || 1;
@@ -192,8 +319,7 @@ function peerScaleTick() {
     if (!mesh) {
         state._peerMeshAt = now;
         try {
-            const g = globalThis.miniblox || window.miniblox;
-            const ents = g?.world?.entitiesDump || g?.world?.entities || g?.world?.entityMap;
+            const ents = resolveEntityMap(getGame());
             if (ents?.values) {
                 for (const e of ents.values()) {
                     if (e?.profile?.username === state.peerName && e?.mesh?.scale) {
@@ -205,10 +331,14 @@ function peerScaleTick() {
             }
         } catch {}
         if (mesh) {
-            // capturar base la primera vez que vemos este mesh
+            // capturar base la primera vez que vemos este mesh + hookear el
+            // render (el juego pisa mesh.scale en su update, hay que
+            // re-aplicar justo antes de dibujar, como hace TitanTiny local)
             if (state._peerMeshBaseOf !== mesh) {
                 state._peerMeshBaseOf = mesh;
                 state._peerBase = { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z };
+                installPeerRenderHooks(mesh);
+                log('mesh del peer encontrado (' + state.peerName + ') base x' + state._peerBase.x.toFixed(2));
             }
         } else {
             state._peerMesh = null;
@@ -238,7 +368,9 @@ function handleMsg(msg) {
         case 'hello':
             state.peerName = msg.name || null;
             log('handshake con', msg.name, '(rol remoto: ' + msg.role + ')');
-            if (state.role === 'host' && !state.sendTimer) startBroadcast();
+            // ambos roles emiten: host hace broadcast completo (sync verity),
+            // guest solo escala/nombre. startBroadcast autolimita por rol.
+            if (!state.sendTimer) startBroadcast();
             break;
         case 'sync':
             if (state.role === 'guest') onSyncGuest(msg);
@@ -264,8 +396,9 @@ function handleMsg(msg) {
             // TitanTiny compartido: escalar la entidad del OTRO jugador en MI
             // mundo. El juego puede resetear mesh.scale (respawn, anim), asi
             // que se re-aplica por frame con la escala guardada.
-            if (msg.name) state.peerName = msg.name;
+            if (msg.name && msg.name !== 'yo') state.peerName = msg.name;
             state.peerScale = Number(msg.scale) || 1;
+            log('escala remota recibida: ' + msg.name + ' → x' + state.peerScale);
             break;
     }
 }
