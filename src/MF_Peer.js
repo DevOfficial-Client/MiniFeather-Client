@@ -15,6 +15,7 @@ const state = {
     conn: null,          // DataConnection activo
     role: null,          // 'host' | 'guest'
     peerId: null,        // mi id publico (host)
+    peerName: null,      // username del otro jugador (del handshake)
     status: 'off',       // off | connecting | host | guest | error
     sendTimer: null,     // interval de broadcast del host
     lastFrameIn: 0,      // ultimo paquete recibido (guest)
@@ -83,6 +84,17 @@ function startBroadcast() {
             try { window.MF_CustomModels?.setPeerTarget?.('verity_peer', state.guestPos); } catch {}
         }
     }, 50); // 20 Hz
+    // escala TitanTiny → al otro cliente (ambos roles, solo cuando cambia)
+    state.scaleTimer = setInterval(() => {
+        try {
+            const tt = globalThis.TitanTiny;
+            const sc = tt?.enabled ? +(Number(tt.scale) || 1).toFixed(2) : 1;
+            if (sc !== state._lastSentScale) {
+                state._lastSentScale = sc;
+                send({ t: 'scale', scale: sc, name: myName() });
+            }
+        } catch {}
+    }, 250);
     // guest → host: reportar mi pos (5 Hz basta, solo para elegir objetivo)
     state.posTimer = setInterval(() => {
         if (state.role !== 'guest') return;
@@ -93,6 +105,7 @@ function startBroadcast() {
 
 function stopBroadcast() {
     if (state.sendTimer) { clearInterval(state.sendTimer); state.sendTimer = null; }
+    if (state.scaleTimer) { clearInterval(state.scaleTimer); state.scaleTimer = null; }
     if (state.posTimer) { clearInterval(state.posTimer); state.posTimer = null; }
 }
 
@@ -152,8 +165,69 @@ function puppetTick() {
     rec.yaw = (rec.yaw || 0) + dyaw * L;
     rec.root.rotation.y = rec.yaw;
 }
+
+// ---- TitanTiny P2P: escalar la entidad del peer en mi mundo ----
+// El juego resetea mesh.scale periodicamente (anims, respawn), asi que se
+// re-aplica cada frame. La escala base se captura UNA vez por mesh.
+function peerScaleTick() {
+    if (!state.peerName || !state.conn) return;
+    const factor = Number(state.peerScale) || 1;
+    if (!Number.isFinite(factor) || Math.abs(factor - 1) < 0.01) {
+        // escala 1: restaurar si habia quedado escalado
+        if (state._peerMesh && state._peerBase) {
+            try {
+                state._peerMesh.scale.set(state._peerBase.x, state._peerBase.y, state._peerBase.z);
+            } catch {}
+        }
+        return;
+    }
+    // buscar la entidad del peer por username (cacheada, re-scan 1s)
+    let mesh = state._peerMesh;
+    const now = performance.now();
+    if (mesh && (!mesh.parent || now - (state._peerMeshAt || 0) > 1500)) {
+        // mesh vieja (desmontada) o refresco periodico → re-escanear
+        state._peerMesh = null;
+        mesh = null;
+    }
+    if (!mesh) {
+        state._peerMeshAt = now;
+        try {
+            const g = globalThis.miniblox || window.miniblox;
+            const ents = g?.world?.entitiesDump || g?.world?.entities || g?.world?.entityMap;
+            if (ents?.values) {
+                for (const e of ents.values()) {
+                    if (e?.profile?.username === state.peerName && e?.mesh?.scale) {
+                        mesh = e.mesh;
+                        state._peerMesh = mesh;
+                        break;
+                    }
+                }
+            }
+        } catch {}
+        if (mesh) {
+            // capturar base la primera vez que vemos este mesh
+            if (state._peerMeshBaseOf !== mesh) {
+                state._peerMeshBaseOf = mesh;
+                state._peerBase = { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z };
+            }
+        } else {
+            state._peerMesh = null;
+        }
+    }
+    if (!mesh?.scale) return;
+    const b = state._peerBase;
+    if (!b) return;
+    try {
+        mesh.scale.set(b.x * factor, b.y * factor, b.z * factor);
+        if (mesh.matrixAutoUpdate === false && typeof mesh.updateMatrix === 'function') mesh.updateMatrix();
+    } catch {}
+}
+
 (function puppetLoop() {
-    if (state.role === 'guest') { try { puppetTick(); } catch {} }
+    if (state.role === 'guest' || state.role === 'host') {
+        try { puppetTick(); } catch {}
+        try { peerScaleTick(); } catch {}
+    }
     requestAnimationFrame(puppetLoop);
 })();
 
@@ -162,6 +236,7 @@ function handleMsg(msg) {
     if (!msg || typeof msg !== 'object') return;
     switch (msg.t) {
         case 'hello':
+            state.peerName = msg.name || null;
             log('handshake con', msg.name, '(rol remoto: ' + msg.role + ')');
             if (state.role === 'host' && !state.sendTimer) startBroadcast();
             break;
@@ -184,6 +259,13 @@ function handleMsg(msg) {
             // pat compartido: reproducirlo localmente (mano + squish + agachada
             // de camara si el que lo recibio soy yo)
             try { globalThis.MiniFeatherPatPat?.remotePat?.(msg); } catch {}
+            break;
+        case 'scale':
+            // TitanTiny compartido: escalar la entidad del OTRO jugador en MI
+            // mundo. El juego puede resetear mesh.scale (respawn, anim), asi
+            // que se re-aplica por frame con la escala guardada.
+            if (msg.name) state.peerName = msg.name;
+            state.peerScale = Number(msg.scale) || 1;
             break;
     }
 }

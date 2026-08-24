@@ -736,11 +736,14 @@ function remotePat(msg) {
     if (!game?.player) return;
     const tp = msg?.target;
     if (!tp) return;
-    // 1) ¿el pat fue para MI? (la pos del objetivo ~= mi pos) → agachar camara
+    // 1) ¿el pat fue para MI? (pos del objetivo ≈ mi pos; tolerancia vertical
+    // generosa porque entity.pos va a los pies y player.pos puede ir al ojo)
     const me = getPos(game.player);
     if (me) {
-        const d = Math.hypot(tp.x - me.x, tp.y - me.y, tp.z - me.z);
-        if (d < 1.2) {
+        const dh = Math.hypot(tp.x - me.x, tp.z - me.z);
+        const dy = Math.abs(tp.y - me.y);
+        console.log('[PatPat] pat remoto: dh=' + dh.toFixed(2) + ' dy=' + dy.toFixed(2) + (dh < 1.3 && dy < 2.3 ? ' → PARA MI (agacho camara)' : ''));
+        if (dh < 1.3 && dy < 2.3) {
             duckCamera(game);
         }
     }
@@ -764,24 +767,51 @@ function remotePat(msg) {
     playSound();
 }
 
-// "agachar" la camara del que recibio el pat: bajar el rig (yawObject)
-// con un impulso suave tipo "le apretaron la cabecita"
+// "agachar" la camara del que recibio el pat. Mover el camera MISMO (hijo
+// del pitchObject). GUARD CRITICO: si llega otro pat mientras ya esta
+// agachada, NO recapturar la base (sino cada pat bajaria mas y mas y la
+// camara nunca recuperaria su altura original).
+const duck = { active: false, baseY: 0, camera: null };
+
 function duckCamera(game) {
     try {
         const camera = resolveCamera(game);
-        if (!camera?.parent?.parent) return;
-        const yawObject = camera.parent.parent;
-        const baseY = yawObject.position.y;
+        if (!camera?.position) return;
+        // pat durante una agachada activa: ignorar (ya la estan acariciando)
+        if (duck.active) return;
+        // si quedo una animacion colgada en OTRA camara (respawn), restaurarla
+        if (duck.camera && duck.camera !== camera && duck.camera.position) {
+            try { duck.camera.position.y = duck.baseY; } catch {}
+            duck.camera = null;
+        }
+        // sanity: si camera.position.y no esta en reposo (~0 local), es un
+        // leftover de una animacion perdida — resetear a 0 antes de empezar
+        if (Math.abs(camera.position.y) > 0.001) {
+            try { camera.position.y = 0; } catch {}
+        }
+        duck.active = true;
+        duck.camera = camera;
+        duck.baseY = camera.position.y;
         const start = performance.now();
-        const DURATION = 420;
-        const DROP = 0.28; // bloques que "baja" la camara
+        const DURATION = 460;
+        const DROP = 0.34; // bloques que baja la camara
         const frame = () => {
+            if (!duck.active || duck.camera !== camera) return; // otra animacion tomo el control
             const t = Math.min(1, (performance.now() - start) / DURATION);
-            // curva: baja rapido, sube suave (squish invertido)
-            const dip = Math.sin(Math.PI * t) * DROP;
-            yawObject.position.y = baseY - dip;
-            if (t < 1) requestAnimationFrame(frame);
-            else yawObject.position.y = baseY;
+            // curva: cae rapido (30%), aguanta un toque, sube suave
+            let dip;
+            if (t < 0.3) dip = (t / 0.3) * DROP;
+            else if (t < 0.45) dip = DROP;
+            else dip = DROP * (1 - (t - 0.45) / 0.55);
+            camera.position.y = duck.baseY - dip;
+            if (t < 1) {
+                requestAnimationFrame(frame);
+                return;
+            }
+            // restaurar SIEMPRE a la base original capturada al inicio
+            camera.position.y = duck.baseY;
+            duck.active = false;
+            duck.camera = null;
         };
         requestAnimationFrame(frame);
         playSound();
