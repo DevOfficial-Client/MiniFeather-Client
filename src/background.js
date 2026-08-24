@@ -647,414 +647,6 @@ async function applySpritesheet() {
   });
 }
 
-// MFGEN:LOCAL_TEXTURES:start
-const LOCAL_TEXTURES = [
-  "entity/armorstand/wood.png",
-  "entity/arrow.png",
-  "entity/bed/black.png",
-  "entity/bed/blue.png",
-  "entity/bed/brown.png",
-  "entity/bed/cyan.png",
-  "entity/bed/gray.png",
-  "entity/bed/green.png",
-  "entity/bed/light_blue.png",
-  "entity/bed/light_gray.png",
-  "entity/bed/lime.png",
-  "entity/bed/magenta.png",
-  "entity/bed/orange.png",
-  "entity/bed/pink.png",
-  "entity/bed/purple.png",
-  "entity/bed/red.png",
-  "entity/bed/white.png",
-  "entity/bed/yellow.png",
-  "entity/boat/acacia.png",
-  "entity/boat/birch.png",
-  "entity/boat/dark_oak.png",
-  "entity/boat/jungle.png",
-  "entity/boat/oak.png",
-  "entity/boat/spruce.png",
-  "entity/cat/all_black.png",
-  "entity/cat/black.png",
-  "entity/cat/british_shorthair.png",
-  "entity/cat/calico.png",
-  "entity/cat/cat_collar.png",
-  "entity/cat/jellie.png",
-  "entity/cat/ocelot.png",
-  "entity/cat/persian.png",
-  "entity/cat/ragdoll.png",
-  "entity/cat/red.png",
-  "entity/cat/siamese.png",
-  "entity/cat/tabby.png",
-  "entity/cat/white.png",
-  "entity/chicken/chicken.png",
-  "entity/cow/cow.png",
-  "entity/creeper/creeper.png",
-  "entity/enchanting_table_book.png",
-  "entity/experience_orb.png",
-  "entity/ghost/ghost.png",
-  "entity/minecart/minecart.png",
-  "entity/pig/pig.png",
-  "entity/sheep/sheep.png",
-  "entity/sheep/sheep_fur.png",
-  "entity/skeleton/sans.png",
-  "entity/skeleton/skeleton.png",
-  "entity/slime/slime.png",
-  "entity/snowman/snowman.png",
-  "entity/spider/spider.png",
-  "entity/villager/butcher.png",
-  "entity/villager/farmer.png",
-  "entity/villager/librarian.png",
-  "entity/villager/priest.png",
-  "entity/villager/smith.png",
-  "entity/wolf/wolf.png",
-  "entity/wolf/wolf_angry.png",
-  "entity/wolf/wolf_collar.png",
-  "entity/wolf/wolf_tame.png",
-  "entity/zombie/zombie.png",
-  "entity/zombie_cowman/zombie_cowman.png",
-  "mace.png",
-  "misc/enchanted_item_glint.png",
-  "models/armor/chainmail_layer_1.png",
-  "models/armor/chainmail_layer_2.png",
-  "models/armor/diamond_layer_1.png",
-  "models/armor/diamond_layer_2.png",
-  "models/armor/emerald_layer_1.png",
-  "models/armor/emerald_layer_2.png",
-  "models/armor/gold_layer_1.png",
-  "models/armor/gold_layer_2.png",
-  "models/armor/infernium_layer_1.png",
-  "models/armor/infernium_layer_2.png",
-  "models/armor/iron_layer_1.png",
-  "models/armor/iron_layer_2.png",
-  "models/armor/leather_layer_1.png",
-  "models/armor/leather_layer_1_overlay.png",
-  "models/armor/leather_layer_2.png",
-  "models/armor/leather_layer_2_overlay.png",
-  "particle/Sprite-0002.png",
-  "particle/acacia_leaf_1.png",
-  "particle/acacia_leaf_2.png",
-  "particle/angry.png",
-  "particle/azalea_leaf_1.png",
-  "particle/azalea_leaf_2.png",
-  "particle/azalea_leaf_3.png",
-  "particle/azalea_leaf_4.png",
-  "particle/azalea_leaf_5.png",
-  "particle/azalea_leaf_6.png",
-  "particle/bamboo_leaf_1.png",
-  "particle/bamboo_leaf_2.png",
-  "particle/bamboo_leaf_3.png",
-  "particle/bamboo_leaf_4.png",
-  "particle/barrier.png",
-  "particle/birch_leaf_1.png",
-  "particle/birch_leaf_2.png",
-  "particle/birch_leaf_3.png",
-  "particle/birch_leaf_4.png",
-  "particle/birch_leaf_5.png",
-  "particle/birch_leaf_6.png",
-  "particle/brimwood_leaf_1.png",
-  "particle/brimwood_leaf_2.png",
-  "particle/brimwood_leaf_3.png",
-  "particle/brimwood_leaf_4.png",
-  "particle/brimwood_leaf_5.png",
-  "particle/brimwood_leaf_6.png",
-  "particle/bubble.png",
-  "particle/cascade_0.png",
-  "particle/cascade_1.png",
-  "particle/cascade_10.png",
-  "particle/cascade_11.png",
-  "particle/cascade_2.png",
-  "particle/cascade_3.png",
-  "particle/cascade_4.png",
-  "particle/cascade_5.png",
-  "particle/cascade_6.png",
-  "particle/cascade_7.png",
-  "particle/cascade_8.png",
-  "particle/cascade_9.png",
-  "particle/critical_hit.png",
-  "particle/drip_fall.png",
-  "particle/drip_hang.png",
-  "particle/drip_land.png",
-  "particle/effect_0.png",
-  "particle/effect_1.png",
-  "particle/effect_2.png",
-  "particle/effect_3.png",
-  "particle/effect_4.png",
-  "particle/effect_5.png",
-  "particle/effect_6.png",
-  "particle/effect_7.png",
-  "particle/ender_bubble.png",
-  "particle/ender_bubble_pop_0.png",
-  "particle/ender_bubble_pop_1.png",
-  "particle/ender_bubble_pop_2.png",
-  "particle/ender_bubble_pop_3.png",
-  "particle/ender_bubble_pop_4.png",
-  "particle/eucalyptus_leaf_1.png",
-  "particle/eucalyptus_leaf_2.png",
-  "particle/eucalyptus_leaf_3.png",
-  "particle/eucalyptus_leaf_4.png",
-  "particle/eucalyptus_leaf_5.png",
-  "particle/eucalyptus_leaf_6.png",
-  "particle/explosion_0.png",
-  "particle/explosion_1.png",
-  "particle/explosion_10.png",
-  "particle/explosion_11.png",
-  "particle/explosion_12.png",
-  "particle/explosion_13.png",
-  "particle/explosion_14.png",
-  "particle/explosion_15.png",
-  "particle/explosion_2.png",
-  "particle/explosion_3.png",
-  "particle/explosion_4.png",
-  "particle/explosion_5.png",
-  "particle/explosion_6.png",
-  "particle/explosion_7.png",
-  "particle/explosion_8.png",
-  "particle/explosion_9.png",
-  "particle/firefly.png",
-  "particle/flame.png",
-  "particle/generic_0.png",
-  "particle/generic_1.png",
-  "particle/generic_2.png",
-  "particle/generic_3.png",
-  "particle/generic_4.png",
-  "particle/generic_5.png",
-  "particle/generic_6.png",
-  "particle/generic_7.png",
-  "particle/glint.png",
-  "particle/golden_larch_leaf_1.png",
-  "particle/golden_larch_leaf_2.png",
-  "particle/golden_larch_leaf_3.png",
-  "particle/heart.png",
-  "particle/jungle_leaf_1.png",
-  "particle/jungle_leaf_2.png",
-  "particle/jungle_leaf_3.png",
-  "particle/kapok_leaf_1.png",
-  "particle/kapok_leaf_2.png",
-  "particle/kapok_leaf_3.png",
-  "particle/kapok_leaf_4.png",
-  "particle/larch_leaf_1.png",
-  "particle/larch_leaf_2.png",
-  "particle/larch_leaf_3.png",
-  "particle/lava.png",
-  "particle/magnolia_leaf_1.png",
-  "particle/magnolia_leaf_2.png",
-  "particle/magnolia_leaf_3.png",
-  "particle/magnolia_leaf_4.png",
-  "particle/magnolia_leaf_5.png",
-  "particle/magnolia_leaf_6.png",
-  "particle/mangrove_leaf_1.png",
-  "particle/mangrove_leaf_2.png",
-  "particle/mangrove_leaf_3.png",
-  "particle/mangrove_leaf_4.png",
-  "particle/mangrove_leaf_5.png",
-  "particle/mangrove_leaf_6.png",
-  "particle/maple_leaf_1.png",
-  "particle/maple_leaf_2.png",
-  "particle/maple_leaf_3.png",
-  "particle/note.png",
-  "particle/oak_leaf_1.png",
-  "particle/oak_leaf_2.png",
-  "particle/oak_leaf_3.png",
-  "particle/oak_leaf_4.png",
-  "particle/oak_leaf_5.png",
-  "particle/oak_leaf_6.png",
-  "particle/redwood_leaf_1.png",
-  "particle/redwood_leaf_2.png",
-  "particle/ru_baobab_leaf_1.png",
-  "particle/ru_baobab_leaf_2.png",
-  "particle/ru_baobab_leaf_3.png",
-  "particle/ru_baobab_leaf_4.png",
-  "particle/ru_cypress_leaf_1.png",
-  "particle/ru_cypress_leaf_2.png",
-  "particle/ru_palm_leaf_1.png",
-  "particle/ru_palm_leaf_2.png",
-  "particle/sga_a.png",
-  "particle/sga_b.png",
-  "particle/sga_c.png",
-  "particle/sga_d.png",
-  "particle/sga_e.png",
-  "particle/sga_f.png",
-  "particle/sga_g.png",
-  "particle/sga_h.png",
-  "particle/sga_i.png",
-  "particle/sga_j.png",
-  "particle/sga_k.png",
-  "particle/sga_l.png",
-  "particle/sga_m.png",
-  "particle/sga_n.png",
-  "particle/sga_o.png",
-  "particle/sga_p.png",
-  "particle/sga_q.png",
-  "particle/sga_r.png",
-  "particle/sga_s.png",
-  "particle/sga_t.png",
-  "particle/sga_u.png",
-  "particle/sga_v.png",
-  "particle/sga_w.png",
-  "particle/sga_x.png",
-  "particle/sga_y.png",
-  "particle/sga_z.png",
-  "particle/socotra_leaf_1.png",
-  "particle/socotra_leaf_2.png",
-  "particle/socotra_leaf_3.png",
-  "particle/socotra_leaf_4.png",
-  "particle/socotra_leaf_5.png",
-  "particle/socotra_leaf_6.png",
-  "particle/socotra_leaf_7.png",
-  "particle/socotra_leaf_8.png",
-  "particle/soul_fire_flame.png",
-  "particle/spell_0.png",
-  "particle/spell_1.png",
-  "particle/spell_2.png",
-  "particle/spell_3.png",
-  "particle/spell_4.png",
-  "particle/spell_5.png",
-  "particle/spell_6.png",
-  "particle/spell_7.png",
-  "particle/splash_0.png",
-  "particle/splash_1.png",
-  "particle/splash_2.png",
-  "particle/splash_3.png",
-  "particle/spruce_leaf_1.png",
-  "particle/spruce_leaf_2.png",
-  "particle/water_ripple_1.png",
-  "particle/water_ripple_2.png",
-  "particle/water_ripple_3.png",
-  "particle/water_ripple_4.png",
-  "particle/water_ripple_5.png",
-  "particle/water_ripple_6.png",
-  "particle/water_ripple_7.png",
-  "particle/water_splash_1.png",
-  "particle/water_splash_2.png",
-  "particle/water_splash_3.png",
-  "particle/water_splash_4.png",
-  "particle/water_splash_5.png",
-  "particle/water_splash_6.png",
-  "particle/water_splash_7.png",
-  "particle/water_splash_8.png",
-  "particle/water_splash_9.png",
-  "particle/water_splash_foam_1.png",
-  "particle/water_splash_foam_2.png",
-  "particle/water_splash_foam_3.png",
-  "particle/water_splash_foam_4.png",
-  "particle/water_splash_foam_5.png",
-  "particle/water_splash_foam_6.png",
-  "particle/water_splash_foam_7.png",
-  "particle/water_splash_foam_8.png",
-  "particle/water_splash_foam_9.png",
-  "particle/water_splash_ring_1.png",
-  "particle/water_splash_ring_2.png",
-  "particle/water_splash_ring_3.png",
-  "particle/water_splash_ring_4.png",
-  "particle/water_splash_ring_5.png",
-  "particle/water_splash_ring_6.png",
-  "particle/water_splash_ring_7.png",
-  "particle/water_splash_ring_8.png",
-  "particle/water_splash_ring_9.png",
-  "particle/white_oak_leaf_1.png",
-  "particle/white_oak_leaf_2.png",
-  "particle/white_oak_leaf_3.png",
-  "particle/white_oak_leaf_4.png",
-  "particle/white_oak_leaf_5.png",
-  "particle/white_oak_leaf_6.png",
-  "particle/white_spruce_leaf_1.png",
-  "particle/white_spruce_leaf_2.png",
-  "particle/willow_leaf_1.png",
-  "particle/willow_leaf_2.png",
-  "particle/willow_leaf_3.png",
-  "particle/willow_leaf_4.png",
-  "particle/willow_leaf_5.png",
-  "particle/willow_leaf_6.png",
-  "particle/willow_leaf_7.png",
-  "particle/willow_leaf_8.png",
-  "particle/ww_baobab_leaf_1.png",
-  "particle/ww_baobab_leaf_10.png",
-  "particle/ww_baobab_leaf_2.png",
-  "particle/ww_baobab_leaf_3.png",
-  "particle/ww_baobab_leaf_4.png",
-  "particle/ww_baobab_leaf_5.png",
-  "particle/ww_baobab_leaf_6.png",
-  "particle/ww_baobab_leaf_7.png",
-  "particle/ww_baobab_leaf_8.png",
-  "particle/ww_baobab_leaf_9.png",
-  "particle/ww_cypress_leaf_1.png",
-  "particle/ww_cypress_leaf_2.png",
-  "particle/ww_cypress_leaf_3.png",
-  "particle/ww_cypress_leaf_4.png",
-  "particle/ww_cypress_leaf_5.png",
-  "particle/ww_cypress_leaf_6.png",
-  "particle/ww_palm_leaf_1.png",
-  "particle/ww_palm_leaf_2.png",
-  "particle/ww_palm_leaf_3.png",
-  "particle/ww_palm_leaf_4.png",
-  "spear/diamond_spear.png",
-  "spear/golden_spear.png",
-  "spear/infernium_spear.png",
-  "spear/iron_spear.png",
-  "spear/stone_spear.png",
-  "spear/wooden_spear.png"
-];
-// MFGEN:LOCAL_TEXTURES:end
-
-// MFGEN:MENU_UI_IMAGES:start
-const MENU_UI_IMAGES = [
-  
-];
-// MFGEN:MENU_UI_IMAGES:end
-
-const LOCAL_TEXTURES_BASE_ID = 20000;
-const LOCAL_TEXTURES_MAX_ID = 29999;
-const LOCAL_TEXTURES_RULE_IDS = Array.from(
-  { length: LOCAL_TEXTURES_MAX_ID - LOCAL_TEXTURES_BASE_ID + 1 },
-  (_, i) => LOCAL_TEXTURES_BASE_ID + i
-);
-const MENU_UI_RULE_ID = 30000;
-
-function buildLocalTextureRules(enabled) {
-  if (!enabled) return [];
-  return LOCAL_TEXTURES.map((rel, i) => ({
-    id: LOCAL_TEXTURES_BASE_ID + i,
-    priority: 2,
-    action: { type: "redirect", redirect: { url: chrome.runtime.getURL("textures/" + rel) } },
-    condition: {
-      requestDomains: GAME_DOMAINS,
-      urlFilter: `/textures/${rel}*`,
-      resourceTypes: ["image", "other"]
-    }
-  }));
-}
-
-async function applyLocalTextures() {
-  const { localTexturesEnabled } = await chrome.storage.local.get(["localTexturesEnabled"]);
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: LOCAL_TEXTURES_RULE_IDS,
-    addRules: buildLocalTextureRules(localTexturesEnabled !== false)
-  });
-}
-
-async function applyMenuUi() {
-  const { menuUiOverrideEnabled } = await chrome.storage.local.get(["menuUiOverrideEnabled"]);
-  const rules = (menuUiOverrideEnabled !== false && MENU_UI_IMAGES.length)
-    ? MENU_UI_IMAGES.map((name, i) => {
-        const stem = name.replace(/\.(webp|png|jpg)$/i, "");
-        return {
-          id: MENU_UI_RULE_ID + i,
-          priority: 1,
-          action: { type: "redirect", redirect: { url: chrome.runtime.getURL("assets/menu/" + name) } },
-          condition: {
-            requestDomains: GAME_DOMAINS,
-            urlFilter: `/assets/${stem}-*`,
-            resourceTypes: ["image", "other"]
-          }
-        };
-      })
-    : [];
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: MENU_UI_IMAGES.map((_, i) => MENU_UI_RULE_ID + i),
-    addRules: rules
-  });
-}
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "setSpritesheet") {
     chrome.storage.local.set({ spritesheetEnabled: message.enabled })
@@ -1138,3 +730,308 @@ chrome.runtime.onInstalled.addListener(async () => {
 applySpritesheet();
 applyLocalTextures();
 applyMenuUi();
+
+
+// MF_AUTO_UPDATER_V2
+(function () {
+  'use strict';
+
+  const OWNER = 'DevOfficial-Client';
+  const REPO = 'MiniFeather-Client';
+  const BRANCH = 'main';
+  const REPOSITORY_URL = `https://github.com/${OWNER}/${REPO}`;
+  const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
+  const RAW_MANIFEST = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/manifest.json`;
+  const DOWNLOAD_URL = `${REPOSITORY_URL}/archive/refs/heads/${BRANCH}.zip`;
+  const ALARM_NAME = 'mfUpdaterCheck';
+  const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+  const DEFAULT_SETTINGS = Object.freeze({ autoCheck: true, autoDownload: false });
+
+  function versionParts(value) {
+    return String(value || '0').split('.').map(part => Number.parseInt(part, 10) || 0);
+  }
+
+  function compareVersions(a, b) {
+    const av = versionParts(a);
+    const bv = versionParts(b);
+    const length = Math.max(av.length, bv.length);
+    for (let i = 0; i < length; i++) {
+      const diff = (av[i] || 0) - (bv[i] || 0);
+      if (diff) return diff > 0 ? 1 : -1;
+    }
+    return 0;
+  }
+
+  function toHex(buffer) {
+    return Array.from(new Uint8Array(buffer), value => value.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function gitBlobSha(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const header = new TextEncoder().encode(`blob ${bytes.byteLength}\0`);
+    const joined = new Uint8Array(header.byteLength + bytes.byteLength);
+    joined.set(header, 0);
+    joined.set(bytes, header.byteLength);
+    return toHex(await crypto.subtle.digest('SHA-1', joined));
+  }
+
+  async function fetchJson(url) {
+    const response = await fetch(url, {
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      }
+    });
+    if (!response.ok) throw new Error(`GitHub ${response.status}`);
+    return response.json();
+  }
+
+  async function getSettings() {
+    const stored = await chrome.storage.local.get(['mfUpdaterSettings']);
+    return { ...DEFAULT_SETTINGS, ...(stored.mfUpdaterSettings || {}) };
+  }
+
+  async function readBuildInfo() {
+    try {
+      const response = await fetch(chrome.runtime.getURL('build.json'), { cache: 'no-store' });
+      if (response.ok) return response.json();
+    } catch (_) {}
+    return { builtAt: null };
+  }
+
+  function trackedFilesFromManifest(manifest) {
+    const files = new Set(['manifest.json']);
+    if (manifest?.background?.service_worker) files.add(manifest.background.service_worker);
+    for (const script of manifest?.content_scripts || []) {
+      for (const file of script?.js || []) files.add(file);
+    }
+    return [...files].sort();
+  }
+
+  async function compareLocalWithTree(localManifest, remoteManifest, remoteTree) {
+    const treeMap = new Map(
+      (remoteTree?.tree || [])
+        .filter(item => item?.type === 'blob' && item?.path)
+        .map(item => [item.path, item.sha])
+    );
+
+    const localFiles = trackedFilesFromManifest(localManifest);
+    const remoteFiles = trackedFilesFromManifest(remoteManifest);
+    const allPaths = [...new Set([...localFiles, ...remoteFiles])].sort();
+    const changed = [];
+
+    for (const path of allPaths) {
+      if (!localFiles.includes(path) || !remoteFiles.includes(path)) {
+        changed.push(path);
+        continue;
+      }
+
+      const remoteSha = treeMap.get(path);
+      if (!remoteSha) {
+        changed.push(path);
+        continue;
+      }
+
+      try {
+        const response = await fetch(chrome.runtime.getURL(path), { cache: 'no-store' });
+        if (!response.ok) {
+          changed.push(path);
+          continue;
+        }
+        const localSha = await gitBlobSha(await response.arrayBuffer());
+        if (localSha !== remoteSha) changed.push(path);
+      } catch (_) {
+        changed.push(path);
+      }
+    }
+
+    return { matches: changed.length === 0, changedFiles: changed };
+  }
+
+  async function updateBadge(state) {
+    try {
+      await chrome.action.setBadgeText({ text: state?.updateAvailable ? 'UP' : '' });
+      if (state?.updateAvailable) {
+        await chrome.action.setBadgeBackgroundColor({ color: '#7c3aed' });
+      }
+    } catch (_) {}
+  }
+
+  async function saveState(state) {
+    await chrome.storage.local.set({ mfUpdaterState: state });
+    await updateBadge(state);
+    return state;
+  }
+
+  async function downloadLatest(state) {
+    const current = state || (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
+    const short = String(current.remoteCommit || 'main').slice(0, 7);
+    const filename = `MiniFeather-Client-${current.remoteVersion || chrome.runtime.getManifest().version}-${short}.zip`;
+    const id = await chrome.downloads.download({
+      url: DOWNLOAD_URL,
+      filename,
+      saveAs: false,
+      conflictAction: 'uniquify'
+    });
+    await chrome.storage.local.set({ mfUpdaterLastDownloadedCommit: current.remoteCommit || '' });
+    return id;
+  }
+
+  async function checkForUpdate(force) {
+    const previous = (await chrome.storage.local.get(['mfUpdaterState', 'mfUpdaterLastMatchedCommit']));
+    const previousState = previous.mfUpdaterState || null;
+    const now = Date.now();
+
+    if (!force && previousState?.checkedAt && now - previousState.checkedAt < CHECK_INTERVAL_MS) {
+      return previousState;
+    }
+
+    const localManifest = chrome.runtime.getManifest();
+    const localVersion = localManifest.version || '0.0.0';
+    const buildInfo = await readBuildInfo();
+
+    try {
+      const commit = await fetchJson(`${API_BASE}/commits/${encodeURIComponent(BRANCH)}?t=${now}`);
+      const remoteCommit = commit.sha || '';
+      const remoteCommitDate = commit?.commit?.committer?.date || commit?.commit?.author?.date || null;
+      const remoteMessage = String(commit?.commit?.message || '').split('\n')[0].slice(0, 160);
+      const remoteTree = await fetchJson(`${API_BASE}/git/trees/${encodeURIComponent(remoteCommit)}?recursive=1&t=${now}`);
+
+      const manifestResponse = await fetch(`${RAW_MANIFEST}?t=${now}`, { cache: 'no-store' });
+      if (!manifestResponse.ok) throw new Error(`Manifest ${manifestResponse.status}`);
+      const remoteManifest = await manifestResponse.json();
+      const remoteVersion = remoteManifest.version || '0.0.0';
+
+      const comparison = await compareLocalWithTree(localManifest, remoteManifest, remoteTree);
+      const versionNewer = compareVersions(remoteVersion, localVersion) > 0;
+      const builtAtMs = buildInfo?.builtAt ? Date.parse(buildInfo.builtAt) : NaN;
+      const remoteDateMs = remoteCommitDate ? Date.parse(remoteCommitDate) : NaN;
+      const lastMatchedCommit = previous.mfUpdaterLastMatchedCommit || '';
+
+      let updateAvailable = false;
+      let reason = 'current';
+
+      if (comparison.matches) {
+        reason = 'current';
+        await chrome.storage.local.set({ mfUpdaterLastMatchedCommit: remoteCommit });
+      } else if (versionNewer) {
+        updateAvailable = true;
+        reason = 'version';
+      } else if (lastMatchedCommit && remoteCommit && remoteCommit !== lastMatchedCommit) {
+        updateAvailable = true;
+        reason = 'build';
+      } else if (Number.isFinite(builtAtMs) && Number.isFinite(remoteDateMs) && remoteDateMs > builtAtMs + 60000) {
+        updateAvailable = true;
+        reason = 'build';
+      } else {
+        reason = 'local_modified';
+      }
+
+      const state = {
+        success: true,
+        checkedAt: now,
+        installedVersion: localVersion,
+        remoteVersion,
+        remoteCommit,
+        remoteShortCommit: remoteCommit.slice(0, 7),
+        remoteCommitDate,
+        remoteMessage,
+        updateAvailable,
+        reason,
+        filesMatch: comparison.matches,
+        changedFiles: comparison.changedFiles.slice(0, 12),
+        repositoryUrl: REPOSITORY_URL,
+        downloadUrl: DOWNLOAD_URL
+      };
+
+      await saveState(state);
+
+      const settings = await getSettings();
+      if (updateAvailable && settings.autoDownload) {
+        const lastDownload = (await chrome.storage.local.get(['mfUpdaterLastDownloadedCommit'])).mfUpdaterLastDownloadedCommit || '';
+        if (!remoteCommit || lastDownload !== remoteCommit) {
+          try { await downloadLatest(state); } catch (_) {}
+        }
+      }
+
+      return state;
+    } catch (error) {
+      return saveState({
+        ...(previousState || {}),
+        success: false,
+        checkedAt: now,
+        installedVersion: localVersion,
+        updateAvailable: false,
+        reason: 'error',
+        error: String(error?.message || error),
+        repositoryUrl: REPOSITORY_URL,
+        downloadUrl: DOWNLOAD_URL
+      });
+    }
+  }
+
+  async function ensureAlarm() {
+    try {
+      const existing = await chrome.alarms.get(ALARM_NAME);
+      if (!existing) chrome.alarms.create(ALARM_NAME, { periodInMinutes: 360 });
+    } catch (_) {}
+  }
+
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!message?.type?.startsWith?.('mfUpdater:')) return;
+
+    (async () => {
+      if (message.type === 'mfUpdater:getState') {
+        const data = await chrome.storage.local.get(['mfUpdaterState', 'mfUpdaterSettings']);
+        sendResponse({ success: true, state: data.mfUpdaterState || null, settings: { ...DEFAULT_SETTINGS, ...(data.mfUpdaterSettings || {}) } });
+        return;
+      }
+
+      if (message.type === 'mfUpdater:check') {
+        const state = await checkForUpdate(message.force !== false);
+        sendResponse({ success: true, state, settings: await getSettings() });
+        return;
+      }
+
+      if (message.type === 'mfUpdater:setSettings') {
+        const current = await getSettings();
+        const next = { ...current, ...(message.settings || {}) };
+        await chrome.storage.local.set({ mfUpdaterSettings: next });
+        await ensureAlarm();
+        sendResponse({ success: true, settings: next });
+        return;
+      }
+
+      if (message.type === 'mfUpdater:download') {
+        const id = await downloadLatest();
+        sendResponse({ success: true, downloadId: id });
+        return;
+      }
+
+      sendResponse({ success: false, error: 'Unknown updater request' });
+    })().catch(error => sendResponse({ success: false, error: String(error?.message || error) }));
+
+    return true;
+  });
+
+  chrome.alarms.onAlarm.addListener(async alarm => {
+    if (alarm?.name !== ALARM_NAME) return;
+    const settings = await getSettings();
+    if (settings.autoCheck) await checkForUpdate(false);
+  });
+
+  chrome.runtime.onInstalled.addListener(async () => {
+    await ensureAlarm();
+    const settings = await getSettings();
+    if (settings.autoCheck) await checkForUpdate(true);
+  });
+
+  chrome.runtime.onStartup.addListener(async () => {
+    await ensureAlarm();
+    const settings = await getSettings();
+    if (settings.autoCheck) await checkForUpdate(false);
+  });
+
+  ensureAlarm();
+})();
