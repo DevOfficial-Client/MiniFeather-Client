@@ -371,6 +371,7 @@
     leafWind: false,
     antiAfk: false,
     antiAfkDelay: 120,
+    autoRespawn: false,
     patPatPreset: 'normal',
     patPatValues: clonePatPatValues(),
     zoom: false,
@@ -2429,6 +2430,7 @@
       { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc') },
       { page: 'render', key: 'freecam', title: t('freecam'), desc: t('freecamDesc') },
       { page: 'shaders', key: 'customShader', title: t('navShaders'), desc: t('shadersDesc') },
+      { page: 'world', key: 'autoRespawn', title: t('autoRespawn'), desc: t('autoRespawnDesc') },
       { page: 'world', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc') },
       { page: 'world', key: 'rhythmParkour', title: 'Rhythm Parkour', desc: 'Transforms Miniblox into a rhythm parkour game' },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
@@ -3109,6 +3111,29 @@
       disable() { sendCustomShaderConfig(false); },
       refresh() { sendCustomShaderConfig(MODULES.get('customShader')?.enabled === true); },
       destroy() { sendCustomShaderConfig(false); }
+    }));
+  }
+
+  function sendAutoRespawnConfig(enabled = settings.autoRespawn) {
+    document.dispatchEvent(new CustomEvent('minifeather:auto-respawn-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initAutoRespawnModule() {
+    registerModule('autoRespawn', () => createLifecycle({
+      enable() {
+        sendAutoRespawnConfig(true);
+      },
+      disable() {
+        sendAutoRespawnConfig(false);
+      },
+      refresh() {
+        sendAutoRespawnConfig(MODULES.get('autoRespawn')?.enabled === true);
+      },
+      destroy() {
+        sendAutoRespawnConfig(false);
+      }
     }));
   }
 
@@ -5509,6 +5534,7 @@
         <div class="mf-card">
           <div class="mf-card-title">${t('sectionWorldUtilities')}</div>
           <div class="mf-toggle-grid">
+            ${renderToggle('autoRespawn', t('autoRespawn'), t('autoRespawnDesc'))}
             ${renderToggle('antiAfk', t('antiAfk'), t('antiAfkDesc'))}
             ${renderToggle('rhythmParkour', 'Rhythm Parkour', 'Transforms Miniblox into a rhythm parkour game. Load a song and dodge obstacles to the beat.')}
           </div>
@@ -8019,6 +8045,7 @@ function renderCreditsPage() {
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
     setModuleEnabled('leafWind', settings.leafWind);
+    setModuleEnabled('autoRespawn', settings.autoRespawn);
     setModuleEnabled('antiAfk', settings.antiAfk);
     setModuleEnabled('rhythmParkour', settings.rhythmParkour);
     setModuleEnabled('zoom', settings.zoom);
@@ -8513,6 +8540,7 @@ function renderCreditsPage() {
     initVanillaAnimationsModule();
     initLeafWindModule();
     initHandSwayModule();
+    initAutoRespawnModule();
     initAntiAfkModule();
     initRhythmParkourModule();
     initLocalGamesModule();
