@@ -1,6 +1,6 @@
 {
-  "builtAt": "2026-08-24T18:19:28.395585Z",
+  "builtAt": "2026-08-25T00:58:00Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Used by MiniFeather AutoUpdater to distinguish local/unpublished builds from newer GitHub commits."
+  "note": "Local build with AutoRespawn, Damage Particles and complete panel localization cleanup."
 }
