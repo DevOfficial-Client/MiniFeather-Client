@@ -9,6 +9,18 @@
 const EVENT_CONFIG = 'minifeather:rhythmparkour-config';
 const EVENT_COMMAND = 'minifeather:rhythmparkour-command';
 const EVENT_STATE = 'minifeather:rhythmparkour-state';
+const EVENT_LANGUAGE = 'minifeather:language-config';
+let mfStrings = {};
+function tr(key, fallback = key) { return mfStrings[key] || fallback; }
+function onLanguageConfig(event) {
+  try {
+    const data = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+    if (data?.strings && typeof data.strings === 'object') mfStrings = data.strings;
+    if (state?.enabled && state.ui) createUI();
+  } catch (_) {}
+}
+document.addEventListener(EVENT_LANGUAGE, onLanguageConfig);
+
 
 const state = {
   enabled: false,
@@ -620,7 +632,7 @@ function triggerSongPicker() {
 function executeCommand(raw) {
   const cmd = String(raw || '').trim();
   if (cmd === '/rp start' || cmd === '/rp play') { startGame(); return true; }
-  if (cmd === '/rp stop') { stopGame(); showNotification('⏹ Juego detenido', 'info'); return true; }
+  if (cmd === '/rp stop') { stopGame(); showNotification(tr('rhythmGameStopped', '⏹ Game stopped'), 'info'); return true; }
   if (cmd === '/rp load' || cmd.startsWith('/pr load')) { triggerSongPicker(); return true; }
   if (cmd === '/rp status') { showNotification(statusText(), 'info'); return true; }
   if (cmd === '/rp debug') { debugInfo(); return true; }
@@ -1045,7 +1057,7 @@ class P2PManager {
     this.discoveryChannel?.close();
     this.discoveryChannel = null;
 
-    showNotification('👋 Desconectado', 'info');
+    showNotification(tr('rhythmDisconnectedNotice', '👋 Disconnected'), 'info');
     updateP2PRoomUI();
   }
 }
@@ -1061,30 +1073,30 @@ function getP2PPanelHtml() {
   const m = p2pManager;
   return `
     <div id="mf-rhythm-p2p" style="display:none;margin-top:10px;border-top:1px solid #7c5cff;padding-top:8px;">
-      <div style="font-weight:bold;margin-bottom:6px;color:#7c5cff;font-size:12px;">🌐 Multijugador P2P</div>
-      <div id="mf-rhythm-p2p-status" style="margin-bottom:6px;font-size:10px;color:#9ca3af;">No conectado</div>
+      <div style="font-weight:bold;margin-bottom:6px;color:#7c5cff;font-size:12px;">🌐 ${tr('rhythmMultiplayer', 'Multiplayer P2P')}</div>
+      <div id="mf-rhythm-p2p-status" style="margin-bottom:6px;font-size:10px;color:#9ca3af;">${tr('rhythmDisconnected', 'Not connected')}</div>
       <div id="mf-rhythm-p2p-current" style="display:none;margin-bottom:6px;padding:6px;background:rgba(124,92,255,0.15);border-radius:4px;font-size:11px;">
-        <div>Sala: <span id="mf-rhythm-room-id" style="cursor:pointer;background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px;user-select:all;" title="Clic para copiar">-</span> 📋</div>
-        <div id="mf-rhythm-room-count" style="color:#9ca3af;font-size:10px;">1/4 jugadores</div>
+        <div>${tr('rhythmRoom', 'Room')}: <span id="mf-rhythm-room-id" style="cursor:pointer;background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px;user-select:all;" title="${tr('waypointCopy', 'Copy')}">-</span> 📋</div>
+        <div id="mf-rhythm-room-count" style="color:#9ca3af;font-size:10px;">1/4 ${tr('rhythmPlayers', 'players')}</div>
         <div id="mf-rhythm-player-list" style="margin-top:4px;font-size:10px;"></div>
       </div>
-      <input type="text" id="mf-rhythm-p2p-name" placeholder="Tu nombre" value="${m ? m.playerName : ''}"
+      <input type="text" id="mf-rhythm-p2p-name" placeholder="${tr('rhythmYourName', 'Your name')}" value="${m ? m.playerName : ''}"
         style="width:100%;box-sizing:border-box;padding:4px;border-radius:3px;border:none;font-size:11px;margin-bottom:4px;">
       <select id="mf-rhythm-p2p-mode" style="width:100%;padding:4px;border-radius:3px;border:none;font-size:11px;margin-bottom:4px;">
-        <option value="competitive">🏆 Competitivo</option>
-        <option value="cooperative">🤝 Cooperativo</option>
+        <option value="competitive">🏆 ${tr('rhythmCompetitive', 'Competitive')}</option>
+        <option value="cooperative">🤝 ${tr('rhythmCooperative', 'Cooperative')}</option>
       </select>
       <div style="display:flex;gap:4px;margin-bottom:4px;">
-        <input type="text" id="mf-rhythm-p2p-join-id" placeholder="ID del Host"
+        <input type="text" id="mf-rhythm-p2p-join-id" placeholder="${tr('rhythmHostId', 'Host ID')}"
           style="flex:1;padding:4px;border-radius:3px;border:none;font-size:11px;">
         <button id="mf-rhythm-p2p-join" class="mf-rhythm-btn" style="background:#f59e0b;padding:4px 8px;">🔗</button>
       </div>
       <div style="display:flex;gap:4px;">
-        <button id="mf-rhythm-p2p-create" class="mf-rhythm-btn" style="flex:1;background:#4ade80;color:#000;font-size:11px;">🏠 Crear Sala</button>
-        <button id="mf-rhythm-p2p-disconnect" class="mf-rhythm-btn" style="flex:1;background:#ef4444;font-size:11px;display:none;">❌ Salir</button>
+        <button id="mf-rhythm-p2p-create" class="mf-rhythm-btn" style="flex:1;background:#4ade80;color:#000;font-size:11px;">🏠 ${tr('rhythmCreateRoom', 'Create Room')}</button>
+        <button id="mf-rhythm-p2p-disconnect" class="mf-rhythm-btn" style="flex:1;background:#ef4444;font-size:11px;display:none;">❌ ${tr('rhythmLeave', 'Leave')}</button>
       </div>
       <div style="margin-top:6px;font-size:9px;color:#6b7280;font-style:italic;">
-        /rp start también inicia la partida para los peers conectados
+        ${tr('rhythmStartPeersHint', '/rp start also starts the game for connected peers')}
       </div>
     </div>
   `;
@@ -1114,17 +1126,17 @@ function updateP2PRoomUI() {
     discBtn.style.display = 'block';
     if (roomIdEl && roomIdEl.textContent === '-') roomIdEl.textContent = m.roomId;
     statusEl.innerHTML = m.isHost
-      ? '🏠 <span style="color:#4ade80;">Eres el host</span>'
-      : '🔌 <span style="color:#60a5fa;">Conectado</span>';
+      ? `🏠 <span style="color:#4ade80;">${tr('rhythmYouAreHost', 'You are the host')}</span>`
+      : `🔌 <span style="color:#60a5fa;">${tr('rhythmConnected', 'Connected')}</span>`;
 
-    let html = `<div style="color:#4ade80;">🟢 Tú: ${m.playerName} (${state.score} pts)</div>`;
+    let html = `<div style="color:#4ade80;">🟢 ${tr('rhythmYou', 'You')}: ${m.playerName} (${state.score} ${tr('rhythmPoints', 'pts')})</div>`;
     m.remotePlayers.forEach((pl) => {
-      html += `<div style="color:#60a5fa;">🔵 ${pl.name || 'Jugador'}: ${pl.score || 0} pts`;
-      if (m.gameMode === 'competitive') html += ` (Combo: ${pl.combo || 0})`;
+      html += `<div style="color:#60a5fa;">🔵 ${pl.name || tr('rhythmPlayer', 'Player')}: ${pl.score || 0} ${tr('rhythmPoints', 'pts')}`;
+      if (m.gameMode === 'competitive') html += ` (${tr('rhythmCombo', 'Combo')}: ${pl.combo || 0})`;
       html += `</div>`;
     });
     if (listEl) listEl.innerHTML = html;
-    if (countEl) countEl.textContent = `${m.connections.length + 1}/${m.maxPlayers} jugadores`;
+    if (countEl) countEl.textContent = `${m.connections.length + 1}/${m.maxPlayers} ${tr('rhythmPlayers', 'players')}`;
   } else {
     currentEl.style.display = 'none';
     createBtn.style.display = 'block';
@@ -1132,7 +1144,7 @@ function updateP2PRoomUI() {
     joinInput.style.display = 'block';
     discBtn.style.display = 'none';
     if (roomIdEl) roomIdEl.textContent = '-';
-    statusEl.innerHTML = '<span style="color:#9ca3af;">No conectado</span>';
+    statusEl.innerHTML = `<span style="color:#9ca3af;">${tr('rhythmDisconnected', 'Not connected')}</span>`;
     if (listEl) listEl.innerHTML = '';
     if (countEl) countEl.textContent = '';
   }
@@ -1202,11 +1214,11 @@ function createUI() {
     <div id="mf-rhythm-hud" style="font-size:11px;line-height:1.6;color:#d1d5db;"></div>
     <input type="file" id="mf-rhythm-file" accept="audio/*" style="display:none;">
     <div style="display:flex;gap:4px;margin-top:8px;">
-      <button id="mf-rhythm-load" class="mf-rhythm-btn" style="flex:1;background:#4ade80;color:#000;font-size:11px;">🎵 Canción</button>
+      <button id="mf-rhythm-load" class="mf-rhythm-btn" style="flex:1;background:#4ade80;color:#000;font-size:11px;">🎵 ${tr('rhythmSong', 'Song')}</button>
       <button id="mf-rhythm-start" class="mf-rhythm-btn" style="flex:1;background:#7c5cff;font-size:11px;">▶</button>
       <button id="mf-rhythm-stop" class="mf-rhythm-btn" style="flex:1;background:#ef4444;font-size:11px;">⏹</button>
     </div>
-    <div id="mf-rhythm-p2p-toggle" style="margin-top:8px;font-size:11px;color:#7c5cff;cursor:pointer;user-select:none;">🌐 Multijugador ▸</div>
+    <div id="mf-rhythm-p2p-toggle" style="margin-top:8px;font-size:11px;color:#7c5cff;cursor:pointer;user-select:none;">🌐 ${tr('rhythmMultiplayerShort', 'Multiplayer')} ▸</div>
     ${getP2PPanelHtml()}
   `;
   container.style.cssText = 'position:fixed;top:60px;right:10px;z-index:99998;background:rgba(15,15,20,0.92);border:1px solid #7c5cff;border-radius:8px;padding:10px;width:190px;font-family:monospace;color:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.5);';
@@ -1221,7 +1233,7 @@ function createUI() {
   });
   container.querySelector('#mf-rhythm-load')?.addEventListener('click', () => fileInput?.click());
   container.querySelector('#mf-rhythm-start')?.addEventListener('click', () => startGame());
-  container.querySelector('#mf-rhythm-stop')?.addEventListener('click', () => { stopGame(); showNotification('⏹ Juego detenido', 'info'); });
+  container.querySelector('#mf-rhythm-stop')?.addEventListener('click', () => { stopGame(); showNotification(tr('rhythmGameStopped', '⏹ Game stopped'), 'info'); });
 
   // Toggle del panel P2P
   const p2pToggle = container.querySelector('#mf-rhythm-p2p-toggle');
@@ -1230,7 +1242,7 @@ function createUI() {
     if (!p2pPanel) return;
     const visible = p2pPanel.style.display !== 'none';
     p2pPanel.style.display = visible ? 'none' : 'block';
-    p2pToggle.textContent = visible ? '🌐 Multijugador ▸' : '🌐 Multijugador ▾';
+    p2pToggle.textContent = `🌐 ${tr('rhythmMultiplayerShort', 'Multiplayer')} ${visible ? '▸' : '▾'}`;
   });
 
   bindP2PControls(container);
@@ -1243,14 +1255,14 @@ function updateHud() {
   const hud = state.ui.querySelector('#mf-rhythm-hud');
   if (!hud) return;
   if (!state.currentSong) {
-    hud.innerHTML = '<span style="color:#9ca3af;">Sin canción. Usa 🎵 Canción o /rp load</span>';
+    hud.innerHTML = `<span style="color:#9ca3af;">${tr('rhythmNoSong', 'No song. Use 🎵 Song or /rp load')}</span>`;
     return;
   }
   hud.innerHTML = `
-    <div>Estado: ${state.isPlaying ? '▶ <span style="color:#4ade80;">Jugando</span>' : '⏸ Detenido'}</div>
-    <div>Score: <span style="color:#fbbf24;">${state.score}</span> | Combo: ${state.combo}</div>
-    <div>Vidas: ${'❤️'.repeat(state.health)}${'🖤'.repeat(Math.max(0, 5 - state.health))}</div>
-    <div>Beat: ${state.currentBeat}/${state.beatCount} | BPM: ${state.detectedBPM}</div>
+    <div>${tr('rhythmStatus', 'Status')}: ${state.isPlaying ? `▶ <span style="color:#4ade80;">${tr('rhythmPlaying', 'Playing')}</span>` : `⏸ ${tr('rhythmStopped', 'Stopped')}`}</div>
+    <div>${tr('rhythmScore', 'Score')}: <span style="color:#fbbf24;">${state.score}</span> | ${tr('rhythmCombo', 'Combo')}: ${state.combo}</div>
+    <div>${tr('rhythmLives', 'Lives')}: ${'❤️'.repeat(state.health)}${'🖤'.repeat(Math.max(0, 5 - state.health))}</div>
+    <div>${tr('rhythmBeat', 'Beat')}: ${state.currentBeat}/${state.beatCount} | BPM: ${state.detectedBPM}</div>
   `;
 }
 
@@ -1273,7 +1285,7 @@ function showNotification(msg, type = 'info') {
 function showHitMessage(kind) {
   const isGood = kind === 'good';
   const msg = document.createElement('div');
-  msg.textContent = isGood ? '✔ ¡Bien!' : '✘ ¡Fallo!';
+  msg.textContent = isGood ? tr('rhythmGood', '✔ Good!') : tr('rhythmMiss', '✘ Miss!');
   msg.style.cssText = `position:fixed;bottom:120px;left:50%;transform:translateX(-50%);z-index:99999;font-family:'Faithful',monospace;font-size:24px;font-weight:bold;color:${isGood ? '#4ade80' : '#ef4444'};text-shadow:2px 2px 0 #000;pointer-events:none;transition:opacity 0.6s ease-out, transform 0.6s ease-out;`;
   document.body.appendChild(msg);
   requestAnimationFrame(() => {
