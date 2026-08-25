@@ -1,6 +1,23 @@
 (function () {
   'use strict';
 
+  let mfStrings = {};
+  function tr(key, fallback = key) { return mfStrings[key] || fallback; }
+  function onLanguageConfig(event) {
+    try {
+      const data = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+      if (data?.strings && typeof data.strings === 'object') mfStrings = data.strings;
+      const overlay = document.getElementById('mf-localgames-connection-lost');
+      if (overlay) {
+        const title = overlay.querySelector('[data-mf-local-title]');
+        const button = overlay.querySelector('[data-mf-local-back]');
+        if (title) title.textContent = tr('localConnectionLost', 'Connection Lost');
+        if (button) button.textContent = tr('localBackToMiniblox', 'Back to MiniBlox');
+      }
+    } catch (_) {}
+  }
+  document.addEventListener('minifeather:language-config', onLanguageConfig);
+
   const COMMAND_EVENT = 'minifeather:localgames-command';
   const STATE_EVENT = 'minifeather:localgames-state';
   const PROTOCOL = 3;
@@ -6503,7 +6520,7 @@
     return false;
   }
 
-  function showConnectionLost(reason = 'The host left the world.') {
+  function showConnectionLost(reason = '') {
     if (state.connectionLost) return;
     state.connectionLost = true;
 
@@ -6540,7 +6557,8 @@
       ].join(';');
 
       const title = document.createElement('div');
-      title.textContent = 'Connection Lost';
+      title.dataset.mfLocalTitle = '1';
+      title.textContent = tr('localConnectionLost', 'Connection Lost');
       title.style.cssText = 'font-size:24px;font-weight:900;margin-bottom:12px;color:#f87171';
 
       const message = document.createElement('div');
@@ -6548,7 +6566,8 @@
       message.style.cssText = 'font-size:14px;line-height:1.6;color:#d7dbe7;margin-bottom:20px';
 
       const button = document.createElement('button');
-      button.textContent = 'Back to Miniblox';
+      button.dataset.mfLocalBack = '1';
+      button.textContent = tr('localBackToMiniblox', 'Back to MiniBlox');
       button.style.cssText = 'border:0;border-radius:9px;padding:11px 18px;background:#7c3aed;color:#fff;font:inherit;font-weight:800;cursor:pointer';
       button.addEventListener('click', () => location.reload());
 
@@ -6560,7 +6579,7 @@
     }
 
     const message = overlay.querySelector('#mf-localgames-connection-lost-message');
-    if (message) message.textContent = cleanText(reason, 240) || 'The connection to the host was lost.';
+    if (message) message.textContent = cleanText(reason, 240) || tr('localConnectionLostFallback', 'The connection to the host was lost.');
 
     stopLoops();
     setStatus('Connection lost.', 'HOST_CONNECTION_LOST');
@@ -6590,7 +6609,7 @@
         if (notifyGuests) {
           sendJSON(peer.stateChannel, {
             t: 'server-close',
-            reason: 'The host left the world.'
+            reason: tr('localHostLeft', 'The host left the world.')
           });
           setTimeout(() => closePeerConnection(peer), 180);
         } else {
