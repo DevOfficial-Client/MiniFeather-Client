@@ -1,6 +1,21 @@
 (function () {
     'use strict';
 
+    let mfStrings = {};
+    function tr(key, fallback = key) { return mfStrings[key] || fallback; }
+    function onLanguageConfig(event) {
+        try {
+            const data = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+            if (data?.strings && typeof data.strings === 'object') mfStrings = data.strings;
+            if (state?.overlay) {
+                state.overlay.querySelector('[data-mf-worldmap-title]')?.replaceChildren(document.createTextNode(tr('worldMap', 'World Map')));
+                state.overlay.querySelector('[data-mf-worldmap-close]')?.replaceChildren(document.createTextNode(tr('worldMapClose', 'Close (U)')));
+                state.overlay.querySelector('[data-mf-worldmap-hint]')?.replaceChildren(document.createTextNode(tr('worldMapHint', 'Drag to pan | Scroll to zoom | U to close')));
+            }
+        } catch (_) {}
+    }
+    document.addEventListener('minifeather:language-config', onLanguageConfig);
+
     const TAG = '[MiniFeather WorldMap]';
 
     if (window.__MF_WORLD_MAP__) return;
@@ -846,11 +861,13 @@
         });
 
         const title = document.createElement('span');
-        title.textContent = 'World Map';
+        title.dataset.mfWorldmapTitle = '1';
+        title.textContent = tr('worldMap', 'World Map');
         Object.assign(title.style, { fontSize: '20px', fontWeight: 'bold' });
 
         const closeBtn = document.createElement('button');
-        closeBtn.textContent = 'Close (U)';
+        closeBtn.dataset.mfWorldmapClose = '1';
+        closeBtn.textContent = tr('worldMapClose', 'Close (U)');
         Object.assign(closeBtn.style, {
             background: '#333', color: '#fff',
             border: '1px solid #555', borderRadius: '6px',
@@ -882,12 +899,13 @@
         Object.assign(coordsLabel.style, {
             marginTop: '8px', fontSize: '13px', opacity: '0.8', fontFamily: 'monospace'
         });
-        coordsLabel.textContent = 'Loading...';
+        coordsLabel.textContent = tr('worldMapLoading', 'Loading...');
         overlay.appendChild(coordsLabel);
 
         const hint = document.createElement('div');
         Object.assign(hint.style, { marginTop: '4px', fontSize: '11px', opacity: '0.5' });
-        hint.innerHTML = 'Drag to pan | Scroll to zoom | U to close';
+        hint.dataset.mfWorldmapHint = '1';
+        hint.textContent = tr('worldMapHint', 'Drag to pan | Scroll to zoom | U to close');
         overlay.appendChild(hint);
 
         document.body.appendChild(overlay);
