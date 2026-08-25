@@ -50,6 +50,7 @@
         "src/ItemPhysics.js",
         "src/NoWeather.js",
         "src/LeafWind.js",
+        "src/AutoRespawn.js",
         "src/AntiAFK.js",
         "src/Waypoints.js",
         "src/ClientCommands.js",
