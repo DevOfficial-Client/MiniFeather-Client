@@ -84,7 +84,7 @@
     { id: 'world', icon: '🌍', labelKey: 'navWorld' },
     { id: 'settings', icon: '⚙', labelKey: 'navSettings' },
     { id: 'about', icon: '🪶', labelKey: 'tabAbout' },
-    { id: 'credits', icon: '🏆', labelKey: 'Credits' }
+    { id: 'credits', icon: '🏆', labelKey: 'credits' }
   ];
 
   const MODULE_VERSION = chrome.runtime?.getManifest?.().version || '4.7.0';
@@ -365,6 +365,7 @@
     titanTinyBind: '',
     healthNameTags: false,
     distanceNameTags: false,
+    damageParticles: false,
     patPat: false,
     itemPhysics: false,
     noWeather: false,
@@ -531,7 +532,7 @@
 
   function isMiniFeatherNode(node) {
     const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
-    return !!element?.closest?.('#mf-gui, #mf-gui-overlay, #mf-sidebar-btn, #minifeather-fps, #minifeather-cps, #minifeather-ping, #mf-keystrokes, #mf-coordinates-hud, #mf-waypoint-layer');
+    return !!element?.closest?.('#mf-gui, #mf-gui-overlay, #mf-sidebar-btn, #minifeather-fps, #minifeather-cps, #minifeather-ping, #mf-keystrokes, #mf-coordinates-hud, #mf-waypoint-layer, #mf-damage-particles-layer');
   }
 
   function safePosition(key, fallback) {
@@ -547,6 +548,13 @@
     const fallback = TRANSLATIONS.en[key] || key;
     let value = table[key] || fallback;
     return value.replace(/\{(\w+)\}/g, (_, token) => token in vars ? vars[token] : '');
+  }
+
+  function sendLanguageConfig() {
+    const table = TRANSLATIONS[settings.language] || TRANSLATIONS.en || {};
+    document.dispatchEvent(new CustomEvent('minifeather:language-config', {
+      detail: JSON.stringify({ language: settings.language || 'en', strings: table })
+    }));
   }
 
   function scheduleUpdate() {
@@ -2410,19 +2418,20 @@
       { page: 'hud', key: 'fpsCounter', title: t('fpsCounter'), desc: t('fpsCounterDesc') },
       { page: 'hud', key: 'cpsCounter', title: t('cpsCounter'), desc: t('cpsCounterDesc') },
       { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc') },
-      { page: 'hud', key: 'guiPatch', title: 'GUI Patch', desc: 'Classic Minecraft hearts, food, XP and WiFi icons' },
+      { page: 'hud', key: 'guiPatch', title: t('guiPatch'), desc: t('guiPatchDesc') },
       { page: 'hud', key: 'coordinates', title: t('coordinates'), desc: t('coordinatesDesc') },
-      { page: 'hud', key: 'dynamicCrosshair', title: 'Dynamic Crosshair', desc: 'Changes crosshair based on situation' },
+      { page: 'hud', key: 'dynamicCrosshair', title: t('dynamicCrosshair'), desc: t('dynamicCrosshairDesc') },
       { page: 'waypoints', key: 'waypoints', title: t('waypoints'), desc: t('waypointsDesc') },
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc') },
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc') },
       { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc') },
+      { page: 'render', key: 'damageParticles', title: t('damageParticles'), desc: t('damageParticlesDesc') },
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc') },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc') },
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc') },
       { page: 'render', key: 'leafWind', title: t('leafWind'), desc: t('leafWindDesc') },
-      { page: 'render', key: 'vanillaAnimations', title: 'Vanilla Animations', desc: 'Freezes elbow and knee joints rigid for all players' },
+      { page: 'render', key: 'vanillaAnimations', title: t('vanillaAnimations'), desc: t('vanillaAnimationsDesc') },
       { page: 'render', key: 'leafWind', title: t('leafWind'), desc: t('leafWindDesc') },
       { page: 'render', key: 'handSway', title: t('handSway'), desc: t('handSwayDesc') },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
@@ -2432,7 +2441,7 @@
       { page: 'shaders', key: 'customShader', title: t('navShaders'), desc: t('shadersDesc') },
       { page: 'world', key: 'autoRespawn', title: t('autoRespawn'), desc: t('autoRespawnDesc') },
       { page: 'world', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc') },
-      { page: 'world', key: 'rhythmParkour', title: 'Rhythm Parkour', desc: 'Transforms Miniblox into a rhythm parkour game' },
+      { page: 'world', key: 'rhythmParkour', title: t('rhythmParkour'), desc: t('rhythmParkourDescShort') },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
       { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc') },
       { page: 'chat', key: 'chatMemes', title: t('chatMemes'), desc: t('chatMemesDesc') },
@@ -2445,7 +2454,7 @@
     return NAV_ITEMS.map(item => `
       <div class="mf-nav ${activePage === item.id && !searchQuery ? 'active' : ''}" data-page="${item.id}">
         <span class="mf-nav-icon">${item.icon}</span>
-        <span>${item.id === 'youtubeMusic' ? 'YouTube Music' : t(item.labelKey)}</span>
+        <span>${t(item.labelKey)}</span>
       </div>
     `).join('');
   }
@@ -2502,6 +2511,7 @@
     crosshair: 'dynamicCrosshair', dynamiccrosshair: 'dynamicCrosshair',
     cps: 'cpsCounter', cpscounter: 'cpsCounter',
     distance: 'distanceNameTags', distancenametags: 'distanceNameTags',
+    damage: 'damageParticles', damageparticles: 'damageParticles',
     fps: 'fpsCounter', fpscounter: 'fpsCounter',
     gui: 'guiPatch', guipatch: 'guiPatch',
     freelook: 'freelook',
@@ -2522,16 +2532,19 @@
     zoom: 'zoom'
   });
 
-  const COMMAND_MODULE_LABELS = Object.freeze({
-    antiAfk: 'Anti-AFK', armorHud: 'Armor HUD', cameraOverhaul: 'Camera Overhaul', elytraFlight: 'Elytra Flight',
-    coordinates: 'Coordinates', dynamicCrosshair: 'Dynamic Crosshair', cpsCounter: 'CPS Counter',
-    distanceNameTags: 'Player Distance', fpsCounter: 'FPS Counter', freelook: 'FreeLook', freecam: 'FreeCam',
-    guiPatch: 'GUI Patch',
-    handSway: 'Hand Sway',
-    healthNameTags: 'Player Health', blockHighlight: 'Block Highlight', itemPhysics: 'Item Physics',
-    keystrokes: 'Keystrokes', noWeather: 'No Weather', leafWind: 'Leaf Movement', patPat: 'PatPat', pingCounter: 'Ping Counter',
-    titanTiny: 'Titan & Tiny', vanillaAnimations: 'Vanilla Animations', waypoints: 'Waypoints', zoom: 'Zoom'
+  const COMMAND_MODULE_TRANSLATION_KEYS = Object.freeze({
+    antiAfk: 'antiAfk', armorHud: 'armorHud', cameraOverhaul: 'cameraOverhaul', elytraFlight: 'elytraFlight',
+    coordinates: 'coordinates', dynamicCrosshair: 'dynamicCrosshair', cpsCounter: 'cpsCounter',
+    damageParticles: 'damageParticles', distanceNameTags: 'distanceNameTags', fpsCounter: 'fpsCounter', freelook: 'freelook', freecam: 'freecam',
+    guiPatch: 'guiPatch', handSway: 'handSway', healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
+    keystrokes: 'keystrokes', noWeather: 'noWeather', leafWind: 'leafWind', patPat: 'patPat', pingCounter: 'pingCounter',
+    titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations', waypoints: 'waypoints', zoom: 'zoom'
   });
+
+  function commandModuleLabel(key) {
+    const translationKey = COMMAND_MODULE_TRANSLATION_KEYS[key];
+    return translationKey ? t(translationKey) : key;
+  }
 
   function resolveCommandModule(value) {
     const normalized = String(value || '').toLowerCase().replace(/[\s_-]+/g, '');
@@ -2666,7 +2679,7 @@
     if (request.action === 'toggle') {
       const key = resolveCommandModule(args[0]);
       if (!key) {
-        push('Usage: /toggle <module>. Modules: afk, armor, camera, coords, crosshair, cps, distance, elytra, fps, freecam, freelook, health, highlight, itemphysics, keystrokes, leafwind, noweather, patpat, ping, titan, waypoints, zoom', 'error');
+        push(t('commandToggleUsage'), 'error');
       } else {
         const enabling = !settings[key];
         if (key === 'freecam' && enabling && !requestFreecamAccess()) {
@@ -2680,7 +2693,7 @@
           applyGuiSettings();
           if (panel && !searchQuery.trim()) renderCurrentPageContent();
           if (activePage === 'dashboard') updateDashboardStats();
-          push(`${COMMAND_MODULE_LABELS[key] || key} ${settings[key] ? 'enabled' : 'disabled'}.`, 'success');
+          push(t(settings[key] ? 'commandEnabled' : 'commandDisabled', { module: commandModuleLabel(key) }), 'success');
         }
       }
       respondClientCommand(requestId, response);
@@ -2691,7 +2704,7 @@
       const key = resolveCommandModule(args[0]);
       const code = normalizeBindCode(args[1]);
       if (!key || !code) {
-        push('Usage: /bind <module> <key>. Example: /bind coords C', 'error');
+        push(t('commandBindUsage'), 'error');
       } else if (key === 'freecam' && !requestFreecamAccess()) {
         push(t('freecamNoAccess'), 'error');
       } else {
@@ -2699,7 +2712,7 @@
         guiSettings.moduleBinds = { ...settings.moduleBinds };
         saveSettings();
         sendClientBindsConfig();
-        push(`${COMMAND_MODULE_LABELS[key] || key} bound to ${bindLabel(code)}.`, 'success');
+        push(t('commandBound', { module: commandModuleLabel(key), key: bindLabel(code) }), 'success');
       }
       respondClientCommand(requestId, response);
       return;
@@ -2708,16 +2721,16 @@
     if (request.action === 'unbind') {
       const key = resolveCommandModule(args[0]);
       if (!key) {
-        push('Usage: /unbind <module>', 'error');
+        push(t('commandUnbindUsage'), 'error');
       } else if (!settings.moduleBinds?.[key]) {
-        push(`${COMMAND_MODULE_LABELS[key] || key} does not have a bind.`);
+        push(t('commandNoBind', { module: commandModuleLabel(key) }));
       } else {
         settings.moduleBinds = { ...(settings.moduleBinds || {}) };
         delete settings.moduleBinds[key];
         guiSettings.moduleBinds = { ...settings.moduleBinds };
         saveSettings();
         sendClientBindsConfig();
-        push(`${COMMAND_MODULE_LABELS[key] || key} bind removed.`, 'success');
+        push(t('commandBindRemoved', { module: commandModuleLabel(key) }), 'success');
       }
       respondClientCommand(requestId, response);
       return;
@@ -2726,10 +2739,10 @@
     if (request.action === 'binds') {
       const binds = Object.entries(settings.moduleBinds || {});
       if (!binds.length) {
-        push('No MiniFeather module binds are configured.');
+        push(t('commandNoBinds'));
       } else {
-        push(`Module binds: ${binds.length}`);
-        binds.forEach(([key, code]) => push(`\\yellow\\${COMMAND_MODULE_LABELS[key] || key}\\reset\\ - ${bindLabel(code)}`));
+        push(t('commandBindsCount', { count: binds.length }));
+        binds.forEach(([key, code]) => push(`\\yellow\\${commandModuleLabel(key)}\\reset\\ - ${bindLabel(code)}`));
       }
       respondClientCommand(requestId, response);
       return;
@@ -2738,13 +2751,13 @@
     if (request.action === 'afk') {
       const raw = Number(args[0]);
       if (!Number.isFinite(raw) || raw < 5 || raw > 150) {
-        push('Usage: /afk <5-150>', 'error');
+        push(t('commandAfkUsage'), 'error');
       } else {
         settings.antiAfkDelay = clampAntiAfkDelay(raw);
         guiSettings.antiAfkDelay = settings.antiAfkDelay;
         saveSettings();
         sendAntiAfkConfig(settings.antiAfk);
-        push(`Anti-AFK delay changed to ${settings.antiAfkDelay}s.`, 'success');
+        push(t('commandAfkChanged', { seconds: settings.antiAfkDelay }), 'success');
       }
       respondClientCommand(requestId, response);
     }
@@ -3111,6 +3124,21 @@
       disable() { sendCustomShaderConfig(false); },
       refresh() { sendCustomShaderConfig(MODULES.get('customShader')?.enabled === true); },
       destroy() { sendCustomShaderConfig(false); }
+    }));
+  }
+
+  function sendDamageParticlesConfig(enabled = settings.damageParticles) {
+    document.dispatchEvent(new CustomEvent('minifeather:damage-particles-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initDamageParticlesModule() {
+    registerModule('damageParticles', () => createLifecycle({
+      enable() { sendDamageParticlesConfig(true); },
+      disable() { sendDamageParticlesConfig(false); },
+      refresh() { sendDamageParticlesConfig(MODULES.get('damageParticles')?.enabled === true); },
+      destroy() { sendDamageParticlesConfig(false); }
     }));
   }
 
@@ -4538,10 +4566,10 @@
   }
 
   const DC_SITUATIONS = [
-    ['default', 'Default'], ['block', 'Targeting Block'], ['player', 'Player'],
-    ['enemy', 'Enemy Mob'], ['entity', 'Entity'], ['item', 'Item/Drop'],
-    ['projectile', 'Projectile'], ['air', 'In Air'], ['building', 'Building'],
-    ['bridging', 'Bridging']
+    ['default', 'dcDefault'], ['block', 'dcTargetingBlock'], ['player', 'dcPlayer'],
+    ['enemy', 'dcEnemyMob'], ['entity', 'dcEntity'], ['item', 'dcItemDrop'],
+    ['projectile', 'dcProjectile'], ['air', 'dcInAir'], ['building', 'dcBuilding'],
+    ['bridging', 'dcBridging']
   ];
 
   const DC_PNGS = [
@@ -4572,7 +4600,7 @@
     const backdrop = document.createElement('div');
     backdrop.className = 'mf-tt-backdrop mf-dc-backdrop';
 
-    const situationRow = ([key, label]) => {
+    const situationRow = ([key, labelKey]) => {
       const current = settings.dynamicCrosshairMap[key] || 'crosshair.png';
       const options = DC_PNGS.map(png => {
         const sel = png === current ? 'selected' : '';
@@ -4580,7 +4608,7 @@
       }).join('');
       return `
         <div class="mf-dc-row">
-          <span class="mf-dc-label">${label}</span>
+          <span class="mf-dc-label">${t(labelKey)}</span>
           <div class="mf-dc-preview"><img src="${assetBase}${current}" alt=""></div>
           <select class="mf-dc-select" data-dc-situation="${key}">${options}</select>
         </div>`;
@@ -4591,12 +4619,12 @@
     backdrop.innerHTML = `
       <div class="mf-tt-dialog mf-dc-dialog" role="dialog" aria-modal="true">
         <div class="mf-tt-head">
-          <div class="mf-tt-title">Dynamic Crosshair</div>
+          <div class="mf-tt-title">${t('dynamicCrosshairSettings')}</div>
           <button type="button" class="mf-close" data-dc-close>×</button>
         </div>
 
         <div class="mf-tt-row">
-          <span>Crosshair Size</span>
+          <span>${t('dynamicCrosshairSize')}</span>
           <span class="mf-tt-scale-value" data-dc-size-val>${sizeVal}px</span>
         </div>
         <input class="mf-co-range" data-dc-size type="range" min="8" max="64" step="1" value="${sizeVal}">
@@ -4605,7 +4633,7 @@
           ${DC_SITUATIONS.map(situationRow).join('')}
         </div>
 
-        <button type="button" class="mf-btn primary mf-tt-save" data-dc-save>Save</button>
+        <button type="button" class="mf-btn primary mf-tt-save" data-dc-save>${t('save')}</button>
       </div>`;
 
     panel.appendChild(backdrop);
@@ -4924,20 +4952,20 @@
             )}
             ${renderToggle(
               'guiPatch',
-              'GUI Patch',
-              'Classic Minecraft hearts, food, XP and WiFi icons'
+              t('guiPatch'),
+              t('guiPatchDesc')
             )}
             ${renderToggle(
               'armorHud',
-              'Armor HUD',
-              'Show your equipped helmet, chestplate, leggings and boots on screen.'
+              t('armorHud'),
+              t('armorHudDesc')
             )}
             ${renderToggle(
               'coordinates',
               t('coordinates'),
               t('coordinatesDesc')
             )}
-            ${renderToggle('dynamicCrosshair', 'Dynamic Crosshair', 'Changes crosshair based on situation')}
+            ${renderToggle('dynamicCrosshair', t('dynamicCrosshair'), t('dynamicCrosshairDesc'))}
           </div>
           <div style="margin-top:12px;">
               <button
@@ -4946,7 +4974,7 @@
                   class="mf-btn secondary"
                   style="width:100%;"
               >
-                  Configure Armor HUD
+                  ${t('armorHudConfigure')}
               </button>
           </div>
         </div>
@@ -5012,8 +5040,13 @@
             )}
             ${renderToggle(
               'vanillaAnimations',
-              'Vanilla Animations',
-              'Freezes elbow and knee joints rigid for all players'
+              t('vanillaAnimations'),
+              t('vanillaAnimationsDesc')
+            )}
+            ${renderToggle(
+              'damageParticles',
+              t('damageParticles'),
+              t('damageParticlesDesc')
             )}
             ${renderToggle(
               'zoom',
@@ -5032,8 +5065,8 @@
             )}
             ${renderToggle(
               'freelook',
-              'Freelook',
-              'Look around independently while keeping your player facing direction unchanged.'
+              t('freelook'),
+              t('freelookDesc')
             )}
             ${renderToggle(
               'freecam',
@@ -5042,8 +5075,8 @@
             )}
             ${renderToggle(
               'blockHighlight',
-              'Block Highlight',
-              'Customize the outline shown around the block you are looking at.'
+              t('blockHighlight'),
+              t('blockHighlightDesc')
             )}
             <label class="mf-toggle" id="mf-spritesheet-toggle">
               <span class="mf-toggle-dot"></span>
@@ -5086,8 +5119,8 @@
             </label>
             <div id="mf-custom-tp-container" style="margin-top: 8px; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
               <div style="font-size: 12px; color: #aaa; margin-bottom: 8px;">
-                <strong style="color: #e0e0e0;">Custom Texture Pack</strong><br>
-                Upload a <code style="color: #4a9eff;">.zip</code> file or individual <code style="color: #4a9eff;">.png</code> files. Names must match the original (e.g. <code style="color: #4a9eff;">stone.png</code>, <code style="color: #4a9eff;">grass_block.png</code>).
+                <strong style="color: #e0e0e0;">${t('customTexturePack')}</strong><br>
+                ${t('customTexturePackDesc')}
               </div>
               <input type="file" id="mf-custom-tp-files" accept=".png,.zip,application/zip" multiple style="font-size: 11px; color: #ccc; margin-bottom: 8px; width: 100%;">
               <div id="mf-custom-tp-preview" style="display: none; margin-bottom: 8px;">
@@ -5095,16 +5128,16 @@
                 <div id="mf-custom-tp-stats" style="font-size: 11px; color: #888; margin-top: 4px;"></div>
               </div>
               <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                <button id="mf-custom-tp-generate" class="mf-btn primary" style="font-size: 11px; padding: 5px 12px; background: #2a6dc4; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Generate &amp; Apply</button>
-                <button id="mf-custom-tp-disable" class="mf-btn" style="font-size: 11px; padding: 5px 12px; background: #333; color: #ccc; border: 1px solid #444; border-radius: 5px; cursor: pointer;">Use Default</button>
+                <button id="mf-custom-tp-generate" class="mf-btn primary" style="font-size: 11px; padding: 5px 12px; background: #2a6dc4; color: #fff; border: none; border-radius: 5px; cursor: pointer;">${t('textureGenerateApply')}</button>
+                <button id="mf-custom-tp-disable" class="mf-btn" style="font-size: 11px; padding: 5px 12px; background: #333; color: #ccc; border: 1px solid #444; border-radius: 5px; cursor: pointer;">${t('textureUseDefault')}</button>
               </div>
               <div id="mf-custom-tp-status" style="font-size: 11px; margin-top: 6px;"></div>
               <div id="mf-custom-tp-manager" style="margin-top: 10px; display: none;">
                 <div style="font-size: 12px; color: #e0e0e0; margin-bottom: 6px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px;">
-                  <strong>Active Textures</strong>
+                  <strong>${t('textureActive')}</strong>
                 </div>
                 <div id="mf-custom-tp-list" style="max-height: 150px; overflow-y: auto; font-size: 11px;"></div>
-                <button id="mf-custom-tp-clear" style="font-size: 10px; padding: 3px 10px; background: #5a2020; color: #ff8080; border: 1px solid #804040; border-radius: 4px; cursor: pointer; margin-top: 6px;">Clear All</button>
+                <button id="mf-custom-tp-clear" style="font-size: 10px; padding: 3px 10px; background: #5a2020; color: #ff8080; border: 1px solid #804040; border-radius: 4px; cursor: pointer; margin-top: 6px;">${t('clearAll')}</button>
               </div>
             </div>
           </div>
@@ -5237,7 +5270,7 @@
             <option value="complementaryInspired"${preset === 'complementaryInspired' ? ' selected' : ''}>Complementary Inspired</option>
             <option value="ultrafast"${preset === 'ultrafast' ? ' selected' : ''}>UltraFast</option>
             <option value="photon"${preset === 'photon' ? ' selected' : ''}>Photon</option>
-            <option value="graveyard"${preset === 'graveyard' ? ' selected' : ''}>Cementerio</option>
+            <option value="graveyard"${preset === 'graveyard' ? ' selected' : ''}>${t('shadersGraveyard')}</option>
           </select>
           <div class="mf-muted" style="margin-top:8px;font-size:11px;">${isUltrafast ? t('shadersUfDesc') : isPhoton ? t('shadersPhDesc') : isComplementary ? t('shadersCrDesc') : isGraveyard ? t('shadersGvDesc') : t('shadersHint')}</div>
         </div>
@@ -5536,7 +5569,7 @@
           <div class="mf-toggle-grid">
             ${renderToggle('autoRespawn', t('autoRespawn'), t('autoRespawnDesc'))}
             ${renderToggle('antiAfk', t('antiAfk'), t('antiAfkDesc'))}
-            ${renderToggle('rhythmParkour', 'Rhythm Parkour', 'Transforms Miniblox into a rhythm parkour game. Load a song and dodge obstacles to the beat.')}
+            ${renderToggle('rhythmParkour', t('rhythmParkour'), t('rhythmParkourDesc'))}
           </div>
           <div class="mf-tt-hint">${t('antiAfkRightClickHint')}</div>
         </div>
@@ -5687,7 +5720,7 @@ function renderCreditsPage() {
   return `
     <div class="mf-page-stack">
       <div class="mf-card">
-        <div class="mf-card-title">Credits</div>
+        <div class="mf-card-title">${t('credits')}</div>
         <div class="mf-muted">EstebanGxE_</div>
         <div class="mf-muted">ItzNightrise</div>
         <div class="mf-muted">Not_Senpai</div>
@@ -5718,7 +5751,7 @@ function renderCreditsPage() {
     `;
   }
 
-  function renderYouTubeMusicPage() { return `<div class="mf-page-stack"><div class="mf-card"><div class="mf-card-title">YouTube Music</div><div class="mf-muted" style="margin:6px 0 12px;">Reproduce en el mini-reproductor persistente: puedes cerrar la GUI y la música sigue.</div><div style="display:flex;gap:8px"><input id="mf-yt-module-url" class="mf-input" style="flex:1" placeholder="URL o ID de YouTube (video o playlist)"><button id="mf-yt-module-load" class="mf-btn mf-btn-primary" type="button">Reproducir</button></div><div id="mf-yt-module-status" class="mf-muted" style="min-height:18px;margin-top:8px"></div></div></div>`; }
+  function renderYouTubeMusicPage() { return `<div class="mf-page-stack"><div class="mf-card"><div class="mf-card-title">${t('youtubeMusic')}</div><div class="mf-muted" style="margin:6px 0 12px;">${t('youtubeMusicDesc')}</div><div style="display:flex;gap:8px"><input id="mf-yt-module-url" class="mf-input" style="flex:1" placeholder="${t('youtubeUrlPlaceholder')}"><button id="mf-yt-module-load" class="mf-btn mf-btn-primary" type="button">${t('play')}</button></div><div id="mf-yt-module-status" class="mf-muted" style="min-height:18px;margin-top:8px"></div></div></div>`; }
   const PAGE_RENDERERS = {
     dashboard: renderDashboardPage,
     hud: renderHudPage,
@@ -5772,7 +5805,6 @@ function renderCreditsPage() {
       pageContainer.innerHTML = renderSearchResults(searchQuery);
     } else {
       const navItem = NAV_ITEMS.find(item => item.id === activePage) || NAV_ITEMS[0];
-      if (titleEl && navItem.id === 'youtubeMusic') titleEl.textContent = 'YouTube Music';
       if (titleEl) titleEl.textContent = t(navItem.labelKey);
       const renderer = PAGE_RENDERERS[activePage] || renderDashboardPage;
       pageContainer.innerHTML = renderer();
@@ -6154,7 +6186,7 @@ function renderCreditsPage() {
       >
         <div class="mf-tt-head">
           <div class="mf-tt-title">
-            Freelook Settings
+            ${t('freelookSettings')}
           </div>
           <button
             type="button"
@@ -6165,7 +6197,7 @@ function renderCreditsPage() {
           </button>
         </div>
         <div class="mf-tt-row">
-          <span>Activation Mode</span>
+          <span>${t('activationMode')}</span>
         </div>
         <div class="mf-grid-2">
           <button
@@ -6173,28 +6205,28 @@ function renderCreditsPage() {
             class="mf-btn secondary ${currentMode === 'hold' ? 'active' : ''}"
             data-fl-mode="hold"
           >
-            Hold
+            ${t('hold')}
           </button>
           <button
             type="button"
             class="mf-btn secondary ${currentMode === 'toggle' ? 'active' : ''}"
             data-fl-mode="toggle"
           >
-            Toggle
+            ${t('toggle')}
           </button>
         </div>
         <div class="mf-tt-row">
-          <span>Keybind</span>
+          <span>${t('keybind')}</span>
         </div>
         <div class="mf-tt-bind-box">
           <span class="mf-muted">
-            Freelook Key
+            ${t('freelookKey')}
           </span>
           <span
             class="mf-tt-bind-code"
             data-fl-bind-code
           >
-            ${currentBind || 'Not Bound'}
+            ${currentBind || t('notBound')}
           </span>
         </div>
         <div class="mf-tt-bind-actions">
@@ -6203,26 +6235,25 @@ function renderCreditsPage() {
             class="mf-btn secondary"
             data-fl-bind
           >
-            Set Keybind
+            ${t('setKeybind')}
           </button>
           <button
             type="button"
             class="mf-btn danger"
             data-fl-unbind
           >
-            Remove
+            ${t('remove')}
           </button>
         </div>
         <div class="mf-tt-hint">
-          Hold mode keeps freelook active while the key is held.
-          Toggle mode switches freelook on and off each time the key is pressed.
+          ${t('freelookHint')}
         </div>
         <button
           type="button"
           class="mf-btn primary mf-tt-save"
           data-fl-save
         >
-          Save
+          ${t('save')}
         </button>
       </div>
     `;
@@ -6268,7 +6299,7 @@ function renderCreditsPage() {
         )
       );
       if (bindButton) {
-        bindButton.textContent = 'Set Keybind';
+        bindButton.textContent = t('setKeybind');
       }
     };
     bindButton?.addEventListener('click', () => {
@@ -6284,7 +6315,7 @@ function renderCreditsPage() {
         )
       );
       bindButton.textContent =
-        'Press a Key...';
+        t('pressKey');
     });
     backdrop
       .querySelector('[data-fl-unbind]')
@@ -6293,7 +6324,7 @@ function renderCreditsPage() {
         settings.freelookBind = '';
         guiSettings.freelookBind = '';
         if (bindCode) {
-          bindCode.textContent = 'Not Bound';
+          bindCode.textContent = t('notBound');
         }
         document.dispatchEvent(
           new CustomEvent(
@@ -6324,7 +6355,7 @@ function renderCreditsPage() {
         settings.freelookBind = '';
         guiSettings.freelookBind = '';
         if (bindCode) {
-          bindCode.textContent = 'Not Bound';
+          bindCode.textContent = t('notBound');
         }
       } else {
         settings.freelookBind = event.code;
@@ -6404,7 +6435,7 @@ function renderCreditsPage() {
       >   
         <div class="mf-tt-head">
           <div class="mf-tt-title">
-            Block Highlight Settings
+            ${t('blockHighlightSettings')}
           </div>    
           <button
             type="button"
@@ -6415,7 +6446,7 @@ function renderCreditsPage() {
           </button>
         </div>    
         <div class="mf-tt-row">
-          <span>Highlight Color</span>
+          <span>${t('highlightColor')}</span>
         </div>    
         <div style="
           display:flex;
@@ -6447,7 +6478,7 @@ function renderCreditsPage() {
           >   
         </div>    
         <div class="mf-tt-row">
-          <span>Thickness</span>    
+          <span>${t('thickness')}</span>    
           <span
             class="mf-tt-scale-value"
             data-bh-thickness-value
@@ -6470,39 +6501,39 @@ function renderCreditsPage() {
             class="mf-btn secondary"
             data-bh-preset="1"
           >
-            Thin
+            ${t('thin')}
           </button>   
           <button
             type="button"
             class="mf-btn secondary"
             data-bh-preset="2"
           >
-            Medium
+            ${t('medium')}
           </button>   
           <button
             type="button"
             class="mf-btn secondary"
             data-bh-preset="3"
           >
-            Thick
+            ${t('thick')}
           </button>   
           <button
             type="button"
             class="mf-btn secondary"
             data-bh-preset="4"
           >
-            Extra Thick
+            ${t('extraThick')}
           </button>   
         </div>    
         <div class="mf-tt-hint">
-          Changes are applied immediately while this window is open.
+          ${t('blockHighlightHint')}
         </div>    
         <button
           type="button"
           class="mf-btn primary mf-tt-save"
           data-bh-save
         >
-          Save
+          ${t('save')}
         </button>   
       </div>
     `;    
@@ -6670,7 +6701,7 @@ function renderCreditsPage() {
     const title =
         document.createElement('div');  
     title.textContent =
-        'Configure Armor HUD';  
+        t('armorHudConfigure');  
     Object.assign(title.style, {
         fontSize: '17px',
         fontWeight: '700',
@@ -6679,7 +6710,7 @@ function renderCreditsPage() {
     const subtitle =
         document.createElement('div');  
     subtitle.textContent =
-        'Drag the armor slots to position them on your screen.';  
+        t('armorHudEditorHint');  
     Object.assign(subtitle.style, {
         marginLeft: '14px', 
         fontSize: '12px',
@@ -6702,7 +6733,7 @@ function renderCreditsPage() {
             'assets/armor-hud-editor.png'
         );  
     screenshot.alt =
-        'Armor HUD editor preview'; 
+        t('armorHudEditorPreview'); 
     Object.assign(screenshot.style, {
         position: 'absolute', 
         inset: '0', 
@@ -6714,10 +6745,10 @@ function renderCreditsPage() {
     }); 
     preview.appendChild(screenshot);  
     const names = [
-        'Helmet',
-        'Chestplate',
-        'Leggings',
-        'Boots'
+        t('helmet'),
+        t('chestplate'),
+        t('leggings'),
+        t('boots')
     ];  
     const markerColors = [
         '#ffffff',
@@ -6883,7 +6914,7 @@ function renderCreditsPage() {
     reset.type =
         'button'; 
     reset.textContent =
-        'Reset';  
+        t('reset');  
     reset.className =
         'mf-btn secondary'; 
     reset.addEventListener(
@@ -6923,7 +6954,7 @@ function renderCreditsPage() {
     cancel.type =
         'button'; 
     cancel.textContent =
-        'Cancel'; 
+        t('cancel'); 
     cancel.className =
         'mf-btn secondary'; 
     cancel.addEventListener(
@@ -6937,7 +6968,7 @@ function renderCreditsPage() {
     save.type =
         'button'; 
     save.textContent =
-        'Save Layout';  
+        t('saveLayout');  
     save.className =
         'mf-btn primary'; 
     save.addEventListener(
@@ -7025,11 +7056,11 @@ function renderCreditsPage() {
       'background:#1f1f1f;color:#eee;font-size:12px;user-select:none';
     const title = document.createElement('span');
     title.id = 'mf-music-mini-title';
-    title.textContent = 'MiniFeather Music';
+    title.textContent = t('miniFeatherMusic');
     title.style.cssText = 'flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
     const btn = document.createElement('button');
     btn.textContent = '\u2715';
-    btn.title = 'Detener y cerrar';
+    btn.title = t('stopClose');
     btn.style.cssText = 'background:none;border:0;color:#eee;cursor:pointer;font-size:14px;padding:0 4px';
     btn.addEventListener('click', stopMusicMini);
     bar.append(title, btn);
@@ -7054,15 +7085,15 @@ function renderCreditsPage() {
   // Devuelve { ok, msg }
   function playMusicMini(url) {
     const { id, list } = parseYouTubeMusicUrl(url);
-    if (!id && !list) return { ok: false, msg: 'URL o ID de YouTube no válido' };
+    if (!id && !list) return { ok: false, msg: t('musicInvalidUrl') };
     const box = ensureMusicMini();
     const frame = document.getElementById('mf-music-mini-frame');
     const title = document.getElementById('mf-music-mini-title');
-    if (!frame) return { ok: false, msg: 'Reproductor no disponible' };
+    if (!frame) return { ok: false, msg: t('musicUnavailable') };
     let src;
     if (list && !id) {
       src = 'https://www.youtube.com/embed/videoseries?listType=playlist&list=' + encodeURIComponent(list);
-      if (title) title.textContent = 'Playlist';
+      if (title) title.textContent = t('playlist');
     } else {
       src = 'https://www.youtube.com/embed/' + encodeURIComponent(id) +
         '?playsinline=1&rel=0&controls=1' + (list ? '&list=' + encodeURIComponent(list) : '');
@@ -7070,7 +7101,7 @@ function renderCreditsPage() {
     }
     frame.src = src;
     box.style.display = 'block';
-    return { ok: true, msg: 'Reproduciendo en el mini-reproductor (abajo a la derecha).' };
+    return { ok: true, msg: t('musicPlaying') };
   }
 
   function bindPageControls() {
@@ -7781,7 +7812,7 @@ function renderCreditsPage() {
     if (tpGenerate && tpFiles) {
       chrome.runtime.sendMessage({ type: 'getCustomSpritesheet' }, resp => {
         if (resp?.url) {
-          tpStatus.innerHTML = '<span style="color: #4caf50;">✓ Custom texture pack active</span>';
+          tpStatus.innerHTML = `<span style="color: #4caf50;">✓ ${t('texturePackActive')}</span>`;
           if (tpPreviewImg) tpPreviewImg.src = resp.url;
           if (tpPreview) tpPreview.style.display = 'block';
         }
@@ -7791,11 +7822,11 @@ function renderCreditsPage() {
       tpGenerate.addEventListener('click', async () => {
         const files = tpFiles.files;
         if (!files || files.length === 0) {
-          tpStatus.innerHTML = '<span style="color: #f44336;">Select a .zip or .png file</span>';
+          tpStatus.innerHTML = `<span style="color: #f44336;">${t('textureSelectFile')}</span>`;
           return;
         }
 
-        tpStatus.innerHTML = '<span style="color: #4a9eff;">Generating spritesheet...</span>';
+        tpStatus.innerHTML = `<span style="color: #4a9eff;">${t('textureGenerating')}</span>`;
         tpGenerate.disabled = true;
 
         try {
@@ -7824,7 +7855,7 @@ function renderCreditsPage() {
               tpStatus.innerHTML = `<span style="color: #f44336;">Error: ${result.error}</span>`;
             }
           } else {
-            tpStatus.innerHTML = '<span style="color: #f44336;">TexturePack module not loaded</span>';
+            tpStatus.innerHTML = `<span style="color: #f44336;">${t('textureModuleMissing')}</span>`;
           }
         } catch (e) {
           tpStatus.innerHTML = `<span style="color: #f44336;">Error: ${e.message}</span>`;
@@ -7836,7 +7867,7 @@ function renderCreditsPage() {
       tpDisable?.addEventListener('click', () => {
         if (window.MF_TEXTURE_PACK) MF_TEXTURE_PACK.disable();
         chrome.runtime.sendMessage({ type: 'setCustomSpritesheet', url: null });
-        tpStatus.innerHTML = '<span style="color: #888;">Reverted to default. Reload page.</span>';
+        tpStatus.innerHTML = `<span style="color: #888;">${t('textureReverted')}</span>`;
         if (tpPreview) tpPreview.style.display = 'none';
       });
 
@@ -7844,7 +7875,7 @@ function renderCreditsPage() {
         if (window.MF_TEXTURE_PACK) MF_TEXTURE_PACK.clearAll();
         chrome.runtime.sendMessage({ type: 'setCustomSpritesheet', url: null });
         localStorage.removeItem('mf_texture_list');
-        tpStatus.innerHTML = '<span style="color: #888;">All textures cleared. Reload page.</span>';
+        tpStatus.innerHTML = `<span style="color: #888;">${t('textureCleared')}</span>`;
         if (tpPreview) tpPreview.style.display = 'none';
         refreshTextureList();
       });
@@ -7886,6 +7917,7 @@ function renderCreditsPage() {
       settings.language = event.target.value;
       guiSettings.language = event.target.value;
       saveSettings();
+      sendLanguageConfig();
       sendDistanceNameTagsConfig(settings.distanceNameTags);
       update();
       renderGUI();
@@ -8021,6 +8053,7 @@ function renderCreditsPage() {
   }
 
   function applyGuiSettings() {
+    sendLanguageConfig();
     setModuleEnabled('rebrand', settings.rebrand);
     setModuleEnabled('discord', settings.rebrand && settings.discord);
     setModuleEnabled('keystrokes', settings.keystrokes);
@@ -8041,6 +8074,7 @@ function renderCreditsPage() {
     setModuleEnabled('titanTiny', settings.titanTiny);
     setModuleEnabled('healthNameTags', settings.healthNameTags);
     setModuleEnabled('distanceNameTags', settings.distanceNameTags);
+    setModuleEnabled('damageParticles', settings.damageParticles);
     setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
@@ -8533,6 +8567,7 @@ function renderCreditsPage() {
     initTitanTinyModule();
     initHealthNameTagsModule();
     initDistanceNameTagsModule();
+    initDamageParticlesModule();
     initPatPatModule();
     initItemPhysicsModule();
     initNoWeatherModule();
