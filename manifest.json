@@ -46,6 +46,7 @@
         "src/TitanTiny.js",
         "src/HealthNameTags.js",
         "src/DistanceNameTags.js",
+        "src/DamageParticles.js",
         "src/PatPat.js",
         "src/ItemPhysics.js",
         "src/NoWeather.js",
