@@ -14,15 +14,15 @@
     playerList: null,
     playerListApplyEntry: null,
     playerListApplyEntryWrapped: null,
-    chat: null,
-    chatAdd: null,
-    chatAddWrapped: null,
     timer: 0,
     boot: 0,
     proxyUrl: '',
     nativeResolver: false,
     nativeRanks: new Map(),
-    uuidToName: new Map()
+    uuidToName: new Map(),
+    seenChatEntries: new WeakSet(),
+    responseJsonOriginal: null,
+    responseJsonWrapped: null
   };
 
   globalThis.__MF_NATIVE_CUSTOM_RANKS__ = {
@@ -89,7 +89,7 @@
       if (!value || typeof value !== 'object' || seen.has(value)) continue;
       seen.add(value);
       patchRecord(value);
-      if (depth >= 9) continue;
+      if (depth >= 7) continue;
       if (Array.isArray(value)) {
         for (let i = 0; i < value.length; i++) {
           const child = value[i];
@@ -108,32 +108,36 @@
     return root;
   }
 
-  function installEarlyDataHooks() {
-    try {
-      const originalParse = JSON.parse;
-      if (!originalParse.__mfCustomRanks) {
-        const wrapped = function (...args) {
-          const result = Reflect.apply(originalParse, this, args);
-          const raw = args[0];
-          if (typeof raw === 'string' && /AngryWolfX|EstebanExG_/i.test(raw)) patchTree(result);
-          return result;
-        };
-        Object.defineProperty(wrapped, '__mfCustomRanks', { value: true });
-        JSON.parse = wrapped;
-      }
-    } catch (_) {}
+  function shouldPatchApiResponse(url) {
+    if (!url) return false;
+    let parsed;
+    try { parsed = new URL(url, location.href); } catch (_) { return false; }
+    const host = parsed.hostname.toLowerCase();
+    if (!host.includes('miniblox')) return false;
+    const path = parsed.pathname.toLowerCase();
+    return path.includes('/accounts/get') ||
+      path.includes('/friends/') ||
+      path.includes('/leaderboards/') ||
+      path.includes('/dm/history') ||
+      path.includes('/party/');
+  }
 
+  function installEarlyDataHook() {
     try {
       const proto = globalThis.Response?.prototype;
-      const originalJson = proto?.json;
-      if (typeof originalJson === 'function' && !originalJson.__mfCustomRanks) {
-        const wrapped = async function (...args) {
-          const result = await Reflect.apply(originalJson, this, args);
-          return patchTree(result);
-        };
-        Object.defineProperty(wrapped, '__mfCustomRanks', { value: true });
-        proto.json = wrapped;
-      }
+      const original = proto?.json;
+      if (typeof original !== 'function' || original.__mfCustomRanksSafe) return;
+
+      const wrapped = async function (...args) {
+        const result = await Reflect.apply(original, this, args);
+        if (shouldPatchApiResponse(this?.url)) patchTree(result);
+        return result;
+      };
+
+      Object.defineProperty(wrapped, '__mfCustomRanksSafe', { value: true });
+      proto.json = wrapped;
+      state.responseJsonOriginal = original;
+      state.responseJsonWrapped = wrapped;
     } catch (_) {}
   }
 
@@ -344,60 +348,43 @@
   }
 
   function rewriteChatData(data) {
-    if (!data || typeof data !== 'object' || typeof data.text !== 'string') return data;
+    if (!data || typeof data !== 'object' || typeof data.text !== 'string') return false;
     const target = targetFromChat(data);
-    if (!target) return data;
+    if (!target) return false;
     const plain = stripFormatting(data.text);
+    let next = null;
 
     const chatPrefix = target + ':';
     const chatIndex = plain.indexOf(chatPrefix);
     if (chatIndex >= 0 && data.publicChat) {
       const message = plain.slice(chatIndex + chatPrefix.length).trimStart();
-      return { ...data, text: chatLine(target, message) };
+      next = chatLine(target, message);
+    } else if (plain.includes(target + ' has joined the server')) {
+      next = systemLine(target, 'has joined the server');
+    } else if (plain.includes(target + ' has left the server')) {
+      next = systemLine(target, 'has left the server');
+    } else if (plain.includes(target + ' joined the server')) {
+      next = systemLine(target, 'joined the server');
+    } else if (plain.includes(target + ' left the server')) {
+      next = systemLine(target, 'left the server');
     }
 
-    if (plain.includes(target + ' has joined the server')) {
-      return { ...data, text: systemLine(target, 'has joined the server') };
-    }
-
-    if (plain.includes(target + ' has left the server')) {
-      return { ...data, text: systemLine(target, 'has left the server') };
-    }
-
-    if (plain.includes(target + ' joined the server')) {
-      return { ...data, text: systemLine(target, 'joined the server') };
-    }
-
-    if (plain.includes(target + ' left the server')) {
-      return { ...data, text: systemLine(target, 'left the server') };
-    }
-
-    return data;
+    if (!next || next === data.text) return false;
+    try { data.text = next; } catch (_) { return false; }
+    return true;
   }
 
-  function hookChat(game) {
-    const chat = game?.chat;
-    if (!chat || typeof chat.addChat !== 'function') return;
-    if (state.chat === chat && chat.addChat === state.chatAddWrapped) return;
-
-    if (state.chat && state.chat.addChat === state.chatAddWrapped) {
-      try { state.chat.addChat = state.chatAdd; } catch (_) {}
+  function patchChatLog(game) {
+    const log = game?.chat?.log;
+    if (!Array.isArray(log) || !log.length) return;
+    const start = Math.max(0, log.length - 24);
+    for (let i = start; i < log.length; i++) {
+      const entry = log[i];
+      if (!entry || typeof entry !== 'object') continue;
+      if (state.seenChatEntries.has(entry)) continue;
+      state.seenChatEntries.add(entry);
+      rewriteChatData(entry);
     }
-
-    const original = chat.addChat;
-    const wrapped = function (...args) {
-      try {
-        if (args[0] && typeof args[0] === 'object') args[0] = rewriteChatData(args[0]);
-      } catch (_) {}
-      return original.apply(this, args);
-    };
-
-    try {
-      chat.addChat = wrapped;
-      state.chat = chat;
-      state.chatAdd = original;
-      state.chatAddWrapped = wrapped;
-    } catch (_) {}
   }
 
   function installRuntime() {
@@ -406,11 +393,11 @@
     state.game = game;
     patchKnownGameData(game);
     hookPlayerList(game);
-    hookChat(game);
+    patchChatLog(game);
     return true;
   }
 
-  installEarlyDataHooks();
+  installEarlyDataHook();
   installNativeResolver();
 
   state.boot = setInterval(() => {
@@ -420,12 +407,13 @@
   state.timer = setInterval(() => {
     const game = findGame();
     if (!game) return;
-    if (game !== state.game || game.playerList !== state.playerList || game.chat !== state.chat) {
+    if (game !== state.game || game.playerList !== state.playerList) {
       installRuntime();
       return;
     }
     patchKnownGameData(game);
-  }, 500);
+    patchChatLog(game);
+  }, 250);
 })();
 (function () {
   function tryPatchSliders() {
