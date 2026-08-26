@@ -812,52 +812,11 @@
   function installHook(game) {
     const chat = game?.chat;
     if (!chat || typeof chat.submit !== 'function') return false;
-    if (state.chat === chat && chat.submit === state.hookedSubmit) return true;
-
-    if (state.chat && state.hookedSubmit && state.originalSubmit && state.chat.submit === state.hookedSubmit) {
-      try { state.chat.submit = state.originalSubmit; } catch (_) {}
-    }
-
     state.game = game;
     state.chat = chat;
-    state.originalSubmit = chat.submit;
-
-    const hookedSubmit = function (gameArg) {
-      const line = commandLineFromChat(this);
-      if (line && shouldIntercept(line)) {
-        try {
-          if (this.inputHistory?.[0] !== line) this.inputHistory.unshift(line);
-          this.inputHistoryIndex = 0;
-        } catch (_) {}
-
-        execute(line);
-        try { this.setInputValue?.(''); } catch (_) { try { this.inputValue = ''; } catch (_) {} }
-        try { this.closeInput?.(); } catch (_) {}
-        return true;
-      }
-      // mensaje normal del chat global → respuesta automatica de Verity
-      if (line && line.trim()) {
-        try {
-          const verity = globalThis.MF_Verity;
-          if (verity?.autoReplyChat) verity.autoReplyChat(line);
-        } catch (_) {}
-      }
-      return state.originalSubmit.call(this, gameArg);
-    };
-
-    state.hookedSubmit = hookedSubmit;
-
-    try {
-      chat.submit = hookedSubmit;
-    } catch (_) {}
-
-    if (chat.submit !== hookedSubmit) {
-      try {
-        Object.defineProperty(chat, 'submit', { configurable: true, writable: true, value: hookedSubmit });
-      } catch (_) {}
-    }
-
-    return chat.submit === hookedSubmit;
+    state.originalSubmit = null;
+    state.hookedSubmit = null;
+    return true;
   }
 
   function scan() {
@@ -887,7 +846,29 @@
   }
 
   function onKeyDown(event) {
-    if (event.repeat || isTyping()) return;
+    if (event.repeat) return;
+
+    if (event.key === 'Enter' || event.code === 'Enter' || event.code === 'NumpadEnter') {
+      const chat = state.chat;
+      if (chat) {
+        const line = commandLineFromChat(chat);
+        if (line && shouldIntercept(line)) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+          try {
+            if (chat.inputHistory?.[0] !== line) chat.inputHistory.unshift(line);
+            chat.inputHistoryIndex = 0;
+          } catch (_) {}
+          execute(line);
+          try { chat.setInputValue?.(''); } catch (_) { try { chat.inputValue = ''; } catch (_) {} }
+          try { chat.closeInput?.(); } catch (_) {}
+          return;
+        }
+      }
+    }
+
+    if (isTyping()) return;
     const code = String(event.code || '');
     if (!code) return;
     for (const [module, bindCode] of Object.entries(state.binds)) {
@@ -904,9 +885,6 @@
     document.removeEventListener(RESPONSE_EVENT, handleResponse);
     document.removeEventListener(BINDS_EVENT, handleBinds);
     window.removeEventListener('keydown', onKeyDown, true);
-    if (state.chat && state.hookedSubmit && state.originalSubmit && state.chat.submit === state.hookedSubmit) {
-      try { state.chat.submit = state.originalSubmit; } catch (_) {}
-    }
     if (globalThis[GLOBAL_KEY]?.destroy === destroy) delete globalThis[GLOBAL_KEY];
   }
 
@@ -920,7 +898,7 @@
   globalThis[GLOBAL_KEY] = {
     get game() { return state.game; },
     get chat() { return state.chat; },
-    get installed() { return !!(state.chat && state.chat.submit === state.hookedSubmit); },
+    get installed() { return !!state.chat; },
     execute,
     showHelp,
     destroy
