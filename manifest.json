@@ -37,6 +37,17 @@
         "https://miniblox.online/*"
       ],
       "js": [
+        "src/FriendNicknames.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
+      ],
+      "js": [
         "src/TextureInterceptor.js",
         "src/CustomSkins.js",
         "src/inject.js",
