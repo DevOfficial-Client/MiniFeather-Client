@@ -400,6 +400,7 @@
     leafWind: false,
     leafWindStrength: 0.085,
     handSway: false,
+    betterPlayerLayers: false,
     dynamicCrosshairMap: {
       air: 'empty.png', block: 'crosshair.png', entity: 'cross-open.png',
       player: 'diamond.png', enemy: 'cross-diagonal-small.png', friendly: 'circle.png',
@@ -2424,6 +2425,7 @@
       { page: 'waypoints', key: 'waypoints', title: t('waypoints'), desc: t('waypointsDesc') },
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc') },
+      { page: 'render', key: 'betterPlayerLayers', title: t('betterPlayerLayers'), desc: t('betterPlayerLayersDesc') },
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc') },
       { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc') },
       { page: 'render', key: 'damageParticles', title: t('damageParticles'), desc: t('damageParticlesDesc') },
@@ -2528,6 +2530,7 @@
     vanilla: 'vanillaAnimations', vanillaanimations: 'vanillaAnimations',
     leaf: 'leafWind', leafwind: 'leafWind', wind: 'leafWind',
     hand: 'handSway', handsway: 'handSway', sway: 'handSway',
+    playerlayer: 'betterPlayerLayers', playerlayers: 'betterPlayerLayers', betterplayerlayer: 'betterPlayerLayers', betterplayerlayers: 'betterPlayerLayers', layers: 'betterPlayerLayers',
     waypoint: 'waypoints', waypoints: 'waypoints',
     zoom: 'zoom'
   });
@@ -2536,7 +2539,7 @@
     antiAfk: 'antiAfk', armorHud: 'armorHud', cameraOverhaul: 'cameraOverhaul', elytraFlight: 'elytraFlight',
     coordinates: 'coordinates', dynamicCrosshair: 'dynamicCrosshair', cpsCounter: 'cpsCounter',
     damageParticles: 'damageParticles', distanceNameTags: 'distanceNameTags', fpsCounter: 'fpsCounter', freelook: 'freelook', freecam: 'freecam',
-    guiPatch: 'guiPatch', handSway: 'handSway', healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
+    guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers', healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
     keystrokes: 'keystrokes', noWeather: 'noWeather', leafWind: 'leafWind', patPat: 'patPat', pingCounter: 'pingCounter',
     titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations', waypoints: 'waypoints', zoom: 'zoom'
   });
@@ -3057,6 +3060,21 @@
       destroy() {
         sendHandSwayConfig(false);
       }
+    }));
+  }
+
+  function sendBetterPlayerLayersConfig(enabled = settings.betterPlayerLayers) {
+    document.dispatchEvent(new CustomEvent('minifeather:better-player-layers-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initBetterPlayerLayersModule() {
+    registerModule('betterPlayerLayers', () => createLifecycle({
+      enable() { sendBetterPlayerLayersConfig(true); },
+      disable() { sendBetterPlayerLayersConfig(false); },
+      refresh() { sendBetterPlayerLayersConfig(MODULES.get('betterPlayerLayers')?.enabled === true); },
+      destroy() { sendBetterPlayerLayersConfig(false); }
     }));
   }
 
@@ -5007,6 +5025,11 @@
               'titanTiny',
               t('titanTiny'),
               t('titanTinyDesc')
+            )}
+            ${renderToggle(
+              'betterPlayerLayers',
+              t('betterPlayerLayers'),
+              t('betterPlayerLayersDesc')
             )}
             ${renderToggle(
               'healthNameTags',
@@ -8090,6 +8113,7 @@ function renderCreditsPage() {
     setModuleEnabled('vanillaAnimations', settings.vanillaAnimations);
     setModuleEnabled('leafWind', settings.leafWind);
     setModuleEnabled('handSway', settings.handSway);
+    setModuleEnabled('betterPlayerLayers', settings.betterPlayerLayers);
     setModuleEnabled('guiPatch', settings.guiPatch);
     document.dispatchEvent(
       new CustomEvent(
@@ -8575,6 +8599,7 @@ function renderCreditsPage() {
     initVanillaAnimationsModule();
     initLeafWindModule();
     initHandSwayModule();
+    initBetterPlayerLayersModule();
     initAutoRespawnModule();
     initAntiAfkModule();
     initRhythmParkourModule();
