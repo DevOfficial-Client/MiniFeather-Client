@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.7.0",
-  "description": "MiniFeather Client for Miniblox",
+  "version": "4.7.1",
+  "description": "MiniFeather Client for Miniblox — Better Player Layers Beta",
   "permissions": [
     "storage",
     "declarativeNetRequest",
@@ -80,7 +80,7 @@
         "src/VanillaAnimations.js",
         "src/LeafWind.js",
         "src/HandSway.js",
-        "src/HandLayer.js",
+        "src/BetterPlayerLayers.js",
         "src/CustomModels.js",
         "src/VerityAI.js",
         "src/MF_Peer.js",
