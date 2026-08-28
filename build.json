@@ -1,6 +1,6 @@
 {
-  "builtAt": "2026-08-25T00:58:00Z",
+  "builtAt": "2026-08-28T02:20:29Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Local build with AutoRespawn, Damage Particles and complete panel localization cleanup."
+  "note": "Better Player Layers (Beta): pixel-by-pixel 3D second skin layer for the full player and first-person sleeve."
 }
