@@ -53,12 +53,14 @@ The client is built using separate feature modules, allowing individual systems 
 ## Credits
 
 **MiniFeather Client**
+
 Developed by:
-**EstebanGxE_ ( ShushakeGxE_ )
-  Not_Senpai
-  ItzNightrise
-  botless
-  AngryWolfX **
+
+* **EstebanGxE_** *(ShushakeGxE_)*
+* **Not_Senpai**
+* **ItzNightrise**
+* **botless**
+* **AngryWolfX**
 
 Made for the Miniblox community.
 
