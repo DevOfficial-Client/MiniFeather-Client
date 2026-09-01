@@ -50,22 +50,38 @@
 }
 /* ── top bar ── */
 #mf-studio-top {
-    height: 46px; display: flex; align-items: center; gap: 14px;
-    padding: 0 14px; background: rgba(20, 20, 24, 0.95);
+    height: 42px; display: flex; align-items: center; gap: 10px;
+    padding: 0 12px; background: rgba(20, 20, 24, 0.95);
     border-bottom: 1px solid #32323a; pointer-events: auto;
 }
-#mf-studio-top .logo { font-weight: 700; letter-spacing: 2px; color: #ff6b2b; font-size: 13px; }
+#mf-studio-top .logo { font-weight: 700; letter-spacing: 2px; color: #ff6b2b; font-size: 12px; }
 #mf-studio-top .project {
-    font-size: 12px; color: #9a9aa6; border: 1px solid #3a3a44;
-    padding: 4px 10px; border-radius: 3px; min-width: 180px;
+    font-size: 11px; color: #9a9aa6; border: 1px solid #3a3a44;
+    padding: 3px 9px; border-radius: 3px; min-width: 140px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px;
 }
 #mf-studio-top .spacer { flex: 1; }
-.mfs-btn {
-    background: #2a2a32; border: 1px solid #3a3a44; color: #e8e8ec;
-    height: 30px; padding: 0 12px; border-radius: 3px; font-size: 12px;
-    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+/* grupos de botones separados por línea vertical (estilo Resolve) */
+#mf-studio-top .btn-group {
+    display: flex; align-items: center; gap: 4px; padding: 0 4px;
+    border-left: 1px solid #2a2a32;
 }
-.mfs-btn:hover { background: #34343e; }
+#mf-studio-top .btn-group:first-of-type { border-left: none; }
+.mfs-btn {
+    background: transparent; border: 1px solid transparent; color: #c8c8d2;
+    height: 28px; padding: 0 9px; border-radius: 4px; font-size: 12px;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+    white-space: nowrap; transition: background .12s, color .12s, border-color .12s;
+}
+.mfs-btn:hover { background: #2e2e38; color: #fff; }
+.mfs-btn:disabled { opacity: .35; cursor: default; }
+/* variante solo-icono (compacta) */
+.mfs-btn.icon { padding: 0; width: 30px; justify-content: center; font-size: 13px; }
+/* toggle activo (Posing/Compartir/cine) */
+.mfs-btn.on { background: #3ecf8e; color: #0b2e20; font-weight: 700; }
+.mfs-btn.on:hover { background: #55d9a0; color: #0b2e20; }
+.mfs-btn.on.warm { background: #ff6b2b; color: #14141a; }
+.mfs-btn.on.warm:hover { background: #ff7f47; }
 .mfs-btn.primary { background: #ff6b2b; border-color: #ff6b2b; color: #14141a; font-weight: 700; }
 .mfs-btn.primary:hover { background: #ff7f47; }
 .mfs-btn.rec.active { background: #e33; border-color: #e33; color: #fff; animation: mfs-blink 1s infinite; }
@@ -74,7 +90,7 @@
 /* ── cuerpo ── */
 #mf-studio-body { flex: 1; display: flex; min-height: 0; position: relative; }
 #mf-studio-left {
-    width: 200px; overflow-y: auto; padding: 8px;
+    width: 208px; overflow-y: auto; padding: 10px;
     background: rgba(27, 27, 31, 0.92); border-right: 1px solid #32323a;
     pointer-events: auto;
 }
@@ -88,6 +104,11 @@
     background: rgba(27, 27, 31, 0.92); border-left: 1px solid #32323a;
     pointer-events: auto;
 }
+/* scrollbars finos y oscuros */
+#mf-studio ::-webkit-scrollbar { width: 8px; height: 8px; }
+#mf-studio ::-webkit-scrollbar-track { background: transparent; }
+#mf-studio ::-webkit-scrollbar-thumb { background: #33333e; border-radius: 4px; }
+#mf-studio ::-webkit-scrollbar-thumb:hover { background: #44444f; }
 /* ── timeline ── */
 #mf-studio-timeline {
     height: 190px; background: rgba(20, 20, 24, 0.95);
@@ -125,14 +146,23 @@
     border: 5px solid transparent; border-top-color: #ff6b2b;
 }
 /* ── panels internos ── */
-.mfs-section { margin-bottom: 14px; }
+.mfs-section { margin-bottom: 16px; }
 .mfs-section h3 {
     font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
     color: #6e6e7a; margin-bottom: 8px; font-weight: 600;
+    display: flex; align-items: center; justify-content: space-between;
 }
+/* botón pequeño al lado del título de sección */
+.mfs-section h3 .mini {
+    background: transparent; border: 1px solid #3a3a44; color: #9a9aa6;
+    font-size: 10px; border-radius: 3px; padding: 2px 7px; cursor: pointer;
+    line-height: 1.3;
+}
+.mfs-section h3 .mini:hover { background: #2e2e38; color: #fff; }
 .mfs-item {
-    padding: 7px 10px; border-radius: 3px; font-size: 12px;
+    padding: 6px 9px; border-radius: 4px; font-size: 12px;
     cursor: pointer; color: #c8c8d2; display: flex; justify-content: space-between;
+    border: 1px solid transparent;
 }
 .mfs-item:hover { background: #26262e; }
 .mfs-item.active { background: #ff6b2b; color: #14141a; font-weight: 600; }
@@ -165,6 +195,32 @@
     font-size: 11px; color: #9a9aa6; line-height: 1.6; margin-top: 10px;
     font-family: 'Consolas', monospace;
 }
+/* ── Modelos 3D (cargador) ── */
+.model-item {
+    display: flex; align-items: center; gap: 6px; padding: 5px 7px;
+    border-radius: 4px; font-size: 11px; cursor: pointer; color: #c8c8d2;
+    border: 1px solid transparent;
+}
+.model-item:hover { background: #26262e; }
+.model-item.live { border-color: #3ecf8e55; background: #1d2b24; }
+.model-item .m-icon { font-size: 13px; flex-shrink: 0; }
+.model-item .m-name {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: #e8e8ec;
+}
+.model-item .m-act {
+    font-size: 11px; opacity: 0; padding: 1px 4px; border-radius: 3px;
+    flex-shrink: 0; color: #9a9aa6;
+}
+.model-item:hover .m-act { opacity: .85; }
+.model-item .m-act:hover { color: #fff; background: #3a3a44; }
+.model-item .m-tag { font-size: 9px; color: #3ecf8e; flex-shrink: 0; }
+.model-drop {
+    border: 1px dashed #3a3a44; border-radius: 4px; padding: 10px 8px;
+    text-align: center; font-size: 10.5px; color: #6e6e7a; cursor: pointer;
+    line-height: 1.5; margin-bottom: 6px; transition: border-color .15s, color .15s;
+}
+.model-drop:hover, .model-drop.over { border-color: #ff6b2b; color: #ff6b2b; }
 /* modo cine: el HUD del juego se oculta desde JS (applyCinema), no por CSS
    de hermano — el canvas WebGL debe seguir visible bajo el preview */
 `;
@@ -232,6 +288,112 @@
         } catch { return null; }
     }
 
+    // ── cargador de modelos 3D (.glb/.gltf/.obj) ──
+    // Los bytes del archivo se registran en el cache de CustomModels
+    // (registerModelBytes) y de ahí se spawnean como entidad client-side
+    // delante del jugador. Los nombres se prefijan "user_" para no chocar
+    // con los modelos del paquete (models/entities/).
+    const models = {
+        loaded: new Map(),       // file -> { name, size, at, id }
+        picker: null,            // <input type=file> reutilizable
+        seq: 0
+    };
+
+    function modelPickFiles() {
+        if (!models.picker) {
+            const inp = document.createElement('input');
+            inp.type = 'file';
+            inp.accept = '.glb,.gltf,.obj';
+            inp.multiple = true;
+            inp.style.display = 'none';
+            inp.addEventListener('change', () => {
+                if (inp.files?.length) modelLoadFiles([...inp.files]);
+                inp.value = ''; // permitir recargar el mismo archivo
+            });
+            document.body.appendChild(inp);
+            models.picker = inp;
+        }
+        models.picker.click();
+    }
+
+    async function modelLoadFiles(files) {
+        const CM = window.MF_CustomModels;
+        if (!CM?.registerModelBytes) { updateStatus('⚠ MF_CustomModels no disponible'); return; }
+        for (const f of files) {
+            if (!/\.(glb|gltf|obj)$/i.test(f.name)) continue;
+            const file = 'user_' + f.name;
+            try {
+                const buf = await f.arrayBuffer();
+                await CM.registerModelBytes(file, buf);
+                models.loaded.set(file, { name: f.name, size: f.size, at: Date.now(), id: null });
+                updateStatus(`📦 "${f.name}" cargado (${(f.size / 1024).toFixed(0)} KB) — click en la lista para spawnear`);
+                refreshModels();
+                // spawn inmediato frente al jugador
+                modelSpawn(file);
+            } catch (e) {
+                updateStatus(`⚠ "${f.name}": ${e?.message || e}`);
+            }
+        }
+    }
+
+    // spawn delante del jugador (2 bloques, dirección de la cámara del estudio)
+    function modelSpawn(file) {
+        const CM = window.MF_CustomModels;
+        const info = models.loaded.get(file);
+        if (!CM?.spawn) return;
+        const p = getGame()?.player?.pos;
+        if (!p) { updateStatus('⚠ sin player para spawnear'); return; }
+        // dirección: yaw de la cámara del estudio si está activa
+        let dx = 1, dz = 0;
+        if (cam.active) { dx = -Math.sin(cam.yaw); dz = -Math.cos(cam.yaw); }
+        const x = p.x + dx * 2, z = p.z + dz * 2;
+        const id = 'umodel' + (++models.seq);
+        try {
+            CM.spawn(file, x, p.y, z, { id, height: 0.9, lookAtPlayer: true });
+            if (info) { info.id = id; }
+            updateStatus(`📦 "${info?.name || file}" spawnneado`);
+            refreshModels();
+        } catch (e) {
+            updateStatus(`⚠ spawn: ${e?.message || e}`);
+        }
+    }
+
+    function modelDespawn(id) {
+        try { window.MF_CustomModels?.despawn?.(id); } catch {}
+        for (const [, info] of models.loaded) {
+            if (info.id === id) { info.id = null; break; }
+        }
+        refreshModels();
+    }
+
+    function refreshModels() {
+        const box = document.getElementById('mfs-models-list');
+        if (!box) return;
+        box.innerHTML = '';
+        if (!models.loaded.size) {
+            box.appendChild(el('div', 'mfs-item', '<span style="color:#6e6e7a;font-size:11px">Sin modelos cargados</span>'));
+            return;
+        }
+        for (const [file, info] of models.loaded) {
+            const row = el('div', 'model-item' + (info.id ? ' live' : ''));
+            row.title = file + ' — click: spawn frente a ti';
+            row.innerHTML = `
+                <span class="m-icon">${/\.obj$/i.test(file) ? '🔷' : '📦'}</span>
+                <span class="m-name">${info.name}</span>
+                ${info.id ? '<span class="m-tag">live</span>' : ''}
+                <span class="m-act m-del" title="Quitar del mundo">✕</span>
+            `;
+            row.addEventListener('click', (ev) => {
+                if (ev.target.classList.contains('m-del')) {
+                    if (info.id) modelDespawn(info.id);
+                    return;
+                }
+                if (!info.id) modelSpawn(file);
+            });
+            box.appendChild(row);
+        }
+    }
+
     // ── DOM ──
     function build() {
         if (document.getElementById(ID)) return;
@@ -245,25 +407,34 @@
         root.id = ID;
         if (state.cinema) root.classList.add('cinema');
 
-        // top bar
+        // top bar — grupos: transporte | rango | herramientas | salir
         const top = el('div', '', '');
         top.id = 'mf-studio-top';
         top.innerHTML = `
             <span class="logo">MF STUDIO</span>
             <span class="project" id="mfs-project">Proyecto: sin toma activa</span>
             <span class="spacer"></span>
-            <button class="mfs-btn" id="mfs-home" title="Ir al inicio (Home)">⏮</button>
-            <button class="mfs-btn" id="mfs-in" title="Marcar IN aquí (I)">[ IN</button>
-            <button class="mfs-btn" id="mfs-out" title="Marcar OUT aquí (O)">OUT ]</button>
-            <button class="mfs-btn" id="mfs-range-clear" title="Quitar In/Out (reproduce todo)">⨯ Rango</button>
-            <button class="mfs-btn" id="mfs-play" title="Reproducir/Pausa (Space)">▶ Reproducir</button>
-            <button class="mfs-btn" id="mfs-stop" title="Detener (S)">⏹</button>
-            <button class="mfs-btn rec" id="mfs-rec" title="Grabar (R)">● REC</button>
-            <button class="mfs-btn" id="mfs-pose-vp" title="Posing directo en viewport (click der. en extremidad + arrastrar)">🦴 Posing: OFF</button>
-            <button class="mfs-btn" id="mfs-share" title="Compartir pose + cámara por P2P con el peer (/p2p host/join)">📡 Compartir: OFF</button>
-            <button class="mfs-btn" id="mfs-skineditor" title="Editor de cabeza en vivo (dibujar base + overlay)">🎨 Cabeza</button>
-            <button class="mfs-btn" id="mfs-cinema" title="Ocultar HUD del juego">🎬 Modo cine</button>
-            <button class="mfs-btn" id="mfs-close" title="Cerrar (F1)">✕</button>
+            <span class="btn-group">
+                <button class="mfs-btn icon" id="mfs-home" title="Ir al inicio (Home)">⏮</button>
+                <button class="mfs-btn primary" id="mfs-play" title="Reproducir/Pausa (Space)">▶</button>
+                <button class="mfs-btn icon" id="mfs-stop" title="Detener (S)">⏹</button>
+                <button class="mfs-btn rec" id="mfs-rec" title="Grabar (R)">●</button>
+            </span>
+            <span class="btn-group">
+                <button class="mfs-btn" id="mfs-in" title="Marcar IN aquí (I)">{ IN</button>
+                <button class="mfs-btn" id="mfs-out" title="Marcar OUT aquí (O)">OUT }</button>
+                <button class="mfs-btn icon" id="mfs-range-clear" title="Quitar In/Out (reproduce todo)" style="display:none">⨯</button>
+            </span>
+            <span class="btn-group">
+                <button class="mfs-btn" id="mfs-pose-vp" title="Posar extremidades: click der. en el cuerpo + arrastrar (rueda=yaw, Alt+rueda=tamaño)">🦴 Posing</button>
+                <button class="mfs-btn" id="mfs-share" title="Compartir pose + cámara por P2P (/p2p host o /p2p join)">📡</button>
+                <button class="mfs-btn icon" id="mfs-skineditor" title="Editor de cabeza en vivo (dibujar base + overlay)">🎨</button>
+                <button class="mfs-btn icon" id="mfs-models" title="Cargar modelo 3D (.glb/.gltf/.obj)">📦</button>
+            </span>
+            <span class="btn-group">
+                <button class="mfs-btn icon" id="mfs-cinema" title="Ocultar/mostrar HUD del juego">🎬</button>
+                <button class="mfs-btn icon" id="mfs-close" title="Cerrar (F1)">✕</button>
+            </span>
         `;
 
         // cuerpo
@@ -273,6 +444,9 @@
         const left = el('div');
         left.id = 'mf-studio-left';
         left.innerHTML = `<div class="mfs-section"><h3>Media Pool</h3><div id="mfs-mediapool"></div></div>
+<div class="mfs-section"><h3>Modelos 3D <button class="mini" id="mfs-model-add" title="Cargar .glb/.gltf/.obj del disco">+ Cargar</button></h3>
+<div class="model-drop" id="mfs-model-drop" title="Clic para elegir archivo">📦 Suelta un modelo aquí<br>.glb · .gltf · .obj</div>
+<div id="mfs-models-list"></div></div>
 <div class="mfs-section"><h3>Tomas</h3><div id="mfs-takes"></div></div>
 <div class="mfs-section"><h3>Caras (face swap)</h3><div id="mfs-faces"></div></div>`;
 
@@ -331,11 +505,26 @@
         $('mfs-rec').onclick = toggleRec;
         $('mfs-pose-vp').onclick = () => posingToggle(!posing.enabled);
         $('mfs-share').onclick = shareToggle;
+        $('mfs-models').onclick = modelPickFiles;
+        $('mfs-model-add').onclick = modelPickFiles;
+        // zona drop de modelos + drag&drop de archivos
+        const dropZone = $('mfs-model-drop');
+        if (dropZone) {
+            dropZone.onclick = modelPickFiles;
+            dropZone.addEventListener('dragover', (ev) => { ev.preventDefault(); dropZone.classList.add('over'); });
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+            dropZone.addEventListener('drop', (ev) => {
+                ev.preventDefault();
+                dropZone.classList.remove('over');
+                const files = [...(ev.dataTransfer?.files || [])].filter(f => /\.(glb|gltf|obj)$/i.test(f.name));
+                if (files.length) modelLoadFiles(files);
+            });
+        }
         $('mfs-cinema').onclick = () => {
             state.cinema = !state.cinema;
             document.getElementById(ID)?.classList.toggle('cinema', state.cinema);
             applyCinema();
-            $('mfs-cinema').textContent = state.cinema ? '🎬 Modo cine' : '🎮 Ver HUD';
+            $('mfs-cinema').classList.toggle('on', state.cinema);
         };
 
         // atajos de teclado (registrados UNA sola vez: guard contra acumulación
@@ -697,12 +886,12 @@
         const rec = document.getElementById('mfs-rec');
         if (!play || !rec) return;
         if (s?.recording) {
-            play.textContent = '▶ Reproducir'; play.disabled = true; play.style.opacity = .4;
+            play.textContent = '▶'; play.disabled = true;
             rec.classList.add('active');
         } else {
-            play.disabled = false; play.style.opacity = 1;
+            play.disabled = false;
             rec.classList.remove('active');
-            play.textContent = s?.playing && !s.paused ? '⏸ Pausa' : '▶ Reproducir';
+            play.textContent = s?.playing && !s.paused ? '⏸' : '▶';
         }
     }
 
@@ -1396,10 +1585,9 @@
         if (!on) posingDeselect();
         const btn = document.getElementById('mfs-pose-vp');
         if (btn) {
-            btn.textContent = posing.enabled ? '🦴 Posing: ON' : '🦴 Posing: OFF';
-            btn.style.background = posing.enabled ? '#ff6b2b' : '';
-            btn.style.color = posing.enabled ? '#14141a' : '';
-            btn.style.fontWeight = posing.enabled ? '700' : '';
+            btn.classList.toggle('on', posing.enabled);
+            btn.classList.toggle('warm', posing.enabled);
+            btn.textContent = posing.enabled ? '🦴 Posing ●' : '🦴 Posing';
         }
         const preview = document.getElementById('mf-studio-preview');
         if (preview) preview.style.cursor = posing.enabled ? 'crosshair' : 'grab';
@@ -1411,10 +1599,8 @@
         p2p.share = !!on;
         const btn = document.getElementById('mfs-share');
         if (btn) {
-            btn.textContent = p2p.share ? '📡 Compartir: ON' : '📡 Compartir: OFF';
-            btn.style.background = p2p.share ? '#3ecf8e' : '';
-            btn.style.color = p2p.share ? '#0b2e20' : '';
-            btn.style.fontWeight = p2p.share ? '700' : '';
+            btn.classList.toggle('on', p2p.share);
+            btn.textContent = p2p.share ? '📡 ●' : '📡';
         }
         if (!p2p.share) {
             p2p._camKey = null;
@@ -1950,7 +2136,7 @@
         releasePointerLock();
         patchPointerLock();
         globalThis.__MF_STUDIO_OPEN__ = true; // FreeCam deja de interceptar input
-        refreshTakes(); refreshMediaPool(); refreshFaces(); refreshPosePanel(); renderTimeline(); updateProps(); updateStatus(); updateButtons();
+        refreshTakes(); refreshMediaPool(); refreshModels(); refreshFaces(); refreshPosePanel(); renderTimeline(); updateProps(); updateStatus(); updateButtons();
         applyCinema();
         bindPreviewCamera();
         bindViewportPosing();
