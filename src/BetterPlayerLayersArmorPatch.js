@@ -3,7 +3,7 @@
 
     const W = globalThis;
     const CONFIG = Object.freeze({
-        inflate: 0.028,
+        scale: 1.035,
         scanMs: 250
     });
 
@@ -19,13 +19,16 @@
 
     function findGameInReact(element) {
         if (!element) return null;
+
         let keys = [];
         try { keys = Object.keys(element); } catch { return null; }
 
         for (const key of keys) {
-            if (!key.startsWith('__reactFiber$') &&
+            if (
+                !key.startsWith('__reactFiber$') &&
                 !key.startsWith('__reactContainer$') &&
-                !key.startsWith('__reactInternalInstance$')) continue;
+                !key.startsWith('__reactInternalInstance$')
+            ) continue;
 
             let root;
             try { root = element[key]; } catch { continue; }
@@ -157,84 +160,146 @@
     function isArmorMesh(object, root, skinObjects) {
         if (!object?.geometry || object.visible === false) return false;
         if (!(object.isSkinnedMesh === true || object.type === 'SkinnedMesh')) return false;
+        if (!object.parent) return false;
         if (skinObjects.has(object)) return false;
+        if (object.__mfArmorShell === true) return false;
 
-        const geometry = object.geometry;
-        const pos = geometry?.attributes?.position;
+        const pos = object.geometry?.attributes?.position;
         if (!pos || pos.count < 12) return false;
 
         const name = String(object.name || '').toLowerCase();
-        if (/cape|elytra|wing|skin|body/.test(name)) return false;
-
+        if (/cape|elytra|wing|skin|body|shell/.test(name)) return false;
         if (object === root?.skinnedBody) return false;
+
         return true;
     }
 
-    function inflateGeometry(original, amount) {
-        let geometry;
-        try { geometry = original.clone(); } catch { return null; }
+    function cloneMaterial(material) {
+        let copy;
+        try { copy = material?.clone?.(); } catch { copy = null; }
+        if (!copy) return null;
 
-        try {
-            if (!geometry.attributes?.normal) geometry.computeVertexNormals?.();
+        copy.side = 2;
+        copy.transparent = material.transparent;
+        copy.opacity = material.opacity;
+        copy.alphaTest = material.alphaTest;
+        copy.depthWrite = material.depthWrite;
+        copy.depthTest = material.depthTest;
+        copy.polygonOffset = true;
+        copy.polygonOffsetFactor = 1;
+        copy.polygonOffsetUnits = 1;
+        copy.needsUpdate = true;
 
-            const pos = geometry.attributes?.position;
-            const normal = geometry.attributes?.normal;
-            if (!pos || !normal || pos.count !== normal.count) {
-                geometry.dispose?.();
-                return null;
-            }
-
-            for (let i = 0; i < pos.count; i++) {
-                const nx = normal.getX(i);
-                const ny = normal.getY(i);
-                const nz = normal.getZ(i);
-
-                if (!Number.isFinite(nx + ny + nz)) continue;
-
-                pos.setXYZ(
-                    i,
-                    pos.getX(i) + nx * amount,
-                    pos.getY(i) + ny * amount,
-                    pos.getZ(i) + nz * amount
-                );
-            }
-
-            pos.needsUpdate = true;
-            geometry.computeBoundingBox?.();
-            geometry.computeBoundingSphere?.();
-            return geometry;
-        } catch {
-            try { geometry.dispose?.(); } catch {}
-            return null;
-        }
+        return copy;
     }
 
-    function patchArmor(object) {
-        if (state.armor.has(object)) return true;
+    function createShellMaterials(material) {
+        if (Array.isArray(material)) {
+            return material.map(cloneMaterial).filter(Boolean);
+        }
 
-        const original = object.geometry;
-        const inflated = inflateGeometry(original, CONFIG.inflate);
-        if (!inflated) return false;
+        return cloneMaterial(material);
+    }
 
-        state.armor.set(object, { original, inflated });
-        object.geometry = inflated;
-        object.frustumCulled = false;
+    function createShell(object) {
+        const material = createShellMaterials(object.material);
+        if (!material) return null;
+
+        let shell;
+        try {
+            shell = new object.constructor(object.geometry, material);
+        } catch {
+            return null;
+        }
+
+        shell.__mfArmorShell = true;
+        shell.name = `${object.name || 'armor'}__mf_shell`;
+        shell.frustumCulled = false;
+        shell.castShadow = object.castShadow;
+        shell.receiveShadow = object.receiveShadow;
+        shell.renderOrder = (object.renderOrder || 0) + 0.01;
+        shell.visible = object.visible;
+        shell.matrixAutoUpdate = object.matrixAutoUpdate;
+
+        try { shell.position.copy(object.position); } catch {}
+        try { shell.quaternion.copy(object.quaternion); } catch {}
+        try { shell.scale.copy(object.scale).multiplyScalar(CONFIG.scale); } catch {}
+        try { shell.rotation.copy(object.rotation); } catch {}
 
         try {
-            const materials = Array.isArray(object.material) ? object.material : [object.material];
-            for (const material of materials) {
-                if (material) material.needsUpdate = true;
+            if (object.isSkinnedMesh && object.skeleton) {
+                shell.bindMode = object.bindMode;
+                shell.bindMatrix.copy(object.bindMatrix);
+                shell.bindMatrixInverse.copy(object.bindMatrixInverse);
+                shell.bind(object.skeleton, object.bindMatrix);
             }
         } catch {}
 
+        try {
+            if (object.parent) object.parent.add(shell);
+        } catch {
+            try {
+                if (Array.isArray(material)) material.forEach(m => m?.dispose?.());
+                else material?.dispose?.();
+            } catch {}
+            return null;
+        }
+
+        return shell;
+    }
+
+    function syncShell(entry) {
+        const object = entry.object;
+        const shell = entry.shell;
+
+        if (!object || !shell) return;
+
+        try { shell.visible = object.visible; } catch {}
+        try { shell.position.copy(object.position); } catch {}
+        try { shell.quaternion.copy(object.quaternion); } catch {}
+        try { shell.scale.copy(object.scale).multiplyScalar(CONFIG.scale); } catch {}
+        try { shell.rotation.copy(object.rotation); } catch {}
+        try { shell.matrixWorldNeedsUpdate = true; } catch {}
+
+        try {
+            if (object.isSkinnedMesh && object.skeleton && shell.skeleton !== object.skeleton) {
+                shell.bindMode = object.bindMode;
+                shell.bind(object.skeleton, object.bindMatrix);
+            }
+        } catch {}
+    }
+
+    function patchArmor(object) {
+        const existing = state.armor.get(object);
+        if (existing) {
+            syncShell(existing);
+            return true;
+        }
+
+        const shell = createShell(object);
+        if (!shell) return false;
+
+        state.armor.set(object, { object, shell });
+        syncShell({ object, shell });
         return true;
+    }
+
+    function disposeMaterial(material) {
+        try {
+            if (Array.isArray(material)) {
+                for (const entry of material) entry?.dispose?.();
+            } else {
+                material?.dispose?.();
+            }
+        } catch {}
     }
 
     function restoreObject(object, entry) {
         try {
-            if (object?.geometry === entry.inflated) object.geometry = entry.original;
+            if (entry.shell?.parent) entry.shell.parent.remove(entry.shell);
         } catch {}
-        try { entry.inflated?.dispose?.(); } catch {}
+
+        disposeMaterial(entry.shell?.material);
     }
 
     function restoreAll() {
@@ -244,8 +309,19 @@
         state.root = null;
     }
 
+    function isLayerEnabled() {
+        try {
+            const mod = W.MF_BetterPlayerLayers;
+            if (mod && typeof mod.getState === 'function') {
+                const info = mod.getState();
+                if (typeof info?.enabled === 'boolean') return info.enabled;
+            }
+        } catch {}
+        return state.enabled;
+    }
+
     function synchronize() {
-        if (!state.enabled) return;
+        if (!state.enabled && !isLayerEnabled()) return;
 
         const game = findGame();
         if (!game?.player) {
@@ -279,6 +355,8 @@
             if (!current.has(object) || !object.parent) {
                 restoreObject(object, entry);
                 state.armor.delete(object);
+            } else {
+                syncShell(entry);
             }
         }
     }
@@ -314,9 +392,9 @@
         enable: () => setEnabled(true),
         disable: () => setEnabled(false),
         getState: () => ({
-            enabled: state.enabled,
+            enabled: state.enabled || isLayerEnabled(),
             armorMeshes: state.armor.size,
-            inflate: CONFIG.inflate
+            scale: CONFIG.scale
         })
     };
 
