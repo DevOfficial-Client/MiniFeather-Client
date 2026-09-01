@@ -1,548 +1,1138 @@
 (function () {
   'use strict';
 
-  const EVENT_CONFIG = 'minifeather:anti-afk-config';
-  const GLOBAL_KEY = '__MINIFEATHER_ANTI_AFK__';
-  const MIN_DELAY_SECONDS = 5;
-  const MAX_DELAY_SECONDS = 150;
-  const DEFAULT_DELAY_SECONDS = 120;
-  const ACTION_INTERVAL_MS = 2500;
-  const ACTION_DURATION_MS = 550;
+  const EVENT = 'minifeather:anti-afk-config';
+  const KEY = '__MINIFEATHER_ANTI_AFK__';
 
-  try {
-    globalThis[GLOBAL_KEY]?.destroy?.();
-  } catch (_) {}
-
-  const state = {
+  const s = {
     enabled: false,
-    delaySeconds: DEFAULT_DELAY_SECONDS,
     active: false,
-
+    destroyed: false,
+    delaySeconds: 120,
     game: null,
     player: null,
-    readerName: null,
     applyName: null,
-    originalReader: null,
-    nativeApply: null,
-
-    lastUserActivity: Date.now(),
-    lastPosition: null,
-
-    action: 'idle',
-    actionStartedAt: 0,
-    lastActionAt: 0,
-
+    sendName: null,
+    originalApply: null,
+    hookApply: null,
+    applyHadOwn: false,
+    lastActivity: Date.now(),
+    lastNativeCall: 0,
     scanTimer: 0,
     idleTimer: 0,
-    movementTimer: 0,
-
-    lastMouseX: null,
-    lastMouseY: null,
-
-    destroyed: false
+    fallbackTimer: 0,
+    mouseX: null,
+    mouseY: null
   };
 
-  function clampDelay(value) {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return DEFAULT_DELAY_SECONDS;
-    const stepped = Math.round(parsed / 5) * 5;
-    return Math.max(MIN_DELAY_SECONDS, Math.min(MAX_DELAY_SECONDS, stepped));
+  try {
+    globalThis[KEY]?.destroy?.();
+  } catch {}
+
+  function clampDelay(v) {
+    const n = Number(v);
+
+    if (!Number.isFinite(n)) {
+      return 120;
+    }
+
+    return Math.max(
+      5,
+      Math.min(
+        150,
+        Math.round(n / 5) * 5
+      )
+    );
   }
 
-  function getGame() {
-    if (state.game?.player?.pos && state.game?.world) return state.game;
+  function getGame(force = false) {
+    if (
+      !force &&
+      s.game?.player?.pos
+    ) {
+      return s.game;
+    }
 
     try {
-      const react = document.querySelector('#react');
-      if (!react) return null;
+      const direct = [
+        globalThis.__MB?.game,
+        globalThis.game,
+        globalThis.__game,
+        globalThis.minibloxGame,
+        globalThis.MiniBlox?.game
+      ];
 
-      for (const root of Object.values(react)) {
-        const game = root?.updateQueue?.baseState?.element?.props?.game;
-        if (game?.player?.pos && game?.world) return game;
+      for (const game of direct) {
+        if (game?.player?.pos) {
+          s.game = game;
+          return game;
+        }
       }
-    } catch (_) {}
+    } catch {}
+
+    try {
+      const roots = [
+        document.querySelector('#react'),
+        document.querySelector('#root'),
+        document.querySelector(
+          '[id*="react"]'
+        )
+      ].filter(Boolean);
+
+      for (const el of roots) {
+        for (
+          const root
+          of Object.values(el)
+        ) {
+          const candidates = [
+            root?.updateQueue
+              ?.baseState
+              ?.element
+              ?.props
+              ?.game,
+
+            root?.memoizedProps?.game,
+            root?.pendingProps?.game,
+
+            root?.return
+              ?.memoizedProps
+              ?.game,
+
+            root?.return
+              ?.return
+              ?.memoizedProps
+              ?.game,
+
+            root?.child
+              ?.memoizedProps
+              ?.game,
+
+            root?.child
+              ?.child
+              ?.memoizedProps
+              ?.game
+          ];
+
+          for (
+            const game
+            of candidates
+          ) {
+            if (game?.player?.pos) {
+              s.game = game;
+              return game;
+            }
+          }
+        }
+      }
+    } catch {}
 
     return null;
   }
 
-  function getMethods(player) {
-    const methods = [];
+  function methodsOf(obj) {
+    const out = [];
     const seen = new Set();
-    let proto = player;
 
-    for (let depth = 0; proto && depth < 10; depth++) {
+    let proto = obj;
+
+    for (
+      let depth = 0;
+      proto && depth < 14;
+      depth++
+    ) {
       let names = [];
+
       try {
-        names = Object.getOwnPropertyNames(proto);
-      } catch (_) {}
+        names =
+          Object.getOwnPropertyNames(
+            proto
+          );
+      } catch {}
 
       for (const name of names) {
-        if (name === 'constructor' || seen.has(name)) continue;
-        seen.add(name);
-
-        let fn;
-        try {
-          fn = player[name];
-        } catch (_) {
+        if (
+          name === 'constructor' ||
+          seen.has(name)
+        ) {
           continue;
         }
 
-        if (typeof fn !== 'function') continue;
+        seen.add(name);
 
-        let source = '';
+        let fn;
+
         try {
-          source = Function.prototype.toString.call(fn);
-        } catch (_) {}
+          fn = obj[name];
+        } catch {
+          continue;
+        }
 
-        methods.push({ name, fn, source });
+        if (
+          typeof fn !== 'function'
+        ) {
+          continue;
+        }
+
+        let src = '';
+
+        try {
+          src =
+            Function.prototype
+              .toString
+              .call(fn);
+        } catch {}
+
+        out.push({
+          name,
+          fn,
+          src
+        });
       }
 
-      proto = Object.getPrototypeOf(proto);
+      try {
+        proto =
+          Object.getPrototypeOf(
+            proto
+          );
+      } catch {
+        break;
+      }
     }
 
-    return methods;
+    return out;
   }
 
-  function resolveNativeInput(player) {
-    const methods = getMethods(player);
+  function findApply(player) {
+    let best = null;
 
-    const reader =
-      methods.find(method => method.name === 'bkkAvIfjEgvYuYRLXBgtj') ||
-      methods.find(method =>
-        method.source.includes('sentInputThisTick') &&
-        method.source.includes('currentInput') &&
-        method.source.includes('jumping') &&
-        method.source.includes('inputSequenceNumber')
-      );
+    for (
+      const m
+      of methodsOf(player)
+    ) {
+      let score = 0;
 
-    const apply =
-      methods.find(method => method.name === 'OBHUlAPATf') ||
-      methods.find(method =>
-        method.source.includes('this.wWQmwuDLqA') &&
-        method.source.includes('this.YApHmhhGagG') &&
-        method.source.includes('this.jumping')
-      );
+      const x = m.src;
 
-    if (!reader || !apply) return null;
+      if (
+        x.includes(
+          'ayHGaukUNSp'
+        )
+      ) {
+        score += 10;
+      }
+
+      if (
+        x.includes(
+          'yNDNKuoxzL'
+        )
+      ) {
+        score += 10;
+      }
+
+      if (
+        x.includes('jumping')
+      ) {
+        score += 5;
+      }
+
+      if (
+        x.includes('.right')
+      ) {
+        score += 4;
+      }
+
+      if (
+        x.includes('.left')
+      ) {
+        score += 4;
+      }
+
+      if (
+        x.includes('.up')
+      ) {
+        score += 4;
+      }
+
+      if (
+        x.includes('.down')
+      ) {
+        score += 4;
+      }
+
+      if (
+        x.includes('.jump')
+      ) {
+        score += 4;
+      }
+
+      if (
+        x.includes(
+          'usingItem'
+        )
+      ) {
+        score += 2;
+      }
+
+      if (
+        m.name ===
+        'aowZWMsCgJ'
+      ) {
+        score += 6;
+      }
+
+      if (
+        !best ||
+        score > best.score
+      ) {
+        best = {
+          ...m,
+          score
+        };
+      }
+    }
+
+    return best?.score >= 28
+      ? best
+      : null;
+  }
+
+  function findSend(player) {
+    let best = null;
+
+    for (
+      const m
+      of methodsOf(player)
+    ) {
+      let score = 0;
+
+      const x = m.src;
+
+      if (
+        x.includes(
+          'serverMoveForward'
+        )
+      ) {
+        score += 10;
+      }
+
+      if (
+        x.includes(
+          'serverMoveStrafe'
+        )
+      ) {
+        score += 10;
+      }
+
+      if (
+        x.includes(
+          'ayHGaukUNSp'
+        )
+      ) {
+        score += 5;
+      }
+
+      if (
+        x.includes(
+          'yNDNKuoxzL'
+        )
+      ) {
+        score += 5;
+      }
+
+      if (
+        x.includes(
+          'sendPacket'
+        )
+      ) {
+        score += 5;
+      }
+
+      if (
+        x.includes(
+          'serverSneakState'
+        )
+      ) {
+        score += 2;
+      }
+
+      if (
+        x.includes(
+          'serverSprintState'
+        )
+      ) {
+        score += 2;
+      }
+
+      if (
+        m.name ===
+        'GksBoXJsoTP'
+      ) {
+        score += 6;
+      }
+
+      if (
+        !best ||
+        score > best.score
+      ) {
+        best = {
+          ...m,
+          score
+        };
+      }
+    }
+
+    return best?.score >= 25
+      ? best
+      : null;
+  }
+
+  function actionAt(now) {
+    const t = now % 5200;
 
     return {
-      readerName: reader.name,
-      applyName: apply.name,
-      originalReader: player[reader.name],
-      nativeApply: player[apply.name]
+      up:
+        t < 260,
+
+      down:
+        t >= 520 &&
+        t < 780,
+
+      left:
+        t >= 1900 &&
+        t < 2160,
+
+      right:
+        t >= 2420 &&
+        t < 2680,
+
+      jump:
+        t >= 3600 &&
+        t < 3730
     };
   }
 
-  function neutralMovement(player = state.player) {
-    if (!player) return;
+  function buildInput(
+    base,
+    player
+  ) {
+    const a =
+      actionAt(Date.now());
 
-    try {
-      player.wWQmwuDLqA = 0;
-      player.YApHmhhGagG = 0;
-      player.jumping = false;
-    } catch (_) {}
+    return {
+      ...(
+        base ||
+        player.currentInput ||
+        {}
+      ),
+
+      up:
+        a.up,
+
+      down:
+        a.down,
+
+      left:
+        a.left,
+
+      right:
+        a.right,
+
+      jump:
+        a.jump,
+
+      sneak:
+        false,
+
+      usingItem:
+        false,
+
+      yaw:
+        Number.isFinite(
+          Number(player.yaw)
+        )
+          ? player.yaw
+          : base?.yaw,
+
+      pitch:
+        Number.isFinite(
+          Number(player.pitch)
+        )
+          ? player.pitch
+          : base?.pitch
+    };
   }
 
-  function resetAction() {
-    state.action = 'idle';
-    state.actionStartedAt = 0;
-    state.lastActionAt = 0;
+  function neutralInput(
+    base,
+    player
+  ) {
+    return {
+      ...(
+        base ||
+        player.currentInput ||
+        {}
+      ),
+
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+      jump: false,
+      sneak: false,
+      usingItem: false,
+
+      yaw:
+        Number.isFinite(
+          Number(player.yaw)
+        )
+          ? player.yaw
+          : base?.yaw,
+
+      pitch:
+        Number.isFinite(
+          Number(player.pitch)
+        )
+          ? player.pitch
+          : base?.pitch
+    };
   }
 
-  function rememberPosition() {
-    const player = state.player;
-    if (!player?.pos) {
-      state.lastPosition = null;
+  function sendNow(player) {
+    if (
+      !player ||
+      !s.sendName
+    ) {
       return;
     }
 
-    state.lastPosition = {
-      x: Number(player.pos.x) || 0,
-      y: Number(player.pos.y) || 0,
-      z: Number(player.pos.z) || 0
-    };
-  }
-
-  function deactivate(reason = 'user_activity') {
-    const wasActive = state.active;
-    state.active = false;
-    resetAction();
-    neutralMovement();
-    state.lastUserActivity = Date.now();
-    rememberPosition();
-
-    if (wasActive) {
-      try {
-        console.debug('[MiniFeather Anti-AFK] stopped:', reason);
-      } catch (_) {}
-    }
-  }
-
-  function activate() {
-    if (!state.enabled || state.active || !state.player) return;
-    state.active = true;
-    resetAction();
-
     try {
-      console.debug('[MiniFeather Anti-AFK] active');
-    } catch (_) {}
+      player[
+        s.sendName
+      ]?.call(player);
+    } catch {}
   }
 
-  function chooseAction() {
-    const actions = ['forward', 'backward', 'left', 'right', 'jump'];
-    state.action = actions[Math.floor(Math.random() * actions.length)];
-    state.actionStartedAt = Date.now();
-    state.lastActionAt = state.actionStartedAt;
-  }
-
-  function getControls() {
-    const now = Date.now();
+  function applyNow(input) {
+    const p = s.player;
 
     if (
-      state.action === 'idle' &&
-      (state.lastActionAt === 0 || now - state.lastActionAt >= ACTION_INTERVAL_MS)
+      !p ||
+      typeof s.originalApply !==
+        'function'
     ) {
-      chooseAction();
+      return false;
     }
-
-    if (
-      state.action !== 'idle' &&
-      now - state.actionStartedAt >= ACTION_DURATION_MS
-    ) {
-      state.action = 'idle';
-    }
-
-    const controls = {
-      left: false,
-      right: false,
-      up: false,
-      down: false,
-      jump: false
-    };
-
-    if (state.action === 'forward') controls.up = true;
-    else if (state.action === 'backward') controls.down = true;
-    else if (state.action === 'left') controls.left = true;
-    else if (state.action === 'right') controls.right = true;
-    else if (state.action === 'jump') controls.jump = true;
-
-    return controls;
-  }
-
-  function createNativeInput(player) {
-    const controls = getControls();
-    const data = {
-      sequenceNumber: ++player.inputSequenceNumber,
-      left: controls.left,
-      right: controls.right,
-      up: controls.up,
-      down: controls.down,
-      yaw: player.yaw,
-      pitch: player.pitch,
-      jump: controls.jump,
-      sneak: false,
-      sprint: false,
-      pos: null,
-      ackId: player.lastServerAckId > 0 ? player.lastServerAckId : undefined,
-      onGround: player.onGround,
-      usingItem: false
-    };
 
     try {
-      const InputClass = player.currentInput?.constructor;
-      if (InputClass && InputClass !== Object) return new InputClass(data);
-    } catch (_) {}
+      s.originalApply.call(
+        p,
+        input
+      );
 
-    return data;
+      s.lastNativeCall =
+        Date.now();
+
+      sendNow(p);
+
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  function restorePlayerHook() {
-    const player = state.player;
-    const readerName = state.readerName;
-    const originalReader = state.originalReader;
+  function stopMovement() {
+    const p = s.player;
 
-    if (player && readerName && typeof originalReader === 'function') {
+    if (!p) {
+      return;
+    }
+
+    applyNow(
+      neutralInput(
+        p.currentInput,
+        p
+      )
+    );
+  }
+
+  function restoreHook() {
+    const p = s.player;
+
+    if (
+      p &&
+      s.applyName &&
+      s.hookApply
+    ) {
       try {
-        if (player[readerName] !== originalReader) {
-          player[readerName] = originalReader;
+        if (
+          p[s.applyName] ===
+          s.hookApply
+        ) {
+          if (
+            s.applyHadOwn
+          ) {
+            p[s.applyName] =
+              s.originalApply;
+          } else {
+            delete p[
+              s.applyName
+            ];
+          }
         }
-      } catch (_) {}
+      } catch {}
     }
 
-    neutralMovement(player);
-
-    state.player = null;
-    state.readerName = null;
-    state.applyName = null;
-    state.originalReader = null;
-    state.nativeApply = null;
-    state.active = false;
-    resetAction();
-    state.lastPosition = null;
+    s.applyName = null;
+    s.sendName = null;
+    s.originalApply = null;
+    s.hookApply = null;
+    s.applyHadOwn = false;
   }
 
   function hookPlayer(player) {
-    if (!player) return false;
-
-    if (
-      state.player === player &&
-      state.readerName &&
-      typeof state.originalReader === 'function' &&
-      typeof state.nativeApply === 'function'
-    ) {
-      return true;
+    if (!player) {
+      return false;
     }
 
-    restorePlayerHook();
+    if (
+      s.player &&
+      s.player !== player
+    ) {
+      stopMovement();
+      restoreHook();
+    }
 
-    const native = resolveNativeInput(player);
-    if (!native) return false;
+    s.player = player;
 
-    state.player = player;
-    state.readerName = native.readerName;
-    state.applyName = native.applyName;
-    state.originalReader = native.originalReader;
-    state.nativeApply = native.nativeApply;
-    state.lastUserActivity = Date.now();
-    rememberPosition();
+    const apply =
+      findApply(player);
 
-    const readerName = state.readerName;
-    const originalReader = state.originalReader;
-    const nativeApply = state.nativeApply;
+    const send =
+      findSend(player);
 
-    player[readerName] = function (...args) {
-      if (
-        state.destroyed ||
-        !state.enabled ||
-        !state.active ||
-        state.player !== this
+    if (!apply) {
+      return false;
+    }
+
+    s.applyName =
+      apply.name;
+
+    s.sendName =
+      send?.name || null;
+
+    s.originalApply =
+      apply.fn;
+
+    s.applyHadOwn =
+      Object.prototype
+        .hasOwnProperty
+        .call(
+          player,
+          apply.name
+        );
+
+    const hook =
+      function (
+        input,
+        ...args
       ) {
-        return originalReader.apply(this, args);
+        s.lastNativeCall =
+          Date.now();
+
+        if (
+          !s.enabled ||
+          !s.active ||
+          s.player !== this
+        ) {
+          return s.originalApply.call(
+            this,
+            input,
+            ...args
+          );
+        }
+
+        return s.originalApply.call(
+          this,
+          buildInput(
+            input,
+            this
+          ),
+          ...args
+        );
+      };
+
+    try {
+      player[
+        apply.name
+      ] = hook;
+
+      if (
+        player[
+          apply.name
+        ] !== hook
+      ) {
+        return false;
       }
+    } catch {
+      return false;
+    }
 
-      const input = createNativeInput(this);
-
-      this.sentInputThisTick = false;
-      this.wWQmwuDLqA = 0;
-      this.YApHmhhGagG = 0;
-      this.currentInput = input;
-
-      return nativeApply.call(this, input);
-    };
+    s.hookApply = hook;
 
     return true;
   }
 
   function ensureRuntime() {
-    if (!state.enabled || state.destroyed) return false;
+    if (
+      !s.enabled ||
+      s.destroyed
+    ) {
+      return false;
+    }
 
-    const game = getGame();
-    if (!game?.player) return false;
+    const game =
+      getGame(true);
 
-    state.game = game;
+    const player =
+      game?.player;
 
-    if (state.player !== game.player) {
-      return hookPlayer(game.player);
+    if (!player?.pos) {
+      return false;
+    }
+
+    s.game = game;
+
+    if (
+      s.player !== player ||
+      !s.hookApply ||
+      player[
+        s.applyName
+      ] !== s.hookApply
+    ) {
+      return hookPlayer(
+        player
+      );
     }
 
     return true;
   }
 
-  function noteUserActivity(event) {
-    if (event && event.isTrusted === false) return;
-
-    state.lastUserActivity = Date.now();
-
-    if (state.active) {
-      deactivate('user_activity');
-    } else {
-      rememberPosition();
-    }
-  }
-
-  function onMouseMove(event) {
-    if (event.isTrusted === false) return;
-
-    const movementDistance = Math.hypot(
-      Number(event.movementX) || 0,
-      Number(event.movementY) || 0
-    );
-
-    if (movementDistance >= 1) {
-      state.lastMouseX = event.clientX;
-      state.lastMouseY = event.clientY;
-      noteUserActivity(event);
+  function activate() {
+    if (
+      !s.enabled ||
+      s.active ||
+      !ensureRuntime()
+    ) {
       return;
     }
 
-    if (state.lastMouseX === null || state.lastMouseY === null) {
-      state.lastMouseX = event.clientX;
-      state.lastMouseY = event.clientY;
+    s.active = true;
+
+    applyNow(
+      buildInput(
+        s.player.currentInput,
+        s.player
+      )
+    );
+  }
+
+  function deactivate(
+    resetActivity = true
+  ) {
+    if (s.active) {
+      s.active = false;
+
+      stopMovement();
+    }
+
+    if (resetActivity) {
+      s.lastActivity =
+        Date.now();
+    }
+  }
+
+  function activity(e) {
+    if (
+      e?.isTrusted === false
+    ) {
       return;
     }
 
-    const distance = Math.hypot(
-      event.clientX - state.lastMouseX,
-      event.clientY - state.lastMouseY
-    );
-
-    state.lastMouseX = event.clientX;
-    state.lastMouseY = event.clientY;
-
-    if (distance >= 4) noteUserActivity(event);
+    deactivate(true);
   }
 
-  const activityListeners = [
-    ['keydown', noteUserActivity],
-    ['mousedown', noteUserActivity],
-    ['pointerdown', noteUserActivity],
-    ['wheel', noteUserActivity],
-    ['touchstart', noteUserActivity],
-    ['mousemove', onMouseMove]
+  function mouseMove(e) {
+    if (
+      e.isTrusted === false
+    ) {
+      return;
+    }
+
+    const dx =
+      Number(
+        e.movementX
+      ) || 0;
+
+    const dy =
+      Number(
+        e.movementY
+      ) || 0;
+
+    if (
+      Math.hypot(
+        dx,
+        dy
+      ) >= 1
+    ) {
+      s.mouseX =
+        e.clientX;
+
+      s.mouseY =
+        e.clientY;
+
+      activity(e);
+
+      return;
+    }
+
+    if (
+      s.mouseX === null ||
+      s.mouseY === null
+    ) {
+      s.mouseX =
+        e.clientX;
+
+      s.mouseY =
+        e.clientY;
+
+      return;
+    }
+
+    const d =
+      Math.hypot(
+        e.clientX -
+          s.mouseX,
+
+        e.clientY -
+          s.mouseY
+      );
+
+    s.mouseX =
+      e.clientX;
+
+    s.mouseY =
+      e.clientY;
+
+    if (d >= 4) {
+      activity(e);
+    }
+  }
+
+  const listeners = [
+    [
+      'keydown',
+      activity
+    ],
+
+    [
+      'mousedown',
+      activity
+    ],
+
+    [
+      'pointerdown',
+      activity
+    ],
+
+    [
+      'wheel',
+      activity
+    ],
+
+    [
+      'touchstart',
+      activity
+    ],
+
+    [
+      'mousemove',
+      mouseMove
+    ]
   ];
 
-  function addActivityListeners() {
-    for (const [type, listener] of activityListeners) {
-      window.addEventListener(type, listener, true);
+  function addListeners() {
+    for (
+      const [
+        type,
+        fn
+      ] of listeners
+    ) {
+      window.addEventListener(
+        type,
+        fn,
+        true
+      );
     }
   }
 
-  function removeActivityListeners() {
-    for (const [type, listener] of activityListeners) {
-      window.removeEventListener(type, listener, true);
+  function removeListeners() {
+    for (
+      const [
+        type,
+        fn
+      ] of listeners
+    ) {
+      window.removeEventListener(
+        type,
+        fn,
+        true
+      );
     }
   }
 
   function startTimers() {
-    if (!state.scanTimer) {
-      state.scanTimer = window.setInterval(() => {
-        if (!state.enabled) return;
-        ensureRuntime();
-      }, 1000);
-    }
-
-    if (!state.idleTimer) {
-      state.idleTimer = window.setInterval(() => {
-        if (!state.enabled || state.active) return;
-        if (!ensureRuntime()) return;
-
-        if (Date.now() - state.lastUserActivity >= state.delaySeconds * 1000) {
-          activate();
-        }
-      }, 200);
-    }
-
-    if (!state.movementTimer) {
-      state.movementTimer = window.setInterval(() => {
-        if (!state.enabled || state.active) return;
-        if (!ensureRuntime()) return;
-
-        const player = state.player;
-        if (!player?.pos) return;
-
-        if (!state.lastPosition) {
-          rememberPosition();
-          return;
-        }
-
-        const distance = Math.hypot(
-          player.pos.x - state.lastPosition.x,
-          player.pos.y - state.lastPosition.y,
-          player.pos.z - state.lastPosition.z
+    if (!s.scanTimer) {
+      s.scanTimer =
+        setInterval(
+          () => {
+            if (
+              s.enabled
+            ) {
+              ensureRuntime();
+            }
+          },
+          1000
         );
+    }
 
-        if (distance > 0.08) {
-          state.lastUserActivity = Date.now();
-          rememberPosition();
-        }
-      }, 250);
+    if (!s.idleTimer) {
+      s.idleTimer =
+        setInterval(
+          () => {
+            if (
+              !s.enabled ||
+              s.active
+            ) {
+              return;
+            }
+
+            if (
+              Date.now() -
+                s.lastActivity >=
+              s.delaySeconds *
+                1000
+            ) {
+              activate();
+            }
+          },
+          250
+        );
+    }
+
+    if (!s.fallbackTimer) {
+      s.fallbackTimer =
+        setInterval(
+          () => {
+            if (
+              !s.enabled ||
+              !s.active ||
+              !ensureRuntime()
+            ) {
+              return;
+            }
+
+            if (
+              Date.now() -
+                s.lastNativeCall <
+              300
+            ) {
+              return;
+            }
+
+            applyNow(
+              buildInput(
+                s.player
+                  .currentInput,
+                s.player
+              )
+            );
+          },
+          250
+        );
     }
   }
 
   function stopTimers() {
-    if (state.scanTimer) clearInterval(state.scanTimer);
-    if (state.idleTimer) clearInterval(state.idleTimer);
-    if (state.movementTimer) clearInterval(state.movementTimer);
-    state.scanTimer = 0;
-    state.idleTimer = 0;
-    state.movementTimer = 0;
+    clearInterval(
+      s.scanTimer
+    );
+
+    clearInterval(
+      s.idleTimer
+    );
+
+    clearInterval(
+      s.fallbackTimer
+    );
+
+    s.scanTimer = 0;
+    s.idleTimer = 0;
+    s.fallbackTimer = 0;
   }
 
   function enable() {
-    if (state.destroyed) return;
+    if (
+      s.destroyed
+    ) {
+      return false;
+    }
 
-    state.enabled = true;
-    state.active = false;
-    state.lastUserActivity = Date.now();
-    resetAction();
-    addActivityListeners();
+    if (
+      s.enabled
+    ) {
+      return true;
+    }
+
+    s.enabled = true;
+    s.active = false;
+
+    s.lastActivity =
+      Date.now();
+
+    addListeners();
     startTimers();
     ensureRuntime();
+
+    return true;
   }
 
   function disable() {
-    state.enabled = false;
-    state.active = false;
+    s.enabled = false;
+
+    deactivate(false);
+
     stopTimers();
-    removeActivityListeners();
-    restorePlayerHook();
-    state.game = null;
-    state.lastUserActivity = Date.now();
+    removeListeners();
+    restoreHook();
+
+    s.player = null;
+    s.game = null;
+
+    s.lastActivity =
+      Date.now();
   }
 
-  function applyConfig(config = {}) {
-    state.delaySeconds = clampDelay(config.delaySeconds ?? state.delaySeconds);
+  function applyConfig(
+    config = {}
+  ) {
+    const delay =
+      config.delaySeconds ??
+      config.delay ??
+      config.seconds;
 
-    if (config.enabled === true) {
-      if (!state.enabled) enable();
-      return;
+    if (
+      delay != null
+    ) {
+      s.delaySeconds =
+        clampDelay(delay);
     }
 
-    if (config.enabled === false && state.enabled) {
+    if (
+      config.enabled === true
+    ) {
+      enable();
+    }
+
+    if (
+      config.enabled === false
+    ) {
       disable();
     }
   }
 
-  function onConfig(event) {
+  function onConfig(e) {
     let config = {};
 
     try {
-      config = typeof event.detail === 'string'
-        ? JSON.parse(event.detail || '{}')
-        : (event.detail || {});
-    } catch (_) {
-      config = {};
-    }
+      config =
+        typeof e.detail ===
+        'string'
+          ? JSON.parse(
+              e.detail || '{}'
+            )
+          : (
+              e.detail || {}
+            );
+    } catch {}
 
     applyConfig(config);
   }
 
   function destroy() {
-    if (state.destroyed) return;
-    state.destroyed = true;
-    document.removeEventListener(EVENT_CONFIG, onConfig);
+    if (
+      s.destroyed
+    ) {
+      return;
+    }
+
+    document.removeEventListener(
+      EVENT,
+      onConfig
+    );
+
     disable();
 
-    if (globalThis[GLOBAL_KEY]?.destroy === destroy) {
-      delete globalThis[GLOBAL_KEY];
-    }
+    s.destroyed = true;
+
+    try {
+      delete globalThis[
+        KEY
+      ];
+    } catch {}
   }
 
-  document.addEventListener(EVENT_CONFIG, onConfig);
+  document.addEventListener(
+    EVENT,
+    onConfig
+  );
 
-  globalThis[GLOBAL_KEY] = {
+  globalThis[KEY] = {
+    enable,
+    disable,
     destroy,
     applyConfig,
+
     get status() {
       return {
-        enabled: state.enabled,
-        active: state.active,
-        delaySeconds: state.delaySeconds,
-        action: state.action,
-        idleSeconds: Math.max(0, (Date.now() - state.lastUserActivity) / 1000),
-        hooked: !!state.player,
-        readerName: state.readerName,
-        applyName: state.applyName
+        enabled:
+          s.enabled,
+
+        active:
+          s.active,
+
+        delaySeconds:
+          s.delaySeconds,
+
+        idleSeconds:
+          Math.max(
+            0,
+            (
+              Date.now() -
+              s.lastActivity
+            ) / 1000
+          ),
+
+        playerHooked:
+          !!s.player,
+
+        applyMethod:
+          s.applyName,
+
+        sendMethod:
+          s.sendName,
+
+        hidden:
+          document.hidden
       };
     }
   };
