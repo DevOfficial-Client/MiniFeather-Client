@@ -1,0 +1,27 @@
+{
+  "name": "T-Pose",
+  "author": "MiniFeather",
+  "description": "Pose de T clasica",
+  "emote": {
+    "beginTick": 0,
+    "endTick": 8,
+    "stopTick": 999999,
+    "isLoop": true,
+    "returnTick": 8,
+    "degrees": true,
+    "moves": [
+      {
+        "tick": 0,
+        "easing": "easeOutCubic",
+        "leftArm": { "roll": 0 },
+        "rightArm": { "roll": 0 }
+      },
+      {
+        "tick": 8,
+        "easing": "constant",
+        "leftArm": { "roll": -90 },
+        "rightArm": { "roll": 90 }
+      }
+    ]
+  }
+}

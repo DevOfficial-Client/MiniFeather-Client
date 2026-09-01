@@ -12,6 +12,11 @@ try {
     meta.name = 'mf-mirror-base';
     meta.content = chrome.runtime.getURL('assets/mfpack/');
     document.documentElement.appendChild(meta);
+    // base de skins locales para CustomSkins (MAIN world no tiene chrome.runtime)
+    const metaSkins = document.createElement('meta');
+    metaSkins.name = 'mf-skins-base';
+    metaSkins.content = chrome.runtime.getURL('skins/');
+    document.documentElement.appendChild(metaSkins);
   }
 } catch (_) {}
 

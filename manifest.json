@@ -85,7 +85,16 @@
         "src/VerityAI.js",
         "src/MF_Peer.js",
         "src/CustomShader.js",
-        "src/GUIPatch.js"
+        "src/GUIPatch.js",
+        "src/Emotes.js",
+        "src/MF_FaceSwap.js",
+        "src/MF_SkinEditor.js",
+        "src/MF_Film.js",
+        "src/MF_Pose.js",
+        "src/MF_Gizmo.js",
+        "src/MF_Animation.js",
+        "src/MF_Timeline.js",
+        "src/MF_Studio.js"
       ],
       "run_at": "document_start",
       "world": "MAIN",
@@ -139,9 +148,14 @@
         "textures/*/*",
         "textures/*/*/*",
         "textures/*/*/*/*",
+        "client-side mod/entity/*",
         "models/*",
         "models/*/*",
         "models/*/*/*",
+        "emotes/*",
+        "accounts.json",
+        "skins/*",
+        "skins/*/*",
         "src/jszip.min.js"
       ],
       "matches": [

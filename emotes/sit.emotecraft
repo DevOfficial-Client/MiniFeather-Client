@@ -1,0 +1,29 @@
+{
+  "name": "Sit",
+  "author": "MiniFeather",
+  "description": "Sentarse en el suelo",
+  "emote": {
+    "beginTick": 0,
+    "endTick": 10,
+    "stopTick": 999999,
+    "isLoop": true,
+    "returnTick": 10,
+    "degrees": true,
+    "moves": [
+      {
+        "tick": 0,
+        "easing": "easeOutCubic",
+        "torso": { "y": 0 },
+        "leftLeg": { "pitch": 0, "bend": 0 },
+        "rightLeg": { "pitch": 0, "bend": 0 }
+      },
+      {
+        "tick": 10,
+        "easing": "constant",
+        "torso": { "y": -4 },
+        "leftLeg": { "pitch": -80, "bend": 80 },
+        "rightLeg": { "pitch": -80, "bend": 80 }
+      }
+    ]
+  }
+}

@@ -433,6 +433,7 @@ function spawnPuppetEnt(id, r) {
         height: r.height || 0,
         scale: r.scale || 1,
         puppet: true,
+        room: r.room === true,   // rooms P2P: mantener modo room (sin fisica)
         anim: r.anim || null,
         followPlayer: false
     });
@@ -608,6 +609,20 @@ function handleMsg(msg) {
         case 'file-e':
             if (msg.file) handleFileEnd(msg.file);
             break;
+        // ---- Studio Sync: animación + cámara compartidas ----
+        case 'studio-pose':
+            // pose de partes del actor local (radianes, formato MF_Film)
+            try { window.MF_Studio?.applyRemotePose?.(msg.pose, msg.reset); } catch {}
+            break;
+        case 'studio-cam':
+            // cámara del estudio: target para interpolar (no salto seco)
+            try { window.MF_Studio?.applyRemoteCam?.(msg.p); } catch {}
+            break;
+        case 'studio-cam-on':
+        case 'studio-cam-off':
+            // el peer activó/desactivó su cámara compartida
+            try { window.MF_Studio?.remoteCamActive?.(msg.t === 'studio-cam-on'); } catch {}
+            break;
     }
 }
 
@@ -706,12 +721,20 @@ window.MF_Peer = {
     get status() { return state.status; },
     get role() { return state.role; },
     get code() { return state.peerId; },
+    get connected() { return !!state.conn; },
     _chatHook: null,
     host, join, off,
     // pat compartido (PatPat): envia la info del pat al otro cliente
     sendPat(info) {
         if (!state.conn) return false;
         send({ t: 'pat', target: info?.target || null, from: info?.from || null });
+        return true;
+    },
+    // Studio Sync: enviar eventos del estudio (pose/cámara) al peer.
+    // Devuelve false si no hay conexión (el emisor no debe acumular).
+    sendStudio(obj) {
+        if (!state.conn || state.status === 'off') return false;
+        send(obj);
         return true;
     }
 };

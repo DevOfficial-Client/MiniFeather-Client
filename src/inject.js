@@ -4,9 +4,14 @@
   const RANK_KEY = 'dev';
   const RANK_LABEL = 'DEV';
   const RANK_COLOR = '#00FFFF';
+  // identificacion por UUID (inmune a renombres) con fallback por username.
+  // El uuid se normaliza a minusculas; el display name se resuelve al vuelo.
+  const TARGET_UUIDS = new Map([
+    ['6eb7369a-551e-406a-9a63-6db7a358e1e5', 'ShusukeGxE_']
+  ]);
+  // fallback / usuarios cuyo uuid no conocemos: lowercase → display
   const TARGETS = new Map([
-    ['angrywolfx', 'AngryWolfX'],
-    ['estebanexg_', 'EstebanExG_']
+    ['angrywolfx', 'AngryWolfX']
   ]);
 
   const state = {
@@ -35,6 +40,11 @@
     }
   };
 
+  function isTargetUuid(value) {
+    if (typeof value !== 'string' || !value) return null;
+    return TARGET_UUIDS.get(value.toLowerCase()) || null;
+  }
+
   function isTargetName(value) {
     if (typeof value !== 'string') return null;
     return TARGETS.get(value.trim().toLowerCase()) || null;
@@ -48,10 +58,15 @@
 
   function targetNameFromObject(value) {
     if (!value || typeof value !== 'object') return null;
+    // uuid primero (inmune a renombres), luego username/name
+    const byUuid = isTargetUuid(value.uuid);
+    if (byUuid) return byUuid;
     const direct = isTargetName(value.username) || isTargetName(value.name);
     if (direct) return direct;
     const profile = value.profile;
     if (profile && typeof profile === 'object') {
+      const profileByUuid = isTargetUuid(profile.uuid);
+      if (profileByUuid) return profileByUuid;
       return isTargetName(profile.username) || isTargetName(profile.name);
     }
     return null;
@@ -68,7 +83,8 @@
     }
 
     if (value.profile && typeof value.profile === 'object') {
-      const profileTarget = isTargetName(value.profile.username) || isTargetName(value.profile.name) || target;
+      const profileTarget = isTargetUuid(value.profile.uuid) ||
+        isTargetName(value.profile.username) || isTargetName(value.profile.name) || target;
       if (profileTarget && 'rank' in value.profile) {
         rememberNativeRank(profileTarget, value.profile.rank);
         try { value.profile.rank = RANK_KEY; } catch (_) {}
@@ -172,7 +188,7 @@
         if (match) guiFile = match[1];
       }
 
-      if (!guiFile) guiFile = 'GuiToast-Lc6SpdY_.js';
+      if (!guiFile) guiFile = 'GuiToast-CS00K5-z.js'; // v3.46.223 (actualizar si cambia el bundle)
       if (!mainUrl) mainUrl = new URL('/assets/index-placeholder.js', location.origin).href;
 
       const guiUrl = new URL('./' + guiFile, mainUrl).href;

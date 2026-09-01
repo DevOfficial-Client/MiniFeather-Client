@@ -1,0 +1,5 @@
+# archivos grandes (bloquean el push a GitHub, límite 100 MB)
+models/entities/backrooms_level_0.glb
+
+# chat interno del agente
+.commandcode/

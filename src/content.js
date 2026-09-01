@@ -2606,8 +2606,13 @@
       const parts = dirRaw.replace(/[\\/]+/g, '/').split('/').filter(Boolean).slice(0, 2);
       const dir = parts.join('/');
       const url = chrome.runtime.getURL(dir + '/' + file);
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      let resp;
+      try {
+        resp = await fetch(url);
+      } catch (e) {
+        throw new Error('no existe "' + dir + '/' + file + '" (' + (e?.message || e) + ')');
+      }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status + ' para ' + dir + '/' + file);
       const blob = await resp.blob();
       const blobUrl = URL.createObjectURL(blob);
       document.dispatchEvent(new CustomEvent('minifeather:model-fetch-response', {
@@ -2616,6 +2621,33 @@
     } catch (err) {
       if (!nonce) return;
       document.dispatchEvent(new CustomEvent('minifeather:model-fetch-response', {
+        detail: JSON.stringify({ nonce, ok: false, status: (err && err.message) || 'error' })
+      }));
+    }
+  });
+
+  // Puente de emotes: el mundo MAIN pide un .emotecraft de emotes/,
+  // aqui (ISOLATED) lo fetch-eamos como blob y devolvemos la URL.
+  document.addEventListener('minifeather:emote-fetch-request', async (e) => {
+    let nonce = null;
+    try {
+      const req = JSON.parse(e.detail || '{}');
+      nonce = req.nonce;
+      const file = String(req.file || '').replace(/[\\/]+/g, '');
+      if (!file || file.includes('..')) throw new Error('nombre invalido');
+      const dirRaw = String(req.dir || '') || 'emotes';
+      const dir = dirRaw.replace(/[\\/]+/g, '/').split('/').filter(Boolean).slice(0, 1).join('/');
+      const url = chrome.runtime.getURL(dir + '/' + file);
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      document.dispatchEvent(new CustomEvent('minifeather:emote-fetch-response', {
+        detail: JSON.stringify({ nonce, url: blobUrl, ok: true })
+      }));
+    } catch (err) {
+      if (!nonce) return;
+      document.dispatchEvent(new CustomEvent('minifeather:emote-fetch-response', {
         detail: JSON.stringify({ nonce, ok: false, status: (err && err.message) || 'error' })
       }));
     }

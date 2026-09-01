@@ -198,6 +198,9 @@
                 anim: opts.anim || null,
                 animSpeed: +(opts.animSpeed || 1),
                 hover: !!opts.hover,          // flota: sin gravedad ni colision
+                room: !!opts.room,            // habitacion: estatica, centrada en el player, sin fisica
+                autoSize: !!opts.autoSize,    // room: escalar automaticamente a ~80 bloques
+                sink: opts.sink !== false,    // room: hundir 1 bloque el piso (default true)
                 weeping: !!opts.weeping,      // se congela si el player lo mira
                 lookAtPlayer: opts.lookAtPlayer !== false,
                 stay: !!opts.stay,
@@ -217,7 +220,57 @@
                 const inst = cloneInstance(built);
                 rec.inst = inst;
                 rec.root = inst.root;
-                if (rec.height > 0 && built.height > 0) {
+                if (rec.room) {
+                    // habitacion: tamano real (o escala indicada) y CENTRADA en el
+                    // player: el centro XZ del modelo queda en rec.pos, su piso en
+                    // rec.pos.y. El origen del GLB puede estar a cientos de unidades
+                    // del centro real (backrooms: 406x411 con origen en -190,-199).
+                    // P2P: si es puppet, rec.pos ya es la pos FINAL del host (con
+                    // offset) — no re-centrar.
+                    let s = (rec.scale && rec.scale !== 1) ? rec.scale : 1;
+                    if (rec.autoSize) {
+                        // escalar al mayor lado horizontal ≈ 80 bloques
+                        const maxSide = Math.max(built.max[0] - built.min[0], built.max[2] - built.min[2]);
+                        s = 80 / (maxSide || 1);
+                    }
+                    if (s !== 1) inst.root.scale.multiplyScalar(s);
+                    s = inst.root.scale.x; // escala uniforme final
+                    if (rec.puppet) {
+                        inst.root.position.set(rec.pos.x, rec.pos.y, rec.pos.z);
+                    } else {
+                        // pegar al suelo: el piso de la room se mete 1 bloque en
+                        // el terreno (borde inferior del GLB 1 bloque bajo la
+                        // superficie) para que no asomen rendijas del mundo real.
+                        // sink:false → piso EXACTO en la superficie (niveles
+                        // generados con piso plano en y=0)
+                        let floorY = rec.pos.y;
+                        try {
+                            for (let dy = 0; dy < 8; dy++) {
+                                const solid = blockSolidAt(rec.pos.x, rec.pos.y - dy - 0.5, rec.pos.z);
+                                if (solid === true) { floorY = Math.floor(rec.pos.y - dy - 0.5) + 1; break; }
+                                if (solid === null) break; // chunk no cargado
+                            }
+                        } catch {}
+                        const sink = rec.sink === false ? 0 : 1; // sink:false → piso exacto en superficie
+                        inst.root.position.set(
+                            rec.pos.x - built.center.x * s,
+                            floorY - built.min[1] * s - sink,
+                            rec.pos.z - built.center.z * s
+                        );
+                    }
+                    // AABB local para ocultar el terreno dentro (updateRoomTerrainHiding)
+                    rec.terrBox = { min: built.min, max: built.max };
+                    // grid de colision para el player: AABBs por celda de 1 bloque
+                    // extraidos de las mallas del modelo (paredes/piso/techo)
+                    if (!rec.puppet) {
+                        try { buildRoomColliders(rec, built, s); } catch {}
+                    }
+                    console.log(TAG + ' habitacion "' + id + '" [' + modelFile + ']: ' +
+                        ((built.max[0] - built.min[0]) * s).toFixed(1) + 'x' +
+                        ((built.max[1] - built.min[1]) * s).toFixed(1) + 'x' +
+                        ((built.max[2] - built.min[2]) * s).toFixed(1) +
+                        ' bloques, piso en Y=' + rec.pos.y.toFixed(1) + ', centro XZ sobre ti');
+                } else if (rec.height > 0 && built.height > 0) {
                     inst.root.scale.multiplyScalar(rec.height / built.height);
                 } else if (rec.scale !== 1) {
                     inst.root.scale.multiplyScalar(rec.scale);
@@ -238,7 +291,8 @@
                         console.log(TAG + ' "' + id + '" aparece con "' + an + '"');
                     }
                 }
-                inst.root.position.set(rec.pos.x, rec.pos.y, rec.pos.z);
+                // posicion final (room ya seteo su Y alineada al piso arriba)
+                if (!rec.room) inst.root.position.set(rec.pos.x, rec.pos.y, rec.pos.z);
                 disableCullingDeep(inst.root);
                 inst.root.matrixAutoUpdate = true;
                 scene.add(inst.root);
@@ -249,7 +303,12 @@
                 const animInfo = inst.anims.length ? ' anims: ' + inst.anims.map((a) => a.name).join(', ') : '';
                 console.log(TAG + ' entidad client-side "' + id + '" spawneada' + (rec.anim ? ' animando "' + rec.anim + '"' : '') + animInfo);
             }).catch((e) => {
-                console.warn(TAG + ' fallo spawn "' + id + '": ' + (e?.message || e));
+                // mensaje accionable: que archivo fallo y por que
+                const msg = String(e?.message || e);
+                const hint = /Failed to fetch/.test(msg)
+                    ? ' (extension recargada? refresca la pagina de miniblox; o el archivo no existe en models/entities/)'
+                    : '';
+                console.warn(TAG + ' fallo spawn "' + id + '" [' + modelFile + ']: ' + msg + hint);
                 state.customs.delete(id);
             });
             return id;
@@ -316,6 +375,7 @@
             rec.dead = true;
             try { rec.root?.parent?.remove(rec.root); } catch {}
             state.customs.delete(id);
+            // si era room, su terreno oculto se restaura en el proximo tick
             return true;
         },
         move(id, x, y, z, yaw) {
@@ -382,7 +442,8 @@
                     yaw: +(rec.yaw ?? 0).toFixed(2),
                     anim: rec.curAnim || rec.anim || null,
                     scale: +rec.scale || 1,
-                    height: +rec.height || 0
+                    height: +rec.height || 0,
+                    room: rec.room === true
                 });
             }
             return out;
@@ -391,15 +452,26 @@
         async tryLoad(file) {
             try { await loadModel(file); return true; } catch { return false; }
         },
-        // bytes del .glb para enviar al peer
+        // bytes del .glb/.gltf/.obj para enviar al peer
         async getGLBBytes(file) {
-            if (!/\.glb$/i.test(file)) throw new Error('solo archivos .glb via P2P');
+            if (!/\.(glb|gltf|obj)$/i.test(file)) throw new Error('solo archivos .glb/.gltf/.obj via P2P');
             return fetchModelArrayBuffer(file);
         },
-        // registrar un .glb recibido por red en el cache de modelos
+        // registrar un modelo (.glb/.gltf/.obj) recibido por red en el cache
         registerModelBytes(file, arrayBuffer) {
             const p = (async () => {
-                const parsed = parseGLB(arrayBuffer);
+                let parsed;
+                if (/\.obj$/i.test(file)) {
+                    // OBJ via P2P: sin .mtl/texturas (se envian solo los bytes
+                    // del obj) → material por defecto
+                    parsed = parseOBJ(new TextDecoder().decode(arrayBuffer), file, null);
+                } else if (/\.gltf$/i.test(file)) {
+                    // glTF via P2P: el JSON llega por red; .bin/texturas se
+                    // intentan resolver localmente (mismo paquete en ambos lados)
+                    parsed = await resolveGLTFExternal(JSON.parse(new TextDecoder().decode(arrayBuffer)));
+                } else {
+                    parsed = parseGLB(arrayBuffer);
+                }
                 const ctors = grabCtors();
                 if (!ctors) throw new Error('constructores Three no disponibles todavia');
                 const lf = findHandRenderer(getGame());
@@ -745,6 +817,85 @@
         return { json, bin };
     }
 
+    // ─── .gltf (JSON) con .bin/imagenes EXTERNAS → {json, bin} ───
+    // El pipeline lee un UNICO bin (readAccessor/getTextureFor), asi que:
+    // 1) se cargan todos los buffers (archivos .bin junto al .gltf o data
+    //    URIs), se concatenan en uno y se remapean los bufferViews
+    // 2) las imagenes con uri externo se fetchean y se convierten a data URI
+    //    (getTextureFor ya soporta data URIs y bufferViews)
+    function b64ToBytes(b64) {
+        const raw = atob(b64);
+        const out = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+        return out;
+    }
+
+    // resuelve .bin/imagenes externos de un json glTF → {json, bin}
+    // (usado por parseGLTFModel y por modelos recibidos via P2P)
+    async function resolveGLTFExternal(json, base) {
+        // 1) buffers → bin unico concatenado + bufferViews remapeados
+        const bufs = [];
+        let total = 0;
+        for (const b of json.buffers || []) {
+            let bytes = null;
+            if (typeof b.uri === 'string' && b.uri.startsWith('data:')) {
+                bytes = b64ToBytes(b.uri.slice(b.uri.indexOf(',') + 1));
+            } else if (typeof b.uri === 'string' && b.uri) {
+                // archivo junto al .gltf (basename: el puente no acepta rutas)
+                const name = decodeURIComponent(b.uri.split('/').pop());
+                try { bytes = new Uint8Array(await fetchModelArrayBuffer(name)); } catch {}
+            }
+            if (!bytes) bytes = new Uint8Array(0);
+            bufs.push({ bytes, off: total });
+            total += bytes.byteLength;
+        }
+        const bin = new ArrayBuffer(total);
+        const binU8 = new Uint8Array(bin);
+        for (const b of bufs) binU8.set(b.bytes, b.off);
+        for (const bv of json.bufferViews || []) {
+            const src = bufs[bv.buffer] || bufs[0];
+            if (!src) continue;
+            bv.byteOffset = (bv.byteOffset || 0) + src.off;
+            bv.buffer = 0;
+        }
+
+        // 2) imagenes externas → data URI
+        const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
+        for (const img of json.images || []) {
+            if (typeof img.uri !== 'string' || img.uri.startsWith('data:')) continue;
+            const name = decodeURIComponent(img.uri.split('/').pop());
+            try {
+                const bytes = new Uint8Array(await fetchModelArrayBuffer(name));
+                let s = '';
+                for (let i = 0; i < bytes.length; i += 0x8000) {
+                    s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+                }
+                const ext = (name.split('.').pop() || 'png').toLowerCase();
+                img.uri = 'data:' + (MIME[ext] || 'image/png') + ';base64,' + btoa(s);
+                img.mimeType = MIME[ext] || 'image/png';
+            } catch { /* sin textura: material cae a color plano */ }
+        }
+
+        // fallback del .bin por nombre base si ningun buffer resolvio
+        if (!total && json.buffers?.length && base) {
+            try {
+                const bytes = new Uint8Array(await fetchModelArrayBuffer(base + '.bin'));
+                return { json, bin: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) };
+            } catch { throw new Error('.gltf sin .bin accesible'); }
+        }
+        if (!json.buffers?.length && !(json.bufferViews || []).length) {
+            throw new Error('.gltf sin geometria (buffers)');
+        }
+        return { json, bin };
+    }
+
+    async function parseGLTFModel(file) {
+        const json = JSON.parse(new TextDecoder().decode(await fetchModelArrayBuffer(file)));
+        const parsed = await resolveGLTFExternal(json, file.replace(/\.gltf$/i, ''));
+        console.log(TAG + ' glTF "' + file + '": ' + (json.meshes?.length || 0) + ' meshes, bin ' + parsed.bin.byteLength + ' B');
+        return parsed;
+    }
+
     function readAccessor(parsed, acc) {
         const { json: gltf, bin } = parsed;
         const dv = new DataView(bin);
@@ -960,8 +1111,18 @@
             groups.set(idx, g);
             if (node.matrix) {
                 const m = node.matrix;
-                g.position.set(m[12], m[13], m[14]);
-                try { quatFromMat4(m, g.quaternion); } catch {}
+                try {
+                    // descomponer TRS completo: la matriz puede mezclar
+                    // rotacion+escala (p.ej. Sketchfab: Z-up→Y-up * 1.25).
+                    // Extraer el quaternion a mano con escala mezclada da una
+                    // rotacion corrupta = modelo inclinado, y la escala se
+                    // perdia = modelo mas chico que sus bounds.
+                    g.matrix.fromArray(m);
+                    g.matrix.decompose(g.position, g.quaternion, g.scale);
+                } catch {
+                    g.position.set(m[12], m[13], m[14]);
+                    try { quatFromMat4(m, g.quaternion); } catch {}
+                }
             } else {
                 if (node.translation) g.position.fromArray(node.translation);
                 if (node.rotation) g.quaternion.fromArray(node.rotation);
@@ -996,7 +1157,7 @@
 
         const height = max[1] - min[1];
         const anims = buildAnimTracks(parsed);
-        return { root, height, minY: min[1], groups, anims };
+        return { root, height, minY: min[1], min, max, center: { x: (min[0] + max[0]) / 2, y: (min[1] + max[1]) / 2, z: (min[2] + max[2]) / 2 }, groups, anims };
     }
 
     const modelCache = new Map();
@@ -1030,12 +1191,29 @@
 
     async function fetchModelArrayBuffer(file) {
         if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
-            const resp = await fetch(chrome.runtime.getURL('models/entities/' + file));
+            // cache:'reload' → forzar revalidacion: tras actualizar archivos de
+            // la extension, el cache HTTP puede servir un .glb VIEJO (p.ej. el
+            // /room mostrando el modelo generado del port en vez del original)
+            const url = chrome.runtime.getURL('models/entities/' + file);
+            let resp;
+            try {
+                resp = await fetch(url, { cache: 'reload' });
+            } catch (e) {
+                // fetch a chrome-extension:// lanza TypeError (Failed to fetch)
+                // si el archivo NO existe (o la extension fue recargada y esta
+                // URL murio). Distinguirlo del resto de errores:
+                throw new Error('no se encontro "' + file + '" en models/entities/ (fetch ' + (e?.message || e) + ')');
+            }
             if (!resp.ok) throw new Error('HTTP ' + resp.status + ' para ' + file);
             return resp.arrayBuffer();
         }
         const url = await bridgeFetchUrl(file);
-        const resp = await fetch(url);
+        let resp;
+        try {
+            resp = await fetch(url);
+        } catch (e) {
+            throw new Error('no se encontro "' + file + '" via puente (fetch ' + (e?.message || e) + ')');
+        }
         if (!resp.ok) throw new Error('HTTP ' + resp.status + ' para ' + file);
         return resp.arrayBuffer();
     }
@@ -1216,6 +1394,248 @@
         return parsed;
     }
 
+    // ─── Wavefront .obj → pseudo-GLTF ───
+    // Mismo patrón que parseBedrockGeo: se emite glTF JSON con accessors en
+    // un bin propio, para que buildScene/cloneInstance funcionen igual.
+    // - Grupos "o"/"g" → un nodo glTF cada uno (jerarquia plana).
+    // - "usemtl" + .mtl (map_Kd) → textura por material; la imagen se
+    //   resuelve a base64 en parseOBJModel (buscada junto al .obj).
+    // - Coordenadas: OBJ y GLB usan Y-up; Blockbench exporta OBJ con
+    //   1 unidad = 1 bloque → SIN escala (igual que un GLB exportado).
+    // - UV: OBJ tiene origen abajo-izquierda, la textura se crea con
+    //   flipY=false (glTF) → v_glTF = 1 - v_obj.
+    function parseOBJ(text, file, mtlMap) {
+        const verts = [];
+        const uvs = [];
+        const norms = [];
+        const groups = [];          // { name, mat, pos:[], uv:[], nor:[], idx:[] }
+        let cur = null;
+
+        function newGroup(name) {
+            cur = { name: name || ('obj' + groups.length), mat: null, pos: [], uv: [], nor: [], idx: [] };
+            groups.push(cur);
+            return cur;
+        }
+        newGroup('default');
+
+        const lines = text.split(/\r?\n/);
+        for (let li = 0; li < lines.length; li++) {
+            const line = lines[li];
+            const t = line.trim();
+            if (!t || t[0] === '#') continue;
+            const sp = t.indexOf(' ');
+            const kw = sp < 0 ? t : t.slice(0, sp);
+            const rest = sp < 0 ? '' : t.slice(sp + 1).trim();
+            switch (kw) {
+                case 'v': {
+                    const p = rest.split(/\s+/).map(Number);
+                    verts.push(p[0] || 0, p[1] || 0, p[2] || 0);
+                    break;
+                }
+                case 'vt': {
+                    const p = rest.split(/\s+/).map(Number);
+                    uvs.push(p[0] || 0, p[1] || 0);
+                    break;
+                }
+                case 'vn': {
+                    const p = rest.split(/\s+/).map(Number);
+                    norms.push(p[0] || 0, p[1] || 0, p[2] || 0);
+                    break;
+                }
+                case 'o':
+                case 'g':
+                    if (!cur || cur.name !== rest) newGroup(rest);
+                    break;
+                case 'usemtl':
+                    if (cur) cur.mat = rest;
+                    break;
+                case 'f': {
+                    if (!cur) newGroup('default');
+                    // f v/vt/vn v/vt/vn ... (indices 1-based; negativos = desde el final)
+                    const corners = rest.split(/\s+/);
+                    const base = cur.pos.length / 3;
+                    const nv = verts.length / 3, nt = uvs.length / 2, nn = norms.length / 3;
+                    for (const c of corners) {
+                        let vi = 0, ti = 0, ni = 0;
+                        const parts = c.split('/');
+                        vi = parseInt(parts[0], 10) || 0;
+                        if (parts.length > 1 && parts[1]) ti = parseInt(parts[1], 10) || 0;
+                        if (parts.length > 2 && parts[2]) ni = parseInt(parts[2], 10) || 0;
+                        if (vi < 0) vi = nv + vi + 1;
+                        if (ti < 0) ti = nt + ti + 1;
+                        if (ni < 0) ni = nn + ni + 1;
+                        const vOff = (vi - 1) * 3, tOff = (ti - 1) * 2, nOff = (ni - 1) * 3;
+                        cur.pos.push(verts[vOff] || 0, verts[vOff + 1] || 0, verts[vOff + 2] || 0);
+                        if (ti > 0) cur.uv.push(uvs[tOff], 1 - uvs[tOff + 1]); // flip v
+                        else cur.uv.push(0, 0);
+                        if (ni > 0) cur.nor.push(norms[nOff], norms[nOff + 1], norms[nOff + 2]);
+                        else cur.nor.push(0, 0, 0);
+                    }
+                    // fan triangulacion
+                    for (let i = 1; i + 1 < corners.length; i++) {
+                        cur.idx.push(base, base + i, base + i + 1);
+                    }
+                    break;
+                }
+            }
+        }
+
+        // grupos sin caras se descartan
+        const solid = groups.filter((g) => g.idx.length);
+        if (!solid.length) throw new Error('OBJ sin caras (f)');
+
+        // materiales: agrupar por usemtl → material glTF; textura del .mtl
+        // (map_Kd, ya resuelta a base64 por parseOBJModel). Material i usa
+        // texture i (indices paralelos cuando hay textura).
+        const matNames = new Set(solid.map((g) => g.mat).filter(Boolean));
+        const materials = [];
+        const textures = [];
+        const images = [];
+        const matIndex = new Map();
+        for (const mn of matNames) {
+            const mtl = mtlMap?.get(mn) || {};
+            const mi = materials.length;
+            if (mtl.map) {
+                images.push({ uri: 'data:image/png;base64,' + mtl.map, mimeType: 'image/png' });
+                textures.push({ source: images.length - 1 });
+                materials.push({ pbrMetallicRoughness: { baseColorTexture: { index: textures.length - 1 } }, alphaMode: 'BLEND', doubleSided: true });
+            } else {
+                materials.push({ pbrMetallicRoughness: { baseColorFactor: mtl.kd || [0.8, 0.8, 0.8, 1] }, doubleSided: true });
+            }
+            matIndex.set(mn, mi);
+        }
+
+        // accessors + bin
+        const bufferViews = [];
+        const accessors = [];
+        const chunks = [];
+        let offset = 0;
+        function pushView(typedArr) {
+            const pad = (4 - (offset % 4)) % 4;
+            if (pad) { chunks.push(new Uint8Array(pad)); offset += pad; }
+            const bytes = new Uint8Array(typedArr.buffer, typedArr.byteOffset, typedArr.byteLength);
+            bufferViews.push({ buffer: 0, byteOffset: offset, byteLength: bytes.byteLength });
+            chunks.push(bytes);
+            offset += bytes.byteLength;
+            return bufferViews.length - 1;
+        }
+        function addAccessor(typedArr, type, componentType) {
+            const count = typedArr.length / { SCALAR: 1, VEC2: 2, VEC3: 3 }[type];
+            accessors.push({ bufferView: pushView(typedArr), componentType, count, type });
+            return accessors.length - 1;
+        }
+
+        const nodes = [];
+        const meshes = [];
+        for (const g of solid) {
+            const prims = [{
+                attributes: {
+                    POSITION: addAccessor(new Float32Array(g.pos), 'VEC3', 5126),
+                    NORMAL: addAccessor(new Float32Array(g.nor), 'VEC3', 5126),
+                    TEXCOORD_0: addAccessor(new Float32Array(g.uv), 'VEC2', 5126)
+                },
+                indices: addAccessor(new Uint32Array(g.idx), 'SCALAR', 5125),
+                material: g.mat ? (matIndex.get(g.mat) ?? 0) : 0
+            }];
+            nodes.push({ name: g.name, mesh: meshes.length });
+            meshes.push({ primitives: prims });
+        }
+
+        const bin = new ArrayBuffer(offset);
+        const binU8 = new Uint8Array(solid.length ? bin : new ArrayBuffer(0));
+        if (offset > 0) {
+            let at = 0;
+            for (const c of chunks) { binU8.set(c, at); at += c.byteLength; }
+        }
+        const nodeIdxOf = new Map();
+        for (let i = 0; i < nodes.length; i++) if (nodes[i]?.name) nodeIdxOf.set(nodes[i].name, i);
+
+        return {
+            bin,
+            json: {
+                asset: { version: '2.0' },
+                scene: 0,
+                scenes: [{ nodes: nodes.map((_, i) => i) }],
+                nodes,
+                meshes,
+                materials,
+                textures,
+                images,
+                accessors,
+                bufferViews,
+                buffers: [{ byteLength: offset }]
+            },
+            nodeIdxOf,
+            nodes
+        };
+    }
+
+    // parsea un .mtl: usemtl → { map: base64png | null, kd: [r,g,b] }
+    function parseMTL(text) {
+        const map = new Map();
+        let cur = null;
+        for (const raw of text.split(/\r?\n/)) {
+            const t = raw.trim();
+            if (!t || t[0] === '#') continue;
+            const sp = t.indexOf(' ');
+            const kw = sp < 0 ? t : t.slice(0, sp);
+            const rest = sp < 0 ? '' : t.slice(sp + 1).trim();
+            if (kw === 'newmtl') {
+                cur = { map: null, kd: null };
+                map.set(rest, cur);
+            } else if (cur && kw === 'map_Kd') {
+                cur.map = rest.split(/\s+/).pop(); // nombre del archivo de imagen
+            } else if (cur && kw === 'Kd') {
+                const c = rest.split(/\s+/).map(Number);
+                if (c.length >= 3) cur.kd = [c[0], c[1], c[2], 1];
+            }
+        }
+        return map;
+    }
+
+    async function parseOBJModel(file) {
+        const text = new TextDecoder().decode(await fetchModelArrayBuffer(file));
+        const base = file.replace(/\.obj$/i, '');
+        // .mtl opcional (mtllib en el OBJ); texto plano junto al .obj.
+        // fallback: <base>.mtl (el mtllib puede quedar viejo tras renombrar
+        // el .obj, p.ej. "idk XD.mtl" vs idkXD.obj)
+        let mtlMap = null;
+        {
+            const mtlName = (text.match(/^\s*mtllib\s+(.+)$/m) || [])[1];
+            const candidates = [];
+            if (mtlName) candidates.push(mtlName.trim().replace(/[\\/]+/g, ''));
+            candidates.push(base + '.mtl');
+            for (const cand of [...new Set(candidates)]) {
+                try {
+                    const mtlText = new TextDecoder().decode(await fetchModelArrayBuffer(cand));
+                    mtlMap = parseMTL(mtlText);
+                    break;
+                } catch { /* siguiente candidato */ }
+            }
+        }
+        // resolver texturas de los materiales: <base>.png junto al .obj
+        // (Blockbench exporta la textura con el nombre del modelo)
+        if (mtlMap) {
+            for (const m of mtlMap.values()) {
+                if (m.map) {
+                    try {
+                        const texBytes = new Uint8Array(await fetchModelArrayBuffer(m.map));
+                        let s = '';
+                        for (let i = 0; i < texBytes.length; i += 0x8000) {
+                            s += String.fromCharCode.apply(null, texBytes.subarray(i, i + 0x8000));
+                        }
+                        m.map = btoa(s);
+                    } catch {
+                        m.map = null;
+                    }
+                }
+            }
+        }
+        const parsed = parseOBJ(text, file, mtlMap);
+        console.log(TAG + ' OBJ "' + file + '": ' + parsed.json.meshes.length + ' grupos');
+        return parsed;
+    }
+
     // ─── Animaciones Bedrock (.animation.json) → tracks glTF ───
     // Bedrock rota en GRADOS con pitch/roll de signo invertido a three.js
     // (yaw igual; verificado con las tapas de la caja: sin invertir Z se
@@ -1287,6 +1707,8 @@
         const p = (async () => {
             let parsed;
             if (/\.geo\.json$/i.test(file)) parsed = await parseGeoModel(file);
+            else if (/\.obj$/i.test(file)) parsed = await parseOBJModel(file);
+            else if (/\.gltf$/i.test(file)) parsed = await parseGLTFModel(file);
             else parsed = parseGLB(await fetchModelArrayBuffer(file));
             const ctors = grabCtors();
             if (!ctors) throw new Error('constructores Three no disponibles todavia');
@@ -1649,6 +2071,151 @@
         }
     }
 
+    // ---- room: ocultar el terreno del juego dentro del volumen de la room ----
+    // Las rooms son interiores GLB: si el terreno del mundo asoma dentro, se
+    // ven fragmentos raros mezclados. Esto oculta los chunk-meshes cuyo AABB
+    // intersecta el volumen de la room y los restaura al despawnear.
+    function restoreHiddenChunks() {
+        for (const m of state.hiddenChunks || []) {
+            try { m.visible = true; } catch {}
+        }
+        state.hiddenChunks = [];
+    }
+
+    // ---- room: colisiones del player contra las paredes del GLB ----
+    // Se extraen AABBs (celdas de 1 bloque) de las mallas del modelo y se
+    // guardan en un grid espacial. Cada frame, si el player se mete dentro
+    // de un AABB, se le empuja fuera (resolucion por eje minimo).
+    function buildRoomColliders(rec, built, s) {
+        const cells = new Map(); // "x,y,z" -> true
+        const root = rec.root;
+        root.updateMatrixWorld(true);
+        const v = new (Object.getPrototypeOf(root.position).constructor)();
+        let boxes = 0;
+        root.traverse((o) => {
+            if (!o?.isMesh || !o.geometry) return;
+            const pos = o.geometry.attributes?.position;
+            const nor = o.geometry.attributes?.normal;
+            if (!pos?.array) return;
+            // voxelize tosca: por cada N vertices, la celda del bloque.
+            // SKIP de superficies horizontales hacia arriba (piso/techo):
+            // el player camina sobre el terreno real — el piso del GLB es
+            // visual, no debe generar un bloque fantasma que lo empuje.
+            const stride = Math.max(3, Math.floor(pos.count / 4000) * 3);
+            for (let i = 0; i < pos.array.length; i += stride) {
+                if (nor?.array) {
+                    const ny = nor.array[i + 1];
+                    if (ny > 0.5) continue; // cara superior (piso): sin colision
+                }
+                v.set(pos.array[i], pos.array[i + 1], pos.array[i + 2]);
+                o.localToWorld(v);
+                const x = Math.floor(v.x), y = Math.floor(v.y), z = Math.floor(v.z);
+                cells.set(x + ',' + y + ',' + z, true);
+                boxes++;
+            }
+        });
+        rec.roomCells = cells;
+        console.log(TAG + ' room "' + rec.id + '": ' + cells.size + ' celdas de colision (' + boxes + ' muestras)');
+    }
+
+    function roomCollidePlayer(rec) {
+        if (!rec.roomCells?.size) return;
+        const p = getGame()?.player?.pos;
+        if (!p) return;
+        const HALF = 0.3;  // radio del player
+        const EYE = 1.62;  // altura de ojos (colision hasta la cabeza)
+        const FEET = 0.05; // margen para no chocar con el piso
+        // AABB del player: pies a cabeza
+        const px0 = p.x - HALF, px1 = p.x + HALF;
+        const py0 = p.y - EYE + FEET, py1 = p.y + 0.1;
+        const pz0 = p.z - HALF, pz1 = p.z + HALF;
+        // revisar celdas cercanas (3x5x3 alrededor)
+        let pushX = 0, pushY = 0, pushZ = 0;
+        let hit = false;
+        const cx = Math.floor(p.x), cy = Math.floor(p.y - EYE / 2), cz = Math.floor(p.z);
+        for (let dx = -1; dx <= 1; dx++) for (let dy = -3; dy <= 3; dy++) for (let dz = -1; dz <= 1; dz++) {
+            if (!rec.roomCells.has((cx + dx) + ',' + (cy + dy) + ',' + (cz + dz))) continue;
+            const bx0 = cx + dx, bx1 = bx0 + 1, by0 = cy + dy, by1 = by0 + 1, bz0 = cz + dz, bz1 = bz0 + 1;
+            // solapamiento AABB
+            const ox = Math.min(px1, bx1) - Math.max(px0, bx0);
+            const oy = Math.min(py1, by1) - Math.max(py0, by0);
+            const oz = Math.min(pz1, bz1) - Math.max(pz0, bz0);
+            if (ox <= 0 || oy <= 0 || oz <= 0) continue;
+            hit = true;
+            // resolver por el eje de menor penetracion
+            if (oy <= ox && oy <= oz) {
+                pushY = (py0 + py1) / 2 < (by0 + by1) / 2 ? oy : -oy; // empujar hacia abajo si el bloque esta arriba
+            } else if (ox <= oz) {
+                pushX = p.x < (bx0 + bx1) / 2 ? -ox : ox;
+            } else {
+                pushZ = p.z < (bz0 + bz1) / 2 ? -oz : oz;
+            }
+        }
+        if (hit) {
+            // aplicar push-out directo a la posicion del player
+            try {
+                p.x += pushX; p.y += pushY; p.z += pushZ;
+                // cancelar velocidad del juego en el eje empujado
+                const vel = getGame()?.player?.vel;
+                if (vel) {
+                    if (pushX) vel.x = 0;
+                    if (pushY) vel.y = 0;
+                }
+            } catch {}
+        }
+        return hit;
+    }
+
+    function updateRoomTerrainHiding() {
+        const rooms = [...state.customs.values()].filter((r) => r.room && !r.dead && r.root);
+        if (!rooms.length) {
+            if (state.hiddenChunks?.length) restoreHiddenChunks();
+            return;
+        }
+        const chunkRoot = getGame()?.gameScene?.chunkMeshes;
+        if (!chunkRoot) return;
+        // AABB de cada room en mundo
+        const boxes = rooms.map((r) => {
+            const p = r.root.position, s = r.root.scale.x || 1;
+            const rec2 = r.terrBox;
+            if (!rec2) return null;
+            return {
+                x0: p.x + rec2.min[0] * s, y0: p.y + rec2.min[1] * s, z0: p.z + rec2.min[2] * s,
+                x1: p.x + rec2.max[0] * s, y1: p.y + rec2.max[1] * s, z1: p.z + rec2.max[2] * s
+            };
+        }).filter(Boolean);
+        if (!boxes.length) {
+            if (state.hiddenChunks?.length) restoreHiddenChunks();
+            return;
+        }
+        const hidden = new Set(state.hiddenChunks || []);
+        let changed = false;
+        try {
+            chunkRoot.traverse((o) => {
+                if (!o?.isMesh || !o.geometry) return;
+                // AABB del chunk-mesh en mundo
+                const bb = o.geometry.boundingBox || (o.geometry.boundingBox = (() => {
+                    try { o.geometry.computeBoundingBox(); return o.geometry.boundingBox; } catch { return null; }
+                })());
+                if (!bb) return;
+                const cx = o.position.x, cy = o.position.y, cz = o.position.z;
+                for (const b of boxes) {
+                    if (bb.max.x + cx > b.x0 && bb.min.x + cx < b.x1 &&
+                        bb.max.y + cy > b.y0 && bb.min.y + cy < b.y1 &&
+                        bb.max.z + cz > b.z0 && bb.min.z + cz < b.z1) {
+                        if (!hidden.has(o)) { hidden.add(o); o.visible = false; changed = true; }
+                        return;
+                    }
+                }
+                // ya no intersecta: restaurar si estaba oculto
+                if (hidden.has(o)) { hidden.delete(o); o.visible = true; changed = true; }
+            });
+        } catch {}
+        state.hiddenChunks = [...hidden];
+        // si cambió el conjunto, guardar referencias (débiles: el GC de chunks del
+        // juego recrea meshes; un mesh restaurado puede morir sin avisar)
+    }
+
     function blockSolidAt(x, y, z) {
         const world = getGame()?.world;
         if (!world) return null;
@@ -1863,6 +2430,7 @@
 
     function followTick(rec, dt, t) {
         const root = rec.root;
+        if (rec.room) return; // habitacion: estatica, no la toca ni la fisica ni la IA
         if (rec.puppet) return; // marioneta P2P: la mueve la red (MF_Peer), no la IA local
         if (!rec.followPlayer || rec.stay) {
             // entidad estatica (o en modo "stay"): solo gravedad, para asentarse
@@ -1991,6 +2559,13 @@
         const t = performance.now();
         let dt = Math.min(0.1, (t - (state.lastTickT || t)) / 1000);
         state.lastTickT = t;
+        try { updateRoomTerrainHiding(); } catch {}
+        // colision player contra paredes de rooms locales (puppets P2P no)
+        for (const rec of state.customs.values()) {
+            if (rec.room && !rec.dead && !rec.puppet && rec.roomCells?.size) {
+                try { roomCollidePlayer(rec); } catch {}
+            }
+        }
         for (const rec of state.customs.values()) {
             const root = rec.root;
             if (!root || rec.dead) continue;

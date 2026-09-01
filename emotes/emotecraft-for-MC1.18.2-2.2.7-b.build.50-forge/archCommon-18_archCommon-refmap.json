@@ -1,0 +1,32 @@
+{
+  "mappings": {
+    "io/github/kosmx/emotes/arch/mixin/EmotePlayerMixin": {
+      "<init>": "Lnet/minecraft/client/player/AbstractClientPlayer;<init>(Lnet/minecraft/client/multiplayer/ClientLevel;Lcom/mojang/authlib/GameProfile;)V"
+    },
+    "io/github/kosmx/emotes/arch/mixin/KeyEventMixin": {
+      "click": "Lnet/minecraft/client/KeyMapping;m_90835_(Lcom/mojang/blaze3d/platform/InputConstants$Key;)V"
+    },
+    "io/github/kosmx/emotes/arch/mixin/ServerPlayTrackerMixin": {
+      "addPairing": "Lnet/minecraft/server/level/ServerEntity;m_8541_(Lnet/minecraft/server/level/ServerPlayer;)V"
+    },
+    "io/github/kosmx/emotes/arch/mixin/ServerPlayerMixin": {
+      "updatePlayerPose": "Lnet/minecraft/world/entity/player/Player;m_7594_()V"
+    }
+  },
+  "data": {
+    "searge": {
+      "io/github/kosmx/emotes/arch/mixin/EmotePlayerMixin": {
+        "<init>": "Lnet/minecraft/client/player/AbstractClientPlayer;<init>(Lnet/minecraft/client/multiplayer/ClientLevel;Lcom/mojang/authlib/GameProfile;)V"
+      },
+      "io/github/kosmx/emotes/arch/mixin/KeyEventMixin": {
+        "click": "Lnet/minecraft/client/KeyMapping;m_90835_(Lcom/mojang/blaze3d/platform/InputConstants$Key;)V"
+      },
+      "io/github/kosmx/emotes/arch/mixin/ServerPlayTrackerMixin": {
+        "addPairing": "Lnet/minecraft/server/level/ServerEntity;m_8541_(Lnet/minecraft/server/level/ServerPlayer;)V"
+      },
+      "io/github/kosmx/emotes/arch/mixin/ServerPlayerMixin": {
+        "updatePlayerPose": "Lnet/minecraft/world/entity/player/Player;m_7594_()V"
+      }
+    }
+  }
+}

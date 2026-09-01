@@ -1,0 +1,52 @@
+{
+  "name": "Wave",
+  "author": "MiniFeather",
+  "description": "Saludo con la mano",
+  "emote": {
+    "beginTick": 0,
+    "endTick": 40,
+    "stopTick": 46,
+    "isLoop": false,
+    "degrees": true,
+    "moves": [
+      {
+        "tick": 0,
+        "easing": "easeOutCubic",
+        "rightArm": { "roll": 0 },
+        "head": { "yaw": 0 }
+      },
+      {
+        "tick": 8,
+        "easing": "easeOutCubic",
+        "rightArm": { "roll": 150, "bend": 10 },
+        "head": { "yaw": -12 }
+      },
+      {
+        "tick": 14,
+        "easing": "easeInOutSine",
+        "rightArm": { "roll": 150, "bend": -35 }
+      },
+      {
+        "tick": 20,
+        "easing": "easeInOutSine",
+        "rightArm": { "roll": 150, "bend": 35 }
+      },
+      {
+        "tick": 26,
+        "easing": "easeInOutSine",
+        "rightArm": { "roll": 150, "bend": -35 }
+      },
+      {
+        "tick": 32,
+        "easing": "easeInOutSine",
+        "rightArm": { "roll": 150, "bend": 35 }
+      },
+      {
+        "tick": 40,
+        "easing": "easeInOutCubic",
+        "rightArm": { "roll": 0, "bend": 0 },
+        "head": { "yaw": 0 }
+      }
+    ]
+  }
+}

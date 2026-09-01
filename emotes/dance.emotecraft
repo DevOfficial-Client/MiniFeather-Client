@@ -1,0 +1,78 @@
+{
+  "name": "Dance",
+  "author": "MiniFeather",
+  "description": "Bailar moviendo brazos y cabeza",
+  "emote": {
+    "beginTick": 0,
+    "endTick": 80,
+    "isLoop": true,
+    "returnTick": 0,
+    "degrees": true,
+    "moves": [
+      {
+        "tick": 0,
+        "easing": "easeInOutSine",
+        "torso": { "yaw": 0 },
+        "head": { "yaw": 0 },
+        "leftArm": { "roll": 0, "bend": 0 },
+        "rightArm": { "roll": 0, "bend": 0 }
+      },
+      {
+        "tick": 10,
+        "easing": "easeInOutSine",
+        "torso": { "yaw": 20 },
+        "head": { "yaw": 15 },
+        "leftArm": { "roll": 120, "bend": 45 },
+        "rightArm": { "roll": -120, "bend": -45 }
+      },
+      {
+        "tick": 20,
+        "easing": "easeInOutSine",
+        "torso": { "yaw": -20 },
+        "head": { "yaw": -15 },
+        "leftArm": { "roll": -120, "bend": -45 },
+        "rightArm": { "roll": 120, "bend": 45 }
+      },
+      {
+        "tick": 30,
+        "easing": "easeInOutSine",
+        "torso": { "yaw": 20 },
+        "head": { "yaw": 15 },
+        "leftArm": { "roll": 120, "bend": 45 },
+        "rightArm": { "roll": -120, "bend": -45 }
+      },
+      {
+        "tick": 40,
+        "easing": "easeInOutSine",
+        "torso": { "yaw": -20 },
+        "head": { "yaw": -15 },
+        "leftArm": { "roll": -120, "bend": -45 },
+        "rightArm": { "roll": 120, "bend": 45 }
+      },
+      {
+        "tick": 50,
+        "easing": "easeInOutSine",
+        "torso": { "yaw": 20 },
+        "head": { "yaw": 15 },
+        "leftArm": { "roll": 120, "bend": 45 },
+        "rightArm": { "roll": -120, "bend": -45 }
+      },
+      {
+        "tick": 60,
+        "easing": "easeInOutSine",
+        "torso": { "yaw": -20 },
+        "head": { "yaw": -15 },
+        "leftArm": { "roll": -120, "bend": -45 },
+        "rightArm": { "roll": 120, "bend": 45 }
+      },
+      {
+        "tick": 70,
+        "easing": "easeInOutSine",
+        "torso": { "yaw": 0 },
+        "head": { "yaw": 0 },
+        "leftArm": { "roll": 0, "bend": 0 },
+        "rightArm": { "roll": 0, "bend": 0 }
+      }
+    ]
+  }
+}

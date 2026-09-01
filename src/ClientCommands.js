@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio']);
 
   function parseDetail(event) {
     try {
@@ -65,6 +65,7 @@
       '\\yellow\\/maternal spawn [stay]\\reset\\ - Spawn the Maternal Wraith (floating, always watching)',
       '\\yellow\\/stalker spawn\\reset\\ - Spawn the Stalker (freezes when you look at it!)',
       '\\yellow\\/model spawn <file.glb> [height] [anim] [stay]\\reset\\ - Load any GLB from models/entities/',
+      '\\yellow\\/room [file.glb] [scale]\\reset\\ - Build a room around you (Backrooms! centered, floor-aligned)',
       '\\yellow\\/model list | despawn <id> | stay <id> | follow <id>\\reset\\ - Manage spawned models',
       '\\yellow\\/model anim <id> <name|stop> | anims <id> | move <id> <x y z>\\reset\\ - Anims & teleport',
       '\\yellow\\/baritone goto <x y z|waypoint>\\reset\\ - Walk to coords or waypoint',
@@ -73,6 +74,8 @@
       '\\yellow\\/p2p host [code]\\reset\\ - Share your Verity (friend: /p2p join <code>)',
       '\\yellow\\/p2p join <code>\\reset\\ - See friend\\\'s Verity',
       '\\yellow\\/p2p off\\reset\\ - End the shared session',
+      '\\yellow\\/emote <name>\\reset\\ - Play a custom emote (from emotes/)',
+      '\\yellow\\/emote stop|list|reload\\reset\\ - Manage emotes',
       '\\yellow\\/mf help\\reset\\ - Show this help'
     ];
     for (const line of lines) state.chat?.addChat?.({ text: line });
@@ -83,11 +86,10 @@
   }
 
   function findGame() {
-    if (isGame(state.game)) return state.game;
-
-    const waypointGame = globalThis.__MINIFEATHER_WAYPOINTS__?.game;
-    if (isGame(waypointGame)) return waypointGame;
-
+    // 1) PRIMERO el arbol de React: es el objeto game VIVO. Al reconectar a
+    //    un mundo React crea un game nuevo con un chat nuevo — si devolvemos
+    //    el cache (state.game) hookeariamos el chat viejo para siempre y
+    //    ningun comando se interceptaria ("ya no me detecta el /room").
     try {
       const react = document.querySelector('#react');
       if (react) {
@@ -97,6 +99,12 @@
         }
       }
     } catch (_) {}
+
+    // 2) cache propio (solo si el arbol de React no tiene game aun)
+    if (isGame(state.game)) return state.game;
+
+    const waypointGame = globalThis.__MINIFEATHER_WAYPOINTS__?.game;
+    if (isGame(waypointGame)) return waypointGame;
 
     const roots = [];
     try {
@@ -504,6 +512,165 @@
       return;
     }
 
+    if (command === 'face' || command === 'facewap') {
+      const api = globalThis.MF_FaceSwap;
+      if (!api) { addChat('FaceSwap is not ready yet.', 'error'); return; }
+      const action = (args[0] || 'help').toLowerCase();
+      if (action === 'set') {
+        const name = (args[1] || '').toLowerCase();
+        if (!name) { addChat('Usage: /face set <name> (see /face list)', 'error'); return; }
+        api.set(name).then(() => {
+          addChat(`Face set: \\green\\${name}\\reset\\`, 'success');
+        }).catch(e => addChat(e.message, 'error'));
+        return;
+      }
+      if (action === 'revert' || action === 'reset') {
+        const r = api.revert();
+        addChat(r.ok ? 'Face reverted to original skin.' : (r.error || 'Nothing to revert.'), r.ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'preview') {
+        const name = (args[1] || '').toLowerCase();
+        if (!name) { addChat('Usage: /face preview <name>', 'error'); return; }
+        api.preview(name, 3000).then(() => {
+          addChat(`Previewing \\green\\${name}\\reset\\ for 3s...`, 'success');
+        }).catch(e => addChat(e.message, 'error'));
+        return;
+      }
+      if (action === 'list') {
+        const list = api.list();
+        addChat(`Faces (${list.length}): \\yellow\\${list.join(', ')}\\reset\\`);
+        return;
+      }
+      if (action === 'help' || action === '') {
+        for (const line of [
+          '\\yellow\\/face set <name>\\reset\\ - Change your face texture',
+          '\\yellow\\/face preview <name>\\reset\\ - Show it for 3 seconds',
+          '\\yellow\\/face revert\\reset\\ - Restore original skin',
+          '\\yellow\\/face list\\reset\\ - Available faces'
+        ]) state.chat?.addChat?.({ text: line });
+        return;
+      }
+      addChat('Usage: /face set <n> | preview <n> | revert | list', 'error');
+      return;
+    }
+
+    if (command === 'studio' || command === 'estudio') {
+      const api = globalThis.MF_Studio;
+      if (!api) { addChat('Studio is not ready yet.', 'error'); return; }
+      const action = (args[0] || 'toggle').toLowerCase();
+      if (action === 'open' || action === 'abrir') { api.open(); addChat('Studio opened (F1 to close).', 'success'); return; }
+      if (action === 'close' || action === 'cerrar') { api.close(); addChat('Studio closed.', 'success'); return; }
+      if (action === 'toggle') {
+        if (api.isOpen) { api.close(); addChat('Studio closed.', 'success'); }
+        else { api.open(); addChat('Studio opened (Space=play, R=rec, F1=close).', 'success'); }
+        return;
+      }
+      if (action === 'cinema') {
+        api.cinema = !api.cinema;
+        addChat(`Cinema mode ${api.cinema ? 'ON (game HUD hidden)' : 'OFF'}.`, 'success');
+        return;
+      }
+      addChat('Usage: /studio open | close | cinema', 'error');
+      return;
+    }
+
+    if (command === 'film' || command === 'pelicula') {
+      const api = globalThis.MF_Film;
+      if (!api) { addChat('Film mode is not ready yet.', 'error'); return; }
+      const action = (args[0] || 'help').toLowerCase();
+      if (action === 'record' || action === 'grabar') {
+        const r = api.startRecording();
+        if (r.ok) addChat('Recording started (20 ticks/s). /film stop to end.', 'success');
+        else addChat(r.error, 'error');
+        return;
+      }
+      if (action === 'stop' || action === 'parar') {
+        if (api.status.recording) {
+          const r = api.stopRecording();
+          addChat(`Recording stopped: \\green\\${r.keyframes}\\reset\\ keyframes over ${r.ticks} ticks${r.droppedTicks ? ` \\red\\(${r.droppedTicks} ticks dropped!)\\reset\\` : ''}. /film save <name> to persist.`, r.droppedTicks ? 'error' : 'success');
+        } else {
+          api.stopPlayback();
+          api.despawnActors();
+          addChat('Playback stopped and actors despawned.', 'success');
+        }
+        return;
+      }
+      if (action === 'save' || action === 'guardar') {
+        const name = args.slice(1).join(' ').trim();
+        const r = api.saveFilm(name || undefined);
+        if (r.ok) addChat(`Saved as \\green\\${r.name}\\reset\\ (${r.keyframes} keyframes).`, 'success');
+        else addChat(r.error, 'error');
+        return;
+      }
+      if (action === 'list' || action === 'lista') {
+        const list = api.listFilms();
+        if (!list.length) { addChat('No saved takes. Record one with /film record.'); return; }
+        addChat(`Saved takes (${list.length}):`);
+        list.slice(0, 12).forEach(n => addChat(`\\yellow\\${n}\\reset\\`));
+        return;
+      }
+      if (action === 'play' || action === 'reproducir') {
+        const name = args.slice(1).join(' ').trim();
+        const r = api.playFilm(name || undefined);
+        if (r.ok) addChat(`Playing \\green\\${r.name}\\reset\\ (${r.ticks} ticks = ${(r.ticks / 20).toFixed(1)}s, ${r.actors} actor${r.actors === 1 ? '' : 's'}).`, 'success');
+        else addChat(r.error, 'error');
+        return;
+      }
+      if (action === 'pause' || action === 'pausa') {
+        const r = api.pausePlayback();
+        if (r.ok) addChat(`Paused at tick ${r.atTick}.`, 'success');
+        else addChat(r.error, 'error');
+        return;
+      }
+      if (action === 'resume' || action === 'seguir') {
+        const r = api.resumePlayback();
+        if (r.ok) addChat('Resumed.', 'success');
+        else addChat(r.error, 'error');
+        return;
+      }
+      if (action === 'despawn') {
+        api.despawnActors();
+        addChat('Actors despawned.', 'success');
+        return;
+      }
+      if (action === 'export' || action === 'exportar') {
+        const name = args.slice(1).join(' ').trim();
+        const r = api.exportFilm(name || undefined);
+        if (r.ok) addChat(`Exported \\green\\${r.name}.mffilm.json\\reset\\ (check downloads).`, 'success');
+        else addChat(r.error, 'error');
+        return;
+      }
+      if (action === 'delete' || action === 'borrar') {
+        const name = args.slice(1).join(' ').trim();
+        if (!name) { addChat('Usage: /film delete <name>', 'error'); return; }
+        const r = api.deleteFilm(name);
+        addChat(r.ok ? `Deleted "${name}".` : r.error, r.ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'status' || action === 'diag') {
+        const d = api.diag();
+        const j = Object.entries(d.joints || {}).filter(([, v]) => v).map(([k]) => k);
+        addChat(`game:${d.game ? 'ok' : 'NO'} | mesh:${d.mesh ? 'ok' : 'NO'} | joints found: \\yellow\\${j.length ? j.join(', ') : 'none'}\\reset\\ | frames:${d.framesInMemory} | takes:${d.savedFilms}`);
+        return;
+      }
+      if (action === 'help' || action === '') {
+        for (const line of [
+          '\\yellow\\/film record\\reset\\ - Record your actions (20 t/s)',
+          '\\yellow\\/film stop\\reset\\ - Stop recording (or stop playback)',
+          '\\yellow\\/film save [name]\\reset\\ - Save the take',
+          '\\yellow\\/film play [name]\\reset\\ - Replay as an actor puppet',
+          '\\yellow\\/film pause | resume\\reset\\ - Control playback',
+          '\\yellow\\/film list | export | delete\\reset\\ - Manage takes',
+          '\\yellow\\/film despawn\\reset\\ - Remove actors',
+          '\\yellow\\/film status\\reset\\ - Diagnostics'
+        ]) state.chat?.addChat?.({ text: line });
+        return;
+      }
+      addChat('Usage: /film record | stop | save | play | pause | resume | list | export | delete | despawn | status', 'error');
+      return;
+    }
+
     if (command === 'caballo' || command === 'horse') {
       const api = globalThis.MF_CustomModels;
       if (!api?.spawnHorse) {
@@ -534,6 +701,62 @@
         return;
       }
       addChat('Usage: /caballo spawn [stay] | stay | follow | despawn', 'error');
+      return;
+    }
+
+    if (command === 'room' || command === 'habitacion' || command === 'sala') {
+      const api = globalThis.MF_CustomModels;
+      if (!api?.spawn) {
+        addChat('CustomModels is not ready yet.', 'error');
+        return;
+      }
+      const action = (args[0] || 'spawn').toLowerCase();
+      if (action === 'spawn' || action === 'load') {
+        // /room [file.glb|scale|auto] — sin args: auto (~80 bloques)
+        let file = null;
+        let scale = null;
+        for (const a of args.slice(1)) {
+          const n = Number(a);
+          if (Number.isFinite(n) && n > 0) scale = n;
+          else if (/\.(glb|gltf|obj|geo\.json)$/i.test(a)) file = a;
+          else if (a === 'auto') scale = null;
+        }
+        file = file || 'backrooms_level_0.glb';
+        const pos = currentCoords();
+        if (!pos) { addChat('Player coordinates are not available yet.', 'error'); return; }
+        // habitacion: sin fisica, piso pegado al suelo real, centrada en ti,
+        // con colision de paredes. autoSize si no se especifica escala.
+        const id = api.spawn(file, pos.x, pos.y, pos.z, {
+          id: 'room',
+          room: true,
+          autoSize: scale == null,
+          scale: scale == null ? 1 : scale,
+          followPlayer: false,
+          lookAtPlayer: false
+        });
+        addChat(id ? `Room "${file}" building (size: ${scale == null ? 'auto ~80 blocks' : 'x' + scale})...` : `Could not load "${file}".`, id ? 'normal' : 'error');
+        // el spawn es async: si el GLB falla en cargar, avisarlo en el chat
+        // (antes el error solo iba a consola y parecia que el comando no hacia nada)
+        if (id && typeof api.tryLoad === 'function') {
+          api.tryLoad(file).then(ok => {
+            if (!ok) addChat(`Room failed: could not load "${file}" (check console F12).`, 'error');
+          }).catch(e => addChat(`Room failed: ${e?.message || e}`, 'error'));
+        }
+        return;
+      }
+      if (action === 'despawn' || action === 'remove' || action === 'exit') {
+        const ok = api.despawn('room');
+        addChat(ok ? 'Room despawned. Back to reality.' : 'No room is spawned.', ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'move') {
+        const nums = args.slice(1).map(Number);
+        if (nums.length < 3 || nums.some(n => !Number.isFinite(n))) { addChat('Usage: /room move <x y z>', 'error'); return; }
+        const ok = api.move('room', nums[0], nums[1], nums[2]);
+        addChat(ok ? `Room moved to ${nums[0]} ${nums[1]} ${nums[2]}.` : 'No room is spawned.', ok ? 'success' : 'error');
+        return;
+      }
+      addChat('Usage: /room [spawn] [file.glb] | move <x y z> | despawn', 'error');
       return;
     }
 
@@ -758,6 +981,47 @@
       return;
     }
 
+    if (command === 'backrooms' || command === 'br') {
+      const api = globalThis.MF_Backrooms;
+      if (!api) { addChat('Backrooms module is not ready yet.', 'error'); return; }
+      const arg = (args[0] || '').toLowerCase();
+      if (!arg || ['0', '1', '2', '324', 'pool', 'grass'].includes(arg)) {
+        const lvl = arg || '0';
+        api.enter(lvl).then(() => {
+          addChat(`You noclipped into the Backrooms: ${lvl}. F=flashlight, G=event, exit with /br exit`, 'success');
+        }).catch(e => addChat(String(e?.message || e), 'error'));
+        return;
+      }
+      if (arg === 'exit' || arg === 'salir' || arg === 'off') {
+        api.exit();
+        addChat('Back to reality.', 'success');
+        return;
+      }
+      if (arg === 'noclip') {
+        api.noclip();
+        addChat('Falling...', 'success');
+        return;
+      }
+      if (arg === 'spawn') {
+        const t = (args[1] || '').toLowerCase();
+        if (!['smiler', 'skinwalker', 'walker'].includes(t)) { addChat('Usage: /br spawn <smiler|skinwalker|walker>', 'error'); return; }
+        const ok = api.spawnEnt(t);
+        addChat(ok ? `${t} spawned nearby.` : `Could not spawn (need a level active).`, ok ? 'success' : 'error');
+        return;
+      }
+      if (arg === 'event' || arg === 'evento') {
+        if (!api.active) { addChat('Enter a level first: /br', 'error'); return; }
+        api.event();
+        return;
+      }
+      if (arg === 'levels' || arg === 'niveles') {
+        addChat('Levels: ' + api.levels.join(', ') + ' — /br <level> | noclip | spawn <ent> | event | exit', 'normal');
+        return;
+      }
+      addChat('Usage: /backrooms [0|1|2|324|pool|grass|noclip|spawn <ent>|event|exit]', 'error');
+      return;
+    }
+
     if (command === 'p2p') {
       const api = globalThis.MF_Peer;
       if (!api) {
@@ -790,6 +1054,71 @@
       const st = api.status;
       const role = api.role ? ` (${api.role})` : '';
       addChat(st === 'off' ? 'P2P: off — use /p2p host or /p2p join <code>' : `P2P: ${st}${role}`);
+      return;
+    }
+
+    if (command === 'emote' || command === 'emotes') {
+      const api = globalThis.MF_Emotes;
+      if (!api) { addChat('Emotes is not ready yet.', 'error'); return; }
+      const action = (args[0] || '').toLowerCase();
+      if (action === 'stop' || action === 'parar') {
+        api.stop();
+        addChat('Emote stopped.', 'success');
+        return;
+      }
+      if (action === 'list' || action === 'lista') {
+        const names = api.list();
+        if (!names.length) { addChat('No emotes loaded. Use /emote reload.', 'normal'); return; }
+        addChat(`Emotes: ${names.join(', ')}`);
+        return;
+      }
+      if (action === 'reload' || action === 'recargar') {
+        // el cache vive en MF_Emotes; recargar = descartar y volver a pedir
+        api.stop();
+        try { delete globalThis.MF_Emotes; } catch (_) {}
+        location.reload();
+        return;
+      }
+      if (action === 'debug') {
+        let d;
+        try { d = api.dumpSkeleton(); } catch (err) { d = { ok: false, error: String(err?.message || err) }; }
+        if (!d.ok) { addChat(`Skeleton dump failed: ${d.error}`, 'error'); return; }
+        addChat(`mesh=${d.meshClass} skeleton=${d.hasSkeleton ? `yes @ [${d.skeletonPos}]` : 'no'} | posScale=${d.posScale} (1/16=${d.assumedScale116})`, 'normal');
+        for (const [jn, info] of Object.entries(d.keyJoints)) {
+          addChat(`  ${jn}: ${info.found ? `[${info.pos}] rot[${info.rot}]` : 'NOT FOUND'}`, 'normal');
+        }
+        console.log('[MF Emotes] skeleton tree:', d.tree);
+        return;
+      }
+      if (!action) {
+        addChat(`Playing: ${api.playing || 'none'}. Usage: /emote <name> | stop | list | reload | debug`, 'normal');
+        return;
+      }
+      // nombre con espacios: /emote sit adorably == /emote "Sit Adorably"
+      const name = action === 'stop' || action === 'parar' || action === 'list' || action === 'lista' || action === 'reload' || action === 'recargar'
+        ? action
+        : args.join(' ');
+      api.load(name).then(res => {
+        if (!res.ok) {
+          const errs = {
+            parse: 'invalid .emotecraft file (check console F12)',
+            'sin-partes': 'the file has no animatable parts'
+          };
+          addChat(`Could not load "${name}": ${errs[res.error] || res.error}`, 'error');
+          return;
+        }
+        const p = api.play(name);
+        if (!p.ok) {
+          const errs = {
+            'no-mesh': 'player mesh not found (join a world first)',
+            'no-joints': 'player joints not found in the mesh',
+            'no-hook': 'could not hook the player mesh render'
+          };
+          addChat(`Could not play "${name}": ${errs[p.error] || p.error}`, 'error');
+          return;
+        }
+        addChat(`Emote "${name}"${res.name ? ` (${res.name})` : ''}${p.loop ? ' looping' : ` (${(p.endTick / 20).toFixed(1)}s)`}. Parts: ${p.parts.join(', ')}`, 'success');
+      });
       return;
     }
 

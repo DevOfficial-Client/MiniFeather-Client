@@ -1,0 +1,3 @@
+Manifest-Version: 1.0
+MixinConfigs: emotecraft.mixins.json,emotecraft-arch.mixins.json
+

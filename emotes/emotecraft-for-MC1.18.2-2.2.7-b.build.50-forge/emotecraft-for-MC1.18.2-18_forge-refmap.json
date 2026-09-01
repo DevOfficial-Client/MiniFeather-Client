@@ -1,0 +1,20 @@
+{
+  "mappings": {
+    "io/github/kosmx/emotes/forge/mixin/ChunkMapAccessor": {
+      "entityMap": "f_140150_:Lit/unimi/dsi/fastutil/ints/Int2ObjectMap;"
+    },
+    "io/github/kosmx/emotes/forge/mixin/TrackedEntityAccessor": {
+      "seenBy": "f_140475_:Ljava/util/Set;"
+    }
+  },
+  "data": {
+    "named:intermediary": {
+      "io/github/kosmx/emotes/forge/mixin/ChunkMapAccessor": {
+        "entityMap": "f_140150_:Lit/unimi/dsi/fastutil/ints/Int2ObjectMap;"
+      },
+      "io/github/kosmx/emotes/forge/mixin/TrackedEntityAccessor": {
+        "seenBy": "f_140475_:Ljava/util/Set;"
+      }
+    }
+  }
+}
