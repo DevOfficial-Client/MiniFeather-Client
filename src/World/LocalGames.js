@@ -31,6 +31,12 @@
   const OUTGOING_ALLOW = new Set(['SPacketPing']);
   const INCOMING_ALLOW = new Set(['CPacketPong']);
 
+  // Direct local worlds used to generate only 5x5 chunks (80x80 blocks).
+  // 9x9 keeps startup reasonable while giving Sandbox/hosted local worlds
+  // 3.24x more terrain to explore. Both Local Sandbox and Create World use
+  // this exact generator, so the size stays consistent between modes.
+  const LOCAL_TERRAIN_RADIUS_CHUNKS = 4;
+
   // ── Logging ────────────────────────────────────────────────────────
   // Activar con: localStorage.setItem('mflg:log', '1')  (o 'trace' para más detalle)
   // Desactivar:  localStorage.removeItem('mflg:log')
@@ -3068,8 +3074,15 @@
     const dz = z - centerZ;
     const distance = Math.hypot(dx, dz);
 
+    // Large-scale shape first, then hills/detail. The old generator forced an
+    // island falloff after ~42 blocks, which meant enlarging the world mostly
+    // produced ocean. Keep the terrain deterministic but let useful land
+    // continue throughout the bigger local world.
     const continental =
-      smoothNoise(x, z, 38, seed + 11) * 2 - 1;
+      smoothNoise(x, z, 64, seed + 11) * 2 - 1;
+
+    const regional =
+      smoothNoise(x, z, 31, seed + 19) * 2 - 1;
 
     const hills =
       smoothNoise(x, z, 17, seed + 29) * 2 - 1;
@@ -3077,21 +3090,28 @@
     const detail =
       smoothNoise(x, z, 7, seed + 47) * 2 - 1;
 
+    // Ridge noise gives broader mountain/valley silhouettes without adding
+    // any new blocks or changing Miniblox's renderer.
+    const ridgeRaw =
+      smoothNoise(x, z, 43, seed + 61) * 2 - 1;
+    const ridge = 1 - Math.abs(ridgeRaw);
+    const mountainMask = Math.max(0, continental * 0.75 + regional * 0.35 - 0.05);
+
     let height =
       65 +
-      continental * 6 +
-      hills * 3 +
-      detail * 1.35;
+      continental * 7 +
+      regional * 3.5 +
+      hills * 3.25 +
+      detail * 1.25 +
+      ridge * mountainMask * 8;
 
-    const islandFalloff = Math.max(0, (distance - 42) / 20);
-    height -= islandFalloff * islandFalloff * 12;
-
+    // Keep spawn predictable and safe regardless of the seed.
     if (distance < 7) {
       const blend = Math.max(0, Math.min(1, (distance - 3) / 4));
       height = 67 * (1 - blend) + height * blend;
     }
 
-    return Math.max(48, Math.min(77, Math.round(height)));
+    return Math.max(46, Math.min(86, Math.round(height)));
   }
 
   function profileSnapshot() {
@@ -4368,8 +4388,8 @@
         }
       }
     } else {
-      const minChunk = -2;
-      const maxChunk = 2;
+      const minChunk = -LOCAL_TERRAIN_RADIUS_CHUNKS;
+      const maxChunk = LOCAL_TERRAIN_RADIUS_CHUNKS;
       const minX = minChunk * 16;
       const maxX = (maxChunk + 1) * 16 - 1;
       const minZ = minChunk * 16;
@@ -4398,7 +4418,7 @@
         minZ,
         maxZ,
         minY: bottomY,
-        maxY: 96
+        maxY: 112
       };
 
       const chunks = new Map();
@@ -5945,6 +5965,13 @@
       }
 
       patchNetwork();
+
+      // Local Sandbox used to skip this hook because Create World installed it
+      // later in createWorldServer(). That made single-player Sandbox miss the
+      // same block/drop handling that hosted local worlds received. Install it
+      // here for ALL direct local worlds; the function is idempotent.
+      patchWorldBlockBroadcast();
+
       startLoops();
       ensurePeerLayer();
       installPendingUploadDrain();
@@ -8605,10 +8632,18 @@
       return state.game;
     },
     startSandbox() {
-      return startWorld('sandbox', 'single', 0);
+      return startWorld('sandbox', 'single', 0, {
+        forceDirect: true,
+        worldName: 'Local Sandbox',
+        role: 'owner'
+      });
     },
     startSpleef() {
-      return startWorld('spleef', 'single', 0);
+      return startWorld('spleef', 'single', 0, {
+        forceDirect: true,
+        worldName: 'Local Spleef',
+        role: 'owner'
+      });
     },
     stop() {
       stopWorld(true);
