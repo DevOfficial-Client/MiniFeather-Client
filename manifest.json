@@ -18,7 +18,7 @@
     "https://github.com/*"
   ],
   "background": {
-    "service_worker": "src/background.js"
+    "service_worker": "src/Core/background.js"
   },
   "content_scripts": [
     {
@@ -27,7 +27,7 @@
         "https://miniblox.online/*"
       ],
       "js": [
-        "src/SplashScreen.js"
+        "src/Core/SplashScreen.js"
       ],
       "run_at": "document_start"
     },
@@ -37,7 +37,7 @@
         "https://miniblox.online/*"
       ],
       "js": [
-        "src/FriendNicknames.js"
+        "src/Chat/FriendNicknames.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"
@@ -48,55 +48,55 @@
         "https://miniblox.online/*"
       ],
       "js": [
-        "src/TextureInterceptor.js",
-        "src/CustomSkins.js",
-        "src/inject.js",
-        "src/FreeCam.js",
-        "src/mf-freelook.js",
-        "src/ElytraFlight.js",
-        "src/TitanTiny.js",
-        "src/HealthNameTags.js",
-        "src/DistanceNameTags.js",
-        "src/DamageParticles.js",
-        "src/PatPat.js",
-        "src/ItemPhysics.js",
-        "src/NoWeather.js",
-        "src/LeafWind.js",
-        "src/AutoRespawn.js",
-        "src/AntiAFK.js",
-        "src/Waypoints.js",
-        "src/ClientCommands.js",
-        "src/Zoom.js",
-        "src/Camera Overhaul.js",
-        "src/DynamicCrosshair.js",
-        "src/Baritone.js",
-        "src/Dynamic Crosshair.js",
-        "src/features.js",
-        "src/armorhud.js",
-        "src/MinimapCache.js",
-        "src/WorldMap.js",
-        "src/RhythmParkour.js",
-        "src/LocalGames.js",
-        "src/VanillaAnimations.js",
-        "src/LeafWind.js",
-        "src/HandSway.js",
-        "src/BetterPlayerLayers.js",
-        "src/BetterPlayerLayersArmorPatch.js",
-        "src/CustomModels.js",
-        "src/VerityAI.js",
-        "src/MF_Peer.js",
-        "src/CustomShader.js",
-        "src/CustomShaderSafetyPatch.js",
-        "src/GUIPatch.js",
-        "src/Emotes.js",
-        "src/MF_FaceSwap.js",
-        "src/MF_SkinEditor.js",
-        "src/MF_Film.js",
-        "src/MF_Pose.js",
-        "src/MF_Gizmo.js",
-        "src/MF_Animation.js",
-        "src/MF_Timeline.js",
-        "src/MF_Studio.js"
+        "src/Render/TextureInterceptor.js",
+        "src/Cosmetics/CustomSkins.js",
+        "src/Core/inject.js",
+        "src/Render/FreeCam.js",
+        "src/Render/mf-freelook.js",
+        "src/Render/ElytraFlight.js",
+        "src/Render/TitanTiny.js",
+        "src/Render/HealthNameTags.js",
+        "src/Render/DistanceNameTags.js",
+        "src/Render/DamageParticles.js",
+        "src/Render/PatPat.js",
+        "src/Render/ItemPhysics.js",
+        "src/Render/NoWeather.js",
+        "src/Render/LeafWind.js",
+        "src/World/AutoRespawn.js",
+        "src/World/AntiAFK.js",
+        "src/Waypoints/Waypoints.js",
+        "src/Chat/ClientCommands.js",
+        "src/Render/Zoom.js",
+        "src/Render/Camera Overhaul.js",
+        "src/HUD/DynamicCrosshair.js",
+        "src/World/Baritone.js",
+        "src/HUD/Dynamic Crosshair.js",
+        "src/Core/features.js",
+        "src/HUD/armorhud.js",
+        "src/World/MinimapCache.js",
+        "src/World/WorldMap.js",
+        "src/World/RhythmParkour.js",
+        "src/World/LocalGames.js",
+        "src/Render/VanillaAnimations.js",
+        "src/Render/LeafWind.js",
+        "src/Render/HandSway.js",
+        "src/Render/BetterPlayerLayers.js",
+        "src/Render/BetterPlayerLayersArmorPatch.js",
+        "src/Cosmetics/CustomModels.js",
+        "src/AI/VerityAI.js",
+        "src/Studio/MF_Peer.js",
+        "src/Shaders/CustomShader.js",
+        "src/Shaders/CustomShaderSafetyPatch.js",
+        "src/HUD/GUIPatch.js",
+        "src/Cosmetics/Emotes.js",
+        "src/Studio/MF_FaceSwap.js",
+        "src/Studio/MF_SkinEditor.js",
+        "src/Studio/MF_Film.js",
+        "src/Studio/MF_Pose.js",
+        "src/Studio/MF_Gizmo.js",
+        "src/Studio/MF_Animation.js",
+        "src/Studio/MF_Timeline.js",
+        "src/Studio/MF_Studio.js"
       ],
       "run_at": "document_start",
       "world": "MAIN",
@@ -108,11 +108,11 @@
         "https://miniblox.online/*"
       ],
       "js": [
-        "src/translations.js",
-        "src/jszip.min.js",
-        "src/TexturePackManager.js",
-        "src/AutoUpdater.js",
-        "src/content.js"
+        "src/Core/translations.js",
+        "src/Libraries/jszip.min.js",
+        "src/Render/TexturePackManager.js",
+        "src/Core/AutoUpdater.js",
+        "src/Core/content.js"
       ],
       "run_at": "document_end",
       "all_frames": true
@@ -158,7 +158,7 @@
         "accounts.json",
         "skins/*",
         "skins/*/*",
-        "src/jszip.min.js"
+        "src/Libraries/jszip.min.js"
       ],
       "matches": [
         "https://miniblox.io/*",
