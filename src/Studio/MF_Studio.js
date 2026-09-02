@@ -394,6 +394,266 @@
         }
     }
 
+    // ── Skins PNG (SkinChanger) ──
+    async function skinsImport(files) {
+        const SC = window.MF_SkinChanger;
+        if (!SC?.importFiles) { updateStatus('⚠ SkinChanger no disponible'); return; }
+        const pngs = [...files].filter(f => /\.png$/i.test(f.name));
+        if (!pngs.length) { updateStatus('⚠ solo .png'); return; }
+        try {
+            const items = await SC.importFiles(pngs);
+            updateStatus(items.length
+                ? `👕 ${items.length} skin(s) importada(s) — click = aplicar · arrastra al timeline V2`
+                : '⚠ ningún PNG válido (deben ser 64x64 o 64x32)');
+            refreshSkinsList();
+            refreshFaces();
+        } catch (e) {
+            updateStatus('⚠ import skins: ' + (e?.message || e));
+        }
+    }
+
+    function refreshSkinsList() {
+        const box = document.getElementById('mfs-skins-list');
+        if (!box) return;
+        const SC = window.MF_SkinChanger;
+        const items = SC?.items || [];
+        box.innerHTML = '';
+        if (!items.length) {
+            box.appendChild(el('div', 'mfs-item', '<span style="color:#6e6e7a;font-size:11px">Sin skins importadas</span>'));
+            return;
+        }
+        const grid = el('div');
+        grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:4px;';
+        for (const it of items) {
+            const d = el('div', 'media-head' + (SC.current === it.name ? ' on' : ''));
+            d.title = it.name + ' — click = aplicar en vivo · arrastra al timeline V2 como clip de skin';
+            d.draggable = true;
+            d.innerHTML = `<img src="${it.thumb}" alt="">`;
+            d.ondragstart = (ev) => {
+                ev.dataTransfer.setData('text/mf-skin', it.name);
+                ev.dataTransfer.effectAllowed = 'copy';
+            };
+            d.onclick = () => {
+                SC.apply(it.name).then(() => {
+                    updateStatus('👕 Skin aplicada: ' + it.name);
+                    refreshSkinsList();
+                }).catch(e => updateStatus('⚠ ' + (e?.message || e)));
+            };
+            grid.appendChild(d);
+        }
+        box.appendChild(grid);
+    }
+
+    // ── Morph (mobs del mundo → transformarse) ──
+    function refreshMorphList() {
+        const box = document.getElementById('mfs-morph-list');
+        if (!box) return;
+        const M = window.MF_Morph;
+        const items = M?.catalog || [];
+        box.innerHTML = '';
+        if (!items.length) {
+            box.appendChild(el('div', 'mfs-item', '<span style="color:#6e6e7a;font-size:11px">Sin mobs cerca — pulsa ⟳ con mobs a la vista</span>'));
+            return;
+        }
+        const grid = el('div');
+        grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:4px;';
+        for (const it of items) {
+            const d = el('div', 'media-head' + (M.current === it.type ? ' on' : ''));
+            d.title = it.label + ' — click = morph en vivo · arrastra al timeline V2 como clip de morph';
+            d.draggable = true;
+            d.style.cssText = 'display:flex;align-items:center;justify-content:center;font-size:20px;';
+            d.textContent = MOJI_OF(it.type);
+            d.ondragstart = (ev) => {
+                ev.dataTransfer.setData('text/mf-morph', it.type);
+                ev.dataTransfer.effectAllowed = 'copy';
+            };
+            d.onclick = () => {
+                try {
+                    M.apply(it.type);
+                    updateStatus('🧬 Morph: ' + it.label);
+                    refreshMorphList();
+                } catch (e) {
+                    updateStatus('⚠ ' + (e?.message || e));
+                }
+            };
+            grid.appendChild(d);
+        }
+        const rev = el('div', 'mfs-item', '<span style="font-size:11px">↺ Volver a humano</span>');
+        rev.style.cursor = 'pointer';
+        rev.onclick = () => {
+            M?.revert?.();
+            updateStatus('🧬 Forma humana restaurada');
+            refreshMorphList();
+        };
+        box.appendChild(grid);
+        box.appendChild(rev);
+    }
+
+    function MOJI_OF(key) {
+        const MOJI = {
+            creeper: '🟩', pig: '🐖', cow: '🐄', chicken: '🐔', sheep: '🐑',
+            wolf: '🐺', cat: '🐈', zombie: '🧟', skeleton: '💀', slime: '🟢',
+            spider: '🕷️', snowman: '⛄', ghost: '👻', villager: '🧑‍🌾',
+            iron_golem: '🗿', armor_stand: '🧍', boat: '🚤', minecart: '🛒',
+            zombie_cowman: '🧟‍🐄'
+        };
+        if (MOJI[key]) return MOJI[key];
+        if (/zombie/i.test(key)) return '🧟';
+        if (/horse|donkey|mule/i.test(key)) return '🐎';
+        return '🧬';
+    }
+
+    // ── anti-AFK del estudio ──
+    // Grabar/posar/editar puede dejar al jugador quieto mucho tiempo y el
+    // servidor lo kickea. Este guardián hace micro-movimientos NATIVOS
+    // (jitter de yaw ±0.3°, sin desplazamiento) por el mismo camino que el
+    // input real (apply/send del player, patrón AntiAFK), SOLO mientras el
+    // estudio esté abierto. La cámara del estudio es aparte: el actor no se
+    // mueve ni gira en pantalla — solo se reporta rotación al servidor.
+    const afk = {
+        on: false,
+        timer: null,
+        rescanTimer: null,
+        player: null,
+        applyName: null,
+        sendName: null,
+        originalApply: null,
+        applyHadOwn: false,
+        lastBeat: 0
+    };
+
+    // busca el método apply(input) del player por firma en el código fuente
+    // (nombres ofuscados: se identifican por contenido, igual que AntiAFK)
+    function afkFindApply(player) {
+        const seen = new Set();
+        let proto = player, best = null;
+        for (let depth = 0; proto && depth < 14; depth++) {
+            let names = [];
+            try { names = Object.getOwnPropertyNames(proto); } catch { break; }
+            for (const name of names) {
+                if (name === 'constructor' || seen.has(name)) continue;
+                seen.add(name);
+                let fn;
+                try { fn = player[name]; } catch { continue; }
+                if (typeof fn !== 'function') continue;
+                let src = '';
+                try { src = Function.prototype.toString.call(fn); } catch {}
+                let score = 0;
+                if (src.includes('jumping')) score += 5;
+                if (src.includes('.jump')) score += 4;
+                if (src.includes('.left') && src.includes('.right')) score += 4;
+                if (src.includes('.up') && src.includes('.down')) score += 4;
+                if (src.includes('usingItem')) score += 2;
+                if (src.includes('sendPacket') || src.includes('serverMove')) score += 3;
+                if (!best || score > best.score) best = { name, fn, score };
+            }
+            try { proto = Object.getPrototypeOf(proto); } catch { break; }
+        }
+        return best?.score >= 12 ? best : null;
+    }
+
+    function afkFindSend(player) {
+        const seen = new Set();
+        let proto = player, best = null;
+        for (let depth = 0; proto && depth < 14; depth++) {
+            let names = [];
+            try { names = Object.getOwnPropertyNames(proto); } catch { break; }
+            for (const name of names) {
+                if (name === 'constructor' || seen.has(name)) continue;
+                seen.add(name);
+                let fn;
+                try { fn = player[name]; } catch { continue; }
+                if (typeof fn !== 'function') continue;
+                let src = '';
+                try { src = Function.prototype.toString.call(fn); } catch {}
+                let score = 0;
+                if (src.includes('serverMoveForward') || src.includes('serverMoveStrafe')) score += 10;
+                if (src.includes('sendPacket')) score += 5;
+                if (!best || score > best.score) best = { name, fn, score };
+            }
+            try { proto = Object.getPrototypeOf(proto); } catch { break; }
+        }
+        return best?.score >= 10 ? best : null;
+    }
+
+    // construye el input del beat: todo neutral + jitter de yaw mínimo
+    function afkBeatInput(player) {
+        const base = player.currentInput || {};
+        return {
+            ...base,
+            up: false, down: false, left: false, right: false,
+            jump: false, sneak: false, usingItem: false,
+            yaw: (Number(base.yaw ?? player.yaw) || 0) + (Math.random() - 0.5) * 0.006,
+            pitch: Number(base.pitch ?? player.pitch) || 0
+        };
+    }
+
+    // un "beat": aplica input neutral+jitter y lo envía al servidor
+    function afkBeat() {
+        if (!afk.on) return;
+        const player = getGame()?.player;
+        if (!player) return;
+        // hook perdido (respawn/cambio de mundo) → re-scan
+        if (afk.player !== player || (afk.applyName && player[afk.applyName] !== undefined && !player[afk.applyName])) {
+            afkHookPlayer(player);
+        }
+        if (!afk.applyName || !afk.originalApply) return;
+        try {
+            afk.originalApply.call(player, afkBeatInput(player));
+            afk.lastBeat = Date.now();
+            if (afk.sendName) player[afk.sendName]?.call(player);
+        } catch {
+            // algo cambió: re-scan en el próximo beat
+            afk.applyName = null;
+        }
+    }
+
+    function afkHookPlayer(player) {
+        afkRestoreHook();
+        const apply = afkFindApply(player);
+        if (!apply) { afk.player = null; return false; }
+        const send = afkFindSend(player);
+        afk.player = player;
+        afk.applyName = apply.name;
+        afk.sendName = send?.name || null;
+        afk.originalApply = apply.fn;
+        afk.applyHadOwn = Object.prototype.hasOwnProperty.call(player, apply.name);
+        return true; // no hookeamos: llamamos apply directamente en cada beat
+    }
+
+    function afkRestoreHook() {
+        // no hay hook que restaurar (usamos llamadas directas), solo limpiar
+        afk.player = null;
+        afk.applyName = null;
+        afk.sendName = null;
+        afk.originalApply = null;
+    }
+
+    function afkToggle(on) {
+        if (on === undefined) on = !afk.on;
+        afk.on = !!on;
+        const btn = document.getElementById('mfs-afk');
+        if (btn) {
+            btn.classList.toggle('on', afk.on);
+            btn.title = afk.on ? 'Anti-AFK activo: micro-rotaciones nativas cada ~30s' : 'Activar anti-kick mientras el estudio está abierto';
+        }
+        if (afk.on) {
+            afkHookPlayer(getGame()?.player);
+            afkBeat();
+            afk.timer = setInterval(afkBeat, 30000);       // beat cada 30s
+            afk.rescanTimer = setInterval(() => {          // re-hook si cambió el player
+                if (!afk.on) return;
+                const p = getGame()?.player;
+                if (p && p !== afk.player) afkHookPlayer(p);
+            }, 3000);
+            updateStatus('🛡 Anti-AFK activo — micro-rotaciones cada 30s (el actor no se mueve)');
+        } else {
+            clearInterval(afk.timer); afk.timer = null;
+            clearInterval(afk.rescanTimer); afk.rescanTimer = null;
+            afkRestoreHook();
+        }
+    }
+
     // ── DOM ──
     function build() {
         if (document.getElementById(ID)) return;
@@ -429,10 +689,13 @@
                 <button class="mfs-btn" id="mfs-pose-vp" title="Posar extremidades: click der. en el cuerpo + arrastrar (rueda=yaw, Alt+rueda=tamaño)">🦴 Posing</button>
                 <button class="mfs-btn" id="mfs-share" title="Compartir pose + cámara por P2P (/p2p host o /p2p join)">📡</button>
                 <button class="mfs-btn icon" id="mfs-skineditor" title="Editor de cabeza en vivo (dibujar base + overlay)">🎨</button>
+                <button class="mfs-btn icon" id="mfs-skinchanger" title="Skins PNG en vivo (biblioteca + drag al timeline)">👕</button>
+                <button class="mfs-btn icon" id="mfs-morph" title="Morph: transformarse en mobs del mundo (client-side)">🧬</button>
                 <button class="mfs-btn icon" id="mfs-models" title="Cargar modelo 3D (.glb/.gltf/.obj)">📦</button>
             </span>
             <span class="btn-group">
                 <button class="mfs-btn icon" id="mfs-cinema" title="Ocultar/mostrar HUD del juego">🎬</button>
+                <button class="mfs-btn icon" id="mfs-afk" title="Anti-AFK: evita el kick por inactividad mientras editas (micro-rotaciones invisibles)">🛡</button>
                 <button class="mfs-btn icon" id="mfs-close" title="Cerrar (F1)">✕</button>
             </span>
         `;
@@ -448,6 +711,10 @@
 <div class="model-drop" id="mfs-model-drop" title="Clic para elegir archivo">📦 Suelta un modelo aquí<br>.glb · .gltf · .obj</div>
 <div id="mfs-models-list"></div></div>
 <div class="mfs-section"><h3>Tomas</h3><div id="mfs-takes"></div></div>
+<div class="mfs-section"><h3>Skins PNG <button class="mini" id="mfs-skins-add" title="Importar .png de skin (64x64/64x32)">+ Importar</button></h3>
+<div class="model-drop" id="mfs-skins-drop" title="Clic para elegir PNGs">👕 Suelta skins .png aquí<br>64x64 · 64x32</div>
+<div id="mfs-skins-list"></div></div>
+<div class="mfs-section"><h3>Morph (mobs) <button class="mini" id="mfs-morph-rescan" title="Volver a escanear mobs del mundo">⟳</button></h3><div id="mfs-morph-list"></div></div>
 <div class="mfs-section"><h3>Caras (face swap)</h3><div id="mfs-faces"></div></div>`;
 
         const preview = el('div');
@@ -457,6 +724,15 @@
         status.id = 'mfs-status';
         status.style.cssText = 'position:absolute;top:10px;left:10px;pointer-events:auto;';
         preview.appendChild(status);
+        // toggle gizmo: botón único que alterna mover ⇄ rotar
+        const gtoggle = el('button');
+        gtoggle.id = 'mfs-gizmo-mode';
+        gtoggle.className = 'mfs-btn';
+        gtoggle.textContent = '↔ Mover';
+        gtoggle.title = 'Alternar gizmo: mover por ejes / rotar por ejes (tecla G)';
+        gtoggle.style.cssText = `
+            position:absolute;top:10px;right:10px;pointer-events:auto;`;
+        preview.appendChild(gtoggle);
         // hint de controles de cámara (abajo centro, se desvanece)
         const hint = el('div');
         hint.innerHTML = '🖱 Click+arrastrar: rotar cámara · WASD/QE: mover · Ctrl: rápido · 🦴 Posing: click der. en extremidad (rueda=yaw, Alt+rueda=tamaño)';
@@ -520,6 +796,45 @@
                 if (files.length) modelLoadFiles(files);
             });
         }
+        $('mfs-afk').onclick = () => afkToggle();
+        // ── skins PNG (SkinChanger): botón topbar + sección izquierda ──
+        $('mfs-skinchanger').onclick = () => window.MF_SkinChanger?.open();
+        const skinsInput = el('input');
+        skinsInput.type = 'file';
+        skinsInput.accept = 'image/png,.png';
+        skinsInput.multiple = true;
+        skinsInput.style.display = 'none';
+        document.getElementById(ID).appendChild(skinsInput);
+        const skinsPick = () => skinsInput.click();
+        $('mfs-skins-add').onclick = skinsPick;
+        const skinsDrop = $('mfs-skins-drop');
+        if (skinsDrop) {
+            skinsDrop.onclick = skinsPick;
+            skinsDrop.addEventListener('dragover', (ev) => { ev.preventDefault(); skinsDrop.classList.add('over'); });
+            skinsDrop.addEventListener('dragleave', () => skinsDrop.classList.remove('over'));
+            skinsDrop.addEventListener('drop', (ev) => {
+                ev.preventDefault();
+                skinsDrop.classList.remove('over');
+                const files = [...(ev.dataTransfer?.files || [])].filter(f => /\.png$/i.test(f.name));
+                if (files.length) skinsImport(files);
+            });
+        }
+        window.addEventListener('mf:skinchanger-items', () => refreshSkinsList(), { once: false });
+        refreshSkinsList();
+        // ── morph (MF_Morph): botón topbar + sección izquierda ──
+        $('mfs-morph').onclick = () => window.MF_Morph?.open();
+        $('mfs-morph-rescan').onclick = () => {
+            window.MF_Morph?.scan?.(true);
+            refreshMorphList();
+        };
+        window.addEventListener('mf:morph-catalog', () => refreshMorphList(), { once: false });
+        refreshMorphList();
+        // toggle gizmo mover/rotar (botón único)
+        const gm = document.getElementById('mfs-gizmo-mode');
+        if (gm) {
+            gm.onclick = () => gizmoSetMode(gizmo.mode === 'move' ? 'rotate' : 'move');
+            gizmoSetMode(gizmo.mode); // estado inicial
+        }
         $('mfs-cinema').onclick = () => {
             state.cinema = !state.cinema;
             document.getElementById(ID)?.classList.toggle('cinema', state.cinema);
@@ -539,6 +854,10 @@
                 else if ((ev.key === 'i' || ev.key === 'I') && !isTypingTarget(ev.target)) markIn();
                 else if ((ev.key === 'o' || ev.key === 'O') && !isTypingTarget(ev.target)) markOut();
                 else if ((ev.key === 'r' || ev.key === 'R') && !isTypingTarget(ev.target)) { ev.preventDefault(); toggleRec(); }
+                else if ((ev.key === 'g' || ev.key === 'G') && !isTypingTarget(ev.target)) {
+                    ev.preventDefault();
+                    gizmoSetMode(gizmo.mode === 'move' ? 'rotate' : 'move');
+                }
             });
             // presets de cabeza creados/borrados en el SkinEditor → pool
             window.addEventListener('mf:skineditor-presets', () => {
@@ -1625,30 +1944,28 @@
         posing.selected = pick.object;
         posing.selPart = pick.part;
         try {
-            // resaltar: material clonado con emissive naranja (estilo BB).
-            // Sin globalThis.THREE (no expuesto): set() con hex funciona en
-            // el Color interno del material clonado.
-            if (pick.object.material) {
-                const m = Array.isArray(pick.object.material) ? pick.object.material[0] : pick.object.material;
-                if (m?.clone) {
-                    const c = m.clone();
-                    if ('emissive' in c && c.emissive?.set) c.emissive.set(0x552200);
-                    if ('emissiveIntensity' in c) c.emissiveIntensity = 1;
-                    posing.outline = { obj: pick.object, prev: m };
-                    const assign = (mat) => {
-                        if (Array.isArray(pick.object.material)) pick.object.material[0] = mat;
-                        else pick.object.material = mat;
-                    };
-                    assign(c);
-                }
-            }
+            // resaltar: emissive naranja IN-PLACE (sin clonar — el clone
+            // pierde la textura de la skin y se veía azul/oscura)
+            posing.outline = makeEmissiveHighlight(pick.object, 0x552200);
         } catch {}
-        updateStatus('Pose: ' + pick.part + ' — 🖱 izq=rotar · der=mover · rueda=yaw · Alt+rueda=tamaño · flechas XYZ=mover eje · Shift=espejo · Esc=salir');
+        updateStatus('Pose: ' + pick.part + ' — 🖱 izq=rotar · anillos XYZ=rotar eje · flechas XYZ=mover · der=mover · rueda=yaw · Alt+rueda=tamaño · Shift=espejo · Esc=salir');
         attachGizmoToPart(pick);
     }
 
     // ── gizmo de flechas XYZ (estilo Blockbench move tool) ──
-    const gizmo = { hoverAxis: null, draggingAxis: null, lastX: 0, lastY: 0, startOffset: null };
+    const gizmo = { hoverAxis: null, draggingAxis: null, lastX: 0, lastY: 0, startOffset: null, hoverRing: null, draggingRing: null, mode: 'move' };
+
+    // aplicar/validar el modo del gizmo (move | rotate)
+    function gizmoSetMode(mode) {
+        gizmo.mode = (mode === 'rotate') ? 'rotate' : 'move';
+        window.MF_Gizmo?.setMode?.(gizmo.mode);
+        const btn = document.getElementById('mfs-gizmo-mode');
+        if (btn) {
+            btn.textContent = gizmo.mode === 'rotate' ? '⟳ Rotar' : '↔ Mover';
+            btn.classList.toggle('warm', gizmo.mode === 'rotate');
+            btn.classList.toggle('on', gizmo.mode === 'rotate');
+        }
+    }
 
     function attachGizmoToPart(pick) {
         const G = window.MF_Gizmo;
@@ -1657,6 +1974,7 @@
         const joint = pick.joint || getJointOfPart(pick.part);
         if (!joint) return;
         G.attach(joint, null);
+        G.setMode?.(gizmo.mode); // restaurar modo mover/rotar tras re-attach
     }
 
     function getJointOfPart(part) {
@@ -1710,16 +2028,27 @@
         autoKeyTransform(part, 'position', [next.x, next.y, next.z], false);
     }
 
+    // rotación por anillo: eje MUNDO fijo (x/y/z), ángulo medido en el
+    // plano del anillo — reutiliza el handle de beginRotateWorld
+    function applyRingDrag(angleRad, snap15, mirror) {
+        const part = posing.selPart;
+        const P = window.MF_Pose;
+        if (!part || !P) return;
+        if (posing.rotHandle != null && P.applyAxisRotateWorld) {
+            const out = P.applyAxisRotateWorld(posing.rotHandle, gizmo.draggingRing, angleRad, snap15, mirror);
+            if (out) {
+                autoKeyTransform(part, 'rotation', out.deg, false);
+                if (mirror && out.mirrorDeg) {
+                    const mp = mirrorPart(part);
+                    if (mp) autoKeyTransform(mp, 'rotation', out.mirrorDeg, false);
+                }
+            }
+        }
+    }
+
     function posingDeselect() {
         if (posing.outline) {
-            try {
-                const { obj, prev } = posing.outline;
-                const assign = (mat) => {
-                    if (Array.isArray(obj.material)) obj.material[0] = mat;
-                    else obj.material = mat;
-                };
-                assign(prev);
-            } catch {}
+            try { posing.outline.restore?.(); } catch {}
             posing.outline = null;
         }
         detachGizmo();
@@ -1837,9 +2166,18 @@
             const now = performance.now();
             if (now - hoverThrottle < 50) return; // 20Hz max
             hoverThrottle = now;
-            // prioridad: flecha del gizmo bajo el cursor
+            // prioridad: anillo de rotación > flecha del gizmo > parte
             const G = window.MF_Gizmo;
             if (G?.visible() && posing.selPart) {
+                const ring = G.pickRing?.(ev.clientX, ev.clientY, cam.camera);
+                if (ring) {
+                    gizmo.hoverRing = ring;
+                    gizmo.hoverAxis = null;
+                    clearHoverHighlight();
+                    preview.style.cursor = 'grab';
+                    return;
+                }
+                gizmo.hoverRing = null;
                 const axis = G.pick(ev.clientX, ev.clientY, cam.camera);
                 if (axis) {
                     gizmo.hoverAxis = axis;
@@ -1863,8 +2201,25 @@
         // ── click izquierdo: flecha del gizmo = mover por eje; si no, seleccionar ──
         preview.addEventListener('mousedown', (ev) => {
             if (!posing.enabled || ev.button !== 0) return;
-            // 1) ¿flecha del gizmo bajo el cursor? → drag por eje
+            // 1) ¿anillo de rotación bajo el cursor? → rotar por eje mundo
             const G = window.MF_Gizmo;
+            if (G?.pickRing && posing.selPart) {
+                const ring = G.pickRing(ev.clientX, ev.clientY, cam.camera);
+                if (ring) {
+                    gizmo.draggingRing = ring;
+                    posing.dragging = true;
+                    posing.dragMode = 'ring';
+                    posing.lastX = ev.clientX; posing.lastY = ev.clientY;
+                    posing.startX = ev.clientX; posing.startY = ev.clientY;
+                    posing.rotHandle = window.MF_Pose?.beginRotateWorld?.(posing.selPart, cam.camera) ?? null;
+                    clearHoverHighlight();
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                    updateStatus('Rotando eje ' + ring.toUpperCase() + ' de ' + posing.selPart + ' (Ctrl=snap 15°, Shift=espejo)');
+                    return;
+                }
+            }
+            // 2) ¿flecha del gizmo bajo el cursor? → drag por eje
             if (G?.visible() && posing.selPart) {
                 const axis = G.pick(ev.clientX, ev.clientY, cam.camera);
                 if (axis) {
@@ -1923,6 +2278,12 @@
                 const dy = ev.clientY - posing.lastY;
                 posing.lastX = ev.clientX; posing.lastY = ev.clientY;
                 if (posing.dragMode === 'gizmo') applyGizmoDrag(dx, dy, ev.ctrlKey);
+                else if (posing.dragMode === 'ring') {
+                    // ángulo total desde el mousedown en el plano del anillo
+                    const G = window.MF_Gizmo;
+                    const ang = G?.ringDragDelta?.(gizmo.draggingRing, { x: posing.startX, y: posing.startY }, { x: ev.clientX, y: ev.clientY }, cam.camera) || 0;
+                    applyRingDrag(ang, ev.ctrlKey, ev.shiftKey);
+                }
                 else if (posing.dragMode === 'move') applyMoveFromDrag(dx, dy, ev.ctrlKey, ev.shiftKey);
                 else {
                     // deltas TOTALES desde el mousedown (la pose inicial ya está
@@ -1936,6 +2297,7 @@
                 if (posing.dragging && (ev.button === 0 || ev.button === 2)) {
                     posing.dragging = false;
                     if (posing.dragMode === 'gizmo') gizmo.draggingAxis = null;
+                    if (posing.dragMode === 'ring') gizmo.draggingRing = null;
                     if (posing.rotHandle != null) {
                         window.MF_Pose?.endRotateWorld?.(posing.rotHandle);
                         posing.rotHandle = null;
@@ -1951,22 +2313,35 @@
         bindPreview(); // (re)bindear al preview actual (nuevo en cada open)
     }
 
-    // ── resaltados ──
-    // seleccionado: naranja emissive · hover: azul tenue emissive
-    function cloneWithEmissive(obj, color) {
+    // resaltados ──
+    // seleccionado: naranja emissive · hover: azul tenue emissive.
+    // IN-PLACE: guardar emissive/emissiveIntensity y restaurarlos. NO se
+    // clona el material — el clone() del juego pierde la textura map y la
+    // parte se veía azul/oscura (color plano + emissive).
+    function makeEmissiveHighlight(obj, color) {
         if (!obj?.material) return null;
         try {
-            const m = Array.isArray(obj.material) ? obj.material[0] : obj.material;
-            if (!m?.clone) return null;
-            const c = m.clone();
-            if ('emissive' in c && c.emissive?.set) c.emissive.set(color);
-            if ('emissiveIntensity' in c) c.emissiveIntensity = 1;
-            const assign = (mat) => {
-                if (Array.isArray(obj.material)) obj.material[0] = mat;
-                else obj.material = mat;
+            const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+            const prev = mats.map(m => ({
+                m,
+                hex: m?.emissive?.getHex?.(),
+                intensity: (m && 'emissiveIntensity' in m) ? m.emissiveIntensity : null
+            }));
+            for (const { m } of prev) {
+                if (m?.emissive?.set) m.emissive.set(color);
+                if (m && 'emissiveIntensity' in m) m.emissiveIntensity = 1;
+            }
+            return {
+                obj,
+                restore() {
+                    for (const { m, hex, intensity } of prev) {
+                        try {
+                            if (m?.emissive && hex != null) m.emissive.setHex(hex);
+                            if (m && intensity != null && 'emissiveIntensity' in m) m.emissiveIntensity = intensity;
+                        } catch {}
+                    }
+                }
             };
-            assign(c);
-            return { obj, prev: m };
         } catch { return null; }
     }
 
@@ -1976,16 +2351,12 @@
         clearHoverHighlight();
         // no pisar el resaltado de selección
         if (posing.outline?.obj === obj) return;
-        const hl = cloneWithEmissive(obj, 0x113355);
+        const hl = makeEmissiveHighlight(obj, 0x113355);
         if (hl) hoverHl = hl;
     }
     function clearHoverHighlight() {
         if (!hoverHl) return;
-        try {
-            const { obj, prev } = hoverHl;
-            if (Array.isArray(obj.material)) obj.material[0] = prev;
-            else obj.material = prev;
-        } catch {}
+        try { hoverHl.restore(); } catch {}
         hoverHl = null;
     }
 
@@ -2141,6 +2512,7 @@
         bindPreviewCamera();
         bindViewportPosing();
         cameraEnable();
+        afkToggle(true); // anti-kick: editar puede dejar al player quieto mucho rato
         console.log(TAG + ' abierto. Click+drag en preview=rotar cámara · WASD=mover · Space=play · R=rec · F1=cerrar');
     }
 
@@ -2150,6 +2522,7 @@
         cancelAnimationFrame(state.raf);
         cameraDisable();
         posingToggle(false);
+        afkToggle(false);
         unpatchPointerLock(); // devolver el lock al juego
         globalThis.__MF_STUDIO_OPEN__ = false;
         state.cinema = false; applyCinema(); // restaurar HUD del juego

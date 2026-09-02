@@ -23,10 +23,13 @@
     const SHAFT_R = 0.022;   // radio del cuerpo
     const HEAD_LEN = 0.16;   // largo de la punta
     const HEAD_R = 0.06;     // radio de la punta
+    const RING_R = 0.42;     // radio de los anillos de rotación
+    const RING_TUBE = 0.028; // grosor del tubo del anillo
 
     const state = {
         root: null,          // Group anclado al joint
         arrows: null,        // { x: {mesh, dir}, y: ..., z: ... }
+        rings: null,         // { x: {mesh, mat, dir}, ... } rotación
         joint: null,
         onDelta: null,
         dragging: null,      // eje durante el drag
@@ -140,6 +143,37 @@
         return geo;
     }
 
+    // ── geometría: toro (anillo) en el plano XZ, centro en el origen ──
+    function makeTorus(ctors, radius, tubeR, tubularSegs, radialSegs) {
+        const geo = new ctors.BufferGeometry();
+        const pos = [];
+        const idx = [];
+        for (let i = 0; i <= tubularSegs; i++) {
+            const u = (i / tubularSegs) * Math.PI * 2; // ángulo alrededor del eje
+            const cu = Math.cos(u), su = Math.sin(u);
+            for (let j = 0; j <= radialSegs; j++) {
+                const v = (j / radialSegs) * Math.PI * 2; // alrededor del tubo
+                const cv = Math.cos(v), sv = Math.sin(v);
+                pos.push(
+                    (radius + tubeR * cv) * cu,
+                    tubeR * sv,
+                    (radius + tubeR * cv) * su
+                );
+            }
+        }
+        for (let i = 0; i < tubularSegs; i++) {
+            for (let j = 0; j < radialSegs; j++) {
+                const a = i * (radialSegs + 1) + j;
+                const b = a + radialSegs + 1;
+                idx.push(a, b, a + 1, b, b + 1, a + 1);
+            }
+        }
+        geo.setAttribute('position', new ctors.BufferAttribute(new Float32Array(pos), 3));
+        geo.setIndex(new ctors.BufferAttribute(new Uint16Array(idx), 1));
+        try { geo.computeVertexNormals(); } catch {}
+        return geo;
+    }
+
     function makeArrowMesh(ctors, color) {
         const shaft = makeCylinder(ctors, SHAFT_R, SHAFT_LEN, 8);
         const head = makeCone(ctors, HEAD_R, HEAD_LEN, 10);
@@ -202,6 +236,33 @@
             }
             state.root.userData = state.root.userData || {};
             state.root.userData.__mfGizmo = true;
+            // ── anillos de rotación (X/Y/Z) — plano normal al eje ──
+            state.rings = {};
+            const ringDirs = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
+            for (const axis of ['x', 'y', 'z']) {
+                const torus = makeTorus(ctors, RING_R, RING_TUBE, 48, 8);
+                if (!torus) continue;
+                const mat = new ctors.Material();
+                const mesh = new ctors.Mesh(torus, mat);
+                // el toro se genera en plano XZ (normal +Y): rotarlo para que
+                // su normal apunte al eje del anillo
+                if (axis === 'x') mesh.rotation.z = Math.PI / 2;
+                else if (axis === 'z') mesh.rotation.x = Math.PI / 2;
+                mesh.userData = mesh.userData || {};
+                mesh.userData.__mfRing = axis;
+                state.root.add(mesh);
+                state.rings[axis] = { mesh, mat, dir: ringDirs[axis] };
+                try {
+                    if (mat.color?.set) mat.color.set(AXIS_COLORS[axis]);
+                    if ('emissive' in mat && mat.emissive?.set) mat.emissive.set(AXIS_COLORS[axis]);
+                    if ('emissiveIntensity' in mat) mat.emissiveIntensity = 0.7;
+                    if ('transparent' in mat) mat.transparent = true;
+                    if ('opacity' in mat) mat.opacity = 0.55;
+                    if ('fog' in mat) mat.fog = false;
+                    if ('depthWrite' in mat) mat.depthWrite = false;
+                    mat.needsUpdate = true;
+                } catch {}
+            }
             // SIEMPRE visible encima del modelo (no queda oculto dentro
             // del cuerpo): renderOrder alto + depthTest off
             state.root.traverse(o => {
@@ -250,6 +311,20 @@
         return n?.add ? n : null;
     }
 
+    // modo: 'both' (flechas+anillos) | 'move' (solo flechas) | 'rotate' (solo anillos)
+    function setMode(mode) {
+        if (!state.root) return;
+        const showArrows = mode !== 'rotate';
+        const showRings = mode !== 'move';
+        try {
+            for (const axis of ['x', 'y', 'z']) {
+                if (state.arrows?.[axis]) state.arrows[axis].group.visible = showArrows;
+                if (state.rings?.[axis]) state.rings[axis].mesh.visible = showRings;
+            }
+            state.mode = mode;
+        } catch {}
+    }
+
     function detach() {
         if (state.root) {
             try { state.root.parent?.remove(state.root); } catch {}
@@ -290,7 +365,9 @@
             let best = null;
             const tmp = new V3(), tip = new V3();
             for (const axis of ['x', 'y', 'z']) {
-                const d = state.arrows[axis].dir;
+                const ar = state.arrows[axis];
+                if (!ar || ar.group.visible === false) continue; // oculto por modo
+                const d = ar.dir;
                 tip.set(jp.x + d[0] * len, jp.y + d[1] * len, jp.z + d[2] * len);
                 // distancia del segmento (jp→tip) al rayo: aprox por punto medio
                 tmp.set((jp.x + tip.x) / 2, (jp.y + tip.y) / 2, (jp.z + tip.z) / 2);
@@ -340,6 +417,107 @@
         } catch { return 0; }
     }
 
+    // ── anillos de rotación: picking y delta angular ──
+    // pickRing: ¿qué anillo está bajo el cursor? Interseca el rayo del
+    // cursor con el plano del anillo y mide la distancia al centro; si cae
+    // dentro de la banda del anillo (R ± tolerancia) lo devuelve.
+    function pickRing(clientX, clientY, camera) {
+        if (!state.rings || !state.joint) return null;
+        const cam = camera || getStudioCamera();
+        if (!cam) return null;
+        update();
+        try {
+            const V3 = cam.position.constructor;
+            const rect = (getGameCanvas() || document.body).getBoundingClientRect();
+            const ndcX = ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+            const ndcY = -((clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;
+            cam.updateMatrixWorld?.();
+            const origin = new V3().setFromMatrixPosition(cam.matrixWorld);
+            const dir = new V3(ndcX, ndcY, 0.5).unproject(cam).sub(origin).normalize();
+
+            state.joint.updateMatrixWorld?.(true);
+            const jp = new V3();
+            state.joint.getWorldPosition(jp);
+
+            let best = null;
+            for (const axis of ['x', 'y', 'z']) {
+                const r = state.rings[axis];
+                if (!r || r.mesh.visible === false) continue; // oculto por modo
+                const d = r.dir;
+                // intersección rayo ∩ plano (centro jp, normal = eje)
+                const denom = dir.x * d[0] + dir.y * d[1] + dir.z * d[2];
+                if (Math.abs(denom) < 0.08) continue; // plano de canto: no agarrable
+                const toC = jp.clone().sub(origin);
+                const t = toC.dot(d) / denom;
+                if (t < 0.05) continue; // detrás de la cámara
+                const hit = dir.clone().multiplyScalar(t).add(origin);
+                const dist = hit.distanceTo(jp);
+                const R = RING_R * state.size;
+                // tolerancia: grosor del tubo + margen en píxeles
+                const camDist = origin.distanceTo(jp);
+                const worldPerPx = (2 * camDist * Math.tan(35 * Math.PI / 180)) / Math.max(1, rect.height);
+                const tol = RING_TUBE + worldPerPx * 10;
+                const band = Math.abs(dist - R);
+                // el anillo más frontal gana (menor t) si hay solapamiento
+                const score = band - t * 0.01;
+                if (band < tol && (!best || score < best.score)) {
+                    best = { axis, score };
+                }
+            }
+            return best?.axis || null;
+        } catch { return null; }
+    }
+
+    // ringDragDelta: ángulo (radianes) girado alrededor del eje del anillo,
+    // medido en el plano del anillo entre la posición actual del ratón y la
+    // del mousedown. Devuelve positivo = regla de la mano derecha alrededor
+    // del eje mundo del anillo.
+    function ringDragDelta(axis, startXY, curXY, camera) {
+        const cam = camera || getStudioCamera();
+        if (!cam || !state.rings?.[axis]) return 0;
+        update();
+        try {
+            const V3 = cam.position.constructor;
+            const rect = (getGameCanvas() || document.body).getBoundingClientRect();
+            cam.updateMatrixWorld?.();
+            const origin = new V3().setFromMatrixPosition(cam.matrixWorld);
+
+            state.joint.updateMatrixWorld?.(true);
+            const jp = new V3();
+            state.joint.getWorldPosition(jp);
+
+            const d = state.rings[axis].dir;
+            const axisV = new V3(d[0], d[1], d[2]);
+
+            // base ortonormal del plano del anillo
+            const helper = Math.abs(d[1]) > 0.9 ? new V3(1, 0, 0) : new V3(0, 1, 0);
+            const u = helper.clone().sub(axisV.clone().multiplyScalar(helper.dot(axisV))).normalize();
+            const v = axisV.clone().cross(u);
+
+            const angleAt = (cx, cy) => {
+                const ndcX = ((cx - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+                const ndcY = -((cy - rect.top) / Math.max(1, rect.height)) * 2 + 1;
+                const dir = new V3(ndcX, ndcY, 0.5).unproject(cam).sub(origin).normalize();
+                const denom = dir.dot(axisV);
+                if (Math.abs(denom) < 1e-4) return null;
+                const toC = jp.clone().sub(origin);
+                const t = toC.dot(axisV) / denom;
+                if (t < 0.05) return null;
+                const hit = dir.clone().multiplyScalar(t).add(origin).sub(jp);
+                return Math.atan2(hit.dot(v), hit.dot(u));
+            };
+
+            const a0 = angleAt(startXY.x, startXY.y);
+            const a1 = angleAt(curXY.x, curXY.y);
+            if (a0 == null || a1 == null) return 0;
+            let delta = a1 - a0;
+            // desenvolver: dar vueltas completas si el drag cruza ±π
+            while (delta > Math.PI) delta -= Math.PI * 2;
+            while (delta < -Math.PI) delta += Math.PI * 2;
+            return delta;
+        } catch { return 0; }
+    }
+
     function projectPoint(world, cam, rect) {
         try {
             const V3 = cam.position.constructor;
@@ -371,7 +549,7 @@
         return best;
     }
 
-    window.MF_Gizmo = { attach, detach, pick, dragDelta, visible };
+    window.MF_Gizmo = { attach, detach, pick, dragDelta, visible, pickRing, ringDragDelta, setMode };
     window.__MF_Gizmo = true;
 
     console.log(TAG + ' listo. attach(joint, onDelta) — flechas X/Y/Z para mover la parte.');

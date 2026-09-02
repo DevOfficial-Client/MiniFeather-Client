@@ -611,6 +611,49 @@
 
     function endRotateWorld(handle) { rotDrags.delete(handle); }
 
+    // ── rotación por eje mundo (anillos del gizmo) ──
+    // Igual que applyRotateWorld pero el eje es MUNDO fijo (x/y/z), no
+    // relativo a cámara. angle en radianes, regla mano derecha. Con espejo,
+    // refleja el eje e invierte el ángulo (M·rot(a,θ)·M⁻¹ = rot(Ma,−θ)).
+    function applyAxisRotateWorld(handle, axis, angle, snap15, mirror) {
+        const st = rotDrags.get(handle);
+        if (!st) return null;
+        const dirMap = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
+        const d = dirMap[axis];
+        if (!d) return null;
+        try {
+            const V3 = st.joint.position.constructor;
+            let a = angle;
+            if (snap15) {
+                const s = 15 * Math.PI / 180;
+                a = Math.round(a / s) * s;
+            }
+            const axisV = new V3(d[0], d[1], d[2]);
+            const qDelta = new st.Q().setFromAxisAngle(axisV, a);
+
+            const qNew = qDelta.clone().multiply(st.qStartWorld);
+            const qLocal = st.qParentWorldInv.clone().multiply(qNew);
+            const ord = st.joint.rotation?.order || 'XYZ';
+            const eu = new (st.joint.rotation.constructor)().setFromQuaternion(qLocal, ord);
+            st.joint.rotation.set(eu.x, eu.y, eu.z);
+
+            const deg = (r) => r * 180 / Math.PI;
+            const out = { deg: [deg(eu.x), deg(eu.y), deg(eu.z)], angle: a };
+
+            if (mirror && st.mirrorJoint) {
+                const mAxis = reflectAxis(axisV, st.mirrorN);
+                const qDeltaM = new st.Q().setFromAxisAngle(mAxis, -a);
+                const qNewM = qDeltaM.clone().multiply(st.qMirrorStart);
+                const qLocalM = st.qMirrorParentInv.clone().multiply(qNewM);
+                const ordM = st.mirrorJoint.rotation?.order || 'XYZ';
+                const euM = new (st.mirrorJoint.rotation.constructor)().setFromQuaternion(qLocalM, ordM);
+                st.mirrorJoint.rotation.set(euM.x, euM.y, euM.z);
+                out.mirrorDeg = [deg(euM.x), deg(euM.y), deg(euM.z)];
+            }
+            return out;
+        } catch { return null; }
+    }
+
     // ── mover partes en espacio MUNDO (gizmo y drag con click der.) ──
     // El personaje tiene yaw → local ≠ mundo. Convertimos los ejes mundo
     // al espacio del padre del joint antes de tocar la posición.
@@ -683,7 +726,7 @@
         setPart, getPose, applyPoseObj, reset,
         getScale, setScale,
         getOffset, setOffset,
-        beginRotateWorld, applyRotateWorld, endRotateWorld, addWorldOffset, addScreenOffset,
+        beginRotateWorld, applyRotateWorld, applyAxisRotateWorld, endRotateWorld, addWorldOffset, addScreenOffset,
         save, apply, remove, applyPreset,
         pickPart,
         list() { return Object.keys(loadPoses()); },

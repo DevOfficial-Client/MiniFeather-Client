@@ -67,6 +67,13 @@
 .face-clip.head { background: linear-gradient(180deg, #4a2410, #3a1c0c); border-color: #a04a1c; }
 .face-clip.head:hover { border-color: #ff6b2b; }
 .face-clip.head .name { color: #ffe0c8; }
+.face-clip.skin { background: linear-gradient(180deg, #143a24, #0c2a1a); border-color: #2f9464; }
+.face-clip.skin:hover { border-color: #4dff88; }
+.face-clip.skin .name { color: #d8ffe8; }
+/* morph a mob — morado */
+.face-clip.morph { background: linear-gradient(180deg, #3a1d52, #24103a); border-color: #7c3fae; }
+.face-clip.morph:hover { border-color: #b56bff; }
+.face-clip.morph .name { color: #ecd8ff; }
 #mft-toolbar {
     height: 30px; display: flex; align-items: center; gap: 8px;
     padding: 0 10px; border-bottom: 1px solid #2a2a32; background: #1a1a1f;
@@ -181,7 +188,7 @@
         // text/mf-head = preset de cabeza · text/mf-face = emoción → clip V2.
         root.addEventListener('dragover', (ev) => {
             const types = ev.dataTransfer.types;
-            if (!types.includes('text/mf-film') && !types.includes('text/mf-head') && !types.includes('text/mf-face')) return;
+            if (!types.includes('text/mf-film') && !types.includes('text/mf-head') && !types.includes('text/mf-face') && !types.includes('text/mf-skin') && !types.includes('text/mf-morph')) return;
             ev.preventDefault();
             ev.dataTransfer.dropEffect = 'copy';
         });
@@ -190,6 +197,25 @@
             ev.stopPropagation();
             const r = tracks.getBoundingClientRect();
             const tick = Math.max(0, Math.round(xToTick(ev.clientX - r.left)));
+
+            // skin PNG completa → clip en V2 (tipo 'skin')
+            const skinName = ev.dataTransfer.getData('text/mf-skin');
+            if (skinName) {
+                window.MF_FaceSwap?.applyAtTick(tick, 'skin_' + skinName, 'skin');
+                render();
+                state.onChange?.('clips-changed', state.clips.length);
+                return;
+            }
+
+            // morph a mob → clip en V2 (tipo 'morph')
+            const morphType = ev.dataTransfer.getData('text/mf-morph');
+            if (morphType) {
+                window.MF_Morph?.applyAtTick?.(tick, morphType) ||
+                    window.MF_FaceSwap?.applyAtTick(tick, 'morph_' + morphType, 'morph');
+                render();
+                state.onChange?.('clips-changed', state.clips.length);
+                return;
+            }
 
             // emoción o preset de cabeza → clip en V2
             const headName = ev.dataTransfer.getData('text/mf-head');
@@ -421,17 +447,27 @@
     // de V1: arrastrable, grips para trim, click derecho borra)
     function renderTriggerClip(t, i) {
         const isHead = t.type === 'head';
-        const div = el('div', 'mft-clip face-clip' + (isHead ? ' head' : ''));
+        const isSkin = t.type === 'skin';
+        const isMorph = t.type === 'morph';
+        // nombre legible: skin_<name>/morph_<type> → solo <name>
+        const label = isSkin ? String(t.face).replace(/^skin_/, '')
+            : isMorph ? String(t.face).replace(/^morph_/, '').replace(/_/g, ' ')
+            : t.face;
+        const icon = isHead ? '🎨' : isSkin ? '👕' : isMorph ? '🧬' : '😄';
+        const div = el('div', 'mft-clip face-clip' + (isHead ? ' head' : '') + (isSkin ? ' skin' : '') + (isMorph ? ' morph' : ''));
         div.dataset.tri = i;
         div.style.left = tickToX(t.tick) + 'px';
         div.style.width = Math.max(8, ((t.durationTicks || TPS) / TPS) * state.view.pxPerSec) + 'px';
+        // miniatura de la skin dentro del clip si está disponible
+        const thumb = isSkin ? (window.MF_SkinChanger?.items || []).find(s => ('skin_' + s.name) === t.face)?.thumb : null;
         div.innerHTML = `
             <div class="grip l" data-edge="l"></div>
-            <span class="name">${isHead ? '🎨' : '😄'} ${t.face}</span>
+            ${thumb ? `<img src="${thumb}" alt="" style="height:14px;width:14px;image-rendering:pixelated;border-radius:2px;margin-right:3px;flex:none;">` : ''}
+            <span class="name">${icon} ${label}</span>
             <span class="len">${((t.durationTicks || TPS) / TPS).toFixed(1)}s</span>
             <div class="grip r" data-edge="r"></div>
         `;
-        div.title = `${isHead ? 'Preset de cabeza' : 'Cara: ' + t.face}\n` +
+        div.title = `${isHead ? 'Preset de cabeza' : isSkin ? 'Skin PNG: ' + label : isMorph ? 'Morph: ' + label : 'Cara: ' + t.face}\n` +
             `Inicio: ${(t.tick / TPS).toFixed(2)}s · Duración: ${((t.durationTicks || TPS) / TPS).toFixed(2)}s\n` +
             `Arrastra para mover · grips para duración · click derecho = borrar`;
 
@@ -488,6 +524,10 @@
         div.addEventListener('dblclick', (ev) => {
             ev.stopPropagation();
             if (t.type === 'head') window.MF_SkinEditor?.applyPreset?.(t.face);
+            else if (t.type === 'skin') window.MF_SkinChanger?.apply?.(String(t.face).replace(/^skin_/, ''));
+            else if (t.type === 'morph') {
+                try { window.MF_Morph?.apply?.(String(t.face).replace(/^morph_/, '')); } catch {}
+            }
             else { try { window.MF_FaceSwap?.preview?.(t.face); } catch {} }
         });
         return div;

@@ -170,7 +170,7 @@
         if (!game?.player?.mesh) throw new Error('jugador/mesh no disponible todavía');
         const mesh = opts.mesh || game.player.mesh;
 
-        const faceCanvas = await loadFaceImage(faceName);
+        const faceCanvas = await (loadExternalFace(faceName) || loadFaceImage(faceName));
         const mat = findSkinMaterial(mesh);
         if (!mat?.map) throw new Error('no se encontró material de skin en el mesh');
 
@@ -271,7 +271,7 @@
         state.tickTriggers.push({
             tick: Math.max(0, Math.round(tick)),
             face: name,
-            type: type === 'head' ? 'head' : 'face',
+            type: type === 'head' ? 'head' : type === 'skin' ? 'skin' : type === 'morph' ? 'morph' : 'face',
             durationTicks: dur,
             done: false,
             expired: false
@@ -302,6 +302,17 @@
                 t.done = true;
                 if (t.type === 'head') {
                     window.MF_SkinEditor?.applyPreset?.(t.face);
+                } else if (t.type === 'skin') {
+                    // skin PNG completa (SkinChanger): t.face = 'skin_<name>'
+                    window.MF_SkinChanger?.apply?.(t.face.replace(/^skin_/, ''))
+                        .catch(e => console.warn(TAG + ' trigger skin tick ' + t.tick + ' fallo: ' + e.message));
+                } else if (t.type === 'morph') {
+                    // morph a mob (MF_Morph): t.face = 'morph_<type>'
+                    try {
+                        window.MF_Morph?.apply?.(t.face.replace(/^morph_/, ''));
+                    } catch (e) {
+                        console.warn(TAG + ' trigger morph tick ' + t.tick + ' fallo: ' + (e?.message || e));
+                    }
                 } else {
                     applyFace(t.face).catch(e => console.warn(TAG + ' trigger tick ' + t.tick + ' fallo: ' + e.message));
                 }
@@ -311,6 +322,10 @@
                 t.expired = true;
                 if (t.type === 'head') {
                     window.MF_SkinEditor?.revert?.();
+                } else if (t.type === 'skin') {
+                    window.MF_SkinChanger?.revert?.();
+                } else if (t.type === 'morph') {
+                    window.MF_Morph?.revert?.();
                 } else {
                     revertFace();
                 }
@@ -364,13 +379,66 @@
         'crazy_talking', 'flashlight'
     ];
 
+    // ── fuentes externas de caras (p.ej. skins PNG del SkinChanger) ──
+    // Una "fuente" aporta caras con imagen propia (dataURL). Se registran
+    // con un id de fuente; list() las incluye y applyAtTick las dispara
+    // como cualquier emoción (tipo 'skin' aplica la skin PNG completa).
+    const SOURCES_DIR = { __proto__: null };
+
+    function registerSource(sourceId, faces) {
+        if (!sourceId || !Array.isArray(faces)) return { ok: false };
+        SOURCES_DIR[sourceId] = faces.slice();
+        return { ok: true, total: faces.length };
+    }
+
+    function listSources() {
+        const out = [];
+        for (const id in SOURCES_DIR) {
+            for (const f of SOURCES_DIR[id]) out.push({ source: id, ...f });
+        }
+        return out;
+    }
+
+    // resuelve una cara por nombre buscando primero en fuentes externas
+    function loadExternalFace(name) {
+        for (const id in SOURCES_DIR) {
+            for (const f of SOURCES_DIR[id]) {
+                if (f.name === name) {
+                    // devuelve un canvas 8x8 recortado de la región de cara
+                    return loadImageFromURL(f.dataURL).then(img => {
+                        const r = f.region || FACE;
+                        const c = document.createElement('canvas');
+                        c.width = FACE.w; c.height = FACE.h;
+                        const ctx = c.getContext('2d');
+                        ctx.imageSmoothingEnabled = false;
+                        ctx.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, FACE.w, FACE.h);
+                        return c;
+                    });
+                }
+            }
+        }
+        return null;
+    }
+
+    function loadImageFromURL(url) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error('no se pudo cargar imagen'));
+            img.src = url;
+        });
+    }
+
     window.MF_FaceSwap = {
         get enabled() { return state.enabled; },
         set enabled(v) { state.enabled = !!v; if (!v) revertFace(); },
         set: applyFace,
         revert: revertFace,
         preview: previewFace,
-        list() { return [...KNOWN_FACES]; },
+        list() {
+            const ext = listSources().map(f => f.name);
+            return [...KNOWN_FACES, ...ext];
+        },
         applyAtTick,
         onTick,
         skipBefore,
@@ -379,6 +447,8 @@
         removeTrigger,
         resolveOverlaps,
         clearTickTriggers,
+        registerSource,
+        listSources,
         get triggers() { return state.tickTriggers; },
         // Constantes útiles para el timeline UI
         FACE_REGION: FACE,

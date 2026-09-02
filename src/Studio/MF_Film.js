@@ -326,25 +326,101 @@
 
     // ── ACTOR: clon del mesh 3D del jugador (skin y joints reales) ──
 
-    // Clona el mesh del jugador local. mesh.clone(true) es profundo y
-    // COMPARTE geometría/materiales/texturas → el clon conserva la skin
-    // exacta sin duplicar memoria de GPU. Los joints (headPivot, hombros…)
-    // quedan replicados con los mismos nombres → lo grabado aplica directo.
+    // cuenta de nodos de una jerarquía (sanidad del clon)
+    function countNodes(o) {
+        let n = 1;
+        for (const c of (o.children || [])) n += countNodes(c);
+        return n;
+    }
+
+    // Reconstrucción manual de la jerarquía cuando clone() falla o rompe.
+    // Comparte geometría y MATERIALES (la skin vive en la textura compartida
+    // → el clon se ve exactamente igual al jugador) y replica transforms.
+    function manualCloneNode(src) {
+        let node;
+        try {
+            if (src.isSkinnedMesh) {
+                // SkinnedMesh sin bindMode/skeleton no renderiza: pasar la
+                // MISMA geometría+material+esqueleto (comparte huesos con el
+                // original — los joints del clon mueven sus propios pivots)
+                node = new src.constructor(src.geometry, src.material);
+                try {
+                    node.bind(src.skeleton, src.bindMatrix || src.matrixWorld?.clone?.() || null);
+                } catch {}
+            } else if (src.isMesh) {
+                node = new src.constructor(src.geometry, src.material);
+            } else {
+                node = new src.constructor();
+            }
+        } catch { return null; }
+        try {
+            node.position.copy(src.position);
+            node.quaternion.copy(src.quaternion);
+            node.scale.copy(src.scale);
+            if (src.name) node.name = src.name;
+            node.visible = src.visible !== false;
+            node.matrixAutoUpdate = true;
+            node.frustumCulled = false; // siempre visible: actor de escena
+        } catch {}
+        for (const child of (src.children || [])) {
+            const c = manualCloneNode(child);
+            if (c) node.add(c);
+        }
+        return node;
+    }
+
+    // Clona el mesh del jugador local. Estrategias:
+    // 1) mesh.clone(true) — nativo, rápido (comparte geo/mats → misma skin)
+    // 2) reconstrucción manual — si clone lanza o deja jerarquía incompleta
+    // Los joints (headPivot, hombros…) quedan replicados con los mismos
+    // nombres → lo grabado aplica directo sobre el clon.
     function clonePlayerMesh() {
         const ent = getLocalPlayerEntity(getGame());
         const mesh = ent?.mesh;
-        if (!mesh || typeof mesh.clone !== 'function') return null;
+        if (!mesh) return null;
+
+        let clone = null;
+        if (typeof mesh.clone === 'function') {
+            try {
+                const c = mesh.clone(true);
+                // sanidad: el clon debe tener la misma estructura que el
+                // original (clone roto puede dejar hijos atrás)
+                if (c && countNodes(c) === countNodes(mesh)) clone = c;
+            } catch {}
+        }
+        if (!clone) {
+            clone = manualCloneNode(mesh);
+            if (clone) console.log(TAG + ' clon manual del player OK (' + countNodes(clone) + ' nodos)');
+        }
+        if (!clone) {
+            console.warn(TAG + ' clone del player fallo por completo');
+            return null;
+        }
         try {
-            const clone = mesh.clone(true);
             clone.traverse(o => {
                 o.matrixAutoUpdate = true;
                 o.frustumCulled = false; // siempre visible: es un actor de escena
+                // el juego oculta el mesh del player en primera persona
+                // (o partes por culling de armadura): el actor SIEMPRE visible
+                o.visible = true;
             });
-            return clone;
-        } catch (e) {
-            console.warn(TAG + ' clone del player fallo: ' + (e?.message || e));
-            return null;
-        }
+        } catch {}
+        // el juego puede re-ocultar partes del clon (anims/estados) → un
+        // watchdog corto re-fuerza visibilidad hasta que el playback aplica
+        try {
+            let checks = 0;
+            const wd = setInterval(() => {
+                checks++;
+                try {
+                    if (!clone.parent) { clearInterval(wd); return; } // ya no existe
+                    clone.traverse(o => {
+                        if (o.visible === false) o.visible = true;
+                    });
+                } catch {}
+                if (checks >= 40) clearInterval(wd); // ~10s y fuera
+            }, 250);
+        } catch {}
+        return clone;
     }
 
     function despawnOne(actorId) {

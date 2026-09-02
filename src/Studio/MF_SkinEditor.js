@@ -709,6 +709,7 @@
         open, close, revert,
         presets: listPresets,          // [{name, thumb}] para el Media Pool
         applyPreset: applyPresetByName,// trigger desde el timeline
+        __tex: () => state.tex,        // textura editable activa (SkinChanger)
         get isOpen() { return state.open; }
     };
     window.__MF_SkinEditor = true;
