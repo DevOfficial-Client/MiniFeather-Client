@@ -85,6 +85,8 @@
     moduleNamespace: null,
     moduleUrl: '',
     blockRegistry: null,
+    itemsRegistry: null,
+    blockItemCache: new WeakMap(),
     chunkConstructor: null,
     localChunks: [],
     localGameStateBefore: 0,
@@ -112,6 +114,12 @@
     pendingBlockChanges: [],
     suppressBlockBroadcast: false,
     worldSetBlockPatch: null,
+    worldItemPatch: null,
+    recentNativeDrops: new Map(),
+    lastPickupScan: 0,
+    lastPlayerEntityRepair: 0,
+    localPlayerEntityReady: false,
+    dropStats: { spawned: 0, pickedUp: 0, fallback: 0, failed: 0, lastError: '' },
     banList: new Map(),
     connectedOnce: false,
     connectionLost: false,
@@ -1380,8 +1388,15 @@
       player: p ? {
         x: Number(p.x) || 0,
         y: Number(p.y) || 0,
-        z: Number(p.z) || 0
+        z: Number(p.z) || 0,
+        registeredInPlayers: state.world?.players?.get?.(state.localPlayerId) === game?.player,
+        registeredInEntities: state.world?.entities?.get?.(state.localPlayerId) === game?.player,
+        meshPresent: !!game?.player?.mesh,
+        meshAttached: !!(game?.player?.mesh && gs?.entityMeshes && game.player.mesh.parent === gs.entityMeshes),
+        meshVisible: game?.player?.mesh?.visible !== false,
+        entityReady: state.localPlayerEntityReady === true
       } : null,
+      drops: { ...(state.dropStats || {}) },
       camera: c ? {
         x: Number(c.x) || 0,
         y: Number(c.y) || 0,
@@ -2623,6 +2638,393 @@
     return null;
   }
 
+  function blockCoordinates(pos) {
+    const read = (axis, getter) => {
+      let value = Number(pos?.[axis]);
+      if (!Number.isFinite(value)) {
+        try { value = Number(pos?.[getter]?.()); } catch (_) {}
+      }
+      return Number.isFinite(value) ? Math.floor(value) : NaN;
+    };
+
+    const x = read('x', 'getX');
+    const y = read('y', 'getY');
+    const z = read('z', 'getZ');
+    return [x, y, z].every(Number.isFinite) ? { x, y, z } : null;
+  }
+
+  function isAirState(blockState) {
+    if (!blockState) return true;
+
+    try {
+      const air = stateFor('air', '');
+      if (
+        air &&
+        Number.isFinite(Number(air.id)) &&
+        Number(blockState.id) === Number(air.id)
+      ) {
+        return true;
+      }
+    } catch (_) {}
+
+    try {
+      return String(blockState.getBlock?.()?.name || '').toLowerCase() === 'air';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function looksLikeItemsRegistry(value) {
+    if (!value || (typeof value !== 'object' && typeof value !== 'function')) {
+      return false;
+    }
+
+    try {
+      const stone = value.stone;
+      const sword = value.wooden_sword || value.stone_sword;
+      return !!(
+        stone &&
+        sword &&
+        Number.isFinite(Number(stone.id)) &&
+        typeof stone.isItemBlock === 'function' &&
+        stone.isItemBlock() === true
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function resolveItemsRegistry() {
+    if (looksLikeItemsRegistry(state.itemsRegistry)) return state.itemsRegistry;
+
+    for (const candidate of [globalThis.Items, globalThis.window?.Items]) {
+      if (!looksLikeItemsRegistry(candidate)) continue;
+      state.itemsRegistry = candidate;
+      return candidate;
+    }
+
+    const mod = state.moduleNamespace;
+    if (mod && typeof mod === 'object') {
+      for (const value of Object.values(mod)) {
+        if (!looksLikeItemsRegistry(value)) continue;
+        state.itemsRegistry = value;
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  function itemForBlock(block) {
+    if (!block || typeof block !== 'object') return null;
+
+    try {
+      const cached = state.blockItemCache.get(block);
+      if (cached) return cached;
+    } catch (_) {}
+
+    const Items = resolveItemsRegistry();
+    if (!Items) return null;
+
+    const blockName = String(block.name || '');
+    let item = blockName ? Items[blockName] : null;
+
+    try {
+      if (
+        item &&
+        typeof item.isItemBlock === 'function' &&
+        item.isItemBlock() === true
+      ) {
+        state.blockItemCache.set(block, item);
+        return item;
+      }
+    } catch (_) {}
+
+    for (const candidate of Object.values(Items)) {
+      try {
+        if (
+          typeof candidate?.isItemBlock !== 'function' ||
+          candidate.isItemBlock() !== true ||
+          typeof candidate.getBlock !== 'function' ||
+          candidate.getBlock() !== block
+        ) {
+          continue;
+        }
+        item = candidate;
+        state.blockItemCache.set(block, item);
+        return item;
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  function nativeVector(x, y, z) {
+    const sample = state.game?.player?.pos;
+    const Ctor = sample?.constructor;
+
+    if (typeof Ctor === 'function') {
+      try {
+        const value = new Ctor(x, y, z);
+        if (value && Number.isFinite(Number(value.x))) return value;
+      } catch (_) {}
+
+      try {
+        const value = new Ctor();
+        value?.set?.(x, y, z);
+        if (value && Number.isFinite(Number(value.x))) return value;
+      } catch (_) {}
+    }
+
+    return {
+      x, y, z,
+      set(nx, ny, nz) {
+        this.x = nx;
+        this.y = ny;
+        this.z = nz;
+        return this;
+      }
+    };
+  }
+
+  function localDropsEnabled() {
+    const mode = String(currentGamemodeId() || state.localGameMode || 'survival').toLowerCase();
+    return mode !== 'creative' && mode !== 'spectator';
+  }
+
+  function markNativeDrop(pos) {
+    const xyz = blockCoordinates(pos);
+    if (!xyz) return;
+    state.recentNativeDrops.set(key(xyz.x, xyz.y, xyz.z), performance.now());
+
+    if (state.recentNativeDrops.size > 96) {
+      const cutoff = performance.now() - 1500;
+      for (const [entryKey, at] of state.recentNativeDrops) {
+        if (at < cutoff) state.recentNativeDrops.delete(entryKey);
+      }
+    }
+  }
+
+  function hadRecentNativeDrop(pos, maxAge = 180) {
+    const xyz = blockCoordinates(pos);
+    if (!xyz) return false;
+    const entryKey = key(xyz.x, xyz.y, xyz.z);
+    const at = Number(state.recentNativeDrops.get(entryKey)) || 0;
+    if (!at) return false;
+    if (performance.now() - at <= maxAge) return true;
+    state.recentNativeDrops.delete(entryKey);
+    return false;
+  }
+
+  function spawnLocalItem(itemOrStack, pos, yOffset = 0.15, fallback = false) {
+    const world = state.world;
+    if (!world || !itemOrStack || !localDropsEnabled()) return null;
+
+    const sourceStack = itemOrStack?.item ? itemOrStack : null;
+    const item =
+      sourceStack?.item ||
+      itemOrStack?.getItem?.() ||
+      itemOrStack;
+
+    if (!item || !Number.isFinite(Number(item.id))) return null;
+
+    const xyz = blockCoordinates(pos) || {
+      x: Number(pos?.x),
+      y: Number(pos?.y),
+      z: Number(pos?.z)
+    };
+
+    if (![xyz.x, xyz.y, xyz.z].every(Number.isFinite)) return null;
+
+    const spawnPos = nativeVector(
+      Number(xyz.x) + 0.5,
+      Number(xyz.y) + 0.15,
+      Number(xyz.z) + 0.5
+    );
+
+    try {
+      const entity = world.getEntityItem?.(item, spawnPos, Number(yOffset) || 0.15);
+      if (!entity) throw new Error('getEntityItem returned no entity');
+
+      if (sourceStack && typeof entity.setEntityItemStack === 'function') {
+        try {
+          entity.setEntityItemStack(sourceStack.clone?.() || sourceStack);
+        } catch (_) {}
+      }
+
+      try { entity.setPickupDelay?.(6); } catch (_) {}
+      entity.__mfLocalPickupReadyAt = performance.now() + 220;
+      entity.__mfLocalDrop = true;
+
+      try {
+        if (entity.motion) {
+          entity.motion.x = (Math.random() - 0.5) * 0.09;
+          entity.motion.y = 0.13 + Math.random() * 0.045;
+          entity.motion.z = (Math.random() - 0.5) * 0.09;
+        }
+      } catch (_) {}
+
+      const spawned = world.spawnEntityInWorld?.(entity);
+      if (spawned === false) throw new Error('spawnEntityInWorld rejected item');
+
+      state.dropStats.spawned++;
+      if (fallback) state.dropStats.fallback++;
+      markNativeDrop(pos);
+      return entity;
+    } catch (error) {
+      state.dropStats.failed++;
+      state.dropStats.lastError = String(error?.message || error || 'DROP_SPAWN_FAILED').slice(0, 180);
+      return null;
+    }
+  }
+
+  function patchWorldItemDrops() {
+    const world = state.world;
+    if (!world || state.worldItemPatch?.world === world) return;
+    if (typeof world.addItem !== 'function') return;
+
+    const original = world.addItem;
+    const wrapped = function (itemOrStack, pos, ...args) {
+      if (state.active && state.directLocal && localDropsEnabled()) {
+        const entity = spawnLocalItem(itemOrStack, pos, Number(args[0]) || 0.15, false);
+        if (entity) return null;
+      }
+
+      try {
+        return original.call(this, itemOrStack, pos, ...args);
+      } catch (_) {
+        return null;
+      }
+    };
+
+    try {
+      world.addItem = wrapped;
+      state.worldItemPatch = { world, original, wrapped };
+    } catch (_) {}
+  }
+
+  function restoreWorldItemDrops() {
+    const patch = state.worldItemPatch;
+    state.worldItemPatch = null;
+    if (!patch?.world || !patch.original) return;
+
+    try {
+      if (patch.world.addItem === patch.wrapped) patch.world.addItem = patch.original;
+    } catch (_) {}
+  }
+
+  function wearHeldItemOnLocalBreak(pos, previousState, stack, damageBefore) {
+    if (!localDropsEnabled()) return;
+    const player = state.game?.player;
+    const inventory = player?.inventory;
+    const block = previousState?.getBlock?.();
+    if (!stack || !block) return;
+
+    // The online client may already predict tool wear. Only apply the native
+    // ItemStack hook when this break did not change durability on its own.
+    const damageAfter = Number(stack.itemDamage);
+    if (
+      Number.isFinite(Number(damageBefore)) &&
+      Number.isFinite(damageAfter) &&
+      damageAfter !== Number(damageBefore)
+    ) {
+      return;
+    }
+
+    try {
+      stack.onBlockDestroyed?.(
+        state.world,
+        block,
+        nativeVector(pos.x, pos.y, pos.z),
+        player
+      );
+      inventory.markDirty?.();
+    } catch (_) {}
+  }
+
+  function scheduleFallbackBlockDrop(pos, previousState) {
+    if (!localDropsEnabled() || !previousState || isAirState(previousState)) return;
+
+    const xyz = blockCoordinates(pos);
+    if (!xyz) return;
+    const previousBlock = previousState.getBlock?.();
+
+    setTimeout(() => {
+      if (!state.active || !state.directLocal || !localDropsEnabled()) return;
+      if (hadRecentNativeDrop(xyz, 240)) return;
+
+      const item = itemForBlock(previousBlock);
+      if (!item) {
+        state.dropStats.failed++;
+        state.dropStats.lastError = `No ItemBlock found for ${String(previousBlock?.name || 'unknown')}`;
+        return;
+      }
+
+      spawnLocalItem(item, xyz, 0.15, true);
+    }, 0);
+  }
+
+  function pickupNearbyLocalItems() {
+    if (!state.active || !state.directLocal || !localDropsEnabled()) return;
+
+    const now = performance.now();
+    if (now - state.lastPickupScan < 90) return;
+    state.lastPickupScan = now;
+
+    const world = state.world;
+    const player = state.game?.player;
+    const inventory = player?.inventory;
+    const p = player?.pos;
+    if (!world || !inventory || !p || typeof inventory.addItemStackToInventory !== 'function') return;
+
+    const candidates = [];
+    const seen = new Set();
+
+    try {
+      for (const entity of world.entities?.values?.() || []) {
+        if (!entity || seen.has(entity)) continue;
+        seen.add(entity);
+        candidates.push(entity);
+      }
+    } catch (_) {}
+
+    try {
+      for (const entity of world.loadedEntityList || []) {
+        if (!entity || seen.has(entity)) continue;
+        seen.add(entity);
+        candidates.push(entity);
+      }
+    } catch (_) {}
+
+    for (const entity of candidates.slice(0, 128)) {
+      if (entity === player || typeof entity.getEntityItem !== 'function') continue;
+      if (Number(entity.__mfLocalPickupReadyAt) > now) continue;
+
+      const ep = entity.pos;
+      if (!ep) continue;
+      const dx = Number(ep.x) - Number(p.x);
+      const dy = Number(ep.y) - Number(p.y);
+      const dz = Number(ep.z) - Number(p.z);
+      if (![dx, dy, dz].every(Number.isFinite) || dx * dx + dy * dy + dz * dz > 2.6) continue;
+
+      let stack = null;
+      try { stack = entity.getEntityItem(); } catch (_) {}
+      if (!stack || Number(stack.stackSize) <= 0) continue;
+
+      let picked = false;
+      try { picked = inventory.addItemStackToInventory(stack) === true; } catch (_) {}
+      if (!picked) continue;
+
+      try { inventory.markDirty?.(); } catch (_) {}
+      try { world.removeEntity?.(entity); } catch (_) {}
+      try {
+        if (world.entities?.get?.(entity.id) === entity) world.entities.delete(entity.id);
+      } catch (_) {}
+
+      state.dropStats.pickedUp++;
+    }
+  }
+
   function hash2D(x, z, seed = 0) {
     let value =
       Math.imul((x | 0) ^ 0x9e3779b9, 0x85ebca6b) ^
@@ -2857,6 +3259,88 @@
     }
 
     syncNativePlayerList();
+  }
+
+  function ensureLocalPlayerEntity(forceRecreate = false) {
+    const game = state.game;
+    const world = state.world;
+    const player = game?.player;
+    if (!game || !world || !player) return false;
+
+    const id = Number(state.localPlayerId);
+    if (!Number.isFinite(id)) return false;
+
+    try {
+      player.id = id;
+      player.game = game;
+      player.world = world;
+      player.dimension = Number(world.dimensionId) || 0;
+    } catch (_) {}
+
+    let registered = false;
+
+    try {
+      registered = world.players?.get?.(id) === player;
+    } catch (_) {}
+
+    if (!registered && typeof world.addPlayer === 'function') {
+      try { world.addPlayer(player); } catch (_) {}
+    }
+
+    try {
+      if (world.players?.get?.(id) !== player) world.players?.set?.(id, player);
+      registered = world.players?.get?.(id) === player;
+    } catch (_) {}
+
+    let entityRegistered = false;
+    try { entityRegistered = world.entities?.get?.(id) === player; } catch (_) {}
+
+    if (!entityRegistered && typeof world.spawnEntityInWorld === 'function') {
+      try { world.spawnEntityInWorld(player); } catch (_) {}
+    }
+
+    try {
+      if (world.entities?.get?.(id) !== player) world.entities?.set?.(id, player);
+      entityRegistered = world.entities?.get?.(id) === player;
+    } catch (_) {}
+
+    try {
+      if (Array.isArray(world.loadedEntityList) && !world.loadedEntityList.includes(player)) {
+        world.loadedEntityList.push(player);
+      }
+    } catch (_) {}
+
+    const entityRoot = game.gameScene?.entityMeshes;
+
+    try {
+      if ((!player.mesh || player.mesh.parent !== entityRoot) && typeof world.attachEntityMesh === 'function') {
+        world.attachEntityMesh(player);
+      }
+    } catch (_) {}
+
+    try {
+      if (forceRecreate && player.mesh) {
+        if (typeof player.mesh.recreate === 'function') player.mesh.recreate();
+        else player.mesh.bXbFHkqbGNBEv?.();
+      }
+    } catch (_) {}
+
+    try {
+      if (player.mesh) {
+        if (entityRoot && player.mesh.parent !== entityRoot && typeof entityRoot.add === 'function') {
+          entityRoot.add(player.mesh);
+        }
+        player.mesh.visible = true;
+      }
+    } catch (_) {}
+
+    state.localPlayerEntityReady = !!(
+      registered &&
+      entityRegistered &&
+      player.mesh
+    );
+
+    return state.localPlayerEntityReady;
   }
 
   function setLocalGamemode(modeId) {
@@ -4673,6 +5157,8 @@
       } catch (_) {}
     }
 
+    ensureLocalPlayerEntity(false);
+
     try {
       game.chunkManager.warmCache?.();
     } catch (_) {}
@@ -4772,6 +5258,8 @@
         game._state = 5;
       } catch (_) {}
     }
+
+    ensureLocalPlayerEntity(false);
 
     try {
       game.update?.();
@@ -4999,6 +5487,7 @@
     repairGameSceneTick(game);
     ensureNativeSceneRoots(game);
     synchronizeLocalCamera(game);
+    ensureLocalPlayerEntity(true);
 
     syncNativePlayerList();
     refreshLocalVisualMode();
@@ -6419,16 +6908,42 @@
 
   function patchWorldBlockBroadcast() {
     const world = state.world;
-    if (!world || state.worldSetBlockPatch?.world === world) return;
+    if (!world) return;
+
+    patchWorldItemDrops();
+
+    if (state.worldSetBlockPatch?.world === world) return;
     if (typeof world.setBlockState !== 'function') return;
 
     const original = world.setBlockState;
 
     const wrapped = function (pos, blockState, ...args) {
+      const xyz = blockCoordinates(pos);
+      const previousState = xyz ? getStateAt(xyz.x, xyz.y, xyz.z) : null;
+      const wasSolid = !!previousState && !isAirState(previousState);
+      const becomesAir = isAirState(blockState);
+      const heldBefore = state.game?.player?.inventory?.getCurrentItem?.() || null;
+      const heldDamageBefore = Number(heldBefore?.itemDamage);
+
       const changed = original.call(this, pos, blockState, ...args);
 
       if (changed) {
         queueBlockChange(pos, blockState);
+
+        if (
+          !state.suppressBlockBroadcast &&
+          xyz &&
+          wasSolid &&
+          becomesAir
+        ) {
+          wearHeldItemOnLocalBreak(
+            xyz,
+            previousState,
+            heldBefore,
+            heldDamageBefore
+          );
+          scheduleFallbackBlockDrop(xyz, previousState);
+        }
       }
 
       return changed;
@@ -7054,6 +7569,7 @@
     stopLoops();
     closeP2P(notifyGuests);
     restoreWorldBlockBroadcast();
+    restoreWorldItemDrops();
     restoreGameSceneUpdate();
     clearPendingUploadDrain();
     clearRenderLoopWatchdog();
@@ -7087,6 +7603,11 @@
     state.blockState.clear();
     state.blockOverrides.clear();
     state.pendingBlockChanges.length = 0;
+    state.recentNativeDrops.clear();
+    state.lastPickupScan = 0;
+    state.lastPlayerEntityRepair = 0;
+    state.localPlayerEntityReady = false;
+    state.dropStats = { spawned: 0, pickedUp: 0, fallback: 0, failed: 0, lastError: '' };
     state.start = null;
     state.worldName = '';
     state.worldSeedOverride = null;
@@ -7940,6 +8461,8 @@
         );
       }
 
+      const now = performance.now();
+
       if (state.directLocal && state.game?.playerList) {
         const expected = state.mode === 'host'
           ? 1 + state.peers.size
@@ -7953,9 +8476,15 @@
 
         refreshLocalVisualMode();
         repairLocalRender();
+
+        if (now - state.lastPlayerEntityRepair >= 500) {
+          ensureLocalPlayerEntity(false);
+          state.lastPlayerEntityRepair = now;
+        }
+
+        pickupNearbyLocalItems();
       }
 
-      const now = performance.now();
       if (now - state.lastMoveSend >= 65) {
         const pos = relativePosition();
 
@@ -8128,6 +8657,12 @@
     },
     getServerAddress() {
       return state.serverAddress;
+    },
+    ensurePlayer(forceRecreate = true) {
+      return ensureLocalPlayerEntity(forceRecreate);
+    },
+    getDropStats() {
+      return { ...(state.dropStats || {}) };
     },
     renderProbe(logResult = true) {
       return localRenderProbe(logResult);
