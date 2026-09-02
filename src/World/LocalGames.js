@@ -121,6 +121,14 @@
     uploadDrainTimer: null,
     renderWatchdogTimer: null,
     sceneUpdateRestore: null,
+    gameSceneClass: null,
+    gameSceneTickRef: null,
+    gameSceneTickCtor: null,
+    gameSceneTickRecovered: false,
+    sceneUpdateFailures: 0,
+    sceneUpdateLastError: '',
+    sceneUpdateLastErrorAt: 0,
+    renderProbe: null,
     textureWatchTimer: null,
     textureResyncInFlight: false,
     freshWorldCreated: false,
@@ -1023,9 +1031,11 @@
         `renderLoop watchdog: loop muerto (errored=${game.renderLoopErrored === true}, sin frames ${lastRenderTime > 0 ? Math.round(now - lastRenderTime) + 'ms' : 'n/a'}) → reviviendo (intento ${state.renderWatchdogRevives})`
       );
 
-      // Si el error de fondo persiste, re-instalar el blindaje de escena
-      // antes de revivir: el tick de UI roto es la causa más común
+      // Repara primero el estado nativo que puede matar el frame loop.
       try {
+        repairGameSceneTick(game);
+        ensureNativeSceneRoots(game);
+        synchronizeLocalCamera(game);
         patchGameSceneUpdateForLocal(game);
       } catch (_) {}
 
@@ -1081,15 +1091,321 @@
     state.providerGuard = null;
   }
 
+  // ── Reparación del GameScene nativo ────────────────────────────────
+  // GameScene.tick es un Single estático del cliente (tiene get()/set()).
+  // LocalGames antes lo reemplazaba por el número 0; eso puede romper
+  // GameScene.update() y matar el rAF de Miniblox dejando HUD + cielo vivos
+  // pero el mundo 3D negro. Guardamos la referencia nativa ANTES de limpiar
+  // el mundo y la restauramos si alguna transición la corrompe.
+  function isNativeSingle(value) {
+    return !!(
+      value &&
+      typeof value === 'object' &&
+      typeof value.get === 'function' &&
+      typeof value.set === 'function'
+    );
+  }
+
+  function resolveGameSceneClass(game) {
+    const gs = game?.gameScene;
+    const candidates = [
+      state.gameSceneClass,
+      game?.GameSceneClass,
+      gs?.constructor
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'function') continue;
+      try {
+        if (
+          candidate === gs?.constructor ||
+          'tick' in candidate ||
+          (
+            typeof candidate.prototype?.update === 'function' &&
+            typeof candidate.prototype?.clear === 'function'
+          )
+        ) {
+          state.gameSceneClass = candidate;
+          return candidate;
+        }
+      } catch (_) {}
+    }
+
+    const mod = state.moduleNamespace;
+    if (mod && typeof mod === 'object') {
+      for (const candidate of Object.values(mod)) {
+        if (typeof candidate !== 'function') continue;
+        try {
+          if (
+            isNativeSingle(candidate.tick) &&
+            typeof candidate.prototype?.update === 'function' &&
+            typeof candidate.prototype?.clear === 'function'
+          ) {
+            state.gameSceneClass = candidate;
+            return candidate;
+          }
+        } catch (_) {}
+      }
+    }
+
+    return null;
+  }
+
+  function captureGameSceneTick(game) {
+    const cls = resolveGameSceneClass(game);
+    let tick = null;
+
+    try { tick = cls?.tick; } catch (_) {}
+
+    if (!isNativeSingle(tick)) {
+      try {
+        const alt = game?.gameScene?.constructor?.tick;
+        if (isNativeSingle(alt)) tick = alt;
+      } catch (_) {}
+    }
+
+    if (!isNativeSingle(tick)) return false;
+
+    state.gameSceneTickRef = tick;
+    state.gameSceneTickCtor =
+      typeof tick.constructor === 'function'
+        ? tick.constructor
+        : state.gameSceneTickCtor;
+    state.gameSceneTickRecovered = false;
+    return true;
+  }
+
+  function assignGameSceneTick(game, tick) {
+    if (!isNativeSingle(tick)) return false;
+
+    const classes = [
+      state.gameSceneClass,
+      game?.GameSceneClass,
+      game?.gameScene?.constructor
+    ].filter((value, index, list) =>
+      typeof value === 'function' && list.indexOf(value) === index
+    );
+
+    let assigned = false;
+
+    for (const cls of classes) {
+      try {
+        if (cls.tick !== tick) cls.tick = tick;
+        if (cls.tick === tick || isNativeSingle(cls.tick)) assigned = true;
+      } catch (_) {}
+    }
+
+    return assigned;
+  }
+
+  function repairGameSceneTick(game) {
+    const cls = resolveGameSceneClass(game);
+    const classes = [
+      cls,
+      game?.GameSceneClass,
+      game?.gameScene?.constructor
+    ].filter((value, index, list) =>
+      typeof value === 'function' && list.indexOf(value) === index
+    );
+
+    // Si alguna referencia de la clase sigue sana, úsala como fuente de verdad.
+    for (const candidate of classes) {
+      try {
+        if (!isNativeSingle(candidate.tick)) continue;
+        state.gameSceneTickRef = candidate.tick;
+        state.gameSceneTickCtor =
+          typeof candidate.tick.constructor === 'function'
+            ? candidate.tick.constructor
+            : state.gameSceneTickCtor;
+        assignGameSceneTick(game, candidate.tick);
+        return true;
+      } catch (_) {}
+    }
+
+    // Restaurar el mismo Single capturado antes de gameScene.clear().
+    if (isNativeSingle(state.gameSceneTickRef)) {
+      const ok = assignGameSceneTick(game, state.gameSceneTickRef);
+      if (ok) state.gameSceneTickRecovered = true;
+      return ok;
+    }
+
+    // Último recurso: reconstruir el Single con su constructor nativo.
+    const TickCtor = state.gameSceneTickCtor;
+    if (typeof TickCtor === 'function') {
+      try {
+        const worldTime =
+          Number(game?.world?.worldTime) ||
+          Number(game?.world?.totalTime) ||
+          6000;
+        const tick = new TickCtor(worldTime, performance.now());
+        if (isNativeSingle(tick) && assignGameSceneTick(game, tick)) {
+          state.gameSceneTickRef = tick;
+          state.gameSceneTickRecovered = true;
+          return true;
+        }
+      } catch (_) {}
+    }
+
+    return false;
+  }
+
+  function ensureNativeSceneRoots(game) {
+    const gs = game?.gameScene;
+    const scene = gs?.scene;
+    if (!gs || !scene) return false;
+
+    let ok = true;
+    for (const key of [
+      'chunkMeshes',
+      'entityMeshes',
+      'ambientMeshes',
+      'leaderboardMeshes'
+    ]) {
+      const root = gs[key];
+      if (!root) continue;
+      try {
+        if (root.parent !== scene) scene.add(root);
+        root.visible = true;
+      } catch (_) {
+        ok = false;
+      }
+    }
+    return ok;
+  }
+
+  function synchronizeLocalCamera(game) {
+    const gs = game?.gameScene;
+    const camera = gs?.camera;
+    if (!gs || !camera) return false;
+
+    try { game?.player?.renderCamera?.(); } catch (_) {}
+    try { gs.updateCameraZoom?.(); } catch (_) {}
+    try { camera.updateProjectionMatrix?.(); } catch (_) {}
+    try { camera.updateMatrixWorld?.(true); } catch (_) {}
+    return true;
+  }
+
+  function localRenderProbe(logResult = false) {
+    const game = state.game;
+    const gs = game?.gameScene;
+    const manager = game?.chunkRenderManager;
+    const worker = manager?.chunkRenderWorkerManager;
+    const root = gs?.chunkMeshes;
+    const scene = gs?.scene;
+    const tickClass = resolveGameSceneClass(game);
+
+    let tick = null;
+    try { tick = tickClass?.tick; } catch (_) {}
+
+    let tickValue = null;
+    if (isNativeSingle(tick)) {
+      try {
+        const value = Number(tick.get(performance.now()));
+        if (Number.isFinite(value)) tickValue = value;
+      } catch (_) {}
+    }
+
+    let processed = 0;
+    try { processed = Number(manager?.getProcessedChunkCount?.()) || 0; } catch (_) {}
+
+    let queueSize = -1;
+    try {
+      const queue = manager?.chunkRenderQueue;
+      queueSize = Number(
+        queue?.size ??
+        queue?.length ??
+        queue?.queue?.length ??
+        queue?.highPriority?.length
+      );
+      if (!Number.isFinite(queueSize)) queueSize = -1;
+    } catch (_) {}
+
+    let meshChildren = -1;
+    try { meshChildren = Number(root?.children?.length); } catch (_) {}
+    if (!Number.isFinite(meshChildren)) meshChildren = -1;
+
+    const p = game?.player?.pos;
+    const c = gs?.camera?.position;
+    const renderStats = repairLocalRender(false) || state.localRenderStats || {};
+
+    const probe = {
+      at: new Date().toISOString(),
+      gameState: Number(game?.state) || 0,
+      renderLoopErrored: game?.renderLoopErrored === true,
+      lastRenderAgeMs:
+        Number(game?.lastRenderTime) > 0
+          ? Math.max(0, Math.round(performance.now() - Number(game.lastRenderTime)))
+          : null,
+      tick: {
+        className: String(tickClass?.name || ''),
+        type: tick === null ? 'missing' : typeof tick,
+        constructor: String(tick?.constructor?.name || ''),
+        validSingle: isNativeSingle(tick),
+        recovered: state.gameSceneTickRecovered === true,
+        value: tickValue
+      },
+      sceneUpdate: {
+        failures: Number(state.sceneUpdateFailures) || 0,
+        lastError: String(state.sceneUpdateLastError || '')
+      },
+      world: {
+        attached: game?.world === state.world,
+        isClient: state.world?.isClient === true,
+        isServer: state.world?.isServer === true,
+        dimension: Number(state.world?.dimensionId) || 0,
+        worldTime: Number(state.world?.worldTime) || 0,
+        loadedChunks: loadedChunkCount(game)
+      },
+      renderer: {
+        renderedChunks: renderChunkCount(game),
+        processedChunks: processed,
+        queueSize,
+        wasmReady: worker?.isWasmReady?.() === true,
+        pendingUploadOrder: Number(manager?.pendingUploadOrder?.length) || 0,
+        pendingUploads: Number(manager?.pendingUploads?.size) || 0,
+        workerSeeded: Number(state.chunkLoadDiagnostics?.rendererSeeded) || 0,
+        workerQueued: Number(state.chunkLoadDiagnostics?.rendererQueued) || 0
+      },
+      scene: {
+        present: !!scene,
+        chunkRootAttached: !!(root && scene && root.parent === scene),
+        chunkRootVisible: root?.visible !== false,
+        chunkRootChildren: meshChildren,
+        meshes: Number(renderStats.meshes) || 0,
+        visibleMeshes: Number(renderStats.visible) || 0,
+        texturedMeshes: Number(renderStats.textured) || 0,
+        lightAttributes: Number(renderStats.lightAttributes) || 0,
+        blackLightAttributes: Number(renderStats.blackLightAttributes) || 0
+      },
+      player: p ? {
+        x: Number(p.x) || 0,
+        y: Number(p.y) || 0,
+        z: Number(p.z) || 0
+      } : null,
+      camera: c ? {
+        x: Number(c.x) || 0,
+        y: Number(c.y) || 0,
+        z: Number(c.z) || 0,
+        near: Number(gs?.camera?.near) || 0,
+        far: Number(gs?.camera?.far) || 0,
+        fov: Number(gs?.camera?.fov) || 0
+      } : null,
+      diagnostics: { ...(state.chunkLoadDiagnostics || {}) }
+    };
+
+    state.renderProbe = probe;
+
+    if (logResult) {
+      console.log('[MiniFeather Local Render Probe]', probe);
+    }
+
+    return probe;
+  }
+
   // ── Blindaje de gameScene.update ───────────────────────────────────
-  // gameScene.update() empieza con el reloj de UI (e.tick), una variable de
-  // CLOSURE del bundle (no exportada — inaccesible desde fuera). En un mundo
-  // local fresh ese observable nunca se inicializa y "e.tick.set is not a
-  // function" mata CADA frame → el render 3D nunca corre (solo se ve cielo).
-  // Solución: envolver update(). Si el original lanza, ejecutar manualmente
-  // las 6 actualizaciones que siguen al tick (todas propiedades accesibles):
-  // clouds, stars, sun, sky, fog, weather. Tras el primer fallo se cambia a
-  // la versión manual permanente (sin overhead de excepción por frame).
+  // Conserva siempre el update nativo. Si falla, primero repara tick/roots y
+  // lo reintenta; solo ese frame usa el fallback de cielo. Así no ocultamos un
+  // error permanente ni sustituimos el pipeline 3D por un renderer falso.
   function patchGameSceneUpdateForLocal(game) {
     const gs = game?.gameScene;
 
@@ -1101,11 +1417,11 @@
       return false;
     }
 
-    const originalUpdate = gs.update.bind(gs);
+    const originalUpdate = gs.update;
 
     state.sceneUpdateRestore = () => {
       try {
-        gs.update = originalUpdate;
+        if (gs.update !== originalUpdate) gs.update = originalUpdate;
       } catch (_) {}
       gs.__mfLocalSceneUpdatePatched = false;
     };
@@ -1119,17 +1435,40 @@
       try { this.weather?.update?.(); } catch (_) {}
     };
 
-    gs.update = function () {
+    gs.update = function (...args) {
       try {
-        originalUpdate();
-        return;
-      } catch (_) {}
+        return originalUpdate.apply(this, args);
+      } catch (firstError) {
+        state.sceneUpdateFailures =
+          (Number(state.sceneUpdateFailures) || 0) + 1;
 
-      // El reloj de UI está roto (mundo local fresh): conmutar a la
-      // versión manual permanente para este mundo
-      logWarn('gameScene.update: tick de UI roto → usando actualización manual de escena');
-      gs.update = manualSceneUpdate;
-      manualSceneUpdate.call(gs);
+        const tickFixed = repairGameSceneTick(game);
+        ensureNativeSceneRoots(game);
+
+        if (tickFixed) {
+          try {
+            return originalUpdate.apply(this, args);
+          } catch (retryError) {
+            state.sceneUpdateLastError = String(
+              retryError?.stack || retryError?.message || retryError || firstError
+            ).slice(0, 500);
+          }
+        } else {
+          state.sceneUpdateLastError = String(
+            firstError?.stack || firstError?.message || firstError
+          ).slice(0, 500);
+        }
+
+        const now = performance.now();
+        if (now - Number(state.sceneUpdateLastErrorAt || 0) > 2000) {
+          state.sceneUpdateLastErrorAt = now;
+          logWarn(
+            `gameScene.update falló; tickFixed=${tickFixed}. Fallback visual solo para este frame: ${state.sceneUpdateLastError}`
+          );
+        }
+
+        manualSceneUpdate.call(this);
+      }
     };
 
     gs.__mfLocalSceneUpdatePatched = true;
@@ -1160,6 +1499,9 @@
     }
 
     restoreProviderGuard();
+
+    // Capture the native static Single before any world/scene cleanup.
+    captureGameSceneTick(game);
 
     try {
       game.player?.stopSpectating?.();
@@ -1209,6 +1551,9 @@
     try {
       game.chunkRenderManager.world = newWorld;
     } catch (_) {}
+
+    repairGameSceneTick(game);
+    ensureNativeSceneRoots(game);
 
     try {
       game.player.world = newWorld;
@@ -3899,6 +4244,10 @@
       manager.world = world;
     } catch (_) {}
 
+    repairGameSceneTick(game);
+    ensureNativeSceneRoots(game);
+    synchronizeLocalCamera(game);
+
     const workerReady =
       await ensureChunkRenderWorkerReady(manager, 12000);
 
@@ -3945,6 +4294,8 @@
 
     const started = performance.now();
     let recoveryDone = forceReplay;
+    let directSeedDone = false;
+    let lightingRecoveryDone = false;
 
     while (
       state.active &&
@@ -3952,16 +4303,67 @@
       performance.now() - started < 18000 &&
       renderChunkCount(game) < 8
     ) {
-      // Current newChunkReceived() queues its own chunk immediately, so no
-      // manual high-priority queue seeding is necessary. Let Miniblox's worker
-      // manager and Offscreen upload path run exactly as in an online world.
+      repairGameSceneTick(game);
+      ensureNativeSceneRoots(game);
+
+      // Offscreen uploads normally drain from the game loop. During a broken
+      // local transition that loop may have died before the watchdog starts,
+      // so drain pending native uploads right here as well.
+      try {
+        if (manager?.pendingUploadOrder?.length > 0) {
+          manager.scheduleUploadDrain?.();
+        }
+      } catch (_) {}
+
+      // If chunks are loaded but the native renderer still has zero output,
+      // seed NEW_CHUNK data directly into the existing Miniblox worker. This
+      // helper already existed in LocalGames but was never used.
       if (
-        !recoveryDone &&
-        performance.now() - started > 3500 &&
+        !directSeedDone &&
+        performance.now() - started > 1800 &&
         loadedChunkCount(game) >= 9 &&
         renderChunkCount(game) === 0
       ) {
+        directSeedDone = true;
+        const seeded = seedLocalPacketsIntoRenderWorker(
+          manager,
+          state.generatedChunkPackets || []
+        );
+        state.chunkLoadDiagnostics.rendererSeeded = seeded.seeded;
+        state.chunkLoadDiagnostics.rendererQueued = seeded.queued;
+        state.chunkLoadDiagnostics.rendererSeedFailed = seeded.failed;
+        if (seeded.lastError) {
+          state.chunkLoadDiagnostics.lastError = seeded.lastError;
+        }
+        log(
+          `render recovery: worker seed=${seeded.seeded}, queue=${seeded.queued}, failed=${seeded.failed}`
+        );
+        try { manager.scheduleUploadDrain?.(); } catch (_) {}
+      }
+
+      // Second recovery: initialize the local light engine and replay the full
+      // native path. This only runs when the first worker seed produced no
+      // visible chunks, so normal online-like rendering remains untouched.
+      if (
+        !lightingRecoveryDone &&
+        performance.now() - started > 4200 &&
+        loadedChunkCount(game) >= 9 &&
+        renderChunkCount(game) === 0
+      ) {
+        lightingRecoveryDone = true;
         recoveryDone = true;
+
+        const lighting = await initializeLocalChunkLighting();
+        state.chunkLoadDiagnostics.lightAttempted = lighting.attempted;
+        state.chunkLoadDiagnostics.lightInitialized = lighting.initialized;
+        state.chunkLoadDiagnostics.lightFailed = lighting.failed;
+        if (lighting.lastError) {
+          state.chunkLoadDiagnostics.lastError = lighting.lastError;
+        }
+        log(
+          `render recovery: lighting ${lighting.initialized}/${lighting.attempted}, failed=${lighting.failed}`
+        );
+
         await replayAllThroughNativePipeline();
       }
 
@@ -4275,11 +4677,10 @@
       game.chunkManager.warmCache?.();
     } catch (_) {}
 
-    try {
-      if (game.GameSceneClass) {
-        game.GameSceneClass.tick = 0;
-      }
-    } catch (_) {}
+    // Never replace GameScene.tick with a number. It is a native Single.
+    captureGameSceneTick(game);
+    repairGameSceneTick(game);
+    ensureNativeSceneRoots(game);
 
     try {
       state.world.dimensionId = 0;
@@ -4356,6 +4757,10 @@
       );
     } catch (_) {}
 
+    repairGameSceneTick(game);
+    ensureNativeSceneRoots(game);
+    synchronizeLocalCamera(game);
+
     installProviderGuard();
 
     log(`initializeDirectLocalGame: player teleportado a spawn (${expectedSpawn.x}, ${expectedSpawn.y}, ${expectedSpawn.z}), guard instalado, gameState=5`);
@@ -4393,6 +4798,10 @@
     }
 
     log(`initializeDirectLocalGame: generateLocalChunks OK en ${Math.round(performance.now() - chunkGenStart)}ms (packets=${state.generatedChunkPackets.length}, chunks=${state.localChunks.length})`);
+
+    repairGameSceneTick(game);
+    ensureNativeSceneRoots(game);
+    synchronizeLocalCamera(game);
 
     const activeTextureAssets =
       resolveWorldAssetManager();
@@ -4533,6 +4942,11 @@
       const diag =
         state.chunkLoadDiagnostics || {};
 
+      const probe = localRenderProbe(true);
+      logError(
+        `LOCAL_RENDER_TIMEOUT probe: ${JSON.stringify(probe)}`
+      );
+
       const worldMatches =
         game.world === state.world;
 
@@ -4581,6 +4995,10 @@
         state.origin.z
       );
     } catch (_) {}
+
+    repairGameSceneTick(game);
+    ensureNativeSceneRoots(game);
+    synchronizeLocalCamera(game);
 
     syncNativePlayerList();
     refreshLocalVisualMode();
@@ -6674,6 +7092,10 @@
     state.worldSeedOverride = null;
     state.status = 'Idle';
     state.error = '';
+    state.gameSceneTickRecovered = false;
+    state.sceneUpdateFailures = 0;
+    state.sceneUpdateLastError = '';
+    state.renderProbe = null;
     emitState();
 
     if (reload) {
@@ -7706,6 +8128,19 @@
     },
     getServerAddress() {
       return state.serverAddress;
+    },
+    renderProbe(logResult = true) {
+      return localRenderProbe(logResult);
+    },
+    repairRender() {
+      const game = state.game;
+      const tick = repairGameSceneTick(game);
+      const roots = ensureNativeSceneRoots(game);
+      const camera = synchronizeLocalCamera(game);
+      try { game?.chunkRenderManager?.scheduleUploadDrain?.(); } catch (_) {}
+      const render = repairLocalRender(true);
+      const probe = localRenderProbe(true);
+      return { tick, roots, camera, render, probe };
     }
   };
 
