@@ -478,6 +478,16 @@
   let lastFreecamDeniedAt = 0;
   let waypointStatus = '';
   let destroyed = false;
+  let hudQuickHideActive = false;
+  const HUD_QUICK_HIDE_KEY = 'KeyH';
+  const HUD_QUICK_HIDE_MODULES = Object.freeze([
+    'keystrokes',
+    'fpsCounter',
+    'cpsCounter',
+    'pingCounter',
+    'coordinates',
+    'waypoints'
+  ]);
 
   const MODULES = new Map();
   const ORIGINALS = {
@@ -8017,12 +8027,35 @@ function renderCreditsPage() {
     bindPanelControls();
   }
 
+  function applyHudQuickHideState() {
+    for (const key of HUD_QUICK_HIDE_MODULES) {
+      setModuleEnabled(key, !hudQuickHideActive && !!settings[key]);
+    }
+
+    const armorEnabled = !hudQuickHideActive && !!settings.armorHud;
+    window.__MINIFEATHER_ARMOR_HUD_ENABLED__ = armorEnabled;
+    document.dispatchEvent(new CustomEvent('minifeather:armorhud-config', {
+      detail: JSON.stringify({ enabled: armorEnabled })
+    }));
+  }
+
+  function toggleHudQuickHide() {
+    hudQuickHideActive = !hudQuickHideActive;
+    applyHudQuickHideState();
+  }
+
   function initGUI() {
     if (guiReady) return;
     guiReady = true;
     let rightShiftDown = false;
 
     document.addEventListener('keydown', event => {
+      if (event.code === HUD_QUICK_HIDE_KEY && event.shiftKey && !event.repeat) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleHudQuickHide();
+        return;
+      }
       if (event.code === 'ShiftRight' && !rightShiftDown) {
         rightShiftDown = true;
         toggleGUI();
@@ -8111,19 +8144,17 @@ function renderCreditsPage() {
     sendLanguageConfig();
     setModuleEnabled('rebrand', settings.rebrand);
     setModuleEnabled('discord', settings.rebrand && settings.discord);
-    setModuleEnabled('keystrokes', settings.keystrokes);
-    setModuleEnabled('fpsCounter', settings.fpsCounter);
-    setModuleEnabled('cpsCounter', settings.cpsCounter);
-    setModuleEnabled('pingCounter', settings.pingCounter);
-    setModuleEnabled('coordinates', settings.coordinates);
-    setModuleEnabled('waypoints', settings.waypoints);
-    window.__MINIFEATHER_ARMOR_HUD_ENABLED__ = !!settings.armorHud;
-      document.dispatchEvent(
-          new CustomEvent('minifeather:armorhud-config', {
-            detail: JSON.stringify({
-              enabled: !!settings.armorHud
-            
-        })
+    setModuleEnabled('keystrokes', !hudQuickHideActive && settings.keystrokes);
+    setModuleEnabled('fpsCounter', !hudQuickHideActive && settings.fpsCounter);
+    setModuleEnabled('cpsCounter', !hudQuickHideActive && settings.cpsCounter);
+    setModuleEnabled('pingCounter', !hudQuickHideActive && settings.pingCounter);
+    setModuleEnabled('coordinates', !hudQuickHideActive && settings.coordinates);
+    setModuleEnabled('waypoints', !hudQuickHideActive && settings.waypoints);
+    const armorHudRuntimeEnabled = !hudQuickHideActive && !!settings.armorHud;
+    window.__MINIFEATHER_ARMOR_HUD_ENABLED__ = armorHudRuntimeEnabled;
+    document.dispatchEvent(
+      new CustomEvent('minifeather:armorhud-config', {
+        detail: JSON.stringify({ enabled: armorHudRuntimeEnabled })
       })
     );
     setModuleEnabled('titanTiny', settings.titanTiny);
@@ -8727,6 +8758,7 @@ function renderCreditsPage() {
     overlay = null;
     panel = null;
     guiReady = false;
+    hudQuickHideActive = false;
     activePage = 'dashboard';
     searchQuery = '';
 
