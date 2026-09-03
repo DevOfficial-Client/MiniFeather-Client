@@ -1,12 +1,15 @@
-// MF_SkinEditor.js — Editor de píxeles EN VIVO para toda la cabeza:
-// capa base (la de abajo) + capa overlay (hat layer). Cada trazo se pinta
-// directo sobre el canvas de la textura que el juego renderiza → el cambio
-// se ve al instante en el personaje.
+// MF_SkinEditor.js — Editor de píxeles EN VIVO para la skin del jugador:
+// dos modos: SOLO CABEZA (64x16, rápido) y SKIN COMPLETA (todo el cuerpo).
+// Cada trazo se pinta directo sobre el canvas de la textura que el juego
+// renderiza → el cambio se ve al instante en el personaje.
 //
-// Zona editable de una skin MC (64x64 o 64x32): el rect (0,0)-(64,16).
+// Zona de la CABEZA en una skin MC (64x64 o 64x32): el rect (0,0)-(64,16).
 //   · Mitad izquierda  (x 0..32)  = capa BASE: top(8,0) bottom(16,0)
 //     right(0,8) front/cara(8,8) left(16,8) back(24,8)
 //   · Mitad derecha    (x 32..64) = capa OVERLAY (hat): mismas caras +32.
+//
+// MODO FULL: edita TODO el canvas de la skin (cabeza + cuerpo + brazos +
+// piernas, base + overlay) con guía de rectángulos de cada parte.
 //
 // Herramientas: lápiz, borrador, cuentagotas, relleno (flood), pinceles
 // 1-3, filtro de capa (ambas/base/overlay), grid, undo/redo, revertir
@@ -24,6 +27,16 @@
 
     const HEAD = { x: 0, y: 0, w: 64, h: 16 }; // zona de la cabeza
     const OVERLAY_X = 32;                      // x>=32 → hat layer
+    // modo FULL: zonas del cuerpo en la skin 64x64 (y<16 = cabeza)
+    // rects base {x,y,w,h} de cada parte (overlay = +32 en x)
+    const BODY_PARTS = [
+        { n: 'cabeza', base: { x: 0, y: 0, w: 32, h: 16 } },
+        { n: 'cuerpo', base: { x: 16, y: 16, w: 24, h: 16 } },
+        { n: 'brazo D', base: { x: 40, y: 16, w: 16, h: 16 } },
+        { n: 'brazo I', base: { x: 32, y: 48, w: 16, h: 16 } },
+        { n: 'pierna D', base: { x: 0, y: 16, w: 16, h: 16 } },
+        { n: 'pierna I', base: { x: 16, y: 48, w: 16, h: 16 } }
+    ];
     const LS_KEY = 'minifeather_headskins_v1';
     const ID = 'mf-skineditor';
 
@@ -36,6 +49,7 @@
 
     const state = {
         open: false,
+        mode: 'head',        // head | full (solo cabeza | skin completa)
         zoom: 10,            // px de UI por pixel de skin
         tool: 'pencil',      // pencil | eraser | picker | fill
         color: '#1a1a1a',
@@ -50,6 +64,16 @@
         painting: false, lastCell: null,
         p2pCells: []            // celdas del trazo actual (Look Sync P2P)
     };
+
+    // zona editable según modo
+    function zone() {
+        if (state.mode === 'full') {
+            const c = state.texCanvas;
+            const w = c ? c.width : 64, h = c ? c.height : 64;
+            return { x: 0, y: 0, w, h };
+        }
+        return HEAD;
+    }
 
     // ── acceso al juego (patrón del cliente) ──
     function getGame() {
@@ -204,12 +228,14 @@
 
     // ── pintado ──
     function layerAllows(sx) {
+        if (state.mode === 'full') return true; // en full se pintan ambas mitades
         if (state.layer === 'both') return true;
         return state.layer === 'base' ? sx < OVERLAY_X : sx >= OVERLAY_X;
     }
 
-    function inHead(sx, sy) {
-        return sx >= HEAD.x && sy >= HEAD.y && sx < HEAD.x + HEAD.w && sy < HEAD.y + HEAD.h;
+    function inZone(x, y) {
+        const z = zone();
+        return x >= z.x && y >= z.y && x < z.x + z.w && y < z.y + z.h;
     }
 
     // pinta una celda (con tamaño de pincel) sobre la textura del juego
@@ -220,7 +246,7 @@
         for (let i = 0; i < b; i++) {
             for (let j = 0; j < b; j++) {
                 const x = sx + i, y = sy + j;
-                if (!inHead(x, y) || !layerAllows(x)) continue;
+                if (!inZone(x, y) || !layerAllows(x)) continue;
                 if (erase) ctx.clearRect(x, y, 1, 1);
                 else { ctx.fillStyle = state.color; ctx.fillRect(x, y, 1, 1); }
                 // Look Sync P2P: acumular celda del trazo actual
@@ -230,15 +256,16 @@
         state.tex.needsUpdate = true; // ← tiempo real: el juego la re-sube ya
     }
 
-    // relleno por color dentro de la zona de cabeza y capa activa
+    // relleno por color dentro de la zona editable y capa activa
     function floodFill(sx, sy) {
-        if (!state.texCanvas || !state.tex || !inHead(sx, sy) || !layerAllows(sx)) return;
+        if (!state.texCanvas || !state.tex || !inZone(sx, sy) || !layerAllows(sx)) return;
+        const Z = zone();
         const ctx = state.texCanvas.getContext('2d');
-        const img = ctx.getImageData(HEAD.x, HEAD.y, HEAD.w, HEAD.h);
+        const img = ctx.getImageData(Z.x, Z.y, Z.w, Z.h);
         const d = img.data;
-        const W = HEAD.w, H = HEAD.h;
+        const W = Z.w, H = Z.h;
         const idx = (x, y) => (y * W + x) * 4;
-        const lx = sx - HEAD.x, ly = sy - HEAD.y;
+        const lx = sx - Z.x, ly = sy - Z.y;
         const t = idx(lx, ly);
         const tr = d[t], tg = d[t + 1], tb = d[t + 2], ta = d[t + 3];
         // color destino del pincel
@@ -249,54 +276,62 @@
         while (stack.length) {
             const [x, y] = stack.pop();
             if (x < 0 || y < 0 || x >= W || y >= H) continue;
-            const sxTex = x + HEAD.x;
+            const sxTex = x + Z.x;
             if (!layerAllows(sxTex)) continue;
             const i = idx(x, y);
             if (d[i] !== tr || d[i + 1] !== tg || d[i + 2] !== tb || d[i + 3] !== ta) continue;
             d[i] = fr; d[i + 1] = fg; d[i + 2] = fb; d[i + 3] = 255;
             stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
         }
-        ctx.putImageData(img, HEAD.x, HEAD.y);
+        ctx.putImageData(img, Z.x, Z.y);
         state.tex.needsUpdate = true;
-        // Look Sync P2P: flood = cambio de cabeza completa
-        emitHeadRect();
+        // Look Sync P2P: flood = cambio de zona completa
+        emitZoneRect();
     }
 
     // cuentagotas: lee el color de una celda
     function pickColorAt(sx, sy) {
-        if (!state.texCanvas || !inHead(sx, sy)) return null;
+        if (!state.texCanvas || !inZone(sx, sy)) return null;
         const d = state.texCanvas.getContext('2d').getImageData(sx, sy, 1, 1).data;
         if (d[3] === 0) return null;
         const h = (v) => v.toString(16).padStart(2, '0');
         return '#' + h(d[0]) + h(d[1]) + h(d[2]);
     }
 
-    // ── undo/redo (snapshots del rect de cabeza) ──
+    // ── undo/redo (snapshots de la zona editable) ──
     function snapshot() {
         if (!state.texCanvas) return;
+        const Z = zone();
         const ctx = state.texCanvas.getContext('2d');
-        state.undo.push(ctx.getImageData(HEAD.x, HEAD.y, HEAD.w, HEAD.h));
+        state.undo.push(ctx.getImageData(Z.x, Z.y, Z.w, Z.h));
         if (state.undo.length > 40) state.undo.shift();
         state.redo.length = 0;
     }
     function restoreFrom(stackA, stackB) {
         if (!state.texCanvas || !stackA.length) return;
+        const Z = zone();
         const ctx = state.texCanvas.getContext('2d');
-        stackB.push(ctx.getImageData(HEAD.x, HEAD.y, HEAD.w, HEAD.h));
-        ctx.putImageData(stackA.pop(), HEAD.x, HEAD.y);
+        stackB.push(ctx.getImageData(Z.x, Z.y, Z.w, Z.h));
+        ctx.putImageData(stackA.pop(), Z.x, Z.y);
         state.tex.needsUpdate = true;
-        // Look Sync P2P: undo/redo = cabeza completa tras el cambio
-        emitHeadRect();
+        // Look Sync P2P: undo/redo = zona completa tras el cambio
+        emitZoneRect();
     }
 
-    // Look Sync P2P: emitir la cabeza completa (64x16) como PNG
-    function emitHeadRect() {
+    // Look Sync P2P: emitir la zona editable como PNG
+    // - modo head  → 'head-rect' (64x16) [formato corto, compatible]
+    // - modo full  → 'skin' (canvas completo) [el peer la aplica entera]
+    function emitZoneRect() {
         try {
             if (!state.texCanvas) return;
-            const c = document.createElement('canvas');
-            c.width = HEAD.w; c.height = HEAD.h;
-            c.getContext('2d').drawImage(state.texCanvas, HEAD.x, HEAD.y, HEAD.w, HEAD.h, 0, 0, HEAD.w, HEAD.h);
-            window.MF_Peer?.sendLook?.({ a: 'head-rect', png: c.toDataURL() });
+            if (state.mode === 'full') {
+                window.MF_Peer?.sendLook?.({ a: 'skin', name: 'edit', dataURL: state.texCanvas.toDataURL('image/png') });
+            } else {
+                const c = document.createElement('canvas');
+                c.width = HEAD.w; c.height = HEAD.h;
+                c.getContext('2d').drawImage(state.texCanvas, HEAD.x, HEAD.y, HEAD.w, HEAD.h, 0, 0, HEAD.w, HEAD.h);
+                window.MF_Peer?.sendLook?.({ a: 'head-rect', png: c.toDataURL() });
+            }
         } catch {}
     }
 
@@ -315,8 +350,30 @@
     }
 
     // ── UI ──
-    const W = () => HEAD.w * state.zoom;
-    const H = () => HEAD.h * state.zoom;
+    const W = () => zone().w * state.zoom;
+    const H = () => zone().h * state.zoom;
+
+    // cambiar tamaño del canvas UI al cambiar de modo
+    function resizeCanvasUI() {
+        const cv = document.querySelector('#' + ID + ' canvas.mfse-cv');
+        if (!cv) return;
+        cv.width = W(); cv.height = H();
+        // en full la skin es más alta: bajar zoom para que no tape la pantalla
+        cv.style.maxHeight = '60vh';
+        cv.style.width = 'auto';
+        renderUI();
+    }
+
+    function setMode(m) {
+        if (state.mode === m) return;
+        state.mode = m;
+        state.undo.length = 0; state.redo.length = 0; // zonas distintas
+        document.querySelectorAll('#' + ID + ' [data-mode]').forEach(b =>
+            b.classList.toggle('on', b.dataset.mode === m));
+        const lay = document.querySelector('#' + ID + ' [data-row="layers"]');
+        if (lay) lay.style.display = (m === 'full') ? 'none' : 'flex';
+        resizeCanvasUI();
+    }
 
     function buildUI() {
         if (document.getElementById(ID)) return;
@@ -351,9 +408,14 @@
         const root = document.createElement('div');
         root.id = ID;
         root.innerHTML = `
-<div class="mfse-head"><span class="dot"></span>🎨 EDITOR DE CABEZA — en vivo
+<div class="mfse-head"><span class="dot"></span>🎨 EDITOR DE SKIN — en vivo
     <button data-act="close" title="Cerrar (el dibujo se mantiene)">✕</button></div>
-<canvas class="mfse-cv" width="${W()}" height="${H()}"></canvas>
+<canvas class="mfse-cv" width="${W()}" height="${H()}" style="max-height:60vh;width:auto;"></canvas>
+<div class="mfse-row" data-row="mode">
+    <label>Modo:</label>
+    <button data-mode="head" class="on" title="Editar solo la cabeza (64x16), con filtro de capa">Cabeza</button>
+    <button data-mode="full" title="Editar la skin completa: cuerpo, brazos, piernas">Skin completa</button>
+</div>
 <div class="mfse-row" data-row="tools">
     <button data-tool="pencil" class="on" title="Lápiz">✏️</button>
     <button data-tool="eraser" title="Borrador (transparente)">🧽</button>
@@ -403,10 +465,11 @@
     }
 
     function bindUI(root) {
-        // herramientas / pincel / capa / grid: marcar botón activo
+        // herramientas / pincel / capa / grid / modo: marcar botón activo
         const setActive = (sel, btn) => {
             root.querySelectorAll(sel).forEach(b => b.classList.toggle('on', b === btn));
         };
+        root.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => setMode(b.dataset.mode));
         root.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => {
             state.tool = b.dataset.tool;
             setActive('[data-tool]', b);
@@ -468,15 +531,16 @@
         // dibujo en el canvas
         const cv = root.querySelector('canvas.mfse-cv');
         const cellOf = (e) => {
+            const Z = zone();
             const r = cv.getBoundingClientRect();
-            const x = Math.floor((e.clientX - r.left) / (r.width / HEAD.w));
-            const y = Math.floor((e.clientY - r.top) / (r.height / HEAD.h));
-            return { x, y };
+            const x = Math.floor((e.clientX - r.left) / (r.width / Z.w));
+            const y = Math.floor((e.clientY - r.top) / (r.height / Z.h));
+            return { x: x + Z.x, y: y + Z.y };
         };
         cv.addEventListener('pointerdown', (e) => {
             e.preventDefault();
             const { x, y } = cellOf(e);
-            if (!inHead(x, y)) return;
+            if (!inZone(x, y)) return;
             if (state.tool === 'picker') {
                 const c = pickColorAt(x, y);
                 if (c) { state.color = c; colorInput.value = c; err(''); }
@@ -519,11 +583,12 @@
         cv.addEventListener('pointercancel', stop);
     }
 
-    // ── render del canvas UI (checker + cabeza + grid + etiquetas) ──
+    // ── render del canvas UI (checker + zona + grid + guías) ──
     function renderUI() {
         const cv = document.querySelector('#' + ID + ' canvas.mfse-cv');
         if (!cv || !state.texCanvas) return;
         const ctx = cv.getContext('2d');
+        const Z = zone();
         const z = state.zoom, w = W(), h = H();
         ctx.imageSmoothingEnabled = false;
 
@@ -534,8 +599,8 @@
                 ctx.fillRect(x, y, 8, 8);
             }
         }
-        // zona de cabeza tal cual está en la textura del juego
-        ctx.drawImage(state.texCanvas, HEAD.x, HEAD.y, HEAD.w, HEAD.h, 0, 0, w, h);
+        // zona editable tal cual está en la textura del juego
+        ctx.drawImage(state.texCanvas, Z.x, Z.y, Z.w, Z.h, 0, 0, w, h);
 
         // rejilla por pixel
         if (state.grid) {
@@ -545,29 +610,47 @@
             for (let y = 0; y <= h; y += z) { ctx.moveTo(0, y + .5); ctx.lineTo(w, y + .5); }
             ctx.stroke();
         }
-        // separadores de caras (fuertes)
-        ctx.strokeStyle = 'rgba(255,255,255,.28)';
-        ctx.beginPath();
-        for (const gx of [0, 8, 16, 24, 40, 48, 56, 64]) { ctx.moveTo(gx * z + .5, 0); ctx.lineTo(gx * z + .5, h); }
-        for (const gy of [0, 8, 16]) { ctx.moveTo(0, gy * z + .5); ctx.lineTo(w, gy * z + .5); }
-        ctx.stroke();
-        // frontera base | overlay
-        ctx.strokeStyle = '#ff6b2b';
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath();
-        ctx.moveTo(OVERLAY_X * z + .5, 0); ctx.lineTo(OVERLAY_X * z + .5, h);
-        ctx.stroke();
-        ctx.setLineDash([]);
 
-        // etiquetas de caras
-        ctx.font = '9px system-ui';
-        for (const r of REGIONS) {
-            for (const rx of [r.x, r.ov]) {
-                const isCara = r.n === 'CARA';
-                ctx.fillStyle = isCara ? 'rgba(255,107,43,.9)' : 'rgba(0,0,0,.55)';
-                ctx.fillRect(rx * z + 1, (r.y === 0 ? 0 : 8 * z) + 1, r.n.length * 5.5 + 4, 11);
-                ctx.fillStyle = isCara ? '#14141a' : '#c8c8d2';
-                ctx.fillText(r.n, rx * z + 3, (r.y === 0 ? 0 : 8 * z) + 10);
+        if (state.mode === 'full') {
+            // guías de cada parte del cuerpo (base + overlay)
+            ctx.font = '9px system-ui';
+            for (const p of BODY_PARTS) {
+                for (const ox of [0, 32]) {
+                    const r = p.base;
+                    if (r.x + ox + r.w > Z.w) continue; // fuera (skin 64x32 no tiene overlay inferior)
+                    ctx.strokeStyle = 'rgba(255,255,255,.28)';
+                    ctx.strokeRect(r.x * z + .5, r.y * z + .5, r.w * z - 1, r.h * z - 1);
+                    ctx.fillStyle = 'rgba(0,0,0,.55)';
+                    ctx.fillRect(r.x * z + 1, r.y * z + 1, p.n.length * 5.5 + 4, 11);
+                    ctx.fillStyle = '#c8c8d2';
+                    ctx.fillText(p.n, r.x * z + 3, r.y * z + 10);
+                }
+            }
+        } else {
+            // separadores de caras (fuertes)
+            ctx.strokeStyle = 'rgba(255,255,255,.28)';
+            ctx.beginPath();
+            for (const gx of [0, 8, 16, 24, 40, 48, 56, 64]) { ctx.moveTo(gx * z + .5, 0); ctx.lineTo(gx * z + .5, h); }
+            for (const gy of [0, 8, 16]) { ctx.moveTo(0, gy * z + .5); ctx.lineTo(w, gy * z + .5); }
+            ctx.stroke();
+            // frontera base | overlay
+            ctx.strokeStyle = '#ff6b2b';
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(OVERLAY_X * z + .5, 0); ctx.lineTo(OVERLAY_X * z + .5, h);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // etiquetas de caras
+            ctx.font = '9px system-ui';
+            for (const r of REGIONS) {
+                for (const rx of [r.x, r.ov]) {
+                    const isCara = r.n === 'CARA';
+                    ctx.fillStyle = isCara ? 'rgba(255,107,43,.9)' : 'rgba(0,0,0,.55)';
+                    ctx.fillRect(rx * z + 1, (r.y === 0 ? 0 : 8 * z) + 1, r.n.length * 5.5 + 4, 11);
+                    ctx.fillStyle = isCara ? '#14141a' : '#c8c8d2';
+                    ctx.fillText(r.n, rx * z + 3, (r.y === 0 ? 0 : 8 * z) + 10);
+                }
             }
         }
 
@@ -634,7 +717,7 @@
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(img, 0, 0, img.width, img.height, HEAD.x, HEAD.y, HEAD.w, HEAD.h);
             state.tex.needsUpdate = true;
-            emitHeadRect(); // Look Sync P2P
+            emitZoneRect(); // Look Sync P2P
             renderUI();
         };
         img.src = data;
@@ -682,7 +765,7 @@
                     ctx.imageSmoothingEnabled = false;
                     ctx.drawImage(img, 0, 0, img.width, img.height, HEAD.x, HEAD.y, HEAD.w, HEAD.h);
                     state.tex.needsUpdate = true;
-                    emitHeadRect(); // Look Sync P2P
+                    emitZoneRect(); // Look Sync P2P
                     resolve({ ok: true, name });
                 } catch (e) { resolve({ ok: false, error: e.message }); }
             };

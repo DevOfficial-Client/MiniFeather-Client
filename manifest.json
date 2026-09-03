@@ -92,6 +92,7 @@
         "src/Studio/MF_SkinEditor.js",
         "src/Studio/MF_SkinChanger.js",
         "src/Studio/MF_Morph.js",
+        "src/Studio/MF_Facial.js",
         "src/Studio/MF_Film.js",
         "src/Studio/MF_Pose.js",
         "src/Studio/MF_Gizmo.js",

@@ -539,6 +539,9 @@ function handleMsg(msg) {
             // ambos roles emiten: host hace broadcast completo (sync verity),
             // guest solo escala/nombre. startBroadcast autolimita por rol.
             if (!state.sendTimer) startBroadcast();
+            // Look Sync: re-enviar mi look actual (por si el peer conectó
+            // tarde y no vio la skin/morph que ya tenía puesta)
+            setTimeout(() => { try { window.MF_Peer.resendLook(); } catch {} }, 800);
             break;
         case 'sync':
             if (state.role === 'guest') onSyncGuest(msg);
@@ -657,7 +660,11 @@ const look = {
     entityAt: 0,        // cuándo se resolvió por última vez
     faceCache: new Map(), // dataURL -> Promise<HTMLImageElement>
     pending: [],        // cola de acciones si aún no hay entidad
-    lastApplied: 0      // anti-eco: ignorar mis propios broadcasts
+    lastApplied: 0,     // anti-eco: ignorar mis propios broadcasts
+    lastTexAction: null, // última acción de textura aplicada (watchdog)
+    mountedTex: null,   // textura que montamos en el peer
+    morphType: null,    // morph actual del peer
+    _lastWD: 0          // gate del watchdog (600 ms)
 };
 
 function peerEntity() {
@@ -773,12 +780,14 @@ function applyLook(a) {
         return;
     }
     look.lastApplied = performance.now();
+    log('look-sync ← ' + a.a + (a.name ? ' (' + a.name + ')' : a.type ? ' (' + a.type + ')' : ''));
     try {
         switch (a.a) {
             case 'stroke': {
                 // trazos píxel a píxel del editor de cabeza del peer
                 const s = rememberPeerOriginal(entity, 'head');
                 if (!s) return;
+                look.mountedTex = s.tex;
                 const ctx = s.canvas.getContext('2d');
                 for (const [x, y, color] of a.cells) {
                     if (color == null) ctx.clearRect(x, y, 1, 1);
@@ -791,7 +800,10 @@ function applyLook(a) {
                 // cabeza completa (64x16): preset/fill/undo del peer
                 const s = rememberPeerOriginal(entity, 'head');
                 if (!s) return;
+                look.mountedTex = s.tex;
+                look.lastTexAction = { a: 'head-rect' };
                 loadImg(a.png).then(img => {
+                    look.lastTexImg = img;
                     const ctx = s.canvas.getContext('2d');
                     ctx.clearRect(HEAD_RECT.x, HEAD_RECT.y, HEAD_RECT.w, HEAD_RECT.h);
                     ctx.imageSmoothingEnabled = false;
@@ -804,7 +816,10 @@ function applyLook(a) {
                 // emoción de cara (8x8 en la región frontal + overlay)
                 const s = rememberPeerOriginal(entity, 'face');
                 if (!s) return;
+                look.mountedTex = s.tex;
+                look.lastTexAction = { a: 'face', region: a.region };
                 loadImg(a.dataURL).then(img => {
+                    look.lastTexImg = img;
                     const r = a.region || FACE_RECT;
                     const ctx = s.canvas.getContext('2d');
                     ctx.imageSmoothingEnabled = false;
@@ -818,7 +833,10 @@ function applyLook(a) {
                 // skin PNG completa (64x64/64x32)
                 const s = rememberPeerOriginal(entity, 'skin');
                 if (!s) return;
+                look.mountedTex = s.tex;
+                look.lastTexAction = { a: 'skin' };
                 loadImg(a.dataURL).then(img => {
+                    look.lastTexImg = img;
                     const ctx = s.canvas.getContext('2d');
                     ctx.imageSmoothingEnabled = false;
                     ctx.clearRect(0, 0, s.canvas.width, s.canvas.height);
@@ -834,6 +852,9 @@ function applyLook(a) {
                 if (!rec || !s) return;
                 const src = rec[a.what + 'Canvas'];
                 if (!src) return;
+                look.mountedTex = s.tex;
+                look.lastTexAction = null;   // ya no hay acción que vigilar
+                look.lastTexImg = null;
                 const ctx = s.canvas.getContext('2d');
                 ctx.imageSmoothingEnabled = false;
                 ctx.clearRect(0, 0, s.canvas.width, s.canvas.height);
@@ -843,13 +864,17 @@ function applyLook(a) {
             }
             case 'morph': {
                 // peer se transformó en un mob: morfar SU entidad en mi vista
-                try { window.MF_Morph?.applyOn?.(entity, a.type); } catch (e) {
+                try {
+                    window.MF_Morph?.applyOn?.(entity, a.type);
+                    look.morphType = a.type;
+                } catch (e) {
                     warn('morph remoto (' + a.type + ') fallo: ' + (e?.message || e));
                 }
                 break;
             }
             case 'unmorph': {
                 try { window.MF_Morph?.detachFrom?.(entity.id); } catch {}
+                look.morphType = null;
                 break;
             }
         }
@@ -867,7 +892,8 @@ function drainLookPending() {
     for (const a of q) applyLook(a);
 }
 
-// watchdog del Look Sync: entidad cacheada muerta + cola pendiente
+// watchdog del Look Sync: entidad cacheada muerta + cola pendiente +
+// re-aplicar la última textura si el juego la pisó (patrón SkinChanger)
 function lookTick() {
     if (!state.conn) return;
     if (look.pending.length) drainLookPending();
@@ -875,6 +901,45 @@ function lookTick() {
     if (look.entity && (look.entity.mesh == null || look.entity.removed)) {
         look.entity = null;
     }
+    const now = performance.now();
+    if (now - look._lastWD < 600) return;
+    look._lastWD = now;
+    // ¿el juego re-asignó la textura del peer? re-aplicar lo último
+    if (look.lastTexAction && look.mountedTex) {
+        const entity = peerEntity();
+        if (entity) {
+            const mats = peerSkinMaterials(entity);
+            const mounted = mats.some(m => m.map === look.mountedTex);
+            if (!mounted && mats.length) {
+                for (const m of mats) { m.map = look.mountedTex; m.needsUpdate = true; }
+                log('look-sync: juego pisó la textura del peer — re-montada');
+            }
+        }
+    }
+}
+
+// re-aplicar la última acción de textura completa (skin/head/face)
+function reappliedLastTexAction(entity) {
+    const a = look.lastTexAction;
+    if (!a) return;
+    const img = look.lastTexImg;
+    if (!img) return;
+    const s = peerEditableCanvas(entity);
+    if (!s) return;
+    const ctx = s.canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    if (a.a === 'skin') {
+        ctx.clearRect(0, 0, s.canvas.width, s.canvas.height);
+        ctx.drawImage(img, 0, 0);
+    } else if (a.a === 'head-rect') {
+        ctx.clearRect(HEAD_RECT.x, HEAD_RECT.y, HEAD_RECT.w, HEAD_RECT.h);
+        ctx.drawImage(img, 0, 0, img.width, img.height, HEAD_RECT.x, HEAD_RECT.y, HEAD_RECT.w, HEAD_RECT.h);
+    } else if (a.a === 'face') {
+        const r = a.region || FACE_RECT;
+        ctx.drawImage(img, r.x, r.y, r.w, r.h, FACE_RECT.x, FACE_RECT.y, FACE_RECT.w, FACE_RECT.h);
+        ctx.drawImage(img, r.x, r.y, r.w, r.h, FACE_OVERLAY_RECT.x, FACE_OVERLAY_RECT.y, FACE_OVERLAY_RECT.w, FACE_OVERLAY_RECT.h);
+    }
+    s.tex.needsUpdate = true;
 }
 
 
@@ -900,6 +965,13 @@ function wireConn(conn) {
         }
         ents._lastKey = null;
         ents.recv.clear();
+        // limpiar Look Sync (morph del peer pendiente de revert)
+        if (look.entity && look.morphType) {
+            try { window.MF_Morph?.detachFrom?.(look.entity.id); } catch {}
+        }
+        look.entity = null; look.pending.length = 0;
+        look.morphType = null;
+        look.lastTexAction = null; look.lastTexImg = null; look.mountedTex = null;
         stopBroadcast();
         state.conn = null;
         state.status = 'off';
@@ -989,7 +1061,40 @@ window.MF_Peer = {
         return true;
     },
     // estado del Look Sync para UI/debug
-    get lookSynced() { return !!(state.conn && state.peerName); }
+    get lookSynced() { return !!(state.conn && state.peerName); },
+    // diagnóstico del Look Sync (para cuando "no se ve nada")
+    lookStatus() {
+        const e = look.entity || peerEntity();
+        return {
+            connected: !!state.conn,
+            role: state.role,
+            peerName: state.peerName,
+            entityFound: !!e,
+            entityMesh: !!e?.mesh,
+            skinMats: e ? peerSkinMaterials(e).length : 0,
+            pendingQueue: look.pending.length,
+            morphType: look.morphType,
+            lastTexAction: look.lastTexAction?.a || null,
+            lastAppliedAgoMs: look.lastApplied ? Math.round(performance.now() - look.lastApplied) : null
+        };
+    },
+    // re-enviar mi look actual (skin/morph) al peer — útil si conectó tarde
+    resendLook() {
+        if (!state.conn) return { ok: false, error: 'sin conexión' };
+        let sent = 0;
+        // skin PNG activa
+        const sc = window.MF_SkinChanger;
+        if (sc?.current) {
+            sc.apply(sc.current).catch(() => {});
+            sent++;
+        }
+        // morph activo
+        if (window.MF_Morph?.current) {
+            try { window.MF_Peer.sendLook({ a: 'morph', type: window.MF_Morph.current }); sent++; } catch {}
+        }
+        log('look-sync: re-enviado estado propio (' + sent + ' elemento(s))');
+        return { ok: true, sent };
+    }
 };
 
 // retransmitir lo que verity dice (host) via patch de say()

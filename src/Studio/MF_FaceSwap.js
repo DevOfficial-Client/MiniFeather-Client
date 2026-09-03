@@ -464,6 +464,9 @@
         clearTickTriggers,
         registerSource,
         listSources,
+        // resolver el canvas 8x8 de una emoción (built-in o externa) —
+        // usado por MF_Facial para sus keyframes
+        loadFaceCanvas(name) { return loadExternalFace(name) || loadFaceImage(name); },
         get triggers() { return state.tickTriggers; },
         // Constantes útiles para el timeline UI
         FACE_REGION: FACE,
