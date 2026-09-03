@@ -31,11 +31,19 @@
     }
   }
 
+  function translateChat(text) {
+    const value = String(text ?? '');
+    const i18n = globalThis.MiniFeatherI18n;
+    if (typeof i18n?.translateInline === 'function') return i18n.translateInline(value);
+    if (typeof i18n?.translate === 'function') return i18n.translate(value);
+    return value;
+  }
+
   function addChat(text, status = 'normal') {
     const chat = state.chat;
     if (!chat || typeof chat.addChat !== 'function') return;
     const color = status === 'success' ? '\\green\\' : status === 'error' ? '\\red\\' : '';
-    chat.addChat({ text: `\\purple\\MiniFeather >\\reset\\ ${color}${String(text)}` });
+    chat.addChat({ text: `\\purple\\MiniFeather >\\reset\\ ${color}${translateChat(text)}` });
   }
 
   function showHelp() {
@@ -78,7 +86,7 @@
       '\\yellow\\/emote stop|list|reload\\reset\\ - Manage emotes',
       '\\yellow\\/mf help\\reset\\ - Show this help'
     ];
-    for (const line of lines) state.chat?.addChat?.({ text: line });
+    for (const line of lines) state.chat?.addChat?.({ text: translateChat(line) });
   }
 
   function isGame(value) {

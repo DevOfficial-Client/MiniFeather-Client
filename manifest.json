@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.7.1",
-  "description": "MiniFeather Client for Miniblox — Better Player Layers Beta",
+  "version": "4.8.0",
+  "description": "MiniFeather Client for MiniBlox — organized modules, movement assists and multilingual Studio",
   "permissions": [
     "storage",
     "declarativeNetRequest",
@@ -48,11 +48,14 @@
         "https://miniblox.online/*"
       ],
       "js": [
+        "src/I18n/MainWorldI18n.js",
+        "src/I18n/MainTranslations.js",
+        "src/I18n/CommandTranslations.js",
         "src/Render/TextureInterceptor.js",
         "src/Cosmetics/CustomSkins.js",
         "src/Core/inject.js",
         "src/Render/FreeCam.js",
-        "src/Render/mf-freelook.js",
+        "src/Render/Freelook.js",
         "src/Render/ElytraFlight.js",
         "src/Render/TitanTiny.js",
         "src/Render/HealthNameTags.js",
@@ -63,16 +66,16 @@
         "src/Render/NoWeather.js",
         "src/Render/LeafWind.js",
         "src/World/AutoRespawn.js",
-        "src/World/AntiAFK.js",
+        "src/Movement/AntiAFK.js",
+        "src/Movement/MovementAssist.js",
         "src/Waypoints/Waypoints.js",
         "src/Chat/ClientCommands.js",
         "src/Render/Zoom.js",
-        "src/Render/Camera Overhaul.js",
+        "src/Render/CameraOverhaul.js",
         "src/HUD/DynamicCrosshair.js",
-        "src/World/Baritone.js",
-        "src/HUD/Dynamic Crosshair.js",
+        "src/Movement/Baritone.js",
         "src/Core/features.js",
-        "src/HUD/armorhud.js",
+        "src/HUD/ArmorHUD.js",
         "src/World/MinimapCache.js",
         "src/World/WorldMap.js",
         "src/World/RhythmParkour.js",
@@ -110,11 +113,11 @@
         "https://miniblox.online/*"
       ],
       "js": [
-        "src/Core/translations.js",
+        "src/I18n/Translations.js",
         "src/Libraries/jszip.min.js",
         "src/Render/TexturePackManager.js",
         "src/Core/AutoUpdater.js",
-        "src/Core/content.js"
+        "src/UI/ClientPanel.js"
       ],
       "run_at": "document_end",
       "all_frames": true
@@ -152,7 +155,7 @@
         "textures/*/*",
         "textures/*/*/*",
         "textures/*/*/*/*",
-        "client-side mod/entity/*",
+        "assets/content/minifeather-pack/entity/*",
         "models/*",
         "models/*/*",
         "models/*/*/*",

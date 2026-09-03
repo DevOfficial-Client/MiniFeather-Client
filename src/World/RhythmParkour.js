@@ -242,10 +242,10 @@ async function loadAudioFile(file) {
     state.beatIntervalSeconds = 60 / bpm;
 
     dispatchState();
-    showNotification(`🎵 ${beats.length} obstáculos generados (BPM: ${bpm})`, 'success');
+    showNotification(tr('rhythmObstaclesGenerated', '🎵 {count} obstacles generated (BPM: {bpm})').replace('{count}', beats.length).replace('{bpm}', bpm), 'success');
     return true;
   } catch (e) {
-    showNotification('❌ Error al cargar el audio', 'error');
+    showNotification(tr('rhythmAudioLoadError', '❌ Error loading audio'), 'error');
     return false;
   }
 }
@@ -501,7 +501,7 @@ function checkPlayerCollisions() {
       applyDamage(2);
       obs.collided = true;
       state.combo = 0;
-      showNotification('💥 ¡Ouch! -1 corazón', 'error');
+      showNotification(tr('rhythmOuchHeart', '💥 Ouch! -1 heart'), 'error');
       showHitMessage('miss');
       // Notificar a otros jugadores en modo cooperativo
       if (p2pManager?.gameMode === 'cooperative') p2pManager.notifyHit(2);
@@ -529,8 +529,8 @@ function applyDamage(damage) {
 
 // ---- Control del juego ----
 function startGame() {
-  if (!state.currentSong || !state.beats.length) { showNotification('❌ Primero carga una canción (/rp load)', 'error'); return false; }
-  if (state.isPlaying) { showNotification('⚠ El juego ya está en progreso', 'info'); return false; }
+  if (!state.currentSong || !state.beats.length) { showNotification(tr('rhythmLoadSongFirst', '❌ Load a song first (/rp load)'), 'error'); return false; }
+  if (state.isPlaying) { showNotification(tr('rhythmAlreadyRunning', '⚠ Game already in progress'), 'info'); return false; }
 
   state.score = 0; state.combo = 0; state.maxCombo = 0; state.health = 5;
   state.currentBeat = 0; state.obstacles = []; state.nextObstacleId = 0;
@@ -549,7 +549,7 @@ function startGame() {
   state.lastStateSync = 0;
   state.lastCollisionCheck = 0;
 
-  state.audioSource.onended = () => { stopGame(); showNotification('🎉 ¡Canción completada!', 'success'); };
+  state.audioSource.onended = () => { stopGame(); showNotification(tr('rhythmSongCompleted', '🎉 Song completed!'), 'success'); };
 
   state.beatInterval = setInterval(() => {
     const audioTime = (Date.now() - state.audioStartTime) / 1000;
@@ -570,7 +570,7 @@ function startGame() {
 
   state.gameLoopId = requestAnimationFrame(gameLoop);
   p2pManager?.startGame?.();
-  showNotification(`🎮 ¡Juego iniciado! ${state.beats.length} obstáculos`, 'success');
+  showNotification(tr('rhythmGameStartedCount', '🎮 Game started! {count} obstacles').replace('{count}', state.beats.length), 'success');
   dispatchState();
   return true;
 }
@@ -609,7 +609,7 @@ function debugInfo() {
   console.log('[MiniFeather RhythmParkour] Bloques (window.Blocks):', !!(window.Blocks || globalThis.Blocks));
   console.log('[MiniFeather RhythmParkour] Canción:', !!state.currentSong, '| Obstáculos activos:', state.obstacles.length);
   console.log('[MiniFeather RhythmParkour] P2P:', p2pManager ? { host: p2pManager.isHost, room: p2pManager.roomId, peers: p2pManager.connections.length } : null);
-  showNotification('Debug completado — mira la consola (F12)', 'info');
+  showNotification(tr('rhythmDebugDone', 'Debug complete — check console (F12)'), 'info');
 }
 
 function triggerSongPicker() {
@@ -637,7 +637,7 @@ function executeCommand(raw) {
   if (cmd === '/rp status') { showNotification(statusText(), 'info'); return true; }
   if (cmd === '/rp debug') { debugInfo(); return true; }
   if (cmd === '/rp help') {
-    showNotification('Comandos: /rp load | /rp start | /rp stop | /rp status | /rp debug', 'info');
+    showNotification(tr('rhythmCommands', 'Commands: /rp load | /rp start | /rp stop | /rp status | /rp debug'), 'info');
     return true;
   }
   return false;
@@ -675,7 +675,7 @@ class P2PManager {
     this.roomId = null;
     this.gameMode = 'competitive';
     this.playerId = Math.random().toString(36).substring(2, 15);
-    this.playerName = 'Jugador ' + Math.floor(Math.random() * 1000);
+    this.playerName = tr('rhythmPlayer', 'Player') + ' ' + Math.floor(Math.random() * 1000);
     this.remotePlayers = new Map();
     this.gameState = { isPlaying: false, song: null, startTime: null };
     this.signalingChannel = null;
@@ -755,13 +755,13 @@ class P2PManager {
         senderId: this.playerId
       });
     }
-    showNotification('🔍 Buscando salas...', 'info');
+    showNotification(tr('rhythmSearchingRooms', '🔍 Searching for rooms...'), 'info');
     setTimeout(() => {
       this.isSearching = false;
       if (this.availableRooms.size === 0) {
-        showNotification('❌ No se encontraron salas. ¡Crea una!', 'info');
+        showNotification(tr('rhythmNoRoomsFound', '❌ No rooms found. Create one!'), 'info');
       } else {
-        showNotification(`✅ ${this.availableRooms.size} sala(s) encontrada(s)`, 'success');
+        showNotification(tr('rhythmRoomsFound', '✅ {count} room(s) found').replace('{count}', this.availableRooms.size), 'success');
       }
       updateP2PRoomUI();
     }, 2000);
@@ -770,7 +770,7 @@ class P2PManager {
   // Matchmaking automático
   autoMatchmake(mode = 'competitive') {
     this.autoMatchmaking = true;
-    showNotification('🎮 Buscando partida automáticamente...', 'info');
+    showNotification(tr('rhythmAutoMatchmaking', '🎮 Finding a match automatically...'), 'info');
     this.searchRooms();
     setTimeout(() => {
       if (this.availableRooms.size > 0) {
@@ -778,14 +778,14 @@ class P2PManager {
         const bestRoom = rooms.sort((a, b) => b.players - a.players)[0];
         if (bestRoom && bestRoom.players < bestRoom.maxPlayers) {
           this.joinRoom(bestRoom.roomId);
-          showNotification(`🎮 ¡Unido a sala de ${bestRoom.hostName}!`, 'success');
+          showNotification(tr('rhythmJoinedHostRoom', "🎮 Joined {host}'s room!").replace('{host}', bestRoom.hostName), 'success');
         } else {
           this.createRoom(mode);
-          showNotification('🏠 Sala creada (no había espacio)', 'info');
+          showNotification(tr('rhythmRoomCreatedNoSpace', '🏠 Room created (no space available)'), 'info');
         }
       } else {
         this.createRoom(mode);
-        showNotification('🏠 Sala creada (no se encontraron salas)', 'info');
+        showNotification(tr('rhythmRoomCreatedNoRooms', '🏠 Room created (no rooms found)'), 'info');
       }
       this.autoMatchmaking = false;
     }, 3000);
@@ -796,7 +796,7 @@ class P2PManager {
     this.gameMode = mode;
     this.maxPlayers = maxPlayers;
     this.roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    showNotification(`🏠 Sala creada: ${this.roomId} (${mode})`, 'success');
+    showNotification(tr('rhythmRoomCreated', '🏠 Room created: {room} ({mode})').replace('{room}', this.roomId).replace('{mode}', mode), 'success');
 
     this.startDynamicDiscovery();
     this.startSignalingListener();
@@ -809,7 +809,7 @@ class P2PManager {
   async joinRoom(roomId) {
     this.isHost = false;
     this.roomId = String(roomId).toUpperCase();
-    showNotification(`🔗 Conectando a sala ${this.roomId}...`, 'info');
+    showNotification(tr('rhythmConnectingRoom', '🔗 Connecting to room {room}...').replace('{room}', this.roomId), 'info');
     this.startDynamicDiscovery();
     this.startSignalingListener();
     await this.sendSignal('join', {
@@ -821,8 +821,8 @@ class P2PManager {
 
   async joinDynamicRoom(roomId) {
     const room = this.availableRooms.get(roomId);
-    if (!room) { showNotification('❌ Sala no encontrada', 'error'); return; }
-    if (room.players >= room.maxPlayers) { showNotification('❌ Sala llena', 'error'); return; }
+    if (!room) { showNotification(tr('rhythmRoomNotFound', '❌ Room not found'), 'error'); return; }
+    if (room.players >= room.maxPlayers) { showNotification(tr('rhythmRoomFull', '❌ Room full'), 'error'); return; }
     await this.joinRoom(roomId);
     this.gameMode = room.mode;
   }
@@ -830,7 +830,7 @@ class P2PManager {
   // Señalización via BroadcastChannel
   startSignalingListener() {
     if (!this.hasBroadcast()) {
-      showNotification('❌ BroadcastChannel no disponible en este navegador', 'error');
+      showNotification(tr('rhythmBroadcastUnavailable', '❌ BroadcastChannel is not available in this browser'), 'error');
       return;
     }
     this.signalingChannel?.close();
@@ -863,7 +863,7 @@ class P2PManager {
   }
 
   async handlePlayerJoin(data) {
-    showNotification(`👋 ${data.playerName} se unió!`, 'success');
+    showNotification(tr('rhythmPlayerJoined', '👋 {player} joined!').replace('{player}', data.playerName), 'success');
     const connection = new RTCPeerConnection({
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
     });
@@ -891,7 +891,7 @@ class P2PManager {
   async handleOffer(data) {
     if (data.targetId !== this.playerId) return;
     this.gameMode = data.gameMode;
-    showNotification(`✅ Conectado a ${data.hostName}! Modo: ${this.gameMode}`, 'success');
+    showNotification(tr('rhythmConnectedHost', '✅ Connected to {host}! Mode: {mode}').replace('{host}', data.hostName).replace('{mode}', this.gameMode), 'success');
 
     const connection = new RTCPeerConnection({
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
@@ -930,7 +930,7 @@ class P2PManager {
 
   setupDataChannel(channel, peerId) {
     channel.onopen = () => {
-      showNotification('🎮 Conexión P2P establecida!', 'success');
+      showNotification(tr('rhythmP2PEstablished', '🎮 P2P connection established!'), 'success');
       updateP2PRoomUI();
     };
     channel.onmessage = (event) => {
@@ -964,7 +964,7 @@ class P2PManager {
       case 'player-hit':
         if (this.gameMode === 'cooperative') {
           applyDamage(data.damage);
-          showNotification(`💔 ${data.playerName} fue golpeado!`, 'error');
+          showNotification(tr('rhythmPlayerHit', '💔 {player} was hit!').replace('{player}', data.playerName), 'error');
         }
         break;
     }
@@ -1015,7 +1015,7 @@ class P2PManager {
       players: [{ name: this.playerName, score: state.score, isHost: this.isHost }]
     };
     this.remotePlayers.forEach((player) => {
-      results.players.push({ name: player.name || 'Jugador', score: player.score || 0, isHost: false });
+      results.players.push({ name: player.name || tr('rhythmPlayer', 'Player'), score: player.score || 0, isHost: false });
     });
     if (this.isHost) this.broadcast(results);
     this.showResults(results);

@@ -1,6 +1,7 @@
 {
-  "builtAt": "2026-08-28T02:20:29Z",
+  "builtAt": "2026-09-03T17:53:46Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Better Player Layers (Beta): pixel-by-pixel 3D second skin layer for the full player and first-person sleeve."
+  "note": "Organized runtime structure, native Auto Sprint, Safe Sneak, HUD clean shortcut and multilingual Studio.",
+  "version": "4.8.0"
 }

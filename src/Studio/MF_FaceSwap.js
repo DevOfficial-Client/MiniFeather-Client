@@ -21,7 +21,7 @@
 //   MF_FaceSwap.applyAtTick(240, 'happy')  // trigger para film mode (Fase 3+)
 //   MF_FaceSwap.clearTickTriggers()
 //
-// Caras incluidas: reutiliza las de Verity en client-side mod/entity/
+// Caras incluidas: reutiliza las de Verity en assets/content/minifeather-pack/entity/
 // (happy.png, evil.png, neutral.png, hurt.png, smiling_evil.png, ...).
 // Son 8x8 px → se escalan al pintar la región de cara.
 
@@ -38,7 +38,7 @@
     const TPS = 20; // ticks por segundo (duración default de un trigger = 1s)
 
     // Archivos de emoción disponibles en la extension (dir de Verity).
-    const FACES_DIR = 'client-side mod/entity/';
+    const FACES_DIR = 'assets/content/minifeather-pack/entity/';
 
     const state = {
         enabled: true,

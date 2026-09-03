@@ -81,12 +81,13 @@
     { id: 'cosmetics', icon: '👕', labelKey: 'tabSkins' },
     { id: 'chat', icon: '💬', labelKey: 'sectionChat' },
     { id: 'waypoints', icon: '📍', labelKey: 'navWaypoints' },
+    { id: 'movement', icon: '👟', labelKey: 'navMovement' },
     { id: 'world', icon: '🌍', labelKey: 'navWorld' },
     { id: 'settings', icon: '⚙', labelKey: 'navSettings' },
     { id: 'about', icon: '🪶', labelKey: 'tabAbout' }
   ];
 
-  const MODULE_VERSION = '4.6.0';
+  const MODULE_VERSION = chrome.runtime?.getManifest?.().version || '4.8.0';
 
   const ELYTRA_FLIGHT_PRESETS = Object.freeze({
     soft: Object.freeze({
@@ -368,9 +369,10 @@
     patPat: false,
     itemPhysics: false,
     noWeather: false,
-    leafWind: false,
     antiAfk: false,
     antiAfkDelay: 120,
+    autoSprint: false,
+    safeSneak: false,
     autoRespawn: false,
     patPatPreset: 'normal',
     patPatValues: clonePatPatValues(),
@@ -2637,10 +2639,10 @@
       { page: 'hud', key: 'fpsCounter', title: t('fpsCounter'), desc: t('fpsCounterDesc') },
       { page: 'hud', key: 'cpsCounter', title: t('cpsCounter'), desc: t('cpsCounterDesc') },
       { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc') },
-      { page: 'hud', key: 'armorHud', title: 'Armor HUD', desc: 'Show your equipped helmet, chestplate, leggings and boots with durability.' },
-      { page: 'hud', key: 'guiPatch', title: 'GUI Patch', desc: 'Classic Minecraft hearts, food, XP and WiFi icons' },
+      { page: 'hud', key: 'armorHud', title: t('armorHud'), desc: t('armorHudDesc') },
+      { page: 'hud', key: 'guiPatch', title: t('guiPatch'), desc: t('guiPatchDesc') },
       { page: 'hud', key: 'coordinates', title: t('coordinates'), desc: t('coordinatesDesc') },
-      { page: 'hud', key: 'dynamicCrosshair', title: 'Dynamic Crosshair', desc: 'Changes crosshair based on situation' },
+      { page: 'hud', key: 'dynamicCrosshair', title: t('dynamicCrosshair'), desc: t('dynamicCrosshairDesc') },
       { page: 'waypoints', key: 'waypoints', title: t('waypoints'), desc: t('waypointsDesc') },
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc') },
@@ -2651,15 +2653,17 @@
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc') },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc') },
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc') },
-      { page: 'render', key: 'vanillaAnimations', title: 'Vanilla Animations', desc: 'Freezes elbow and knee joints rigid for all players' },
+      { page: 'render', key: 'vanillaAnimations', title: t('vanillaAnimations'), desc: t('vanillaAnimationsDesc') },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
       { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc') },
       { page: 'render', key: 'freecam', title: t('freecam'), desc: t('freecamDesc') },
       { page: 'shaders', key: 'customShader', title: t('navShaders'), desc: t('shadersDesc') },
+      { page: 'movement', key: 'autoSprint', title: t('autoSprint'), desc: t('autoSprintDesc') },
+      { page: 'movement', key: 'safeSneak', title: t('safeSneak'), desc: t('safeSneakDesc') },
+      { page: 'movement', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc') },
       { page: 'world', key: 'autoRespawn', title: t('autoRespawn'), desc: t('autoRespawnDesc') },
-      { page: 'world', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc') },
-      { page: 'world', key: 'rhythmParkour', title: 'Rhythm Parkour', desc: 'Transforms Miniblox into a rhythm parkour game' },
+      { page: 'world', key: 'rhythmParkour', title: t('rhythmParkour'), desc: t('rhythmParkourDescShort') },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
       { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc') },
       { page: 'chat', key: 'chatMemes', title: t('chatMemes'), desc: t('chatMemesDesc') },
@@ -2677,6 +2681,7 @@
     cosmetics:'<path d="M6 3h12l3 5-3 13H6L3 8l3-5Z"/><path d="M8 3c0 2 1.8 4 4 4s4-2 4-4M3 8h18"/>',
     chat:'<path d="M4 5h16v11H8l-4 4V5Z"/><path d="M8 9h8M8 12h5"/>',
     waypoints:'<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
+    movement:'<path d="M4 16h5l3-5 3 2 5-1"/><path d="M5 19h14M8 12l2-5 4 1 2 3"/>',
     world:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.2 2.5 3.2 5.5 3.2 9S14.2 18.5 12 21c-2.2-2.5-3.2-5.5-3.2-9S9.8 5.5 12 3Z"/>',
     settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.84 1.84-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.55V20h-2.6v-.09a1.7 1.7 0 0 0-1.03-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-1.84-1.84.06-.06A1.7 1.7 0 0 0 8 15a1.7 1.7 0 0 0-1.55-1.03H6.36v-2.6h.09A1.7 1.7 0 0 0 8 10.34a1.7 1.7 0 0 0-.34-1.88L7.6 8.4l1.84-1.84.06.06a1.7 1.7 0 0 0 1.88.34 1.7 1.7 0 0 0 1.03-1.55v-.09h2.6v.09a1.7 1.7 0 0 0 1.03 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06 1.84 1.84-.06.06A1.7 1.7 0 0 0 19.4 10c.22.62.8 1.03 1.45 1.03h.09v2.6h-.09c-.65 0-1.23.41-1.45 1.03Z"/>',
     about:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>',
@@ -2733,7 +2738,7 @@
   function featherNavIcon(page) {
     const icons = {
       hud: 'hud', render: 'render', shaders: 'shaders', cosmetics: 'cosmetics', chat: 'chat',
-      waypoints: 'waypoints', world: 'world', settings: 'settings', about: 'about'
+      waypoints: 'waypoints', movement: 'movement', world: 'world', settings: 'settings', about: 'about'
     };
     return iconSvg(icons[page] || 'grid');
   }
@@ -2744,7 +2749,7 @@
       coordinates:'coordinates', dynamicCrosshair:'dynamicCrosshair', rebrand:'rebrand', titanTiny:'titanTiny', healthNameTags:'healthNameTags',
       distanceNameTags:'distanceNameTags', patPat:'patPat', itemPhysics:'itemPhysics', noWeather:'noWeather', vanillaAnimations:'vanillaAnimations',
       zoom:'zoom', cameraOverhaul:'cameraOverhaul', elytraFlight:'elytraFlight', freelook:'freelook', freecam:'freecam', blockHighlight:'blockHighlight',
-      waypoints:'waypoints', customShader:'shaders', antiAfk:'antiAfk', rhythmParkour:'rhythmParkour', chatVideos:'chatVideos', chatLinks:'chatLinks', chatMemes:'chatMemes',
+      waypoints:'waypoints', customShader:'shaders', autoSprint:'movement', safeSneak:'movement', antiAfk:'antiAfk', rhythmParkour:'rhythmParkour', chatVideos:'chatVideos', chatLinks:'chatLinks', chatMemes:'chatMemes',
       discord:'discord', supportAds:'supportAds'
     };
     return iconSvg(icons[key] || 'grid');
@@ -2757,7 +2762,7 @@
           <div class="mf-feather-nav-main">
             <button class="mf-feather-main-tab ${activePage === 'dashboard' && !searchQuery ? 'active' : ''}" data-page="dashboard">
               <span class="mf-feather-grid-icon">${iconSvg('grid')}</span>
-              <span>MOD MENU</span>
+              <span>${t('modMenu')}</span>
             </button>
             <div class="mf-feather-icon-tabs">
               ${NAV_ITEMS.filter(item => item.id !== 'dashboard').map(item => `
@@ -2768,22 +2773,22 @@
             </div>
           </div>
           <h2 id="mf-gui-page-title" aria-hidden="true"></h2>
-          <button id="mf-gui-close" class="mf-feather-close" title="Close">${iconSvg('close')}</button>
+          <button id="mf-gui-close" class="mf-feather-close" title="${t('close')}">${iconSvg('close')}</button>
         </div>
 
         <div id="mf-gui-content">
           <div id="mf-feather-filterbar">
             <div class="mf-feather-categories">
-              <button class="mf-feather-category active" data-category="all">All</button>
-              <button class="mf-feather-category" data-category="new">New</button>
-              <button class="mf-feather-category" data-category="hud">HUD</button>
-              <button class="mf-feather-category" data-category="hypixel">Hypixel</button>
-              <button class="mf-feather-category" data-category="pvp">PvP</button>
+              <button class="mf-feather-category active" data-category="all">${t('filterAll')}</button>
+              <button class="mf-feather-category" data-category="new">${t('filterNew')}</button>
+              <button class="mf-feather-category" data-category="hud">${t('filterHud')}</button>
+              <button class="mf-feather-category" data-category="hypixel">${t('filterHypixel')}</button>
+              <button class="mf-feather-category" data-category="pvp">${t('filterPvp')}</button>
             </div>
             <div class="mf-feather-tools">
               <input id="mf-gui-search" type="text" placeholder="${t('searchPlaceholder')}" value="${searchQuery.replace(/"/g, '&quot;')}">
-              <button class="mf-feather-tool ${favoritesOnly ? 'active' : ''}" type="button" data-mf-favorites title="Favorites">${iconSvg('heart')}</button>
-              <button class="mf-feather-tool" type="button" title="Grid">${iconSvg('grid')}</button>
+              <button class="mf-feather-tool ${favoritesOnly ? 'active' : ''}" type="button" data-mf-favorites title="${t('favorites')}">${iconSvg('heart')}</button>
+              <button class="mf-feather-tool" type="button" title="${t('grid')}">${iconSvg('grid')}</button>
             </div>
           </div>
           <div id="mf-gui-page"></div>
@@ -2802,9 +2807,9 @@
           <strong>${title}</strong>
           <span>${description}</span>
         </span>
-        <button type="button" class="mf-feature-favorite ${favorite ? 'active' : ''}" data-mf-favorite title="${favorite ? 'Remove from favorites' : 'Add to favorites'}" aria-label="${favorite ? 'Remove from favorites' : 'Add to favorites'}">${iconSvg('heart')}</button>
-        <button type="button" class="mf-feature-settings" data-mf-settings title="Configure ${title}">${iconSvg('settings')}</button>
-        <span class="mf-feature-state ${enabled ? 'enabled' : 'disabled'}">${enabled ? 'Enabled' : 'Disabled'}</span>
+        <button type="button" class="mf-feature-favorite ${favorite ? 'active' : ''}" data-mf-favorite title="${favorite ? t('removeFavorite') : t('addFavorite')}" aria-label="${favorite ? t('removeFavorite') : t('addFavorite')}">${iconSvg('heart')}</button>
+        <button type="button" class="mf-feature-settings" data-mf-settings title="${t('configureModule', { module: title })}">${iconSvg('settings')}</button>
+        <span class="mf-feature-state ${enabled ? 'enabled' : 'disabled'}">${enabled ? t('enabled') : t('disabled')}</span>
         <input type="checkbox" class="mf-switch-hidden" ${enabled ? 'checked' : ''}>
       </label>
     `;
@@ -2812,6 +2817,8 @@
 
   const COMMAND_MODULE_ALIASES = Object.freeze({
     afk: 'antiAfk', antiafk: 'antiAfk',
+    autosprint: 'autoSprint', sprint: 'autoSprint',
+    safesneak: 'safeSneak', autosneak: 'safeSneak',
     armor: 'armorHud', armorhud: 'armorHud',
     camera: 'cameraOverhaul', cameraoverhaul: 'cameraOverhaul',
     elytra: 'elytraFlight', elytraflight: 'elytraFlight', barrelroll: 'elytraFlight', flight: 'elytraFlight',
@@ -2841,14 +2848,16 @@
     zoom: 'zoom'
   });
 
-  const COMMAND_MODULE_LABELS = Object.freeze({
-    antiAfk: 'Anti-AFK', armorHud: 'Armor HUD', cameraOverhaul: 'Camera Overhaul', elytraFlight: 'Elytra Flight',
-    coordinates: 'Coordinates', dynamicCrosshair: 'Dynamic Crosshair', cpsCounter: 'CPS Counter',
-    distanceNameTags: 'Player Distance', fpsCounter: 'FPS Counter', freelook: 'FreeLook', freecam: 'FreeCam',
-    guiPatch: 'GUI Patch',
-    healthNameTags: 'Player Health', blockHighlight: 'Block Highlight', itemPhysics: 'Item Physics',
-    keystrokes: 'Keystrokes', noWeather: 'No Weather', patPat: 'PatPat', pingCounter: 'Ping Counter',
-    titanTiny: 'Titan & Tiny', vanillaAnimations: 'Vanilla Animations', waypoints: 'Waypoints', zoom: 'Zoom'
+  const COMMAND_MODULE_TRANSLATION_KEYS = Object.freeze({
+    antiAfk: 'antiAfk', autoSprint: 'autoSprint', safeSneak: 'safeSneak', armorHud: 'armorHud',
+    cameraOverhaul: 'cameraOverhaul', elytraFlight: 'elytraFlight', coordinates: 'coordinates',
+    dynamicCrosshair: 'dynamicCrosshair', cpsCounter: 'cpsCounter', damageParticles: 'damageParticles',
+    distanceNameTags: 'distanceNameTags', fpsCounter: 'fpsCounter', freelook: 'freelook', freecam: 'freecam',
+    guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers',
+    healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
+    keystrokes: 'keystrokes', noWeather: 'noWeather', leafWind: 'leafWind', patPat: 'patPat',
+    pingCounter: 'pingCounter', titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations',
+    waypoints: 'waypoints', zoom: 'zoom'
   });
 
   function commandModuleLabel(key) {
@@ -3021,7 +3030,7 @@
     if (request.action === 'toggle') {
       const key = resolveCommandModule(args[0]);
       if (!key) {
-        push('Usage: /toggle <module>. Modules: afk, armor, camera, coords, crosshair, cps, distance, elytra, fps, freecam, freelook, health, highlight, itemphysics, keystrokes, noweather, patpat, ping, titan, waypoints, zoom', 'error');
+        push(t('commandToggleUsage'), 'error');
       } else {
         const enabling = !settings[key];
         if (key === 'freecam' && enabling && !requestFreecamAccess()) {
@@ -3035,7 +3044,7 @@
           applyGuiSettings();
           if (panel && !searchQuery.trim()) renderCurrentPageContent();
           if (activePage === 'dashboard') updateDashboardStats();
-          push(`${COMMAND_MODULE_LABELS[key] || key} ${settings[key] ? 'enabled' : 'disabled'}.`, 'success');
+          push(t(settings[key] ? 'commandEnabled' : 'commandDisabled', { module: commandModuleLabel(key) }), 'success');
         }
       }
       respondClientCommand(requestId, response);
@@ -3046,7 +3055,7 @@
       const key = resolveCommandModule(args[0]);
       const code = normalizeBindCode(args[1]);
       if (!key || !code) {
-        push('Usage: /bind <module> <key>. Example: /bind coords C', 'error');
+        push(t('commandBindUsage'), 'error');
       } else if (key === 'freecam' && !requestFreecamAccess()) {
         push(t('freecamNoAccess'), 'error');
       } else {
@@ -3054,7 +3063,7 @@
         guiSettings.moduleBinds = { ...settings.moduleBinds };
         saveSettings();
         sendClientBindsConfig();
-        push(`${COMMAND_MODULE_LABELS[key] || key} bound to ${bindLabel(code)}.`, 'success');
+        push(t('commandBound', { module: commandModuleLabel(key), key: bindLabel(code) }), 'success');
       }
       respondClientCommand(requestId, response);
       return;
@@ -3063,16 +3072,16 @@
     if (request.action === 'unbind') {
       const key = resolveCommandModule(args[0]);
       if (!key) {
-        push('Usage: /unbind <module>', 'error');
+        push(t('commandUnbindUsage'), 'error');
       } else if (!settings.moduleBinds?.[key]) {
-        push(`${COMMAND_MODULE_LABELS[key] || key} does not have a bind.`);
+        push(t('commandNoBind', { module: commandModuleLabel(key) }));
       } else {
         settings.moduleBinds = { ...(settings.moduleBinds || {}) };
         delete settings.moduleBinds[key];
         guiSettings.moduleBinds = { ...settings.moduleBinds };
         saveSettings();
         sendClientBindsConfig();
-        push(`${COMMAND_MODULE_LABELS[key] || key} bind removed.`, 'success');
+        push(t('commandBindRemoved', { module: commandModuleLabel(key) }), 'success');
       }
       respondClientCommand(requestId, response);
       return;
@@ -3081,10 +3090,10 @@
     if (request.action === 'binds') {
       const binds = Object.entries(settings.moduleBinds || {});
       if (!binds.length) {
-        push('No MiniFeather module binds are configured.');
+        push(t('commandNoBinds'));
       } else {
-        push(`Module binds: ${binds.length}`);
-        binds.forEach(([key, code]) => push(`\\yellow\\${COMMAND_MODULE_LABELS[key] || key}\\reset\\ - ${bindLabel(code)}`));
+        push(t('commandBindsCount', { count: binds.length }));
+        binds.forEach(([key, code]) => push(`\\yellow\\${commandModuleLabel(key)}\\reset\\ - ${bindLabel(code)}`));
       }
       respondClientCommand(requestId, response);
       return;
@@ -3093,13 +3102,13 @@
     if (request.action === 'afk') {
       const raw = Number(args[0]);
       if (!Number.isFinite(raw) || raw < 5 || raw > 150) {
-        push('Usage: /afk <5-150>', 'error');
+        push(t('commandAfkUsage'), 'error');
       } else {
         settings.antiAfkDelay = clampAntiAfkDelay(raw);
         guiSettings.antiAfkDelay = settings.antiAfkDelay;
         saveSettings();
         sendAntiAfkConfig(settings.antiAfk);
-        push(`Anti-AFK delay changed to ${settings.antiAfkDelay}s.`, 'success');
+        push(t('commandAfkChanged', { seconds: settings.antiAfkDelay }), 'success');
       }
       respondClientCommand(requestId, response);
     }
@@ -3303,29 +3312,6 @@
       },
       destroy() {
         sendNoWeatherConfig(false);
-      }
-    }));
-  }
-
-  function sendLeafWindConfig(enabled = settings.leafWind) {
-    document.dispatchEvent(new CustomEvent('minifeather:leaf-wind-config', {
-      detail: JSON.stringify({ enabled: !!enabled })
-    }));
-  }
-
-  function initLeafWindModule() {
-    registerModule('leafWind', () => createLifecycle({
-      enable() {
-        sendLeafWindConfig(true);
-      },
-      disable() {
-        sendLeafWindConfig(false);
-      },
-      refresh() {
-        sendLeafWindConfig(MODULES.get('leafWind')?.enabled === true);
-      },
-      destroy() {
-        sendLeafWindConfig(false);
       }
     }));
   }
@@ -3545,6 +3531,30 @@
       destroy() {
         sendAntiAfkConfig(false);
       }
+    }));
+  }
+
+  function sendMovementAssistConfig() {
+    document.dispatchEvent(new CustomEvent('minifeather:movement-assist-config', {
+      detail: JSON.stringify({
+        autoSprint: settings.autoSprint === true,
+        safeSneak: settings.safeSneak === true
+      })
+    }));
+  }
+
+  function initMovementAssistModules() {
+    registerModule('autoSprint', () => createLifecycle({
+      enable: sendMovementAssistConfig,
+      disable: sendMovementAssistConfig,
+      refresh: sendMovementAssistConfig,
+      destroy: sendMovementAssistConfig
+    }));
+    registerModule('safeSneak', () => createLifecycle({
+      enable: sendMovementAssistConfig,
+      disable: sendMovementAssistConfig,
+      refresh: sendMovementAssistConfig,
+      destroy: sendMovementAssistConfig
     }));
   }
 
@@ -5996,6 +6006,23 @@
     `;
   }
 
+  function renderMovementPage() {
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionMovement')}</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('autoSprint', t('autoSprint'), t('autoSprintDesc'))}
+            ${renderToggle('safeSneak', t('safeSneak'), t('safeSneakDesc'))}
+            ${renderToggle('antiAfk', t('antiAfk'), t('antiAfkDesc'))}
+          </div>
+          <div class="mf-tt-hint">${t('safeSneakHint')}</div>
+          <div class="mf-tt-hint">${t('antiAfkRightClickHint')}</div>
+        </div>
+      </div>
+    `;
+  }
+
   function renderWorldPage() {
     return `
       <div class="mf-page-stack">
@@ -6003,10 +6030,8 @@
           <div class="mf-card-title">${t('sectionWorldUtilities')}</div>
           <div class="mf-toggle-grid">
             ${renderToggle('autoRespawn', t('autoRespawn'), t('autoRespawnDesc'))}
-            ${renderToggle('antiAfk', t('antiAfk'), t('antiAfkDesc'))}
-            ${renderToggle('rhythmParkour', 'Rhythm Parkour', 'Transforms Miniblox into a rhythm parkour game. Load a song and dodge obstacles to the beat.')}
+            ${renderToggle('rhythmParkour', t('rhythmParkour'), t('rhythmParkourDescShort'))}
           </div>
-          <div class="mf-tt-hint">${t('antiAfkRightClickHint')}</div>
         </div>
         <div class="mf-card">
           <div class="mf-card-title">${t('localGamesTitle')}</div>
@@ -6196,6 +6221,7 @@ function renderCreditsPage() {
     cosmetics: renderCosmeticsPage,
     chat: renderChatPage,
     waypoints: renderWaypointsPage,
+    movement: renderMovementPage,
     world: renderWorldPage,
     settings: renderSettingsPage,
     about: renderAboutPage
@@ -8478,17 +8504,44 @@ function renderCreditsPage() {
     if (guiReady) return;
     guiReady = true;
     let rightShiftDown = false;
+    let leftShiftDown = false;
+    let cleanHud = false;
+
+    const isTyping = target => target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target?.isContentEditable === true;
+    const setCleanHud = hidden => {
+      cleanHud = hidden;
+      let style = document.getElementById('mf-clean-hud-style');
+      if (!style) {
+        style = document.createElement('style');
+        style.id = 'mf-clean-hud-style';
+        style.textContent = '#minifeather-fps,#minifeather-cps,#minifeather-ping,#mf-keystrokes,#mf-coordinates-hud,#mf-waypoint-layer,#minifeather-armor-hud,#mf-damage-particles-layer{display:none!important}';
+        document.head.appendChild(style);
+      }
+      style.disabled = !hidden;
+    };
 
     document.addEventListener('keydown', event => {
       if (event.code === 'ShiftRight' && !rightShiftDown) {
         rightShiftDown = true;
         toggleGUI();
       }
+      if (event.code === 'ShiftLeft') leftShiftDown = true;
+      if (event.code === 'KeyH' && leftShiftDown && !event.repeat && !isTyping(event.target)) {
+        event.preventDefault();
+        event.stopPropagation();
+        setCleanHud(!cleanHud);
+      }
       if (event.code === 'Escape') hideGUI();
-    }, { signal: runtimeController?.signal });
+    }, { capture: true, signal: runtimeController?.signal });
 
     document.addEventListener('keyup', event => {
       if (event.code === 'ShiftRight') rightShiftDown = false;
+      if (event.code === 'ShiftLeft') leftShiftDown = false;
+    }, { capture: true, signal: runtimeController?.signal });
+
+    window.addEventListener('blur', () => {
+      rightShiftDown = false;
+      leftShiftDown = false;
     }, { signal: runtimeController?.signal });
   }
 
@@ -8590,9 +8643,10 @@ function renderCreditsPage() {
     setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
-    setModuleEnabled('leafWind', settings.leafWind);
     setModuleEnabled('autoRespawn', settings.autoRespawn);
     setModuleEnabled('antiAfk', settings.antiAfk);
+    setModuleEnabled('autoSprint', settings.autoSprint);
+    setModuleEnabled('safeSneak', settings.safeSneak);
     setModuleEnabled('rhythmParkour', settings.rhythmParkour);
     setModuleEnabled('zoom', settings.zoom);
     setModuleEnabled('cameraOverhaul', settings.cameraOverhaul);
@@ -9084,13 +9138,13 @@ function renderCreditsPage() {
     initPatPatModule();
     initItemPhysicsModule();
     initNoWeatherModule();
-    initLeafWindModule();
     initVanillaAnimationsModule();
     initLeafWindModule();
     initHandSwayModule();
     initBetterPlayerLayersModule();
     initAutoRespawnModule();
     initAntiAfkModule();
+    initMovementAssistModules();
     initRhythmParkourModule();
     initLocalGamesModule();
     initGuiPatchModule();
@@ -9180,6 +9234,7 @@ function renderCreditsPage() {
     document.getElementById('minifeather-chat-style')?.remove();
     document.getElementById('minifeather-font')?.remove();
     document.getElementById('mf-waypoints-panel-style')?.remove();
+    document.getElementById('mf-clean-hud-style')?.remove();
 
     overlay = null;
     panel = null;

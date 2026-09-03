@@ -131,70 +131,58 @@
 
   function methodsOf(obj) {
     const out = [];
-    const seen = new Set();
-
+    const seenFns = new Set();
     let proto = obj;
 
-    for (
-      let depth = 0;
-      proto && depth < 14;
-      depth++
-    ) {
+    for (let depth = 0; proto && depth < 14; depth++) {
       let names = [];
-
       try {
-        names =
-          Object.getOwnPropertyNames(
-            proto
-          );
-      } catch {}
+        names = Object.getOwnPropertyNames(proto);
+      } catch (_) {}
 
       for (const name of names) {
-        if (
-          name === 'constructor' ||
-          seen.has(name)
-        ) {
-          continue;
-        }
+        if (name === 'constructor') continue;
 
-        seen.add(name);
-
-        let fn;
-
+        let fn = null;
         try {
-          fn = obj[name];
-        } catch {
-          continue;
-        }
-
-        if (
-          typeof fn !== 'function'
-        ) {
-          continue;
-        }
+          fn = depth === 0 ? obj[name] : proto[name];
+        } catch (_) {}
+        if (typeof fn !== 'function' || seenFns.has(fn)) continue;
+        seenFns.add(fn);
 
         let src = '';
-
         try {
-          src =
-            Function.prototype
-              .toString
-              .call(fn);
-        } catch {}
+          src = Function.prototype.toString.call(fn);
+        } catch (_) {}
 
-        out.push({
-          name,
-          fn,
-          src
-        });
+        out.push({ name, fn, src });
+
+        if (depth === 0) {
+          let nativeFn = null;
+          let nativeProto = Object.getPrototypeOf(obj);
+          while (nativeProto) {
+            try {
+              if (Object.prototype.hasOwnProperty.call(nativeProto, name)) {
+                nativeFn = nativeProto[name];
+                break;
+              }
+            } catch (_) {}
+            nativeProto = Object.getPrototypeOf(nativeProto);
+          }
+          if (typeof nativeFn === 'function' && !seenFns.has(nativeFn)) {
+            seenFns.add(nativeFn);
+            let nativeSrc = '';
+            try {
+              nativeSrc = Function.prototype.toString.call(nativeFn);
+            } catch (_) {}
+            out.push({ name, fn: nativeFn, src: nativeSrc });
+          }
+        }
       }
 
       try {
-        proto =
-          Object.getPrototypeOf(
-            proto
-          );
-      } catch {
+        proto = Object.getPrototypeOf(proto);
+      } catch (_) {
         break;
       }
     }
