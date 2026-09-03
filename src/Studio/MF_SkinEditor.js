@@ -47,7 +47,8 @@
         tex: null, texCanvas: null,
         watchdog: null,
         undo: [], redo: [],
-        painting: false, lastCell: null
+        painting: false, lastCell: null,
+        p2pCells: []            // celdas del trazo actual (Look Sync P2P)
     };
 
     // ── acceso al juego (patrón del cliente) ──
@@ -222,6 +223,8 @@
                 if (!inHead(x, y) || !layerAllows(x)) continue;
                 if (erase) ctx.clearRect(x, y, 1, 1);
                 else { ctx.fillStyle = state.color; ctx.fillRect(x, y, 1, 1); }
+                // Look Sync P2P: acumular celda del trazo actual
+                state.p2pCells.push([x, y, erase ? null : state.color]);
             }
         }
         state.tex.needsUpdate = true; // ← tiempo real: el juego la re-sube ya
@@ -255,6 +258,8 @@
         }
         ctx.putImageData(img, HEAD.x, HEAD.y);
         state.tex.needsUpdate = true;
+        // Look Sync P2P: flood = cambio de cabeza completa
+        emitHeadRect();
     }
 
     // cuentagotas: lee el color de una celda
@@ -280,6 +285,19 @@
         stackB.push(ctx.getImageData(HEAD.x, HEAD.y, HEAD.w, HEAD.h));
         ctx.putImageData(stackA.pop(), HEAD.x, HEAD.y);
         state.tex.needsUpdate = true;
+        // Look Sync P2P: undo/redo = cabeza completa tras el cambio
+        emitHeadRect();
+    }
+
+    // Look Sync P2P: emitir la cabeza completa (64x16) como PNG
+    function emitHeadRect() {
+        try {
+            if (!state.texCanvas) return;
+            const c = document.createElement('canvas');
+            c.width = HEAD.w; c.height = HEAD.h;
+            c.getContext('2d').drawImage(state.texCanvas, HEAD.x, HEAD.y, HEAD.w, HEAD.h, 0, 0, HEAD.w, HEAD.h);
+            window.MF_Peer?.sendLook?.({ a: 'head-rect', png: c.toDataURL() });
+        } catch {}
     }
 
     // línea Bresenham entre celdas (para trazos continuos sin huecos)
@@ -483,7 +501,20 @@
                 renderUI();
             }
         });
-        const stop = () => { state.painting = false; state.lastCell = null; };
+        const stop = () => {
+            state.painting = false;
+            state.lastCell = null;
+            // Look Sync P2P: emitir el trazo completo al terminar
+            if (state.p2pCells.length) {
+                try {
+                    window.MF_Peer?.sendLook?.({
+                        a: 'stroke',
+                        cells: state.p2pCells.length > 400 ? state.p2pCells.slice(-400) : state.p2pCells
+                    });
+                } catch {}
+                state.p2pCells = [];
+            }
+        };
         cv.addEventListener('pointerup', stop);
         cv.addEventListener('pointercancel', stop);
     }
@@ -603,6 +634,7 @@
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(img, 0, 0, img.width, img.height, HEAD.x, HEAD.y, HEAD.w, HEAD.h);
             state.tex.needsUpdate = true;
+            emitHeadRect(); // Look Sync P2P
             renderUI();
         };
         img.src = data;
@@ -650,6 +682,7 @@
                     ctx.imageSmoothingEnabled = false;
                     ctx.drawImage(img, 0, 0, img.width, img.height, HEAD.x, HEAD.y, HEAD.w, HEAD.h);
                     state.tex.needsUpdate = true;
+                    emitHeadRect(); // Look Sync P2P
                     resolve({ ok: true, name });
                 } catch (e) { resolve({ ok: false, error: e.message }); }
             };
@@ -703,6 +736,8 @@
         state.undo.length = 0; state.redo.length = 0;
         renderUI();
         err('');
+        // Look Sync P2P: restaurar la cabeza del peer también
+        try { window.MF_Peer?.sendLook?.({ a: 'revert', what: 'head' }); } catch {}
     }
 
     window.MF_SkinEditor = {

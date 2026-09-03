@@ -233,6 +233,13 @@
         session.tex.needsUpdate = true;
         state.current = name;
         startWatchdog();
+        // Look Sync P2P: compartir la skin aplicada en tiempo real
+        try {
+            window.MF_Peer?.sendLook?.({
+                a: 'skin', name,
+                dataURL: opts?.dataURL || item?.dataURL || null
+            });
+        } catch {}
         return { ok: true, skin: name, mode: session.shared ? 'shared' : 'own' };
     }
 
@@ -254,6 +261,8 @@
         session.tex.needsUpdate = true;
         state.current = null;
         stopWatchdog();
+        // Look Sync P2P: avisar del revert al peer
+        try { window.MF_Peer?.sendLook?.({ a: 'revert', what: 'skin' }); } catch {}
         return { ok: true };
     }
 

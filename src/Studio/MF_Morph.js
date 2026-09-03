@@ -41,10 +41,10 @@
         // typeKey: `creeper`, `pig`… deducido de entity.type o className
         catalog: new Map(),
         catalogAt: 0,
-        current: null,        // typeKey aplicado
-        // para revert:
-        origMesh: null,       // mesh humanoide original del player
-        morphMesh: null,      // mesh del mob montado
+        current: null,        // typeKey aplicado al player LOCAL (UI)
+        // morphs activos por entidad (local + remotas vía P2P Look Sync):
+        // entity.id -> { entity, origMesh, morphMesh, type }
+        targets: new Map(),
         watchdog: null
     };
 
@@ -171,24 +171,26 @@
     }
 
     // ── morph ──
-    function apply(typeKey) {
-        const game = getGame();
-        if (!game) throw new Error('jugador no disponible (entra al mundo primero)');
+    // applyOn(entity, typeKey): morfa una ENTIDAD cualquiera (local o
+    // remota). El player local usa apply() (compat con timeline/Studio).
+    function applyOn(entity, typeKey) {
+        if (!entity) throw new Error('entidad no disponible');
+        if (!entity.mesh) throw new Error('la entidad no tiene mesh');
         scan(false);
         const entry = state.catalog.get(typeKey);
         if (!entry) {
             throw new Error('morph "' + typeKey + '" no disponible — acércate a uno de esos mobs y reintenta (scan)');
         }
-        const me = getLocalPlayerEntity(game);
-        if (!me?.mesh) throw new Error('el jugador no tiene mesh');
 
-        // si ya hay un morph activo, desmontarlo primero y restaurar el
-        // humanoide como base (me.mesh apunta al morph viejo, no al original)
-        if (state.morphMesh) detachMorph(game, me);
-        const origMesh = state.origMesh || me.mesh;
+        // si ya hay un morph en esta entidad, desmontarlo y usar el mesh
+        // resultante como base
+        const prev = state.targets.get(entity.id);
+        if (prev?.morphMesh) detachFrom(entity.id);
+
+        const origMesh = prev?.origMesh || entity.mesh;
         if (!origMesh) throw new Error('mesh original no disponible');
 
-        const proxy = makeProxyEntity(me);
+        const proxy = makeProxyEntity(entity);
         let morph = null;
         try {
             morph = new entry.MeshClass(proxy);
@@ -197,44 +199,49 @@
         }
         if (!morph) throw new Error('mesh de ' + typeKey + ' nulo');
 
-        // ocultar el humanoide: quitarlo del grupo de entity meshes y de la
-        // entidad (el bucle de render solo dibuja e.mesh)
-        const group = getEntityMeshesGroup(game);
+        // ocultar el mesh original y colgar el morph donde estaba
+        const group = getEntityMeshesGroup(getGame());
         try { group?.remove?.(origMesh); } catch {}
         try { origMesh.parent?.remove?.(origMesh); } catch {}
-
-        // colgar el morph donde estaba el original
         try { group?.add?.(morph); } catch {}
-        me.mesh = morph;
+        entity.mesh = morph;
 
-        // estado para revert
-        state.origMesh = state.origMesh || origMesh;
-        state.morphMesh = morph;
-        state.current = typeKey;
+        state.targets.set(entity.id, {
+            entity, type: typeKey, origMesh, morphMesh: morph
+        });
 
         // primer render para que tome posición/pose (patrón del spawner)
         try { morph.render(); } catch {}
-        // visibilidad forzada (el juego oculta al player en 1ª persona)
         forceVisible(morph);
         startWatchdog();
+        return morph;
+    }
 
+    function apply(typeKey) {
+        const game = getGame();
+        if (!game) throw new Error('jugador no disponible (entra al mundo primero)');
+        const me = getLocalPlayerEntity(game);
+        applyOn(me, typeKey);
+        state.current = typeKey;
         renderUI();
+        // Look Sync P2P: el peer me verá como ese mob
+        try { window.MF_Peer?.sendLook?.({ a: 'morph', type: typeKey }); } catch {}
         console.log(TAG + ' morph aplicado: ' + typeKey);
         return { ok: true, type: typeKey };
     }
 
-    function detachMorph(game, me) {
-        const group = getEntityMeshesGroup(game);
-        try { group?.remove?.(state.morphMesh); } catch {}
-        try { state.morphMesh?.parent?.remove?.(state.morphMesh); } catch {}
-        try { if (state.morphMesh?.dispose) state.morphMesh.dispose(); } catch {}
-        state.morphMesh = null;
-        // restaurar el humanoide como mesh actual (aunque se re-morfará en
-        //seguida: deja el estado consistente si algo falla después)
-        if (me && state.origMesh) {
-            try { me.mesh = state.origMesh; } catch {}
-            try { group?.add?.(state.origMesh); } catch {}
+    function detachFrom(entityId) {
+        const t = state.targets.get(entityId);
+        if (!t) return;
+        const group = getEntityMeshesGroup(getGame());
+        try { group?.remove?.(t.morphMesh); } catch {}
+        try { t.morphMesh?.parent?.remove?.(t.morphMesh); } catch {}
+        try { if (t.morphMesh?.dispose) t.morphMesh.dispose(); } catch {}
+        if (t.entity) {
+            try { t.entity.mesh = t.origMesh; } catch {}
+            try { group?.add?.(t.origMesh); } catch {}
         }
+        state.targets.delete(entityId);
     }
 
     function forceVisible(root) {
@@ -251,25 +258,26 @@
         stopWatchdog();
         state.watchdog = setInterval(() => {
             const game = getGame();
-            const me = game && getLocalPlayerEntity(game);
-            if (!me) return;
-            if (me.mesh !== state.morphMesh) {
-                // el juego recreó el mesh (respawn, cambio de mundo…) →
-                // re-montar el morph si sigue activo
-                if (state.current && state.morphMesh) {
+            // por cada morph activo (local + remotos del Look Sync)
+            for (const [id, t] of state.targets) {
+                const me = t.entity;
+                if (!me) continue;
+                if (me.mesh !== t.morphMesh) {
+                    // el juego recreó el mesh (respawn, cambio de mundo…) →
+                    // re-montar el morph si sigue activo
                     const group = getEntityMeshesGroup(game);
                     try { group?.remove?.(me.mesh); } catch {}
-                    try { group?.add?.(state.morphMesh); } catch {}
-                    me.mesh = state.morphMesh;
+                    try { group?.add?.(t.morphMesh); } catch {}
+                    me.mesh = t.morphMesh;
+                    continue;
                 }
-                return;
+                // re-forzar visibilidad (el render loop la toca según perspectiva)
+                try {
+                    t.morphMesh.traverse(o => {
+                        if (o.visible === false) o.visible = true;
+                    });
+                } catch {}
             }
-            // re-forzar visibilidad (el render loop la toca según perspectiva)
-            try {
-                state.morphMesh.traverse(o => {
-                    if (o.visible === false) o.visible = true;
-                });
-            } catch {}
         }, 400);
     }
 
@@ -280,24 +288,14 @@
     function revert() {
         const game = getGame();
         if (!game) return { ok: false, error: 'sin juego' };
-        if (!state.current) return { ok: false, error: 'no hay morph activo' };
-        const me = getLocalPlayerEntity(game);
-        const group = getEntityMeshesGroup(game);
-
-        if (state.morphMesh) {
-            try { group?.remove?.(state.morphMesh); } catch {}
-            try { state.morphMesh?.parent?.remove?.(state.morphMesh); } catch {}
-            try { if (state.morphMesh?.dispose) state.morphMesh.dispose(); } catch {}
-            state.morphMesh = null;
-        }
-        if (state.origMesh && me) {
-            try { me.mesh = state.origMesh; } catch {}
-            try { group?.add?.(state.origMesh); } catch {}
-            state.origMesh = null;
-        }
+        if (!state.targets.size) return { ok: false, error: 'no hay morph activo' };
+        // revertir todos los morphs activos (local + remotos)
+        for (const id of [...state.targets.keys()]) detachFrom(id);
         state.current = null;
         stopWatchdog();
         renderUI();
+        // Look Sync P2P: avisar al peer que volví a humano
+        try { window.MF_Peer?.sendLook?.({ a: 'unmorph' }); } catch {}
         console.log(TAG + ' revert: forma humana restaurada');
         return { ok: true };
     }
@@ -441,6 +439,24 @@
         scan,
         apply, revert,
         applyAtTick,
+        // morph de una entidad concreta (Look Sync P2P / API avanzada)
+        applyOn, detachFrom,
+        // localizar la entidad de un jugador por username (para P2P)
+        findEntityByName(username) {
+            const game = getGame();
+            if (!game || !username) return null;
+            try {
+                for (const e of game.world.players.values()) {
+                    if (e?.profile?.username === username) return e;
+                }
+            } catch {}
+            try {
+                for (const e of game.world.entities.values()) {
+                    if (e?.profile?.username === username) return e;
+                }
+            } catch {}
+            return null;
+        },
         get current() { return state.current; },
         get catalog() { return [...state.catalog.values()].map(e => ({ type: e.type, label: e.label })); }
     };

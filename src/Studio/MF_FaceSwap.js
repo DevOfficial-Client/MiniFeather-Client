@@ -206,6 +206,7 @@
                 ctx.drawImage(faceCanvas, FACE_OVERLAY.x, FACE_OVERLAY.y, FACE_OVERLAY.w, FACE_OVERLAY.h);
             }
             tex.needsUpdate = true;
+            emitLookFace(faceName); // Look Sync P2P
             return { ok: true, face: faceName, mode: 'direct' };
         }
 
@@ -223,7 +224,19 @@
 
         mat.map = newTex;
         mat.needsUpdate = true;
+        emitLookFace(faceName); // Look Sync P2P
         return { ok: true, face: faceName, mode: 'newtex' };
+    }
+
+    // Look Sync P2P: compartir la emoción aplicada (canvas 8x8 → dataURL)
+    function emitLookFace(faceName) {
+        try {
+            // resolver el canvas 8x8 de la cara (misma fuente que apply)
+            Promise.resolve(loadExternalFace(faceName) || loadFaceImage(faceName)).then(c => {
+                if (!c) return;
+                window.MF_Peer?.sendLook?.({ a: 'face', name: faceName, dataURL: c.toDataURL() });
+            }).catch(() => {});
+        } catch {}
     }
 
     // Restaura la textura original del target.
@@ -248,6 +261,8 @@
             }
         }
         state.originals.delete(mesh);
+        // Look Sync P2P: avisar del revert de cara al peer
+        try { window.MF_Peer?.sendLook?.({ a: 'revert', what: 'face' }); } catch {}
         return { ok: true };
     }
 
