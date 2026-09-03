@@ -3133,6 +3133,37 @@
       .mf-waypoint-empty{padding:20px;text-align:center;color:#9ca3af;border:1px dashed rgba(255,255,255,.12);border-radius:9px}
       .mf-waypoint-count{font-size:12px;color:#a78bfa;margin-left:6px}
       @media(max-width:760px){.mf-waypoint-row{grid-template-columns:10px 1fr}.mf-waypoint-actions{grid-column:2;justify-content:flex-start}.mf-waypoint-add-row{align-items:stretch}.mf-waypoint-add-row .mf-btn{width:100%}}
+      .mf-chat-container{display:flex;flex-direction:column;gap:10px}
+      .mf-chat-header-bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:8px}
+      .mf-chat-tabs{display:flex;gap:6px}
+      .mf-chat-tab-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#cbd5e1;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;transition:all .15s;font-family:inherit}
+      .mf-chat-tab-btn:hover{background:rgba(255,255,255,.1)}
+      .mf-chat-tab-btn.active{background:#ef3b3b;border-color:#ef3b3b;color:#fff;font-weight:600;box-shadow:0 0 10px rgba(239,59,59,.3)}
+      .mf-chat-badge{background:#ef4444;color:#fff;border-radius:10px;padding:1px 6px;font-size:9px;margin-left:5px;font-weight:bold}
+      .mf-chat-nick-wrap{display:flex;align-items:center;gap:6px}
+      .mf-chat-nick-input{background:rgba(10,12,18,.7);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:6px;padding:4px 8px;font-size:11px;max-width:130px;font-family:inherit}
+      .mf-chat-nick-input:focus{border-color:#ef3b3b;outline:none}
+      .mf-chat-status-bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:11px;color:#94a3b8;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:6px;padding:6px 10px}
+      .mf-chat-status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
+      .mf-chat-status-dot.online{background:#22c55e;box-shadow:0 0 6px #22c55e}
+      .mf-chat-status-dot.hosting{background:#a855f7;box-shadow:0 0 6px #a855f7}
+      .mf-chat-status-dot.connecting{background:#eab308;box-shadow:0 0 6px #eab308}
+      .mf-chat-status-dot.offline{background:#64748b}
+      .mf-chat-room-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+      .mf-chat-feed{height:220px;overflow-y:auto;background:rgba(6,8,12,.85);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px;scroll-behavior:smooth}
+      .mf-chat-feed::-webkit-scrollbar{width:6px}
+      .mf-chat-feed::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:3px}
+      .mf-chat-empty{display:flex;align-items:center;justify-content:center;height:100%;color:#64748b;font-size:12px;font-style:italic;text-align:center;padding:20px}
+      .mf-chat-bubble{max-width:85%;align-self:flex-start;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:6px 10px;font-size:12px;word-break:break-word;line-height:1.35}
+      .mf-chat-bubble.is-me{align-self:flex-end;background:rgba(239,59,59,.18);border-color:rgba(239,59,59,.35)}
+      .mf-chat-bubble.is-sys{align-self:center;background:transparent;border:none;color:#94a3b8;font-size:10px;font-style:italic;padding:2px 6px}
+      .mf-chat-meta{display:flex;gap:6px;font-size:10px;margin-bottom:2px;align-items:baseline}
+      .mf-chat-author{font-weight:600;color:#38bdf8}
+      .mf-chat-bubble.is-me .mf-chat-author{color:#f87171}
+      .mf-chat-input-row{display:flex;gap:8px;align-items:center}
+      .mf-chat-input{flex:1;min-width:0;background:rgba(10,12,18,.9);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:8px;padding:12px 14px;font-size:13px;font-family:inherit;line-height:1.4;box-sizing:border-box}
+      .mf-chat-input:focus{border-color:#ef3b3b;outline:none;box-shadow:0 0 0 2px rgba(239,59,59,.25)}
+      .mf-chat-send-btn{width:auto!important;min-width:48px;padding:6px 12px!important;font-size:11px!important;flex-shrink:0;border-radius:6px;font-weight:600;display:inline-flex;align-items:center;justify-content:center}
     `;
     document.head.appendChild(style);
   }
@@ -5907,6 +5938,286 @@
     `).join('');
   }
 
+  // ─── P2P & Global Chat ───────────────────────────────────────
+  let p2pChatState = {
+    activeMode: 'global',
+    nickname: '',
+    globalStatus: 'connecting',
+    globalMessages: [],
+    privateStatus: 'off',
+    privateRoomCode: '',
+    privatePeerCount: 0,
+    privateRoster: [],
+    privateMessages: [],
+    unreadGlobal: 0,
+    unreadPrivate: 0
+  };
+
+  function sendChatAction(action, extra = {}) {
+    document.dispatchEvent(new CustomEvent('minifeather:chat-action', {
+      detail: JSON.stringify({ action, ...extra })
+    }));
+  }
+
+  function initP2PChatModule() {
+    document.addEventListener('minifeather:chat-update', (e) => {
+      try {
+        const data = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail;
+        if (data) {
+          p2pChatState = { ...p2pChatState, ...data };
+          refreshP2PChatView();
+        }
+      } catch (_) {}
+    });
+  }
+
+  function formatChatTime(timestamp) {
+    if (!timestamp) return '';
+    try {
+      const d = new Date(timestamp);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function refreshP2PChatView() {
+    if (!panel) return;
+    const container = panel.querySelector('#mf-p2pchat-view');
+    if (!container) return;
+
+    const isGlobal = p2pChatState.activeMode !== 'private';
+    const myNick = p2pChatState.nickname || 'You';
+
+    const messages = isGlobal ? p2pChatState.globalMessages : p2pChatState.privateMessages;
+    let feedHtml = '';
+    if (!messages || !messages.length) {
+      feedHtml = `<div class="mf-chat-empty">${isGlobal ? t('chatNoGlobalMsgs') : t('chatNoPrivateMsgs')}</div>`;
+    } else {
+      feedHtml = messages.map(msg => {
+        if (msg.system) {
+          return `<div class="mf-chat-bubble is-sys">ℹ️ ${escapeHtml(msg.text)}</div>`;
+        }
+        const isMe = msg.sender === myNick;
+        return `
+          <div class="mf-chat-bubble ${isMe ? 'is-me' : ''}">
+            <div class="mf-chat-meta">
+              <span class="mf-chat-author">${escapeHtml(msg.sender || 'Player')}</span>
+              <span class="mf-chat-time">${formatChatTime(msg.time)}</span>
+            </div>
+            <div class="mf-chat-body">${escapeHtml(msg.text || '')}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    const headerHtml = `
+      <div class="mf-chat-header-bar">
+        <div class="mf-chat-tabs">
+          <button type="button" class="mf-chat-tab-btn ${isGlobal ? 'active' : ''}" data-chat-mode="global">
+            🌐 ${t('chatGlobalTab')}
+            ${p2pChatState.unreadGlobal > 0 && !isGlobal ? `<span class="mf-chat-badge">${p2pChatState.unreadGlobal}</span>` : ''}
+          </button>
+          <button type="button" class="mf-chat-tab-btn ${!isGlobal ? 'active' : ''}" data-chat-mode="private">
+            🔒 ${t('chatPrivateTab')}
+            ${p2pChatState.unreadPrivate > 0 && isGlobal ? `<span class="mf-chat-badge">${p2pChatState.unreadPrivate}</span>` : ''}
+          </button>
+        </div>
+        <div class="mf-chat-nick-wrap">
+          <span class="mf-muted" style="font-size:11px;">${t('chatNickname')}:</span>
+          <input type="text" id="mf-chat-nick-input" class="mf-chat-nick-input" value="${escapeHtml(myNick)}" maxlength="20" placeholder="${t('chatNicknamePlaceholder')}">
+        </div>
+      </div>
+    `;
+
+    let controlsHtml = '';
+    if (isGlobal) {
+      const isConnected = p2pChatState.globalStatus === 'connected';
+      controlsHtml = `
+        <div class="mf-chat-status-bar">
+          <div>
+            <span class="mf-chat-status-dot ${isConnected ? 'online' : 'connecting'}"></span>
+            <span>${isConnected ? '🟢 ' + t('chatStatusConnected') + ' (ntfy.sh)' : '⏳ ' + t('chatStatusConnecting')}</span>
+          </div>
+          <button type="button" class="mf-btn secondary" id="mf-chat-clear-btn" style="padding:2px 8px;font-size:10px;">${t('chatClear')}</button>
+        </div>
+      `;
+    } else {
+      const st = p2pChatState.privateStatus;
+      const isHosting = st === 'hosting';
+      const isConnected = st === 'connected';
+      const isConnecting = st === 'connecting';
+      const isActive = isHosting || isConnected;
+
+      controlsHtml = `
+        <div class="mf-chat-status-bar">
+          <div>
+            <span class="mf-chat-status-dot ${isActive ? (isHosting ? 'hosting' : 'online') : (isConnecting ? 'connecting' : 'offline')}"></span>
+            <span>
+              ${isHosting ? `🟣 ${t('chatStatusHosting')}: <strong>${escapeHtml(p2pChatState.privateRoomCode)}</strong> (${p2pChatState.privatePeerCount} ${t('chatPeersOnline')})` : ''}
+              ${isConnected ? `🟢 ${t('chatStatusConnected')}: <strong>${escapeHtml(p2pChatState.privateRoomCode)}</strong> (${p2pChatState.privatePeerCount} ${t('chatPeersOnline')})` : ''}
+              ${isConnecting ? `⏳ ${t('chatStatusConnecting')}` : ''}
+              ${st === 'off' || st === 'error' ? `⚪ ${t('chatStatusOffline')}` : ''}
+            </span>
+          </div>
+          <div class="mf-chat-room-controls">
+            ${!isActive && !isConnecting ? `
+              <input type="text" id="mf-private-code-input" class="mf-chat-nick-input" style="width:75px;text-transform:uppercase;" placeholder="${t('chatRoomCodePlaceholder')}" maxlength="12">
+              <button type="button" class="mf-btn primary" id="mf-private-host-btn" style="padding:3px 8px;font-size:11px;">${t('chatHostRoom')}</button>
+              <button type="button" class="mf-btn secondary" id="mf-private-join-btn" style="padding:3px 8px;font-size:11px;">${t('chatJoinRoom')}</button>
+            ` : ''}
+            ${isActive ? `
+              <button type="button" class="mf-btn secondary" id="mf-private-copy-btn" style="padding:3px 8px;font-size:11px;">${t('chatCopyCode')}</button>
+              <button type="button" class="mf-btn danger" id="mf-private-leave-btn" style="padding:3px 8px;font-size:11px;">${t('chatLeaveRoom')}</button>
+            ` : ''}
+            ${isConnecting ? `
+              <button type="button" class="mf-btn danger" id="mf-private-leave-btn" style="padding:3px 8px;font-size:11px;">${t('chatLeaveRoom')}</button>
+            ` : ''}
+            <button type="button" class="mf-btn secondary" id="mf-chat-clear-btn" style="padding:2px 8px;font-size:10px;">${t('chatClear')}</button>
+          </div>
+        </div>
+      `;
+    }
+
+    const feedBox = container.querySelector('#mf-chat-feed-box');
+    const statusBox = container.querySelector('#mf-chat-status-bar-box');
+    const msgInput = container.querySelector('#mf-chat-msg-input');
+
+    // If DOM structure already exists in the container, update in-place without destroying the input element!
+    if (feedBox && statusBox && msgInput) {
+      feedBox.innerHTML = feedHtml;
+      feedBox.scrollTop = feedBox.scrollHeight;
+      statusBox.innerHTML = controlsHtml;
+      msgInput.placeholder = isGlobal ? t('chatPlaceholderGlobal') : t('chatPlaceholderPrivate');
+
+      container.querySelectorAll('[data-chat-mode]').forEach(btn => {
+        const mode = btn.dataset.chatMode;
+        btn.classList.toggle('active', mode === p2pChatState.activeMode);
+        const badge = btn.querySelector('.mf-chat-badge');
+        const count = mode === 'global' ? p2pChatState.unreadGlobal : p2pChatState.unreadPrivate;
+        if (count > 0 && mode !== p2pChatState.activeMode) {
+          if (badge) badge.textContent = count;
+          else btn.insertAdjacentHTML('beforeend', `<span class="mf-chat-badge">${count}</span>`);
+        } else if (badge) {
+          badge.remove();
+        }
+      });
+
+      bindChatControlsListeners(container);
+      return;
+    }
+
+    const inputHtml = `
+      <div class="mf-chat-input-row">
+        <input type="text" id="mf-chat-msg-input" class="mf-chat-input" placeholder="${isGlobal ? t('chatPlaceholderGlobal') : t('chatPlaceholderPrivate')}" maxlength="300" autocomplete="off">
+        <button type="button" class="mf-btn primary mf-chat-send-btn" id="mf-chat-send-btn">${t('chatSend')}</button>
+      </div>
+    `;
+
+    container.innerHTML = `
+      <div class="mf-chat-container">
+        ${headerHtml}
+        <div id="mf-chat-status-bar-box">${controlsHtml}</div>
+        <div class="mf-chat-feed" id="mf-chat-feed-box">${feedHtml}</div>
+        ${inputHtml}
+      </div>
+    `;
+
+    const newFeedBox = container.querySelector('#mf-chat-feed-box');
+    if (newFeedBox) {
+      newFeedBox.scrollTop = newFeedBox.scrollHeight;
+    }
+
+    bindChatViewListeners(container);
+  }
+
+  function bindChatControlsListeners(container) {
+    container.querySelector('#mf-chat-clear-btn')?.addEventListener('click', () => {
+      if (p2pChatState.activeMode === 'global') {
+        sendChatAction('clear-global');
+      } else {
+        sendChatAction('clear-private');
+      }
+    });
+
+    container.querySelector('#mf-private-host-btn')?.addEventListener('click', () => {
+      const codeInput = container.querySelector('#mf-private-code-input');
+      const code = codeInput?.value?.trim() || '';
+      sendChatAction('host-private', { code });
+    });
+
+    container.querySelector('#mf-private-join-btn')?.addEventListener('click', () => {
+      const codeInput = container.querySelector('#mf-private-code-input');
+      const code = codeInput?.value?.trim() || '';
+      if (!code) {
+        if (codeInput) {
+          codeInput.focus();
+          codeInput.style.borderColor = '#ef4444';
+        }
+        return;
+      }
+      sendChatAction('join-private', { code });
+    });
+
+    container.querySelector('#mf-private-leave-btn')?.addEventListener('click', () => {
+      sendChatAction('leave-private');
+    });
+
+    const copyBtn = container.querySelector('#mf-private-copy-btn');
+    copyBtn?.addEventListener('click', async () => {
+      const code = p2pChatState.privateRoomCode;
+      if (!code) return;
+      try {
+        await navigator.clipboard.writeText(code);
+        copyBtn.textContent = t('chatCodeCopied');
+        setTimeout(() => {
+          if (copyBtn.isConnected) copyBtn.textContent = t('chatCopyCode');
+        }, 1200);
+      } catch (_) {}
+    });
+  }
+
+  function bindChatViewListeners(container) {
+    container.querySelectorAll('[data-chat-mode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.chatMode;
+        if (mode) sendChatAction('set-mode', { mode });
+      });
+    });
+
+    const nickInput = container.querySelector('#mf-chat-nick-input');
+    nickInput?.addEventListener('change', () => {
+      const val = nickInput.value.trim();
+      if (val) sendChatAction('set-nickname', { nickname: val });
+    });
+
+    const sendBtn = container.querySelector('#mf-chat-send-btn');
+    const msgInput = container.querySelector('#mf-chat-msg-input');
+    const doSend = () => {
+      const input = container.querySelector('#mf-chat-msg-input') || msgInput;
+      if (!input) return;
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      input.focus();
+      if (p2pChatState.activeMode === 'global') {
+        sendChatAction('send-global', { text });
+      } else {
+        sendChatAction('send-private', { text });
+      }
+    };
+
+    sendBtn?.addEventListener('click', doSend);
+    msgInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        doSend();
+      }
+    });
+
+    bindChatControlsListeners(container);
+  }
+
   function renderChatPage() {
     const memeItems = getChatMemeItems();
 
@@ -5914,6 +6225,10 @@
       <div class="mf-page-stack">
         <div class="mf-card">
           <div class="mf-card-title">${t('sectionChat')}</div>
+          <div id="mf-p2pchat-view"></div>
+        </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionChat')} — ${t('sectionGeneral')}</div>
           <div class="mf-toggle-grid">
             ${renderToggle('chatVideos', t('chatVideos'), t('chatVideosDesc'))}
             ${renderToggle('chatLinks', t('chatLinks'), t('chatLinksDesc'))}
@@ -7617,6 +7932,12 @@ function renderCreditsPage() {
       sendLocalGamesCommand('status');
     }
 
+    // P2P & Global Chat: render inicial del contenedor
+    if (panel.querySelector('#mf-p2pchat-view')) {
+      refreshP2PChatView();
+      sendChatAction('query');
+    }
+
     // ─── Shaders: slider de intensidad ──────────
     const shaderStrength = panel.querySelector('#mf-shader-strength');
     shaderStrength?.addEventListener('input', () => {
@@ -9102,6 +9423,7 @@ function renderCreditsPage() {
     initDynamicCrosshairModule();
     initGUI();
     initChatFeatures();
+    initP2PChatModule();
     injectFeatherButton();
 
     document.addEventListener('click', handleDocumentClick, {
