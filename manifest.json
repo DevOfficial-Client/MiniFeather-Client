@@ -66,6 +66,7 @@
         "src/World/AntiAFK.js",
         "src/Waypoints/Waypoints.js",
         "src/Chat/ClientCommands.js",
+        "src/Chat/P2PChat.js",
         "src/Render/Zoom.js",
         "src/Render/Camera Overhaul.js",
         "src/HUD/DynamicCrosshair.js",
