@@ -2,6 +2,6 @@
   "builtAt": "2026-09-03T17:53:46Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Organized runtime structure, native Auto Sprint, Safe Sneak, HUD clean shortcut and multilingual Studio.",
-  "version": "4.8.0"
+  "note": "Language selector restored in Settings with persistent multilingual client and Studio synchronization.",
+  "version": "4.8.1"
 }

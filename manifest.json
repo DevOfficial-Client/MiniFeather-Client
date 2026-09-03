@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.8.0",
+  "version": "4.8.1",
   "description": "MiniFeather Client for MiniBlox — organized modules, movement assists and multilingual Studio",
   "permissions": [
     "storage",
@@ -70,7 +70,6 @@
         "src/Movement/MovementAssist.js",
         "src/Waypoints/Waypoints.js",
         "src/Chat/ClientCommands.js",
-        "src/Chat/P2PChat.js",
         "src/Render/Zoom.js",
         "src/Render/CameraOverhaul.js",
         "src/HUD/DynamicCrosshair.js",
