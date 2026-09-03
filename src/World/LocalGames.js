@@ -153,6 +153,7 @@
     worldAssetManager: null,
     localRenderFixAt: 0,
     localRenderStats: null,
+    nativeRenderRecovery: null,
     globalPollTimer: 0,
     registryCursor: '',
     savedServers: [],
@@ -1662,6 +1663,20 @@
 
     if (!mod) return null;
 
+    // Current Miniblox exposes the live renderer/composer singleton as an
+    // object. Older builds exposed a function-like singleton. Prefer the live
+    // object first, then keep the legacy shape as a compatibility fallback.
+    for (const value of Object.values(mod)) {
+      if (
+        value &&
+        (typeof value === 'object' || typeof value === 'function') &&
+        value?.renderer?.isWebGLRenderer &&
+        value?.composer
+      ) {
+        return value;
+      }
+    }
+
     for (const value of Object.values(mod)) {
       if (
         typeof value === 'function' &&
@@ -1674,6 +1689,293 @@
     }
 
     return null;
+  }
+
+  function safeLocalRenderDistance(world = state.world || state.game?.world) {
+    let value = NaN;
+
+    try {
+      value = Number(world?.getRenderDistanceChunks?.());
+    } catch (_) {}
+
+    if (!Number.isFinite(value) || value <= 0) {
+      try {
+        value = Number(localStorage.getItem('Render Distance '));
+      } catch (_) {}
+    }
+
+    if (!Number.isFinite(value) || value <= 0) {
+      value = 8;
+    }
+
+    return Math.max(2, Math.min(16, Math.round(value)));
+  }
+
+  function restoreNativeRenderRecovery() {
+    const recovery = state.nativeRenderRecovery;
+    if (!recovery) return;
+
+    try {
+      if (
+        recovery.composer &&
+        recovery.patchedComposerRender &&
+        recovery.composer.render === recovery.patchedComposerRender
+      ) {
+        recovery.composer.render = recovery.originalComposerRender;
+      }
+    } catch (_) {}
+
+    try {
+      if (
+        recovery.world &&
+        recovery.patchedRenderDistance &&
+        recovery.world.getRenderDistanceChunks === recovery.patchedRenderDistance
+      ) {
+        if (recovery.hadOwnRenderDistance) {
+          recovery.world.getRenderDistanceChunks = recovery.originalRenderDistance;
+        } else {
+          delete recovery.world.getRenderDistanceChunks;
+        }
+      }
+    } catch (_) {}
+
+    state.nativeRenderRecovery = null;
+  }
+
+  function installNativeRenderRecovery() {
+    if (!state.active || !state.directLocal) return false;
+
+    const game = state.game;
+    const master = resolveMasterRenderer();
+    const renderer = master?.renderer;
+    const composer = master?.composer;
+    const world = state.world || game?.world;
+
+    if (!game?.gameScene || !renderer?.isWebGLRenderer) {
+      return false;
+    }
+
+    if (
+      state.nativeRenderRecovery?.master === master &&
+      state.nativeRenderRecovery?.world === world
+    ) {
+      state.nativeRenderRecovery.ensureSize?.();
+      return true;
+    }
+
+    restoreNativeRenderRecovery();
+
+    const originalRenderDistance =
+      typeof world?.getRenderDistanceChunks === 'function'
+        ? world.getRenderDistanceChunks
+        : null;
+
+    const hadOwnRenderDistance =
+      !!world &&
+      Object.prototype.hasOwnProperty.call(world, 'getRenderDistanceChunks');
+
+    const safeDistance = safeLocalRenderDistance(world);
+    let patchedRenderDistance = null;
+
+    if (world && originalRenderDistance) {
+      let current = NaN;
+
+      try {
+        current = Number(originalRenderDistance.call(world));
+      } catch (_) {}
+
+      if (!Number.isFinite(current) || current <= 0) {
+        patchedRenderDistance = function (...args) {
+          let value = NaN;
+
+          try {
+            value = Number(originalRenderDistance.apply(this, args));
+          } catch (_) {}
+
+          return Number.isFinite(value) && value > 0
+            ? value
+            : safeDistance;
+        };
+
+        try {
+          world.getRenderDistanceChunks = patchedRenderDistance;
+        } catch (_) {}
+
+        try {
+          localStorage.setItem('Render Distance ', String(safeDistance));
+        } catch (_) {}
+      }
+    }
+
+    let lastWidth = 0;
+    let lastHeight = 0;
+    let lastRatio = 0;
+
+    const ensureSize = () => {
+      const liveCamera = state.game?.gameScene?.camera;
+      const canvas = renderer.domElement;
+      const holder =
+        document.getElementById('canvas-holder') ||
+        canvas?.parentElement;
+
+      const rect = holder?.getBoundingClientRect?.();
+
+      const width = Math.max(
+        1,
+        Math.round(Number(rect?.width) || Number(innerWidth) || 1)
+      );
+
+      const height = Math.max(
+        1,
+        Math.round(Number(rect?.height) || Number(innerHeight) || 1)
+      );
+
+      let ratio = Number(renderer.getPixelRatio?.());
+
+      if (!Number.isFinite(ratio) || ratio <= 0) {
+        try {
+          renderer.setPixelRatio?.(1);
+        } catch (_) {}
+        ratio = 1;
+      }
+
+      const targetWidth = Math.max(1, Math.round(width * ratio));
+      const targetHeight = Math.max(1, Math.round(height * ratio));
+
+      if (
+        canvas &&
+        (
+          canvas.width !== targetWidth ||
+          canvas.height !== targetHeight
+        )
+      ) {
+        try {
+          renderer.setSize?.(width, height, false);
+        } catch (_) {}
+      }
+
+      if (
+        width !== lastWidth ||
+        height !== lastHeight ||
+        ratio !== lastRatio
+      ) {
+        // Keep the native composer correctly sized on miniblox.online.
+        // miniblox.io still gets the same size repair even when Local Games
+        // uses the direct-render fallback below.
+        try {
+          composer?.setSize?.(width, height);
+        } catch (_) {}
+
+        lastWidth = width;
+        lastHeight = height;
+        lastRatio = ratio;
+      }
+
+      if (liveCamera && Number.isFinite(width / height)) {
+        const aspect = width / height;
+
+        if (
+          !Number.isFinite(Number(liveCamera.aspect)) ||
+          Math.abs(Number(liveCamera.aspect) - aspect) > 0.0001
+        ) {
+          liveCamera.aspect = aspect;
+          liveCamera.updateProjectionMatrix?.();
+        }
+      }
+
+      return { width, height, ratio };
+    };
+
+    const isMinibloxIo =
+      /(^|\.)miniblox\.io$/i.test(location.hostname);
+
+    const originalComposerRender =
+      composer && typeof composer.render === 'function'
+        ? composer.render
+        : null;
+
+    let patchedComposerRender = null;
+
+    if (isMinibloxIo && originalComposerRender) {
+      patchedComposerRender = function (...args) {
+        if (!state.active || !state.directLocal) {
+          return originalComposerRender.apply(this, args);
+        }
+
+        ensureSize();
+
+        // Resolve the active camera every frame. F5 changes the native camera
+        // mode, so retaining an older camera object breaks first/third person.
+        const liveScene = state.game?.gameScene?.scene;
+        const liveCamera = state.game?.gameScene?.camera;
+
+        if (!liveScene || !liveCamera) {
+          return originalComposerRender.apply(this, args);
+        }
+
+        try {
+          renderer.setRenderTarget?.(null);
+          renderer.setScissorTest?.(false);
+          renderer.setViewport?.(
+            0,
+            0,
+            Math.max(1, Number(renderer.domElement?.width) || 1),
+            Math.max(1, Number(renderer.domElement?.height) || 1)
+          );
+
+          liveScene.updateMatrixWorld?.(true);
+          liveCamera.updateMatrixWorld?.(true);
+
+          return renderer.render(liveScene, liveCamera);
+        } catch (error) {
+          logWarn('native render fallback failed:', error);
+          return originalComposerRender.apply(this, args);
+        }
+      };
+
+      try {
+        composer.render = patchedComposerRender;
+        log('Local Games: direct renderer fallback enabled for miniblox.io');
+      } catch (_) {
+        patchedComposerRender = null;
+      }
+    }
+
+    state.nativeRenderRecovery = {
+      master,
+      renderer,
+      composer,
+      world,
+      originalComposerRender,
+      patchedComposerRender,
+      originalRenderDistance,
+      patchedRenderDistance,
+      hadOwnRenderDistance,
+      ensureSize,
+      bypassComposer: !!patchedComposerRender
+    };
+
+    ensureSize();
+    return true;
+  }
+
+  function refreshNativeRenderRecovery() {
+    if (!state.active || !state.directLocal) return;
+
+    const currentMaster = resolveMasterRenderer();
+    const currentWorld = state.world || state.game?.world;
+    const recovery = state.nativeRenderRecovery;
+
+    if (
+      !recovery ||
+      recovery.master !== currentMaster ||
+      recovery.world !== currentWorld
+    ) {
+      installNativeRenderRecovery();
+      return;
+    }
+
+    recovery.ensureSize?.();
   }
 
   function worldTextureAssetsReady(assets) {
@@ -1937,6 +2239,8 @@
 
   function repairLocalRender(force = false) {
     if (!state.active || !state.directLocal) return null;
+
+    refreshNativeRenderRecovery();
 
     const now = performance.now();
 
@@ -3687,7 +3991,7 @@
 
     teleportPlayer(
       state.origin.x,
-      state.origin.y + 3.05,
+      state.origin.y + 0.05,
       state.origin.z
     );
 
@@ -5239,6 +5543,9 @@
     state.directLocal = true;
     state.localGameStateBefore =
       Number(game.state) || 0;
+
+    // Sanitize renderer size/pixel ratio before the local world begins.
+    installNativeRenderRecovery();
     state.freshWorldCreated = false;
 
     setStatus(
@@ -5270,6 +5577,10 @@
       );
       return false;
     }
+
+    // createFreshNativeLocalWorld replaces game.world. Re-bind the safe render
+    // distance wrapper to the new world while keeping the same renderer fix.
+    refreshNativeRenderRecovery();
 
     log('initializeDirectLocalGame: fresh world creado, configurando jugador...');
 
@@ -5411,14 +5722,9 @@
       )
     );
 
-    try {
-      game.gameScene.camera?.position?.set?.(
-        expectedSpawn.x,
-        expectedSpawn.y + 1.62,
-        expectedSpawn.z
-      );
-    } catch (_) {}
-
+    // The camera is parented to Miniblox's native player/camera rig.
+    // Writing world coordinates into camera.position offsets that rig and
+    // causes wrong eye/player height, especially after changing camera with F5.
     repairGameSceneTick(game);
     ensureNativeSceneRoots(game);
     synchronizeLocalCamera(game);
@@ -5435,6 +5741,7 @@
       } catch (_) {}
     }
 
+    refreshNativeRenderRecovery();
     ensureLocalPlayerEntity(false);
 
     try {
@@ -5660,15 +5967,10 @@
       return false;
     }
 
-    try {
-      game.gameScene.camera?.position?.set?.(
-        state.origin.x,
-        state.origin.y + (
-          Number(player.getEyeHeight?.()) || 1.62
-        ),
-        state.origin.z
-      );
-    } catch (_) {}
+    // Keep camera positioning owned by Miniblox. synchronizeLocalCamera()
+    // below asks the native player/camera rig to update without injecting
+    // world coordinates into a local camera transform.
+    refreshNativeRenderRecovery();
 
     repairGameSceneTick(game);
     ensureNativeSceneRoots(game);
@@ -6121,6 +6423,7 @@
 
       if (!ok) {
         logError('startWorld: initializeDirectLocalGame failed');
+        restoreNativeRenderRecovery();
         exitLocalVisualMode();
         state.active = false;
         state.mode = 'idle';
@@ -6882,7 +7185,7 @@
             t: 'control',
             action: 'teleport',
             x: state.origin.x,
-            y: state.origin.y + 3.05,
+            y: state.origin.y + 0.05,
             z: state.origin.z
           });
           addSystemChat(`${found[1].profile.name} teleported to spawn.`);
@@ -7691,6 +7994,7 @@
     closeP2P(notifyGuests);
     restoreWorldBlockBroadcast();
     restoreWorldItemDrops();
+    restoreNativeRenderRecovery();
     restoreGameSceneUpdate();
     clearPendingUploadDrain();
     clearRenderLoopWatchdog();
