@@ -220,16 +220,20 @@
         const dataURL = opts?.dataURL || item.dataURL;
         const img = await loadImage(dataURL);
 
-        // solo 64x64 o 64x32
-        if (!(img.width === 64 && (img.height === 64 || img.height === 32))) {
-            throw new Error('PNG inválido (' + img.width + 'x' + img.height + ') — debe ser 64x64 o 64x32');
+        // la textura del juego es 64x64/64x32. Aceptamos cualquier múltiplo
+        // entero (HD: 128x128, 512x256…) reescalando al pintar, y las
+        // legacy 64x32 lógicas (ratio 2:1, ej. la cara en distinta fila)
+        // se convierten a modern 64x64 antes.
+        const canvas = normalizeSkinCanvas(img);
+        if (!canvas) {
+            throw new Error('PNG inválido (' + img.width + 'x' + img.height + ') — debe ser 64x64/64x32 o múltiplo');
         }
 
         const session = ensureTextureSession();
         const ctx = session.canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
         ctx.clearRect(0, 0, session.canvas.width, session.canvas.height);
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, session.canvas.width, session.canvas.height);
         session.tex.needsUpdate = true;
         state.current = name;
         startWatchdog();
@@ -241,6 +245,37 @@
             });
         } catch {}
         return { ok: true, skin: name, mode: session.shared ? 'shared' : 'own' };
+    }
+
+    // normaliza cualquier PNG de skin a un canvas 64x64 (o 64x32 si el
+    // juego usa legacy): reescala múltiplos HD y convierte legacy→modern.
+    // null si las proporciones no son de skin.
+    function normalizeSkinCanvas(img) {
+        const w = img.width, h = img.height;
+        const isModern = w === h;             // 64x64, 128x128, 1024x1024…
+        const isLegacy = w === h * 2;         // 64x32, 128x64, 1024x512…
+        if (!isModern && !isLegacy) return null;
+        const scale = w / 64;
+        if (!Number.isInteger(scale)) return null;
+
+        // destino: la textura editable del juego siempre es modern 64x64
+        const out = document.createElement('canvas');
+        out.width = 64; out.height = 64;
+        const cx = out.getContext('2d');
+        cx.imageSmoothingEnabled = false;
+
+        if (isModern) {
+            cx.drawImage(img, 0, 0, w, h, 0, 0, 64, 64);
+            return out;
+        }
+        // legacy (64x32 lógico): convertir a modern 64x64.
+        // Layout legacy: cabeza en (0,0)-(32,16), cuerpo/brazos/piernas en
+        // la fila inferior. En modern las piernas van en la mitad inferior.
+        // Copia directa de la mitad superior + piernas abajo.
+        cx.drawImage(img, 0, 0, w, h / 2, 0, 0, 64, 32); // cabeza+cuerpo+brazos
+        // piernas (32x16 lógicos) → (16,48)-(48,64)
+        cx.drawImage(img, 0, h / 2, w / 2, h / 2, 16, 48, 32, 16);
+        return out;
     }
 
     function revert() {

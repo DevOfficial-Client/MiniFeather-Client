@@ -133,7 +133,9 @@
                 const slash = name.indexOf('/');
                 if (slash < 0) return null;
                 const id = name.slice(3, slash), file = name.slice(slash + 1);
-                const img = await loadPackImg(id, file);
+                const url = extAssetUrl(PACKS_DIR + id + '/' + file + '.png');
+                if (!url) return null; // sin base de assets todavía
+                const img = await loadImg(url).catch(() => null);
                 if (!img) return null;
                 const c = document.createElement('canvas');
                 c.width = 64; c.height = 16;
@@ -149,6 +151,9 @@
             return null; // emoción desconocida
         })();
         state.frameCache.set(name, p);
+        // los fs: que fallan (meta aún no plantado / imagen sin cargar) no
+        // se cachean → el próximo resolveFace reintenta
+        p.then(v => { if (v === null && /^fs:/.test(name)) state.frameCache.delete(name); }).catch(() => {});
         return p;
     }
 
@@ -187,9 +192,17 @@
         if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
             return chrome.runtime.getURL(rel);
         }
-        const meta = document.querySelector('meta[name="mf-asset-base"]');
+        // MAIN world: el SplashScreen (ISOLATED) planta meta[mf-skins-base]
+        // con la URL de /skins/ de la extensión
+        const meta = document.querySelector('meta[name="mf-skins-base"]');
         const base = meta?.content;
-        return base ? base.replace(/\/$/, '') + '/' + rel : null;
+        if (base) {
+            const b = base.replace(/\/$/, '') + '/';
+            // rel empieza con "skins/" → quitar el prefijo (la base ya lo tiene)
+            const noPrefix = rel.replace(/^skins\//, '');
+            return b + noPrefix;
+        }
+        return null;
     }
 
     function loadPackImg(id, file) {
@@ -216,11 +229,11 @@
 
     // ¿qué skin se está usando ahora?
     // Prioridad:
-    //   1. MF_SkinChanger.current — skin aplicada EN VIVO localmente (pinta
-    //      la textura sin cambiar el id del servidor)
-    //   2. auth-api/accounts/me → campo "skin" — la fuente de verdad de la
-    //      cuenta según el SERVIDOR (cacheada, fetchApiSkin la refresca)
-    //   3. internals del juego (profile.cosmetics.skin / model.skin)
+    //   1. MF_SkinChanger.current — skin aplicada EN VIVO localmente
+    //   2. internals del juego (profile.cosmetics.skin / model.skin) — se
+    //      actualizan al instante al cambiar de skin en el armario
+    //   3. cache de la API (accounts/me) — SOLO respaldo: puede quedar
+    //      desactualizada si el armario usa XHR (no capturable)
     function currentSkinId() {
         try {
             const sc = window.MF_SkinChanger?.current;
@@ -228,7 +241,6 @@
                 return sc.split('/').pop().replace(/\.png$/i, '').toLowerCase();
             }
         } catch {}
-        if (apiSkin.value) return apiSkin.value;
         const g = getGame();
         const me = g?.player;
         const cand = [
@@ -244,7 +256,7 @@
                 if (id) return id;
             }
         }
-        return null;
+        return apiSkin.value;
     }
 
     // cache del campo "skin" de la cuenta. Mismo origen (miniblox.io).
@@ -419,13 +431,12 @@
             ctx.clearRect(FACE.x, FACE.y, FACE.w, FACE.h);
             ctx.drawImage(frame.canvas, 0, 0, 8, 8, FACE.x, FACE.y, FACE.w, FACE.h);
         }
-        // restaurar la cara del overlay con la ORIGINAL (pelo/franja de la
-        // skin se mantiene; donde era transparente se ve la base animada)
+        // vaciar SOLO la cara del overlay (8x8 en 40,8). El hat layer se
+        // renderiza ENCIMA de la base con inflate → si la skin tiene
+        // píxeles opacos ahí (cara pintada en el hat), tapan la cara
+        // animada (base) por completo. El resto del hat (pelo de arriba,
+        // lados, atrás) NO se toca, y stop() restaura la cabeza entera.
         ctx.clearRect(FACE_OV.x, FACE_OV.y, FACE_OV.w, FACE_OV.h);
-        if (state.baseHead) {
-            ctx.drawImage(state.baseHead, FACE_OV.x, FACE_OV.y, FACE_OV.w, FACE_OV.h,
-                FACE_OV.x, FACE_OV.y, FACE_OV.w, FACE_OV.h);
-        }
         state.tex.needsUpdate = true;
     }
 
