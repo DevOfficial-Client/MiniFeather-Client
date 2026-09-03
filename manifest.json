@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.8.1",
-  "description": "MiniFeather Client for MiniBlox — organized modules, movement assists and multilingual Studio",
+  "version": "4.9.2",
+  "description": "MiniFeather Client for MiniBlox — fixed Client Chat world bridge, P2P input, mentions, movement assists and multilingual Studio",
   "permissions": [
     "storage",
     "declarativeNetRequest",
@@ -15,7 +15,8 @@
     "https://miniblox.online/*",
     "https://api.github.com/*",
     "https://raw.githubusercontent.com/*",
-    "https://github.com/*"
+    "https://github.com/*",
+    "https://ntfy.sh/*"
   ],
   "background": {
     "service_worker": "src/Core/background.js"
@@ -69,6 +70,7 @@
         "src/Movement/AntiAFK.js",
         "src/Movement/MovementAssist.js",
         "src/Waypoints/Waypoints.js",
+        "src/Chat/ClientChatIdentity.js",
         "src/Chat/ClientCommands.js",
         "src/Render/Zoom.js",
         "src/Render/CameraOverhaul.js",
@@ -113,6 +115,7 @@
         "https://miniblox.online/*"
       ],
       "js": [
+        "src/Chat/ClientChat.js",
         "src/I18n/Translations.js",
         "src/Libraries/jszip.min.js",
         "src/Render/TexturePackManager.js",

@@ -1035,3 +1035,98 @@ applyMenuUi();
 
   ensureAlarm();
 })();
+
+
+const CLIENT_CHAT_SIGNAL_URL = "https://ntfy.sh/mfcc-7f41c6d8b92e4a63b5f1-global-v1";
+const CLIENT_CHAT_SIGNAL_PORT = "minifeather-client-chat-signal";
+
+chrome.runtime.onConnect.addListener(port => {
+  if (port.name !== CLIENT_CHAT_SIGNAL_PORT) return;
+
+  const controller = new AbortController();
+  let stopped = false;
+  let reconnectTimer = 0;
+
+  const notify = message => {
+    try { port.postMessage(message); } catch (_) {}
+  };
+
+  const sleep = delay => new Promise(resolve => {
+    reconnectTimer = setTimeout(resolve, delay);
+  });
+
+  const publish = async payload => {
+    if (stopped || !payload || typeof payload !== "object") return;
+    try {
+      const response = await fetch(CLIENT_CHAT_SIGNAL_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=UTF-8", "Cache": "no", "Firebase": "no" },
+        body: JSON.stringify(payload),
+        cache: "no-store",
+        signal: controller.signal
+      });
+      if (!response.ok) notify({ type: "offline" });
+    } catch (_) {
+      if (!stopped) notify({ type: "offline" });
+    }
+  };
+
+  const subscribe = async () => {
+    while (!stopped && !controller.signal.aborted) {
+      try {
+        const response = await fetch(`${CLIENT_CHAT_SIGNAL_URL}/json`, {
+          headers: { Accept: "application/x-ndjson, application/json" },
+          cache: "no-store",
+          signal: controller.signal
+        });
+
+        if (!response.ok || !response.body) throw new Error("SIGNAL_UNAVAILABLE");
+        notify({ type: "ready" });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (!stopped && !controller.signal.aborted) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          let index;
+          while ((index = buffer.indexOf("\n")) >= 0) {
+            const line = buffer.slice(0, index).trim();
+            buffer = buffer.slice(index + 1);
+            if (!line) continue;
+
+            let event;
+            try { event = JSON.parse(line); } catch (_) { continue; }
+            if (event.event !== "message" || !event.message) continue;
+
+            let signal;
+            try { signal = JSON.parse(event.message); } catch (_) { continue; }
+            notify({ type: "signal", signal });
+          }
+        }
+      } catch (_) {
+        if (stopped || controller.signal.aborted) break;
+      }
+
+      notify({ type: "offline" });
+      if (stopped || controller.signal.aborted) break;
+      await sleep(2000);
+      reconnectTimer = 0;
+    }
+  };
+
+  port.onMessage.addListener(message => {
+    if (message?.type === "publish") void publish(message.payload);
+  });
+
+  port.onDisconnect.addListener(() => {
+    stopped = true;
+    clearTimeout(reconnectTimer);
+    controller.abort();
+  });
+
+  void subscribe();
+});

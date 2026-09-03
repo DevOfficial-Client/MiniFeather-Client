@@ -87,7 +87,7 @@
     { id: 'about', icon: '🪶', labelKey: 'tabAbout' }
   ];
 
-  const MODULE_VERSION = chrome.runtime?.getManifest?.().version || '4.8.1';
+  const MODULE_VERSION = chrome.runtime?.getManifest?.().version || '4.9.2';
 
   const ELYTRA_FLIGHT_PRESETS = Object.freeze({
     soft: Object.freeze({
@@ -411,6 +411,8 @@
     chatVideos: true,
     chatLinks: true,
     chatMemes: true,
+    clientChat: false,
+    clientChatMentions: true,
     rhythmParkour: false,
     localGamesWorldName: '',
     guiPatch: false,
@@ -481,6 +483,7 @@
   let freecamAccess = { known: false, allowed: false, permissionLevel: 0 };
   let lastFreecamDeniedAt = 0;
   let waypointStatus = '';
+  let clientChatState = null;
   let destroyed = false;
 
   const MODULES = new Map();
@@ -2049,6 +2052,76 @@
       .mf-meme-library-desc {
         margin-top:-2px;
       }
+      .mf-client-chat-privacy {
+        margin-top:4px;
+        padding:10px 12px;
+        border-radius:10px;
+        border:1px solid rgba(245,158,11,.18);
+        background:rgba(245,158,11,.07);
+      }
+      .mf-client-chat-head {
+        display:flex;
+        flex-wrap:wrap;
+        gap:8px 14px;
+        align-items:center;
+        font-size:11px;
+        color:#94a3b8;
+      }
+      #mf-client-chat-status[data-state="connected"] { color:#86efac; }
+      #mf-client-chat-status[data-state="connecting"] { color:#fde68a; }
+      #mf-client-chat-status[data-state="offline"] { color:#94a3b8; }
+      .mf-client-chat-messages {
+        height:260px;
+        overflow:auto;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+        padding:10px;
+        border:1px solid var(--mf-border);
+        border-radius:12px;
+        background:rgba(2,6,12,.48);
+      }
+      .mf-client-chat-message {
+        padding:8px 10px;
+        border-radius:10px;
+        border:1px solid rgba(255,255,255,.06);
+        background:rgba(255,255,255,.035);
+      }
+      .mf-client-chat-message.own {
+        background:rgba(124,92,255,.10);
+        border-color:rgba(124,92,255,.18);
+      }
+      .mf-client-chat-message.mentioned {
+        background:rgba(245,158,11,.11);
+        border-color:rgba(245,158,11,.32);
+      }
+      .mf-client-chat-meta {
+        display:flex;
+        justify-content:space-between;
+        gap:10px;
+        margin-bottom:3px;
+        font-size:10px;
+        color:#64748b;
+      }
+      .mf-client-chat-meta strong { color:#c4b5fd; font-size:11px; }
+      .mf-client-chat-text {
+        color:#e2e8f0;
+        font-size:12px;
+        line-height:1.45;
+        overflow-wrap:anywhere;
+      }
+      .mf-client-chat-empty {
+        margin:auto;
+        color:#64748b;
+        font-size:11px;
+        text-align:center;
+      }
+      .mf-client-chat-compose {
+        display:grid;
+        grid-template-columns:minmax(0,1fr) auto;
+        gap:8px;
+      }
+      .mf-client-chat-compose .mf-btn { width:auto; min-width:88px; }
       .mf-meme-group {
         display:flex;
         flex-direction:column;
@@ -2667,6 +2740,7 @@
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
       { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc') },
       { page: 'chat', key: 'chatMemes', title: t('chatMemes'), desc: t('chatMemesDesc') },
+      { page: 'chat', key: 'clientChat', title: t('clientChat'), desc: t('clientChatDesc') },
       { page: 'settings', key: 'discord', title: t('discordRedirect'), desc: t('discordRedirectDesc') },
       { page: 'settings', key: 'supportAds', title: t('supportAds'), desc: t('supportAdsDesc') }
     ];
@@ -2715,6 +2789,7 @@
     chatVideos:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3V9Z"/>',
     chatLinks:'<path d="M10 13a5 5 0 0 0 7.1.1l1.8-1.8a5 5 0 0 0-7.1-7.1L10.7 5.3"/><path d="M14 11a5 5 0 0 0-7.1-.1l-1.8 1.8a5 5 0 0 0 7.1 7.1l1.1-1.1"/>',
     chatMemes:'<circle cx="12" cy="12" r="8"/><path d="M9 10h.01M15 10h.01M8.5 14c1.2 1.5 5.8 1.5 7 0"/>',
+    clientChat:'<path d="M4 5h16v11H8l-4 3V5Z"/><path d="M8 9h8M8 12h5"/>',
     discord:'<path d="M7 7.5A13 13 0 0 1 12 6a13 13 0 0 1 5 1.5 14 14 0 0 1 2 9.5c-2 1.5-4 2-6 2l-1-2-1 2c-2 0-4-.5-6-2A14 14 0 0 1 7 7.5Z"/><path d="M9 12h.01M15 12h.01"/>',
     supportAds:'<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9 9h4a2 2 0 0 1 0 4H9h3a2 2 0 0 1 0 4H9"/>',
     shaders:'<path d="M12 3 4 8l8 5 8-5-8-5Z"/><path d="M4 13l8 5 8-5M4 18l8 3 8-3"/>'
@@ -2749,7 +2824,7 @@
       coordinates:'coordinates', dynamicCrosshair:'dynamicCrosshair', rebrand:'rebrand', titanTiny:'titanTiny', healthNameTags:'healthNameTags',
       distanceNameTags:'distanceNameTags', patPat:'patPat', itemPhysics:'itemPhysics', noWeather:'noWeather', vanillaAnimations:'vanillaAnimations',
       zoom:'zoom', cameraOverhaul:'cameraOverhaul', elytraFlight:'elytraFlight', freelook:'freelook', freecam:'freecam', blockHighlight:'blockHighlight',
-      waypoints:'waypoints', customShader:'shaders', autoSprint:'movement', safeSneak:'movement', antiAfk:'antiAfk', rhythmParkour:'rhythmParkour', chatVideos:'chatVideos', chatLinks:'chatLinks', chatMemes:'chatMemes',
+      waypoints:'waypoints', customShader:'shaders', autoSprint:'movement', safeSneak:'movement', antiAfk:'antiAfk', rhythmParkour:'rhythmParkour', chatVideos:'chatVideos', chatLinks:'chatLinks', chatMemes:'chatMemes', clientChat:'clientChat',
       discord:'discord', supportAds:'supportAds'
     };
     return iconSvg(icons[key] || 'grid');
@@ -5897,6 +5972,100 @@
     `;
   }
 
+  function sendClientChatConfig(enabled = settings.clientChat) {
+    document.dispatchEvent(new CustomEvent('minifeather:client-chat-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        mentionSound: settings.clientChatMentions !== false
+      })
+    }));
+  }
+
+  function sendClientChatCommand(action, payload = {}) {
+    document.dispatchEvent(new CustomEvent('minifeather:client-chat-command', {
+      detail: JSON.stringify({ action, ...payload })
+    }));
+  }
+
+  function initClientChatModule() {
+    registerModule('clientChat', () => createLifecycle({
+      enable() { sendClientChatConfig(true); },
+      disable() { sendClientChatConfig(false); },
+      refresh() { sendClientChatConfig(MODULES.get('clientChat')?.enabled === true); },
+      destroy() { sendClientChatConfig(false); }
+    }));
+
+    document.addEventListener('minifeather:client-chat-state', event => {
+      try {
+        clientChatState = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+      } catch (_) {
+        clientChatState = null;
+      }
+      refreshClientChatView();
+    }, { signal: runtimeController?.signal });
+  }
+
+  function escapeRegExp(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function clientChatMessageHtml(message) {
+    const state = clientChatState || {};
+    const username = String(state.username || '');
+    const own = message?.own === true;
+    const rawText = String(message?.text || '');
+    const mentioned = username && new RegExp(`@${escapeRegExp(username)}(?:\\b|$)`, 'i').test(rawText);
+    const time = Number(message?.time) || Date.now();
+    const timeText = new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `
+      <div class="mf-client-chat-message ${own ? 'own' : ''} ${mentioned ? 'mentioned' : ''}">
+        <div class="mf-client-chat-meta">
+          <strong>${escapeHtml(message?.name || 'Player')}</strong>
+          <span>${escapeHtml(timeText)}</span>
+        </div>
+        <div class="mf-client-chat-text">${escapeHtml(rawText)}</div>
+      </div>
+    `;
+  }
+
+  function refreshClientChatView() {
+    if (!panel || activePage !== 'chat') return;
+    const state = clientChatState || {};
+    const status = panel.querySelector('#mf-client-chat-status');
+    const online = panel.querySelector('#mf-client-chat-online');
+    const identity = panel.querySelector('#mf-client-chat-identity');
+    const messages = panel.querySelector('#mf-client-chat-messages');
+    const input = panel.querySelector('#mf-client-chat-input');
+    const send = panel.querySelector('#mf-client-chat-send');
+    const connect = panel.querySelector('#mf-client-chat-connect');
+
+    if (status) {
+      status.textContent = !settings.clientChat
+        ? t('clientChatOffline')
+        : state.connected
+          ? t('clientChatConnected')
+          : t('clientChatConnecting');
+      status.dataset.state = !settings.clientChat ? 'offline' : state.connected ? 'connected' : 'connecting';
+    }
+    if (online) online.textContent = `${t('clientChatOnline')}: ${Number(state.online) || 0}`;
+    if (identity) identity.textContent = `${t('clientChatYou')}: ${state.username || '—'}`;
+    if (connect) {
+      connect.textContent = settings.clientChat ? t('clientChatDisconnect') : t('clientChatConnect');
+      connect.classList.toggle('danger', settings.clientChat === true);
+    }
+    if (messages) {
+      const rows = Array.isArray(state.messages) ? state.messages : [];
+      messages.innerHTML = rows.length
+        ? rows.map(clientChatMessageHtml).join('')
+        : `<div class="mf-client-chat-empty">${t('clientChatEmpty')}</div>`;
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    const ready = settings.clientChat === true;
+    if (input) input.disabled = !ready;
+    if (send) send.disabled = !ready;
+  }
+
   function getChatMemeItems() {
     return CHAT_GIFS.map(({ id, file }) => ({
       id: `:${id}:`,
@@ -5929,6 +6098,28 @@
             ${renderToggle('chatLinks', t('chatLinks'), t('chatLinksDesc'))}
             ${renderToggle('chatMemes', t('chatMemes'), t('chatMemesDesc'))}
           </div>
+        </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('clientChatTitle')}</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('clientChat', t('clientChat'), t('clientChatDesc'))}
+            ${renderToggle('clientChatMentions', t('clientChatMentions'), t('clientChatMentionsDesc'))}
+          </div>
+          <div class="mf-muted mf-client-chat-privacy">${t('clientChatPrivacy')}</div>
+          <div class="mf-client-chat-head">
+            <span id="mf-client-chat-status" data-state="offline">${t('clientChatOffline')}</span>
+            <span id="mf-client-chat-online">${t('clientChatOnline')}: 0</span>
+            <span id="mf-client-chat-identity">${t('clientChatYou')}: —</span>
+            <button id="mf-client-chat-connect" class="mf-small-btn" type="button">${settings.clientChat ? t('clientChatDisconnect') : t('clientChatConnect')}</button>
+          </div>
+          <div id="mf-client-chat-messages" class="mf-client-chat-messages">
+            <div class="mf-client-chat-empty">${t('clientChatEmpty')}</div>
+          </div>
+          <div class="mf-client-chat-compose">
+            <input id="mf-client-chat-input" class="mf-input" maxlength="240" placeholder="${t('clientChatPlaceholder')}">
+            <button id="mf-client-chat-send" class="mf-btn primary" type="button">${t('clientChatSend')}</button>
+          </div>
+          <div class="mf-muted">${t('clientChatMentionHint')}</div>
         </div>
         <div class="mf-card">
           <div class="mf-card-title">${t('memeLibraryTitle')}</div>
@@ -7662,6 +7853,31 @@ function renderCreditsPage() {
       });
     });
 
+    panel.querySelector('#mf-client-chat-connect')?.addEventListener('click', () => {
+      const toggle = panel.querySelector('.mf-toggle[data-key="clientChat"] input');
+      if (toggle) toggle.click();
+    });
+
+    if (panel.querySelector('#mf-client-chat-messages')) {
+      refreshClientChatView();
+      sendClientChatCommand('status');
+
+      const input = panel.querySelector('#mf-client-chat-input');
+      const send = panel.querySelector('#mf-client-chat-send');
+      const submit = () => {
+        const text = String(input?.value || '').trim();
+        if (!text || !settings.clientChat) return;
+        sendClientChatCommand('send', { text });
+        input.value = '';
+      };
+      send?.addEventListener('click', submit);
+      input?.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' || event.shiftKey) return;
+        event.preventDefault();
+        submit();
+      });
+    }
+
     // Local Games: render inicial del contenedor (el resto llega por eventos) (el resto llega por eventos)
     if (panel.querySelector('#mf-localgames-view')) {
       refreshLocalGamesView();
@@ -8753,6 +8969,8 @@ function renderCreditsPage() {
     setModuleEnabled('chatVideos', settings.chatVideos);
     setModuleEnabled('chatLinks', settings.chatLinks);
     setModuleEnabled('chatMemes', settings.chatMemes);
+    setModuleEnabled('clientChat', settings.clientChat);
+    sendClientChatConfig(settings.clientChat);
 
     if (settings.rebrand && settings.discord) hookClipboard();
     else unhookClipboard();
@@ -9179,6 +9397,7 @@ function renderCreditsPage() {
     initElytraFlightModule();
     initFreecamModule();
     initDynamicCrosshairModule();
+    initClientChatModule();
     initGUI();
     initChatFeatures();
     injectFeatherButton();

@@ -1,7 +1,7 @@
 {
-  "builtAt": "2026-09-03T17:53:46Z",
+  "builtAt": "2026-09-03T19:55:00Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Language selector restored in Settings with persistent multilingual client and Studio synchronization.",
-  "version": "4.8.1"
+  "note": "Fixed Client Chat by moving extension networking/WebRTC to the isolated extension world, bridging MiniBlox identity from MAIN, and allowing chat input whenever the module is enabled.",
+  "version": "4.9.2"
 }
