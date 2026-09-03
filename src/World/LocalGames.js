@@ -28,14 +28,15 @@
   const GLOBAL_REGISTRY_TOPIC = 'mf-local-globalregistryv1a1b2c3d4e5f6';
   const SAVED_SERVERS_KEY = 'minifeather.localgames.savedServers.v2';
   const SERVER_STALE_AFTER_MS = 330000;
+  const SIGNAL_POLL_INTERVAL_MS = 350;
   const OUTGOING_ALLOW = new Set(['SPacketPing']);
   const INCOMING_ALLOW = new Set(['CPacketPong']);
 
   // Direct local worlds used to generate only 5x5 chunks (80x80 blocks).
-  // 9x9 keeps startup reasonable while giving Sandbox/hosted local worlds
-  // 3.24x more terrain to explore. Both Local Sandbox and Create World use
+  // 15x15 keeps startup manageable while giving Sandbox/hosted local worlds
+  // a much larger 240x240-block area. Both Local Sandbox and Create World use
   // this exact generator, so the size stays consistent between modes.
-  const LOCAL_TERRAIN_RADIUS_CHUNKS = 4;
+  const LOCAL_TERRAIN_RADIUS_CHUNKS = 7;
 
   // ── Logging ────────────────────────────────────────────────────────
   // Activar con: localStorage.setItem('mflg:log', '1')  (o 'trace' para más detalle)
@@ -147,6 +148,7 @@
     textureResyncInFlight: false,
     freshWorldCreated: false,
     visualRestore: null,
+    surfaceStageRestore: null,
     worldAssetsReady: false,
     worldAssetManager: null,
     localRenderFixAt: 0,
@@ -2170,14 +2172,125 @@
     return ready;
   }
 
+
+  function findLocalCanvasHolder() {
+    return (
+      document.getElementById('canvas-holder') ||
+      document.querySelector('[data-canvas-holder]') ||
+      resolveMasterRenderer()?.renderer?.domElement?.parentElement ||
+      document.querySelector('canvas')?.parentElement ||
+      null
+    );
+  }
+
+  function stageLocalRenderSurface() {
+    const holder = findLocalCanvasHolder();
+    if (!holder) return null;
+
+    if (!state.surfaceStageRestore) {
+      state.surfaceStageRestore = {
+        holder,
+        display: holder.style.getPropertyValue('display'),
+        displayPriority: holder.style.getPropertyPriority('display'),
+        visibility: holder.style.getPropertyValue('visibility'),
+        visibilityPriority: holder.style.getPropertyPriority('visibility'),
+        opacity: holder.style.getPropertyValue('opacity'),
+        opacityPriority: holder.style.getPropertyPriority('opacity'),
+        width: holder.style.getPropertyValue('width'),
+        widthPriority: holder.style.getPropertyPriority('width'),
+        height: holder.style.getPropertyValue('height'),
+        heightPriority: holder.style.getPropertyPriority('height'),
+        minWidth: holder.style.getPropertyValue('min-width'),
+        minWidthPriority: holder.style.getPropertyPriority('min-width'),
+        minHeight: holder.style.getPropertyValue('min-height'),
+        minHeightPriority: holder.style.getPropertyPriority('min-height'),
+        position: holder.style.getPropertyValue('position'),
+        positionPriority: holder.style.getPropertyPriority('position'),
+        inset: holder.style.getPropertyValue('inset'),
+        insetPriority: holder.style.getPropertyPriority('inset')
+      };
+    }
+
+    holder.style.setProperty('display', 'block', 'important');
+    holder.style.setProperty('visibility', 'hidden', 'important');
+    holder.style.setProperty('opacity', '0', 'important');
+    holder.style.setProperty('width', '100vw', 'important');
+    holder.style.setProperty('height', '100vh', 'important');
+    holder.style.setProperty('min-width', '2px', 'important');
+    holder.style.setProperty('min-height', '2px', 'important');
+
+    const computed = getComputedStyle(holder);
+    if (computed.position === 'static') {
+      holder.style.setProperty('position', 'fixed', 'important');
+      holder.style.setProperty('inset', '0', 'important');
+    }
+
+    return holder;
+  }
+
+  function restoreStagedLocalRenderSurface() {
+    const restore = state.surfaceStageRestore;
+    if (!restore) return;
+    state.surfaceStageRestore = null;
+
+    const holder = restore.holder;
+    if (!holder?.isConnected) return;
+
+    const apply = (name, value, priority) => {
+      if (value) holder.style.setProperty(name, value, priority || '');
+      else holder.style.removeProperty(name);
+    };
+
+    apply('display', restore.display, restore.displayPriority);
+    apply('visibility', restore.visibility, restore.visibilityPriority);
+    apply('opacity', restore.opacity, restore.opacityPriority);
+    apply('width', restore.width, restore.widthPriority);
+    apply('height', restore.height, restore.heightPriority);
+    apply('min-width', restore.minWidth, restore.minWidthPriority);
+    apply('min-height', restore.minHeight, restore.minHeightPriority);
+    apply('position', restore.position, restore.positionPriority);
+    apply('inset', restore.inset, restore.insetPriority);
+  }
+
+  async function waitForLocalRenderSurface(game, timeoutMs = 6000) {
+    const started = performance.now();
+    stageLocalRenderSurface();
+
+    while (performance.now() - started < timeoutMs) {
+      const holder = findLocalCanvasHolder();
+      const renderer = resolveMasterRenderer();
+      const canvas = renderer?.renderer?.domElement || holder?.querySelector?.('canvas') || null;
+
+      if (holder) {
+        const rect = holder.getBoundingClientRect();
+        const canvasRect = canvas?.getBoundingClientRect?.();
+        const holderReady = rect.width >= 2 && rect.height >= 2;
+        const canvasReady = !canvas || (canvasRect?.width >= 2 && canvasRect?.height >= 2);
+
+        if (holderReady && canvasReady) {
+          try {
+            renderer?.updateResolution?.();
+            renderer?.resize?.();
+          } catch (_) {}
+
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          return true;
+        }
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      stageLocalRenderSurface();
+    }
+
+    return false;
+  }
+
   function enterLocalVisualMode() {
     if (state.visualRestore) return;
 
     const body = document.body;
-    const holder =
-      document.getElementById(
-        'canvas-holder'
-      );
+    const holder = findLocalCanvasHolder();
+    const staged = state.surfaceStageRestore;
 
     const restore = {
       body: body
@@ -2195,15 +2308,34 @@
           }
         : null,
       holder: holder
-        ? {
-            display: holder.style.display,
-            visibility:
-              holder.style.visibility,
-            opacity: holder.style.opacity
-          }
+        ? staged?.holder === holder
+          ? { ...staged }
+          : {
+              holder,
+              display: holder.style.getPropertyValue('display'),
+              displayPriority: holder.style.getPropertyPriority('display'),
+              visibility: holder.style.getPropertyValue('visibility'),
+              visibilityPriority: holder.style.getPropertyPriority('visibility'),
+              opacity: holder.style.getPropertyValue('opacity'),
+              opacityPriority: holder.style.getPropertyPriority('opacity'),
+              width: holder.style.getPropertyValue('width'),
+              widthPriority: holder.style.getPropertyPriority('width'),
+              height: holder.style.getPropertyValue('height'),
+              heightPriority: holder.style.getPropertyPriority('height'),
+              minWidth: holder.style.getPropertyValue('min-width'),
+              minWidthPriority: holder.style.getPropertyPriority('min-width'),
+              minHeight: holder.style.getPropertyValue('min-height'),
+              minHeightPriority: holder.style.getPropertyPriority('min-height'),
+              position: holder.style.getPropertyValue('position'),
+              positionPriority: holder.style.getPropertyPriority('position'),
+              inset: holder.style.getPropertyValue('inset'),
+              insetPriority: holder.style.getPropertyPriority('inset')
+            }
         : null,
       titleImages: []
     };
+
+    state.surfaceStageRestore = null;
 
     document.documentElement
       .classList.add(
@@ -2352,10 +2484,7 @@
       );
     }
 
-    const holder =
-      document.getElementById(
-        'canvas-holder'
-      );
+    const holder = findLocalCanvasHolder();
 
     if (holder) {
       holder.style.setProperty(
@@ -2416,7 +2545,10 @@
       )
       ?.remove();
 
-    if (!restore) return;
+    if (!restore) {
+      restoreStagedLocalRenderSurface();
+      return;
+    }
 
     const body = document.body;
 
@@ -2437,20 +2569,23 @@
         restore.body.backgroundColor;
     }
 
-    const holder =
-      document.getElementById(
-        'canvas-holder'
-      );
+    const holder = restore.holder?.holder || findLocalCanvasHolder();
 
     if (holder && restore.holder) {
-      holder.style.display =
-        restore.holder.display;
+      const apply = (name, value, priority) => {
+        if (value) holder.style.setProperty(name, value, priority || '');
+        else holder.style.removeProperty(name);
+      };
 
-      holder.style.visibility =
-        restore.holder.visibility;
-
-      holder.style.opacity =
-        restore.holder.opacity;
+      apply('display', restore.holder.display, restore.holder.displayPriority);
+      apply('visibility', restore.holder.visibility, restore.holder.visibilityPriority);
+      apply('opacity', restore.holder.opacity, restore.holder.opacityPriority);
+      apply('width', restore.holder.width, restore.holder.widthPriority);
+      apply('height', restore.holder.height, restore.holder.heightPriority);
+      apply('min-width', restore.holder.minWidth, restore.holder.minWidthPriority);
+      apply('min-height', restore.holder.minHeight, restore.holder.minHeightPriority);
+      apply('position', restore.holder.position, restore.holder.positionPriority);
+      apply('inset', restore.holder.inset, restore.holder.insetPriority);
     }
 
     for (
@@ -4455,6 +4590,7 @@
       };
 
       const heights = new Map();
+      let generationRows = 0;
 
       for (let x = minX; x <= maxX; x++) {
         for (let z = minZ; z <= maxZ; z++) {
@@ -4521,8 +4657,14 @@
             setLocal(x, height, z, gravel);
           }
         }
+
+        generationRows++;
+        if (generationRows % 8 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
       }
 
+      generationRows = 0;
       for (let x = minX + 4; x <= maxX - 4; x++) {
         for (let z = minZ + 4; z <= maxZ - 4; z++) {
           const height =
@@ -4663,6 +4805,11 @@
                 : flowerA || flowerB
             );
           }
+        }
+
+        generationRows++;
+        if (generationRows % 12 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 0));
         }
       }
 
@@ -4998,6 +5145,12 @@
     log(`initializeDirectLocalGame: begin (map=${map}, gameState=${Number(game.state)})`);
     setStatus('Starting the local Miniblox engine...', '');
 
+    const surfaceReadyBeforeBoot = await waitForLocalRenderSurface(game, 5000);
+    if (!surfaceReadyBeforeBoot) {
+      setStatus('The MiniBlox render surface is not ready yet.', 'LOCAL_RENDER_SURFACE_NOT_READY');
+      return false;
+    }
+
     try {
       logTrace('initializeDirectLocalGame: prepareEngine + waitForAccount...');
       // Follow the same engine preparation path Miniblox uses on the title
@@ -5077,13 +5230,16 @@
       return false;
     }
 
+    if (!await waitForLocalRenderSurface(game, 3500)) {
+      setStatus('The MiniBlox renderer has no usable canvas size.', 'LOCAL_RENDER_SURFACE_ZERO_SIZE');
+      return false;
+    }
+
     state.game = game;
     state.directLocal = true;
     state.localGameStateBefore =
       Number(game.state) || 0;
     state.freshWorldCreated = false;
-
-    enterLocalVisualMode();
 
     setStatus(
       'Creating a fresh local Miniblox world...',
@@ -5393,6 +5549,16 @@
     let entered = false;
 
     if (renderReady) {
+      enterLocalVisualMode();
+      refreshLocalVisualMode();
+      try {
+        const renderer = resolveMasterRenderer();
+        renderer?.updateResolution?.();
+        renderer?.resize?.();
+      } catch (_) {}
+
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
       setStatus(
         'Chunks are rendered. Warming the native Miniblox scene...',
         ''
@@ -6148,27 +6314,36 @@
   }
 
   function makeServerAddress() {
-    const token = base32(randomBytes(16)).slice(0, 26);
-    return `MF-${token.match(/.{1,5}/g).join('-')}`;
+    const bytes = randomBytes(6);
+    const portSeed = (bytes[3] << 8) | bytes[4];
+    const port = 20000 + (portSeed % 40000);
+    return `10.${bytes[0]}.${bytes[1]}.${bytes[2]}:${port}`;
   }
 
   function normalizeServerAddress(value) {
-    const raw = String(value || '')
-      .toUpperCase()
-      .replace(/[^A-Z2-9]/g, '');
+    const input = String(value || '').trim();
+    const ipMatch = input.match(/^(?:mf:\/\/)?(10)\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?::(\d{4,5}))?$/i);
 
+    if (ipMatch) {
+      const parts = ipMatch.slice(1, 5).map(Number);
+      const port = Number(ipMatch[5] || 25565);
+      if (parts.every(part => Number.isInteger(part) && part >= 0 && part <= 255) && port >= 1024 && port <= 65535) {
+        return `${parts[0]}.${parts[1]}.${parts[2]}.${parts[3]}:${port}`;
+      }
+    }
+
+    const raw = input.toUpperCase().replace(/[^A-Z2-9]/g, '');
     if (!raw.startsWith('MF')) return null;
 
     const token = raw.slice(2);
     if (token.length < 20 || token.length > 30) return null;
-
     return `MF-${token.match(/.{1,5}/g).join('-')}`;
   }
 
   function topicFromAddress(address) {
     const normalized = normalizeServerAddress(address);
     if (!normalized) return '';
-    return `mf-local-${normalized.replace(/[^A-Z2-9]/g, '').toLowerCase()}`;
+    return `mf-local-${normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   }
 
   function bytesToBase64(bytes) {
@@ -6285,87 +6460,6 @@
 
   document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
-  // ── Broker de señales local (ntfy.sh) ──────────────────────────────
-  // Implementa publish/poll de mensajes por topic usando la API pública
-  // de ntfy.sh vía fetch directo (CORS abierto). Los mensajes usan el
-  // formato z:/b: base64(+deflate) de packSignal/unpackSignal.
-  const NTFY_BASE = 'https://ntfy.sh';
-  // Prefijo NSFW-safe para topics: ntfy es global y público; usar un
-  // prefijo largo evita colisiones con topics de otros usuarios.
-  const NTFY_PREFIX = 'mflg';
-
-  function ntfyTopicUrl(topic) {
-    return `${NTFY_BASE}/${NTFY_PREFIX}${String(topic).replace(/[^a-zA-Z0-9_-]/g, '')}`;
-  }
-
-  function resolveSignalRequest(requestId, ok, payload) {
-    document.dispatchEvent(new CustomEvent(SIGNAL_RESPONSE_EVENT, {
-      detail: JSON.stringify({ requestId, ok, ...payload })
-    }));
-  }
-
-  async function handleSignalRequest(request) {
-    logTrace(`signal(${request.action}): topic=${request.topic}`);
-    try {
-      if (request.action === 'publish') {
-        const res = await fetch(ntfyTopicUrl(request.topic), {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: String(request.message || '')
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        resolveSignalRequest(request.requestId, true, {});
-        return;
-      }
-
-      if (request.action === 'poll') {
-        // poll=1 es CRÍTICO: sin él, /json es un stream infinito y el fetch
-        // nunca termina (agotaría el timeout de 15s del signalRequest)
-        const params = new URLSearchParams({
-          since: String(request.since || '15m'),
-          poll: '1'
-        });
-        const res = await fetch(`${ntfyTopicUrl(request.topic)}/json?${params}`, {
-          headers: { Accept: 'application/json' }
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        const text = await res.text();
-        const messages = [];
-        for (const line of text.split('\n')) {
-          if (!line.trim()) continue;
-          try {
-            const evt = JSON.parse(line);
-            // Solo mensajes reales (no keepalives/eventos de suscripción)
-            if (evt.event === 'open') continue;
-            if (evt.event) continue;
-            if (!evt.message) continue;
-            messages.push({ id: String(evt.id || ''), message: String(evt.message) });
-          } catch (_) {}
-        }
-        logTrace(`signal(poll): ${messages.length} mensaje(s) de ${request.topic}`);
-        resolveSignalRequest(request.requestId, true, { messages });
-        return;
-      }
-
-      logWarn(`signal: acción desconocida "${request.action}"`);
-      resolveSignalRequest(request.requestId, false, { error: 'UNKNOWN_ACTION' });
-    } catch (error) {
-      logError(`signal(${request.action}) topic=${request.topic} falló:`, error?.message || error);
-      resolveSignalRequest(request.requestId, false, { error: String(error?.message || error) });
-    }
-  }
-
-  function onSignalRequest(event) {
-    let request = event.detail;
-    if (typeof request === 'string') {
-      try { request = JSON.parse(request); } catch (_) { return; }
-    }
-    if (request?.requestId) void handleSignalRequest(request);
-  }
-
-  document.addEventListener(SIGNAL_REQUEST_EVENT, onSignalRequest);
-
   async function publishSignal(topic, payload) {
     const message = await packSignal(payload);
     return signalRequest('publish', { topic, message });
@@ -6406,7 +6500,7 @@
     }
   }
 
-  function scheduleSignalPoll(handler, delay = 5000) {
+  function scheduleSignalPoll(handler, delay = SIGNAL_POLL_INTERVAL_MS) {
     stopSignalLoop();
 
     state.signalPollTimer = setTimeout(async () => {
@@ -6422,7 +6516,7 @@
       } catch (_) {}
 
       if (state.active && state.roomTopic) {
-        scheduleSignalPoll(handler, 5000);
+        scheduleSignalPoll(handler, SIGNAL_POLL_INTERVAL_MS);
       }
     }, delay);
   }
@@ -8219,7 +8313,7 @@
         }
       }
 
-      await new Promise(resolve => setTimeout(resolve, 4800));
+      await new Promise(resolve => setTimeout(resolve, SIGNAL_POLL_INTERVAL_MS));
     }
 
     throw new Error('The world did not respond in time.');

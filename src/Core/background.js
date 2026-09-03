@@ -1037,96 +1037,215 @@ applyMenuUi();
 })();
 
 
-const CLIENT_CHAT_SIGNAL_URL = "https://ntfy.sh/mfcc-7f41c6d8b92e4a63b5f1-global-v1";
+const NTFY_HTTP_BASE = "https://ntfy.sh";
+const CLIENT_CHAT_TOPIC = "mfcc-7f41c6d8b92e4a63b5f1-global-v2";
 const CLIENT_CHAT_SIGNAL_PORT = "minifeather-client-chat-signal";
+const LOCAL_GAMES_NETWORK_PORT = "minifeather-localgames-network";
+
+function ntfySafeTopic(value) {
+  return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 120);
+}
+
+function ntfyWsUrl(topic, since = "30s") {
+  const safe = ntfySafeTopic(topic);
+  const query = new URLSearchParams({ since: String(since || "30s") });
+  return `wss://ntfy.sh/${safe}/ws?${query}`;
+}
+
+async function ntfyPublish(topic, message, signal) {
+  const safe = ntfySafeTopic(topic);
+  if (!safe) throw new Error("INVALID_TOPIC");
+  const response = await fetch(`${NTFY_HTTP_BASE}/${safe}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain;charset=UTF-8",
+      "Cache": "no",
+      "Firebase": "no"
+    },
+    body: String(message || ""),
+    cache: "no-store",
+    signal
+  });
+  if (!response.ok) throw new Error(`HTTP_${response.status}`);
+}
+
+function openNtfySocket(topic, since, handlers) {
+  const safe = ntfySafeTopic(topic);
+  if (!safe) throw new Error("INVALID_TOPIC");
+
+  const socket = new WebSocket(ntfyWsUrl(safe, since));
+  socket.addEventListener("open", () => handlers.open?.());
+  socket.addEventListener("message", event => {
+    let packet;
+    try { packet = JSON.parse(String(event.data || "")); } catch (_) { return; }
+    if (packet?.event === "message" && packet.message != null) handlers.message?.(packet);
+  });
+  socket.addEventListener("error", () => handlers.error?.());
+  socket.addEventListener("close", () => handlers.close?.());
+  return socket;
+}
 
 chrome.runtime.onConnect.addListener(port => {
-  if (port.name !== CLIENT_CHAT_SIGNAL_PORT) return;
+  if (port.name === CLIENT_CHAT_SIGNAL_PORT) {
+    const controller = new AbortController();
+    let stopped = false;
+    let socket = null;
+    let reconnectTimer = 0;
+
+    const notify = message => {
+      try { port.postMessage(message); } catch (_) {}
+    };
+
+    const connect = () => {
+      if (stopped) return;
+      try {
+        socket?.close();
+        socket = openNtfySocket(CLIENT_CHAT_TOPIC, "45s", {
+          open() {
+            notify({ type: "ready" });
+          },
+          message(packet) {
+            let signal;
+            try { signal = JSON.parse(String(packet.message || "")); } catch (_) { return; }
+            notify({ type: "signal", signal });
+          },
+          error() {
+            notify({ type: "offline", error: "WEBSOCKET_ERROR" });
+          },
+          close() {
+            if (stopped) return;
+            notify({ type: "offline", error: "WEBSOCKET_CLOSED" });
+            clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(connect, 1500);
+          }
+        });
+      } catch (_) {
+        notify({ type: "offline", error: "WEBSOCKET_UNAVAILABLE" });
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connect, 2000);
+      }
+    };
+
+    port.onMessage.addListener(message => {
+      if (message?.type === "ping") return;
+      if (message?.type !== "publish" || !message.payload) return;
+      void ntfyPublish(CLIENT_CHAT_TOPIC, JSON.stringify(message.payload), controller.signal)
+        .catch(() => notify({ type: "offline", error: "PUBLISH_FAILED" }));
+    });
+
+    port.onDisconnect.addListener(() => {
+      stopped = true;
+      clearTimeout(reconnectTimer);
+      controller.abort();
+      try { socket?.close(); } catch (_) {}
+      socket = null;
+    });
+
+    connect();
+    return;
+  }
+
+  if (port.name !== LOCAL_GAMES_NETWORK_PORT) return;
 
   const controller = new AbortController();
+  const subscriptions = new Map();
   let stopped = false;
-  let reconnectTimer = 0;
 
   const notify = message => {
     try { port.postMessage(message); } catch (_) {}
   };
 
-  const sleep = delay => new Promise(resolve => {
-    reconnectTimer = setTimeout(resolve, delay);
-  });
-
-  const publish = async payload => {
-    if (stopped || !payload || typeof payload !== "object") return;
-    try {
-      const response = await fetch(CLIENT_CHAT_SIGNAL_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=UTF-8", "Cache": "no", "Firebase": "no" },
-        body: JSON.stringify(payload),
-        cache: "no-store",
-        signal: controller.signal
-      });
-      if (!response.ok) notify({ type: "offline" });
-    } catch (_) {
-      if (!stopped) notify({ type: "offline" });
-    }
+  const stopSubscription = topic => {
+    const entry = subscriptions.get(topic);
+    if (!entry) return;
+    subscriptions.delete(topic);
+    clearTimeout(entry.reconnectTimer);
+    try { entry.socket?.close(); } catch (_) {}
   };
 
-  const subscribe = async () => {
-    while (!stopped && !controller.signal.aborted) {
-      try {
-        const response = await fetch(`${CLIENT_CHAT_SIGNAL_URL}/json`, {
-          headers: { Accept: "application/x-ndjson, application/json" },
-          cache: "no-store",
-          signal: controller.signal
-        });
+  const startSubscription = (topic, since = "30s") => {
+    const safe = ntfySafeTopic(topic);
+    if (!safe || stopped) return;
 
-        if (!response.ok || !response.body) throw new Error("SIGNAL_UNAVAILABLE");
-        notify({ type: "ready" });
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (!stopped && !controller.signal.aborted) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-
-          let index;
-          while ((index = buffer.indexOf("\n")) >= 0) {
-            const line = buffer.slice(0, index).trim();
-            buffer = buffer.slice(index + 1);
-            if (!line) continue;
-
-            let event;
-            try { event = JSON.parse(line); } catch (_) { continue; }
-            if (event.event !== "message" || !event.message) continue;
-
-            let signal;
-            try { signal = JSON.parse(event.message); } catch (_) { continue; }
-            notify({ type: "signal", signal });
-          }
-        }
-      } catch (_) {
-        if (stopped || controller.signal.aborted) break;
-      }
-
-      notify({ type: "offline" });
-      if (stopped || controller.signal.aborted) break;
-      await sleep(2000);
-      reconnectTimer = 0;
+    const existing = subscriptions.get(safe);
+    if (existing?.socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(existing.socket.readyState)) {
+      notify({ type: "subscribed", topic: safe });
+      return;
     }
+
+    if (existing) stopSubscription(safe);
+
+    const entry = {
+      socket: null,
+      reconnectTimer: 0,
+      since: String(since || "30s")
+    };
+    subscriptions.set(safe, entry);
+
+    const connect = () => {
+      if (stopped || !subscriptions.has(safe)) return;
+      try {
+        entry.socket = openNtfySocket(safe, entry.since, {
+          open() {
+            entry.since = "30s";
+            notify({ type: "subscribed", topic: safe });
+          },
+          message(packet) {
+            notify({
+              type: "event",
+              topic: safe,
+              id: String(packet.id || ""),
+              message: String(packet.message || "")
+            });
+          },
+          error() {
+            notify({ type: "topic-offline", topic: safe });
+          },
+          close() {
+            if (stopped || !subscriptions.has(safe)) return;
+            clearTimeout(entry.reconnectTimer);
+            entry.reconnectTimer = setTimeout(connect, 1500);
+          }
+        });
+      } catch (_) {
+        clearTimeout(entry.reconnectTimer);
+        entry.reconnectTimer = setTimeout(connect, 2000);
+      }
+    };
+
+    connect();
   };
 
   port.onMessage.addListener(message => {
-    if (message?.type === "publish") void publish(message.payload);
+    if (!message || typeof message !== "object") return;
+    if (message.type === "ping") return;
+
+    if (message.type === "subscribe") {
+      startSubscription(message.topic, message.since);
+      return;
+    }
+
+    if (message.type === "unsubscribe") {
+      stopSubscription(ntfySafeTopic(message.topic));
+      return;
+    }
+
+    if (message.type === "publish") {
+      const requestId = String(message.requestId || "");
+      void ntfyPublish(message.topic, message.message, controller.signal)
+        .then(() => notify({ type: "published", requestId, ok: true }))
+        .catch(error => notify({
+          type: "published",
+          requestId,
+          ok: false,
+          error: String(error?.message || error || "PUBLISH_FAILED")
+        }));
+    }
   });
 
   port.onDisconnect.addListener(() => {
     stopped = true;
-    clearTimeout(reconnectTimer);
     controller.abort();
+    for (const topic of [...subscriptions.keys()]) stopSubscription(topic);
   });
-
-  void subscribe();
 });

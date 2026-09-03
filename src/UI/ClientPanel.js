@@ -2110,6 +2110,21 @@
         line-height:1.45;
         overflow-wrap:anywhere;
       }
+      .mf-client-chat-link {
+        color:#93c5fd;
+        text-decoration:underline;
+        text-underline-offset:2px;
+      }
+      .mf-client-chat-inline-meme {
+        display:block;
+        width:auto;
+        max-width:min(240px,100%);
+        max-height:170px;
+        margin-top:6px;
+        border-radius:9px;
+        object-fit:contain;
+        background:rgba(0,0,0,.28);
+      }
       .mf-client-chat-empty {
         margin:auto;
         color:#64748b;
@@ -3690,7 +3705,10 @@
       ${lg.active ? `
         <div style="background:rgba(124,92,255,0.15);border-radius:6px;padding:8px;margin-bottom:8px;font-size:11px;">
           <div>🎮 <b>${escapeHtml(lg.worldName || 'Local')}</b> · ${escapeHtml(lg.mode || '')} · 👥 ${Number(lg.playerCount || 1)}/${Number(lg.maxPlayers || 8)}</div>
-          <div class="mf-muted">${t('localGamesAddress')}: <code>${escapeHtml(lg.serverAddress || '-')}</code></div>
+          <div class="mf-muted" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;">
+            <span>${t('localGamesAddress')}: <code>${escapeHtml(lg.serverAddress || '-')}</code></span>
+            ${lg.serverAddress ? `<button id="mf-lg-copy-address" class="mf-small-btn" type="button">${t('localGamesCopyAddress')}</button>` : ''}
+          </div>
           ${lg.renderStats ? `<div class="mf-muted" style="margin-top:2px;font-size:10px;opacity:0.8;">${t('localGamesRender')}: ${Number(lg.renderStats.visible || 0)}/${Number(lg.renderStats.meshes || 0)} · ${t('localGamesTextures')}: ${Number(lg.renderStats.textured || 0)}/${Number(lg.renderStats.nativeMaterials || 0)}</div>` : ''}
         </div>
         <div class="mf-card-title" style="margin-top:6px;">${t('localGamesModeTitle')}</div>
@@ -3720,12 +3738,47 @@
           <button id="mf-lg-create" class="mf-btn primary">${t('localGamesCreate')}</button>
           <button id="mf-lg-sandbox" class="mf-btn secondary">${t('localGamesSandbox')}</button>
         </div>
-        <div style="margin-top:8px;">${serverRows || `<div class="mf-muted" style="font-size:11px;">${t('localGamesNoServers')}</div>`}</div>
+        <div class="mf-card-title" style="margin-top:12px;">${t('localGamesJoinByAddress')}</div>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <input id="mf-lg-address-input" class="mf-input" type="text" placeholder="${t('localGamesAddressPlaceholder')}" autocomplete="off" spellcheck="false">
+          <button id="mf-lg-join-address" class="mf-btn primary" type="button" style="width:auto;min-width:90px;">${t('localGamesJoin')}</button>
+        </div>
+        <div class="mf-muted" style="font-size:10px;margin-top:5px;">${t('localGamesAddressHint')}</div>
+        <div style="margin-top:10px;">${serverRows || `<div class="mf-muted" style="font-size:11px;">${t('localGamesNoServers')}</div>`}</div>
       `}
     `;
 
     container.querySelector('#mf-lg-refresh')?.addEventListener('click', () => {
       sendLocalGamesCommand('refresh-servers');
+    });
+
+    container.querySelector('#mf-lg-copy-address')?.addEventListener('click', async () => {
+      const address = String(lg.serverAddress || '');
+      if (!address) return;
+      try {
+        await navigator.clipboard.writeText(address);
+        const button = container.querySelector('#mf-lg-copy-address');
+        if (button) {
+          button.textContent = t('localGamesCopied');
+          window.setTimeout(() => {
+            if (button.isConnected) button.textContent = t('localGamesCopyAddress');
+          }, 1200);
+        }
+      } catch (_) {}
+    });
+
+    const joinByAddress = () => {
+      const input = container.querySelector('#mf-lg-address-input');
+      const address = String(input?.value || '').trim();
+      if (!address) return;
+      sendLocalGamesCommand('join-server', { address });
+    };
+
+    container.querySelector('#mf-lg-join-address')?.addEventListener('click', joinByAddress);
+    container.querySelector('#mf-lg-address-input')?.addEventListener('keydown', event => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      joinByAddress();
     });
 
     container.querySelector('#mf-lg-stop')?.addEventListener('click', () => {
@@ -6009,6 +6062,35 @@
     return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
+  function clientChatRichHtml(text) {
+    const raw = String(text || '');
+    const memeByCode = new Map(CHAT_GIFS.map(item => [`:${item.id}:`, item.file]));
+    const tokenRegex = /(https?:\/\/[^\s<>"']+|:[a-zA-Z0-9_-]{1,96}:)/gi;
+    let output = '';
+    let cursor = 0;
+    let match;
+
+    while ((match = tokenRegex.exec(raw))) {
+      if (match.index > cursor) output += escapeHtml(raw.slice(cursor, match.index));
+      const token = match[0];
+      const memeFile = memeByCode.get(token);
+
+      if (memeFile && settings.chatMemes) {
+        const src = chrome.runtime.getURL(`assets/memes/gif/${memeFile}`);
+        output += `<img class="mf-client-chat-inline-meme" src="${escapeHtml(src)}" alt="${escapeHtml(token)}" loading="lazy" decoding="async">`;
+      } else if (/^https?:\/\//i.test(token) && settings.chatLinks) {
+        output += `<a class="mf-client-chat-link" href="${escapeHtml(token)}" target="_blank" rel="noopener noreferrer">${escapeHtml(token)}</a>`;
+      } else {
+        output += escapeHtml(token);
+      }
+
+      cursor = match.index + token.length;
+    }
+
+    if (cursor < raw.length) output += escapeHtml(raw.slice(cursor));
+    return output;
+  }
+
   function clientChatMessageHtml(message) {
     const state = clientChatState || {};
     const username = String(state.username || '');
@@ -6023,7 +6105,7 @@
           <strong>${escapeHtml(message?.name || 'Player')}</strong>
           <span>${escapeHtml(timeText)}</span>
         </div>
-        <div class="mf-client-chat-text">${escapeHtml(rawText)}</div>
+        <div class="mf-client-chat-text">${clientChatRichHtml(rawText)}</div>
       </div>
     `;
   }
