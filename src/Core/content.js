@@ -83,11 +83,10 @@
     { id: 'waypoints', icon: '📍', labelKey: 'navWaypoints' },
     { id: 'world', icon: '🌍', labelKey: 'navWorld' },
     { id: 'settings', icon: '⚙', labelKey: 'navSettings' },
-    { id: 'about', icon: '🪶', labelKey: 'tabAbout' },
-    { id: 'credits', icon: '🏆', labelKey: 'credits' }
+    { id: 'about', icon: '🪶', labelKey: 'tabAbout' }
   ];
 
-  const MODULE_VERSION = chrome.runtime?.getManifest?.().version || '4.7.0';
+  const MODULE_VERSION = '4.6.0';
 
   const ELYTRA_FLIGHT_PRESETS = Object.freeze({
     soft: Object.freeze({
@@ -452,6 +451,9 @@
   let updateTimer = 0;
   let activePage = 'dashboard';
   let searchQuery = '';
+  let favoritesOnly = false;
+  let favoriteModules = new Set();
+  let featureSettingsCleanup = null;
   let dashboardStats = { fps: 0, ping: null };
   let dashboardTimer = 0;
   let guiCloseTimer = 0;
@@ -478,16 +480,6 @@
   let lastFreecamDeniedAt = 0;
   let waypointStatus = '';
   let destroyed = false;
-  let hudQuickHideActive = false;
-  const HUD_QUICK_HIDE_KEY = 'KeyH';
-  const HUD_QUICK_HIDE_MODULES = Object.freeze([
-    'keystrokes',
-    'fpsCounter',
-    'cpsCounter',
-    'pingCounter',
-    'coordinates',
-    'waypoints'
-  ]);
 
   const MODULES = new Map();
   const ORIGINALS = {
@@ -543,7 +535,7 @@
 
   function isMiniFeatherNode(node) {
     const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
-    return !!element?.closest?.('#mf-gui, #mf-gui-overlay, #mf-sidebar-btn, #minifeather-fps, #minifeather-cps, #minifeather-ping, #mf-keystrokes, #mf-coordinates-hud, #mf-waypoint-layer, #mf-damage-particles-layer');
+    return !!element?.closest?.('#mf-gui, #mf-gui-overlay, #mf-sidebar-btn, #minifeather-fps, #minifeather-cps, #minifeather-ping, #mf-keystrokes, #mf-coordinates-hud, #mf-waypoint-layer');
   }
 
   function safePosition(key, fallback) {
@@ -714,7 +706,7 @@
   function replaceBackground() {
     document.querySelectorAll('img').forEach(img => {
       const src = img.getAttribute('src') || '';
-      if (!MENU_BG_PATTERN.test(src) && img.dataset.mfBackground !== '1') return;
+      if (!src.includes('default-B1Dv6Hww') && img.dataset.mfBackground !== '1') return;
 
       img.dataset.mfBackground = '1';
       if (!img.hasAttribute('data-mf-original-src')) img.dataset.mfOriginalSrc = src;
@@ -1277,10 +1269,7 @@
         const started = performance.now();
 
         try {
-          const target = pingTarget !== null ? pingTarget : await findPingTarget();
-          if (!target) throw new Error('no endpoint');
-
-          await fetch(`${location.origin}${target}?mf_ping=${Date.now()}`, {
+          await fetch(`${location.origin}/favicon.ico?mf_ping=${Date.now()}`, {
             method: 'HEAD',
             cache: 'no-store',
             credentials: 'omit',
@@ -2420,6 +2409,225 @@
         }
       }
     `;
+    style.textContent += `
+      .mf-svg-icon {
+        width:20px; height:20px; display:block;
+        flex:0 0 auto; user-select:none; pointer-events:none;
+      }
+      .mf-nav-icon .mf-svg-icon { width:18px; height:18px; }
+      .mf-feather-grid-icon .mf-svg-icon { width:21px; height:21px; }
+      .mf-feather-tab-icon .mf-svg-icon { width:22px; height:22px; }
+      .mf-feather-close .mf-svg-icon { width:20px; height:20px; margin:auto; }
+      .mf-feather-tool .mf-svg-icon { width:19px; height:19px; margin:auto; }
+      .mf-feature-icon .mf-svg-icon { width:54px; height:54px; opacity:.96; }
+      .mf-feature-settings .mf-svg-icon { width:17px; height:17px; margin:auto; }
+      .mf-feature-favorite .mf-svg-icon { width:16px; height:16px; margin:auto; }
+    `;
+    style.textContent += `
+      /* Feather-style GUI skin: visual-only overrides. */
+      #mf-gui-overlay {
+        background:rgba(0,0,0,.52);
+        backdrop-filter:blur(8px);
+        -webkit-backdrop-filter:blur(8px);
+      }
+      #mf-gui {
+        width:min(1122px, calc(100vw - 28px));
+        height:min(694px, calc(100vh - 28px));
+        top:50%;
+        left:50%;
+        transform:translate(-50%,-50%);
+        border:0;
+        border-radius:6px;
+        background:#0e1115;
+        box-shadow:0 28px 80px rgba(0,0,0,.72);
+        overflow:hidden;
+        color:#f3f4f6;
+        font-family:'Faithful','Inter','Arial',sans-serif;
+      }
+      #mf-gui-shell { display:flex; flex-direction:column; height:100%; }
+      #mf-gui-topbar {
+        position:relative;
+        height:71px;
+        min-height:71px;
+        padding:0;
+        display:flex;
+        align-items:flex-end;
+        border:0;
+        background:transparent;
+      }
+      .mf-feather-nav-main {
+        display:flex;
+        align-items:center;
+        gap:8px;
+        height:71px;
+        padding:0 0 14px 0;
+      }
+      .mf-feather-main-tab, .mf-feather-icon-tab, .mf-feather-tool, .mf-feather-close, .mf-feather-category {
+        font-family:'Faithful','Inter','Arial',sans-serif;
+        border:0;
+        outline:0;
+        color:#d6d8dc;
+        cursor:pointer;
+      }
+      .mf-feather-main-tab {
+        height:56px;
+        min-width:153px;
+        padding:0 20px;
+        border-radius:6px 6px 0 0;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        gap:12px;
+        background:#1a1d21;
+        color:#f4f4f5;
+        font-size:13px;
+        font-weight:800;
+        letter-spacing:.02em;
+      }
+      .mf-feather-main-tab.active { background:#ef3b3b; color:#fff; }
+      .mf-feather-grid-icon { font-size:21px; line-height:1; }
+      .mf-feather-icon-tabs { display:flex; align-items:center; gap:8px; }
+      .mf-feather-icon-tab {
+        width:65px; height:56px; border-radius:6px;
+        display:flex; align-items:center; justify-content:center;
+        background:#15181c; color:#d5d7da; font-size:23px;
+        box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);
+      }
+      .mf-feather-icon-tab:hover, .mf-feather-icon-tab.active { background:#20242a; color:#fff; }
+      .mf-feather-icon-tab.active { box-shadow:inset 0 -3px 0 #ef3b3b; }
+      .mf-feather-close {
+        position:absolute; right:0; bottom:14px; width:42px; height:42px;
+        border-radius:6px; background:#171a1e; color:#ef4444; font-size:28px;
+        line-height:1; border:1px solid rgba(239,68,68,.55);
+      }
+      .mf-feather-close:hover { background:#27191b; }
+      #mf-gui-content { flex:1; min-height:0; background:#0c0f12; display:flex; flex-direction:column; }
+      #mf-feather-filterbar {
+        height:68px; min-height:68px; padding:17px 20px 12px;
+        display:flex; align-items:center; justify-content:space-between; gap:16px;
+        background:#0d1013; border-bottom:1px solid #20252b;
+      }
+      .mf-feather-categories { display:flex; gap:10px; align-items:center; }
+      .mf-feather-category {
+        height:36px; min-width:94px; padding:0 17px; border-radius:6px;
+        background:#181b1f; color:#777c83; font-size:12px; font-weight:700;
+      }
+      .mf-feather-category.active { background:#ef3b3b; color:#fff; }
+      .mf-feather-category:hover { background:#23272c; color:#ddd; }
+      .mf-feather-category.active:hover { background:#ef3b3b; }
+      .mf-feather-tools { display:flex; gap:9px; align-items:center; margin-left:auto; }
+      #mf-gui-search {
+        width:267px; max-width:267px; height:36px; margin:0; padding:0 15px;
+        border-radius:6px; border:0; background:#181b1f; color:#eee; font-size:12px;
+        box-sizing:border-box;
+      }
+      #mf-gui-search::placeholder { color:#70757b; }
+      #mf-gui-search:focus { background:#1d2126; border:0; box-shadow:none; }
+      .mf-feather-tool { width:36px; height:36px; border-radius:6px; background:#181b1f; color:#777c83; font-size:19px; }
+      .mf-feather-tool:hover { background:#23272c; color:#fff; }
+      #mf-gui-page {
+        flex:1; min-height:0; overflow:auto; padding:12px 20px 20px;
+        scrollbar-width:thin; scrollbar-color:#3c4249 #0c0f12;
+      }
+      #mf-gui-page::-webkit-scrollbar { width:9px; }
+      #mf-gui-page::-webkit-scrollbar-track { background:#0c0f12; }
+      #mf-gui-page::-webkit-scrollbar-thumb { background:#3b4148; border:2px solid #0c0f12; border-radius:4px; }
+      #mf-gui-page h1, #mf-gui-page .mf-card-title { text-transform:none; letter-spacing:0; }
+      .mf-page-stack { gap:12px; }
+      .mf-feather-module-grid {
+        display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px;
+      }
+      .mf-toggle {
+        height:178px; min-width:0; padding:18px 18px 13px; box-sizing:border-box;
+        border-radius:6px; border:1px solid #252a30; background:linear-gradient(180deg,#11151a,#101317);
+        align-items:flex-start; justify-content:flex-start; text-align:left; gap:0;
+        overflow:hidden; transform:none !important;
+      }
+      .mf-toggle:hover { border-color:#333941; background:linear-gradient(180deg,#15191e,#11151a); }
+      .mf-toggle:has(.mf-switch-hidden:checked) { border-color:#252a30; background:linear-gradient(180deg,#11151a,#101317); }
+      .mf-toggle-dot { display:none; }
+      .mf-feature-icon {
+        width:100%; height:73px; display:flex; align-items:center; justify-content:center;
+        color:#e9eaec; font-size:47px; line-height:1; font-weight:400;
+        text-shadow:0 1px 0 rgba(0,0,0,.5); opacity:.96;
+      }
+      .mf-toggle-copy { width:100%; display:flex; flex-direction:column; align-items:center; gap:3px; text-align:center; }
+      .mf-toggle-copy strong { font-size:15px; color:#e8e9eb; font-weight:800; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+      .mf-toggle-copy span { display:none; }
+      .mf-feature-settings {
+        position:absolute; left:12px; bottom:11px; width:35px; height:35px;
+        border:0; border-radius:5px; background:#1b2025; color:#777c82; font-size:17px;
+        cursor:pointer; z-index:3;
+      }
+      .mf-feature-settings:hover { color:#e5e7eb; background:#252a30; }
+      .mf-feature-favorite {
+        position:absolute; right:12px; top:11px; width:30px; height:30px; border:0; border-radius:5px;
+        background:#1b2025; color:#686e75; font-size:16px; cursor:pointer; z-index:4;
+      }
+      .mf-feature-favorite:hover { color:#fff; background:#252a30; }
+      .mf-feature-favorite.active { color:#ef3b3b; background:#27191b; }
+      .mf-feather-tool.active { color:#ef3b3b; background:#27191b; }
+      .mf-feature-settings, .mf-feature-favorite { font-family:Arial,sans-serif; }
+      .mf-switch-hidden { pointer-events:none !important; }
+      .mf-feature-settings, .mf-feature-favorite { pointer-events:auto !important; }
+      .mf-feature-modal-backdrop { position:fixed; inset:0; z-index:100000; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.62); backdrop-filter:blur(3px); }
+      .mf-feature-modal { width:min(440px,calc(100vw - 32px)); max-height:80vh; overflow:auto; background:#101419; border:1px solid #30363d; border-radius:8px; box-shadow:0 24px 80px rgba(0,0,0,.55); padding:20px; color:#eee; }
+      .mf-feature-modal-title { font-size:19px; font-weight:800; margin-bottom:5px; }
+      .mf-feature-modal-desc { color:#858b93; font-size:12px; line-height:1.45; margin-bottom:18px; }
+      .mf-feature-modal-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-top:1px solid #252a30; }
+      .mf-feature-modal-row span { font-size:13px; font-weight:700; }
+      .mf-feature-modal-actions { display:flex; gap:9px; margin-top:18px; }
+      .mf-feature-modal-actions button { flex:1; }
+
+      .mf-feature-state {
+        position:absolute; left:61px; right:12px; bottom:11px; height:35px;
+        border-radius:5px; display:flex; align-items:center; justify-content:center;
+        font-size:12px; font-weight:700;
+      }
+      .mf-feature-state.disabled { background:#1a1e22; color:#6f747a; }
+      .mf-feature-state.enabled { background:#125a1c; color:#21c43b; }
+      .mf-switch-hidden { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; z-index:2; pointer-events:auto; }
+      .mf-toggle:has(.mf-feature-settings:hover) .mf-switch-hidden { pointer-events:none; }
+      .mf-card { background:linear-gradient(180deg,#12161a,#0f1317); border:1px solid #252a30; border-radius:6px; padding:16px; }
+      .mf-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+      .mf-settings-row { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:12px; padding-top:12px; border-top:1px solid #252a30; }
+      .mf-settings-label { color:#c7cbd0; font-size:12px; font-weight:700; }
+      .mf-language-select { width:150px; margin:0; }
+      #mf-gui-page .mf-muted { color:#7c828a; }
+      #mf-gui-page .mf-btn.primary { background:#ef3b3b; border-color:#ef3b3b; }
+      #mf-gui-page .mf-btn.primary:hover { background:#ff4b4b; }
+      @media (max-width: 1100px) {
+        .mf-feather-module-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+        .mf-feather-icon-tab { width:54px; }
+        .mf-feather-main-tab { min-width:140px; }
+      }
+      @media (max-width: 780px) {
+        #mf-gui { width:calc(100vw - 12px); height:calc(100vh - 12px); }
+        .mf-feather-module-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+        .mf-feather-categories { overflow-x:auto; }
+        .mf-feather-category { min-width:72px; }
+        .mf-feather-tools { min-width:0; }
+        #mf-gui-search { width:160px; max-width:160px; }
+        .mf-feather-icon-tab { width:44px; }
+      }
+
+      .mf-toggle-grid {
+        display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px;
+      }
+      .mf-toggle-grid .mf-toggle {
+        height:178px; min-width:0; padding:18px 18px 13px; box-sizing:border-box;
+        border-radius:6px; border:1px solid #252a30; background:linear-gradient(180deg,#11151a,#101317);
+        align-items:flex-start; justify-content:flex-start; text-align:left; gap:0; overflow:hidden; transform:none !important;
+      }
+      .mf-toggle-grid .mf-toggle:hover { border-color:#333941; background:linear-gradient(180deg,#15191e,#11151a); }
+      .mf-toggle-grid .mf-toggle-copy span { display:none; }
+      .mf-toggle-grid .mf-feature-icon { width:100%; height:73px; display:flex; align-items:center; justify-content:center; }
+      .mf-toggle-grid .mf-toggle-copy { width:100%; display:flex; flex-direction:column; align-items:center; gap:3px; text-align:center; }
+      .mf-toggle-grid .mf-feature-settings { position:absolute; left:12px; bottom:11px; }
+      .mf-toggle-grid .mf-feature-favorite { position:absolute; right:12px; top:11px; }
+      @media (max-width:1100px) { .mf-toggle-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+      @media (max-width:780px) { .mf-toggle-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    `;
     document.head.appendChild(style);
   }
 
@@ -2429,9 +2637,10 @@
       { page: 'hud', key: 'fpsCounter', title: t('fpsCounter'), desc: t('fpsCounterDesc') },
       { page: 'hud', key: 'cpsCounter', title: t('cpsCounter'), desc: t('cpsCounterDesc') },
       { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc') },
-      { page: 'hud', key: 'guiPatch', title: t('guiPatch'), desc: t('guiPatchDesc') },
+      { page: 'hud', key: 'armorHud', title: 'Armor HUD', desc: 'Show your equipped helmet, chestplate, leggings and boots with durability.' },
+      { page: 'hud', key: 'guiPatch', title: 'GUI Patch', desc: 'Classic Minecraft hearts, food, XP and WiFi icons' },
       { page: 'hud', key: 'coordinates', title: t('coordinates'), desc: t('coordinatesDesc') },
-      { page: 'hud', key: 'dynamicCrosshair', title: t('dynamicCrosshair'), desc: t('dynamicCrosshairDesc') },
+      { page: 'hud', key: 'dynamicCrosshair', title: 'Dynamic Crosshair', desc: 'Changes crosshair based on situation' },
       { page: 'waypoints', key: 'waypoints', title: t('waypoints'), desc: t('waypointsDesc') },
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc') },
@@ -2442,10 +2651,7 @@
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc') },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc') },
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc') },
-      { page: 'render', key: 'leafWind', title: t('leafWind'), desc: t('leafWindDesc') },
-      { page: 'render', key: 'vanillaAnimations', title: t('vanillaAnimations'), desc: t('vanillaAnimationsDesc') },
-      { page: 'render', key: 'leafWind', title: t('leafWind'), desc: t('leafWindDesc') },
-      { page: 'render', key: 'handSway', title: t('handSway'), desc: t('handSwayDesc') },
+      { page: 'render', key: 'vanillaAnimations', title: 'Vanilla Animations', desc: 'Freezes elbow and knee joints rigid for all players' },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
       { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc') },
@@ -2453,7 +2659,7 @@
       { page: 'shaders', key: 'customShader', title: t('navShaders'), desc: t('shadersDesc') },
       { page: 'world', key: 'autoRespawn', title: t('autoRespawn'), desc: t('autoRespawnDesc') },
       { page: 'world', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc') },
-      { page: 'world', key: 'rhythmParkour', title: t('rhythmParkour'), desc: t('rhythmParkourDescShort') },
+      { page: 'world', key: 'rhythmParkour', title: 'Rhythm Parkour', desc: 'Transforms Miniblox into a rhythm parkour game' },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
       { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc') },
       { page: 'chat', key: 'chatMemes', title: t('chatMemes'), desc: t('chatMemesDesc') },
@@ -2462,37 +2668,122 @@
     ];
   }
 
+  // Feather-style inline SVG icons. Inline SVG keeps the icons crisp at any size,
+  // avoids extension/page asset loading issues, and does not depend on external files.
+  const MF_SVG_ICONS = {
+    home:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/>',
+    hud:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/>',
+    render:'<path d="m12 3 2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3Z"/>',
+    cosmetics:'<path d="M6 3h12l3 5-3 13H6L3 8l3-5Z"/><path d="M8 3c0 2 1.8 4 4 4s4-2 4-4M3 8h18"/>',
+    chat:'<path d="M4 5h16v11H8l-4 4V5Z"/><path d="M8 9h8M8 12h5"/>',
+    waypoints:'<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
+    world:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.2 2.5 3.2 5.5 3.2 9S14.2 18.5 12 21c-2.2-2.5-3.2-5.5-3.2-9S9.8 5.5 12 3Z"/>',
+    settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.84 1.84-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.55V20h-2.6v-.09a1.7 1.7 0 0 0-1.03-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-1.84-1.84.06-.06A1.7 1.7 0 0 0 8 15a1.7 1.7 0 0 0-1.55-1.03H6.36v-2.6h.09A1.7 1.7 0 0 0 8 10.34a1.7 1.7 0 0 0-.34-1.88L7.6 8.4l1.84-1.84.06.06a1.7 1.7 0 0 0 1.88.34 1.7 1.7 0 0 0 1.03-1.55v-.09h2.6v.09a1.7 1.7 0 0 0 1.03 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06 1.84 1.84-.06.06A1.7 1.7 0 0 0 19.4 10c.22.62.8 1.03 1.45 1.03h.09v2.6h-.09c-.65 0-1.23.41-1.45 1.03Z"/>',
+    about:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>',
+    grid:'<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
+    close:'<path d="m6 6 12 12M18 6 6 18"/>',
+    search:'<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
+    heart:'<path d="M20.8 8.7c0 5-8.8 10.3-8.8 10.3S3.2 13.7 3.2 8.7A4.7 4.7 0 0 1 12 6.4a4.7 4.7 0 0 1 8.8 2.3Z"/>',
+    keystrokes:'<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 14h10"/>',
+    fpsCounter:'<path d="M4 5h16v14H4z"/><path d="M8 15V11M12 15V8M16 15v-5"/>',
+    cpsCounter:'<circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/>',
+    pingCounter:'<path d="M4 12a8 8 0 0 1 16 0"/><path d="M7 12a5 5 0 0 1 10 0M10 12a2 2 0 0 1 4 0"/><path d="M12 12v.01"/>',
+    guiPatch:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 13h3M13 13h3M8 16h8"/>',
+    armorHud:'<path d="M8 3h8l2 4-2 14H8L6 7l2-4Z"/><path d="M9 7h6M8 11h8M9 16h6"/>',
+    coordinates:'<path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5M8 17h3"/>',
+    dynamicCrosshair:'<circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
+    rebrand:'<path d="m12 3 2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3Z"/><path d="M12 8v6M9 11h6"/>',
+    titanTiny:'<path d="M8 3h8l2 4-2 14H8L6 7l2-4Z"/><path d="M9 7h6M10 11h4"/>',
+    healthNameTags:'<path d="M12 20S4 15.5 4 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 2.5C20 15.5 12 20 12 20Z"/>',
+    distanceNameTags:'<path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"/>',
+    patPat:'<path d="M7 11c1-4 4-6 7-6 3.5 0 6 2.5 6 6 0 5-4 9-8 9s-8-4-8-9c0-2 .7-3.6 2-5"/><path d="M9 13c1 1 3 1 4 0"/>',
+    itemPhysics:'<path d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>',
+    noWeather:'<path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6 11.5 3.5 3.5 0 0 0 7 18Z"/><path d="M4 4l16 16"/>',
+    vanillaAnimations:'<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>',
+    zoom:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5M10.5 7v7M7 10.5h7"/>',
+    cameraOverhaul:'<path d="M4 7h3l1.5-2h7L17 7h3v12H4V7Z"/><circle cx="12" cy="13" r="4"/>',
+    elytraFlight:'<path d="M3 17c3-1 6-4 9-9 3 5 6 8 9 9-4 1-7 1-9-1-2 2-5 2-9 1Z"/>',
+    freecam:'<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+    blockHighlight:'<path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>',
+    antiAfk:'<circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/>',
+    rhythmParkour:'<path d="M5 17V7h4l3 10 3-10h4v10"/>',
+    chatVideos:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3V9Z"/>',
+    chatLinks:'<path d="M10 13a5 5 0 0 0 7.1.1l1.8-1.8a5 5 0 0 0-7.1-7.1L10.7 5.3"/><path d="M14 11a5 5 0 0 0-7.1-.1l-1.8 1.8a5 5 0 0 0 7.1 7.1l1.1-1.1"/>',
+    chatMemes:'<circle cx="12" cy="12" r="8"/><path d="M9 10h.01M15 10h.01M8.5 14c1.2 1.5 5.8 1.5 7 0"/>',
+    discord:'<path d="M7 7.5A13 13 0 0 1 12 6a13 13 0 0 1 5 1.5 14 14 0 0 1 2 9.5c-2 1.5-4 2-6 2l-1-2-1 2c-2 0-4-.5-6-2A14 14 0 0 1 7 7.5Z"/><path d="M9 12h.01M15 12h.01"/>',
+    supportAds:'<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9 9h4a2 2 0 0 1 0 4H9h3a2 2 0 0 1 0 4H9"/>',
+    shaders:'<path d="M12 3 4 8l8 5 8-5-8-5Z"/><path d="M4 13l8 5 8-5M4 18l8 3 8-3"/>'
+  };
+
+  function iconSvg(name, className = '') {
+    const key = MF_SVG_ICONS[name] ? name : 'grid';
+    return `<svg class="mf-svg-icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${MF_SVG_ICONS[key]}</svg>`;
+  }
+
+
   function renderNavList() {
     return NAV_ITEMS.map(item => `
       <div class="mf-nav ${activePage === item.id && !searchQuery ? 'active' : ''}" data-page="${item.id}">
-        <span class="mf-nav-icon">${item.icon}</span>
+        <span class="mf-nav-icon">${iconSvg(item.id === 'dashboard' ? 'home' : item.id)}</span>
         <span>${t(item.labelKey)}</span>
       </div>
     `).join('');
   }
 
+  function featherNavIcon(page) {
+    const icons = {
+      hud: 'hud', render: 'render', shaders: 'shaders', cosmetics: 'cosmetics', chat: 'chat',
+      waypoints: 'waypoints', world: 'world', settings: 'settings', about: 'about'
+    };
+    return iconSvg(icons[page] || 'grid');
+  }
+
+  function moduleIcon(key) {
+    const icons = {
+      keystrokes:'keystrokes', fpsCounter:'fpsCounter', cpsCounter:'cpsCounter', pingCounter:'pingCounter', guiPatch:'guiPatch', armorHud:'armorHud',
+      coordinates:'coordinates', dynamicCrosshair:'dynamicCrosshair', rebrand:'rebrand', titanTiny:'titanTiny', healthNameTags:'healthNameTags',
+      distanceNameTags:'distanceNameTags', patPat:'patPat', itemPhysics:'itemPhysics', noWeather:'noWeather', vanillaAnimations:'vanillaAnimations',
+      zoom:'zoom', cameraOverhaul:'cameraOverhaul', elytraFlight:'elytraFlight', freelook:'freelook', freecam:'freecam', blockHighlight:'blockHighlight',
+      waypoints:'waypoints', customShader:'shaders', antiAfk:'antiAfk', rhythmParkour:'rhythmParkour', chatVideos:'chatVideos', chatLinks:'chatLinks', chatMemes:'chatMemes',
+      discord:'discord', supportAds:'supportAds'
+    };
+    return iconSvg(icons[key] || 'grid');
+  }
+
   function getPanelTemplate() {
     return `
       <div id="mf-gui-shell">
-        <div id="mf-gui-sidebar">
-          <div id="mf-gui-sidebar-brand">
-            <img class="mf-icon" src="${currentLogo}" alt="MiniFeather">
-            <strong>${t('title')}</strong>
+        <div id="mf-gui-topbar">
+          <div class="mf-feather-nav-main">
+            <button class="mf-feather-main-tab ${activePage === 'dashboard' && !searchQuery ? 'active' : ''}" data-page="dashboard">
+              <span class="mf-feather-grid-icon">${iconSvg('grid')}</span>
+              <span>MOD MENU</span>
+            </button>
+            <div class="mf-feather-icon-tabs">
+              ${NAV_ITEMS.filter(item => item.id !== 'dashboard').map(item => `
+                <button class="mf-feather-icon-tab ${activePage === item.id && !searchQuery ? 'active' : ''}" data-page="${item.id}" title="${t(item.labelKey)}">
+                  <span class="mf-feather-tab-icon">${featherNavIcon(item.id)}</span>
+                </button>
+              `).join('')}
+            </div>
           </div>
-          <div class="mf-nav-list">${renderNavList()}</div>
+          <h2 id="mf-gui-page-title" aria-hidden="true"></h2>
+          <button id="mf-gui-close" class="mf-feather-close" title="Close">${iconSvg('close')}</button>
         </div>
+
         <div id="mf-gui-content">
-          <div id="mf-gui-topbar">
-            <h2 id="mf-gui-page-title"></h2>
-            <input id="mf-gui-search" type="text" placeholder="${t('searchPlaceholder')}" value="${searchQuery.replace(/"/g, '&quot;')}">
-            <div class="mf-topbar-actions">
-              <select id="mf-language-select" class="mf-select">
-                <option value="en" ${settings.language === 'en' ? 'selected' : ''}>English</option>
-                <option value="es" ${settings.language === 'es' ? 'selected' : ''}>Español</option>
-                <option value="ja" ${settings.language === 'ja' ? 'selected' : ''}>日本語</option>
-                <option value="it" ${settings.language === 'it' ? 'selected' : ''}>Italiano</option>
-              </select>
-              <button id="mf-gui-close" class="mf-close">×</button>
+          <div id="mf-feather-filterbar">
+            <div class="mf-feather-categories">
+              <button class="mf-feather-category active" data-category="all">All</button>
+              <button class="mf-feather-category" data-category="new">New</button>
+              <button class="mf-feather-category" data-category="hud">HUD</button>
+              <button class="mf-feather-category" data-category="hypixel">Hypixel</button>
+              <button class="mf-feather-category" data-category="pvp">PvP</button>
+            </div>
+            <div class="mf-feather-tools">
+              <input id="mf-gui-search" type="text" placeholder="${t('searchPlaceholder')}" value="${searchQuery.replace(/"/g, '&quot;')}">
+              <button class="mf-feather-tool ${favoritesOnly ? 'active' : ''}" type="button" data-mf-favorites title="Favorites">${iconSvg('heart')}</button>
+              <button class="mf-feather-tool" type="button" title="Grid">${iconSvg('grid')}</button>
             </div>
           </div>
           <div id="mf-gui-page"></div>
@@ -2502,14 +2793,19 @@
   }
 
   function renderToggle(key, title, description) {
+    const enabled = !!guiSettings[key];
+    const favorite = favoriteModules.has(key);
     return `
       <label class="mf-toggle" data-key="${key}">
-        <span class="mf-toggle-dot"></span>
+        <span class="mf-feature-icon" aria-hidden="true">${moduleIcon(key)}</span>
         <span class="mf-toggle-copy">
           <strong>${title}</strong>
           <span>${description}</span>
         </span>
-        <input type="checkbox" class="mf-switch-hidden" ${guiSettings[key] ? 'checked' : ''}>
+        <button type="button" class="mf-feature-favorite ${favorite ? 'active' : ''}" data-mf-favorite title="${favorite ? 'Remove from favorites' : 'Add to favorites'}" aria-label="${favorite ? 'Remove from favorites' : 'Add to favorites'}">${iconSvg('heart')}</button>
+        <button type="button" class="mf-feature-settings" data-mf-settings title="Configure ${title}">${iconSvg('settings')}</button>
+        <span class="mf-feature-state ${enabled ? 'enabled' : 'disabled'}">${enabled ? 'Enabled' : 'Disabled'}</span>
+        <input type="checkbox" class="mf-switch-hidden" ${enabled ? 'checked' : ''}>
       </label>
     `;
   }
@@ -2545,13 +2841,14 @@
     zoom: 'zoom'
   });
 
-  const COMMAND_MODULE_TRANSLATION_KEYS = Object.freeze({
-    antiAfk: 'antiAfk', armorHud: 'armorHud', cameraOverhaul: 'cameraOverhaul', elytraFlight: 'elytraFlight',
-    coordinates: 'coordinates', dynamicCrosshair: 'dynamicCrosshair', cpsCounter: 'cpsCounter',
-    damageParticles: 'damageParticles', distanceNameTags: 'distanceNameTags', fpsCounter: 'fpsCounter', freelook: 'freelook', freecam: 'freecam',
-    guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers', healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
-    keystrokes: 'keystrokes', noWeather: 'noWeather', leafWind: 'leafWind', patPat: 'patPat', pingCounter: 'pingCounter',
-    titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations', waypoints: 'waypoints', zoom: 'zoom'
+  const COMMAND_MODULE_LABELS = Object.freeze({
+    antiAfk: 'Anti-AFK', armorHud: 'Armor HUD', cameraOverhaul: 'Camera Overhaul', elytraFlight: 'Elytra Flight',
+    coordinates: 'Coordinates', dynamicCrosshair: 'Dynamic Crosshair', cpsCounter: 'CPS Counter',
+    distanceNameTags: 'Player Distance', fpsCounter: 'FPS Counter', freelook: 'FreeLook', freecam: 'FreeCam',
+    guiPatch: 'GUI Patch',
+    healthNameTags: 'Player Health', blockHighlight: 'Block Highlight', itemPhysics: 'Item Physics',
+    keystrokes: 'Keystrokes', noWeather: 'No Weather', patPat: 'PatPat', pingCounter: 'Ping Counter',
+    titanTiny: 'Titan & Tiny', vanillaAnimations: 'Vanilla Animations', waypoints: 'Waypoints', zoom: 'Zoom'
   });
 
   function commandModuleLabel(key) {
@@ -2724,7 +3021,7 @@
     if (request.action === 'toggle') {
       const key = resolveCommandModule(args[0]);
       if (!key) {
-        push(t('commandToggleUsage'), 'error');
+        push('Usage: /toggle <module>. Modules: afk, armor, camera, coords, crosshair, cps, distance, elytra, fps, freecam, freelook, health, highlight, itemphysics, keystrokes, noweather, patpat, ping, titan, waypoints, zoom', 'error');
       } else {
         const enabling = !settings[key];
         if (key === 'freecam' && enabling && !requestFreecamAccess()) {
@@ -2738,7 +3035,7 @@
           applyGuiSettings();
           if (panel && !searchQuery.trim()) renderCurrentPageContent();
           if (activePage === 'dashboard') updateDashboardStats();
-          push(t(settings[key] ? 'commandEnabled' : 'commandDisabled', { module: commandModuleLabel(key) }), 'success');
+          push(`${COMMAND_MODULE_LABELS[key] || key} ${settings[key] ? 'enabled' : 'disabled'}.`, 'success');
         }
       }
       respondClientCommand(requestId, response);
@@ -2749,7 +3046,7 @@
       const key = resolveCommandModule(args[0]);
       const code = normalizeBindCode(args[1]);
       if (!key || !code) {
-        push(t('commandBindUsage'), 'error');
+        push('Usage: /bind <module> <key>. Example: /bind coords C', 'error');
       } else if (key === 'freecam' && !requestFreecamAccess()) {
         push(t('freecamNoAccess'), 'error');
       } else {
@@ -2757,7 +3054,7 @@
         guiSettings.moduleBinds = { ...settings.moduleBinds };
         saveSettings();
         sendClientBindsConfig();
-        push(t('commandBound', { module: commandModuleLabel(key), key: bindLabel(code) }), 'success');
+        push(`${COMMAND_MODULE_LABELS[key] || key} bound to ${bindLabel(code)}.`, 'success');
       }
       respondClientCommand(requestId, response);
       return;
@@ -2766,16 +3063,16 @@
     if (request.action === 'unbind') {
       const key = resolveCommandModule(args[0]);
       if (!key) {
-        push(t('commandUnbindUsage'), 'error');
+        push('Usage: /unbind <module>', 'error');
       } else if (!settings.moduleBinds?.[key]) {
-        push(t('commandNoBind', { module: commandModuleLabel(key) }));
+        push(`${COMMAND_MODULE_LABELS[key] || key} does not have a bind.`);
       } else {
         settings.moduleBinds = { ...(settings.moduleBinds || {}) };
         delete settings.moduleBinds[key];
         guiSettings.moduleBinds = { ...settings.moduleBinds };
         saveSettings();
         sendClientBindsConfig();
-        push(t('commandBindRemoved', { module: commandModuleLabel(key) }), 'success');
+        push(`${COMMAND_MODULE_LABELS[key] || key} bind removed.`, 'success');
       }
       respondClientCommand(requestId, response);
       return;
@@ -2784,10 +3081,10 @@
     if (request.action === 'binds') {
       const binds = Object.entries(settings.moduleBinds || {});
       if (!binds.length) {
-        push(t('commandNoBinds'));
+        push('No MiniFeather module binds are configured.');
       } else {
-        push(t('commandBindsCount', { count: binds.length }));
-        binds.forEach(([key, code]) => push(`\\yellow\\${commandModuleLabel(key)}\\reset\\ - ${bindLabel(code)}`));
+        push(`Module binds: ${binds.length}`);
+        binds.forEach(([key, code]) => push(`\\yellow\\${COMMAND_MODULE_LABELS[key] || key}\\reset\\ - ${bindLabel(code)}`));
       }
       respondClientCommand(requestId, response);
       return;
@@ -2796,13 +3093,13 @@
     if (request.action === 'afk') {
       const raw = Number(args[0]);
       if (!Number.isFinite(raw) || raw < 5 || raw > 150) {
-        push(t('commandAfkUsage'), 'error');
+        push('Usage: /afk <5-150>', 'error');
       } else {
         settings.antiAfkDelay = clampAntiAfkDelay(raw);
         guiSettings.antiAfkDelay = settings.antiAfkDelay;
         saveSettings();
         sendAntiAfkConfig(settings.antiAfk);
-        push(t('commandAfkChanged', { seconds: settings.antiAfkDelay }), 'success');
+        push(`Anti-AFK delay changed to ${settings.antiAfkDelay}s.`, 'success');
       }
       respondClientCommand(requestId, response);
     }
@@ -3142,12 +3439,9 @@
     const spookFx = ['vhs', 'crt', 'cel', 'fog', 'grain', 'glitch', 'flash', 'sharp'];
     const ufFx = ['ufsat', 'ufcontrast', 'uftone'];
     const phFx = ['phagx', 'phfog', 'phend', 'phbh', 'phbhsize', 'phbhspin'];
-    const crFx = ['crtm', 'crexp', 'crc', 'crsat', 'crvib', 'crvig', 'crfog', 'crdith'];
-    const gvFx = ['gvfog', 'gvdist', 'gvdesat', 'gvblue', 'gvgrain', 'gvlight'];
-    const fxList = preset === 'ultrafast' ? ufFx : preset === 'photon' ? phFx
-      : preset === 'complementaryInspired' ? crFx : preset === 'graveyard' ? gvFx : spookFx;
+    const fxList = preset === 'ultrafast' ? ufFx : preset === 'photon' ? phFx : spookFx;
     for (const name of fxList) {
-      const fallback = { vhs: 0.6, crt: 0.6, cel: 0.6, fog: 0.7, grain: 0.5, glitch: 0.4, flash: 0.5, sharp: 0.5, ufsat: 1.35, ufcontrast: 0.45, uftone: 0.35, phagx: 0.8, phfog: 0.5, phend: 0, phbh: 0, phbhsize: 0.35, phbhspin: 1, crtm: 0.8, crexp: 1.0, crc: 1.05, crsat: 1.0, crvib: 1.0, crvig: 0.5, crfog: 0.4, crdith: 1, gvfog: 0.8, gvdist: 30, gvdesat: 0.55, gvblue: 0.35, gvgrain: 0.3, gvlight: 0.3 }[name];
+      const fallback = { vhs: 0.6, crt: 0.6, cel: 0.6, fog: 0.7, grain: 0.5, glitch: 0.4, flash: 0.5, sharp: 0.5, ufsat: 1.35, ufcontrast: 0.45, uftone: 0.35, phagx: 0.8, phfog: 0.5, phend: 0, phbh: 0, phbhsize: 0.35, phbhspin: 1 }[name];
       fx[name] = Number(settings['customShaderFx' + name.charAt(0).toUpperCase() + name.slice(1)] ?? fallback);
     }
 
@@ -4626,10 +4920,10 @@
   }
 
   const DC_SITUATIONS = [
-    ['default', 'dcDefault'], ['block', 'dcTargetingBlock'], ['player', 'dcPlayer'],
-    ['enemy', 'dcEnemyMob'], ['entity', 'dcEntity'], ['item', 'dcItemDrop'],
-    ['projectile', 'dcProjectile'], ['air', 'dcInAir'], ['building', 'dcBuilding'],
-    ['bridging', 'dcBridging']
+    ['default', 'Default'], ['block', 'Targeting Block'], ['player', 'Player'],
+    ['enemy', 'Enemy Mob'], ['entity', 'Entity'], ['item', 'Item/Drop'],
+    ['projectile', 'Projectile'], ['air', 'In Air'], ['building', 'Building'],
+    ['bridging', 'Bridging']
   ];
 
   const DC_PNGS = [
@@ -4660,7 +4954,7 @@
     const backdrop = document.createElement('div');
     backdrop.className = 'mf-tt-backdrop mf-dc-backdrop';
 
-    const situationRow = ([key, labelKey]) => {
+    const situationRow = ([key, label]) => {
       const current = settings.dynamicCrosshairMap[key] || 'crosshair.png';
       const options = DC_PNGS.map(png => {
         const sel = png === current ? 'selected' : '';
@@ -4668,7 +4962,7 @@
       }).join('');
       return `
         <div class="mf-dc-row">
-          <span class="mf-dc-label">${t(labelKey)}</span>
+          <span class="mf-dc-label">${label}</span>
           <div class="mf-dc-preview"><img src="${assetBase}${current}" alt=""></div>
           <select class="mf-dc-select" data-dc-situation="${key}">${options}</select>
         </div>`;
@@ -4679,12 +4973,12 @@
     backdrop.innerHTML = `
       <div class="mf-tt-dialog mf-dc-dialog" role="dialog" aria-modal="true">
         <div class="mf-tt-head">
-          <div class="mf-tt-title">${t('dynamicCrosshairSettings')}</div>
+          <div class="mf-tt-title">Dynamic Crosshair</div>
           <button type="button" class="mf-close" data-dc-close>×</button>
         </div>
 
         <div class="mf-tt-row">
-          <span>${t('dynamicCrosshairSize')}</span>
+          <span>Crosshair Size</span>
           <span class="mf-tt-scale-value" data-dc-size-val>${sizeVal}px</span>
         </div>
         <input class="mf-co-range" data-dc-size type="range" min="8" max="64" step="1" value="${sizeVal}">
@@ -4693,7 +4987,7 @@
           ${DC_SITUATIONS.map(situationRow).join('')}
         </div>
 
-        <button type="button" class="mf-btn primary mf-tt-save" data-dc-save>${t('save')}</button>
+        <button type="button" class="mf-btn primary mf-tt-save" data-dc-save>Save</button>
       </div>`;
 
     panel.appendChild(backdrop);
@@ -4957,29 +5251,110 @@
     });
   }
 
+  function renderFavoritesPage() {
+    const modules = getModuleIndex().filter(entry => favoriteModules.has(entry.key));
+    if (!modules.length) {
+      return `
+        <div class="mf-card" style="padding:34px;text-align:center;">
+          <div class="mf-card-title">No favorites yet</div>
+          <div class="mf-muted" style="margin-top:8px;">Click the ♥ on any module to add it here.</div>
+        </div>
+      `;
+    }
+    return `<div class="mf-feather-module-grid">${modules.map(entry => renderToggle(entry.key, entry.title, entry.desc)).join('')}</div>`;
+  }
+
+  function saveFavorites() {
+    chrome.storage.local.set({ favoriteModules: [...favoriteModules] });
+  }
+
+  function toggleFavorite(key, rerender = true) {
+    if (favoriteModules.has(key)) favoriteModules.delete(key);
+    else favoriteModules.add(key);
+    saveFavorites();
+    if (rerender && panel) renderCurrentPageContent();
+  }
+
+  const FEATURE_ADVANCED_SETTINGS = new Set([
+    'titanTiny','patPat','antiAfk','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight'
+  ]);
+
+  function closeFeatureSettings() {
+    if (featureSettingsCleanup) {
+      const cleanup = featureSettingsCleanup;
+      featureSettingsCleanup = null;
+      cleanup();
+    }
+  }
+
+  function openFeatureSettings(key) {
+    if (!panel) return;
+    closeFeatureSettings();
+    const entry = getModuleIndex().find(item => item.key === key);
+    if (!entry) return;
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-feature-modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="mf-feature-modal" role="dialog" aria-modal="true">
+        <div class="mf-feature-modal-title">${entry.title}</div>
+        <div class="mf-feature-modal-desc">${entry.desc}</div>
+        <div class="mf-feature-modal-row">
+          <span>Enabled</span>
+          <button type="button" class="mf-feature-state ${guiSettings[key] ? 'enabled' : 'disabled'}" data-feature-enabled style="position:static;width:110px;border:0;cursor:pointer;">${guiSettings[key] ? 'Enabled' : 'Disabled'}</button>
+        </div>
+        <div class="mf-feature-modal-row">
+          <span>Favorite</span>
+          <button type="button" class="mf-feature-state ${favoriteModules.has(key) ? 'enabled' : 'disabled'}" data-feature-favorite style="position:static;width:110px;border:0;cursor:pointer;">${favoriteModules.has(key) ? '★ Added' : '☆ Add'}</button>
+        </div>
+        <div class="mf-feature-modal-actions">
+          ${FEATURE_ADVANCED_SETTINGS.has(key) ? '<button type="button" class="mf-btn secondary" data-feature-advanced>Advanced Settings</button>' : ''}
+          <button type="button" class="mf-btn primary" data-feature-close>Done</button>
+        </div>
+      </div>
+    `;
+    panel.appendChild(backdrop);
+
+    const enabledButton = backdrop.querySelector('[data-feature-enabled]');
+    const favoriteButton = backdrop.querySelector('[data-feature-favorite]');
+    const sync = () => {
+      const enabled = !!guiSettings[key];
+      enabledButton.textContent = enabled ? 'Enabled' : 'Disabled';
+      enabledButton.className = `mf-feature-state ${enabled ? 'enabled' : 'disabled'}`;
+      const fav = favoriteModules.has(key);
+      favoriteButton.textContent = fav ? '★ Added' : '☆ Add';
+      favoriteButton.className = `mf-feature-state ${fav ? 'enabled' : 'disabled'}`;
+    };
+    enabledButton?.addEventListener('click', () => {
+      const input = panel.querySelector(`.mf-toggle[data-key="${CSS.escape(key)}"] input`);
+      if (input) { input.checked = !input.checked; input.dispatchEvent(new Event('change', { bubbles:true })); }
+      else {
+        settings[key] = !settings[key]; guiSettings[key] = settings[key]; saveSettings(true); applyGuiSettings();
+        renderCurrentPageContent();
+      }
+      sync();
+    });
+    favoriteButton?.addEventListener('click', () => { toggleFavorite(key, false); sync(); });
+    backdrop.querySelector('[data-feature-advanced]')?.addEventListener('click', () => {
+      closeFeatureSettings();
+      const advanced = {
+        titanTiny: openTitanTinySettings, patPat: openPatPatSettings, antiAfk: openAntiAfkSettings, zoom: openZoomSettings,
+        cameraOverhaul: openCameraOverhaulSettings, elytraFlight: openElytraFlightSettings, dynamicCrosshair: openDynamicCrosshairSettings,
+        freelook: openFreelookSettings, freecam: openFreecamSettings, blockHighlight: openBlockHighlightSettings, armorHud: openArmorHudSettings
+      };
+      if (key === 'freecam' && !requestFreecamAccess()) { showFreecamDenied(); return; }
+      advanced[key]?.();
+    });
+    backdrop.querySelector('[data-feature-close]')?.addEventListener('click', closeFeatureSettings);
+    backdrop.addEventListener('mousedown', event => { if (event.target === backdrop) closeFeatureSettings(); });
+    featureSettingsCleanup = () => backdrop.remove();
+  }
+
   function renderDashboardPage() {
+    const modules = getModuleIndex();
     return `
-      <div class="mf-grid">
-        <div class="mf-card mf-stat-card">
-          <div class="mf-card-title">FPS</div>
-          <div class="mf-stat-value" id="mf-dash-fps">0</div>
-          <div class="mf-muted">${t('dashboardFpsSub')}</div>
-        </div>
-        <div class="mf-card mf-stat-card">
-          <div class="mf-card-title">${t('pingLabel')}</div>
-          <div class="mf-stat-value" id="mf-dash-ping">--</div>
-          <div class="mf-muted">${t('dashboardPingSub')}</div>
-        </div>
-        <div class="mf-card mf-stat-card">
-          <div class="mf-card-title">${t('dashboardModulesTitle')}</div>
-          <div class="mf-stat-value" id="mf-dash-modules">0</div>
-          <div class="mf-muted">${t('dashboardModulesSub')}</div>
-        </div>
-        <div class="mf-card mf-stat-card">
-          <div class="mf-card-title">${t('title')}</div>
-          <div class="mf-stat-value">${MODULE_VERSION}</div>
-          <div class="mf-muted">${t('dashboardVersionSub')}</div>
-        </div>
+      <div class="mf-feather-module-grid">
+        ${modules.map(entry => renderToggle(entry.key, entry.title, entry.desc)).join('')}
       </div>
     `;
   }
@@ -5012,20 +5387,20 @@
             )}
             ${renderToggle(
               'guiPatch',
-              t('guiPatch'),
-              t('guiPatchDesc')
+              'GUI Patch',
+              'Classic Minecraft hearts, food, XP and WiFi icons'
             )}
             ${renderToggle(
               'armorHud',
-              t('armorHud'),
-              t('armorHudDesc')
+              'Armor HUD',
+              'Show your equipped helmet, chestplate, leggings and boots on screen.'
             )}
             ${renderToggle(
               'coordinates',
               t('coordinates'),
               t('coordinatesDesc')
             )}
-            ${renderToggle('dynamicCrosshair', t('dynamicCrosshair'), t('dynamicCrosshairDesc'))}
+            ${renderToggle('dynamicCrosshair', 'Dynamic Crosshair', 'Changes crosshair based on situation')}
           </div>
           <div style="margin-top:12px;">
               <button
@@ -5034,7 +5409,7 @@
                   class="mf-btn secondary"
                   style="width:100%;"
               >
-                  ${t('armorHudConfigure')}
+                  Configure Armor HUD
               </button>
           </div>
         </div>
@@ -5105,13 +5480,8 @@
             )}
             ${renderToggle(
               'vanillaAnimations',
-              t('vanillaAnimations'),
-              t('vanillaAnimationsDesc')
-            )}
-            ${renderToggle(
-              'damageParticles',
-              t('damageParticles'),
-              t('damageParticlesDesc')
+              'Vanilla Animations',
+              'Freezes elbow and knee joints rigid for all players'
             )}
             ${renderToggle(
               'zoom',
@@ -5130,8 +5500,8 @@
             )}
             ${renderToggle(
               'freelook',
-              t('freelook'),
-              t('freelookDesc')
+              'Freelook',
+              'Look around independently while keeping your player facing direction unchanged.'
             )}
             ${renderToggle(
               'freecam',
@@ -5140,8 +5510,8 @@
             )}
             ${renderToggle(
               'blockHighlight',
-              t('blockHighlight'),
-              t('blockHighlightDesc')
+              'Block Highlight',
+              'Customize the outline shown around the block you are looking at.'
             )}
             <label class="mf-toggle" id="mf-spritesheet-toggle">
               <span class="mf-toggle-dot"></span>
@@ -5184,8 +5554,8 @@
             </label>
             <div id="mf-custom-tp-container" style="margin-top: 8px; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
               <div style="font-size: 12px; color: #aaa; margin-bottom: 8px;">
-                <strong style="color: #e0e0e0;">${t('customTexturePack')}</strong><br>
-                ${t('customTexturePackDesc')}
+                <strong style="color: #e0e0e0;">Custom Texture Pack</strong><br>
+                Upload a <code style="color: #4a9eff;">.zip</code> file or individual <code style="color: #4a9eff;">.png</code> files. Names must match the original (e.g. <code style="color: #4a9eff;">stone.png</code>, <code style="color: #4a9eff;">grass_block.png</code>).
               </div>
               <input type="file" id="mf-custom-tp-files" accept=".png,.zip,application/zip" multiple style="font-size: 11px; color: #ccc; margin-bottom: 8px; width: 100%;">
               <div id="mf-custom-tp-preview" style="display: none; margin-bottom: 8px;">
@@ -5193,16 +5563,16 @@
                 <div id="mf-custom-tp-stats" style="font-size: 11px; color: #888; margin-top: 4px;"></div>
               </div>
               <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                <button id="mf-custom-tp-generate" class="mf-btn primary" style="font-size: 11px; padding: 5px 12px; background: #2a6dc4; color: #fff; border: none; border-radius: 5px; cursor: pointer;">${t('textureGenerateApply')}</button>
-                <button id="mf-custom-tp-disable" class="mf-btn" style="font-size: 11px; padding: 5px 12px; background: #333; color: #ccc; border: 1px solid #444; border-radius: 5px; cursor: pointer;">${t('textureUseDefault')}</button>
+                <button id="mf-custom-tp-generate" class="mf-btn primary" style="font-size: 11px; padding: 5px 12px; background: #2a6dc4; color: #fff; border: none; border-radius: 5px; cursor: pointer;">Generate &amp; Apply</button>
+                <button id="mf-custom-tp-disable" class="mf-btn" style="font-size: 11px; padding: 5px 12px; background: #333; color: #ccc; border: 1px solid #444; border-radius: 5px; cursor: pointer;">Use Default</button>
               </div>
               <div id="mf-custom-tp-status" style="font-size: 11px; margin-top: 6px;"></div>
               <div id="mf-custom-tp-manager" style="margin-top: 10px; display: none;">
                 <div style="font-size: 12px; color: #e0e0e0; margin-bottom: 6px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px;">
-                  <strong>${t('textureActive')}</strong>
+                  <strong>Active Textures</strong>
                 </div>
                 <div id="mf-custom-tp-list" style="max-height: 150px; overflow-y: auto; font-size: 11px;"></div>
-                <button id="mf-custom-tp-clear" style="font-size: 10px; padding: 3px 10px; background: #5a2020; color: #ff8080; border: 1px solid #804040; border-radius: 4px; cursor: pointer; margin-top: 6px;">${t('clearAll')}</button>
+                <button id="mf-custom-tp-clear" style="font-size: 10px; padding: 3px 10px; background: #5a2020; color: #ff8080; border: 1px solid #804040; border-radius: 4px; cursor: pointer; margin-top: 6px;">Clear All</button>
               </div>
             </div>
           </div>
@@ -5337,7 +5707,7 @@
             <option value="photon"${preset === 'photon' ? ' selected' : ''}>Photon</option>
             <option value="graveyard"${preset === 'graveyard' ? ' selected' : ''}>${t('shadersGraveyard')}</option>
           </select>
-          <div class="mf-muted" style="margin-top:8px;font-size:11px;">${isUltrafast ? t('shadersUfDesc') : isPhoton ? t('shadersPhDesc') : isComplementary ? t('shadersCrDesc') : isGraveyard ? t('shadersGvDesc') : t('shadersHint')}</div>
+          <div class="mf-muted" style="margin-top:8px;font-size:11px;">${isUltrafast ? t('shadersUfDesc') : isPhoton ? t('shadersPhDesc') : t('shadersHint')}</div>
         </div>
 
         <div class="mf-card">
@@ -5404,7 +5774,7 @@
             <span id="mf-cloud-coverage-value">${Math.round(Number(settings.cloudsCoverage ?? 0.5) * 100)}%</span>
           </div>
           <div class="mf-toggle-grid" style="margin-bottom:10px;">
-            ${renderToggle('cloudsPackNoise', t('cloudsPackNoise'), t('cloudsPackNoiseHint'))}
+            ${renderToggle('cloudsPackNoise', t('cloudsPackNoise'), t('cloudsPackNoiseHint'), () => sendCloudsConfig())}
           </div>
           <div class="mf-shader-strength" style="margin-bottom:10px;">
             <span style="min-width:90px;font-size:12px;">${t('cloudsScale')}</span>
@@ -5634,7 +6004,7 @@
           <div class="mf-toggle-grid">
             ${renderToggle('autoRespawn', t('autoRespawn'), t('autoRespawnDesc'))}
             ${renderToggle('antiAfk', t('antiAfk'), t('antiAfkDesc'))}
-            ${renderToggle('rhythmParkour', t('rhythmParkour'), t('rhythmParkourDesc'))}
+            ${renderToggle('rhythmParkour', 'Rhythm Parkour', 'Transforms Miniblox into a rhythm parkour game. Load a song and dodge obstacles to the beat.')}
           </div>
           <div class="mf-tt-hint">${t('antiAfkRightClickHint')}</div>
         </div>
@@ -5828,8 +6198,7 @@ function renderCreditsPage() {
     waypoints: renderWaypointsPage,
     world: renderWorldPage,
     settings: renderSettingsPage,
-    about: renderAboutPage,
-    credits: renderCreditsPage
+    about: renderAboutPage
   };
 
   function updateDashboardStats() {
@@ -5865,7 +6234,10 @@ function renderCreditsPage() {
     const titleEl = panel.querySelector('#mf-gui-page-title');
     if (!pageContainer) return;
 
-    if (searchQuery.trim()) {
+    if (favoritesOnly && !searchQuery.trim()) {
+      if (titleEl) titleEl.textContent = 'Favorites';
+      pageContainer.innerHTML = renderFavoritesPage();
+    } else if (searchQuery.trim()) {
       if (titleEl) titleEl.textContent = t('searchResultsLabel');
       pageContainer.innerHTML = renderSearchResults(searchQuery);
     } else {
@@ -5882,10 +6254,11 @@ function renderCreditsPage() {
   function setActivePage(page) {
     activePage = page;
     searchQuery = '';
+    favoritesOnly = false;
     if (panel) {
       const searchInput = panel.querySelector('#mf-gui-search');
       if (searchInput) searchInput.value = '';
-      panel.querySelectorAll('.mf-nav').forEach(nav => {
+      panel.querySelectorAll('[data-page]').forEach(nav => {
         nav.classList.toggle('active', nav.dataset.page === page);
       });
     }
@@ -6251,7 +6624,7 @@ function renderCreditsPage() {
       >
         <div class="mf-tt-head">
           <div class="mf-tt-title">
-            ${t('freelookSettings')}
+            Freelook Settings
           </div>
           <button
             type="button"
@@ -6262,7 +6635,7 @@ function renderCreditsPage() {
           </button>
         </div>
         <div class="mf-tt-row">
-          <span>${t('activationMode')}</span>
+          <span>Activation Mode</span>
         </div>
         <div class="mf-grid-2">
           <button
@@ -6270,28 +6643,28 @@ function renderCreditsPage() {
             class="mf-btn secondary ${currentMode === 'hold' ? 'active' : ''}"
             data-fl-mode="hold"
           >
-            ${t('hold')}
+            Hold
           </button>
           <button
             type="button"
             class="mf-btn secondary ${currentMode === 'toggle' ? 'active' : ''}"
             data-fl-mode="toggle"
           >
-            ${t('toggle')}
+            Toggle
           </button>
         </div>
         <div class="mf-tt-row">
-          <span>${t('keybind')}</span>
+          <span>Keybind</span>
         </div>
         <div class="mf-tt-bind-box">
           <span class="mf-muted">
-            ${t('freelookKey')}
+            Freelook Key
           </span>
           <span
             class="mf-tt-bind-code"
             data-fl-bind-code
           >
-            ${currentBind || t('notBound')}
+            ${currentBind || 'Not Bound'}
           </span>
         </div>
         <div class="mf-tt-bind-actions">
@@ -6300,25 +6673,26 @@ function renderCreditsPage() {
             class="mf-btn secondary"
             data-fl-bind
           >
-            ${t('setKeybind')}
+            Set Keybind
           </button>
           <button
             type="button"
             class="mf-btn danger"
             data-fl-unbind
           >
-            ${t('remove')}
+            Remove
           </button>
         </div>
         <div class="mf-tt-hint">
-          ${t('freelookHint')}
+          Hold mode keeps freelook active while the key is held.
+          Toggle mode switches freelook on and off each time the key is pressed.
         </div>
         <button
           type="button"
           class="mf-btn primary mf-tt-save"
           data-fl-save
         >
-          ${t('save')}
+          Save
         </button>
       </div>
     `;
@@ -6364,7 +6738,7 @@ function renderCreditsPage() {
         )
       );
       if (bindButton) {
-        bindButton.textContent = t('setKeybind');
+        bindButton.textContent = 'Set Keybind';
       }
     };
     bindButton?.addEventListener('click', () => {
@@ -6380,7 +6754,7 @@ function renderCreditsPage() {
         )
       );
       bindButton.textContent =
-        t('pressKey');
+        'Press a Key...';
     });
     backdrop
       .querySelector('[data-fl-unbind]')
@@ -6389,7 +6763,7 @@ function renderCreditsPage() {
         settings.freelookBind = '';
         guiSettings.freelookBind = '';
         if (bindCode) {
-          bindCode.textContent = t('notBound');
+          bindCode.textContent = 'Not Bound';
         }
         document.dispatchEvent(
           new CustomEvent(
@@ -6420,7 +6794,7 @@ function renderCreditsPage() {
         settings.freelookBind = '';
         guiSettings.freelookBind = '';
         if (bindCode) {
-          bindCode.textContent = t('notBound');
+          bindCode.textContent = 'Not Bound';
         }
       } else {
         settings.freelookBind = event.code;
@@ -6500,7 +6874,7 @@ function renderCreditsPage() {
       >   
         <div class="mf-tt-head">
           <div class="mf-tt-title">
-            ${t('blockHighlightSettings')}
+            Block Highlight Settings
           </div>    
           <button
             type="button"
@@ -6511,7 +6885,7 @@ function renderCreditsPage() {
           </button>
         </div>    
         <div class="mf-tt-row">
-          <span>${t('highlightColor')}</span>
+          <span>Highlight Color</span>
         </div>    
         <div style="
           display:flex;
@@ -6543,7 +6917,7 @@ function renderCreditsPage() {
           >   
         </div>    
         <div class="mf-tt-row">
-          <span>${t('thickness')}</span>    
+          <span>Thickness</span>    
           <span
             class="mf-tt-scale-value"
             data-bh-thickness-value
@@ -6566,39 +6940,39 @@ function renderCreditsPage() {
             class="mf-btn secondary"
             data-bh-preset="1"
           >
-            ${t('thin')}
+            Thin
           </button>   
           <button
             type="button"
             class="mf-btn secondary"
             data-bh-preset="2"
           >
-            ${t('medium')}
+            Medium
           </button>   
           <button
             type="button"
             class="mf-btn secondary"
             data-bh-preset="3"
           >
-            ${t('thick')}
+            Thick
           </button>   
           <button
             type="button"
             class="mf-btn secondary"
             data-bh-preset="4"
           >
-            ${t('extraThick')}
+            Extra Thick
           </button>   
         </div>    
         <div class="mf-tt-hint">
-          ${t('blockHighlightHint')}
+          Changes are applied immediately while this window is open.
         </div>    
         <button
           type="button"
           class="mf-btn primary mf-tt-save"
           data-bh-save
         >
-          ${t('save')}
+          Save
         </button>   
       </div>
     `;    
@@ -6766,7 +7140,7 @@ function renderCreditsPage() {
     const title =
         document.createElement('div');  
     title.textContent =
-        t('armorHudConfigure');  
+        'Configure Armor HUD';  
     Object.assign(title.style, {
         fontSize: '17px',
         fontWeight: '700',
@@ -6775,14 +7149,49 @@ function renderCreditsPage() {
     const subtitle =
         document.createElement('div');  
     subtitle.textContent =
-        t('armorHudEditorHint');  
+        'Drag the armor slots to position them on your screen.';  
     Object.assign(subtitle.style, {
         marginLeft: '14px', 
         fontSize: '12px',
         color: 'rgba(255,255,255,0.55)'
     }); 
     header.appendChild(title);
-    header.appendChild(subtitle); 
+    header.appendChild(subtitle);
+
+    const displayWrap = document.createElement('div');
+    Object.assign(displayWrap.style, {
+        marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px'
+    });
+    const displayLabel = document.createElement('span');
+    displayLabel.textContent = 'Durability';
+    Object.assign(displayLabel.style, { fontSize: '12px', color: 'rgba(255,255,255,0.65)' });
+    const displaySelect = document.createElement('select');
+    displaySelect.className = 'mf-select';
+    Object.assign(displaySelect.style, {
+        background: '#222', color: '#fff', border: '1px solid rgba(255,255,255,0.12)',
+        borderRadius: '6px', padding: '6px 8px', fontSize: '12px', outline: 'none'
+    });
+    [
+        ['off', 'Off'],
+        ['percentage', 'Percentage (95%)'],
+        ['durability', 'Durability Points (95)'],
+        ['both', 'Durability Points + Bar']
+    ].forEach(([value, label]) => {
+        const option = document.createElement('option');
+        option.value = value; option.textContent = label; displaySelect.appendChild(option);
+    });
+    displaySelect.value = 'durability';
+    displaySelect.addEventListener('change', () => {
+        document.dispatchEvent(new CustomEvent('minifeather:armorhud-config', {
+            detail: JSON.stringify({ enabled: !!settings.armorHud, durabilityDisplay: displaySelect.value })
+        }));
+        try { localStorage.setItem('minifeather-armorhud-display', displaySelect.value); } catch (_) {}
+    });
+    try {
+        const savedDisplay = localStorage.getItem('minifeather-armorhud-display');
+        if (['off','percentage','durability','both'].includes(savedDisplay)) displaySelect.value = savedDisplay;
+    } catch (_) {}
+    displayWrap.appendChild(displayLabel); displayWrap.appendChild(displaySelect); header.appendChild(displayWrap); 
     const preview =
         document.createElement('div');  
     Object.assign(preview.style, {
@@ -6798,7 +7207,7 @@ function renderCreditsPage() {
             'assets/armor-hud-editor.png'
         );  
     screenshot.alt =
-        t('armorHudEditorPreview'); 
+        'Armor HUD editor preview'; 
     Object.assign(screenshot.style, {
         position: 'absolute', 
         inset: '0', 
@@ -6810,10 +7219,10 @@ function renderCreditsPage() {
     }); 
     preview.appendChild(screenshot);  
     const names = [
-        t('helmet'),
-        t('chestplate'),
-        t('leggings'),
-        t('boots')
+        'Helmet',
+        'Chestplate',
+        'Leggings',
+        'Boots'
     ];  
     const markerColors = [
         '#ffffff',
@@ -6979,7 +7388,7 @@ function renderCreditsPage() {
     reset.type =
         'button'; 
     reset.textContent =
-        t('reset');  
+        'Reset';  
     reset.className =
         'mf-btn secondary'; 
     reset.addEventListener(
@@ -7019,7 +7428,7 @@ function renderCreditsPage() {
     cancel.type =
         'button'; 
     cancel.textContent =
-        t('cancel'); 
+        'Cancel'; 
     cancel.className =
         'mf-btn secondary'; 
     cancel.addEventListener(
@@ -7033,7 +7442,7 @@ function renderCreditsPage() {
     save.type =
         'button'; 
     save.textContent =
-        t('saveLayout');  
+        'Save Layout';  
     save.className =
         'mf-btn primary'; 
     save.addEventListener(
@@ -7174,9 +7583,35 @@ function renderCreditsPage() {
 
     bindLocalizedFileInputs();
 
-    if (activePage === 'about') bindUpdaterControls();
+    panel.querySelector('[data-mf-favorites]')?.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      favoritesOnly = !favoritesOnly;
+      searchQuery = '';
+      const searchInput = panel.querySelector('#mf-gui-search');
+      if (searchInput) searchInput.value = '';
+      renderCurrentPageContent();
+    });
 
-    // Local Games: render inicial del contenedor (el resto llega por eventos)
+    panel.querySelectorAll('[data-mf-favorite]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        const key = button.closest('.mf-toggle[data-key]')?.dataset.key;
+        if (key) toggleFavorite(key);
+      });
+    });
+
+    panel.querySelectorAll('[data-mf-settings]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        const key = button.closest('.mf-toggle[data-key]')?.dataset.key;
+        if (key) openFeatureSettings(key);
+      });
+    });
+
+    // Local Games: render inicial del contenedor (el resto llega por eventos) (el resto llega por eventos)
     if (panel.querySelector('#mf-localgames-view')) {
       refreshLocalGamesView();
       sendLocalGamesCommand('status');
@@ -7240,7 +7675,7 @@ function renderCreditsPage() {
       if (settings.customShader) {
         sendCustomShaderConfig(true);
       }
-      renderCurrentPageContent(); setTimeout(() => { const next = document.getElementById('mf-shader-preset'); if (next) next.value = settings.customShaderPreset; }, 0);
+      renderCurrentPageContent();
     });
 
     // Sliders de sub-efectos (según el preset activo)
@@ -7261,14 +7696,7 @@ function renderCreditsPage() {
       phend: { key: 'customShaderFxPhend', fmt: v => Math.round(v * 100) + '%' },
       phbh: { key: 'customShaderFxPhbh', fmt: v => Math.round(v * 100) + '%' },
       phbhsize: { key: 'customShaderFxPhbhsize', fmt: v => v.toFixed(2) },
-        phbhspin: { key: 'customShaderFxPhbhspin', fmt: v => v.toFixed(1) },
-        crtm:  { key: 'customShaderFxCrtm',  fmt: v => Math.round(v * 100) + '%' },
-        crexp: { key: 'customShaderFxCrexp', fmt: v => v.toFixed(2) },
-        crc:   { key: 'customShaderFxCrc',   fmt: v => v.toFixed(2) },
-        crsat: { key: 'customShaderFxcrsat', fmt: v => v.toFixed(2) },
-        crvib: { key: 'customShaderFxcrvib', fmt: v => v.toFixed(2) },
-        crvig: { key: 'customShaderFxcrvig', fmt: v => Math.round(v * 100) + '%' },
-        crfog: { key: 'customShaderFxcrfog', fmt: v => Math.round(v * 100) + '%' }
+      phbhspin: { key: 'customShaderFxPhbhspin', fmt: v => v.toFixed(1) }
     };
     for (const [fxName, { key, fmt }] of Object.entries(fxMap)) {
       const slider = panel.querySelector(`#mf-shader-fx-${fxName}`);
@@ -7669,6 +8097,13 @@ function renderCreditsPage() {
       const key = label.dataset.key;
       const input = label.querySelector('input');
       if (!input) return;
+      label.addEventListener('click', event => {
+        if (event.target.closest('[data-mf-settings], [data-mf-favorite]')) return;
+        if (event.target === input) return;
+        event.preventDefault();
+        input.checked = !input.checked;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
       input.addEventListener('change', () => {
         if (key === 'freecam' && input.checked && !requestFreecamAccess()) {
           input.checked = false;
@@ -7680,6 +8115,18 @@ function renderCreditsPage() {
         }
         guiSettings[key] = input.checked;
         settings[key] = input.checked;
+
+        // Update the visible module state immediately. The old UI only reflected
+        // the new value after the whole GUI was closed and reopened.
+        const state = label.querySelector('.mf-feature-state');
+        if (state) {
+          state.textContent = input.checked ? 'Enabled' : 'Disabled';
+          state.classList.toggle('enabled', input.checked);
+          state.classList.toggle('disabled', !input.checked);
+        }
+        label.classList.toggle('enabled', input.checked);
+        label.classList.toggle('disabled', !input.checked);
+
         saveSettings(true);
         applyGuiSettings();
         update();
@@ -7877,7 +8324,7 @@ function renderCreditsPage() {
     if (tpGenerate && tpFiles) {
       chrome.runtime.sendMessage({ type: 'getCustomSpritesheet' }, resp => {
         if (resp?.url) {
-          tpStatus.innerHTML = `<span style="color: #4caf50;">✓ ${t('texturePackActive')}</span>`;
+          tpStatus.innerHTML = '<span style="color: #4caf50;">✓ Custom texture pack active</span>';
           if (tpPreviewImg) tpPreviewImg.src = resp.url;
           if (tpPreview) tpPreview.style.display = 'block';
         }
@@ -7887,11 +8334,11 @@ function renderCreditsPage() {
       tpGenerate.addEventListener('click', async () => {
         const files = tpFiles.files;
         if (!files || files.length === 0) {
-          tpStatus.innerHTML = `<span style="color: #f44336;">${t('textureSelectFile')}</span>`;
+          tpStatus.innerHTML = '<span style="color: #f44336;">Select a .zip or .png file</span>';
           return;
         }
 
-        tpStatus.innerHTML = `<span style="color: #4a9eff;">${t('textureGenerating')}</span>`;
+        tpStatus.innerHTML = '<span style="color: #4a9eff;">Generating spritesheet...</span>';
         tpGenerate.disabled = true;
 
         try {
@@ -7920,7 +8367,7 @@ function renderCreditsPage() {
               tpStatus.innerHTML = `<span style="color: #f44336;">Error: ${result.error}</span>`;
             }
           } else {
-            tpStatus.innerHTML = `<span style="color: #f44336;">${t('textureModuleMissing')}</span>`;
+            tpStatus.innerHTML = '<span style="color: #f44336;">TexturePack module not loaded</span>';
           }
         } catch (e) {
           tpStatus.innerHTML = `<span style="color: #f44336;">Error: ${e.message}</span>`;
@@ -7932,7 +8379,7 @@ function renderCreditsPage() {
       tpDisable?.addEventListener('click', () => {
         if (window.MF_TEXTURE_PACK) MF_TEXTURE_PACK.disable();
         chrome.runtime.sendMessage({ type: 'setCustomSpritesheet', url: null });
-        tpStatus.innerHTML = `<span style="color: #888;">${t('textureReverted')}</span>`;
+        tpStatus.innerHTML = '<span style="color: #888;">Reverted to default. Reload page.</span>';
         if (tpPreview) tpPreview.style.display = 'none';
       });
 
@@ -7940,7 +8387,7 @@ function renderCreditsPage() {
         if (window.MF_TEXTURE_PACK) MF_TEXTURE_PACK.clearAll();
         chrome.runtime.sendMessage({ type: 'setCustomSpritesheet', url: null });
         localStorage.removeItem('mf_texture_list');
-        tpStatus.innerHTML = `<span style="color: #888;">${t('textureCleared')}</span>`;
+        tpStatus.innerHTML = '<span style="color: #888;">All textures cleared. Reload page.</span>';
         if (tpPreview) tpPreview.style.display = 'none';
         refreshTextureList();
       });
@@ -7966,13 +8413,13 @@ function renderCreditsPage() {
 
     panel.querySelector('#mf-gui-close')?.addEventListener('click', hideGUI, { signal: panelSignal });
 
-    panel.querySelectorAll('.mf-nav[data-page]').forEach(nav => {
+    panel.querySelectorAll('[data-page]').forEach(nav => {
       nav.addEventListener('click', () => setActivePage(nav.dataset.page), { signal: panelSignal });
     });
 
     panel.querySelector('#mf-gui-search')?.addEventListener('input', event => {
       searchQuery = event.target.value;
-      panel.querySelectorAll('.mf-nav').forEach(nav => {
+      panel.querySelectorAll('[data-page]').forEach(nav => {
         nav.classList.toggle('active', !searchQuery.trim() && nav.dataset.page === activePage);
       });
       renderCurrentPageContent();
@@ -8027,35 +8474,12 @@ function renderCreditsPage() {
     bindPanelControls();
   }
 
-  function applyHudQuickHideState() {
-    for (const key of HUD_QUICK_HIDE_MODULES) {
-      setModuleEnabled(key, !hudQuickHideActive && !!settings[key]);
-    }
-
-    const armorEnabled = !hudQuickHideActive && !!settings.armorHud;
-    window.__MINIFEATHER_ARMOR_HUD_ENABLED__ = armorEnabled;
-    document.dispatchEvent(new CustomEvent('minifeather:armorhud-config', {
-      detail: JSON.stringify({ enabled: armorEnabled })
-    }));
-  }
-
-  function toggleHudQuickHide() {
-    hudQuickHideActive = !hudQuickHideActive;
-    applyHudQuickHideState();
-  }
-
   function initGUI() {
     if (guiReady) return;
     guiReady = true;
     let rightShiftDown = false;
 
     document.addEventListener('keydown', event => {
-      if (event.code === HUD_QUICK_HIDE_KEY && event.shiftKey && !event.repeat) {
-        event.preventDefault();
-        event.stopPropagation();
-        toggleHudQuickHide();
-        return;
-      }
       if (event.code === 'ShiftRight' && !rightShiftDown) {
         rightShiftDown = true;
         toggleGUI();
@@ -8144,17 +8568,19 @@ function renderCreditsPage() {
     sendLanguageConfig();
     setModuleEnabled('rebrand', settings.rebrand);
     setModuleEnabled('discord', settings.rebrand && settings.discord);
-    setModuleEnabled('keystrokes', !hudQuickHideActive && settings.keystrokes);
-    setModuleEnabled('fpsCounter', !hudQuickHideActive && settings.fpsCounter);
-    setModuleEnabled('cpsCounter', !hudQuickHideActive && settings.cpsCounter);
-    setModuleEnabled('pingCounter', !hudQuickHideActive && settings.pingCounter);
-    setModuleEnabled('coordinates', !hudQuickHideActive && settings.coordinates);
-    setModuleEnabled('waypoints', !hudQuickHideActive && settings.waypoints);
-    const armorHudRuntimeEnabled = !hudQuickHideActive && !!settings.armorHud;
-    window.__MINIFEATHER_ARMOR_HUD_ENABLED__ = armorHudRuntimeEnabled;
-    document.dispatchEvent(
-      new CustomEvent('minifeather:armorhud-config', {
-        detail: JSON.stringify({ enabled: armorHudRuntimeEnabled })
+    setModuleEnabled('keystrokes', settings.keystrokes);
+    setModuleEnabled('fpsCounter', settings.fpsCounter);
+    setModuleEnabled('cpsCounter', settings.cpsCounter);
+    setModuleEnabled('pingCounter', settings.pingCounter);
+    setModuleEnabled('coordinates', settings.coordinates);
+    setModuleEnabled('waypoints', settings.waypoints);
+    window.__MINIFEATHER_ARMOR_HUD_ENABLED__ = !!settings.armorHud;
+      document.dispatchEvent(
+          new CustomEvent('minifeather:armorhud-config', {
+            detail: JSON.stringify({
+              enabled: !!settings.armorHud
+            
+        })
       })
     );
     setModuleEnabled('titanTiny', settings.titanTiny);
@@ -8758,9 +9184,11 @@ function renderCreditsPage() {
     overlay = null;
     panel = null;
     guiReady = false;
-    hudQuickHideActive = false;
     activePage = 'dashboard';
     searchQuery = '';
+    favoritesOnly = false;
+    favoriteModules.clear();
+    featureSettingsCleanup = null;
 
     if (globalThis.__MINIFEATHER_CONTENT__?.destroy === destroy) {
       delete globalThis.__MINIFEATHER_CONTENT__;
@@ -8768,7 +9196,7 @@ function renderCreditsPage() {
   }
 
   function boot() {
-    chrome.storage.local.get(['settings', 'customLogo'], data => {
+    chrome.storage.local.get(['settings', 'customLogo', 'favoriteModules'], data => {
       if (destroyed) return;
       settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
       settings.antiAfkDelay = clampAntiAfkDelay(settings.antiAfkDelay);
@@ -8792,6 +9220,7 @@ function renderCreditsPage() {
         elytraFlightValues: cloneElytraFlightValues(settings.elytraFlightValues)
       };
       currentLogo = data.customLogo || CONFIG.defaultLogo;
+      favoriteModules = new Set(Array.isArray(data.favoriteModules) ? data.favoriteModules : []);
 
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init, { once: true });
