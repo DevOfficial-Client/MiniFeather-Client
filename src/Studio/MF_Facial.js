@@ -131,7 +131,8 @@
                 return null;
             }
             if (/^fs:/.test(name)) {
-                // cara de un PACK facial (skins/facialskins/<id>/<file>.png).
+                // cara de un PACK facial (builtin skins/facialskins/<id>/
+                // <file>.png o custom importado por ZIP).
                 // El PNG es la franja BASE de cabeza, ratio 2:1 (32x16
                 // lógico a cualquier escala: alice 64x32 = k2, apex…).
                 // El frame vive a RESOLUCIÓN NATIVA del pack (k propio) y
@@ -140,9 +141,7 @@
                 const slash = name.indexOf('/');
                 if (slash < 0) return null;
                 const id = name.slice(3, slash), file = name.slice(slash + 1);
-                const url = extAssetUrl(PACKS_DIR + id + '/' + file + '.png');
-                if (!url) return null; // sin base de assets todavía
-                const img = await loadImg(url).catch(() => null);
+                const img = await packImg(id, file).catch(() => null);
                 if (!img) return null;
                 // k del sprite: la franja base es 32x16 lógico (cat 32x16
                 // = k1, alice 64x32 = k2, apex 512x256 = k16…)
@@ -217,10 +216,20 @@
         return null;
     }
 
+    // URL base de un pack builtin según su carpeta: facialskins/ (server)
+    // o mypacks/ (custom). Los ids conocidos del server van en facialskins.
+    function packBaseUrl(packId) {
+        const serverKnown = [
+            'adele', 'adventure', 'aether', 'alice', 'apex', 'ariel', 'aurora',
+            'banana', 'bob', 'cat', 'celeste', 'ethan'
+        ];
+        return serverKnown.includes(packId) ? PACKS_DIR : MY_PACKS_DIR;
+    }
+
     function loadPackImg(id, file) {
         const key = id + '/' + file;
         if (packImgCache.has(key)) return packImgCache.get(key);
-        const url = extAssetUrl(PACKS_DIR + id + '/' + file + '.png');
+        const url = extAssetUrl(packBaseUrl(id) + id + '/' + file + '.png');
         const p = url
             ? loadImg(url).catch(() => null)
             : Promise.resolve(null);
@@ -247,11 +256,16 @@
     //   3. cache de la API (accounts/me) — SOLO respaldo: puede quedar
     //      desactualizada si el armario usa XHR (no capturable)
     function currentSkinId() {
+        // normalizar: quitar rutas/extensiones y el prefijo mfpack: (skin
+        // de pack aplicada por el conducto nativo del juego)
+        const norm = (v) => {
+            let s = String(v).split('/').pop().replace(/\.png$/i, '');
+            if (s.toLowerCase().startsWith(MFPACK_PREFIX)) s = s.slice(MFPACK_PREFIX.length);
+            return s.toLowerCase();
+        };
         try {
             const sc = window.MF_SkinChanger?.current;
-            if (typeof sc === 'string' && sc) {
-                return sc.split('/').pop().replace(/\.png$/i, '').toLowerCase();
-            }
+            if (typeof sc === 'string' && sc) return norm(sc);
         } catch {}
         const g = getGame();
         const me = g?.player;
@@ -264,7 +278,7 @@
         ];
         for (const c of cand) {
             if (typeof c === 'string' && c) {
-                const id = c.split('/').pop().replace(/\.png$/i, '').toLowerCase();
+                const id = norm(c);
                 if (id) return id;
             }
         }
@@ -366,16 +380,559 @@
             .catch(() => { apiFetchFail.at = performance.now(); return apiSkin.value; });
     }
 
-    // índice de packs disponibles: [{id, front, blink, left, right}]
+    // uuid del player LOCAL: player.uuid / profile.uuid / player.id (si
+    // tiene forma de uuid) / entrada en playerList. Para el auto-activado
+    // de packs con "uuid" en pack.json.
+    function currentPlayerUuid() {
+        const g = getGame() || globalThis.__MINIBLOX_GAME__ || null;
+        const me = g?.player;
+        if (!me) return null;
+        const isUuid = (v) => typeof v === 'string' &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+        if (isUuid(me.uuid)) return me.uuid.toLowerCase();
+        if (isUuid(me.profile?.uuid)) return me.profile.uuid.toLowerCase();
+        if (isUuid(me.id)) return me.id.toLowerCase();
+        // playerList: buscar la entrada del player local
+        try {
+            const pl = g?.playerList;
+            const entries = pl?.values ? [...pl.values()] : (pl ? Object.values(pl) : []);
+            for (const e of entries) {
+                if ((isUuid(e?.uuid) && (e.uuid === me.uuid || e.id === me.id)) ||
+                    (e?.username === me.username && isUuid(e?.uuid))) {
+                    return e.uuid.toLowerCase();
+                }
+            }
+        } catch {}
+        return null;
+    }
+
+    // ── índice de packs ──
+    // [{id, name, front, blink, left, right, skin?, custom?}]
+    //  · builtin: vienen de skins/facialskins/<id>/pack.json (fetch)
+    //  · custom:  ZIPs importados por el usuario, guardados en IndexedDB
+    //             con sus PNGs como dataURL (accesibles desde MAIN world)
     const packIndex = [];
-    function buildPackIndex() {
+
+    // packs importados: IndexedDB "packs" → [{id, name, author, version,
+    // skin(dataURL), sprites:{front,left,right,blink}(dataURL)}]
+    const PACKS_DB = 'minifeather_facialpacks';
+    let packsDb = null;
+    function packsDbOpen() {
+        if (packsDb) return Promise.resolve(packsDb);
+        return new Promise((res, rej) => {
+            const rq = indexedDB.open(PACKS_DB, 1);
+            rq.onupgradeneeded = () => rq.result.createObjectStore('packs', { keyPath: 'id' });
+            rq.onsuccess = () => { packsDb = rq.result; res(packsDb); };
+            rq.onerror = () => rej(rq.error);
+        });
+    }
+    function packsDbAll() {
+        return packsDbOpen().then(db => new Promise((res, rej) => {
+            const rq = db.transaction('packs', 'readonly').objectStore('packs').getAll();
+            rq.onsuccess = () => res(rq.result || []);
+            rq.onerror = () => rej(rq.error);
+        }));
+    }
+    function packsDbPut(item) {
+        return packsDbOpen().then(db => new Promise((res, rej) => {
+            const rq = db.transaction('packs', 'readwrite').objectStore('packs').put(item);
+            rq.onsuccess = () => res(true);
+            rq.onerror = () => rej(rq.error);
+        }));
+    }
+    function packsDbDel(id) {
+        return packsDbOpen().then(db => new Promise((res, rej) => {
+            const rq = db.transaction('packs', 'readwrite').objectStore('packs').delete(id);
+            rq.onsuccess = () => res(true);
+            rq.onerror = () => rej(rq.error);
+        }));
+    }
+
+    // resolver la imagen de un pack builtin (meta mf-skins-base) o custom
+    // (dataURL de IndexedDB) → Promise<HTMLImageElement>
+    // file: para builtin = nombre SIN extensión; para custom = clave del
+    // sprite ('front'|'left'|'right'|'blink')
+    async function packImg(id, file) {
+        const custom = customPacks.get(id);
+        if (custom) {
+            const key = id + '/' + file;
+            if (packImgCache.has(key)) return packImgCache.get(key);
+            const du = custom.sprites[file] || null;
+            const p = du ? loadImg(du).catch(() => null) : Promise.resolve(null);
+            packImgCache.set(key, p);
+            return p;
+        }
+        // builtin: loadPackImg añade ".png" él mismo → quitar la extensión
+        // si viene (pack.json la trae: "alfrente.png")
+        return loadPackImg(id, file.replace(/\.png$/i, ''));
+    }
+
+    // ── lectura/escritura ZIP (STORE, sin compresión) en MAIN world ──
+    // JSZip vive en ISOLATED → aquí un lector minimalista: localiza los
+    // [File Header] de entradas STORED, y para DEFLATE usa
+    // DecompressionStream (todos los Chrome modernos lo tienen).
+    async function zipRead(buf) {
+        const dv = new DataView(buf);
+        const files = new Map(); // name -> Uint8Array | null (directorio)
+        // EOCD al final
+        let eocd = -1;
+        for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 66000); i--) {
+            if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+        }
+        if (eocd < 0) throw new Error('ZIP inválido (sin EOCD)');
+        const count = dv.getUint16(eocd + 10, true);
+        let off = dv.getUint32(eocd + 16, true); // offset del CD
+        const entries = [];
+        for (let i = 0; i < count; i++) {
+            if (dv.getUint32(off, true) !== 0x02014b50) break;
+            const method = dv.getUint16(off + 10, true);
+            const csize = dv.getUint32(off + 20, true);
+            const nlen = dv.getUint16(off + 28, true);
+            const elen = dv.getUint16(off + 30, true);
+            const clen = dv.getUint16(off + 32, true);
+            const lho = dv.getUint32(off + 42, true);
+            const name = new TextDecoder().decode(new Uint8Array(buf, off + 46, nlen));
+            entries.push({ name, method, csize, lho });
+            off += 46 + nlen + elen + clen;
+        }
+        // local headers → data
+        for (const e of entries) {
+            if (e.name.endsWith('/')) { files.set(e.name, null); continue; }
+            if (dv.getUint32(e.lho, true) !== 0x04034b50) continue;
+            const nlen = dv.getUint16(e.lho + 26, true);
+            const elen = dv.getUint16(e.lho + 28, true);
+            const start = e.lho + 30 + nlen + elen;
+            const raw = new Uint8Array(buf, start, e.csize);
+            let data = raw;
+            if (e.method === 8) { // DEFLATE
+                const ds = new DecompressionStream('deflate-raw');
+                const stream = new Blob([raw]).stream().pipeThrough(ds);
+                data = new Uint8Array(await new Response(stream).arrayBuffer());
+            } else if (e.method !== 0) continue;
+            files.set(e.name, data);
+        }
+        return files;
+    }
+
+    // construir un ZIP STORE mínimo (varios PNGs + pack.json)
+    function zipWrite(files) { // [[name, Uint8Array]]
+        const enc = new TextEncoder();
+        const chunks = [];
+        const central = [];
+        let offset = 0;
+        const crcTable = (() => {
+            const t = new Uint32Array(256);
+            for (let n = 0; n < 256; n++) {
+                let c = n;
+                for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+                t[n] = c >>> 0;
+            }
+            return t;
+        })();
+        const crc32 = (d) => {
+            let c = 0xFFFFFFFF;
+            for (let i = 0; i < d.length; i++) c = crcTable[(c ^ d[i]) & 0xFF] ^ (c >>> 8);
+            return (c ^ 0xFFFFFFFF) >>> 0;
+        };
+        for (const [name, data] of files) {
+            const nb = enc.encode(name);
+            const crc = crc32(data);
+            const lh = new Uint8Array(30 + nb.length);
+            const lv = new DataView(lh.buffer);
+            lv.setUint32(0, 0x04034b50, true);
+            lv.setUint16(4, 20, true);      // version
+            lv.setUint16(6, 0, true);       // flags
+            lv.setUint16(8, 0, true);       // STORE
+            lv.setUint16(10, 0, true);      // time
+            lv.setUint16(12, 0, true);      // date
+            lv.setUint32(14, crc, true);
+            lv.setUint32(18, data.length, true);
+            lv.setUint32(22, data.length, true);
+            lv.setUint16(26, nb.length, true);
+            lv.setUint16(28, 0, true);
+            lh.set(nb, 30);
+            chunks.push(lh, data);
+            central.push({ nb, crc, size: data.length, offset });
+            offset += lh.length + data.length;
+        }
+        const cdStart = offset;
+        for (const c of central) {
+            const ch = new Uint8Array(46 + c.nb.length);
+            const cv = new DataView(ch.buffer);
+            cv.setUint32(0, 0x02014b50, true);
+            cv.setUint16(4, 20, true);
+            cv.setUint16(6, 20, true);
+            cv.setUint32(16, c.crc, true);
+            cv.setUint32(20, c.size, true);
+            cv.setUint32(24, c.size, true);
+            cv.setUint16(28, c.nb.length, true);
+            cv.setUint32(42, c.offset, true);
+            ch.set(c.nb, 46);
+            chunks.push(ch);
+            offset += ch.length;
+        }
+        const eocd = new Uint8Array(22);
+        const ev = new DataView(eocd.buffer);
+        ev.setUint32(0, 0x06054b50, true);
+        ev.setUint16(8, central.length, true);
+        ev.setUint16(10, central.length, true);
+        ev.setUint32(12, offset - cdStart, true);
+        ev.setUint32(16, cdStart, true);
+        chunks.push(eocd);
+        return new Blob(chunks, { type: 'application/zip' });
+    }
+
+    // importar un ZIP de pack: pack.json + PNGs en la raíz o en una subcarpeta
+    async function importPackZip(file) {
+        const buf = await file.arrayBuffer();
+        const files = await zipRead(buf);
+        // localizar pack.json (raíz o primera subcarpeta)
+        const names = [...files.keys()];
+        const pjName = names.find(n => /(^|\/)pack\.json$/i.test(n));
+        if (!pjName) throw new Error('el ZIP no tiene pack.json');
+        const dir = pjName.includes('/') ? pjName.slice(0, pjName.lastIndexOf('/') + 1) : '';
+        const j = JSON.parse(new TextDecoder().decode(files.get(pjName)));
+        const id = String(j.id || file.name.replace(/\.zip$/i, '')).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        if (!id) throw new Error('pack.json sin "id"');
+
+        // leer sprites: nombres desde el json, o sprites explícitos dataURL
+        const pick = (v, fallback) => {
+            const n = typeof v === 'string' ? v : (v && v.file);
+            return n ? dir + n : fallback;
+        };
+        const pack = {
+            id,
+            name: String(j.name || id),
+            author: String(j.author || ''),
+            version: +j.version || 1,
+            uuid: typeof j.uuid === 'string' ? j.uuid.toLowerCase() : null,
+            skin: null,
+            sprites: { front: null, left: null, right: null, up: null, down: null, blink: null }
+        };
+        const want = new Set();
+        const sp = j.sprites || {};
+        const spriteFiles = {
+            front: pick(sp.front, dir + 'alfrente.png'),
+            left: pick(sp.left, dir + 'izquierda.png'),
+            right: pick(sp.right, dir + 'derecha.png'),
+            up: pick(sp.up, null),     // opcionales (null si no vienen)
+            down: pick(sp.down, null),
+            brow: pick(sp.brow, null),
+            blink: pick(sp.blink, dir + 'blink.png')
+        };
+        for (const k in spriteFiles) if (spriteFiles[k]) want.add(spriteFiles[k]);
+        const skinFile = j.skin ? dir + j.skin : null;
+        if (skinFile) want.add(skinFile);
+        // normalizar nombres de archivos del ZIP (mayúsculas/espacios) con
+        // tolerancia: buscar por lowercase sin espacios
+        const lower = new Map([...files.keys()].map(n => [n.toLowerCase(), n]));
+        const resolve = (wantName) => {
+            if (files.has(wantName)) return wantName;
+            return lower.get(wantName.toLowerCase()) || null;
+        };
+        const blobOf = async (name) => {
+            if (!name) return null;
+            const rn = resolve(name);
+            const d = rn ? files.get(rn) : null;
+            if (!d) return null;
+            return await new Promise(res => {
+                const fr = new FileReader();
+                fr.onload = () => res(fr.result);
+                fr.onerror = () => res(null);
+                fr.readAsDataURL(new Blob([d], { type: 'image/png' }));
+            });
+        };
+        const OPTIONAL = new Set(['up', 'down', 'brow']); // sprites opcionales
+        for (const key in spriteFiles) {
+            const du = await blobOf(spriteFiles[key]);
+            if (!du) {
+                if (OPTIONAL.has(key)) continue; // sin sprite → zona desactivada
+                throw new Error('falta sprite "' + key + '" (' + spriteFiles[key] + ')');
+            }
+            pack.sprites[key] = du;
+        }
+        pack.skin = await blobOf(skinFile);
+        // invalidar caches del id (re-import con imágenes nuevas)
+        for (const key of [...packImgCache.keys()]) {
+            if (key.startsWith(id + '/')) packImgCache.delete(key);
+        }
+        for (const key of [...state.frameCache.keys()]) {
+            if (key.startsWith('fs:' + id + '/')) state.frameCache.delete(key);
+        }
+        auto._blinkCache = null; auto._blinkCacheZone = null; auto._blinkCacheKind = null;
+        // guardar en IndexedDB + refrescar índices
+        await packsDbPut(pack);
+        await loadCustomPacks();
+        // registrar el id en mypacks (para el boot y futuras sesiones)
+        try {
+            const saved = JSON.parse(localStorage.getItem('mff:mypacks') || '[]');
+            if (!saved.includes(id)) {
+                saved.push(id);
+                localStorage.setItem('mff:mypacks', JSON.stringify(saved));
+            }
+        } catch {}
+        // aplicar la skin del pack por el conducto NATIVO del juego (id
+        // mfpack:<id> + interceptor <img>) → el monitor detecta el id y
+        // enciende la cara animada. Si no hay juego cargado queda listo
+        // para cuando entre a un mundo.
+        try { await applyPackSkinToGame(id); } catch {}
+        return pack;
+    }
+
+    // exportar un pack como ZIP descargable (builtin via fetch, custom
+    // desde sus dataURLs de IndexedDB)
+    async function exportPackZip(id) {
+        const p = packIndex.find(x => x.id === id);
+        if (!p) throw new Error('pack "' + id + '" no encontrado');
+        const files = [];
+        const j = { id: p.id, name: p.name || p.id, author: p.author || '', version: p.version || 1 };
+        const sprites = {};
+        const map = { front: p.front, left: p.left, right: p.right, blink: p.blink };
+        const custom = customPacks.get(id);
+        let bytes = async (file) => null;
+        if (custom) {
+            bytes = async (key) => {
+                const du = custom.sprites[key];
+                if (!du) return null;
+                const b = await (await fetch(du)).blob();
+                return new Uint8Array(await b.arrayBuffer());
+            };
+        } else {
+            bytes = async (file) => {
+                const img = await loadPackImg(id, file.replace(/\.png$/i, ''));
+                if (!img) return null;
+                // el src de la imagen ya es la URL del PNG (chrome-ext://…)
+                const b = await (await fetch(img.src)).blob();
+                return new Uint8Array(await b.arrayBuffer());
+            };
+        }
+        for (const k in map) {
+            if (!map[k]) continue;
+            const base = custom ? k : map[k].replace(/\.png$/i, '');
+            const d = await bytes(custom ? k : map[k]);
+            if (d) {
+                files.push([base + '.png', d]);
+                sprites[k] = base + '.png';
+            }
+        }
+        if (custom && custom.skin) {
+            const b = await (await fetch(custom.skin)).blob();
+            const d = new Uint8Array(await b.arrayBuffer());
+            files.push([id + '.png', d]);
+            j.skin = id + '.png';
+        } else if (p.skinFile) {
+            const base = p.skinFile.replace(/\.png$/i, '');
+            const d = await bytes(p.skinFile);
+            if (d) { files.push([base + '.png', d]); j.skin = base + '.png'; }
+        }
+        j.sprites = sprites;
+        files.push(['pack.json', new TextEncoder().encode(JSON.stringify(j, null, 2))]);
+        const blob = zipWrite(files);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = p.id + '-pack.zip';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        return { ok: true, files: files.length };
+    }
+
+    // packs custom (IndexedDB) en memoria: id → pack (con dataURLs)
+    const customPacks = new Map();
+    async function loadCustomPacks() {
+        try {
+            const all = await packsDbAll();
+            customPacks.clear();
+            for (const p of all) customPacks.set(p.id, p);
+        } catch {}
+        rebuildPackIndex();
+    }
+
+    // ── Registro de skins de pack DENTRO del bundle del juego ──
+    // El skinManager del juego (clase AF, module-scope) carga cada skin
+    // como <img src="textures/entity/skins/<id>.png"> (vía THREE.Texture
+    // Loader). Interceptor de CustomSkins.js ya probó este conducto.
+    // Aquí registramos la skin de cada pack con id "mfpack:<id>":
+    //   1. exponemos la URL real del PNG (extensión o dataURL) en
+    //      window.__MF_PACK_SKINS__ para el interceptor de <img src>
+    //   2. player.profile.cosmetics.skin = "mfpack:<id>" + mesh.recreate()
+    //      → el juego la carga/registra como nativa (ratio + materiales
+    //      correctos, avatares de UI incluidos) y el servidor NUNCA la ve
+    //      (local only: el id no se envía hasta que exista de verdad)
+    const MFPACK_PREFIX = 'mfpack:';
+    function packSkinUrl(packId) {
+        // ZIP importado (IndexedDB): dataURL directo
+        const custom = customPacks.get(packId);
+        if (custom?.skin) return custom.skin;
+        // builtin de mypacks/ (custom, no server): URL de la extensión
+        const p = builtinPacks.find(x => x.id === packId && !x.server);
+        if (p) {
+            const base = p.skinFile ? MY_PACKS_DIR + packId + '/' + p.skinFile
+                                    : MY_PACKS_DIR + packId + '/' + packId + '.png';
+            return extAssetUrl(base);
+        }
+        // builtin de facialskins/ (skin DEL SERVER): el juego ya la tiene,
+        // no necesita registro — solo se aplica por el armario del juego
+        return null;
+    }
+    // registro vivo para el interceptor de <img src> (mismo conducto que
+    // CustomSkins.js): skinId "mfpack:cat" → URL del PNG
+    const packSkinReg = (globalThis.__MF_PACK_SKINS__ ||= {});
+    function registerPackSkin(packId) {
+        const url = packSkinUrl(packId);
+        if (!url) return false;
+        packSkinReg[MFPACK_PREFIX + packId] = url;
+        return true;
+    }
+    // instalar el interceptor una sola vez (document_start, MAIN world)
+    function installPackImgHook() {
+        if (globalThis.__MF_PACK_IMG_HOOK__) return;
+        const proto = HTMLImageElement.prototype;
+        const d = Object.getOwnPropertyDescriptor(proto, 'src');
+        if (!d?.set || !d?.get) return;
+        const origSet = d.set;
+        Object.defineProperty(proto, 'src', {
+            configurable: true,
+            enumerable: d.enumerable,
+            get() { return d.get.call(this); },
+            set(v) {
+                if (typeof v === 'string') {
+                    const m = v.match(/^textures\/entity\/skins\/([^/?#]+)\.png/);
+                    if (m && globalThis.__MF_PACK_SKINS__?.[m[1]]) {
+                        origSet.call(this, globalThis.__MF_PACK_SKINS__[m[1]]);
+                        return;
+                    }
+                }
+                origSet.call(this, v);
+            }
+        });
+        globalThis.__MF_PACK_IMG_HOOK__ = true;
+    }
+    // aplicar la skin del pack al player LOCAL (no server-side):
+    // registra el id, carga la textura en el skinManager del juego y
+    // recrea el mesh con el pipeline nativo
+    async function applyPackSkinToGame(packId) {
+        const g = getGame();
+        const me = g?.player;
+        if (!g || !me) throw new Error('no hay juego cargado (entra a un mundo primero)');
+        if (!registerPackSkin(packId)) throw new Error('el pack no tiene skin PNG');
+        // soltar cualquier skin del SkinChanger: su watchdog re-pintaría
+        // su textura encima del mesh que el juego acaba de recrear
+        try { window.MF_SkinChanger?.release?.(); } catch {}
+        me.profile.cosmetics.skin = MFPACK_PREFIX + packId;
+        // recrear el mesh del player como hace el juego al cambiar skin
+        let mesh = null;
+        try { mesh = g.world?.getPlayerById?.(me.id)?.mesh || me.mesh; } catch {}
+        try {
+            if (mesh?.recreate) await mesh.recreate();
+            else if (typeof mesh?.init === 'function') await mesh.init();
+        } catch {}
+        return true;
+    }
+
+    // índice unificado builtin + custom
+    function rebuildPackIndex() {
         packIndex.length = 0;
-        const dirs = [
+        for (const p of builtinPacks) packIndex.push(p);
+        for (const p of customPacks.values()) {
+            packIndex.push({
+                id: p.id, name: p.name, author: p.author, version: p.version,
+                uuid: p.uuid || null,
+                // custom: los "file" de fs: son CLAVES de sprites (no
+                // filenames) → packImg(id, 'front') resuelve el dataURL
+                front: 'front', left: 'left',
+                right: 'right', blink: 'blink',
+                up: p.sprites.up ? 'up' : null,       // opcionales
+                down: p.sprites.down ? 'down' : null,
+                brow: p.sprites.brow ? 'brow' : null,
+                skinFile: null, custom: true, server: false
+            });
+        }
+        // registrar TODAS las skins de pack en el conducto nativo del
+        // juego (interceptor <img>) para que estén disponibles al vuelo
+        installPackImgHook();
+        for (const p of packIndex) { try { registerPackSkin(p.id); } catch {} }
+        renderPacksTab();
+    }
+
+    // builtin: leer pack.json de cada directorio conocido vía fetch.
+    // skins/facialskins/ = SOLO skins NATIVAS del server (catálogo del
+    // juego: cat, alice, bob…): el juego ya sabe cargarlas → sus packs NO
+    // necesitan inyección, solo activan el modo auto.
+    // skins/mypacks/ = packs CUSTOM (skins propias que NO están en el
+    // server): esos sí se registran en el bundle (id mfpack:<id>) para
+    // que el juego las trate como nativas.
+    const builtinPacks = [];
+    const SERVER_SKINS = new Set([
+        'bob', 'alice', 'techno', 'ganyu', 'klee', 'hutao', 'kyoko',
+        'georgenotfound', 'thebiggelo', 'jake', 'diana', 'holly',
+        'endoskeleton', 'strange', 'corrupted', 'james', 'levi', 'deadpool',
+        'vindicate', 'galactus', 'suit', 'remus', 'ironman', 'transformer',
+        'adele', 'natalie', 'heather', 'lexi', 'sara', 'chris', 'aurora',
+        'zane', 'hunter', 'seraphina', 'celeste', 'ember', 'finn',
+        'adventure', 'raven', 'nova', 'panda', 'glory', 'cody', 'aether',
+        'apex', 'katie', 'vain', 'ariel', 'duck', 'ethan', 'cat', 'tester',
+        'remlin', 'sushi', 'qhyun', 'banana'
+    ]);
+    function isServerSkin(id) { return SERVER_SKINS.has(String(id).toLowerCase()); }
+    async function loadBuiltinPacks() {
+        builtinPacks.length = 0;
+        const dirs = await builtinDirs();
+        const results = await Promise.all(dirs.map(async (id) => {
+            try {
+                const url = extAssetUrl(packBaseUrl(id) + id + '/pack.json');
+                if (!url) return null;
+                const r = await fetch(url, { cache: 'no-store' });
+                if (!r.ok) return null;
+                const j = await r.json();
+                const sp = j.sprites || {};
+                return {
+                    id: (j.id || id).toLowerCase(),
+                    name: j.name || id,
+                    author: j.author || '',
+                    version: +j.version || 1,
+                    uuid: typeof j.uuid === 'string' ? j.uuid.toLowerCase() : null, // auto-activar si el player local tiene este uuid
+                    front: sp.front || null,
+                    left: sp.left || 'izquierda.png',
+                    right: sp.right || 'derecha.png',
+                    up: sp.up || null,      // opcional: mirar arriba
+                    down: sp.down || null,  // opcional: mirar abajo
+                    brow: sp.brow || null,  // opcional: ceja levantada ("?" chat)
+                    blink: sp.blink || 'blink.png',
+                    skinFile: j.skin || null,
+                    // server: el juego ya tiene esta skin (solo auto-mode).
+                    // custom: skin propia no-server → registro mfpack:
+                    server: isServerSkin(j.id || id)
+                };
+            } catch { return null; }
+        }));
+        for (const p of results) if (p) builtinPacks.push(p);
+        rebuildPackIndex();
+    }
+
+    // lista de directorios con pack.json: facialskins/ (server) +
+    // mypacks/ (custom). mypacks no existe en versiones viejas → fetch
+    // 404 da lista vacía, no error.
+    const MY_PACKS_DIR = 'skins/mypacks/';
+    // ids de packs custom builtin (carpeta skins/mypacks/ de la extensión)
+    const MY_PACKS_IDS = ['estebangxe', 'angrywolfx'];
+    async function builtinDirs() {
+        const known = [
             'adele', 'adventure', 'aether', 'alice', 'apex', 'ariel', 'aurora',
             'banana', 'bob', 'cat', 'celeste', 'ethan'
         ];
-        for (const id of dirs) packIndex.push({ id, blink: 'blink', left: 'izquierda', right: 'derecha' });
-        return packIndex;
+        const mine = [...MY_PACKS_IDS];
+        try {
+            const saved = JSON.parse(localStorage.getItem('mff:mypacks') || '[]');
+            for (const id of saved) if (!known.includes(id) && !mine.includes(id)) mine.push(id);
+        } catch {}
+        return [...known, ...mine];
+    }
+
+    // URL de un archivo de pack builtin (con extensión tal cual)
+    function packFileUrl(id, file) {
+        const custom = customPacks.get(id);
+        if (custom) return custom.sprites[file] || null; // sprites custom son dataURL
+        return extAssetUrl(packBaseUrl(id) + id + '/' + file);
     }
 
     // ── sesión de textura (patrón SkinChanger) ──
@@ -560,6 +1117,10 @@
         blink: true,             // parpadeo automático
         blinkClosed: '',         // preset de ojos cerrados ('' = noface)
         blinkMinMs: 2000, blinkMaxMs: 7000,
+        brow: false,             // ceja levantada al ver un "?" en el chat
+        browFace: '',            // preset de ceja ('' = sintetizar sobre la zona)
+        browMs: 1400,            // duración de la ceja levantada
+        _browUntil: 0,           // timestamp de fin de la ceja actual
         _raf: null,              // loop rAF
         _nextBlink: 0,           // timestamp del próximo parpadeo
         _blinkUntil: 0,          // timestamp de fin del parpadeo actual
@@ -578,6 +1139,7 @@
         // campos de runtime no persisten
         auto._raf = null; auto._nextBlink = 0; auto._blinkUntil = 0;
         auto._blinkCache = null; auto._blinkCacheZone = null; auto._zone = 'front';
+        auto._browUntil = 0; auto._browPainted = false;
         auto._refYaw = null; auto._refPitch = null; auto._lastT = 0;
     }
     function saveAuto() {
@@ -586,7 +1148,8 @@
                 on: auto.on, yawThreshold: auto.yawThreshold, pitchThreshold: auto.pitchThreshold,
                 front: auto.front, left: auto.left, right: auto.right, up: auto.up, down: auto.down,
                 blink: auto.blink, blinkClosed: auto.blinkClosed,
-                blinkMinMs: auto.blinkMinMs, blinkMaxMs: auto.blinkMaxMs
+                blinkMinMs: auto.blinkMinMs, blinkMaxMs: auto.blinkMaxMs,
+                brow: auto.brow, browFace: auto.browFace, browMs: auto.browMs
             }));
         } catch {}
     }
@@ -762,36 +1325,169 @@
         auto._nextBlink = now + auto.blinkMinMs + Math.random() * Math.max(0, auto.blinkMaxMs - auto.blinkMinMs);
     }
 
+    // Facial Sync: emitir mi estado de cara por P2P (MF_Peer). El receptor
+    // lo replica sobre MI entidad en su vista. Solo animaciones temporales
+    // (blink/ceja) — las zonas de giro ya se ven con la cabeza rotando.
+    function broadcastFacial(a) {
+        try { window.MF_Peer?.sendStudio?.({ t: 'facial', a }); } catch {}
+    }
+
+    // ── ceja levantada al ver un "?" en el chat ──
+    // Vigila game.chat.log (array de entradas): cuando aparece un mensaje
+    // NUEVO con "?", levanta la ceja por browMs. Si hay preset/sprite de
+    // ceja se usa; si no, se sintetiza sobre la cara de la zona actual.
+    const chatSeen = new WeakSet();
+    const DEBUG_BROW = localStorage.getItem('mff:debug-brow') === '1';
+    function debugBrow(...a) { if (DEBUG_BROW) console.log('[MF Facial 🤨]', ...a); }
+    function chatQuestionWatch() {
+        if (!auto.brow || !auto.on) { debugBrow('watch off (brow=' + auto.brow + ' on=' + auto.on + ')'); return; }
+        const g = getGame() || globalThis.__MINIBLOX_GAME__ || null;
+        const log = g?.chat?.log;
+        if (!Array.isArray(log)) { debugBrow('sin chat: game=' + !!g + ' log=' + (log === undefined ? 'undefined' : typeof log)); return; }
+        // solo mirar las últimas entradas (el chat es append-only)
+        for (let i = Math.max(0, log.length - 12); i < log.length; i++) {
+            const entry = log[i];
+            if (!entry || typeof entry !== 'object' || chatSeen.has(entry)) continue;
+            chatSeen.add(entry);
+            const text = String(entry.text ?? entry.message ?? entry.content ?? '');
+            const hasQ = text.includes('?');
+            debugBrow('chat[' + i + ']' + (hasQ ? ' [?]' : '') + ': ' + JSON.stringify(text.slice(0, 60)));
+            // "?" en el mensaje (¿…? también cuenta por el cierre)
+            if (hasQ) {
+                auto._browUntil = performance.now() + (auto.browMs || 1400);
+                debugBrow('→ ceja hasta +' + (auto.browMs || 1400) + 'ms');
+                return; // una sola reacción por tanda
+            }
+        }
+    }
+
+    // canvas de ceja levantada: preset asignado o sintetizada sobre la
+    // cara de la zona actual (sube la fila de cejas 1px)
+    async function getBrowCanvas() {
+        // 1) preset asignado explícitamente
+        if (auto.browFace) {
+            const fr = await resolveFace(resolveAutoName(auto.browFace)).catch(e => { debugBrow('preset browFace falló:', e?.message || e); return null; });
+            if (fr) {
+                debugBrow('brow por preset: ' + auto.browFace + ' (kind=' + fr.kind + ')');
+                if (fr.kind === 'head') return { canvas: fr.canvas, kind: 'head' };
+                const c = document.createElement('canvas');
+                c.width = 8; c.height = 8;
+                const cx = c.getContext('2d');
+                cx.imageSmoothingEnabled = false;
+                cx.drawImage(fr.canvas, 0, 0, 8, 8, 0, 0, 8, 8);
+                return { canvas: c, kind: 'face' };
+            }
+            debugBrow('preset browFace "' + auto.browFace + '" NO resolvió → siguiente fuente');
+        }
+        // 2) sprite "brow" del pack activo (por filename real del pack)
+        const zone = auto._zone || 'front';
+        const name = zone === 'front' ? (auto.front || null) : auto[zone] || null;
+        if (typeof name === 'string' && name.startsWith('fs:')) {
+            const m = name.match(/^fs:([^/]+)\/(.+)$/);
+            const pack = m ? packIndex.find(p => p.id === m[1]) : null;
+            if (pack?.brow) {
+                const fr = await resolveFace('fs:' + pack.id + '/' + pack.brow).catch(() => null);
+                if (fr) { debugBrow('brow por pack: ' + pack.id + '/' + pack.brow + ' (kind=' + fr.kind + ')'); return { canvas: fr.canvas, kind: fr.kind }; }
+                debugBrow('pack brow "' + pack.brow + '" NO cargó');
+            } else {
+                debugBrow('pack ' + (pack ? pack.id : m?.[1]) + ' sin sprite brow');
+            }
+        }
+        // 3) sintetizar: copia la cara de la zona y sube la ceja 1px
+        //    (y=3 → y=2, rellenando con tono del pelo para no duplicar)
+        debugBrow('brow SINTETIZADA sobre zona "' + zone + '"');
+        const face = await zoneFace();
+        if (!face) return null;
+        const c = document.createElement('canvas');
+        c.width = 8; c.height = 8;
+        const cx = c.getContext('2d');
+        cx.imageSmoothingEnabled = false;
+        cx.drawImage(face, 0, 0);
+        try {
+            const hair = cx.getImageData(4, 0, 1, 1).data; // tono del pelo (arriba)
+            const row3 = cx.getImageData(0, 3, 8, 1);
+            cx.putImageData(row3, 0, 2); // subir la ceja 1px
+            // rellenar donde estaba con tono piel/pelo aclarado
+            const cheek = cx.getImageData(1, 6, 1, 1).data;
+            cx.fillStyle = `rgb(${Math.round((cheek[0] + hair[0]) / 2)},${Math.round((cheek[1] + hair[1]) / 2)},${Math.round((cheek[2] + hair[2]) / 2)})`;
+            cx.fillRect(0, 3, 8, 1);
+        } catch {}
+        return { canvas: c, kind: 'face' };
+    }
+
     function autoTick() {
         if (!auto.on) { auto._raf = null; return; }
         const now = performance.now();
 
+        // chat "?" → ceja levantada (ventana browMs). Mientras dura la
+        // ceja no se evalúan zonas ni blink (evita que se pisen)
+        chatQuestionWatch();
+        if (auto._browUntil) {
+            if (now >= auto._browUntil) {
+                debugBrow('fin de la ceja → restaurar zona "' + (auto._zone || 'front') + '"');
+                auto._browUntil = 0;
+                broadcastFacial('open'); // P2P: ceja abajo
+                paintZone(auto._zone || 'front', true); // restaurar la zona
+            } else {
+                // pintar la ceja una vez al entrar en la ventana
+                if (!auto._browPainted) {
+                    auto._browPainted = true;
+                    broadcastFacial('brow'); // P2P: ceja arriba
+                    debugBrow('pintando ceja (quedan ' + Math.round(auto._browUntil - now) + 'ms)');
+                    getBrowCanvas().then(fr => {
+                        if (fr && auto.on && auto._browUntil) {
+                            paintFace({ canvas: fr.canvas, kind: fr.kind });
+                        } else if (fr) {
+                            debugBrow('canvas listo pero ventana cerrada (on=' + auto.on + ') — no se pinta');
+                        }
+                    });
+                }
+            }
+        } else if (auto._browPainted) {
+            auto._browPainted = false;
+        }
+
         // parpadeo: ventana corta de ojos cerrados; al terminar SIEMPRE se
         // repinta la cara de la zona actual (aunque el yaw no haya cambiado)
-        if (auto.blink) {
+        if (auto.blink && !auto._browUntil) {
             if (auto._blinkUntil && now >= auto._blinkUntil) {
                 auto._blinkUntil = 0;
                 scheduleBlink(now);
+                broadcastFacial('open'); // P2P: ojos abiertos
                 paintZone(auto._zone || 'front', true); // restaurar ya
             } else if (!auto._blinkUntil && now >= auto._nextBlink) {
                 auto._blinkUntil = now + 45 + Math.random() * 45; // 45-90 ms
+                broadcastFacial('blink'); // P2P: ojos cerrados
                 getBlinkCanvas().then(cv => {
                     // pintar SOLO si el canvas ya está listo y la ventana sigue abierta
                     if (cv && auto.on && auto._blinkUntil && performance.now() < auto._blinkUntil) {
                         // kind 'head' → el sprite del pack trae hat incluido;
                         // 'face' → solo la cara 8x8 (vacía el hat frontal)
-                        paintFace({ canvas: cv, kind: auto._blinkCacheKind || 'face' });
+                        try { paintFace({ canvas: cv, kind: auto._blinkCacheKind || 'face' }); }
+                        catch (e) {
+                            // el mesh se recreó (cambio de mundo/shader): la
+                            // sesión de textura quedó vieja → invalidar y
+                            // reintentar en el próximo blink
+                            auto._blinkUntil = 0; scheduleBlink(performance.now());
+                            state.tex = null; state.baseHead = null;
+                            debugBrow('blink: sesión inválida (' + e.message + ') → recapturar');
+                        }
                     }
+                }).catch(e => {
+                    auto._blinkUntil = 0; scheduleBlink(performance.now());
+                    debugBrow('blink falló: ' + (e?.message || e));
                 });
             }
         }
 
         // reacción al giro de cabeza: evaluar zona CADA tick (barato) y solo
         // repintar cuando la zona cambia (con histéresis evita el jitter)
-        const angles = lookAngles();
-        if (angles) {
-            const z = zoneOf(angles);
-            if (z !== auto._zone && !auto._blinkUntil) paintZone(z);
+        if (!auto._browUntil) {
+            const angles = lookAngles();
+            if (angles) {
+                const z = zoneOf(angles);
+                if (z !== auto._zone && !auto._blinkUntil) paintZone(z);
+            }
         }
         auto._raf = requestAnimationFrame(autoTick);
     }
@@ -812,10 +1508,204 @@
     function autoStop(restore = true) {
         auto.on = false;
         if (auto._raf) { cancelAnimationFrame(auto._raf); auto._raf = null; }
+        broadcastFacial('off'); // P2P: el peer restaura mi cara
         if (restore && state.baseHead && state.tex) {
             try { paintFace({ canvas: state.baseHead, kind: 'head' }); } catch {}
         }
         renderUI();
+        return { ok: true };
+    }
+
+    // ── ANIMAR A OTROS (modo machinima) ──
+    // Parpadeo local sobre los meshes de OTROS jugadores: nadie más lo
+    // ve, pero el recording sí. Cada player tiene su propia "sesión" de
+    // textura (canvas editable + baseHead 64x16 capturada UNA vez), con
+    // blink desincronizado (fase random por player) para que no parpadeen
+    // todos a la vez. 'me' nunca se toca acá (eso ya lo hace el modo auto).
+    const LS_OTHERS = LS_KEY + '_others';
+    const others = {
+        on: false,
+        intervalMinMs: 2500,  // parpadeo de cada player: random entre min y max
+        intervalMaxMs: 6500,
+        _raf: null,           // loop rAF compartido
+        _sessions: new Map()  // playerKey -> {tex, canvas, baseHead, k, nextBlink, blinkUntil, name}
+    };
+    function loadOthers() {
+        try { Object.assign(others, JSON.parse(localStorage.getItem(LS_OTHERS) || '{}')); } catch {}
+        others._raf = null; others._sessions = new Map();
+    }
+    function saveOthers() {
+        try {
+            localStorage.setItem(LS_OTHERS, JSON.stringify({
+                on: others.on, intervalMinMs: others.intervalMinMs, intervalMaxMs: others.intervalMaxMs
+            }));
+        } catch {}
+    }
+    loadOthers();
+
+    // iterar entidades de otros players (todo lo que world tiene con mesh,
+    // menos el local). La clave ES el uuid/id del player — así la sesión
+    // sobrevive aunque el objeto entidad se recree.
+    function otherPlayers() {
+        const g = getGame() || globalThis.__MINIBLOX_GAME__ || null;
+        const me = g?.player;
+        if (!g || !me) return [];
+        const out = [];
+        const seen = new Set();
+        const add = (key, e, name) => {
+            if (!key || seen.has(key) || key === me.id) return;
+            const mesh = e?.mesh;
+            if (!mesh) return;
+            seen.add(key); out.push({ key: String(key), mesh, name: String(name || key).slice(0, 16) });
+        };
+        try {
+            if (g.world?.players instanceof Map) {
+                for (const [id, e] of g.world.players) {
+                    if (id === me.id) continue;
+                    add(e?.uuid || id, e, e?.username || e?.profile?.username || e?.name);
+                }
+            }
+        } catch {}
+        try {
+            const pl = g.playerList;
+            const entries = pl?.entries ? [...pl.entries()] : Object.entries(pl || {});
+            for (const [k, v] of entries) {
+                if (!v || typeof v !== 'object') continue;
+                if (v.uuid === me.uuid || k === me.id) continue;
+                try { const e = g.world?.getPlayerById?.(k) || g.world?.players?.get?.(k); if (e) add(v.uuid || k, e, v.username || v.name); } catch {}
+            }
+        } catch {}
+        return out;
+    }
+
+    // sesión de textura de otro player (patrón ensureSession pero por key)
+    function otherSession(p) {
+        let s = others._sessions.get(p.key);
+        const mats = findSkinMaterials(p.mesh);
+        if (!mats.length) return null;
+        const src = mats[0].map;
+        if (!src?.image) return null;
+
+        if (!s) {
+            s = { tex: null, canvas: null, baseHead: null, k: 1, nextBlink: 0, blinkUntil: 0, name: p.name };
+            others._sessions.set(p.key, s);
+        }
+        // la base se captura UNA vez por player (si el server recrea el mesh
+        // con otra skin, la sesión vieja se resetea al detectar otra textura)
+        if (!s.baseHead) {
+            try {
+                const k = Math.max(1, Math.round(src.image.width / 64));
+                const c = document.createElement('canvas');
+                c.width = 64 * k; c.height = 16 * k;
+                c.getContext('2d').drawImage(src.image, 0, 0, 64 * k, 16 * k, 0, 0, 64 * k, 16 * k);
+                s.baseHead = c; s.k = k;
+            } catch { return null; }
+        }
+        if (src.image instanceof HTMLCanvasElement) { s.tex = src; s.canvas = src.image; return s; }
+        // montar canvas editable propio (solo la primera vez; después el
+        // material ya apunta a nuestro canvas)
+        if (!s.canvas) {
+            const c = document.createElement('canvas');
+            c.width = src.image.width; c.height = src.image.height;
+            c.getContext('2d').drawImage(src.image, 0, 0);
+            let nt = null;
+            try { nt = new src.constructor(c); } catch {}
+            if (!nt) { others._sessions.delete(p.key); return null; }
+            try {
+                nt.magFilter = src.magFilter; nt.minFilter = src.minFilter;
+                if (src.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = src.colorSpace;
+                nt.flipY = src.flipY; nt.wrapS = src.wrapS; nt.wrapT = src.wrapT;
+            } catch {}
+            for (const m of mats) { m.map = nt; m.needsUpdate = true; }
+            s.tex = nt; s.canvas = c;
+        }
+        return s;
+    }
+
+    // blink sintetizado de un otro: copia la cara 8x8 de su baseHead y
+    // tapa los ojos con el tono de piel de su propia cara
+    function otherBlinkCanvas(s) {
+        if (!s?.baseHead) return null;
+        const k = s.k || 1;
+        const c = document.createElement('canvas');
+        c.width = 8; c.height = 8;
+        const cx = c.getContext('2d');
+        cx.imageSmoothingEnabled = false;
+        cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, 0, 0, 8, 8);
+        try {
+            const cheek = cx.getImageData(1, 6, 1, 1).data;
+            cx.fillStyle = `rgb(${cheek[0]},${cheek[1]},${cheek[2]})`;
+            cx.fillRect(1, 4, 2, 2);
+            cx.fillRect(5, 4, 2, 2);
+        } catch {}
+        return c;
+    }
+
+    function otherTick() {
+        if (!others.on) { others._raf = null; return; }
+        const now = performance.now();
+        const live = new Set();
+        for (const p of otherPlayers()) {
+            live.add(p.key);
+            const s = otherSession(p);
+            if (!s) continue;
+            if (!s.nextBlink) s.nextBlink = now + 800 + Math.random() * others.intervalMinMs; // fase random
+            if (s.blinkUntil && now >= s.blinkUntil) {
+                s.blinkUntil = 0;
+                s.nextBlink = now + others.intervalMinMs + Math.random() * Math.max(0, others.intervalMaxMs - others.intervalMinMs);
+                // restaurar su cara (solo la región de cara 8x8 + overlay)
+                try {
+                    const k = s.k || 1, cx = s.canvas.getContext('2d');
+                    cx.imageSmoothingEnabled = false;
+                    cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
+                    cx.drawImage(s.baseHead, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
+                    s.tex.needsUpdate = true;
+                } catch {}
+            } else if (!s.blinkUntil && now >= s.nextBlink) {
+                s.blinkUntil = now + 45 + Math.random() * 45;
+                const cv = otherBlinkCanvas(s);
+                if (cv) {
+                    try {
+                        const k = s.k || 1, cx = s.canvas.getContext('2d');
+                        cx.imageSmoothingEnabled = false;
+                        cx.drawImage(cv, 0, 0, 8, 8, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
+                        cx.clearRect(FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k); // el hat no tape los ojos
+                        s.tex.needsUpdate = true;
+                    } catch {}
+                }
+            }
+        }
+        // limpiar sesiones de players que se fueron del mundo
+        for (const key of others._sessions.keys()) if (!live.has(key)) others._sessions.delete(key);
+        others._raf = requestAnimationFrame(otherTick);
+    }
+
+    function othersStart() {
+        others.on = true;
+        saveOthers();
+        if (!others._raf) others._raf = requestAnimationFrame(otherTick);
+        renderUI();
+        const n = otherPlayers().length;
+        console.log(TAG + ' animar a otros ON (' + n + ' player(s) visibles, solo local)');
+        return { ok: true, count: n };
+    }
+    function othersStop() {
+        others.on = false;
+        if (others._raf) { cancelAnimationFrame(others._raf); others._raf = null; }
+        // restaurar TODAS las caras tocadas
+        for (const [key, s] of others._sessions) {
+            try {
+                const k = s.k || 1, cx = s.canvas.getContext('2d');
+                cx.imageSmoothingEnabled = false;
+                cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
+                cx.drawImage(s.baseHead, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
+                s.tex.needsUpdate = true;
+            } catch {}
+        }
+        others._sessions.clear();
+        saveOthers();
+        renderUI();
+        console.log(TAG + ' animar a otros OFF');
         return { ok: true };
     }
 
@@ -937,6 +1827,7 @@
 <div class="mff-tabs">
     <button data-tab="loop" class="on">Loops</button>
     <button data-tab="auto" title="La cara reacciona a dónde miras + parpadeo random">Auto</button>
+    <button data-tab="packs" title="Packs de skins con caras animadas (builtin + ZIP)">Packs</button>
 </div>
 <div class="mff-body" data-page="loop">
   <div class="mff-left">
@@ -968,6 +1859,21 @@
     <div class="mff-autoform" id="mff-blinkform" style="padding:0 12px"></div>
     <div class="mff-sec">Live</div>
     <div class="mff-pad" id="mff-autolive" style="font:11px 'Consolas',monospace;color:#9a9aa6;line-height:1.8"></div>
+  </div>
+</div>
+<div class="mff-body" data-page="packs" style="display:none">
+  <div class="mff-left">
+    <div class="mff-sec">Packs faciales</div>
+    <div class="mff-hint">Cada pack = skin + sprites (frente / izq / der / blink). Si usas su skin, la cara anima sola.</div>
+    <div class="mff-list" id="mff-packs"></div>
+    <div class="mff-pad mff-row">
+      <button id="mff-packimport" title="Importar pack desde un ZIP (pack.json + PNGs)" style="flex:1">📥 Importar ZIP</button>
+      <input type="file" id="mff-packfile" accept=".zip" style="display:none">
+    </div>
+  </div>
+  <div class="mff-right">
+    <div class="mff-sec">Pack seleccionado</div>
+    <div class="mff-pad" id="mff-packdetail" style="font-size:11px;color:#c8c8d2"></div>
   </div>
 </div>
 <div class="mff-foot">
@@ -1017,6 +1923,14 @@
         // caras de skins PNG del SkinChanger
         for (const it of (window.MF_SkinChanger?.items || [])) {
             opts.push({ v: 'skin_' + it.name, t: '👕 ' + it.name });
+        }
+        // sprites de packs (builtin + zip importados)
+        for (const p of packIndex) {
+            const nm = (p.name || p.id) + (p.custom ? ' (zip)' : '');
+            opts.push({ v: 'fs:' + p.id + '/' + p.front, t: '📦 ' + nm + ' frente' });
+            opts.push({ v: 'fs:' + p.id + '/' + p.left, t: '📦 ' + nm + ' izquierda' });
+            opts.push({ v: 'fs:' + p.id + '/' + p.right, t: '📦 ' + nm + ' derecha' });
+            opts.push({ v: 'fs:' + p.id + '/' + p.blink, t: '📦 ' + nm + ' blink' });
         }
         // emociones de FaceSwap (assets de Verity)
         for (const n of (window.MF_FaceSwap?.list?.() || [])) {
@@ -1139,20 +2053,108 @@
         let html = '<option value="" ' + (sel ? '' : 'selected') + '>— (sin cambio)</option>' +
             names.map(n => `<option value="${n}" ${n === sel ? 'selected' : ''}>✏️ ${n}</option>`).join('');
         if (packIndex.length) {
-            html += '<optgroup label="Packs (skins/facialskins)">';
+            html += '<optgroup label="Packs faciales">';
             for (const p of packIndex) {
                 const front = p.front || 'alfrente';
                 const opts = kind === 'blink'
                     ? [`fs:${p.id}/${p.blink}`]
                     : [`fs:${p.id}/${front}`, `fs:${p.id}/${p.left}`, `fs:${p.id}/${p.right}`];
                 for (const v of opts) {
-                    const label = v.split('/').pop();
-                    html += `<option value="${v}" ${v === sel ? 'selected' : ''}>📦 ${p.id}/${label}</option>`;
+                    const label = v.split('/').pop().replace(/\.png$/i, '');
+                    const nm = (p.name || p.id) + (p.custom ? ' (zip)' : '');
+                    html += `<option value="${v}" ${v === sel ? 'selected' : ''}>📦 ${nm}/${label}</option>`;
                 }
             }
             html += '</optgroup>';
         }
         return html;
+    }
+
+    // ── pestaña PACKS: lista + detalle ──
+    let packSel = null; // id del pack mostrado en el detalle
+    function renderPacksTab() {
+        const root = document.getElementById(ID);
+        if (!root) return;
+        const list = root.querySelector('#mff-packs');
+        if (!list) return;
+        if (packSel && !packIndex.some(p => p.id === packSel)) packSel = null;
+        list.innerHTML = '';
+        if (!packIndex.length) {
+            list.innerHTML = '<div style="color:#8a8a96;font-size:11px;padding:4px 2px">Sin packs — importa un ZIP</div>';
+        }
+        for (const p of packIndex) {
+            const it = el('div', 'mff-item' + (packSel === p.id ? ' editing' : ''));
+            const tag = p.server ? 'server' : (p.custom ? 'zip' : 'custom');
+            it.innerHTML = `<span class="nm">${p.name || p.id}${p.custom ? ' <span class="meta">(zip)</span>' : ''}</span>
+                <span class="meta">${tag}</span>`;
+            it.onclick = () => { packSel = p.id; renderPacksTab(); };
+            list.appendChild(it);
+        }
+        // detalle
+        const det = root.querySelector('#mff-packdetail');
+        if (det) {
+            const p = packIndex.find(x => x.id === packSel);
+            if (!p) {
+                det.innerHTML = '<span style="color:#8a8a96">Selecciona un pack de la lista</span>';
+            } else {
+                const cur = currentSkinId();
+                det.innerHTML = `
+<div style="font-weight:700;font-size:13px;margin-bottom:2px">${p.name || p.id}</div>
+<div style="color:#8a8a96;margin-bottom:8px">id: ${p.id}${p.author ? ' · por ' + p.author : ''} · v${p.version || 1} · ${p.server ? 'skin del server (activa al ponértela en el armario)' : p.custom ? 'ZIP importado' : 'custom (mypacks)'}</div>
+<div class="mff-row" style="flex-wrap:wrap">
+  <button data-pk="apply" title="Poner la skin del pack (solo builtin)">👕 Usar skin</button>
+  <button data-pk="auto" title="Activar el modo auto con los sprites de este pack">⚡ Activar</button>
+  <button data-pk="export" title="Descargar el pack como ZIP (pack.json + PNGs)">📤 Exportar ZIP</button>
+  ${p.custom ? '<button data-pk="del" title="Eliminar el pack importado">🗑</button>' : ''}
+</div>
+<div style="color:#8a8a96;margin-top:8px;font-size:10px">${cur === p.id ? '✓ esta skin está puesta — la cara anima sola' : 'la cara anima cuando la skin ' + p.id + ' esté en uso'}</div>`;
+                det.querySelector('[data-pk="apply"]').onclick = async () => {
+                    if (p.server) {
+                        // skin DEL SERVER: el juego ya la conoce — aplicar por
+                        // su propio conducto (armario) para que también quede
+                        // en la cuenta. El modo auto arranca al detectar el id.
+                        alert('"' + (p.name || p.id) + '" es una skin del server:\nponla desde el armario del juego (dressing room).\nLa cara animada se activa sola al detectar la skin.');
+                        return;
+                    }
+                    try {
+                        // conducto NATIVO del juego: id mfpack:<id> → el
+                        // skinManager lo registra con ratio/materiales
+                        // correctos; el servidor no ve el id
+                        await applyPackSkinToGame(p.id);
+                        renderPacksTab();
+                    } catch (e) { alert('no se pudo aplicar: ' + e.message); }
+                };
+                det.querySelector('[data-pk="auto"]').onclick = async () => {
+                    // forzar el pack elegido aunque la skin no coincida
+                    auto.front = 'fs:' + p.id + '/' + p.front;
+                    auto.left = 'fs:' + p.id + '/' + p.left;
+                    auto.right = 'fs:' + p.id + '/' + p.right;
+                    auto.up = p.up ? 'fs:' + p.id + '/' + p.up : '';
+                    auto.down = p.down ? 'fs:' + p.id + '/' + p.down : '';
+                    auto.browFace = p.brow ? 'fs:' + p.id + '/' + p.brow : '';
+                    auto.blinkClosed = 'fs:' + p.id + '/' + p.blink;
+                    auto.blink = true;
+                    skinWatch.userOff = false;
+                    skinWatch.lastApplied = p.id;
+                    saveAuto();
+                    const r = await autoStart();
+                    if (!r.ok) alert(r.error);
+                    renderPacksTab();
+                };
+                det.querySelector('[data-pk="export"]').onclick = async () => {
+                    try { await exportPackZip(p.id); }
+                    catch (e) { alert('export: ' + e.message); }
+                };
+                const del = det.querySelector('[data-pk="del"]');
+                if (del) del.onclick = async () => {
+                    if (!confirm('¿Eliminar el pack "' + (p.name || p.id) + '"?')) return;
+                    await packsDbDel(p.id);
+                    customPacks.delete(p.id);
+                    if (skinWatch.lastApplied === p.id) skinWatch.lastApplied = null;
+                    rebuildPackIndex();
+                };
+            }
+        }
     }
 
     function renderAutoForm() {
@@ -1191,7 +2193,19 @@
 <div class="mff-field"><label>cada mín (s)</label>
 <input type="number" min="0.5" max="30" step="0.5" value="${(auto.blinkMinMs / 1000).toFixed(1)}" data-blink="min"></div>
 <div class="mff-field"><label>cada máx (s)</label>
-<input type="number" min="1" max="60" step="0.5" value="${(auto.blinkMaxMs / 1000).toFixed(1)}" data-blink="max"></div>`;
+<input type="number" min="1" max="60" step="0.5" value="${(auto.blinkMaxMs / 1000).toFixed(1)}" data-blink="max"></div>
+<div class="mff-check"><input type="checkbox" id="mff-browon" ${auto.brow ? 'checked' : ''}>
+  <label for="mff-browon">🤨 levantar la ceja al ver un "?" en el chat</label></div>
+<div class="mff-field"><label>ceja (opcional)</label>
+<select data-auto="browFace">${presetOptions(auto.browFace, 'ceja')}</select></div>
+<div class="mff-field"><label>duración (s)</label>
+<input type="number" min="0.3" max="5" step="0.1" value="${(auto.browMs / 1000).toFixed(1)}" data-brow="ms"></div>
+<div class="mff-check"><input type="checkbox" id="mff-otherson" ${others.on ? 'checked' : ''}>
+  <label for="mff-otherson">👥 animar a otros (blink local, machinima)</label></div>
+<div class="mff-field"><label>otros mín (s)</label>
+<input type="number" min="0.5" max="30" step="0.5" value="${(others.intervalMinMs / 1000).toFixed(1)}" data-others="min"></div>
+<div class="mff-field"><label>otros máx (s)</label>
+<input type="number" min="1" max="60" step="0.5" value="${(others.intervalMaxMs / 1000).toFixed(1)}" data-others="max"></div>`;
             const chk = bf.querySelector('#mff-blinkon');
             if (chk) chk.onchange = () => { auto.blink = chk.checked; saveAuto(); };
             const sel = bf.querySelector('[data-auto="blinkClosed"]');
@@ -1205,6 +2219,26 @@
                 if (i.dataset.blink === 'min') auto.blinkMinMs = v;
                 else auto.blinkMaxMs = Math.max(v, auto.blinkMinMs);
                 saveAuto();
+            });
+            const browChk = bf.querySelector('#mff-browon');
+            if (browChk) browChk.onchange = () => { auto.brow = browChk.checked; saveAuto(); };
+            const browSel = bf.querySelector('[data-auto="browFace"]');
+            if (browSel) browSel.onchange = () => { auto.browFace = browSel.value; saveAuto(); };
+            const browMs = bf.querySelector('[data-brow="ms"]');
+            if (browMs) browMs.onchange = () => {
+                auto.browMs = Math.max(0.3, +browMs.value || 1.4) * 1000;
+                saveAuto();
+            };
+            const othersChk = bf.querySelector('#mff-otherson');
+            if (othersChk) othersChk.onchange = () => {
+                if (othersChk.checked) othersStart();
+                else othersStop();
+            };
+            bf.querySelectorAll('[data-others]').forEach(i => i.onchange = () => {
+                const v = Math.max(0.3, +i.value || 2.5) * 1000;
+                if (i.dataset.others === 'min') others.intervalMinMs = v;
+                else others.intervalMaxMs = Math.max(v, others.intervalMinMs);
+                saveOthers();
             });
         }
         updateAutoLive();
@@ -1338,6 +2372,33 @@
         root.querySelector('#mff-seed').onclick = () => {
             window.MF_Facial.seedTemplates();
         };
+        // packs: import ZIP
+        const pfile = root.querySelector('#mff-packfile');
+        const pbtn = root.querySelector('#mff-packimport');
+        if (pbtn) {
+            pbtn.onclick = () => pfile?.click();
+            if (pfile) pfile.onchange = async () => {
+                const f = pfile.files?.[0];
+                pfile.value = '';
+                if (!f) return;
+                pbtn.textContent = '⏳ importando…';
+                pbtn.disabled = true;
+                try {
+                    const p = await importPackZip(f);
+                    packSel = p.id;
+                    renderPacksTab();
+                    alert('pack "' + (p.name || p.id) + '" importado ✓\n(skin aplicada y cara animada activa)');
+                } catch (e) {
+                    alert('import ZIP: ' + e.message);
+                } finally {
+                    pbtn.textContent = '📥 Importar ZIP';
+                    pbtn.disabled = false;
+                }
+            };
+        }
+        // tab packs → refrescar lista al abrirla
+        const ptab = root.querySelector('[data-tab="packs"]');
+        if (ptab) ptab.addEventListener('click', renderPacksTab);
         updateAutoToggle();
     }
 
@@ -1392,6 +2453,16 @@
             saveLibrary();
             renderUI();
             return { ok: true };
+        },
+        // packs faciales (builtin + ZIP importados)
+        get packs() { return packIndex.map(p => ({ ...p })); },
+        importPackZip, exportPackZip,
+        deletePack: async function (id) {
+            await packsDbDel(id);
+            customPacks.delete(id);
+            if (skinWatch.lastApplied === id) skinWatch.lastApplied = null;
+            rebuildPackIndex();
+            return { ok: true };
         }
     };
     window.__MF_Facial = true;
@@ -1435,6 +2506,22 @@
         }
     } catch {}
 
+    // autostart de "animar a otros" (persistido como auto)
+    if (others.on) {
+        const boot2 = setInterval(() => {
+            if (others._raf) { clearInterval(boot2); return; }
+            try {
+                const g = getGame();
+                if (g?.player?.mesh) {
+                    clearInterval(boot2);
+                    others.on = false;
+                    othersStart();
+                }
+            } catch {}
+        }, 1500);
+        setTimeout(() => clearInterval(boot2), 60000);
+    }
+
     // 3) Monitor de PACKS faciales: si el juego está usando una skin con
     //    pack en skins/facialskins/, activa el modo auto con sus sprites.
     //    Detecta el id de la skin actual (profile.cosmetics.skin o
@@ -1446,14 +2533,25 @@
         try {
             const skinId = currentSkinId();
             if (!skinId) return null;
-            if (!force && skinWatch.lastApplied === skinId) return null;
-            const pack = packIndex.find(p => p.id === skinId);
+            // match por uuid (pack.json "uuid") primero: el pack se aplica
+            // aunque la skin del server sea otra. Los packs custom además
+            // registran su skin (mfpack:) para el conducto nativo.
+            const uid = currentPlayerUuid();
+            let pack = uid ? packIndex.find(p => p.uuid === uid) : null;
+            if (pack && pack.id !== skinId) {
+                if (!force && skinWatch.lastApplied === pack.id) return null;
+                try { await applyPackSkinToGame(pack.id); } catch (e) { debugBrow('uuid skin: ' + (e?.message || e)); }
+            } else {
+                pack = packIndex.find(p => p.id === skinId);
+            }
             if (!pack) { skinWatch.lastApplied = null; return null; }
+            const pid = pack.id;
+            if (!force && skinWatch.lastApplied === pid) return null;
 
             // resolver el archivo de "frente" (varía por pack)
             let frontFile = pack.front || null;
             if (!frontFile) {
-                const hit = await loadPackFront(skinId);
+                const hit = await loadPackFront(pid);
                 if (!hit) return null;
                 frontFile = hit.usedName;
                 pack.front = frontFile; // cache para la próxima
@@ -1465,16 +2563,20 @@
             if (!getMesh()) return null;
 
             // aplicar los presets del pack al modo auto y encenderlo
-            auto.front = 'fs:' + skinId + '/' + frontFile;
-            auto.left = 'fs:' + skinId + '/' + pack.left;
-            auto.right = 'fs:' + skinId + '/' + pack.right;
-            auto.blinkClosed = 'fs:' + skinId + '/' + pack.blink;
+            auto.front = 'fs:' + pid + '/' + frontFile;
+            auto.left = 'fs:' + pid + '/' + pack.left;
+            auto.right = 'fs:' + pid + '/' + pack.right;
+            auto.up = pack.up ? 'fs:' + pid + '/' + pack.up : '';
+            auto.down = pack.down ? 'fs:' + pid + '/' + pack.down : '';
+            auto.browFace = pack.brow ? 'fs:' + pid + '/' + pack.brow : '';
+            auto.brow = !!pack.brow; // el pack trae ceja → modo 🤨 ON
+            auto.blinkClosed = 'fs:' + pid + '/' + pack.blink;
             auto.blink = true;
             saveAuto();
-            skinWatch.lastApplied = skinId;
+            skinWatch.lastApplied = pid;
             skinWatch.userOff = false; // skin nueva → reactivar aunque lo apagaran
             const r = await autoStart();
-            if (r.ok) console.log(TAG + ' pack "' + skinId + '" detectado → auto facial (' + frontFile + '/izquierda/derecha/blink)');
+            if (r.ok) console.log(TAG + ' pack "' + pid + '"' + (pid !== skinId ? ' (uuid ' + uid + ')' : '') + ' → auto facial (' + frontFile + '/izquierda/derecha/' + (pack.up ? 'arriba/' : '') + (pack.down ? 'abajo/' : '') + 'blink' + (pack.brow ? '/ceja🤨' : '') + ') · brow=' + auto.brow + ' browFace=' + (auto.browFace || '(sintetizada)') + ' browMs=' + auto.browMs);
             return r;
         } finally { skinWatch.busy = false; }
     }
@@ -1482,6 +2584,17 @@
     skinWatch.timer = setInterval(() => {
         if (skinWatch.busy) return;
         fetchApiSkin().then(() => { // refrescar la skin de la cuenta primero
+            // auto-activado por uuid: pack.json con "uuid" que coincida con
+            // el player local → aplicar ESE pack (gana al match por skin-id)
+            if (!auto.on && !skinWatch.userOff) {
+                const uid = currentPlayerUuid();
+                const byUuid = uid ? packIndex.find(p => p.uuid === uid) : null;
+                if (byUuid && skinWatch.lastApplied !== byUuid.id) {
+                    console.log(TAG + ' uuid ' + uid + ' → pack "' + byUuid.id + '"');
+                    applyPackForSkin(true).catch(() => {});
+                    return;
+                }
+            }
             const sid = currentSkinId();
             if (!sid) return;
             // cambiar de skin con pack → skin SIN pack: apagar y restaurar
@@ -1507,7 +2620,13 @@
         }
     }, 1000);
     setTimeout(() => clearInterval(packBoot), 120000);
-    buildPackIndex();
+    // índice de packs: builtin (pack.json fetch) + custom (IndexedDB).
+    // El primer chequeo del monitor espera a que el índice esté listo.
+    const packsReady = Promise.all([
+        loadBuiltinPacks().catch(() => {}),
+        loadCustomPacks().catch(() => {})
+    ]);
+    packsReady.then(() => applyPackForSkin().catch(() => {}));
 
     // registrar la última reproducida
     {

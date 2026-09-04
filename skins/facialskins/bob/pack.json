@@ -1,0 +1,13 @@
+{
+  "id": "bob",
+  "name": "Bob",
+  "author": "MiniFeather",
+  "version": 1,
+  "skin": "bob.png",
+  "sprites": {
+    "front": "alfrente.png",
+    "left": "izquierda.png",
+    "right": "derecha.png",
+    "blink": "blink.png"
+  }
+}

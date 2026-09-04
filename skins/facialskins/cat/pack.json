@@ -1,0 +1,13 @@
+{
+  "id": "cat",
+  "name": "Cat",
+  "author": "MiniFeather",
+  "version": 1,
+  "skin": "cat.png",
+  "sprites": {
+    "front": "alfrente.png",
+    "left": "izquierda.png",
+    "right": "derecha.png",
+    "blink": "blink.png"
+  }
+}

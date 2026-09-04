@@ -639,7 +639,66 @@ function handleMsg(msg) {
             // Look Sync: replicar un cambio visual del peer en mi vista
             if (msg.a && typeof msg.a === 'object') applyLook(msg.a);
             break;
+        case 'facial':
+            // Facial Sync: parpadeo/ceja del peer en tiempo real
+            try { applyRemoteFacial(msg); } catch {}
+            break;
     }
+}
+
+// ---------- FACIAL SYNC: animaciones de cara del peer ----------
+// El otro cliente (MF_Facial en modo auto) emite {t:'facial', a} con su
+// estado de cara; se aplica sobre SU entidad en mi vista usando la cara
+// original cacheada (patrón Look Sync). Sintetizado: no necesita sprites,
+// usa el tono de piel de la propia cara del peer.
+function applyRemoteFacial(msg) {
+    if (!msg || typeof msg.a !== 'string') return;
+    const entity = peerEntity();
+    if (!entity) return;
+    const s = rememberPeerOriginal(entity, 'face');
+    if (!s) return;
+    const rec = peerOriginals.get(entity);
+    const orig = rec?.faceCanvas;
+    if (!orig) return;
+    const k = Math.max(1, Math.round(s.canvas.width / 64));
+    const ctx = s.canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    const FR = { x: FACE_RECT.x * k, y: FACE_RECT.y * k, w: FACE_RECT.w * k, h: FACE_RECT.h * k };
+    const FOR = { x: FACE_OVERLAY_RECT.x * k, y: FACE_OVERLAY_RECT.y * k, w: FACE_OVERLAY_RECT.w * k, h: FACE_OVERLAY_RECT.h * k };
+    if (msg.a === 'open' || msg.a === 'off') {
+        // restaurar la cara original del peer
+        ctx.drawImage(orig, FR.x, FR.y, FR.w, FR.h, FR.x, FR.y, FR.w, FR.h);
+        ctx.drawImage(orig, FOR.x, FOR.y, FOR.w, FOR.h, FOR.x, FOR.y, FOR.w, FOR.h);
+        s.tex.needsUpdate = true;
+        return;
+    }
+    // copiar la cara original a 8x8 lógico y sintetizar la animación
+    const ok = Math.max(1, Math.round(orig.width / 64));
+    const face = document.createElement('canvas');
+    face.width = 8 * ok; face.height = 8 * ok;
+    const fx = face.getContext('2d');
+    fx.imageSmoothingEnabled = false;
+    fx.drawImage(orig, FACE_RECT.x * ok, FACE_RECT.y * ok, FACE_RECT.w * ok, FACE_RECT.h * ok, 0, 0, face.width, face.height);
+    try {
+        if (msg.a === 'blink') {
+            // tapar los ojos con el tono de piel de su mejilla
+            const cheek = fx.getImageData(1 * ok, 6 * ok, 1, 1).data;
+            fx.fillStyle = `rgb(${cheek[0]},${cheek[1]},${cheek[2]})`;
+            fx.fillRect(1 * ok, 4 * ok, 2 * ok, 2 * ok);
+            fx.fillRect(5 * ok, 4 * ok, 2 * ok, 2 * ok);
+        } else if (msg.a === 'brow') {
+            // subir la fila de cejas 1px (y3 → y2) y rellenar con tono piel/pelo
+            const hair = fx.getImageData(4 * ok, 0, 1, 1).data;
+            const row3 = fx.getImageData(0, 3 * ok, face.width, ok);
+            fx.putImageData(row3, 0, 2 * ok);
+            const cheek = fx.getImageData(1 * ok, 6 * ok, 1, 1).data;
+            fx.fillStyle = `rgb(${Math.round((cheek[0] + hair[0]) / 2)},${Math.round((cheek[1] + hair[1]) / 2)},${Math.round((cheek[2] + hair[2]) / 2)})`;
+            fx.fillRect(0, 3 * ok, face.width, ok);
+        } else return;
+    } catch { return; }
+    ctx.drawImage(face, 0, 0, face.width, face.height, FR.x, FR.y, FR.w, FR.h);
+    ctx.clearRect(FOR.x, FOR.y, FOR.w, FOR.h); // que el hat no tape la animación
+    s.tex.needsUpdate = true;
 }
 
 // mostrar en el chat del juego lo que verity dijo en el host

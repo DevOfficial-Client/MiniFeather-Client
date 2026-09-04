@@ -1,0 +1,13 @@
+{
+  "id": "ethan",
+  "name": "Ethan",
+  "author": "MiniFeather",
+  "version": 1,
+  "skin": "ethan.png",
+  "sprites": {
+    "front": "alfrente.png",
+    "left": "izquierda.png",
+    "right": "derecha.png",
+    "blink": "blink.png"
+  }
+}

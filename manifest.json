@@ -166,6 +166,7 @@
         "accounts.json",
         "skins/*",
         "skins/*/*",
+        "skins/*/*/*",
         "src/Libraries/jszip.min.js"
       ],
       "matches": [
