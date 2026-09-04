@@ -665,7 +665,7 @@ function applyRemoteFacial(msg) {
     ctx.imageSmoothingEnabled = false;
     const FR = { x: FACE_RECT.x * k, y: FACE_RECT.y * k, w: FACE_RECT.w * k, h: FACE_RECT.h * k };
     const FOR = { x: FACE_OVERLAY_RECT.x * k, y: FACE_OVERLAY_RECT.y * k, w: FACE_OVERLAY_RECT.w * k, h: FACE_OVERLAY_RECT.h * k };
-    if (msg.a === 'open' || msg.a === 'off') {
+    if (msg.a === 'open' || msg.a === 'off' || msg.a === 'front') {
         // restaurar la cara original del peer
         ctx.drawImage(orig, FR.x, FR.y, FR.w, FR.h, FR.x, FR.y, FR.w, FR.h);
         ctx.drawImage(orig, FOR.x, FOR.y, FOR.w, FOR.h, FOR.x, FOR.y, FOR.w, FOR.h);
@@ -694,6 +694,40 @@ function applyRemoteFacial(msg) {
             const cheek = fx.getImageData(1 * ok, 6 * ok, 1, 1).data;
             fx.fillStyle = `rgb(${Math.round((cheek[0] + hair[0]) / 2)},${Math.round((cheek[1] + hair[1]) / 2)},${Math.round((cheek[2] + hair[2]) / 2)})`;
             fx.fillRect(0, 3 * ok, face.width, ok);
+        } else if (msg.a === 'left' || msg.a === 'right' || msg.a === 'up' || msg.a === 'down') {
+            // zona: mover pupilas según la dirección, con los tonos de SU cara
+            const cheek = fx.getImageData(1 * ok, 6 * ok, 1, 1).data;
+            const skin = [cheek[0], cheek[1], cheek[2]];
+            const rgb = a => `rgb(${a[0]},${a[1]},${a[2]})`;
+            // detectar iris (píxel más oscuro del área de ojos) y blanco
+            let iris = null, white = [219, 219, 219];
+            for (let x = 1; x <= 6; x++) {
+                for (let y = 4; y <= 5; y++) {
+                    const d = fx.getImageData(x * ok, y * ok, 1, 1).data;
+                    if (!d || d[3] === 0) continue;
+                    const sum = d[0] + d[1] + d[2];
+                    if (!iris && sum < skin[0] + skin[1] + skin[2] - 90) iris = [d[0], d[1], d[2]];
+                    if (sum > white[0] + white[1] + white[2]) white = [d[0], d[1], d[2]];
+                }
+            }
+            if (iris) {
+                if (msg.a === 'left' || msg.a === 'right') {
+                    const dir = msg.a === 'left' ? -1 : 1;
+                    const pair = (ex) => {
+                        fx.fillStyle = rgb(skin); fx.fillRect(ex * ok, 4 * ok, 2 * ok, 2 * ok);
+                        fx.fillStyle = rgb(white); fx.fillRect((ex + (dir < 0 ? 0 : 1)) * ok, 4 * ok, ok, 2 * ok);
+                        fx.fillStyle = rgb(iris); fx.fillRect((ex + (dir < 0 ? 1 : 0)) * ok, 4 * ok, ok, 2 * ok);
+                    };
+                    pair(1); pair(5);
+                } else {
+                    const dy = msg.a === 'up' ? -1 : 1;
+                    const row = fx.getImageData(0, 4 * ok, 8 * ok, 2 * ok); // ojos originales
+                    fx.fillStyle = rgb(skin);
+                    fx.fillRect(1 * ok, 4 * ok, 2 * ok, 2 * ok);
+                    fx.fillRect(5 * ok, 4 * ok, 2 * ok, 2 * ok);
+                    fx.putImageData(row, 0, (4 + dy) * ok);
+                }
+            }
         } else return;
     } catch { return; }
     ctx.drawImage(face, 0, 0, face.width, face.height, FR.x, FR.y, FR.w, FR.h);
@@ -1031,6 +1065,10 @@ function wireConn(conn) {
         look.entity = null; look.pending.length = 0;
         look.morphType = null;
         look.lastTexAction = null; look.lastTexImg = null; look.mountedTex = null;
+        // desactivar cámaras/poses remotas del Studio Sync: sin esto el
+        // invitado queda con la cámara detachada siguiendo un target muerto
+        try { window.MF_Studio?.remoteCamActive?.(false); } catch {}
+        try { window.MF_Studio?.applyRemotePose?.(null, true); } catch {}
         stopBroadcast();
         state.conn = null;
         state.status = 'off';

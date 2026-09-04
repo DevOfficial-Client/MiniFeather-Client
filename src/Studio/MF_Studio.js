@@ -1809,9 +1809,23 @@
     function remoteCamActive(on) {
         p2p.camActive = !!on;
         if (!on) p2p.camRemote = null;
-        if (on && !cam.active) try { cameraEnable(); } catch {}
-        updateStatus(on ? '📡 Cámara del peer compartida (siguiendo su vista)'
-            : '📡 El peer dejó de compartir cámara');
+        // nunca forzar la cámara si mi estudio está cerrado: sin UI el
+        // usuario queda bloqueado siguiendo la vista remota sin escapar
+        if (on && state.open && !cam.active) {
+            try { cameraEnable(); } catch {}
+            updateStatus('📡 Cámara del peer compartida (siguiendo su vista)');
+        } else if (on) {
+            updateStatus('📡 Cámara del peer compartida (abre el estudio para verla)');
+        } else {
+            // si me quedé siguiendo una cámara remota sin estudio abierto
+            // (cierre inesperado), devolver la cámara al juego YA
+            if (!state.open && cam.active) {
+                try { cameraDisable(); } catch {}
+                updateStatus('📡 El peer dejó de compartir cámara (restaurada)');
+            } else {
+                updateStatus('📡 El peer dejó de compartir cámara');
+            }
+        }
     }
 
     // el peer posó su actor: aplicar localmente (radianes, formato MF_Film)

@@ -1486,7 +1486,10 @@
             const angles = lookAngles();
             if (angles) {
                 const z = zoneOf(angles);
-                if (z !== auto._zone && !auto._blinkUntil) paintZone(z);
+                if (z !== auto._zone && !auto._blinkUntil) {
+                    broadcastFacial(z); // P2P: giré la cabeza a la zona z
+                    paintZone(z);
+                }
             }
         }
         auto._raf = requestAnimationFrame(autoTick);
@@ -1641,6 +1644,85 @@
         return c;
     }
 
+    // cara 8x8 de un otro mirando a 'zone' ('left'|'right'|'up'|'down'),
+    // sintetizada desde SU cara original: mueve pupilas según la dirección
+    // (no necesita sprites del pack — funciona con cualquier skin)
+    function otherZoneCanvas(s, zone) {
+        if (!s?.baseHead) return null;
+        if (!/^(left|right|up|down)$/.test(zone)) return null;
+        const k = s.k || 1;
+        const c = document.createElement('canvas');
+        c.width = 8; c.height = 8;
+        const cx = c.getContext('2d');
+        cx.imageSmoothingEnabled = false;
+        cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, 0, 0, 8, 8);
+        try {
+            const cheek = cx.getImageData(1, 6, 1, 1).data;
+            const skin = [cheek[0], cheek[1], cheek[2]];
+            const rgb = a => `rgb(${a[0]},${a[1]},${a[2]})`;
+            // leer los ojos originales (y4..5, x1..2 y x5..6) y sus tonos
+            let iris = null, white = [219, 219, 219];
+            const px = (x, y) => cx.getImageData(x, y, 1, 1).data;
+            for (let x = 1; x <= 6; x++) {
+                for (let y = 4; y <= 5; y++) {
+                    const d = px(x, y);
+                    if (!d || d[3] === 0) continue;
+                    const sum = d[0] + d[1] + d[2];
+                    if (!iris || sum < iris[0] + iris[1] + iris[2]) { if (sum < skin[0] + skin[1] + skin[2] - 90) iris = [d[0], d[1], d[2]]; }
+                    if (sum > white[0] + white[1] + white[2]) white = [d[0], d[1], d[2]];
+                }
+            }
+            if (!iris) return c; // ojos no detectados: cara original
+            if (zone === 'left' || zone === 'right') {
+                const dir = zone === 'left' ? -1 : 1;
+                const y = 4;
+                const pair = (ex, dx) => {
+                    cx.fillStyle = rgb(skin); cx.fillRect(ex, y, 2, 2);
+                    cx.fillStyle = rgb(white); cx.fillRect(ex + (dx < 0 ? 0 : 1), y, 1, 2);
+                    cx.fillStyle = rgb(iris); cx.fillRect(ex + (dx < 0 ? 1 : 0), y, 1, 2);
+                };
+                pair(1, dir); pair(5, dir);
+            } else {
+                const dy = zone === 'up' ? -1 : 1;
+                const row = cx.getImageData(0, 4, 8, 2); // ojos originales y4..5
+                cx.fillStyle = rgb(skin);
+                cx.fillRect(1, 4, 2, 2); cx.fillRect(5, 4, 2, 2);
+                cx.putImageData(row, 0, 4 + dy);
+            }
+        } catch {}
+        return c;
+    }
+
+    // zona de un player según la rotación REAL de su cabeza (headPivot
+    // relativo al body — mismos nombres de joint que usa MF_Pose/MF_Studio)
+    function otherZone(p) {
+        try {
+            const m = p.mesh;
+            if (!m) return null;
+            // BFS corto por el rig: headPivot y body viven anidados en el mesh
+            const queue = [m];
+            const seen = new WeakSet();
+            let head = null, body = null, visited = 0;
+            while (queue.length && visited < 500 && !(head && body)) {
+                const obj = queue.shift();
+                if (!obj || typeof obj !== 'object' || seen.has(obj)) continue;
+                seen.add(obj); visited++;
+                if (!head && obj.headPivot?.rotation) head = obj.headPivot;
+                if (!body && obj.body?.rotation) body = obj.body;
+                if (Array.isArray(obj.children)) for (const c of obj.children) queue.push(c);
+            }
+            if (!head) return null;
+            const yaw = wrapPi((Number(head.rotation.y) || 0) - (Number(body?.rotation.y) || 0));
+            const pitch = Number(head.rotation.x) || 0;
+            const thr = 22; // grados, umbral conservative para zonas
+            if (pitch > thr * Math.PI / 180) return 'up';
+            if (pitch < -thr * Math.PI / 180) return 'down';
+            if (yaw > thr * Math.PI / 180) return 'right';
+            if (yaw < -thr * Math.PI / 180) return 'left';
+            return 'front';
+        } catch { return null; }
+    }
+
     function otherTick() {
         if (!others.on) { others._raf = null; return; }
         const now = performance.now();
@@ -1649,19 +1731,15 @@
             live.add(p.key);
             const s = otherSession(p);
             if (!s) continue;
+            // zona según la rotación real de su cabeza (left/right/up/down)
+            const z = otherZone(p) || 'front';
+            if (s.zone !== z) { s.zone = z; s.zoneDirty = true; }
             if (!s.nextBlink) s.nextBlink = now + 800 + Math.random() * others.intervalMinMs; // fase random
             if (s.blinkUntil && now >= s.blinkUntil) {
                 s.blinkUntil = 0;
                 s.nextBlink = now + others.intervalMinMs + Math.random() * Math.max(0, others.intervalMaxMs - others.intervalMinMs);
-                // restaurar su cara (solo la región de cara 8x8 + overlay)
-                try {
-                    const k = s.k || 1, cx = s.canvas.getContext('2d');
-                    cx.imageSmoothingEnabled = false;
-                    cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
-                    cx.drawImage(s.baseHead, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
-                    s.tex.needsUpdate = true;
-                } catch {}
-            } else if (!s.blinkUntil && now >= s.nextBlink) {
+                s.zoneDirty = true; // al abrir ojos, repintar la zona actual
+            } else if (!s.blinkUntil && now >= s.nextBlink && s.zone === 'front') {
                 s.blinkUntil = now + 45 + Math.random() * 45;
                 const cv = otherBlinkCanvas(s);
                 if (cv) {
@@ -1673,6 +1751,22 @@
                         s.tex.needsUpdate = true;
                     } catch {}
                 }
+            } else if (s.zoneDirty && !s.blinkUntil) {
+                // pintar la zona a la que mira (o restaurar el frente)
+                s.zoneDirty = false;
+                const cv = s.zone === 'front' ? null : otherZoneCanvas(s, s.zone);
+                try {
+                    const k = s.k || 1, cx = s.canvas.getContext('2d');
+                    cx.imageSmoothingEnabled = false;
+                    if (cv) {
+                        cx.drawImage(cv, 0, 0, 8, 8, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
+                        cx.clearRect(FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
+                    } else {
+                        cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
+                        cx.drawImage(s.baseHead, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
+                    }
+                    s.tex.needsUpdate = true;
+                } catch {}
             }
         }
         // limpiar sesiones de players que se fueron del mundo
