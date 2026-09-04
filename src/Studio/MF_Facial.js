@@ -78,7 +78,10 @@
         });
         const skins = out.filter(m => {
             const w = m.map?.image?.width, h = m.map?.image?.height;
-            return w === 64 && (h === 64 || h === 32);
+            if (!w || !h) return false;
+            // 64x64/64x32 o múltiplo HD (128x128, 1024x512…) — ratio 1:1 o 2:1
+            const k64 = w / 64;
+            return Number.isInteger(k64) && (h === w || h === w / 2);
         });
         return skins.length ? skins : out;
     }
@@ -116,20 +119,24 @@
                 const it = (window.MF_SkinChanger?.items || []).find(i => i.name === nm);
                 if (it?.dataURL) {
                     const img = await loadImg(it.dataURL);
+                    // la skin puede ser HD: leer la cara a SU escala
+                    const k = Math.max(1, Math.round(img.width / 64));
                     const c = document.createElement('canvas');
                     c.width = 8; c.height = 8;
                     const ctx = c.getContext('2d');
                     ctx.imageSmoothingEnabled = false;
-                    ctx.drawImage(img, 8, 8, 8, 8, 0, 0, 8, 8);
+                    ctx.drawImage(img, 8 * k, 8 * k, 8 * k, 8 * k, 0, 0, 8, 8);
                     return { canvas: c, kind: 'face' };
                 }
                 return null;
             }
             if (/^fs:/.test(name)) {
                 // cara de un PACK facial (skins/facialskins/<id>/<file>.png).
-                // El PNG es la franja de cabeza 32x16 (2:1, cualquier escala)
-                // → se pinta como cuadrante base sobre la cabeza 64x16
-                // (mantiene la capa overlay derecha) y la cara cae en (8,8).
+                // El PNG es la franja BASE de cabeza, ratio 2:1 (32x16
+                // lógico a cualquier escala: alice 64x32 = k2, apex…).
+                // El frame vive a RESOLUCIÓN NATIVA del pack (k propio) y
+                // paintFace lo escala al k de la textura del juego al
+                // pintar → sin pérdida por reescalado intermedio.
                 const slash = name.indexOf('/');
                 if (slash < 0) return null;
                 const id = name.slice(3, slash), file = name.slice(slash + 1);
@@ -137,13 +144,18 @@
                 if (!url) return null; // sin base de assets todavía
                 const img = await loadImg(url).catch(() => null);
                 if (!img) return null;
+                // k del sprite: la franja base es 32x16 lógico (cat 32x16
+                // = k1, alice 64x32 = k2, apex 512x256 = k16…)
+                const sk = Math.max(1, Math.round(img.width / 32));
                 const c = document.createElement('canvas');
-                c.width = 64; c.height = 16;
+                c.width = 64 * sk; c.height = 16 * sk;
                 const ctx = c.getContext('2d');
                 ctx.imageSmoothingEnabled = false;
-                if (state.baseHead) ctx.drawImage(state.baseHead, 0, 0);
-                ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, 32, 16);
-                return { canvas: c, kind: 'head' };
+                // base completa debajo (con su hat, en la resolución que
+                // tenga) y el sprite del pack encima
+                if (state.baseHead) ctx.drawImage(state.baseHead, 0, 0, 64 * sk, 16 * sk);
+                ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, 32 * sk, 16 * sk);
+                return { canvas: c, kind: 'head', k: sk };
             }
             // emoción de FaceSwap (assets de Verity o fuentes externas)
             const cv = await window.MF_FaceSwap?.loadFaceCanvas?.(name);
@@ -376,14 +388,22 @@
         if (!src?.image) throw new Error('textura de skin no legible');
 
         // guardar cabeza original SOLO la primera vez (o cuando cambia la
-        // skin: la base anterior ya no corresponde a la actual)
+        // skin: la base anterior ya no corresponde a la actual).
+        // La textura puede ser HD (128x128, 512x512…) → el cuadrante de
+        // cabeza ocupa 64x16*k → se captura A RESOLUCIÓN NATIVA (64k x 16k)
+        // para no perder detalle al restaurar/pintar en texturas HD.
         const skinIdNow = currentSkinId();
-        if (!state.baseHead || state.baseHeadSkin !== skinIdNow) {
+        // NUNCA capturar a mitad de un parpadeo: los frames 'face' vacían
+        // el cuadrado frontal del hat y ese agujero quedaría grabado en la
+        // base para siempre (hat invisible). Se captura en el próximo
+        // paintFace que no esté dentro de la ventana de blink.
+        if ((!state.baseHead || state.baseHeadSkin !== skinIdNow) && !auto._blinkUntil) {
             try {
+                const k = Math.max(1, Math.round(src.image.width / 64));
                 const c = document.createElement('canvas');
-                c.width = 64; c.height = 16;
-                c.getContext('2d').drawImage(src.image, 0, 0, 64, 16, 0, 0, 64, 16);
-                state.baseHead = c;
+                c.width = 64 * k; c.height = 16 * k;
+                c.getContext('2d').drawImage(src.image, 0, 0, 64 * k, 16 * k, 0, 0, 64 * k, 16 * k);
+                state.baseHead = c; state.baseHeadK = k;
                 state.baseHeadSkin = skinIdNow;
                 // la base cambió → invalidar todo lo cacheado contra ella
                 state.frameCache.clear();
@@ -414,41 +434,50 @@
     }
 
     // pinta un frame sobre la textura del juego.
-    // kind 'head' → cabeza completa 64x16 (preset dibujado)
-    // kind 'face' → solo la región de cara 8x8.
-    //   IMPORTANTE: la capa overlay (hat, x=40) se renderiza ENCIMA de la
-    //   base → siempre se limpia la región de cara del overlay para que no
-    //   tape la cara animada. (Pintarla ahí produce un flash de "expansión"
-    //   por el inflate del hat layer, así que solo se vacía.)
+    // kind 'head' → cabeza completa 64x16 (presets dibujados y sprites de
+    //   pack: traen la franja completa, hat incluido, en 32..64)
+    // kind 'face' → solo la región de cara 8x8 (emociones de FaceSwap)
     function paintFace(frame) {
         const canvas = ensureSession();
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
+        // la textura puede ser HD (k = múltiplo de 64): todas las
+        // coordenadas están en unidades lógicas 64x64 → escalar por k
+        const k = Math.max(1, Math.round(canvas.width / 64));
         if (frame.kind === 'head') {
-            ctx.clearRect(0, 0, 64, 16);
-            ctx.drawImage(frame.canvas, 0, 0, 64, 16, 0, 0, 64, 16);
+            ctx.clearRect(0, 0, 64 * k, 16 * k);
+            // el frame puede tener k propio (sprite de pack HD): se pinta
+            // completo a la resolución de la textura, 1:1 si k coincide
+            ctx.drawImage(frame.canvas, 0, 0, frame.canvas.width, frame.canvas.height, 0, 0, 64 * k, 16 * k);
         } else {
-            ctx.clearRect(FACE.x, FACE.y, FACE.w, FACE.h);
-            ctx.drawImage(frame.canvas, 0, 0, 8, 8, FACE.x, FACE.y, FACE.w, FACE.h);
+            ctx.clearRect(FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
+            ctx.drawImage(frame.canvas, 0, 0, 8,  8, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
         }
-        // vaciar SOLO la cara del overlay (8x8 en 40,8). El hat layer se
-        // renderiza ENCIMA de la base con inflate → si la skin tiene
-        // píxeles opacos ahí (cara pintada en el hat), tapan la cara
-        // animada (base) por completo. El resto del hat (pelo de arriba,
-        // lados, atrás) NO se toca, y stop() restaura la cabeza entera.
-        ctx.clearRect(FACE_OV.x, FACE_OV.y, FACE_OV.w, FACE_OV.h);
+        // El hat layer (overlay, x=40) se renderiza ENCIMA de la base con
+        // inflate. Los frames 'head' ya pintan su propio hat (vienen de la
+        // franja completa del pack/baseHead). Los frames 'face' no traen
+        // hat → se vacía SOLO el cuadrado de cara del overlay para que el
+        // hat opaco de la skin no tape la emoción; el resto del hat (pelo
+        // de arriba, lados, atrás) NO se toca, y stop() restaura todo.
+        if (frame.kind !== 'head') {
+            ctx.clearRect(FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
+        }
         state.tex.needsUpdate = true;
     }
 
-    // mezcla dos frames por alpha (blend suave entre keyframes)
+    // mezcla dos frames por alpha (blend suave entre keyframes).
+    // Los frames pueden tener k distintos (preset 64x16 vs pack HD) →
+    // se mezclan a la resolución MAYOR para no perder detalle.
     function blendFrames(a, b, t) {
+        const w = Math.max(a.canvas.width, b.canvas.width);
+        const h = Math.max(a.canvas.height, b.canvas.height);
         const c = document.createElement('canvas');
-        c.width = a.canvas.width; c.height = a.canvas.height;
+        c.width = w; c.height = h;
         const ctx = c.getContext('2d');
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(a.canvas, 0, 0);
+        ctx.drawImage(a.canvas, 0, 0, w, h);
         ctx.globalAlpha = t;
-        ctx.drawImage(b.canvas, 0, 0, a.canvas.width, a.canvas.height);
+        ctx.drawImage(b.canvas, 0, 0, w, h);
         ctx.globalAlpha = 1;
         return { canvas: c, kind: a.kind };
     }
@@ -652,9 +681,11 @@
     }
 
     // canvas de ojos cerrados (cacheado por zona):
-    //   1. preset asignado (blinkClosed) → su cara 8x8 (si el preset es de
-    //      cabeza 64x16 se recorta la región de cara)
-    //   2. sintetizado: copia la cara de la ZONA ACTUAL y tapa los ojos con
+    //   1. preset asignado (blinkClosed) de tipo 'head' (packs) → se pinta
+    //      tal cual: su franja 64x16 ya trae el hat → el pelo/sombrero NO
+    //      desaparece durante el parpadeo
+    //   2. preset 'face' (8x8) → igual que antes
+    //   3. sintetizado: copia la cara de la ZONA ACTUAL y tapa los ojos con
     //      el tono de piel de la propia cara (nunca deja la cara vacía)
     async function getBlinkCanvas() {
         const zone = auto._zone || 'front';
@@ -666,20 +697,22 @@
             let fr = null;
             if (name) fr = await resolveFace(resolveAutoName(name)).catch(() => null);
             if (fr) {
+                const k = fr.kind === 'head' ? Math.max(1, Math.round(fr.canvas.width / 64)) : 1;
                 const c = document.createElement('canvas');
                 c.width = 8; c.height = 8;
                 const cx = c.getContext('2d');
                 cx.imageSmoothingEnabled = false;
-                if (fr.kind === 'head') cx.drawImage(fr.canvas, FACE.x, FACE.y, FACE.w, FACE.h, 0, 0, 8, 8);
+                if (fr.kind === 'head') cx.drawImage(fr.canvas, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, 0, 0, 8, 8);
                 else cx.drawImage(fr.canvas, 0, 0, 8, 8, 0, 0, 8, 8);
                 return c;
             }
             if (state.baseHead) {
+                const bk = state.baseHeadK || 1;
                 const c = document.createElement('canvas');
                 c.width = 8; c.height = 8;
                 const cx = c.getContext('2d');
                 cx.imageSmoothingEnabled = false;
-                cx.drawImage(state.baseHead, FACE.x, FACE.y, FACE.w, FACE.h, 0, 0, 8, 8);
+                cx.drawImage(state.baseHead, FACE.x * bk, FACE.y * bk, FACE.w * bk, FACE.h * bk, 0, 0, 8, 8);
                 return c;
             }
             return null;
@@ -690,13 +723,21 @@
             if (auto.blinkClosed) {
                 const fr = await resolveFace(resolveAutoName(auto.blinkClosed)).catch(() => null);
                 if (fr) {
+                    // frame 'head' (sprite de pack): SU franja ya trae el
+                    // hat → devolverlo tal cual para pintarlo completo y no
+                    // perder el pelo/sombrero durante el parpadeo
+                    if (fr.kind === 'head') {
+                        auto._blinkCache = fr.canvas; auto._blinkCacheZone = zone;
+                        auto._blinkCacheKind = 'head';
+                        return fr.canvas;
+                    }
                     const c = document.createElement('canvas');
                     c.width = 8; c.height = 8;
                     const cx = c.getContext('2d');
                     cx.imageSmoothingEnabled = false;
-                    if (fr.kind === 'head') cx.drawImage(fr.canvas, FACE.x, FACE.y, FACE.w, FACE.h, 0, 0, 8, 8);
-                    else cx.drawImage(fr.canvas, 0, 0, 8, 8, 0, 0, 8, 8);
+                    cx.drawImage(fr.canvas, 0, 0, 8, 8, 0, 0, 8, 8);
                     auto._blinkCache = c; auto._blinkCacheZone = zone;
+                    auto._blinkCacheKind = 'face';
                     return c;
                 }
             }
@@ -710,6 +751,7 @@
                 cx.fillRect(1, 4, 2, 2); // ojo izquierdo
                 cx.fillRect(5, 4, 2, 2); // ojo derecho
                 auto._blinkCache = face; auto._blinkCacheZone = zone;
+                auto._blinkCacheKind = 'face';
                 return face;
             }
         } catch {}
@@ -736,7 +778,9 @@
                 getBlinkCanvas().then(cv => {
                     // pintar SOLO si el canvas ya está listo y la ventana sigue abierta
                     if (cv && auto.on && auto._blinkUntil && performance.now() < auto._blinkUntil) {
-                        paintFace({ canvas: cv, kind: 'face' });
+                        // kind 'head' → el sprite del pack trae hat incluido;
+                        // 'face' → solo la cara 8x8 (vacía el hat frontal)
+                        paintFace({ canvas: cv, kind: auto._blinkCacheKind || 'face' });
                     }
                 });
             }
@@ -1073,12 +1117,14 @@
             const name = img.dataset.thumb;
             resolveFace(name).then(fr => {
                 if (!fr || !img.isConnected) return;
-                // recorte de la CARA (8x8) de cualquier kind para el thumb
+                // recorte de la CARA (8x8 lógico) de cualquier kind, a la
+                // resolución del propio frame ('head' HD → k = width/64)
+                const k = fr.kind === 'head' ? Math.max(1, Math.round(fr.canvas.width / 64)) : 1;
                 const c = document.createElement('canvas');
                 c.width = 8; c.height = 8;
                 const cx = c.getContext('2d');
                 cx.imageSmoothingEnabled = false;
-                if (fr.kind === 'head') cx.drawImage(fr.canvas, 8, 8, 8, 8, 0, 0, 8, 8);
+                if (fr.kind === 'head') cx.drawImage(fr.canvas, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, 0, 0, 8, 8);
                 else cx.drawImage(fr.canvas, 0, 0, 8, 8, 0, 0, 8, 8);
                 img.src = c.toDataURL();
             }).catch(() => {});

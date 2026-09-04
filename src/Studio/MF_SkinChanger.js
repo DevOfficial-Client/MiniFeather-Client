@@ -75,7 +75,10 @@
         });
         const skins = out.filter(m => {
             const w = m.map?.image?.width, h = m.map?.image?.height;
-            return w === 64 && (h === 64 || h === 32);
+            if (!w || !h) return false;
+            // 64x64/64x32 o múltiplo HD (128x128, 512x256…) — y ratio 1:1 o 2:1
+            const k64 = w / 64;
+            return Number.isInteger(k64) && (h === w || h === w / 2);
         });
         return skins.length ? skins : out;
     }
@@ -133,26 +136,29 @@
         });
     }
 
-    // miniatura de una skin: la cara ampliada (lo distintivo)
+    // miniatura de una skin: la cara ampliada (lo distintivo).
+    // Escala: HD (k>1) → leer la cara a k para no quedarse con 1/4 de píxel
     function faceThumb(img) {
+        const k = Math.max(1, Math.round(img.width / 64));
         const c = document.createElement('canvas');
         c.width = 32; c.height = 32;
         const ctx = c.getContext('2d');
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(img, SKIN_FACE.x, SKIN_FACE.y, SKIN_FACE.w, SKIN_FACE.h, 0, 0, 32, 32);
+        ctx.drawImage(img, SKIN_FACE.x * k, SKIN_FACE.y * k, SKIN_FACE.w * k, SKIN_FACE.h * k, 0, 0, 32, 32);
         return c.toDataURL();
     }
 
     // miniatura del cuerpo completo (64x32 de alto, escalado)
     function bodyThumb(img) {
+        const k = Math.max(1, Math.round(img.width / 64));
         const c = document.createElement('canvas');
         c.width = 32; c.height = 32;
         const ctx = c.getContext('2d');
         ctx.imageSmoothingEnabled = false;
         // cuerpo: usar mitad derecha del PNG (frente del personaje)
         // layout MC: la skin completa 64x64 → cuerpo en (16,16)-(40,32)
-        ctx.drawImage(img, 16, 16, 24, 16, 4, 8, 24, 16);
-        ctx.drawImage(img, 40, 0, 24, 16, 4, -8, 24, 16); // cabeza arriba
+        ctx.drawImage(img, 16 * k, 16 * k, 24 * k, 16 * k, 4, 8, 24, 16);
+        ctx.drawImage(img, 40 * k, 0, 24 * k, 16 * k, 4, -8, 24, 16); // cabeza arriba
         return c.toDataURL();
     }
 
@@ -220,10 +226,11 @@
         const dataURL = opts?.dataURL || item.dataURL;
         const img = await loadImage(dataURL);
 
-        // la textura del juego es 64x64/64x32. Aceptamos cualquier múltiplo
-        // entero (HD: 128x128, 512x256…) reescalando al pintar, y las
-        // legacy 64x32 lógicas (ratio 2:1, ej. la cara en distinta fila)
-        // se convierten a modern 64x64 antes.
+        // la textura del juego puede ser SD (64x64/64x32) o HD (128x128,
+        // 1024x512…). Aceptamos cualquier múltiplo entero; el canvas ya
+        // viene a SU resolución nativa (modern cuadrado) y aquí solo se
+        // escala al tamaño de la textura destino — si la textura es HD y
+        // el PNG también, el pintado es 1:1 sin pérdida.
         const canvas = normalizeSkinCanvas(img);
         if (!canvas) {
             throw new Error('PNG inválido (' + img.width + 'x' + img.height + ') — debe ser 64x64/64x32 o múltiplo');
@@ -233,7 +240,18 @@
         const ctx = session.canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
         ctx.clearRect(0, 0, session.canvas.width, session.canvas.height);
-        ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, session.canvas.width, session.canvas.height);
+        // pintar en el MISMO layout que la textura del juego:
+        //   modern (tw == th)    → canvas completo escalado
+        //   legacy  (tw == th*2) → SOLO la mitad superior del canvas
+        //                          modern; los miembros izquierdos los
+        //                          espeja el propio juego (no existen en legacy)
+        const tw = session.canvas.width, th = session.canvas.height;
+        const cs = canvas.width / 64; // escala del canvas modern
+        if (tw === th * 2) {
+            ctx.drawImage(canvas, 0, 0, 64 * cs, 32 * cs, 0, 0, tw, th);
+        } else {
+            ctx.drawImage(canvas, 0, 0, 64 * cs, 64 * cs, 0, 0, tw, th);
+        }
         session.tex.needsUpdate = true;
         state.current = name;
         startWatchdog();
@@ -247,9 +265,12 @@
         return { ok: true, skin: name, mode: session.shared ? 'shared' : 'own' };
     }
 
-    // normaliza cualquier PNG de skin a un canvas 64x64 (o 64x32 si el
-    // juego usa legacy): reescala múltiplos HD y convierte legacy→modern.
-    // null si las proporciones no son de skin.
+    // normaliza cualquier PNG de skin (reescala nada): modern pasa tal
+    // cual (a SU resolución nativa) y legacy se convierte a modern a la
+    // MISMA escala. null si las proporciones no son de skin.
+    // El canvas/img resultante es w == h (modern): aplicar lo escala al
+    // tamaño de la textura destino SIN colapso intermedio a 64x64 (eso
+    // mataba la resolución HD: alice 128 → 64 → estirada a x16).
     function normalizeSkinCanvas(img) {
         const w = img.width, h = img.height;
         const isModern = w === h;             // 64x64, 128x128, 1024x1024…
@@ -258,23 +279,25 @@
         const scale = w / 64;
         if (!Number.isInteger(scale)) return null;
 
-        // destino: la textura editable del juego siempre es modern 64x64
+        if (isModern) return img; // tal cual, resolución nativa intacta
+
+        // legacy (64x32 lógico a escala `scale`) → modern a la MISMA escala.
+        // Legacy: y0..h/2 = cabeza(0..32)+hat(32..64) + piernaD/cuerpo/brazoD
+        // Modern: añade y48..64 = piernaI(16..32) brazoI(32..48) espejados
         const out = document.createElement('canvas');
-        out.width = 64; out.height = 64;
+        out.width = w; out.height = w; // modern = cuadrado (64x32 → 64x64)
         const cx = out.getContext('2d');
         cx.imageSmoothingEnabled = false;
-
-        if (isModern) {
-            cx.drawImage(img, 0, 0, w, h, 0, 0, 64, 64);
-            return out;
-        }
-        // legacy (64x32 lógico): convertir a modern 64x64.
-        // Layout legacy: cabeza en (0,0)-(32,16), cuerpo/brazos/piernas en
-        // la fila inferior. En modern las piernas van en la mitad inferior.
-        // Copia directa de la mitad superior + piernas abajo.
-        cx.drawImage(img, 0, 0, w, h / 2, 0, 0, 64, 32); // cabeza+cuerpo+brazos
-        // piernas (32x16 lógicos) → (16,48)-(48,64)
-        cx.drawImage(img, 0, h / 2, w / 2, h / 2, 16, 48, 32, 16);
+        cx.drawImage(img, 0, 0, w, h, 0, 0, w, h); // todo el legacy 1:1 arriba
+        const mirror = (sx, dx) => {
+            cx.save();
+            cx.translate((dx + 16) * scale, 48 * scale);
+            cx.scale(-1, 1);
+            cx.drawImage(img, sx * scale, h / 2, 16 * scale, h / 2, 0, 0, 16 * scale, 16 * scale);
+            cx.restore();
+        };
+        mirror(0, 16);  // pierna I ← espejo pierna D
+        mirror(40, 32); // brazo I ← espejo brazo D
         return out;
     }
 
@@ -361,8 +384,11 @@
             if (!dataURL) continue;
             try {
                 const img = await loadImage(dataURL);
-                if (!(img.width === 64 && (img.height === 64 || img.height === 32))) {
-                    console.warn(TAG + ' "' + file.name + '" no es 64x64/64x32 (' + img.width + 'x' + img.height + ')');
+                // aceptar 64x64/64x32 y CUALQUIER múltiplo HD (128x128,
+                // 512x256, 1024x512…). normalizeSkinCanvas devuelve null si
+                // las proporciones no son de skin.
+                if (!normalizeSkinCanvas(img)) {
+                    console.warn(TAG + ' "' + file.name + '" proporciones no válidas (' + img.width + 'x' + img.height + ')');
                     continue;
                 }
                 const name = file.name.replace(/\.png$/i, '');
