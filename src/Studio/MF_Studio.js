@@ -236,13 +236,14 @@
         hiddenHudEls: []
     };
 
-    // ── Studio Sync P2P: compartir pose + cámara con el peer ──
+    // ── Studio Sync P2P: compartir pose/animación con el peer (cámara local) ──
     const p2p = {
         share: false,          // toggle del usuario (emite mis cambios)
         camRemote: null,       // { x,y,z, yaw, pitch } target remoto
         camLerp: 0.25,         // suavizado
-        camActive: false,      // el peer está compartiendo SU cámara
-        lastCamOut: 0,         // throttle emisión cámara (30 Hz)
+        camActive: false,      // compatibilidad con peers antiguos
+        followRemoteCamera: false, // compartir animación nunca secuestra la cámara
+        lastCamOut: 0,         // reservado para compatibilidad
         lastPoseOut: 0,        // throttle emisión pose (20 Hz)
         applying: false        // guard anti-eco: aplicando datos remotos
     };
@@ -687,7 +688,7 @@
             </span>
             <span class="btn-group">
                 <button class="mfs-btn" id="mfs-pose-vp" title="Posar extremidades: click der. en el cuerpo + arrastrar (rueda=yaw, Alt+rueda=tamaño)">🦴 Posing</button>
-                <button class="mfs-btn" id="mfs-share" title="Compartir pose + cámara por P2P (/p2p host o /p2p join)">📡</button>
+                <button class="mfs-btn" id="mfs-share" title="Compartir pose/animación por P2P sin controlar la cámara del otro jugador">📡</button>
                 <button class="mfs-btn icon" id="mfs-skineditor" title="Editor de cabeza en vivo (dibujar base + overlay)">🎨</button>
                 <button class="mfs-btn icon" id="mfs-skinchanger" title="Skins PNG en vivo (biblioteca + drag al timeline)">👕</button>
                 <button class="mfs-btn icon" id="mfs-morph" title="Morph: transformarse en mobs del mundo (client-side)">🧬</button>
@@ -1562,7 +1563,12 @@
         // el ratón atrapado (lo pide el juego vía eventos que no controlamos)
         if (document.pointerLockElement) releasePointerLock();
         // cámara WASD: 60fps con delta time real
-        if (lastCamFrame) applyCameraMovement((now - lastCamFrame) / 1000);
+        if (lastCamFrame) {
+            // Un lag spike o volver de otra pestaña no debe convertirse en un
+            // salto enorme de cámara en un único frame.
+            const dt = Math.min(0.05, Math.max(0, (now - lastCamFrame) / 1000));
+            applyCameraMovement(dt);
+        }
         lastCamFrame = now;
         // Studio Sync: emitir pose local (20 Hz interno, solo si cambió)
         if (p2p.share) emitLocalPose();
@@ -1596,6 +1602,9 @@
         pos: null, yaw: 0, pitch: 0,
         origPos: null, origQuat: null
     };
+    // El preview se recrea en cada open(), pero estos listeners viven en window.
+    // Sin este guard se acumulaban y multiplicaban la sensibilidad al reabrir.
+    let camMouseBound = false;
 
     function findSceneOf(node) {
         let n = node;
@@ -1635,29 +1644,32 @@
             const wp = camera.getWorldPosition?.(new camera.position.constructor());
             if (wp && Number.isFinite(wp.x)) { cam.pos = { x: wp.x, y: wp.y, z: wp.z }; }
         } catch {}
-        cam.yaw = Number(camera.rotation?.y) || 0;
-        cam.pitch = Number(camera.rotation?.x) || 0;
-
-        // detach a la escena (mantiene transform mundial)
+        // detach a la escena (mantiene transform mundial). La orientación
+        // se captura DESPUÉS del attach; antes era local al padre del jugador
+        // y podía producir un salto/desgarro al primer frame.
         try {
             if (typeof scene.attach === 'function') scene.attach(camera);
             else scene.add(camera);
+        } catch {}
+        try {
+            camera.updateMatrixWorld?.(true);
+            cam.pos = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
+            cam.yaw = Number(camera.rotation?.y) || 0;
+            cam.pitch = Number(camera.rotation?.x) || 0;
         } catch {}
 
         cam.active = true;
         bindCameraKeys();
         installCamHooks(camera);
         applyCamPose();
-        // Studio Sync: avisar al peer que empecé a mover la cámara
-        if (p2p.share) sendStudio({ t: 'studio-cam-on' });
+        // La cámara del Studio es local; compartir animación no la publica.
         console.log(TAG + ' cámara de studio activa (click+drag=rotar · WASD/QE=mover · Ctrl=rápido)');
         return true;
     }
 
     function cameraDisable() {
         if (!cam.active) return;
-        // Studio Sync: avisar al peer que dejé de mover la cámara
-        if (p2p.share) sendStudio({ t: 'studio-cam-off' });
+        // La cámara del Studio es local; no hay estado remoto que apagar.
         cam.active = false;
         cam.dragging = false;
         cam.keys = {};
@@ -1686,7 +1698,7 @@
     // Mismo mecanismo que FreeCam: hookear updateMatrixWorld/updateWorldMatrix
     // para que la pose del estudio se aplique ANTES de que el juego calcule
     // sus matrices (el juego reescribe la cámara en su propio loop).
-    const camHooks = { umw: null, uwm: null };
+    const camHooks = { umw: null, uwm: null, updating: false };
     function applyCamPose() {
         const c = cam.camera;
         if (!c) return;
@@ -1694,12 +1706,11 @@
         // lugar de usar mi pose local. Si arrastro o uso WASD, TOMO el
         // control (dejo de seguir y mi cámara pasa a compartirse).
         if (p2p.applying) return; // ya viene de datos remotos
-        if (p2p.camActive && p2p.camRemote) {
+        if (p2p.followRemoteCamera && p2p.camActive && p2p.camRemote) {
             if (cam.dragging || camKeysActive()) {
                 p2p.camActive = false;
                 p2p.camRemote = null;
-                if (p2p.share) sendStudio({ t: 'studio-cam-on' });
-                updateStatus('📡 Tomaste el control de la cámara');
+                updateStatus('📡 Tomaste el control de la cámara local');
             } else {
                 const L = p2p.camLerp;
                 const r = p2p.camRemote;
@@ -1717,34 +1728,36 @@
         if (typeof c.rotation?.set === 'function') {
             try { c.rotation.set(cam.pitch, cam.yaw, 0, 'YXZ'); } catch { c.rotation.set(cam.pitch, cam.yaw, 0); }
         }
-        // compartir mi cámara (30 Hz, solo si cambió)
-        if (p2p.share && !p2p.camActive) {
-            const now = performance.now();
-            if (now - p2p.lastCamOut > 33) {
-                p2p.lastCamOut = now;
-                const k = cam.pos.x.toFixed(2) + ',' + cam.pos.y.toFixed(2) + ',' + cam.pos.z.toFixed(2) + ',' + cam.yaw.toFixed(3) + ',' + cam.pitch.toFixed(3);
-                if (k !== p2p._camKey) {
-                    p2p._camKey = k;
-                    sendStudio({ t: 'studio-cam', p: { x: +cam.pos.x.toFixed(2), y: +cam.pos.y.toFixed(2), z: +cam.pos.z.toFixed(2), yaw: +cam.yaw.toFixed(3), pitch: +cam.pitch.toFixed(3) } });
-                }
-            }
-        }
+        // P2P del Studio comparte pose/animación, no la cámara. Esto evita
+        // bloquear o secuestrar la vista del jugador conectado.
     }
     function installCamHooks(camera) {
         if (!camera) return;
         if (camHooks.umw?.camera !== camera && typeof camera.updateMatrixWorld === 'function') {
             const original = camera.updateMatrixWorld;
             const hook = function (...args) {
-                if (cam.active && cam.camera === camera) applyCamPose();
-                return original.apply(this, args);
+                if (camHooks.updating) return original.apply(this, args);
+                camHooks.updating = true;
+                try {
+                    if (cam.active && cam.camera === camera) applyCamPose();
+                    return original.apply(this, args);
+                } finally {
+                    camHooks.updating = false;
+                }
             };
             try { camera.updateMatrixWorld = hook; camHooks.umw = { camera, original, hook }; } catch {}
         }
         if (camHooks.uwm?.camera !== camera && typeof camera.updateWorldMatrix === 'function') {
             const original = camera.updateWorldMatrix;
             const hook = function (...args) {
-                if (cam.active && cam.camera === camera) applyCamPose();
-                return original.apply(this, args);
+                if (camHooks.updating) return original.apply(this, args);
+                camHooks.updating = true;
+                try {
+                    if (cam.active && cam.camera === camera) applyCamPose();
+                    return original.apply(this, args);
+                } finally {
+                    camHooks.updating = false;
+                }
             };
             try { camera.updateWorldMatrix = hook; camHooks.uwm = { camera, original, hook }; } catch {}
         }
@@ -1752,7 +1765,7 @@
     function removeCamHooks() {
         if (camHooks.umw) { try { camHooks.umw.camera.updateMatrixWorld = camHooks.umw.original; } catch {} }
         if (camHooks.uwm) { try { camHooks.uwm.camera.updateWorldMatrix = camHooks.uwm.original; } catch {} }
-        camHooks.umw = null; camHooks.uwm = null;
+        camHooks.umw = null; camHooks.uwm = null; camHooks.updating = false;
     }
 
     function bindCameraKeys() {
@@ -1797,35 +1810,17 @@
     // ── Studio Sync: recepción de datos remotos ──
     // el peer movió su cámara: guardar target (applyCamPose interpola)
     function applyRemoteCam(p) {
+        // Compatibilidad con clientes viejos que aún mandan studio-cam.
+        // Se acepta el paquete, pero NUNCA se activa/mueve la cámara local.
         if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) return;
         p2p.camRemote = { x: p.x, y: p.y, z: p.z, yaw: +p.yaw || 0, pitch: +p.pitch || 0 };
-        // suprimir eco: si mi emisión lee esta misma pose, no re-enviarla
-        p2p._camKey = p.x + ',' + p.y + ',' + p.z + ',' + (+p.yaw || 0) + ',' + (+p.pitch || 0);
-        // si el peer comparte cámara, activar la mía para ver su toma
-        if (!cam.active) try { cameraEnable(); } catch {}
     }
 
-    // el peer activó/desactivó SU cámara compartida
+    // Compatibilidad con peers antiguos. Compartir animación no implica seguir
+    // su cámara: el receptor conserva control total de su vista.
     function remoteCamActive(on) {
         p2p.camActive = !!on;
         if (!on) p2p.camRemote = null;
-        // nunca forzar la cámara si mi estudio está cerrado: sin UI el
-        // usuario queda bloqueado siguiendo la vista remota sin escapar
-        if (on && state.open && !cam.active) {
-            try { cameraEnable(); } catch {}
-            updateStatus('📡 Cámara del peer compartida (siguiendo su vista)');
-        } else if (on) {
-            updateStatus('📡 Cámara del peer compartida (abre el estudio para verla)');
-        } else {
-            // si me quedé siguiendo una cámara remota sin estudio abierto
-            // (cierre inesperado), devolver la cámara al juego YA
-            if (!state.open && cam.active) {
-                try { cameraDisable(); } catch {}
-                updateStatus('📡 El peer dejó de compartir cámara (restaurada)');
-            } else {
-                updateStatus('📡 El peer dejó de compartir cámara');
-            }
-        }
     }
 
     // el peer posó su actor: aplicar localmente (radianes, formato MF_Film)
@@ -1887,21 +1882,24 @@
             preview.style.cursor = 'grabbing';
             ev.preventDefault();
         });
-        window.addEventListener('mousemove', (ev) => {
-            if (!cam.dragging) return;
-            const dx = ev.clientX - cam.lastX;
-            const dy = ev.clientY - cam.lastY;
-            cam.lastX = ev.clientX; cam.lastY = ev.clientY;
-            const sens = 0.0035;
-            cam.yaw -= dx * sens;
-            cam.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, cam.pitch - dy * sens));
-        });
-        window.addEventListener('mouseup', () => {
-            if (!cam.dragging) return;
-            cam.dragging = false;
-            const p = document.getElementById('mf-studio-preview');
-            if (p) p.style.cursor = 'grab';
-        });
+        if (!camMouseBound) {
+            camMouseBound = true;
+            window.addEventListener('mousemove', (ev) => {
+                if (!cam.dragging) return;
+                const dx = ev.clientX - cam.lastX;
+                const dy = ev.clientY - cam.lastY;
+                cam.lastX = ev.clientX; cam.lastY = ev.clientY;
+                const sens = 0.0035;
+                cam.yaw -= dx * sens;
+                cam.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, cam.pitch - dy * sens));
+            });
+            window.addEventListener('mouseup', () => {
+                if (!cam.dragging) return;
+                cam.dragging = false;
+                const p = document.getElementById('mf-studio-preview');
+                if (p) p.style.cursor = 'grab';
+            });
+        }
     }
 
     // ── posing directo en viewport, estilo Blockbench ──
@@ -1939,16 +1937,13 @@
             p2p._camKey = null;
             p2p._poseKey = null;
         } else {
-            // al activar: mandar un snapshot inmediato para que el peer
-            // arranque desde mi estado actual (pose + cámara si está activa)
+            // al activar: mandar snapshot inmediato de pose/animación.
+            // La cámara permanece siempre local para cada jugador.
             emitLocalPose(true);
-            if (cam.active) sendStudio({ t: 'studio-cam-on' });
         }
-        // avisar al peer que ya no sigo moviendo la cámara
-        if (!p2p.share && cam.active) sendStudio({ t: 'studio-cam-off' });
         const st = window.MF_Peer?.status;
         updateStatus(p2p.share
-            ? (st === 'host' || st === 'guest' ? '📡 Compartiendo pose + cámara con el peer' : '📡 ON — pero P2P desconectado (usa /p2p host o /p2p join)')
+            ? (st === 'host' || st === 'guest' ? '📡 Compartiendo pose/animación con el peer' : '📡 ON — pero P2P desconectado (usa /p2p host o /p2p join)')
             : '📡 Compartir apagado');
     }
 
@@ -1967,7 +1962,13 @@
     }
 
     // ── gizmo de flechas XYZ (estilo Blockbench move tool) ──
-    const gizmo = { hoverAxis: null, draggingAxis: null, lastX: 0, lastY: 0, startOffset: null, hoverRing: null, draggingRing: null, mode: 'move' };
+    const gizmo = {
+        hoverAxis: null, draggingAxis: null, startOffset: null,
+        axisApplied: 0, axisScale: 1,
+        hoverRing: null, draggingRing: null,
+        ringAccum: 0, ringLastX: 0, ringLastY: 0,
+        mode: 'move'
+    };
 
     // aplicar/validar el modo del gizmo (move | rotate)
     function gizmoSetMode(mode) {
@@ -2026,19 +2027,28 @@
         window.MF_Gizmo?.detach?.();
         gizmo.hoverAxis = null;
         gizmo.draggingAxis = null;
+        gizmo.axisApplied = 0;
+        window.MF_Gizmo?.endDrag?.();
     }
 
     // aplicar translate solo en el eje arrastrado (eje MUNDO del gizmo,
     // convertido a local por MF_Pose — el personaje tiene yaw)
-    function applyGizmoDrag(dx, dy, slow) {
+    function applyGizmoDrag(dxTotal, dyTotal) {
         const G = window.MF_Gizmo;
         const part = posing.selPart;
         const P = window.MF_Pose;
         const axis = gizmo.draggingAxis;
         if (!G || !part || !P || !axis) return;
-        const amount = G.dragDelta(axis, dx, dy, cam.camera) * (slow ? 0.25 : 1);
+        // Proyección congelada + delta total = movimiento X/Y/Z lineal. Aplicar
+        // solo la diferencia contra el frame anterior lo vuelve independiente
+        // de FPS y de cuántos mousemove entregue el navegador.
+        const raw = G.dragDeltaFromStart?.(dxTotal, dyTotal);
+        const target = (Number.isFinite(raw) ? raw : 0) * gizmo.axisScale;
+        const step = target - gizmo.axisApplied;
+        gizmo.axisApplied = target;
+        if (!Number.isFinite(step) || Math.abs(step) < 1e-9) return;
         let next = { x: 0, y: 0, z: 0 };
-        try { next = P.addWorldOffset(part, axis, amount); } catch {}
+        try { next = P.addWorldOffset(part, axis, step); } catch {}
         autoKeyTransform(part, 'position', [next.x, next.y, next.z], false);
     }
 
@@ -2225,6 +2235,8 @@
                     posing.dragMode = 'ring';
                     posing.lastX = ev.clientX; posing.lastY = ev.clientY;
                     posing.startX = ev.clientX; posing.startY = ev.clientY;
+                    gizmo.ringAccum = 0;
+                    gizmo.ringLastX = ev.clientX; gizmo.ringLastY = ev.clientY;
                     posing.rotHandle = window.MF_Pose?.beginRotateWorld?.(posing.selPart, cam.camera) ?? null;
                     clearHoverHighlight();
                     ev.preventDefault();
@@ -2241,6 +2253,10 @@
                     posing.dragging = true;
                     posing.dragMode = 'gizmo';
                     posing.lastX = ev.clientX; posing.lastY = ev.clientY;
+                    posing.startX = ev.clientX; posing.startY = ev.clientY;
+                    gizmo.axisApplied = 0;
+                    gizmo.axisScale = ev.ctrlKey ? 0.25 : 1;
+                    G.beginDrag?.(axis, cam.camera);
                     clearHoverHighlight();
                     ev.preventDefault();
                     ev.stopImmediatePropagation();
@@ -2291,12 +2307,22 @@
                 const dx = ev.clientX - posing.lastX;
                 const dy = ev.clientY - posing.lastY;
                 posing.lastX = ev.clientX; posing.lastY = ev.clientY;
-                if (posing.dragMode === 'gizmo') applyGizmoDrag(dx, dy, ev.ctrlKey);
+                if (posing.dragMode === 'gizmo') {
+                    applyGizmoDrag(ev.clientX - posing.startX, ev.clientY - posing.startY);
+                }
                 else if (posing.dragMode === 'ring') {
-                    // ángulo total desde el mousedown en el plano del anillo
+                    // Acumular deltas cortos evita el salto ±π de medir siempre
+                    // desde el mousedown después de cruzar media vuelta.
                     const G = window.MF_Gizmo;
-                    const ang = G?.ringDragDelta?.(gizmo.draggingRing, { x: posing.startX, y: posing.startY }, { x: ev.clientX, y: ev.clientY }, cam.camera) || 0;
-                    applyRingDrag(ang, ev.ctrlKey, ev.shiftKey);
+                    const step = G?.ringDragDelta?.(
+                        gizmo.draggingRing,
+                        { x: gizmo.ringLastX, y: gizmo.ringLastY },
+                        { x: ev.clientX, y: ev.clientY },
+                        cam.camera
+                    ) || 0;
+                    if (Number.isFinite(step)) gizmo.ringAccum += step;
+                    gizmo.ringLastX = ev.clientX; gizmo.ringLastY = ev.clientY;
+                    applyRingDrag(gizmo.ringAccum, ev.ctrlKey, ev.shiftKey);
                 }
                 else if (posing.dragMode === 'move') applyMoveFromDrag(dx, dy, ev.ctrlKey, ev.shiftKey);
                 else {
@@ -2310,7 +2336,11 @@
             window.addEventListener('mouseup', (ev) => {
                 if (posing.dragging && (ev.button === 0 || ev.button === 2)) {
                     posing.dragging = false;
-                    if (posing.dragMode === 'gizmo') gizmo.draggingAxis = null;
+                    if (posing.dragMode === 'gizmo') {
+                        gizmo.draggingAxis = null;
+                        gizmo.axisApplied = 0;
+                        window.MF_Gizmo?.endDrag?.();
+                    }
                     if (posing.dragMode === 'ring') gizmo.draggingRing = null;
                     if (posing.rotHandle != null) {
                         window.MF_Pose?.endRotateWorld?.(posing.rotHandle);
@@ -2514,6 +2544,7 @@
         if (state.open) return;
         build();
         state.open = true;
+        lastCamFrame = 0;
         // ORDEN CRÍTICO: primero bloquear pointerlockchange (si no, el juego
         // ve la pérdida del lock como "Esc" y abre su menú de pausa),
         // después liberar el lock, después parchear requestPointerLock.
@@ -2533,6 +2564,7 @@
     function close() {
         if (!state.open) return;
         state.open = false;
+        lastCamFrame = 0;
         cancelAnimationFrame(state.raf);
         cameraDisable();
         posingToggle(false);

@@ -33,6 +33,7 @@
         joint: null,
         onDelta: null,
         dragging: null,      // eje durante el drag
+        dragCtx: null,       // proyección congelada durante drag lineal
         ctors: null,
         size: 1
     };
@@ -336,7 +337,7 @@
             } catch {}
         }
         state.root = null; state.arrows = null; state.joint = null;
-        state.onDelta = null; state.dragging = null;
+        state.onDelta = null; state.dragging = null; state.dragCtx = null;
     }
 
     function visible() { return !!state.root; }
@@ -386,7 +387,46 @@
         } catch { return null; }
     }
 
-    // delta de mundo a lo largo de un eje, dado el movimiento del ratón
+    // Congela la proyección del eje al comenzar el drag. Si se recalcula
+    // mientras el joint se mueve, la perspectiva cambia la sensibilidad y el
+    // movimiento parece acelerar/frenar. Con esto el drag es lineal.
+    function beginDrag(axis, camera) {
+        const cam = camera || getStudioCamera();
+        if (!cam || !state.arrows?.[axis] || !state.joint) return false;
+        update();
+        try {
+            const V3 = cam.position.constructor;
+            const rect = (getGameCanvas() || document.body).getBoundingClientRect();
+            cam.updateMatrixWorld?.();
+            state.joint.updateMatrixWorld?.(true);
+            const jp = new V3();
+            state.joint.getWorldPosition(jp);
+            const d = state.arrows[axis].dir;
+            const p0 = projectPoint(jp, cam, rect);
+            const p1 = projectPoint(new V3(jp.x + d[0], jp.y + d[1], jp.z + d[2]), cam, rect);
+            if (!p0 || !p1) return false;
+            const ax = p1.x - p0.x, ay = p1.y - p0.y;
+            const lenSq = ax * ax + ay * ay;
+            if (lenSq < 1e-6) return false;
+            state.dragCtx = { axis, ax, ay, lenSq };
+            return true;
+        } catch {
+            state.dragCtx = null;
+            return false;
+        }
+    }
+
+    // Desplazamiento TOTAL desde el mousedown, independiente de FPS y del
+    // número de eventos mousemove recibidos.
+    function dragDeltaFromStart(dxTotal, dyTotal) {
+        const c = state.dragCtx;
+        if (!c) return 0;
+        return (dxTotal * c.ax + dyTotal * c.ay) / c.lenSq;
+    }
+
+    function endDrag() { state.dragCtx = null; }
+
+    // API legacy: delta incremental. Se conserva por compatibilidad.
     function dragDelta(axis, dxPx, dyPx, camera) {
         const cam = camera || getStudioCamera();
         if (!cam) return 0;
@@ -549,7 +589,7 @@
         return best;
     }
 
-    window.MF_Gizmo = { attach, detach, pick, dragDelta, visible, pickRing, ringDragDelta, setMode };
+    window.MF_Gizmo = { attach, detach, pick, beginDrag, dragDeltaFromStart, endDrag, dragDelta, visible, pickRing, ringDragDelta, setMode };
     window.__MF_Gizmo = true;
 
     console.log(TAG + ' listo. attach(joint, onDelta) — flechas X/Y/Z para mover la parte.');

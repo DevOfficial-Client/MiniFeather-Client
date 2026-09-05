@@ -585,12 +585,12 @@
             // joint seleccionado: delta en mundo → espacio local
             const qNew = qDelta.clone().multiply(st.qStartWorld);
             const qLocal = st.qParentWorldInv.clone().multiply(qNew);
-            const ord = st.joint.rotation?.order || 'XYZ';
-            const eu = new (st.joint.rotation.constructor)().setFromQuaternion(qLocal, ord);
-            st.joint.rotation.set(eu.x, eu.y, eu.z);
+            // Aplicar el quaternion directo evita conversiones Euler repetidas
+            // y discontinuidades visibles cerca de ±180° / gimbal lock.
+            st.joint.quaternion.copy(qLocal);
 
             const deg = (r) => r * 180 / Math.PI;
-            const out = { deg: [deg(eu.x), deg(eu.y), deg(eu.z)] };
+            const out = { deg: [deg(st.joint.rotation.x), deg(st.joint.rotation.y), deg(st.joint.rotation.z)] };
 
             // espejo: la reflexión invierte el sentido (det=-1):
             // M·rot(a,θ)·M⁻¹ = rot(Ma,−θ) → ambos lados van "adelante" juntos
@@ -600,10 +600,8 @@
                 const qDeltaM = new st.Q().setFromAxisAngle(mB, -aB).multiply(new st.Q().setFromAxisAngle(mR, -aR));
                 const qNewM = qDeltaM.clone().multiply(st.qMirrorStart);
                 const qLocalM = st.qMirrorParentInv.clone().multiply(qNewM);
-                const ordM = st.mirrorJoint.rotation?.order || 'XYZ';
-                const euM = new (st.mirrorJoint.rotation.constructor)().setFromQuaternion(qLocalM, ordM);
-                st.mirrorJoint.rotation.set(euM.x, euM.y, euM.z);
-                out.mirrorDeg = [deg(euM.x), deg(euM.y), deg(euM.z)];
+                st.mirrorJoint.quaternion.copy(qLocalM);
+                out.mirrorDeg = [deg(st.mirrorJoint.rotation.x), deg(st.mirrorJoint.rotation.y), deg(st.mirrorJoint.rotation.z)];
             }
             return out;
         } catch { return null; }
@@ -633,22 +631,18 @@
 
             const qNew = qDelta.clone().multiply(st.qStartWorld);
             const qLocal = st.qParentWorldInv.clone().multiply(qNew);
-            const ord = st.joint.rotation?.order || 'XYZ';
-            const eu = new (st.joint.rotation.constructor)().setFromQuaternion(qLocal, ord);
-            st.joint.rotation.set(eu.x, eu.y, eu.z);
+            st.joint.quaternion.copy(qLocal);
 
             const deg = (r) => r * 180 / Math.PI;
-            const out = { deg: [deg(eu.x), deg(eu.y), deg(eu.z)], angle: a };
+            const out = { deg: [deg(st.joint.rotation.x), deg(st.joint.rotation.y), deg(st.joint.rotation.z)], angle: a };
 
             if (mirror && st.mirrorJoint) {
                 const mAxis = reflectAxis(axisV, st.mirrorN);
                 const qDeltaM = new st.Q().setFromAxisAngle(mAxis, -a);
                 const qNewM = qDeltaM.clone().multiply(st.qMirrorStart);
                 const qLocalM = st.qMirrorParentInv.clone().multiply(qNewM);
-                const ordM = st.mirrorJoint.rotation?.order || 'XYZ';
-                const euM = new (st.mirrorJoint.rotation.constructor)().setFromQuaternion(qLocalM, ordM);
-                st.mirrorJoint.rotation.set(euM.x, euM.y, euM.z);
-                out.mirrorDeg = [deg(euM.x), deg(euM.y), deg(euM.z)];
+                st.mirrorJoint.quaternion.copy(qLocalM);
+                out.mirrorDeg = [deg(st.mirrorJoint.rotation.x), deg(st.mirrorJoint.rotation.y), deg(st.mirrorJoint.rotation.z)];
             }
             return out;
         } catch { return null; }
