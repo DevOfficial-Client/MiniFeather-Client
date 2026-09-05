@@ -1,10 +1,6 @@
 (() => {
   'use strict';
 
-  // MiniFeather Legacy Skins 4.9.4
-  // Keeps only the useful hidden-skin unlock from the old "Miniblox Unlocked"
-  // extension. It does not modify world creation, requests, or world types.
-
   if (window.top !== window.self) return;
   if (window.__MF_LEGACY_UNLOCKS_494__) return;
   window.__MF_LEGACY_UNLOCKS_494__ = true;
@@ -20,7 +16,6 @@
     'banana'
   ];
 
-  // Only add slime if the current game actually exposes it in its catalog.
   const OPTIONAL_SECRET_SKINS = ['slime'];
 
   const state = {
@@ -50,7 +45,6 @@
       for (const e of performance.getEntriesByType('resource')) urls.push(e.name);
     } catch {}
 
-    // Prefer the main Vite index module, not source maps or chunks.
     return [...new Set(urls)]
       .filter(Boolean)
       .find(url => {
@@ -90,8 +84,6 @@
       if (!item || item.id !== id) continue;
 
       try {
-        // MiniBlox computes ownership from tier/level. Hidden skins use high
-        // tiers, so tier 0 lets the native cosmetics UI treat them as owned.
         item.tier = 0;
         if (item.level != null) item.level = undefined;
         unlocked.push(id);
@@ -112,8 +104,6 @@
   }
 
   async function unlockCurrentSkins() {
-    // Waiting for the React root avoids executing the main module earlier than
-    // MiniBlox itself. Importing an already-loaded module reuses its cache.
     for (let i = 0; i < 160 && !state.destroyed; i++) {
       if (document.querySelector('#react')) break;
       await new Promise(r => setTimeout(r, 50));
