@@ -78,7 +78,7 @@
         "src/HUD/DynamicCrosshair.js",
         "src/Movement/Baritone.js",
         "src/Core/features.js",
-        "src/HUD/ArmorHUD.js",
+        "src/HUD/Armorhud.js",
         "src/World/MinimapCache.js",
         "src/World/WorldMap.js",
         "src/World/RhythmParkour.js",
