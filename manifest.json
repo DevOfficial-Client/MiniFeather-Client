@@ -53,6 +53,7 @@
         "src/I18n/MainTranslations.js",
         "src/I18n/CommandTranslations.js",
         "src/Render/TextureInterceptor.js",
+        "src/Cosmetics/LegacyUnlocks.js",
         "src/Cosmetics/CustomSkins.js",
         "src/Core/inject.js",
         "src/Render/FreeCam.js",
