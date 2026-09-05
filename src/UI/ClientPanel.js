@@ -3217,21 +3217,21 @@
     const style = document.createElement('style');
     style.id = 'mf-waypoints-panel-style';
     style.textContent = `
-      .mf-waypoint-add-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-      .mf-waypoint-input{flex:1;min-width:180px;border:1px solid rgba(255,255,255,.14);background:rgba(10,12,18,.7);color:#fff;border-radius:8px;padding:10px 12px;outline:none;font:inherit}
-      .mf-waypoint-input:focus{border-color:rgba(139,92,246,.8);box-shadow:0 0 0 2px rgba(139,92,246,.18)}
-      .mf-waypoint-status{min-height:18px;margin-top:9px;color:#c4b5fd;font-size:12px}
-      .mf-waypoint-list{display:flex;flex-direction:column;gap:8px}
-      .mf-waypoint-row{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border-radius:9px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08)}
-      .mf-waypoint-swatch{width:10px;height:34px;border-radius:5px;box-shadow:0 0 10px rgba(255,255,255,.12)}
-      .mf-waypoint-copy{min-width:0;display:flex;flex-direction:column;gap:3px}
-      .mf-waypoint-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .mf-waypoint-copy span{color:#aeb3c2;font-size:12px}
-      .mf-waypoint-actions{display:flex;gap:6px}
-      .mf-waypoint-actions .mf-btn{padding:7px 9px;font-size:11px}
-      .mf-waypoint-empty{padding:20px;text-align:center;color:#9ca3af;border:1px dashed rgba(255,255,255,.12);border-radius:9px}
-      .mf-waypoint-count{font-size:12px;color:#a78bfa;margin-left:6px}
-      @media(max-width:760px){.mf-waypoint-row{grid-template-columns:10px 1fr}.mf-waypoint-actions{grid-column:2;justify-content:flex-start}.mf-waypoint-add-row{align-items:stretch}.mf-waypoint-add-row .mf-btn{width:100%}}
+      .mf-waypoint-world-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px;padding:11px 12px;border-radius:10px;background:linear-gradient(135deg,rgba(139,92,246,.13),rgba(34,211,238,.06));border:1px solid rgba(167,139,250,.24)}
+      .mf-waypoint-world-copy{min-width:0;display:flex;flex-direction:column;gap:2px}.mf-waypoint-world-copy strong{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mf-waypoint-world-copy span{font-size:11px;color:#aeb3c2}
+      .mf-waypoint-world-badge{flex:0 0 auto;padding:5px 8px;border-radius:999px;font-size:10px;font-weight:900;letter-spacing:.04em;background:rgba(139,92,246,.15);border:1px solid rgba(167,139,250,.3);color:#d8ccff}
+      .mf-waypoint-no-world{padding:12px;border-radius:9px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.23);color:#fcd34d;font-size:12px}
+      .mf-waypoint-add-grid{display:grid;grid-template-columns:minmax(170px,1fr) 48px auto;gap:8px;align-items:center}.mf-waypoint-input,.mf-waypoint-select{min-width:0;border:1px solid rgba(255,255,255,.14);background:rgba(10,12,18,.7);color:#fff;border-radius:8px;padding:10px 12px;outline:none;font:inherit}.mf-waypoint-input:focus,.mf-waypoint-select:focus{border-color:rgba(139,92,246,.8);box-shadow:0 0 0 2px rgba(139,92,246,.18)}
+      .mf-waypoint-color{width:48px;height:39px;padding:3px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:rgba(10,12,18,.7);cursor:pointer}.mf-waypoint-status{min-height:18px;margin-top:9px;color:#c4b5fd;font-size:12px}
+      .mf-waypoint-list{display:flex;flex-direction:column;gap:9px}.mf-waypoint-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border-radius:11px;background:linear-gradient(135deg,rgba(255,255,255,.052),rgba(255,255,255,.025));border:1px solid rgba(255,255,255,.09);transition:border-color .16s ease,background .16s ease}.mf-waypoint-row:hover{border-color:rgba(167,139,250,.23);background:linear-gradient(135deg,rgba(139,92,246,.07),rgba(255,255,255,.028))}.mf-waypoint-row.is-hidden{opacity:.58}
+      .mf-waypoint-icon{--wp-color:#8b5cf6;width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:18px;background:linear-gradient(145deg,color-mix(in srgb,var(--wp-color) 75%,#fff 25%),color-mix(in srgb,var(--wp-color) 65%,#000 35%));border:1px solid rgba(255,255,255,.38);box-shadow:0 0 14px color-mix(in srgb,var(--wp-color) 30%,transparent)}
+      .mf-waypoint-copy{min-width:0;display:flex;flex-direction:column;gap:3px}.mf-waypoint-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mf-waypoint-meta{display:flex;gap:7px;align-items:center;flex-wrap:wrap;color:#aeb3c2;font-size:11px}
+      .mf-waypoint-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.mf-waypoint-actions .mf-btn{padding:7px 8px;font-size:10px}.mf-waypoint-edit{display:none;grid-column:2/4;grid-template-columns:minmax(150px,1fr) 46px auto auto auto;gap:7px;align-items:center;padding-top:8px;border-top:1px solid rgba(255,255,255,.07)}.mf-waypoint-row.editing .mf-waypoint-edit{display:grid}.mf-waypoint-mini-toggle{display:flex;align-items:center;gap:5px;color:#c6cad4;font-size:10px;white-space:nowrap}.mf-waypoint-mini-toggle input{accent-color:#8b5cf6}
+      .mf-waypoint-empty{padding:22px;text-align:center;color:#9ca3af;border:1px dashed rgba(255,255,255,.12);border-radius:10px}.mf-waypoint-count{font-size:12px;color:#a78bfa;margin-left:6px}
+      .mf-waypoint-legacy{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;padding:11px;border-radius:10px;background:rgba(245,158,11,.075);border:1px solid rgba(245,158,11,.2)}.mf-waypoint-legacy strong{color:#fcd34d}.mf-waypoint-legacy-copy{display:flex;flex-direction:column;gap:3px;font-size:12px}.mf-waypoint-legacy-copy span{color:#c9cbd2;font-size:11px}.mf-waypoint-legacy-actions{display:flex;gap:7px}
+      .mf-waypoint-world-list{display:flex;flex-direction:column;gap:7px}.mf-waypoint-world-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border-radius:9px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)}.mf-waypoint-world-row strong{display:block;font-size:12px}.mf-waypoint-world-row span{font-size:10px;color:#9da2b1}.mf-waypoint-current-tag{color:#a78bfa!important;font-weight:800}
+      @media(max-width:860px){.mf-waypoint-add-grid{grid-template-columns:1fr 46px}.mf-waypoint-add-grid .mf-btn{grid-column:1/-1}.mf-waypoint-edit{grid-column:1/-1;grid-template-columns:1fr 46px auto}.mf-waypoint-edit .mf-btn{grid-column:auto}.mf-waypoint-mini-toggle{grid-row:auto}}
+      @media(max-width:620px){.mf-waypoint-row{grid-template-columns:38px 1fr}.mf-waypoint-actions{grid-column:1/-1;justify-content:flex-start}.mf-waypoint-edit{grid-template-columns:1fr 1fr}.mf-waypoint-edit .mf-waypoint-color{width:100%}.mf-waypoint-add-grid{grid-template-columns:1fr 1fr}.mf-waypoint-add-grid .mf-waypoint-color{width:100%}.mf-waypoint-add-grid .mf-btn{grid-column:1/-1}}
     `;
     document.head.appendChild(style);
   }
@@ -6224,56 +6224,136 @@
       .replace(/'/g, '&#039;');
   }
 
-  function readStoredWaypoints() {
+  function readWaypointV2State() {
+    const fallback = { world: null, waypoints: [], worlds: [], legacyCount: 0 };
     try {
-      const value = JSON.parse(localStorage.getItem('minifeather_waypoints_v1') || '[]');
-      if (!Array.isArray(value)) return [];
-      return value.filter(item => item && item.id && item.name &&
-        Number.isFinite(Number(item.x)) && Number.isFinite(Number(item.y)) && Number.isFinite(Number(item.z))
-      );
+      const store = JSON.parse(localStorage.getItem('minifeather_waypoints_v2') || '{"version":2,"worlds":{}}');
+      const world = JSON.parse(localStorage.getItem('minifeather_waypoints_v2_active') || 'null');
+      const legacy = JSON.parse(localStorage.getItem('minifeather_waypoints_v1') || '[]');
+      const worldsObj = store && store.version === 2 && store.worlds && typeof store.worlds === 'object' ? store.worlds : {};
+      const activeEntry = world?.key ? worldsObj[world.key] : null;
+      const waypoints = Array.isArray(activeEntry?.waypoints)
+        ? activeEntry.waypoints.filter(item => item && item.id && item.name && Number.isFinite(Number(item.x)) && Number.isFinite(Number(item.y)) && Number.isFinite(Number(item.z)))
+        : [];
+      const worlds = Object.values(worldsObj)
+        .filter(item => item && item.key)
+        .map(item => ({
+          key: String(item.key),
+          label: String(item.label || 'MiniBlox World'),
+          dimensionId: Number(item.dimensionId) || 0,
+          isLocal: !!item.isLocal,
+          updatedAt: Number(item.updatedAt) || 0,
+          count: Array.isArray(item.waypoints) ? item.waypoints.length : 0
+        }))
+        .sort((a, b) => b.updatedAt - a.updatedAt);
+      return {
+        world: world?.key ? world : null,
+        waypoints,
+        worlds,
+        legacyCount: Array.isArray(legacy) ? legacy.length : 0
+      };
     } catch (_) {
-      return [];
+      return fallback;
     }
   }
 
+
+
   function renderWaypointsPage() {
-    const waypoints = readStoredWaypoints();
+    const data = readWaypointV2State();
+    const waypoints = data.waypoints;
+    const currentKey = data.world?.key || '';
+    const currentWorld = data.world
+      ? `<div class="mf-waypoint-world-head">
+          <div class="mf-waypoint-world-copy">
+            <span>${t('waypointCurrentWorld')}</span>
+            <strong>${escapeHtml(data.world.label || 'MiniBlox World')}</strong>
+            <span>${t('waypointDimension')} ${Number(data.world.dimensionId) || 0}</span>
+          </div>
+          <span class="mf-waypoint-world-badge">${data.world.isLocal ? 'LOCAL' : 'SERVER'}</span>
+        </div>`
+      : `<div class="mf-waypoint-no-world">${t('waypointNoWorld')}</div>`;
+
+    const legacy = data.legacyCount > 0
+      ? `<div class="mf-waypoint-legacy">
+          <div class="mf-waypoint-legacy-copy">
+            <strong>${t('waypointLegacyFound')}</strong>
+            <span>${t('waypointLegacyDesc', { count: data.legacyCount })}</span>
+          </div>
+          <div class="mf-waypoint-legacy-actions">
+            <button type="button" class="mf-btn primary" data-waypoint-import-legacy ${!data.world ? 'disabled' : ''}>${t('waypointImportCurrent')}</button>
+            <button type="button" class="mf-btn danger" data-waypoint-delete-legacy>${t('waypointDeleteLegacy')}</button>
+          </div>
+        </div>`
+      : '';
+
     const rows = waypoints.length
       ? waypoints.map(wp => `
-          <div class="mf-waypoint-row" data-waypoint-id="${escapeHtml(wp.id)}" data-x="${Number(wp.x)}" data-y="${Number(wp.y)}" data-z="${Number(wp.z)}">
-            <span class="mf-waypoint-swatch" style="background:${escapeHtml(wp.color || '#8b5cf6')}"></span>
+          <div class="mf-waypoint-row ${wp.visible === false ? 'is-hidden' : ''}" data-waypoint-id="${escapeHtml(wp.id)}" data-x="${Number(wp.x)}" data-y="${Number(wp.y)}" data-z="${Number(wp.z)}">
+            <div class="mf-waypoint-icon" style="--wp-color:${escapeHtml(wp.color || '#8b5cf6')}">📍</div>
             <div class="mf-waypoint-copy">
               <strong>${escapeHtml(wp.name)}</strong>
-              <span>XYZ ${Math.floor(Number(wp.x))} ${Math.floor(Number(wp.y))} ${Math.floor(Number(wp.z))}</span>
+              <div class="mf-waypoint-meta">
+                <span>XYZ ${Math.floor(Number(wp.x))} ${Math.floor(Number(wp.y))} ${Math.floor(Number(wp.z))}</span>
+                ${wp.visible === false ? `<span>${t('waypointHidden')}</span>` : ''}
+              </div>
             </div>
             <div class="mf-waypoint-actions">
-              <button type="button" class="mf-btn secondary mf-waypoint-copy-btn" data-waypoint-copy>${t('waypointCopy')}</button>
-              <button type="button" class="mf-btn danger mf-waypoint-delete-btn" data-waypoint-delete>${t('waypointDelete')}</button>
+              <button type="button" class="mf-btn secondary" data-waypoint-visibility>${wp.visible === false ? t('waypointShow') : t('waypointHide')}</button>
+              <button type="button" class="mf-btn secondary" data-waypoint-edit>${t('waypointEdit')}</button>
+              <button type="button" class="mf-btn secondary" data-waypoint-copy>${t('waypointCopy')}</button>
+              <button type="button" class="mf-btn danger" data-waypoint-delete>${t('waypointDelete')}</button>
+            </div>
+            <div class="mf-waypoint-edit">
+              <input class="mf-waypoint-input" data-waypoint-edit-name maxlength="40" value="${escapeHtml(wp.name)}">
+              <input class="mf-waypoint-color" data-waypoint-edit-color type="color" value="${escapeHtml(wp.color || '#8b5cf6')}">
+              <label class="mf-waypoint-mini-toggle"><input type="checkbox" data-waypoint-edit-name-visible ${wp.showName !== false ? 'checked' : ''}> ${t('waypointShowName')}</label>
+              <label class="mf-waypoint-mini-toggle"><input type="checkbox" data-waypoint-edit-distance-visible ${wp.showDistance !== false ? 'checked' : ''}> ${t('waypointShowDistance')}</label>
+              <button type="button" class="mf-btn primary" data-waypoint-save-edit>${t('waypointSave')}</button>
             </div>
           </div>
         `).join('')
-      : `<div class="mf-waypoint-empty">${t('waypointEmpty')}</div>`;
+      : `<div class="mf-waypoint-empty">${data.world ? t('waypointEmptyWorld') : t('waypointEmpty')}</div>`;
+
+    const worlds = data.worlds.length
+      ? data.worlds.map(world => `
+          <div class="mf-waypoint-world-row" data-waypoint-world-key="${escapeHtml(world.key)}">
+            <div>
+              <strong>${escapeHtml(world.label)} ${world.key === currentKey ? `<span class="mf-waypoint-current-tag">· ${t('waypointCurrent')}</span>` : ''}</strong>
+              <span>${t('waypointDimension')} ${world.dimensionId} · ${world.count} ${t('waypoints')}</span>
+            </div>
+            ${world.key === currentKey ? '' : `<button type="button" class="mf-btn danger" data-waypoint-delete-world>${t('waypointDeleteWorld')}</button>`}
+          </div>
+        `).join('')
+      : `<div class="mf-waypoint-empty">${t('waypointNoSavedWorlds')}</div>`;
 
     return `
       <div class="mf-page-stack">
         <div class="mf-card">
-          <div class="mf-card-title">${t('waypoints')}</div>
+          <div class="mf-card-title">${t('waypoints')} V2</div>
           <div class="mf-toggle-grid">
             ${renderToggle('waypoints', t('waypoints'), t('waypointsDesc'))}
           </div>
-          <div class="mf-tt-hint">${t('waypointsHint')}</div>
+          <div class="mf-tt-hint">${t('waypointsV2Hint')}</div>
+          ${currentWorld}
         </div>
+        ${legacy ? `<div class="mf-card">${legacy}</div>` : ''}
         <div class="mf-card">
           <div class="mf-card-title">${t('waypointAddTitle')}</div>
-          <div class="mf-waypoint-add-row">
-            <input id="mf-waypoint-name" class="mf-waypoint-input" type="text" maxlength="40" placeholder="${t('waypointNamePlaceholder')}">
-            <button id="mf-waypoint-add" type="button" class="mf-btn primary">${t('waypointAddCurrent')}</button>
+          <div class="mf-waypoint-add-grid">
+            <input id="mf-waypoint-name" class="mf-waypoint-input" type="text" maxlength="40" placeholder="${t('waypointNamePlaceholder')}" ${!data.world ? 'disabled' : ''}>
+            <input id="mf-waypoint-color" class="mf-waypoint-color" type="color" value="#8b5cf6" ${!data.world ? 'disabled' : ''}>
+            <button id="mf-waypoint-add" type="button" class="mf-btn primary" ${!data.world ? 'disabled' : ''}>${t('waypointAddCurrent')}</button>
           </div>
           <div id="mf-waypoint-status" class="mf-waypoint-status">${escapeHtml(waypointStatus)}</div>
         </div>
         <div class="mf-card">
           <div class="mf-card-title">${t('waypointSaved')} <span class="mf-waypoint-count">${waypoints.length}</span></div>
           <div class="mf-waypoint-list">${rows}</div>
+        </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('waypointSavedWorlds')}</div>
+          <div class="mf-waypoint-world-list">${worlds}</div>
         </div>
       </div>
     `;
@@ -8388,6 +8468,7 @@ function renderCreditsPage() {
 
     panel.querySelector('#mf-waypoint-add')?.addEventListener('click', () => {
       const input = panel.querySelector('#mf-waypoint-name');
+      const color = panel.querySelector('#mf-waypoint-color')?.value || '#8b5cf6';
       const name = input?.value?.trim() || '';
       if (!name) {
         waypointStatus = t('waypointNeedName');
@@ -8398,7 +8479,7 @@ function renderCreditsPage() {
       waypointStatus = t('waypointAdding');
       const status = panel.querySelector('#mf-waypoint-status');
       if (status) status.textContent = waypointStatus;
-      requestWaypointUI('add', { name });
+      requestWaypointUI('add', { name, color });
     });
 
     panel.querySelectorAll('[data-waypoint-delete]').forEach(button => {
@@ -8406,6 +8487,48 @@ function renderCreditsPage() {
         const row = button.closest('.mf-waypoint-row');
         const id = row?.dataset.waypointId;
         if (id) requestWaypointUI('remove', { id });
+      });
+    });
+
+    panel.querySelectorAll('[data-waypoint-visibility]').forEach(button => {
+      button.addEventListener('click', () => {
+        const row = button.closest('.mf-waypoint-row');
+        const id = row?.dataset.waypointId;
+        if (!id) return;
+        const hidden = row.classList.contains('is-hidden');
+        requestWaypointUI('update', { id, patch: { visible: hidden } });
+      });
+    });
+
+    panel.querySelectorAll('[data-waypoint-edit]').forEach(button => {
+      button.addEventListener('click', () => {
+        const row = button.closest('.mf-waypoint-row');
+        if (!row) return;
+        row.classList.toggle('editing');
+      });
+    });
+
+    panel.querySelectorAll('[data-waypoint-save-edit]').forEach(button => {
+      button.addEventListener('click', () => {
+        const row = button.closest('.mf-waypoint-row');
+        const id = row?.dataset.waypointId;
+        if (!row || !id) return;
+        const name = row.querySelector('[data-waypoint-edit-name]')?.value?.trim() || '';
+        if (!name) {
+          waypointStatus = t('waypointNeedName');
+          const status = panel.querySelector('#mf-waypoint-status');
+          if (status) status.textContent = waypointStatus;
+          return;
+        }
+        requestWaypointUI('update', {
+          id,
+          patch: {
+            name,
+            color: row.querySelector('[data-waypoint-edit-color]')?.value || '#8b5cf6',
+            showName: !!row.querySelector('[data-waypoint-edit-name-visible]')?.checked,
+            showDistance: !!row.querySelector('[data-waypoint-edit-distance-visible]')?.checked
+          }
+        });
       });
     });
 
@@ -8422,6 +8545,24 @@ function renderCreditsPage() {
         }
         const status = panel.querySelector('#mf-waypoint-status');
         if (status) status.textContent = waypointStatus;
+      });
+    });
+
+    panel.querySelector('[data-waypoint-import-legacy]')?.addEventListener('click', () => {
+      requestWaypointUI('importLegacy');
+    });
+
+    panel.querySelector('[data-waypoint-delete-legacy]')?.addEventListener('click', () => {
+      if (!confirm(t('waypointDeleteLegacyConfirm'))) return;
+      requestWaypointUI('deleteLegacy');
+    });
+
+    panel.querySelectorAll('[data-waypoint-delete-world]').forEach(button => {
+      button.addEventListener('click', () => {
+        const row = button.closest('[data-waypoint-world-key]');
+        const worldKey = row?.dataset.waypointWorldKey;
+        if (!worldKey || !confirm(t('waypointDeleteWorldConfirm'))) return;
+        requestWaypointUI('deleteWorld', { worldKey });
       });
     });
 
@@ -9499,8 +9640,14 @@ function renderCreditsPage() {
       if (!result) return;
       if (result.ok && result.waypoint) {
         waypointStatus = result.waypoint.name ? `${result.waypoint.name}: ${result.waypoint.x} ${result.waypoint.y} ${result.waypoint.z}` : t('waypointSaved');
+      } else if (result.ok && Number.isFinite(Number(result.imported))) {
+        waypointStatus = t('waypointImportedCount', { count: Number(result.imported) });
+      } else if (result.ok) {
+        waypointStatus = t('waypointUpdated');
       } else if (result.error === 'DUPLICATE_NAME') waypointStatus = t('waypointDuplicate');
       else if (result.error === 'NO_PLAYER') waypointStatus = t('waypointNoPlayer');
+      else if (result.error === 'NO_WORLD') waypointStatus = t('waypointNoWorld');
+      else if (result.error === 'LIMIT_REACHED') waypointStatus = t('waypointLimitReached');
       else if (result.error === 'NOT_FOUND') waypointStatus = t('waypointNotFound');
       else if (!result.ok) waypointStatus = t('waypointError');
       if (panel && activePage === 'waypoints' && !searchQuery.trim()) renderCurrentPageContent();

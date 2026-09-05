@@ -805,34 +805,45 @@
 
     function drawWaypoints(ctx, offsetX, offsetY, centerX, centerZ, blockPx) {
         try {
-            const stored = localStorage.getItem('minifeather_waypoints_v1');
-            if (!stored) return;
-            const parsed = JSON.parse(stored);
-            if (!parsed?.list) return;
+            const active = JSON.parse(localStorage.getItem('minifeather_waypoints_v2_active') || 'null');
+            const store = JSON.parse(localStorage.getItem('minifeather_waypoints_v2') || '{"version":2,"worlds":{}}');
+            if (!active?.key || store?.version !== 2 || !store.worlds) return;
+            const entry = store.worlds[active.key];
+            if (!entry || !Array.isArray(entry.waypoints)) return;
 
-            for (const wp of parsed.list) {
-                const sx = offsetX + (wp.x - centerX) * blockPx;
-                const sy = offsetY + (wp.z - centerZ) * blockPx;
+            for (const wp of entry.waypoints) {
+                if (!wp || wp.visible === false || !Number.isFinite(Number(wp.x)) || !Number.isFinite(Number(wp.z))) continue;
+                const sx = offsetX + (Number(wp.x) - centerX) * blockPx;
+                const sy = offsetY + (Number(wp.z) - centerZ) * blockPx;
                 if (sx < -20 || sx > state.canvas.width + 20 ||
                     sy < -20 || sy > state.canvas.height + 20) continue;
 
-                ctx.fillStyle = wp.color || '#ff5f5f';
+                ctx.save();
+                ctx.fillStyle = /^#[0-9a-f]{6}$/i.test(String(wp.color || '')) ? wp.color : '#8b5cf6';
                 ctx.strokeStyle = '#000000';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.arc(sx, sy, 6, 0, Math.PI * 2);
+                ctx.arc(sx, sy, 6.5, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.stroke();
 
-                if (blockPx >= 4) {
-                    ctx.fillStyle = '#ffffff';
-                    ctx.strokeStyle = '#000000';
+                // Small center point keeps the marker readable at every map zoom.
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (blockPx >= 4 && wp.showName !== false) {
+                    ctx.font = 'bold 12px sans-serif';
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
                     ctx.lineWidth = 3;
-                    ctx.font = '11px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.strokeText(wp.name, sx, sy - 10);
-                    ctx.fillText(wp.name, sx, sy - 10);
+                    ctx.strokeStyle = 'rgba(0,0,0,.9)';
+                    ctx.strokeText(String(wp.name || 'Waypoint'), sx + 10, sy);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(String(wp.name || 'Waypoint'), sx + 10, sy);
                 }
+                ctx.restore();
             }
         } catch (_) {}
     }
