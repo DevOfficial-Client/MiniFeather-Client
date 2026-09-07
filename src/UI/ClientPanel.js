@@ -78,6 +78,7 @@
     { id: 'render', icon: '✨', labelKey: 'navRender' },
     { id: 'youtubeMusic', icon: '🎵', labelKey: 'navYouTubeMusic' },
     { id: 'shaders', icon: '🌈', labelKey: 'navShaders' },
+    { id: 'experimental', icon: '🧪', labelKey: 'navExperimental' },
     { id: 'cosmetics', icon: '👕', labelKey: 'tabSkins' },
     { id: 'chat', icon: '💬', labelKey: 'sectionChat' },
     { id: 'waypoints', icon: '📍', labelKey: 'navWaypoints' },
@@ -441,8 +442,28 @@
     cloudsShapeBrush: 12,
     cloudsShapeMix: 0.85,
     cloudsShapeTile: 512,
+    panelAccentColor: '#ef3b3b',
+    panelBackgroundColor: '#0e1115',
     language: 'en'
   };
+
+  function normalizePanelColor(value, fallback) {
+    const raw = String(value || '').trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toLowerCase();
+    if (/^#[0-9a-fA-F]{3}$/.test(raw)) {
+      const [r, g, b] = raw.slice(1).split('');
+      return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+    }
+    return fallback;
+  }
+
+  function applyPanelTheme() {
+    if (!panel) return;
+    const accent = normalizePanelColor(settings.panelAccentColor, DEFAULT_SETTINGS.panelAccentColor);
+    const background = normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor);
+    panel.style.setProperty('--mf-ui-accent', accent);
+    panel.style.setProperty('--mf-ui-panel', background);
+  }
 
   const TRANSLATIONS = globalThis.MINIFEATHER_TRANSLATIONS || { en: {} };
 
@@ -2521,6 +2542,8 @@
         -webkit-backdrop-filter:blur(8px);
       }
       #mf-gui {
+        --mf-ui-accent:#ef3b3b;
+        --mf-ui-panel:#0e1115;
         width:min(1122px, calc(100vw - 28px));
         height:min(694px, calc(100vh - 28px));
         top:50%;
@@ -2528,7 +2551,7 @@
         transform:translate(-50%,-50%);
         border:0;
         border-radius:6px;
-        background:#0e1115;
+        background:var(--mf-ui-panel);
         box-shadow:0 28px 80px rgba(0,0,0,.72);
         overflow:hidden;
         color:#f3f4f6;
@@ -2548,7 +2571,7 @@
       .mf-feather-nav-main {
         display:flex;
         align-items:center;
-        gap:8px;
+        gap:7px;
         height:71px;
         padding:0 0 14px 0;
       }
@@ -2561,7 +2584,7 @@
       }
       .mf-feather-main-tab {
         height:56px;
-        min-width:153px;
+        min-width:148px;
         padding:0 20px;
         border-radius:6px 6px 0 0;
         display:flex;
@@ -2574,37 +2597,50 @@
         font-weight:800;
         letter-spacing:.02em;
       }
-      .mf-feather-main-tab.active { background:#ef3b3b; color:#fff; }
+      .mf-feather-main-tab.active { background:var(--mf-ui-accent); color:#fff; }
       .mf-feather-grid-icon { font-size:21px; line-height:1; }
-      .mf-feather-icon-tabs { display:flex; align-items:center; gap:8px; }
+      .mf-feather-icon-tabs { display:flex; align-items:center; gap:7px; }
       .mf-feather-icon-tab {
-        width:65px; height:56px; border-radius:6px;
+        width:58px; height:56px; border-radius:6px;
         display:flex; align-items:center; justify-content:center;
         background:#15181c; color:#d5d7da; font-size:23px;
         box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);
       }
       .mf-feather-icon-tab:hover, .mf-feather-icon-tab.active { background:#20242a; color:#fff; }
-      .mf-feather-icon-tab.active { box-shadow:inset 0 -3px 0 #ef3b3b; }
+      .mf-feather-icon-tab.active { box-shadow:inset 0 -3px 0 var(--mf-ui-accent); }
+      #mf-gui-page-title {
+        flex:0 1 112px;
+        min-width:0;
+        max-width:112px;
+        margin:0 52px 17px 1px !important;
+        font-size:12px !important;
+        line-height:1.1;
+        color:#f4f4f5 !important;
+        text-align:left;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
+      }
       .mf-feather-close {
         position:absolute; right:0; bottom:14px; width:42px; height:42px;
         border-radius:6px; background:#171a1e; color:#ef4444; font-size:28px;
         line-height:1; border:1px solid rgba(239,68,68,.55);
       }
       .mf-feather-close:hover { background:#27191b; }
-      #mf-gui-content { flex:1; min-height:0; background:#0c0f12; display:flex; flex-direction:column; }
+      #mf-gui-content { flex:1; min-height:0; background:color-mix(in srgb,var(--mf-ui-panel) 93%,#000 7%); display:flex; flex-direction:column; }
       #mf-feather-filterbar {
         height:68px; min-height:68px; padding:17px 20px 12px;
         display:flex; align-items:center; justify-content:space-between; gap:16px;
-        background:#0d1013; border-bottom:1px solid #20252b;
+        background:color-mix(in srgb,var(--mf-ui-panel) 90%,#000 10%); border-bottom:1px solid #20252b;
       }
       .mf-feather-categories { display:flex; gap:10px; align-items:center; }
       .mf-feather-category {
         height:36px; min-width:94px; padding:0 17px; border-radius:6px;
         background:#181b1f; color:#777c83; font-size:12px; font-weight:700;
       }
-      .mf-feather-category.active { background:#ef3b3b; color:#fff; }
+      .mf-feather-category.active { background:var(--mf-ui-accent); color:#fff; }
       .mf-feather-category:hover { background:#23272c; color:#ddd; }
-      .mf-feather-category.active:hover { background:#ef3b3b; }
+      .mf-feather-category.active:hover { background:var(--mf-ui-accent); }
       .mf-feather-tools { display:flex; gap:9px; align-items:center; margin-left:auto; }
       #mf-gui-search {
         width:267px; max-width:267px; height:36px; margin:0; padding:0 15px;
@@ -2655,8 +2691,8 @@
         background:#1b2025; color:#686e75; font-size:16px; cursor:pointer; z-index:4;
       }
       .mf-feature-favorite:hover { color:#fff; background:#252a30; }
-      .mf-feature-favorite.active { color:#ef3b3b; background:#27191b; }
-      .mf-feather-tool.active { color:#ef3b3b; background:#27191b; }
+      .mf-feature-favorite.active { color:var(--mf-ui-accent); background:color-mix(in srgb,var(--mf-ui-accent) 16%,#15181c 84%); }
+      .mf-feather-tool.active { color:var(--mf-ui-accent); background:color-mix(in srgb,var(--mf-ui-accent) 16%,#15181c 84%); }
       .mf-feature-settings, .mf-feature-favorite { font-family:Arial,sans-serif; }
       .mf-switch-hidden { pointer-events:none !important; }
       .mf-feature-settings, .mf-feature-favorite { pointer-events:auto !important; }
@@ -2684,12 +2720,13 @@
       .mf-settings-label { color:#c7cbd0; font-size:12px; font-weight:700; }
       .mf-language-select { width:150px; margin:0; }
       #mf-gui-page .mf-muted { color:#7c828a; }
-      #mf-gui-page .mf-btn.primary { background:#ef3b3b; border-color:#ef3b3b; }
-      #mf-gui-page .mf-btn.primary:hover { background:#ff4b4b; }
+      #mf-gui-page .mf-btn.primary { background:var(--mf-ui-accent); border-color:var(--mf-ui-accent); }
+      #mf-gui-page .mf-btn.primary:hover { background:color-mix(in srgb,var(--mf-ui-accent) 86%,#fff 14%); }
       @media (max-width: 1100px) {
         .mf-feather-module-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
-        .mf-feather-icon-tab { width:54px; }
-        .mf-feather-main-tab { min-width:140px; }
+        .mf-feather-icon-tab { width:50px; }
+        .mf-feather-main-tab { min-width:136px; }
+        #mf-gui-page-title { max-width:92px; margin-right:50px !important; }
       }
       @media (max-width: 780px) {
         #mf-gui { width:calc(100vw - 12px); height:calc(100vh - 12px); }
@@ -2698,7 +2735,8 @@
         .mf-feather-category { min-width:72px; }
         .mf-feather-tools { min-width:0; }
         #mf-gui-search { width:160px; max-width:160px; }
-        .mf-feather-icon-tab { width:44px; }
+        .mf-feather-icon-tab { width:42px; }
+        #mf-gui-page-title { display:none; }
       }
 
       .mf-toggle-grid {
@@ -2807,7 +2845,8 @@
     clientChat:'<path d="M4 5h16v11H8l-4 3V5Z"/><path d="M8 9h8M8 12h5"/>',
     discord:'<path d="M7 7.5A13 13 0 0 1 12 6a13 13 0 0 1 5 1.5 14 14 0 0 1 2 9.5c-2 1.5-4 2-6 2l-1-2-1 2c-2 0-4-.5-6-2A14 14 0 0 1 7 7.5Z"/><path d="M9 12h.01M15 12h.01"/>',
     supportAds:'<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9 9h4a2 2 0 0 1 0 4H9h3a2 2 0 0 1 0 4H9"/>',
-    shaders:'<path d="M12 3 4 8l8 5 8-5-8-5Z"/><path d="M4 13l8 5 8-5M4 18l8 3 8-3"/>'
+    shaders:'<path d="M12 3 4 8l8 5 8-5-8-5Z"/><path d="M4 13l8 5 8-5M4 18l8 3 8-3"/>',
+    experimental:'<path d="M9 3h6M10 3v5l-5 9a2 2 0 0 0 1.8 3h10.4A2 2 0 0 0 19 17l-5-9V3"/><path d="M8 14h8"/><circle cx="10" cy="17" r=".7"/><circle cx="14.5" cy="16.5" r=".7"/>'
   };
 
   function iconSvg(name, className = '') {
@@ -2827,7 +2866,7 @@
 
   function featherNavIcon(page) {
     const icons = {
-      hud: 'hud', render: 'render', shaders: 'shaders', cosmetics: 'cosmetics', chat: 'chat',
+      hud: 'hud', render: 'render', shaders: 'shaders', experimental: 'experimental', cosmetics: 'cosmetics', chat: 'chat',
       waypoints: 'waypoints', movement: 'movement', world: 'world', settings: 'settings', about: 'about'
     };
     return iconSvg(icons[page] || 'grid');
@@ -5764,6 +5803,16 @@
     `;
   }
 
+  function renderExperimentalPage() {
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card" style="min-height:180px;display:flex;align-items:center;justify-content:center;text-align:center;">
+          <div class="mf-card-title" style="font-size:18px;margin:0;color:#7c828a;">${escapeHtml(t('experimentalComingSoon'))}</div>
+        </div>
+      </div>
+    `;
+  }
+
   function renderShadersPage() {
     const strength = Number(settings.customShaderStrength) || 0.5;
     const renderScale = Number(settings.customShaderRenderScale) || 1.0;
@@ -6411,6 +6460,27 @@
           </div>
         </div>
         <div class="mf-card">
+          <div class="mf-card-title">${t('panelCustomization')}</div>
+          <div class="mf-muted">${t('panelCustomizationDesc')}</div>
+          <div class="mf-settings-row">
+            <span class="mf-settings-label">${t('panelAccentColor')}</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input id="mf-panel-accent-color" type="color" value="${escapeHtml(normalizePanelColor(settings.panelAccentColor, DEFAULT_SETTINGS.panelAccentColor))}" style="width:44px;height:34px;padding:2px;border:1px solid #30363d;border-radius:6px;background:#171a1e;">
+              <input id="mf-panel-accent-text" class="mf-input" value="${escapeHtml(normalizePanelColor(settings.panelAccentColor, DEFAULT_SETTINGS.panelAccentColor))}" maxlength="7" style="width:104px;">
+            </div>
+          </div>
+          <div class="mf-settings-row">
+            <span class="mf-settings-label">${t('panelBackgroundColor')}</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input id="mf-panel-background-color" type="color" value="${escapeHtml(normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor))}" style="width:44px;height:34px;padding:2px;border:1px solid #30363d;border-radius:6px;background:#171a1e;">
+              <input id="mf-panel-background-text" class="mf-input" value="${escapeHtml(normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor))}" maxlength="7" style="width:104px;">
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+            <button id="mf-panel-custom-reset" class="mf-btn">${t('resetPanelCustomization')}</button>
+          </div>
+        </div>
+        <div class="mf-card">
           <div class="mf-card-title">${t('sectionStartup')}</div>
           <div class="mf-toggle-grid">
             ${renderToggle('startupAnimation', t('startupAnimation'), t('startupAnimationDesc'))}
@@ -6542,6 +6612,11 @@
     refreshUpdaterCard(false);
   }
   
+  window.addEventListener('minifeather:experimental-registry-changed', () => {
+    if (!panel || activePage !== 'experimental' || searchQuery) return;
+    renderCurrentPageContent();
+  });
+  
 function renderCreditsPage() {
   return `
     <div class="mf-page-stack">
@@ -6584,6 +6659,7 @@ function renderCreditsPage() {
     render: renderRenderPage,
     youtubeMusic: renderYouTubeMusicPage,
     shaders: renderShadersPage,
+    experimental: renderExperimentalPage,
     cosmetics: renderCosmeticsPage,
     chat: renderChatPage,
     waypoints: renderWaypointsPage,
@@ -6786,6 +6862,9 @@ function renderCreditsPage() {
       if (saveTimer) return;
       Object.assign(settings, incoming);
       Object.assign(guiSettings, incoming);
+      settings.panelAccentColor = normalizePanelColor(settings.panelAccentColor, DEFAULT_SETTINGS.panelAccentColor);
+      settings.panelBackgroundColor = normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor);
+      applyPanelTheme();
       applyGuiSettings();
       // Actualizar UI si está abierta
       const panel = document.getElementById('mf-gui');
@@ -7987,6 +8066,41 @@ function renderCreditsPage() {
       renderGUI();
     });
 
+    const bindThemeColor = (pickerId, textId, settingKey, fallback) => {
+      const picker = panel.querySelector(pickerId);
+      const text = panel.querySelector(textId);
+      const apply = value => {
+        const normalized = normalizePanelColor(value, fallback);
+        settings[settingKey] = normalized;
+        guiSettings[settingKey] = normalized;
+        if (picker) picker.value = normalized;
+        if (text) text.value = normalized;
+        applyPanelTheme();
+      };
+      picker?.addEventListener('input', () => apply(picker.value));
+      picker?.addEventListener('change', () => { apply(picker.value); saveSettings(true); });
+      text?.addEventListener('change', () => { apply(text.value); saveSettings(true); });
+      text?.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        apply(text.value);
+        saveSettings(true);
+      });
+    };
+
+    bindThemeColor('#mf-panel-accent-color', '#mf-panel-accent-text', 'panelAccentColor', DEFAULT_SETTINGS.panelAccentColor);
+    bindThemeColor('#mf-panel-background-color', '#mf-panel-background-text', 'panelBackgroundColor', DEFAULT_SETTINGS.panelBackgroundColor);
+
+    panel.querySelector('#mf-panel-custom-reset')?.addEventListener('click', () => {
+      settings.panelAccentColor = DEFAULT_SETTINGS.panelAccentColor;
+      settings.panelBackgroundColor = DEFAULT_SETTINGS.panelBackgroundColor;
+      guiSettings.panelAccentColor = settings.panelAccentColor;
+      guiSettings.panelBackgroundColor = settings.panelBackgroundColor;
+      saveSettings(true);
+      applyPanelTheme();
+      renderCurrentPageContent();
+    });
+
     panel.querySelector('[data-mf-favorites]')?.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
@@ -8961,6 +9075,7 @@ function renderCreditsPage() {
   function renderGUI() {
     if (!panel) return;
     panel.innerHTML = getPanelTemplate();
+    applyPanelTheme();
     bindPanelControls();
   }
 
@@ -9740,6 +9855,8 @@ function renderCreditsPage() {
       settings.freecamFastMultiplier = Math.max(1, Math.min(8, Number(settings.freecamFastMultiplier) || 3));
       settings.dynamicCrosshairMap = { ...DEFAULT_SETTINGS.dynamicCrosshairMap, ...(settings.dynamicCrosshairMap || {}) };
       settings.moduleBinds = { ...DEFAULT_SETTINGS.moduleBinds, ...(settings.moduleBinds || {}) };
+      settings.panelAccentColor = normalizePanelColor(settings.panelAccentColor, DEFAULT_SETTINGS.panelAccentColor);
+      settings.panelBackgroundColor = normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor);
       guiSettings = {
         ...settings,
         moduleBinds: { ...settings.moduleBinds },

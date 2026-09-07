@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.9.2",
-  "description": "MiniFeather Client for MiniBlox — fixed Client Chat world bridge, P2P input, mentions, movement assists and multilingual Studio",
+  "version": "4.9.3",
+  "description": "MiniFeather Client for MiniBlox — adds a scalable Experimental Hub for future test modules while keeping Shaders, Render and World clean",
   "permissions": [
     "storage",
     "declarativeNetRequest",
@@ -121,6 +121,7 @@
         "src/Libraries/jszip.min.js",
         "src/Render/TexturePackManager.js",
         "src/Core/AutoUpdater.js",
+        "src/Experimental/ExperimentalRegistry.js",
         "src/UI/ClientPanel.js"
       ],
       "run_at": "document_end",
