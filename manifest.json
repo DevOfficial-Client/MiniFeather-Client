@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.10.2",
-  "description": "MiniFeather Client for MiniBlox — Experimental Hub with Aurora, Natural Grass Details and Animated Items",
+  "version": "4.13.3",
+  "description": "MiniFeather Client for MiniBlox — Experimental 3D Grass Replacement with Low/Medium/High physics, Aurora, Natural Grass Details and Animated Items",
   "permissions": [
     "storage",
     "declarativeNetRequest",
@@ -67,6 +67,7 @@
         "src/Render/ItemPhysics.js",
         "src/Render/NoWeather.js",
         "src/Render/LeafWind.js",
+        "src/Experimental/InteractiveVegetation/InteractiveVegetation.js",
         "src/Experimental/Aurora/Aurora.js",
         "src/Experimental/GrassFlowers/GrassFlowers.js",
         "src/Experimental/AnimatedItems/AnimatedItems.js",

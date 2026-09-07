@@ -1,7 +1,7 @@
 {
-  "builtAt": "2026-09-07T18:35:00Z",
+  "builtAt": "2026-09-07T20:55:00Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Adapted Animated Items 4.10.2 to the updated MiniFeather client while preserving the new Studio film camera and all current modules. Adds 16x16/32x32 adaptive item animations plus enchanted-book and potion effects.",
-  "version": "4.10.2"
+  "note": "Interactive Vegetation v3.1: replaces the flat green native grass/fern pixels with smooth procedural 3D blades once the replacement mesh is ready. Adds Low/Medium/High optimized profiles, GPU wind, player-body and High-quality foot contacts, underfoot flattening, trample recovery, distance LOD, and keeps all server blocks/hitboxes untouched.",
+  "version": "4.13.3"
 }

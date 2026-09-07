@@ -18,6 +18,7 @@ function normalize(entry) {
     icon: String(entry.icon || '🧪'),
     settingsKey: entry.settingsKey == null ? '' : String(entry.settingsKey),
     levelKey: entry.levelKey == null ? '' : String(entry.levelKey),
+    levelLabelKey: entry.levelLabelKey == null ? '' : String(entry.levelLabelKey),
     levels: Array.isArray(entry.levels) ? entry.levels.map(level => Object.freeze({
       value: String(level?.value || ''),
       labelKey: String(level?.labelKey || ''),
@@ -57,12 +58,16 @@ const api = Object.freeze({
 
 globalThis.MF_ExperimentalRegistry = api;
 
+
+
+
 // First real Experimental feature. The renderer itself lives in MAIN world;
 // this registry only tells the panel how to present and persist the toggle.
 api.register({
   id: 'aurora-borealis',
   settingsKey: 'experimentalAurora',
   levelKey: 'experimentalAuroraLevel',
+  levelLabelKey: 'experimentalAuroraQuality',
   levels: [
     { value: 'low', labelKey: 'experimentalAuroraLow', label: 'Low' },
     { value: 'medium', labelKey: 'experimentalAuroraMedium', label: 'Medium' },
@@ -76,6 +81,26 @@ api.register({
   order: 10
 });
 
+
+
+api.register({
+  id: 'interactive-vegetation',
+  settingsKey: 'experimentalInteractiveVegetation',
+  levelKey: 'experimentalInteractiveVegetationLevel',
+  levelLabelKey: 'experimentalInteractiveVegetationQuality',
+  levels: [
+    { value: 'low', labelKey: 'experimentalInteractiveVegetationLow', label: 'Low' },
+    { value: 'medium', labelKey: 'experimentalInteractiveVegetationMedium', label: 'Medium' },
+    { value: 'high', labelKey: 'experimentalInteractiveVegetationHigh', label: 'High' },
+    { value: 'extreme', labelKey: 'experimentalInteractiveVegetationExtreme', label: 'Extreme' }
+  ],
+  title: '3D Grass Physics',
+  titleKey: 'experimentalInteractiveVegetationTitle',
+  descriptionKey: 'experimentalInteractiveVegetationDesc',
+  icon: '🌾',
+  badge: 'EXPERIMENTAL',
+  order: 18
+});
 
 api.register({
   id: 'natural-grass-details',

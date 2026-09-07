@@ -447,6 +447,8 @@
     experimentalAurora: false,
     experimentalAuroraLevel: 'medium',
     experimentalGrassFlowers: false,
+    experimentalInteractiveVegetation: false,
+    experimentalInteractiveVegetationLevel: 'medium',
     experimentalAnimatedItems: false,
     language: 'en'
   };
@@ -5850,7 +5852,7 @@
                     <span>${escapeHtml(description)}</span>
                   </span>
                   ${levelKey && levels.length ? `
-                    <select class="mf-input mf-experimental-level" data-mf-experimental-level="${escapeHtml(levelKey)}" aria-label="${escapeHtml(t('experimentalAuroraQuality'))}">
+                    <select class="mf-input mf-experimental-level" data-mf-experimental-level="${escapeHtml(levelKey)}" aria-label="${escapeHtml(t(exp.levelLabelKey || 'experimentalAuroraQuality'))}">
                       ${levels.map(level => {
                         const value = String(level.value || '');
                         const label = level.labelKey ? t(level.labelKey) : String(level.label || value);
@@ -9324,6 +9326,16 @@ function renderCreditsPage() {
     document.dispatchEvent(
       new CustomEvent('minifeather:grass-flowers-config', {
         detail: JSON.stringify({ enabled: !!settings.experimentalGrassFlowers })
+      })
+    );
+    document.dispatchEvent(
+      new CustomEvent('minifeather:interactive-vegetation-config', {
+        detail: JSON.stringify({
+          enabled: !!settings.experimentalInteractiveVegetation,
+          level: ['low', 'medium', 'high', 'extreme'].includes(String(settings.experimentalInteractiveVegetationLevel))
+            ? String(settings.experimentalInteractiveVegetationLevel)
+            : 'medium'
+        })
       })
     );
     document.dispatchEvent(
