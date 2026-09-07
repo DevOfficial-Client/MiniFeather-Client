@@ -447,6 +447,7 @@
     experimentalAurora: false,
     experimentalAuroraLevel: 'medium',
     experimentalGrassFlowers: false,
+    experimentalPbr: false,
     language: 'en'
   };
 
@@ -5864,6 +5865,22 @@
             }).join('')}
           </div>
         </div>
+        <div class="mf-card" id="mf-pbr-section">
+          <div class="mf-card-title">✨ PBR Textures</div>
+          <div style="font-size: 11px; color: #aaa; margin-bottom: 10px; line-height: 1.5;">
+            ${t('pbrDesc')}
+            <span data-pbr-kinds style="color: #7c828a;"></span>
+          </div>
+          <div class="mf-tt-row"><span style="font-size: 11px;">${t('pbrNormalStr')}</span><strong style="font-size: 11px;" data-pbr-nv>1.00</strong></div>
+          <input type="range" min="0" max="2" step="0.05" value="1" data-pbr-normal style="width: 100%;">
+          <div class="mf-tt-row" style="margin-top: 6px;"><span style="font-size: 11px;">${t('pbrSpecStr')}</span><strong style="font-size: 11px;" data-pbr-sv>0.70</strong></div>
+          <input type="range" min="0" max="2" step="0.05" value="0.7" data-pbr-spec style="width: 100%;">
+          <div class="mf-tt-row" style="margin-top: 6px;"><span style="font-size: 11px;">${t('pbrShiny')}</span><strong style="font-size: 11px;" data-pbr-hv>24</strong></div>
+          <input type="range" min="2" max="128" step="1" value="24" data-pbr-shiny style="width: 100%;">
+          <div class="mf-tt-row" style="margin-top: 6px;"><span style="font-size: 11px;">${t('pbrEmissiveStr')}</span><strong style="font-size: 11px;" data-pbr-ev>1.00</strong></div>
+          <input type="range" min="0" max="3" step="0.05" value="1" data-pbr-emissive style="width: 100%;">
+          <button id="mf-pbr-clear" class="mf-btn" style="font-size: 10px; padding: 4px 10px; background: #5a2020; color: #ff8080; border: 1px solid #804040; border-radius: 4px; cursor: pointer; margin-top: 10px;">${t('pbrClear')}</button>
+        </div>
       </div>
     `;
   }
@@ -9070,6 +9087,54 @@ function renderCreditsPage() {
       });
     }
 
+    // ── PBR Textures (Experimental) — sliders de MF_PBR (MAIN) via CustomEvent ──
+    const pbrKinds = panel.querySelector('[data-pbr-kinds]');
+    const pbrClearBtn = panel.querySelector('#mf-pbr-clear');
+
+    function sendPbrConfig(cfg) {
+      document.dispatchEvent(new CustomEvent('minifeather:pbr-config', {
+        detail: JSON.stringify(cfg)
+      }));
+    }
+
+    {
+      const sliders = [
+        { el: panel.querySelector('[data-pbr-normal]'), out: panel.querySelector('[data-pbr-nv]'), key: 'mf_pbr_normal', kind: 'normal', fmt: v => v.toFixed(2) },
+        { el: panel.querySelector('[data-pbr-spec]'), out: panel.querySelector('[data-pbr-sv]'), key: 'mf_pbr_spec', kind: 'spec', fmt: v => v.toFixed(2) },
+        { el: panel.querySelector('[data-pbr-shiny]'), out: panel.querySelector('[data-pbr-hv]'), key: 'mf_pbr_shiny', kind: 'shiny', fmt: v => String(Math.round(v)) },
+        { el: panel.querySelector('[data-pbr-emissive]'), out: panel.querySelector('[data-pbr-ev]'), key: 'mf_pbr_emissive', kind: 'emissive', fmt: v => v.toFixed(2) }
+      ];
+      for (const s of sliders) {
+        if (!s.el) continue;
+        const saved = parseFloat(localStorage.getItem(s.key));
+        if (!isNaN(saved)) s.el.value = saved;
+        if (s.out) s.out.textContent = s.fmt(parseFloat(s.el.value));
+        s.el.addEventListener('input', () => {
+          const v = parseFloat(s.el.value);
+          if (s.out) s.out.textContent = s.fmt(v);
+          sendPbrConfig({ [s.kind]: v });
+        });
+      }
+
+      const refreshPbrKinds = () => {
+        if (!pbrKinds) return;
+        const avail = localStorage.getItem('mf_pbr_available') === 'true';
+        pbrKinds.textContent = avail
+          ? ' · PBR maps loaded ✓'
+          : ' · No PBR maps — upload a pack with _n/_s/_e in Cosmetics';
+        pbrKinds.style.color = avail ? '#4caf50' : '#7c828a';
+      };
+      refreshPbrKinds();
+      setInterval(refreshPbrKinds, 3000);
+
+      pbrClearBtn?.addEventListener('click', () => {
+        if (window.MF_TEXTURE_PACK?.clearPbr) {
+          MF_TEXTURE_PACK.clearPbr();
+          refreshPbrKinds();
+        }
+      });
+    }
+
     if (panel.querySelector('#mf-skin-select')) {
       populateSkinSelect();
       refreshActiveSkins();
@@ -9323,6 +9388,11 @@ function renderCreditsPage() {
     document.dispatchEvent(
       new CustomEvent('minifeather:grass-flowers-config', {
         detail: JSON.stringify({ enabled: !!settings.experimentalGrassFlowers })
+      })
+    );
+    document.dispatchEvent(
+      new CustomEvent('minifeather:pbr-config', {
+        detail: JSON.stringify({ enabled: !!settings.experimentalPbr })
       })
     );
     document.dispatchEvent(

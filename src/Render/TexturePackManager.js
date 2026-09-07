@@ -307,6 +307,7 @@
 
     async function processUploadedFiles(fileList) {
         const customSprites = new Map();
+        const pbrMaps = { n: new Map(), s: new Map(), e: new Map() };
         const files = Array.from(fileList);
         let loaded = 0;
 
@@ -319,6 +320,23 @@
             f.type === 'image/png' || f.name.toLowerCase().endsWith('.png')
         );
 
+        // Sufijos PBR estilo OptiFine: base_n = normal, base_s = specular,
+        // base_e = emissive. Devuelve null si NO es un mapa PBR.
+        function pbrKind(name) {
+            const base = name.replace(/\.png$/i, '');
+            if (/_n$/.test(base)) return { kind: 'n', base: base.slice(0, -2) };
+            if (/_s$/.test(base)) return { kind: 's', base: base.slice(0, -2) };
+            if (/_e$/.test(base)) return { kind: 'e', base: base.slice(0, -2) };
+            return null;
+        }
+
+        function registerPbr(name, img) {
+            const info = pbrKind(name);
+            if (!info) return false;
+            pbrMaps[info.kind].set(info.base, img);
+            return true;
+        }
+
         for (const file of pngFiles) {
             try {
                 const url = URL.createObjectURL(file);
@@ -329,7 +347,7 @@
                     i.src = url;
                 });
                 const name = file.name.replace(/\.png$/i, '');
-                customSprites.set(name, img);
+                if (!registerPbr(name, img)) customSprites.set(name, img);
                 loaded++;
             } catch (_) {}
         }
@@ -338,22 +356,130 @@
             console.log(`${TAG} Extracting ${zipFile.name}...`);
             const extracted = await extractZip(zipFile);
             for (const { name, img } of extracted) {
-                customSprites.set(name, img);
+                if (!registerPbr(name, img)) customSprites.set(name, img);
                 loaded++;
             }
             console.log(`${TAG} Extracted ${extracted.length} PNGs from ${zipFile.name}`);
         }
 
-        return { customSprites, loaded };
+        return { customSprites, pbrMaps, loaded };
+    }
+
+    // ── Atlases PBR (_n / _s / _e) ──
+    // Mismo layout de frames.json que el atlas diffuse, tiles faltantes con
+    // valor neutro (azul para normal, negro para spec/emissive), guardados en
+    // IndexedDB porque 3 atlas PNG no caben en la cuota de localStorage.
+
+    function pbrNeutral(kind) {
+        return kind === 'n' ? '#8080ff' : '#000000';
+    }
+
+    async function generatePbrAtlas(kind, maps) {
+        const frames = await loadFramesData();
+        if (!frames) return null;
+        if (!maps || maps.size === 0) return null;
+
+        const scale = 1;  // los maps PBR de estos packs son 16x
+        const atlasSize = ATLAS_SIZE * scale;
+        const canvas = document.createElement('canvas');
+        canvas.width = atlasSize;
+        canvas.height = atlasSize;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+
+        // Rellenar TODO el atlas con el valor neutro del kind
+        ctx.fillStyle = pbrNeutral(kind);
+        ctx.fillRect(0, 0, atlasSize, atlasSize);
+
+        let placed = 0;
+        const lower = new Map();
+        for (const [name, img] of maps) {
+            if (!lower.has(name.toLowerCase())) lower.set(name.toLowerCase(), img);
+        }
+
+        for (const [fileName, data] of Object.entries(frames)) {
+            const frame = data.frame || {};
+            const fx = (frame.x || 0) * scale;
+            const fy = (frame.y || 0) * scale;
+            const fw = (frame.w || TILE_SIZE) * scale;
+            const fh = (frame.h || TILE_SIZE) * scale;
+            const baseName = fileName.replace(/\.png$/, '');
+            const img = maps.get(baseName) || lower.get(baseName.toLowerCase());
+            if (!img) continue;  // tile neutro
+            if (data.rotated) {
+                ctx.save();
+                ctx.translate(fx, fy);
+                ctx.rotate(Math.PI / 2);
+                ctx.drawImage(img, 0, 0, fw, fh);
+                ctx.restore();
+            } else {
+                ctx.drawImage(img, fx, fy, fw, fh);
+            }
+            placed++;
+        }
+
+        console.log(`${TAG} PBR atlas '${kind}': ${placed} tiles de ${Object.keys(frames).length}`);
+        return { dataUrl: canvas.toDataURL('image/png'), placed };
+    }
+
+    function idbPut(key, value) {
+        return new Promise((resolve) => {
+            let db = null;
+            const req = indexedDB.open('mf_pbr_store', 1);
+            req.onupgradeneeded = () => {
+                if (!req.result.objectStoreNames.contains('atlases')) {
+                    req.result.createObjectStore('atlases');
+                }
+            };
+            req.onsuccess = () => {
+                db = req.result;
+                try {
+                    const tx = db.transaction('atlases', 'readwrite');
+                    tx.objectStore('atlases').put(value, key);
+                    tx.oncomplete = () => resolve(true);
+                    tx.onerror = () => resolve(false);
+                } catch (_) { resolve(false); }
+            };
+            req.onerror = () => resolve(false);
+        });
+    }
+
+    async function generateAndStorePbr(pbrMaps) {
+        const results = {};
+        for (const kind of ['n', 's', 'e']) {
+            const maps = pbrMaps[kind];
+            if (!maps || maps.size === 0) continue;
+            const atlas = await generatePbrAtlas(kind, maps);
+            if (atlas) {
+                await idbPut('atlas_' + kind, atlas);
+                results[kind] = atlas.placed;
+            }
+        }
+        // Avisar al módulo MAIN para que recargue los atlases ya
+        try {
+            document.dispatchEvent(new CustomEvent('minifeather:pbr-update'));
+        } catch (_) {}
+        return results;
     }
 
     async function generateAndApply(files) {
         console.log(`${TAG} Processing ${files.length} files...`);
-        const { customSprites, loaded } = await processUploadedFiles(files);
+        const { customSprites, pbrMaps, loaded } = await processUploadedFiles(files);
 
         if (loaded === 0) {
             console.warn(`${TAG} No valid PNG files found`);
             return { success: false, error: 'No valid PNG files' };
+        }
+
+        // Si el pack SOLO trae maps PBR (_n/_s/_e), no tocar el atlas diffuse
+        // — el vanilla sigue visible y solo se aplican normal/specular/emissive.
+        const hasPbr = pbrMaps.n.size || pbrMaps.s.size || pbrMaps.e.size;
+        if (hasPbr) {
+            const pbrStats = await generateAndStorePbr(pbrMaps);
+            console.log(`${TAG} ✓ PBR maps:`, pbrStats);
+            if (customSprites.size === 0) {
+                return { success: true, stats: { custom: 0, placeholder: 0, pbr: pbrStats }, textureNames: [] };
+            }
         }
 
         console.log(`${TAG} Loaded ${loaded} sprites. Generating atlas...`);
@@ -381,8 +507,42 @@
         console.log(`${TAG} Custom texture pack disabled. Reload page to restore original.`);
     }
 
+    function idbDeleteAll() {
+        return new Promise((resolve) => {
+            const req = indexedDB.open('mf_pbr_store', 1);
+            req.onupgradeneeded = () => {
+                if (!req.result.objectStoreNames.contains('atlases')) {
+                    req.result.createObjectStore('atlases');
+                }
+            };
+            req.onsuccess = () => {
+                try {
+                    const tx = req.result.transaction('atlases', 'readwrite');
+                    const store = tx.objectStore('atlases');
+                    store.delete('atlas_n');
+                    store.delete('atlas_s');
+                    store.delete('atlas_e');
+                    tx.oncomplete = () => resolve(true);
+                    tx.onerror = () => resolve(false);
+                } catch (_) { resolve(false); }
+            };
+            req.onerror = () => resolve(false);
+        });
+    }
+
+    function clearPbr() {
+        idbDeleteAll().then((ok) => {
+            try {
+                localStorage.setItem('mf_pbr_available', 'false');
+                document.dispatchEvent(new CustomEvent('minifeather:pbr-update'));
+            } catch (_) {}
+            console.log(`${TAG} PBR atlases cleared (${ok}).`);
+        });
+    }
+
     function clearAll() {
         clearStorage();
+        clearPbr();
         console.log(`${TAG} Cleared all custom textures. Reload page.`);
     }
 
@@ -400,6 +560,7 @@
         generateAndApply,
         disable,
         clearAll,
+        clearPbr,
         isActive,
         getCustomSpritesheetUrl,
         processUploadedFiles,

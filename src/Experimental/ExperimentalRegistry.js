@@ -87,4 +87,15 @@ api.register({
   badge: 'EXPERIMENTAL',
   order: 20
 });
+
+api.register({
+  id: 'pbr-textures',
+  settingsKey: 'experimentalPbr',
+  title: 'PBR Textures',
+  titleKey: 'pbrTitle',
+  descriptionKey: 'pbrDesc',
+  icon: '✨',
+  badge: 'EXPERIMENTAL',
+  order: 30
+});
 })();
