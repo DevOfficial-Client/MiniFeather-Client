@@ -447,6 +447,7 @@
     experimentalAurora: false,
     experimentalAuroraLevel: 'medium',
     experimentalGrassFlowers: false,
+    experimentalAnimatedItems: false,
     language: 'en'
   };
 
@@ -9323,6 +9324,11 @@ function renderCreditsPage() {
     document.dispatchEvent(
       new CustomEvent('minifeather:grass-flowers-config', {
         detail: JSON.stringify({ enabled: !!settings.experimentalGrassFlowers })
+      })
+    );
+    document.dispatchEvent(
+      new CustomEvent('minifeather:animated-items-config', {
+        detail: JSON.stringify({ enabled: !!settings.experimentalAnimatedItems })
       })
     );
     document.dispatchEvent(

@@ -1,7 +1,7 @@
 {
-  "builtAt": "2026-09-03T19:55:00Z",
+  "builtAt": "2026-09-07T18:35:00Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Fixed Client Chat by moving extension networking/WebRTC to the isolated extension world, bridging MiniBlox identity from MAIN, and allowing chat input whenever the module is enabled.",
-  "version": "4.9.2"
+  "note": "Animated Items adds specialized adaptive animation for enchanted_book and MiniBlox potion families (potion, splash_potion, lingering_potion). Enchanted books get a clipped cyan/violet magic glint; potions retain their runtime colour and get subtle liquid shimmer and rising bubbles. Effects preserve the original sprite silhouette and support both 16x16 and 32x32 texture packs.",
+  "version": "4.10.2"
 }

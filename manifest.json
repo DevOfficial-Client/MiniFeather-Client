@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.9.8",
-  "description": "MiniFeather Client for MiniBlox — Experimental Hub with world-anchored natural Aurora Borealis effects",
+  "version": "4.10.2",
+  "description": "MiniFeather Client for MiniBlox — Experimental Hub with Aurora, Natural Grass Details and Animated Items",
   "permissions": [
     "storage",
     "declarativeNetRequest",
@@ -69,6 +69,7 @@
         "src/Render/LeafWind.js",
         "src/Experimental/Aurora/Aurora.js",
         "src/Experimental/GrassFlowers/GrassFlowers.js",
+        "src/Experimental/AnimatedItems/AnimatedItems.js",
         "src/World/AutoRespawn.js",
         "src/Movement/AntiAFK.js",
         "src/Movement/MovementAssist.js",

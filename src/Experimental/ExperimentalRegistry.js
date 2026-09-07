@@ -87,4 +87,16 @@ api.register({
   badge: 'EXPERIMENTAL',
   order: 20
 });
+
+api.register({
+  id: 'animated-items',
+  settingsKey: 'experimentalAnimatedItems',
+  title: 'Animated Items',
+  titleKey: 'experimentalAnimatedItemsTitle',
+  descriptionKey: 'experimentalAnimatedItemsDesc',
+  icon: '✨',
+  badge: 'EXPERIMENTAL',
+  order: 30
+});
+
 })();
