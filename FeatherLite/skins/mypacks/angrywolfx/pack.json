@@ -1,0 +1,15 @@
+{
+  "id": "angrywolfx",
+  "name": "AngryWolfX",
+  "author": "AngryWolfX",
+  "version": 1,
+  "uuid": "c4201f43-2de9-4275-930a-301fae4cce6c",
+  "skin": "angrywolfx.png",
+  "sprites": {
+    "front": "al frente.png",
+    "left": "izquierda.png",
+    "right": "derecha.png",
+    "up": "miando arriba.png",
+    "blink": "blink.png"
+  }
+}

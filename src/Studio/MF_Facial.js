@@ -256,11 +256,14 @@
     //   3. cache de la API (accounts/me) — SOLO respaldo: puede quedar
     //      desactualizada si el armario usa XHR (no capturable)
     function currentSkinId() {
-        // normalizar: quitar rutas/extensiones y el prefijo mfpack: (skin
-        // de pack aplicada por el conducto nativo del juego)
+        // normalizar: quitar rutas/extensiones y los prefijos de skin de
+        // pack aplicadas por el conducto nativo del juego:
+        //   custom:mf_<id> (clase nativa, actual) y mfpack:<id> (legacy)
         const norm = (v) => {
             let s = String(v).split('/').pop().replace(/\.png$/i, '');
-            if (s.toLowerCase().startsWith(MFPACK_PREFIX)) s = s.slice(MFPACK_PREFIX.length);
+            const cl = CUSTOM_PREFIX + MF_NAME_PREFIX;   // custom:mf_
+            if (s.toLowerCase().startsWith(cl)) s = s.slice(cl.length);
+            else if (s.toLowerCase().startsWith(MFPACK_PREFIX)) s = s.slice(MFPACK_PREFIX.length);
             return s.toLowerCase();
         };
         try {
@@ -672,8 +675,8 @@
             }
         } catch {}
         // aplicar la skin del pack por el conducto NATIVO del juego (id
-        // mfpack:<id> + interceptor <img>) → el monitor detecta el id y
-        // enciende la cara animada. Si no hay juego cargado queda listo
+        // custom:mf_<id> + interceptor <img>) → el monitor detecta el id
+        // y enciende la cara animada. Si no hay juego cargado queda listo
         // para cuando entre a un mundo.
         try { await applyPackSkinToGame(id); } catch {}
         return pack;
@@ -748,17 +751,25 @@
     }
 
     // ── Registro de skins de pack DENTRO del bundle del juego ──
-    // El skinManager del juego (clase AF, module-scope) carga cada skin
-    // como <img src="textures/entity/skins/<id>.png"> (vía THREE.Texture
-    // Loader). Interceptor de CustomSkins.js ya probó este conducto.
-    // Aquí registramos la skin de cada pack con id "mfpack:<id>":
+    // El juego TIENE una clase nativa para skins custom: ids "custom:<n>"
+    // (investigado con Puppeteer en el bundle index-CH1F5it9.js):
+    //   downloadSkin("custom:xyz") → loadSkinFromUrl("xyz",
+    //     `${An}/skins/custom/xyz.png`) → <img> del THREE.TextureLoader
+    //   An = https://miniblox.io/auth-api  (mismo host, ruta /skins/custom)
+    //   El armario lo muestra como "Custom Skin" owned (función i6e) y NO
+    //   toca el catálogo del server (n$) ni /textures/entity/skins/.
+    // Usamos esa clase de fábrica con nombre "mf_<packId>" (prefijo mf_
+    // para no chocar con skins subidas reales del server):
     //   1. exponemos la URL real del PNG (extensión o dataURL) en
     //      window.__MF_PACK_SKINS__ para el interceptor de <img src>
-    //   2. player.profile.cosmetics.skin = "mfpack:<id>" + mesh.recreate()
-    //      → el juego la carga/registra como nativa (ratio + materiales
-    //      correctos, avatares de UI incluidos) y el servidor NUNCA la ve
-    //      (local only: el id no se envía hasta que exista de verdad)
-    const MFPACK_PREFIX = 'mfpack:';
+    //   2. player.profile.cosmetics.skin = "custom:mf_<id>" + mesh.recreate()
+    //      → el juego la carga con SU pipeline (ratio, materiales,
+    //      avatares de UI, armario) y el servidor NUNCA la ve (el id no
+    //      existe en el server → PATCH posterior lo ignora/conserva)
+    const MFPACK_PREFIX = 'mfpack:';   // compat: ids viejos persistidos
+    const CUSTOM_PREFIX = 'custom:';   // clase nativa del juego
+    const MF_NAME_PREFIX = 'mf_';      // espacio de nombres dentro de custom:
+    const CUSTOM_SKIN_URL = '/auth-api/skins/custom/'; // base ${An}/skins/custom/
     function packSkinUrl(packId) {
         // ZIP importado (IndexedDB): dataURL directo
         const custom = customPacks.get(packId);
@@ -774,16 +785,24 @@
         // no necesita registro — solo se aplica por el armario del juego
         return null;
     }
-    // registro vivo para el interceptor de <img src> (mismo conducto que
-    // CustomSkins.js): skinId "mfpack:cat" → URL del PNG
+    // registro vivo para el interceptor de <img src>: nombre de la clase
+    // custom ("mf_cat") → URL del PNG. La URL que el juego pide es
+    // https://miniblox.io/auth-api/skins/custom/<nombre>.png (o relativa
+    // /auth-api/skins/custom/<nombre>.png): el interceptor matchea por
+    // sufijo de ruta para cubrir ambas formas.
     const packSkinReg = (globalThis.__MF_PACK_SKINS__ ||= {});
+    const CUSTOM_URL_RE = /(?:^|\/)auth-api\/skins\/custom\/([^\/?#]+)\.png(?:[?#]|$)/;
     function registerPackSkin(packId) {
         const url = packSkinUrl(packId);
         if (!url) return false;
-        packSkinReg[MFPACK_PREFIX + packId] = url;
+        packSkinReg[MF_NAME_PREFIX + packId] = url;
         return true;
     }
-    // instalar el interceptor una sola vez (document_start, MAIN world)
+    // instalar el interceptor una sola vez (document_start, MAIN world).
+    // Dos conductos:
+    //   a) custom:<n> nativo → /auth-api/skins/custom/<n>.png → PNG nuestro
+    //   b) legacy mfpack:<id> → textures/entity/skins/mfpack:<id>.png
+    //      (ids persistidos por versiones anteriores del client)
     function installPackImgHook() {
         if (globalThis.__MF_PACK_IMG_HOOK__) return;
         const proto = HTMLImageElement.prototype;
@@ -796,10 +815,20 @@
             get() { return d.get.call(this); },
             set(v) {
                 if (typeof v === 'string') {
-                    const m = v.match(/^textures\/entity\/skins\/([^/?#]+)\.png/);
-                    if (m && globalThis.__MF_PACK_SKINS__?.[m[1]]) {
-                        origSet.call(this, globalThis.__MF_PACK_SKINS__[m[1]]);
-                        return;
+                    const reg = globalThis.__MF_PACK_SKINS__;
+                    if (reg) {
+                        // a) clase nativa custom: del juego
+                        const m = v.match(CUSTOM_URL_RE);
+                        if (m && reg[m[1]]) {
+                            origSet.call(this, reg[m[1]]);
+                            return;
+                        }
+                        // b) conducto legacy mfpack:
+                        const m2 = v.match(/^textures\/entity\/skins\/([^/?#]+)\.png/);
+                        if (m2 && reg[m2[1]]) {
+                            origSet.call(this, reg[m2[1]]);
+                            return;
+                        }
                     }
                 }
                 origSet.call(this, v);
@@ -807,18 +836,41 @@
         });
         globalThis.__MF_PACK_IMG_HOOK__ = true;
     }
-    // aplicar la skin del pack al player LOCAL (no server-side):
-    // registra el id, carga la textura en el skinManager del juego y
-    // recrea el mesh con el pipeline nativo
+    // recordar la skin del server en sessionStorage además de memoria:
+    // sobrevive al reload de la extensión/página mientras dure la pestaña
+    const PACK_LAST_KEY = 'mff:pack-last-server-skin';
+    function rememberServerSkin(id) {
+        packLastServerSkin = id;
+        try { sessionStorage.setItem(PACK_LAST_KEY, id); } catch {}
+    }
+    function savedServerSkin() {
+        if (packLastServerSkin) return packLastServerSkin;
+        try {
+            const v = sessionStorage.getItem(PACK_LAST_KEY);
+            if (v && !String(v).startsWith(MFPACK_PREFIX) && !String(v).startsWith(CUSTOM_PREFIX)) {
+                return v;
+            }
+        } catch {}
+        return null;
+    }
+    // aplicar la skin del pack al player LOCAL (no server-side) usando la
+    // CLASE NATIVA custom: del juego: setea el id, el skinManager pide la
+    // URL (el interceptor la sirve local) y recrea el mesh
+    let packLastServerSkin = null;
     async function applyPackSkinToGame(packId) {
         const g = getGame();
         const me = g?.player;
         if (!g || !me) throw new Error('no hay juego cargado (entra a un mundo primero)');
         if (!registerPackSkin(packId)) throw new Error('el pack no tiene skin PNG');
+        // recordar la skin del server para poder volver (releasePack)
+        const cur = me.profile?.cosmetics?.skin;
+        if (cur && !String(cur).startsWith(MFPACK_PREFIX) && !String(cur).startsWith(CUSTOM_PREFIX)) {
+            rememberServerSkin(cur);
+        }
         // soltar cualquier skin del SkinChanger: su watchdog re-pintaría
         // su textura encima del mesh que el juego acaba de recrear
         try { window.MF_SkinChanger?.release?.(); } catch {}
-        me.profile.cosmetics.skin = MFPACK_PREFIX + packId;
+        me.profile.cosmetics.skin = CUSTOM_PREFIX + MF_NAME_PREFIX + packId;
         // recrear el mesh del player como hace el juego al cambiar skin
         let mesh = null;
         try { mesh = g.world?.getPlayerById?.(me.id)?.mesh || me.mesh; } catch {}
@@ -826,6 +878,30 @@
             if (mesh?.recreate) await mesh.recreate();
             else if (typeof mesh?.init === 'function') await mesh.init();
         } catch {}
+        return true;
+    }
+
+    // volver a la skin del server (soltar la custom:mf_/mfpack: activa)
+    async function releasePackSkin() {
+        const g = getGame();
+        const me = g?.player;
+        if (!g || !me) throw new Error('no hay juego cargado');
+        const cur = me.profile?.cosmetics?.skin;
+        if (!String(cur || '').startsWith(MFPACK_PREFIX) &&
+            !String(cur || '').startsWith(CUSTOM_PREFIX)) return false; // ya está en server skin
+        // restaurar la skin del server recordada (memoria o sessionStorage).
+        // Sin backup NO inventamos una: vacío = que el server reponga la
+        // suya (nunca sobreescribir p.ej. chris con bob por adivinar)
+        const backup = savedServerSkin();
+        me.profile.cosmetics.skin = backup || '';
+        let mesh = null;
+        try { mesh = g.world?.getPlayerById?.(me.id)?.mesh || me.mesh; } catch {}
+        try {
+            if (mesh?.recreate) await mesh.recreate();
+            else if (typeof mesh?.init === 'function') await mesh.init();
+        } catch {}
+        packLastServerSkin = null;
+        try { sessionStorage.removeItem(PACK_LAST_KEY); } catch {}
         return true;
     }
 
@@ -859,8 +935,8 @@
     // juego: cat, alice, bob…): el juego ya sabe cargarlas → sus packs NO
     // necesitan inyección, solo activan el modo auto.
     // skins/mypacks/ = packs CUSTOM (skins propias que NO están en el
-    // server): esos sí se registran en el bundle (id mfpack:<id>) para
-    // que el juego las trate como nativas.
+    // server): esos sí se registran en el bundle (id custom:mf_<id>, la
+    // clase nativa "Custom Skin" del juego) para que las trate como nativas.
     const builtinPacks = [];
     const SERVER_SKINS = new Set([
         'bob', 'alice', 'techno', 'ganyu', 'klee', 'hutao', 'kyoko',
@@ -900,7 +976,7 @@
                     blink: sp.blink || 'blink.png',
                     skinFile: j.skin || null,
                     // server: el juego ya tiene esta skin (solo auto-mode).
-                    // custom: skin propia no-server → registro mfpack:
+                    // custom: skin propia no-server → registro custom:mf_
                     server: isServerSkin(j.id || id)
                 };
             } catch { return null; }
@@ -1076,12 +1152,22 @@
             }
             const cur = frames[i];
             const nxt = frames[(i + 1) % frames.length];
-            if (t > cur.holdMs && cur.blendMs > 0 && cur.kind === nxt.kind) {
-                // fase de transición: mezclar cur → nxt (mismo kind)
-                const k = (t - cur.holdMs) / cur.blendMs;
-                paintFace(blendFrames(cur, nxt, k));
-            } else {
-                paintFace(cur);
+            try {
+                if (t > cur.holdMs && cur.blendMs > 0 && cur.kind === nxt.kind) {
+                    // fase de transición: mezclar cur → nxt (mismo kind)
+                    const k = (t - cur.holdMs) / cur.blendMs;
+                    paintFace(blendFrames(cur, nxt, k));
+                } else {
+                    paintFace(cur);
+                }
+            } catch (e) {
+                // el mesh/textura de skin desapareció (salida del mundo,
+                // cambio de dimensión): parar limpio en vez de lanzar
+                // "Uncaught (in promise)" en cada frame
+                state.playing = null;
+                if (state.playTimer) { cancelAnimationFrame(state.playTimer); state.playTimer = null; }
+                console.warn(TAG + ' loop detenido: ' + e.message);
+                return;
             }
             state.playTimer = requestAnimationFrame(tick);
         };
@@ -1263,7 +1349,7 @@
                 const k = fr.kind === 'head' ? Math.max(1, Math.round(fr.canvas.width / 64)) : 1;
                 const c = document.createElement('canvas');
                 c.width = 8; c.height = 8;
-                const cx = c.getContext('2d');
+                const cx = c.getContext('2d', { willReadFrequently: true });
                 cx.imageSmoothingEnabled = false;
                 if (fr.kind === 'head') cx.drawImage(fr.canvas, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, 0, 0, 8, 8);
                 else cx.drawImage(fr.canvas, 0, 0, 8, 8, 0, 0, 8, 8);
@@ -1273,7 +1359,7 @@
                 const bk = state.baseHeadK || 1;
                 const c = document.createElement('canvas');
                 c.width = 8; c.height = 8;
-                const cx = c.getContext('2d');
+                const cx = c.getContext('2d', { willReadFrequently: true });
                 cx.imageSmoothingEnabled = false;
                 cx.drawImage(state.baseHead, FACE.x * bk, FACE.y * bk, FACE.w * bk, FACE.h * bk, 0, 0, 8, 8);
                 return c;
@@ -1307,7 +1393,7 @@
             // 2) sintetizar sobre la cara de la zona actual
             const face = await zoneFace();
             if (face) {
-                const cx = face.getContext('2d');
+                const cx = face.getContext('2d', { willReadFrequently: true });
                 // tono de piel: pixel de mejilla izquierda (1,6)
                 const cheek = cx.getImageData(1, 6, 1, 1).data;
                 cx.fillStyle = `rgb(${cheek[0]},${cheek[1]},${cheek[2]})`;
@@ -1400,7 +1486,7 @@
         if (!face) return null;
         const c = document.createElement('canvas');
         c.width = 8; c.height = 8;
-        const cx = c.getContext('2d');
+        const cx = c.getContext('2d', { willReadFrequently: true });
         cx.imageSmoothingEnabled = false;
         cx.drawImage(face, 0, 0);
         try {
@@ -1436,7 +1522,13 @@
                     debugBrow('pintando ceja (quedan ' + Math.round(auto._browUntil - now) + 'ms)');
                     getBrowCanvas().then(fr => {
                         if (fr && auto.on && auto._browUntil) {
-                            paintFace({ canvas: fr.canvas, kind: fr.kind });
+                            try { paintFace({ canvas: fr.canvas, kind: fr.kind }); }
+                            catch (e) {
+                                // sesión de textura inválida (mesh recreado):
+                                // invalidar y dejar que el próximo ciclo recapture
+                                state.tex = null; state.baseHead = null;
+                                debugBrow('brow: sesión inválida (' + e.message + ') → recapturar');
+                            }
                         } else if (fr) {
                             debugBrow('canvas listo pero ventana cerrada (on=' + auto.on + ') — no se pinta');
                         }
@@ -1632,7 +1724,7 @@
         const k = s.k || 1;
         const c = document.createElement('canvas');
         c.width = 8; c.height = 8;
-        const cx = c.getContext('2d');
+        const cx = c.getContext('2d', { willReadFrequently: true });
         cx.imageSmoothingEnabled = false;
         cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, 0, 0, 8, 8);
         try {
@@ -1653,7 +1745,7 @@
         const k = s.k || 1;
         const c = document.createElement('canvas');
         c.width = 8; c.height = 8;
-        const cx = c.getContext('2d');
+        const cx = c.getContext('2d', { willReadFrequently: true });
         cx.imageSmoothingEnabled = false;
         cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, 0, 0, 8, 8);
         try {
@@ -2197,11 +2289,19 @@
 <div style="color:#8a8a96;margin-bottom:8px">id: ${p.id}${p.author ? ' · por ' + p.author : ''} · v${p.version || 1} · ${p.server ? 'skin del server (activa al ponértela en el armario)' : p.custom ? 'ZIP importado' : 'custom (mypacks)'}</div>
 <div class="mff-row" style="flex-wrap:wrap">
   <button data-pk="apply" title="Poner la skin del pack (solo builtin)">👕 Usar skin</button>
+  <button data-pk="release" title="Quitar la skin custom y volver a la del server">↩ Quitar skin</button>
   <button data-pk="auto" title="Activar el modo auto con los sprites de este pack">⚡ Activar</button>
   <button data-pk="export" title="Descargar el pack como ZIP (pack.json + PNGs)">📤 Exportar ZIP</button>
   ${p.custom ? '<button data-pk="del" title="Eliminar el pack importado">🗑</button>' : ''}
 </div>
 <div style="color:#8a8a96;margin-top:8px;font-size:10px">${cur === p.id ? '✓ esta skin está puesta — la cara anima sola' : 'la cara anima cuando la skin ' + p.id + ' esté en uso'}</div>`;
+                det.querySelector('[data-pk="release"]').onclick = async () => {
+                    try {
+                        const ok = await releasePackSkin();
+                        if (!ok) alert('no hay skin custom puesta (ya estás con la del server)');
+                        renderPacksTab();
+                    } catch (e) { alert('no se pudo quitar: ' + e.message); }
+                };
                 det.querySelector('[data-pk="apply"]').onclick = async () => {
                     if (p.server) {
                         // skin DEL SERVER: el juego ya la conoce — aplicar por
@@ -2211,9 +2311,10 @@
                         return;
                     }
                     try {
-                        // conducto NATIVO del juego: id mfpack:<id> → el
-                        // skinManager lo registra con ratio/materiales
-                        // correctos; el servidor no ve el id
+                        // conducto NATIVO del juego: id custom:mf_<id> (la
+                        // clase "Custom Skin" de fábrica) → el skinManager
+                        // lo registra con ratio/materiales correctos; el
+                        // servidor no ve el id
                         await applyPackSkinToGame(p.id);
                         renderPacksTab();
                     } catch (e) { alert('no se pudo aplicar: ' + e.message); }
@@ -2551,12 +2652,33 @@
         // packs faciales (builtin + ZIP importados)
         get packs() { return packIndex.map(p => ({ ...p })); },
         importPackZip, exportPackZip,
+        applyPack: applyPackSkinToGame, // aplicar la skin PNG de un pack (custom:mf_)
+        releasePack: releasePackSkin,   // volver a la skin del server
         deletePack: async function (id) {
             await packsDbDel(id);
             customPacks.delete(id);
             if (skinWatch.lastApplied === id) skinWatch.lastApplied = null;
             rebuildPackIndex();
             return { ok: true };
+        },
+        // clase NATIVA custom: del juego — sin tocar las skins del server.
+        // Registra el PNG y aplica "custom:mf_<name>" al player local.
+        // name: id del pack (usa su skin PNG), pngUrl: URL/dataURL directo
+        applyCustomSkin: async function (name, pngUrl) {
+            if (pngUrl) {
+                packSkinReg[MF_NAME_PREFIX + name] = pngUrl;
+            } else if (!registerPackSkin(name)) {
+                throw new Error('el pack "' + name + '" no tiene skin PNG');
+            }
+            installPackImgHook();
+            return applyPackSkinToGame(name);
+        },
+        // registro de redirección crudo (para FeatherLite y scripts)
+        registerCustomSkin: function (name, pngUrl) {
+            if (typeof name !== 'string' || typeof pngUrl !== 'string') return false;
+            installPackImgHook();
+            packSkinReg[MF_NAME_PREFIX + name] = pngUrl;
+            return true;
         }
     };
     window.__MF_Facial = true;
@@ -2620,7 +2742,7 @@
     //    pack en skins/facialskins/, activa el modo auto con sus sprites.
     //    Detecta el id de la skin actual (profile.cosmetics.skin o
     //    model.skin) y mapea a los PNG del pack.
-    const skinWatch = { timer: null, lastApplied: null, userOff: false, busy: false };
+    const skinWatch = { timer: null, lastApplied: null, userOff: false, busy: false, uuidDone: false };
     async function applyPackForSkin(force = false) {
         if (skinWatch.busy) return null;
         skinWatch.busy = true;
@@ -2629,10 +2751,15 @@
             if (!skinId) return null;
             // match por uuid (pack.json "uuid") primero: el pack se aplica
             // aunque la skin del server sea otra. Los packs custom además
-            // registran su skin (mfpack:) para el conducto nativo.
+            // registran su skin (custom:mf_) para el conducto nativo.
+            // uuidDone: SOLO UNA VEZ por sesión — si el usuario elige otra
+            // skin del server (p.ej. chris) en el armario, se respeta y no
+            // se vuelve a reemplazar en el siguiente ciclo del monitor.
             const uid = currentPlayerUuid();
             let pack = uid ? packIndex.find(p => p.uuid === uid) : null;
             if (pack && pack.id !== skinId) {
+                if (skinWatch.uuidDone) return null; // ya se aplicó: respetar la skin elegida
+                skinWatch.uuidDone = true;
                 if (!force && skinWatch.lastApplied === pack.id) return null;
                 try { await applyPackSkinToGame(pack.id); } catch (e) { debugBrow('uuid skin: ' + (e?.message || e)); }
             } else {
@@ -2679,8 +2806,10 @@
         if (skinWatch.busy) return;
         fetchApiSkin().then(() => { // refrescar la skin de la cuenta primero
             // auto-activado por uuid: pack.json con "uuid" que coincida con
-            // el player local → aplicar ESE pack (gana al match por skin-id)
-            if (!auto.on && !skinWatch.userOff) {
+            // el player local → aplicar ESE pack (gana al match por skin-id).
+            // Solo la PRIMERA vez por sesión: si el usuario cambia a una
+            // skin del server (chris…), no se le reemplaza de nuevo.
+            if (!auto.on && !skinWatch.userOff && !skinWatch.uuidDone) {
                 const uid = currentPlayerUuid();
                 const byUuid = uid ? packIndex.find(p => p.uuid === uid) : null;
                 if (byUuid && skinWatch.lastApplied !== byUuid.id) {

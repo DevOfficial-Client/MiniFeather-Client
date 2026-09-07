@@ -306,7 +306,8 @@
         const V3 = getV3(camera);
         if (!mesh || !camera || !V3) return null;
 
-        // NDC relativo al rect real del canvas del juego
+        // NDC sobre el rect del canvas: con el Studio abierto el canvas
+        // está minimizado/anclado al preview, así que su rect ya es correcto
         const rect = (getGameCanvas() || document.body).getBoundingClientRect();
         const ndcX = ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
         const ndcY = -((clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;

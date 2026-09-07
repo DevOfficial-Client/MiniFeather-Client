@@ -1,0 +1,13 @@
+{
+  "id": "ariel",
+  "name": "Ariel",
+  "author": "MiniFeather",
+  "version": 1,
+  "skin": "ariel.png",
+  "sprites": {
+    "front": "al frente1.png",
+    "left": "izquierda.png",
+    "right": "derecha.png",
+    "blink": "blink.png"
+  }
+}

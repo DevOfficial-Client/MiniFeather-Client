@@ -676,7 +676,8 @@ function applyRemoteFacial(msg) {
     const ok = Math.max(1, Math.round(orig.width / 64));
     const face = document.createElement('canvas');
     face.width = 8 * ok; face.height = 8 * ok;
-    const fx = face.getContext('2d');
+    // willReadFrequently: leemos muchos getImageData por animación
+    const fx = face.getContext('2d', { willReadFrequently: true });
     fx.imageSmoothingEnabled = false;
     fx.drawImage(orig, FACE_RECT.x * ok, FACE_RECT.y * ok, FACE_RECT.w * ok, FACE_RECT.h * ok, 0, 0, face.width, face.height);
     try {

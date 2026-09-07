@@ -350,7 +350,7 @@
         update(); // sincronizar gizmo con el joint antes de intersectar
         try {
             const V3 = cam.position.constructor;
-            const rect = (getGameCanvas() || document.body).getBoundingClientRect();
+            const rect = effectiveRect();
             const ndcX = ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
             const ndcY = -((clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;
             cam.updateMatrixWorld?.();
@@ -440,7 +440,7 @@
             state.joint.getWorldPosition(jp);
             const camPos = new V3().setFromMatrixPosition(cam.matrixWorld);
             const dist = camPos.distanceTo(jp);
-            const rect = (getGameCanvas() || document.body).getBoundingClientRect();
+            const rect = effectiveRect();
             // proyectar el eje: puntos origen y origen+eje
             const d = state.arrows[axis].dir;
             const p0 = projectPoint(jp, cam, rect);
@@ -468,7 +468,7 @@
         update();
         try {
             const V3 = cam.position.constructor;
-            const rect = (getGameCanvas() || document.body).getBoundingClientRect();
+            const rect = effectiveRect();
             const ndcX = ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
             const ndcY = -((clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;
             cam.updateMatrixWorld?.();
@@ -518,7 +518,7 @@
         update();
         try {
             const V3 = cam.position.constructor;
-            const rect = (getGameCanvas() || document.body).getBoundingClientRect();
+            const rect = effectiveRect();
             cam.updateMatrixWorld?.();
             const origin = new V3().setFromMatrixPosition(cam.matrixWorld);
 
@@ -588,6 +588,10 @@
         } catch {}
         return best;
     }
+
+    // NOTA: con el Studio abierto el canvas del juego se minimiza y se ancla
+    // al rect del preview, por lo que su getBoundingClientRect() YA es el
+    // rect correcto para el NDC del picking — no hace falta corrección.
 
     window.MF_Gizmo = { attach, detach, pick, beginDrag, dragDeltaFromStart, endDrag, dragDelta, visible, pickRing, ringDragDelta, setMode };
     window.__MF_Gizmo = true;

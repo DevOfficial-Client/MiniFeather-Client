@@ -21,77 +21,92 @@
     const TPS = 20;
 
     const CSS = `
-#mf-timeline { display: flex; flex-direction: column; height: 100%; }
+#mf-timeline {
+    display: flex; flex-direction: column; height: 100%;
+    font-family: 'Consolas', 'Courier New', monospace;
+    background: #001B33; color: #e8e8ec;
+}
 #mft-ruler {
-    height: 28px; position: relative; cursor: ew-resize; flex-shrink: 0;
-    border-bottom: 1px solid #2a2a32; background: #16161a; overflow: hidden;
+    height: 20px; position: relative; cursor: ew-resize; flex-shrink: 0;
+    border-bottom: 1px solid rgba(255,255,255,.13); background: rgba(0,0,0,.35);
+    overflow: hidden;
 }
 #mft-ruler canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: inherit; }
-#mft-tracks { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 0 8px 0; }
-.mft-track { display: flex; align-items: center; height: 40px; padding: 0 10px; position: relative; }
-.mft-track + .mft-track { border-top: 1px solid #1e1e24; }
+#mft-tracks { flex: 1; overflow-y: auto; overflow-x: hidden; }
+/* pistas de 20px (LAYER_HEIGHT de BBS) */
+.mft-track { display: flex; align-items: center; height: 20px; padding: 0 0 0 4px; position: relative; }
+.mft-track + .mft-track { border-top: 1px solid rgba(255,255,255,.07); }
 .mft-track .label {
-    width: 86px; flex-shrink: 0; font-size: 10px; letter-spacing: 1px;
-    color: #6e6e7a; text-transform: uppercase; user-select: none;
+    width: 76px; flex-shrink: 0; font-size: 9px; letter-spacing: 1px;
+    color: #888; text-transform: uppercase; user-select: none;
 }
-.mft-lane { flex: 1; height: 30px; background: #141419; border-radius: 3px; position: relative; }
+.mft-lane { flex: 1; height: 18px; background: rgba(0,0,0,.25); border-radius: 0; position: relative; }
+/* clips: cuadrados, bevel inferior oscuro (estilo BBS UIClips) */
 .mft-clip {
-    position: absolute; top: 1px; height: 28px; border-radius: 3px;
-    background: linear-gradient(180deg, #2d3542 0%, #232936 100%);
-    border: 1px solid #3a4456; cursor: grab; user-select: none;
-    display: flex; align-items: center; padding: 0 8px; gap: 4px;
+    position: absolute; top: 1px; height: 16px; border-radius: 0;
+    border: 0; cursor: grab; user-select: none;
+    display: flex; align-items: center; padding: 0 4px; gap: 3px;
     box-sizing: border-box; overflow: hidden; white-space: nowrap;
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.14);
 }
-.mft-clip:hover { border-color: #5a6a8a; }
+.mft-clip:hover { filter: brightness(1.15); }
 .mft-clip.dragging { cursor: grabbing; opacity: .9; }
-.mft-clip.selected { border-color: #ff6b2b; box-shadow: 0 0 0 1px #ff6b2b inset; }
-.mft-clip .grip { position: absolute; top: 0; width: 6px; height: 100%; cursor: ew-resize; }
+.mft-clip.selected { box-shadow: inset 0 0 0 1px #fff, inset 0 -2px 0 rgba(0,0,0,.35); }
+.mft-clip .grip { position: absolute; top: 0; width: 5px; height: 100%; cursor: ew-resize; }
 .mft-clip .grip.l { left: 0; } .mft-clip .grip.r { right: 0; }
-.mft-clip .grip.l:hover, .mft-clip .grip.r:hover { background: rgba(255,107,43,.4); }
-.mft-clip .name { font-size: 10px; color: #c8c8d2; pointer-events: none; }
-.mft-clip .len { font-size: 9px; color: #6e6e7a; font-family: Consolas, monospace; pointer-events: none; margin-left: auto; }
+.mft-clip .grip.l:hover, .mft-clip .grip.r:hover { background: rgba(255,255,255,.3); }
+.mft-clip .name { font-size: 9px; color: #fff; pointer-events: none; text-shadow: 1px 1px 0 rgba(0,0,0,.8); }
+.mft-clip .len { font-size: 8px; color: rgba(255,255,255,.75); pointer-events: none; margin-left: auto; }
 .mft-kf {
     position: absolute; top: 50%; transform: translateY(-50%);
-    width: 4px; height: 16px; background: #4fc3f7; border-radius: 1px;
+    width: 3px; height: 12px; background: #fff; border-radius: 0;
     cursor: pointer; z-index: 3;
 }
-.mft-kf:hover { background: #fff; }
-/* preset de cabeza (skin dibujada) — naranja, más ancho */
-.mft-kf.head { background: #ff6b2b; width: 6px; }
-.mft-kf.head:hover { background: #ffa76b; }
-/* clips de V2 (caras/cabeza): emociones azul, cabeza naranja */
-.face-clip { border-radius: 4px; }
-.face-clip .name { color: #d8ecff; }
-.face-clip { background: linear-gradient(180deg, #1d3a52, #16303f); border-color: #2f6a94; }
-.face-clip:hover { border-color: #4fc3f7; }
-.face-clip.head { background: linear-gradient(180deg, #4a2410, #3a1c0c); border-color: #a04a1c; }
-.face-clip.head:hover { border-color: #ff6b2b; }
-.face-clip.head .name { color: #ffe0c8; }
-.face-clip.skin { background: linear-gradient(180deg, #143a24, #0c2a1a); border-color: #2f9464; }
-.face-clip.skin:hover { border-color: #4dff88; }
-.face-clip.skin .name { color: #d8ffe8; }
-/* morph a mob — morado */
-.face-clip.morph { background: linear-gradient(180deg, #3a1d52, #24103a); border-color: #7c3fae; }
-.face-clip.morph:hover { border-color: #b56bff; }
-.face-clip.morph .name { color: #ecd8ff; }
+.mft-kf:hover { background: #fff; box-shadow: 0 0 0 1px #57F52A; }
+/* preset de cabeza (skin dibujada) — naranja BBS */
+.mft-kf.head { background: #FFA500; width: 5px; }
+.mft-kf.head:hover { background: #ffc04d; }
+/* colores por tipo — paleta de clips de BBSMod.java 418-458 */
+.mft-clip { background: #0088FF; }                                /* V1 tomas: acento */
+.face-clip { background: #D82253; }                               /* V2 caras (emoción) */
+.face-clip.head { background: #FFA500; }                          /* preset de cabeza */
+.face-clip.skin { background: #159E64; }                          /* skin PNG */
+.face-clip.morph { background: #6820AD; }                         /* morph a mob */
+/* CAM/SUB — clips de cámara estilo BBS (MF_FilmCamera) por tipo */
+.cam-clip.t-idle      { background: #159E64; }
+.cam-clip.t-keyframe  { background: #DE2E9F; }
+.cam-clip.t-path      { background: #6820AD; }
+.cam-clip.t-dolly     { background: #FFA500; }
+.cam-clip.t-orbit     { background: #D82253; }
+.cam-clip.t-look      { background: #197FFF; }
+.cam-clip.t-shake     { background: #159E64; }
+.cam-clip.t-translate { background: #4BA03E; }
+.cam-clip.t-subtitle  { background: #888899; }
+.cam-clip.t-audio     { background: #FFC825; }
+.cam-clip.selected { box-shadow: inset 0 0 0 1px #fff, inset 0 -2px 0 rgba(0,0,0,.35); }
+/* toolbar: control bar BBS (#141417, 20px, botones cuadrados) */
 #mft-toolbar {
-    height: 30px; display: flex; align-items: center; gap: 8px;
-    padding: 0 10px; border-bottom: 1px solid #2a2a32; background: #1a1a1f;
-    font-size: 11px; color: #9a9aa6; flex-shrink: 0; user-select: none;
+    height: 20px; display: flex; align-items: center; gap: 4px;
+    padding: 0 6px; border-bottom: 1px solid rgba(255,255,255,.13);
+    background: #141417; font-size: 10px; color: #ccc;
+    flex-shrink: 0; user-select: none;
 }
-#mft-toolbar .zoom-ind { font-family: Consolas, monospace; color: #6e6e7a; margin-left: auto; }
+#mft-toolbar .zoom-ind { font-family: Consolas, monospace; color: #888; margin-left: auto; }
 #mft-toolbar button {
-    background: #26262e; border: 1px solid #3a3a44; color: #c8c8d2;
-    height: 20px; padding: 0 8px; border-radius: 2px; cursor: pointer; font-size: 10px;
+    background: transparent; border: 0; color: #ccc;
+    height: 18px; padding: 0 6px; border-radius: 0; cursor: pointer;
+    font-size: 10px; font-family: inherit;
 }
-#mft-toolbar button:hover { background: #30303a; }
+#mft-toolbar button:hover { color: #fff; background: rgba(255,255,255,.07); }
+#mft-toolbar label { display: flex; align-items: center; gap: 3px; cursor: pointer; }
+/* playhead BBS: #57F52A, 2px */
 #mft-playhead {
-    position: absolute; top: 0; bottom: 0; width: 1px; background: #fff;
+    position: absolute; top: 0; bottom: 0; width: 2px; background: #57F52A;
     pointer-events: none; z-index: 5;
 }
 #mft-playhead::before {
-    content: ''; position: absolute; top: 0; left: -5px;
-    border: 5px solid transparent; border-top-color: #ff6b2b;
+    content: ''; position: absolute; top: 0; left: -4px;
+    border: 5px solid transparent; border-top-color: #57F52A;
 }
 `;
 
@@ -402,11 +417,25 @@
         });
         v2.appendChild(lane2);
 
-        // A1 — audio (F2)
-        const a1 = el('div', 'mft-track');
-        a1.innerHTML = '<span class="label">A1 · Audio</span><div class="mft-lane"></div>';
+        // CAM — clips de cámara estilo BBS (MF_FilmCamera)
+        const cam = el('div', 'mft-track');
+        cam.innerHTML = '<span class="label">CAM · Cámara</span>';
+        const laneCam = el('div', 'mft-lane');
+        (window.MF_FilmCamera?.clips || []).forEach((c) => {
+            if (c.type !== 'subtitle' && c.type !== 'audio') laneCam.appendChild(renderCamClip(c));
+        });
+        cam.appendChild(laneCam);
 
-        tracks.appendChild(v1); tracks.appendChild(v2); tracks.appendChild(a1);
+        // SUB — subtítulos y audio (capas 9/10 de MF_FilmCamera)
+        const sub = el('div', 'mft-track');
+        sub.innerHTML = '<span class="label">SUB/A1 · Texto y audio</span>';
+        const laneSub = el('div', 'mft-lane');
+        (window.MF_FilmCamera?.clips || []).forEach((c) => {
+            if (c.type === 'subtitle' || c.type === 'audio') laneSub.appendChild(renderCamClip(c));
+        });
+        sub.appendChild(laneSub);
+
+        tracks.appendChild(v1); tracks.appendChild(v2); tracks.appendChild(cam); tracks.appendChild(sub);
 
         drawRuler();
         updatePlayhead();
@@ -421,6 +450,16 @@
         if (!lanes) return;
         for (const lane of lanes) {
             for (const div of lane.children) {
+                if (div.dataset.cam) {
+                    // CAM/SUB: clip de cámara (MF_FilmCamera)
+                    const c = window.MF_FilmCamera?.get?.(div.dataset.cam);
+                    if (!c) continue;
+                    div.style.left = tickToX(c.start) + 'px';
+                    div.style.width = Math.max(10, (c.duration / TPS) * state.view.pxPerSec) + 'px';
+                    const len = div.querySelector('.len');
+                    if (len) len.textContent = (c.duration / TPS).toFixed(1) + 's';
+                    continue;
+                }
                 if (div.dataset.tri != null) {
                     // V2: trigger de cara/cabeza
                     const i = +div.dataset.tri;
@@ -533,6 +572,78 @@
         return div;
     }
 
+    // clip de CAM/SUB: clip de cámara estilo BBS (MF_FilmCamera).
+    // Patrón V2: estado en el módulo externo, referencia por objeto,
+    // drag/trim con updateClipStyles barato y update() que persiste
+    function renderCamClip(c) {
+        const FC = window.MF_FilmCamera;
+        const T = FC?.TYPES?.[c.type] || {};
+        const div = el('div', 'mft-clip cam-clip t-' + (c.type || 'idle') + (FC?.selectedId === c.id ? ' selected' : ''));
+        div.dataset.cam = c.id;
+        div.style.left = tickToX(c.start) + 'px';
+        div.style.width = Math.max(10, (c.duration / TPS) * state.view.pxPerSec) + 'px';
+        div.innerHTML = `
+            <div class="grip l" data-edge="l"></div>
+            <span class="name">${T.icon || '🎥'} ${c.title || T.label || c.type}</span>
+            <span class="len">${(c.duration / TPS).toFixed(1)}s</span>
+            <div class="grip r" data-edge="r"></div>
+        `;
+        div.title = `${T.label || c.type} (capa ${c.layer})\n` +
+            `Inicio: ${(c.start / TPS).toFixed(2)}s · Duración: ${(c.duration / TPS).toFixed(2)}s\n` +
+            (c.enabled ? '' : '(deshabilitado)\n') +
+            `Arrastra para mover · grips para duración · click derecho = borrar`;
+
+        div.addEventListener('mousedown', (ev) => {
+            if (ev.button !== 0 || !FC) return;
+            ev.stopPropagation();
+            FC.selectedId = c.id;
+            const edge = ev.target.dataset?.edge || null;
+            const startX = ev.clientX;
+            const orig = { start: c.start, duration: c.duration };
+            const snapOff = () => ev.altKey;
+
+            const mv = (e) => {
+                const dxTick = (e.clientX - startX) / state.view.pxPerSec * TPS;
+                if (!edge) {
+                    FC.update(c.id, { start: snapCandidate(orig.start + dxTick, null, e.altKey) });
+                } else if (edge === 'l') {
+                    const ns = Math.max(0, Math.min(snapCandidate(orig.start + dxTick, null, e.altKey), orig.start + orig.duration - TPS / 2));
+                    FC.update(c.id, { start: ns, duration: Math.max(TPS / 2, orig.start + orig.duration - ns) });
+                } else {
+                    const ne = snapCandidate(orig.start + orig.duration + dxTick, null, e.altKey);
+                    FC.update(c.id, { duration: Math.max(TPS / 2, Math.round(ne - c.start)) });
+                }
+                updateClipStyles();
+            };
+            const up = () => {
+                window.removeEventListener('mousemove', mv);
+                window.removeEventListener('mouseup', up);
+                render();
+                state.onChange?.('clips-changed', null);
+            };
+            window.addEventListener('mousemove', mv);
+            window.addEventListener('mouseup', up);
+        });
+
+        // click derecho: borrar
+        div.addEventListener('contextmenu', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            FC?.remove(c.id);
+            render();
+            state.onChange?.('clips-changed', null);
+        });
+
+        // doble click: preview de cámara — saltar el playhead al clip
+        div.addEventListener('dblclick', (ev) => {
+            ev.stopPropagation();
+            state.playheadTick = c.start;
+            updatePlayhead();
+            state.onChange?.('scrub', state.playheadTick);
+        });
+        return div;
+    }
+
     function renderClip(clip) {
         const div = el('div', 'mft-clip' + (clip.selected ? ' selected' : ''));
         div.dataset.id = clip.id;
@@ -616,14 +727,14 @@
         for (let s = Math.max(0, firstSec); s <= lastSec; s += stepSec) {
             const x = secToX(s);
             if (x < -20 || x > w + 20) continue;
-            ctx.strokeStyle = '#3a3a44';
+            ctx.strokeStyle = 'rgba(255,255,255,.27)';
             ctx.beginPath(); ctx.moveTo(x + .5, h - 10); ctx.lineTo(x + .5, h); ctx.stroke();
-            ctx.fillStyle = '#8a8a96';
+            ctx.fillStyle = '#aaa';
             const label = stepSec >= 1 ? (s % 1 === 0 ? s + 's' : s.toFixed(1) + 's') : s.toFixed(2) + 's';
             ctx.fillText(label, x + 3, 11);
             // sub-marcas (5 por paso)
             if (stepSec * pxPerSec > 90) {
-                ctx.strokeStyle = '#26262e';
+                ctx.strokeStyle = 'rgba(255,255,255,.13)';
                 for (let i = 1; i < 5; i++) {
                     const sx = secToX(s + stepSec * i / 5);
                     ctx.beginPath(); ctx.moveTo(sx + .5, h - 5); ctx.lineTo(sx + .5, h); ctx.stroke();

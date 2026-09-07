@@ -1578,7 +1578,7 @@
                 const cv = document.createElement('canvas');
                 cv.width = img.width;
                 cv.height = img.height;
-                const cx = cv.getContext('2d');
+                const cx = cv.getContext('2d', { willReadFrequently: true });
                 cx.drawImage(img, 0, 0);
                 const px = cx.getImageData(0, 0, cv.width, cv.height).data;
                 const size = cv.width;

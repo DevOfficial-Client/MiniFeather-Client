@@ -1,0 +1,13 @@
+{
+  "id": "aurora",
+  "name": "Aurora",
+  "author": "MiniFeather",
+  "version": 1,
+  "skin": "aurora.png",
+  "sprites": {
+    "front": "alfrente.png",
+    "left": "izquierda.png",
+    "right": "derecha.png",
+    "blink": "blink.png"
+  }
+}

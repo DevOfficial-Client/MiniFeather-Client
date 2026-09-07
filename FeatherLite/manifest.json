@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "FeatherLite",
+  "version": "1.0.0",
+  "description": "FeatherLite for MiniBlox — animated faces, vanilla animations, camera springs, P2P facial sync. One-click everything.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://miniblox.io/*",
+    "https://miniblox.online/*",
+    "https://unpkg.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://miniblox.io/*", "https://miniblox.online/*"],
+      "js": ["src/Core/LiteMeta.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://miniblox.io/*", "https://miniblox.online/*"],
+      "js": [
+        "src/Render/VanillaAnimations.js",
+        "src/Render/CameraOverhaul.js",
+        "src/Render/HandSway.js",
+        "src/Render/NoWeather.js",
+        "src/HUD/DynamicCrosshair.js",
+        "src/Studio/MF_Peer.js",
+        "src/Studio/MF_Facial.js",
+        "src/Core/LiteBoot.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://miniblox.io/*", "https://miniblox.online/*"],
+      "js": ["src/UI/LitePanel.js"],
+      "run_at": "document_end",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "skins/*",
+        "skins/*/*",
+        "skins/*/*/*",
+        "assets/crosshair/*"
+      ],
+      "matches": ["https://miniblox.io/*", "https://miniblox.online/*"]
+    }
+  ]
+}

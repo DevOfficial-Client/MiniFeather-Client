@@ -1,0 +1,13 @@
+{
+  "id": "adele",
+  "name": "Adele",
+  "author": "MiniFeather",
+  "version": 1,
+  "skin": "adele.png",
+  "sprites": {
+    "front": "al frente.png",
+    "left": "izquierda.png",
+    "right": "derecha.png",
+    "blink": "blink.png"
+  }
+}
