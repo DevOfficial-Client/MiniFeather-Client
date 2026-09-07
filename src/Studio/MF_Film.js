@@ -774,6 +774,7 @@
         setPlayRange, getPlayRange, despawnActors,
         diag,
         listFilms() { return Object.keys(loadFilms()); },
+        getFilm(name) { const f = loadFilms(); return f[name] || null; },
         get status() {
             return {
                 recording: state.recording,

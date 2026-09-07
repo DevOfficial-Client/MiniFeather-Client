@@ -1,0 +1,13 @@
+{
+  "id": "celeste",
+  "name": "Celeste",
+  "author": "MiniFeather",
+  "version": 1,
+  "skin": "celeste.png",
+  "sprites": {
+    "front": "afrente.png",
+    "left": "izquierda.png",
+    "right": "derecha.png",
+    "blink": "blink.png"
+  }
+}

@@ -36,138 +36,173 @@
     const ID = 'mf-studio';
     const CSS = `
 #mf-studio * { box-sizing: border-box; margin: 0; padding: 0; }
+/* ═══ Estilo BBS (replicación visual del mod) ═══
+   Paleta: ACTIVE #0088FF · CURSOR #57F52A · fondo panel #001B33
+   (primaryColor × 0.2) · CONTROL_BAR #141417 · A50 rgba(0,0,0,.53) ·
+   A75 rgba(0,0,0,.73) · TODO cuadrado, texto con sombra 1px estilo MC */
 #mf-studio {
     position: fixed; inset: 0; z-index: 2147483000;
     display: flex; flex-direction: column;
-    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Consolas', 'Courier New', monospace;
     background: transparent; color: #e8e8ec;
     pointer-events: none;
 }
+#mf-studio * { text-shadow: 1px 1px 0 rgba(0,0,0,.8); }
 #mf-studio .panel {
-    background: rgba(27, 27, 31, 0.92);
-    border: 1px solid #32323a; pointer-events: auto;
-    backdrop-filter: blur(6px);
+    background: rgba(0,0,0,.73); pointer-events: auto;
 }
-/* ── top bar ── */
-#mf-studio-top {
-    height: 42px; display: flex; align-items: center; gap: 10px;
-    padding: 0 12px; background: rgba(20, 20, 24, 0.95);
-    border-bottom: 1px solid #32323a; pointer-events: auto;
+/* ── editor principal: [main 66% | derecha 34% | iconBar 20px] ──
+   Los paneles son OPACOS (como BBS): la escena del juego solo se ve
+   a través del hueco del preview (ventana única a la escena) */
+#mf-studio-main { flex: 1; display: flex; min-height: 0; position: relative; }
+#mf-studio-mainzone {
+    flex: 0 0 66%; display: flex; flex-direction: column;
+    min-width: 0; position: relative; background: #001B33;
+    pointer-events: auto; border-right: 1px solid rgba(255,255,255,.13);
 }
-#mf-studio-top .logo { font-weight: 700; letter-spacing: 2px; color: #ff6b2b; font-size: 12px; }
-#mf-studio-top .project {
-    font-size: 11px; color: #9a9aa6; border: 1px solid #3a3a44;
-    padding: 3px 9px; border-radius: 3px; min-width: 140px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px;
-}
-#mf-studio-top .spacer { flex: 1; }
-/* grupos de botones separados por línea vertical (estilo Resolve) */
-#mf-studio-top .btn-group {
-    display: flex; align-items: center; gap: 4px; padding: 0 4px;
-    border-left: 1px solid #2a2a32;
-}
-#mf-studio-top .btn-group:first-of-type { border-left: none; }
-.mfs-btn {
-    background: transparent; border: 1px solid transparent; color: #c8c8d2;
-    height: 28px; padding: 0 9px; border-radius: 4px; font-size: 12px;
-    cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
-    white-space: nowrap; transition: background .12s, color .12s, border-color .12s;
-}
-.mfs-btn:hover { background: #2e2e38; color: #fff; }
-.mfs-btn:disabled { opacity: .35; cursor: default; }
-/* variante solo-icono (compacta) */
-.mfs-btn.icon { padding: 0; width: 30px; justify-content: center; font-size: 13px; }
-/* toggle activo (Posing/Compartir/cine) */
-.mfs-btn.on { background: #3ecf8e; color: #0b2e20; font-weight: 700; }
-.mfs-btn.on:hover { background: #55d9a0; color: #0b2e20; }
-.mfs-btn.on.warm { background: #ff6b2b; color: #14141a; }
-.mfs-btn.on.warm:hover { background: #ff7f47; }
-.mfs-btn.primary { background: #ff6b2b; border-color: #ff6b2b; color: #14141a; font-weight: 700; }
-.mfs-btn.primary:hover { background: #ff7f47; }
-.mfs-btn.rec.active { background: #e33; border-color: #e33; color: #fff; animation: mfs-blink 1s infinite; }
-@keyframes mfs-blink { 50% { opacity: .65; } }
-@keyframes mfs-fadeout { 0%,70% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
-/* ── cuerpo ── */
-#mf-studio-body { flex: 1; display: flex; min-height: 0; position: relative; }
-#mf-studio-left {
-    width: 208px; overflow-y: auto; padding: 10px;
-    background: rgba(27, 27, 31, 0.92); border-right: 1px solid #32323a;
-    pointer-events: auto;
+#mf-studio-rightzone {
+    flex: 1; display: flex; flex-direction: column; min-width: 0;
 }
 #mf-studio-preview {
-    flex: 1; position: relative;
+    flex: 1; position: relative; min-height: 0;
+    background: transparent; /* hueco: ventana al canvas del juego */
+    border-bottom: 1px solid rgba(255,255,255,.13);
     pointer-events: auto; /* CRÍTICO: sin esto los clicks atraviesan al
                              canvas del juego y re-atrapan el ratón */
 }
+/* lienzo de trayectoria de cámara (overlay encima del juego) */
+#mf-studio-traj {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 5;
+}
+#mf-studio-traj.hint .traj-hint {
+    display: block;
+}
+#mf-studio-traj .traj-hint {
+    display: none;
+    position: absolute; left: 8px; bottom: 26px;
+    font-size: 11px; line-height: 1.5; color: #9ecbff;
+    text-shadow: 1px 1px 0 rgba(0,0,0,.9);
+    white-space: pre; pointer-events: none;
+}
 #mf-studio-right {
-    width: 240px; padding: 10px; overflow-y: auto;
-    background: rgba(27, 27, 31, 0.92); border-left: 1px solid #32323a;
+    height: 50%; padding: 0; overflow-y: auto;
+    background: #001B33; border-top: 1px solid rgba(255,255,255,.13);
     pointer-events: auto;
 }
-/* scrollbars finos y oscuros */
-#mf-studio ::-webkit-scrollbar { width: 8px; height: 8px; }
+/* ── iconBar lateral derecha (20px, BBS) ── */
+#mf-studio-iconbar {
+    width: 20px; flex-shrink: 0; display: flex; flex-direction: column;
+    background: #001B33; pointer-events: auto;
+    box-shadow: -6px 0 6px -6px rgba(0,0,0,.16) inset;
+}
+#mf-studio-iconbar .ib {
+    width: 20px; height: 20px; flex-shrink: 0; border: 0; cursor: pointer;
+    background: transparent; color: #ccc; font-size: 10px; line-height: 20px;
+    padding: 0; text-align: center; font-family: inherit;
+}
+#mf-studio-iconbar .ib:hover { color: #fff; background: rgba(255,255,255,.07); }
+#mf-studio-iconbar .ib.on {
+    color: #fff;
+    background: linear-gradient(90deg, rgba(0,136,255,.73), #0088FF);
+    box-shadow: inset 2px 0 0 #0088FF;
+}
+#mf-studio-iconbar .ib-div { height: 1px; margin: 0 3px; background: rgba(255,255,255,.13); }
+#mf-studio-iconbar .ib-gap { height: 8px; }
+/* ── taskbar inferior (20px, BBS CONTROL_BAR) ── */
+#mf-studio-top {
+    height: 20px; display: flex; align-items: center; gap: 8px;
+    padding: 0 8px; background: #141417;
+    border-top: 1px solid rgba(255,255,255,.27); pointer-events: auto;
+    font-size: 10px;
+}
+#mf-studio-top .logo { font-weight: 700; letter-spacing: 1px; color: #0088FF; font-size: 10px; }
+#mf-studio-top .project {
+    font-size: 10px; color: #ccc; min-width: 100px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw;
+}
+#mf-studio-top .spacer { flex: 1; }
+#mf-studio-top .btn-group { display: flex; align-items: center; gap: 2px; }
+/* ── botones estilo BBS: cuadrados, 20px, acento #0088FF ── */
+.mfs-btn {
+    background: transparent; border: 0; color: #ccc;
+    height: 20px; padding: 0 6px; font-size: 10px;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+    white-space: nowrap; font-family: inherit; border-radius: 0;
+    transition: background .1s, color .1s;
+}
+.mfs-btn:hover { color: #fff; background: rgba(255,255,255,.07); }
+.mfs-btn:disabled { opacity: .35; cursor: default; }
+.mfs-btn.icon { padding: 0; width: 20px; justify-content: center; font-size: 11px; }
+/* toggle activo: franja inferior 2px + gradiente #0088FF (renderHighlight BBS) */
+.mfs-btn.on {
+    color: #fff;
+    background: linear-gradient(180deg, #0088FF, rgba(0,136,255,.73));
+    box-shadow: inset 0 -2px 0 #0088FF;
+}
+.mfs-btn.primary { background: #0088FF; color: #fff; font-weight: 700; }
+.mfs-btn.primary:hover { background: #0077dd; }
+.mfs-btn.rec.active, .mfs-btn.rec-on { background: #FF3333; color: #fff; animation: mfs-blink 1s infinite; }
+@keyframes mfs-blink { 50% { opacity: .65; } }
+@keyframes mfs-fadeout { 0%,70% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+/* ── fila de botones del preview (centrada abajo, gradiente A50, BBS) ── */
+#mfs-previewbar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 20px;
+    display: flex; align-items: center; justify-content: center; gap: 2px;
+    background: linear-gradient(180deg, transparent, rgba(0,0,0,.53));
+    pointer-events: auto;
+}
+/* scrollbars biseladas estilo BBS (4px, #AAAAAA/#666/#EEE) */
+#mf-studio ::-webkit-scrollbar { width: 4px; height: 4px; }
 #mf-studio ::-webkit-scrollbar-track { background: transparent; }
-#mf-studio ::-webkit-scrollbar-thumb { background: #33333e; border-radius: 4px; }
-#mf-studio ::-webkit-scrollbar-thumb:hover { background: #44444f; }
-/* ── timeline ── */
+#mf-studio ::-webkit-scrollbar-thumb {
+    background: #aaaaaa; border: 1px solid #666666; outline: 1px solid #eeeeee;
+}
+#mf-studio ::-webkit-scrollbar-thumb:hover { background: #ccc; }
+/* ── timeline (lo pinta MF_Timeline; alto completo de la mainzone) ── */
 #mf-studio-timeline {
-    height: 190px; background: rgba(20, 20, 24, 0.95);
-    border-top: 1px solid #32323a; pointer-events: auto;
+    flex: 1; min-height: 0; background: #001B33;
+    pointer-events: auto; display: flex; flex-direction: column;
+}
+/* ── overlay del media pool (dropShadow BBS: halo A25) ── */
+#mf-studio-pool {
+    position: absolute; top: 0; bottom: 0; left: 0; width: 236px;
+    background: #001B33; pointer-events: auto; z-index: 30;
     display: flex; flex-direction: column;
+    box-shadow: 4px 0 12px rgba(0,0,0,.5);
 }
-#mf-studio-ruler {
-    height: 26px; position: relative; cursor: pointer;
-    border-bottom: 1px solid #2a2a32; background: #16161a;
+#mf-studio-pool.hidden { display: none; }
+#mfs-pool-bar {
+    height: 20px; display: flex; align-items: center; gap: 2px; padding: 0 4px;
+    background: #141417; border-bottom: 1px solid rgba(255,255,255,.13);
+    flex-shrink: 0;
 }
-#mf-studio-ruler canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-#mf-studio-tracks { flex: 1; overflow-y: auto; padding: 6px 8px; }
-.mfs-track {
-    height: 34px; display: flex; align-items: center; gap: 8px;
-    border-bottom: 1px solid #232329; position: relative;
+#mfs-pool-bar .title { font-size: 10px; color: #ccc; margin-right: auto; padding-left: 2px; }
+#mf-studio-left {
+    flex: 1; overflow-y: auto; padding: 8px;
 }
-.mfs-track .label {
-    width: 90px; font-size: 11px; color: #9a9aa6; flex-shrink: 0;
-    text-transform: uppercase; letter-spacing: 1px;
-}
-.mfs-track .lane { flex: 1; height: 22px; background: #141419; border-radius: 2px; position: relative; overflow: hidden; }
-.mfs-kf {
-    position: absolute; top: 2px; width: 3px; height: 18px;
-    background: #ff6b2b; border-radius: 1px;
-}
-.mfs-kf.face { background: #4fc3f7; }
-.mfs-kf.audio { background: #81c784; }
-/* cabezal de reproducción */
-#mf-studio-playhead {
-    position: absolute; top: 0; bottom: 0; width: 1px;
-    background: #fff; pointer-events: none; z-index: 5;
-}
-#mf-studio-playhead::before {
-    content: ''; position: absolute; top: 0; left: -5px;
-    border: 5px solid transparent; border-top-color: #ff6b2b;
-}
-/* ── panels internos ── */
-.mfs-section { margin-bottom: 16px; }
+/* ── paneles internos ── */
+.mfs-section { margin-bottom: 14px; }
 .mfs-section h3 {
-    font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
-    color: #6e6e7a; margin-bottom: 8px; font-weight: 600;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+    color: #aaa; margin-bottom: 6px; font-weight: 700;
     display: flex; align-items: center; justify-content: space-between;
 }
-/* botón pequeño al lado del título de sección */
 .mfs-section h3 .mini {
-    background: transparent; border: 1px solid #3a3a44; color: #9a9aa6;
-    font-size: 10px; border-radius: 3px; padding: 2px 7px; cursor: pointer;
-    line-height: 1.3;
+    background: #0088FF; border: 0; color: #fff;
+    font-size: 10px; padding: 2px 6px; cursor: pointer;
+    line-height: 1.3; font-family: inherit; border-radius: 0;
 }
-.mfs-section h3 .mini:hover { background: #2e2e38; color: #fff; }
+.mfs-section h3 .mini:hover { background: #0077dd; }
 .mfs-item {
-    padding: 6px 9px; border-radius: 4px; font-size: 12px;
-    cursor: pointer; color: #c8c8d2; display: flex; justify-content: space-between;
+    padding: 3px 6px; font-size: 11px; border-radius: 0;
+    cursor: pointer; color: #ccc; display: flex; justify-content: space-between;
     border: 1px solid transparent;
 }
-.mfs-item:hover { background: #26262e; }
-.mfs-item.active { background: #ff6b2b; color: #14141a; font-weight: 600; }
-.mfs-item .meta { color: #6e6e7a; font-size: 10px; }
-.mfs-item.active .meta { color: #3a2010; }
+.mfs-item:hover { background: rgba(0,136,255,.25); color: #fff; }
+.mfs-item.active { background: #0088FF; color: #fff; font-weight: 700; }
+.mfs-item .meta { color: #888; font-size: 10px; }
+.mfs-item.active .meta { color: rgba(255,255,255,.8); }
 /* Media Pool */
 .media-item { display: flex; align-items: center; gap: 8px; justify-content: flex-start; }
 .media-item .thumb { font-size: 16px; opacity: .9; }
@@ -180,47 +215,46 @@
 .media-item:hover .mi-del { opacity: .7; }
 .media-item .mi-del:hover { opacity: 1; }
 .media-item[draggable] { cursor: grab; }
-/* miniaturas de presets de cabeza en el pool */
 .media-head {
-    height: 34px; border: 1px solid #32323a; border-radius: 3px; overflow: hidden;
-    cursor: grab; background: #0c0c10; display: flex; align-items: center; justify-content: center;
+    height: 34px; border: 1px solid rgba(255,255,255,.27); border-radius: 0; overflow: hidden;
+    cursor: grab; background: rgba(0,0,0,.73); display: flex; align-items: center; justify-content: center;
 }
-.media-head:hover { border-color: #ff6b2b; }
+.media-head:hover { border-color: #0088FF; }
 .media-head img { max-height: 100%; max-width: 100%; image-rendering: pixelated; }
-.mfs-prop { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 12px; }
-.mfs-prop label { color: #9a9aa6; }
+.mfs-prop { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 11px; }
+.mfs-prop label { color: #aaa; }
 .mfs-prop .val { color: #e8e8ec; font-family: 'Consolas', monospace; font-size: 11px; }
 .mfs-status {
-    padding: 8px 10px; background: #141419; border-radius: 3px;
-    font-size: 11px; color: #9a9aa6; line-height: 1.6; margin-top: 10px;
+    padding: 6px 8px; background: rgba(0,0,0,.73); border-radius: 0;
+    font-size: 10px; color: #aaa; line-height: 1.6; margin: 8px 6px;
     font-family: 'Consolas', monospace;
 }
 /* ── Modelos 3D (cargador) ── */
 .model-item {
-    display: flex; align-items: center; gap: 6px; padding: 5px 7px;
-    border-radius: 4px; font-size: 11px; cursor: pointer; color: #c8c8d2;
+    display: flex; align-items: center; gap: 6px; padding: 4px 6px;
+    border-radius: 0; font-size: 11px; cursor: pointer; color: #ccc;
     border: 1px solid transparent;
 }
-.model-item:hover { background: #26262e; }
-.model-item.live { border-color: #3ecf8e55; background: #1d2b24; }
+.model-item:hover { background: rgba(0,136,255,.25); }
+.model-item.live { border-color: #33FF3388; background: rgba(51,255,51,.1); }
 .model-item .m-icon { font-size: 13px; flex-shrink: 0; }
 .model-item .m-name {
     flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     color: #e8e8ec;
 }
 .model-item .m-act {
-    font-size: 11px; opacity: 0; padding: 1px 4px; border-radius: 3px;
-    flex-shrink: 0; color: #9a9aa6;
+    font-size: 11px; opacity: 0; padding: 1px 4px; border-radius: 0;
+    flex-shrink: 0; color: #aaa;
 }
 .model-item:hover .m-act { opacity: .85; }
-.model-item .m-act:hover { color: #fff; background: #3a3a44; }
-.model-item .m-tag { font-size: 9px; color: #3ecf8e; flex-shrink: 0; }
+.model-item .m-act:hover { color: #fff; background: rgba(255,255,255,.13); }
+.model-item .m-tag { font-size: 9px; color: #33FF33; flex-shrink: 0; }
 .model-drop {
-    border: 1px dashed #3a3a44; border-radius: 4px; padding: 10px 8px;
-    text-align: center; font-size: 10.5px; color: #6e6e7a; cursor: pointer;
+    border: 1px dashed rgba(255,255,255,.27); border-radius: 0; padding: 10px 8px;
+    text-align: center; font-size: 10.5px; color: #888; cursor: pointer;
     line-height: 1.5; margin-bottom: 6px; transition: border-color .15s, color .15s;
 }
-.model-drop:hover, .model-drop.over { border-color: #ff6b2b; color: #ff6b2b; }
+.model-drop:hover, .model-drop.over { border-color: #0088FF; color: #0088FF; }
 /* modo cine: el HUD del juego se oculta desde JS (applyCinema), no por CSS
    de hermano — el canvas WebGL debe seguir visible bajo el preview */
 `;
@@ -633,10 +667,12 @@
     function afkToggle(on) {
         if (on === undefined) on = !afk.on;
         afk.on = !!on;
-        const btn = document.getElementById('mfs-afk');
-        if (btn) {
-            btn.classList.toggle('on', afk.on);
-            btn.title = afk.on ? 'Anti-AFK activo: micro-rotaciones nativas cada ~30s' : 'Activar anti-kick mientras el estudio está abierto';
+        for (const id of ['mfs-afk', 'mfs-ib-afk']) {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.classList.toggle('on', afk.on);
+                btn.title = afk.on ? 'Anti-AFK activo: micro-rotaciones nativas cada ~30s' : 'Activar anti-kick mientras el estudio está abierto';
+            }
         }
         if (afk.on) {
             afkHookPlayer(getGame()?.player);
@@ -668,55 +704,20 @@
         root.id = ID;
         if (state.cinema) root.classList.add('cinema');
 
-        // top bar — grupos: transporte | rango | herramientas | salir
-        const top = el('div', '', '');
-        top.id = 'mf-studio-top';
-        top.innerHTML = `
-            <span class="logo">MF STUDIO</span>
-            <span class="project" id="mfs-project">Proyecto: sin toma activa</span>
-            <span class="spacer"></span>
-            <span class="btn-group">
-                <button class="mfs-btn icon" id="mfs-home" title="Ir al inicio (Home)">⏮</button>
-                <button class="mfs-btn primary" id="mfs-play" title="Reproducir/Pausa (Space)">▶</button>
-                <button class="mfs-btn icon" id="mfs-stop" title="Detener (S)">⏹</button>
-                <button class="mfs-btn rec" id="mfs-rec" title="Grabar (R)">●</button>
-            </span>
-            <span class="btn-group">
-                <button class="mfs-btn" id="mfs-in" title="Marcar IN aquí (I)">{ IN</button>
-                <button class="mfs-btn" id="mfs-out" title="Marcar OUT aquí (O)">OUT }</button>
-                <button class="mfs-btn icon" id="mfs-range-clear" title="Quitar In/Out (reproduce todo)" style="display:none">⨯</button>
-            </span>
-            <span class="btn-group">
-                <button class="mfs-btn" id="mfs-pose-vp" title="Posar extremidades: click der. en el cuerpo + arrastrar (rueda=yaw, Alt+rueda=tamaño)">🦴 Posing</button>
-                <button class="mfs-btn" id="mfs-share" title="Compartir pose/animación por P2P sin controlar la cámara del otro jugador">📡</button>
-                <button class="mfs-btn icon" id="mfs-skineditor" title="Editor de cabeza en vivo (dibujar base + overlay)">🎨</button>
-                <button class="mfs-btn icon" id="mfs-skinchanger" title="Skins PNG en vivo (biblioteca + drag al timeline)">👕</button>
-                <button class="mfs-btn icon" id="mfs-morph" title="Morph: transformarse en mobs del mundo (client-side)">🧬</button>
-                <button class="mfs-btn icon" id="mfs-models" title="Cargar modelo 3D (.glb/.gltf/.obj)">📦</button>
-            </span>
-            <span class="btn-group">
-                <button class="mfs-btn icon" id="mfs-cinema" title="Ocultar/mostrar HUD del juego">🎬</button>
-                <button class="mfs-btn icon" id="mfs-afk" title="Anti-AFK: evita el kick por inactividad mientras editas (micro-rotaciones invisibles)">🛡</button>
-                <button class="mfs-btn icon" id="mfs-close" title="Cerrar (F1)">✕</button>
-            </span>
-        `;
+        // ═══ layout BBS: [mainzone: timeline 66% | rightzone: preview+editArea] + iconBar + taskbar ═══
+        const main = el('div');
+        main.id = 'mf-studio-main';
 
-        // cuerpo
-        const body = el('div');
-        body.id = 'mf-studio-body';
+        // ── mainzone (izquierda, 66%): timeline de clips de cámara ──
+        const mainzone = el('div');
+        mainzone.id = 'mf-studio-mainzone';
+        const tl = el('div');
+        tl.id = 'mf-studio-timeline';
+        mainzone.appendChild(tl);
 
-        const left = el('div');
-        left.id = 'mf-studio-left';
-        left.innerHTML = `<div class="mfs-section"><h3>Media Pool</h3><div id="mfs-mediapool"></div></div>
-<div class="mfs-section"><h3>Modelos 3D <button class="mini" id="mfs-model-add" title="Cargar .glb/.gltf/.obj del disco">+ Cargar</button></h3>
-<div class="model-drop" id="mfs-model-drop" title="Clic para elegir archivo">📦 Suelta un modelo aquí<br>.glb · .gltf · .obj</div>
-<div id="mfs-models-list"></div></div>
-<div class="mfs-section"><h3>Tomas</h3><div id="mfs-takes"></div></div>
-<div class="mfs-section"><h3>Skins PNG <button class="mini" id="mfs-skins-add" title="Importar .png de skin (64x64/64x32)">+ Importar</button></h3>
-<div class="model-drop" id="mfs-skins-drop" title="Clic para elegir PNGs">👕 Suelta skins .png aquí<br>64x64 · 64x32</div>
-<div id="mfs-skins-list"></div></div>
-<div class="mfs-section"><h3>Morph (mobs) <button class="mini" id="mfs-morph-rescan" title="Volver a escanear mobs del mundo">⟳</button></h3><div id="mfs-morph-list"></div></div>
-<div class="mfs-section"><h3>Caras (face swap)</h3><div id="mfs-faces"></div></div>`;
+        // ── rightzone (34%): preview arriba + editArea (inspector) abajo ──
+        const rightzone = el('div');
+        rightzone.id = 'mf-studio-rightzone';
 
         const preview = el('div');
         preview.id = 'mf-studio-preview';
@@ -734,29 +735,116 @@
         gtoggle.style.cssText = `
             position:absolute;top:10px;right:10px;pointer-events:auto;`;
         preview.appendChild(gtoggle);
-        // hint de controles de cámara (abajo centro, se desvanece)
+        // hint de controles de cámara (se desvanece)
         const hint = el('div');
-        hint.innerHTML = '🖱 Click+arrastrar: rotar cámara · WASD/QE: mover · Ctrl: rápido · 🦴 Posing: click der. en extremidad (rueda=yaw, Alt+rueda=tamaño)';
+        hint.innerHTML = '🖱 Click+arrastrar: rotar cámara · WASD/QE: mover · Ctrl: rápido · 🦴 Posing: click der. en extremidad';
         hint.style.cssText = `
-            position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
-            background:rgba(20,20,24,.85);border:1px solid #32323a;border-radius:4px;
-            padding:6px 14px;font-size:11px;color:#9a9aa6;pointer-events:none;
+            position:absolute;bottom:26px;left:50%;transform:translateX(-50%);
+            background:rgba(0,0,0,.73);border:1px solid rgba(255,255,255,.13);padding:4px 10px;
+            font-size:10px;color:#aaa;pointer-events:none;
             animation:mfs-fadeout 6s forwards;white-space:nowrap;`;
         preview.appendChild(hint);
+        // ── fila de botones del preview (BBS: centrada abajo, gradiente) ──
+        const pbar = el('div');
+        pbar.id = 'mfs-previewbar';
+        pbar.innerHTML = `
+            <button class="mfs-btn icon" id="mfs-pv-replays"  title="Replays / tomas grabadas (media pool)">🎞</button>
+            <button class="mfs-btn icon" id="mfs-pv-plause"   title="Play/Pausa (Space)">▶</button>
+            <button class="mfs-btn icon" id="mfs-pv-teleport" title="Teleportarse a la cámara">✈</button>
+            <button class="mfs-btn icon on" id="mfs-pv-flight" title="Modo vuelo (cámara libre)">🛩</button>
+            <button class="mfs-btn icon" id="mfs-pv-control"  title="Controlar actor / posar extremidades">🦴</button>
+            <button class="mfs-btn icon" id="mfs-pv-player"   title="Controlar jugador (H) — WASD mueve al jugador, cámara estática, mouse bloqueado">🎮</button>
+            <button class="mfs-btn icon" id="mfs-pv-record"   title="Grabar replay (R)">●</button>
+            <button class="mfs-btn icon" id="mfs-pv-video"    title="Renderizar a video .webm">⏺</button>
+            <button class="mfs-btn icon" id="mfs-pv-traj"     title="Lienzo de trayectoria (T) — dibuja el recorrido de los clips de cámara">🧭</button>`;
+        preview.appendChild(pbar);
+        // ── lienzo de trayectoria de cámara (overlay encima del juego) ──
+        const trajCv = el('canvas');
+        trajCv.id = 'mf-studio-traj';
+        preview.appendChild(trajCv);
+        const trajHint = el('div');
+        trajHint.className = 'traj-hint';
+        trajHint.textContent = '🧭 Trayectoria: puntos = keyframes · línea = recorrido · ◀▶ = clip anterior/siguiente';
+        trajCv.appendChild(trajHint);
+        rightzone.appendChild(preview);
 
+        // ── editArea (inspector, abajo derecha) ──
         const right = el('div');
         right.id = 'mf-studio-right';
         right.innerHTML = `<div class="mfs-section"><h3>Propiedades</h3><div id="mfs-props"></div></div>
 <div class="mfs-section"><h3>Editor de pose</h3><div id="mfs-pose"></div></div>`;
+        rightzone.appendChild(right);
 
-        body.appendChild(left); body.appendChild(preview); body.appendChild(right);
+        // ── overlay del media pool (panel izquierdo deslizante, BBS) ──
+        const pool = el('div');
+        pool.id = 'mf-studio-pool';
+        pool.innerHTML = `
+            <div id="mfs-pool-bar">
+                <span class="title">MEDIA POOL</span>
+                <button class="mfs-btn icon" id="mfs-pool-close" title="Cerrar (P)">✕</button>
+            </div>
+            <div id="mf-studio-left">
+<div class="mfs-section"><h3>Media Pool</h3><div id="mfs-mediapool"></div></div>
+<div class="mfs-section"><h3>Modelos 3D <button class="mini" id="mfs-model-add" title="Cargar .glb/.gltf/.obj del disco">+ Cargar</button></h3>
+<div class="model-drop" id="mfs-model-drop" title="Clic para elegir archivo">📦 Suelta un modelo aquí<br>.glb · .gltf · .obj</div>
+<div id="mfs-models-list"></div></div>
+<div class="mfs-section"><h3>Tomas</h3><div id="mfs-takes"></div></div>
+<div class="mfs-section"><h3>Skins PNG <button class="mini" id="mfs-skins-add" title="Importar .png de skin (64x64/64x32)">+ Importar</button></h3>
+<div class="model-drop" id="mfs-skins-drop" title="Clic para elegir PNGs">👕 Suelta skins .png aquí<br>64x64 · 64x32</div>
+<div id="mfs-skins-list"></div></div>
+<div class="mfs-section"><h3>Morph (mobs) <button class="mini" id="mfs-morph-rescan" title="Volver a escanear mobs del mundo">⟳</button></h3><div id="mfs-morph-list"></div></div>
+<div class="mfs-section"><h3>Cámara (clips BBS) <button class="mini" id="mfs-cam-clear" title="Borrar todos los clips de cámara/subtítulo/audio">🗑</button></h3><div id="mfs-cam-list"></div></div>
+<div class="mfs-section"><h3>Caras (face swap)</h3><div id="mfs-faces"></div></div>
+            </div>`;
+        mainzone.appendChild(pool);
 
-        // timeline (montado por MF_Timeline dentro de este contenedor)
-        const tl = el('div');
-        tl.id = 'mf-studio-timeline';
+        // ── iconBar (derecha, 20px) — orden BBS ──
+        const iconbar = el('div');
+        iconbar.id = 'mf-studio-iconbar';
+        iconbar.innerHTML = `
+            <button class="ib" id="mfs-ib-pool"   title="Media pool (P)">🗂</button>
+            <button class="ib" id="mfs-ib-cam"    title="Clips de cámara">🎥</button>
+            <button class="ib" id="mfs-ib-undo"   title="Deshacer (Ctrl+Z)">↶</button>
+            <button class="ib" id="mfs-ib-redo"   title="Rehacer (Ctrl+Y)">↷</button>
+            <div class="ib-div"></div>
+            <button class="ib" id="mfs-ib-skineditor" title="Editor de cabeza">🎨</button>
+            <button class="ib" id="mfs-ib-skinchanger" title="Skins PNG">👕</button>
+            <button class="ib" id="mfs-ib-morph"  title="Morph (mobs)">🧬</button>
+            <button class="ib" id="mfs-ib-models" title="Modelos 3D">📦</button>
+            <div class="ib-gap"></div>
+            <button class="ib" id="mfs-ib-share"  title="Compartir pose + cámara con el peer (P2P)">📡</button>
+            <button class="ib" id="mfs-ib-cinema" title="Modo cine (ocultar HUD)">🎬</button>
+            <button class="ib" id="mfs-ib-afk"    title="Anti-AFK">🛡</button>
+            <button class="ib" id="mfs-ib-close"  title="Cerrar (F1)">✕</button>`;
 
-        root.appendChild(top); root.appendChild(body); root.appendChild(tl);
+        // ── taskbar (abajo, 20px) — transporte + rango, BBS ──
+        const top = el('div', '', '');
+        top.id = 'mf-studio-top';
+        top.innerHTML = `
+            <span class="logo">MF STUDIO</span>
+            <span class="project" id="mfs-project">Proyecto: sin toma activa</span>
+            <span class="spacer"></span>
+            <span class="btn-group">
+                <button class="mfs-btn icon" id="mfs-home" title="Ir al inicio (Home)">⏮</button>
+                <button class="mfs-btn primary" id="mfs-play" title="Reproducir/Pausa (Space)">▶</button>
+                <button class="mfs-btn icon" id="mfs-stop" title="Detener (S)">⏹</button>
+                <button class="mfs-btn rec" id="mfs-rec" title="Grabar (R)">●</button>
+            </span>
+            <span class="btn-group">
+                <button class="mfs-btn" id="mfs-in" title="Marcar IN aquí (I)">{ IN</button>
+                <button class="mfs-btn" id="mfs-out" title="Marcar OUT aquí (O)">OUT }</button>
+                <button class="mfs-btn icon" id="mfs-range-clear" title="Quitar In/Out (reproduce todo)" style="display:none">⨯</button>
+            </span>`;
+
+        main.appendChild(mainzone);
+        main.appendChild(rightzone);
+        main.appendChild(iconbar);
+        root.appendChild(main);
+        root.appendChild(top); // taskbar al fondo (BBS la tiene abajo)
         document.body.appendChild(root);
+
+        // mover los modales existentes (skin editor/changer/morph) no hace
+        // falta: viven fuera del overlay y applyCinema los respeta (mf-*)
 
         bind();
         window.MF_Timeline?.mount(tl, { onChange: onTimelineChange });
@@ -766,8 +854,6 @@
     function bind() {
         const $ = (id) => document.getElementById(id);
 
-        $('mfs-close').onclick = close;
-        $('mfs-skineditor').onclick = () => { window.MF_SkinEditor?.open(); };
         $('mfs-home').onclick = () => { seek(0); };
         $('mfs-in').onclick = markIn;
         $('mfs-out').onclick = markOut;
@@ -780,9 +866,6 @@
             updateButtons();
         };
         $('mfs-rec').onclick = toggleRec;
-        $('mfs-pose-vp').onclick = () => posingToggle(!posing.enabled);
-        $('mfs-share').onclick = shareToggle;
-        $('mfs-models').onclick = modelPickFiles;
         $('mfs-model-add').onclick = modelPickFiles;
         // zona drop de modelos + drag&drop de archivos
         const dropZone = $('mfs-model-drop');
@@ -797,9 +880,16 @@
                 if (files.length) modelLoadFiles(files);
             });
         }
-        $('mfs-afk').onclick = () => afkToggle();
-        // ── skins PNG (SkinChanger): botón topbar + sección izquierda ──
-        $('mfs-skinchanger').onclick = () => window.MF_SkinChanger?.open();
+        $('mfs-afk')?.addEventListener?.('click', () => afkToggle());
+        // ── clips de cámara estilo BBS (MF_FilmCamera) ──
+        $('mfs-cam-clear').onclick = () => {
+            if (!confirm('¿Borrar TODOS los clips de cámara, subtítulos y audio?')) return;
+            window.MF_FilmCamera?.clear?.();
+            refreshCamList();
+            window.MF_Timeline?.render?.();
+        };
+        refreshCamList();
+        // ── skins PNG (SkinChanger): sección del pool ──
         const skinsInput = el('input');
         skinsInput.type = 'file';
         skinsInput.accept = 'image/png,.png';
@@ -822,8 +912,7 @@
         }
         window.addEventListener('mf:skinchanger-items', () => refreshSkinsList(), { once: false });
         refreshSkinsList();
-        // ── morph (MF_Morph): botón topbar + sección izquierda ──
-        $('mfs-morph').onclick = () => window.MF_Morph?.open();
+        // ── morph (MF_Morph): sección izquierda ──
         $('mfs-morph-rescan').onclick = () => {
             window.MF_Morph?.scan?.(true);
             refreshMorphList();
@@ -836,12 +925,57 @@
             gm.onclick = () => gizmoSetMode(gizmo.mode === 'move' ? 'rotate' : 'move');
             gizmoSetMode(gizmo.mode); // estado inicial
         }
-        $('mfs-cinema').onclick = () => {
+        // ── iconBar (BBS) ──
+        const ib = (id, fn) => { const b = $(id); if (b) b.onclick = fn; };
+        // pool overlay (media pool deslizante estilo BBS)
+        const p = document.getElementById('mf-studio-pool');
+        if (p) {
+            if (!poolOpen) p.classList.add('hidden');
+            document.getElementById('mfs-ib-pool')?.classList.toggle('on', poolOpen);
+        }
+        ib('mfs-ib-pool', () => poolToggle(!poolOpen));
+        ib('mfs-ib-cam', () => camPanelToggle());
+        ib('mfs-ib-undo', () => window.MF_Undo?.undo?.());
+        ib('mfs-ib-redo', () => window.MF_Undo?.redo?.());
+        ib('mfs-ib-skineditor', () => window.MF_SkinEditor?.open());
+        ib('mfs-ib-skinchanger', () => window.MF_SkinChanger?.open());
+        ib('mfs-ib-morph', () => window.MF_Morph?.open());
+        ib('mfs-ib-models', () => modelPickFiles());
+        ib('mfs-ib-share', () => shareToggle());
+        ib('mfs-ib-cinema', () => {
             state.cinema = !state.cinema;
             document.getElementById(ID)?.classList.toggle('cinema', state.cinema);
             applyCinema();
-            $('mfs-cinema').classList.toggle('on', state.cinema);
+            document.getElementById('mfs-ib-cinema')?.classList.toggle('on', state.cinema);
+        });
+        document.getElementById('mfs-ib-cinema')?.classList.toggle('on', state.cinema);
+        ib('mfs-ib-afk', () => afkToggle());
+        ib('mfs-ib-close', close);
+        // ── previewbar (BBS) ──
+        $('mfs-pv-replays').onclick = () => poolToggle(true);
+        $('mfs-pv-plause').onclick = togglePlay;
+        $('mfs-pv-teleport').onclick = () => {
+            // llevar al jugador a la cámara (teleport estilo BBS)
+            const g = getGame();
+            const p = g?.player;
+            if (p && cam.pos) {
+                try { p.position?.set?.(cam.pos.x, cam.pos.y, cam.pos.z); } catch {}
+                try { p.rotation?.set?.(cam.pitch, cam.yaw, 0); } catch {}
+                updateStatus('✈ jugador llevado a la cámara');
+            }
         };
+        $('mfs-pv-flight').onclick = () => {
+            if (cam.active) cameraDisable();
+            else cameraEnable();
+            $('mfs-pv-flight')?.classList.toggle('on', cam.active);
+        };
+        $('mfs-pv-control').onclick = () => posingToggle(!posing.enabled);
+        $('mfs-pv-player').onclick = () => playerControlToggle();
+        $('mfs-pv-record').onclick = toggleRec;
+        $('mfs-pv-traj').onclick = () => trajToggle();
+        $('mfs-pv-video').onclick = renderVideo;
+        // ── pool overlay ──
+        ib('mfs-pool-close', () => poolToggle(false));
 
         // atajos de teclado (registrados UNA sola vez: guard contra acumulación
         // de listeners en reaperturas del estudio, que congelaba la página)
@@ -849,12 +983,22 @@
             state.keysBound = true;
             window.addEventListener('keydown', (ev) => {
                 if (!state.open) return;
+                // en modo control del jugador las teclas son del juego
+                // (WASD/salto/esc); solo F1 y H siguen siendo nuestros
+                if (playerCtrl.active) {
+                    if (ev.key === 'F1') { ev.preventDefault(); close(); }
+                    return;
+                }
                 if (ev.key === 'F1') { ev.preventDefault(); close(); }
                 else if (ev.code === 'Space' && !isTypingTarget(ev.target)) { ev.preventDefault(); togglePlay(); }
                 else if (ev.key === 'Home') { ev.preventDefault(); seek(0); }
                 else if ((ev.key === 'i' || ev.key === 'I') && !isTypingTarget(ev.target)) markIn();
                 else if ((ev.key === 'o' || ev.key === 'O') && !isTypingTarget(ev.target)) markOut();
+                else if ((ev.key === 'p' || ev.key === 'P') && !isTypingTarget(ev.target)) { ev.preventDefault(); poolToggle(!poolOpen); }
                 else if ((ev.key === 'r' || ev.key === 'R') && !isTypingTarget(ev.target)) { ev.preventDefault(); toggleRec(); }
+                else if ((ev.key === 't' || ev.key === 'T') && !isTypingTarget(ev.target)) { ev.preventDefault(); trajToggle(); }
+                else if (ev.code === 'BracketLeft' && !isTypingTarget(ev.target)) trajCycle(-1);
+                else if (ev.code === 'BracketRight' && !isTypingTarget(ev.target)) trajCycle(1);
                 else if ((ev.key === 'g' || ev.key === 'G') && !isTypingTarget(ev.target)) {
                     ev.preventDefault();
                     gizmoSetMode(gizmo.mode === 'move' ? 'rotate' : 'move');
@@ -1204,15 +1348,21 @@
         const s = window.MF_Film?.status;
         const play = document.getElementById('mfs-play');
         const rec = document.getElementById('mfs-rec');
-        if (!play || !rec) return;
-        if (s?.recording) {
-            play.textContent = '▶'; play.disabled = true;
-            rec.classList.add('active');
-        } else {
-            play.disabled = false;
-            rec.classList.remove('active');
-            play.textContent = s?.playing && !s.paused ? '⏸' : '▶';
+        const pvPlay = document.getElementById('mfs-pv-plause');
+        const pvRec = document.getElementById('mfs-pv-record');
+        const pvFlight = document.getElementById('mfs-pv-flight');
+        const pvCtrl = document.getElementById('mfs-pv-control');
+        if (play) {
+            if (s?.recording) { play.textContent = '▶'; play.disabled = true; }
+            else { play.disabled = false; play.textContent = s?.playing && !s.paused ? '⏸' : '▶'; }
         }
+        rec?.classList.toggle('active', !!s?.recording);
+        if (pvPlay) pvPlay.textContent = s?.playing && !s.paused ? '⏸' : '▶';
+        pvRec?.classList.toggle('active', !!s?.recording);
+        pvFlight?.classList.toggle('on', !!cam.active);
+        if (pvCtrl) pvCtrl.classList.toggle('on', !!posing.enabled);
+        const pvPlayer = document.getElementById('mfs-pv-player');
+        if (pvPlayer) pvPlayer.classList.toggle('on', !!playerCtrl.active);
     }
 
     function updateStatus(extra) {
@@ -1559,9 +1709,18 @@
 
     function uiLoop(now) {
         if (!state.open) return;
+        // mantener el canvas del juego dentro del preview: el juego escribe
+        // estilos inline !important en su resize y pisan la regla CSS;
+        // re-escribirlos cada frame DESPUÉS del render del juego
+        clampGameCanvas();
         // watchdog del pointer lock: el estudio abierto nunca debe tener
         // el ratón atrapado (lo pide el juego vía eventos que no controlamos)
-        if (document.pointerLockElement) releasePointerLock();
+        // EXCEPTO en modo control del jugador: ahí el lock lo pedimos
+        // nosotros a propósito (el juego mueve al jugador con el ratón)
+        if (document.pointerLockElement && !playerCtrl.active) releasePointerLock();
+        // lienzo de trayectoria: redibujar si está activo (la cámara
+        // se mueve → la proyección de las rutas cambia cada frame)
+        if (traj.on) trajDraw();
         // cámara WASD: 60fps con delta time real
         if (lastCamFrame) {
             // Un lag spike o volver de otra pestaña no debe convertirse en un
@@ -1570,6 +1729,8 @@
             applyCameraMovement(dt);
         }
         lastCamFrame = now;
+        // clips de cámara estilo BBS durante el playback (pose + subtítulos)
+        playbackCamTick();
         // Studio Sync: emitir pose local (20 Hz interno, solo si cambió)
         if (p2p.share) emitLocalPose();
         // playhead siempre fluido (solo 1 style write, barato)
@@ -1606,6 +1767,219 @@
     // Sin este guard se acumulaban y multiplicaban la sensibilidad al reabrir.
     let camMouseBound = false;
 
+    // pose actual de la cámara del estudio (para MF_FilmCamera.addFromStudio)
+    function getStudioCamPose() {
+        if (cam.active && cam.pos) {
+            return { x: cam.pos.x, y: cam.pos.y, z: cam.pos.z, yaw: cam.yaw, pitch: cam.pitch,
+                     fov: (cam.origFov != null ? cam.origFov : cam.camera?.fov) || 0 };
+        }
+        return null;
+    }
+    // FOV de la cámara del studio (dolly zoom / keyframes lo animan)
+    function applyCamFov(fov) {
+        if (!cam.camera || !fov) return;
+        try {
+            if (cam.origFov == null) cam.origFov = cam.camera.fov;
+            cam.camera.fov = fov;
+            cam.camera.updateProjectionMatrix?.();
+        } catch {}
+    }
+
+    // ── pool overlay (media pool deslizante estilo BBS) ──
+    let poolOpen = true;
+    function poolToggle(open) {
+        poolOpen = !!open;
+        document.getElementById('mf-studio-pool')?.classList.toggle('hidden', !poolOpen);
+        document.getElementById('mfs-ib-pool')?.classList.toggle('on', poolOpen);
+    }
+
+    // ── clips de cámara estilo BBS (MF_FilmCamera) — panel izquierdo ──
+    let camPanelOpen = false;
+    function camPanelToggle() {
+        camPanelOpen = !camPanelOpen;
+        // la sección vive dentro del pool overlay: si está cerrado, ábrelo
+        if (camPanelOpen) poolToggle(true);
+        const sec = document.getElementById('mfs-cam-list')?.closest('.mfs-section');
+        if (sec) sec.style.display = camPanelOpen ? '' : 'none';
+        document.getElementById('mfs-ib-cam')?.classList.toggle('on', camPanelOpen);
+    }
+    function refreshCamList() {
+        const box = document.getElementById('mfs-cam-list');
+        if (!box) return;
+        const FC = window.MF_FilmCamera;
+        const clips = FC?.clips || [];
+        if (!clips.length) {
+            box.innerHTML = '<div class="mfs-empty">Sin clips.<br>Posiciona la cámara y añade uno:</div>';
+        }
+        // botones de creación (con la pose actual de la cámara)
+        const btns = el('div');
+        btns.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:6px 0;';
+        const types = ['idle', 'keyframe', 'path', 'dolly', 'orbit', 'look', 'shake', 'translate', 'subtitle', 'audio'];
+        for (const t of types) {
+            const T = FC?.TYPES?.[t];
+            if (!T) continue;
+            const b = el('button', 'mfs-btn');
+            b.textContent = `${T.icon} ${T.label}`;
+            b.title = `Añadir clip ${T.label} en el playhead (pose actual de la cámara)`;
+            b.style.cssText = 'padding:4px 6px;font-size:11px;text-align:left;';
+            b.onclick = () => {
+                try {
+                    const c = FC.addFromStudio(t, { start: Math.max(0, Math.round(state.playheadTick || 0)) });
+                    updateStatus(`🎥 clip ${T.label} añadido en ${(c.start / 20).toFixed(1)}s`);
+                    refreshCamList();
+                    window.MF_Timeline?.render?.();
+                } catch (e) { updateStatus('⚠ ' + (e?.message || e)); }
+            };
+            btns.appendChild(b);
+        }
+        box.innerHTML = '';
+        box.appendChild(btns);
+        if (clips.length) {
+            const list = el('div');
+            list.style.cssText = 'display:flex;flex-direction:column;gap:2px;';
+            for (const c of FC.byLayer()) {
+                const T = FC.TYPES[c.type] || {};
+                const row = el('div');
+                row.style.cssText = `display:flex;align-items:center;gap:4px;padding:3px 5px;border-radius:3px;background:${FC.selectedId === c.id ? '#2a3b5a' : '#1d1d24'};cursor:pointer;`;
+                row.innerHTML = `<span>${T.icon || '🎥'}</span>
+                    <span style="flex:1;font-size:11px;${c.enabled ? '' : 'opacity:.45;text-decoration:line-through;'}">${c.title}</span>
+                    <span style="font-size:10px;color:#8a8a96;">${(c.start / 20).toFixed(1)}s</span>`;
+                row.title = `Capa ${c.layer} · ${T.label}\nClick = seleccionar · botones de la derecha para editar`;
+                row.onclick = () => { FC.selectedId = c.id; refreshCamList(); window.MF_Timeline?.render?.(); };
+                // menú de acciones rápido por clip
+                const acts = el('span');
+                acts.style.cssText = 'display:flex;gap:2px;';
+                const mk = (txt, fn, title) => {
+                    const a = el('button', 'mfs-btn icon');
+                    a.textContent = txt; a.title = title;
+                    a.style.cssText = 'padding:1px 5px;font-size:10px;';
+                    a.onclick = (ev) => { ev.stopPropagation(); fn(); };
+                    return a;
+                };
+                acts.appendChild(mk(c.enabled ? '⏸' : '▶', () => { FC.update(c.id, { enabled: !c.enabled }); refreshCamList(); window.MF_Timeline?.render?.(); }, c.enabled ? 'Deshabilitar' : 'Habilitar'));
+                if (c.type === 'keyframe' || c.type === 'path') {
+                    acts.appendChild(mk('＋', () => {
+                        FC.addKeyAt(c.id, Math.max(0, Math.round((state.playheadTick || 0) - c.start)));
+                        updateStatus('🎥 waypoint añadido con la pose actual');
+                        refreshCamList();
+                    }, 'Añadir keyframe/waypoint en el playhead con la pose actual'));
+                }
+                acts.appendChild(mk('🗑', () => { FC.remove(c.id); refreshCamList(); window.MF_Timeline?.render?.(); }, 'Eliminar clip'));
+                row.appendChild(acts);
+                list.appendChild(row);
+            }
+            box.appendChild(list);
+        }
+    }
+
+    // ── cámara durante el playback: aplicar la pose evaluada ──
+    // BBS evalúa los clips de cámara cada tick del film; aquí el hook de
+    // applyCamPose del studio se queda corto (solo impone cam.pos/yaw/pitch),
+    // así que en playback escribimos cam.* directamente y applyCamPose la
+    // impone en el render del juego.
+    let playbackCamActive = false;
+    function playbackCamTick() {
+        const F = window.MF_Film;
+        const FC = window.MF_FilmCamera;
+        if (!F || !FC) return;
+        const s = F.status;
+        if (!s?.playing) {
+            if (playbackCamActive) {
+                playbackCamActive = false;
+                FC.reset();
+                // restaurar FOV si lo animamos
+                if (cam.origFov != null && cam.camera) {
+                    try { cam.camera.fov = cam.origFov; cam.camera.updateProjectionMatrix?.(); } catch {}
+                }
+            }
+            return;
+        }
+        if (!FC.clips.length) return;
+        const pose = FC.onTick(s.tick ?? 0, !s.paused);
+        if (pose?.hasPos) {
+            if (!cam.active) try { cameraEnable(); } catch {}
+            playbackCamActive = true;
+            cam.pos.x = pose.x; cam.pos.y = pose.y; cam.pos.z = pose.z;
+            cam.yaw = pose.yaw; cam.pitch = pose.pitch;
+            applyCamFov(pose.fov || null);
+            // roll: el juego usa rotation YXZ; el roll va como Z
+            if (pose.roll && cam.camera?.rotation?.set) {
+                try { cam._roll = pose.roll; } catch {}
+            }
+        }
+        renderSubtitle(FC.subtitle);
+    }
+
+    // ── subtítulos (clip subtitle de MF_FilmCamera) ──
+    let subEl = null;
+    function renderSubtitle(sub) {
+        if (!sub) { if (subEl) { subEl.remove(); subEl = null; } return; }
+        const root = document.getElementById(ID);
+        if (!root) return;
+        if (!subEl) {
+            subEl = el('div');
+            subEl.style.cssText = `
+                position:absolute;left:0;right:0;pointer-events:none;z-index:50;
+                text-align:center;text-shadow:0 2px 6px rgba(0,0,0,.9);
+                font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+            root.appendChild(subEl);
+        }
+        subEl.style.top = (sub.y * 100) + '%';
+        subEl.style.left = (sub.x * 100) + '%';
+        subEl.style.right = 'auto';
+        subEl.style.transform = `translateX(-50%) scale(${sub.size / 20})`;
+        subEl.style.color = sub.color || '#fff';
+        subEl.style.background = sub.background ? 'rgba(0,0,0,.45)' : 'none';
+        subEl.style.padding = sub.background ? '2px 12px' : '0';
+        subEl.style.borderRadius = '4px';
+        subEl.style.opacity = sub.alpha ?? 1;
+        subEl.textContent = sub.text || '';
+    }
+
+    // ── render de video: MediaRecorder sobre el canvas del juego ──
+    const renderer = { rec: null, chunks: [] };
+    function renderVideo() {
+        if (renderer.rec) { // parar manualmente
+            try { renderer.rec.stop(); } catch {}
+            return;
+        }
+        const F = window.MF_Film;
+        if (!F) return updateStatus('⚠ MF_Film no disponible');
+        const canvas = document.querySelector('#react canvas') || document.querySelector('canvas');
+        if (!canvas) return updateStatus('⚠ no hay canvas del juego');
+        const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+            .find(m => MediaRecorder.isTypeSupported?.(m));
+        if (!mime) return updateStatus('⚠ este navegador no soporta MediaRecorder webm');
+        const stream = canvas.captureStream(60);
+        // nota: el audio de los clips suena por los Audio elements de
+        // MF_FilmCamera durante la sesión (no se muxea al webm — F2)
+        renderer.chunks = [];
+        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
+        rec.ondataavailable = (e) => { if (e.data?.size) renderer.chunks.push(e.data); };
+        rec.onstop = () => {
+            const blob = new Blob(renderer.chunks, { type: mime });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `mf-render-${Date.now()}.webm`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 30_000);
+            renderer.rec = null;
+            updateStatus('⏺ render guardado');
+            document.getElementById('mfs-pv-video')?.classList.remove('rec-on');
+        };
+        renderer.rec = rec;
+        rec.start(250);
+        document.getElementById('mfs-pv-video')?.classList.add('rec-on');
+        updateStatus('⏺ renderizando… click ⏺ otra vez para terminar y guardar');
+        // reproducir la secuencia; al terminar, parar la grabación
+        const startPlayback = window.MF_Timeline?.clips?.length
+            ? () => F.playSequence(window.MF_Timeline.clips.map(c => ({ filmName: c.film.name, start: c.start, duration: c.duration })))
+            : () => F.playFilm(state.activeFilm || undefined);
+        startPlayback();
+        window.addEventListener('mf:film-ended', () => { try { renderer.rec?.stop(); } catch {} }, { once: true });
+    }
+
     function findSceneOf(node) {
         let n = node;
         while (n) {
@@ -1613,6 +1987,162 @@
             n = n.parent;
         }
         return null;
+    }
+
+    // ── minimizar la ESCENA al rect del preview vía transform ──
+    // El canvas del juego es fullscreen y el juego defiende su tamaño con
+    // estilos inline. En vez de pelear, NO se toca su tamaño: se aplica un
+    // transform (translate + scale anisótropo) que llena el rect del
+    // preview EXACTO, sin letterbox. El juego jamás escribe 'transform',
+    // así que no hay batalla. La cámara ajusta su aspect al del preview
+    // cada frame para que la escena no se deforme (mismo efecto que
+    // renderer.setSize con el rect del preview).
+    const viewport = { canvases: [], origAspect: null };
+    let clampLogN = 0, clampLogLast = 0;
+    function dumpCanvases() {
+        const out = [];
+        try {
+            document.querySelectorAll('canvas').forEach((c, i) => {
+                const r = c.getBoundingClientRect();
+                out.push(`[${i}] ${c.width}x${c.height}${c.id ? '#' + c.id : ''}` +
+                    ` css=${Math.round(r.width)}x${Math.round(r.height)}@${Math.round(r.left)},${Math.round(r.top)}` +
+                    ` layout=${c.offsetWidth}x${c.offsetHeight}` +
+                    (c.isConnected ? '' : ' DETACHED') +
+                    ` parent=${c.parentNode?.nodeName}${c.parentNode?.id ? '#' + c.parentNode.id : ''}`);
+            });
+        } catch {}
+        return out.join('  ·  ') || 'NINGUNO';
+    }
+    // recopila TODOS los canvas del juego: el juego puede usar varios
+    // (3D + HUD 2D apilados); si solo se transforma uno, el otro queda
+    // fullscreen y la escena se sigue viendo centrada en la pantalla.
+    // Criterio: layout (offsetWidth/Height, ignora transforms) ≈ ventana.
+    function collectGameCanvases() {
+        const found = [];
+        try {
+            for (const cv of document.querySelectorAll('canvas')) {
+                if (!cv.isConnected) continue;
+                if (cv.closest('#mf-studio')) continue; // nuestra UI
+                const w = cv.offsetWidth || cv.getBoundingClientRect().width;
+                const h = cv.offsetHeight || cv.getBoundingClientRect().height;
+                if (w >= window.innerWidth * 0.9 && h >= window.innerHeight * 0.9) found.push(cv);
+            }
+        } catch {}
+        return found;
+    }
+    // calcula el transform que encaja un canvas fullscreen DENTRO del rect
+    // del preview, llenándolo por completo. Escala NO uniforme (sx, sy) +
+    // aspect de la cámara forzado al del preview = sin letterbox y sin
+    // deformación percibida (la cámara compensa la diferencia de aspect).
+    // Devuelve { tx, ty, sx, sy }.
+    function fitTransform() {
+        const p = document.getElementById('mf-studio-preview');
+        if (!p) return null;
+        const pr = p.getBoundingClientRect();
+        if (pr.width < 2 || pr.height < 2) return null;
+        return {
+            tx: pr.left, ty: pr.top,
+            sx: pr.width / window.innerWidth,
+            sy: pr.height / window.innerHeight
+        };
+    }
+    // lee el transform actual de un canvas; null si no hay
+    function parseTransform(cv) {
+        const t = cv.style.transform;
+        if (!t || t === 'none') return null;
+        const nums = t.match(/-?[\d.]+/g);
+        if (!nums || nums.length < 4) return null;
+        return { tx: +nums[0], ty: +nums[1], sx: +nums[2], sy: +nums[3] };
+    }
+    function clampGameCanvas() {
+        // re-colectar si cambió el set (el juego puede crear/eliminar canvas)
+        const want = fitTransform();
+        if (!want) return;
+        if (!viewport.canvases.length) {
+            viewport.canvases = collectGameCanvases();
+            if (!viewport.canvases.length) return;
+            console.log(TAG + ' clamp: ' + viewport.canvases.length + ' canvas(es) del juego encajados');
+        }
+        const tr = `translate(${want.tx}px, ${want.ty}px) scale(${want.sx}, ${want.sy})`;
+        try {
+            for (const cv of viewport.canvases) {
+                if (!cv.isConnected) continue;
+                const cur = parseTransform(cv);
+                const off = !cur
+                    || Math.abs(cur.tx - want.tx) > 0.5
+                    || Math.abs(cur.ty - want.ty) > 0.5
+                    || Math.abs(cur.sx - want.sx) > 0.0005
+                    || Math.abs(cur.sy - want.sy) > 0.0005;
+                if (off) {
+                    cv.style.setProperty('transform-origin', '0 0', 'important');
+                    cv.style.setProperty('transform', tr, 'important');
+                    const now = performance.now();
+                    if (clampLogN < 3 || now - clampLogLast > 5000) {
+                        clampLogN++; clampLogLast = now;
+                        console.log(TAG + ` clamp: transform re-aplicado a ${cv.id || 'canvas'} tx=${want.tx.toFixed(1)} ty=${want.ty.toFixed(1)} sx=${want.sx.toFixed(4)} sy=${want.sy.toFixed(4)}`);
+                    }
+                }
+            }
+            // aspect de la cámara = aspect del preview: compensa la escala
+            // anisótropa, así la escena no se deforma
+            const p = document.getElementById('mf-studio-preview');
+            const pr = p.getBoundingClientRect();
+            const c = cam.camera;
+            if (c && pr.width > 2 && pr.height > 2) {
+                const asp = pr.width / pr.height;
+                if (viewport.origAspect == null) viewport.origAspect = c.aspect;
+                if (Math.abs(c.aspect - asp) > 0.001) {
+                    c.aspect = asp;
+                    c.updateProjectionMatrix?.();
+                }
+            }
+        } catch (e) {
+            console.log(TAG + ' clamp: ERROR ' + e);
+        }
+    }
+    // recalcula el transform (ventana resize o cambios de layout)
+    function applyViewportRect() { clampGameCanvas(); }
+    function viewportEnable() {
+        const cvs = collectGameCanvases();
+        const p = document.getElementById('mf-studio-preview');
+        console.log(TAG + ' viewportEnable: ' + cvs.length + ' canvas(es) fullscreen' +
+            ' preview=' + (p ? Math.round(p.getBoundingClientRect().width) + 'x' + Math.round(p.getBoundingClientRect().height) : 'NO'));
+        if (!p || !cvs.length) {
+            console.log(TAG + ' viewportEnable: FALLÓ, canvases: ' + dumpCanvases());
+            return false;
+        }
+        viewport.canvases = cvs;
+        clampGameCanvas();
+        window.addEventListener('resize', applyViewportRect);
+        // snapshot del estado tras 1s para diagnóstico
+        setTimeout(() => {
+            if (!viewport.canvases.length) return;
+            const pr = (document.getElementById('mf-studio-preview') || {}).getBoundingClientRect?.() || { width: 0, height: 0 };
+            const parts = viewport.canvases.map((cv) => {
+                const r = cv.getBoundingClientRect();
+                return (cv.id || 'canvas') + ' css=' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.left) + ',' + Math.round(r.top);
+            });
+            console.log(TAG + ' viewport +1s: ' + parts.join(' · ') + ' · preview=' + Math.round(pr.width) + 'x' + Math.round(pr.height));
+        }, 1000);
+        return true;
+    }
+    function viewportDisable() {
+        window.removeEventListener('resize', applyViewportRect);
+        for (const cv of viewport.canvases) {
+            try {
+                cv.style.removeProperty('transform');
+                cv.style.removeProperty('transform-origin');
+            } catch {}
+        }
+        if (viewport.canvases.length) console.log(TAG + ' viewportDisable: transforms eliminados');
+        // restaurar el aspect original de la cámara
+        if (cam.camera && viewport.origAspect != null) {
+            try {
+                cam.camera.aspect = viewport.origAspect;
+                cam.camera.updateProjectionMatrix?.();
+            } catch {}
+        }
+        viewport.canvases = []; viewport.origAspect = null;
     }
 
     function cameraEnable() {
@@ -1773,6 +2303,9 @@
         cam.keysBound = true;
         window.addEventListener('keydown', (ev) => {
             if (!cam.active || !state.open) return;
+            // en modo control del jugador, WASD se lo queda el JUEGO (mueve
+            // al actor); la cámara estática no debe consumir las teclas
+            if (playerCtrl.active) return;
             if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE'].includes(ev.code)) {
                 cam.keys[ev.code] = true;
                 ev.preventDefault();
@@ -1914,25 +2447,273 @@
     function posingToggle(on) {
         posing.enabled = !!on;
         if (!on) posingDeselect();
-        const btn = document.getElementById('mfs-pose-vp');
+        const btn = document.getElementById('mfs-pv-control');
         if (btn) {
             btn.classList.toggle('on', posing.enabled);
             btn.classList.toggle('warm', posing.enabled);
-            btn.textContent = posing.enabled ? '🦴 Posing ●' : '🦴 Posing';
         }
         const preview = document.getElementById('mf-studio-preview');
         if (preview) preview.style.cursor = posing.enabled ? 'crosshair' : 'grab';
+    }
+
+    // ── lienzo de trayectoria de cámara (estilo BBS UIOverlay) ──
+    // Dibuja sobre el preview el recorrido 3D de los clips de cámara
+    // (MF_FilmCamera): muestrea cada clip con su propia evaluación y
+    // proyecta los puntos con la cámara del studio. Toggle con T o 🧭.
+    const traj = { on: false, sel: -1 };
+    const TRAJ_COLORS = ['#57F52A', '#0088FF', '#FFA500', '#DE2E9F', '#6820AD', '#D82253'];
+    function trajToggle(on) {
+        traj.on = on == null ? !traj.on : !!on;
+        const cv = document.getElementById('mf-studio-traj');
+        if (cv) {
+            cv.style.display = traj.on ? 'block' : 'none';
+            cv.classList.toggle('hint', traj.on);
+        }
+        const btn = document.getElementById('mfs-pv-traj');
+        if (btn) btn.classList.toggle('on', traj.on);
+        if (traj.on) trajDraw();
+    }
+    // proyecta un punto 3D a coordenadas del lienzo con las matrices de la
+    // cámara (manual, sin THREE — miniblox es bundle sin window.THREE;
+    // misma técnica que Waypoints/PatPat)
+    function matrixVec(m, x, y, z, w) {
+        return {
+            x: m[0] * x + m[4] * y + m[8] * z + m[12] * w,
+            y: m[1] * x + m[5] * y + m[9] * z + m[13] * w,
+            z: m[2] * x + m[6] * y + m[10] * z + m[14] * w,
+            w: m[3] * x + m[7] * y + m[11] * z + m[15] * w
+        };
+    }
+    function trajProjectHelper(p, camera, w, h) {
+        const view = camera?.matrixWorldInverse?.elements;
+        const proj = camera?.projectionMatrix?.elements;
+        if (!view || !proj) return null;
+        const v = matrixVec(view, p.x, p.y, p.z, 1);
+        const c = matrixVec(proj, v.x, v.y, v.z, v.w);
+        if (!Number.isFinite(c.w) || c.w <= 0.00001) return null; // detrás
+        const nx = c.x / c.w, ny = c.y / c.w, nz = c.z / c.w;
+        if (![nx, ny, nz].every(Number.isFinite)) return null;
+        return { x: (nx * 0.5 + 0.5) * w, y: (-ny * 0.5 + 0.5) * h };
+    }
+    // genera la polilínea 3D de un clip de cámara (x,y,z por tick)
+    function trajClipPoints(c) {
+        const FC = window.MF_FilmCamera;
+        if (!FC || !c) return [];
+        const pts = [];
+        const n = Math.min(120, Math.max(8, c.duration));
+        const step = c.duration / n;
+        for (let i = 0; i <= n; i++) {
+            const t = Math.min(c.duration - 0.01, i * step);
+            const pose = FC.evalClipOnly?.(c, t);
+            if (pose?.hasPos) pts.push({ x: pose.x, y: pose.y, z: pose.z });
+        }
+        return pts;
+    }
+    // keyframes/waypoints explícitos de un clip (para puntos)
+    function trajClipKeys(c) {
+        const P = c.props || {};
+        if (c.type === 'path') return P.points || [];
+        if (c.type === 'keyframe') return P.keys || [];
+        if (c.type === 'idle' || c.type === 'dolly') return [P.pose || {}].filter(Boolean);
+        if (c.type === 'orbit') {
+            // 8 puntos alrededor del target
+            const t = P.target || { x: 0, y: 0, z: 0 }, out = [];
+            const d = P.distance || 8, h = P.height || 2;
+            for (let i = 0; i < 8; i++) {
+                unshiftOrbitPoint(out, t, d, h, (P.from || 0) + (P.to || 360) * i / 8);
+            }
+            return out;
+        }
+        return [];
+    }
+    function unshiftOrbitPoint(out, t, d, h, deg) {
+        const a = deg * Math.PI / 180;
+        out.push({ x: t.x + Math.cos(a) * d, y: t.y + h, z: t.z + Math.sin(a) * d });
+    }
+    // ¿es dibujable? (tiene posición propia en el mundo)
+    function trajDrawable(c) {
+        return !['subtitle', 'audio', 'look', 'shake', 'translate'].includes(c.type);
+    }
+    function trajDraw() {
+        const cv = document.getElementById('mf-studio-traj');
+        if (!cv || !traj.on) return;
+        const FC = window.MF_FilmCamera;
+        const camera = cam.camera;
+        if (!FC || !camera) return;
+        // tamaño del lienzo = tamaño del preview (device pixels para nitidez)
+        const r = cv.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        if (cv.width !== Math.round(r.width * dpr) || cv.height !== Math.round(r.height * dpr)) {
+            cv.width = Math.round(r.width * dpr);
+            cv.height = Math.round(r.height * dpr);
+        }
+        const ctx = cv.getContext('2d');
+        if (!ctx) return;
+        const w = r.width, h = r.height;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, w, h);
+        const clips = (FC.clips || []).filter(trajDrawable);
+        if (!clips.length) return;
+        // dibujar todos los clips; el seleccionado más grueso y opaco
+        clips.forEach((c, ci) => {
+            const poses = trajClipPoints(c);
+            if (poses.length < 2) return;
+            const color = TRAJ_COLORS[ci % TRAJ_COLORS.length];
+            const sel = traj.sel === ci;
+            ctx.strokeStyle = color;
+            ctx.globalAlpha = sel ? 1 : 0.55;
+            ctx.lineWidth = sel ? 2.5 : 1.5;
+            ctx.setLineDash(c.type === 'orbit' ? [6, 4] : []);
+            ctx.beginPath();
+            let started = false;
+            for (const p of poses) {
+                const pr = trajProjectHelper(p, camera, w, h);
+                if (!pr) { started = false; continue; }
+                if (!started) { ctx.moveTo(pr.x, pr.y); started = true; }
+                else ctx.lineTo(pr.x, pr.y);
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // keyframes como puntos
+            const keys = trajClipKeys(c);
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 1;
+            let firstLabel = null;
+            for (const k of keys) {
+                const pr = trajProjectHelper(k, camera, w, h);
+                if (!pr) continue;
+                if (!firstLabel) firstLabel = pr;
+                ctx.beginPath();
+                ctx.arc(pr.x, pr.y, sel ? 4 : 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            // etiqueta del clip
+            if (firstLabel) {
+                ctx.font = '10px Consolas, monospace';
+                ctx.fillText(FC.TYPES?.[c.type]?.label || c.type, firstLabel.x + 6, firstLabel.y - 4);
+            }
+        });
+        ctx.globalAlpha = 1;
+    }
+    // clip seleccionado en el lienzo: ◀/▶ navegan los clips dibujables
+    function trajCycle(dir) {
+        const FC = window.MF_FilmCamera;
+        const drawable = (FC?.clips || []).filter(trajDrawable);
+        if (!drawable.length) return;
+        traj.sel = (traj.sel + dir + drawable.length) % drawable.length;
+        // sincronizar selección con FilmCamera/timeline
+        try { FC.select?.(drawable[traj.sel].id); } catch {}
+        trajDraw();
+    }
+
+    // ── modo "control del jugador" (estilo toggleControl de BBS) ──
+    // El jugador se mueve con WASD/salto y el RATÓN lo rota, mientras la
+    // cámara del studio permanece estática. En BBS esto se hace dando el
+    // pointer-lock al juego (GLFW_CURSOR_DISABLED) y dejando que su motor
+    // mueva al actor; la cámara queda bajo control del runner del film.
+    // Aquí: el patch de requestPointerLock se relaja SOLO para un request
+    // generado por nosotros, el canvas del juego captura el lock real (el
+    // juego mueve y rota al jugador), y applyCamPose() —que ya corre cada
+    // frame en el uiLoop— re-fija la cámara del studio encima, estática.
+    const playerCtrl = { active: false, bound: false, recHeld: false };
+    function playerControlToggle() {
+        playerCtrl.active = !playerCtrl.active;
+        const btn = document.getElementById('mfs-pv-player');
+        if (btn) btn.classList.toggle('on', playerCtrl.active);
+        if (playerCtrl.active) {
+            // desactivar modos que compiten por el input
+            posingToggle(false);
+            // forzar cámara del studio activa (si no lo está, activarla
+            // para que el frame que pinta sea el de la cámara estática)
+            if (!cam.active) try { cameraEnable(); } catch {}
+            // pedir el pointer lock REAL para el canvas del juego: el juego
+            // vuelve a leer WASD/ratón y mueve/rota AL JUGADOR
+            lock.forceNext = true; // el patch deja pasar el próximo request
+            const cv = viewport.canvases[0];
+            try { cv?.requestPointerLock?.(); } catch {}
+            updateStatus('🎮 Control del jugador ON — WASD=mover · ratón=rotar jugador · cámara estática · H/ESC=salir');
+            console.log(TAG + ' playerControl ON');
+        } else {
+            if (playerCtrl.recHeld) playerCtrlRecStop(); // cortar toma colgada
+            releasePointerLock();
+            updateStatus('🎮 Control del jugador OFF');
+            console.log(TAG + ' playerControl OFF');
+        }
+    }
+    function playerControlBindKeys() {
+        if (playerCtrl.bound) return;
+        playerCtrl.bound = true;
+        window.addEventListener('keydown', (ev) => {
+            if (!state.open || !playerCtrl.active) return;
+            if (ev.code === 'KeyH' || ev.key === 'Escape') {
+                ev.preventDefault();
+                playerControlToggle(); // toggle → OFF
+            }
+        }, true);
+        // MANTENER ALT IZQUIERDO = grabar los movimientos en un clip:
+        // keydown arranca la toma, keyup la corta, guarda y añade el clip
+        // al timeline en el playhead actual (estilo hold-to-record de BBS)
+        window.addEventListener('keydown', (ev) => {
+            if (!state.open || !playerCtrl.active) return;
+            if (ev.code === 'AltLeft' && !playerCtrl.recHeld && !isTypingTarget(ev.target)) {
+                ev.preventDefault();
+                playerCtrlRecStart();
+            }
+        }, true);
+        window.addEventListener('keyup', (ev) => {
+            if (ev.code === 'AltLeft' && playerCtrl.recHeld) playerCtrlRecStop();
+        }, true);
+        // blur de ventana: cortar la toma para no dejar grabación colgada
+        window.addEventListener('blur', () => {
+            if (playerCtrl.recHeld) playerCtrlRecStop();
+        });
+        // si el juego pierde el lock (alt-tab, click fuera), salir del modo
+        document.addEventListener('pointerlockchange', () => {
+            if (playerCtrl.active && !document.pointerLockElement) {
+                if (playerCtrl.recHeld) playerCtrlRecStop();
+                playerCtrl.active = false;
+                const btn = document.getElementById('mfs-pv-player');
+                if (btn) btn.classList.remove('on');
+                updateStatus('🎮 Control del jugador OFF (lock perdido)');
+            }
+        });
+    }
+    // arranca la toma (MF_Film recorder a 20Hz)
+    function playerCtrlRecStart() {
+        const F = window.MF_Film;
+        if (!F || F.status?.recording) return;
+        F.stopPlayback();
+        F.startRecording();
+        playerCtrl.recHeld = true;
+        updateStatus('⏺ GRABANDO movimiento (suelta Alt izq. para cortar)');
+    }
+    // corta la toma, la guarda y la añade como clip en el playhead
+    function playerCtrlRecStop() {
+        playerCtrl.recHeld = false;
+        const F = window.MF_Film;
+        if (!F || !F.status?.recording) return;
+        const r = F.stopRecording();
+        if (!r.ok) return;
+        const name = 'toma-' + new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+        const s = F.saveFilm(name);
+        if (s.ok) {
+            refreshTakes(); refreshMediaPool();
+            // añadir como clip de la toma activa en el playhead actual
+            const film = F.getFilm?.(name) || null;
+            if (film && window.MF_Timeline) {
+                try { window.MF_Timeline.addClip(film, Math.floor(state.playheadTick)); } catch {}
+            }
+            updateStatus(`⏺ Clip "${name}" grabado (${r.ticks} ticks, ${r.keyframes} keys)`);
+            console.log(TAG + ` clip ${name}: ${r.ticks} ticks, ${r.keyframes} keyframes`);
+        }
     }
 
     // ── Studio Sync P2P: activar/desactivar compartir mis cambios ──
     function shareToggle(on) {
         if (on === undefined) on = !p2p.share;
         p2p.share = !!on;
-        const btn = document.getElementById('mfs-share');
-        if (btn) {
-            btn.classList.toggle('on', p2p.share);
-            btn.textContent = p2p.share ? '📡 ●' : '📡';
-        }
+        const btn = document.getElementById('mfs-ib-share');
+        if (btn) btn.classList.toggle('on', p2p.share);
         if (!p2p.share) {
             p2p._camKey = null;
             p2p._poseKey = null;
@@ -2495,7 +3276,7 @@
     // El juego pide pointer-lock en cada click sobre su canvas. Mientras el
     // estudio está abierto, salimos del lock y neutralizamos requests
     // nuevos (patch a requestPointerLock durante la sesión de estudio).
-    const lock = { patched: false, orig: null };
+    const lock = { patched: false, orig: null, forceNext: false };
 
     function releasePointerLock() {
         try { document.exitPointerLock?.(); } catch {}
@@ -2508,7 +3289,12 @@
         const orig = lock.orig;
         Element.prototype.requestPointerLock = function (...args) {
             if (state.open) {
-                // estudio abierto: el juego no puede atrapar el ratón
+                // estudio abierto: el juego no puede atrapar el ratón...
+                // salvo que lo pidamos nosotros (modo control del jugador)
+                if (lock.forceNext) {
+                    lock.forceNext = false;
+                    return orig.apply(this, args);
+                }
                 return undefined;
             }
             return orig.apply(this, args);
@@ -2530,6 +3316,10 @@
     let lockEventsBound = false;
     function swallowLockEvent(ev) {
         if (!state.open) return;
+        // en modo control del jugador, dejar que el juego VEA el lock
+        // ganado (necesita saber que el ratón está atrapado para el
+        // mouse-look); el lock PERDIDO se sigue tragando (menú de pausa)
+        if (playerCtrl.active && ev.type === 'pointerlockchange' && document.pointerLockElement) return;
         ev.stopImmediatePropagation();
     }
     function blockLockEvents() {
@@ -2551,12 +3341,24 @@
         blockLockEvents();
         releasePointerLock();
         patchPointerLock();
+        playerControlBindKeys();
         globalThis.__MF_STUDIO_OPEN__ = true; // FreeCam deja de interceptar input
         refreshTakes(); refreshMediaPool(); refreshModels(); refreshFaces(); refreshPosePanel(); renderTimeline(); updateProps(); updateStatus(); updateButtons();
         applyCinema();
         bindPreviewCamera();
         bindViewportPosing();
         cameraEnable();
+        // minimizar el canvas al rect del preview: reintentar unos frames
+        // porque en el frame del open() el layout puede medir 0×0
+        if (!viewportEnable()) {
+            let tries = 0;
+            const retry = () => {
+                if (state.open && !viewport.canvases.length && ++tries < 120) {
+                    if (!viewportEnable()) requestAnimationFrame(retry);
+                }
+            };
+            requestAnimationFrame(retry);
+        }
         afkToggle(true); // anti-kick: editar puede dejar al player quieto mucho rato
         console.log(TAG + ' abierto. Click+drag en preview=rotar cámara · WASD=mover · Space=play · R=rec · F1=cerrar');
     }
@@ -2566,6 +3368,8 @@
         state.open = false;
         lastCamFrame = 0;
         cancelAnimationFrame(state.raf);
+        if (playerCtrl.active) playerControlToggle(); // soltar lock del jugador
+        viewportDisable(); // restaurar render fullscreen
         cameraDisable();
         posingToggle(false);
         afkToggle(false);
@@ -2591,7 +3395,10 @@
         // Studio Sync P2P
         get share() { return p2p.share; },
         set share(v) { shareToggle(!!v); },
-        applyRemotePose, applyRemoteCam, remoteCamActive
+        applyRemotePose, applyRemoteCam, remoteCamActive,
+        // clips de cámara estilo BBS (MF_FilmCamera)
+        getStudioCamPose,
+        renderVideo
     };
     window.__MF_Studio = true;
 

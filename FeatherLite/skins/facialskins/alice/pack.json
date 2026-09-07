@@ -1,0 +1,13 @@
+{
+  "id": "alice",
+  "name": "Alice",
+  "author": "MiniFeather",
+  "version": 1,
+  "skin": "alice.png",
+  "sprites": {
+    "front": "alfrente.png",
+    "left": "izquierda.png",
+    "right": "derecha.png",
+    "blink": "blink.png"
+  }
+}

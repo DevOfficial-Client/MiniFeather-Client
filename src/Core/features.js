@@ -414,29 +414,61 @@
         return true;
     }
 
+    // The dynamic import() re-executes the game bundle's top-level
+    // code. If the canvas/DOM it expects is not there yet (game still
+    // booting, or Studio re-arranging canvases), evaluation throws
+    // "Cannot read properties of null (reading 'getContext')".
+    // Gate on an existing game canvas and retry a few times.
+    const MAX_BUNDLE_ATTEMPTS = 10;
+
+    let bundleAttempts = 0;
+    let bundleExhausted = false;
+
     function scanBundle() {
         const script = document.querySelector(
             'script[src*="/assets/index-"]'
         );
 
-        if (!script) return false;
+        // Game bundle not present yet, or game has not created
+        // its canvas — wait for the next tick.
+        if (!script || !document.querySelector('canvas')) {
+            return false;
+        }
+
+        if (bundleExhausted) return true;
+
+        bundleAttempts++;
 
         import(script.src)
             .then(module => {
-                if (!module) return;
+                try {
+                    if (!module) return;
 
-                patchSelectMethod(module);
-                refreshBlockHighlight();
+                    patchSelectMethod(module);
+                    refreshBlockHighlight();
 
-                console.log(
-                    `${TAG} ✓ Bundle scanned.`
-                );
+                    console.log(
+                        `${TAG} ✓ Bundle scanned.`
+                    );
+                } catch (err) {
+                    console.warn(
+                        `${TAG} Bundle module error:`,
+                        err
+                    );
+                }
             })
             .catch(err => {
-                console.warn(
-                    `${TAG} Bundle scan failed:`,
-                    err
-                );
+                if (bundleAttempts >= MAX_BUNDLE_ATTEMPTS) {
+                    bundleExhausted = true;
+
+                    console.warn(
+                        `${TAG} Bundle scan skipped after ${bundleAttempts} attempts:`,
+                        err?.message || err
+                    );
+                } else {
+                    // Allow a retry on the next interval tick.
+                    bundleStarted = false;
+                }
             });
 
         return true;
@@ -455,24 +487,34 @@
     );
 
     let bundleStarted = false;
+    let intervalTicks = 0;
+    const MAX_INTERVAL_TICKS = 120; // ~60s, then stop polling
 
     const interval = setInterval(() => {
+        intervalTicks++;
+
         if (!bundleStarted) {
             bundleStarted = scanBundle();
         }
 
         refreshBlockHighlight();
 
-        if (
-            bundleStarted &&
+        const ready =
             window.miniblox &&
-            window.miniblox.player?.selectBox &&
-            window.__MF_BLOCK_HIGHLIGHT_SELECT_PATCHED__
+            window.miniblox.player?.selectBox;
+
+        if (
+            (ready &&
+                window
+                    .__MF_BLOCK_HIGHLIGHT_SELECT_PATCHED__) ||
+            intervalTicks >= MAX_INTERVAL_TICKS
         ) {
             clearInterval(interval);
 
             console.log(
-                `${TAG} ✓ Block Highlight ready.`
+                ready
+                    ? `${TAG} ✓ Block Highlight ready.`
+                    : `${TAG} Block Highlight idle (no select box found).`
             );
         }
     }, 500);

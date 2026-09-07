@@ -166,10 +166,12 @@
         const base = skinCanvasFromTexture(src);
         if (!base) throw new Error('no se pudo leer la skin actual');
 
-        // copia editable de la skin completa
+        // copia editable de la skin completa (willReadFrequently: la
+        // editamos con getImageData/putImageData — flood fill, snapshots,
+        // cuentagotas — y sin el flag Chrome lo advierte y va lento)
         const c = document.createElement('canvas');
         c.width = base.width; c.height = base.height;
-        c.getContext('2d').drawImage(base, 0, 0);
+        c.getContext('2d', { willReadFrequently: true }).drawImage(base, 0, 0);
 
         // nueva textura con el CONSTRUCTOR de la actual (sin globalThis.THREE)
         let tex = null;

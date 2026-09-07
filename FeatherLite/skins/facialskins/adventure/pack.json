@@ -1,0 +1,13 @@
+{
+  "id": "adventure",
+  "name": "Adventure",
+  "author": "MiniFeather",
+  "version": 1,
+  "skin": "adventure.png",
+  "sprites": {
+    "front": "alfrente.png",
+    "left": "izquierda.png",
+    "right": "derecha.png",
+    "blink": "blink.png"
+  }
+}

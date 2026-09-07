@@ -102,6 +102,7 @@
         "src/Studio/MF_Morph.js",
         "src/Studio/MF_Facial.js",
         "src/Studio/MF_Film.js",
+        "src/Studio/MF_FilmCamera.js",
         "src/Studio/MF_Pose.js",
         "src/Studio/MF_Gizmo.js",
         "src/Studio/MF_Animation.js",
