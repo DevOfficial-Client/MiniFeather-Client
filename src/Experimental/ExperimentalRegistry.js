@@ -16,6 +16,13 @@ function normalize(entry) {
     description: String(entry.description || ''),
     descriptionKey: entry.descriptionKey == null ? '' : String(entry.descriptionKey),
     icon: String(entry.icon || '🧪'),
+    settingsKey: entry.settingsKey == null ? '' : String(entry.settingsKey),
+    levelKey: entry.levelKey == null ? '' : String(entry.levelKey),
+    levels: Array.isArray(entry.levels) ? entry.levels.map(level => Object.freeze({
+      value: String(level?.value || ''),
+      labelKey: String(level?.labelKey || ''),
+      label: String(level?.label || level?.value || '')
+    })).filter(level => level.value) : Object.freeze([]),
     badge: entry.badge == null ? '' : String(entry.badge),
     status: entry.status == null ? '' : String(entry.status),
     statusKey: entry.statusKey == null ? '' : String(entry.statusKey),
@@ -50,17 +57,22 @@ const api = Object.freeze({
 
 globalThis.MF_ExperimentalRegistry = api;
 
-// Built-in marker: this is infrastructure, not a gameplay experiment.
+// First real Experimental feature. The renderer itself lives in MAIN world;
+// this registry only tells the panel how to present and persist the toggle.
 api.register({
-  id: 'experimental-core',
-  title: 'Experimental Core',
-  titleKey: 'experimentalCoreTitle',
-  description: '',
-  descriptionKey: 'experimentalCoreDesc',
-  icon: '🧪',
-  badge: 'CORE',
-  status: '',
-  statusKey: 'experimentalCoreStatus',
-  order: 0
+  id: 'aurora-borealis',
+  settingsKey: 'experimentalAurora',
+  levelKey: 'experimentalAuroraLevel',
+  levels: [
+    { value: 'low', labelKey: 'experimentalAuroraLow', label: 'Low' },
+    { value: 'medium', labelKey: 'experimentalAuroraMedium', label: 'Medium' },
+    { value: 'high', labelKey: 'experimentalAuroraHigh', label: 'High' }
+  ],
+  title: 'Aurora Borealis',
+  titleKey: 'experimentalAuroraTitle',
+  descriptionKey: 'experimentalAuroraDesc',
+  icon: '🌌',
+  badge: 'EXPERIMENTAL',
+  order: 10
 });
 })();

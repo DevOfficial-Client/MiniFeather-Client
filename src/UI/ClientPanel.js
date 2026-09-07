@@ -444,6 +444,8 @@
     cloudsShapeTile: 512,
     panelAccentColor: '#ef3b3b',
     panelBackgroundColor: '#0e1115',
+    experimentalAurora: false,
+    experimentalAuroraLevel: 'medium',
     language: 'en'
   };
 
@@ -2753,6 +2755,15 @@
       .mf-toggle-grid .mf-toggle-copy { width:100%; display:flex; flex-direction:column; align-items:center; gap:3px; text-align:center; }
       .mf-toggle-grid .mf-feature-settings { position:absolute; left:12px; bottom:11px; }
       .mf-toggle-grid .mf-feature-favorite { position:absolute; right:12px; top:11px; }
+      .mf-experimental-level {
+        position:absolute; left:12px; bottom:13px; width:auto; min-width:104px; height:30px;
+        padding:4px 28px 4px 9px; font-size:12px; line-height:1; border-radius:7px;
+        background:#0d1116; color:#d8dce2; border:1px solid #2c333c; cursor:pointer;
+        z-index:5; pointer-events:auto;
+      }
+      .mf-experimental-level:hover { border-color:#414a56; }
+      .mf-toggle:has(.mf-experimental-level) .mf-feature-state { left:128px; }
+      .mf-toggle:has(.mf-experimental-level) .mf-switch-hidden { z-index:2; }
       @media (max-width:1100px) { .mf-toggle-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
       @media (max-width:780px) { .mf-toggle-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
     `;
@@ -5804,10 +5815,53 @@
   }
 
   function renderExperimentalPage() {
+    const registry = globalThis.MF_ExperimentalRegistry;
+    const experiments = registry?.list?.().filter(exp => exp?.settingsKey) || [];
+
+    if (!experiments.length) {
+      return `
+        <div class="mf-page-stack">
+          <div class="mf-card" style="min-height:180px;display:flex;align-items:center;justify-content:center;text-align:center;">
+            <div class="mf-card-title" style="font-size:18px;margin:0;color:#7c828a;">${escapeHtml(t('experimentalComingSoon'))}</div>
+          </div>
+        </div>
+      `;
+    }
+
     return `
       <div class="mf-page-stack">
-        <div class="mf-card" style="min-height:180px;display:flex;align-items:center;justify-content:center;text-align:center;">
-          <div class="mf-card-title" style="font-size:18px;margin:0;color:#7c828a;">${escapeHtml(t('experimentalComingSoon'))}</div>
+        <div class="mf-card">
+          <div class="mf-toggle-grid">
+            ${experiments.map(exp => {
+              const key = String(exp.settingsKey);
+              const enabled = !!guiSettings[key];
+              const title = exp.titleKey ? t(exp.titleKey) : String(exp.title || exp.id);
+              const description = exp.descriptionKey ? t(exp.descriptionKey) : String(exp.description || '');
+              const levelKey = String(exp.levelKey || '');
+              const levels = Array.isArray(exp.levels) ? exp.levels : [];
+              const currentLevel = levelKey ? String(guiSettings[levelKey] || settings[levelKey] || 'medium') : '';
+              return `
+                <label class="mf-toggle" data-key="${escapeHtml(key)}">
+                  <span class="mf-feature-icon" aria-hidden="true" style="font-size:34px;line-height:1;">${escapeHtml(exp.icon || '🧪')}</span>
+                  <span class="mf-toggle-copy">
+                    <strong>${escapeHtml(title)}</strong>
+                    <span>${escapeHtml(description)}</span>
+                  </span>
+                  ${levelKey && levels.length ? `
+                    <select class="mf-input mf-experimental-level" data-mf-experimental-level="${escapeHtml(levelKey)}" aria-label="${escapeHtml(t('experimentalAuroraQuality'))}">
+                      ${levels.map(level => {
+                        const value = String(level.value || '');
+                        const label = level.labelKey ? t(level.labelKey) : String(level.label || value);
+                        return `<option value="${escapeHtml(value)}" ${currentLevel === value ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+                      }).join('')}
+                    </select>
+                  ` : ''}
+                  <span class="mf-feature-state ${enabled ? 'enabled' : 'disabled'}">${enabled ? t('enabled') : t('disabled')}</span>
+                  <input type="checkbox" class="mf-switch-hidden" ${enabled ? 'checked' : ''}>
+                </label>
+              `;
+            }).join('')}
+          </div>
         </div>
       </div>
     `;
@@ -6873,6 +6927,10 @@ function renderCreditsPage() {
           const key = label.dataset.key;
           const input = label.querySelector('input');
           if (input && key in guiSettings) input.checked = guiSettings[key];
+        });
+        panel.querySelectorAll('[data-mf-experimental-level]').forEach(select => {
+          const key = String(select.dataset.mfExperimentalLevel || '');
+          if (key && key in guiSettings) select.value = String(guiSettings[key]);
         });
       }
     });
@@ -8702,7 +8760,7 @@ function renderCreditsPage() {
       const input = label.querySelector('input');
       if (!input) return;
       label.addEventListener('click', event => {
-        if (event.target.closest('[data-mf-settings], [data-mf-favorite]')) return;
+        if (event.target.closest('[data-mf-settings], [data-mf-favorite], [data-mf-experimental-level]')) return;
         if (event.target === input) return;
         event.preventDefault();
         input.checked = !input.checked;
@@ -8735,6 +8793,20 @@ function renderCreditsPage() {
         applyGuiSettings();
         update();
         if (activePage === 'dashboard') updateDashboardStats();
+      });
+    });
+
+    panel.querySelectorAll('[data-mf-experimental-level]').forEach(select => {
+      const key = String(select.dataset.mfExperimentalLevel || '');
+      if (!key) return;
+      select.addEventListener('click', event => event.stopPropagation());
+      select.addEventListener('change', event => {
+        event.stopPropagation();
+        const value = String(select.value || 'medium');
+        guiSettings[key] = value;
+        settings[key] = value;
+        saveSettings(true);
+        applyGuiSettings();
       });
     });
 
@@ -9237,6 +9309,16 @@ function renderCreditsPage() {
     setModuleEnabled('handSway', settings.handSway);
     setModuleEnabled('betterPlayerLayers', settings.betterPlayerLayers);
     setModuleEnabled('guiPatch', settings.guiPatch);
+    document.dispatchEvent(
+      new CustomEvent('minifeather:aurora-config', {
+        detail: JSON.stringify({
+          enabled: !!settings.experimentalAurora,
+          level: ['low', 'medium', 'high'].includes(String(settings.experimentalAuroraLevel))
+            ? String(settings.experimentalAuroraLevel)
+            : 'medium'
+        })
+      })
+    );
     document.dispatchEvent(
       new CustomEvent(
         'minifeather:freelook-config',

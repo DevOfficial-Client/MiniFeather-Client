@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.9.3",
-  "description": "MiniFeather Client for MiniBlox — adds a scalable Experimental Hub for future test modules while keeping Shaders, Render and World clean",
+  "version": "4.9.5",
+  "description": "MiniFeather Client for MiniBlox — Experimental Hub with optimized three-level Aurora Borealis night-sky effects",
   "permissions": [
     "storage",
     "declarativeNetRequest",
@@ -67,6 +67,7 @@
         "src/Render/ItemPhysics.js",
         "src/Render/NoWeather.js",
         "src/Render/LeafWind.js",
+        "src/Experimental/Aurora/Aurora.js",
         "src/World/AutoRespawn.js",
         "src/Movement/AntiAFK.js",
         "src/Movement/MovementAssist.js",
