@@ -75,4 +75,16 @@ api.register({
   badge: 'EXPERIMENTAL',
   order: 10
 });
+
+
+api.register({
+  id: 'natural-grass-details',
+  settingsKey: 'experimentalGrassFlowers',
+  title: 'Natural Grass Details',
+  titleKey: 'experimentalGrassFlowersTitle',
+  descriptionKey: 'experimentalGrassFlowersDesc',
+  icon: '🌼',
+  badge: 'EXPERIMENTAL',
+  order: 20
+});
 })();

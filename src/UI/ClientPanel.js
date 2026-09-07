@@ -446,6 +446,7 @@
     panelBackgroundColor: '#0e1115',
     experimentalAurora: false,
     experimentalAuroraLevel: 'medium',
+    experimentalGrassFlowers: false,
     language: 'en'
   };
 
@@ -9317,6 +9318,11 @@ function renderCreditsPage() {
             ? String(settings.experimentalAuroraLevel)
             : 'medium'
         })
+      })
+    );
+    document.dispatchEvent(
+      new CustomEvent('minifeather:grass-flowers-config', {
+        detail: JSON.stringify({ enabled: !!settings.experimentalGrassFlowers })
       })
     );
     document.dispatchEvent(
