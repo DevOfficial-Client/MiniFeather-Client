@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.9.5",
-  "description": "MiniFeather Client for MiniBlox — Experimental Hub with optimized three-level Aurora Borealis night-sky effects",
+  "version": "4.9.7",
+  "description": "MiniFeather Client for MiniBlox — Experimental Hub with world-anchored natural Aurora Borealis effects",
   "permissions": [
     "storage",
     "declarativeNetRequest",

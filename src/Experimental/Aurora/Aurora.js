@@ -3,7 +3,7 @@
 
   const W = globalThis;
   const EVENT_NAME = 'minifeather:aurora-config';
-  const MARKER = 'MF_AURORA_BOREALIS_V2';
+  const MARKER = 'MF_AURORA_BOREALIS_V4_WORLD_ANCHORED';
 
   try { W.MF_AuroraExperimental?.destroy?.(); } catch (_) {}
 
@@ -75,69 +75,147 @@
     );
 
     const helpers = `
-  // MiniFeather Experimental: lightweight layered aurora curtains.
+  // MiniFeather Experimental: world-anchored procedural aurora.
+  // The auroral oval stays fixed in world space. Time only animates the folds,
+  // shimmer and plasma flow inside the curtains, never their global position.
   // uMFAuroraQuality: 0 = Low, 1 = Medium, 2 = High.
-  float mfAuroraRibbon(float az, float h, float t, float phase, float density, float lift) {
-    float slowWarp = sin(az * 2.15 + t * 0.095 + phase) * 0.19;
-    slowWarp += sin(az * 5.20 - t * 0.061 + phase * 1.7) * 0.075;
+  float mfAuroraHash21(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+  }
 
-    float base = 0.165 + lift;
-    base += sin(az * 1.65 + t * 0.038 + phase) * 0.020;
-    base += sin(az * 4.10 - t * 0.026 + phase * 0.7) * 0.010;
+  float mfAuroraNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = mfAuroraHash21(i);
+    float b = mfAuroraHash21(i + vec2(1.0, 0.0));
+    float c = mfAuroraHash21(i + vec2(0.0, 1.0));
+    float d = mfAuroraHash21(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  }
 
-    float top = base + 0.40 + 0.025 * sin(az * 1.25 - t * 0.031 + phase);
-    float vertical = smoothstep(base - 0.035, base + 0.028, h);
-    vertical *= 1.0 - smoothstep(top - 0.095, top + 0.055, h);
+  float mfAuroraFbm(vec2 p, float quality) {
+    float value = 0.52 * mfAuroraNoise(p);
+    value += 0.27 * mfAuroraNoise(p * 2.03 + 11.7);
+    if (quality > 0.5) value += 0.14 * mfAuroraNoise(p * 4.07 + 31.3);
+    if (quality > 1.5) value += 0.07 * mfAuroraNoise(p * 8.11 + 67.9);
+    return value;
+  }
 
-    // Bend the folds slightly as they rise so they read as curtains instead of blocks.
-    float bentAz = az + (h - base) * (0.26 * sin(az * 1.9 + t * 0.052 + phase));
-    float stripeA = 0.5 + 0.5 * sin(bentAz * density + slowWarp * 3.1 + t * 0.115 + phase);
-    float stripeB = 0.5 + 0.5 * sin(bentAz * (density * 1.73) - slowWarp * 2.2 - t * 0.072 + phase * 2.3);
-    float folds = smoothstep(0.30, 0.86, stripeA);
-    folds *= 0.68 + 0.32 * smoothstep(0.18, 0.82, stripeB);
+  float mfAuroraCurtain(
+    float az,
+    float elevation,
+    float t,
+    float quality,
+    float seed,
+    float heightOffset,
+    float widthScale
+  ) {
+    // The silhouette is static: these terms never use time. This is what anchors
+    // the curtain to a fixed location in the world instead of following the camera.
+    float staticShape = mfAuroraFbm(vec2(az * 0.43 + seed, seed * 0.37), quality);
+    float staticFine = mfAuroraNoise(vec2(az * 1.19 + seed * 2.7, seed + 8.3));
+    float lower = 0.105 + heightOffset + (staticShape - 0.48) * 0.145;
+    lower += (staticFine - 0.5) * 0.045;
+    float thickness = 0.52 + 0.10 * mfAuroraNoise(vec2(az * 0.62 - seed, seed * 1.9));
+    float upper = lower + thickness;
 
-    float verticalTexture = 0.88 + 0.12 * sin(h * 24.0 + bentAz * 4.0 - t * 0.08 + phase);
-    return vertical * folds * verticalTexture;
+    float vertical = smoothstep(lower - 0.045, lower + 0.035, elevation);
+    vertical *= 1.0 - smoothstep(upper - 0.16, upper + 0.035, elevation);
+    if (vertical <= 0.001) return 0.0;
+
+    float relY = clamp((elevation - lower) / max(0.12, thickness), 0.0, 1.0);
+
+    // Time deforms only the plasma inside the fixed silhouette. Two slow flow fields
+    // create folds that breathe and bend without translating the entire aurora.
+    float flowA = mfAuroraNoise(vec2(az * 1.72 + seed, t * 0.025 + seed * 3.1));
+    float flowB = mfAuroraNoise(vec2(az * 3.35 - seed, t * 0.018 + 19.0 + seed));
+    float warp = (flowA - 0.5) * 0.22 + (flowB - 0.5) * 0.095;
+    warp *= 0.35 + 0.95 * relY;
+
+    // Vertical rays are noise ridges rather than repeated sine columns. This makes
+    // the curtain less illustrated and gives every part a different width/spacing.
+    float rayCoord = az * widthScale + warp;
+    float rayNoise = mfAuroraNoise(vec2(rayCoord, seed * 7.3 + t * 0.010));
+    float rayFine = mfAuroraNoise(vec2(rayCoord * 1.91 + 13.4, seed * 4.1 - t * 0.008));
+    float ridge = 1.0 - abs(rayNoise * 2.0 - 1.0);
+    ridge = smoothstep(0.30, 0.88, ridge);
+    ridge *= 0.62 + 0.38 * smoothstep(0.20, 0.86, rayFine);
+
+    // Large gaps are static in world-space, so the same broad auroral structures
+    // remain above the same horizon while their internal rays continue to move.
+    float cluster = mfAuroraFbm(vec2(az * 0.31 + seed * 5.4, seed * 0.83), quality);
+    cluster = smoothstep(0.27, 0.68, cluster);
+
+    // A faint translucent body prevents the effect from looking like isolated neon bars.
+    float body = 0.20 + 0.34 * mfAuroraNoise(vec2(az * 0.68 + seed, elevation * 2.2 + seed));
+    float rays = mix(body, 1.0, ridge);
+
+    // Natural brightness tends to gather toward the lower green edge, with softer
+    // rays climbing upward into the cyan/violet part of the curtain.
+    float lowerEdge = 0.62 + 0.38 * (1.0 - smoothstep(0.05, 0.82, relY));
+    return vertical * cluster * rays * lowerEdge;
   }
 
   vec3 mfAuroraColor(vec3 dir) {
     float night = (1.0 - smoothstep(0.10, 0.58, dayFactor)) * uMFAuroraStrength;
-    if (night <= 0.001 || dir.y <= 0.025) return vec3(0.0);
-
-    float t = uMFAuroraTime;
-    float az = atan(dir.x, dir.z);
-    float h = dir.y;
-
-    // Keep the display in a broad northern arc, fading naturally at its edges.
-    float northArc = 1.0 - smoothstep(1.05, 2.28, abs(az));
-    float horizonGate = smoothstep(0.035, 0.12, h) * (1.0 - smoothstep(0.73, 0.94, h));
+    if (night <= 0.001 || dir.y <= 0.012) return vec3(0.0);
 
     float quality = clamp(uMFAuroraQuality, 0.0, 2.0);
-    float curtain = mfAuroraRibbon(az, h, t, 0.25, 11.0, 0.000);
+    float t = uMFAuroraTime;
+
+    // Fixed world-space auroral sector. There is intentionally NO time component
+    // in this basis. Walking or turning the camera cannot move the aurora itself.
+    vec3 north = normalize(vec3(-0.24, 0.0, 0.971));
+    vec3 east = normalize(vec3(north.z, 0.0, -north.x));
+
+    float az = atan(dot(dir, east), dot(dir, north));
+    float elevation = asin(clamp(dir.y, -1.0, 1.0));
+
+    // A broad northern oval spans most of the visible sky, but leaves a real gap
+    // behind the player instead of closing into a 360-degree ring.
+    float sideGate = 1.0 - smoothstep(1.82, 2.32, abs(az));
+    float horizonGate = smoothstep(0.025, 0.115, elevation);
+    float zenithGate = 1.0 - smoothstep(1.23, 1.49, elevation);
+    float region = sideGate * horizonGate * zenithGate;
+    if (region <= 0.001) return vec3(0.0);
+
+    float light = mfAuroraCurtain(az, elevation, t, quality, 1.7, 0.000, 7.5);
 
     if (quality > 0.5) {
-      curtain += mfAuroraRibbon(az + 0.28, h, t * 0.92, 1.75, 16.0, 0.035) * 0.52;
+      light += mfAuroraCurtain(az + 0.10, elevation, t * 0.94, quality, 6.1, 0.075, 10.5) * 0.52;
     }
     if (quality > 1.5) {
-      curtain += mfAuroraRibbon(az - 0.18, h, t * 1.06, 3.55, 21.0, 0.075) * 0.30;
+      light += mfAuroraCurtain(az - 0.075, elevation, t * 1.04, quality, 10.9, 0.155, 14.5) * 0.30;
     }
 
-    // Green near the lower curtain, cyan in the middle, a restrained violet cap on High.
-    vec3 green = vec3(0.08, 0.90, 0.43);
-    vec3 cyan = vec3(0.08, 0.58, 0.88);
-    vec3 violet = vec3(0.44, 0.20, 0.74);
-    float upperMix = smoothstep(0.24, 0.59, h);
-    vec3 auroraColor = mix(green, cyan, upperMix);
+    // Very faint broad glow around the curtains. It remains fixed spatially while
+    // its brightness breathes, which reads as atmospheric light rather than a PNG.
+    float veilShape = mfAuroraFbm(vec2(az * 0.54 + 4.2, elevation * 1.72 + 12.8), quality);
+    float veilBand = smoothstep(0.15, 0.32, elevation) * (1.0 - smoothstep(0.82, 1.20, elevation));
+    float veil = smoothstep(0.40, 0.76, veilShape) * veilBand;
+    veil *= quality < 0.5 ? 0.055 : (quality < 1.5 ? 0.085 : 0.105);
+
+    float h = smoothstep(0.14, 0.92, elevation);
+    vec3 green = vec3(0.035, 0.76, 0.29);
+    vec3 cyan = vec3(0.045, 0.43, 0.70);
+    vec3 violet = vec3(0.30, 0.095, 0.52);
+    vec3 colorA = mix(green, cyan, h);
     if (quality > 1.5) {
-      auroraColor = mix(auroraColor, violet, smoothstep(0.49, 0.72, h) * 0.42);
+      colorA = mix(colorA, violet, smoothstep(0.72, 1.12, elevation) * 0.40);
     }
 
-    float intensity = quality < 0.5 ? 0.115 : (quality < 1.5 ? 0.145 : 0.175);
-    float shimmer = 0.94 + 0.06 * sin(t * 0.43 + az * 2.4);
-    float softCap = 1.0 - smoothstep(1.10, 1.62, curtain);
-    float light = curtain * (0.82 + 0.18 * softCap);
-    return auroraColor * light * northArc * horizonGate * night * shimmer * intensity;
+    // Shimmer is local intensity modulation only. No azimuth/position drift.
+    float shimmerNoise = mfAuroraNoise(vec2(az * 2.15 + 21.0, t * 0.055 + elevation * 2.8));
+    float shimmer = 0.91 + 0.09 * shimmerNoise;
+
+    float intensity = quality < 0.5 ? 0.105 : (quality < 1.5 ? 0.125 : 0.140);
+    float total = min(light, 1.20) * intensity + veil;
+    return colorA * total * region * night * shimmer;
   }
+
 `;
 
     shader = shader.replace('  void main() {', `${helpers}\n  void main() {`);
@@ -196,7 +274,7 @@
     material.customProgramCacheKey = function() {
       let base = '';
       try { base = previousCacheKey ? String(previousCacheKey.call(this)) : ''; } catch (_) {}
-      return `${base}|mf-aurora-v2`;
+      return `${base}|mf-aurora-v4-world-anchored`;
     };
 
     material.needsUpdate = true; // one compile only; toggling is uniform-only afterwards.
