@@ -237,7 +237,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalGrassFlowersTitle": "Natural Grass Details",
     "experimentalGrassFlowersDesc": "Adds sparse flowers and small rocks to exposed grass on the client only, without changing world blocks or terrain generation.",
     "experimentalAnimatedItemsTitle": "Animated Items",
-    "experimentalAnimatedItemsDesc": "Animates compatible MiniBlox item textures from the experimental pack while preserving the game\'s blocks, collisions and item logic.",
+    "experimentalAnimatedItemsDesc": "Animates compatible MiniBlox item textures while preserving blocks, collisions and item logic.",
     "panelCustomization": "Panel customization",
     "panelCustomizationDesc": "Customize the panel accent and background colors.",
     "panelAccentColor": "Accent color",

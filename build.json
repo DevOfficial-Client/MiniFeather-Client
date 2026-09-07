@@ -2,6 +2,6 @@
   "builtAt": "2026-09-07T18:35:00Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Animated Items adds specialized adaptive animation for enchanted_book and MiniBlox potion families (potion, splash_potion, lingering_potion). Enchanted books get a clipped cyan/violet magic glint; potions retain their runtime colour and get subtle liquid shimmer and rising bubbles. Effects preserve the original sprite silhouette and support both 16x16 and 32x32 texture packs.",
+  "note": "Adapted Animated Items 4.10.2 to the updated MiniFeather client while preserving the new Studio film camera and all current modules. Adds 16x16/32x32 adaptive item animations plus enchanted-book and potion effects.",
   "version": "4.10.2"
 }

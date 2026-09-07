@@ -88,6 +88,7 @@ api.register({
   order: 20
 });
 
+
 api.register({
   id: 'animated-items',
   settingsKey: 'experimentalAnimatedItems',
@@ -98,5 +99,4 @@ api.register({
   badge: 'EXPERIMENTAL',
   order: 30
 });
-
 })();
