@@ -450,6 +450,7 @@
     experimentalInteractiveVegetation: false,
     experimentalInteractiveVegetationLevel: 'medium',
     experimentalAnimatedItems: false,
+    experimentalBetterAnimationCape: false,
     language: 'en'
   };
 
@@ -9341,6 +9342,11 @@ function renderCreditsPage() {
     document.dispatchEvent(
       new CustomEvent('minifeather:animated-items-config', {
         detail: JSON.stringify({ enabled: !!settings.experimentalAnimatedItems })
+      })
+    );
+    document.dispatchEvent(
+      new CustomEvent('minifeather:better-animation-cape-config', {
+        detail: JSON.stringify({ enabled: !!settings.experimentalBetterAnimationCape })
       })
     );
     document.dispatchEvent(

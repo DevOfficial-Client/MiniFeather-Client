@@ -71,6 +71,7 @@
         "src/Experimental/Aurora/Aurora.js",
         "src/Experimental/GrassFlowers/GrassFlowers.js",
         "src/Experimental/AnimatedItems/AnimatedItems.js",
+        "src/Experimental/BetterAnimationCape/BetterAnimationCape.js",
         "src/World/AutoRespawn.js",
         "src/Movement/AntiAFK.js",
         "src/Movement/MovementAssist.js",

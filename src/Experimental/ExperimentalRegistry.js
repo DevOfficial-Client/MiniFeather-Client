@@ -114,6 +114,19 @@ api.register({
 });
 
 
+
+
+api.register({
+  id: 'better-animation-cape',
+  settingsKey: 'experimentalBetterAnimationCape',
+  title: 'Better Animation Cape',
+  titleKey: 'experimentalBetterAnimationCapeTitle',
+  descriptionKey: 'experimentalBetterAnimationCapeDesc',
+  icon: '🧥',
+  badge: 'EXPERIMENTAL',
+  order: 25
+});
+
 api.register({
   id: 'animated-items',
   settingsKey: 'experimentalAnimatedItems',
