@@ -9144,27 +9144,6 @@
       return;
     }
 
-    // Join duplicado del mismo peerId: la respuesta anterior pudo perderse
-    // (hueco de reconexión del WS de señalización). Si aún no conectó,
-    // re-enviar la MISMA answer en lugar de ignorar el join.
-    const existing = state.peers.get(peerId);
-    if (existing) {
-      if (existing.pc.connectionState === 'connected') return;
-      if (existing.pc.localDescription) {
-        await publishSignal(state.roomTopic, {
-          type: 'answer',
-          protocol: PROTOCOL,
-          peerId,
-          worldName: state.worldName,
-          seed: state.worldSeed,
-          role: existing.role,
-          sdp: existing.pc.localDescription
-        });
-      }
-      return;
-    }
-
-    const peer = createHostPeerConnection(peerId, profile);
     const peer = createHostPeerConnection(peerId, profile);
 
     try {
@@ -9252,11 +9231,6 @@
     let nextRepublishAt = started + SIGNAL_RETRY_INTERVAL_MS;
     state.signalLastId = '';
 
-    const started = performance.now();
-    let nextRepublishAt = started + SIGNAL_RETRY_INTERVAL_MS;
-    state.signalLastId = '';
-    let lastRepublish = performance.now();
-
     while (performance.now() - started < timeout) {
       const messages = await pollSignals(state.roomTopic);
 
@@ -9281,7 +9255,6 @@
       if (typeof republish === 'function' && performance.now() >= nextRepublishAt) {
         await republish().catch(() => {});
         nextRepublishAt = performance.now() + SIGNAL_RETRY_INTERVAL_MS;
-      }
       }
 
       await new Promise(resolve => setTimeout(resolve, SIGNAL_POLL_INTERVAL_MS));
@@ -9328,12 +9301,6 @@
 
     try {
       const profile = profileNetworkSnapshot();
-
-    try {
-      const profile = profileNetworkSnapshot();
-      let peer = null;
-      let answer = null;
-      let lastError = null;
 
       for (let attempt = 0; attempt < 2; attempt++) {
         let peerId = '';

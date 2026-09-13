@@ -134,12 +134,6 @@ api.register({
   badge: 'EXPERIMENTAL',
   order: 25
 });
-  badge: 'EXPERIMENTAL',
-  order: 25
-});
-
-api.register({
-});
 
 api.register({
   id: 'tiny-takeover',

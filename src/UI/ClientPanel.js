@@ -9597,12 +9597,9 @@ function renderCreditsPage() {
     setModuleEnabled('coordinates', settings.coordinates);
     setModuleEnabled('waypoints', settings.waypoints);
     window.__MINIFEATHER_ARMOR_HUD_ENABLED__ = !!settings.armorHud;
-      document.dispatchEvent(
-          new CustomEvent('minifeather:armorhud-config', {
-            detail: JSON.stringify({
-              enabled: !!settings.armorHud
-            
-        })
+    document.dispatchEvent(
+      new CustomEvent('minifeather:armorhud-config', {
+        detail: JSON.stringify({ enabled: !!settings.armorHud })
       })
     );
     setModuleEnabled('titanTiny', settings.titanTiny);
@@ -9658,9 +9655,6 @@ function renderCreditsPage() {
         detail: JSON.stringify({
           enabled: !!settings.experimentalFallenLeaves,
           assetsBase: (() => { try { const u = chrome.runtime.getURL('assets/particles/'); return u && !u.includes('://invalid/') ? u : ''; } catch (_) { return ''; } })()
-        })
-      })
-    );
         })
       })
     );
