@@ -1,7 +1,7 @@
 {
-  "builtAt": "2026-09-07T20:55:00Z",
+  "builtAt": "2026-09-13T02:30:00Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Interactive Vegetation v3.1: replaces the flat green native grass/fern pixels with smooth procedural 3D blades once the replacement mesh is ready. Adds Low/Medium/High optimized profiles, GPU wind, player-body and High-quality foot contacts, underfoot flattening, trample recovery, distance LOD, and keeps all server blocks/hitboxes untouched.",
-  "version": "4.13.3"
+  "note": "Local Games keeps native mobs alive through render recovery, spawns them only in rendered chunks near the player, preserves native movement constants, and keeps host-authoritative synchronization.",
+  "version": "4.13.5"
 }

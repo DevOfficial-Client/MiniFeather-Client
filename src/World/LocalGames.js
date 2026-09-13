@@ -37,6 +37,24 @@
   const LOCAL_ABILITY_FLY_SPEED = 0.05;
   const LOCAL_PLAYER_FLY_SPEED = 0.04;
   const LOCAL_AIR_SPEED = 0.02;
+  const LOCAL_MOB_TYPES = Object.freeze({
+    pig: 12,
+    cow: 13,
+    chicken: 14,
+    sheep: 15,
+    zombie: 16,
+    skeleton: 18,
+    creeper: 19,
+    slime: 20,
+    spider: 21,
+    wolf: 27,
+    cat: 29,
+    villager: 32,
+    iron_golem: 33
+  });
+  const LOCAL_PASSIVE_MOBS = ['pig', 'cow', 'chicken', 'sheep', 'wolf', 'cat'];
+  const LOCAL_HOSTILE_MOBS = ['zombie', 'skeleton', 'creeper', 'spider'];
+  const LOCAL_MOB_LIMIT = 14;
   const GLOBAL_REGISTRY_TOPIC = 'mf-local-globalregistryv1a1b2c3d4e5f6';
   const SAVED_SERVERS_KEY = 'minifeather.localgames.savedServers.v2';
   const SERVER_STALE_AFTER_MS = 330000;
@@ -139,6 +157,13 @@
     lastPickupScan: 0,
     lastPlayerEntityRepair: 0,
     localPlayerEntityReady: false,
+    entityManager: null,
+    localMobs: new Map(),
+    localMobNextId: -2147482000,
+    localMobStartedAt: 0,
+    localMobLastTick: 0,
+    localMobLastSpawn: 0,
+    localMobLastSync: 0,
     dropStats: { spawned: 0, pickedUp: 0, fallback: 0, failed: 0, lastError: '' },
     banList: new Map(),
     connectedOnce: false,
@@ -3972,6 +3997,279 @@
 
     try { player.speedInAir = LOCAL_AIR_SPEED; } catch (_) {}
     try { player.flySpeed = LOCAL_PLAYER_FLY_SPEED; } catch (_) {}
+  }
+
+  function looksLikeEntityManager(value) {
+    return !!(
+      value &&
+      typeof value === 'object' &&
+      typeof value.addEntity === 'function' &&
+      typeof value.addLocalEntity === 'function' &&
+      typeof value.collectEntity === 'function' &&
+      typeof value.startDeathRagdoll === 'function'
+    );
+  }
+
+  function resolveEntityManager() {
+    if (looksLikeEntityManager(state.entityManager)) return state.entityManager;
+
+    const mod = state.moduleNamespace;
+    if (!mod || typeof mod !== 'object') return null;
+
+    for (const value of Object.values(mod)) {
+      if (!looksLikeEntityManager(value)) continue;
+      state.entityManager = value;
+      return value;
+    }
+
+    return null;
+  }
+
+  function localMobSurface(x, z) {
+    const bx = Math.floor(Number(x));
+    const bz = Math.floor(Number(z));
+    const height = Number(state.terrainSurface.get(`${bx},${bz}`));
+    if (!Number.isFinite(height) || height < 63) return null;
+    if (!withinWorldBounds(bx, height + 1, bz)) return null;
+    try {
+      if (state.world?.isBlockLoaded?.(blockPos(bx, height, bz)) === false) return null;
+    } catch (_) {}
+    for (const y of [height + 1, height + 2]) {
+      const blockState = getStateAt(bx, y, bz);
+      const block = blockState?.getBlock?.() || blockState?.block;
+      if (block && block.isAir?.() !== true && block.isReplaceable !== true) return null;
+    }
+    return { x: Number(x), y: height + 1.01, z: Number(z) };
+  }
+
+  function localMobSpawnPosition(minDistance = 8, maxDistance = 28) {
+    const player = state.game?.player;
+    const origin = player?.pos || state.origin;
+    if (!origin) return null;
+
+    for (let attempt = 0; attempt < 24; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = minDistance + Math.random() * Math.max(1, maxDistance - minDistance);
+      const pos = localMobSurface(
+        Number(origin.x) + Math.cos(angle) * distance,
+        Number(origin.z) + Math.sin(angle) * distance
+      );
+      if (pos) return pos;
+    }
+
+    return null;
+  }
+
+  function spawnLocalMob(typeName, position = null, requestedId = null) {
+    if (!state.active || !state.directLocal || Number(state.game?.state) !== 6) return null;
+
+    const type = LOCAL_MOB_TYPES[String(typeName || '').toLowerCase()];
+    const manager = resolveEntityManager();
+    const world = state.world;
+    const pos = position || localMobSpawnPosition();
+    if (!type || !manager || !world || !pos) return null;
+
+    const hasRequestedId = requestedId !== null && requestedId !== undefined && Number.isFinite(Number(requestedId));
+    const requested = hasRequestedId ? Number(requestedId) : null;
+    const id = hasRequestedId ? requested : state.localMobNextId--;
+    if (hasRequestedId) state.localMobNextId = Math.min(state.localMobNextId, requested - 1);
+    const yaw = Math.random() * Math.PI * 2;
+
+    try {
+      manager.addEntity({
+        id,
+        type,
+        pos: {
+          x: Math.round(pos.x * 32),
+          y: Math.round(pos.y * 32),
+          z: Math.round(pos.z * 32)
+        },
+        yaw,
+        pitch: 0,
+        motion: { x: 0, y: 0, z: 0 }
+      }, world);
+
+      const entity = world.getEntityIncludingQueued?.(id) || world.entities?.get?.(id);
+      if (!entity) return null;
+
+      const hostile = LOCAL_HOSTILE_MOBS.includes(String(typeName));
+      state.localMobs.set(id, {
+        id,
+        type: String(typeName),
+        entity,
+        hostile,
+        homeX: pos.x,
+        homeZ: pos.z,
+        targetX: pos.x,
+        targetZ: pos.z,
+        nextTargetAt: 0,
+        lastPositionAt: performance.now()
+      });
+
+      if (state.mode === 'host' && !hasRequestedId) {
+        broadcastReliable({
+          t: 'mob-spawn',
+          mob: { id, type: String(typeName), x: pos.x, y: pos.y, z: pos.z, yaw }
+        });
+      }
+
+      return entity;
+    } catch (_) {
+      try { world.removeEntityFromWorld?.(id); } catch (_) {}
+      return null;
+    }
+  }
+
+  function clearLocalMobs() {
+    const world = state.world;
+    for (const id of state.localMobs.keys()) {
+      try { world?.removeEntityFromWorld?.(id); } catch (_) {}
+    }
+    state.localMobs.clear();
+    state.localMobNextId = -2147482000;
+    state.localMobStartedAt = 0;
+    state.localMobLastTick = 0;
+    state.localMobLastSpawn = 0;
+    state.localMobLastSync = 0;
+  }
+
+  function localMobNight() {
+    const time = ((Number(state.world?.worldTime) || 0) % 24000 + 24000) % 24000;
+    return time >= 13000 && time <= 23000;
+  }
+
+  function chooseLocalMobTarget(mob, now) {
+    const player = state.game?.player;
+    const entity = mob.entity;
+    if (!entity?.pos) return;
+
+    if (mob.hostile && player?.pos) {
+      const distance = Math.hypot(
+        Number(player.pos.x) - Number(entity.pos.x),
+        Number(player.pos.z) - Number(entity.pos.z)
+      );
+      if (distance < 18) {
+        mob.targetX = Number(player.pos.x);
+        mob.targetZ = Number(player.pos.z);
+        mob.nextTargetAt = now + 500;
+        return;
+      }
+    }
+
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 2 + Math.random() * 8;
+    mob.targetX = mob.homeX + Math.cos(angle) * distance;
+    mob.targetZ = mob.homeZ + Math.sin(angle) * distance;
+    mob.nextTargetAt = now + 2500 + Math.random() * 4500;
+  }
+
+  function updateLocalMob(mob, now) {
+    const entity = mob.entity;
+    if (!entity || entity.dead || !entity.pos) {
+      state.localMobs.delete(mob.id);
+      return;
+    }
+
+    if (now >= mob.nextTargetAt) chooseLocalMobTarget(mob, now);
+
+    const dx = mob.targetX - Number(entity.pos.x);
+    const dz = mob.targetZ - Number(entity.pos.z);
+    const distance = Math.hypot(dx, dz);
+    if (distance < 0.3) {
+      mob.nextTargetAt = 0;
+      return;
+    }
+
+    const step = Math.min(distance, mob.hostile ? 0.13 : 0.08);
+    const x = Number(entity.pos.x) + dx / distance * step;
+    const z = Number(entity.pos.z) + dz / distance * step;
+    const surface = localMobSurface(x, z);
+    if (!surface || Math.abs(surface.y - Number(entity.pos.y)) > 1.25) {
+      mob.nextTargetAt = 0;
+      return;
+    }
+
+    const yaw = Math.atan2(-dx, dz);
+    entity.serverPos?.set?.(surface.x * 32, surface.y * 32, surface.z * 32);
+    entity.setPositionAndRotation2?.(surface.x, surface.y, surface.z, yaw, 0, 3);
+    entity.yaw = yaw;
+    entity.pitch = 0;
+    entity.onGround = true;
+    mob.lastPositionAt = now;
+  }
+
+  function updateLocalMobs(now = performance.now()) {
+    if (!state.active || !state.directLocal || Number(state.game?.state) !== 6) return;
+    if (state.game?.renderLoopErrored === true || renderChunkCount(state.game) < 8) return;
+    if (state.mode === 'join') return;
+
+    if (!state.localMobStartedAt) state.localMobStartedAt = now;
+    if (now - state.localMobStartedAt < 2500) return;
+
+    if (now - state.localMobLastTick >= 100) {
+      for (const mob of state.localMobs.values()) updateLocalMob(mob, now);
+      state.localMobLastTick = now;
+    }
+
+    if (state.localMobs.size >= LOCAL_MOB_LIMIT || now - state.localMobLastSpawn < 900) return;
+
+    const hostileCount = Array.from(state.localMobs.values()).filter(mob => mob.hostile).length;
+    const passiveCount = state.localMobs.size - hostileCount;
+    let pool = null;
+
+    if (passiveCount < 8) pool = LOCAL_PASSIVE_MOBS;
+    else if (localMobNight() && hostileCount < 6) pool = LOCAL_HOSTILE_MOBS;
+
+    if (!pool) return;
+    spawnLocalMob(pool[Math.floor(Math.random() * pool.length)]);
+    state.localMobLastSpawn = now;
+  }
+
+  function localMobPayload(mob) {
+    const entity = mob?.entity;
+    if (!entity?.pos) return null;
+    return {
+      id: mob.id,
+      type: mob.type,
+      x: Number(entity.pos.x),
+      y: Number(entity.pos.y),
+      z: Number(entity.pos.z),
+      yaw: Number(entity.yaw) || 0
+    };
+  }
+
+  function localMobSnapshot() {
+    return Array.from(state.localMobs.values()).map(localMobPayload).filter(Boolean);
+  }
+
+  function applyLocalMobSnapshot(mobs) {
+    if (!Array.isArray(mobs) || !state.active || !state.directLocal) return;
+    clearLocalMobs();
+    for (const mob of mobs.slice(0, LOCAL_MOB_LIMIT)) {
+      const type = String(mob?.type || '').toLowerCase();
+      const id = Number(mob?.id);
+      const position = { x: Number(mob?.x), y: Number(mob?.y), z: Number(mob?.z) };
+      if (!LOCAL_MOB_TYPES[type] || !Number.isFinite(id) || !Object.values(position).every(Number.isFinite)) continue;
+      const entity = spawnLocalMob(type, position, id);
+      if (entity && Number.isFinite(Number(mob.yaw))) entity.yaw = Number(mob.yaw);
+    }
+  }
+
+  function applyLocalMobPositions(mobs) {
+    if (!Array.isArray(mobs)) return;
+    for (const data of mobs.slice(0, LOCAL_MOB_LIMIT)) {
+      const mob = state.localMobs.get(Number(data?.id));
+      const entity = mob?.entity;
+      const x = Number(data?.x);
+      const y = Number(data?.y);
+      const z = Number(data?.z);
+      const yaw = Number(data?.yaw) || 0;
+      if (!entity || ![x, y, z].every(Number.isFinite)) continue;
+      entity.serverPos?.set?.(x * 32, y * 32, z * 32);
+      entity.setPositionAndRotation2?.(x, y, z, yaw, 0, 3);
+      entity.yaw = yaw;
+      entity.onGround = true;
+    }
   }
 
   function setLocalGamemode(modeId) {
@@ -8232,6 +8530,7 @@
   function stopWorld(reload = true, notifyGuests = true) {
     log(`stopWorld reload=${reload} (mode=${state.mode}, active=${state.active})`);
     stopLoops();
+    clearLocalMobs();
     closeP2P(notifyGuests);
     restoreWorldBlockBroadcast();
     restoreWorldItemDrops();
@@ -8398,6 +8697,12 @@
       for (const entry of messages) {
         if (entry.type === 'system') addSystemChat(entry.payload);
         if (entry.type === 'chat') addPlayerChat(entry.payload?.profile, entry.payload?.text);
+        if (entry.type === 'mob-snapshot') applyLocalMobSnapshot(entry.payload);
+        if (entry.type === 'mob-spawn') {
+          const mob = entry.payload;
+          spawnLocalMob(mob?.type, { x: Number(mob?.x), y: Number(mob?.y), z: Number(mob?.z) }, Number(mob?.id));
+        }
+        if (entry.type === 'mob-positions') applyLocalMobPositions(entry.payload);
       }
     }
   }
@@ -8465,6 +8770,32 @@
           state.deferredBlocks.splice(0, state.deferredBlocks.length - 4096);
         }
       }
+      return;
+    }
+
+    if (message.t === 'mob-snapshot') {
+      if (state.active && state.directLocal) applyLocalMobSnapshot(message.mobs);
+      else queueDeferredMessage('mob-snapshot', message.mobs);
+      return;
+    }
+
+    if (message.t === 'mob-spawn') {
+      const mob = message.mob;
+      if (state.active && state.directLocal && mob) {
+        spawnLocalMob(
+          mob.type,
+          { x: Number(mob.x), y: Number(mob.y), z: Number(mob.z) },
+          Number(mob.id)
+        );
+      } else if (mob) {
+        queueDeferredMessage('mob-spawn', mob);
+      }
+      return;
+    }
+
+    if (message.t === 'mob-positions') {
+      if (state.active && state.directLocal) applyLocalMobPositions(message.mobs);
+      else queueDeferredMessage('mob-positions', message.mobs);
       return;
     }
 
@@ -8617,6 +8948,7 @@
         });
 
         sendBlockSnapshot(peer);
+        sendJSON(channel, { t: 'mob-snapshot', mobs: localMobSnapshot() });
         announceSystem(`${peer.profile.name} has joined.`);
         broadcastRoster();
       });
@@ -9243,6 +9575,15 @@
         pickupNearbyLocalItems();
       }
 
+      if (state.directLocal) {
+        updateLocalMobs(now);
+
+        if (state.mode === 'host' && now - state.localMobLastSync >= 250) {
+          broadcastReliable({ t: 'mob-positions', mobs: localMobSnapshot() });
+          state.localMobLastSync = now;
+        }
+      }
+
       if (
         state.mode === 'host' &&
         now - state.lastTimeSync >= 2000 &&
@@ -9441,6 +9782,18 @@
     },
     getDropStats() {
       return { ...(state.dropStats || {}) };
+    },
+    summon(type, x = null, z = null) {
+      const position = Number.isFinite(Number(x)) && Number.isFinite(Number(z))
+        ? localMobSurface(Number(x), Number(z))
+        : null;
+      return spawnLocalMob(type, position);
+    },
+    clearMobs() {
+      clearLocalMobs();
+    },
+    getMobs() {
+      return localMobSnapshot();
     },
     renderProbe(logResult = true) {
       return localRenderProbe(logResult);
