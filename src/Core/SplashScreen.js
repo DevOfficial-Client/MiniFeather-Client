@@ -17,6 +17,11 @@ try {
     metaSkins.name = 'mf-skins-base';
     metaSkins.content = chrome.runtime.getURL('skins/');
     document.documentElement.appendChild(metaSkins);
+    // base de partículas para WaterSplash (MAIN world no tiene chrome.runtime)
+    const metaParticles = document.createElement('meta');
+    metaParticles.name = 'mf-particles-base';
+    metaParticles.content = chrome.runtime.getURL('assets/particles/');
+    document.documentElement.appendChild(metaParticles);
   }
 } catch (_) {}
 

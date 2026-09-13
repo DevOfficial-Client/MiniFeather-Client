@@ -1,0 +1,26 @@
+{
+  "textures": [
+    "shine:world_ambience/birds/birb1_left",
+    "shine:world_ambience/birds/birb1_right",
+    "shine:world_ambience/birds/birb1_checking_left",
+    "shine:world_ambience/birds/birb1_checking_right",
+    "shine:world_ambience/birds/birb2_flying_left_1",
+    "shine:world_ambience/birds/birb2_flying_left_2",
+    "shine:world_ambience/birds/birb2_flying_right_1",
+    "shine:world_ambience/birds/birb2_flying_right_2",
+    "shine:world_ambience/birds/bird2_left",
+    "shine:world_ambience/birds/bird2_right",
+    "shine:world_ambience/birds/bird2_checking_left",
+    "shine:world_ambience/birds/bird2_checking_right",
+    "shine:world_ambience/birds/bird2_flying_left_1",
+    "shine:world_ambience/birds/bird2_flying_left_2",
+    "shine:world_ambience/birds/bird2_flying_left_3",
+    "shine:world_ambience/birds/bird2_flying_left_4",
+    "shine:world_ambience/birds/bird2_flying_left_5",
+    "shine:world_ambience/birds/bird2_flying_right_1",
+    "shine:world_ambience/birds/bird2_flying_right_2",
+    "shine:world_ambience/birds/bird2_flying_right_3",
+    "shine:world_ambience/birds/bird2_flying_right_4",
+    "shine:world_ambience/birds/bird2_flying_right_5"
+  ]
+}

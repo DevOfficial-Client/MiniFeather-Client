@@ -1,0 +1,49 @@
+{
+	"credit": "Created by FreshLX for Fresh Animations",
+	"animations": [
+		{
+			"varb.pfc": "frame_counter == var.pre_frame_counter",
+			"var.hy": "clamp(head_yaw,-90,90) * clamp( 1-abs( var.position-pos_y )*2, 0, 1 )",
+			"var.r": "random(id)*pi*4",
+			"var.up": "var.up +abs( var.pre_posy-pos_y )",
+			"var.ls": "var.r +limb_swing*2 +age/7 +var.up*4",
+			"var.ft": "limb_swing/3 +age/3",
+			"var.m": "clamp( limb_speed*3 +abs( var.position-pos_y ), 0, 1 )",
+			"var.waves": "pos_x*1.5 +pos_y*2 +pos_z*1.5 +age/17",
+			"var.inair": "clamp( if( varb.pfc, var.inair, !is_in_water, var.inair +1 *frame_time, var.inair -2 *frame_time ), 0, 1 )",
+			"var.position": "if( varb.pfc, var.position, !equals(pos_y,var.pre_posy,1), pos_y, pos_y*min(1,frame_time*6) +var.position*max(0,1-frame_time*6) )",
+			"var.Created_by_FreshLX_for_Fresh_Animations": "1"
+		},
+		{
+			"body.ry": "-tail.ry/6  +sin( var.ft/3 +sin( var.ft/5 )/2 )*var.inair",
+			"body.rz": "if( is_in_water, 0, -pi/2 )",
+			"body.rx": "( clamp( ( var.position-pos_y )*3, -1.5, 1.5 ) -sin( var.waves )/24*(1-var.m) )*(1-var.inair)",
+			"body2.rz": "( -cos( var.ls )/10*var.m -cos( var.waves )/20*(1-var.m) )*(1-var.inair) +( sin( var.ft/6 +sin( var.ft/3 )*1.2 )*pi/2 )*var.inair",
+			"body2.ty": "if( is_in_water, -1.5,-5) +cos( var.waves )               *(1-var.inair) +(                     clamp( ( var.position-pos_y )*4,-1,1)*4 +3 )*clamp(1-(1-var.inair)*4,0,1)",
+			"body2.ry": "   (  sin( var.ls )/13*(0.5+var.m*1.5) +torad(var.hy)/2  )*(1-var.inair) +( -cos( var.ft )/4   +clamp( ( var.position-pos_y )*2,-1,1)*body2.rz   )*var.inair",
+			"tail2.tx": "   (  sin( var.ls )/6 *(0.5+var.m*1.5) +torad(var.hy)/4  )*(1-var.inair) +( -sin( var.ft )/6   -clamp( ( var.position-pos_y )*2,-1,1)*body2.rz/2 )*var.inair",
+			"tail2.ry": "   ( -cos( var.ls )/3 *(0.5+var.m*1.5) +torad(var.hy)/1.5)*(1-var.inair) +( -sin( var.ft )/1.5 -clamp( ( var.position-pos_y )*5,-1,1)*body2.rz   )*var.inair",
+			"tail2.rz": "   (  cos( 0.8 +var.ls )/6 *(1 -var.m)                   )*(1-var.inair)    -sin( var.ft )/3                                                      *var.inair",
+			"fin_top2.rz": "(  cos( var.ls )/8 *(1  -var.m*0.5)                   )*(1-var.inair) +(  sin( var.ft )/1.5 -clamp( ( var.position-pos_y )*5,-1,1)*body2.rz   )*var.inair",
+			"body2.tx": "   (  cos( var.ls )/5 *(0.5+var.m*1.5)                   )*(1-var.inair)    -cos( var.ft )   *var.inair   +if( is_in_water, 0, -1.82 )",
+			"tail2.rx": "   ( -sin( var.waves )/10*(1-var.m) -max(0,1-var.m*2)/20 )*(1-var.inair)    -sin( var.ft )/6 *var.inair",
+			"body2.tz": "3",
+			"fin_bottom2.rz": "-fin_top2.rz/1.5",
+			"body2.sx": "1 +( 0.5-random(id) )/3",
+			"body2.sy": "body2.sx",
+			"body2.sz": "body2.sx"
+		},
+		{
+			"left_fin.rx": " torad(-20)",
+			"right_fin.rx": "torad(-20)",
+			"left_fin.ry": " torad(-35          ) +(  cos(      var.r +limb_swing/2 +age/4 +sin( var.r +limb_swing/2 +age/8 )   )/2 *max(0,1-var.m*2) +( -0.5 -sin( var.r +limb_swing*1.5 +age/6 )/3 ) *min(1,var.m*2) )*(1-var.inair) +sin(age/1.5)/2*var.inair",
+			"right_fin.ry": "torad( 35          ) +( -sin(      var.r +limb_swing/2 +age/4 +cos( var.r +limb_swing/2 +age/8 )   )/2 *max(0,1-var.m*2) +(  0.5 -sin( var.r +limb_swing*1.5 +age/6 )/3 ) *min(1,var.m*2) )*(1-var.inair) -sin(age/1.5)/2*var.inair",
+			"left_fin.rz": " torad( 10 +9*var.m ) +( -cos( 0.5 +var.r +limb_swing/2 +age/4 +sin( var.r +limb_swing/2 +age/8 )/2 )/4 *max(0,1-var.m*2) )*(1-var.inair)",
+			"right_fin.rz": "torad(-10 -9*var.m ) +(  sin( 0.5 +var.r +limb_swing/2 +age/4 +cos( var.r +limb_swing/2 +age/8 )/2 )/4 *max(0,1-var.m*2) )*(1-var.inair)"
+		},
+		{
+			"var.pre_posy": "pos_y",
+			"var.pre_frame_counter": "frame_counter"
+		}
+	]
+}

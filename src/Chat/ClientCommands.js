@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña']);
 
   function parseDetail(event) {
     try {
@@ -517,6 +517,109 @@
         return;
       }
       addChat('Usage: /caja spawn [follow] | open | anim <name> | despawn', 'error');
+      return;
+    }
+
+    if (command === 'baby') {
+      const api = globalThis.__MINIFEATHER_TINY_TAKEOVER__;
+      if (!api) { addChat('TinyTakeover is not ready yet.', 'error'); return; }
+      const action = (args[0] || 'help').toLowerCase();
+      if (action === 'spawn') {
+        const type = (args[1] || 'wolf').toLowerCase();
+        if (!api.types.includes(type)) { addChat('Unknown baby type. Available: ' + api.types.join(', '), 'error'); return; }
+        const name = (args[2] || type + '_' + Math.floor(Math.random() * 1000)).toLowerCase();
+        const ok = api.spawn(name, type);
+        if (!ok) { addChat('Could not spawn (name in use?).', 'error'); return; }
+        addChat(`Baby ${type} spawned${type === 'wolf' ? ' \u00a1lobezno!' : ''}. Follows you around.`, 'success');
+        // diagnóstico: verificar que el pipeline arrancó de verdad
+        setTimeout(() => {
+          try {
+            const d = api.debug();
+            console.log('[MiniFeather /baby] spawn check:', d);
+            if (!d.rigs) addChat('Warning: rig not created (see console).', 'error');
+          } catch (e) { console.warn('[MiniFeather /baby] debug failed', e); }
+        }, 1500);
+        return;
+      }
+      if (action === 'despawn' || action === 'remove') {
+        const name = (args[1] || '').toLowerCase();
+        const ok = name === 'all' ? api.despawnAll() : api.despawn(name);
+        addChat(ok ? 'Baby removed.' : 'No such baby (see /baby list).', ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'sit') {
+        const name = (args[1] || '').toLowerCase();
+        const ok = api.sit(name);
+        addChat(ok ? 'Toggled sit.' : 'No such baby.', ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'list') {
+        const list = api.list();
+        if (!list.length) addChat('No client-side babies spawned.', 'success');
+        else for (const b of list) addChat(`  ${b.name} (${b.type})${b.sitting ? ' [sitting]' : ''} @ ${b.pos.x.toFixed(1)}, ${b.pos.y.toFixed(1)}, ${b.pos.z.toFixed(1)}`, 'info');
+        return;
+      }
+      if (action === 'help' || action === '') {
+        for (const line of [
+          '\\yellow\\/baby spawn <type> [name]\\reset\\ - Spawn a client-side baby (default: wolf)',
+          '\\yellow\\/baby despawn <name|all>\\reset\\ - Remove babies',
+          '\\yellow\\/baby sit <name>\\reset\\ - Toggle sitting',
+          '\\yellow\\/baby list\\reset\\ - Spawned babies',
+          'Types: \\yellow\\' + api.types.join(', ') + '\\reset\\'
+        ]) state.chat?.addChat?.({ text: line });
+        return;
+      }
+      return;
+    }
+
+    if (command === 'spider' || command === 'arana' || command === 'araña') {
+      const api = globalThis.MF_SPIDER_BOT;
+      if (!api) { addChat('SpiderBot is not ready yet (reload page).', 'error'); return; }
+      const action = (args[0] || 'help').toLowerCase();
+      if (action === 'spawn') {
+        const preset = (args[1] || 'boxy').toLowerCase();
+        const variant = (args[2] || '').toLowerCase() || null;
+        const scale = args[3] ? Number(args[3]) : undefined;
+        if (!api.presets().includes(preset)) { addChat('Unknown torso: ' + api.presets().join(', '), 'error'); return; }
+        const r = api.spawn(null, preset, variant, scale);
+        if (!r.ok) { addChat('Could not spawn: ' + r.error, 'error'); return; }
+        api.enable(true);
+        addChat(`Spider "${r.name}" (${preset}${variant ? ' ' + variant : ''}) spawned \u00a1ara\u00f1a-robot! Follows you.`, 'success');
+        setTimeout(() => {
+          try { console.log('[MiniFeather /spider] check:', api.debug()); } catch (e) { console.warn(e); }
+        }, 1500);
+        return;
+      }
+      if (action === 'despawn') {
+        const name = (args[1] || '').toLowerCase();
+        const ok = name === 'all' ? (api.clear(), true) : api.despawn(name);
+        addChat(ok ? 'Spider removed.' : 'No such spider (see /spider list).', ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'list') {
+        const list = api.list();
+        if (!list.length) addChat('No spiders spawned.', 'success');
+        else for (const s of list) addChat(`  ${s.name} (${s.preset}${s.variant && s.variant !== 'normal' ? ' ' + s.variant : ''})`, 'info');
+        return;
+      }
+      if (action === 'angel') {
+        // atajo: /spider angel → stealth blanco + halo + alas
+        const r = api.spawn('angel_' + Math.floor(Math.random() * 100), 'stealth', 'angel');
+        if (!r.ok) { addChat('Could not spawn angel: ' + r.error, 'error'); return; }
+        api.enable(true);
+        addChat('\\white\\ \u275d Un \u00e1ngel ar\u00e1cnido descendi\u00f3 del cielo \u275e\\reset\\', 'success');
+        return;
+      }
+      if (action === 'help' || action === '') {
+        for (const line of [
+          '\\yellow\\/spider spawn <torso> [variant] [scale]\\reset\\ - Spawn (torsos: flat, boxy, stealth)',
+          '\\yellow\\/spider angel\\reset\\ - \u00c1ngel ar\u00e1cnido gigante (halo + alas + 8 patas)',
+          '\\yellow\\/spider despawn <name|all>\\reset\\ - Remove spiders',
+          '\\yellow\\/spider list\\reset\\ - Spawned spiders',
+          'Variants: \\yellow\\angel\\reset\\ (white + halo + wings + 8 legs)'
+        ]) state.chat?.addChat?.({ text: line });
+        return;
+      }
       return;
     }
 

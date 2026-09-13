@@ -1,0 +1,42 @@
+{
+	"credit": "Created by FreshLX for Fresh Animations",
+	"animations": [
+		{
+			"var.hy": "clamp(head_yaw,-90,90)",
+			"var.r": "random(id)*pi*4",
+			"var.b": "age/11",
+			"var.open": "-(lid.ty-24)/3.295",
+			"var.hurt": "if(is_hurt, -sin(hurt_time*pi/5)/6*hurt_time, 0)",
+			"var.nov1": "(0.5-0.5*cos( clamp(cos(var.r +age/60)*4, 0, 1)*pi ))*(var.open*clamp(1-lid.ry*2, 0, 1))",
+			"lid2.visible": "true",
+			"var.Created_by_FreshLX_for_Fresh_Animations": "1"
+		},
+		{
+			"head2.rx": "-torad(45)*clamp(1-var.open, 0, 1) -sin(var.b -cos(var.b)/2)/20 +sin(limb_swing/2)/3*var.hurt*if(var.open==0, 0, 1)",
+			"head2.ry": "head.ry -cos(age/8 -sin(age/8*2)/2)/4*var.nov1 +sin(limb_swing/2.5)*sin(hurt_time/2)*hurt_time/10",
+			"head2.tx": "1.7*var.open*clamp(1-lid.ry*2, 0, 1)*sin(torad(var.hy))*var.nov1 -1.5*var.hurt*sin(torad(var.hy))*if(var.open==0, 0, 1)",
+			"head2.tz": "1.7*var.open*clamp(1-lid.ry*2, 0, 1)*cos(torad(var.hy))*var.nov1 -1.5*var.hurt*cos(torad(var.hy))*if(var.open==0, 0, 1)",
+			"head2.ty": "-5.3 -4*clamp(var.open, 0, 1) -clamp(var.open/2, 0, 1) +sin(var.b)/2 -clamp(var.hurt, 0, 1)*1.5*clamp(var.open, 0.3, 1)*if(var.open==0, 0, 1)",
+			"lid2.ty": "-2 -var.open*clamp(2.5+lid.ry, 0, 3.3)     -clamp(var.hurt, 0, 1)*3  *clamp(var.open, 0.3, 1)*if(var.open==0, 0, 1)",
+			"lid2.rx": " torad(10+cos(var.b)*2)*var.open*clamp(1-lid.ry*2, 0, 1)*cos(torad(var.hy)) +sin(limb_swing/4*if(var.open==0, 5, 1))/8*var.hurt*clamp(var.open, 0.3, 1)",
+			"lid2.rz": "-torad(10+cos(var.b)*2)*var.open*clamp(1-lid.ry*2, 0, 1)*sin(torad(var.hy)) +cos(limb_swing/3*if(var.open==0, 5, 1))/8*var.hurt*clamp(var.open, 0.3, 1)",
+			"lid2.ry": "lid.ry +sin(limb_swing/3*if(var.open==0, 5, 1))/2*var.hurt*clamp(var.open, 0.1, 1)"
+		},
+		{
+			"r_eye.tz": "-clamp( sqrt( pow(pos_x-player_pos_x, 2) +pow(pos_y-player_pos_y, 2) +pow(pos_z-player_pos_z, 2) ), 0, 128 )/1000",
+			"l_eye.tz": "r_eye.tz",
+			"r_pupil.tz": "r_eye.tz",
+			"l_pupil.tz": "r_eye.tz",
+			"var.r_pupil_x": "clamp((-0.3 +cos(pi/4+age/8)*10)*var.nov1, -1, 0)",
+			"var.l_pupil_x": "clamp(( 0.3 +cos(pi/4+age/8)*10)*var.nov1,  0, 1)",
+			"r_eye.sy": "1 -pow( clamp((1.5 -abs(sin(var.r+age/9)*5 ))*clamp(-32 +cos((var.r+age/9)/1.5)*40 +cos((var.r+age/9)/4)*40, 0, 1), clamp(var.hurt*2 +death_time/2, 0, 1), 1), 2 )",
+			"l_eye.sy": "r_eye.sy",
+			"r_pupil.tx": "clamp( var.r_pupil_x+1,  0, 1 )-1",
+			"l_pupil.tx": "clamp( var.l_pupil_x-1, -1, 0 )+1",
+			"r_pupil.sx": "clamp(1 +clamp(-var.r_pupil_x, -0.2, 0 ), 0.5, 1 )",
+			"l_pupil.sx": "clamp(1 +clamp( var.l_pupil_x, -0.2, 0 ), 0.5, 1 )",
+			"r_eye.visible": "r_eye.sy!=0",
+			"l_eye.visible": "l_eye.sy!=0"
+		}
+	]
+}

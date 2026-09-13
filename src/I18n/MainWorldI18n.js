@@ -206,7 +206,7 @@
   }
 
   function setLanguage(language) {
-    const next = ['en', 'es', 'ja', 'it'].includes(language) ? language : 'en';
+    const next = ['en', 'es', 'ja', 'it', 'zh', 'fr', 'de', 'pt', 'ru', 'ko'].includes(language) ? language : 'en';
     if (state.language === next) {
       translateDocument();
       return;
@@ -215,12 +215,26 @@
     translateDocument();
   }
 
+  function getLanguage() {
+    return state.language;
+  }
+
+  // t('key', {var: 'x'}) → string (con fallback a en, luego a la clave)
+  function t(key, vars) {
+    const values = state.entries.get(key);
+    if (!values) return key;
+    const v = values[state.language] ?? values.en ?? key;
+    return format(v, vars || {});
+  }
+
   function onLanguage(event) {
     let detail = null;
     try {
       detail = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
     } catch (_) {}
-    if (detail?.language) setLanguage(detail.language);
+    if (!detail) return;
+    if (detail.strings) register(detail.strings);
+    if (detail.language) setLanguage(detail.language);
   }
 
   function patchDialogs() {
@@ -268,7 +282,7 @@
   });
   patchDialogs();
 
-  const api = { register, translate, translateInline, setLanguage, destroy };
+  const api = { register, translate, translateInline, setLanguage, getLanguage, t, destroy };
   globalThis.MiniFeatherI18n = api;
   globalThis[KEY] = api;
 })();

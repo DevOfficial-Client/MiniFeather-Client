@@ -1,0 +1,76 @@
+{
+	"credit": "Created by FreshLX for Fresh Animations",
+	"animations": [
+		{
+			"varb.pfc": "frame_counter == var.pre_frame_counter",
+			"var.hy": "clamp(head_yaw,-90,90)*if(is_riding, 0, 1)",
+			"var.r": "random(id)*pi*4",
+			"var.roll": "clamp(if( varb.pfc, var.roll, !is_in_water&&!is_riding&&!is_on_ground&&between(sin(var.r+age/128)*2, 1, 2), min(40, var.roll +0.05 *frame_time*40), max(0, var.roll -0.05 *frame_time*40)), 0, 1) +if(!is_in_water&&!is_riding&&!is_on_ground&&between(sin(age/128)*2, 1, 2), 1, 0)*0",
+			"var.water": "clamp(if( varb.pfc, var.water, is_in_water&&!is_riding, min(40, var.water +0.05 *frame_time*40), max(0, var.water -0.05 *frame_time*40)), 0, 1)",
+			"var.air": "clamp(1-var.water, 0, 1)",
+			"var.b": "var.r +age/if(is_child, 10, 15)",
+			"var.up": "var.up +abs( var.pre_posy-pos_y )",
+			"var.ls": "limb_swing/if(is_child, 3, 1.5) +var.up*2",
+			"var.m": "clamp( limb_speed*2 +abs( var.position-pos_y ), 0, 1 )*if(is_child, 1.3, 1)",
+			"var.yrot_offset": "if( varb.pfc, var.yrot_offset, var.yrot_offset +if( between( var.pre_roty-rot_y, -pi*2, -pi*2+0.2 ), -pi*2, between( var.pre_roty-rot_y, pi*2-0.2, pi*2 ), pi*2, 0 ) )",
+			"var.roty": "rot_y +var.yrot_offset",
+			"var.rotation": "if( varb.pfc, var.rotation, is_riding || !equals(var.roty,var.pre_Oroty,1), var.roty, var.roty*min(1,frame_time*3) +var.rotation*max(0,1-frame_time*3) )",
+			"var.position": "if( varb.pfc, var.position, is_riding || !equals(   pos_y, var.pre_posy,2),    pos_y,    pos_y*min(1,frame_time*5) +var.position*max(0,1-frame_time*5) )",
+			"var.Created_by_FreshLX_for_Fresh_Animations": "1"
+		},
+		{
+			"body.rx": "if(is_on_ground||is_riding, 0, body.rx )",
+			"body.ry": "if(is_on_ground||is_riding, 0, body.ry )",
+			"body2.rx": "-body.rx +(-sin(var.b)/10 +sin(var.ls)/6  *var.m )*var.water +if(is_on_ground||is_riding, sin(age/8)/80,                                                       -sin(age/2)/4)*var.air   +if(is_on_ground||is_riding, 0, torad(head_pitch) )",
+			"tail2.rx": "          ( cos(var.b)/8  -cos(var.ls)/3  *var.m )*var.water +if(is_on_ground||is_riding, torad(-5) -sin(age/8)/60, clamp(torad(-15  ), torad(-30), torad(15)) +cos(age/2)/3)*var.air +clamp( var.rotation-var.roty, -1, 1 )/1.5*min(1,0.3+var.m)*clamp( var.rotation-var.roty, -1, 1 )*clamp( 1-abs( var.position-pos_y )*2, 0, 1 )",
+			"tail_fin2.rx": "      ( sin(var.b)/5  -sin(var.ls)/1.5*var.m )*var.water +if(is_on_ground||is_riding, torad(-10)              , clamp(torad(-22.5), torad(-45), torad(15)) +cos(age/2)/2)*var.air +clamp( var.rotation-var.roty, -1, 1 )/1.5*min(1,0.3+var.m)*clamp( var.rotation-var.roty, -1, 1 )*clamp( 1-abs( var.position-pos_y )*2, 0, 1 )",
+			"body2.ry": "0",
+			"tail2.ry": "    clamp( var.rotation-var.roty, -1, 1 )/2*min(1,0.3+var.m)*clamp( 1-abs( var.position-pos_y )*2, 0, 1 )",
+			"tail_fin2.ry": "clamp( var.rotation-var.roty, -1, 1 )/2*min(1,0.3+var.m)*clamp( 1-abs( var.position-pos_y )*2, 0, 1 )",
+			"body2.rz": "    (asin(sin(var.r +age/8))*2*if(between(cos(var.r +age/8), 0, 1), 1, 0) -asin(sin(var.r +age/8))*2*if(between(cos(var.r +age/8), -1, 0), 1, 0))*var.roll +clamp( var.rotation-var.roty, -1, 1 )*clamp( 1-abs( var.position-pos_y ), 0, 1 )",
+			"tail2.rz": "    torad(-20)*var.roll",
+			"tail_fin2.rz": "torad(-20)*var.roll",
+			"body2.ty": "-6.5 +(cos(var.b)/2 -cos(var.ls)*var.m )*var.water +if(is_on_ground||is_riding, 2.5, 0)*var.air",
+			"body2.tz": "6"
+		},
+		{
+			"top_fin.rz": "if(is_on_ground||is_riding, torad(20), 0)*var.air +torad(20)*var.roll +clamp( var.rotation-var.roty, -1, 1 )/2*min(1,0.3+var.m)*clamp( 1-abs( var.position-pos_y )*2, 0, 1 )",
+			"right_fin2.rx": "right_fin.rx",
+			"left_fin2.rx": "  left_fin.rx",
+			"right_fin2.ry": "right_fin.ry",
+			"left_fin2.ry": "  left_fin.ry",
+			"right_fin2.rz": "right_fin.rz +(-sin(var.b)/16 +sin(var.ls)/8*var.m )*var.water +if(is_on_ground||is_riding, -right_fin.rz -torad(98), -cos(age/2)/4 -torad(15) +torad(head_pitch)/1.5)*var.air +torad(-30)*var.roll",
+			"left_fin2.rz": "  left_fin.rz +( sin(var.b)/16 -sin(var.ls)/8*var.m )*var.water +if(is_on_ground||is_riding, - left_fin.rz +torad(98),  cos(age/2)/4 +torad(15) -torad(head_pitch)/1.5)*var.air +torad(-30)*var.roll"
+		},
+		{
+			"var.blink": "pow( clamp((1.5 -abs(sin(var.r+age/if(is_child, 6, 9))*5 ))*clamp(-32 +cos((var.r+age/if(is_child, 6, 9))/1.5)*40 +cos((var.r+age/if(is_child, 6, 9))/4)*40, 0, 1), min(1, death_time/4 ), 1), 2 )",
+			"var.eye_top": "( clamp(head_pitch/120, -0.2, 0.4) +(-1.5 -cos(limb_swing/3)/2)/2*if(is_hurt, -sin(hurt_time*pi/5)/6*hurt_time, 0) )*(1-var.blink) +var.blink",
+			"var.pupil_y": "0.5 +clamp(head_pitch/120, -0.2, 0.5) +(-1.5 -cos(limb_swing/3)/2)/4*if(is_hurt, -sin(hurt_time*pi/5)/6*hurt_time, 0) -clamp(-24 +sin(var.r+age/100)*40, 0, 1)/10",
+			"var.pupil_x": "-torad(var.hy)/1.2 +clamp(sin(var.r+age/27) +sin(var.r+age/16), -0.1, 0.1)*clamp(-20*2 -cos(var.r+age/125)*30*2, 0, 1)*clamp(59*4 -sin(var.r+age/187)*60*4, 0, 1)",
+			"right_eye.tx": "-4 -clamp( sqrt( pow(pos_x-player_pos_x, 2) +pow(pos_y-player_pos_y, 2) +pow(pos_z-player_pos_z, 2) ), 0, 128 )/1000",
+			"left_eye.tx": "-right_eye.tx",
+			"r_pupil.tz": "right_eye.tx+4",
+			"l_pupil.tz": "right_eye.tx+4",
+			"r_eye_white.sy": "clamp(1 -var.eye_top, 0, 2 )",
+			"l_eye_white.sy": "r_eye_white.sy",
+			"r_eye_white.visible": "r_eye_white.sy!=0",
+			"l_eye_white.visible": "l_eye_white.sy!=0",
+			"r_pupil.tx": "clamp( var.pupil_x+1,  0, 1 )",
+			"l_pupil.tx": "clamp( var.pupil_x-1, -1, 0 )",
+			"r_pupil.ty": "clamp( var.pupil_y+0.5, -r_eye_white.sy+0.6, 1 )",
+			"l_pupil.ty": "clamp( var.pupil_y+0.5, -l_eye_white.sy+0.6, 1 )",
+			"r_pupil.sy": "clamp(1 +var.pupil_y-0.5 +r_eye_white.sy-1, 0, clamp( r_eye_white.sy, 0, clamp(-var.pupil_y+1.5, 0.5, 1) ) )",
+			"l_pupil.sy": "clamp(1 +var.pupil_y-0.5 +l_eye_white.sy-1, 0, clamp( l_eye_white.sy, 0, clamp(-var.pupil_y+1.5, 0.5, 1) ) )",
+			"r_pupil.sx": "clamp(1 +clamp(-var.pupil_x, -0.3, 0 ), 0.5, 1 )",
+			"l_pupil.sx": "clamp(1 +clamp( var.pupil_x, -0.3, 0 ), 0.5, 1 )",
+			"r_pupil.visible": "r_pupil.sy!=0",
+			"l_pupil.visible": "l_pupil.sy!=0"
+		},
+		{
+			"var.pre_posy": "pos_y",
+			"var.pre_roty": "rot_y",
+			"var.pre_Oroty": "var.roty",
+			"var.pre_frame_counter": "frame_counter"
+		}
+	]
+}

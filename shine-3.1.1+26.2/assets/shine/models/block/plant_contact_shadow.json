@@ -1,0 +1,17 @@
+{
+  "textures": {
+    "particle": "shine:block/plant_contact_shadow",
+    "shadow": "shine:block/plant_contact_shadow"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 0],
+      "to": [16, 0.01, 16],
+      "faces": {
+        "up": {
+          "texture": "#shadow"
+        }
+      }
+    }
+  ]
+}

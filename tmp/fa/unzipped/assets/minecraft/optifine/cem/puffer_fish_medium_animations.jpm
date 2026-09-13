@@ -1,0 +1,42 @@
+{
+	"credit": "Created by FreshLX for Fresh Animations",
+	"animations": [
+		{
+			"varb.pfc": "frame_counter == var.pre_frame_counter",
+			"var.hy": "clamp(head_yaw,-90,90) * clamp( 1-abs( var.position-pos_y )*2, 0, 1 )",
+			"var.r": "random(id)*pi*4",
+			"var.inair": "clamp( if( varb.pfc, var.inair, !is_in_water, var.inair +1 *frame_time, var.inair -2 *frame_time ), 0, 1 )",
+			"var.position": "if( varb.pfc, var.position, !equals(pos_y,var.pre_posy,2), pos_y, pos_y*min(1,frame_time*6) +var.position*max(0,1-frame_time*6) )",
+			"var.Created_by_FreshLX_for_Fresh_Animations": "1"
+		},
+		{
+			"body.ty": "22",
+			"body2.ry": "( sin(var.r+limb_swing  +age/12)/7 +torad(var.hy)/2                    )*(1-var.inair)   -sin(limb_swing+age/1.6)/4*var.inair",
+			"body2.rz": "( sin(var.r+limb_swing/2+age/14)/7                                     )*(1-var.inair) +(-cos(limb_swing+age/1.8)/6 +sin( (limb_swing/1.5 +age/3)/6 +sin( (limb_swing/1.5 +age/3)/3 )*1.2 )*pi/2 )*var.inair",
+			"body2.rx": "( sin(var.r+limb_swing/2+age/16)/7 +torad(30)*clamp(limb_speed*2, 0, 1))*(1-var.inair)   -sin(limb_swing+age/2  )/4*var.inair +clamp( ( var.position-pos_y )*1.5, -1.5, 1.5 )",
+			"body2.tx": "( cos(var.r+limb_swing  +age/12)/3                                     )*(1-var.inair)   -cos(limb_swing+age/1.6)  *var.inair",
+			"body2.ty": "-2",
+			"body2.sx": "1 +(0.5-random(id))/2.5 +sin(var.r+age/1.5 -cos(var.r+age/1.5)/2)/20",
+			"body2.sy": "body2.sx",
+			"body2.sz": "body2.sx"
+		},
+		{
+			"left_fin.rx": " torad( 20)",
+			"right_fin.rx": "torad( 20)",
+			"left_fin.ry": " torad( 5 ) +( cos(torad(30)+var.r+limb_swing/2+age/1.3)/3*clamp(1-limb_speed*6, 0.3, 1) )*(1-var.inair)",
+			"right_fin.ry": "torad(-5 ) +(-sin(torad(30)+var.r+limb_swing/2+age/1.2)/3*clamp(1-limb_speed*6, 0.3, 1) )*(1-var.inair)",
+			"left_fin.rz": " torad(-15) +( sin(          var.r+limb_swing/2+age/1.3)/2*clamp(1-limb_speed*6, 0.3, 1) +(torad(-10) -sin(var.r+limb_swing*1.6+age/6)/3)*clamp(limb_speed*6, 0, 1) )*(1-var.inair) +sin(age)*var.inair",
+			"right_fin.rz": "torad( 15) +( cos(          var.r+limb_swing/2+age/1.2)/2*clamp(1-limb_speed*6, 0.3, 1) +(torad( 10) -sin(var.r+limb_swing*1.6+age/6)/3)*clamp(limb_speed*6, 0, 1) )*(1-var.inair) -sin(age)*var.inair",
+			"left_fin.sx": " 2-body2.sx",
+			"right_fin.sx": "2-body2.sx",
+			"left_fin.sy": "left_fin.sx",
+			"right_fin.sy": "right_fin.sx",
+			"left_fin.sz": "left_fin.sx",
+			"right_fin.sz": "right_fin.sx"
+		},
+		{
+			"var.pre_posy": "pos_y",
+			"var.pre_frame_counter": "frame_counter"
+		}
+	]
+}

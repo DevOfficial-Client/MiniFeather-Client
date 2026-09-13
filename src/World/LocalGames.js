@@ -25,6 +25,15 @@
   const SIGNAL_REQUEST_EVENT = 'minifeather:localgames-signal-request';
   const SIGNAL_RESPONSE_EVENT = 'minifeather:localgames-signal-response';
   const STUN_URL = 'stun:stun.cloudflare.com:3478';
+  // TURN público de Open Relay (metered.ca, gratuito y sin registro).
+  // STUN solo no atraviesa NAT simétrico/CGNAT (típico en móviles y
+  // redes escolares/empresariales): sin TURN el P2P nunca conecta.
+  const ICE_SERVERS = [
+    { urls: STUN_URL },
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+  ];
   const GLOBAL_REGISTRY_TOPIC = 'mf-local-globalregistryv1a1b2c3d4e5f6';
   const SAVED_SERVERS_KEY = 'minifeather.localgames.savedServers.v2';
   const SERVER_STALE_AFTER_MS = 330000;
@@ -8374,7 +8383,7 @@
 
   function createHostPeerConnection(peerId, profile) {
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: STUN_URL }]
+      iceServers: ICE_SERVERS
     });
 
     const peer = {
@@ -8407,6 +8416,14 @@
     pc.addEventListener('connectionstatechange', () => {
       const current = pc.connectionState;
 
+      if (current === 'connected' || current === 'failed' || current === 'closed') {
+        // Refrescar el anuncio del lobby para que el contador de
+        // jugadores esté al día sin esperar los 150s del ciclo.
+        if (state.mode === 'host' && state.serverAddress) {
+          state.lastRegistryPublish = 0;
+        }
+      }
+
       if (current === 'failed' || current === 'closed') {
         handleHostPeerDisconnect(peerId);
       }
@@ -8426,7 +8443,7 @@
 
   function createGuestConnection() {
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: STUN_URL }]
+      iceServers: ICE_SERVERS
     });
 
     const peer = {
@@ -8519,7 +8536,25 @@
       return;
     }
 
-    if (state.peers.has(peerId)) return;
+    // Join duplicado del mismo peerId: la respuesta anterior pudo perderse
+    // (hueco de reconexión del WS de señalización). Si aún no conectó,
+    // re-enviar la MISMA answer en lugar de ignorar el join.
+    const existing = state.peers.get(peerId);
+    if (existing) {
+      if (existing.pc.connectionState === 'connected') return;
+      if (existing.pc.localDescription) {
+        await publishSignal(state.roomTopic, {
+          type: 'answer',
+          protocol: PROTOCOL,
+          peerId,
+          worldName: state.worldName,
+          seed: state.worldSeed,
+          role: existing.role,
+          sdp: existing.pc.localDescription
+        });
+      }
+      return;
+    }
 
     const peer = createHostPeerConnection(peerId, profile);
 
@@ -8596,9 +8631,10 @@
     return true;
   }
 
-  async function waitForGuestAnswer(peerId, timeout = 45000) {
+  async function waitForGuestAnswer(peerId, timeout = 45000, republish = null) {
     const started = performance.now();
     state.signalLastId = '';
+    let lastRepublish = performance.now();
 
     while (performance.now() - started < timeout) {
       const messages = await pollSignals(state.roomTopic);
@@ -8615,6 +8651,15 @@
         if (message.type === 'answer' && message.sdp) {
           return message;
         }
+      }
+
+      // Si el host no respondió tras 15s (p. ej. su WebSocket de
+      // señalización se reconectó y perdió el join), re-publicar la
+      // oferta para que vuelva a verla. El host ignora joins duplicados
+      // de un peerId que ya registró.
+      if (republish && performance.now() - lastRepublish >= 15000) {
+        lastRepublish = performance.now();
+        try { await republish(); } catch (_) {}
       }
 
       await new Promise(resolve => setTimeout(resolve, SIGNAL_POLL_INTERVAL_MS));
@@ -8665,7 +8710,7 @@
       await peer.pc.setLocalDescription(offer);
       await waitIce(peer.pc);
 
-      await publishSignal(state.roomTopic, {
+      const buildJoinSignal = () => ({
         type: 'join',
         protocol: PROTOCOL,
         peerId,
@@ -8673,7 +8718,11 @@
         sdp: peer.pc.localDescription
       });
 
-      const answer = await waitForGuestAnswer(peerId);
+      await publishSignal(state.roomTopic, buildJoinSignal());
+
+      const answer = await waitForGuestAnswer(peerId, 45000, () =>
+        publishSignal(state.roomTopic, buildJoinSignal())
+      );
       state.worldName = cleanText(answer.worldName, 30) || 'MiniFeather World';
       state.worldSeedOverride = Number(answer.seed);
       state.localRole = answer.role || 'player';

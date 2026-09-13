@@ -1,0 +1,32 @@
+{
+	"credit": "Created by FreshLX for Fresh Animations",
+	"animations": [
+		{
+			"varb.pfc": "frame_counter == var.pre_frame_counter",
+			"var.hy": "clamp(head_yaw,-90,90)",
+			"var.r": "random(id)*pi*4",
+			"var.b": "var.r + age * 1.5 / sqrt( max_health )",
+			"var.look": "(0.5-0.5*cos( clamp(-18 +sin(var.r+age/60)*20, 0, 1)*clamp(1-torad(var.hy)/1.5, 0, 1)*pi ))",
+			"var.swim": "clamp(if(  is_in_water, min(20, var.swim +0.04 *frame_time*20), max(0, var.swim -0.04 *frame_time*20)), 0, 1)",
+			"var.jump": "clamp(if(!is_on_ground, min(20, var.jump +0.08 *frame_time*20), max(0, var.jump -0.08 *frame_time*20)), 0, 1)",
+			"var.position": "if( varb.pfc, var.position, is_riding || !equals(pos_y,var.pre_posy,2), pos_y, pos_y*min(1,frame_time*3) +var.position*max(0,1-frame_time*3) )",
+			"var.Created_by_FreshLX_for_Fresh_Animations": "1"
+		},
+		{
+			"body.ty": "24 -if(max_health<2, 0.02, 0)",
+			"body2.ty": "-4 +(1 +sin(var.b/2) )*var.swim",
+			"body2.rx": "torad( clamp( ( pos_y-var.position )*20*limb_speed*var.jump +5*limb_speed*(1-var.jump), -10, 10) )*limb_speed*2*(1-var.swim) +(torad(10) +sin(var.b/2)/5)*var.swim",
+			"body.ry": "clamp(torad(var.hy)/10 +sin(var.b/6)/20, torad(-8), torad(8))",
+			"body.sy": "1 +(-0.05 +clamp(-cos(var.b/3 +sin(var.b/3)*clamp((max_health-1)/8, 0.5, 3))/8 , -0.4, 0.4)/1.2  -0.5 *clamp(limb_speed*(8 -clamp(sqrt(max_health)*1.5, 0, 7.7)), 0, 1)*(1-var.jump) )*(1-var.swim)",
+			"body.sx": "1 +( 0.1  +clamp( cos(var.b/3 +sin(var.b/3)*clamp((max_health-1)/8, 0.5, 3))/12, -0.3, 0.3)/1.2  +0.66*clamp(limb_speed*(8 -clamp(sqrt(max_health)*1.5, 0, 7.7)), 0, 1)*(1-var.jump) )*(1-var.swim)",
+			"body.sz": "1 +( 0.1  +clamp( cos(var.b/3 +sin(var.b/3)*clamp((max_health-1)/8, 0.5, 3))/12, -0.3, 0.3)/1.2  +0.66*clamp(limb_speed*(8 -clamp(sqrt(max_health)*1.5, 0, 7.7)), 0, 1)*(1-var.jump) )*(1-var.swim)",
+			"body2.sy": "1 +(-cos(var.b/2 -sin(var.b/2 )/2 )/4 )*var.swim +( if(age>10, clamp( ( pos_y-var.position ), 0, 0.5)*0.66 +clamp(-( pos_y-var.position ), 0, 0.5)*0.66, 0)*1.4*clamp(1-max_health/40, 0.2, 1) )*(1-var.swim)",
+			"body2.sx": "1 +( cos(var.b/2 -sin(var.b/2 )/2 )/6 )*var.swim +( if(age>10, clamp(-( pos_y-var.position ),-0.5, 0)*0.5  +clamp( ( pos_y-var.position ),-0.5, 0)*0.5 , 0)*1.4*clamp(1-max_health/40, 0.2, 1) )*(1-var.swim)",
+			"body2.sz": "1 +( cos(var.b/2 -sin(var.b/2 )/2 )/6 )*var.swim +( if(age>10, clamp(-( pos_y-var.position ),-0.5, 0)*0.5  +clamp( ( pos_y-var.position ),-0.5, 0)*0.5 , 0)*1.4*clamp(1-max_health/40, 0.2, 1) )*(1-var.swim)"
+		},
+		{
+			"var.pre_posy": "pos_y",
+			"var.pre_frame_counter": "frame_counter"
+		}
+	]
+}

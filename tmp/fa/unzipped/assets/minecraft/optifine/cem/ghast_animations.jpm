@@ -1,0 +1,104 @@
+{
+	"credit": "Created by FreshLX for Fresh Animations",
+	"animations": [
+		{
+			"varb.pfc": "frame_counter == var.pre_frame_counter",
+			"var.hy": "if( varb.pfc, var.hy, clamp(head_yaw,-90,90)*min(1,frame_time*2) +var.hy*max(0,1-frame_time*2) )",
+			"var.id": "random(id)*pi*4",
+			"var.Bt": "var.id +age/2",
+			"var.Ut": "var.id +age/9 +pos_y/3",
+			"var.Tt": "var.id +( limb_swing/3 +pos_y/4 )",
+			"var.Et": "age*1.5",
+			"var.lsg": "var.id +limb_swing/3 +var.rotation*2",
+			"var.up": "cos(var.Ut-sin(var.Ut)/1.5)/1.5",
+			"var.yrot_offset": "if( varb.pfc, var.yrot_offset, var.yrot_offset +if( between( var.pre_roty-rot_y, -pi*2, -pi*2+0.2 ), -pi*2, between( var.pre_roty-rot_y, pi*2-0.2, pi*2 ), pi*2, 0 ) )",
+			"var.roty": "rot_y +var.yrot_offset",
+			"var.rotation": "if( varb.pfc, var.rotation, !equals(var.roty,var.pre_Oroty,1), var.roty, var.roty*min(1,frame_time*2) +var.rotation*max(0,1-frame_time*2) )",
+			"var.speed": "if( varb.pfc, var.speed, age<9, 0, limb_speed*min(1,frame_time*4) +var.speed*max(0,1-frame_time*4) )",
+			"var.moveA": "min(1, 0.3 +limb_speed*4 )",
+			"var.moveB": "(0.3+0.7*limb_speed)",
+			"var.hurt": "(hurt_time/10)*(hurt_time/10)*max(0, (1-hurt_time/10)*8 )*0.2",
+			"var.grounded": "if( varb.pfc, var.grounded, is_on_ground, 1, pos_y==var.pre_posy, var.grounded, 0 )",
+			"var.Aground": "clamp( if( varb.pfc, var.Aground, var.grounded==1, var.Aground + frame_time*2, var.Aground - frame_time ), 0, 1 )",
+			"var.ground": "(0.5-0.5*cos( var.Aground*pi ) )",
+			"var.Athrust": "clamp( if( varb.pfc, var.Athrust, is_in_lava || pos_y-var.pre_posy>0.04, var.Athrust + frame_time, var.Athrust - frame_time ), 0, 1-var.ground )",
+			"var.thrust": "(0.5-0.5*cos( var.Athrust*pi ))",
+			"var.Created_by_FreshLX_for_Fresh_Animations": "1"
+		},
+		{
+			"body.rx": "-sin(var.Bt/6)/8 *var.moveB +torad( head_pitch +15*var.speed*(1-2*var.ground)  +( -3*sin(var.lsg/1.5)*1.3*var.moveA )*if(is_riding,1,var.ground)  +(-9-20*sin(limb_swing/4) )*var.hurt  )",
+			"body.rz": " sin(var.Bt/5)/17*var.moveB +torad( var.hy/6  *(1-if(is_riding,1,var.ground))  +(  2*cos(var.lsg    )*1.3*var.moveA )*if(is_riding,1,var.ground)  +(   30*cos(limb_swing/6) )*var.hurt  )  +clamp( (var.rotation-var.roty)/2, -1, 1 )/3*min(1,var.speed*4)*(1-var.ground)",
+			"body.ry": "var.rotation-rot_y          +torad( var.hy/1.5*(1-if(is_riding,1,var.ground))  +( -5*sin(var.lsg    )*1.3*var.moveA )*if(is_riding,1,var.ground)  +(   -8*sin(limb_swing/8) )*var.hurt  )",
+			"body.tx": "      (      -cos(var.Bt/5)*var.moveB         )*(1-if(is_riding,1,var.ground))",
+			"body.tz": "      (      -cos(var.Bt/6)*var.moveB         )*(1-if(is_riding,1,var.ground))",
+			"body.ty": "20.5 +(-cos(var.Ut/2)/2  -var.up*2*var.thrust )*(1-if(is_riding,1,var.ground))",
+			"body.sx": "0.9 +sin(var.Ut+cos(var.Ut)/2)/90*var.thrust",
+			"body.sy": "0.9 -sin(var.Ut+cos(var.Ut)/2)/60*var.thrust",
+			"body.sz": "0.9 +sin(var.Ut+cos(var.Ut)/2)/90*var.thrust"
+		},
+		{
+			"var.ten_twist": "clamp( -(var.rotation-var.roty)/2, -1, 1 )*(1-var.ground)",
+			"var.ten_x": "-body.rx*(1+if(is_riding,1,var.ground))  +( -sin(var.Bt/6)/4*var.moveB  +torad( 50*var.speed )  )*(1-var.ground)",
+			"tentacle_1.rx": "var.ten_x +(  sin( var.Tt +torad( 0) +var.Et/11 )/4*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad(-9 ) +var.up/2 )*var.thrust  +torad(-40*var.ten_twist ) )*(1-var.ground)  +torad( -85                                       )*var.ground",
+			"tentacle_2.rx": "var.ten_x +( -sin( var.Tt +torad(10) +var.Et/16 )/4*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad(-9 ) +var.up/2 )*var.thrust  +torad( 40*var.ten_twist ) )*(1-var.ground)  +torad( -85 +10*cos(torad( 50)+var.lsg)*var.moveA )*var.ground",
+			"tentacle_3.rx": "var.ten_x +( -cos( var.Tt +torad(40) +var.Et/14 )/4*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad(-21) +var.up   )*var.thrust                             )*(1-var.ground)  +torad( -87  +5*cos(torad(-80)+var.lsg)*var.moveA )*var.ground",
+			"tentacle_4.rx": "var.ten_x +(  cos( var.Tt +torad(30) +var.Et/12 )/4*min(1,var.moveB*2)*(1-0.7*var.thrust)                                        +torad(-50*var.ten_twist ) )*(1-var.ground)  +torad(  20 +40*sin(torad( 30)+var.lsg)           )*var.ground",
+			"tentacle_5.rx": "var.ten_x +(  sin( var.Tt +torad(60) +var.Et/14 )/4*min(1,var.moveB*2)*(1-0.7*var.thrust)                                        +torad(-20*var.ten_twist ) )*(1-var.ground)  +torad( -20 +20*sin(torad(-30)+var.lsg)           )*var.ground",
+			"tentacle_6.rx": "var.ten_x +( -cos( var.Tt +torad(70) +var.Et/16 )/4*min(1,var.moveB*2)*(1-0.7*var.thrust)                                        +torad( 30*var.ten_twist ) )*(1-var.ground)  +torad( -20 +30*sin(torad(100)+var.lsg)           )*var.ground",
+			"tentacle_7.rx": "var.ten_x +( -sin( var.Tt +torad( 0) +var.Et/14 )/4*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad( 9 ) -var.up/2 )*var.thrust  +torad(-40*var.ten_twist ) )*(1-var.ground)  +torad(  87                                       )*var.ground",
+			"tentacle_8.rx": "var.ten_x +(  cos( var.Tt +torad(50) +var.Et/11 )/4*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad( 9 ) -var.up/2 )*var.thrust  +torad( 40*var.ten_twist ) )*(1-var.ground)  +torad(  87                                       )*var.ground",
+			"tentacle_9.rx": "var.ten_x +(  cos( var.Tt +torad(80) +var.Et/12 )/4*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad( 21) -var.up   )*var.thrust                             )*(1-var.ground)  +torad(  87                                       )*var.ground"
+		},
+		{
+			"var.ten_z": "-body.rz*(1+var.ground)  +( -cos(var.Bt/5)/12  -torad(var.hy)/6  )*(1-var.ground)",
+			"tentacle_1.rz": "var.ten_z +(  sin( var.Tt +torad( 0) +var.Et/13 )/12*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad( 9 ) -var.up/2 ) *var.thrust  +torad(-40*var.ten_twist ) )*(1-var.ground)  +torad(    -10*cos(torad( 0 )+var.lsg)*var.moveA )*var.ground",
+			"tentacle_2.rz": "var.ten_z +( -cos( var.Tt +torad(30) +var.Et/10 )/12*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad(-9 ) +var.up/2 ) *var.thrust  +torad(-40*var.ten_twist ) )*(1-var.ground)  +torad(    -20*cos(torad( 50)+var.lsg)*var.moveA )*var.ground",
+			"tentacle_3.rz": "var.ten_z +(  cos( var.Tt +torad(50) +var.Et/12 )/12*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad(-5 )           ) *var.thrust  +torad(-50*var.ten_twist ) )*(1-var.ground)  +torad(    -10*cos(torad(-80)+var.lsg)*var.moveA )*var.ground",
+			"tentacle_4.rz": "var.ten_z +(  sin( var.Tt +torad(10) +var.Et/13 )/12*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad( 21) -var.up   ) *var.thrust                             )*(1-var.ground)  +torad( 85 +10*cos(torad( 30)+var.lsg)*var.moveA )*var.ground",
+			"tentacle_5.rz": "var.ten_z +( -cos( var.Tt +torad(70) +var.Et/12 )/12*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad( 5 ) -var.up/2 ) *var.thrust  +torad(-10*var.ten_twist ) )*(1-var.ground)  +torad( 85                                       )*var.ground",
+			"tentacle_6.rz": "var.ten_z +( -cos( var.Tt +torad(80) +var.Et/10 )/12*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad(-21) +var.up   ) *var.thrust  +torad( 10*var.ten_twist ) )*(1-var.ground)  +torad(-85                                       )*var.ground",
+			"tentacle_7.rz": "var.ten_z +(  cos( var.Tt +torad(20) +var.Et/13 )/12*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad( 9 ) -var.up/2 ) *var.thrust  +torad( 40*var.ten_twist ) )*(1-var.ground)  +torad(    -10*cos(torad(-60)+var.lsg)*var.moveA )*var.ground",
+			"tentacle_8.rz": "var.ten_z +(  sin( var.Tt +torad(60) +var.Et/12 )/12*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad(-9 ) +var.up/2 ) *var.thrust  +torad( 40*var.ten_twist ) )*(1-var.ground)  +torad(     10*cos(torad(160)+var.lsg)*var.moveA )*var.ground",
+			"tentacle_9.rz": "var.ten_z +( -sin( var.Tt +torad(20) +var.Et/10 )/12*min(1,var.moveB*2)*(1-0.7*var.thrust)  +( torad(-5 )           ) *var.thrust  +torad( 50*var.ten_twist ) )*(1-var.ground)  +torad(    -10*cos(torad( 20)+var.lsg)*var.moveA )*var.ground"
+		},
+		{
+			"tentacle_1.ry": "torad(  20 -20*sin( torad( 0 ) +var.lsg )           )*var.ground",
+			"tentacle_2.ry": "torad( -60 -30*sin( torad( 50) +var.lsg )           )*var.ground",
+			"tentacle_3.ry": "torad( -10 -30*sin( torad(-80) +var.lsg )           )*var.ground",
+			"tentacle_4.ry": "torad(      10*cos( torad( 30) +var.lsg )*var.moveA )*var.ground",
+			"tentacle_5.ry": "torad(     -10*cos( torad(-30) +var.lsg )*var.moveA )*var.ground",
+			"tentacle_6.ry": "torad(     -10*cos( torad(100) +var.lsg )*var.moveA )*var.ground",
+			"tentacle_7.ry": "torad( -30 -40*sin( torad(-60) +var.lsg )           )*var.ground",
+			"tentacle_8.ry": "torad(  70 -40*sin( torad(160) +var.lsg )           )*var.ground",
+			"tentacle_9.ry": "torad(  10 -30*sin( torad( 20) +var.lsg )           )*var.ground"
+		},
+		{
+			"tentacle_1.tz": "-4 +(  sin( var.Tt +torad( 90) +var.Et/11 )/2*min(1,var.moveB*2)*(1-0.7*var.thrust)                                           )*(1-var.ground)",
+			"tentacle_2.tz": "-4 +( -sin( var.Tt +torad(100) +var.Et/16 )/2*min(1,var.moveB*2)*(1-0.7*var.thrust)                                           )*(1-var.ground)",
+			"tentacle_3.tz": "-5 +( -cos( var.Tt +torad(130) +var.Et/14 )/2*min(1,var.moveB*2)*(1-0.7*var.thrust) -sin(var.Ut-sin(var.Ut)/1.5)  *var.thrust )*(1-var.ground)",
+			"tentacle_4.tz": "   +(  cos( var.Tt +torad(120) +var.Et/12 )/2*min(1,var.moveB*2)*(1-0.7*var.thrust)                                           )*(1-var.ground)",
+			"tentacle_5.tz": "-1 +(  sin( var.Tt +torad(150) +var.Et/14 )/2*min(1,var.moveB*2)*(1-0.7*var.thrust)                                           )*(1-var.ground)",
+			"tentacle_6.tz": " 1 +( -cos( var.Tt +torad(160) +var.Et/16 )/2*min(1,var.moveB*2)*(1-0.7*var.thrust)                                           )*(1-var.ground)",
+			"tentacle_7.tz": " 4 +( -sin( var.Tt +torad( 90) +var.Et/12 )/2*min(1,var.moveB*2)*(1-0.7*var.thrust) +sin(var.Ut-sin(var.Ut)/1.5)  *var.thrust )*(1-var.ground)",
+			"tentacle_8.tz": " 4 +(  cos( var.Tt +torad(140) +var.Et/11 )/2*min(1,var.moveB*2)*(1-0.7*var.thrust) +sin(var.Ut-sin(var.Ut)/1.5)/2*var.thrust )*(1-var.ground)",
+			"tentacle_9.tz": " 5 +(  cos( var.Tt +torad(170) +var.Et/12 )/2*min(1,var.moveB*2)*(1-0.7*var.thrust) +sin(var.Ut-sin(var.Ut)/1.5)  *var.thrust )*(1-var.ground)"
+		},
+		{
+			"tentacle_1.tx": "-3.7 +( -sin(var.Ut-sin(var.Ut)/1.5)  *var.thrust )*(1-var.ground)",
+			"tentacle_2.tx": " 6.3 +(  sin(var.Ut-sin(var.Ut)/1.5)/2*var.thrust )*(1-var.ground)",
+			"tentacle_3.tx": " 1.3",
+			"tentacle_4.tx": "-6.3 +( -sin(var.Ut-sin(var.Ut)/1.5)/2*var.thrust )*(1-var.ground)",
+			"tentacle_5.tx": "-1.3",
+			"tentacle_6.tx": " 3.7 +(  sin(var.Ut-sin(var.Ut)/1.5)  *var.thrust )*(1-var.ground)",
+			"tentacle_7.tx": "-3.7 +( -sin(var.Ut-sin(var.Ut)/1.5)  *var.thrust )*(1-var.ground)",
+			"tentacle_8.tx": " 6.3 +(  sin(var.Ut-sin(var.Ut)/1.5)/2*var.thrust )*(1-var.ground)",
+			"tentacle_9.tx": " 1.3"
+		},
+		{
+			"var.pre_posy": "pos_y",
+			"var.pre_roty": "rot_y",
+			"var.pre_Oroty": "var.roty",
+			"var.pre_frame_counter": "frame_counter"
+		}
+	]
+}

@@ -648,6 +648,31 @@ async function applySpritesheet() {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Zoom de página (el de Ctrl+ruedita): lo pide el panel desde el
+  // content script porque chrome.tabs no existe allí.
+  // Deduplicado: si la pestaña ya está en ese zoom no se vuelve a
+  // llamar setZoom, porque cada llamada dispara el flyout de zoom
+  // de Edge/Chrome (el globito con −/+/%) y es molesto.
+  if (message.type === "mfSetPageZoom") {
+    const zoom = Math.min(5, Math.max(0.25, Number(message.zoom) || 1));
+    const tabId = sender?.tab?.id;
+    if (tabId != null) {
+      chrome.tabs.getZoom(tabId)
+        .then(current => {
+          if (Math.abs(current - zoom) < 0.001) {
+            sendResponse({ success: true, skipped: true });
+            return;
+          }
+          return chrome.tabs.setZoom(tabId, zoom)
+            .then(() => sendResponse({ success: true }));
+        })
+        .catch(error => sendResponse({ success: false, error: String(error?.message || error) }));
+    } else {
+      sendResponse({ success: false, error: "NO_TAB" });
+    }
+    return true;
+  }
+
   if (message.type === "setSpritesheet") {
     chrome.storage.local.set({ spritesheetEnabled: message.enabled })
       .then(applySpritesheet)

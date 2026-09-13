@@ -1,0 +1,53 @@
+{
+	"schemaVersion": 1,
+	"id": "shine",
+	"version": "3.1.1+26.2",
+	"name": "Shine",
+	"description": "Makes Minecraft come alive with tons of visual effects.",
+	"icon": "assets/shine/shine4.png",
+	"authors": [
+		"tapeQ"
+	],
+	"license": "All Rights Reserved",
+	"contact": {
+		"sources": "https://modrinth.com/mod/shine",
+		"discord": "https://discord.gg/wX836fj6pz"
+	},
+	"custom": {
+		"modmenu": {
+			"links": {
+				"modmenu.discord": "https://discord.gg/wX836fj6pz",
+				"modmenu.wiki": "https://shine-wiki.pages.dev/"
+			}
+		}
+	},
+	"environment": "client",
+	"accessWidener": "shine.accesswidener",
+	"entrypoints": {
+		"main": [
+			"com.bloom.BloomMod"
+		],
+		"client": [
+			"com.bloom.client.BloomClient"
+		],
+		"modmenu": [
+			"com.bloom.client.config.BloomModMenuIntegration"
+		]
+	},
+	"mixins": [
+		"shine.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": ">=0.152.1",
+		"sodium": ">=0.9.0"
+	},
+	"breaks": {
+		"vulkanmod": "*"
+	},
+	"suggests": {
+		"modmenu": "*"
+	}
+}

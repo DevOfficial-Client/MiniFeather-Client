@@ -89,6 +89,28 @@ api.register({
 });
 
 api.register({
+  id: 'fallen-leaves',
+  settingsKey: 'experimentalFallenLeaves',
+  title: 'Fallen Leaves',
+  titleKey: 'experimentalFallenLeavesTitle',
+  descriptionKey: 'experimentalFallenLeavesDesc',
+  icon: '🍂',
+  badge: 'EXPERIMENTAL',
+  order: 25
+});
+
+api.register({
+  id: 'tiny-takeover',
+  settingsKey: 'experimentalTinyTakeover',
+  title: 'Tiny Takeover Babies',
+  titleKey: 'experimentalTinyTakeoverTitle',
+  descriptionKey: 'experimentalTinyTakeoverDesc',
+  icon: '🐺',
+  badge: 'EXPERIMENTAL',
+  order: 27
+});
+
+api.register({
   id: 'pbr-textures',
   settingsKey: 'experimentalPbr',
   title: 'PBR Textures',

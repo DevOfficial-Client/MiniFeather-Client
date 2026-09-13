@@ -1,0 +1,43 @@
+#version 330
+
+#moj_import <minecraft:dynamictransforms.glsl>
+#moj_import <minecraft:fog.glsl>
+
+uniform sampler2D Sampler0;
+
+in float sphericalVertexDistance;
+in float cylindricalVertexDistance;
+in vec2 texCoord0;
+in vec4 vertexColor;
+
+out vec4 fragColor;
+
+const float SHINE_PARTICLE_EDGE_WINDOW = 0.03;
+
+float shineEdgeCoverage(float alpha) {
+    float edge = clamp(alpha / SHINE_PARTICLE_EDGE_WINDOW, 0.0, 1.0);
+    return edge * edge * (3.0 - 2.0 * edge);
+}
+
+void main() {
+    vec4 texel = texture(Sampler0, texCoord0);
+    if (texel.a == 0.0) {
+        discard;
+    }
+
+    vec4 particleColor = texel * vertexColor * ColorModulator;
+    if (particleColor.a == 0.0) {
+        discard;
+    }
+    particleColor.a *= shineEdgeCoverage(particleColor.a);
+    fragColor = apply_fog(
+        particleColor,
+        sphericalVertexDistance,
+        cylindricalVertexDistance,
+        FogEnvironmentalStart,
+        FogEnvironmentalEnd,
+        FogRenderDistanceStart,
+        FogRenderDistanceEnd,
+        FogColor
+    );
+}

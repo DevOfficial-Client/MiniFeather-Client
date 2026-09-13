@@ -1,0 +1,75 @@
+{
+	"credit": "Created by FreshLX for Fresh Animations",
+	"animations": [
+		{
+			"varb.pfc": "frame_counter == var.pre_frame_counter",
+			"var.hy": "clamp( 90*sin(torad(head_yaw)), -90, 90 )",
+			"var.id": "random(id)*pi*4",
+			"var.ls_offset": "if( varb.pfc, var.ls_offset, is_hurt, var.ls_offset + frame_time*2.5 * limb_speed, var.ls_offset)",
+			"var.ls": "if( is_riding, 2,  ( limb_swing*1.2 -var.ls_offset*3 )  )",
+			"var.position": "if( varb.pfc, var.position, is_riding || !equals(pos_y,var.pre_posy,2), pos_y, pos_y*min(1,frame_time*16) +var.position*max(0,1-frame_time*16) )",
+			"var.vs": "if( varb.pfc, var.vs, !equals(pos_y,var.pre_posy,2), 0, (var.position-pos_y) )",
+			"var.Bt": "var.id +age/10",
+			"var.St": "var.id +age/10*pi +limb_swing/4 -pos_y/4",
+			"var.move": "clamp(limb_speed, 0.5, 1)",
+			"var.air": "clamp( if( varb.pfc, var.air, !is_riding && !is_on_ground && !is_in_water, var.air +if(var.vs<0, 0.4, 6)*frame_time, var.air -6 *frame_time ), 0, 1 )",
+			"var.hurt": "(hurt_time/10)*(hurt_time/10)*max(0, (1-hurt_time/10)*8 )",
+			"var.scared": "clamp( if( varb.pfc, var.scared, is_hurt, var.scared +frame_time, var.scared -frame_time/8 ), 0, 1 )",
+			"var.sheared": "clamp(if( varb.pfc, var.sheared, varb.index_sheared, 1, var.sheared -frame_time/2 ), 0, 1)",
+			"varb.jumping": "!is_on_ground && !is_in_water && pos_y > var.pre_posy && age>9 || var.t_jump!=0",
+			"varb.falling": "!is_on_ground && !is_in_water && age>9",
+			"var.t_land": "clamp( if( varb.pfc, var.t_land, (var.t_land==0 || var.t_land==1) && varb.falling, 0, var.t_land + frame_time * if(varb.falling,4,2) ), 0, 1)",
+			"var.t_jump": "clamp( if( varb.pfc, var.t_jump, (var.t_jump==1 && is_on_ground) || !varb.jumping, 0, var.t_jump + frame_time * 2                    ), 0, 1)",
+			"var.t_fall": "clamp( if( varb.pfc, var.t_fall, var.air>0.4, var.t_fall +6 *frame_time, var.t_fall -6 *frame_time ), 0, 1)",
+			"var.fall_amp": "if( varb.pfc, var.fall_amp, max(0, var.fall_amp - frame_time * var.fall_amp * if(var.t_land<0.7, 3, 6) +if( !is_on_ground, var.vs/if(is_child, 2, 4), 0) ) )",
+			"var.jump": "sin( ( var.t_jump -pow( var.t_jump, 2 )/2 )*2*pi )*if(is_child, 1.7, 1.3)*1.2",
+			"var.land": "sin( ( clamp(-0.2 +var.t_land*1.2, 0, 1) -pow(clamp(-0.2 +var.t_land*1.2, 0, 1 ),2 )/2 )*2*pi )*sqrt( clamp(var.fall_amp*2, 0, if(is_alive, 3, 0)) )",
+			"var.fall": "clamp( if(age>9, var.vs*1.5, 0 ), -1.5, 1.5 )",
+			"var.hp": "clamp(if( varb.pfc, var.hp, head_pitch!=0, var.hp +21 *frame_time, var.hp -2 *frame_time ), 0, 1)",
+			"var.nov1": "0.5-0.5*cos( clamp( -3.5 +sin(var.id +age/70 )*5 , 0, 1-var.hp )*pi )",
+			"var.nov2": "0.5-0.5*cos( clamp( -2   +sin(var.id +age/110)*10, 0, 1-var.hp )*pi )",
+			"var.Created_by_FreshLX_for_Fresh_Animations": "1"
+		},
+		{
+			"head.tx": "-sin(pi*0.3 +var.Bt +sin(var.id +age/30))/2  +       sin(pi*0.4 +var.ls  )      *var.move",
+			"head.tz": "-sin(pi*0.3 +var.Bt/1.7                 )/2  +(  -4 +sin(pi*0.3 +var.ls*2)*1.5 )*limb_speed  +(                        var.jump         +var.fall                                            )*3*limb_speed",
+			"head.ty": "4.49                                         +( 0.9 +cos(pi*0.4 +var.ls*2)/2   )*limb_speed  +( 3*sin( var.t_jump*pi )*var.jump -9*max(0,var.fall) +(2 -4*cos(     var.t_land*pi) )*var.land )  -(1 +sin(limb_swing) )/2*var.hurt  +0.7*sin( sin( min(1,3-var.sheared*3)*pi/2 )*pi )*sin( min(1,2-var.sheared*2)*pi )",
+			"head.rx": "torad(head_pitch) +(-cos(pi*0.5 +var.Bt/1.7)/40 )                                               +torad(                20*pow( clamp(var.fall*1.5,-1,1), 3) -15*sin(var.t_land*pi*1.5)*var.land ) +torad(  -7 +20*sin(var.ls/1.2) )*var.hurt  +torad( 7*sin( min(1,6.3-var.sheared*7)*pi/2 )*(1+cos( min(1,6-var.sheared*7)*pi )) -9*(1-cos( clamp(-0.5 +sin( pi/12 +var.sheared*pi )*1.8,0,1)*pi )) )",
+			"head.rz": "(  cos(pi*0.5 +var.Bt +sin(var.id +age/30) )/40 )  +( sin(pi*0.1 +var.ls)/10 )*var.move  +torad( 30*cos(var.ls*0.8) )*var.hurt",
+			"head.ry": "torad(var.hy)*cos( sin(var.sheared*pi)*pi )/2                                            +torad(-30*cos(var.ls*1.3) )*var.hurt    +( sin(var.id +age/13 +sin(var.id*2 +age/13*2)/1.7)*0.3   )*var.nov1  +clamp( clamp( sin(var.id +age/13)*0.15, -0.05, 0.05) +clamp( cos(var.id +age/18.3)*0.15, -0.05, 0.05) , -0.03, 0.03)*var.hp  +torad( 7*sin( age/4 +sin( pi/3+age/2 )/2 )*(1-cos( clamp(-0.5 +sin( pi/12 +var.sheared*pi )*1.8,0,1)*pi )) )",
+			"body.tx": "( -sin(pi*0.2 +var.Bt +sin(var.id +age/30) )/5 )  +(    sin(pi*0.2 +var.ls  )/1.5 )*var.move",
+			"body.tz": "( -sin(pi*0.2 +var.Bt/1.7)/5                   )  +(-1 +sin(pi*0.2 +var.ls*2)/1.5 )*limb_speed  +( -var.jump         +var.fall                                 )*limb_speed  +(     -cos(var.ls)*2 )*var.hurt",
+			"body.ty": "13.5                                              +( 0.5 +cos(pi*0.2 +var.ls*2)/2 )*limb_speed  +(2*var.jump -3*max(0,var.fall) +(   3*sin(pi/4+var.t_land*pi) )*var.land )  +( 1 +0.5*cos(var.ls) )*var.hurt  +0.7*sin( sin( min(1,4-var.sheared*4)*pi/2 )*pi )",
+			"body.rx": "( sin(pi*0.4 +var.Bt/1.7                  )/40 )  +( (2 -sin(pi*0.2 +var.ls*2) )/12 )*limb_speed  +torad( (-20*var.jump -6*var.fall )*limb_speed  -7*cos(var.t_land*4)*var.land )  +torad(-3 -10*sin(var.ls    ) )*var.hurt",
+			"body.rz": "(-sin(pi*0.4 +var.Bt +sin(var.id +age/30) )/40 )  +(     sin(pi*0.1 +var.ls  )  /12 )*var.move                                                                                     +torad(  -2.6*sin(var.ls    ) )*var.hurt",
+			"body.ry": "torad(var.hy)/4                                   +(    -cos(pi*0.2 +var.ls  )  /3  )*var.move    +torad(-4*sin(var.St*1.5)*var.t_fall                                          )  +torad(    20*cos(var.ls/1.5) )*var.hurt  +( sin(var.id +age/13 +sin(var.id*2 +age/13*2)/1.7)*0.3/4 )*var.nov1",
+			"body_bottom.tx": "0",
+			"body_bottom.tz": "sin(var.ls*2)/3*limb_speed",
+			"body_bottom.ty": "24.5  +( 6*exp(-var.t_jump*pi)*var.jump +3*max(0,var.fall) +var.land )",
+			"body_bottom.rx": " sin(pi*0.3 +var.Bt/1.7                 )/60  +(1 -sin(var.ls*2) )/17*limb_speed",
+			"body_bottom.rz": "-sin(pi*0.3 +var.Bt +sin(var.id +age/30))/60",
+			"body_bottom.ry": "torad(var.hy)/8  -cos(var.ls)/9*var.move  +torad( 2*cos(var.St*1.5)*var.t_fall )",
+			"body_bottom.sy": "1 +0.25*exp(-var.t_jump*pi)*var.jump"
+		},
+		{
+			"left_arm.rx": " ( -torad(var.hy)/4 +( sin(var.Bt +cos(var.Bt/2)*1.7 )/4 )*var.nov1  )*cos( sin(var.sheared*pi)*pi )/2",
+			"right_arm.rx": "(  torad(var.hy)/4 +( sin(var.Bt +cos(var.Bt/2)*1.7 )/4 )*var.nov1  )*cos( sin(var.sheared*pi)*pi )/2",
+			"left_arm.rz": " clamp( torad( 57 -40*limb_speed ) +(  sin(var.ls)/2 )*limb_speed +( -0.3 )*var.nov1*(1-limb_speed/2)  +torad( 40*var.jump +(-40 +20*sin(var.St) )*pow(var.fall,3) +(20-70*cos(var.t_land*4))*var.land )  +torad( 9*cos(var.ls/1.5) )*var.hurt  +(  ( sin(var.Bt/3 +sin( var.Bt/3*2) ) -0.7 +sin(var.Bt/8 +sin( var.Bt/8*2) ) )/6 )*var.nov2*(1-limb_speed/2), -3, 2.5 )*cos( sin(var.sheared*pi)*pi )/2  +torad( 10*sin( min(1,1-var.sheared*4)*pi/2 )*(1+cos( min(1,1-var.sheared*4)*pi )) -70*(1-cos( clamp(-0.7 +sin( pi/30 +var.sheared*pi )*2,0,1)*pi ))  +80*(1-cos( sin(var.sheared*pi)*pi ))/2 )",
+			"right_arm.rz": "clamp( torad(-57 +40*limb_speed ) +(  sin(var.ls)/2 )*limb_speed +(  0.3 )*var.nov1*(1-limb_speed/2)  -torad( 40*var.jump +(-40 -20*sin(var.St) )*pow(var.fall,3) +(20-70*cos(var.t_land*4))*var.land )  +torad( 9*sin(var.ls/1.8) )*var.hurt  +( -( sin(var.Bt/3 +sin( var.Bt/3*2) ) -0.7 +sin(var.Bt/8 +sin( var.Bt/8*2) ) )/6 )*var.nov2*(1-limb_speed/2), -2.5, 3 )*cos( sin(var.sheared*pi)*pi )/2  +torad(-10*sin( min(1,1-var.sheared*5)*pi/2 )*(1+cos( min(1,1-var.sheared*5)*pi )) +70*(1-cos( clamp(-0.6 +sin( pi/30 +var.sheared*pi )*2,0,1)*pi ))  -80*(1-cos( sin(var.sheared*pi)*pi ))/2 )",
+			"left_arm.ry": " (  (  sin(var.ls)   )*limb_speed +( -sin(-pi*0.2 +var.Bt +cos(var.Bt/2)*1.7 )/5 )*var.nov1  +torad( (-60*sin(var.t_jump*5)*var.jump -30*pow(var.fall,3) )*limb_speed +40*sin(var.t_land*5)*var.land )  +torad( 30*sin(var.ls/1.8) )*var.hurt  )*cos( sin(var.sheared*pi)*pi )/2  +torad( -7*(1-cos( clamp(-0.5 +sin( var.sheared*pi )*2,0,1)*pi )) )",
+			"right_arm.ry": "(  (  sin(var.ls)   )*limb_speed +(  sin(-pi*0.2 +var.Bt +cos(var.Bt/2)*1.7 )/5 )*var.nov1  -torad( (-60*sin(var.t_jump*5)*var.jump -30*pow(var.fall,3) )*limb_speed +40*sin(var.t_land*5)*var.land )  +torad( 30*cos(var.ls/1.5) )*var.hurt  )*cos( sin(var.sheared*pi)*pi )/2  +torad(  7*(1-cos( clamp(-0.5 +sin( var.sheared*pi )*2,0,1)*pi )) )",
+			"left_arm.tx": "  4.25 +0.4*(1-cos( clamp(-0.6 +sin( pi/20 +var.sheared*pi )*1.8,0,1)*pi ))",
+			"right_arm.tx": "-4.25 -0.4*(1-cos( clamp(-0.6 +sin( pi/20 +var.sheared*pi )*1.8,0,1)*pi ))"
+		},
+		{
+			"faces.tz": "-3.5 -clamp( sqrt( pow(pos_x-player_pos_x, 2) +pow(pos_y-player_pos_y, 2) +pow(pos_z-player_pos_z, 2) ), 1, 128 )/1000",
+			"face_sheared.visible": "between( var.sheared, 0.4, 1 )",
+			"face_hurt.visible": "face_sheared.visible && hurt_time>0 || var.scared!=0",
+			"face_neutral.visible": "!face_hurt.visible && !face_sheared.visible"
+		},
+		{
+			"var.pre_posy": "pos_y",
+			"var.pre_frame_counter": "frame_counter"
+		}
+	]
+}
