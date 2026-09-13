@@ -29,11 +29,35 @@
   // STUN solo no atraviesa NAT simétrico/CGNAT (típico en móviles y
   // redes escolares/empresariales): sin TURN el P2P nunca conecta.
   const ICE_SERVERS = [
-    { urls: STUN_URL },
+    { urls: [STUN_URL, 'stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
     { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
     { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
     { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
   ];
+  const RTC_CONNECT_TIMEOUT_MS = 14000;
+  const SIGNAL_RETRY_INTERVAL_MS = 2200;
+  const LOCAL_WALK_SPEED = 0.1;
+  const LOCAL_ABILITY_FLY_SPEED = 0.05;
+  const LOCAL_PLAYER_FLY_SPEED = 0.04;
+  const LOCAL_AIR_SPEED = 0.02;
+  const LOCAL_MOB_TYPES = Object.freeze({
+    pig: 12,
+    cow: 13,
+    chicken: 14,
+    sheep: 15,
+    zombie: 16,
+    skeleton: 18,
+    creeper: 19,
+    slime: 20,
+    spider: 21,
+    wolf: 27,
+    cat: 29,
+    villager: 32,
+    iron_golem: 33
+  });
+  const LOCAL_PASSIVE_MOBS = ['pig', 'cow', 'chicken', 'sheep', 'wolf', 'cat'];
+  const LOCAL_HOSTILE_MOBS = ['zombie', 'skeleton', 'creeper', 'spider'];
+  const LOCAL_MOB_LIMIT = 14;
   const GLOBAL_REGISTRY_TOPIC = 'mf-local-globalregistryv1a1b2c3d4e5f6';
   const SAVED_SERVERS_KEY = 'minifeather.localgames.savedServers.v2';
   const SERVER_STALE_AFTER_MS = 330000;
@@ -96,6 +120,7 @@
     status: 'Idle',
     error: '',
     lastMoveSend: 0,
+    lastTimeSync: 0,
     destroyed: false,
     directLocal: false,
     moduleNamespace: null,
@@ -135,6 +160,13 @@
     lastPickupScan: 0,
     lastPlayerEntityRepair: 0,
     localPlayerEntityReady: false,
+    entityManager: null,
+    localMobs: new Map(),
+    localMobNextId: -2147482000,
+    localMobStartedAt: 0,
+    localMobLastTick: 0,
+    localMobLastSpawn: 0,
+    localMobLastSync: 0,
     dropStats: { spawned: 0, pickedUp: 0, fallback: 0, failed: 0, lastError: '' },
     banList: new Map(),
     connectedOnce: false,
@@ -2218,31 +2250,16 @@
 
     if (!game || !world) return;
 
-    if (
-      !Number.isFinite(
-        Number(world.worldTime)
-      ) ||
-      Number(world.worldTime) < 1000 ||
-      Number(world.worldTime) > 11000
-    ) {
+    if (!Number.isFinite(Number(world.worldTime))) {
       world.worldTime = 6000;
     }
 
-    if (
-      !Number.isFinite(
-        Number(world.totalTime)
-      ) ||
-      Number(world.totalTime) < 6000
-    ) {
-      world.totalTime = 6000;
+    if (!Number.isFinite(Number(world.totalTime))) {
+      world.totalTime = Number(world.worldTime) || 6000;
     }
 
     try {
-      game.serverInfo.doDaylightCycle = false;
-    } catch (_) {}
-
-    try {
-      game.gameScene?.update?.();
+      game.serverInfo.doDaylightCycle = true;
     } catch (_) {}
   }
 
@@ -3246,6 +3263,48 @@
     return mode !== 'creative' && mode !== 'spectator';
   }
 
+  function ensureLocalItemVisual(entity) {
+    const world = state.world;
+    const entityRoot = state.game?.gameScene?.entityMeshes;
+    if (!world || !entity || typeof entity.getEntityItem !== 'function') return false;
+
+    try { entity.world = world; } catch (_) {}
+
+    try {
+      if (typeof world.attachEntityMesh === 'function') {
+        world.attachEntityMesh(entity);
+      }
+    } catch (_) {}
+
+    try {
+      if (entity.mesh && entityRoot && entity.mesh.parent !== entityRoot && typeof entityRoot.add === 'function') {
+        entityRoot.add(entity.mesh);
+      }
+      if (entity.mesh) entity.mesh.visible = true;
+    } catch (_) {}
+
+    if (entity.mesh) return true;
+
+    requestAnimationFrame(() => {
+      if (!state.active || !state.directLocal || entity.isDead === true) return;
+
+      try {
+        if (typeof world.attachEntityMesh === 'function') {
+          world.attachEntityMesh(entity);
+        }
+      } catch (_) {}
+
+      try {
+        if (entity.mesh && entityRoot && entity.mesh.parent !== entityRoot && typeof entityRoot.add === 'function') {
+          entityRoot.add(entity.mesh);
+        }
+        if (entity.mesh) entity.mesh.visible = true;
+      } catch (_) {}
+    });
+
+    return !!entity.mesh;
+  }
+
   function markNativeDrop(pos) {
     const xyz = blockCoordinates(pos);
     if (!xyz) return;
@@ -3306,8 +3365,8 @@
         } catch (_) {}
       }
 
-      try { entity.setPickupDelay?.(6); } catch (_) {}
-      entity.__mfLocalPickupReadyAt = performance.now() + 220;
+      try { entity.setPickupDelay?.(10); } catch (_) {}
+      entity.__mfLocalPickupReadyAt = performance.now() + 500;
       entity.__mfLocalDrop = true;
 
       try {
@@ -3320,6 +3379,8 @@
 
       const spawned = world.spawnEntityInWorld?.(entity);
       if (spawned === false) throw new Error('spawnEntityInWorld rejected item');
+
+      ensureLocalItemVisual(entity);
 
       state.dropStats.spawned++;
       if (fallback) state.dropStats.fallback++;
@@ -3396,6 +3457,115 @@
     } catch (_) {}
   }
 
+  function spawnNativeHarvestEntity(entity, pos) {
+    const world = state.world;
+    if (!world || !entity) return false;
+
+    try { entity.world = world; } catch (_) {}
+
+    try {
+      if (typeof entity.getEntityItem === 'function') {
+        try { entity.setPickupDelay?.(10); } catch (_) {}
+        entity.__mfLocalPickupReadyAt = performance.now() + 500;
+        entity.__mfLocalDrop = true;
+      }
+    } catch (_) {}
+
+    try {
+      const spawned = world.spawnEntityInWorld?.(entity);
+      if (spawned === false) return false;
+      if (typeof entity.getEntityItem === 'function') {
+        ensureLocalItemVisual(entity);
+        state.dropStats.spawned++;
+        markNativeDrop(pos);
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function runNativeBlockHarvest(pos, previousState) {
+    if (!localDropsEnabled() || !previousState || isAirState(previousState)) {
+      return { handled: true, spawned: 0 };
+    }
+
+    const world = state.world;
+    const player = state.game?.player;
+    const block = previousState.getBlock?.();
+    const xyz = blockCoordinates(pos);
+
+    if (!world || !player || !block || !xyz) {
+      return { handled: false, spawned: 0 };
+    }
+
+    try {
+      if (typeof player.canHarvestBlock === 'function' && !player.canHarvestBlock(block)) {
+        return { handled: true, spawned: 0 };
+      }
+    } catch (_) {}
+
+    if (typeof block.harvestBlock === 'function') {
+      let spawned = 0;
+      const proxy = new Proxy(world, {
+        get(target, prop) {
+          if (prop === 'isServer') return true;
+          if (prop === 'isClient') return false;
+          if (prop === 'spawnEntityInWorld') {
+            return entity => {
+              const ok = spawnNativeHarvestEntity(entity, xyz);
+              if (ok) spawned++;
+              return ok;
+            };
+          }
+
+          const value = Reflect.get(target, prop, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        }
+      });
+
+      try {
+        block.harvestBlock(
+          proxy,
+          player,
+          nativeVector(xyz.x, xyz.y, xyz.z),
+          previousState,
+          null
+        );
+        return { handled: true, spawned };
+      } catch (_) {}
+    }
+
+    try {
+      const fortune = 0;
+      const item = typeof block.getItemDropped === 'function'
+        ? block.getItemDropped(previousState, fortune)
+        : null;
+
+      const quantityRaw = typeof block.quantityDroppedWithBonus === 'function'
+        ? block.quantityDroppedWithBonus(previousState, fortune)
+        : typeof block.getQuantityDrop === 'function'
+          ? block.getQuantityDrop(previousState, fortune)
+          : item
+            ? 1
+            : 0;
+
+      const quantity = Math.max(0, Math.min(64, Math.floor(Number(quantityRaw) || 0)));
+
+      if (item == null || quantity === 0) {
+        return { handled: true, spawned: 0 };
+      }
+
+      let spawned = 0;
+      for (let i = 0; i < quantity; i++) {
+        if (spawnLocalItem(item, xyz, 0.15, true)) spawned++;
+      }
+      return { handled: true, spawned };
+    } catch (_) {
+      return { handled: false, spawned: 0 };
+    }
+  }
+
   function scheduleFallbackBlockDrop(pos, previousState) {
     if (!localDropsEnabled() || !previousState || isAirState(previousState)) return;
 
@@ -3407,10 +3577,13 @@
       if (!state.active || !state.directLocal || !localDropsEnabled()) return;
       if (hadRecentNativeDrop(xyz, 240)) return;
 
+      const nativeResult = runNativeBlockHarvest(xyz, previousState);
+      if (nativeResult.handled) return;
+
       const item = itemForBlock(previousBlock);
       if (!item) {
         state.dropStats.failed++;
-        state.dropStats.lastError = `No ItemBlock found for ${String(previousBlock?.name || 'unknown')}`;
+        state.dropStats.lastError = `No drop found for ${String(previousBlock?.name || 'unknown')}`;
         return;
       }
 
@@ -3773,8 +3946,12 @@
     } catch (_) {}
 
     try {
-      if (Array.isArray(world.loadedEntityList) && !world.loadedEntityList.includes(player)) {
-        world.loadedEntityList.push(player);
+      if (Array.isArray(world.loadedEntityList)) {
+        for (let index = world.loadedEntityList.length - 1; index >= 0; index--) {
+          if (world.loadedEntityList[index] === player) {
+            world.loadedEntityList.splice(index, 1);
+          }
+        }
       }
     } catch (_) {}
 
@@ -3809,6 +3986,293 @@
     );
 
     return state.localPlayerEntityReady;
+  }
+
+  function normalizeLocalPlayerMovement(player = state.game?.player) {
+    if (!player) return;
+
+    try {
+      if (player.abilities) {
+        player.abilities.walkSpeed = LOCAL_WALK_SPEED;
+        player.abilities.flySpeed = LOCAL_ABILITY_FLY_SPEED;
+      }
+    } catch (_) {}
+
+    try { player.speedInAir = LOCAL_AIR_SPEED; } catch (_) {}
+    try { player.flySpeed = LOCAL_PLAYER_FLY_SPEED; } catch (_) {}
+  }
+
+  function looksLikeEntityManager(value) {
+    return !!(
+      value &&
+      typeof value === 'object' &&
+      typeof value.addEntity === 'function' &&
+      typeof value.addLocalEntity === 'function' &&
+      typeof value.collectEntity === 'function' &&
+      typeof value.startDeathRagdoll === 'function'
+    );
+  }
+
+  function resolveEntityManager() {
+    if (looksLikeEntityManager(state.entityManager)) return state.entityManager;
+
+    const mod = state.moduleNamespace;
+    if (!mod || typeof mod !== 'object') return null;
+
+    for (const value of Object.values(mod)) {
+      if (!looksLikeEntityManager(value)) continue;
+      state.entityManager = value;
+      return value;
+    }
+
+    return null;
+  }
+
+  function localMobSurface(x, z) {
+    const bx = Math.floor(Number(x));
+    const bz = Math.floor(Number(z));
+    const height = Number(state.terrainSurface.get(`${bx},${bz}`));
+    if (!Number.isFinite(height) || height < 63) return null;
+    if (!withinWorldBounds(bx, height + 1, bz)) return null;
+    try {
+      if (state.world?.isBlockLoaded?.(blockPos(bx, height, bz)) === false) return null;
+    } catch (_) {}
+    for (const y of [height + 1, height + 2]) {
+      const blockState = getStateAt(bx, y, bz);
+      const block = blockState?.getBlock?.() || blockState?.block;
+      if (block && block.isAir?.() !== true && block.isReplaceable !== true) return null;
+    }
+    return { x: Number(x), y: height + 1.01, z: Number(z) };
+  }
+
+  function localMobSpawnPosition(minDistance = 8, maxDistance = 28) {
+    const player = state.game?.player;
+    const origin = player?.pos || state.origin;
+    if (!origin) return null;
+
+    for (let attempt = 0; attempt < 24; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = minDistance + Math.random() * Math.max(1, maxDistance - minDistance);
+      const pos = localMobSurface(
+        Number(origin.x) + Math.cos(angle) * distance,
+        Number(origin.z) + Math.sin(angle) * distance
+      );
+      if (pos) return pos;
+    }
+
+    return null;
+  }
+
+  function spawnLocalMob(typeName, position = null, requestedId = null) {
+    if (!state.active || !state.directLocal || Number(state.game?.state) !== 6) return null;
+
+    const type = LOCAL_MOB_TYPES[String(typeName || '').toLowerCase()];
+    const manager = resolveEntityManager();
+    const world = state.world;
+    const pos = position || localMobSpawnPosition();
+    if (!type || !manager || !world || !pos) return null;
+
+    const hasRequestedId = requestedId !== null && requestedId !== undefined && Number.isFinite(Number(requestedId));
+    const requested = hasRequestedId ? Number(requestedId) : null;
+    const id = hasRequestedId ? requested : state.localMobNextId--;
+    if (hasRequestedId) state.localMobNextId = Math.min(state.localMobNextId, requested - 1);
+    const yaw = Math.random() * Math.PI * 2;
+
+    try {
+      manager.addEntity({
+        id,
+        type,
+        pos: {
+          x: Math.round(pos.x * 32),
+          y: Math.round(pos.y * 32),
+          z: Math.round(pos.z * 32)
+        },
+        yaw,
+        pitch: 0,
+        motion: { x: 0, y: 0, z: 0 }
+      }, world);
+
+      const entity = world.getEntityIncludingQueued?.(id) || world.entities?.get?.(id);
+      if (!entity) return null;
+
+      const hostile = LOCAL_HOSTILE_MOBS.includes(String(typeName));
+      state.localMobs.set(id, {
+        id,
+        type: String(typeName),
+        entity,
+        hostile,
+        homeX: pos.x,
+        homeZ: pos.z,
+        targetX: pos.x,
+        targetZ: pos.z,
+        nextTargetAt: 0,
+        lastPositionAt: performance.now()
+      });
+
+      if (state.mode === 'host' && !hasRequestedId) {
+        broadcastReliable({
+          t: 'mob-spawn',
+          mob: { id, type: String(typeName), x: pos.x, y: pos.y, z: pos.z, yaw }
+        });
+      }
+
+      return entity;
+    } catch (_) {
+      try { world.removeEntityFromWorld?.(id); } catch (_) {}
+      return null;
+    }
+  }
+
+  function clearLocalMobs() {
+    const world = state.world;
+    for (const id of state.localMobs.keys()) {
+      try { world?.removeEntityFromWorld?.(id); } catch (_) {}
+    }
+    state.localMobs.clear();
+    state.localMobNextId = -2147482000;
+    state.localMobStartedAt = 0;
+    state.localMobLastTick = 0;
+    state.localMobLastSpawn = 0;
+    state.localMobLastSync = 0;
+  }
+
+  function localMobNight() {
+    const time = ((Number(state.world?.worldTime) || 0) % 24000 + 24000) % 24000;
+    return time >= 13000 && time <= 23000;
+  }
+
+  function chooseLocalMobTarget(mob, now) {
+    const player = state.game?.player;
+    const entity = mob.entity;
+    if (!entity?.pos) return;
+
+    if (mob.hostile && player?.pos) {
+      const distance = Math.hypot(
+        Number(player.pos.x) - Number(entity.pos.x),
+        Number(player.pos.z) - Number(entity.pos.z)
+      );
+      if (distance < 18) {
+        mob.targetX = Number(player.pos.x);
+        mob.targetZ = Number(player.pos.z);
+        mob.nextTargetAt = now + 500;
+        return;
+      }
+    }
+
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 2 + Math.random() * 8;
+    mob.targetX = mob.homeX + Math.cos(angle) * distance;
+    mob.targetZ = mob.homeZ + Math.sin(angle) * distance;
+    mob.nextTargetAt = now + 2500 + Math.random() * 4500;
+  }
+
+  function updateLocalMob(mob, now) {
+    const entity = mob.entity;
+    if (!entity || entity.dead || !entity.pos) {
+      state.localMobs.delete(mob.id);
+      return;
+    }
+
+    if (now >= mob.nextTargetAt) chooseLocalMobTarget(mob, now);
+
+    const dx = mob.targetX - Number(entity.pos.x);
+    const dz = mob.targetZ - Number(entity.pos.z);
+    const distance = Math.hypot(dx, dz);
+    if (distance < 0.3) {
+      mob.nextTargetAt = 0;
+      return;
+    }
+
+    const step = Math.min(distance, mob.hostile ? 0.13 : 0.08);
+    const x = Number(entity.pos.x) + dx / distance * step;
+    const z = Number(entity.pos.z) + dz / distance * step;
+    const surface = localMobSurface(x, z);
+    if (!surface || Math.abs(surface.y - Number(entity.pos.y)) > 1.25) {
+      mob.nextTargetAt = 0;
+      return;
+    }
+
+    const yaw = Math.atan2(-dx, dz);
+    entity.serverPos?.set?.(surface.x * 32, surface.y * 32, surface.z * 32);
+    entity.setPositionAndRotation2?.(surface.x, surface.y, surface.z, yaw, 0, 3);
+    entity.yaw = yaw;
+    entity.pitch = 0;
+    entity.onGround = true;
+    mob.lastPositionAt = now;
+  }
+
+  function updateLocalMobs(now = performance.now()) {
+    if (!state.active || !state.directLocal || Number(state.game?.state) !== 6) return;
+    if (state.game?.renderLoopErrored === true || renderChunkCount(state.game) < 8) return;
+    if (state.mode === 'join') return;
+
+    if (!state.localMobStartedAt) state.localMobStartedAt = now;
+    if (now - state.localMobStartedAt < 2500) return;
+
+    if (now - state.localMobLastTick >= 100) {
+      for (const mob of state.localMobs.values()) updateLocalMob(mob, now);
+      state.localMobLastTick = now;
+    }
+
+    if (state.localMobs.size >= LOCAL_MOB_LIMIT || now - state.localMobLastSpawn < 900) return;
+
+    const hostileCount = Array.from(state.localMobs.values()).filter(mob => mob.hostile).length;
+    const passiveCount = state.localMobs.size - hostileCount;
+    let pool = null;
+
+    if (passiveCount < 8) pool = LOCAL_PASSIVE_MOBS;
+    else if (localMobNight() && hostileCount < 6) pool = LOCAL_HOSTILE_MOBS;
+
+    if (!pool) return;
+    spawnLocalMob(pool[Math.floor(Math.random() * pool.length)]);
+    state.localMobLastSpawn = now;
+  }
+
+  function localMobPayload(mob) {
+    const entity = mob?.entity;
+    if (!entity?.pos) return null;
+    return {
+      id: mob.id,
+      type: mob.type,
+      x: Number(entity.pos.x),
+      y: Number(entity.pos.y),
+      z: Number(entity.pos.z),
+      yaw: Number(entity.yaw) || 0
+    };
+  }
+
+  function localMobSnapshot() {
+    return Array.from(state.localMobs.values()).map(localMobPayload).filter(Boolean);
+  }
+
+  function applyLocalMobSnapshot(mobs) {
+    if (!Array.isArray(mobs) || !state.active || !state.directLocal) return;
+    clearLocalMobs();
+    for (const mob of mobs.slice(0, LOCAL_MOB_LIMIT)) {
+      const type = String(mob?.type || '').toLowerCase();
+      const id = Number(mob?.id);
+      const position = { x: Number(mob?.x), y: Number(mob?.y), z: Number(mob?.z) };
+      if (!LOCAL_MOB_TYPES[type] || !Number.isFinite(id) || !Object.values(position).every(Number.isFinite)) continue;
+      const entity = spawnLocalMob(type, position, id);
+      if (entity && Number.isFinite(Number(mob.yaw))) entity.yaw = Number(mob.yaw);
+    }
+  }
+
+  function applyLocalMobPositions(mobs) {
+    if (!Array.isArray(mobs)) return;
+    for (const data of mobs.slice(0, LOCAL_MOB_LIMIT)) {
+      const mob = state.localMobs.get(Number(data?.id));
+      const entity = mob?.entity;
+      const x = Number(data?.x);
+      const y = Number(data?.y);
+      const z = Number(data?.z);
+      const yaw = Number(data?.yaw) || 0;
+      if (!entity || ![x, y, z].every(Number.isFinite)) continue;
+      entity.serverPos?.set?.(x * 32, y * 32, z * 32);
+      entity.setPositionAndRotation2?.(x, y, z, yaw, 0, 3);
+      entity.yaw = yaw;
+      entity.onGround = true;
+    }
   }
 
   function setLocalGamemode(modeId) {
@@ -3863,6 +4327,7 @@
 
     try {
       player.setGamemode(mode);
+      normalizeLocalPlayerMovement(player);
       state.game.info.gamemode = mode;
       state.game.info.showVitals =
         targetMode !== 'creative' && targetMode !== 'spectator';
@@ -5647,6 +6112,7 @@
       player.name = profile.name;
       player.world = state.world;
       player.dimension = 0;
+      normalizeLocalPlayerMovement(player);
     } catch (_) {
       try {
         player.world = state.world;
@@ -5700,7 +6166,7 @@
         rolePermissionLevel(state.localRole);
       game.serverInfo.serverCategory =
         'creative';
-      game.serverInfo.doDaylightCycle = false;
+      game.serverInfo.doDaylightCycle = true;
       game.serverInfo.fallDamage =
         map !== 'sandbox';
     } catch (_) {}
@@ -5754,7 +6220,19 @@
     ensureLocalPlayerEntity(false);
 
     try {
-      game.update?.();
+      const lastRenderTime = Number(game.lastRenderTime) || 0;
+      const renderLoopAlive =
+        game.renderLoopErrored !== true &&
+        lastRenderTime > 0 &&
+        performance.now() - lastRenderTime < 1500;
+
+      if (!renderLoopAlive) {
+        game.renderLoopErrored = false;
+        game.lastTickPump = performance.now();
+        game.prevTime = performance.now();
+        game.tickAccumulator = 0;
+        game.update?.();
+      }
     } catch (_) {}
 
     await new Promise(
@@ -7268,6 +7746,9 @@
         addGameChat('\\red\\Could not change time on this world.', '');
         return true;
       }
+      if (state.mode === 'host') {
+        broadcastReliable({ t: 'time', worldTime: newTime });
+      }
       addSystemChat(`Time set to ${arg || newTime} (${newTime}).`);
     } catch (err) {
       addGameChat('\\red\\Failed to change time.', '');
@@ -7467,6 +7948,58 @@
         snapshot: true
       });
     }
+  }
+
+  function createPeerConnection() {
+    return new RTCPeerConnection({
+      iceServers: ICE_SERVERS,
+      iceCandidatePoolSize: 4,
+      bundlePolicy: 'max-bundle'
+    });
+  }
+
+  function waitForPeerConnected(pc, timeout = RTC_CONNECT_TIMEOUT_MS) {
+    if (!pc) return Promise.reject(new Error('P2P_CONNECTION_MISSING'));
+    if (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+      return Promise.resolve(true);
+    }
+
+    return new Promise((resolve, reject) => {
+      let finished = false;
+      const timer = setTimeout(() => finish(false, 'P2P_CONNECT_TIMEOUT'), timeout);
+
+      function cleanup() {
+        clearTimeout(timer);
+        pc.removeEventListener('connectionstatechange', onState);
+        pc.removeEventListener('iceconnectionstatechange', onState);
+      }
+
+      function finish(ok, error = '') {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        if (ok) resolve(true);
+        else reject(new Error(error || 'P2P_CONNECT_FAILED'));
+      }
+
+      function onState() {
+        const connection = pc.connectionState;
+        const ice = pc.iceConnectionState;
+
+        if (connection === 'connected' || ice === 'connected' || ice === 'completed') {
+          finish(true);
+          return;
+        }
+
+        if (connection === 'failed' || connection === 'closed' || ice === 'failed' || ice === 'closed') {
+          finish(false, 'P2P_CONNECT_FAILED');
+        }
+      }
+
+      pc.addEventListener('connectionstatechange', onState);
+      pc.addEventListener('iceconnectionstatechange', onState);
+      onState();
+    });
   }
 
   function waitIce(pc, timeout = 8000) {
@@ -8000,6 +8533,7 @@
   function stopWorld(reload = true, notifyGuests = true) {
     log(`stopWorld reload=${reload} (mode=${state.mode}, active=${state.active})`);
     stopLoops();
+    clearLocalMobs();
     closeP2P(notifyGuests);
     restoreWorldBlockBroadcast();
     restoreWorldItemDrops();
@@ -8037,6 +8571,8 @@
     state.blockState.clear();
     state.blockOverrides.clear();
     state.pendingBlockChanges.length = 0;
+    state.lastMoveSend = 0;
+    state.lastTimeSync = 0;
     state.recentNativeDrops.clear();
     state.lastPickupScan = 0;
     state.lastPlayerEntityRepair = 0;
@@ -8164,6 +8700,12 @@
       for (const entry of messages) {
         if (entry.type === 'system') addSystemChat(entry.payload);
         if (entry.type === 'chat') addPlayerChat(entry.payload?.profile, entry.payload?.text);
+        if (entry.type === 'mob-snapshot') applyLocalMobSnapshot(entry.payload);
+        if (entry.type === 'mob-spawn') {
+          const mob = entry.payload;
+          spawnLocalMob(mob?.type, { x: Number(mob?.x), y: Number(mob?.y), z: Number(mob?.z) }, Number(mob?.id));
+        }
+        if (entry.type === 'mob-positions') applyLocalMobPositions(entry.payload);
       }
     }
   }
@@ -8181,7 +8723,17 @@
     if (message.t === 'welcome') {
       state.localRole = message.role || 'player';
       state.worldName = cleanText(message.worldName, 30) || state.worldName;
+      if (Number.isFinite(Number(message.worldTime)) && state.world) {
+        state.world.worldTime = ((Number(message.worldTime) % 24000) + 24000) % 24000;
+      }
       syncNativePlayerList();
+      return;
+    }
+
+    if (message.t === 'time') {
+      if (Number.isFinite(Number(message.worldTime)) && state.world) {
+        state.world.worldTime = ((Number(message.worldTime) % 24000) + 24000) % 24000;
+      }
       return;
     }
 
@@ -8221,6 +8773,32 @@
           state.deferredBlocks.splice(0, state.deferredBlocks.length - 4096);
         }
       }
+      return;
+    }
+
+    if (message.t === 'mob-snapshot') {
+      if (state.active && state.directLocal) applyLocalMobSnapshot(message.mobs);
+      else queueDeferredMessage('mob-snapshot', message.mobs);
+      return;
+    }
+
+    if (message.t === 'mob-spawn') {
+      const mob = message.mob;
+      if (state.active && state.directLocal && mob) {
+        spawnLocalMob(
+          mob.type,
+          { x: Number(mob.x), y: Number(mob.y), z: Number(mob.z) },
+          Number(mob.id)
+        );
+      } else if (mob) {
+        queueDeferredMessage('mob-spawn', mob);
+      }
+      return;
+    }
+
+    if (message.t === 'mob-positions') {
+      if (state.active && state.directLocal) applyLocalMobPositions(message.mobs);
+      else queueDeferredMessage('mob-positions', message.mobs);
       return;
     }
 
@@ -8362,6 +8940,7 @@
           t: 'welcome',
           worldName: state.worldName,
           seed: state.worldSeed,
+          worldTime: Number(state.world?.worldTime) || 6000,
           role: peer.role || 'player',
           protocol: PROTOCOL
         });
@@ -8372,6 +8951,7 @@
         });
 
         sendBlockSnapshot(peer);
+        sendJSON(channel, { t: 'mob-snapshot', mobs: localMobSnapshot() });
         announceSystem(`${peer.profile.name} has joined.`);
         broadcastRoster();
       });
@@ -8382,9 +8962,7 @@
   }
 
   function createHostPeerConnection(peerId, profile) {
-    const pc = new RTCPeerConnection({
-      iceServers: ICE_SERVERS
-    });
+    const pc = createPeerConnection();
 
     const peer = {
       peerId,
@@ -8442,9 +9020,7 @@
   }
 
   function createGuestConnection() {
-    const pc = new RTCPeerConnection({
-      iceServers: ICE_SERVERS
-    });
+    const pc = createPeerConnection();
 
     const peer = {
       peerId: 'host',
@@ -8498,17 +9074,23 @@
   }
 
   async function handleJoinSignal(message) {
-    if (
-      state.mode !== 'host' ||
-      message?.type !== 'join' ||
-      Number(message.protocol) !== PROTOCOL ||
-      !message.peerId ||
-      !message.sdp
-    ) {
+    if (state.mode !== 'host' || Number(message?.protocol) !== PROTOCOL || !message?.peerId) {
       return;
     }
 
     const peerId = String(message.peerId).slice(0, 64);
+
+    if (message.type === 'cancel') {
+      const existing = state.peers.get(peerId);
+      if (existing && !existing.joinAnnounced) {
+        state.peers.delete(peerId);
+        state.remotePlayers.delete(peerId);
+        closePeerConnection(existing);
+      }
+      return;
+    }
+
+    if (message.type !== 'join' || !message.sdp) return;
     const profile = {
       ...(message.profile || {}),
       name: cleanText(message.profile?.name || 'Player', 24)
@@ -8524,6 +9106,32 @@
         reason: 'You are banned from this world.'
       });
       return;
+    }
+
+    const existingPeer = state.peers.get(peerId);
+    if (existingPeer) {
+      if (
+        existingPeer.pc?.connectionState === 'failed' ||
+        existingPeer.pc?.connectionState === 'closed'
+      ) {
+        state.peers.delete(peerId);
+        state.remotePlayers.delete(peerId);
+        closePeerConnection(existingPeer);
+      } else if (existingPeer.pc?.localDescription) {
+        await publishSignal(state.roomTopic, {
+          type: 'answer',
+          protocol: PROTOCOL,
+          peerId,
+          worldName: state.worldName,
+          seed: state.worldSeed,
+          worldTime: Number(state.world?.worldTime) || 6000,
+          role: existingPeer.role || 'player',
+          sdp: existingPeer.pc.localDescription
+        }).catch(() => {});
+        return;
+      } else {
+        return;
+      }
     }
 
     if (connectedHostPeers().length >= MAX_PLAYERS - 1 || state.peers.size >= MAX_PLAYERS - 1) {
@@ -8557,6 +9165,7 @@
     }
 
     const peer = createHostPeerConnection(peerId, profile);
+    const peer = createHostPeerConnection(peerId, profile);
 
     try {
       await peer.pc.setRemoteDescription(message.sdp);
@@ -8570,6 +9179,7 @@
         peerId,
         worldName: state.worldName,
         seed: state.worldSeed,
+        worldTime: Number(state.world?.worldTime) || 6000,
         role: peer.role,
         sdp: peer.pc.localDescription
       });
@@ -8631,8 +9241,19 @@
     return true;
   }
 
-  async function waitForGuestAnswer(peerId, timeout = 45000, republish = null) {
+  async function waitForGuestAnswer(peerId, republishOrTimeout = null, timeoutOrRepublish = null) {
+    const republish = typeof republishOrTimeout === 'function' ? republishOrTimeout
+      : typeof timeoutOrRepublish === 'function' ? timeoutOrRepublish : null;
+    const timeout = typeof republishOrTimeout === 'number'
+      ? republishOrTimeout
+      : (typeof timeoutOrRepublish === 'number' ? timeoutOrRepublish : 45000);
+
     const started = performance.now();
+    let nextRepublishAt = started + SIGNAL_RETRY_INTERVAL_MS;
+    state.signalLastId = '';
+
+    const started = performance.now();
+    let nextRepublishAt = started + SIGNAL_RETRY_INTERVAL_MS;
     state.signalLastId = '';
     let lastRepublish = performance.now();
 
@@ -8657,9 +9278,10 @@
       // señalización se reconectó y perdió el join), re-publicar la
       // oferta para que vuelva a verla. El host ignora joins duplicados
       // de un peerId que ya registró.
-      if (republish && performance.now() - lastRepublish >= 15000) {
-        lastRepublish = performance.now();
-        try { await republish(); } catch (_) {}
+      if (typeof republish === 'function' && performance.now() >= nextRepublishAt) {
+        await republish().catch(() => {});
+        nextRepublishAt = performance.now() + SIGNAL_RETRY_INTERVAL_MS;
+      }
       }
 
       await new Promise(resolve => setTimeout(resolve, SIGNAL_POLL_INTERVAL_MS));
@@ -8700,34 +9322,78 @@
     await waitForAccount(game, 5000);
     state.game = game;
 
-    const peerId = randomHex(12);
-    state.localPeerId = peerId;
-    state.localPlayerId = numericPeerId(peerId);
-    const peer = createGuestConnection();
+    let peer = null;
+    let answer = null;
+    let lastError = null;
 
     try {
-      const offer = await peer.pc.createOffer();
-      await peer.pc.setLocalDescription(offer);
-      await waitIce(peer.pc);
+      const profile = profileNetworkSnapshot();
 
-      const buildJoinSignal = () => ({
-        type: 'join',
-        protocol: PROTOCOL,
-        peerId,
-        profile: profileNetworkSnapshot(),
-        sdp: peer.pc.localDescription
-      });
+    try {
+      const profile = profileNetworkSnapshot();
+      let peer = null;
+      let answer = null;
+      let lastError = null;
 
-      await publishSignal(state.roomTopic, buildJoinSignal());
+      for (let attempt = 0; attempt < 2; attempt++) {
+        let peerId = '';
 
-      const answer = await waitForGuestAnswer(peerId, 45000, () =>
-        publishSignal(state.roomTopic, buildJoinSignal())
-      );
+        try {
+          peerId = randomHex(12);
+          state.localPeerId = peerId;
+          state.localPlayerId = numericPeerId(peerId);
+          peer = createGuestConnection();
+
+          const offer = await peer.pc.createOffer();
+          await peer.pc.setLocalDescription(offer);
+          await waitIce(peer.pc, 10000);
+
+          const buildJoinSignal = () => ({
+            type: 'join',
+            protocol: PROTOCOL,
+            peerId,
+            profile: profileNetworkSnapshot(),
+            sdp: peer.pc.localDescription
+          });
+
+          const publishJoin = () => publishSignal(state.roomTopic, buildJoinSignal());
+          await publishJoin();
+          answer = await waitForGuestAnswer(peerId, publishJoin, 30000);
+          await peer.pc.setRemoteDescription(answer.sdp);
+          await waitForPeerConnected(peer.pc, RTC_CONNECT_TIMEOUT_MS);
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+
+          if (peerId) {
+            await publishSignal(state.roomTopic, {
+              type: 'cancel',
+              protocol: PROTOCOL,
+              peerId
+            }).catch(() => {});
+          }
+
+          closePeerConnection(peer);
+          if (state.hostPeer === peer) state.hostPeer = null;
+          peer = null;
+          answer = null;
+
+          if (attempt === 0) {
+            state.signalLastId = '';
+            setStatus('Retrying P2P connection...');
+            await new Promise(resolve => setTimeout(resolve, 350));
+          }
+        }
+      }
+
+      if (!peer || !answer) {
+        throw lastError || new Error('P2P connection could not be established.');
+      }
+
       state.worldName = cleanText(answer.worldName, 30) || 'MiniFeather World';
       state.worldSeedOverride = Number(answer.seed);
       state.localRole = answer.role || 'player';
-
-      await peer.pc.setRemoteDescription(answer.sdp);
 
       const ok = await startWorld('sandbox', 'join', 3, {
         forceDirect: true,
@@ -8741,6 +9407,10 @@
         closePeerConnection(peer);
         state.hostPeer = null;
         return false;
+      }
+
+      if (Number.isFinite(Number(answer.worldTime)) && state.world) {
+        state.world.worldTime = ((Number(answer.worldTime) % 24000) + 24000) % 24000;
       }
 
       patchWorldBlockBroadcast();
@@ -8959,6 +9629,27 @@
         pickupNearbyLocalItems();
       }
 
+      if (state.directLocal) {
+        updateLocalMobs(now);
+
+        if (state.mode === 'host' && now - state.localMobLastSync >= 250) {
+          broadcastReliable({ t: 'mob-positions', mobs: localMobSnapshot() });
+          state.localMobLastSync = now;
+        }
+      }
+
+      if (
+        state.mode === 'host' &&
+        now - state.lastTimeSync >= 2000 &&
+        Number.isFinite(Number(state.world?.worldTime))
+      ) {
+        broadcastReliable({
+          t: 'time',
+          worldTime: Number(state.world.worldTime)
+        });
+        state.lastTimeSync = now;
+      }
+
       if (now - state.lastMoveSend >= 65) {
         const pos = relativePosition();
 
@@ -9145,6 +9836,18 @@
     },
     getDropStats() {
       return { ...(state.dropStats || {}) };
+    },
+    summon(type, x = null, z = null) {
+      const position = Number.isFinite(Number(x)) && Number.isFinite(Number(z))
+        ? localMobSurface(Number(x), Number(z))
+        : null;
+      return spawnLocalMob(type, position);
+    },
+    clearMobs() {
+      clearLocalMobs();
+    },
+    getMobs() {
+      return localMobSnapshot();
     },
     renderProbe(logResult = true) {
       return localRenderProbe(logResult);

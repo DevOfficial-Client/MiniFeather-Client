@@ -450,9 +450,17 @@
     experimentalAurora: false,
     experimentalAuroraLevel: 'medium',
     experimentalGrassFlowers: false,
+    experimentalAurora: false,
+    experimentalAuroraLevel: 'medium',
+    experimentalGrassFlowers: false,
+    experimentalInteractiveVegetation: false,
+    experimentalInteractiveVegetationLevel: 'medium',
     experimentalFallenLeaves: false,
     experimentalTinyTakeover: false,
+    experimentalAnimatedItems: false,
+    experimentalBetterAnimationCape: false,
     experimentalPbr: false,
+
     language: 'en'
   };
 
@@ -5923,7 +5931,7 @@
                     <span>${escapeHtml(description)}</span>
                   </span>
                   ${levelKey && levels.length ? `
-                    <select class="mf-input mf-experimental-level" data-mf-experimental-level="${escapeHtml(levelKey)}" aria-label="${escapeHtml(t('experimentalAuroraQuality'))}">
+                    <select class="mf-input mf-experimental-level" data-mf-experimental-level="${escapeHtml(levelKey)}" aria-label="${escapeHtml(t(exp.levelLabelKey || 'experimentalAuroraQuality'))}">
                       ${levels.map(level => {
                         const value = String(level.value || '');
                         const label = level.labelKey ? t(level.labelKey) : String(level.label || value);
@@ -9636,10 +9644,23 @@ function renderCreditsPage() {
       })
     );
     document.dispatchEvent(
+      new CustomEvent('minifeather:interactive-vegetation-config', {
+        detail: JSON.stringify({
+          enabled: !!settings.experimentalInteractiveVegetation,
+          level: ['low', 'medium', 'high', 'extreme'].includes(String(settings.experimentalInteractiveVegetationLevel))
+            ? String(settings.experimentalInteractiveVegetationLevel)
+            : 'medium'
+        })
+      })
+    );
+    document.dispatchEvent(
       new CustomEvent('minifeather:fell-leaves-config', {
         detail: JSON.stringify({
           enabled: !!settings.experimentalFallenLeaves,
           assetsBase: (() => { try { const u = chrome.runtime.getURL('assets/particles/'); return u && !u.includes('://invalid/') ? u : ''; } catch (_) { return ''; } })()
+        })
+      })
+    );
         })
       })
     );
@@ -9649,6 +9670,16 @@ function renderCreditsPage() {
           enabled: !!settings.experimentalTinyTakeover,
           assetsBase: (() => { try { const u = chrome.runtime.getURL('assets/tiny/'); return u && !u.includes('://invalid/') ? u : ''; } catch (_) { return ''; } })()
         })
+      })
+    );
+    document.dispatchEvent(
+      new CustomEvent('minifeather:animated-items-config', {
+        detail: JSON.stringify({ enabled: !!settings.experimentalAnimatedItems })
+      })
+    );
+    document.dispatchEvent(
+      new CustomEvent('minifeather:better-animation-cape-config', {
+        detail: JSON.stringify({ enabled: !!settings.experimentalBetterAnimationCape })
       })
     );
     document.dispatchEvent(
