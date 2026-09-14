@@ -56,7 +56,7 @@ The client is built using separate feature modules, allowing individual systems 
 
 Developed by:
 
-* **EstebanGxE_** *(ShushakeGxE_)*
+* **EstebanGxE_** *(ShushukeGxE_)*
 * **Not_Senpai**
 * **ItzNightrise**
 * **botless**
