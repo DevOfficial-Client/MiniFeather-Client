@@ -18,6 +18,10 @@ const CAPES = [
 
 const GAME_DOMAINS = ["miniblox.io", "miniblox.online"];
 
+// cache en memoria de assets/accounts.json (lo pide el MAIN world via
+// sendMessage; leer el archivo en cada llamada sería innecesario)
+let accountsCache = null;
+
 const ASSET_TYPES = {
   skin: {
     names: SKINS,
@@ -119,6 +123,25 @@ function getActiveAssets(type, sendResponse) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // accounts.json del paquete: lo pide CustomSkins.js desde el MAIN world
+  // (no puede usar chrome.runtime.getURL de forma confiable). Cacheamos el
+  // JSON en memoria para no leer el archivo en cada llamada.
+  if (message?.type === 'mfAccounts:get') {
+    const url = chrome.runtime.getURL('assets/accounts.json');
+    if (accountsCache && accountsCache.url === url) {
+      sendResponse({ success: true, json: accountsCache.json });
+      return false;
+    }
+    fetch(url, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        accountsCache = { url, json };
+        sendResponse({ success: true, json });
+      })
+      .catch(() => sendResponse({ success: false, json: null }));
+    return true;
+  }
+
   const handlers = {
     setSkin: () => setAsset("skin", message.skinName, message.customUrl),
     resetSkin: () => resetAsset("skin", message.skinName),

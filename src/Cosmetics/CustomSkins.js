@@ -194,11 +194,44 @@
             return db;
         };
 
-        dbLoading = fetch('/accounts.json', { cache: 'no-store' })
-            .then(function (r) {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.json();
-            })
+        // el MAIN world no tiene chrome.runtime.getURL garantizado en todas
+        // las versiones: pasamos por sendMessage → background, que sí tiene
+        // acceso a los recursos de la extensión. Fallback: si chrome.runtime
+        // no está disponible (raro), intentar getURL directamente.
+        dbLoading = new Promise(function (resolve) {
+            var done = false;
+            var finishFromExt = function (json) {
+                if (done) return;
+                done = true;
+                resolve(json);
+            };
+            try {
+                if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+                    chrome.runtime.sendMessage({ type: 'mfAccounts:get' }, function (res) {
+                        if (chrome.runtime.lastError || !res || !res.success) {
+                            // fallback: intentar getURL directo
+                            try {
+                                fetch(chrome.runtime.getURL('assets/accounts.json'), { cache: 'no-store' })
+                                    .then(function (r) { return r.ok ? r.json() : null; })
+                                    .then(finishFromExt)
+                                    .catch(function () { finishFromExt(null); });
+                            } catch (_) { finishFromExt(null); }
+                            return;
+                        }
+                        finishFromExt(res.json || null);
+                    });
+                    return;
+                }
+            } catch (_) {}
+            try {
+                fetch(chrome.runtime.getURL('assets/accounts.json'), { cache: 'no-store' })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(finishFromExt)
+                    .catch(function () { finishFromExt(null); });
+                return;
+            } catch (_) {}
+            finishFromExt(null);
+        })
             .then(finish)
             .catch(function (e) {
                 warn('accounts.json local no disponible (' + (e && e.message || e) + '), usando sessionStorage');
