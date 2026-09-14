@@ -2683,6 +2683,12 @@
     // últimas entradas del ring buffer (para volcar sin consola)
     logs(n) { return LOG.dump(n); },
     logsClear() { LOG.clear(); },
+    // hot-reload: parar todo y restaurar meshes nativas antes de re-crear
+    dispose() {
+      try { api.clear(); } catch (_) {}
+      try { stop(); } catch (_) {}
+      try { clearInterval(sim.initialWatcher); } catch (_) {}
+    },
   };
 
   window.MF_SPIDER_SIM = api;
@@ -2691,14 +2697,14 @@
 
   // auto-spawn cuando se conozca la posición real del jugador: watcher barato
   // (SpiderBot reporta desde su raf; esto cubre el caso de que tarde)
-  const initialWatcher = setInterval(() => {
-    if (sim.spiders.length) { clearInterval(initialWatcher); return; }
+  sim.initialWatcher = setInterval(() => {
+    if (sim.spiders.length) { clearInterval(sim.initialWatcher); return; }
     refreshGame();
     const player = simGame?.player;
     const pos = player?.pos;
     if (pos && Number.isFinite(Number(pos.x)) && !(pos.x === 0 && pos.y === 0 && pos.z === 0)) {
       reportPlayer(Number(pos.x), Number(pos.y), Number(pos.z), Number(player.yaw) || 0);
-      if (api.ensureInitialSpiders()) clearInterval(initialWatcher);
+      if (api.ensureInitialSpiders()) clearInterval(sim.initialWatcher);
     }
   }, 1000);
 

@@ -214,6 +214,7 @@
             } catch {}
         }
         for (const m of mats) { m.map = tex; m.needsUpdate = true; }
+        tex.__mfLocalCanvas = true; // contiene MI skin: nunca base de otros players
         state.origMats = mats;
         state.ownTex = tex; // la textura de ESTA sesión (para revert/watchdog)
         return { canvas: c, tex, mats, shared: false };

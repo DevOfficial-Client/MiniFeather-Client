@@ -86,6 +86,7 @@
       '\\yellow\\/p2p host [code]\\reset\\ - Share your Verity (friend: /p2p join <code>)',
       '\\yellow\\/p2p join <code>\\reset\\ - See friend\\\'s Verity',
       '\\yellow\\/p2p off\\reset\\ - End the shared session',
+      '\\yellow\\/p2p auto [on|off]\\reset\\ - Auto-share room code to chat + auto-join',
       '\\yellow\\/emote <name>\\reset\\ - Play a custom emote (from emotes/)',
       '\\yellow\\/emote stop|list|reload\\reset\\ - Manage emotes',
       '\\yellow\\/mf help\\reset\\ - Show this help'
@@ -1355,6 +1356,16 @@
       if (action === 'off' || action === 'stop') {
         api.off();
         addChat('P2P session ended.', 'success');
+        return;
+      }
+      if (action === 'auto') {
+        const v = (args[1] || '').toLowerCase();
+        const on = ['on', '1', 'true', 'si', 'sí'].includes(v) ? true
+          : ['off', '0', 'false', 'no'].includes(v) ? false : undefined;
+        const cur = api.auto ? api.auto(on) : false;
+        addChat(`P2P auto-share: ${cur ? 'ON' : 'OFF'} — ${cur
+          ? 'hosting publishes the code to chat; others with the extension auto-join.'
+          : 'rooms are private again (manual /p2p join only).'}`, 'success');
         return;
       }
       // status

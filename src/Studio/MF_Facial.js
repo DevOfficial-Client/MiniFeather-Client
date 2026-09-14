@@ -990,7 +990,7 @@
     // 404 da lista vacía, no error.
     const MY_PACKS_DIR = 'skins/mypacks/';
     // ids de packs custom builtin (carpeta skins/mypacks/ de la extensión)
-    const MY_PACKS_IDS = ['estebangxe', 'angrywolfx'];
+    const MY_PACKS_IDS = ['estebangxe', 'angrywolfx', 'eve'];
     async function builtinDirs() {
         const known = [
             'adele', 'adventure', 'aether', 'alice', 'apex', 'ariel', 'aurora',
@@ -1056,6 +1056,10 @@
         let nt = null;
         try { nt = new src.constructor(c); } catch {}
         if (!nt) throw new Error('no se pudo crear textura editable');
+        // marcador: este canvas contiene MI skin — los módulos de "otros
+        // players" (otherSession/peerEditableCanvas) NUNCA deben adoptarlo
+        // como base de la cara de otra persona
+        nt.__mfLocalCanvas = true;
         try {
             nt.magFilter = src.magFilter; nt.minFilter = src.minFilter;
             if (src.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = src.colorSpace;
@@ -1647,8 +1651,12 @@
         if (!g || !me) return [];
         const out = [];
         const seen = new Set();
+        const meId = String(me.id ?? '');
+        const meUuid = me.uuid != null ? String(me.uuid) : null;
+        const isMe = (key, uuid) =>
+            (meId && String(key) === meId) || (meUuid != null && uuid != null && String(uuid) === meUuid);
         const add = (key, e, name) => {
-            if (!key || seen.has(key) || key === me.id) return;
+            if (!key || seen.has(key) || isMe(key, null)) return;
             const mesh = e?.mesh;
             if (!mesh) return;
             seen.add(key); out.push({ key: String(key), mesh, name: String(name || key).slice(0, 16) });
@@ -1656,7 +1664,7 @@
         try {
             if (g.world?.players instanceof Map) {
                 for (const [id, e] of g.world.players) {
-                    if (id === me.id) continue;
+                    if (isMe(id, e?.uuid)) continue;
                     add(e?.uuid || id, e, e?.username || e?.profile?.username || e?.name);
                 }
             }
@@ -1666,54 +1674,117 @@
             const entries = pl?.entries ? [...pl.entries()] : Object.entries(pl || {});
             for (const [k, v] of entries) {
                 if (!v || typeof v !== 'object') continue;
-                if (v.uuid === me.uuid || k === me.id) continue;
+                if (isMe(k, v.uuid)) continue;
                 try { const e = g.world?.getPlayerById?.(k) || g.world?.players?.get?.(k); if (e) add(v.uuid || k, e, v.username || v.name); } catch {}
             }
         } catch {}
         return out;
     }
 
-    // sesión de textura de otro player (patrón ensureSession pero por key)
+    // sesión de textura de otro player (patrón ensureSession pero por key).
+    // Reglas para no pisar a nadie:
+    //  · JAMÁS se pinta un canvas ajeno (del juego, local o del look-sync
+    //    P2P): siempre se monta un canvas PROPIO etiquetado
+    //    __mfOtherKey = key del player
+    //  · el canvas local (__mfLocalCanvas = MI skin) y el del look-sync P2P
+    //    (__mfPeerCanvas — ese módulo es dueño de la cara del peer) se
+    //    ignoran; si no queda otra fuente → este player no se anima
+    //  · si OTRO player ya montó su canvas (material compartido por skin-id),
+    //    ese player lo anima; este no (evita doble-parpadeo cruzado)
     function otherSession(p) {
         let s = others._sessions.get(p.key);
         const mats = findSkinMaterials(p.mesh);
         if (!mats.length) return null;
-        const src = mats[0].map;
-        if (!src?.image) return null;
 
+        // autoridad = textura del juego (o nuestro propio canvas ya montado)
+        let src = null;
+        const srcMats = [];
+        for (const m of mats) {
+            const t = m.map;
+            if (!t?.image) continue;
+            if (t.image instanceof HTMLCanvasElement) {
+                if (t.__mfLocalCanvas || t.__mfPeerCanvas) continue;
+                if (t.__mfOtherKey && t.__mfOtherKey !== p.key) continue;
+            }
+            srcMats.push(m);
+            if (!src) src = t;
+        }
+        const srcIsOurs = !!(src && src.image instanceof HTMLCanvasElement && src.__mfOtherKey === p.key);
+        const now = performance.now();
+        // estado estable: todos los materiales ya apuntan a NUESTRO canvas y
+        // la sesión vive → seguir animando sin tocar nada. Excepción: si la
+        // fuente del juego era un canvas que se repinta solo (skin animada),
+        // seguir espejándola en nuestro canvas
+        if (srcIsOurs && s?.tex) {
+            const auth = s.authTex;
+            if (auth?.image instanceof HTMLCanvasElement && now - (s.lastMirror || 0) > 400) {
+                s.lastMirror = now;
+                try {
+                    const cx = s.canvas.getContext('2d');
+                    cx.imageSmoothingEnabled = false;
+                    cx.drawImage(auth.image, 0, 0);
+                    if (!s.blinkUntil) s.zoneDirty = true; // zona sobre el espejo fresco
+                } catch {}
+            }
+            return s;
+        }
+        if (!src) return null; // cara administrada por otro módulo (P2P/local)
         if (!s) {
-            s = { tex: null, canvas: null, baseHead: null, k: 1, nextBlink: 0, blinkUntil: 0, name: p.name };
+            s = { tex: null, canvas: null, baseHead: null, k: 1, nextBlink: 0, blinkUntil: 0, name: p.name, srcId: null, lastMirror: 0, authTex: null };
             others._sessions.set(p.key, s);
         }
-        // la base se captura UNA vez por player (si el server recrea el mesh
-        // con otra skin, la sesión vieja se resetea al detectar otra textura)
-        if (!s.baseHead) {
-            try {
-                const k = Math.max(1, Math.round(src.image.width / 64));
+
+        const srcId = String(src.uuid ?? '') + ':' + src.image.width + 'x' + src.image.height;
+        const changed = s.srcId !== srcId;
+        // ¿el juego re-montó su textura (respawn/mundo con textura cacheada,
+        // misma uuid) o cambió de skin? → re-montar la nuestra
+        const needsMount = srcMats.some(m => m.map !== s.tex);
+        if (changed || !s.tex || needsMount) {
+            s.lastMirror = now;
+            s.authTex = srcIsOurs ? null : src; // autoridad viva (por si es un canvas animado)
+            // base limpia desde la autoridad (re-capturada al cambiar la skin;
+            // al ser del juego nunca contiene nuestros parpadeos)
+            if (changed || !s.baseHead) {
+                try {
+                    const k = Math.max(1, Math.round(src.image.width / 64));
+                    const c = document.createElement('canvas');
+                    c.width = 64 * k; c.height = 16 * k;
+                    c.getContext('2d').drawImage(src.image, 0, 0, 64 * k, 16 * k, 0, 0, 64 * k, 16 * k);
+                    s.baseHead = c; s.k = k;
+                } catch { return null; }
+            }
+            // canvas propio: UNO por player (se re-crea solo si cambia el
+            // tamaño de la skin), nunca el del juego
+            if (!s.tex || s.canvas.width !== src.image.width || s.canvas.height !== src.image.height) {
                 const c = document.createElement('canvas');
-                c.width = 64 * k; c.height = 16 * k;
-                c.getContext('2d').drawImage(src.image, 0, 0, 64 * k, 16 * k, 0, 0, 64 * k, 16 * k);
-                s.baseHead = c; s.k = k;
-            } catch { return null; }
-        }
-        if (src.image instanceof HTMLCanvasElement) { s.tex = src; s.canvas = src.image; return s; }
-        // montar canvas editable propio (solo la primera vez; después el
-        // material ya apunta a nuestro canvas)
-        if (!s.canvas) {
-            const c = document.createElement('canvas');
-            c.width = src.image.width; c.height = src.image.height;
-            c.getContext('2d').drawImage(src.image, 0, 0);
-            let nt = null;
-            try { nt = new src.constructor(c); } catch {}
-            if (!nt) { others._sessions.delete(p.key); return null; }
+                c.width = src.image.width; c.height = src.image.height;
+                let nt = null;
+                try { nt = new src.constructor(c); } catch {}
+                if (!nt) { others._sessions.delete(p.key); return null; }
+                nt.__mfOtherKey = p.key; // nuestro canvas para ESTE player
+                try {
+                    nt.magFilter = src.magFilter; nt.minFilter = src.minFilter;
+                    if (src.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = src.colorSpace;
+                    nt.flipY = src.flipY; nt.wrapS = src.wrapS; nt.wrapT = src.wrapT;
+                } catch {}
+                s.tex = nt; s.canvas = c;
+            }
+            // espejar el contenido actual de la autoridad en nuestro canvas
             try {
-                nt.magFilter = src.magFilter; nt.minFilter = src.minFilter;
-                if (src.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = src.colorSpace;
-                nt.flipY = src.flipY; nt.wrapS = src.wrapS; nt.wrapT = src.wrapT;
+                const cx = s.canvas.getContext('2d');
+                cx.imageSmoothingEnabled = false;
+                cx.clearRect(0, 0, s.canvas.width, s.canvas.height);
+                cx.drawImage(src.image, 0, 0);
             } catch {}
-            for (const m of mats) { m.map = nt; m.needsUpdate = true; }
-            s.tex = nt; s.canvas = c;
+            // montar nuestro canvas donde haga falta (nunca sobre materiales
+            // de otros módulos: srcMats ya los excluye)
+            for (const m of srcMats) {
+                if (m.map === s.tex) continue;
+                m.map = s.tex; m.needsUpdate = true;
+            }
+            if (!s.blinkUntil) s.zoneDirty = true; // repintar zona sobre el espejo fresco
         }
+        s.srcId = srcId;
         return s;
     }
 

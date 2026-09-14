@@ -1,9 +1,9 @@
 {
-  "id": "ariel",
-  "name": "Ariel",
+  "id": "eve",
+  "name": "Eve",
   "author": "MiniFeather",
   "version": 1,
-  "skin": "ariel.png",
+  "skin": "eve.png",
   "sprites": {
     "front": "al frente1.png",
     "left": "izquierda.png",

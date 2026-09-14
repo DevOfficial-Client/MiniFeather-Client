@@ -84,6 +84,7 @@ const state = {
     actionNextAt: 0,
     heldMouseButton: null,
     manualJumpUntil: 0,
+    jumpHoldUntil: 0,
     playerPositions: new Map(),
     nextPlayerScanAt: 0,
     autoMine: true
@@ -831,12 +832,23 @@ function getLookVector(player) {
 // girar la CAMARA (rig FPS: yawObject > pitchObject > camera). La camara
 // manda: player.yaw la sigue cada tick, asi que girarla gira al player y
 // resuelve tanto el rumbo de movimiento como la vista del usuario.
+function getCameraRig(player) {
+    const camera = state.game?.gameScene?.camera || state.game?.camera || state.game?.renderer?.camera ||
+        player?.game?.gameScene?.camera || player?.game?.player?.game?.gameScene?.camera;
+    if (!camera) return null;
+    return { camera, pitchObject: camera.parent || null, yawObject: camera.parent?.parent || null };
+}
+
+function getViewYaw(player) {
+    const yaw = Number(getCameraRig(player)?.yawObject?.rotation?.y);
+    return Number.isFinite(yaw) ? yaw : (Number(player?.yaw) || 0);
+}
+
 function turnCamera(player, yaw, pitch, speed = 0.35) {
     try {
-        const camera = player?.game?.gameScene?.camera || player?.game?.player?.game?.gameScene?.camera;
-        if (!camera?.parent?.parent) return false;
-        const pitchObject = camera.parent;
-        const yawObject = camera.parent.parent;
+        const rig = getCameraRig(player);
+        if (!rig?.yawObject) return false;
+        const { pitchObject, yawObject } = rig;
         if (yaw != null && typeof yawObject.rotation?.y === 'number') {
             let yawDiff = yaw - yawObject.rotation.y;
             while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
@@ -881,6 +893,19 @@ function applyMovementInput(player, strafe, forward, jump, sneak, yaw, pitch, sp
     // girar la camara hacia el rumbo SOLO si no hay follow activo: en follow
     // la mira aimbot sobre la cabeza del objetivo manda (no pelear con ella)
     if (yaw != null && !state.followTarget) turnCamera(player, yaw, pitch);
+}
+
+// Convierte una dirección del mundo a W/A/S/D relativos a la cámara. De esta
+// forma mirar a otro lado no cambia el rumbo que eligió el pathfinder.
+function movementTowardWorldYaw(player, targetYaw) {
+    let diff = targetYaw - getViewYaw(player);
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    let forward = Math.cos(diff);
+    let strafe = -Math.sin(diff);
+    if (Math.abs(forward) < 0.22) forward = 0;
+    if (Math.abs(strafe) < 0.22) strafe = 0;
+    return { forward, strafe };
 }
 
 function obstacleNeedsJump(player, dx, dz) {
@@ -931,7 +956,7 @@ function executePath(player, keepAlive = false) {
     const distSq = dx * dx + dz * dz;
 
     // Check if we've reached this node
-    if (distSq < 0.36) { // within ~0.6 blocks
+    if (distSq < 0.36 && Math.abs(target.y - py) < 0.7) { // misma altura y ~0.6 bloques
         state.pathIndex++;
         if (state.pathIndex >= state.path.length) {
             if (!keepAlive) {
@@ -951,48 +976,20 @@ function executePath(player, keepAlive = false) {
     // Calculate yaw to face the target
     const targetYaw = Math.atan2(-dx, dz);
 
-    // Smoothly rotate towards target (via input.yaw — el mecanismo nativo)
-    let yawDiff = targetYaw - Number(player.yaw || 0);
-    while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
-    while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+    const move = movementTowardWorldYaw(player, targetYaw);
 
-    const yawSpeed = 0.3;
-    const newYaw = Number(player.yaw || 0) + clamp(yawDiff, -yawSpeed, yawSpeed);
-
-    // Check if we need to jump
-    const dy = target.y - py;
-    const needJump = (dy > 0.5 && Math.abs(dx) < 1.2 && Math.abs(dz) < 1.2) ||
-        obstacleNeedsJump(player, dx, dz);
-
-    // Caminar en ARCO (como bots reales): forward SIEMPRE activo (>0.3 para
-    // el boton up), strafe corrige el rumbo. Asi caminamos aunque el campo
-    // yaw del input no aplique en esta version (rotado) — el strafe es el
-    // motor de giro. El signo del strafe se auto-calibra mas abajo.
-    const forward = 1.0;
-    let strafe = 0;
-    if (Math.abs(yawDiff) > 0.12) {
-        const dir = state._strafeSign || 1;
-        strafe = 0.6 * dir * Math.sign(yawDiff);
-        if (strafe > 1) strafe = 1;
-        if (strafe < -1) strafe = -1;
+    // Mantener jump varios ticks. Antes el nodo se marcaba como alcanzado solo
+    // por X/Z y el salto se soltaba antes de que la física levantara al player.
+    const now = performance.now();
+    const risingToNode = target.y > Math.floor(py + 0.1);
+    if (risingToNode || obstacleNeedsJump(player, dx, dz)) {
+        state.jumpHoldUntil = Math.max(state.jumpHoldUntil, now + 520);
     }
+    const needJump = now < state.jumpHoldUntil;
 
-    // auto-calibracion del signo del strafe: cada 40 ticks, si el error de
-    // yaw NO disminuyo, el arco va al lado equivocado → invertir
-    state._calibTicks = (state._calibTicks || 0) + 1;
-    if (state._calibTicks % 40 === 0) {
-        const err = Math.abs(yawDiff);
-        if (state._yawErrPrev != null && err > state._yawErrPrev + 0.03 && Math.abs(yawDiff) > 0.3) {
-            state._strafeSign = -(state._strafeSign || 1);
-            console.log(`${TAG} strafe invertido (auto-calibrado) → ${state._strafeSign > 0 ? 'derecha' : 'izquierda'}`);
-            state._yawErrPrev = null;
-        } else {
-            state._yawErrPrev = err;
-        }
-    }
-
-    // yaw objetivo via input (si el juego lo aplica, gira de verdad y mas rapido)
-    applyMovementInput(player, strafe, forward, needJump, false, newYaw, undefined, true);
+    // yaw=null conserva la cámara del usuario; W/A/S/D ya fueron rotados para
+    // continuar hacia el nodo en coordenadas del mundo.
+    applyMovementInput(player, move.strafe, move.forward, needJump, false, null, undefined, move.forward > 0.55);
 
     // Re-path if stuck
     state.repathTimer++;
@@ -1068,35 +1065,9 @@ function stopFollow(silent = false) {
 // el arco gira al lado equivocado para esta version → invertir.
 function directChase(player, dx, dz, forceJump = false) {
     const targetYaw = Math.atan2(-dx, dz);
-    let yawDiff = targetYaw - Number(player.yaw || 0);
-    while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
-    while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
-
-    const forward = 1.0;
-    let strafe = 0;
-    if (Math.abs(yawDiff) > 0.12) {
-        const dir = state._strafeSign || 1;
-        strafe = 0.6 * dir * Math.sign(yawDiff);
-        if (strafe > 1) strafe = 1;
-        if (strafe < -1) strafe = -1;
-    }
-
-    // auto-calibracion (cada 40 frames)
-    state._calibTicks = (state._calibTicks || 0) + 1;
-    if (state._calibTicks % 40 === 0) {
-        const err = Math.abs(yawDiff);
-        if (state._yawErrPrev != null && err > state._yawErrPrev + 0.03 && Math.abs(yawDiff) > 0.3) {
-            state._strafeSign = -(state._strafeSign || 1);
-            console.log(`${TAG} strafe invertido (auto-calibrado) → ${state._strafeSign > 0 ? 'derecha' : 'izquierda'}`);
-            state._yawErrPrev = null;
-        } else {
-            state._yawErrPrev = err;
-        }
-    }
-
-    const newYaw = Number(player.yaw || 0) + clamp(yawDiff, -0.3, 0.3);
+    const move = movementTowardWorldYaw(player, targetYaw);
     const jump = forceJump || obstacleNeedsJump(player, dx, dz);
-    applyMovementInput(player, strafe, forward, jump, false, newYaw, undefined, true);
+    applyMovementInput(player, move.strafe, move.forward, jump, false, null, undefined, move.forward > 0.55);
 }
 
 // re-target cada ~1.5s: el objetivo se mueve, la ruta no puede ser fija
@@ -1494,6 +1465,7 @@ function stop(status = 'idle', reason = '') {
     state.action = null;
     state.actionPhase = 'idle';
     state.manualJumpUntil = 0;
+    state.jumpHoldUntil = 0;
     state._loopErr = false;
     // Reset desired input so the hook doesn't keep moving us
     desiredInput.strafe = 0;

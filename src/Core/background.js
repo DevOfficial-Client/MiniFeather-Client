@@ -18,6 +18,10 @@ const CAPES = [
 
 const GAME_DOMAINS = ["miniblox.io", "miniblox.online"];
 
+// cache en memoria de assets/accounts.json (lo pide el MAIN world via
+// sendMessage; leer el archivo en cada llamada sería innecesario)
+let accountsCache = null;
+
 const ASSET_TYPES = {
   skin: {
     names: SKINS,
@@ -119,6 +123,25 @@ function getActiveAssets(type, sendResponse) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // accounts.json del paquete: lo pide CustomSkins.js desde el MAIN world
+  // (no puede usar chrome.runtime.getURL de forma confiable). Cacheamos el
+  // JSON en memoria para no leer el archivo en cada llamada.
+  if (message?.type === 'mfAccounts:get') {
+    const url = chrome.runtime.getURL('assets/accounts.json');
+    if (accountsCache && accountsCache.url === url) {
+      sendResponse({ success: true, json: accountsCache.json });
+      return false;
+    }
+    fetch(url, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        accountsCache = { url, json };
+        sendResponse({ success: true, json });
+      })
+      .catch(() => sendResponse({ success: false, json: null }));
+    return true;
+  }
+
   const handlers = {
     setSkin: () => setAsset("skin", message.skinName, message.customUrl),
     resetSkin: () => resetAsset("skin", message.skinName),
@@ -770,7 +793,104 @@ applyMenuUi();
   const DOWNLOAD_URL = `${REPOSITORY_URL}/archive/refs/heads/${BRANCH}.zip`;
   const ALARM_NAME = 'mfUpdaterCheck';
   const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
-  const DEFAULT_SETTINGS = Object.freeze({ autoCheck: true, autoDownload: false });
+  const DEFAULT_SETTINGS = Object.freeze({ autoCheck: true, autoDownload: false, autoApply: true });
+
+  // ── HOT UPDATE: cargar .js actualizados directo desde GitHub ──
+  // hotload.json (empaquetado) lista los módulos hot-releables con sus
+  // guards. El texto de los que difieren del paquete instalado se guarda
+  // en chrome.storage (mfHotCache) y HotLoader lo inyecta en el arranque.
+  const HOT_KEY = 'mfHotCache';
+  const HOT_APPLIED = 'mfHotAppliedCommit';
+
+  async function readHotList() {
+    try {
+      const response = await fetch(chrome.runtime.getURL('hotload.json'), { cache: 'no-store' });
+      if (response.ok) {
+        const json = await response.json();
+        if (Array.isArray(json.hot)) {
+          return json.hot.filter(e => e && typeof e.path === 'string');
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  async function localFileSha(path) {
+    try {
+      const response = await fetch(chrome.runtime.getURL(path), { cache: 'no-store' });
+      if (!response.ok) return null;
+      return await gitBlobSha(await response.arrayBuffer());
+    } catch (_) { return null; }
+  }
+
+  async function fetchRawText(commit, path) {
+    const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${commit}/${path}`;
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Raw ${response.status}`);
+    const text = await response.text();
+    if (!text) throw new Error('vacío');
+    return text;
+  }
+
+  async function getHotCache() {
+    const stored = await chrome.storage.local.get([HOT_KEY]);
+    return stored[HOT_KEY] || { v: 1, commit: null, ts: 0, files: {}, guards: {}, ok: {} };
+  }
+
+  // comparar cada módulo hot contra el árbol remoto: distinto → cachear el
+  // texto nuevo; igual (p.ej. reinstalaste la versión nueva) → quitarlo
+  async function updateHotCache(remoteCommit, remoteTree) {
+    const hotList = await readHotList();
+    const cache = await getHotCache();
+    if (!cache.ok || typeof cache.ok !== 'object') cache.ok = {};
+    const treeMap = new Map(
+      (remoteTree?.tree || [])
+        .filter(item => item?.type === 'blob' && item?.path)
+        .map(item => [item.path, item.sha])
+    );
+    let changed = false;
+
+    for (const entry of hotList) {
+      const path = entry.path;
+      const remoteSha = treeMap.get(path) || null;
+      if (!remoteSha) {
+        if (cache.files[path]) { delete cache.files[path]; changed = true; }
+        continue;
+      }
+      const localSha = await localFileSha(path);
+      if (localSha === remoteSha) {
+        if (cache.files[path]) { delete cache.files[path]; changed = true; }
+        continue;
+      }
+      try {
+        cache.files[path] = await fetchRawText(remoteCommit, path);
+        cache.guards[path] = Array.isArray(entry.guards) ? entry.guards : [];
+        cache.ok[path] = Array.isArray(entry.ok) ? entry.ok : [];
+        changed = true;
+      } catch (_) {}
+    }
+
+    cache.commit = remoteCommit || null;
+    cache.ts = Date.now();
+    await chrome.storage.local.set({ [HOT_KEY]: cache });
+
+    // auto-aplicar: recargar las pestañas del juego UNA vez por commit para
+    // que HotLoader arranque ya con el plan nuevo
+    if (changed && Object.keys(cache.files).length) {
+      const settings = await getSettings();
+      if (settings.autoApply) {
+        const prev = (await chrome.storage.local.get([HOT_APPLIED]))[HOT_APPLIED] || '';
+        if (remoteCommit && prev !== remoteCommit) {
+          await chrome.storage.local.set({ [HOT_APPLIED]: remoteCommit });
+          try {
+            const tabs = await chrome.tabs.query({ url: ['https://miniblox.io/*', 'https://miniblox.online/*'] });
+            for (const tab of tabs) { try { chrome.tabs.reload(tab.id); } catch (_) {} }
+          } catch (_) {}
+        }
+      }
+    }
+    return cache;
+  }
 
   function versionParts(value) {
     return String(value || '0').split('.').map(part => Number.parseInt(part, 10) || 0);
@@ -966,6 +1086,8 @@ applyMenuUi();
         reason,
         filesMatch: comparison.matches,
         changedFiles: comparison.changedFiles.slice(0, 12),
+        hotFiles: hotCache ? Object.keys(hotCache.files || {}).length : 0,
+        hotCommit: hotCache?.commit || null,
         repositoryUrl: REPOSITORY_URL,
         downloadUrl: DOWNLOAD_URL
       };
@@ -1004,6 +1126,20 @@ applyMenuUi();
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // HOT: el HotLoader pide el plan (texto de los .js actualizados)
+    if (message?.type === 'mfHot:sync') {
+      getHotCache()
+        .then(cache => sendResponse({
+          success: true,
+          commit: cache.commit,
+          files: cache.files || {},
+          guards: cache.guards || {},
+          ok: cache.ok || {}
+        }))
+        .catch(error => sendResponse({ success: false, error: String(error?.message || error) }));
+      return true;
+    }
+
     if (!message?.type?.startsWith?.('mfUpdater:')) return;
 
     (async () => {

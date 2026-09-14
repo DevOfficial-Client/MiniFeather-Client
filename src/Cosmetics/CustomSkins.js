@@ -1,5 +1,7 @@
 (function () {
     'use strict';
+    if (window.__MF_CustomSkins) return;
+    window.__MF_CustomSkins = true;
 
     var TAG = "[MiniFeather Skins]";
     var VERBOSE = false;
@@ -25,6 +27,71 @@
         return meta && meta.content ? meta.content : null;
     }
 
+    // ─── IDs compartidos con packs custom (MF_Facial) ────────────────
+    // Registro vivo "nombre custom → URL del PNG" + interceptor <img src>.
+    // Comparte globals con MF_Facial (instala el hook quien llegue primero;
+    // el registro se lee EN VIVO al resolver cada URL).
+    var packSkinReg = (globalThis.__MF_PACK_SKINS__ ||= {});
+    var CUSTOM_URL_RE = /(?:^|\/)auth-api\/skins\/custom\/([^\/?#]+)\.png(?:[?#]|$)/;
+    var MF_DEV_SKINS = ['eve', 'gab', 'itzesteban', 'nightrise', 'notsenpai'];
+
+    function installCustomUrlHook() {
+        if (globalThis.__MF_PACK_IMG_HOOK__) return;
+        var proto = HTMLImageElement.prototype;
+        var d = Object.getOwnPropertyDescriptor(proto, 'src');
+        if (!d || !d.set || !d.get) return;
+        var origSet = d.set;
+        Object.defineProperty(proto, 'src', {
+            configurable: true,
+            enumerable: d.enumerable,
+            get: function () { return d.get.call(this); },
+            set: function (v) {
+                if (typeof v === 'string') {
+                    var reg = globalThis.__MF_PACK_SKINS__;
+                    if (reg) {
+                        var m = v.match(CUSTOM_URL_RE);
+                        if (m && reg[m[1]]) { origSet.call(this, reg[m[1]]); return; }
+                        var m2 = v.match(/^textures\/entity\/skins\/([^\/?#]+)\.png/);
+                        if (m2 && reg[m2[1]]) { origSet.call(this, reg[m2[1]]); return; }
+                    }
+                }
+                origSet.call(this, v);
+            }
+        });
+        globalThis.__MF_PACK_IMG_HOOK__ = true;
+    }
+
+    // skins sueltas de skins/devs/ → ids custom:mf_dev_<nombre>. Se registra
+    // en cuanto la meta mf-skins-base está disponible (SplashScreen).
+    var devSkinsRegistered = false;
+    function registerDevSkins() {
+        if (devSkinsRegistered) return;
+        var base = skinsBaseUrl();
+        if (!base) return;
+        // la meta apunta DENTRO de /skins/ (chrome-extension://<id>/skins/)
+        base = String(base).replace(/\/*$/, '/');
+        for (var i = 0; i < MF_DEV_SKINS.length; i++) {
+            var n = MF_DEV_SKINS[i];
+            packSkinReg['mf_dev_' + n] = base + 'devs/' + n + '.png';
+        }
+        // packs builtin de skins/mypacks/ (id custom:mf_<pack>) por si
+        // MF_Facial aún no cargó — misma URL que usa su packSkinUrl
+        var packs = {
+            estebangxe: 'EstebanExG__1_1.png',
+            angrywolfx: 'angrywolfx.png',
+            eve: 'eve.png'
+        };
+        for (var id in packs) {
+            if (!Object.prototype.hasOwnProperty.call(packs, id)) continue;
+            if (!packSkinReg['mf_' + id]) {
+                packSkinReg['mf_' + id] = base + 'mypacks/' + id + '/' + packs[id];
+            }
+        }
+        devSkinsRegistered = true;
+        installCustomUrlHook();
+        log('ids custom listos (devs + mypacks)');
+    }
+
     // ─── Carga de la base de datos de overrides ──────────────────────
     // Formato de la caché local:
     //   { "players": { "<uuid>": { "skin": "devs/itzesteban", ... } } }
@@ -36,6 +103,26 @@
     //     campo profile.cosmetics.skin del JSON del servidor tal cual
     var DB_KEY = 'minifeather:custom-skins-db';
 
+    // ─── DB builtin (viene con la extensión) ─────────────────────────
+    // Mapa jugador → id de skin custom. Los ids custom:mf_* los resuelve
+    // el interceptor de arriba contra /skins/ del client (así TODOS los
+    // usuarios del client ven la skin, sin depender del server).
+    // Se puede sobreescribir/añadir con accounts.json (fetch) o editando
+    // assets/accounts.json en el repo.
+    var BUILTIN_DB = {
+        players: {
+            // packs de skins/mypacks/ (uuid del pack.json → custom:mf_<id>)
+            '6eb7369a-551e-406a-9a63-6db7a358e1e5': { skin: 'custom:mf_estebangxe' }, // EstebanGxE
+            'c4201f43-2de9-4275-930a-301fae4cce6c': { skin: 'custom:mf_angrywolfx' }, // AngryWolfX
+            // skins sueltas de skins/devs/ (username → custom:mf_dev_<png>)
+            'itzesteban': { skin: 'custom:mf_dev_itzesteban' },
+            'nightrise': { skin: 'custom:mf_dev_nightrise' },
+            'notsenpai': { skin: 'custom:mf_dev_notsenpai' },
+            'gab': { skin: 'custom:mf_dev_gab' },
+            'eve': { skin: 'custom:mf_eve' }
+        }
+    };
+
     var db = null;            // { uuidOrName: {skin, ...} }
     var dbByUuid = null;      // uuid lowercase → entry
     var dbByName = null;      // username lowercase → entry
@@ -43,6 +130,8 @@
 
     function normalizeSkinValue(value) {
         if (typeof value !== 'string') return null;
+        // ids custom (clase nativa del juego) pasan tal cual
+        if (value.indexOf('custom:') === 0) return value;
         var v = value.trim().replace(/\\/g, '/').replace(/^\/+/, '');
         if (!v) return null;
         var m = v.match(/^skins\/(.+)$/i);
@@ -58,15 +147,19 @@
 
     function entrySkinUrl(entry) {
         if (!entry || !entry.__skin) return null;
+        // id custom: → lo resuelve el hook de /auth-api/skins/custom/ (no
+        // hay URL directa que construir aquí)
+        if (String(entry.__skin).indexOf('custom:') === 0) return null;
         if (isVanillaSkinId(entry.__skin)) return null; // se reescribe el id, no la URL
         var base = skinsBaseUrl();
         if (!base) return null;
         return base + entry.__skin + '.png';
     }
 
-    function parseDb(data) {
-        dbByUuid = {};
-        dbByName = {};
+    function parseDb(data, reset) {
+        if (reset) { dbByUuid = {}; dbByName = {}; }
+        if (!dbByUuid) dbByUuid = {};
+        if (!dbByName) dbByName = {};
         if (!data || typeof data !== 'object') return;
         var players = data.players || data;
         for (var key in players) {
@@ -91,7 +184,9 @@
         if (dbLoading) return dbLoading;
 
         var finish = function (data) {
-            parseDb(data);
+            // builtin primero; accounts.json (si existe) sobreescribe/añade
+            parseDb(BUILTIN_DB, true);
+            parseDb(data, false);
             db = data || {};
             dbLoading = null;
             var n = Object.keys(dbByUuid).length + Object.keys(dbByName).length;
@@ -99,16 +194,53 @@
             return db;
         };
 
-        // accounts.json fue retirado del paquete. No pedir /accounts.json al
-        // dominio de MiniBlox: responde 403 y Chrome lo registra como error
-        // de la extensión. Conservamos únicamente datos válidos de la sesión.
-        dbLoading = Promise.resolve().then(function () {
+        // el MAIN world no tiene chrome.runtime.getURL garantizado en todas
+        // las versiones: pasamos por sendMessage → background, que sí tiene
+        // acceso a los recursos de la extensión. Fallback: si chrome.runtime
+        // no está disponible (raro), intentar getURL directamente.
+        dbLoading = new Promise(function (resolve) {
+            var done = false;
+            var finishFromExt = function (json) {
+                if (done) return;
+                done = true;
+                resolve(json);
+            };
             try {
-                var cached = sessionStorage.getItem(DB_KEY);
-                if (cached) return finish(JSON.parse(cached));
+                if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+                    chrome.runtime.sendMessage({ type: 'mfAccounts:get' }, function (res) {
+                        if (chrome.runtime.lastError || !res || !res.success) {
+                            // fallback: intentar getURL directo
+                            try {
+                                fetch(chrome.runtime.getURL('assets/accounts.json'), { cache: 'no-store' })
+                                    .then(function (r) { return r.ok ? r.json() : null; })
+                                    .then(finishFromExt)
+                                    .catch(function () { finishFromExt(null); });
+                            } catch (_) { finishFromExt(null); }
+                            return;
+                        }
+                        finishFromExt(res.json || null);
+                    });
+                    return;
+                }
             } catch (_) {}
-            return finish(null);
-        });
+            try {
+                fetch(chrome.runtime.getURL('assets/accounts.json'), { cache: 'no-store' })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(finishFromExt)
+                    .catch(function () { finishFromExt(null); });
+                return;
+            } catch (_) {}
+            finishFromExt(null);
+        })
+            .then(finish)
+            .catch(function (e) {
+                warn('accounts.json local no disponible (' + (e && e.message || e) + '), usando sessionStorage');
+                try {
+                    var cached = sessionStorage.getItem(DB_KEY);
+                    if (cached) return finish(JSON.parse(cached));
+                } catch (_) {}
+                return finish(null);
+            });
 
         return dbLoading;
     }
@@ -282,6 +414,7 @@
     var lastLiveScan = 0;
 
     function applyLiveOverrides() {
+        registerDevSkins(); // idempotente: espera la meta mf-skins-base
         if (dbByUuid === null && dbByName === null) return;
 
         var game = findGame();
@@ -401,6 +534,7 @@
 
     function tryPatch() {
         patchFetch();
+        registerDevSkins();
         if (typeof HTMLImageElement === 'undefined') return false;
         return patchImageSrc();
     }
@@ -411,6 +545,7 @@
         var pollTicks = 0;
         var setupInterval = setInterval(function () {
             pollTicks++;
+            registerDevSkins(); // la meta mf-skins-base llega con SplashScreen
             if (tryPatch()) {
                 clearInterval(setupInterval);
             }
