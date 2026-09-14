@@ -519,6 +519,7 @@ function handleFileEnd(file) {
     }).catch((e) => warn('no pude parsear "' + file + '": ' + (e?.message || e)));
 }
 
+let puppetRafId = 0;
 (function puppetLoop() {
     if (state.role === 'guest' || state.role === 'host') {
         try { puppetTick(); } catch {}
@@ -526,7 +527,7 @@ function handleFileEnd(file) {
         try { entsTick(); } catch {}
         try { lookTick(); } catch {}
     }
-    requestAnimationFrame(puppetLoop);
+    puppetRafId = requestAnimationFrame(puppetLoop);
 })();
 
 // ---------- mensajes ----------
@@ -807,32 +808,48 @@ function peerSkinMaterials(entity) {
     });
     const skins = out.filter(m => {
         const w = m.map?.image?.width, h = m.map?.image?.height;
-        return w === 64 && (h === 64 || h === 32);
+        if (!w || !h) return false;
+        // 64x64/64x32 o múltiplo HD (128x128…) — ratio 1:1 o 2:1
+        const k64 = w / 64;
+        return Number.isInteger(k64) && (h === w || h === w / 2);
     });
     return skins.length ? skins : out;
 }
 
-// textura editable del peer (canvas propio montado, nunca la del juego)
+// textura editable del peer (canvas propio montado, nunca la del juego).
+// · re-utiliza NUESTRO canvas si ya está montado (__mfPeerCanvas)
+// · JAMÁS pinta el canvas local (__mfLocalCanvas = MI skin) ni el de
+//   "animar a otros" (__mfOtherKey): si ese es el único disponible, toma el
+//   relevo COPIANDO su contenido a un canvas nuestro (así los dos módulos
+//   no se pelean el mismo canvas)
+// · la textura del juego también se copia (nunca se pinta la original)
 function peerEditableCanvas(entity) {
     const mats = peerSkinMaterials(entity);
     if (!mats.length) return null;
-    const tex = mats[0].map;
-    if (!tex?.image) return null;
-    if (tex.image instanceof HTMLCanvasElement) return { canvas: tex.image, tex, mats };
-    // textura no editable del juego: crear una copia editable
+    const isCanvas = t => t?.image instanceof HTMLCanvasElement;
+    const usable = mats.filter(m =>
+        m.map?.image && !(isCanvas(m.map) && m.map.__mfLocalCanvas));
+    if (!usable.length) return null;
+    const tex = usable[0].map;
+    // estado estable: ya montamos nuestro canvas → re-utilizarlo
+    if (isCanvas(tex) && tex.__mfPeerCanvas) {
+        return { canvas: tex.image, tex, mats: usable.filter(m => m.map === tex) };
+    }
+    // del juego, de "animar a otros" o sin dueño → copia editable propia
     const c = document.createElement('canvas');
     c.width = tex.image.width; c.height = tex.image.height;
     try { c.getContext('2d').drawImage(tex.image, 0, 0); } catch { return null; }
     let nt = null;
     try { nt = new tex.constructor(c); } catch {}
     if (!nt) return null;
+    nt.__mfPeerCanvas = true; // canvas del peer montado por nosotros
     try {
         nt.magFilter = tex.magFilter; nt.minFilter = tex.minFilter;
         if (tex.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = tex.colorSpace;
         nt.flipY = tex.flipY; nt.wrapS = tex.wrapS; nt.wrapT = tex.wrapT;
     } catch {}
-    for (const m of mats) { m.map = nt; m.needsUpdate = true; }
-    return { canvas: c, tex: nt, mats };
+    for (const m of usable) { m.map = nt; m.needsUpdate = true; }
+    return { canvas: c, tex: nt, mats: usable };
 }
 
 function loadImg(url) {
@@ -855,14 +872,17 @@ function rememberPeerOriginal(entity, kind) {
     if (!s) return null;
     let rec = peerOriginals.get(entity);
     if (!rec) {
-        rec = { headCanvas: null, skinCanvas: null };
+        rec = { headCanvas: null, skinCanvas: null, headTex: null, skinTex: null };
         peerOriginals.set(entity, rec);
     }
-    if (!rec[kind + 'Canvas']) {
+    // re-capturar si la textura cambió (skin nueva): el snapshot viejo ya no
+    // corresponde al original actual del peer
+    if (!rec[kind + 'Canvas'] || rec[kind + 'Tex'] !== s.tex) {
         const c = document.createElement('canvas');
         c.width = s.canvas.width; c.height = s.canvas.height;
         c.getContext('2d').drawImage(s.canvas, 0, 0);
         rec[kind + 'Canvas'] = c;
+        rec[kind + 'Tex'] = s.tex;
     }
     return s;
 }
@@ -1043,6 +1063,30 @@ function reappliedLastTexAction(entity) {
     s.tex.needsUpdate = true;
 }
 
+// desconexión: restaurar la textura del peer a su original recordado y
+// liberar el canvas (__mfPeerCanvas off) para que "animar a otros"
+// (MF_Facial) vuelva a hacerse cargo de esa cara
+function revertPeerLook() {
+    try {
+        const entity = (look.entity?.mesh != null && !look.entity.removed) ? look.entity : peerEntity();
+        if (!entity) return;
+        const rec = peerOriginals.get(entity);
+        const s = peerEditableCanvas(entity);
+        if (!rec || !s) return;
+        const src = rec.skinCanvas || rec.headCanvas || rec.faceCanvas;
+        if (src) {
+            const ctx = s.canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+            ctx.clearRect(0, 0, s.canvas.width, s.canvas.height);
+            ctx.drawImage(src, 0, 0);
+            s.tex.needsUpdate = true;
+        }
+        // soltar la propiedad del canvas (queda con el contenido original)
+        try { s.tex.__mfPeerCanvas = false; } catch {}
+        log('look-sync: peer fuera — skin restaurada, cara liberada');
+    } catch (e) { warn('revert look falló: ' + (e?.message || e)); }
+}
+
 
 
 // ---------- conexión ----------
@@ -1072,6 +1116,8 @@ function wireConn(conn) {
         if (look.entity && look.morphType) {
             try { window.MF_Morph?.detachFrom?.(look.entity.id); } catch {}
         }
+        // restaurar la skin del peer a su original y liberar su canvas
+        revertPeerLook();
         look.entity = null; look.pending.length = 0;
         look.morphType = null;
         look.lastTexAction = null; look.lastTexImg = null; look.mountedTex = null;
@@ -1086,6 +1132,60 @@ function wireConn(conn) {
     conn.on('error', (e) => warn('error de conexion:', e?.message || e));
 }
 
+// ---------- P2P auto-share por chat ----------
+// Al crear sala: el código se envía al chat del juego (chat.submit → llega
+// al server). Los demás clientes con la extensión lo detectan en chat.log y
+// se conectan solos. Formato discreto: "mfp2p:<codigo>".
+const autoShare = {
+    on: (() => { try { return localStorage.getItem('mf:p2p:autoshare') !== '0'; } catch { return true; } })(),
+    myCodes: new Set(),      // códigos que YO creé (no auto-unirme a mí mismo)
+    seenCodes: new Map(),    // code → ts del último intento (evita bucles)
+    chatSeen: new WeakSet(), // entradas de chat ya examinadas
+};
+
+function sendRoomToChat(code) {
+    if (!autoShare.on || !code) return;
+    const g = getGame();
+    const chat = g?.chat;
+    if (!chat || typeof chat.submit !== 'function') { log('auto-share: sin chat del juego'); return; }
+    const text = 'mfp2p:' + code;
+    autoShare.myCodes.add(code);
+    try {
+        try { chat.setInputValue?.(text); } catch { try { chat.inputValue = text; } catch {} }
+        chat.submit();
+        log('sala compartida al chat: ' + text);
+    } catch (e) { warn('auto-share falló:', e?.message || e); }
+    try { chat.closeInput?.(); } catch {}
+}
+
+// escanea las últimas líneas del chat buscando "mfp2p:<code>" de OTRO player
+function chatWatchTick() {
+    if (!autoShare.on || state.conn || state.peer) return;
+    const g = getGame();
+    const logArr = g?.chat?.log;
+    if (!Array.isArray(logArr)) return;
+    const meUuid = g?.player?.uuid != null ? String(g.player.uuid) : null;
+    for (let i = Math.max(0, logArr.length - 15); i < logArr.length; i++) {
+        const entry = logArr[i];
+        if (!entry || typeof entry !== 'object' || autoShare.chatSeen.has(entry)) continue;
+        autoShare.chatSeen.add(entry);
+        const text = String(entry.text ?? entry.message ?? entry.content ?? '');
+        const m = text.match(/mfp2p[:\s]+([A-Za-z0-9-]{4,24})/i);
+        if (!m) continue;
+        const code = m[1];
+        if (autoShare.myCodes.has(code)) continue; // mío
+        const from = entry.from != null ? String(entry.from) : null;
+        if (meUuid && from === meUuid) continue;   // mensaje propio
+        const now = Date.now();
+        if (now - (autoShare.seenCodes.get(code) || 0) < 10 * 60 * 1000) continue; // ya intentado
+        autoShare.seenCodes.set(code, now);
+        log('sala P2P detectada en el chat → auto-join ' + code);
+        join(code);
+        return;
+    }
+}
+setInterval(chatWatchTick, 1500);
+
 async function host(code) {
     if (state.conn || state.peer) { warn('ya hay sesion activa — /p2p off primero'); return null; }
     if (!(await loadPeerJS())) { warn('no se pudo cargar PeerJS (CSP?)'); return null; }
@@ -1098,6 +1198,9 @@ async function host(code) {
     peer.on('open', (pid) => {
         log('sala lista. Tu amigo entra con:  /p2p join ' + pid);
         console.log('%c/p2p join ' + pid, 'font-size:16px;color:#7ec8ff');
+        // auto-share: publicar el código al chat del juego — los demás con
+        // la extensión lo detectan y se conectan solos
+        sendRoomToChat(pid);
     });
     peer.on('connection', (c) => {
         if (state.conn) { try { c.close(); } catch {} return; } // 1 invitado
@@ -1147,6 +1250,24 @@ window.MF_Peer = {
     get connected() { return !!state.conn; },
     _chatHook: null,
     host, join, off,
+    // hot-reload: soltar TODO (timers, conexión, raf) para re-crear limpio
+    dispose() {
+        try { off(); } catch {}
+        try { clearInterval(state.sendTimer); } catch {}
+        try { clearInterval(state.scaleTimer); } catch {}
+        try { clearInterval(state.posTimer); } catch {}
+        try { clearInterval(chatWatchTimer); } catch {}
+        try { cancelAnimationFrame(puppetRafId); } catch {}
+    },
+    // /p2p auto [on|off] — compartir código al chat + auto-join al detectarlo
+    auto(on) {
+        if (on === true || on === false) {
+            autoShare.on = on;
+            try { localStorage.setItem('mf:p2p:autoshare', on ? '1' : '0'); } catch {}
+            log('auto-share ' + (on ? 'ON' : 'OFF'));
+        }
+        return autoShare.on;
+    },
     // pat compartido (PatPat): envia la info del pat al otro cliente
     sendPat(info) {
         if (!state.conn) return false;

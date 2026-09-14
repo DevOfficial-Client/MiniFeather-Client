@@ -1,0 +1,11 @@
+{
+  "$note": "Módulos hot-update del client: cuando alguno cambia en GitHub, los clientes con la extensión lo descargan y cargan automáticamente en el próximo arranque (sin reinstalar). 'guards' = variables de guarda que bloquean la versión empaquetada (módulos cuyo re-run no es seguro por sí solo); los demás usan patrón dispose (desechan la instancia vieja al re-crear). 'ok' = globals que el módulo expone una vez inicializado; el runner del HotLoader los verifica y, si falta alguno, dispara el fallback (inyecta la versión empaquetada). Para añadir un módulo nuevo: añade guard o dispose al inicio, lístalo aquí y, si expone un global al terminar, añádelo a 'ok'.",
+  "hot": [
+    { "path": "src/Studio/MF_Peer.js", "guards": [], "ok": ["MF_Peer"] },
+    { "path": "src/Studio/MF_Facial.js", "guards": ["__MF_Facial"], "ok": ["MF_Facial"] },
+    { "path": "src/Render/SpiderSim.js", "guards": [], "ok": ["MF_SPIDER_SIM"] },
+    { "path": "src/Render/SpiderBot.js", "guards": [], "ok": ["MF_SPIDER_BOT"] },
+    { "path": "src/Chat/ClientCommands.js", "guards": [], "ok": ["__MINIFEATHER_CLIENT_COMMANDS__"] },
+    { "path": "src/Cosmetics/CustomSkins.js", "guards": ["__MF_CustomSkins"], "ok": ["__MF_CustomSkins"] }
+  ]
+}

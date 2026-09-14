@@ -800,6 +800,13 @@
 
   // ═══ API pública ═══
   window.MF_SPIDER_BOT = {
+    // hot-reload: quitar meshes de la escena y parar el raf
+    dispose() {
+      state.enabled = false;
+      try { clearAll(); } catch (_) {}
+      try { cancelAnimationFrame(state.raf); } catch (_) {}
+      state.raf = 0;
+    },
     connect() {
       enable(true);
       return { ok: true, embedded: !!simAPI() };

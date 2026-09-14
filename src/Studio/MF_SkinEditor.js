@@ -192,6 +192,7 @@
             tex.offset?.copy?.(src.offset);
         } catch {}
         tex.userData = { __mfSkinEditor: true };
+        tex.__mfLocalCanvas = true; // contiene MI skin: nunca base de otros players
         tex.needsUpdate = true;
 
         state.orig.clear();
