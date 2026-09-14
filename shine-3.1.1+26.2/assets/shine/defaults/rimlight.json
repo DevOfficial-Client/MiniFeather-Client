@@ -1,0 +1,17 @@
+{
+  "ENABLE_RIM_LIGHT": 1,
+  "RIM_COLOR_INFLUENCE": 1.0,
+  "RIM_THICKNESS": 3.0,
+  "RIM_STRENGTH": 0.5,
+  "RIM_DEPTH_THRESHOLD": 0.1,
+  "RIM_MAX_DISTANCE": 64.0,
+  "RIM_DARKNESS_RESPONSE": 0.0,
+  "ENABLE_CLOUD_RIM_LIGHT": 0,
+  "CLOUD_RIM_STYLE": 0,
+  "CLOUD_RIM_STRENGTH": 0.55,
+  "CLOUD_RIM_THICKNESS": 0.35,
+  "CLOUD_RIM_COLOR_INFLUENCE": 0.6,
+  "blockInclusionOverrides": {
+    "minecraft:grass_block": true
+  }
+}

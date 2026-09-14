@@ -1,0 +1,59 @@
+{
+	"credit": "Created by FreshLX for Fresh Animations",
+	"animations": [
+		{
+			"varb.pfc": "frame_counter == var.pre_frame_counter",
+			"var.r": "pi*random(id)*4",
+			"var.b": "var.r +age / 5",
+			"var.w": "var.r +age -death_time/1.3 +pos_y*2 +(sin(var.b/3+cos(var.b/3))-1)*1.5",
+			"var.body_rx": "if( varb.pfc, var.body_rx, body.rx )",
+			"var.h": "clamp(if( varb.pfc, var.h, var.body_rx==pi || is_sitting, min(20, var.h +0.3 *frame_time*20), max(0, var.h -0.3 *frame_time*20)), 0, 1)",
+			"var.f": "1-var.h",
+			"var.nov1": "(0.5-0.5*cos( clamp( 1-(sin(age/80)*5 +2), 0, 1 )*pi ))",
+			"var.blink": "clamp((1.5 -abs(sin(var.r+age/8)*8))*clamp(-32 +cos((var.r+age/8)/1.5)*40 +cos((var.r+age/8)/4)*40, 0, 1), clamp(-sin(hurt_time*pi/5)/3*hurt_time +death_time +(1-clamp(var.nov1*6, 0, 1))*var.h, 0, 1), 1 )",
+			"var.Created_by_FreshLX_for_Fresh_Animations": "1"
+		},
+		{
+			"body.ty": "17 +( -0.5 +(0.1*sin(var.b)-0.1) )*var.h +( sin(var.b) -0.5*sin( var.w +cos(var.w)/3 )*(1-limb_speed/1.5) )*var.f",
+			"body.tz": "( sin( (0.1*sin(var.b/3)*cos(var.b/6 )) )*5          )*var.h +( -0.1*cos(var.b) +0.2*sin( var.w ) -1.4 )*var.f",
+			"body.rx": "(-0.05 +0.1*sin(var.b/3)*cos(var.b/6 )     +pi-0.001 )*var.h +( torad( 45 +( 30 -15+15*cos(head_yaw/90*pi) )*limb_speed +5*sin(var.b) -8*sin( pi/5*0 +var.w ) -5*(sin(var.b/3+cos(var.b/3))-1) ) )*var.f",
+			"body.ry": "(       0.2*sin(var.b/5)*cos(var.b/15) +( sin(age/12 +cos(age/12*1.5)/1.5)/5 )*var.nov1 +torad(head_yaw)/4 )*var.h",
+			"body.rz": "torad( head_yaw/2 )*var.f +if(death_time >0, torad(min(sqrt((death_time-1)/20*1.6),1)*90), 0)",
+			"head2.ty": "( -body.rx/pi )*var.f -7",
+			"head2.tz": "( -body.rx/pi )*var.f",
+			"head2.rx": "( pi +torad( -20*var.nov1 ) )*var.h +( torad( ( 20 -30+30*cos(head_yaw/90*pi)/2 )*limb_speed +5*cos(var.w +sin( var.w )/2 )*(1-limb_speed) +2.5 ) )*var.f -body.rx",
+			"head2.ry": "( ( body.ry +sin(age/12 +cos(age/12*1.5)/1.5)/2 )*var.nov1 -torad(head_yaw)/1.2 )*var.h +torad( -head_yaw/2 )*var.f",
+			"head2.rz": "torad(  head_yaw/3 )*var.f"
+		},
+		{
+			"left_pivot.rx": "(0.05 )*var.h +( cos(-pi/4 +var.w )*0.6 +0.15 )*var.f",
+			"right_pivot.rx": "left_pivot.rx",
+			"left_pivot.rz": " (-0.08*(1-var.nov1) +0.1*var.nov1 )*var.h",
+			"right_pivot.rz": "( 0.08*(1-var.nov1) -0.1*var.nov1 )*var.h",
+			"left_wing2.ty": " ( 0.25 +(0.1*cos(var.b)+0.1) )*var.h +( sin( var.w ) )*var.f",
+			"right_wing2.ty": "(-0.25 +(0.1*cos(var.b)+0.1) )*var.h +( sin( var.w ) )*var.f",
+			"left_wing2.ry": "  torad( 45*(1-clamp(     var.nov1*1.5, 0, 1)*0.8) +10*cos(age/7)*var.nov1 )*var.h +( cos( var.w +sin( pi/5 +var.w )/2 ) -0.2 )*1.1/1.1*var.f",
+			"right_wing2.ry": "-torad( 40*(1-clamp(-0.5+var.nov1*1.5, 0, 1)*0.8) +10*cos(age/8)*var.nov1 )*var.h -left_wing2.ry*var.f",
+			"outer_left_wing2.ry": "  torad( 125*(1-clamp(     var.nov1*1.5, 0, 1)*0.8) +(20 +20*sin(age/7) )*var.nov1 )*var.h +( sin( var.w )*1.5 +0.9 )/1.1*var.f",
+			"outer_right_wing2.ry": "-torad( 139*(1-clamp(-0.5+var.nov1*1.5, 0, 1)*0.8) +(20 +20*sin(age/8) )*var.nov1 )*var.h -outer_left_wing2.ry*var.f"
+		},
+		{
+			"feet2.ty": "( (body.ty-16-0.5) )*var.h -2",
+			"feet2.rx": "( -body.rx +pi )*var.h +( -( cos( -pi/4 +var.w +sin( var.w )/2 ) +0.7 )/3*(1-limb_speed) +0.2 -0.4*(1-limb_speed) +( 2 -body.rx*1.5 )*limb_speed )*var.f",
+			"feet2.ry": "( body.ry )*var.h",
+			"left_ear.rx": " torad( 10 )*var.h +torad( 5*sin(var.w +sin( var.w )/2 ) )*var.f",
+			"right_ear.rx": "left_ear.rx",
+			"left_ear.ry": "  torad( -10 -40 *clamp(-8 +sin(var.r+age/87)*25, limb_speed, 1) )",
+			"right_ear.ry": "-left_ear.ry",
+			"left_ear.rz": "  torad(-10 +sin(age*1.5)*2*clamp(-2+sin(age/6)*3, 0, 1)*var.nov1 )*var.h +torad( 3*sin(var.w +sin( var.w )/2 ) )*var.f",
+			"right_ear.rz": "-left_ear.rz",
+			"left_eyelid.sy": " var.blink",
+			"right_eyelid.sy": "var.blink",
+			"left_eyelid.visible": "  left_eyelid.sy!=0",
+			"right_eyelid.visible": "right_eyelid.sy!=0"
+		},
+		{
+			"var.pre_frame_counter": "frame_counter"
+		}
+	]
+}

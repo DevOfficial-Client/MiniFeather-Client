@@ -1,0 +1,1838 @@
+{
+  "schema": "shine-feature-catalog-v2",
+  "apiVersion": 2,
+  "features": [
+    {
+      "id": "shine:all",
+      "name": "All Shine Features",
+      "category": "core",
+      "parents": [],
+      "group": true,
+      "aliases": [
+        "shine:master"
+      ]
+    },
+    {
+      "id": "shine:shine_effects_master",
+      "name": "Shine Effects Master",
+      "category": "core",
+      "parent": "shine:all",
+      "parents": [
+        "shine:all"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:lighting",
+      "name": "Lighting",
+      "category": "lighting",
+      "parent": "shine:shine_effects_master",
+      "parents": [
+        "shine:shine_effects_master"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:post_processing",
+      "name": "Post Processing",
+      "category": "lighting",
+      "parent": "shine:all",
+      "parents": [
+        "shine:all"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:world",
+      "name": "World",
+      "category": "world",
+      "parent": "shine:shine_effects_master",
+      "parents": [
+        "shine:shine_effects_master"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:particles",
+      "name": "Particles",
+      "category": "particles",
+      "parent": "shine:shine_effects_master",
+      "parents": [
+        "shine:shine_effects_master"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:interaction",
+      "name": "Interaction",
+      "category": "interaction",
+      "parent": "shine:shine_effects_master",
+      "parents": [
+        "shine:shine_effects_master"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:weather",
+      "name": "Weather",
+      "category": "weather",
+      "parent": "shine:shine_effects_master",
+      "parents": [
+        "shine:shine_effects_master"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:camera",
+      "name": "Camera",
+      "category": "camera",
+      "parent": "shine:shine_effects_master",
+      "parents": [
+        "shine:shine_effects_master"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:sound",
+      "name": "Sound",
+      "category": "sound",
+      "parent": "shine:shine_effects_master",
+      "parents": [
+        "shine:shine_effects_master"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:custom",
+      "name": "Custom",
+      "category": "custom",
+      "parent": "shine:shine_effects_master",
+      "parents": [
+        "shine:shine_effects_master"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:bloom",
+      "name": "Bloom",
+      "category": "lighting",
+      "parent": "shine:post_processing",
+      "parents": [
+        "shine:post_processing"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:bloom_masks",
+      "name": "Bloom Masks",
+      "category": "lighting",
+      "parent": "shine:bloom",
+      "parents": [
+        "shine:bloom"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:rim_light",
+      "name": "Rim Light",
+      "category": "lighting",
+      "parent": "shine:post_processing",
+      "parents": [
+        "shine:post_processing"
+      ],
+      "group": false,
+      "aliases": [
+        "shine:rimlight"
+      ]
+    },
+    {
+      "id": "shine:experimental_post",
+      "name": "Experimental Full-Screen Post Processing",
+      "category": "camera",
+      "parent": "shine:post_processing",
+      "parents": [
+        "shine:post_processing",
+        "shine:camera"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:shading",
+      "name": "Vanilla Shading Removal",
+      "category": "lighting",
+      "parent": "shine:all",
+      "parents": [
+        "shine:all"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:colored_lighting",
+      "name": "Colored Lighting",
+      "category": "lighting",
+      "parent": "shine:all",
+      "parents": [
+        "shine:all"
+      ],
+      "group": false,
+      "aliases": [
+        "shine:colored_lights"
+      ]
+    },
+    {
+      "id": "shine:water_reflections",
+      "name": "Water Reflections",
+      "category": "lighting",
+      "parent": "shine:lighting",
+      "parents": [
+        "shine:lighting"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:world_shadow",
+      "name": "World Shadow",
+      "category": "lighting",
+      "parent": "shine:lighting",
+      "parents": [
+        "shine:lighting"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:canopy_shade",
+      "name": "Canopy Shade",
+      "category": "lighting",
+      "parent": "shine:lighting",
+      "parents": [
+        "shine:lighting"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:plant_contact_shadows",
+      "name": "Plant Contact Shadows",
+      "category": "lighting",
+      "parent": "shine:lighting",
+      "parents": [
+        "shine:lighting"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:god_rays",
+      "name": "God Rays",
+      "category": "lighting",
+      "parent": "shine:lighting",
+      "parents": [
+        "shine:lighting"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:sky_volumetric_rays",
+      "name": "Sky Volumetric Lighting",
+      "category": "lighting",
+      "parent": "shine:lighting",
+      "parents": [
+        "shine:lighting"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:chunks_fade",
+      "name": "Chunks Fade",
+      "category": "lighting",
+      "parent": "shine:lighting",
+      "parents": [
+        "shine:lighting"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:block_motion",
+      "name": "Block Motion",
+      "category": "lighting",
+      "parent": "shine:lighting",
+      "parents": [
+        "shine:lighting"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:biome_colors",
+      "name": "Biome Colors",
+      "category": "world",
+      "parent": "shine:world",
+      "parents": [
+        "shine:world"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:leaf_block_colors",
+      "name": "Leaf Block Colors",
+      "category": "world",
+      "parent": "shine:world",
+      "parents": [
+        "shine:world"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:biome_noise",
+      "name": "Biome Noise",
+      "category": "world",
+      "parent": "shine:world",
+      "parents": [
+        "shine:world"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:biome_visuals",
+      "name": "Biome Visuals",
+      "category": "world",
+      "parent": "shine:world",
+      "parents": [
+        "shine:world"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:biome_fog",
+      "name": "Biome Fog",
+      "category": "world",
+      "parent": "shine:world",
+      "parents": [
+        "shine:world"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:foliage_wind",
+      "name": "Foliage Wind",
+      "category": "world",
+      "parent": "shine:world",
+      "parents": [
+        "shine:world"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:grass_blades",
+      "name": "Grass Blades",
+      "category": "world",
+      "parent": "shine:world",
+      "parents": [
+        "shine:world"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:shore_foam",
+      "name": "Shore Foam",
+      "category": "world",
+      "parent": "shine:world",
+      "parents": [
+        "shine:world"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:water_caustics",
+      "name": "Water Caustics",
+      "category": "world",
+      "parent": "shine:world",
+      "parents": [
+        "shine:world"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:underwater_polish",
+      "name": "Underwater Polish",
+      "category": "world",
+      "parent": "shine:world",
+      "parents": [
+        "shine:world"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:lava_noise",
+      "name": "Lava Noise",
+      "category": "world",
+      "parent": "shine:world",
+      "parents": [
+        "shine:world"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:heat_distortion",
+      "name": "Distortion Effects",
+      "category": "world",
+      "parent": "shine:world",
+      "parents": [
+        "shine:world"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:heat_haze",
+      "name": "Heat Haze",
+      "category": "world",
+      "parent": "shine:heat_distortion",
+      "parents": [
+        "shine:heat_distortion"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:layered_atmosphere",
+      "name": "Layered Atmosphere",
+      "category": "world",
+      "parent": "shine:heat_distortion",
+      "parents": [
+        "shine:heat_distortion"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:cold_refraction",
+      "name": "Cold Refraction",
+      "category": "world",
+      "parent": "shine:heat_distortion",
+      "parents": [
+        "shine:heat_distortion"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:chromatic_refraction",
+      "name": "Chromatic Refraction",
+      "category": "world",
+      "parent": "shine:heat_distortion",
+      "parents": [
+        "shine:heat_distortion"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:psychedelic_refraction",
+      "name": "Psychedelic Refraction",
+      "category": "world",
+      "parent": "shine:heat_distortion",
+      "parents": [
+        "shine:heat_distortion"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:psychedelic_afterimage",
+      "name": "Psychedelic Afterimage",
+      "category": "world",
+      "parent": "shine:heat_distortion",
+      "parents": [
+        "shine:heat_distortion"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:sky",
+      "name": "Sky \u0026 Atmosphere",
+      "category": "world",
+      "parent": "shine:world",
+      "parents": [
+        "shine:world"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:haze",
+      "name": "Haze",
+      "category": "world",
+      "parent": "shine:sky",
+      "parents": [
+        "shine:sky"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:cloud_veil",
+      "name": "Cloud Veil",
+      "category": "world",
+      "parent": "shine:sky",
+      "parents": [
+        "shine:sky"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:shooting_stars",
+      "name": "Shooting Stars",
+      "category": "world",
+      "parent": "shine:sky",
+      "parents": [
+        "shine:sky"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:clouds",
+      "name": "Clouds",
+      "category": "world",
+      "parent": "shine:sky",
+      "parents": [
+        "shine:sky"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:cloud_main_layer",
+      "name": "Main Cloud Layer",
+      "category": "world",
+      "parent": "shine:clouds",
+      "parents": [
+        "shine:clouds"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:cloud_second_layer",
+      "name": "Second Cloud Layer",
+      "category": "world",
+      "parent": "shine:clouds",
+      "parents": [
+        "shine:clouds"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:cloud_third_layer",
+      "name": "Third Cloud Layer",
+      "category": "world",
+      "parent": "shine:clouds",
+      "parents": [
+        "shine:clouds"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:stars",
+      "name": "Stars",
+      "category": "world",
+      "parent": "shine:sky",
+      "parents": [
+        "shine:sky"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:vanilla_stars",
+      "name": "Vanilla Stars",
+      "category": "world",
+      "parent": "shine:stars",
+      "parents": [
+        "shine:stars"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:day_stars",
+      "name": "Day Stars",
+      "category": "world",
+      "parent": "shine:stars",
+      "parents": [
+        "shine:stars"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:custom_stars",
+      "name": "Custom Stars",
+      "category": "world",
+      "parent": "shine:stars",
+      "parents": [
+        "shine:stars"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:night_noise",
+      "name": "Night Noise",
+      "category": "world",
+      "parent": "shine:sky",
+      "parents": [
+        "shine:sky"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:end_sky_noise",
+      "name": "End Sky Noise",
+      "category": "world",
+      "parent": "shine:sky",
+      "parents": [
+        "shine:sky"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:fog_fx",
+      "name": "Fog FX",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:wind_particles",
+      "name": "Wind Particles",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:passive_leaves",
+      "name": "Passive Leaves",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:falling_leaves",
+      "name": "Falling Leaves",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:leaf_gusts",
+      "name": "Leaf Gusts",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:jellyfish",
+      "name": "Jellyfish",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:xp_orb_trails",
+      "name": "XP Orb Trails",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:cave_dust",
+      "name": "Cave Dust",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:amethyst_sparkles",
+      "name": "Amethyst Sparkles",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:end_dust",
+      "name": "End Dust",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:nether_lava_dust",
+      "name": "Nether Lava Dust",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:nether_rays",
+      "name": "Nether Rays",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:sculk_dust",
+      "name": "Sculk Dust",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:custom_particles",
+      "name": "Custom Particles",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:lantern_torch_particles",
+      "name": "Lantern \u0026 Torch Particles",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:lantern_particles",
+      "name": "Lantern Particles",
+      "category": "particles",
+      "parent": "shine:lantern_torch_particles",
+      "parents": [
+        "shine:lantern_torch_particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:torch_particles",
+      "name": "Torch Particles",
+      "category": "particles",
+      "parent": "shine:lantern_torch_particles",
+      "parents": [
+        "shine:lantern_torch_particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:wall_torch_particles",
+      "name": "Wall-Torch Particles",
+      "category": "particles",
+      "parent": "shine:lantern_torch_particles",
+      "parents": [
+        "shine:lantern_torch_particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:torch_smoke",
+      "name": "Modern Torch Smoke",
+      "category": "particles",
+      "parent": "shine:lantern_torch_particles",
+      "parents": [
+        "shine:lantern_torch_particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:end_portal_effects",
+      "name": "End Portal Effects",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:end_portal_eye_placement",
+      "name": "End Portal Eye Placement",
+      "category": "particles",
+      "parent": "shine:end_portal_effects",
+      "parents": [
+        "shine:end_portal_effects"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:end_portal_rising_burst",
+      "name": "End Portal Rising Burst",
+      "category": "particles",
+      "parent": "shine:end_portal_effects",
+      "parents": [
+        "shine:end_portal_effects"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:end_portal_light_rays",
+      "name": "End Portal Light Rays",
+      "category": "particles",
+      "parent": "shine:end_portal_effects",
+      "parents": [
+        "shine:end_portal_effects"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:end_portal_fireflies",
+      "name": "End Portal Fireflies",
+      "category": "particles",
+      "parent": "shine:end_portal_effects",
+      "parents": [
+        "shine:end_portal_effects"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:mist",
+      "name": "Mist",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:desert_dust",
+      "name": "Desert Dust",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:lava_particles",
+      "name": "Lava Particles",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:ground_mist",
+      "name": "Ground Mist",
+      "category": "particles",
+      "parent": "shine:mist",
+      "parents": [
+        "shine:mist"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:desert_dust_particles",
+      "name": "Desert Dust Particles",
+      "category": "particles",
+      "parent": "shine:desert_dust",
+      "parents": [
+        "shine:desert_dust"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:lava_steam",
+      "name": "Lava Steam",
+      "category": "particles",
+      "parent": "shine:lava_particles",
+      "parents": [
+        "shine:lava_particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:lava_embers",
+      "name": "Lava Embers",
+      "category": "particles",
+      "parent": "shine:lava_particles",
+      "parents": [
+        "shine:lava_particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:lava_pop",
+      "name": "Lava Pops",
+      "category": "particles",
+      "parent": "shine:lava_particles",
+      "parents": [
+        "shine:lava_particles"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:lava_big_pop",
+      "name": "Big Lava Pops",
+      "category": "particles",
+      "parent": "shine:lava_pop",
+      "parents": [
+        "shine:lava_pop"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:lava_small_pop",
+      "name": "Small Lava Pops",
+      "category": "particles",
+      "parent": "shine:lava_pop",
+      "parents": [
+        "shine:lava_pop"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:lava_spray",
+      "name": "Lava Spray",
+      "category": "particles",
+      "parent": "shine:lava_particles",
+      "parents": [
+        "shine:lava_particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:lava_droplets",
+      "name": "Lava Droplets",
+      "category": "particles",
+      "parent": "shine:lava_particles",
+      "parents": [
+        "shine:lava_particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:glowing_ash",
+      "name": "Glowing Ash",
+      "category": "particles",
+      "parent": "shine:lava_particles",
+      "parents": [
+        "shine:lava_particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:pale_garden_effects",
+      "name": "Pale Garden Effects",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:pale_garden_dust",
+      "name": "Pale Garden Dust",
+      "category": "particles",
+      "parent": "shine:pale_garden_effects",
+      "parents": [
+        "shine:pale_garden_effects"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:pale_garden_eyes",
+      "name": "Pale Garden Eyes",
+      "category": "particles",
+      "parent": "shine:pale_garden_effects",
+      "parents": [
+        "shine:pale_garden_effects"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:nature_ambience_core",
+      "name": "Nature Ambience",
+      "category": "particles",
+      "parent": "shine:particles",
+      "parents": [
+        "shine:particles"
+      ],
+      "group": true,
+      "aliases": [
+        "shine:nature_ambience"
+      ]
+    },
+    {
+      "id": "shine:nature_light_rays",
+      "name": "Ambient Light Rays",
+      "category": "particles",
+      "parent": "shine:nature_ambience_core",
+      "parents": [
+        "shine:nature_ambience_core"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:distant_light_rays",
+      "name": "Distant Light Rays",
+      "category": "particles",
+      "parent": "shine:nature_ambience_core",
+      "parents": [
+        "shine:nature_ambience_core"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:lens_flare",
+      "name": "Lens Flare",
+      "category": "particles",
+      "parent": "shine:nature_ambience_core",
+      "parents": [
+        "shine:nature_ambience_core"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:wind_gusts",
+      "name": "Wind Gusts",
+      "category": "particles",
+      "parent": "shine:nature_ambience_core",
+      "parents": [
+        "shine:nature_ambience_core"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:pollen",
+      "name": "Pollen",
+      "category": "particles",
+      "parent": "shine:nature_ambience_core",
+      "parents": [
+        "shine:nature_ambience_core"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:fireflies",
+      "name": "Fireflies",
+      "category": "particles",
+      "parent": "shine:nature_ambience_core",
+      "parents": [
+        "shine:nature_ambience_core"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:birds",
+      "name": "Birds",
+      "category": "particles",
+      "parent": "shine:nature_ambience_core",
+      "parents": [
+        "shine:nature_ambience_core"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:vultures",
+      "name": "Vultures",
+      "category": "particles",
+      "parent": "shine:nature_ambience_core",
+      "parents": [
+        "shine:nature_ambience_core"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:butterflies",
+      "name": "Butterflies",
+      "category": "particles",
+      "parent": "shine:nature_ambience_core",
+      "parents": [
+        "shine:nature_ambience_core"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:geese",
+      "name": "Geese",
+      "category": "particles",
+      "parent": "shine:nature_ambience_core",
+      "parents": [
+        "shine:nature_ambience_core"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:tumbleweeds",
+      "name": "Tumbleweeds",
+      "category": "particles",
+      "parent": "shine:nature_ambience_core",
+      "parents": [
+        "shine:nature_ambience_core"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:general_interaction",
+      "name": "General Interaction",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:foliage_sway",
+      "name": "Foliage Sway",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:surface_imprints",
+      "name": "Surface Imprints",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:leaf_litter",
+      "name": "Leaf Litter",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:flower_litter",
+      "name": "Flower Litter",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:petal_litter",
+      "name": "Petal Litter",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:branch_litter",
+      "name": "Branch Litter",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:pebbles",
+      "name": "Pebbles",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:shells",
+      "name": "Beach Shells",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:lava_plates",
+      "name": "Lava Plates",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:water_cascades",
+      "name": "Water Cascades",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:chest_bubbles",
+      "name": "Chest Bubbles",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:boat_trails",
+      "name": "Boat Trails \u0026 Splashes",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:boat_trail_splashes",
+      "name": "Boat Trail Splashes",
+      "category": "interaction",
+      "parent": "shine:boat_trails",
+      "parents": [
+        "shine:boat_trails"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:boat_side_waves",
+      "name": "Boat Side Waves",
+      "category": "interaction",
+      "parent": "shine:boat_trails",
+      "parents": [
+        "shine:boat_trails"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:water_surface_life",
+      "name": "Water Surface Life",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:reactive_water",
+      "name": "Reactive Water",
+      "category": "interaction",
+      "parent": "shine:interaction",
+      "parents": [
+        "shine:interaction"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:water_splash",
+      "name": "Water Splash",
+      "category": "interaction",
+      "parent": "shine:reactive_water",
+      "parents": [
+        "shine:reactive_water"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:water_splash_impact",
+      "name": "Water Splash Impact",
+      "category": "interaction",
+      "parent": "shine:water_splash",
+      "parents": [
+        "shine:water_splash"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:water_trailer_splash",
+      "name": "Water Trailer Splash",
+      "category": "interaction",
+      "parent": "shine:water_splash",
+      "parents": [
+        "shine:water_splash"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:lily_pads",
+      "name": "Lily Pads",
+      "category": "interaction",
+      "parent": "shine:water_surface_life",
+      "parents": [
+        "shine:water_surface_life"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:duckweed",
+      "name": "Duckweed",
+      "category": "interaction",
+      "parent": "shine:water_surface_life",
+      "parents": [
+        "shine:water_surface_life"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:algae_flecks",
+      "name": "Algae Flecks",
+      "category": "interaction",
+      "parent": "shine:water_surface_life",
+      "parents": [
+        "shine:water_surface_life"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:block_side_rain",
+      "name": "Block-Side Rain",
+      "category": "weather",
+      "parent": "shine:weather",
+      "parents": [
+        "shine:weather"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:rain_puddles",
+      "name": "Rain Puddles",
+      "category": "weather",
+      "parent": "shine:weather",
+      "parents": [
+        "shine:weather"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:nether_storm",
+      "name": "Nether Storm",
+      "category": "weather",
+      "parent": "shine:weather",
+      "parents": [
+        "shine:weather"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:lightning_flash",
+      "name": "Lightning Flash",
+      "category": "weather",
+      "parent": "shine:weather",
+      "parents": [
+        "shine:weather"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:wet_weather",
+      "name": "Wet Weather",
+      "category": "weather",
+      "parent": "shine:weather",
+      "parents": [
+        "shine:weather"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:rain_visuals",
+      "name": "Rain Visuals",
+      "category": "weather",
+      "parent": "shine:weather",
+      "parents": [
+        "shine:weather"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:rain_biome_visuals",
+      "name": "Rain Biome Visuals",
+      "category": "weather",
+      "parent": "shine:rain_visuals",
+      "parents": [
+        "shine:rain_visuals"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:thunder_biome_visuals",
+      "name": "Thunder Biome Visuals",
+      "category": "weather",
+      "parent": "shine:rain_visuals",
+      "parents": [
+        "shine:rain_visuals"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:nether_storm_biome_visuals",
+      "name": "Nether-Storm Biome Visuals",
+      "category": "weather",
+      "parent": "shine:rain_visuals",
+      "parents": [
+        "shine:rain_visuals"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:light_rain",
+      "name": "Light Rain",
+      "category": "weather",
+      "parent": "shine:weather",
+      "parents": [
+        "shine:weather"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:light_rain_biome_visuals",
+      "name": "Light-Rain Biome Visuals",
+      "category": "weather",
+      "parent": "shine:light_rain",
+      "parents": [
+        "shine:light_rain"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:weather_particles",
+      "name": "Weather Particles",
+      "category": "weather",
+      "parent": "shine:weather",
+      "parents": [
+        "shine:weather"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:weather_snow_particles",
+      "name": "Weather Snow Particles",
+      "category": "weather",
+      "parent": "shine:weather_particles",
+      "parents": [
+        "shine:weather_particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:weather_dust_particles",
+      "name": "Weather Dust Particles",
+      "category": "weather",
+      "parent": "shine:weather_particles",
+      "parents": [
+        "shine:weather_particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:weather_passive_snow",
+      "name": "Passive Snow",
+      "category": "weather",
+      "parent": "shine:weather_particles",
+      "parents": [
+        "shine:weather_particles"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:custom_rain",
+      "name": "Custom Rain",
+      "category": "weather",
+      "parent": "shine:weather",
+      "parents": [
+        "shine:weather"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:rainbow_aurora",
+      "name": "Rainbow \u0026 Aurora",
+      "category": "weather",
+      "parent": "shine:weather",
+      "parents": [
+        "shine:weather"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:clearing_rain",
+      "name": "Clearing Rain",
+      "category": "weather",
+      "parent": "shine:custom_rain",
+      "parents": [
+        "shine:custom_rain"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:rainbow",
+      "name": "Rainbow",
+      "category": "weather",
+      "parent": "shine:rainbow_aurora",
+      "parents": [
+        "shine:rainbow_aurora"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:aurora",
+      "name": "Aurora",
+      "category": "weather",
+      "parent": "shine:rainbow_aurora",
+      "parents": [
+        "shine:rainbow_aurora"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:depth_of_field",
+      "name": "Depth of Field",
+      "category": "camera",
+      "parent": "shine:camera",
+      "parents": [
+        "shine:camera"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:vignette",
+      "name": "Vignette",
+      "category": "camera",
+      "parent": "shine:camera",
+      "parents": [
+        "shine:camera"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:camera_noise",
+      "name": "Camera Noise",
+      "category": "camera",
+      "parent": "shine:camera",
+      "parents": [
+        "shine:camera"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:camera_shake",
+      "name": "Camera Shake",
+      "category": "camera",
+      "parent": "shine:camera",
+      "parents": [
+        "shine:camera"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:low_light_desaturation",
+      "name": "Low-Light Desaturation",
+      "category": "camera",
+      "parent": "shine:camera",
+      "parents": [
+        "shine:camera"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:adaptive_palette",
+      "name": "Adaptive Palette",
+      "category": "camera",
+      "parent": "shine:camera",
+      "parents": [
+        "shine:camera"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:motion_blur",
+      "name": "Motion Blur",
+      "category": "camera",
+      "parent": "shine:camera",
+      "parents": [
+        "shine:camera"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:color_grading",
+      "name": "Color Grading",
+      "category": "camera",
+      "parent": "shine:camera",
+      "parents": [
+        "shine:camera"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:ambient_sounds",
+      "name": "Ambient Sounds",
+      "category": "sound",
+      "parent": "shine:sound",
+      "parents": [
+        "shine:sound"
+      ],
+      "group": true,
+      "aliases": []
+    },
+    {
+      "id": "shine:grass_wind_sounds",
+      "name": "Grass Wind Sounds",
+      "category": "sound",
+      "parent": "shine:ambient_sounds",
+      "parents": [
+        "shine:ambient_sounds"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:deep_dark_sounds",
+      "name": "Deep Dark Sounds",
+      "category": "sound",
+      "parent": "shine:ambient_sounds",
+      "parents": [
+        "shine:ambient_sounds"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:firefly_sounds",
+      "name": "Firefly Sounds",
+      "category": "sound",
+      "parent": "shine:ambient_sounds",
+      "parents": [
+        "shine:ambient_sounds"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:cicada_sounds",
+      "name": "Cicada Sounds",
+      "category": "sound",
+      "parent": "shine:ambient_sounds",
+      "parents": [
+        "shine:ambient_sounds"
+      ],
+      "group": false,
+      "aliases": []
+    },
+    {
+      "id": "shine:shine_effects_other",
+      "name": "Other Shine Effects",
+      "category": "custom",
+      "parent": "shine:custom",
+      "parents": [
+        "shine:custom"
+      ],
+      "group": false,
+      "aliases": []
+    }
+  ]
+}

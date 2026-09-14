@@ -307,6 +307,7 @@
 
     async function processUploadedFiles(fileList) {
         const customSprites = new Map();
+        const pbrMaps = { n: new Map(), s: new Map(), e: new Map() };
         const files = Array.from(fileList);
         let loaded = 0;
 
@@ -319,6 +320,23 @@
             f.type === 'image/png' || f.name.toLowerCase().endsWith('.png')
         );
 
+        // Sufijos PBR estilo OptiFine: base_n = normal, base_s = specular,
+        // base_e = emissive. Devuelve null si NO es un mapa PBR.
+        function pbrKind(name) {
+            const base = name.replace(/\.png$/i, '');
+            if (/_n$/.test(base)) return { kind: 'n', base: base.slice(0, -2) };
+            if (/_s$/.test(base)) return { kind: 's', base: base.slice(0, -2) };
+            if (/_e$/.test(base)) return { kind: 'e', base: base.slice(0, -2) };
+            return null;
+        }
+
+        function registerPbr(name, img) {
+            const info = pbrKind(name);
+            if (!info) return false;
+            pbrMaps[info.kind].set(info.base, img);
+            return true;
+        }
+
         for (const file of pngFiles) {
             try {
                 const url = URL.createObjectURL(file);
@@ -329,7 +347,7 @@
                     i.src = url;
                 });
                 const name = file.name.replace(/\.png$/i, '');
-                customSprites.set(name, img);
+                if (!registerPbr(name, img)) customSprites.set(name, img);
                 loaded++;
             } catch (_) {}
         }
@@ -338,22 +356,195 @@
             console.log(`${TAG} Extracting ${zipFile.name}...`);
             const extracted = await extractZip(zipFile);
             for (const { name, img } of extracted) {
-                customSprites.set(name, img);
+                if (!registerPbr(name, img)) customSprites.set(name, img);
                 loaded++;
             }
             console.log(`${TAG} Extracted ${extracted.length} PNGs from ${zipFile.name}`);
         }
 
-        return { customSprites, loaded };
+        return { customSprites, pbrMaps, loaded };
+    }
+
+    // ── Atlases PBR (_n / _s / _e) ──
+    // Mismo layout de frames.json que el atlas diffuse, tiles faltantes con
+    // valor neutro (azul para normal, negro para spec/emissive), guardados en
+    // IndexedDB porque 3 atlas PNG no caben en la cuota de localStorage.
+
+    function pbrNeutral(kind) {
+        return kind === 'n' ? '#8080ff' : '#000000';
+    }
+
+    // Downscale por CPU (box-average real). Necesario porque Chrome IGNORA
+    // imageSmoothingEnabled=false al reducir >3x: aplica su box filter interno
+    // que aplana el ruido de alta frecuencia de los normal maps hacia el
+    // neutro (verificado: dirt_n 128px → tile 16px con 0/256 px no-neutros,
+    // mientras el box-average real da 130/256). Esto dejaba el atlas 'n'
+    // "vacío" para el check de píxeles en un loop de regeneración infinito.
+    function drawTileDownscaled(ctx, img, fx, fy, fw, fh) {
+        const iw = img.naturalWidth || img.width;
+        const ih = img.naturalHeight || img.height;
+        if (iw === fw && ih === fh) {
+            ctx.drawImage(img, fx, fy, fw, fh);  // 1:1, sin pérdida
+            return;
+        }
+        // Pintar el source a tamaño NATIVO en un canvas temp y leer píxeles
+        const tmp = document.createElement('canvas');
+        tmp.width = iw; tmp.height = ih;
+        const tctx = tmp.getContext('2d', { willReadFrequently: true });
+        tctx.drawImage(img, 0, 0);
+        let src;
+        try { src = tctx.getImageData(0, 0, iw, ih); }
+        catch (_) { ctx.drawImage(img, fx, fy, fw, fh); return; }  // fallback GPU
+        const dst = ctx.createImageData(fw, fh);
+        for (let y = 0; y < fh; y++) {
+            const y0 = Math.floor((y * ih) / fh), y1 = Math.max(y0 + 1, Math.floor(((y + 1) * ih) / fh));
+            for (let x = 0; x < fw; x++) {
+                const x0 = Math.floor((x * iw) / fw), x1 = Math.max(x0 + 1, Math.floor(((x + 1) * iw) / fw));
+                let r = 0, g = 0, b = 0, a = 0, n = 0;
+                for (let sy = y0; sy < y1; sy++) {
+                    let sp = (sy * iw + x0) * 4;
+                    for (let sx = x0; sx < x1; sx++, sp += 4) {
+                        const al = src.data[sp + 3];
+                        // Premultiplicar por alpha para overlays (grass side)
+                        r += src.data[sp] * al; g += src.data[sp + 1] * al;
+                        b += src.data[sp + 2] * al; a += al; n++;
+                    }
+                }
+                const dp = (y * fw + x) * 4;
+                if (a > 0) {
+                    dst.data[dp] = Math.round(r / a); dst.data[dp + 1] = Math.round(g / a);
+                    dst.data[dp + 2] = Math.round(b / a);
+                    dst.data[dp + 3] = Math.min(255, Math.round(a / n));
+                }
+            }
+        }
+        ctx.putImageData(dst, fx, fy);
+    }
+
+    async function generatePbrAtlas(kind, maps) {
+        const frames = await loadFramesData();
+        if (!frames) return null;
+        if (!maps || maps.size === 0) return null;
+
+        const scale = 1;  // los maps PBR de estos packs son 16x
+        const atlasSize = ATLAS_SIZE * scale;
+        const canvas = document.createElement('canvas');
+        canvas.width = atlasSize;
+        canvas.height = atlasSize;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+
+        // Rellenar TODO el atlas con el valor neutro del kind
+        ctx.fillStyle = pbrNeutral(kind);
+        ctx.fillRect(0, 0, atlasSize, atlasSize);
+
+        let placed = 0;
+        const lower = new Map();
+        for (const [name, img] of maps) {
+            if (!lower.has(name.toLowerCase())) lower.set(name.toLowerCase(), img);
+        }
+
+        for (const [fileName, data] of Object.entries(frames)) {
+            const frame = data.frame || {};
+            const fx = (frame.x || 0) * scale;
+            const fy = (frame.y || 0) * scale;
+            const fw = (frame.w || TILE_SIZE) * scale;
+            const fh = (frame.h || TILE_SIZE) * scale;
+            const baseName = fileName.replace(/\.png$/, '');
+            const img = maps.get(baseName) || lower.get(baseName.toLowerCase());
+            if (!img) continue;  // tile neutro
+            if (data.rotated) {
+                ctx.save();
+                ctx.translate(fx, fy);
+                ctx.rotate(Math.PI / 2);
+                drawTileDownscaled(ctx, img, 0, 0, fw, fh);
+                ctx.restore();
+            } else {
+                drawTileDownscaled(ctx, img, fx, fy, fw, fh);
+            }
+            placed++;
+        }
+
+        console.log(`${TAG} PBR atlas '${kind}': ${placed} tiles de ${Object.keys(frames).length}`);
+        return { dataUrl: canvas.toDataURL('image/png'), placed };
+    }
+
+    function idbPut(key, value) {
+        return new Promise((resolve) => {
+            let db = null;
+            const req = indexedDB.open('mf_pbr_store', 1);
+            req.onupgradeneeded = () => {
+                if (!req.result.objectStoreNames.contains('atlases')) {
+                    req.result.createObjectStore('atlases');
+                }
+            };
+            req.onsuccess = () => {
+                db = req.result;
+                try {
+                    const tx = db.transaction('atlases', 'readwrite');
+                    tx.objectStore('atlases').put(value, key);
+                    tx.oncomplete = () => resolve(true);
+                    tx.onerror = () => resolve(false);
+                } catch (_) { resolve(false); }
+            };
+            req.onerror = () => resolve(false);
+        });
+    }
+
+    // Cola serializada: cada generación corre tras la anterior. Sin pisarse
+    // (escrituras IndexedDB paralelas) ni descartarse (un pack subido por el
+    // usuario mientras corre la instalación del integrado espera su turno).
+    let pbrGenChain = Promise.resolve();
+
+    function generateAndStorePbr(pbrMaps) {
+        const run = pbrGenChain.then(() => doGenerateAndStorePbr(pbrMaps));
+        pbrGenChain = run.catch(() => {});
+        return run;
+    }
+
+    async function doGenerateAndStorePbr(pbrMaps) {
+        const results = {};
+        for (const kind of ['n', 's', 'e']) {
+            const maps = pbrMaps[kind];
+            if (!maps || maps.size === 0) continue;
+            const atlas = await generatePbrAtlas(kind, maps);
+            if (atlas) {
+                const ok = await idbPut('atlas_' + kind, atlas);
+                if (ok) {
+                    results[kind] = atlas.placed;
+                } else {
+                    console.error(`${TAG} PBR atlas '${kind}' GENERADO pero IndexedDB falló al guardar`);
+                    results[kind] = -1;
+                }
+            }
+        }
+        const anyOk = Object.values(results).some(v => v > 0);
+        console.log(`${TAG} ✓ PBR maps:`, results,
+            anyOk ? '(guardados en IndexedDB)' : '(NINGUNO guardado — revisa arriba)');
+        // Avisar al módulo MAIN para que recargue los atlases ya
+        try {
+            document.dispatchEvent(new CustomEvent('minifeather:pbr-update'));
+        } catch (_) {}
+        return results;
     }
 
     async function generateAndApply(files) {
         console.log(`${TAG} Processing ${files.length} files...`);
-        const { customSprites, loaded } = await processUploadedFiles(files);
+        const { customSprites, pbrMaps, loaded } = await processUploadedFiles(files);
 
         if (loaded === 0) {
             console.warn(`${TAG} No valid PNG files found`);
             return { success: false, error: 'No valid PNG files' };
+        }
+
+        // Si el pack SOLO trae maps PBR (_n/_s/_e), no tocar el atlas diffuse
+        // — el vanilla sigue visible y solo se aplican normal/specular/emissive.
+        const hasPbr = pbrMaps.n.size || pbrMaps.s.size || pbrMaps.e.size;
+        if (hasPbr) {
+            const pbrStats = await generateAndStorePbr(pbrMaps);
+            if (customSprites.size === 0) {
+                return { success: true, stats: { custom: 0, placeholder: 0, pbr: pbrStats }, textureNames: [] };
+            }
         }
 
         console.log(`${TAG} Loaded ${loaded} sprites. Generating atlas...`);
@@ -381,8 +572,44 @@
         console.log(`${TAG} Custom texture pack disabled. Reload page to restore original.`);
     }
 
+    function idbDeleteAll() {
+        return new Promise((resolve) => {
+            const req = indexedDB.open('mf_pbr_store', 1);
+            req.onupgradeneeded = () => {
+                if (!req.result.objectStoreNames.contains('atlases')) {
+                    req.result.createObjectStore('atlases');
+                }
+            };
+            req.onsuccess = () => {
+                try {
+                    const tx = req.result.transaction('atlases', 'readwrite');
+                    const store = tx.objectStore('atlases');
+                    store.delete('atlas_n');
+                    store.delete('atlas_s');
+                    store.delete('atlas_e');
+                    tx.oncomplete = () => resolve(true);
+                    tx.onerror = () => resolve(false);
+                } catch (_) { resolve(false); }
+            };
+            req.onerror = () => resolve(false);
+        });
+    }
+
+    function clearPbr() {
+        idbDeleteAll().then((ok) => {
+            try {
+                localStorage.setItem('mf_pbr_available', 'false');
+                // el pack manual (MF_PbrEditor) murió con los atlas
+                localStorage.removeItem('mf_pbr_manual');
+                document.dispatchEvent(new CustomEvent('minifeather:pbr-update'));
+            } catch (_) {}
+            console.log(`${TAG} PBR atlases cleared (${ok}).`);
+        });
+    }
+
     function clearAll() {
         clearStorage();
+        clearPbr();
         console.log(`${TAG} Cleared all custom textures. Reload page.`);
     }
 
@@ -396,10 +623,206 @@
         }
     }
 
+    // ── PBR integrado (bundled) ──
+    // El pack MLGImposter Ray-tracing V1.1 viene incluido en assets/pbr/.
+    // Instalarlo la primera vez que PBR se active sin atlas en IndexedDB,
+    // para que el usuario no tenga que subir el ZIP manualmente.
+
+    function bundledManifestUrl() {
+        return chrome.runtime.getURL('assets/pbr/manifest.json');
+    }
+
+    // ── Presets PBR online ──
+    // Packs con licencia que permite su uso/descarga (NO se redistribuyen:
+    // se descargan on-demand desde el CDN oficial). El extractor reutiliza
+    // los sufijos OptiFine (_n/_s/_e) y frames.json del juego.
+    const PBR_PRESETS = [
+        {
+            id: 'ultimacraft',
+            name: 'UltimaCraft PBR v1.9',
+            author: 'UltimaCraft (Modrinth)',
+            license: 'CC-BY-NC-4.0',
+            credit: 'https://modrinth.com/resourcepack/ultimacraft-pbr',
+            url: 'https://cdn.modrinth.com/data/71ctNY6u/versions/lXPZqupu/ultimacraft-pbr-v-1-9.zip',
+            size: '~12 MB',
+            note: 'LabPBR 16x, cobertura casi total de bloques vanilla. El más completo.'
+        },
+        {
+            id: 'spbr',
+            name: 'SPBR 16.2',
+            author: 'NyaShulker (Modrinth)',
+            license: 'GPL-3.0',
+            credit: 'https://modrinth.com/resourcepack/spbr',
+            url: 'https://cdn.modrinth.com/data/aNcOVoD7/versions/jtNbhldU/SPBR-16_2.zip',
+            size: '~15 MB',
+            note: 'LabPBR 16x basado en VNR, relieve profundo + parallax data.'
+        },
+        {
+            id: 'vnr',
+            name: 'Vanilla Normals Renewed 1.20',
+            author: 'Poudingue (GitHub)',
+            license: 'Custom (uso libre, no vender, dar crédito)',
+            credit: 'https://github.com/Poudingue/Vanilla-Normals-Renewed',
+            url: 'https://github.com/Poudingue/Vanilla-Normals-Renewed/releases/download/1.20/VNR-1.20.0.zip',
+            size: '~4 MB',
+            note: 'Normal+specular estilo vanilla puro, el clásico.'
+        },
+        {
+            id: 'bundled',
+            name: 'MiniFeather (integrado)',
+            author: 'MLGImposter RT V1.1',
+            license: 'bundled',
+            credit: '',
+            url: '',
+            size: 'local',
+            note: 'Pack incluido en la extensión (35 bloques).'
+        }
+    ];
+
+    let presetInFlight = null;
+
+    function listPresets() {
+        return PBR_PRESETS.map(p => ({
+            id: p.id, name: p.name, author: p.author,
+            license: p.license, size: p.size, note: p.note
+        }));
+    }
+
+    function currentPreset() {
+        try { return localStorage.getItem('mf_pbr_preset') || 'bundled'; }
+        catch (_) { return 'bundled'; }
+    }
+
+    // Descarga el ZIP del CDN, extrae _n/_s/_e y regenera los atlases.
+    // extractZip() ya devuelve { name, img } con el basename sin .png.
+    async function doInstallPreset(presetId) {
+        const preset = PBR_PRESETS.find(p => p.id === presetId);
+        if (!preset) return { success: false, error: `preset desconocido: ${presetId}` };
+        if (preset.id === 'bundled') {
+            const r = await installBundledPbr();
+            if (r.success) {
+                try { localStorage.setItem('mf_pbr_preset', 'bundled'); } catch (_) {}
+            }
+            return r;
+        }
+
+        console.log(`${TAG} Descargando preset PBR "${preset.name}" de ${preset.url} ...`);
+        const res = await fetch(preset.url);
+        if (!res.ok) {
+            return { success: false, error: `descarga falló (HTTP ${res.status})` };
+        }
+        const blob = await res.blob();
+        console.log(`${TAG} ZIP listo (${(blob.size / 1048576).toFixed(1)} MB), extrayendo PNGs...`);
+
+        const extracted = await extractZip(blob);
+        if (!extracted || extracted.length === 0) {
+            return { success: false, error: 'el ZIP no contenía PNGs' };
+        }
+
+        const pbrMaps = { n: new Map(), s: new Map(), e: new Map() };
+        let pbrCount = 0;
+        for (const { name, img } of extracted) {
+            const info = pbrKind(name);
+            if (!info) continue;
+            // Los packs traen overrides/mcmeta con duplicados: gana la ruta
+            // más corta (assets/minecraft/textures/block/dirt_n.png).
+            const prev = pbrMaps[info.kind].get(info.base);
+            if (!prev) {
+                img.nameLen = name.length;
+                pbrMaps[info.kind].set(info.base, img);
+            } else if (name.length < prev.nameLen) {
+                img.nameLen = name.length;
+                pbrMaps[info.kind].set(info.base, img);
+            }
+            pbrCount++;
+        }
+        console.log(`${TAG} Preset "${preset.name}": ${pbrCount} maps PBR (${pbrMaps.n.size}n ${pbrMaps.s.size}s ${pbrMaps.e.size}e)`);
+
+        if (pbrMaps.n.size === 0 && pbrMaps.s.size === 0 && pbrMaps.e.size === 0) {
+            return { success: false, error: 'sin maps _n/_s/_e — estructura del pack inesperada' };
+        }
+
+        const results = await generateAndStorePbr(pbrMaps);
+        const anyOk = Object.values(results).some(v => v > 0);
+        if (anyOk) {
+            try {
+                localStorage.setItem('mf_pbr_preset', preset.id);
+                localStorage.removeItem('mf_pbr_manual');  // preset pisa lo manual
+            } catch (_) {}
+            console.log(`${TAG} ✓ Preset PBR "${preset.name}" instalado:`, results, `— crédito: ${preset.credit}`);
+        }
+        return { success: anyOk, results, maps: { n: pbrMaps.n.size, s: pbrMaps.s.size, e: pbrMaps.e.size } };
+    }
+
+    function installPreset(presetId) {
+        if (presetInFlight) return presetInFlight;
+        presetInFlight = doInstallPreset(presetId).finally(() => { presetInFlight = null; });
+        return presetInFlight;
+    }
+
+    async function fetchImage(url) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
+            img.src = url;
+        });
+    }
+
+    let bundledPbrInFlight = null;
+
+    function installBundledPbr() {
+        // Deduplicar llamadas concurrentes (mismo motivo que el lock de
+        // generateAndStorePbr — el pack integrado es siempre el mismo).
+        if (bundledPbrInFlight) return bundledPbrInFlight;
+        bundledPbrInFlight = doInstallBundledPbr().finally(() => {
+            bundledPbrInFlight = null;
+        });
+        return bundledPbrInFlight;
+    }
+
+    async function doInstallBundledPbr() {
+        try {
+            const res = await fetch(bundledManifestUrl());
+            if (!res.ok) return { success: false, error: 'manifest no disponible' };
+            const names = await res.json();
+            if (!Array.isArray(names) || names.length === 0) {
+                return { success: false, error: 'manifest vacío' };
+            }
+            const pbrMaps = { n: new Map(), s: new Map(), e: new Map() };
+            let loadedCount = 0;
+            for (const name of names) {
+                const base = String(name).replace(/\.png$/i, '');
+                let kind = null;
+                if (/_n$/.test(base)) kind = 'n';
+                else if (/_s$/.test(base)) kind = 's';
+                else if (/_e$/.test(base)) kind = 'e';
+                if (!kind) continue;
+                const img = await fetchImage(chrome.runtime.getURL('assets/pbr/' + name));
+                if (img) {
+                    pbrMaps[kind].set(base.slice(0, -2), img);
+                    loadedCount++;
+                }
+            }
+            if (loadedCount === 0) return { success: false, error: 'ningún PNG cargado' };
+            const results = await generateAndStorePbr(pbrMaps);
+            console.log(`${TAG} ✓ PBR integrado instalado (${loadedCount} maps):`, results);
+            return { success: true, results, loadedCount };
+        } catch (err) {
+            console.warn(`${TAG} PBR integrado no disponible:`, err);
+            return { success: false, error: String(err && err.message || err) };
+        }
+    }
+
     window.MF_TEXTURE_PACK = {
         generateAndApply,
         disable,
         clearAll,
+        clearPbr,
+        installBundledPbr,
+        installPreset,
+        listPresets,
+        currentPreset,
         isActive,
         getCustomSpritesheetUrl,
         processUploadedFiles,
@@ -407,6 +830,27 @@
             return state;
         }
     };
+
+    // Puente MAIN → ISOLATED: la consola del usuario corre en MAIN y no ve
+    // MF_TEXTURE_PACK. PBRTextures (MAIN) dispara CustomEvents que cruzan
+    // mundos (detail serializado: el objeto crudo NO cruza) y contestamos
+    // con eventos de resultado, también serializados.
+    document.addEventListener('minifeather:pbr-presets-list', () => {
+        document.dispatchEvent(new CustomEvent('minifeather:pbr-presets-result', {
+            detail: JSON.stringify({ presets: listPresets(), current: currentPreset() })
+        }));
+    });
+    document.addEventListener('minifeather:pbr-preset-install', (ev) => {
+        let presetId = null;
+        try { presetId = JSON.parse(ev.detail).presetId; } catch (_) { presetId = ev.detail; }
+        installPreset(presetId)
+            .then(result => document.dispatchEvent(new CustomEvent('minifeather:pbr-preset-result', {
+                detail: JSON.stringify({ presetId, ...result })
+            })))
+            .catch(err => document.dispatchEvent(new CustomEvent('minifeather:pbr-preset-result', {
+                detail: JSON.stringify({ presetId, success: false, error: String(err && err.message || err) })
+            })));
+    });
 
     console.log(`${TAG} Loaded.`);
     init();

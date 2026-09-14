@@ -367,6 +367,7 @@
     healthNameTags: false,
     distanceNameTags: false,
     damageParticles: false,
+    waterSplash: true,
     patPat: false,
     itemPhysics: false,
     noWeather: false,
@@ -444,6 +445,8 @@
     cloudsShapeTile: 512,
     panelAccentColor: '#ef3b3b',
     panelBackgroundColor: '#0e1115',
+    panelScale: 68,
+    pageZoomEnabled: true,
     experimentalRealistic: false,
     experimentalRealisticLevel: 'medium',
     experimentalAurora: false,
@@ -451,8 +454,12 @@
     experimentalGrassFlowers: false,
     experimentalInteractiveVegetation: false,
     experimentalInteractiveVegetationLevel: 'medium',
+    experimentalFallenLeaves: false,
+    experimentalTinyTakeover: false,
     experimentalAnimatedItems: false,
     experimentalBetterAnimationCape: false,
+    experimentalPbr: false,
+
     language: 'en'
   };
 
@@ -472,6 +479,25 @@
     const background = normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor);
     panel.style.setProperty('--mf-ui-accent', accent);
     panel.style.setProperty('--mf-ui-panel', background);
+  }
+
+  // Zoom de PÁGINA (el de Ctrl+ruedita): 50-120%, default 68. Se aplica
+  // vía chrome.tabs.setZoom desde el background (el content script no
+  // tiene la API de tabs). El panel de la GUI queda a tamaño natural.
+  function clampPanelScale(value) {
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n)) return DEFAULT_SETTINGS.panelScale;
+    return Math.min(120, Math.max(50, n));
+  }
+
+  function applyPanelScale() {
+    const s = clampPanelScale(settings.panelScale);
+    if (!settings.pageZoomEnabled) return;
+    try {
+      chrome?.runtime?.sendMessage?.({ type: 'mfSetPageZoom', zoom: s / 100 }, () => {
+        void chrome.runtime.lastError;
+      });
+    } catch (_) {}
   }
 
   const TRANSLATIONS = globalThis.MINIFEATHER_TRANSLATIONS || { en: {} };
@@ -589,9 +615,20 @@
   }
 
   function sendLanguageConfig() {
-    const table = TRANSLATIONS[settings.language] || TRANSLATIONS.en || {};
+    // Enviamos TODOS los idiomas cargados (no solo el actual) para que el
+    // módulo MAIN pueda resolver `t('key')` en cualquiera de los 10 al
+    // cambiar de idioma en caliente sin esperar un nuevo bridge.
+    const languages = ['en', 'es', 'ja', 'it', 'zh', 'fr', 'de', 'pt', 'ru', 'ko'];
+    const strings = {};
+    for (const lang of languages) {
+      const table = TRANSLATIONS[lang] || TRANSLATIONS.en || {};
+      for (const key of Object.keys(table)) {
+        if (!strings[key]) strings[key] = {};
+        strings[key][lang] = table[key];
+      }
+    }
     document.dispatchEvent(new CustomEvent('minifeather:language-config', {
-      detail: JSON.stringify({ language: settings.language || 'en', strings: table })
+      detail: JSON.stringify({ language: settings.language || 'en', strings })
     }));
   }
 
@@ -2475,6 +2512,7 @@
         #mf-gui {
           width:calc(100vw - 16px);
           height:calc(100vh - 16px);
+          transform:translate(-50%,-50%) scale(1);
         }
         #mf-gui-shell {
           flex-direction:column;
@@ -2738,7 +2776,10 @@
         #mf-gui-page-title { max-width:92px; margin-right:50px !important; }
       }
       @media (max-width: 780px) {
-        #mf-gui { width:calc(100vw - 12px); height:calc(100vh - 12px); }
+        #mf-gui {
+          width:calc(100vw - 12px);
+          height:calc(100vh - 12px);
+        }
         .mf-feather-module-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
         .mf-feather-categories { overflow-x:auto; }
         .mf-feather-category { min-width:72px; }
@@ -2794,6 +2835,7 @@
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc') },
       { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc') },
       { page: 'render', key: 'damageParticles', title: t('damageParticles'), desc: t('damageParticlesDesc') },
+      { page: 'render', key: 'waterSplash', title: t('waterSplash'), desc: t('waterSplashDesc') },
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc') },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc') },
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc') },
@@ -3629,6 +3671,29 @@
     }));
   }
 
+  function sendWaterSplashConfig(enabled = settings.waterSplash) {
+    // assetsBase por evento: el MAIN world no tiene chrome.runtime y el
+    // meta de SplashScreen puede no existir en el frame del juego (iframes)
+    let assetsBase = '';
+    try {
+      const url = chrome.runtime.getURL('assets/particles/');
+      // runtime invalidado (extensión recargada sin F5): no mandar basura
+      if (url && !url.includes('://invalid/')) assetsBase = url;
+    } catch (_) {}
+    document.dispatchEvent(new CustomEvent('minifeather:water-splash-config', {
+      detail: JSON.stringify({ enabled: !!enabled, assetsBase })
+    }));
+  }
+
+  function initWaterSplashModule() {
+    registerModule('waterSplash', () => createLifecycle({
+      enable() { sendWaterSplashConfig(true); },
+      disable() { sendWaterSplashConfig(false); },
+      refresh() { sendWaterSplashConfig(MODULES.get('waterSplash')?.enabled === true); },
+      destroy() { sendWaterSplashConfig(false); }
+    }));
+  }
+
   function sendAutoRespawnConfig(enabled = settings.autoRespawn) {
     document.dispatchEvent(new CustomEvent('minifeather:auto-respawn-config', {
       detail: JSON.stringify({ enabled: !!enabled })
@@ -3749,12 +3814,17 @@
     if (!container) return;
 
     const lg = localGamesState || {};
-    const servers = Array.isArray(lg.savedServers) ? lg.savedServers.filter(s => s?.online) : [];
-    const serverRows = servers.slice(0, 12).map(server => `
-      <div class="mf-shader-strength" style="margin-bottom:6px;">
-        <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(server.worldName || '')} · ${escapeHtml(server.hostName || '')}">${escapeHtml(server.worldName || 'World')} <span class="mf-muted" style="font-size:10px;">· ${escapeHtml(server.hostName || '')} · ${Number(server.players || 1)}/${Number(server.maxPlayers || 8)}</span></span>
-        <button class="mf-btn primary" style="padding:2px 8px;font-size:11px;" data-lg-join="${escapeHtml(String(server.address || ''))}">${t('localGamesJoin')}</button>
-      </div>`).join('');
+    const allServers = Array.isArray(lg.savedServers) ? lg.savedServers : [];
+    const onlineServers = allServers.filter(s => s?.online);
+    const offlineServers = allServers.filter(s => !s?.online);
+    const serverRows = [...onlineServers, ...offlineServers].slice(0, 12).map(server => {
+      const online = server.online !== false;
+      return `
+      <div class="mf-shader-strength" style="margin-bottom:6px;${online ? '' : 'opacity:0.45;'}">
+        <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(server.worldName || '')} · ${escapeHtml(server.hostName || '')}">${online ? '🟢' : '🔴'} ${escapeHtml(server.worldName || 'World')} <span class="mf-muted" style="font-size:10px;">· ${escapeHtml(server.hostName || '')} · ${Number(server.players || 1)}/${Number(server.maxPlayers || 8)}</span></span>
+        <button class="mf-btn primary" style="padding:2px 8px;font-size:11px;" ${online ? '' : 'disabled'} data-lg-join="${escapeHtml(String(server.address || ''))}">${t('localGamesJoin')}</button>
+      </div>`;
+    }).join('');
 
     container.innerHTML = `
       <div class="mf-card-title">${t('localGamesServers')} <button id="mf-lg-refresh" class="mf-btn secondary" style="padding:2px 8px;font-size:11px;">⟳</button></div>
@@ -5674,6 +5744,11 @@
               t('leafWindDesc')
             )}
             ${renderToggle(
+              'waterSplash',
+              t('waterSplash'),
+              t('waterSplashDesc')
+            )}
+            ${renderToggle(
               'vanillaAnimations',
               'Vanilla Animations',
               'Freezes elbow and knee joints rigid for all players'
@@ -5868,6 +5943,30 @@
                 </label>
               `;
             }).join('')}
+          </div>
+        </div>
+        <div class="mf-card" id="mf-pbr-section">
+          <div class="mf-card-title">✨ PBR Textures</div>
+          <div style="font-size: 11px; color: #aaa; margin-bottom: 10px; line-height: 1.5;">
+            ${t('pbrDesc')}
+            <span data-pbr-kinds style="color: #7c828a;"></span>
+          </div>
+          <div class="mf-tt-row"><span style="font-size: 11px;">${t('pbrNormalStr')}</span><strong style="font-size: 11px;" data-pbr-nv>1.00</strong></div>
+          <input type="range" min="0" max="2" step="0.05" value="1" data-pbr-normal style="width: 100%;">
+          <div class="mf-tt-row" style="margin-top: 6px;"><span style="font-size: 11px;">${t('pbrSpecStr')}</span><strong style="font-size: 11px;" data-pbr-sv>0.70</strong></div>
+          <input type="range" min="0" max="2" step="0.05" value="0.7" data-pbr-spec style="width: 100%;">
+          <div class="mf-tt-row" style="margin-top: 6px;"><span style="font-size: 11px;">${t('pbrShiny')}</span><strong style="font-size: 11px;" data-pbr-hv>24</strong></div>
+          <input type="range" min="2" max="128" step="1" value="24" data-pbr-shiny style="width: 100%;">
+          <div class="mf-tt-row" style="margin-top: 6px;"><span style="font-size: 11px;">${t('pbrEmissiveStr')}</span><strong style="font-size: 11px;" data-pbr-ev>1.00</strong></div>
+          <input type="range" min="0" max="3" step="0.05" value="1" data-pbr-emissive style="width: 100%;">
+          <div class="mf-tt-row" style="margin-top: 10px;"><span style="font-size: 11px;">${t('pbrPresetLabel')}</span></div>
+          <select id="mf-pbr-preset" style="width: 100%; font-size: 11px; padding: 4px 6px; background: #26292e; color: #e8e8e8; border: 1px solid #3a3f46; border-radius: 4px; margin-top: 4px;">
+            <option value="">${t('pbrPresetLoading')}</option>
+          </select>
+          <div id="mf-pbr-preset-status" style="font-size: 10px; color: #7c828a; margin-top: 4px; min-height: 13px;"></div>
+          <div class="mf-tt-row" style="margin-top: 10px; gap: 6px;">
+            <button id="mf-pbr-edit" class="mf-btn" style="font-size: 10px; padding: 4px 10px; background: #26303c; color: #9fc4ff; border: 1px solid #3a5a80; border-radius: 4px; cursor: pointer;">${t('pbrEditorBtn')}</button>
+            <button id="mf-pbr-clear" class="mf-btn" style="font-size: 10px; padding: 4px 10px; background: #5a2020; color: #ff8080; border: 1px solid #804040; border-radius: 4px; cursor: pointer;">${t('pbrClear')}</button>
           </div>
         </div>
       </div>
@@ -6517,6 +6616,12 @@
               <option value="es" ${settings.language === 'es' ? 'selected' : ''}>Español</option>
               <option value="ja" ${settings.language === 'ja' ? 'selected' : ''}>日本語</option>
               <option value="it" ${settings.language === 'it' ? 'selected' : ''}>Italiano</option>
+              <option value="zh" ${settings.language === 'zh' ? 'selected' : ''}>中文</option>
+              <option value="fr" ${settings.language === 'fr' ? 'selected' : ''}>Français</option>
+              <option value="de" ${settings.language === 'de' ? 'selected' : ''}>Deutsch</option>
+              <option value="pt" ${settings.language === 'pt' ? 'selected' : ''}>Português</option>
+              <option value="ru" ${settings.language === 'ru' ? 'selected' : ''}>Русский</option>
+              <option value="ko" ${settings.language === 'ko' ? 'selected' : ''}>한국어</option>
             </select>
           </div>
         </div>
@@ -6536,6 +6641,20 @@
               <input id="mf-panel-background-color" type="color" value="${escapeHtml(normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor))}" style="width:44px;height:34px;padding:2px;border:1px solid #30363d;border-radius:6px;background:#171a1e;">
               <input id="mf-panel-background-text" class="mf-input" value="${escapeHtml(normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor))}" maxlength="7" style="width:104px;">
             </div>
+          </div>
+          <div class="mf-settings-row">
+            <span class="mf-settings-label">${t('panelScale')}</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input id="mf-panel-scale" type="range" min="50" max="120" step="1" value="${clampPanelScale(settings.panelScale)}" style="width:150px;">
+              <span id="mf-panel-scale-value" style="min-width:42px;font-variant-numeric:tabular-nums;color:var(--mf-sub);">${clampPanelScale(settings.panelScale)}%</span>
+            </div>
+          </div>
+          <div class="mf-settings-row">
+            <span class="mf-settings-label">${t('pageZoomEnabled')}</span>
+            <label class="mf-switch" style="margin-left:auto;">
+              <input type="checkbox" id="mf-page-zoom-toggle" ${settings.pageZoomEnabled ? 'checked' : ''}>
+              <span class="mf-slider"></span>
+            </label>
           </div>
           <div style="display:flex;justify-content:flex-end;margin-top:10px;">
             <button id="mf-panel-custom-reset" class="mf-btn">${t('resetPanelCustomization')}</button>
@@ -6925,7 +7044,10 @@ function renderCreditsPage() {
       Object.assign(guiSettings, incoming);
       settings.panelAccentColor = normalizePanelColor(settings.panelAccentColor, DEFAULT_SETTINGS.panelAccentColor);
       settings.panelBackgroundColor = normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor);
+      settings.panelScale = clampPanelScale(settings.panelScale);
+      settings.pageZoomEnabled = settings.pageZoomEnabled !== false;
       applyPanelTheme();
+      applyPanelScale();
       applyGuiSettings();
       // Actualizar UI si está abierta
       const panel = document.getElementById('mf-gui');
@@ -8156,13 +8278,42 @@ function renderCreditsPage() {
     bindThemeColor('#mf-panel-accent-color', '#mf-panel-accent-text', 'panelAccentColor', DEFAULT_SETTINGS.panelAccentColor);
     bindThemeColor('#mf-panel-background-color', '#mf-panel-background-text', 'panelBackgroundColor', DEFAULT_SETTINGS.panelBackgroundColor);
 
+    // ── Zoom de página (50-120%) ──
+    const scaleInput = panel.querySelector('#mf-panel-scale');
+    const scaleValue = panel.querySelector('#mf-panel-scale-value');
+    scaleInput?.addEventListener('input', () => {
+      const s = clampPanelScale(scaleInput.value);
+      settings.panelScale = s;
+      guiSettings.panelScale = s;
+      if (scaleValue) scaleValue.textContent = s + '%';
+      applyPanelScale();
+    });
+    scaleInput?.addEventListener('change', () => saveSettings(true));
+
+    panel.querySelector('#mf-page-zoom-toggle')?.addEventListener('change', event => {
+      settings.pageZoomEnabled = event.target.checked;
+      guiSettings.pageZoomEnabled = settings.pageZoomEnabled;
+      if (!settings.pageZoomEnabled) {
+        // desactivado → devolver la página a 100%
+        try { chrome?.runtime?.sendMessage?.({ type: 'mfSetPageZoom', zoom: 1 }, () => void chrome.runtime.lastError); } catch (_) {}
+      } else {
+        applyPanelScale();
+      }
+      saveSettings(true);
+    });
+
     panel.querySelector('#mf-panel-custom-reset')?.addEventListener('click', () => {
       settings.panelAccentColor = DEFAULT_SETTINGS.panelAccentColor;
       settings.panelBackgroundColor = DEFAULT_SETTINGS.panelBackgroundColor;
+      settings.panelScale = DEFAULT_SETTINGS.panelScale;
       guiSettings.panelAccentColor = settings.panelAccentColor;
       guiSettings.panelBackgroundColor = settings.panelBackgroundColor;
+      guiSettings.panelScale = settings.panelScale;
+      if (scaleInput) scaleInput.value = String(settings.panelScale);
+      if (scaleValue) scaleValue.textContent = settings.panelScale + '%';
       saveSettings(true);
       applyPanelTheme();
+      applyPanelScale();
       renderCurrentPageContent();
     });
 
@@ -8219,10 +8370,12 @@ function renderCreditsPage() {
       });
     }
 
-    // Local Games: render inicial del contenedor (el resto llega por eventos) (el resto llega por eventos)
+    // Local Games: render inicial del contenedor (el resto llega por eventos)
     if (panel.querySelector('#mf-localgames-view')) {
       refreshLocalGamesView();
       sendLocalGamesCommand('status');
+      // refrescar el lobby de salas también (push por WS, sin coste)
+      sendLocalGamesCommand('refresh-servers');
     }
 
     // ─── Shaders: slider de intensidad ──────────
@@ -9076,6 +9229,158 @@ function renderCreditsPage() {
       });
     }
 
+    // ── PBR Textures (Experimental) — sliders de MF_PBR (MAIN) via CustomEvent ──
+    const pbrKinds = panel.querySelector('[data-pbr-kinds]');
+    const pbrClearBtn = panel.querySelector('#mf-pbr-clear');
+
+    function sendPbrConfig(cfg) {
+      document.dispatchEvent(new CustomEvent('minifeather:pbr-config', {
+        detail: JSON.stringify(cfg)
+      }));
+    }
+
+    {
+      const sliders = [
+        { el: panel.querySelector('[data-pbr-normal]'), out: panel.querySelector('[data-pbr-nv]'), key: 'mf_pbr_normal', kind: 'normal', fmt: v => v.toFixed(2) },
+        { el: panel.querySelector('[data-pbr-spec]'), out: panel.querySelector('[data-pbr-sv]'), key: 'mf_pbr_spec', kind: 'spec', fmt: v => v.toFixed(2) },
+        { el: panel.querySelector('[data-pbr-shiny]'), out: panel.querySelector('[data-pbr-hv]'), key: 'mf_pbr_shiny', kind: 'shiny', fmt: v => String(Math.round(v)) },
+        { el: panel.querySelector('[data-pbr-emissive]'), out: panel.querySelector('[data-pbr-ev]'), key: 'mf_pbr_emissive', kind: 'emissive', fmt: v => v.toFixed(2) }
+      ];
+      for (const s of sliders) {
+        if (!s.el) continue;
+        const saved = parseFloat(localStorage.getItem(s.key));
+        if (!isNaN(saved)) s.el.value = saved;
+        if (s.out) s.out.textContent = s.fmt(parseFloat(s.el.value));
+        s.el.addEventListener('input', () => {
+          const v = parseFloat(s.el.value);
+          if (s.out) s.out.textContent = s.fmt(v);
+          sendPbrConfig({ [s.kind]: v });
+        });
+      }
+
+      const refreshPbrKinds = () => {
+        if (!pbrKinds) return;
+        const avail = localStorage.getItem('mf_pbr_available') === 'true';
+        pbrKinds.textContent = avail
+          ? ' · PBR maps loaded ✓'
+          : ' · No PBR maps — upload a pack with _n/_s/_e in Cosmetics';
+        pbrKinds.style.color = avail ? '#4caf50' : '#7c828a';
+      };
+      refreshPbrKinds();
+      setInterval(refreshPbrKinds, 3000);
+
+      pbrClearBtn?.addEventListener('click', () => {
+        if (window.MF_TEXTURE_PACK?.clearPbr) {
+          MF_TEXTURE_PACK.clearPbr();
+          refreshPbrKinds();
+        }
+      });
+
+      // ── Editor de packs PBR (MAIN world, puente CustomEvent) ──
+      // El editor vive en MAIN donde chrome.runtime.getURL NO está
+      // garantizado → le mandamos frames.json serializado y las
+      // traducciones necesarias para t() en el evento.
+      const pbrEditBtn = panel.querySelector('#mf-pbr-edit');
+      pbrEditBtn?.addEventListener('click', async () => {
+        let frames = null;
+        try {
+          const res = await fetch(chrome.runtime.getURL('assets/frames.json'));
+          frames = await res.json();
+        } catch (_) {}
+        // mandar traducciones (10 idiomas) y frames al editor
+        const editorKeys = [
+          'pbrEditorTitle', 'pbrEditorChannel', 'pbrEditorSearch',
+          'pbrEditorReliefUp', 'pbrEditorReliefSmooth', 'pbrEditorReliefFlat',
+          'pbrEditorReliefPicker', 'pbrEditorBrush', 'pbrEditorStrength',
+          'pbrEditorUndo', 'pbrEditorRedo', 'pbrEditorGrid',
+          'pbrEditorApply', 'pbrEditorExport', 'pbrEditorResetTile',
+          'pbrEditorClose', 'pbrEditorDiffuse',
+          'pbrEditorHintN', 'pbrEditorHintS', 'pbrEditorHintE',
+          'pbrEditorNoList', 'pbrEditorPickerInfo',
+          'pbrEditorSavedOk', 'pbrEditorSaveEmpty', 'pbrEditorExportEmpty',
+          'pbrEditorKind_n', 'pbrEditorKind_s', 'pbrEditorKind_e',
+          'pbrEditorApplyLabel', 'pbrEditorResetTileLabel',
+          'pbrEditorBrush1', 'pbrEditorBrush3', 'pbrEditorBrush5', 'pbrEditorBrush7'
+        ];
+        const languages = ['en', 'es', 'ja', 'it', 'zh', 'fr', 'de', 'pt', 'ru', 'ko'];
+        const strings = {};
+        for (const lang of languages) {
+          const table = TRANSLATIONS[lang] || {};
+          for (const key of editorKeys) {
+            if (!strings[key]) strings[key] = {};
+            if (table[key]) strings[key][lang] = table[key];
+          }
+        }
+        document.dispatchEvent(new CustomEvent('minifeather:pbr-editor-open', {
+          detail: JSON.stringify({ language: settings.language || 'en', strings })
+        }));
+        if (frames) {
+          document.dispatchEvent(new CustomEvent('minifeather:pbr-editor-frames', {
+            detail: JSON.stringify(frames)
+          }));
+        }
+      });
+
+      // ── Selector de presets PBR (puente CustomEvent hacia TexturePackManager) ──
+      const presetSelect = panel.querySelector('#mf-pbr-preset');
+      const presetStatus = panel.querySelector('#mf-pbr-preset-status');
+      let presetsBusy = false;
+
+      const setPresetStatus = (txt, color) => {
+        if (!presetStatus) return;
+        presetStatus.textContent = txt || '';
+        presetStatus.style.color = color || '#7c828a';
+      };
+
+      const loadPresetsList = () => {
+        const onList = (ev) => {
+          document.removeEventListener('minifeather:pbr-presets-result', onList);
+          let data = null;
+          try { data = JSON.parse(ev.detail); } catch (_) { data = ev.detail; }
+          if (!presetSelect || !data?.presets) {
+            if (presetSelect) presetSelect.innerHTML = `<option value="">${t('pbrPresetUnavailable')}</option>`;
+            return;
+          }
+          presetSelect.innerHTML = data.presets.map(p =>
+            `<option value="${p.id}"${p.id === data.current ? ' selected' : ''}>${p.name} · ${p.size} · ${p.license}</option>`
+          ).join('');
+          const cur = data.presets.find(p => p.id === data.current);
+          if (cur) setPresetStatus(cur.note, '#7c828a');
+        };
+        document.addEventListener('minifeather:pbr-presets-result', onList);
+        document.dispatchEvent(new CustomEvent('minifeather:pbr-presets-list'));
+        setTimeout(() => document.removeEventListener('minifeather:pbr-presets-result', onList), 4000);
+      };
+      loadPresetsList();
+
+      presetSelect?.addEventListener('change', () => {
+        if (presetsBusy) return;
+        const id = presetSelect.value;
+        if (!id) return;
+        presetsBusy = true;
+        const presetName = presetSelect.selectedOptions[0]?.textContent?.split(' ·')[0] || id;
+        setPresetStatus(t('pbrPresetDownloading').replace('{name}', presetName), '#7fb8ff');
+        const onDone = (ev) => {
+          let data = null;
+          try { data = JSON.parse(ev.detail); } catch (_) { data = ev.detail; }
+          if (data?.presetId !== id) return;
+          document.removeEventListener('minifeather:pbr-preset-result', onDone);
+          presetsBusy = false;
+          if (data?.success) {
+            const m = data.maps || {};
+            setPresetStatus(`✓ ${presetName}: ${m.n || 0}n ${m.s || 0}s ${m.e || 0}e`, '#4caf50');
+            refreshPbrKinds();
+          } else {
+            setPresetStatus('✗ ' + (data?.error || 'falló'), '#ff8080');
+          }
+        };
+        document.addEventListener('minifeather:pbr-preset-result', onDone);
+        document.dispatchEvent(new CustomEvent('minifeather:pbr-preset-install', {
+          detail: JSON.stringify({ presetId: id })
+        }));
+      });
+    }
+
     if (panel.querySelector('#mf-skin-select')) {
       populateSkinSelect();
       refreshActiveSkins();
@@ -9128,9 +9433,13 @@ function renderCreditsPage() {
       if (target) return;
       dragging = true;
       const rect = panel.getBoundingClientRect();
+      // con `zoom` las clientX/Y YA están en el espacio escalado del
+      // layout → rect/offsetWidth miden igual; sin compensación extra
       offX = event.clientX - rect.left;
       offY = event.clientY - rect.top;
       panel.style.transform = 'none';
+      panel.style.left = `${rect.left}px`;
+      panel.style.top = `${rect.top}px`;
     }, { signal: panelSignal });
 
     document.addEventListener('mousemove', event => {
@@ -9155,6 +9464,7 @@ function renderCreditsPage() {
     if (!panel) return;
     panel.innerHTML = getPanelTemplate();
     applyPanelTheme();
+    applyPanelScale();
     bindPanelControls();
   }
 
@@ -9286,18 +9596,16 @@ function renderCreditsPage() {
     setModuleEnabled('coordinates', settings.coordinates);
     setModuleEnabled('waypoints', settings.waypoints);
     window.__MINIFEATHER_ARMOR_HUD_ENABLED__ = !!settings.armorHud;
-      document.dispatchEvent(
-          new CustomEvent('minifeather:armorhud-config', {
-            detail: JSON.stringify({
-              enabled: !!settings.armorHud
-            
-        })
+    document.dispatchEvent(
+      new CustomEvent('minifeather:armorhud-config', {
+        detail: JSON.stringify({ enabled: !!settings.armorHud })
       })
     );
     setModuleEnabled('titanTiny', settings.titanTiny);
     setModuleEnabled('healthNameTags', settings.healthNameTags);
     setModuleEnabled('distanceNameTags', settings.distanceNameTags);
     setModuleEnabled('damageParticles', settings.damageParticles);
+    setModuleEnabled('waterSplash', settings.waterSplash);
     setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
@@ -9358,6 +9666,22 @@ function renderCreditsPage() {
       })
     );
     document.dispatchEvent(
+      new CustomEvent('minifeather:fell-leaves-config', {
+        detail: JSON.stringify({
+          enabled: !!settings.experimentalFallenLeaves,
+          assetsBase: (() => { try { const u = chrome.runtime.getURL('assets/particles/'); return u && !u.includes('://invalid/') ? u : ''; } catch (_) { return ''; } })()
+        })
+      })
+    );
+    document.dispatchEvent(
+      new CustomEvent('minifeather:tiny-takeover-config', {
+        detail: JSON.stringify({
+          enabled: !!settings.experimentalTinyTakeover,
+          assetsBase: (() => { try { const u = chrome.runtime.getURL('assets/tiny/'); return u && !u.includes('://invalid/') ? u : ''; } catch (_) { return ''; } })()
+        })
+      })
+    );
+    document.dispatchEvent(
       new CustomEvent('minifeather:animated-items-config', {
         detail: JSON.stringify({ enabled: !!settings.experimentalAnimatedItems })
       })
@@ -9367,6 +9691,43 @@ function renderCreditsPage() {
         detail: JSON.stringify({ enabled: !!settings.experimentalBetterAnimationCape })
       })
     );
+    document.dispatchEvent(
+      new CustomEvent('minifeather:pbr-config', {
+        detail: JSON.stringify({ enabled: !!settings.experimentalPbr })
+      })
+    );
+    // Auto-instalar el pack PBR integrado (assets/pbr) la primera vez que
+    // se activa PBR sin atlas en IndexedDB — evita subir el ZIP a mano.
+    if (settings.experimentalPbr && localStorage.getItem('mf_pbr_available') !== 'true') {
+      if (window.MF_TEXTURE_PACK?.installBundledPbr) {
+        MF_TEXTURE_PACK.installBundledPbr().then((r) => {
+          if (r?.success) {
+            console.log('[MiniFeather] PBR integrado instalado:', r.loadedCount, 'maps');
+            localStorage.setItem('mf_pbr_available', 'true');
+          }
+        }).catch(() => {
+          // "Extension context invalidated" (reload de la extensión con la
+          // página abierta): chrome.runtime.getURL muere. El usuario solo
+          // necesita F5 — avisar sin spamear.
+          console.warn('[MiniFeather] PBR integrado no instalado — recarga la página (F5)');
+        });
+      }
+    }
+    // Auto-curación: PBRTextures (MAIN) detectó atlas vacíos (relicto de
+    // build vieja) y los borró — regenerar SIN mirar mf_pbr_available.
+    if (!window.__mfPbrReinstallBound) {
+      window.__mfPbrReinstallBound = true;
+      document.addEventListener('minifeather:pbr-reinstall', () => {
+        if (window.MF_TEXTURE_PACK?.installBundledPbr) {
+          MF_TEXTURE_PACK.installBundledPbr().then((r) => {
+            if (r?.success) {
+              console.log('[MiniFeather] PBR integrado REINSTALADO (auto-curación):', r.loadedCount, 'maps');
+              localStorage.setItem('mf_pbr_available', 'true');
+            }
+          });
+        }
+      });
+    }
     document.dispatchEvent(
       new CustomEvent(
         'minifeather:freelook-config',
@@ -9846,6 +10207,7 @@ function renderCreditsPage() {
     initHealthNameTagsModule();
     initDistanceNameTagsModule();
     initDamageParticlesModule();
+    initWaterSplashModule();
     initPatPatModule();
     initItemPhysicsModule();
     initNoWeatherModule();
@@ -9987,6 +10349,10 @@ function renderCreditsPage() {
       settings.moduleBinds = { ...DEFAULT_SETTINGS.moduleBinds, ...(settings.moduleBinds || {}) };
       settings.panelAccentColor = normalizePanelColor(settings.panelAccentColor, DEFAULT_SETTINGS.panelAccentColor);
       settings.panelBackgroundColor = normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor);
+      settings.panelScale = clampPanelScale(settings.panelScale);
+      settings.pageZoomEnabled = settings.pageZoomEnabled !== false;
+      // aplicar zoom de página al arrancar (si está activo)
+      applyPanelScale();
       guiSettings = {
         ...settings,
         moduleBinds: { ...settings.moduleBinds },

@@ -1,0 +1,156 @@
+{
+  "enabled": true,
+  "scanRadius": 96,
+  "dynamicHeldLightsEnabled": true,
+  "dynamicNaturalLightsEnabled": true,
+  "dynamicColoredLightsEnabled": true,
+  "dynamicHeldLightsMainHand": true,
+  "dynamicHeldLightsOffhand": true,
+  "dynamicHeldLightsOtherPlayers": false,
+  "dynamicHeldLightsClientBlockLight": true,
+  "dynamicHeldLightsOtherPlayersRange": 64.0,
+  "dynamicHeldLightsRadiusMultiplier": 1.0,
+  "dynamicHeldLightsIntensityMultiplier": 1.0,
+  "dynamicHeldLightsDarknessBoost": 0.85,
+  "dynamicItemLights": {},
+  "blockLights": {
+    "minecraft:redstone_torch": {
+      "enabled": true,
+      "color": 16718362,
+      "radius": 7.0,
+      "intensity": 0.5
+    },
+    "minecraft:sea_lantern": {
+      "enabled": true,
+      "color": 5636092,
+      "radius": 15.0,
+      "intensity": 0.5
+    },
+    "minecraft:verdant_froglight": {
+      "enabled": true,
+      "color": 10551104,
+      "radius": 15.0,
+      "intensity": 0.25
+    },
+    "minecraft:pearlescent_froglight": {
+      "enabled": true,
+      "color": 16728319,
+      "radius": 15.0,
+      "intensity": 0.25
+    },
+    "minecraft:ochre_froglight": {
+      "enabled": true,
+      "color": 16765517,
+      "radius": 15.0,
+      "intensity": 0.25
+    },
+    "minecraft:shroomlight": {
+      "enabled": true,
+      "color": 16755285,
+      "radius": 15.0,
+      "intensity": 0.5
+    },
+    "minecraft:glow_lichen": {
+      "enabled": true,
+      "color": 15531942,
+      "radius": 7.0,
+      "intensity": 0.5
+    },
+    "minecraft:soul_lantern": {
+      "enabled": true,
+      "color": 5636095,
+      "radius": 10.0,
+      "intensity": 0.75
+    },
+    "minecraft:waxed_oxidized_copper_lantern": {
+      "enabled": true,
+      "color": 10288981,
+      "radius": 15.0,
+      "intensity": 0.30000000000000004
+    },
+    "minecraft:waxed_exposed_copper_lantern": {
+      "enabled": true,
+      "color": 10288981,
+      "radius": 15.0,
+      "intensity": 0.30000000000000004
+    },
+    "minecraft:waxed_copper_lantern": {
+      "enabled": true,
+      "color": 10288981,
+      "radius": 15.0,
+      "intensity": 0.30000000000000004
+    },
+    "minecraft:oxidized_copper_lantern": {
+      "enabled": true,
+      "color": 10288981,
+      "radius": 15.0,
+      "intensity": 0.35000000000000003
+    },
+    "minecraft:exposed_copper_lantern": {
+      "enabled": true,
+      "color": 10288981,
+      "radius": 15.0,
+      "intensity": 0.35000000000000003
+    },
+    "minecraft:copper_lantern": {
+      "enabled": true,
+      "color": 10288981,
+      "radius": 15.0,
+      "intensity": 0.35000000000000003
+    },
+    "minecraft:waxed_weathered_copper_lantern": {
+      "enabled": true,
+      "color": 10288981,
+      "radius": 15.0,
+      "intensity": 0.35000000000000003
+    },
+    "minecraft:weathered_copper_lantern": {
+      "enabled": true,
+      "color": 10288981,
+      "radius": 15.0,
+      "intensity": 0.35000000000000003
+    },
+    "minecraft:amethyst_cluster": {
+      "enabled": true,
+      "color": 13992191,
+      "radius": 5.0,
+      "intensity": 1.5
+    },
+    "minecraft:large_amethyst_bud": {
+      "enabled": true,
+      "color": 13926655,
+      "radius": 4.0,
+      "intensity": 1.5
+    },
+    "minecraft:medium_amethyst_bud": {
+      "enabled": true,
+      "color": 13992191,
+      "radius": 2.0,
+      "intensity": 1.5
+    },
+    "minecraft:small_amethyst_bud": {
+      "enabled": true,
+      "color": 13992191,
+      "radius": 1.0,
+      "intensity": 1.5
+    },
+    "minecraft:soul_campfire": {
+      "enabled": true,
+      "color": 5636095,
+      "radius": 10.0,
+      "intensity": 0.75
+    },
+    "minecraft:soul_torch": {
+      "enabled": true,
+      "color": 5636095,
+      "radius": 10.0,
+      "intensity": 0.75
+    },
+    "minecraft:crying_obsidian": {
+      "enabled": true,
+      "color": 8388863,
+      "radius": 10.0,
+      "intensity": 0.1
+    }
+  }
+}

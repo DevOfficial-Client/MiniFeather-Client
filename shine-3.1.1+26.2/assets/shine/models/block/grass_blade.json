@@ -1,0 +1,17 @@
+{
+  "textures": {
+    "particle": "shine:block/grass_blade",
+    "blade": "shine:block/grass_blade"
+  },
+  "elements": [
+    {
+      "from": [7.5, 0, 8],
+      "to": [8.5, 16, 8.01],
+      "shade": false,
+      "faces": {
+        "north": { "texture": "#blade" },
+        "south": { "texture": "#blade" }
+      }
+    }
+  ]
+}

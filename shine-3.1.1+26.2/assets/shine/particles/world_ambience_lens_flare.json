@@ -1,0 +1,11 @@
+{
+  "textures": [
+    "shine:world_ambience/lens/wide",
+    "shine:world_ambience/lens/halo",
+    "shine:world_ambience/lens/dot_a",
+    "shine:world_ambience/lens/dot_b",
+    "shine:world_ambience/lens/dot_c",
+    "shine:world_ambience/lens/vertical_a",
+    "shine:world_ambience/lens/vertical_b"
+  ]
+}

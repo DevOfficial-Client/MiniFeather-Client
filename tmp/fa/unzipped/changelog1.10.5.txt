@@ -1,0 +1,10 @@
+
+Recommended with Entity Model Features & Entity Texture Features.
+
+Changes/Fixes:
+- removed support for pre-26.1 versions
+- removed unsupported baby models
+- added texture paths for bat, blaze, dolphin, endermite, guardians, snow golem, wandering trader, witch
+- added renamed textures for pigs, cows, mooshroom, chickens, frogs, turtle, llamas, cats, snow fox
+- tweaked fox pounce animation
+- fixed dolphin eye position

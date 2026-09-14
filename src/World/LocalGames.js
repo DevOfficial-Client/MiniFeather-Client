@@ -24,13 +24,16 @@
   const MAX_PLAYERS = 8;
   const SIGNAL_REQUEST_EVENT = 'minifeather:localgames-signal-request';
   const SIGNAL_RESPONSE_EVENT = 'minifeather:localgames-signal-response';
-  const ICE_SERVERS = [{
-    urls: [
-      'stun:stun.cloudflare.com:3478',
-      'stun:stun.l.google.com:19302',
-      'stun:stun1.l.google.com:19302'
-    ]
-  }];
+  const STUN_URL = 'stun:stun.cloudflare.com:3478';
+  // TURN público de Open Relay (metered.ca, gratuito y sin registro).
+  // STUN solo no atraviesa NAT simétrico/CGNAT (típico en móviles y
+  // redes escolares/empresariales): sin TURN el P2P nunca conecta.
+  const ICE_SERVERS = [
+    { urls: [STUN_URL, 'stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+  ];
   const RTC_CONNECT_TIMEOUT_MS = 14000;
   const SIGNAL_RETRY_INTERVAL_MS = 2200;
   const LOCAL_WALK_SPEED = 0.1;
@@ -8991,6 +8994,14 @@
     pc.addEventListener('connectionstatechange', () => {
       const current = pc.connectionState;
 
+      if (current === 'connected' || current === 'failed' || current === 'closed') {
+        // Refrescar el anuncio del lobby para que el contador de
+        // jugadores esté al día sin esperar los 150s del ciclo.
+        if (state.mode === 'host' && state.serverAddress) {
+          state.lastRegistryPublish = 0;
+        }
+      }
+
       if (current === 'failed' || current === 'closed') {
         handleHostPeerDisconnect(peerId);
       }
@@ -9209,7 +9220,13 @@
     return true;
   }
 
-  async function waitForGuestAnswer(peerId, republish = null, timeout = 30000) {
+  async function waitForGuestAnswer(peerId, republishOrTimeout = null, timeoutOrRepublish = null) {
+    const republish = typeof republishOrTimeout === 'function' ? republishOrTimeout
+      : typeof timeoutOrRepublish === 'function' ? timeoutOrRepublish : null;
+    const timeout = typeof republishOrTimeout === 'number'
+      ? republishOrTimeout
+      : (typeof timeoutOrRepublish === 'number' ? timeoutOrRepublish : 45000);
+
     const started = performance.now();
     let nextRepublishAt = started + SIGNAL_RETRY_INTERVAL_MS;
     state.signalLastId = '';
@@ -9231,6 +9248,10 @@
         }
       }
 
+      // Si el host no respondió tras 15s (p. ej. su WebSocket de
+      // señalización se reconectó y perdió el join), re-publicar la
+      // oferta para que vuelva a verla. El host ignora joins duplicados
+      // de un peerId que ya registró.
       if (typeof republish === 'function' && performance.now() >= nextRepublishAt) {
         await republish().catch(() => {});
         nextRepublishAt = performance.now() + SIGNAL_RETRY_INTERVAL_MS;
@@ -9294,15 +9315,15 @@
           await peer.pc.setLocalDescription(offer);
           await waitIce(peer.pc, 10000);
 
-          const joinPayload = {
+          const buildJoinSignal = () => ({
             type: 'join',
             protocol: PROTOCOL,
             peerId,
-            profile,
+            profile: profileNetworkSnapshot(),
             sdp: peer.pc.localDescription
-          };
+          });
 
-          const publishJoin = () => publishSignal(state.roomTopic, joinPayload);
+          const publishJoin = () => publishSignal(state.roomTopic, buildJoinSignal());
           await publishJoin();
           answer = await waitForGuestAnswer(peerId, publishJoin, 30000);
           await peer.pc.setRemoteDescription(answer.sdp);

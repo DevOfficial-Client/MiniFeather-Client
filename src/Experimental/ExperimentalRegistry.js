@@ -132,8 +132,16 @@ api.register({
   order: 20
 });
 
-
-
+api.register({
+  id: 'fallen-leaves',
+  settingsKey: 'experimentalFallenLeaves',
+  title: 'Fallen Leaves',
+  titleKey: 'experimentalFallenLeavesTitle',
+  descriptionKey: 'experimentalFallenLeavesDesc',
+  icon: '🍂',
+  badge: 'EXPERIMENTAL',
+  order: 20
+});
 
 api.register({
   id: 'better-animation-cape',
@@ -147,11 +155,33 @@ api.register({
 });
 
 api.register({
+  id: 'tiny-takeover',
+  settingsKey: 'experimentalTinyTakeover',
+  title: 'Tiny Takeover Babies',
+  titleKey: 'experimentalTinyTakeoverTitle',
+  descriptionKey: 'experimentalTinyTakeoverDesc',
+  icon: '🐺',
+  badge: 'EXPERIMENTAL',
+  order: 27
+});
+
+api.register({
   id: 'animated-items',
   settingsKey: 'experimentalAnimatedItems',
   title: 'Animated Items',
   titleKey: 'experimentalAnimatedItemsTitle',
   descriptionKey: 'experimentalAnimatedItemsDesc',
+  icon: '✨',
+  badge: 'EXPERIMENTAL',
+  order: 30
+});
+
+api.register({
+  id: 'pbr-textures',
+  settingsKey: 'experimentalPbr',
+  title: 'PBR Textures',
+  titleKey: 'pbrTitle',
+  descriptionKey: 'pbrDesc',
   icon: '✨',
   badge: 'EXPERIMENTAL',
   order: 30

@@ -1,0 +1,39 @@
+{
+	"credit": "Created by FreshLX for Fresh Animations",
+	"animations": [
+		{
+			"varb.pfc": "frame_counter == var.pre_frame_counter",
+			"var.r": "random(id)*pi*4",
+			"var.up": "var.up +abs( var.pre_posy-pos_y )",
+			"var.ls": "limb_swing*3 +if(is_in_water, var.up*3, 0)",
+			"var.m": "clamp( limb_speed +abs( var.position-pos_y ), 0, 1 )",
+			"var.yrot_offset": "if( varb.pfc, var.yrot_offset, var.yrot_offset +if( between( var.pre_roty-rot_y, -pi*2, -pi*2+0.2 ), -pi*2, between( var.pre_roty-rot_y, pi*2-0.2, pi*2 ), pi*2, 0 ) )",
+			"var.roty": "rot_y +var.yrot_offset",
+			"var.rotation": "if( varb.pfc, var.rotation, is_riding || !equals(var.roty,var.pre_Oroty,1), var.roty, var.roty*min(1,frame_time*6) +var.rotation*max(0,1-frame_time*6) )",
+			"var.position": "if( varb.pfc, var.position, is_riding || !equals(   pos_y, var.pre_posy,2),    pos_y,    pos_y*min(1,frame_time*5) +var.position*max(0,1-frame_time*5) )",
+			"var.turn": "clamp( var.rotation-var.roty, -1, 1 )",
+			"var.Created_by_FreshLX_for_Fresh_Animations": "1"
+		},
+		{
+			"body.ty": "0",
+			"body.tz": "0",
+			"body2.ry": "if(is_in_water, sin(var.r+var.ls+age/6)/6  *(1+var.m*2  ) -var.turn/2                 , -cos(limb_swing+age/1.2)/8*2)",
+			"tail2.ry": "if(is_in_water,-cos(var.r+var.ls+age/6)/2.5*(1+var.m*1.5) +var.turn                   , -sin(limb_swing+age/1.2)/3*2)",
+			"tail3.ry": "if(is_in_water,-sin(var.r+var.ls+age/6)/2  *(1+var.m*2  ) +var.turn                   ,  cos(limb_swing+age/1.2)/3*2)",
+			"tail2.rz": "if(is_in_water,-sin(var.r+var.ls+age/6)/7                                             , -sin(limb_swing+age/1.2)/3 )",
+			"tail2.tx": "if(is_in_water, sin(var.r+var.ls+age/6)/4  *(1+var.m*2  ) +clamp( var.turn, -0.5, 0.5), -cos(limb_swing+age/1.2)/2)",
+			"body2.tx": "if(is_in_water, cos(var.r+var.ls+age/6)/3                                             , -cos(limb_swing+age/1.2) )",
+			"body2.ty": "if(is_in_water,                 cos((pos_x*1.5+pos_y*2+pos_z*1.5)+age/17)             , 0                       ) -1.5 +22",
+			"body2.tz": "1 -2",
+			"body2.rx": "if(is_in_water, clamp(torad(head_pitch), -pi/3, pi/3)                                 ,  sin(limb_swing+age/1.2/3)/2)",
+			"tail2.rx": "if(is_in_water,  ( torad(-5) -sin((pos_x*1.5+pos_y*2+pos_z*1.5)+age/23)/10 )*clamp(1-var.m*6, 0, 1), -cos(limb_swing+age/1.2/3)/2)",
+			"body2.rz": "if(is_in_water, 0, torad(20) +torad(-40)*clamp(var.m*6, 0, 1) +sin(var.ls +sin(var.ls*2))/2 +limb_swing/2*1.8 -torad(90))"
+		},
+		{
+			"var.pre_posy": "pos_y",
+			"var.pre_roty": "rot_y",
+			"var.pre_Oroty": "var.roty",
+			"var.pre_frame_counter": "frame_counter"
+		}
+	]
+}

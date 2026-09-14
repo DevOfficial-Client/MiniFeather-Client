@@ -1,0 +1,100 @@
+{
+	"credit": "Created by FreshLX for Fresh Animations",
+	"animations": [
+		{
+			"varb.pfc": "frame_counter == var.pre_frame_counter",
+			"var.hy": "clamp(head_yaw,-90,90)",
+			"var.r": "random(id)*pi*4 +(limb_swing/20)",
+			"var.ls": "limb_swing/2.07",
+			"var.b": "var.r +age/40*pi",
+			"var.aggro": "clamp(if( varb.pfc, var.aggro, is_aggressive, min(20, var.aggro +0.1 *frame_time*20), max(0, var.aggro -0.1 *frame_time*20)), 0, 1)",
+			"var.att": "0",
+			"var.poppy": "if(between( right_arm.rx, torad( -45 -2.5 ), torad( -45 +2.5 ) ) && left_arm.rx==0, 1, 0 )",
+			"var.u": "pos_y-player_pos_y",
+			"var.Created_by_FreshLX_for_Fresh_Animations": "1"
+		},
+		{
+			"body.rx": "(right_arm.rx-left_leg.rx)/8 +if(health<=15, torad(5), clamp(torad(-5)+limb_speed, torad(-5), 0)) +clamp(torad(head_pitch)/3, torad(-30), torad(30)) +(torad(5)*limb_speed) +if(health<=35, torad(10), 0) -sin(var.b)/20*clamp(1-limb_speed*4, 0, 1) +torad( 20*clamp((head_pitch-10)/5*var.aggro, 0, 1))",
+			"body.ry": "     ( torad(var.hy)/(4 -2.5*var.aggro) -sin(var.ls)/2*clamp(limb_speed*2, 0, clamp(1-(head_pitch-10)/5*var.aggro, 0, 1))*clamp(5-limb_speed*6, 0.5, 1)*if(limb_speed>=0.3, 0.6, 1) +sin(var.b)/5*clamp(1-limb_speed*4, 0, 1)*(1-var.poppy) ) +clamp(torad(15)-limb_speed*10, 0, torad(15))*(1-1.5*var.poppy)",
+			"body.rz": "0",
+			"body.tx": "0",
+			"body.ty": "3.5 +( -sin(pi/3 +var.ls*2 -sin(pi/6 +var.ls*2)/1.7 )*1.5 +1 )*clamp(limb_speed*4, 0, 1)",
+			"body.tz": "  (right_arm.rx-left_leg.rx)/2 +sin(var.b)*clamp(1-limb_speed*4, 0, 1)*(1-var.poppy/2)",
+			"waist.rx": "torad(5)*limb_speed -body.rx",
+			"waist.ry": " sin(var.ls)/5 *clamp(limb_speed*4, 0, 1) -body.ry +sin(var.b)/10*clamp(1-limb_speed*4, 0, 1)*(1-var.poppy/2) +clamp(torad(15)-limb_speed*10, 0, torad(15))*(1-1.5*var.poppy)",
+			"waist.rz": "-sin(var.ls)/12*clamp(limb_speed*4, 0, 1)",
+			"waist.tx": " sin(var.ls)/3 *clamp(limb_speed*2, 0, 1) -body.tx/2",
+			"waist.ty": "-21 +sin(torad(-110)+var.ls*2)*clamp(sin(limb_speed*2*pi)/3+limb_speed*2, 0, 1) +abs(sin(torad(-110)+var.ls)*clamp(sin(limb_speed*2*pi)/3+limb_speed*2, 0, 1))*2 -1.5*clamp(sin(limb_speed*2*pi)/3+limb_speed*2, 0, 1) -clamp(limb_speed, 0, 0.5)",
+			"waist.tz": "(right_arm.rx-left_leg.rx)/2 -body.tz +sin(var.b)/2*clamp(1-limb_speed*4, 0, 1)*(1-var.poppy/2)",
+			"head2.ry": "torad(var.hy)*(0.5 -0.2*var.aggro) +sin(var.ls)/2*clamp(limb_speed*2, 0, clamp(1-(head_pitch-10)/5*var.aggro, 0, 1))*clamp(5-limb_speed*6, 0.5, 1)*if(limb_speed>=0.3, 0.6, 1) -sin(torad(10)+var.b)/5*clamp(1-limb_speed*4, 0, 1)*(1-var.poppy) +clamp(torad(-15)+limb_speed*10, torad(-15), 0)*(1-1.5*var.poppy)",
+			"head2.rx": "if(health<=15, 0, clamp(torad(5)-limb_speed, 0, torad(5))) +if(health<=35, torad(-10), 0) +clamp(torad(head_pitch)/3, torad(-15), torad(15)) +sin(var.b)/20*clamp(1-limb_speed*4, 0, 1) -torad( 20*clamp((head_pitch-10)/5*var.aggro, 0, 1))",
+			"head2.rz": "            -sin(var.b)/15 *clamp(1-limb_speed*4, 0, 1)*(1-var.poppy/2)",
+			"head2.ty": "-33 +(-0.15 -sin(var.b)/10)*clamp(1-limb_speed*4, 0, 1)*(1-var.poppy/2)",
+			"head2.tz": "clamp(torad(-head_pitch), -2, 0) -3.5"
+		},
+		{
+			"right_arm2.rx": "( -(1.7-1.7*cos( (right_arm.rx-left_leg.rx)*0.9 ))/if(health<=15, 1.4, 1.1)               -body.rx -sin(var.b+torad(135) -cos(var.b+torad(135))/2)/6 *clamp(1-limb_speed*4, 0, 1) +torad(10)*limb_speed -sin(torad(30)+var.ls  )/2            *clamp(limb_speed*2, 0, clamp(1-(head_pitch-10)/5*var.aggro, 0, 1) ) *clamp(5-limb_speed*6, 0.2, 1) +torad( 20*clamp((head_pitch-10)/5*var.aggro, 0, 1)*2 ) +torad( 20)*clamp(-2+limb_speed*3, 0, 1) )*(1-var.poppy) +( right_arm.rx -body.rx )*var.poppy",
+			"left_arm2.rx": " ( -(1.7-1.7*cos( (right_arm.rx-left_leg.rx)*0.9 ))/if(health<=15, 1.4, 1.1)*(1-var.poppy) -body.rx +sin(var.b+torad( 30)                         )/10*clamp(1-limb_speed*4, 0, 1) +torad(10)*limb_speed +sin(torad(30)+var.ls  )/2            *clamp(limb_speed*2, 0, clamp(1-(head_pitch-10)/5*var.aggro, 0, 1) ) *clamp(5-limb_speed*6, 0.2, 1) +torad( 20*clamp((head_pitch-10)/5*var.aggro, 0, 1)*2 ) +torad( 20)*clamp(-2+limb_speed*3, 0, 1) )*(1-var.poppy/2)",
+			"right_arm2.ry": "( (right_arm.rx-left_leg.rx)/8                                                               +torad( 10)*limb_speed      -sin(var.b+torad( 90))/4    *clamp(1-limb_speed*4, 0, 1)                       -sin(          var.ls  )/4 *limb_speed*clamp(limb_speed*2, 0, 1)                                            *clamp(5-limb_speed*6, 0.2, 1) )*(1-var.poppy) +( -body.ry/2 -0.1-0.02 )*var.poppy",
+			"left_arm2.ry": " (-(right_arm.rx-left_leg.rx)/8*(1-var.poppy) +clamp(torad(-15)+limb_speed*10, torad(-15), 0) +torad(-10)*limb_speed      -sin(var.b           )/4    *clamp(1-limb_speed*4, 0, 1)                       -sin(          var.ls  )/4 *limb_speed*clamp(limb_speed*2, 0, 1)                                            *clamp(5-limb_speed*6, 0.2, 1) )*(1-var.poppy/2)",
+			"right_arm2.rz": "( clamp(-(torad(head_pitch))/8, 0, torad( 180)) +torad( 5)                                                               -sin(var.b           )/20   *clamp(1-limb_speed*4, 0, 1) +if(limb_speed>=0.3, (-cos(          var.ls*2)/10 +torad(5))*clamp(limb_speed*2, 0, 1)                                     , 0)   *clamp(5-limb_speed*6, 0.2, 1) +(torad( 10) -sin(var.ls)/6)*clamp(-2+limb_speed*3, 0, 1) )*(1-var.poppy)",
+			"left_arm2.rz": " ( clamp( (torad(head_pitch))/8, torad(-180), 0) +torad(-5)                                                               -sin(var.b           )/20   *clamp(1-limb_speed*4, 0, 1) +if(limb_speed>=0.3, ( cos(          var.ls*2)/10 -torad(5))*clamp(limb_speed*2, 0, 1)                                     , 0)   *clamp(5-limb_speed*6, 0.2, 1) +(torad(-10) -sin(var.ls)/6)*clamp(-2+limb_speed*3, 0, 1) )*(1-var.poppy/2)",
+			"right_arm2.tx": "-11.2",
+			"left_arm2.tx": "  11.2",
+			"right_arm2.ty": "-31.5 +if(health<=15, 1.5 +clamp(2*limb_speed*5, 0, 2), 0) +( cos(var.ls*2+sin(var.ls*2)/2) +1 )*clamp(limb_speed*2, 0, 1)*(1-var.poppy)",
+			"left_arm2.ty": " -31.5 +if(health<=15, 1.5 +clamp(2*limb_speed*5, 0, 2), 0) +( cos(var.ls*2+sin(var.ls*2)/2) +1 )*clamp(limb_speed*2, 0, 1)",
+			"right_arm2.tz": "       if(health<=15, -4, (-1 +sin(torad(30)+var.b))*clamp(1-limb_speed*4, 0, 1)*(1-var.poppy)) +clamp(head_pitch/7*var.aggro, 0, 3*clamp(1-(right_arm.rx-left_leg.rx), 0, 1)) +clamp(-sin(var.ls)*if(limb_speed>=0.3, 1.5, 8*limb_speed), -4, 4) *clamp(5-limb_speed*6, 0, 1)*(1-var.poppy)",
+			"left_arm2.tz": "        if(health<=15, -4, clamp(-3+limb_speed*10, -3, 0)                                      ) +clamp(head_pitch/7*var.aggro, 0, 3*clamp(1-(right_arm.rx-left_leg.rx), 0, 1)) +clamp( sin(var.ls)*if(limb_speed>=0.3, 1.5, 8*limb_speed), -4, 4) *clamp(5-limb_speed*6, 0, 1) +2*var.poppy"
+		},
+		{
+			"right_leg.rx": "0 +max_health*0",
+			"right_leg.tx": "0",
+			"right_leg.ty": "0",
+			"right_leg.tz": "0",
+			"right_leg2.rx": "clamp(torad(-7 )+limb_speed*10, torad(-7 ), 0) -(right_arm.rx-left_leg.rx)/20*(1-var.poppy) -(asin(sin(var.ls))*pi/5)/2*if(limb_speed>=0.3, 1.5, 5*limb_speed)*clamp(-sin(var.ls)*5*clamp(limb_speed*4, 0, 1), 0.5, 1) +clamp( cos(var.ls)/1.2*if(limb_speed>=0.3, 0.6, 2*limb_speed), 0, torad(45)) -sin(var.b)/30*clamp(1-limb_speed*4, 0, 1)",
+			"left_leg2.rx": " clamp(torad( 5 )-limb_speed*10, 0, torad( 5 )) -(right_arm.rx-left_leg.rx)/20*(1-var.poppy) +(asin(sin(var.ls))*pi/5)/2*if(limb_speed>=0.3, 1.5, 5*limb_speed)*clamp( sin(var.ls)*5*clamp(limb_speed*4, 0, 1), 0.5, 1) +clamp(-cos(var.ls)/1.2*if(limb_speed>=0.3, 0.6, 2*limb_speed), 0, torad(45)) -sin(var.b)/14*clamp(1-limb_speed*4, 0, 1)",
+			"right_leg2.ry": "clamp(torad(-10)+limb_speed*10, torad(-10), 0)",
+			"left_leg2.ry": " clamp(torad( 45)-limb_speed*10, 0, torad( 45))",
+			"right_leg2.rz": "clamp(torad(-2 )+limb_speed*10, torad(-2 ), 0) -sin(var.b)/40*clamp(1-limb_speed*4, 0, 1)",
+			"left_leg2.rz": " clamp(torad( 6 )-limb_speed*10, 0, torad( 6 )) -sin(var.b)/20*clamp(1-limb_speed*4, 0, 1)",
+			"right_leg2.tx": "4.5",
+			"left_leg2.tx": "-4.5 +clamp(-1+limb_speed*10, -1, 0)",
+			"right_leg2.ty": "24 +clamp(sin(torad(-90)+var.ls)*5*clamp(limb_speed*4, 0, 1), -3, 0)",
+			"left_leg2.ty": " 24 +clamp(sin(torad( 90)+var.ls)*5*clamp(limb_speed*4, 0, 1), -3, 0)",
+			"right_leg2.tz": "-(asin(sin(var.ls))*pi/5)*if(limb_speed>=0.3, 12, 46*limb_speed) +(2*limb_speed) +clamp(-4.5+limb_speed*20, -4.5, 0)",
+			"left_leg2.tz": "  (asin(sin(var.ls))*pi/5)*if(limb_speed>=0.3, 12, 46*limb_speed) +(2*limb_speed) +clamp( 2.5-limb_speed*10,  0, 2.5)"
+		},
+		{
+			"right_arm.ry": "body.ry +( -body.ry/2 -0.12 +torad(var.hy)/90 +sin(var.b)/70*clamp(1-limb_speed*4, 0, 1)*(var.hy/90)  )",
+			"right_arm.rz": "body.rz",
+			"right_arm.tx": "body.tx -sin(body.rx)*10 *sin(body.ry) +( if(health<=15, 0.8, health<=35, 0.2, 0) -0.5 +sin(var.b)/70*clamp(1-limb_speed*4, 0, 1)*0*(var.hy/90) +(0.5-0.5*cos(torad(var.hy)*pi/2))*0.8 )",
+			"right_arm.ty": "body.ty -cos(body.rx)*10                 +if(health<=15, 2.5 +clamp(2*limb_speed*5, 0, 2), 0) +( -sin( var.ls*2 +cos(pi/4 +var.ls*2)/1.8 )*0 )*clamp(limb_speed*4, 0, 1) -0.5",
+			"right_arm.tz": "body.tz -sin(body.rx)*10 *cos(body.ry)   +if(health<=15, -3.5, 0) +clamp(-sin(var.ls)*if(limb_speed>=0.3, 1.5, 8*limb_speed), -4, 4) *clamp(5-limb_speed*6, 0, 1) +0.5 +(var.hy)/40 -sin(var.b)/5*clamp(1-limb_speed*4, 0, 1)*(var.hy/90)"
+		},
+		{
+			"nose.rz": "-(torad(var.hy))/6",
+			"brow.ty": "-1.5 +( sin(hurt_time/5*pi)/8*hurt_time +if(health<=35, 0.5, (1*var.aggro +clamp(head_pitch/5, 0, 0.8)*(1-var.aggro)) ) )*(1-var.poppy) -0.2*var.poppy",
+			"brow.rz": "if(health<=35, sin(health*10)/8, clamp(var.hy/200*head_pitch/5, torad(-5), torad(5))*(1-var.aggro) )*0",
+			"var.blink": "clamp((1.5 -abs(sin(var.r+age/8)*16))*clamp(-32 +cos((var.r+age/8)/1.5)*40 +cos((var.r+age/8)/4)*40, 0, 1), 0, 1)",
+			"var.pupil_y": "head_pitch/40*(1-var.aggro)",
+			"var.pupil_x": "-var.hy/80*(1-var.aggro)",
+			"r_pupil.visible": "health>20 || ( health>=0 && (sin(var.r+age)-sin(var.r+age*0.3)-sin(2*(var.r+age)) +if(health<=1,-1, 1) ) > 0 )",
+			"l_pupil.visible": "r_pupil.visible"
+		},
+		{
+			"brow.sx": " 1 +clamp( sqrt( pow(pos_x-player_pos_x, 2) +pow(pos_y-player_pos_y, 2) +pow(pos_z-player_pos_z, 2) ), 1, 128 )/2000",
+			"eyes.tz": "-4 -clamp( sqrt( pow(pos_x-player_pos_x, 2) +pow(pos_y-player_pos_y, 2) +pow(pos_z-player_pos_z, 2) ), 1, 128 )/500",
+			"r_pupil.tx": "clamp( var.pupil_x-3, -3, -2 )",
+			"l_pupil.tx": "clamp( var.pupil_x+3,  2,  3 )",
+			"r_pupil.ty": "clamp( var.pupil_y+1 -0.5*var.blink, 0, 1 )",
+			"l_pupil.ty": "clamp( var.pupil_y+1 -0.5*var.blink, 0, 1 )",
+			"r_pupil.sy": "clamp(1 -var.pupil_y, 0.4, 1 )*(1-0.88*var.blink)",
+			"l_pupil.sy": "clamp(1 -var.pupil_y, 0.4, 1 )*(1-0.88*var.blink)",
+			"r_pupil.sx": "1 +clamp( var.pupil_x, -0.2, 0 )",
+			"l_pupil.sx": "1 +clamp(-var.pupil_x, -0.2, 0 )"
+		},
+		{
+			"var.pre_frame_counter": "frame_counter"
+		}
+	]
+}

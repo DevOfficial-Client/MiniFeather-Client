@@ -1862,10 +1862,15 @@
         // Recargar la extensión sin F5 deja materiales hookeados: nuestro
         // hook nuevo capturaría el viejo como "original" y las uniforms
         // se inyectarían DOS veces (redefinition → link fail).
+        // El wrapper viejo tiene __mfCsKill: apagarlo (neutralización)
+        // en vez de restaurar su original — el onBeforeCompile ACTUAL
+        // puede contener el wrapper de PBR de otra sesión viva encima.
         if (material.__mfHooked) {
-            // Restaurar el onBeforeCompile ORIGINAL del juego guardado
-            // por la sesión previa y limpiar la marca.
-            material.onBeforeCompile = material.__mfOriginalOnBeforeCompile || material.onBeforeCompile;
+            if (typeof material.onBeforeCompile?.__mfCsKill === 'function') {
+                material.onBeforeCompile.__mfCsKill();
+            } else {
+                material.onBeforeCompile = material.__mfOriginalOnBeforeCompile || material.onBeforeCompile;
+            }
             if (material.__mfOriginalCacheKey !== undefined) {
                 material.customProgramCacheKey = material.__mfOriginalCacheKey;
             }
@@ -1874,6 +1879,10 @@
 
         const originalOnBeforeCompile = material.onBeforeCompile.bind(material);
         const originalCacheKey = material.customProgramCacheKey;
+
+        // Neutralización simétrica a la de PBRTextures: flag vivo en el
+        // closure; unhook lo apaga sin restaurar onBeforeCompile.
+        let csAlive = true;
 
         const liveUniforms = {};
         // Mapa inverso uniform → nombre GUI (para restaurar valores guardados)
@@ -1892,9 +1901,10 @@
             liveUniforms[key] = { value: initial };
         }
 
-        material.onBeforeCompile = function (shader) {
+        const wrapper = function (shader) {
             // 1. Llamar al onBeforeCompile original del juego (GI, wind, etc.)
             originalOnBeforeCompile(shader);
+            if (!csAlive) return; // desmontado: passthrough limpio
 
             // 2. Inyectar uniforms
             for (const key in liveUniforms) {
@@ -1946,6 +1956,10 @@
             }
         };
 
+        // Colgar el wrapper con marca de neutralización para otros módulos
+        wrapper.__mfCsKill = function () { csAlive = false; };
+        material.onBeforeCompile = wrapper;
+
         // Marca de hookeado + originales: si se recarga la extensión sin
         // F5, la sesión nueva restaura el ORIGINAL DEL JUEGO (no nuestro
         // hook viejo) — evita inyectar el preset dos veces
@@ -1972,6 +1986,7 @@
             liveUniforms,
             originalOnBeforeCompile,
             originalCacheKey,
+            wrapper,
             update: preset.update || (() => {}),
             onUnhook: preset.onUnhook || null
         });
@@ -1988,7 +2003,12 @@
             try { entry.onUnhook(material); } catch (_) {}
         }
 
-        material.onBeforeCompile = entry.originalOnBeforeCompile;
+        // NEUTRALIZAR en vez de restaurar: el onBeforeCompile actual puede
+        // tener wrappers de otros módulos (ej: PBR de MiniFeather) que se
+        // hookearon DESPUÉS de nosotros y nos envuelven — restaurar
+        // ciegamente `entry.originalOnBeforeCompile` los destruiría de
+        // paso. El wrapper queda en la cadena como passthrough limpio.
+        if (entry.wrapper?.__mfCsKill) entry.wrapper.__mfCsKill();
         if (entry.originalCacheKey) {
             material.customProgramCacheKey = entry.originalCacheKey;
         } else {
@@ -1996,6 +2016,7 @@
         }
         material.needsUpdate = true;
         state.hooked.delete(material);
+        delete material.__mfHooked;  // la marca debe morir con el hook
     }
 
     // â”€â”€â”€ Loop de animaciÃ³n de uniforms â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

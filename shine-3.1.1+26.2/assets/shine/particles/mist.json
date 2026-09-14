@@ -1,0 +1,9 @@
+{
+  "textures": [
+    "shine:mist/mist_variant_01_soft_cluster",
+    "shine:mist/mist_variant_02_ground_spread",
+    "shine:mist/mist_variant_03_broken_pale_mist",
+    "shine:mist/mist_variant_04_left_drift",
+    "shine:mist/mist_variant_05_deep_dim_puff"
+  ]
+}
