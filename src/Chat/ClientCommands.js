@@ -658,6 +658,22 @@
         addChat(r.ok ? (n > 0 ? `${n} spider${n === 1 ? '' : 's'} teleported to you.` : 'No spiders to teleport.') : r.error, r.ok ? 'success' : 'error');
         return;
       }
+      if (action === 'replace' || action === 'server') {
+        // /spider replace [scale] | off — arañas del server → preset 'spider'
+        const arg = (args[1] || '').toLowerCase();
+        if (arg === 'off' || arg === 'stop') {
+          const r = api.send({ type: 'replace', off: true });
+          addChat(r.ok ? 'Server spiders restored to their vanilla model.' : r.error, r.ok ? 'success' : 'error');
+          return;
+        }
+        const scale = parseFloat(args[1]);
+        const h = Number.isFinite(scale) && scale > 0 ? Math.min(200, scale) : 100;
+        const r = api.send({ type: 'replace', scale: h });
+        if (!r.ok) { addChat(r.error, 'error'); return; }
+        api.enable(true);
+        addChat(`Replacing server spiders with preset 'spider' (${h} blocks tall). Their vanilla models are hidden. /spider replace off to restore.`, 'success');
+        return;
+      }
       if (action === 'hunt' || action === 'caza') {
         // /spider hunt [range] [agg] | off — IA de caza: acecho, rodeo, emboscada y mordisco
         const arg = (args[1] || '').toLowerCase();
@@ -734,6 +750,8 @@
           '\\yellow\\/spider follow [dist|off]\\reset\\ - Follow you with A* pathfinding',
           '\\yellow\\/spider goto <x> <z> [y] | off\\reset\\ - Walk to coords with A* pathfinding',
           '\\yellow\\/spider hunt [range] [agg] | off\\reset\\ - Hunting AI: stalk, circle, pounce, bite',
+          '\\yellow\\/spider replace [h] | off\\reset\\ - Server spiders become preset spider (h blocks tall, default 100)',
+          '\\yellow\\Spiders auto-share via P2P: /p2p host (owner) + /p2p join <code> (friend)\\reset\\',
           '\\yellow\\/spider clear | despawn all\\reset\\ - Remove ALL loaded spiders',
           '\\yellow\\/spider tphere\\reset\\ - Teleport all spiders to your exact position',
           '\\yellow\\/spider staystill\\reset\\ - Stop all spiders',

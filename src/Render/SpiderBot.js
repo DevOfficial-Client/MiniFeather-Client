@@ -61,6 +61,11 @@
     lastTick: 0, raf: 0,
     lastFrame: null,
     lastAppliedFrameT: -1,
+    // SpiderSync (P2P vía MF_Peer)
+    remoteFrame: null, // último frame del peer
+    lastAppliedRemoteT: -1,
+    remoteNames: new Set(), // arañas que vienen del peer
+    frameSendCount: 0, // throttle: reenviar cada 2º frame (10 Hz)
   };
 
   // ═══ conexión con el simulador embebido (llamada directa, sin ws) ═══
@@ -81,6 +86,7 @@
   }
 
   function handleSimMessage(msg) {
+    forwardToPeer(msg);
     if (msg.type === 'add') {
       LOG.i('← add:', msg.spider?.name, msg.spider?.preset, { legs: msg.spider?.legs?.length });
       if (!addSimSpider(msg.spider)) {
@@ -105,6 +111,63 @@
         } catch (_) {}
       }
     }
+  }
+
+  // ═══ SpiderSync P2P (vía MF_Peer /p2p host|join) ═══
+  // El HOST es autoridad: reenvía add/remove/frame de su sim al peer; el
+  // guest los aplica con remoteApply. Frames a 10 Hz y números a 2 decimales
+  // (~300 B/araña/frame — PeerJS DataChannel confiable lo sobra).
+  function forwardToPeer(msg) {
+    const peer = globalThis.MF_Peer;
+    if (!peer || typeof peer.sendStudio !== 'function') return;
+    if (msg.type === 'frame') {
+      if ((state.frameSendCount++ & 1) !== 0) return; // cada 2º frame
+      peer.sendStudio({ t: 'spider', m: { type: 'frame', t: msg.t, poses: compressPoses(msg.poses) } });
+    } else if (msg.type === 'add' || msg.type === 'remove') {
+      peer.sendStudio({ t: 'spider', m: msg });
+    }
+  }
+
+  function compressPoses(poses) {
+    if (!Array.isArray(poses)) return poses;
+    const r2 = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 100) / 100 : v);
+    return poses.map((p) => ({
+      n: p.n,
+      p: p.p?.map(r2),
+      legs: p.legs?.map((l) => ({
+        att: l.att?.map(r2),
+        joints: l.joints?.map((j) => j?.map(r2)),
+      })),
+    }));
+  }
+
+  // aplica un mensaje del sim REMOTO (spiders del peer)
+  function remoteApply(m) {
+    if (!m || typeof m !== 'object') return;
+    if (m.type === 'add') {
+      if (!m.spider?.name) return;
+      state.remoteNames.add(m.spider.name);
+      if (!addSimSpider(m.spider)) state.pendingSpiders.push(m.spider);
+      LOG.i('p2p ← add:', m.spider.name, m.spider.preset);
+    } else if (m.type === 'remove') {
+      state.remoteNames.delete(m.name);
+      removeSpider(m.name);
+      state.pendingSpiders = state.pendingSpiders.filter((s) => s.name !== m.name);
+    } else if (m.type === 'frame') {
+      state.remoteFrame = m;
+    } else if (m.type === 'clear') {
+      for (const name of [...state.remoteNames]) removeSpider(name);
+      state.remoteNames.clear();
+      state.remoteFrame = null;
+      state.lastAppliedRemoteT = -1;
+      LOG.i('p2p ← clear (arañas del peer fuera)');
+    }
+  }
+
+  // el peer conectó tarde: pedirle al sim local que re-emita sus arañas
+  // (mensaje 'hello' → un 'add' por cada una, que forwardToPeer reenvía)
+  function onPeerConnected() {
+    try { simAPI()?.send?.({ type: 'hello' }); } catch (_) {}
   }
 
   // ═══ infra (patrones TinyTakeover/WaterSplash) ═══
@@ -509,9 +572,9 @@
 
   // tracking del último tick aplicado: el sim emite a 20 Hz pero el RAF va
   // a 60 Hz → sin este check reaplicaríamos el mismo frame 3 veces por tick.
-  function applyFrame(frame) {
-    if (!frame || frame.t === state.lastAppliedFrameT) return; // mismo frame → nada
-    state.lastAppliedFrameT = frame.t;
+  function applyFrame(frame, dedupKey = 'lastAppliedFrameT') {
+    if (!frame || frame.t === state[dedupKey]) return; // mismo frame → nada
+    state[dedupKey] = frame.t;
     for (const pose of frame.poses) {
       if (!pose?.n) continue;
       const sp = state.spiders.get(pose.n);
@@ -562,7 +625,13 @@
           (from[1] + to[1]) * 0.5 - ly,
           (from[2] + to[2]) * 0.5 - lz
         );
-        mesh.scale.set(seg.thickness, seg.thickness, len);
+        // grosor proporcional al tamaño: con scale 100 los segmentos miden
+        // ~160 bloques y un grosor fijo de 0.16 sería un hilo invisible.
+        // Escalamos por la longitud de reposo del segmento (≈1.8 en normal).
+        const restLen = leg.segLengths?.[si] || len;
+        const sizeF = Math.min(80, Math.max(1, restLen / 1.8));
+        const th = seg.thickness * sizeF;
+        mesh.scale.set(th, th, len);
         setQuatLookAtZ(mesh, fx / len, fy / len, fz / len);
       }
     }
@@ -624,6 +693,7 @@
         for (const info of retry) if (!addSimSpider(info)) state.pendingSpiders.push(info);
       }
       if (state.lastFrame) applyFrame(state.lastFrame);
+      if (state.remoteFrame) applyFrame(state.remoteFrame, 'lastAppliedRemoteT');
       // cambio de mundo: la escena nueva no contiene las raíces → re-agregar
       if (state.spiders.size) {
         const scene = getScene(state.game);
@@ -761,6 +831,9 @@
       const sim = simAPI();
       sim?.clear?.();
     },
+    // SpiderSync P2P: mensajes del sim del peer + snapshot al conectar
+    remoteApply,
+    onPeerConnected,
     enable,
     debug() {
       const sim = simAPI();

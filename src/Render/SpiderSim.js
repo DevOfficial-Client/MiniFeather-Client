@@ -1619,6 +1619,15 @@
     }
   }
 
+  // Títere: espeja una araña NATIVA del server (reemplazo de modelo). El
+  // servidor manda: x/z se copian por velocidad (las patas caminan solas y
+  // siguen el suelo), el yaw se copia por rotación suave.
+  class PuppetBehaviour {
+    constructor(entityId) {
+      this.entityId = entityId;
+    }
+  }
+
   function rotateTowards(spider, targetVector) {
     const currentEuler = spider.orientation.getEulerAnglesYXZ();
 
@@ -1957,6 +1966,75 @@
         }
       }
     });
+
+    // Puppet: espejo de arañas NATIVAS del server (/spider replace). La mesh
+    // nativa se oculta cada tick (el render loop puede re-mostrarla) y el
+    // cuerpo copia posición/yaw; la física de patas sigue el suelo sola.
+    app.onTick(() => {
+      if (!sim.replace.on) return;
+      const map = sim.replace.map;
+      for (const [entity, spider, puppet] of app.query('SpiderBody', 'PuppetBehaviour')) {
+        void entity;
+        const rec = sim.spiders.find((r) => r.entity === entity);
+        const native = map?.get?.(puppet.entityId) ?? null;
+        if (!native || !native.pos || !rec) {
+          if (rec) despawnPuppetRecord(rec, 'araña server desapareció');
+          continue;
+        }
+        rec.native = native; // refrescar (el mapa puede recrearse)
+        if (native.mesh && native.mesh.visible !== false) {
+          try { native.mesh.visible = false; } catch (_) {}
+        }
+        const dx = native.pos.x - spider.position.x;
+        const dz = native.pos.z - spider.position.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist > 0.05) {
+          // persecución proporcional con techo: pegada cuando está cerca
+          const speed = Math.min(spider.gait.maxSpeed * 3, 1 + dist * 4);
+          spider.velocity.x = dx / dist * speed;
+          spider.velocity.z = dz / dist * speed;
+        } else {
+          spider.velocity.x = 0;
+          spider.velocity.z = 0;
+        }
+        // altura: la y nativa es el CENTRO del hitbox → suelo = y - altura/2;
+        // el cuerpo se FIJA a bodyHeight sobre ese suelo. Con gaits gigantes
+        // la fuerza normal deriva (equilibrio en +66): el control por velocidad
+        // realimenta ese resorte, así que imponemos la posición directamente y
+        // anulamos vy (la gravedad de un tick es despreciable).
+        const half = (Number(native.height) || 0.9) / 2;
+        spider.position.y = native.pos.y - half + spider.lerpedGait().bodyHeight;
+        spider.velocity.y = 0;
+        spider.isWalking = dist > 0.2;
+        const yaw = Number(native.yaw ?? native.bodyYaw ?? 0) || 0;
+        rotateTowards(spider, new Vec(Math.sin(yaw), 0, Math.cos(yaw)));
+      }
+    });
+
+    // Replace scan: cada 10 ticks (500 ms) descubre arañas nativas nuevas y
+    // les crea un títere con el preset 'spider' a sim.replace.scale de alto.
+    app.onTick(() => {
+      if (!sim.replace.on || sim.tickCount % 10 !== 0) return;
+      const map = resolveEntityMap(sim.world.game);
+      if (!map) return;
+      sim.replace.map = map;
+      for (const native of map.values()) {
+        if (entityTypeOf(native) !== 'spider') continue;
+        const id = native.id ?? native.entityId ?? native.uuid;
+        if (id === undefined || !native.pos) continue;
+        const name = 'srv-' + id;
+        if (sim.spiders.some((r) => r.name === name)) continue;
+        const hit = sim.world.raycastGround(new Vec(native.pos.x, native.pos.y + 40, native.pos.z), DOWN_VECTOR(), 80);
+        const y = (hit ? hit.y : native.pos.y) + 4;
+        const spider = spawnSpider(name, 'spider', native.pos.x, y, native.pos.z, Number(native.yaw ?? 0) || 0, false, sim.replace.scale);
+        const rec = sim.spiders[sim.spiders.length - 1];
+        rec.puppet = true;
+        rec.native = native;
+        rec.entity.replace('PuppetBehaviour', new PuppetBehaviour(id));
+        emit({ type: 'add', spider: serializeSpider(spider, name, 'spider') });
+        LOG.i('replace: server', id, '→', name, 'altura', sim.replace.scale);
+      }
+    });
   }
 
   function setupSpiderBody(app) {
@@ -1975,14 +2053,60 @@
   const sim = {
     app: new ECS(),
     world: new LiveWorld(),
-    spiders: [], // { entity, body, name, preset }
+    spiders: [], // { entity, body, name, preset, puppet?, native? }
     lastPlayerPos: null,
     tickCount: 0,
     interval: 0,
     running: false,
     initialSpawnsDone: false, // arañas iniciales ya creadas (o suprimidas por clear)
     onMessage: null, // callback del renderer (SpiderBot) para add/remove/frame
+    replace: { on: false, scale: 100, map: null }, // reemplazo de arañas del server
   };
+
+  // ── resolución de entidades nativas (patrón TinyTakeover/MF_Morph) ──
+  function isMapLike(v) {
+    return !!v && typeof v.forEach === 'function' && typeof v.values === 'function' && v.size !== undefined;
+  }
+
+  function resolveEntityMap(game) {
+    for (const candidate of [
+      game?.world?.entitiesDump, game?.world?.entities, game?.world?.entityMap, game?.entityManager?.entities,
+    ]) {
+      if (!isMapLike(candidate) || candidate.size === 0) continue;
+      for (const entity of candidate.values()) {
+        if (entity && (entity.pos || entity.mesh || entity.id !== undefined)) return candidate;
+      }
+    }
+    return null;
+  }
+
+  function entityTypeOf(entity) {
+    if (typeof entity?.type === 'string' && entity.type) return entity.type.toLowerCase();
+    if (typeof entity?.entityType === 'string' && entity.entityType) return entity.entityType.toLowerCase();
+    return (entity?.constructor?.name || '').replace(/^Entity/, '').toLowerCase();
+  }
+
+  // quita un títere: restaura la mesh nativa y despawnea el espejo
+  function despawnPuppetRecord(rec, reason) {
+    try { if (rec.native?.mesh) rec.native.mesh.visible = true; } catch (_) {}
+    rec.entity.remove();
+    const i = sim.spiders.indexOf(rec);
+    if (i >= 0) sim.spiders.splice(i, 1);
+    emit({ type: 'remove', name: rec.name });
+    LOG.i('replace: fuera', rec.name, reason || '');
+  }
+
+  function replaceOff() {
+    sim.replace.on = false;
+    sim.replace.map = null;
+    for (const rec of sim.spiders.filter((r) => r.puppet)) {
+      try { if (rec.native?.mesh) rec.native.mesh.visible = true; } catch (_) {}
+      rec.entity.remove();
+      emit({ type: 'remove', name: rec.name });
+    }
+    sim.spiders = sim.spiders.filter((r) => !r.puppet);
+    LOG.i('replace OFF');
+  }
 
   // Multiplicador global de estilización: patas LARGAS y DELGADAS en todos
   // los presets. sl escala la longitud de cada segmento (más alcance) y el
@@ -2202,6 +2326,17 @@
         s.entity.replace('HuntBehaviour', new HuntBehaviour(opts));
       }
       LOG.i('hunt ON', opts);
+    } else if (msg.type === 'replace') {
+      // /spider replace [scale] | off — arañas del server → preset 'spider'
+      const off = (msg.off === true) || String(msg.off ?? '').toLowerCase() === 'off';
+      if (off) { replaceOff(); return; }
+      const scale = Number(msg.scale);
+      sim.replace = {
+        on: true,
+        scale: Number.isFinite(scale) && scale > 0 ? Math.min(200, scale) : 100,
+        map: null,
+      };
+      LOG.i('replace ON: arañas server → spider, altura', sim.replace.scale);
     } else if (msg.type === 'tphere') {
       const p = sim.lastPlayerPos;
       if (!p || !(Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z))) {
@@ -2288,6 +2423,7 @@
   function anchorSpidersToPlayer() {
     const p = sim.lastPlayerPos;
     for (const s of sim.spiders) {
+      if (s.puppet) continue; // los títeres siguen a su araña server, no al jugador
       const b = s.body;
       // altura de reposo del gigante (p.ej. giant_kraken flota a 10): colocar
       // el cuerpo a groundY + bodyHeight para que no caiga durante el re-asentado
@@ -2309,7 +2445,8 @@
 
   function setupDefaultBehaviourTick() {
     for (const [entity] of sim.app.query('SpiderBody')) {
-      if (!entity.has('TargetBehaviour') && !entity.has('StayStillBehaviour') && !entity.has('PathfindBehaviour')) {
+      if (!entity.has('TargetBehaviour') && !entity.has('StayStillBehaviour') && !entity.has('PathfindBehaviour')
+        && !entity.has('HuntBehaviour') && !entity.has('PuppetBehaviour')) {
         entity.add('StayStillBehaviour', new StayStillBehaviour());
       }
     }
@@ -2510,7 +2647,16 @@
       }));
     },
     clear() {
-      for (const s of [...sim.spiders]) s.entity.remove();
+      // restaurar las meshes nativas de los títeres antes de borrarlos
+      for (const rec of sim.spiders) {
+        if (rec.puppet) { try { if (rec.native?.mesh) rec.native.mesh.visible = true; } catch (_) {} }
+      }
+      sim.replace.on = false; // y no re-crearlas en el próximo scan
+      // emit remove por araña: el renderer local Y el peer P2P deben limpiar
+      for (const s of [...sim.spiders]) {
+        emit({ type: 'remove', name: s.name });
+        s.entity.remove();
+      }
       sim.spiders.length = 0;
       // suprimir también las iniciales: si clear dejó la lista vacía, el tick
       // del renderer volvería a crearlas → nunca más en esta sesión

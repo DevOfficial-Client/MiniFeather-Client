@@ -542,6 +542,9 @@ function handleMsg(msg) {
             // Look Sync: re-enviar mi look actual (por si el peer conectó
             // tarde y no vio la skin/morph que ya tenía puesta)
             setTimeout(() => { try { window.MF_Peer.resendLook(); } catch {} }, 800);
+            // SpiderSync: si soy host, re-enviar el estado de las arañas
+            // (el sim emite un 'add' por cada una al recibir 'hello')
+            setTimeout(() => { try { globalThis.MF_SPIDER_BOT?.onPeerConnected?.(); } catch {} }, 600);
             break;
         case 'sync':
             if (state.role === 'guest') onSyncGuest(msg);
@@ -562,6 +565,10 @@ function handleMsg(msg) {
             // pat compartido: reproducirlo localmente (mano + squish + agachada
             // de camara si el que lo recibio soy yo)
             try { globalThis.MiniFeatherPatPat?.remotePat?.(msg); } catch {}
+            break;
+        case 'spider':
+            // SpiderSync: mensaje del sim de arañas del peer → renderer local
+            try { globalThis.MF_SPIDER_BOT?.remoteApply?.(msg.m); } catch {}
             break;
         case 'scale':
             // TitanTiny compartido: escalar la entidad del OTRO jugador en MI
@@ -1052,6 +1059,8 @@ function wireConn(conn) {
     conn.on('close', () => {
         log('conexion cerrada');
         if (state.role === 'guest') killPuppet();
+        // SpiderSync: fuera las arañas remotas del peer
+        try { globalThis.MF_SPIDER_BOT?.remoteApply?.({ type: 'clear' }); } catch {}
         // limpiar customs genericos remotos (puppets)
         for (const id of [...ents.remote.keys()]) {
             try { window.MF_CustomModels?.despawn?.(id, true); } catch {}
