@@ -64,6 +64,25 @@ globalThis.MF_ExperimentalRegistry = api;
 // First real Experimental feature. The renderer itself lives in MAIN world;
 // this registry only tells the panel how to present and persist the toggle.
 api.register({
+  id: 'realistic-mode',
+  settingsKey: 'experimentalRealistic',
+  levelKey: 'experimentalRealisticLevel',
+  levelLabelKey: 'experimentalRealisticQuality',
+  levels: [
+    { value: 'low', labelKey: 'experimentalRealisticLow', label: 'Low' },
+    { value: 'medium', labelKey: 'experimentalRealisticMedium', label: 'Medium' },
+    { value: 'high', labelKey: 'experimentalRealisticHigh', label: 'High' },
+    { value: 'extreme', labelKey: 'experimentalRealisticExtreme', label: 'Extreme' }
+  ],
+  title: 'Realistic Mode',
+  titleKey: 'experimentalRealisticTitle',
+  descriptionKey: 'experimentalRealisticDesc',
+  icon: '🌤️',
+  badge: 'EXPERIMENTAL',
+  order: 5
+});
+
+api.register({
   id: 'aurora-borealis',
   settingsKey: 'experimentalAurora',
   levelKey: 'experimentalAuroraLevel',
