@@ -1,7 +1,7 @@
 {
-  "builtAt": "2026-09-13T02:30:00Z",
+  "builtAt": "2026-09-14T01:14:00Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Local Games keeps native mobs alive through render recovery, spawns them only in rendered chunks near the player, preserves native movement constants, and keeps host-authoritative synchronization.",
-  "version": "4.13.5"
+  "note": "Realistic Mode adds shader-pack water with strong angle-dependent transparency, multi-directional swells, choppy crests, fast ripples, Fresnel sky reflections and bright moving highlights while preserving lava and native refraction.",
+  "version": "4.14.6"
 }

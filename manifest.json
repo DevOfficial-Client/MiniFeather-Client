@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.13.5",
-  "description": "MiniFeather Client for MiniBlox — Experimental 3D Grass Replacement with Low/Medium/High physics, Aurora, Natural Grass Details and Animated Items",
+  "version": "4.14.6",
+  "description": "MiniFeather Client for MiniBlox — Realistic lighting, shadows, water, volumetric clouds, 3D grass and auroras",
   "permissions": [
     "storage",
     "declarativeNetRequest",
@@ -109,6 +109,7 @@
         "src/Studio/MF_Peer.js",
         "src/Shaders/CustomShader.js",
         "src/Shaders/CustomShaderSafetyPatch.js",
+        "src/Experimental/Realistic/RealisticMode.js",
         "src/HUD/GUIPatch.js",
         "src/Cosmetics/Emotes.js",
         "src/Studio/MF_FaceSwap.js",

@@ -447,9 +447,8 @@
     panelBackgroundColor: '#0e1115',
     panelScale: 68,
     pageZoomEnabled: true,
-    experimentalAurora: false,
-    experimentalAuroraLevel: 'medium',
-    experimentalGrassFlowers: false,
+    experimentalRealistic: false,
+    experimentalRealisticLevel: 'medium',
     experimentalAurora: false,
     experimentalAuroraLevel: 'medium',
     experimentalGrassFlowers: false,
@@ -9635,6 +9634,22 @@ function renderCreditsPage() {
         detail: JSON.stringify({
           enabled: !!settings.experimentalAurora,
           level: ['low', 'medium', 'high'].includes(String(settings.experimentalAuroraLevel))
+            ? String(settings.experimentalAuroraLevel)
+            : 'medium'
+        })
+      })
+    );
+    document.dispatchEvent(
+      new CustomEvent('minifeather:realistic-config', {
+        detail: JSON.stringify({
+          enabled: !!settings.experimentalRealistic,
+          level: ['low', 'medium', 'high', 'extreme'].includes(String(settings.experimentalRealisticLevel))
+            ? String(settings.experimentalRealisticLevel)
+            : 'medium',
+          leafEnabled: !!settings.leafWind,
+          leafStrength: Number(settings.leafWindStrength) || 0.085,
+          auroraEnabled: !!settings.experimentalAurora,
+          auroraLevel: ['low', 'medium', 'high'].includes(String(settings.experimentalAuroraLevel))
             ? String(settings.experimentalAuroraLevel)
             : 'medium'
         })
