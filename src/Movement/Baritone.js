@@ -76,7 +76,17 @@ const state = {
     followTarget: null,      // username a seguir
     followEntity: null,      // entity cacheada
     lastFollowScan: 0,
-    followRepathAt: 0
+    followRepathAt: 0,
+    // acciones (maquina de estados inspirada en SpiderSim)
+    action: null,
+    actionPhase: 'idle',
+    actionStartedAt: 0,
+    actionNextAt: 0,
+    heldMouseButton: null,
+    manualJumpUntil: 0,
+    playerPositions: new Map(),
+    nextPlayerScanAt: 0,
+    autoMine: true
 };
 
 function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
@@ -87,6 +97,7 @@ const desiredInput = {
     forward: 0,     // -1 (back) to 1 (forward)
     jump: false,
     sneak: false,
+    sprint: false,
     yaw: null       // target yaw to set
 };
 
@@ -324,7 +335,7 @@ function createNativeInput(player, controls) {
         pitch: Number(player.pitch) || 0,
         jump: controls.jump,
         sneak: controls.sneak,
-        sprint: false,
+        sprint: !!controls.sprint,
         pos: null,
         ackId: player.lastServerAckId > 0 ? player.lastServerAckId : undefined,
         onGround: player.onGround,
@@ -394,7 +405,7 @@ function hookPlayerInput() {
     const applyWrites = state.applyWrites;
 
     player[readerName] = function (...args) {
-        if (!state.enabled || state.status !== 'moving' || state.player !== this) {
+        if (!state.enabled || state.status === 'idle' || state.status === 'failed' || state.player !== this) {
             return originalReader.apply(this, args);
         }
 
@@ -469,8 +480,9 @@ function looksLikeEntityMap(value) {
 }
 
 let entityMapCache = null;
+let entityMapOwner = null;
 function resolveEntityMap(game) {
-    if (entityMapCache && looksLikeEntityMap(entityMapCache)) return entityMapCache;
+    if (entityMapOwner === game && entityMapCache && looksLikeEntityMap(entityMapCache)) return entityMapCache;
     const direct = [
         game?.world?.entitiesDump,
         game?.world?.entities,
@@ -480,6 +492,7 @@ function resolveEntityMap(game) {
     for (const candidate of direct) {
         if (!looksLikeEntityMap(candidate)) continue;
         entityMapCache = candidate;
+        entityMapOwner = game;
         return candidate;
     }
     return null;
@@ -502,6 +515,42 @@ function findPlayerEntity(username) {
         }
     } catch (_) {}
     return null;
+}
+
+function updatePlayerPositions(now = performance.now(), force = false) {
+    if (!force && now < state.nextPlayerScanAt) return;
+    state.nextPlayerScanAt = now + 250;
+    const entities = resolveEntityMap(getGame());
+    if (!entities) return;
+    try {
+        for (const entity of entities.values()) {
+            const username = entity?.profile?.username;
+            if (typeof username !== 'string' || !entity?.pos) continue;
+            state.playerPositions.set(username.toLowerCase(), {
+                username,
+                x: Number(entity.pos.x), y: Number(entity.pos.y), z: Number(entity.pos.z),
+                seenAt: Date.now(), loaded: true
+            });
+        }
+        for (const entry of state.playerPositions.values()) entry.loaded = false;
+        for (const entity of entities.values()) {
+            const username = entity?.profile?.username;
+            if (typeof username === 'string') {
+                const entry = state.playerPositions.get(username.toLowerCase());
+                if (entry) entry.loaded = true;
+            }
+        }
+    } catch (_) {}
+}
+
+function locatePlayer(username) {
+    updatePlayerPositions(performance.now(), true);
+    const entity = findPlayerEntity(username);
+    if (entity?.pos) {
+        return { username: entity.profile?.username || String(username), x: entity.pos.x, y: entity.pos.y, z: entity.pos.z, loaded: true, seenAt: Date.now() };
+    }
+    const cached = state.playerPositions.get(String(username).toLowerCase());
+    return cached ? { ...cached } : null;
 }
 
 // --- Block Access ---
@@ -819,18 +868,41 @@ function aimCameraAt(player, tx, ty, tz, speed = 0.35) {
     return turnCamera(player, yaw, pitch, speed);
 }
 
-function applyMovementInput(player, strafe, forward, jump, sneak, yaw, pitch) {
+function applyMovementInput(player, strafe, forward, jump, sneak, yaw, pitch, sprint = false) {
     // Set desiredInput — the hooked reader will inject these as native input each tick
     desiredInput.strafe = strafe;
     desiredInput.forward = forward;
     desiredInput.jump = jump;
     desiredInput.sneak = sneak;
+    desiredInput.sprint = sprint;
     // el yaw va DENTRO del input: el pipeline del juego lo aplica al player
     // (player.yaw lo pisa la camara cada tick, escribirlo directo no sirve)
     desiredInput.yaw = yaw != null ? yaw : Number(player.yaw) || 0;
     // girar la camara hacia el rumbo SOLO si no hay follow activo: en follow
     // la mira aimbot sobre la cabeza del objetivo manda (no pelear con ella)
     if (yaw != null && !state.followTarget) turnCamera(player, yaw, pitch);
+}
+
+function obstacleNeedsJump(player, dx, dz) {
+    const len = Math.hypot(dx, dz);
+    if (len < 0.05) return false;
+    const x = Math.floor(player.pos.x + (dx / len) * 0.8);
+    const y = Math.floor(player.pos.y);
+    const z = Math.floor(player.pos.z + (dz / len) * 0.8);
+    return isSolid(x, y, z) && !isSolid(x, y + 1, z);
+}
+
+function blockingBlockAhead(player, dx, dz) {
+    const len = Math.hypot(dx, dz);
+    if (len < 0.05) return null;
+    const x = Math.floor(player.pos.x + (dx / len) * 0.78);
+    const z = Math.floor(player.pos.z + (dz / len) * 0.78);
+    const feetY = Math.floor(player.pos.y);
+    for (const y of [feetY + 1, feetY]) {
+        const bs = getBlockState(x, y, z);
+        if (bs && bs.id !== 0 && ![8, 9, 10, 11].includes(bs.id)) return { x, y, z };
+    }
+    return null;
 }
 
 function executePath(player, keepAlive = false) {
@@ -889,7 +961,8 @@ function executePath(player, keepAlive = false) {
 
     // Check if we need to jump
     const dy = target.y - py;
-    const needJump = dy > 0.5 && Math.abs(dx) < 1.2 && Math.abs(dz) < 1.2;
+    const needJump = (dy > 0.5 && Math.abs(dx) < 1.2 && Math.abs(dz) < 1.2) ||
+        obstacleNeedsJump(player, dx, dz);
 
     // Caminar en ARCO (como bots reales): forward SIEMPRE activo (>0.3 para
     // el boton up), strafe corrige el rumbo. Asi caminamos aunque el campo
@@ -919,7 +992,7 @@ function executePath(player, keepAlive = false) {
     }
 
     // yaw objetivo via input (si el juego lo aplica, gira de verdad y mas rapido)
-    applyMovementInput(player, strafe, forward, needJump, false, newYaw);
+    applyMovementInput(player, strafe, forward, needJump, false, newYaw, undefined, true);
 
     // Re-path if stuck
     state.repathTimer++;
@@ -930,6 +1003,13 @@ function executePath(player, keepAlive = false) {
             if (moved < 0.5) {
                 state._stuckCount = (state._stuckCount || 0) + 1;
                 console.log(`${TAG} Stuck detected (x${state._stuckCount}), re-pathing`);
+                const obstacle = state.autoMine ? blockingBlockAhead(player, dx, dz) : null;
+                if (obstacle && state.goal) {
+                    const resumeGoal = { ...state.goal };
+                    console.log(`${TAG} Mining blocking block before resuming path`, obstacle);
+                    startBlockAction('mine', obstacle.x, obstacle.y, obstacle.z, null, resumeGoal);
+                    return false;
+                }
                 // al 2do stuck seguido: diagnosticar automaticamente por que
                 // no se mueve (reader no llamado vs input que no aplica)
                 if (state._stuckCount === 2 && injectedTicks === 0) {
@@ -959,6 +1039,9 @@ function follow(username) {
         return false;
     }
 
+    releaseMouse();
+    state.action = null;
+    state.actionPhase = 'idle';
     state.enabled = true;
     state.followTarget = String(username);
     state.followEntity = entity;
@@ -983,7 +1066,7 @@ function stopFollow(silent = false) {
 // boton up), strafe corrige el rumbo, yaw via input por si aplica. Con
 // auto-calibracion del signo: si tras 40 ticks el error de yaw empeoro,
 // el arco gira al lado equivocado para esta version → invertir.
-function directChase(player, dx, dz) {
+function directChase(player, dx, dz, forceJump = false) {
     const targetYaw = Math.atan2(-dx, dz);
     let yawDiff = targetYaw - Number(player.yaw || 0);
     while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
@@ -1012,7 +1095,8 @@ function directChase(player, dx, dz) {
     }
 
     const newYaw = Number(player.yaw || 0) + clamp(yawDiff, -0.3, 0.3);
-    applyMovementInput(player, strafe, forward, false, false, newYaw);
+    const jump = forceJump || obstacleNeedsJump(player, dx, dz);
+    applyMovementInput(player, strafe, forward, jump, false, newYaw, undefined, true);
 }
 
 // re-target cada ~1.5s: el objetivo se mueve, la ruta no puede ser fija
@@ -1090,12 +1174,274 @@ function followTick(player, now) {
     return true;
 }
 
+// --- Acciones: colocar, minar y combate ---
+function getInputSurface() {
+    const renderer = state.game?.renderer;
+    return renderer?.domElement || renderer?.canvas ||
+        document.querySelector('canvas') || document.body;
+}
+
+function dispatchMouse(button, down) {
+    const target = getInputSurface();
+    if (!target) return false;
+    const rect = target.getBoundingClientRect?.() || { left: 0, top: 0, width: innerWidth, height: innerHeight };
+    const init = {
+        bubbles: true, cancelable: true, composed: true,
+        button, buttons: down ? (button === 0 ? 1 : button === 1 ? 4 : 2) : 0,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        pointerId: 1, pointerType: 'mouse', isPrimary: true
+    };
+    try {
+        if (typeof PointerEvent === 'function') target.dispatchEvent(new PointerEvent(down ? 'pointerdown' : 'pointerup', init));
+        target.dispatchEvent(new MouseEvent(down ? 'mousedown' : 'mouseup', init));
+        return true;
+    } catch (_) { return false; }
+}
+
+function releaseMouse() {
+    if (state.heldMouseButton == null) return;
+    dispatchMouse(state.heldMouseButton, false);
+    state.heldMouseButton = null;
+}
+
+function clickMouse(button) {
+    dispatchMouse(button, true);
+    setTimeout(() => dispatchMouse(button, false), 45);
+}
+
+function selectHotbarSlot(slot) {
+    const n = Math.floor(Number(slot));
+    if (n < 1 || n > 9) return;
+    const target = getInputSurface();
+    const init = { key: String(n), code: `Digit${n}`, bubbles: true, cancelable: true };
+    try {
+        target.dispatchEvent(new KeyboardEvent('keydown', init));
+        target.dispatchEvent(new KeyboardEvent('keyup', init));
+    } catch (_) {}
+}
+
+function eyeDistance(player, x, y, z) {
+    return Math.hypot(x - player.pos.x, y - (player.pos.y + 1.62), z - player.pos.z);
+}
+
+function findActionStand(player, target, reach = 4.4) {
+    const candidates = [];
+    for (let dy = -3; dy <= 3; dy++) {
+        for (let dx = -4; dx <= 4; dx++) {
+            for (let dz = -4; dz <= 4; dz++) {
+                const x = target.x + dx, y = target.y + dy, z = target.z + dz;
+                if (!canStand(x, y, z)) continue;
+                const fromEye = Math.hypot(target.x + 0.5 - (x + 0.5), target.y + 0.5 - (y + 1.62), target.z + 0.5 - (z + 0.5));
+                if (fromEye > reach) continue;
+                candidates.push({ x, y, z, score: Math.hypot(x - player.pos.x, y - player.pos.y, z - player.pos.z) });
+            }
+        }
+    }
+    candidates.sort((a, b) => a.score - b.score);
+    return candidates[0] || null;
+}
+
+function findPlaceAnchor(target, player) {
+    const faces = [
+        [0, -1, 0], [0, 1, 0], [-1, 0, 0], [1, 0, 0], [0, 0, -1], [0, 0, 1]
+    ];
+    const anchors = [];
+    for (const [dx, dy, dz] of faces) {
+        const x = target.x + dx, y = target.y + dy, z = target.z + dz;
+        if (!isSolid(x, y, z)) continue;
+        anchors.push({
+            x: x + 0.5 - dx * 0.49,
+            y: y + 0.5 - dy * 0.49,
+            z: z + 0.5 - dz * 0.49,
+            score: eyeDistance(player, x + 0.5, y + 0.5, z + 0.5)
+        });
+    }
+    anchors.sort((a, b) => a.score - b.score);
+    return anchors[0] || null;
+}
+
+function setActionStatus(status, phase) {
+    const changed = state.status !== status || state.actionPhase !== phase;
+    state.status = status;
+    state.actionPhase = phase;
+    if (changed) emitState();
+}
+
+function planActionApproach(player) {
+    const action = state.action;
+    if (!action || action.type === 'attack') return false;
+    const stand = findActionStand(player, action);
+    if (!stand) return false;
+    state.goal = stand;
+    const path = findPath(player.pos.x, player.pos.y, player.pos.z, stand.x, stand.y, stand.z, 5000);
+    state.path = path || [];
+    state.pathIndex = 0;
+    state.repathTimer = 0;
+    state._lastPos = null;
+    action.repathAt = performance.now() + 1200;
+    return !!path;
+}
+
+function startBlockAction(type, x, y, z, slot, resumeGoal = null) {
+    const game = getGame(true);
+    const player = game?.player;
+    if (!player?.pos) return false;
+    releaseMouse();
+    stopFollow(true);
+    state.actionPhase = 'idle';
+    state.enabled = true;
+    state.action = { type, x: Math.floor(x), y: Math.floor(y), z: Math.floor(z), slot: Number(slot) || null, repathAt: 0, resumeGoal };
+    state.actionStartedAt = performance.now();
+    state.actionNextAt = performance.now() + 220;
+    state.path = [];
+    state.pathIndex = 0;
+    if (type === 'place' && state.action.slot) selectHotbarSlot(state.action.slot);
+    planActionApproach(player);
+    setActionStatus('moving', 'approaching');
+    console.log(`${TAG} ${type} block at ${state.action.x}, ${state.action.y}, ${state.action.z}`);
+    return true;
+}
+
+function attackPlayer(username) {
+    const game = getGame(true);
+    if (!game?.player) return false;
+    const entity = findPlayerEntity(username);
+    if (!entity?.pos) return false;
+    releaseMouse();
+    state.enabled = true;
+    state.action = { type: 'attack', username: String(username), entity };
+    state.followTarget = String(username);
+    state.followEntity = entity;
+    state.path = [];
+    state.pathIndex = 0;
+    state.actionNextAt = 0;
+    state.actionStartedAt = performance.now();
+    setActionStatus('moving', 'chasing');
+    console.log(`${TAG} Attacking "${username}" (local input)`);
+    return true;
+}
+
+function finishAction(reason, failed = false) {
+    releaseMouse();
+    const resumeGoal = !failed ? state.action?.resumeGoal : null;
+    state.action = null;
+    state.actionPhase = 'idle';
+    if (resumeGoal) {
+        console.log(`${TAG} ${reason}; resuming original route`);
+        goto(resumeGoal.x, resumeGoal.y, resumeGoal.z);
+        return;
+    }
+    stop(failed ? 'failed' : 'idle', reason);
+}
+
+function blockActionTick(player, now, action) {
+    const solid = blockSolidity(action.x, action.y, action.z);
+    if (action.type === 'mine' && solid === false) {
+        finishAction('Block mined');
+        return;
+    }
+    if (action.type === 'place' && solid === true) {
+        finishAction('Block placed');
+        return;
+    }
+    if (now - state.actionStartedAt > (action.type === 'mine' ? 20000 : 8000)) {
+        finishAction(`${action.type} timed out`, true);
+        return;
+    }
+
+    const tx = action.x + 0.5, ty = action.y + 0.5, tz = action.z + 0.5;
+    if (eyeDistance(player, tx, ty, tz) > 4.55) {
+        releaseMouse();
+        setActionStatus('moving', 'approaching');
+        if (state.path.length && state.pathIndex < state.path.length) executePath(player, true);
+        else if (now >= action.repathAt) planActionApproach(player);
+        return;
+    }
+
+    applyMovementInput(player, 0, 0, false, false);
+    if (action.type === 'mine') {
+        aimCameraAt(player, tx, ty, tz, 0.42);
+        setActionStatus('mining', 'acting');
+        if (now >= state.actionNextAt && state.heldMouseButton == null) {
+            dispatchMouse(0, true);
+            state.heldMouseButton = 0;
+        }
+        return;
+    }
+
+    const anchor = findPlaceAnchor(action, player);
+    if (!anchor) {
+        finishAction('No solid neighbor to place against', true);
+        return;
+    }
+    aimCameraAt(player, anchor.x, anchor.y, anchor.z, 0.42);
+    setActionStatus('placing', 'acting');
+    if (now >= state.actionNextAt) {
+        clickMouse(2);
+        state.actionNextAt = now + 480;
+    }
+}
+
+function combatTick(player, now, action) {
+    let entity = action.entity;
+    if (!entity?.pos || now - (action.lastScan || 0) > 800) {
+        action.lastScan = now;
+        entity = findPlayerEntity(action.username);
+        action.entity = entity;
+    }
+    if (!entity?.pos) {
+        applyMovementInput(player, 0, 0, false, false);
+        setActionStatus('attacking', 'waiting-target');
+        return;
+    }
+    const dx = entity.pos.x - player.pos.x;
+    const dy = entity.pos.y - player.pos.y;
+    const dz = entity.pos.z - player.pos.z;
+    const distance = Math.hypot(dx, dy, dz);
+    aimCameraAt(player, entity.pos.x, entity.pos.y + 1.35, entity.pos.z, 0.5);
+    state.goal = { x: Math.floor(entity.pos.x), y: Math.floor(entity.pos.y), z: Math.floor(entity.pos.z) };
+    if (distance > 3.45) {
+        setActionStatus('moving', 'chasing');
+        directChase(player, dx, dz, dy > 0.65);
+        return;
+    }
+    applyMovementInput(player, 0, distance < 1.7 ? -0.35 : 0, false, false);
+    setActionStatus('attacking', 'acting');
+    if (now >= state.actionNextAt) {
+        clickMouse(0);
+        state.actionNextAt = now + 520;
+    }
+}
+
+function actionTick(player, now) {
+    const action = state.action;
+    if (!action) return false;
+    if (action.type === 'attack') combatTick(player, now, action);
+    else blockActionTick(player, now, action);
+    return true;
+}
+
+function jumpOnce(ms = 420) {
+    const game = getGame(true);
+    if (!game?.player) return false;
+    state.enabled = true;
+    state.manualJumpUntil = performance.now() + clamp(Number(ms) || 420, 150, 1200);
+    state.status = 'moving';
+    state.actionPhase = 'jumping';
+    emitState();
+    return true;
+}
+
 // --- Commands ---
 function goto(x, y, z) {
     const game = getGame(true);
     if (!game?.player) { console.warn(`${TAG} No player`); return false; }
 
     stopFollow(true);
+    releaseMouse();
+    state.action = null;
+    state.actionPhase = 'idle';
     state.enabled = true;
     state.goal = { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) };
     state.status = 'pathfinding';
@@ -1138,18 +1484,23 @@ function repath() {
 }
 
 function stop(status = 'idle', reason = '') {
+    releaseMouse();
     state.path = [];
     state.pathIndex = 0;
     state.goal = null;
     state.status = status;
     state.followTarget = null;
     state.followEntity = null;
+    state.action = null;
+    state.actionPhase = 'idle';
+    state.manualJumpUntil = 0;
     state._loopErr = false;
     // Reset desired input so the hook doesn't keep moving us
     desiredInput.strafe = 0;
     desiredInput.forward = 0;
     desiredInput.jump = false;
     desiredInput.sneak = false;
+    desiredInput.sprint = false;
     desiredInput.yaw = null;
     // Neutralize movement fields on the player
     neutralMovement(state.player);
@@ -1159,12 +1510,15 @@ function stop(status = 'idle', reason = '') {
 
 // --- Main Loop ---
 function loop() {
+    // El rastreo es pasivo y sigue funcionando aunque el bot esté detenido.
+    try { updatePlayerPositions(performance.now()); } catch (_) {}
     if (state.enabled) {
         try {
             const game = getGame();
             const player = game?.player;
 
             if (game && player) {
+                const now = performance.now();
                 // Re-hook if player instance changed or not hooked yet
                 // (mismo patron que AntiAFK: sin checks extra como ticksExisted,
                 // que puede ser undefined y bloquear el hook para siempre)
@@ -1172,16 +1526,20 @@ function loop() {
                     restorePlayerHook();
                     hookPlayerInput();
                 }
-                if (state.status === 'moving') {
                 // probe activo: solo caminar recto y terminar al vencer
                 if (probeState) {
-                    if (performance.now() >= probeState.until) finishProbe();
+                    if (now >= probeState.until) finishProbe();
+                } else if (state.manualJumpUntil > now) {
+                    applyMovementInput(player, 0, 0, true, false);
+                } else if (state.manualJumpUntil) {
+                    stop('idle', 'Jump complete');
+                } else if (state.action) {
+                    actionTick(player, now);
                 } else if (state.followTarget) {
-                    followTick(player, performance.now());
-                } else if (state.path.length > 0) {
+                    followTick(player, now);
+                } else if (state.status === 'moving' && state.path.length > 0) {
                     executePath(player);
                 }
-            }
             }
         } catch (err) {
             // un throw aqui mataria el loop para siempre (rAF esta al final):
@@ -1226,6 +1584,18 @@ document.addEventListener(EVENT_COMMAND, event => {
         case 'follow':
             follow(cmd.username);
             break;
+        case 'mine':
+            startBlockAction('mine', cmd.x, cmd.y, cmd.z);
+            break;
+        case 'place':
+            startBlockAction('place', cmd.x, cmd.y, cmd.z, cmd.slot);
+            break;
+        case 'attack':
+            attackPlayer(cmd.username);
+            break;
+        case 'jump':
+            jumpOnce(cmd.ms);
+            break;
         case 'stop':
             stop('idle', 'User stopped');
             break;
@@ -1248,6 +1618,9 @@ function emitState() {
                 status: state.status,
                 goal: state.goal,
                 following: state.followTarget,
+                action: state.action ? { type: state.action.type, username: state.action.username, x: state.action.x, y: state.action.y, z: state.action.z } : null,
+                actionPhase: state.actionPhase,
+                autoMine: state.autoMine,
                 pathLength: state.path.length,
                 pathIndex: state.pathIndex
             })
@@ -1267,6 +1640,16 @@ globalThis.Baritone = {
         return goto(x, y, z);
     },
     follow(username) { return follow(username); },
+    attack(username) { return attackPlayer(username); },
+    mine(x, y, z) { return startBlockAction('mine', x, y, z); },
+    place(x, y, z, slot) { return startBlockAction('place', x, y, z, slot); },
+    jump(ms) { return jumpOnce(ms); },
+    locate(username) { return locatePlayer(username); },
+    players() {
+        updatePlayerPositions(performance.now(), true);
+        return [...state.playerPositions.values()].map(p => ({ ...p }));
+    },
+    setAutoMine(value) { state.autoMine = !!value; emitState(); return state.autoMine; },
     unfollow() { stopFollow(); },
     probe(ms) { return startProbe(ms); },
     stop() { stop('idle', 'API stop'); },
@@ -1292,6 +1675,10 @@ globalThis.Baritone = {
             msSinceLastInject: lastInjectAt ? Math.round(performance.now() - lastInjectAt) : null,
             desired: { ...desiredInput },
             followTarget: state.followTarget,
+            action: state.action ? { ...state.action, entity: undefined } : null,
+            actionPhase: state.actionPhase,
+            autoMine: state.autoMine,
+            trackedPlayers: state.playerPositions.size,
             path: state.path.length,
             pathIndex: state.pathIndex
         };

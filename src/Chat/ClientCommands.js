@@ -78,6 +78,10 @@
       '\\yellow\\/model anim <id> <name|stop> | anims <id> | move <id> <x y z>\\reset\\ - Anims & teleport',
       '\\yellow\\/baritone goto <x y z|waypoint>\\reset\\ - Walk to coords or waypoint',
       '\\yellow\\/baritone follow <player>\\reset\\ - Follow a player',
+      '\\yellow\\/baritone mine <x y z> | place <x y z> [slot]\\reset\\ - Mine or place a block',
+      '\\yellow\\/baritone attack <player> | jump\\reset\\ - Chase/attack or jump',
+      '\\yellow\\/baritone locate <player> | players\\reset\\ - Show live/last known positions',
+      '\\yellow\\/baritone automine <on|off>\\reset\\ - Mine blocks that obstruct a route',
       '\\yellow\\/baritone stop\\reset\\ - Stop walking',
       '\\yellow\\/p2p host [code]\\reset\\ - Share your Verity (friend: /p2p join <code>)',
       '\\yellow\\/p2p join <code>\\reset\\ - See friend\\\'s Verity',
@@ -1218,6 +1222,56 @@
         return;
       }
 
+      if (action === 'attack' || action === 'pegar') {
+        const username = rest.join(' ').trim();
+        if (!username) { addChat('Usage: /baritone attack <player>', 'error'); return; }
+        const ok = api.attack(username);
+        addChat(ok ? 'Attacking "' + username + '"...' : 'Player "' + username + '" is not loaded.', ok ? 'success' : 'error');
+        return;
+      }
+
+      if (action === 'mine' || action === 'minar' || action === 'place' || action === 'colocar') {
+        const isPlace = action === 'place' || action === 'colocar';
+        const nums = rest.slice(0, 3).map(Number);
+        if (rest.length < 3 || !nums.every(Number.isFinite)) {
+          addChat('Usage: /baritone ' + (isPlace ? 'place' : 'mine') + ' <x y z>' + (isPlace ? ' [hotbar slot 1-9]' : ''), 'error');
+          return;
+        }
+        const ok = isPlace ? api.place(nums[0], nums[1], nums[2], Number(rest[3])) : api.mine(nums[0], nums[1], nums[2]);
+        addChat(ok ? (isPlace ? 'Placing' : 'Mining') + ' at ' + nums.join(', ') + '...' : 'Could not start that action.', ok ? 'success' : 'error');
+        return;
+      }
+
+      if (action === 'jump' || action === 'saltar') {
+        const ok = api.jump();
+        addChat(ok ? 'Jumping.' : 'Baritone could not access the player.', ok ? 'success' : 'error');
+        return;
+      }
+
+      if (action === 'locate' || action === 'coords') {
+        const username = rest.join(' ').trim();
+        if (!username) { addChat('Usage: /baritone locate <player>', 'error'); return; }
+        const pos = api.locate(username);
+        if (!pos) addChat('No position received for "' + username + '". The server may not have sent that player.', 'error');
+        else addChat(pos.username + ': ' + pos.x.toFixed(1) + ', ' + pos.y.toFixed(1) + ', ' + pos.z.toFixed(1) + ' (' + (pos.loaded ? 'live' : 'last known') + ')', pos.loaded ? 'success' : 'normal');
+        return;
+      }
+
+      if (action === 'players' || action === 'jugadores') {
+        const players = api.players();
+        if (!players.length) addChat('No player positions have been received yet.');
+        else addChat(players.slice(0, 12).map(p => p.username + ' ' + p.x.toFixed(0) + ',' + p.y.toFixed(0) + ',' + p.z.toFixed(0) + (p.loaded ? '' : '*')).join(' | ') + (players.length > 12 ? ' | +' + (players.length - 12) : '') + ' (* last known)');
+        return;
+      }
+
+      if (action === 'automine') {
+        const value = (rest[0] || '').toLowerCase();
+        if (!['on', 'off'].includes(value)) { addChat('Usage: /baritone automine <on|off>', 'error'); return; }
+        api.setAutoMine(value === 'on');
+        addChat('Automatic obstacle mining: ' + value + '.', 'success');
+        return;
+      }
+
       if (action === 'stop' || action === 'cancel') {
         api.stop();
         addChat('Baritone stopped.', 'success');
@@ -1230,7 +1284,7 @@
         return;
       }
 
-      addChat('Usage: /baritone goto <x y z|waypoint> | follow <player> | stop | status', 'error');
+      addChat('Usage: /baritone goto|follow|mine|place|attack|jump|locate|players|automine|stop|status', 'error');
       return;
     }
 

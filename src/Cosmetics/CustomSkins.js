@@ -26,7 +26,7 @@
     }
 
     // ─── Carga de la base de datos de overrides ──────────────────────
-    // Formato (raíz del proyecto, accounts.json):
+    // Formato de la caché local:
     //   { "players": { "<uuid>": { "skin": "devs/itzesteban", ... } } }
     // Acepta clave por uuid (preferido, inmune a renombres) o username.
     // "skin" puede ser:
@@ -99,20 +99,16 @@
             return db;
         };
 
-        dbLoading = fetch('/accounts.json', { cache: 'no-store' })
-            .then(function (r) {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.json();
-            })
-            .then(finish)
-            .catch(function (e) {
-                warn('accounts.json local no disponible (' + (e && e.message || e) + '), usando sessionStorage');
-                try {
-                    var cached = sessionStorage.getItem(DB_KEY);
-                    if (cached) return finish(JSON.parse(cached));
-                } catch (_) {}
-                return finish(null);
-            });
+        // accounts.json fue retirado del paquete. No pedir /accounts.json al
+        // dominio de MiniBlox: responde 403 y Chrome lo registra como error
+        // de la extensión. Conservamos únicamente datos válidos de la sesión.
+        dbLoading = Promise.resolve().then(function () {
+            try {
+                var cached = sessionStorage.getItem(DB_KEY);
+                if (cached) return finish(JSON.parse(cached));
+            } catch (_) {}
+            return finish(null);
+        });
 
         return dbLoading;
     }
