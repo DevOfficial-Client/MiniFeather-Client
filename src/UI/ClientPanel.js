@@ -3866,6 +3866,7 @@
           <button id="mf-lg-create" class="mf-btn primary">${t('localGamesCreate')}</button>
           <button id="mf-lg-sandbox" class="mf-btn secondary">${t('localGamesSandbox')}</button>
         </div>
+        <button id="mf-lg-garden" class="mf-btn secondary" style="width:100%;margin-top:6px;padding:6px;font-size:12px;">🕷️ Spider Garden</button>
         <div class="mf-card-title" style="margin-top:12px;">${t('localGamesJoinByAddress')}</div>
         <div style="display:flex;gap:6px;margin-top:6px;">
           <input id="mf-lg-address-input" class="mf-input" type="text" placeholder="${t('localGamesAddressPlaceholder')}" autocomplete="off" spellcheck="false">
@@ -3923,6 +3924,10 @@
 
     container.querySelector('#mf-lg-sandbox')?.addEventListener('click', () => {
       sendLocalGamesCommand('start-single');
+    });
+
+    container.querySelector('#mf-lg-garden')?.addEventListener('click', () => {
+      sendLocalGamesCommand('start-garden');
     });
 
     container.querySelectorAll('[data-lg-mode]').forEach(btn => {

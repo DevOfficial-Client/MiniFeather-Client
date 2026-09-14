@@ -102,7 +102,8 @@ class RegionFile {
       const type = buf[4];
       let data = buf.subarray(5, 5 + length);
       if (type === 2) data = zlib.inflateSync(data);
-      const nbt = new NBTReader(data).root()[''];
+      // El root NBT del chunk es el compound del chunk directamente (sin wrapper '')
+      const nbt = new NBTReader(data).root();
       result = nbt ? nbt.sections || [] : [];
     }
     this.cache.set(key, result);
@@ -119,8 +120,9 @@ function extractBlocks(sections) {
   for (const section of sections) {
     if (!section) continue;
     const y0 = (section.Y ?? section.y ?? 0) * 16;
-    const palette = section.palette ? section.palette.map((p) => p.Name) : [];
-    const states = section.BlockStates || section.block_states?.data;
+    const blockStates = section.block_states || {};
+    const palette = blockStates.palette ? blockStates.palette.map((p) => p.Name) : section.palette?.map((p) => p.Name) || [];
+    const states = blockStates.data || section.BlockStates;
     if (!states) continue;
     const bits = Math.max(4, Math.ceil(Math.log2(palette.length || 1)));
     const bitBuffer = states instanceof BigInt64Array ? states : toBigIntArray(states);
@@ -139,7 +141,9 @@ function extractBlocks(sections) {
 
 function toBigIntArray(intArr) {
   const out = new BigInt64Array(intArr.length);
-  for (let i = 0; i < intArr.length; i++) out[i] = BigInt(intArr[i] >>> 0);
+  for (let i = 0; i < intArr.length; i++) {
+    out[i] = typeof intArr[i] === 'bigint' ? intArr[i] : BigInt(intArr[i] >>> 0);
+  }
   return out;
 }
 
@@ -177,7 +181,7 @@ class World {
   constructor(worldDir) {
     this.worldDir = worldDir;
     this.regions = new Map(); // "rx,rz" → RegionFile
-    this.heightmap = new Map(); // "x,z" → y del suelo
+    this.sectionBlocks = new Map(); // sección NBT → Map de bloques
     this.spawnedEntities = [];
   }
 
@@ -185,7 +189,13 @@ class World {
     const key = rx + ',' + rz;
     if (!this.regions.has(key)) {
       const file = path.join(this.worldDir, 'region', `r.${rx}.${rz}.mca`);
-      this.regions.set(key, fs.existsSync(file) ? new RegionFile(file) : null);
+      const region = fs.existsSync(file) ? new RegionFile(file) : null;
+      if (region) {
+        // base absoluta de los chunks de esta región (para exportar coords mundo)
+        region.baseCx = rx * 32;
+        region.baseCz = rz * 32;
+      }
+      this.regions.set(key, region);
     }
     return this.regions.get(key);
   }
@@ -206,40 +216,56 @@ class World {
 
   blocksFor(sections, sectionY) {
     for (const s of sections) {
-      if ((s.Y ?? s.y ?? 0) === sectionY) return extractBlocks(s);
+      if ((s.Y ?? s.y ?? 0) === sectionY) {
+        // caché por identidad de sección (las secciones ya viven en el caché de RegionFile)
+        let blocks = this.sectionBlocks.get(s);
+        if (!blocks) {
+          blocks = extractBlocks([s]);
+          this.sectionBlocks.set(s, blocks);
+        }
+        return blocks;
+      }
     }
     return null;
   }
 
-  // raycast vertical-first estilo Bukkit rayTraceBlocks (aprox: recorre voxels)
+  // DDA sobre voxels — replica Bukkit rayTraceBlocks(hitPosition en la cara de entrada)
   raycastGround(position, direction, maxDistance) {
-    // DDA sobre voxels — exacto como Bukkit para colisión de bloques
-    let x = position.x, y = position.y, z = position.z;
-    const stepX = Math.sign(direction.x) || 1e-9;
-    const stepY = Math.sign(direction.y) || 1e-9;
-    const stepZ = Math.sign(direction.z) || 1e-9;
-    const tDeltaX = Math.abs(1 / (direction.x || 1e-9));
-    const tDeltaY = Math.abs(1 / (direction.y || 1e-9));
-    const tDeltaZ = Math.abs(1 / (direction.z || 1e-9));
-    let bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
-    let tMaxX = intbound(x, stepX), tMaxY = intbound(y, stepY), tMaxZ = intbound(z, stepZ);
-    let travelled = 0;
-    while (travelled <= maxDistance) {
+    const dirLen = direction.length();
+    if (dirLen < 1e-12) return null;
+    const dx = direction.x / dirLen, dy = direction.y / dirLen, dz = direction.z / dirLen;
+    const ox = position.x, oy = position.y, oz = position.z;
+
+    const stepX = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+    const stepY = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
+    const stepZ = dz > 0 ? 1 : (dz < 0 ? -1 : 0);
+
+    const tDeltaX = stepX !== 0 ? Math.abs(1 / dx) : Infinity;
+    const tDeltaY = stepY !== 0 ? Math.abs(1 / dy) : Infinity;
+    const tDeltaZ = stepZ !== 0 ? Math.abs(1 / dz) : Infinity;
+
+    let bx = Math.floor(ox), by = Math.floor(oy), bz = Math.floor(oz);
+    let tMaxX = stepX !== 0 ? intbound(ox, dx) : Infinity;
+    let tMaxY = stepY !== 0 ? intbound(oy, dy) : Infinity;
+    let tMaxZ = stepZ !== 0 ? intbound(oz, dz) : Infinity;
+    let t = 0;
+
+    for (;;) {
       const block = this.getBlock(bx, by, bz);
       if (block && !block.isPassable) {
-        // hit en la cara de entrada — aproximamos al centro del voxel en x/z
-        return new (require('./vecmath').Vec)(bx + 0.5, by + 1, bz + 0.5);
+        // punto exacto de entrada al voxel
+        return new (require('./vecmath').Vec)(ox + dx * t, oy + dy * t, oz + dz * t);
       }
       if (tMaxX < tMaxY && tMaxX < tMaxZ) {
-        bx += Math.sign(stepX); travelled = tMaxX; tMaxX += tDeltaX;
+        t = tMaxX; bx += stepX; tMaxX += tDeltaX;
       } else if (tMaxY < tMaxZ) {
-        by += Math.sign(stepY); travelled = tMaxY; tMaxY += tDeltaY;
+        t = tMaxY; by += stepY; tMaxY += tDeltaY;
       } else {
-        bz += Math.sign(stepZ); travelled = tMaxZ; tMaxZ += tDeltaZ;
+        t = tMaxZ; bz += stepZ; tMaxZ += tDeltaZ;
       }
+      if (t > maxDistance) return null;
       if (by < -64 || by > 320) return null;
     }
-    return null;
   }
 
   isOnGround(position, downVector) {
@@ -257,10 +283,9 @@ class World {
 }
 
 function intbound(s, ds) {
+  // distancia a lo largo del rayo (dir normalizada) hasta el próximo límite de voxel
   if (ds > 0) return (Math.floor(s) + 1 - s) / ds;
-  if (castableIsInteger(s)) return 1;
-  return (s - Math.floor(s)) / -ds;
+  return (s - Math.floor(s)) / -ds; // ds<0; s entero → 0: cruza al voxel previo inmediatamente (como Bukkit)
 }
-function castableIsInteger(v) { return Number.isInteger(v); }
 
 module.exports = { readNBT, World, RegionFile, extractBlocks, NON_SOLID };

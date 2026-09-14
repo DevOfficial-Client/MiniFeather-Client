@@ -84,11 +84,13 @@ class Leg {
     this.chain.root.copy(this.attachmentPosition);
 
     if (this.spider.gait.straightenLegs) {
+      // Kotlin: Quaternionf(pivot) — ¡copia! (mutar el pivot corrompería spider.orientation)
       const pivot = PIVOT_MODES[this.spider.gait.legChainPivotMode](this.spider);
+      const pivotCopy = new Quat(pivot.x, pivot.y, pivot.z, pivot.w);
       const direction = this.endEffector.clone().sub(this.attachmentPosition);
-      const rotation = KinematicChain.getRotationAroundAxis(direction, pivot);
+      const rotation = KinematicChain.getRotationAroundAxis(direction, pivotCopy);
       rotation.x += this.spider.gait.legStraightenRotation;
-      const orientation = pivot.rotateYXZ(rotation.y, rotation.x, 0.0);
+      const orientation = pivotCopy.rotateYXZ(rotation.y, rotation.x, 0.0);
       this.chain.straightenDirection(orientation);
     }
 

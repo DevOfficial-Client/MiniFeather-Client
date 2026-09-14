@@ -1844,6 +1844,13 @@
         if (state.hooked.has(material)) return false;
         if (typeof material.onBeforeCompile !== 'function') return false;
 
+        // SpiderBot: las patas de las arañas comparten UN material. Si lo
+        // hookeamos, el shader inyectado puede fallar en la geometría simple
+        // del cubo (sin UVs) y TODAS las patas se vuelven invisibles.
+        // Los meshes se marcan con __mfSkipHook para que el renderer los
+        // respete: solo necesitan color base.
+        if (material.__mfSkipHook) return false;
+
         const preset = PRESETS[state.preset];
         if (!preset) return false;
 

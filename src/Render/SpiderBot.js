@@ -1,52 +1,125 @@
-// MiniFeather — SpiderBot: arañas-robot procedurales client-side
-// Porte del mod TheCymaera/minecraft-spider (Heledron):
-//   - torso: presets block_display (flat/boxy/stealth) → cajas three.js
-//   - patas: IK analítico 2-huesos + gait procedural (walk en diagonales)
-//   - variantes: angel (halo + alas + 8 patas), escala configurable
-// Los bloques MC se pintan con colores planos por material.
+// MiniFeather — SpiderBot: arañas-robot animadas por el simulador EMBEBIDO
+// (SpiderSim.js — port 1:1 de TheCymaera/minecraft-spider dentro de la página)
+//
+// Arquitectura (fusión: ya NO hay proceso Node ni WebSocket):
+//   MF_SPIDER_SIM (física real: FABRIK, gallop, normal force sobre los chunks
+//   nativos del juego) ──llamada directa──▶ este módulo (solo render)
+//
+// Modelo simplificado (optimización de lag, solicitado):
+//   - SIN torso: solo se renderizan las patas.
+//   - Cada pata = 2 cubos alargados (fémur + tibia) reutilizando la MISMA
+//     geometry y material para todas las arañas del mundo.
+//   - Los cubos se posicionan, orientan y escalan cada frame desde los joints
+//     que calcula el simulador (sin allocs por frame).
 
 (() => {
   'use strict';
   const TAG = '[MiniFeather SpiderBot]';
 
-  // paleta de materiales MC aproximada (hex)
-  const MAT_COLORS = {
-    netherite_block: 0x443a3b, polished_deepslate_slab: 0x333333,
-    anvil: 0x484243, smooth_quartz: 0xe8e3dc, gray_concrete: 0x383a3d,
-    black_shulker_box: 0x141519, gray_shulker_box: 0x383a3d,
-    cyan_shulker_box: 0x157788, black_concrete: 0x080a0f,
-    white_concrete: 0xd0d3d6, gold_block: 0xf8d33e,
-  };
-
-  // pares de patas: [rootX, rootY, rootZ, restX, restZ, segLen]
-  // (del hexapod() del mod; angel/octopod usa 4 pares)
-  const LEG_PAIRS_6 = [
-    [0, 0, 0.1, 1.0, 1.1, 1.1],
-    [0, 0, 0.0, 1.3, -0.3, 1.1],
-    [0, 0, -0.1, 1.2, -2.0, 1.6],
-  ];
-  const LEG_PAIRS_8 = [
-    [0, 0, 0.1, 1.0, 1.6, 1.1],
-    [0, 0, 0.0, 1.3, 0.4, 1.0],
-    [0, 0, -0.1, 1.3, -0.9, 1.1],
-    [0, 0, -0.2, 1.1, -2.5, 1.6],
-  ];
+  // ═══ logging de diagnóstico (nivel 0=off 1=básico 2=detalle 3=verboso) ═══
+  // Comparte nivel con SpiderSim vía localStorage['mf:spiderlog'].
+  const LOG = (() => {
+    let level = 0;
+    try { level = parseInt(localStorage.getItem('mf:spiderlog') || '0', 10) || 0; } catch (_) {}
+    const t0 = performance.now();
+    const ring = [];
+    const fmt = (v) => {
+      if (typeof v === 'number') return Math.round(v * 100) / 100;
+      if (Array.isArray(v)) return v.map(fmt).join(',');
+      return v;
+    };
+    const safeJson = (o) => { try { return JSON.stringify(o, (k, v) => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : v)); } catch { return String(o); } };
+    const write = (lvl, tag, args) => {
+      const entry = { t: Math.round(performance.now() - t0), lvl, tag, msg: args.map((a) => (typeof a === 'object' ? safeJson(a) : String(a))).join(' ') };
+      ring.push(entry);
+      if (ring.length > 300) ring.shift();
+      if (level >= lvl) console.log(TAG, `[${entry.t}ms]`, tag, ...args.map(fmt));
+    };
+    return {
+      get level() { return level; },
+      setLevel(l) {
+        level = (l | 0);
+        try { localStorage.setItem('mf:spiderlog', String(level)); } catch (_) {}
+        console.log(TAG, 'log level →', level);
+        // sincronizar con el sim (mismo storage)
+        try { globalThis.MF_SPIDER_SIM?.log?.(level); } catch (_) {}
+      },
+      refresh() { try { level = parseInt(localStorage.getItem('mf:spiderlog') || '0', 10) || 0; } catch (_) {} },
+      i: (...a) => write(1, 'info', a),
+      d: (...a) => write(2, 'detail', a),
+      v: (...a) => write(3, 'verbose', a),
+      dump(n = 30) { return ring.slice(-n); },
+    };
+  })();
 
   const state = {
     enabled: false, ctors: null, game: null,
-    spiders: new Map(),
-    lastTick: 0, raf: 0, lastGameScan: 0,
+    simConnected: false,
+    spiders: new Map(), // name → { root, legs[] }
+    pendingSpiders: [], // 'add' recibidos antes de haber escena/ctors
+    lastGameScan: 0,
+    lastTick: 0, raf: 0,
+    lastFrame: null,
+    lastAppliedFrameT: -1,
   };
 
-  // ─── infra (patrones TinyTakeover/WaterSplash) ───
+  // ═══ conexión con el simulador embebido (llamada directa, sin ws) ═══
+  function simAPI() {
+    return globalThis.MF_SPIDER_SIM || null;
+  }
+
+  function connectSim() {
+    const sim = simAPI();
+    if (!sim) { LOG.i('connectSim: MF_SPIDER_SIM no existe aún'); return false; }
+    // recibir add/remove/frame del sim
+    sim.onMessage(handleSimMessage);
+    // estado completo por si las arañas ya existían
+    sim.send({ type: 'hello' });
+    state.simConnected = true;
+    LOG.i('connectSim: conectado al sim embebido');
+    return true;
+  }
+
+  function handleSimMessage(msg) {
+    if (msg.type === 'add') {
+      LOG.i('← add:', msg.spider?.name, msg.spider?.preset, { legs: msg.spider?.legs?.length });
+      if (!addSimSpider(msg.spider)) {
+        LOG.d('add en cola (sin ctors/escena):', msg.spider?.name, { pending: state.pendingSpiders.length + 1 });
+        state.pendingSpiders.push(msg.spider);
+      }
+    } else if (msg.type === 'remove') {
+      LOG.i('← remove:', msg.name);
+      removeSpider(msg.name);
+      state.pendingSpiders = state.pendingSpiders.filter((s) => s.name !== msg.name);
+    } else if (msg.type === 'frame') {
+      state.lastFrame = msg;
+      LOG.v('← frame t=' + msg.t, msg.poses?.length + ' poses');
+    } else if (msg.type === 'hunt') {
+      // mordisco de la IA de caza → mensaje en el chat del juego
+      LOG.i('← hunt:', msg.event, msg.name, { bites: msg.bites, at: msg.at });
+      if (msg.event === 'bite') {
+        try {
+          state.game?.chat?.addChat?.({
+            text: `\\red\\🕷 ${msg.name} te mordió! (mordida #${msg.bites})`,
+          });
+        } catch (_) {}
+      }
+    }
+  }
+
+  // ═══ infra (patrones TinyTakeover/WaterSplash) ═══
+  // resolución robusta del singleton del juego: la ruta React (#react fiber)
+  // solo funciona si el árbol está montado, y globalThis.miniblox solo lo
+  // setea LocalGames. En mundos normales (servidores reales) hacemos dynamic
+  // import del módulo principal — misma técnica que LocalGames.resolveGameSingleton.
+  let moduleGameResolvePromise = null;
+
   function findGame(force = false) {
     const now = performance.now();
     if (!force && state.game?.player && state.game?.world && now - state.lastGameScan < 1200) return state.game;
-    state.lastGameScan = now;
     for (const candidate of [globalThis.miniblox, globalThis.__MINIBLOX_GAME__, state.game]) {
       if (candidate?.player && candidate?.world) { state.game = candidate; return candidate; }
     }
-    // React fiber: #react → updateQueue.baseState.element.props.game
     try {
       const react = document.querySelector('#react');
       if (react) {
@@ -60,7 +133,57 @@
         }
       }
     } catch (_) {}
-    return null;
+    // async: resolver vía import del módulo principal (no bloquea el tick)
+    resolveGameFromModule();
+    return state.game?.player && state.game?.world ? state.game : null;
+  }
+
+  function looksLikeGameSingleton(value) {
+    return !!(
+      value &&
+      typeof value === 'object' &&
+      typeof value.boot === 'function' &&
+      typeof value.queue === 'function' &&
+      typeof value.connect === 'function' &&
+      typeof value.inGame === 'function' &&
+      value.info &&
+      value.serverInfo
+    );
+  }
+
+  async function resolveGameFromModule() {
+    if (moduleGameResolvePromise) return moduleGameResolvePromise;
+    moduleGameResolvePromise = (async () => {
+      const urls = [];
+      const add = (url) => {
+        if (!url || typeof url !== 'string') return;
+        if (!url.includes('/assets/index-') || !url.endsWith('.js')) return;
+        if (!urls.includes(url)) urls.push(url);
+      };
+      try {
+        for (const s of document.querySelectorAll('script[type="module"][src]')) add(s.src);
+      } catch (_) {}
+      try {
+        for (const e of performance.getEntriesByType('resource')) add(e?.name);
+      } catch (_) {}
+      for (const url of urls) {
+        try {
+          const mod = await import(url);
+          if (!mod || typeof mod !== 'object') continue;
+          for (const value of Object.values(mod)) {
+            if (looksLikeGameSingleton(value) && value.player && value.world) {
+              state.game = value;
+              globalThis.miniblox = value;
+              globalThis.__MINIBLOX_GAME__ = value;
+              return value;
+            }
+          }
+        } catch (_) {}
+      }
+      return null;
+    })();
+    moduleGameResolvePromise.finally(() => { moduleGameResolvePromise = null; });
+    return moduleGameResolvePromise;
   }
 
   function getScene(game) {
@@ -73,40 +196,6 @@
       }
     } catch (_) {}
     return game?.scene?.scene || gs || null;
-  }
-
-  function getWorldProtoDeep(world) {
-    let proto = world && Object.getPrototypeOf(world);
-    for (let i = 0; i < 6 && proto; i++) {
-      if (typeof proto.getChunk === 'function' || typeof proto.getBlockState === 'function') return proto;
-      proto = Object.getPrototypeOf(proto);
-    }
-    return null;
-  }
-
-  // altura del suelo en la columna (x,z) cerca de y
-  function groundHeightAt(game, x, y, z) {
-    try {
-      const world = game?.world;
-      const proto = getWorldProtoDeep(world);
-      if (!proto?.getChunk) return null;
-      const bx = Math.floor(x), bz = Math.floor(z), by = Math.floor(y);
-      const at = (yy) => {
-        try {
-          const chunk = proto.getChunk.call(world, { x: bx, y: yy, z: bz });
-          if (chunk != null && !chunk.isDummyChunk && typeof chunk.getBlockState === 'function') {
-            return chunk.getBlockState({ x: bx, y: yy, z: bz });
-          }
-          return null;
-        } catch (_) { return null; }
-      };
-      for (let d = 6; d >= -6; d--) {
-        const s = at(by + d);
-        if (!s || s.id === 0) continue;
-        return by + d + 1; // cara superior del bloque
-      }
-      return null;
-    } catch (_) { return null; }
   }
 
   function findReferenceMesh(game) {
@@ -136,7 +225,6 @@
         }
       } catch (_) {}
     }
-    // Plan C (patrón CustomModels): rig del brazo del jugador
     if (!best) {
       try {
         const cam = game?.gameScene?.axesHelper?.parent;
@@ -166,9 +254,7 @@
     const Attr = ref.mesh.geometry.attributes.position.constructor;
     const MeshCtor = ref.mesh.constructor;
     const MaterialCtor = material.constructor;
-    let GroupCtor = null, Vector3Ctor = null;
-    // Plan principal (patrón CustomModels): el rig del brazo del jugador ES
-    // el Group real del juego — el renderer solo dibuja sus propias clases
+    let GroupCtor = null;
     try {
       const cam = game?.gameScene?.axesHelper?.parent;
       for (const child of cam?.children ?? []) {
@@ -192,36 +278,38 @@
       } catch (_) {}
     }
     if (!GroupCtor) return false;
-    // material de referencia para clonar (más robusto que new Material(params))
     state.refMaterial = material;
-    // Vector3 real del juego: rotateOnAxis/lookAt exigen instancia nativa
-    try {
-      const scratch = new GroupCtor();
-      if (scratch.position?.constructor) Vector3Ctor = scratch.position.constructor;
-      scratch.clear?.();
-    } catch (_) {}
-    state.ctors = { Geometry, Attr, Mesh: MeshCtor, Material: MaterialCtor, Group: GroupCtor, Vector3: Vector3Ctor };
-    console.log(TAG, 'constructores', Geometry?.name, MeshCtor?.name, GroupCtor?.name);
+    state.ctors = { Geometry, Attr, Mesh: MeshCtor, Material: MaterialCtor, Group: GroupCtor };
+    if (!state.ctorsLogged) {
+      state.ctorsLogged = true;
+      console.log(TAG, 'constructores', Geometry?.name, MeshCtor?.name, GroupCtor?.name);
+    }
     return true;
   }
 
-  // ─── utilidades de geometría ───
+  // ═══ geometría ═══
   function cubeGeometry(ctors) {
-    const quads = [
-      [[0,0,0],[1,0,0],[1,0,1],[0,0,1],[0,1,0],[1,1,0],[1,1,1],[0,1,1]], // índices de esquinas
-    ];
-    void quads;
-    // cubo unitario [0,1]^3 — 6 caras × 2 triángulos
+    // Cubo unitario CENTRADO en (0,0,0) — vértices de -0.5 a +0.5.
+    // applyPose coloca el mesh en el punto medio del segmento y escala
+    // (grosor, grosor, longitud): si el cubo no está centrado, cada mesh
+    // queda desplazado media longitud y las patas se ven con huecos.
     const P = [
-      0,0,1, 1,0,1, 1,1,1,  0,0,1, 1,1,1, 0,1,1,   // +z
-      1,0,0, 0,0,0, 0,1,0,  1,0,0, 0,1,0, 1,1,0,   // -z
-      1,0,1, 1,0,0, 1,1,0,  1,0,1, 1,1,0, 1,1,1,   // +x
-      0,0,0, 0,0,1, 0,1,1,  0,0,0, 0,1,1, 0,1,0,   // -x
-      0,1,1, 1,1,1, 1,1,0,  0,1,1, 1,1,0, 0,1,0,   // +y
-      0,0,0, 1,0,0, 1,0,1,  0,0,0, 1,0,1, 0,0,1,   // -y
+      -0.5,-0.5,0.5, 0.5,-0.5,0.5, 0.5,0.5,0.5,  -0.5,-0.5,0.5, 0.5,0.5,0.5, -0.5,0.5,0.5,
+      0.5,-0.5,-0.5, -0.5,-0.5,-0.5, -0.5,0.5,-0.5,  0.5,-0.5,-0.5, -0.5,0.5,-0.5, 0.5,0.5,-0.5,
+      0.5,-0.5,0.5, 0.5,-0.5,-0.5, 0.5,0.5,-0.5,  0.5,-0.5,0.5, 0.5,0.5,-0.5, 0.5,0.5,0.5,
+      -0.5,-0.5,-0.5, -0.5,-0.5,0.5, -0.5,0.5,0.5,  -0.5,-0.5,-0.5, -0.5,0.5,0.5, -0.5,0.5,-0.5,
+      -0.5,0.5,0.5, 0.5,0.5,0.5, 0.5,0.5,-0.5,  -0.5,0.5,0.5, 0.5,0.5,-0.5, -0.5,0.5,-0.5,
+      -0.5,-0.5,-0.5, 0.5,-0.5,-0.5, 0.5,-0.5,0.5,  -0.5,-0.5,-0.5, 0.5,-0.5,0.5, -0.5,-0.5,0.5,
     ];
+    const UV = [];
+    for (let f = 0; f < 6; f++) {
+      for (let t = 0; t < 2; t++) {
+        UV.push(0, 0,  1, 0,  1, 1,  0, 0,  1, 1,  0, 1);
+      }
+    }
     const geo = new ctors.Geometry();
     geo.setAttribute('position', new ctors.Attr(new Float32Array(P), 3));
+    geo.setAttribute('uv', new ctors.Attr(new Float32Array(UV), 2));
     const N = new Float32Array(P.length);
     recomputeFlatNormals(N, P);
     geo.setAttribute('normal', new ctors.Attr(N, 3));
@@ -242,416 +330,245 @@
     }
   }
 
-  // transforma vértices por matriz 4x4 column-major estilo MC transformation
-  // MC: transformation:[m00,m10,m20,m30, m01,m11,...] en realidad es
-  // row-major [xxx?] — el NBT usa 16 floats en orden columna: probamos
-  // estándar MC display (translation en índices 3,7,11)
-  function transformPositions(positions, mx) {
-    const pa = positions;
-    for (let i = 0; i < pa.length; i += 3) {
-      const x = pa[i], y = pa[i+1], z = pa[i+2];
-      pa[i]   = mx[0]*x + mx[1]*y + mx[2]*z + mx[3];
-      pa[i+1] = mx[4]*x + mx[5]*y + mx[6]*z + mx[7];
-      pa[i+2] = mx[8]*x + mx[9]*y + mx[10]*z + mx[11];
-    }
+  // Punta de la pata: pirámide con base cuadrada (z=-0.5, half-extent 0.5)
+  // que se afila hasta un vértice en z=+0.5. Se escala igual que el cubo
+  // (grosor, grosor, longitud) → el ápice cae exactamente en el end effector
+  // (el punto donde la física apoya la pata en el suelo).
+  function tipGeometry(ctors) {
+    const A = [-0.5,-0.5,-0.5], B = [0.5,-0.5,-0.5], C = [0.5,0.5,-0.5], D = [-0.5,0.5,-0.5];
+    const T = [0,0,0.5];
+    const P = [].concat(
+      A, B, T,   // cara inferior
+      D, T, C,   // cara superior
+      B, C, T,   // cara +X
+      A, T, D,   // cara -X
+      A, D, C,   // base (z-) triángulo 1
+      A, C, B    // base (z-) triángulo 2
+    );
+    const UV = [];
+    for (let f = 0; f < 6; f++) UV.push(0, 0, 1, 0, 1, 1);
+    const geo = new ctors.Geometry();
+    geo.setAttribute('position', new ctors.Attr(new Float32Array(P), 3));
+    geo.setAttribute('uv', new ctors.Attr(new Float32Array(UV), 2));
+    const N = new Float32Array(P.length);
+    recomputeFlatNormals(N, P);
+    geo.setAttribute('normal', new ctors.Attr(N, 3));
+    return geo;
   }
 
-  function scalePositions(positions, sx, sy, sz, offX, offY, offZ) {
-    const pa = positions;
-    for (let i = 0; i < pa.length; i += 3) {
-      pa[i]   = pa[i]   * sx + offX;
-      pa[i+1] = pa[i+1] * sy + offY;
-      pa[i+2] = pa[i+2] * sz + offZ;
+  // ═══ geometría/material compartidos (todos los cubos de patas lo reusan) ═══
+  // Esto reduce drásticamente las allocs/estado por araña: 1 geometry + 1 material
+  // para todas las patas de todas las arañas. El mesh solo guarda position/quat/scale.
+  let _sharedLegGeo = null;
+  let _sharedTipGeo = null;
+  let _sharedLegMat = null;
+  function ensureSharedLegAssets(ctors) {
+    if (!_sharedLegGeo) {
+      // cubo unitario centrado (1×1×1) — la escala real se aplica con mesh.scale en applyPose
+      _sharedLegGeo = cubeGeometry(ctors);
+      // punta afilada para el último segmento de cada pata
+      _sharedTipGeo = tipGeometry(ctors);
     }
+    if (!_sharedLegMat) {
+      // Material FRESCO (patrón TinyTakeover.makeMaterial): no clonamos el
+      // material de referencia — el clon hereda wrappers de CustomShader
+      // (onBeforeCompile/customProgramCacheKey con closures rotas) y el
+      // resultado es un shader que no dibuja color: solo bloquea la vista
+      // ("sombras sin cuerpo"). new constructor() parte de cero.
+      let mat = null;
+      try { mat = new state.refMaterial.constructor(); } catch (_) {
+        try { mat = state.refMaterial.clone(); } catch (_2) {}
+      }
+      if (!mat) {
+        console.error(TAG, 'FATAL: no se pudo crear material para patas de araña');
+        _sharedLegMat = null;
+        return { geo: _sharedLegGeo, tipGeo: _sharedTipGeo, mat: null };
+      }
+      try {
+        // sin texturas: solo color plano
+        mat.map = null;
+        mat.alphaMap = null; mat.aoMap = null; mat.lightMap = null;
+        mat.normalMap = null; mat.bumpMap = null; mat.displacementMap = null;
+        mat.emissiveMap = null; mat.metalnessMap = null; mat.roughnessMap = null;
+        mat.vertexColors = false;
+        mat.transparent = false;
+        mat.alphaTest = 0;
+        mat.side = 2; // DoubleSide
+        mat.fog = true;
+        mat.toneMapped = state.refMaterial.toneMapped !== false;
+        if ('roughness' in mat) mat.roughness = 1;
+        if ('metalness' in mat) mat.metalness = 0;
+        mat.color?.set?.(0x6b3a14);
+        mat.emissive?.set?.(0x000000);
+        // neutralizar cualquier hook de shader: shader plano del juego
+        mat.onBeforeCompile = function () {};
+        mat.customProgramCacheKey = () => 'mf-spider-leg-v2';
+        // Marca para que CustomShader no hookee este material compartido
+        mat.__mfSkipHook = true;
+        mat.needsUpdate = true;
+      } catch (_) {}
+      _sharedLegMat = mat;
+    }
+    return { geo: _sharedLegGeo, tipGeo: _sharedTipGeo, mat: _sharedLegMat };
   }
 
-  function makeMesh(geo, color, ctors) {
-    let mat;
-    try {
-      // clonar el material de referencia del juego y pintarlo
-      mat = state.refMaterial.clone();
-      mat.color.setHex(color);
-      if ('map' in mat) { mat.map = null; mat.needsUpdate = true; }
-    } catch (_) {
-      try { mat = new ctors.Material({ color }); } catch (_2) { mat = new ctors.Material(); }
-    }
-    let mesh;
-    try { mesh = new ctors.Mesh(geo, mat); }
-    catch (_) { mesh = new ctors.Mesh(geo, new ctors.Material()); }
-    try { mesh.material.color.setHex(color); } catch (_) {}
-    mesh.userData = mesh.userData || {};
-    mesh.userData.__mfSpider = true;
-    return mesh;
-  }
+  // grosor por segmento de la pata: LARGAS y DELGADAS en todos los presets.
+  // Decrece hacia el extremo (fémur más grueso que la tibia). Los grosores
+  // se compensan con la longitud extendida (LEG_STYLE.length=1.6 en el sim)
+  // para que sigan visibles a distancia sin parecer troncos.
+  function legThickness(si) { return Math.max(0.07, 0.16 - si * 0.045); }
 
-  // ─── parser del modelo /summon → piezas ───
-  function parseSummonModel(command, scale) {
-    if (!command) return [];
-    const pieces = [];
-    const re = /\{id:"minecraft:block_display",block_state:\{Name:"minecraft:([a-z_]+)"(?:,Properties:(\{[^}]*\}))?\},transformation:\[([^\]]+)\]/g;
-    let m;
-    while ((m = re.exec(command))) {
-      const material = m[1];
-      // los floats Kotlin traen sufijo "f" (0f, 0.75f): quitarlo antes de Number
-      const nums = m[3].split(',').map(s => Number(s.replace(/f/g, '').trim()));
-      if (nums.length < 16 || nums.some(isNaN)) continue;
-      if (scale !== 1) for (let i = 0; i < 12; i++) nums[i] *= scale;
-      pieces.push({ material, props: m[2] || '', matrix: nums });
-    }
-    return pieces;
-  }
-
-  // ─── construir spider ───
-  function createSpider(name, preset, variant, scaleArg) {
-    if (!ensureCtors()) return null;
+  // ═══ construir spider desde el mensaje 'add' del simulador ═══
+  // OPTIMIZACIÓN: solo patas (sin torso). Cada pata = 2 cubos alargados
+  // (fémur + tibia) reutilizando la MISMA geometry y material para todas
+  // las arañas. Antes: torso ~30 meshes + 4 segmentos × 3-7 meshes/pata =
+  // hasta ~80 meshes/araña. Ahora: 2 meshes × N patas = 8-16 meshes/araña.
+  function addSimSpider(info) {
+    if (state.spiders.has(info.name)) return true; // ya está (evita duplicar)
+    if (!ensureCtors()) { LOG.d('addSimSpider: sin ctors →', info.name); return false; }
     const ctors = state.ctors;
-    const game = state.game;
-    if (!game) { console.warn(TAG, 'sin game (React fiber no encontrado)'); return null; }
-    const scene = game?.gameScene?.scene?.isObject3D ? game.gameScene.scene : getScene(game);
-    if (!scene) { console.warn(TAG, 'sin escena'); return null; }
-    const torsoData = window.MF_SPIDER_TORSO?.[preset];
-    if (!torsoData) { console.warn(TAG, 'sin preset', preset); return null; }
-    const torso = parseSummonModel(torsoData.command, torsoData.scale);
-    if (!torso.length) { console.warn(TAG, 'preset sin piezas parseables', preset); return null; }
+    const scene = getScene(state.game);
+    if (!scene) { LOG.d('addSimSpider: sin escena 3D →', info.name); return false; }
 
-    const isAngel = variant === 'angel';
-    const scale = scaleArg || (isAngel ? 2.2 : 1.6);
-    const use8 = isAngel;
-    const pairs = use8 ? LEG_PAIRS_8 : LEG_PAIRS_6;
+    const { geo: sharedGeo, tipGeo: sharedTipGeo, mat: sharedMat } = ensureSharedLegAssets(ctors);
 
     const root = new ctors.Group();
     root.userData.__mfSpider = true;
-    root.name = 'MiniFeatherSpider_' + name;
-    const bodyGroup = new ctors.Group();
-    bodyGroup.userData.__mfSpider = true;
-    root.add(bodyGroup);
+    root.name = 'MiniFeatherSpider_' + info.name;
 
-    // torso
-    for (const piece of torso) {
-      let color = MAT_COLORS[piece.material] ?? 0x777777;
-      if (isAngel) {
-        if (piece.material === 'cyan_shulker_box') color = 0x66fcff;
-        else if (piece.material === 'netherite_block' || piece.material === 'anvil') color = MAT_COLORS.gold_block;
-        else color = MAT_COLORS.white_concrete;
-      }
-      const geo = cubeGeometry(ctors);
-      transformPositions(geo.attributes.position.array, piece.matrix);
-      recomputeFlatNormals(geo.attributes.normal.array, geo.attributes.position.array);
-      const mesh = makeMesh(geo, color, ctors);
-      bodyGroup.add(mesh);
-    }
-
-    // patas
+    // SIN torso: solo las patas — como arañas reales.
+    // patas: 2 cubos alargados por pata (fémur + tibia), posicionados y
+    // orientados cada frame en applyPose a partir de los joints del sim.
     const legs = [];
-    for (let pi = 0; pi < pairs.length; pi++) {
-      const p = pairs[pi];
-      for (const side of [-1, 1]) {
-        const leg = buildLeg(p, side, scale, isAngel, ctors);
-        legs.push(leg);
-        root.add(leg.pivot);
+    for (const legInfo of info.legs) {
+      const legGroup = new ctors.Group();
+      legGroup.userData.__mfSpider = true;
+      const segments = [];
+      // Se renderizan TODOS los segmentos de la cadena cinemática.
+      // Antes solo se dibujaban 2: el sim simulaba 4 y la mitad inferior
+      // de cada pata (la que toca el suelo) quedaba invisible → araña mocha.
+      const renderCount = legInfo.segments.length;
+      for (let si = 0; si < renderCount; si++) {
+        // el último segmento usa geometría de punta (pirámide afilada);
+        // el resto, cubo centrado
+        const isTip = si === renderCount - 1;
+        const mesh = new ctors.Mesh(isTip ? sharedTipGeo : sharedGeo, sharedMat);
+        mesh.userData.__mfSpider = true;
+        mesh.frustumCulled = false; // cubos pequeños: ahorra tests de frustum
+        legGroup.add(mesh);
+        segments.push({ mesh, thickness: legThickness(si), index: si, isTip });
       }
-    }
-
-    // angel: halo + alas
-    let halo = null;
-    const wings = [];
-    if (isAngel) {
-      halo = buildHalo(ctors);
-      root.add(halo);
-      wings.push(buildWing(ctors, 1), buildWing(ctors, -1));
-      for (const w of wings) root.add(w.root);
+      legGroup.name = 'leg_' + legs.length;
+      root.add(legGroup);
+      legs.push({ group: legGroup, segments, attachment: legInfo.attachment, segLengths: legInfo.segments });
     }
 
     disableCullingDeep(root);
     scene.add(root);
     purgeUnderCam();
 
-    const player = state.game?.player;
-    const pp = player?.pos;
-    const feetY = pp ? (Number(pp.y) || 0) - (Number(player.height) || 1.8) / 2 : 64;
-    const yaw = Number(state.game?.player?.yaw) || 0;
-
-    const spider = {
-      key: name, preset, variant: variant || 'normal', scale,
-      root, bodyGroup, legs, halo, wings,
-      pos: {
-        x: pp ? (Number(pp.x) || 0) + Math.sin(yaw) * 4 : 0,
-        y: feetY + 1.1 * scale,
-        z: pp ? (Number(pp.z) || 0) + Math.cos(yaw) * 4 : 0,
-      },
-      yaw, vel: { x: 0, y: 0, z: 0 },
-      hovering: isAngel,
-      bobSeed: Math.random() * 10,
-    };
-    state.spiders.set(name, spider);
-    return spider;
+    state.spiders.set(info.name, {
+      key: info.name, preset: info.preset, gallop: info.gallop,
+      root, bodyGroup: null, legs,
+      lastPose: null,
+    });
+    LOG.i('araña construida:', info.name, info.preset, {
+      legs: legs.length, segmentsPorPata: legs[0]?.segments.length ?? 0,
+      grosor: legs[0]?.segments.map(s => s.thickness) ?? [],
+      color: '#' + (_sharedLegMat?.color?.getHexString?.() ?? '?'),
+      skipHook: !!_sharedLegMat?.__mfSkipHook,
+      enEscena: !!(root.parent),
+    });
+    return true;
   }
 
-  function buildLeg(p, side, scale, white, ctors) {
-    const [rx, , rz, restx, restz, segLen] = p;
-    const pivot = new ctors.Group();
-    pivot.userData.__mfSpider = true;
-    pivot.position.set(rx * scale * side, 0, rz * scale);
-
-    const color = white ? MAT_COLORS.white_concrete : MAT_COLORS.netherite_block;
-    const L1 = segLen * scale * 0.55, L2 = segLen * scale * 0.55;
-    const th1 = 0.18 * scale, th2 = 0.13 * scale;
-
-    // femur: caja a lo largo de +X (largo L1)
-    const gFemur = cubeGeometry(ctors);
-    scalePositions(gFemur.attributes.position.array, L1, th1, th1, 0, -th1 / 2, -th1 / 2);
-    recomputeFlatNormals(gFemur.attributes.normal.array, gFemur.attributes.position.array);
-    const femur = makeMesh(gFemur, color, ctors);
-    const femurPivot = new ctors.Group();
-    femurPivot.userData.__mfSpider = true;
-    femurPivot.add(femur);
-
-    // tibia: igual que el femur pero naciendo en la rodilla (x=L1)
-    // — apunta +X para que el ángulo de rodilla sea relativo al femur
-    const gTibia = cubeGeometry(ctors);
-    scalePositions(gTibia.attributes.position.array, L2, th2, th2, 0, -th2 / 2, -th2 / 2);
-    recomputeFlatNormals(gTibia.attributes.normal.array, gTibia.attributes.position.array);
-    const tibia = makeMesh(gTibia, color, ctors);
-    const tibiaPivot = new ctors.Group();
-    tibiaPivot.userData.__mfSpider = true;
-    tibiaPivot.position.x = L1;
-    tibiaPivot.add(tibia);
-
-    femurPivot.add(tibiaPivot);
-    pivot.add(femurPivot);
-
-    if (side === -1) pivot.rotation.y = Math.PI;
-
-    return {
-      pivot, femurPivot, tibiaPivot, side,
-      L1, L2,
-      // el mod espeja SOLO x para el lado izquierdo (addLegPair)
-      rest: { x: restx * side, z: restz },
-      cur: { x: restx * side, y: 0, z: restz },
-      stepStart: { x: restx * side, y: 0, z: restz },
-      stepProgress: 1, isMoving: false,
-      timeSinceStop: 99, timeSinceBegin: 99,
-    };
-  }
-
-  function buildHalo(ctors) {
-    const segs = 24, R = 0.5, r = 0.06;
-    const posArr = [];
-    for (let i = 0; i < segs; i++) {
-      const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
-      const x00 = Math.cos(a0) * R, z00 = Math.sin(a0) * R;
-      const x01 = Math.cos(a1) * R, z01 = Math.sin(a1) * R;
-      posArr.push(
-        x00, r, z00,  x01, r, z01,  x01, -r, z01,
-        x00, r, z00,  x01, -r, z01, x00, -r, z00
-      );
-    }
-    const normArr = new Float32Array(posArr.length);
-    recomputeFlatNormals(normArr, posArr);
-    const geo = new ctors.Geometry();
-    geo.setAttribute('position', new ctors.Attr(new Float32Array(posArr), 3));
-    geo.setAttribute('normal', new ctors.Attr(normArr, 3));
-    const mesh = makeMesh(geo, 0xffd94a, ctors);
-    mesh.position.y = 1.05;
-    return mesh;
-  }
-
-  function buildWing(ctors, sgn) {
-    const root = new ctors.Group();
-    root.userData.__mfSpider = true;
-    root.rotation.z = sgn * 0.3;
-    const feathers = [];
-    const specs = [[0.9, 0], [0.7, -0.35], [0.5, -0.62]];
-    for (const [len, drop] of specs) {
-      const geo = cubeGeometry(ctors);
-      const th = 0.06, span = 0.34;
-      scalePositions(geo.attributes.position.array, len, th, span, 0, 0, -span / 2);
-      recomputeFlatNormals(geo.attributes.normal.array, geo.attributes.position.array);
-      const m = makeMesh(geo, 0xf5f5f0, ctors);
-      m.position.set(0, 0.35 + drop, sgn * 0.25);
-      m.rotation.y = sgn * -0.5;
-      root.add(m);
-      feathers.push(m);
-    }
-    return { root, feathers };
-  }
-
-  // ─── tick ───
-  function tick() {
-    if (!state.enabled) { state.raf = requestAnimationFrame(tick); return; }
-    try { tickBody(); } catch (e) { console.warn(TAG, 'tick error (recuperado)', e); }
-    state.raf = requestAnimationFrame(tick); // SIEMPRE re-agendar
-  }
-
-  function tickBody() {
-    const now = performance.now();
-    const dt = Math.min(0.05, (now - state.lastTick) / 1000) || 0.016;
-    state.lastTick = now;
-    const game = state.game || findGame();
-    if (game) state.game = game;
-
-    for (const sp of state.spiders.values()) {
-      const player = game?.player;
-      if (player?.pos) {
-        const px = Number(player.pos.x) || 0;
-        const pz = Number(player.pos.z) || 0;
-        const dx = px - sp.pos.x, dz = pz - sp.pos.z;
-        const dist = Math.hypot(dx, dz);
-        if (dist > 3.5) {
-          const spd = dist > 7 ? 3.4 : 2.2;
-          sp.vel.x = (dx / dist) * spd;
-          sp.vel.z = (dz / dist) * spd;
-        } else {
-          sp.vel.x *= 0.82; sp.vel.z *= 0.82;
-        }
-        const speed = Math.hypot(sp.vel.x, sp.vel.z);
-        if (speed > 0.2) {
-          sp.yaw = angleLerp(sp.yaw, Math.atan2(sp.vel.x, sp.vel.z), 1 - Math.pow(0.0001, dt));
-        }
-        // altura del cuerpo
-        const g = groundHeightAt(game, sp.pos.x, sp.pos.y, sp.pos.z);
-        if (sp.hovering) {
-          const targetY = (g ?? sp.pos.y - 1) + 1.1 * sp.scale + 0.5 + Math.sin(now / 650 + sp.bobSeed) * 0.12;
-          sp.pos.y += (targetY - sp.pos.y) * Math.min(1, 3 * dt);
-        } else {
-          const targetY = (g ?? sp.pos.y) + 1.1 * sp.scale;
-          sp.pos.y += (targetY - sp.pos.y) * Math.min(1, 6 * dt);
-        }
-      }
-      sp.pos.x += sp.vel.x * dt;
-      sp.pos.z += sp.vel.z * dt;
-      sp.root.position.set(sp.pos.x, sp.pos.y, sp.pos.z);
-      sp.root.rotation.y = sp.yaw;
-
-      try { updateLegs(sp, game, dt); } catch (e) { /* pata rota no mata el cuerpo */ }
-      if (sp.wings?.length) {
-        const flap = Math.sin(now / 120 + sp.bobSeed);
-        sp.wings[0].root.rotation.x = -0.3 + flap * 0.75;
-        sp.wings[1].root.rotation.x = 0.3 - flap * 0.75;
-      }
-      if (sp.halo) {
-        sp.halo.rotation.y += dt * 1.2;
-        sp.halo.position.y = 1.05 + (sp.hovering ? Math.sin(now / 650 + sp.bobSeed) * 0.05 : 0);
-      }
-
-      // CRÍTICO (lección FallenLeaves): el juego congela el matrixWorld de
-      // la escena — sin updateMatrixWorld manual las animaciones nunca
-      // llegan a la GPU y todo queda congelado en la pose del spawn
-      try { sp.root.updateMatrix(); sp.root.updateMatrixWorld(true); } catch (_) {}
-    }
-  }
-
-  function angleLerp(a, b, t) {
-    let d = b - a;
-    while (d > Math.PI) d -= 2 * Math.PI;
-    while (d < -Math.PI) d += 2 * Math.PI;
-    return a + d * t;
-  }
-
-  function updateLegs(sp, game, dt) {
-    const bodyHeight = 1.1 * sp.scale;
-    const cos = Math.cos(sp.yaw), sin = Math.sin(sp.yaw);
-    const speed = Math.hypot(sp.vel.x, sp.vel.z);
-    const n = sp.legs.length;
-
-    for (let li = 0; li < n; li++) {
-      const leg = sp.legs[li];
-      // rest en mundo
-      const rw = {
-        x: sp.pos.x + leg.rest.x * sp.scale * cos - leg.rest.z * sp.scale * sin,
-        z: sp.pos.z + leg.rest.x * sp.scale * sin + leg.rest.z * sp.scale * cos,
-      };
-      // look-ahead en la dirección de la velocidad
-      let tx = rw.x, tz = rw.z;
-      if (speed > 0.4) {
-        const look = 0.55 * Math.min(1.4, speed / 2.2) * sp.scale;
-        tx += (sp.vel.x / speed) * look;
-        tz += (sp.vel.z / speed) * look;
-      }
-      const restY = sp.pos.y;
-      const groundY = groundHeightAt(game, tx, restY, tz);
-      const ty = groundY !== null ? groundY : restY - bodyHeight;
-
-      if (!leg.isMoving) {
-        const d2 = (leg.cur.x - tx) ** 2 + (leg.cur.z - tz) ** 2;
-        const trigger = (0.3 + Math.min(0.55, speed * 0.3)) * sp.scale;
-        if (d2 > trigger * trigger && canLegMove(sp, li)) {
-          leg.isMoving = true;
-          leg.stepStart = { x: leg.cur.x, y: leg.cur.y, z: leg.cur.z };
-          leg.stepProgress = 0;
-          leg.timeSinceBegin = 0;
-        }
-      } else {
-        const stepSpeed = 2.8 * sp.scale;
-        const dist = Math.hypot(tx - leg.stepStart.x, tz - leg.stepStart.z) || 0.05;
-        leg.stepProgress = Math.min(1, leg.stepProgress + (stepSpeed * dt) / dist);
-        const t = leg.stepProgress;
-        leg.cur.x = leg.stepStart.x + (tx - leg.stepStart.x) * t;
-        leg.cur.z = leg.stepStart.z + (tz - leg.stepStart.z) * t;
-        leg.cur.y = ty + (0.4 * sp.scale) * 4 * t * (1 - t); // envolvente parabólica
-        if (t >= 1) {
-          leg.isMoving = false;
-          leg.cur.y = ty;
-          leg.timeSinceStop = 0;
-        }
-      }
-      leg.timeSinceStop += dt;
-      leg.timeSinceBegin += dt;
-
-      // ─── IK 2-huesos analítico ───
-      // pie en espacio local del cuerpo (sin yaw)
-      const lx = (leg.cur.x - sp.pos.x) * cos + (leg.cur.z - sp.pos.z) * sin;
-      const lz = -(leg.cur.x - sp.pos.x) * sin + (leg.cur.z - sp.pos.z) * cos;
-      const footY = leg.cur.y - sp.pos.y; // negativo = bajo el cuerpo
-
-      const L1 = leg.L1, L2 = leg.L2;
-      // vector horizontal pivote→pie en root-space
-      const vx = lx - leg.pivot.position.x, vz = lz - leg.pivot.position.z;
-      const hd = Math.hypot(vx, vz) || 1e-4;
-      const D = Math.min(Math.hypot(hd, footY), (L1 + L2) * 0.999);
-      // ley de cosenos: ángulo interior en el pivote
-      const cosA = Math.max(-1, Math.min(1, (L1*L1 + D*D - L2*L2) / (2 * L1 * D)));
-      const A = Math.acos(cosA);
-      // ángulo de la línea pivote→pie respecto a la horizontal
-      const planar = Math.atan2(-footY, hd); // positivo = pie por debajo
-      // femur: apunta ARRIBA del vector pivote→pie por A (rodilla arriba)
-      const femurAngle = planar - A;
-      // tibia: ángulo interior en la rodilla (relativo a la dirección del femur)
-      const cosB = Math.max(-1, Math.min(1, (L1*L1 + L2*L2 - D*D) / (2 * L1 * L2)));
-      const kneeBend = Math.PI - Math.acos(cosB);
-      // eje de rotación: perpendicular al plano pivote→pie, horizontal
-      // (para side=-1 el pivot ya tiene rotation.y=π y el eje se refleja solo)
-      const ax = vz / hd, az = -vx / hd;
-      // quaternion de rotación alrededor de (ax, 0, az) por ángulo θ:
-      // q = [sin(θ/2)*ax, sin(θ/2)*0, sin(θ/2)*az, cos(θ/2)]
-      setAxisAngle(leg.femurPivot, ax, az, femurAngle);
-      setAxisAngle(leg.tibiaPivot, ax, az, -kneeBend);
-    }
-  }
-
-  // setea .quaternion directo: axis-angle horizontal (x,z) — sin Vector3 nativo
-  function setAxisAngle(node, ax, az, angle) {
-    const h = Math.sin(angle / 2);
+  // ═══ aplicar frame ═══
+  // OPTIMIZACIÓN: cada cubo se coloca en el punto medio del segmento,
+  // se escala (grosor × grosor × longitud) y se orienta con setQuatLookAtZ
+  // (sin allocs por frame). Sin segGroup intermedio, sin rotación acumulada
+  // del sim (no la necesitamos: la geometría del cubo es uniforme).
+  function setQuatLookAtZ(node, fx, fy, fz) {
     const q = node.quaternion;
     if (!q || typeof q.set !== 'function') return;
-    q.set(h * ax, 0, h * az, Math.cos(angle / 2));
-    if (node.rotation && typeof node.rotation.set === 'function') {
-      // sincronizar rotation (por si el juego la usa para render)
+    const dot = fz; // (0,0,1)·f
+    if (dot > 0.99999) { q.set(0, 0, 0, 1); }
+    else if (dot < -0.99999) {
+      q.set(1, 0, 0, 0); // 180° sobre X
+    } else {
+      let ax = -fy, ay = fx;
+      const al = Math.hypot(ax, ay) || 1;
+      ax /= al; ay /= al;
+      const w = Math.sqrt((1 + dot) / 2); // cos(θ/2)
+      const s = Math.sqrt(1 - w * w);     // sin(θ/2)
+      q.set(ax * s, ay * s, 0, w);
+    }
+    if (node.rotation && typeof node.rotation.setFromQuaternion === 'function') {
       try { node.rotation.setFromQuaternion(q); } catch (_) {}
     }
   }
 
-  // gait walk: una pata se mueve si su diagonal opuesta está apoyada
-  function canLegMove(sp, li) {
-    const n = sp.legs.length;
-    const diag = (li + Math.floor(n / 2)) % n;
-    const other = sp.legs[diag];
-    if (other.isMoving) return false;
-    if (other.timeSinceStop < 0.1) return false;
-    return true;
+  // tracking del último tick aplicado: el sim emite a 20 Hz pero el RAF va
+  // a 60 Hz → sin este check reaplicaríamos el mismo frame 3 veces por tick.
+  function applyFrame(frame) {
+    if (!frame || frame.t === state.lastAppliedFrameT) return; // mismo frame → nada
+    state.lastAppliedFrameT = frame.t;
+    for (const pose of frame.poses) {
+      if (!pose?.n) continue;
+      const sp = state.spiders.get(pose.n);
+      if (sp) applyPose(sp, pose);
+    }
   }
 
-  // ─── limpieza ───
+  function applyPose(sp, pose) {
+    const lx = pose.p[0], ly = pose.p[1], lz = pose.p[2];
+
+    if (!Number.isFinite(lx) || !Number.isFinite(ly) || !Number.isFinite(lz)) {
+      LOG.i('ERROR: pose con NaN →', pose.n, pose.p);
+      return;
+    }
+
+    sp.root.position.set(lx, ly, lz);
+
+    // SIN torso: no hay bodyGroup que actualizar (se renderiza 0 meshes del cuerpo).
+    // Cada pata = 2 cubos. Para cada cubo:
+    //   1. posición = punto medio entre 'from' y 'to' (coords locales al root)
+    //   2. scale   = (grosor, grosor, longitud del segmento)
+    //   3. quat    = rotación que alinea +Z con la dirección del segmento
+    // El cubo unitario centrado en (0,0,0) se estira así a lo largo del eje.
+    for (let li = 0; li < sp.legs.length; li++) {
+      const leg = sp.legs[li];
+      const legPose = pose.legs[li];
+      if (!legPose) continue;
+      const joints = legPose.joints;
+      const segments = leg.segments;
+      const segCount = segments.length;
+      for (let si = 0; si < segCount; si++) {
+        const seg = segments[si];
+        const from = si === 0 ? legPose.att : joints[si - 1];
+        const to = joints[si];
+        if (!to) continue;
+        const fx = to[0] - from[0], fy = to[1] - from[1], fz = to[2] - from[2];
+        const len = Math.hypot(fx, fy, fz);
+        const mesh = seg.mesh;
+        if (len < 1e-6) {
+          // colapsado: esconder el cubo para evitar render artefact
+          mesh.visible = false;
+          continue;
+        }
+        mesh.visible = true;
+        // punto medio, en coords locales al root
+        mesh.position.set(
+          (from[0] + to[0]) * 0.5 - lx,
+          (from[1] + to[1]) * 0.5 - ly,
+          (from[2] + to[2]) * 0.5 - lz
+        );
+        mesh.scale.set(seg.thickness, seg.thickness, len);
+        setQuatLookAtZ(mesh, fx / len, fy / len, fz / len);
+      }
+    }
+  }
+
+  // ═══ limpieza ═══
   function disableCullingDeep(root) {
     const walk = (n) => {
       n.frustumCulled = false;
@@ -685,35 +602,199 @@
     for (const name of [...state.spiders.keys()]) removeSpider(name);
   }
 
-  function enable(on) {
-    state.enabled = on;
-    if (on && !state.raf) { state.lastTick = performance.now(); state.raf = requestAnimationFrame(tick); }
-    if (!on) clearAll();
+  // ═══ tick ═══
+  function tick() {
+    if (!state.enabled) { state.raf = requestAnimationFrame(tick); return; }
+    try {
+      const game = state.game || findGame();
+      if (game) state.game = game;
+      const sim = simAPI();
+      if (sim) {
+        // reconectar si el sim apareció tarde (carga de scripts en desorden)
+        if (!state.simConnected) connectSim();
+        // reportar posición del jugador al sim cada 500ms (spawns + anclaje)
+        reportPlayer(game, sim);
+        // arañas iniciales del garden: cuando sepamos dónde está el jugador
+        sim.refreshGame();
+        sim.ensureInitialSpiders();
+      }
+      // arañas que llegaron antes de haber escena 3D lista
+      if (state.pendingSpiders.length) {
+        const retry = state.pendingSpiders.splice(0);
+        for (const info of retry) if (!addSimSpider(info)) state.pendingSpiders.push(info);
+      }
+      if (state.lastFrame) applyFrame(state.lastFrame);
+      // cambio de mundo: la escena nueva no contiene las raíces → re-agregar
+      if (state.spiders.size) {
+        const scene = getScene(state.game);
+        if (scene) {
+          for (const sp of state.spiders.values()) {
+            if (sp.root.parent !== scene) {
+              try { scene.add(sp.root); LOG.i('re-anclada a la escena nueva:', sp.key); } catch (_) {}
+            }
+          }
+        }
+      }
+      // CRÍTICO: el juego congela el matrixWorld — sin update manual nada se anima
+      for (const sp of state.spiders.values()) {
+        try {
+          sp.root.updateMatrix();
+          sp.root.updateMatrixWorld(true);
+        } catch (_) {}
+      }
+
+      if (!state.lastDiag || performance.now() - state.lastDiag > 2500) {
+        state.lastDiag = performance.now();
+        let totSegs = 0, visSegs = 0;
+        for (const sp of state.spiders.values()) {
+          for (const leg of sp.legs) for (const seg of leg.segments) {
+            totSegs++;
+            if (seg.mesh.visible) visSegs++;
+          }
+        }
+        if (state.spiders.size && (visSegs === 0 || (LOG.level >= 1 && !state._diagLogged))) {
+          state._diagLogged = true;
+          console.log(TAG, 'DIAG visibilidad patas:', visSegs + '/' + totSegs,
+            'arañas=' + state.spiders.size,
+            'ctors=' + (state.ctors ? 'ok' : 'pendiente'),
+            'materialColor=' + (state.ctors ? (() => { try { return '#' + (_sharedLegMat?.color?.getHexString?.() ?? '?'); } catch (_) { return '?'; } })() : '?'),
+            'sharedGeo=' + (!!_sharedLegGeo),
+            'sharedMat=' + (!!_sharedLegMat),
+            'skipHook=' + (_sharedLegMat?.__mfSkipHook ? 'sí' : 'no'));
+        }
+      }
+
+      // foto de render cada 5s (nivel ≥2): pos de mesh, distancia a cámara, on-screen
+      // OPTIMIZACIÓN: el bloque completo está envuelto en LOG.level >= 2 para
+      // evitar ejecutar cálculos costosos (updateWorldMatrix, project, etc.)
+      // cuando el log está apagado (caso normal).
+      const now = performance.now();
+      if (LOG.level >= 2 && now - (state.lastRenderSnapshot || 0) > 5000 && state.spiders.size) {
+        state.lastRenderSnapshot = now;
+        const gs = game?.gameScene;
+        const cam = gs?.camera;
+        for (const sp of state.spiders.values()) {
+          const snap = { meshPos: [sp.root.position.x, sp.root.position.y, sp.root.position.z], enEscena: !!sp.root.parent, visible: sp.root.visible };
+          try {
+            if (cam) {
+              sp.root.updateWorldMatrix(true, false);
+              const v = sp.root.getWorldPosition(new state.ctors.Group().position.constructor());
+              const camWorld = cam.getWorldPosition(v.constructor === Object ? v : v.clone());
+              snap.camDist = Math.round(v.distanceTo(camWorld) * 10) / 10;
+              const p = v.clone().project(cam);
+              snap.onScreen = Math.abs(p.x) < 1 && Math.abs(p.y) < 1 && p.z < 1;
+              // DIAG patas: nº segments, worldPos del primer mesh
+              if (sp.legs[0]?.segments[0]?.mesh) {
+                const leg0 = sp.legs[0].segments[0].mesh;
+                leg0.updateWorldMatrix(true, false);
+                const w = leg0.getWorldPosition(v.constructor === Object ? v : v.clone());
+                snap.leg0MeshPos = [Math.round(w.x*100)/100, Math.round(w.y*100)/100, Math.round(w.z*100)/100];
+                snap.leg0Scale = [leg0.scale.x.toFixed(3), leg0.scale.y.toFixed(3), leg0.scale.z.toFixed(3)];
+                snap.leg0Visible = leg0.visible;
+              }
+              snap.materialColor = state.ctors ? (() => { try { return '#' + (_sharedLegMat?.color?.getHexString?.() ?? '?'); } catch (_) { return '?'; } })() : '?';
+            }
+          } catch (_) {}
+          LOG.d('render:', sp.key, snap);
+        }
+        LOG.d('frame t=' + (state.lastFrame?.t ?? '—'), 'spiders=' + state.spiders.size, 'pending=' + state.pendingSpiders.length, 'fps=' + Math.round(1000 / Math.max(1, now - (state.lastFrameAppliedAt || now - 16))));
+      }
+      if (state.lastFrame) state.lastFrameAppliedAt = now;
+    } catch (e) {
+      console.warn(TAG, 'tick error (recuperado)', e);
+      LOG.i('ERROR tick:', e?.message || e);
+    }
+    state.raf = requestAnimationFrame(tick);
   }
 
-  // ─── API pública ───
+  let lastPlayerReportAt = 0;
+  function reportPlayer(game, sim) {
+    const now = performance.now();
+    if (now - lastPlayerReportAt < 500) return;
+    const player = game?.player || state.game?.player;
+    const pos = player?.pos;
+    if (!pos || !Number.isFinite(Number(pos.x))) return;
+    lastPlayerReportAt = now;
+    sim.reportPlayer(Number(pos.x), Number(pos.y), Number(pos.z), Number(player.yaw) || 0);
+  }
+
+  function enable(on) {
+    state.enabled = on;
+    if (on) {
+      if (!state.raf) { state.lastTick = performance.now(); state.raf = requestAnimationFrame(tick); }
+      if (!connectSim()) console.warn(TAG, 'MF_SPIDER_SIM no disponible (¿SpiderSim.js cargó?)');
+    } else {
+      clearAll();
+    }
+  }
+
+  // ═══ API pública ═══
   window.MF_SPIDER_BOT = {
-    spawn(name, preset, variant, scale) {
-      if (!preset) preset = 'boxy';
-      if (!name) name = preset + '_' + Math.floor(Math.random() * 1000);
-      if (state.spiders.has(name)) return { ok: false, error: 'name in use' };
-      if (!window.MF_SPIDER_TORSO?.[preset]) return { ok: false, error: 'unknown preset: ' + preset + ' (flat|boxy|stealth)' };
-      const sp = createSpider(name, preset, variant, scale);
-      return sp ? { ok: true, name } : { ok: false, error: 'no se pudo construir (¿escena no lista?)' };
+    connect() {
+      enable(true);
+      return { ok: true, embedded: !!simAPI() };
     },
-    despawn(name) { return removeSpider(name); },
-    list() { return [...state.spiders.values()].map(s => ({ name: s.key, preset: s.preset, variant: s.variant })); },
-    presets() { return Object.keys(window.MF_SPIDER_TORSO || {}); },
-    clear() { clearAll(); },
+    send(obj) {
+      const sim = simAPI();
+      if (!sim) return { ok: false, error: 'SpiderSim not loaded' };
+      return sim.send(obj);
+    },
+    // láser: mover la araña más cercana al punto mirado
+    target(x, y, z) { return this.send({ type: 'target', x, y, z }); },
+    staystill() { return this.send({ type: 'staystill' }); },
+    list() {
+      const sim = simAPI();
+      const seen = new Set([...state.spiders.keys(), ...state.pendingSpiders.map((s) => s.name)]);
+      return [...seen].map((name) => {
+        const s = state.spiders.get(name);
+        if (s) return { name: s.key, preset: s.preset, gallop: s.gallop };
+        const p = state.pendingSpiders.find((x) => x.name === name);
+        return { name, preset: p?.preset, gallop: p?.gallop, pending: true };
+      }).map((entry) => {
+        // añadir pos vivo del sim
+        const live = sim?.list?.().find((l) => l.name === entry.name);
+        return live ? { ...entry, pos: live.pos, grounded: live.grounded } : entry;
+      });
+    },
+    clear() {
+      clearAll();
+      const sim = simAPI();
+      sim?.clear?.();
+    },
     enable,
     debug() {
+      const sim = simAPI();
+      const d = sim?.debug?.() || {};
       return {
         enabled: state.enabled,
+        sim: d.running ? 'running' : 'stopped',
+        tick: d.tick ?? null,
+        tickMs: d.tickMs ?? null,
         ctors: state.ctors ? 'ok' : 'pendiente',
         spiders: state.spiders.size,
+        pending: state.pendingSpiders.length,
+        lastFrameT: state.lastFrame?.t ?? null,
+        hasGame: d.hasGame ?? false,
+        player: d.player ?? null,
+        logLevel: LOG.level,
       };
+    },
+    // nivel: 0=off 1=info 2=detalle 3=verboso
+    log(level) {
+      if (level === undefined || level === null) return LOG.level;
+      LOG.setLevel(level);
+      return LOG.level;
+    },
+    // volcado de logs (ring buffer) — útil sin abrir la consola
+    logs(n = 25) {
+      const botLogs = LOG.dump(n);
+      const simLogs = simAPI()?.logs?.(n) || [];
+      return { bot: botLogs, sim: simLogs };
     },
   };
 
-  console.log(TAG, ' cargado. Usa window.MF_SPIDER_BOT o /spider');
+  console.log(TAG, 'cargado (simulador EMBEBIDO — sin Node/ws). Usa window.MF_SPIDER_BOT o /spider');
+
+  // auto-arranque: renderizar las arañas del simulador sin comandos.
+  enable(true);
 })();

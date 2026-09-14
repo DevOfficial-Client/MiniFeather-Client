@@ -577,46 +577,170 @@
       if (!api) { addChat('SpiderBot is not ready yet (reload page).', 'error'); return; }
       const action = (args[0] || 'help').toLowerCase();
       if (action === 'spawn') {
-        const preset = (args[1] || 'boxy').toLowerCase();
-        const variant = (args[2] || '').toLowerCase() || null;
-        const scale = args[3] ? Number(args[3]) : undefined;
-        if (!api.presets().includes(preset)) { addChat('Unknown torso: ' + api.presets().join(', '), 'error'); return; }
-        const r = api.spawn(null, preset, variant, scale);
-        if (!r.ok) { addChat('Could not spawn: ' + r.error, 'error'); return; }
+        // /spider spawn <preset> [scale <altura>] [gallop] — nace al lado tuyo.
+        // scale: altura del cuerpo en bloques (1..200), p.ej. "kraken scale 4"
+        const preset = (args[1] || 'hexbot').toLowerCase();
+        let gallop = false;
+        let scale;
+        for (let i = 2; i < args.length; i++) {
+          const t = args[i].toLowerCase();
+          if (t === 'gallop') gallop = true;
+          else if (t === 'scale' || t === 'altura') {
+            const v = parseFloat(args[i + 1]);
+            if (Number.isFinite(v)) { scale = Math.max(1, Math.min(200, v)); i++; }
+          }
+        }
+        const r = api.send({ type: 'spawn', preset, gallop, scale });
+        if (!r.ok) { addChat(r.error || 'SpiderSim not loaded.', 'error'); return; }
         api.enable(true);
-        addChat(`Spider "${r.name}" (${preset}${variant ? ' ' + variant : ''}) spawned \u00a1ara\u00f1a-robot! Follows you.`, 'success');
-        setTimeout(() => {
-          try { console.log('[MiniFeather /spider] check:', api.debug()); } catch (e) { console.warn(e); }
-        }, 1500);
+        addChat(`Spawn requested: ${preset}${scale ? ` (body height: ${scale} blocks)` : ''}${gallop ? ' gallop' : ''} (embedded simulator).`, 'success');
+        return;
+      }
+      if (action === 'target' || action === 'laser') {
+        // /spider target — láser hacia donde miras (guía la araña más cercana)
+        const player = state.game?.player;
+        if (!player?.pos) { addChat('No player position.', 'error'); return; }
+        const yaw = Number(player.yaw) || 0;
+        const x = Number(player.pos.x) + Math.sin(yaw) * 8;
+        const z = Number(player.pos.z) + Math.cos(yaw) * 8;
+        const r = api.target(x, Number(player.pos.y) || 64, z);
+        addChat(r.ok ? 'Laser on! Guiding nearest spider.' : r.error, r.ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'staystill' || action === 'stop') {
+        const r = api.staystill();
+        addChat(r.ok ? 'Spiders stopped.' : r.error, r.ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'follow') {
+        // /spider follow [dist|off] — siguen tu posición en vivo (A* pathfinding)
+        const arg = (args[1] || '').toLowerCase();
+        if (arg === 'off' || arg === 'stop') {
+          const r = api.send({ type: 'follow', off: true });
+          addChat(r.ok ? 'Spiders no longer following you.' : r.error, r.ok ? 'success' : 'error');
+        } else {
+          const dist = parseFloat(arg);
+          const n = api.list().length;
+          if (!n) { addChat('No spiders yet (spawn one with /spider spawn).', 'error'); return; }
+          const r = api.send({ type: 'follow', distance: Number.isFinite(dist) && dist > 0 ? dist : 3 });
+          addChat(r.ok ? `${n} spider${n === 1 ? '' : 's'} following you${Number.isFinite(dist) && dist > 0 ? ` (stop distance: ${dist})` : ''} — A* pathfinding on.` : r.error, r.ok ? 'success' : 'error');
+        }
+        return;
+      }
+      if (action === 'goto' || action === 'path') {
+        // /spider goto <x> [y] <z> | off — caminan a coordenadas con A*
+        const a1 = (args[1] || '').toLowerCase();
+        if (a1 === 'off' || a1 === 'stop') {
+          const r = api.send({ type: 'goto', off: true });
+          addChat(r.ok ? 'Pathfinding target cleared.' : r.error, r.ok ? 'success' : 'error');
+          return;
+        }
+        const nums = args.slice(1).map(parseFloat);
+        const n = api.list().length;
+        if (!n) { addChat('No spiders yet (spawn one with /spider spawn).', 'error'); return; }
+        let x, y, z;
+        if (nums.filter((v) => Number.isFinite(v)).length === 3) {
+          [x, y, z] = nums;
+        } else if (nums.filter((v) => Number.isFinite(v)).length === 2) {
+          [x, z] = nums.filter((v) => Number.isFinite(v));
+        } else {
+          addChat('Usage: /spider goto <x> <z> | /spider goto <x> <y> <z> | /spider goto off', 'error');
+          return;
+        }
+        const r = api.send({ type: 'goto', x, y, z });
+        addChat(r.ok ? `${n} spider${n === 1 ? '' : 's'} pathfinding (A*) to ${x}, ${y ?? 'auto'}, ${z}.` : r.error, r.ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'tphere') {
+        const r = api.send({ type: 'tphere' });
+        const list = api.list();
+        const n = list.length;
+        addChat(r.ok ? (n > 0 ? `${n} spider${n === 1 ? '' : 's'} teleported to you.` : 'No spiders to teleport.') : r.error, r.ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'hunt' || action === 'caza') {
+        // /spider hunt [range] [agg] | off — IA de caza: acecho, rodeo, emboscada y mordisco
+        const arg = (args[1] || '').toLowerCase();
+        if (arg === 'off' || arg === 'stop') {
+          const r = api.send({ type: 'hunt', off: true });
+          addChat(r.ok ? 'Hunt mode OFF.' : r.error, r.ok ? 'success' : 'error');
+          return;
+        }
+        const n = api.list().length;
+        if (!n) { addChat('No spiders yet (spawn one with /spider spawn).', 'error'); return; }
+        const range = parseFloat(args[1]);
+        const agg = parseFloat(args[2]);
+        const r = api.send({
+          type: 'hunt',
+          range: Number.isFinite(range) && range > 0 ? range : 48,
+          aggression: Number.isFinite(agg) && agg > 0 ? agg : 1,
+        });
+        addChat(r.ok
+          ? `Hunt mode ON: ${n} spider${n === 1 ? '' : 's'} stalking you — they circle, pounce and BITE. /spider hunt off to stop.`
+          : r.error, r.ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'clear' || action === 'remove' || action === 'kill') {
+        // /spider clear — elimina TODAS las arañas cargadas (renderer + sim)
+        const n = api.list().length;
+        api.clear();
+        addChat(n ? `Removed all spiders (${n}).` : 'No spiders loaded.', 'success');
         return;
       }
       if (action === 'despawn') {
         const name = (args[1] || '').toLowerCase();
-        const ok = name === 'all' ? (api.clear(), true) : api.despawn(name);
-        addChat(ok ? 'Spider removed.' : 'No such spider (see /spider list).', ok ? 'success' : 'error');
+        if (name === 'all') {
+          const n = api.list().length;
+          api.clear();
+          addChat(n ? `Removed all spiders (${n}).` : 'No spiders loaded.', 'success');
+          return;
+        }
+        const r = api.send({ type: 'despawn', name });
+        addChat(r.ok ? 'Despawn requested.' : r.error, r.ok ? 'success' : 'error');
         return;
       }
       if (action === 'list') {
         const list = api.list();
-        if (!list.length) addChat('No spiders spawned.', 'success');
-        else for (const s of list) addChat(`  ${s.name} (${s.preset}${s.variant && s.variant !== 'normal' ? ' ' + s.variant : ''})`, 'info');
+        if (!list.length) addChat('No spiders yet (walk into a world and wait a second).', 'success');
+        else for (const s of list) addChat(`  ${s.name} (${s.preset}${s.gallop ? ' gallop' : ''})${s.pos ? ` @ ${s.pos.map(v => v.toFixed(1)).join(', ')}${s.grounded ? '' : ' ⌁air'}` : ''}`, 'info');
+        const d = api.debug();
+        addChat(`sim: ${d.sim} tick=${d.tick ?? '—'} game=${d.hasGame ? 'ok' : '—'} frame=${d.lastFrameT ?? '—'}`);
         return;
       }
-      if (action === 'angel') {
-        // atajo: /spider angel → stealth blanco + halo + alas
-        const r = api.spawn('angel_' + Math.floor(Math.random() * 100), 'stealth', 'angel');
-        if (!r.ok) { addChat('Could not spawn angel: ' + r.error, 'error'); return; }
-        api.enable(true);
-        addChat('\\white\\ \u275d Un \u00e1ngel ar\u00e1cnido descendi\u00f3 del cielo \u275e\\reset\\', 'success');
+      if (action === 'log') {
+        // /spider log [0-3] — 0=off 1=info 2=detalle 3=verboso · sin arg = volcar últimos
+        const lvl = parseInt(args[1] ?? '', 10);
+        if (Number.isFinite(lvl)) {
+          api.log(lvl);
+          addChat(`Spider log level = ${lvl} (0=off 1=info 2=detail 3=verbose). Persistent until changed.`, 'success');
+        } else {
+          const d = api.logs(20);
+          addChat(`— last bot logs (level ${api.log()}) —`, 'info');
+          for (const e of d.bot) addChat(`  [${e.t}ms] ${e.tag}: ${e.msg}`, 'info');
+          addChat(`— last sim logs —`, 'info');
+          for (const e of d.sim) addChat(`  [${e.t}ms] ${e.tag}: ${e.msg}`, 'info');
+        }
+        return;
+      }
+      if (action === 'status') {
+        const d = api.debug();
+        addChat(`enabled=${d.enabled} sim=${d.sim} tick=${d.tick ?? '—'} (${d.tickMs ?? '—'}ms) ctors=${d.ctors} spiders=${d.spiders} game=${d.hasGame ? 'ok' : '—'} frame=${d.lastFrameT ?? '—'} log=${d.logLevel}`);
         return;
       }
       if (action === 'help' || action === '') {
         for (const line of [
-          '\\yellow\\/spider spawn <torso> [variant] [scale]\\reset\\ - Spawn (torsos: flat, boxy, stealth)',
-          '\\yellow\\/spider angel\\reset\\ - \u00c1ngel ar\u00e1cnido gigante (halo + alas + 8 patas)',
-          '\\yellow\\/spider despawn <name|all>\\reset\\ - Remove spiders',
-          '\\yellow\\/spider list\\reset\\ - Spawned spiders',
-          'Variants: \\yellow\\angel\\reset\\ (white + halo + wings + 8 legs)'
+          '\\yellow\\/spider spawn <preset> [scale <h>] [gallop]\\reset\\ - Spawn beside you; h = body height in blocks (1-200)',
+          '\\yellow\\/spider target\\reset\\ - Laser: guide nearest spider where you look',
+          '\\yellow\\/spider follow [dist|off]\\reset\\ - Follow you with A* pathfinding',
+          '\\yellow\\/spider goto <x> <z> [y] | off\\reset\\ - Walk to coords with A* pathfinding',
+          '\\yellow\\/spider hunt [range] [agg] | off\\reset\\ - Hunting AI: stalk, circle, pounce, bite',
+          '\\yellow\\/spider clear | despawn all\\reset\\ - Remove ALL loaded spiders',
+          '\\yellow\\/spider tphere\\reset\\ - Teleport all spiders to your exact position',
+          '\\yellow\\/spider staystill\\reset\\ - Stop all spiders',
+          '\\yellow\\/spider list\\reset\\ - Spiders + simulator status',
+          '\\yellow\\/spider status\\reset\\ - Debug info',
+          '\\yellow\\/spider log [0-3]\\reset\\ - Debug logging (or dump last entries)',
+          'Simulator is embedded in the extension — no external process needed'
         ]) state.chat?.addChat?.({ text: line });
         return;
       }

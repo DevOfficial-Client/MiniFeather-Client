@@ -1851,8 +1851,32 @@
     let lastWidth = 0;
     let lastHeight = 0;
     let lastRatio = 0;
+    let lastMeasuredAt = 0;
+    let lastInnerWidth = 0;
+    let lastInnerHeight = 0;
 
-    const ensureSize = () => {
+    const ensureSize = (force = false) => {
+      // medir el DOM (getBoundingClientRect) fuerza layout — hacerlo cada
+      // frame es layout thrashing puro y caen los FPS. Cachear 500ms y
+      // re-medir antes si la ventana cambió (lee innerWidth: barato).
+      const now = performance.now();
+      const windowResized =
+        innerWidth !== lastInnerWidth ||
+        innerHeight !== lastInnerHeight;
+
+      if (
+        lastWidth > 0 &&
+        !force &&
+        !windowResized &&
+        now - lastMeasuredAt < 500
+      ) {
+        return { width: lastWidth, height: lastHeight, ratio: lastRatio || 1 };
+      }
+
+      lastMeasuredAt = now;
+      lastInnerWidth = innerWidth;
+      lastInnerHeight = innerHeight;
+
       const liveCamera = state.game?.gameScene?.camera;
       const canvas = renderer.domElement;
       const holder =
@@ -2438,14 +2462,36 @@
       // Mirror Miniblox's native boot order. Game.init() owns this promise and
       // prepareEngine() waits for it before booting WebGL. Do not clear or
       // replace menuTexturesPromise: doing so races the game's own loader.
+      // `withTimeout`: en un perfil limpio menuLoad puede quedarse colgado
+      // indefinidamente (CDN lento) y atrapar el mundo local en "Starting...".
       if (game?.menuLoad && typeof game.menuLoad.then === 'function') {
-        await game.menuLoad;
+        await withTimeout(
+          game.menuLoad,
+          20000,
+          'Menu texture load timed out (menuLoad).'
+        );
       } else if (typeof assets.ensureMenuTextures === 'function') {
-        await assets.ensureMenuTextures();
+        await withTimeout(
+          assets.ensureMenuTextures(),
+          20000,
+          'Menu texture load timed out (ensureMenuTextures).'
+        );
       }
 
       // Normal Game.connect() waits for world assets after boot/prewarm.
-      await assets.ensureWorldAssets?.();
+      await withTimeout(
+        assets.ensureWorldAssets?.() ?? Promise.resolve(),
+        30000,
+        'World asset load timed out (ensureWorldAssets).'
+      ).catch(assetTimeout => {
+        // No interrumpir el flujo: waitForTerrainMaterials() abajo decide si
+        // ya hay suficiente material para renderizar el mundo local.
+        console.warn(
+          LOG_PREFIX,
+          'ensureWorldAssets timeout (continuando):',
+          assetTimeout?.message || assetTimeout
+        );
+      });
 
       if (!await waitForTerrainMaterials(2500)) {
         // One controlled native retry is safe. Unlike v5.5, never reset the
@@ -2695,6 +2741,8 @@
           display: block !important;
           visibility: visible !important;
           opacity: 1 !important;
+          width: 100% !important;
+          height: 100% !important;
         }
       `;
 
@@ -3770,6 +3818,21 @@
     ]);
   }
 
+  // Corre una promesa con tope de tiempo. Si expira, rechaza con `message`
+  // en lugar de dejar la inicialización colgada para siempre. La promesa
+  // original sigue su curso en segundo plano (no se puede cancelar).
+  function withTimeout(promise, timeoutMs, message = 'Timed out') {
+    let timer = null;
+
+    const timeoutPromise = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    });
+
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      clearTimeout(timer);
+    });
+  }
+
   function currentGamemodeId() {
     const player = state.game?.player;
 
@@ -3962,6 +4025,72 @@
         world.attachEntityMesh(player);
       }
     } catch (_) {}
+
+    // ── reparar el modelo del jugador si quedó a medias ──
+    // El build() del modelo es async: `await downloadSkin(skin)` cuando el
+    // skin no está cacheado. Sin sesión (perfil limpio) esa promesa cuelga
+    // para siempre → `model.parts` queda incompleto → el renderer del brazo
+    // en primera persona lanza `Cannot read properties of undefined (reading
+    // 'width')` en CADA frame → Game.update() mata su rAF loop de forma
+    // PERMANENTE → pantalla del color de fondo (celeste) y nada se renderiza.
+    // Fix: detectar el modelo roto y reconstruirlo con su propio constructor
+    // nativo — el constructor llena `parts` síncronamente (las UV boxes) y
+    // solo `init()` es async (skin/cosméticos), que tras la reconstrucción
+    // resuelve porque el constructor ya registró el skin por defecto.
+    try {
+      const model = player.mesh?.model;
+      const parts = model?.parts;
+      const pending =
+        model?.skinLoaded &&
+        typeof model.skinLoaded.then === 'function';
+
+      if (
+        model &&
+        parts &&
+        Object.keys(parts).length < 8 &&
+        pending
+      ) {
+        const ModelCtor = model.constructor;
+        const mesh = player.mesh;
+
+        // el constructor nativo hace super(e, e.entity.profile.cosmetics.skin):
+        // espera el MESH (con .entity), no la entidad. Sin sesión el profile
+        // queda sin skin → `await downloadSkin('')` cuelga para siempre y
+        // parts queda incompleto. Sintetizar el perfil cosmético mínimo con
+        // el skin default del juego (bob, ya cacheado en el atlas).
+        if (!mesh.entity?.profile?.cosmetics?.skin) {
+          try {
+            mesh.entity = mesh.entity || {};
+            mesh.entity.profile = mesh.entity.profile || {};
+            mesh.entity.profile.cosmetics = mesh.entity.profile.cosmetics || {};
+            mesh.entity.profile.cosmetics.skin =
+              mesh.entity.profile.cosmetics.skin || 'bob';
+            mesh.entity.profile.cosmetics.cape =
+              mesh.entity.profile.cosmetics.cape || 'none';
+            mesh.entity.profile.cosmetics.hat =
+              mesh.entity.profile.cosmetics.hat || 'none';
+          } catch (_) {}
+        }
+
+        if (typeof ModelCtor === 'function' && mesh.entity?.profile?.cosmetics) {
+          const rebuilt = new ModelCtor(mesh);
+
+          if (rebuilt && rebuilt.parts && Object.keys(rebuilt.parts).length >= 8) {
+            try { mesh.clear(); } catch (_) {}
+
+            mesh.model = rebuilt;
+
+            try {
+              mesh.add(rebuilt);
+            } catch (_) {}
+
+            log('player model reconstruido (build() colgado por downloadSkin)');
+          }
+        }
+      }
+    } catch (error) {
+      logWarn('player model repair falló (no crítico):', error?.message || error);
+    }
 
     try {
       if (forceRecreate && player.mesh) {
@@ -5300,6 +5429,224 @@
           );
         }
       }
+    } else if (map === 'garden') {
+      // ── Spider Garden: mundo real precacheado en assets/garden/world.json ──
+      // El simulador de arañas ahora vive DENTRO de la extensión (SpiderSim.js):
+      // la física corre sobre los chunks de este mundo en vivo. Aquí solo
+      // construimos el terreno EXACTAMENTE como el create world: grid COMPLETO
+      // contiguo de chunks, fondo bedrock/stone + subsuelo en TODAS las
+      // columnas (el renderer de miniblox no hace meshing de chunks huérfanos
+      // sin vecinos) y la superficie real del garden encima. El jugador queda
+      // DENTRO del mundo real que el simulador pisa.
+      let gardenData = null;
+
+      setStatus('Loading the Spider Garden world...', '');
+      log('garden: cargando assets/garden/world.json');
+
+      // base de assets de la extensión (meta inyectada por SplashScreen)
+      const gardenUrl = (() => {
+        try {
+          const meta = document.querySelector('meta[name="mf-mirror-base"]');
+          if (meta?.content?.endsWith('assets/mfpack/')) {
+            return meta.content.slice(0, -'assets/mfpack/'.length) + 'assets/garden/world.json';
+          }
+        } catch (_) {}
+        return null;
+      })();
+
+      if (gardenUrl) {
+        try {
+          const response = await fetch(gardenUrl, { cache: 'no-store' });
+          if (response.ok) gardenData = await response.json();
+          else log('garden: asset HTTP', response.status);
+        } catch (error) {
+          log('garden: fallo el asset embebido:', error?.message || error);
+        }
+      }
+      if (!gardenData) {
+        // fallback: simulador PC viejo (si sigue corriendo)
+        try {
+          const response = await fetch('http://127.0.0.1:8765/world.json', { cache: 'no-store' });
+          if (response.ok) gardenData = await response.json();
+        } catch (_) {}
+      }
+      if (!gardenData) {
+        logError('garden: sin world.json (asset y servidor PC ambos caídos)');
+        setStatus('Could not load the Spider Garden world (assets/garden/world.json).', 'GARDEN_DOWNLOAD_FAILED');
+        return false;
+      }
+
+      if (!gardenData?.ok || !Array.isArray(gardenData.blocks) || !Array.isArray(gardenData.palette)) {
+        setStatus('The simulator returned an invalid world payload.', 'GARDEN_INVALID_PAYLOAD');
+        return false;
+      }
+
+      // resolver paleta minecraft:xxx → block state nativo de miniblox
+      const mcName = (full) => String(full || '').replace(/^minecraft:/, '');
+      const stateCache = new Map();
+      const paletteStates = gardenData.palette.map((full) => {
+        const key = mcName(full);
+        if (stateCache.has(key)) return stateCache.get(key);
+        // p. ej. minecraft:short_grass → short_grass|grass, minecraft:grass_block → grass_block|grass
+        const base = key.split('[')[0];
+        const stem = base.split('_')[0];
+        const state = stateForAny(base, `${stem}_block`, stem === 'grass' ? 'grass' : stem, 'stone');
+        stateCache.set(key, state);
+        return state;
+      });
+      const resolvedCount = paletteStates.filter(Boolean).length;
+      log(`garden: paleta resuelta ${resolvedCount}/${gardenData.palette.length}: ${gardenData.palette.map((p, i) => `${mcName(p)}=${paletteStates[i] ? 'ok' : '?'}`).join(', ')}`);
+
+      // rango de chunks: grid COMPLETO contiguo con margen de 1 chunk
+      // (mismo patrón que el create world/sandbox)
+      const b = gardenData.bounds || {};
+      const minChunkX = Math.floor((Number(b.minX) || -48) >> 4) - 1;
+      const maxChunkX = Math.floor((Number(b.maxX) || 48) >> 4) + 1;
+      const minChunkZ = Math.floor((Number(b.minZ) || -48) >> 4) - 1;
+      const maxChunkZ = Math.floor((Number(b.maxZ) || 48) >> 4) + 1;
+      const minX = minChunkX * 16;
+      const maxX = (maxChunkX + 1) * 16 - 1;
+      const minZ = minChunkZ * 16;
+      const maxZ = (maxChunkZ + 1) * 16 - 1;
+      const bottomY = 40;
+
+      state.worldSeed = 0;
+      state.worldBounds = {
+        minX,
+        maxX,
+        minZ,
+        maxZ,
+        minY: bottomY,
+        maxY: 128
+      };
+
+      const flat = gardenData.blocks;
+
+      const chunks = new Map();
+      let created = 0;
+
+      for (let cx = minChunkX; cx <= maxChunkX; cx++) {
+        for (let cz = minChunkZ; cz <= maxChunkZ; cz++) {
+          const chunk = insertLocalChunk(cx, cz);
+          if (!chunk) {
+            setStatus(`Could not construct native Miniblox Chunk ${cx},${cz}.`, 'LOCAL_CHUNK_CONSTRUCTOR_FAILED');
+            return false;
+          }
+          chunks.set(`${cx},${cz}`, chunk);
+          created++;
+          if ((created & 15) === 15) await new Promise(resolve => setTimeout(resolve, 0));
+        }
+      }
+      log(`garden: ${created} chunks nativos (grid contiguo ${maxChunkX - minChunkX + 1}x${maxChunkZ - minChunkZ + 1})`);
+
+      const setLocal = (x, y, z, blockState) => {
+        const cx = Math.floor(x) >> 4;
+        const cz = Math.floor(z) >> 4;
+        const chunk = chunks.get(`${cx},${cz}`);
+        if (!chunk || !blockState) return false;
+        try {
+          return !!chunk.setBlockState(blockPos(x, y, z), Number(blockState.id), false);
+        } catch (_) {
+          return false;
+        }
+      };
+
+      // ── PASO 1: columna más alta del garden por (x,z) ──
+      const columnTop = new Map(); // "x,z" → y más alto
+      for (let i = 0; i < flat.length; i += 4) {
+        const x = flat[i], y = flat[i + 1], z = flat[i + 2];
+        const key = `${x},${z}`;
+        const prev = columnTop.get(key);
+        if (prev === undefined || y > prev) columnTop.set(key, y);
+      }
+
+      // ── PASO 2: base de terreno completa (patrón create world) ──
+      // bedrock en bottomY, stone hasta height-4, subsuelo hasta height-1.
+      // En TODAS las columnas del grid — así no hay chunks/columnas huecos
+      // y el renderer + la física del juego ven suelo sólido por doquier.
+      const defaultHeight = Math.floor(Number(gardenData.spawn?.y) || Number(gardenData.seaLevel) || 62);
+      let generationRows = 0;
+
+      for (let x = minX; x <= maxX; x++) {
+        for (let z = minZ; z <= maxZ; z++) {
+          const top = columnTop.get(`${x},${z}`);
+          // altura objetivo: la del garden si hay bloques, si no una base
+          // plana suave (interpolación barata desde el borde más cercano
+          // con bloques no compensa: mejor una meseta al nivel del mar)
+          const height = Number.isFinite(top) ? top : defaultHeight;
+          state.terrainSurface.set(`${x},${z}`, height);
+
+          setLocal(x, bottomY, z, bedrock || stone);
+
+          const stoneTop = Math.max(bottomY + 1, height - 4);
+          for (let y = bottomY + 1; y < stoneTop; y++) {
+            setLocal(x, y, z, stone);
+          }
+          for (let y = stoneTop; y < height; y++) {
+            setLocal(x, y, z, dirt);
+          }
+        }
+
+        generationRows++;
+        if (generationRows % 8 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+      }
+      log(`garden: base de terreno completa (${((maxX - minX + 1) * (maxZ - minZ + 1))} columnas)`);
+
+      // ── PASO 3: los bloques REALES del garden encima de la base ──
+      let placed = 0, skipped = 0;
+
+      for (let i = 0; i < flat.length; i += 4) {
+        const x = flat[i], y = flat[i + 1], z = flat[i + 2];
+        const blockState = paletteStates[flat[i + 3]];
+        if (!blockState) { skipped++; continue; }
+        if (setLocal(x, y, z, blockState)) placed++;
+        else skipped++;
+
+        if ((i & 4095) === 4095) await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
+      log(`garden: ${placed} bloques colocados, ${skipped} saltados`);
+
+      // arena/origin alrededor del spawn real del mundo
+      const sp = gardenData.spawn || { x: 0, y: 66, z: 0 };
+      // altura real de la superficie en el spawn (columna más alta en 3x3)
+      let spawnSurface = Number(sp.y) || 66;
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          const top = columnTop.get(`${Math.floor(sp.x) + dx},${Math.floor(sp.z) + dz}`);
+          if (Number.isFinite(top)) spawnSurface = Math.max(spawnSurface, top);
+        }
+      }
+      state.arena = {
+        cx: Math.floor(sp.x),
+        cz: Math.floor(sp.z),
+        floorY: spawnSurface,
+        radius: 8,
+        height: 24,
+        chunkX: Math.floor(sp.x) >> 4,
+        chunkZ: Math.floor(sp.z) >> 4
+      };
+      state.origin = {
+        x: Math.floor(sp.x) + 0.5,
+        y: spawnSurface + 1,
+        z: Math.floor(sp.z) + 0.5
+      };
+      log(`garden: spawn en superficie y=${spawnSurface}`);
+
+      // ordenar chunks por distancia al spawn (AHORA que origin existe):
+      // los primeros en serializarse y despacharse serán los del spawn →
+      // la puerta nativa (9 chunks) abre ya
+      {
+        const spx = state.origin.x, spz = state.origin.z;
+        const dist = (chunk) => {
+          const cx = Number(chunk?.xPosition), cz = Number(chunk?.zPosition);
+          if (!Number.isFinite(cx) || !Number.isFinite(cz)) return Infinity;
+          return Math.hypot(cx * 16 + 8 - spx, cz * 16 + 8 - spz);
+        };
+        state.localChunks.sort((a, b) => dist(a) - dist(b));
+      }
     } else {
       const minChunk = -LOCAL_TERRAIN_RADIUS_CHUNKS;
       const maxChunk = LOCAL_TERRAIN_RADIUS_CHUNKS;
@@ -5934,16 +6281,23 @@
       // Follow the same engine preparation path Miniblox uses on the title
       // screen. prepareEngine() waits for menu textures before booting WebGL
       // and also prewarms the native chunk worker/shaders.
-      await Promise.all([
-        (async () => {
-          if (typeof game.prepareEngine === 'function') {
-            await game.prepareEngine();
-          }
+      // `withTimeout`: en un perfil limpio la descarga de texturas del menú
+      // puede quedarse colgada indefinidamente (ads saturando la red) — sin
+      // timeout el mundo local queda atrapado en "Starting..." para siempre.
+      await withTimeout(
+        Promise.all([
+          (async () => {
+            if (typeof game.prepareEngine === 'function') {
+              await game.prepareEngine();
+            }
 
-          await game.boot?.();
-        })(),
-        waitForAccount(game, 5000)
-      ]);
+            await game.boot?.();
+          })(),
+          waitForAccount(game, 5000)
+        ]),
+        45000,
+        'Engine preparation timed out (menu textures).'
+      );
 
       try {
         game.chunkRenderManager?.chunkRenderWorkerManager?.prewarm?.();
@@ -6179,7 +6533,13 @@
     const expectedSpawn =
       map === 'spleef'
         ? { x: 8, y: 82.05, z: 8 }
-        : { x: 8, y: 86.05, z: 8 };
+        : map === 'garden'
+          ? {
+              x: state.origin?.x ?? 8,
+              y: (state.origin?.y ?? 83) + 2.05,
+              z: state.origin?.z ?? 8
+            }
+          : { x: 8, y: 86.05, z: 8 };
 
     teleportPlayer(
       expectedSpawn.x,
@@ -6875,7 +7235,7 @@
     }
 
     state.game = game;
-    state.map = map === 'spleef' ? 'spleef' : 'sandbox';
+    state.map = map === 'spleef' ? 'spleef' : (map === 'garden' ? 'garden' : 'sandbox');
     state.mode = mode;
     state.directLocal = false;
 
@@ -9561,7 +9921,9 @@
       const fallThreshold =
         state.directLocal && state.map === 'sandbox'
           ? 38
-          : arena.floorY - 4;
+          : state.map === 'garden'
+            ? (state.arena?.floorY ?? 60) - 12 // garden tiene terreno real: umbral generoso
+            : arena.floorY - 4;
 
       if (Number(player.pos.y) < fallThreshold) {
         const offset = state.mode === 'join' ? 3 : 0;
@@ -9684,6 +10046,15 @@
       return;
     }
 
+    if (action === 'start-garden') {
+      await startWorld('garden', 'single', 0, {
+        forceDirect: true,
+        worldName: 'Spider Garden',
+        role: 'owner'
+      });
+      return;
+    }
+
     if (action === 'stop') {
       stopWorld(true, true);
     }
@@ -9747,6 +10118,13 @@
       return startWorld('spleef', 'single', 0, {
         forceDirect: true,
         worldName: 'Local Spleef',
+        role: 'owner'
+      });
+    },
+    startGarden() {
+      return startWorld('garden', 'single', 0, {
+        forceDirect: true,
+        worldName: 'Spider Garden',
         role: 'owner'
       });
     },

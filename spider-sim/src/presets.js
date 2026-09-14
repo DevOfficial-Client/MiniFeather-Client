@@ -103,6 +103,18 @@ const PRESETS = {
     p.addLegPair(new Vec(0.2, -0.35, -0.3), new Vec(1.3 * 1.1, 0, -1.6), createRobotSegments(sc, 1.3 * 0.7 * sl));
     return p;
   },
+  // Araña real: 8 patas (4 pares) × 2 segmentos (fémur + tibia) = cadena corta
+  // para minimizar coste del FABRIK. El renderer ignora el bodyModel (no se
+  // dibuja torso) y solo usa los 2 primeros segmentos como cubos alargados.
+  spider(sc = 2, sl = 1.0) {
+    const p = new BodyPlan();
+    p.bodyModel = 'flat';
+    p.addLegPair(new Vec(0, 0, 0.20), new Vec(1.00, 0, 1.60), equalLength(sc, 1.10 * sl));
+    p.addLegPair(new Vec(0, 0, 0.10), new Vec(1.30, 0, 0.40), equalLength(sc, 1.00 * sl));
+    p.addLegPair(new Vec(0, 0, -0.10), new Vec(1.30, 0, -0.90), equalLength(sc, 1.10 * sl));
+    p.addLegPair(new Vec(0, 0, -0.20), new Vec(1.10, 0, -2.50), equalLength(sc, 1.60 * sl));
+    return p;
+  },
 };
 
 module.exports = { PRESETS, BodyPlan, LegPlan, SegmentPlan, createRobotSegments };
