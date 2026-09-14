@@ -85,6 +85,9 @@ const state = {
     heldMouseButton: null,
     manualJumpUntil: 0,
     jumpHoldUntil: 0,
+    jumpPhase: 'idle',
+    jumpStartY: 0,
+    jumpNodeIndex: -1,
     playerPositions: new Map(),
     nextPlayerScanAt: 0,
     autoMine: true
@@ -343,11 +346,8 @@ function createNativeInput(player, controls) {
         usingItem: false
     });
 
-    try {
-        const InputClass = player.currentInput?.constructor;
-        if (InputClass && InputClass !== Object) return new InputClass(data);
-    } catch (_) {}
-
+    // AntiAFK usa un objeto plano. Algunos constructores internos ignoran
+    // propiedades añadidas (especialmente jump), así que no reconstruirlo.
     return data;
 }
 
@@ -428,7 +428,11 @@ function hookPlayerInput() {
         }
 
         try {
-            return nativeApply.call(this, input);
+            const result = nativeApply.call(this, input);
+            // Respaldo para versiones donde el apply rotó el campo jump o el
+            // objeto de input lo consume después de este método.
+            if (desiredInput.jump) this.jumping = true;
+            return result;
         } finally {
             // verificacion post-apply: que campos del player cambiaron con
             // nuestro input (diagnostico automatico del primer tick)
@@ -662,7 +666,9 @@ function heuristic(x1, y1, z1, x2, y2, z2) {
     const dx = Math.abs(x1 - x2);
     const dy = Math.abs(y1 - y2);
     const dz = Math.abs(z1 - z2);
-    return Math.max(dx, dz) + dy + (Math.SQRT2 - 1) * Math.min(dx, dz);
+    // La distancia horizontal es una cota inferior del tiempo. La altura se
+    // omite para no sobreestimar: saltar y caer se penalizan en getNeighbors.
+    return Math.max(dx, dz) + (Math.SQRT2 - 1) * Math.min(dx, dz);
 }
 
 function getNeighbors(x, y, z) {
@@ -690,20 +696,20 @@ function getNeighbors(x, y, z) {
 
         // Try step up (jump 1 block)
         if (canStand(nx, y + 1, nz) && canStand(x, y, z)) {
-            result.push({ x: nx, y: y + 1, z: nz, cost: isDiagonal ? Math.SQRT2 + 0.5 : 1.5 });
+            result.push({ x: nx, y: y + 1, z: nz, cost: isDiagonal ? Math.SQRT2 + 1.25 : 2.25 });
             continue;
         }
 
         // Try step down
         if (canStand(nx, y - 1, nz)) {
-            result.push({ x: nx, y: y - 1, z: nz, cost: isDiagonal ? Math.SQRT2 + 0.5 : 1.5 });
+            result.push({ x: nx, y: y - 1, z: nz, cost: isDiagonal ? Math.SQRT2 + 0.35 : 1.35 });
             continue;
         }
 
         // Try falling down up to 3 blocks
         for (let dy = 2; dy <= 3; dy++) {
             if (canStand(nx, y - dy, nz) && !isSolid(nx, y - dy + 1, nz) && !isSolid(nx, y - dy + 2, nz)) {
-                result.push({ x: nx, y: y - dy, z: nz, cost: 1 + dy * 0.5 });
+                result.push({ x: nx, y: y - dy, z: nz, cost: 1 + dy * 0.8 });
                 break;
             }
         }
@@ -739,26 +745,26 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ, maxIterOverride) 
 
     const startTime = performance.now();
     let iterations = 0;
-    // rutas largas: heuristic weight 1.5 (greedy-ish) para no explorar en
-    // anillos — con peso 1 puro, 160 bloques de distancia puede necesitar
-    // >100k nodos; con 1.5 prioriza avanzar hacia el goal
-    const H_WEIGHT = 1.5;
-    const MAX_ITER = maxIterOverride || 12000;
+    // A* real: peso 1 conserva la optimalidad según los costes de movimiento.
+    const H_WEIGHT = 1;
+    const MAX_ITER = maxIterOverride || 30000;
 
     // best-effort: recordar el nodo mas cercano al goal; si se agota el
     // limite, devolver ruta hasta ahi (y repath desde alla) en vez de null
     let bestKey = null;
     let bestH = Infinity;
 
-    const reconstruct = (endKey, endNode) => {
+    const reconstruct = (endKey) => {
         const path = [];
         let ck = endKey;
-        while (ck && cameFrom.has(ck)) {
+        while (ck) {
             const [px, py, pz] = ck.split(',').map(Number);
             path.unshift({ x: px, y: py, z: pz });
+            if (ck === startKey) break;
             ck = cameFrom.get(ck);
         }
-        path.push({ x: endNode.x, y: endNode.y, z: endNode.z });
+        // El primer nodo es la celda actual; ejecutarlo provoca giros inútiles.
+        if (path.length > 1) path.shift();
         return path;
     };
 
@@ -777,10 +783,10 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ, maxIterOverride) 
         const h = heuristic(current.x, current.y, current.z, goalX, goalY, goalZ);
         if (h < bestH) { bestH = h; bestKey = cKey; }
 
-        // Goal check (within 1 block)
-        if (Math.abs(current.x - goalX) <= 1 && Math.abs(current.z - goalZ) <= 1 &&
-            Math.abs(current.y - goalY) <= 2) {
-            const path = reconstruct(cKey, current);
+        // Llegar al bloque exacto; antes aceptaba hasta 2 bloques de altura y
+        // podía terminar la ruta sin ejecutar el salto final.
+        if (current.x === goalX && current.y === goalY && current.z === goalZ) {
+            const path = reconstruct(cKey);
             console.log(`${TAG} Path found: ${path.length} nodes in ${iterations} iterations`);
             return path;
         }
@@ -806,8 +812,7 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ, maxIterOverride) 
     // best-effort: llegar al punto mas proximo explorado (solo si avanzo de
     // verdad: al menos 8 bloques mas cerca que al empezar)
     if (bestKey && bestH < heuristic(startX, startY, startZ, goalX, goalY, goalZ) - 8) {
-        const [bx, by, bz] = bestKey.split(',').map(Number);
-        const path = reconstruct(bestKey, { x: bx, y: by, z: bz });
+        const path = reconstruct(bestKey);
         console.log(`${TAG} Best-effort path: ${path.length} nodes (h=${bestH.toFixed(1)}), will re-path from there`);
         return path;
     }
@@ -887,6 +892,7 @@ function applyMovementInput(player, strafe, forward, jump, sneak, yaw, pitch, sp
     desiredInput.jump = jump;
     desiredInput.sneak = sneak;
     desiredInput.sprint = sprint;
+    try { player.jumping = !!jump; } catch (_) {}
     // el yaw va DENTRO del input: el pipeline del juego lo aplica al player
     // (player.yaw lo pisa la camara cada tick, escribirlo directo no sirve)
     desiredInput.yaw = yaw != null ? yaw : Number(player.yaw) || 0;
@@ -930,13 +936,45 @@ function blockingBlockAhead(player, dx, dz) {
     return null;
 }
 
+function updatePathJump(player, target, distSq, dx, dz, now) {
+    const feetLevel = Math.floor(player.pos.y + 0.12);
+    const stepUp = target.y > feetLevel;
+    const obstacle = obstacleNeedsJump(player, dx, dz);
+    const shouldLaunch = (stepUp && distSq < 2.6) || obstacle;
+
+    if (state.jumpNodeIndex !== state.pathIndex) {
+        state.jumpPhase = 'idle';
+        state.jumpNodeIndex = state.pathIndex;
+    }
+
+    if (state.jumpPhase === 'idle' && shouldLaunch) {
+        state.jumpPhase = 'impulse';
+        state.jumpStartY = Number(player.pos.y) || 0;
+        state.jumpHoldUntil = now + 360;
+    }
+
+    if (state.jumpPhase === 'impulse') {
+        const rose = player.pos.y > state.jumpStartY + 0.28;
+        if (rose || now >= state.jumpHoldUntil) state.jumpPhase = 'airborne';
+        return !rose && now < state.jumpHoldUntil;
+    }
+
+    if (state.jumpPhase === 'airborne') {
+        const reachedLevel = player.pos.y >= target.y - 0.18;
+        if (reachedLevel || (player.onGround && player.pos.y <= state.jumpStartY + 0.12)) {
+            state.jumpPhase = 'idle';
+        }
+    }
+    return false;
+}
+
 function executePath(player, keepAlive = false) {
     if (state.path.length === 0 || state.pathIndex >= state.path.length) {
         if (!keepAlive) {
             // fin de ruta: si el goal real sigue lejos (ruta best-effort),
             // recalcular desde la pos actual en vez de declarar victoria
             const g = state.goal;
-            if (g && Math.hypot(g.x - player.pos.x, g.y - player.pos.y, g.z - player.pos.z) > 3) {
+            if (g && Math.hypot(g.x + 0.5 - player.pos.x, g.y - player.pos.y, g.z + 0.5 - player.pos.z) > 0.85) {
                 console.log(`${TAG} Local path done, goal still far — re-pathing`);
                 repath();
                 return true;
@@ -961,7 +999,7 @@ function executePath(player, keepAlive = false) {
         if (state.pathIndex >= state.path.length) {
             if (!keepAlive) {
                 const g = state.goal;
-                if (g && Math.hypot(g.x - player.pos.x, g.y - player.pos.y, g.z - player.pos.z) > 3) {
+                if (g && Math.hypot(g.x + 0.5 - player.pos.x, g.y - player.pos.y, g.z + 0.5 - player.pos.z) > 0.85) {
                     console.log(`${TAG} Local path done, goal still far — re-pathing`);
                     repath();
                     return true;
@@ -978,14 +1016,8 @@ function executePath(player, keepAlive = false) {
 
     const move = movementTowardWorldYaw(player, targetYaw);
 
-    // Mantener jump varios ticks. Antes el nodo se marcaba como alcanzado solo
-    // por X/Z y el salto se soltaba antes de que la física levantara al player.
     const now = performance.now();
-    const risingToNode = target.y > Math.floor(py + 0.1);
-    if (risingToNode || obstacleNeedsJump(player, dx, dz)) {
-        state.jumpHoldUntil = Math.max(state.jumpHoldUntil, now + 520);
-    }
-    const needJump = now < state.jumpHoldUntil;
+    const needJump = updatePathJump(player, target, distSq, dx, dz, now);
 
     // yaw=null conserva la cámara del usuario; W/A/S/D ya fueron rotados para
     // continuar hacia el nodo en coordenadas del mundo.
@@ -1066,7 +1098,11 @@ function stopFollow(silent = false) {
 function directChase(player, dx, dz, forceJump = false) {
     const targetYaw = Math.atan2(-dx, dz);
     const move = movementTowardWorldYaw(player, targetYaw);
-    const jump = forceJump || obstacleNeedsJump(player, dx, dz);
+    const now = performance.now();
+    if (forceJump || obstacleNeedsJump(player, dx, dz)) {
+        state.jumpHoldUntil = Math.max(state.jumpHoldUntil, now + 360);
+    }
+    const jump = now < state.jumpHoldUntil;
     applyMovementInput(player, move.strafe, move.forward, jump, false, null, undefined, move.forward > 0.55);
 }
 
@@ -1147,9 +1183,9 @@ function followTick(player, now) {
 
 // --- Acciones: colocar, minar y combate ---
 function getInputSurface() {
-    const renderer = state.game?.renderer;
+    const renderer = state.game?.gameScene?.renderer || state.game?.renderer;
     return renderer?.domElement || renderer?.canvas ||
-        document.querySelector('canvas') || document.body;
+        document.querySelector('#react canvas') || document.querySelector('canvas') || document.body;
 }
 
 function dispatchMouse(button, down) {
@@ -1171,6 +1207,12 @@ function dispatchMouse(button, down) {
 }
 
 function releaseMouse() {
+    try {
+        if (state.player) {
+            state.player.punching = false;
+            if ('attacking' in state.player) state.player.attacking = false;
+        }
+    } catch (_) {}
     if (state.heldMouseButton == null) return;
     dispatchMouse(state.heldMouseButton, false);
     state.heldMouseButton = null;
@@ -1334,6 +1376,12 @@ function blockActionTick(player, now, action) {
     if (action.type === 'mine') {
         aimCameraAt(player, tx, ty, tz, 0.42);
         setActionStatus('mining', 'acting');
+        // El juego mantiene la rotura mediante player.punching; un evento
+        // sintético aislado no basta en todas las versiones.
+        try {
+            player.punching = true;
+            if ('attacking' in player) player.attacking = true;
+        } catch (_) {}
         if (now >= state.actionNextAt && state.heldMouseButton == null) {
             dispatchMouse(0, true);
             state.heldMouseButton = 0;

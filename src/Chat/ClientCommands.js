@@ -1200,6 +1200,18 @@
           addChat('Usage: /baritone goto <x y z> | <waypoint name>', 'error');
           return;
         }
+        // Un jugador conocido tiene prioridad sobre un waypoint del mismo
+        // nombre. Si sigue cargado, usar follow para actualizar la ruta.
+        const tracked = api.locate(name);
+        if (tracked) {
+          if (tracked.loaded && api.follow(name)) {
+            addChat('Following player "' + tracked.username + '" in real time...', 'success');
+          } else {
+            api.goto(tracked.x, tracked.y, tracked.z);
+            addChat('Walking to the last known position of "' + tracked.username + '"...', 'success');
+          }
+          return;
+        }
         const wpApi = globalThis.__MINIFEATHER_WAYPOINTS__;
         const wp = wpApi?.findWaypoint?.(name);
         if (!wp) {
