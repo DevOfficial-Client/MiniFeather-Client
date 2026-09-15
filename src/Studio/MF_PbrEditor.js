@@ -1,28 +1,3 @@
-// MF_PbrEditor.js — Editor de packs PBR EN VIVO (MAIN world): pinta el
-// relieve de los bloques y se ve al instante en el juego.
-//
-// Flujo: eliges una textura (ej: stone), pintas un MAPA DE ALTURA en
-// grises (blanco = alto, negro = hundido) y el editor deriva el NORMAL
-// MAP con Sobel 3x3 (pintar normales a mano sería imposible). Tabs por
-// canal:
-//   · RELIEVE (n): pinta altura → normal map automático
-//   · BRILLO   (s): pintas el specular directo (blanco = brillo)
-//   · EMISIVO  (e): pintas qué píxeles emiten luz
-//
-// El editor escribe DIRECTO sobre el canvas de la textura THREE del atlas
-// (MF_PBR.__tex(kind).image) + needsUpdate → cambio visible al instante.
-//
-// Persistencia:
-//   · "Aplicar"  → guarda los atlas editados en IndexedDB (mismo formato
-//     que TexturePackManager: atlas_n/s/e = {dataUrl, placed}) y marca
-//     mf_pbr_manual=1 para que la auto-reinstalación no lo pise.
-//   · "ZIP"      → descarga PNGs <base>_n/_s/_e.png en un ZIP (store,
-//     sin dependencias — JSZip no está en MAIN), re-importable con el
-//     upload del Texture Pack y compartible.
-//
-// Uso:
-//   MF_PbrEditor.open()   // o botón "Editar pack" en GUI → Experimental
-//   MF_PbrEditor.close()
 
 (function () {
     'use strict';
@@ -31,8 +6,8 @@
     const ID = 'mf-pbreditor';
     const LS_MANUAL = 'mf_pbr_manual';
 
-    const TILE = 16;   // resolución de edición por defecto
-    const ZOOM = 14;   // px de UI por texel
+    const TILE = 16;   
+    const ZOOM = 14;   
 
     const KINDS = [
         { id: 'n', label: '⛰ Relieve', hint: 'blanco = alto' },
@@ -43,28 +18,24 @@
     const state = {
         open: false,
         grid: true,
-        frames: null,          // frames.json cacheado
-        tiles: [],             // [{name,x,y,w,h}] tiles 16x16 del atlas
+        frames: null,          
+        tiles: [],             
         filtered: [],
-        sel: null,             // tile seleccionado
+        sel: null,             
         kind: 'n',
-        work: null,            // canvas de trabajo del tile (altura o canal)
-        stampN: new Map(),     // name → ImageData (altura para 'n')
-        stampS: new Map(),     // name → ImageData (contenido directo)
+        work: null,            
+        stampN: new Map(),     
+        stampS: new Map(),     
         stampE: new Map(),
-        tool: 'height',        // height | smooth | flat | picker
-        strength: 1.0,         // fuerza del Sobel
-        brush: 2,              // radio en texels (0=1px, 1=3x3, 2=5x5, ...)
+        tool: 'height',        
+        strength: 1.0,         
+        brush: 2,              
         painting: false, lastCell: null,
         undo: [], redo: []
     };
 
-    // ── utilidades ──
-
     function el(id) { return document.getElementById(id); }
 
-    // err() acepta string directo (compatibilidad) o {key, vars} para
-    // mensajes traducibles. Si llega un string, lo trata como fallback.
     function err(input) {
         const e = el(ID + '-err');
         if (!input) {
@@ -87,8 +58,6 @@
 
     function texOf(kind) { return window.MF_PBR?.__tex?.(kind) || null; }
 
-    // canvas editable de la textura del atlas: la primera llamada reemplaza
-    // tex.image por un canvas (mismo tamaño) del que el editor es dueño
     let atlasCv = { n: null, s: null, e: null };
     function atlasCanvas(kind) {
         if (atlasCv[kind]) return atlasCv[kind];
@@ -110,12 +79,6 @@
         if (tex) tex.needsUpdate = true;
     }
 
-    // ── frames.json ──
-    // OJO: este script corre en MAIN world, donde chrome.runtime.getURL
-    // NO está garantizado. Doble vía: (1) intento directo si existe, (2) el
-    // panel (ISOLATED, que sí lo tiene) nos lo manda por CustomEvent junto
-    // con el evento de apertura.
-
     async function loadFrames() {
         if (state.frames) return state.frames;
         try {
@@ -129,12 +92,11 @@
         return state.frames;
     }
 
-    // frames llegando del panel (ISOLATED)
     document.addEventListener('minifeather:pbr-editor-frames', (ev) => {
         try {
             const frames = JSON.parse(ev.detail);
             if (!frames || typeof frames !== 'object') return;
-            if (state.frames) return;  // ya cargados
+            if (state.frames) return;  
             state.frames = frames;
             buildTiles();
             const q = el(ID + '-search')?.value || '';
@@ -145,19 +107,17 @@
         }
     });
 
-    // traducciones + idioma llegando del panel
     document.addEventListener('minifeather:pbr-editor-open', (ev) => {
         try {
             const d = JSON.parse(ev.detail);
             if (d.strings && typeof d.strings === 'object') {
-                // las inyectamos en el i18n del MAIN (que ya tiene t()) o
-                // en un fallback local si no está disponible
+                
                 const i18n = globalThis.MiniFeatherI18n;
                 if (i18n) {
                     i18n.register(d.strings);
                     if (d.language) i18n.setLanguage(d.language);
                 } else {
-                    // fallback: tabla local hasta que el i18n global esté listo
+                    
                     state.i18n = state.i18n || { lang: d.language || 'en', strings: {} };
                     Object.assign(state.i18n.strings, d.strings);
                     if (d.language) state.i18n.lang = d.language;
@@ -166,7 +126,7 @@
             if (d.language && globalThis.MiniFeatherI18n) {
                 globalThis.MiniFeatherI18n.setLanguage(d.language);
             }
-            // re-traducir lo ya construido (si el editor está abierto)
+            
             if (state.open) {
                 refreshTexts();
             }
@@ -193,7 +153,7 @@
         for (const [fileName, data] of Object.entries(state.frames)) {
             const f = data.frame || {};
             const w = f.w || 16, h = f.h || 16;
-            if (w !== 16 || h !== 16) continue;   // solo tiles cuadrados 16x16
+            if (w !== 16 || h !== 16) continue;   
             state.tiles.push({
                 name: fileName.replace(/\.png$/, ''),
                 x: f.x || 0, y: f.y || 0, w, h
@@ -209,8 +169,6 @@
             : state.tiles.filter(t => t.name.includes(needle));
         renderTileList();
     }
-
-    // ── altura → normal map (Sobel 3x3, tile periódico) ──
 
     function heightToNormal(srcData, strength) {
         const w = srcData.width, h = srcData.height;
@@ -239,8 +197,6 @@
         return out;
     }
 
-    // altura aproximada desde el normal actual (integración de gradiente):
-    // punto de partida editable cuando el tile ya tiene relieve del preset
     function tileHeightFromAtlas(tile) {
         const c = document.createElement('canvas');
         c.width = tile.w; c.height = tile.h;
@@ -260,7 +216,7 @@
             let acc = 0;
             for (let x = 0; x < w; x++) {
                 const i = y * w + x;
-                if (x > 0) acc += -nx[i] * 3;   // ~dz/dx * paso
+                if (x > 0) acc += -nx[i] * 3;   
                 height[i] = acc;
             }
         }
@@ -275,8 +231,6 @@
         }
         return out;
     }
-
-    // ── pintado sobre el canvas de trabajo ──
 
     function snapshot() {
         if (!state.work) return;
@@ -301,7 +255,6 @@
         const r = state.brush;
         if (state.tool === 'smooth') { smoothAt(ctx, x, y, r); return; }
 
-        // flat → valor neutral absoluto (gris 128 en n, negro en s/e)
         if (state.tool === 'flat') {
             ctx.fillStyle = state.kind === 'n' ? 'rgb(128,128,128)' : 'rgb(0,0,0)';
             for (let dy = -r; dy <= r; dy++) {
@@ -313,9 +266,6 @@
             return;
         }
 
-        // elevar/hundir: la intensidad controla cuánto cambia cada pasada
-        // (mezcla gradual hacia blanco/negro, no salto directo a 0/255).
-        // strength 0.3 → ±21/pasada (suave), 1 → ±70, 3 → ±210 (casi snap)
         const W = state.work.width, H = state.work.height;
         const x0 = Math.max(0, x - r), y0 = Math.max(0, y - r);
         const x1 = Math.min(W - 1, x + r), y1 = Math.min(H - 1, y + r);
@@ -337,7 +287,7 @@
     }
 
     function smoothAt(ctx, x, y, r) {
-        // r=0 → 1 píxel, no hay vecindad que promediar: no-op
+        
         if (r === 0) return;
         const W = state.work.width, H = state.work.height;
         const src = ctx.getImageData(0, 0, W, H);
@@ -375,7 +325,6 @@
         }
     }
 
-    // llevar el canvas de trabajo al atlas vivo
     function commitTile() {
         const t = state.sel;
         if (!t || !state.work) return;
@@ -396,8 +345,6 @@
             needsUpdate(state.kind);
         }
     }
-
-    // ── selección de tile ──
 
     function selectTile(name) {
         const t = state.tiles.find(x => x.name === name);
@@ -435,8 +382,6 @@
         else renderTileList();
     }
 
-    // ── render ──
-
     function renderCanvas() {
         const cv = el(ID + '-cv');
         if (!cv) return;
@@ -454,7 +399,7 @@
             ctx.fillText('← elige una textura de la lista', 14, h / 2);
             return;
         }
-        // vista según canal: en 'n' mostramos ALTURA + mini normal derivado
+        
         ctx.drawImage(state.work, 0, 0, w, h);
         if (state.grid) {
             ctx.strokeStyle = 'rgba(255,255,255,.07)';
@@ -463,7 +408,7 @@
             for (let y = 0; y <= t.h; y++) { ctx.moveTo(0, y * ZOOM + .5); ctx.lineTo(w, y * ZOOM + .5); }
             ctx.stroke();
         }
-        // nombre del tile
+        
         ctx.font = '9px system-ui';
         ctx.fillStyle = 'rgba(0,0,0,.6)';
         ctx.fillRect(2, 2, t.name.length * 5.5 + 4, 11);
@@ -500,7 +445,6 @@
         });
     }
 
-    // referencia visual: el diffuse del juego (mismo tile, mismo layout)
     function renderRef() {
         const ref = el(ID + '-ref');
         if (!ref) return;
@@ -513,8 +457,6 @@
         const diff = window.MF_PBR?.__diffuse?.();
         if (diff) ictx.drawImage(diff, t.x, t.y, t.w, t.h, 0, 0, ref.width, ref.height);
     }
-
-    // ── persistencia ──
 
     function idbPut(key, value) {
         return new Promise((resolve) => {
@@ -537,8 +479,6 @@
         });
     }
 
-    // guardar los atlas editados (sin disparar reload: las texturas ya
-    // están vivas y son las mismas que se guardarían)
     async function applyPack() {
         let saved = 0;
         for (const kind of ['n', 's', 'e']) {
@@ -555,8 +495,6 @@
             err({ key: 'pbrEditorSaveEmpty' });
         }
     }
-
-    // ── ZIP store sin dependencias (JSZip no está en MAIN) ──
 
     function crc32(buf) {
         let table = crc32.table;
@@ -582,7 +520,7 @@
     }
 
     function makeZip(files) {
-        // files: [{name, bytes}] — método STORE (PNG ya está comprimido)
+        
         const enc = new TextEncoder();
         const parts = [];
         const central = [];
@@ -679,8 +617,6 @@
         }
         selectTile(t.name);
     }
-
-    // ── UI ──
 
     function buildUI() {
         if (el(ID)) return;
@@ -786,24 +722,19 @@
         refreshTexts();
     }
 
-    // Aplica t() a todos los nodos con data-i18n / data-i18n-title /
-    // data-i18n-placeholder del editor.
     function refreshTexts() {
         const root = el(ID);
         if (!root) return;
-        // Nodos simples (sin hijos HTML, solo texto)
+        
         root.querySelectorAll('[data-i18n]').forEach(node => {
             const k = node.getAttribute('data-i18n');
             if (!k) return;
-            // Si tiene hijos que NO son <span data-i18n> (input/canvas/emoji),
-            // los conservamos y solo reescribimos los nodos de texto sueltos.
-            // Caso simple: sin hijos HTML → reescribir todo el textContent
+            
             const childEls = [...node.childNodes].filter(n => n.nodeType === 1);
             if (childEls.length === 0) {
                 node.textContent = t(k);
             } else {
-                // Mezcla (emoji + texto): conservamos los elementos y
-                // reescribimos solo el primer nodo de texto
+                
                 const txt = t(k);
                 let placed = false;
                 childEls.forEach((c, i) => {
@@ -813,18 +744,18 @@
                             placed = true;
                         }
                     } else if (c.hasAttribute && c.hasAttribute('data-i18n')) {
-                        // subnodo a traducir (lo maneja el bucle de abajo)
+                        
                     } else {
                         c.textContent = '';
                     }
                 });
                 if (!placed) {
-                    // prepend texto como nodo de texto antes del primer hijo
+                    
                     node.insertBefore(document.createTextNode(txt), node.firstChild);
                 }
             }
         });
-        // títulos y placeholders
+        
         root.querySelectorAll('[data-i18n-title]').forEach(node => {
             const k = node.getAttribute('data-i18n-title');
             if (k) node.setAttribute('title', t(k));
@@ -833,10 +764,10 @@
             const k = node.getAttribute('data-i18n-placeholder');
             if (k) node.setAttribute('placeholder', t(k));
         });
-        // hint del canal activo
+        
         const hint = root.querySelector('[data-kind-hint]');
         if (hint) hint.textContent = t('pbrEditorKind_' + state.kind) || hint.textContent;
-        // mensajes en err() también traducidos
+        
         const e = el(ID + '-err');
         if (e && e.textContent && state.errKey) e.textContent = t(state.errKey, state.errVars);
     }
@@ -857,7 +788,7 @@
         root.querySelector('[data-str]').oninput = (e) => {
             state.strength = +e.target.value;
             if (state.sel && state.stampN.has(state.sel.name)) {
-                // re-derivar el normal con la nueva fuerza
+                
                 const t = state.sel;
                 const cv = atlasCanvas('n');
                 if (cv) {
@@ -881,7 +812,6 @@
         const search = root.querySelector('#' + ID + '-search');
         search.oninput = () => filterTiles(search.value);
 
-        // dibujo
         const cv = root.querySelector('canvas.mfpe-cv');
         const cellOf = (e) => {
             const t = state.sel;
@@ -926,8 +856,6 @@
         cv.addEventListener('pointercancel', stop);
     }
 
-    // ── API ──
-
     function pbrReady() {
         try {
             const st = window.MF_PBR?.status?.();
@@ -959,7 +887,6 @@
         state.painting = false;
     }
 
-    // puente GUI (ISOLATED) → editor (MAIN)
     document.addEventListener('minifeather:pbr-editor-open', () => open());
 
     window.MF_PbrEditor = { open, close, get isOpen() { return state.open; } };

@@ -1,25 +1,17 @@
-/**
- * Servidor Orquestador P2P
- * 
- * Coordina la red distribuida, asigna regiones a nodos según su potencia,
- * maneja el balanceo de carga y valida la integridad del sistema.
- */
 
 const WebSocket = require('ws');
 const http = require('http');
 const crypto = require('crypto');
 
-// Configuración del servidor
 const CONFIG = {
   PORT: process.env.P2P_PORT || 8766,
   HEARTBEAT_TIMEOUT: 10000,
-  REBALANCE_THRESHOLD: 0.8, // 80% de carga máxima
+  REBALANCE_THRESHOLD: 0.8, 
   VALIDATION_INTERVAL: 5000,
   MAX_REGIONS_PER_NODE: 3,
-  REGION_SIZE: 4 // chunks
+  REGION_SIZE: 4 
 };
 
-// Estados del nodo
 const NODE_STATE = {
   CONNECTING: 'connecting',
   ACTIVE: 'active',
@@ -27,7 +19,6 @@ const NODE_STATE = {
   OFFLINE: 'offline'
 };
 
-// Roles posibles
 const NODE_ROLE = {
   ORCHESTRATOR: 'orchestrator',
   AUTHORITY: 'authority',
@@ -50,7 +41,7 @@ class P2POrchestrator {
   }
 
   initServer() {
-    // Crear servidor HTTP para health checks
+    
     this.httpServer = http.createServer((req, res) => {
       if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -69,7 +60,6 @@ class P2POrchestrator {
       }
     });
 
-    // Crear servidor WebSocket
     this.wss = new WebSocket.Server({ 
       server: this.httpServer,
       path: '/p2p'
@@ -108,7 +98,6 @@ class P2POrchestrator {
       console.error(`[P2P Orchestrator] Error en nodo ${nodeId}:`, error);
     });
 
-    // Timeout de conexión inicial
     ws.connectionTimeout = setTimeout(() => {
       if (ws.state === NODE_STATE.CONNECTING) {
         console.warn(`[P2P Orchestrator] Timeout de conexión para ${nodeId}`);
@@ -160,12 +149,10 @@ class P2POrchestrator {
 
     console.log(`[P2P Orchestrator] Nodo registrado: ${ws.nodeId} (rol: ${message.role}, score: ${message.benchmark.score})`);
 
-    // Asignar regiones si es nodo de autoridad
     if (message.role === NODE_ROLE.AUTHORITY || message.role === NODE_ROLE.HYBRID) {
       this.assignRegionsToNode(nodeData);
     }
 
-    // Enviar lista actualizada de peers
     this.sendPeerList(ws);
   }
 
@@ -176,11 +163,9 @@ class P2POrchestrator {
     node.lastHeartbeat = Date.now();
     node.metrics = message.metrics;
 
-    // Actualizar carga basada en métricas
     if (message.metrics && message.metrics.activeRegions) {
       node.currentLoad = message.metrics.activeRegions / CONFIG.MAX_REGIONS_PER_NODE;
       
-      // Verificar si necesita rebalanceo
       if (node.currentLoad > CONFIG.REBALANCE_THRESHOLD) {
         this.triggerRebalance(ws.nodeId);
       }
@@ -193,7 +178,6 @@ class P2POrchestrator {
       return;
     }
 
-    // Reenviar mensaje de señalización
     targetNode.ws.send(JSON.stringify({
       type: 'SIGNALING',
       from: message.from,
@@ -213,7 +197,6 @@ class P2POrchestrator {
   handleShutdownNotification(ws, message) {
     console.log(`[P2P Orchestrator] Nodo ${ws.nodeId} notificando apagado`);
     
-    // Reasignar regiones del nodo que se va
     const node = this.nodes.get(ws.nodeId);
     if (node && node.assignedRegions.length > 0) {
       this.reassignRegions(node.assignedRegions, ws.nodeId);
@@ -227,7 +210,7 @@ class P2POrchestrator {
     
     const node = this.nodes.get(ws.nodeId);
     if (node) {
-      // Reasignar regiones
+      
       if (node.assignedRegions.length > 0) {
         this.reassignRegions(node.assignedRegions, ws.nodeId);
       }
@@ -235,7 +218,6 @@ class P2POrchestrator {
       this.nodes.delete(ws.nodeId);
     }
 
-    // Notificar a otros nodos
     this.broadcastPeerList();
   }
 
@@ -243,7 +225,7 @@ class P2POrchestrator {
     const availableRegions = this.findAvailableRegions();
     const maxRegions = Math.min(
       CONFIG.MAX_REGIONS_PER_NODE,
-      Math.floor(node.maxCapacity / 30) // Más capacidad = más regiones
+      Math.floor(node.maxCapacity / 30) 
     );
 
     for (let i = 0; i < maxRegions && availableRegions.length > 0; i++) {
@@ -294,7 +276,6 @@ class P2POrchestrator {
       assignedAt: Date.now()
     });
 
-    // Notificar al nodo
     node.ws.send(JSON.stringify({
       type: 'ASSIGN_REGION',
       region: region
@@ -304,7 +285,7 @@ class P2POrchestrator {
   }
 
   reassignRegions(regions, fromNodeId) {
-    // Encontrar nodos con capacidad disponible
+    
     const availableNodes = Array.from(this.nodes.values())
       .filter(node => 
         node.role === NODE_ROLE.AUTHORITY || node.role === NODE_ROLE.HYBRID
@@ -313,7 +294,7 @@ class P2POrchestrator {
       .sort((a, b) => {
         const loadA = a.assignedRegions.length / a.maxCapacity;
         const loadB = b.assignedRegions.length / b.maxCapacity;
-        return loadA - loadB; // Menor carga primero
+        return loadA - loadB; 
       });
 
     for (const regionId of regions) {
@@ -325,7 +306,6 @@ class P2POrchestrator {
       if (region) {
         this.assignRegionToNode(region, targetNode);
         
-        // Actualizar lista de nodos disponibles
         if (targetNode.assignedRegions.length >= CONFIG.MAX_REGIONS_PER_NODE) {
           availableNodes.shift();
         }
@@ -339,7 +319,6 @@ class P2POrchestrator {
 
     console.log(`[P2P Orchestrator] Iniciando rebalanceo para nodo sobrecargado: ${overloadedNodeId}`);
 
-    // Transferir una región al nodo con menor carga
     const availableNodes = Array.from(this.nodes.values())
       .filter(node => 
         node.id !== overloadedNodeId &&
@@ -401,12 +380,10 @@ class P2POrchestrator {
         console.warn(`[P2P Orchestrator] Nodo sin heartbeat: ${nodeId}`);
         node.state = NODE_STATE.DEGRADED;
         
-        // Intentar reconexión o marcar como offline
         if (now - node.lastHeartbeat > CONFIG.HEARTBEAT_TIMEOUT * 2) {
           console.log(`[P2P Orchestrator] Nodo marcado como offline: ${nodeId}`);
           node.state = NODE_STATE.OFFLINE;
           
-          // Reasignar regiones
           if (node.assignedRegions.length > 0) {
             this.reassignRegions(node.assignedRegions, nodeId);
           }
@@ -414,7 +391,6 @@ class P2POrchestrator {
       }
     }
 
-    // Limpieza de nodos offline
     for (const [nodeId, node] of this.nodes.entries()) {
       if (node.state === NODE_STATE.OFFLINE) {
         this.nodes.delete(nodeId);
@@ -449,14 +425,11 @@ class P2POrchestrator {
   }
 }
 
-// Iniciar servidor
 const orchestrator = new P2POrchestrator();
 
-// Manejar cierre graceful
 process.on('SIGINT', () => {
   console.log('\n[P2P Orchestrator] Cerrando servidor...');
   
-  // Notificar a todos los nodos
   for (const node of orchestrator.nodes.values()) {
     if (node.ws.readyState === WebSocket.OPEN) {
       node.ws.send(JSON.stringify({

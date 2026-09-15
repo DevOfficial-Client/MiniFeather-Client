@@ -1,17 +1,3 @@
-// MF_Timeline.js — Timeline NLE (non-linear editor) para MF Studio.
-//
-// Línea de tiempo real estilo DaVinci Resolve/Premiere sobre el film mode:
-//   - Clips arrastrables: cada toma es un bloque en V1. Drag mueve,
-//     bordes (grips) hacen trim.
-//   - Zoom con rueda sobre la regla (centrado en cursor) o botones +/−/fit.
-//   - Snapping a 0, playhead y bordes de otros clips (6px). Alt lo desactiva
-//     durante el drag (se comprueba en tiempo real).
-//   - Multi-selección (Shift+click) y Supr para borrar clips.
-//   - Pistas: V1 tomas (clips), V2 caras (triggers de FaceSwap), A1 audio (F2).
-//   - La duración de la secuencia = fin del último clip.
-//
-// Este módulo solo DOM + estado, no toca el juego. `window.MF_Timeline`
-// y MF_Studio lo monta en su panel inferior pasándole un callback onChange.
 
 (function () {
     'use strict';
@@ -111,7 +97,7 @@
 `;
 
     const state = {
-        clips: [],                        // [{id, film, start, duration, selected}]
+        clips: [],                        
         view: { pxPerSec: 60, scrollSec: 0 },
         playheadTick: 0,
         selection: new Set(),
@@ -128,7 +114,6 @@
         return e;
     }
 
-    // coordenadas mundo/pantalla
     function secToX(sec) { return sec * state.view.pxPerSec - state.view.scrollSec * state.view.pxPerSec; }
     function xToSec(x) { return (x + state.view.scrollSec * state.view.pxPerSec) / state.view.pxPerSec; }
     function tickToX(t) { return secToX(t / TPS); }
@@ -138,7 +123,6 @@
         state.seqDuration = state.clips.reduce((m, c) => Math.max(m, c.start + c.duration), 0);
     }
 
-    // ── montaje ──
     function mount(container, opts) {
         if (opts?.onChange) state.onChange = opts.onChange;
         build(container);
@@ -197,10 +181,6 @@
         tb.querySelector('#mft-zoom-fit').onclick = fit;
         tb.querySelector('#mft-snap').onchange = (e) => { state.snapEnabled = e.target.checked; };
 
-        // ── drop desde el Media Pool del Studio ──
-        // Los ítems del pool arrastran text/mf-film = nombre de la toma.
-        // El drop inserta el clip en la posición X del cursor (con snap).
-        // text/mf-head = preset de cabeza · text/mf-face = emoción → clip V2.
         root.addEventListener('dragover', (ev) => {
             const types = ev.dataTransfer.types;
             if (!types.includes('text/mf-film') && !types.includes('text/mf-head') && !types.includes('text/mf-face') && !types.includes('text/mf-skin') && !types.includes('text/mf-morph')) return;
@@ -213,7 +193,6 @@
             const r = tracks.getBoundingClientRect();
             const tick = Math.max(0, Math.round(xToTick(ev.clientX - r.left)));
 
-            // skin PNG completa → clip en V2 (tipo 'skin')
             const skinName = ev.dataTransfer.getData('text/mf-skin');
             if (skinName) {
                 window.MF_FaceSwap?.applyAtTick(tick, 'skin_' + skinName, 'skin');
@@ -222,7 +201,6 @@
                 return;
             }
 
-            // morph a mob → clip en V2 (tipo 'morph')
             const morphType = ev.dataTransfer.getData('text/mf-morph');
             if (morphType) {
                 window.MF_Morph?.applyAtTick?.(tick, morphType) ||
@@ -232,7 +210,6 @@
                 return;
             }
 
-            // emoción o preset de cabeza → clip en V2
             const headName = ev.dataTransfer.getData('text/mf-head');
             const faceName = ev.dataTransfer.getData('text/mf-face');
             if (headName || faceName) {
@@ -243,11 +220,9 @@
                 return;
             }
 
-            // toma → clip en V1
             const name = ev.dataTransfer.getData('text/mf-film');
             if (!name) return;
-            // resolver la toma: pide al Studio cargarla (no acoplarse a su
-            // localStorage directamente)
+            
             let film = null;
             try {
                 const films = JSON.parse(localStorage.getItem('minifeather_films_v1') || '{}');
@@ -262,21 +237,19 @@
             clip.selected = true;
         });
 
-        // zoom con rueda sobre cualquier zona del timeline
         root.addEventListener('wheel', (ev) => {
-            if (!ev.altKey) return;               // Alt+rueda = zoom (como los NLE)
+            if (!ev.altKey) return;               
             ev.preventDefault();
             const r = ruler.getBoundingClientRect();
             zoom(ev.deltaY < 0 ? 1.25 : 1 / 1.25, ev.clientX - r.left);
         }, { passive: false });
-        // rueda simple sobre la regla también hace zoom (accesible)
+        
         ruler.addEventListener('wheel', (ev) => {
             if (ev.altKey) return;
             ev.preventDefault();
             zoom(ev.deltaY < 0 ? 1.2 : 1 / 1.2, ev.offsetX);
         }, { passive: false });
 
-        // scrub en la regla (barato: solo mueve el playhead, sin re-render)
         const scrub = (ev) => {
             const r = ruler.getBoundingClientRect();
             state.playheadTick = xToTick(ev.clientX - r.left);
@@ -294,7 +267,6 @@
             window.addEventListener('mouseup', up);
         });
 
-        // pan con botón central o Shift+drag en el fondo
         tracks.addEventListener('mousedown', (ev) => {
             if (ev.target !== tracks && !ev.target.classList?.contains('mft-lane')) return;
             if (ev.shiftKey || ev.button === 1) {
@@ -315,7 +287,6 @@
             }
         });
 
-        // Supr borra clips seleccionados
         window.addEventListener('keydown', (ev) => {
             if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
             if (!state.selection.size) return;
@@ -344,7 +315,6 @@
         render();
     }
 
-    // ── API de clips ──
     function addClip(film, startTick) {
         const clip = {
             id: 'clip-' + Math.random().toString(36).slice(2, 8),
@@ -377,10 +347,9 @@
         for (const id of [...state.selection]) removeClip(id);
     }
 
-    // ── snapping ──
     function snapCandidate(tick, ignoreId, snapOff) {
         if (!state.snapEnabled || snapOff) return Math.max(0, Math.round(tick));
-        const tol = (6 / state.view.pxPerSec) * TPS; // 6px
+        const tol = (6 / state.view.pxPerSec) * TPS; 
         let best = tick, bestD = tol;
         const consider = (v) => { const d = Math.abs(tick - v); if (d < bestD) { best = v; bestD = d; } };
         consider(0);
@@ -393,22 +362,19 @@
         return Math.max(0, Math.round(best));
     }
 
-    // ── render ──
     function render() {
         const { tracks } = state.els;
         if (!tracks) return;
         recomputeSeqDuration();
         tracks.innerHTML = '';
-        drawRuler(); // incluye la banda In/Out si hay rango activo
+        drawRuler(); 
 
-        // V1 — clips de tomas
         const v1 = el('div', 'mft-track');
         v1.innerHTML = '<span class="label">V1 · Tomas</span>';
         const lane1 = el('div', 'mft-lane');
         for (const clip of state.clips) lane1.appendChild(renderClip(clip));
         v1.appendChild(lane1);
 
-        // V2 — triggers de cara / cabeza (clips con duración, como V1)
         const v2 = el('div', 'mft-track');
         v2.innerHTML = '<span class="label">V2 · Caras</span>';
         const lane2 = el('div', 'mft-lane');
@@ -417,7 +383,6 @@
         });
         v2.appendChild(lane2);
 
-        // CAM — clips de cámara estilo BBS (MF_FilmCamera)
         const cam = el('div', 'mft-track');
         cam.innerHTML = '<span class="label">CAM · Cámara</span>';
         const laneCam = el('div', 'mft-lane');
@@ -426,7 +391,6 @@
         });
         cam.appendChild(laneCam);
 
-        // SUB — subtítulos y audio (capas 9/10 de MF_FilmCamera)
         const sub = el('div', 'mft-track');
         sub.innerHTML = '<span class="label">SUB/A1 · Texto y audio</span>';
         const laneSub = el('div', 'mft-lane');
@@ -442,16 +406,13 @@
         updateInfo();
     }
 
-    // render barato durante drag: solo actualizar posiciones/tamaños de los
-    // clips existentes en vez de reconstruir todo el DOM por mousemove
-    // (reconstruir a la frecuencia del ratón congelaba la página)
     function updateClipStyles() {
         const lanes = state.els.tracks?.querySelectorAll('.mft-lane');
         if (!lanes) return;
         for (const lane of lanes) {
             for (const div of lane.children) {
                 if (div.dataset.cam) {
-                    // CAM/SUB: clip de cámara (MF_FilmCamera)
+                    
                     const c = window.MF_FilmCamera?.get?.(div.dataset.cam);
                     if (!c) continue;
                     div.style.left = tickToX(c.start) + 'px';
@@ -461,7 +422,7 @@
                     continue;
                 }
                 if (div.dataset.tri != null) {
-                    // V2: trigger de cara/cabeza
+                    
                     const i = +div.dataset.tri;
                     const t = window.MF_FaceSwap?.triggers?.[i];
                     if (!t) continue;
@@ -471,7 +432,7 @@
                     if (len) len.textContent = ((t.durationTicks || TPS) / TPS).toFixed(1) + 's';
                     continue;
                 }
-                // V1: clip de toma
+                
                 const clip = state.clips.find(c => c.id === div.dataset.id);
                 if (!clip) continue;
                 div.style.left = tickToX(clip.start) + 'px';
@@ -482,13 +443,11 @@
         }
     }
 
-    // clip de V2: trigger de cara/cabeza con duración editable (como un clip
-    // de V1: arrastrable, grips para trim, click derecho borra)
     function renderTriggerClip(t, i) {
         const isHead = t.type === 'head';
         const isSkin = t.type === 'skin';
         const isMorph = t.type === 'morph';
-        // nombre legible: skin_<name>/morph_<type> → solo <name>
+        
         const label = isSkin ? String(t.face).replace(/^skin_/, '')
             : isMorph ? String(t.face).replace(/^morph_/, '').replace(/_/g, ' ')
             : t.face;
@@ -497,7 +456,7 @@
         div.dataset.tri = i;
         div.style.left = tickToX(t.tick) + 'px';
         div.style.width = Math.max(8, ((t.durationTicks || TPS) / TPS) * state.view.pxPerSec) + 'px';
-        // miniatura de la skin dentro del clip si está disponible
+        
         const thumb = isSkin ? (window.MF_SkinChanger?.items || []).find(s => ('skin_' + s.name) === t.face)?.thumb : null;
         div.innerHTML = `
             <div class="grip l" data-edge="l"></div>
@@ -518,8 +477,7 @@
             const edge = ev.target.dataset?.edge || null;
             const startX = ev.clientX;
             const orig = { tick: t.tick, duration: t.durationTicks || TPS };
-            // durante el drag referenciamos el trigger por OBJETO, no índice:
-            // updateTrigger hace sort y el índice podría cambiar de dueño
+            
             const patch = (p) => {
                 const idx = FS.triggers.indexOf(t);
                 if (idx >= 0) FS.updateTrigger(idx, p);
@@ -541,16 +499,15 @@
             const up = () => {
                 window.removeEventListener('mousemove', mv);
                 window.removeEventListener('mouseup', up);
-                // resolver solapamientos SOLO al soltar (no durante el drag)
+                
                 try { FS.resolveOverlaps?.(); } catch {}
-                render(); // re-render al soltar (reordena índices tras el sort)
+                render(); 
                 state.onChange?.('clips-changed', null);
             };
             window.addEventListener('mousemove', mv);
             window.addEventListener('mouseup', up);
         });
 
-        // click derecho: borrar el trigger
         div.addEventListener('contextmenu', (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
@@ -559,7 +516,6 @@
             state.onChange?.('clips-changed', null);
         });
 
-        // doble click: aplicar ya (preview inmediato)
         div.addEventListener('dblclick', (ev) => {
             ev.stopPropagation();
             if (t.type === 'head') window.MF_SkinEditor?.applyPreset?.(t.face);
@@ -572,9 +528,6 @@
         return div;
     }
 
-    // clip de CAM/SUB: clip de cámara estilo BBS (MF_FilmCamera).
-    // Patrón V2: estado en el módulo externo, referencia por objeto,
-    // drag/trim con updateClipStyles barato y update() que persiste
     function renderCamClip(c) {
         const FC = window.MF_FilmCamera;
         const T = FC?.TYPES?.[c.type] || {};
@@ -625,7 +578,6 @@
             window.addEventListener('mouseup', up);
         });
 
-        // click derecho: borrar
         div.addEventListener('contextmenu', (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
@@ -634,7 +586,6 @@
             state.onChange?.('clips-changed', null);
         });
 
-        // doble click: preview de cámara — saltar el playhead al clip
         div.addEventListener('dblclick', (ev) => {
             ev.stopPropagation();
             state.playheadTick = c.start;
@@ -672,7 +623,7 @@
             let moved = false;
 
             const mv = (e) => {
-                const snapOff = e.altKey; // Alt durante el drag = sin snap
+                const snapOff = e.altKey; 
                 const dxTick = (e.clientX - startX) / state.view.pxPerSec * TPS;
                 if (Math.abs(e.clientX - startX) > 2) moved = true;
                 if (!edge) {
@@ -685,20 +636,19 @@
                     const ne = snapCandidate(orig.start + orig.duration + dxTick, clip.id, snapOff);
                     clip.duration = Math.max(TPS / 2, Math.round(ne - clip.start));
                 }
-                updateClipStyles(); // render barato: no reconstruir DOM
+                updateClipStyles(); 
             };
             const up = () => {
                 window.removeEventListener('mousemove', mv);
                 window.removeEventListener('mouseup', up);
                 if (moved) state.onChange?.('clip-moved', clip.id);
                 recomputeSeqDuration();
-                render(); // re-render completo solo al soltar
+                render(); 
             };
             window.addEventListener('mousemove', mv);
             window.addEventListener('mouseup', up);
         });
 
-        // doble click: abrir la toma en el Studio
         div.addEventListener('dblclick', () => state.onChange?.('clip-open', clip.film.name));
 
         return div;
@@ -714,7 +664,6 @@
         ctx.scale(devicePixelRatio, devicePixelRatio);
         ctx.clearRect(0, 0, w, h);
 
-        // paso de marcas adaptativo al zoom (1s dibuja ~50px)
         const pxPerSec = state.view.pxPerSec;
         let stepSec = 1;
         while (stepSec * pxPerSec < 45) stepSec *= 2;
@@ -732,7 +681,7 @@
             ctx.fillStyle = '#aaa';
             const label = stepSec >= 1 ? (s % 1 === 0 ? s + 's' : s.toFixed(1) + 's') : s.toFixed(2) + 's';
             ctx.fillText(label, x + 3, 11);
-            // sub-marcas (5 por paso)
+            
             if (stepSec * pxPerSec > 90) {
                 ctx.strokeStyle = 'rgba(255,255,255,.13)';
                 for (let i = 1; i < 5; i++) {
@@ -742,20 +691,19 @@
             }
         }
 
-        // banda del rango In/Out (estilo Resolve): franja + llaves en la regla
         const r = window.MF_Film?.getPlayRange?.();
         if (r && (r.from != null || r.to != null)) {
             const TPS = 20;
             const fromX = r.from != null ? secToX(r.from / TPS) : 0;
             const toX = r.to != null ? secToX(r.to / TPS) : w;
-            // franja entre In y Out
+            
             ctx.fillStyle = 'rgba(60, 170, 90, .18)';
             ctx.fillRect(fromX, 0, Math.max(0, toX - fromX), h);
-            // llaves
+            
             ctx.fillStyle = '#3caa5a';
             ctx.fillRect(fromX - 1, 0, 2, h);
             ctx.fillRect(toX - 1, 0, 2, h);
-            // trazos en forma de llave { }
+            
             ctx.strokeStyle = '#3caa5a';
             ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(fromX - 4, h - 8); ctx.lineTo(fromX, h - 4); ctx.lineTo(fromX + 4, h - 8); ctx.stroke();
@@ -777,7 +725,6 @@
         if (zoomInd) zoomInd.textContent = Math.round(state.view.pxPerSec) + ' px/s';
     }
 
-    // ── API pública ──
     window.MF_Timeline = {
         mount, render, fit,
         addClip, removeClip,

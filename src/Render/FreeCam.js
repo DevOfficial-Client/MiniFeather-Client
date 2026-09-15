@@ -5,11 +5,8 @@ const EVENT_CONFIG = 'minifeather:freecam-config';
 const EVENT_STATE = 'minifeather:freecam-state';
 const EVENT_ACCESS_REQUEST = 'minifeather:freecam-access-request';
 
-// acceso por UUID (inmune a renombres de cuenta). Mantener sincronizada con
-// TARGETS de inject.js (rangos). usernames solo como fallback para cuentas
-// cuyo uuid no conocemos.
 const FREECAM_UUIDS = new Set([
-    '6eb7369a-551e-406a-9a63-6db7a358e1e5' // ShusukeGxE_
+    '6eb7369a-551e-406a-9a63-6db7a358e1e5' 
 ]);
 const FREECAM_USERS = new Set([
     'angrywolfx',
@@ -247,14 +244,14 @@ function getPlayerUsername(game = getGame(true)) {
 }
 
 function getPlayerUuid(game = getGame(true)) {
-    if (!game) game = getGame(true); // emitState puede pasar null
+    if (!game) game = getGame(true); 
     return String(game?.player?.profile?.uuid ?? '').toLowerCase();
 }
 
 function hasFreecamAccess(game = getGame(true)) {
-    if (!game) game = getGame(true); // null NO dispara el default param
+    if (!game) game = getGame(true); 
     if (hasServerAdminAccess(game)) return true;
-    // uuid primero (inmune a renombres), username como fallback
+    
     const uuid = getPlayerUuid(game);
     if (uuid && FREECAM_UUIDS.has(uuid)) return true;
     return FREECAM_USERS.has(getPlayerUsername(game).toLowerCase());
@@ -407,8 +404,7 @@ function clearKeys() {
 }
 
 function isTypingOrUiOpen() {
-    // MF Studio abierto: el estudio controla la cámara del freecam por su
-    // cuenta; FreeCam no debe interceptar clicks/teclas del estudio
+    
     if (globalThis.__MF_STUDIO_OPEN__) return true;
 
     const active = document.activeElement;

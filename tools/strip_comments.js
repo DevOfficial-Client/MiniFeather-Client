@@ -204,6 +204,7 @@ for (const f of targets) {
     continue;
   }
   fs.unlinkSync(tmp);
+  fs.writeFileSync(f, stripped); // escribir el archivo final ya validado
   const kb = ((src.length - stripped.length) / 1024).toFixed(1);
   console.log(`${path.relative(ROOT, f)}: -${kb} KB`);
   changed++;

@@ -58,11 +58,6 @@ const api = Object.freeze({
 
 globalThis.MF_ExperimentalRegistry = api;
 
-
-
-
-// First real Experimental feature. The renderer itself lives in MAIN world;
-// this registry only tells the panel how to present and persist the toggle.
 api.register({
   id: 'realistic-mode',
   settingsKey: 'experimentalRealistic',
@@ -99,8 +94,6 @@ api.register({
   badge: 'EXPERIMENTAL',
   order: 10
 });
-
-
 
 api.register({
   id: 'interactive-vegetation',

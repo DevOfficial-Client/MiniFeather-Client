@@ -2604,10 +2604,6 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "localGamesCopied": "Copiato"
   },
 
-  // ── Idiomas adicionales (sólo claves PBR para la GUI + editor).
-  // El resto cae al fallback de "en" (ver ClientPanel.t). Se han añadido
-  // para que la GUI de PBR y el editor nuevo sean utilizables sin
-  // esfuerzo extra. Las claves siguen exactamente la convención en/es/ja/it.
   "zh": {
     "language": "中文",
     "panelScale": "页面缩放",

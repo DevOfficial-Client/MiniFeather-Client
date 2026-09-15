@@ -1,26 +1,3 @@
-// MF_Facial.js — Animaciones faciales EN LOOP hechas por el usuario.
-// "Mirar a un lado, al otro, parpadear, cejas..." → keyframes de la cara
-// (región 8x8 frontal de la skin) que se reproducen TODO el tiempo hasta
-// que se detengan. Completamente client-side, ideal para machinimas.
-//
-// Cómo funciona:
-// - Una "facial" = lista de keyframes [{ face, holdMs, blendMs }]:
-//     · face: nombre de emoción (happy, neutral, evil…) o 'base' (cara
-//       actual sin emoción) o un canvas/cara de SkinChanger ('skin_x')
-//     · holdMs: cuánto se MANTIENE ese frame (ms)
-//     · blendMs: transición suave (cross-fade por alpha) al siguiente
-// - El loop de reproducción (rAF) calcula el frame actual interpolando
-//   entre el keyframe saliente y el entrante, y lo pinta SOBRE la
-//   textura de la cara del jugador (misma región que FaceSwap).
-// - La textura original se guarda antes de empezar → stop() la restaura.
-// - Persistencia: biblioteca en localStorage (los keyframes referencian
-//   emociones por nombre; las caras de SkinChanger se resuelven al vuelo).
-//
-// Uso:
-//   MF_Facial.open()                    // panel editor
-//   MF_Facial.play('blink')             // reproducir en loop
-//   MF_Facial.stop()                    // parar y restaurar
-//   MF_Facial.new / save / delete       // gestión de biblioteca
 
 (function () {
     'use strict';
@@ -34,16 +11,15 @@
 
     const state = {
         open: false,
-        library: {},          // name -> { frames: [{face, holdMs, blendMs}] }
-        playing: null,        // nombre en reproducción
-        playTimer: null,      // rAF id
-        baseHead: null,       // cabeza original 64x16 (para restaurar)
-        tex: null,            // textura del juego que tocamos
-        frameCache: new Map(), // faceName -> Promise<{canvas, kind}>
-        dirty: true           // recargar biblioteca del storage
+        library: {},          
+        playing: null,        
+        playTimer: null,      
+        baseHead: null,       
+        tex: null,            
+        frameCache: new Map(), 
+        dirty: true           
     };
 
-    // ── acceso al juego (patrón del cliente) ──
     function getGame() {
         if (globalThis.miniblox?.player) return globalThis.miniblox;
         try {
@@ -79,17 +55,13 @@
         const skins = out.filter(m => {
             const w = m.map?.image?.width, h = m.map?.image?.height;
             if (!w || !h) return false;
-            // 64x64/64x32 o múltiplo HD (128x128, 1024x512…) — ratio 1:1 o 2:1
+            
             const k64 = w / 64;
             return Number.isInteger(k64) && (h === w || h === w / 2);
         });
         return skins.length ? skins : out;
     }
 
-    // ── resolver un "face" a { canvas, kind } ──
-    // face = 'base' | 'p:<preset dibujado>' | 'skin_<nombre>' | emoción
-    // kind: 'head' → canvas 64x16 (preset dibujado, se pinta la cabeza
-    //       completa), 'face' → canvas 8x8 (solo la región de cara)
     function resolveFace(name) {
         if (state.frameCache.has(name)) return state.frameCache.get(name);
         const p = (async () => {
@@ -99,7 +71,7 @@
                     : { canvas: blankFace(), kind: 'face' };
             }
             if (/^p:/.test(name)) {
-                // preset DIBUJADO por el usuario en el SkinEditor (64x16)
+                
                 const nm = name.replace(/^p:/, '');
                 const hit = (window.MF_SkinEditor?.presets?.() || []).find(pr => pr.name === nm);
                 if (hit?.thumb) {
@@ -111,15 +83,15 @@
                     ctx.drawImage(img, 0, 0);
                     return { canvas: c, kind: 'head' };
                 }
-                return null; // preset borrado
+                return null; 
             }
             if (/^skin_/.test(name)) {
-                // cara de una skin PNG de la biblioteca SkinChanger
+                
                 const nm = name.replace(/^skin_/, '');
                 const it = (window.MF_SkinChanger?.items || []).find(i => i.name === nm);
                 if (it?.dataURL) {
                     const img = await loadImg(it.dataURL);
-                    // la skin puede ser HD: leer la cara a SU escala
+                    
                     const k = Math.max(1, Math.round(img.width / 64));
                     const c = document.createElement('canvas');
                     c.width = 8; c.height = 8;
@@ -131,39 +103,30 @@
                 return null;
             }
             if (/^fs:/.test(name)) {
-                // cara de un PACK facial (builtin skins/facialskins/<id>/
-                // <file>.png o custom importado por ZIP).
-                // El PNG es la franja BASE de cabeza, ratio 2:1 (32x16
-                // lógico a cualquier escala: alice 64x32 = k2, apex…).
-                // El frame vive a RESOLUCIÓN NATIVA del pack (k propio) y
-                // paintFace lo escala al k de la textura del juego al
-                // pintar → sin pérdida por reescalado intermedio.
+                
                 const slash = name.indexOf('/');
                 if (slash < 0) return null;
                 const id = name.slice(3, slash), file = name.slice(slash + 1);
                 const img = await packImg(id, file).catch(() => null);
                 if (!img) return null;
-                // k del sprite: la franja base es 32x16 lógico (cat 32x16
-                // = k1, alice 64x32 = k2, apex 512x256 = k16…)
+                
                 const sk = Math.max(1, Math.round(img.width / 32));
                 const c = document.createElement('canvas');
                 c.width = 64 * sk; c.height = 16 * sk;
                 const ctx = c.getContext('2d');
                 ctx.imageSmoothingEnabled = false;
-                // base completa debajo (con su hat, en la resolución que
-                // tenga) y el sprite del pack encima
+                
                 if (state.baseHead) ctx.drawImage(state.baseHead, 0, 0, 64 * sk, 16 * sk);
                 ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, 32 * sk, 16 * sk);
                 return { canvas: c, kind: 'head', k: sk };
             }
-            // emoción de FaceSwap (assets de Verity o fuentes externas)
+            
             const cv = await window.MF_FaceSwap?.loadFaceCanvas?.(name);
             if (cv) return { canvas: cv, kind: 'face' };
-            return null; // emoción desconocida
+            return null; 
         })();
         state.frameCache.set(name, p);
-        // los fs: que fallan (meta aún no plantado / imagen sin cargar) no
-        // se cachean → el próximo resolveFace reintenta
+        
         p.then(v => { if (v === null && /^fs:/.test(name)) state.frameCache.delete(name); }).catch(() => {});
         return p;
     }
@@ -190,34 +153,25 @@
         });
     }
 
-    // ── PACKS faciales (skins/facialskins/<id>/) ──
-    // Cada carpeta: <id>.png (skin completa 64x64) + sprites de cabeza
-    // (alfrente/al frente/afrente/al frente1 = frente, blink, izquierda,
-    // derecha) en formato franja 2:1 (32x16 escalado). El monitor detecta
-    // cuándo el juego usa la skin <id> y activa el modo auto con estos
-    // sprites como presets.
     const PACKS_DIR = 'skins/facialskins/';
-    const packImgCache = new Map(); // "id/file" -> Promise<HTMLImageElement|null>
+    const packImgCache = new Map(); 
 
     function extAssetUrl(rel) {
         if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
             return chrome.runtime.getURL(rel);
         }
-        // MAIN world: el SplashScreen (ISOLATED) planta meta[mf-skins-base]
-        // con la URL de /skins/ de la extensión
+        
         const meta = document.querySelector('meta[name="mf-skins-base"]');
         const base = meta?.content;
         if (base) {
             const b = base.replace(/\/$/, '') + '/';
-            // rel empieza con "skins/" → quitar el prefijo (la base ya lo tiene)
+            
             const noPrefix = rel.replace(/^skins\//, '');
             return b + noPrefix;
         }
         return null;
     }
 
-    // URL base de un pack builtin según su carpeta: facialskins/ (server)
-    // o mypacks/ (custom). Los ids conocidos del server van en facialskins.
     function packBaseUrl(packId) {
         const serverKnown = [
             'adele', 'adventure', 'aether', 'alice', 'apex', 'ariel', 'aurora',
@@ -237,8 +191,6 @@
         return p;
     }
 
-    // variantes de nombre de archivo de frente por pack (cada autor nombra
-    // distinto): la primera que cargue gana
     const FRONT_NAMES = ['alfrente', 'al frente', 'afrente', 'al frente1', 'frente'];
     async function loadPackFront(id) {
         for (const n of FRONT_NAMES) {
@@ -248,29 +200,17 @@
         return null;
     }
 
-    // normalizar un id de skin cualquiera: quita rutas/extensiones y los
-    // prefijos del conducto de packs (custom:mf_<id> actual, mfpack:<id>
-    // legacy) → "alice", "eve", "mf_eve"→"eve"…
     function normSkinId(v) {
         if (typeof v !== 'string' || !v) return '';
         let s = v.split('/').pop().replace(/\.png$/i, '');
-        const cl = CUSTOM_PREFIX + MF_NAME_PREFIX;   // custom:mf_
+        const cl = CUSTOM_PREFIX + MF_NAME_PREFIX;   
         if (s.toLowerCase().startsWith(cl)) s = s.slice(cl.length);
         else if (s.toLowerCase().startsWith(MFPACK_PREFIX)) s = s.slice(MFPACK_PREFIX.length);
         return s.toLowerCase();
     }
 
-    // ¿qué skin se está usando ahora?
-    // Prioridad:
-    //   1. MF_SkinChanger.current — skin aplicada EN VIVO localmente
-    //   2. internals del juego (profile.cosmetics.skin / model.skin) — se
-    //      actualizan al instante al cambiar de skin en el armario
-    //   3. cache de la API (accounts/me) — SOLO respaldo: puede quedar
-    //      desactualizada si el armario usa XHR (no capturable)
     function currentSkinId() {
-        // normalizar: quitar rutas/extensiones y los prefijos de skin de
-        // pack aplicadas por el conducto nativo del juego:
-        //   custom:mf_<id> (clase nativa, actual) y mfpack:<id> (legacy)
+        
         const norm = normSkinId;
         try {
             const sc = window.MF_SkinChanger?.current;
@@ -294,13 +234,6 @@
         return apiSkin.value;
     }
 
-    // cache del campo "skin" de la cuenta. Mismo origen (miniblox.io).
-    // ESTRATEGIA: captura PASIVA del tráfico del juego — el propio juego
-    // pide /auth-api/accounts/me al loguear y al abrir el armario, y hace
-    // PATCH al cambiar de skin. Así nunca dependemos de que nuestro fetch
-    // propio pase (el directo 404 sin la sesión interna del cliente).
-    //   GET  /auth-api/accounts/me      → j.skin
-    //   PATCH /auth-api/accounts/me     → req.skin (respuesta del cambio)
     const apiSkin = { value: null, lastPatch: null };
     function noteApiSkin(id) {
         if (typeof id !== 'string' || !id) return;
@@ -318,7 +251,6 @@
         return null;
     }
 
-    // 1) hook de window.fetch: ver respuestas GET y cuerpos de PATCH
     try {
         const origFetch = window.fetch;
         window.fetch = function (input, init) {
@@ -329,8 +261,7 @@
             const p = origFetch.apply(this, arguments);
             if (url.includes('/auth-api/accounts/me')) {
                 try {
-                    // cambio de skin (armario): el body de la petición lleva
-                    // la nueva — vale cualquier método con body
+                    
                     const method = (init?.method || (input?.method) || 'GET').toUpperCase();
                     const body = init?.body || input && typeof input !== 'string' ? (input?.body ?? init?.body) : init?.body;
                     if (method !== 'GET' && method !== 'HEAD' && body) {
@@ -348,8 +279,6 @@
         };
     } catch {}
 
-    // 2) hook de Response.json: cuando el juego hace r.json() sobre
-    //    accounts/me, ya tiene el objeto — lo leemos sin tocar el stream
     try {
         const origJson = Response.prototype.json;
         if (!origJson.__mfFacialSkin) {
@@ -368,11 +297,9 @@
         }
     } catch {}
 
-    // 3) fetch activo como último recurso. El endpoint es POST con body {}
-    //    (así lo llama el juego; GET → 404). Backoff 60 s tras fallo.
     const apiFetchFail = { at: -1e9 };
     function fetchApiSkin(maxAgeMs = 8000) {
-        // la captura pasiva ya nos dio el valor → nada que hacer
+        
         if (apiSkin.value) return Promise.resolve(apiSkin.value);
         if (performance.now() - apiFetchFail.at < 60000) return Promise.resolve(null);
         return fetch(location.origin + '/auth-api/accounts/me', {
@@ -389,9 +316,6 @@
             .catch(() => { apiFetchFail.at = performance.now(); return apiSkin.value; });
     }
 
-    // uuid del player LOCAL: player.uuid / profile.uuid / player.id (si
-    // tiene forma de uuid) / entrada en playerList. Para el auto-activado
-    // de packs con "uuid" en pack.json.
     function currentPlayerUuid() {
         const g = getGame() || globalThis.__MINIBLOX_GAME__ || null;
         const me = g?.player;
@@ -401,7 +325,7 @@
         if (isUuid(me.uuid)) return me.uuid.toLowerCase();
         if (isUuid(me.profile?.uuid)) return me.profile.uuid.toLowerCase();
         if (isUuid(me.id)) return me.id.toLowerCase();
-        // playerList: buscar la entrada del player local
+        
         try {
             const pl = g?.playerList;
             const entries = pl?.values ? [...pl.values()] : (pl ? Object.values(pl) : []);
@@ -415,15 +339,8 @@
         return null;
     }
 
-    // ── índice de packs ──
-    // [{id, name, front, blink, left, right, skin?, custom?}]
-    //  · builtin: vienen de skins/facialskins/<id>/pack.json (fetch)
-    //  · custom:  ZIPs importados por el usuario, guardados en IndexedDB
-    //             con sus PNGs como dataURL (accesibles desde MAIN world)
     const packIndex = [];
 
-    // packs importados: IndexedDB "packs" → [{id, name, author, version,
-    // skin(dataURL), sprites:{front,left,right,blink}(dataURL)}]
     const PACKS_DB = 'minifeather_facialpacks';
     let packsDb = null;
     function packsDbOpen() {
@@ -457,10 +374,6 @@
         }));
     }
 
-    // resolver la imagen de un pack builtin (meta mf-skins-base) o custom
-    // (dataURL de IndexedDB) → Promise<HTMLImageElement>
-    // file: para builtin = nombre SIN extensión; para custom = clave del
-    // sprite ('front'|'left'|'right'|'blink')
     async function packImg(id, file) {
         const custom = customPacks.get(id);
         if (custom) {
@@ -471,26 +384,21 @@
             packImgCache.set(key, p);
             return p;
         }
-        // builtin: loadPackImg añade ".png" él mismo → quitar la extensión
-        // si viene (pack.json la trae: "alfrente.png")
+        
         return loadPackImg(id, file.replace(/\.png$/i, ''));
     }
 
-    // ── lectura/escritura ZIP (STORE, sin compresión) en MAIN world ──
-    // JSZip vive en ISOLATED → aquí un lector minimalista: localiza los
-    // [File Header] de entradas STORED, y para DEFLATE usa
-    // DecompressionStream (todos los Chrome modernos lo tienen).
     async function zipRead(buf) {
         const dv = new DataView(buf);
-        const files = new Map(); // name -> Uint8Array | null (directorio)
-        // EOCD al final
+        const files = new Map(); 
+        
         let eocd = -1;
         for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 66000); i--) {
             if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
         }
         if (eocd < 0) throw new Error('ZIP inválido (sin EOCD)');
         const count = dv.getUint16(eocd + 10, true);
-        let off = dv.getUint32(eocd + 16, true); // offset del CD
+        let off = dv.getUint32(eocd + 16, true); 
         const entries = [];
         for (let i = 0; i < count; i++) {
             if (dv.getUint32(off, true) !== 0x02014b50) break;
@@ -504,7 +412,7 @@
             entries.push({ name, method, csize, lho });
             off += 46 + nlen + elen + clen;
         }
-        // local headers → data
+        
         for (const e of entries) {
             if (e.name.endsWith('/')) { files.set(e.name, null); continue; }
             if (dv.getUint32(e.lho, true) !== 0x04034b50) continue;
@@ -513,7 +421,7 @@
             const start = e.lho + 30 + nlen + elen;
             const raw = new Uint8Array(buf, start, e.csize);
             let data = raw;
-            if (e.method === 8) { // DEFLATE
+            if (e.method === 8) { 
                 const ds = new DecompressionStream('deflate-raw');
                 const stream = new Blob([raw]).stream().pipeThrough(ds);
                 data = new Uint8Array(await new Response(stream).arrayBuffer());
@@ -523,8 +431,7 @@
         return files;
     }
 
-    // construir un ZIP STORE mínimo (varios PNGs + pack.json)
-    function zipWrite(files) { // [[name, Uint8Array]]
+    function zipWrite(files) { 
         const enc = new TextEncoder();
         const chunks = [];
         const central = [];
@@ -549,11 +456,11 @@
             const lh = new Uint8Array(30 + nb.length);
             const lv = new DataView(lh.buffer);
             lv.setUint32(0, 0x04034b50, true);
-            lv.setUint16(4, 20, true);      // version
-            lv.setUint16(6, 0, true);       // flags
-            lv.setUint16(8, 0, true);       // STORE
-            lv.setUint16(10, 0, true);      // time
-            lv.setUint16(12, 0, true);      // date
+            lv.setUint16(4, 20, true);      
+            lv.setUint16(6, 0, true);       
+            lv.setUint16(8, 0, true);       
+            lv.setUint16(10, 0, true);      
+            lv.setUint16(12, 0, true);      
             lv.setUint32(14, crc, true);
             lv.setUint32(18, data.length, true);
             lv.setUint32(22, data.length, true);
@@ -591,11 +498,10 @@
         return new Blob(chunks, { type: 'application/zip' });
     }
 
-    // importar un ZIP de pack: pack.json + PNGs en la raíz o en una subcarpeta
     async function importPackZip(file) {
         const buf = await file.arrayBuffer();
         const files = await zipRead(buf);
-        // localizar pack.json (raíz o primera subcarpeta)
+        
         const names = [...files.keys()];
         const pjName = names.find(n => /(^|\/)pack\.json$/i.test(n));
         if (!pjName) throw new Error('el ZIP no tiene pack.json');
@@ -604,7 +510,6 @@
         const id = String(j.id || file.name.replace(/\.zip$/i, '')).toLowerCase().replace(/[^a-z0-9_-]/g, '');
         if (!id) throw new Error('pack.json sin "id"');
 
-        // leer sprites: nombres desde el json, o sprites explícitos dataURL
         const pick = (v, fallback) => {
             const n = typeof v === 'string' ? v : (v && v.file);
             return n ? dir + n : fallback;
@@ -624,7 +529,7 @@
             front: pick(sp.front, dir + 'alfrente.png'),
             left: pick(sp.left, dir + 'izquierda.png'),
             right: pick(sp.right, dir + 'derecha.png'),
-            up: pick(sp.up, null),     // opcionales (null si no vienen)
+            up: pick(sp.up, null),     
             down: pick(sp.down, null),
             brow: pick(sp.brow, null),
             blink: pick(sp.blink, dir + 'blink.png')
@@ -632,8 +537,7 @@
         for (const k in spriteFiles) if (spriteFiles[k]) want.add(spriteFiles[k]);
         const skinFile = j.skin ? dir + j.skin : null;
         if (skinFile) want.add(skinFile);
-        // normalizar nombres de archivos del ZIP (mayúsculas/espacios) con
-        // tolerancia: buscar por lowercase sin espacios
+        
         const lower = new Map([...files.keys()].map(n => [n.toLowerCase(), n]));
         const resolve = (wantName) => {
             if (files.has(wantName)) return wantName;
@@ -651,17 +555,17 @@
                 fr.readAsDataURL(new Blob([d], { type: 'image/png' }));
             });
         };
-        const OPTIONAL = new Set(['up', 'down', 'brow']); // sprites opcionales
+        const OPTIONAL = new Set(['up', 'down', 'brow']); 
         for (const key in spriteFiles) {
             const du = await blobOf(spriteFiles[key]);
             if (!du) {
-                if (OPTIONAL.has(key)) continue; // sin sprite → zona desactivada
+                if (OPTIONAL.has(key)) continue; 
                 throw new Error('falta sprite "' + key + '" (' + spriteFiles[key] + ')');
             }
             pack.sprites[key] = du;
         }
         pack.skin = await blobOf(skinFile);
-        // invalidar caches del id (re-import con imágenes nuevas)
+        
         for (const key of [...packImgCache.keys()]) {
             if (key.startsWith(id + '/')) packImgCache.delete(key);
         }
@@ -669,10 +573,10 @@
             if (key.startsWith('fs:' + id + '/')) state.frameCache.delete(key);
         }
         auto._blinkCache = null; auto._blinkCacheZone = null; auto._blinkCacheKind = null;
-        // guardar en IndexedDB + refrescar índices
+        
         await packsDbPut(pack);
         await loadCustomPacks();
-        // registrar el id en mypacks (para el boot y futuras sesiones)
+        
         try {
             const saved = JSON.parse(localStorage.getItem('mff:mypacks') || '[]');
             if (!saved.includes(id)) {
@@ -680,16 +584,11 @@
                 localStorage.setItem('mff:mypacks', JSON.stringify(saved));
             }
         } catch {}
-        // aplicar la skin del pack por el conducto NATIVO del juego (id
-        // custom:mf_<id> + interceptor <img>) → el monitor detecta el id
-        // y enciende la cara animada. Si no hay juego cargado queda listo
-        // para cuando entre a un mundo.
+        
         try { await applyPackSkinToGame(id); } catch {}
         return pack;
     }
 
-    // exportar un pack como ZIP descargable (builtin via fetch, custom
-    // desde sus dataURLs de IndexedDB)
     async function exportPackZip(id) {
         const p = packIndex.find(x => x.id === id);
         if (!p) throw new Error('pack "' + id + '" no encontrado');
@@ -710,7 +609,7 @@
             bytes = async (file) => {
                 const img = await loadPackImg(id, file.replace(/\.png$/i, ''));
                 if (!img) return null;
-                // el src de la imagen ya es la URL del PNG (chrome-ext://…)
+                
                 const b = await (await fetch(img.src)).blob();
                 return new Uint8Array(await b.arrayBuffer());
             };
@@ -745,7 +644,6 @@
         return { ok: true, files: files.length };
     }
 
-    // packs custom (IndexedDB) en memoria: id → pack (con dataURLs)
     const customPacks = new Map();
     async function loadCustomPacks() {
         try {
@@ -756,46 +654,25 @@
         rebuildPackIndex();
     }
 
-    // ── Registro de skins de pack DENTRO del bundle del juego ──
-    // El juego TIENE una clase nativa para skins custom: ids "custom:<n>"
-    // (investigado con Puppeteer en el bundle index-CH1F5it9.js):
-    //   downloadSkin("custom:xyz") → loadSkinFromUrl("xyz",
-    //     `${An}/skins/custom/xyz.png`) → <img> del THREE.TextureLoader
-    //   An = https://miniblox.io/auth-api  (mismo host, ruta /skins/custom)
-    //   El armario lo muestra como "Custom Skin" owned (función i6e) y NO
-    //   toca el catálogo del server (n$) ni /textures/entity/skins/.
-    // Usamos esa clase de fábrica con nombre "mf_<packId>" (prefijo mf_
-    // para no chocar con skins subidas reales del server):
-    //   1. exponemos la URL real del PNG (extensión o dataURL) en
-    //      window.__MF_PACK_SKINS__ para el interceptor de <img src>
-    //   2. player.profile.cosmetics.skin = "custom:mf_<id>" + mesh.recreate()
-    //      → el juego la carga con SU pipeline (ratio, materiales,
-    //      avatares de UI, armario) y el servidor NUNCA la ve (el id no
-    //      existe en el server → PATCH posterior lo ignora/conserva)
-    const MFPACK_PREFIX = 'mfpack:';   // compat: ids viejos persistidos
-    const CUSTOM_PREFIX = 'custom:';   // clase nativa del juego
-    const MF_NAME_PREFIX = 'mf_';      // espacio de nombres dentro de custom:
-    const CUSTOM_SKIN_URL = '/auth-api/skins/custom/'; // base ${An}/skins/custom/
+    const MFPACK_PREFIX = 'mfpack:';   
+    const CUSTOM_PREFIX = 'custom:';   
+    const MF_NAME_PREFIX = 'mf_';      
+    const CUSTOM_SKIN_URL = '/auth-api/skins/custom/'; 
     function packSkinUrl(packId) {
-        // ZIP importado (IndexedDB): dataURL directo
+        
         const custom = customPacks.get(packId);
         if (custom?.skin) return custom.skin;
-        // builtin de mypacks/ (custom, no server): URL de la extensión
+        
         const p = builtinPacks.find(x => x.id === packId && !x.server);
         if (p) {
             const base = p.skinFile ? MY_PACKS_DIR + packId + '/' + p.skinFile
                                     : MY_PACKS_DIR + packId + '/' + packId + '.png';
             return extAssetUrl(base);
         }
-        // builtin de facialskins/ (skin DEL SERVER): el juego ya la tiene,
-        // no necesita registro — solo se aplica por el armario del juego
+        
         return null;
     }
-    // registro vivo para el interceptor de <img src>: nombre de la clase
-    // custom ("mf_cat") → URL del PNG. La URL que el juego pide es
-    // https://miniblox.io/auth-api/skins/custom/<nombre>.png (o relativa
-    // /auth-api/skins/custom/<nombre>.png): el interceptor matchea por
-    // sufijo de ruta para cubrir ambas formas.
+    
     const packSkinReg = (globalThis.__MF_PACK_SKINS__ ||= {});
     const CUSTOM_URL_RE = /(?:^|\/)auth-api\/skins\/custom\/([^\/?#]+)\.png(?:[?#]|$)/;
     function registerPackSkin(packId) {
@@ -804,11 +681,7 @@
         packSkinReg[MF_NAME_PREFIX + packId] = url;
         return true;
     }
-    // instalar el interceptor una sola vez (document_start, MAIN world).
-    // Dos conductos:
-    //   a) custom:<n> nativo → /auth-api/skins/custom/<n>.png → PNG nuestro
-    //   b) legacy mfpack:<id> → textures/entity/skins/mfpack:<id>.png
-    //      (ids persistidos por versiones anteriores del client)
+    
     function installPackImgHook() {
         if (globalThis.__MF_PACK_IMG_HOOK__) return;
         const proto = HTMLImageElement.prototype;
@@ -823,13 +696,13 @@
                 if (typeof v === 'string') {
                     const reg = globalThis.__MF_PACK_SKINS__;
                     if (reg) {
-                        // a) clase nativa custom: del juego
+                        
                         const m = v.match(CUSTOM_URL_RE);
                         if (m && reg[m[1]]) {
                             origSet.call(this, reg[m[1]]);
                             return;
                         }
-                        // b) conducto legacy mfpack:
+                        
                         const m2 = v.match(/^textures\/entity\/skins\/([^/?#]+)\.png/);
                         if (m2 && reg[m2[1]]) {
                             origSet.call(this, reg[m2[1]]);
@@ -842,8 +715,7 @@
         });
         globalThis.__MF_PACK_IMG_HOOK__ = true;
     }
-    // recordar la skin del server en sessionStorage además de memoria:
-    // sobrevive al reload de la extensión/página mientras dure la pestaña
+    
     const PACK_LAST_KEY = 'mff:pack-last-server-skin';
     function rememberServerSkin(id) {
         packLastServerSkin = id;
@@ -859,25 +731,22 @@
         } catch {}
         return null;
     }
-    // aplicar la skin del pack al player LOCAL (no server-side) usando la
-    // CLASE NATIVA custom: del juego: setea el id, el skinManager pide la
-    // URL (el interceptor la sirve local) y recrea el mesh
+    
     let packLastServerSkin = null;
     async function applyPackSkinToGame(packId) {
         const g = getGame();
         const me = g?.player;
         if (!g || !me) throw new Error('no hay juego cargado (entra a un mundo primero)');
         if (!registerPackSkin(packId)) throw new Error('el pack no tiene skin PNG');
-        // recordar la skin del server para poder volver (releasePack)
+        
         const cur = me.profile?.cosmetics?.skin;
         if (cur && !String(cur).startsWith(MFPACK_PREFIX) && !String(cur).startsWith(CUSTOM_PREFIX)) {
             rememberServerSkin(cur);
         }
-        // soltar cualquier skin del SkinChanger: su watchdog re-pintaría
-        // su textura encima del mesh que el juego acaba de recrear
+        
         try { window.MF_SkinChanger?.release?.(); } catch {}
         me.profile.cosmetics.skin = CUSTOM_PREFIX + MF_NAME_PREFIX + packId;
-        // recrear el mesh del player como hace el juego al cambiar skin
+        
         let mesh = null;
         try { mesh = g.world?.getPlayerById?.(me.id)?.mesh || me.mesh; } catch {}
         try {
@@ -887,17 +756,14 @@
         return true;
     }
 
-    // volver a la skin del server (soltar la custom:mf_/mfpack: activa)
     async function releasePackSkin() {
         const g = getGame();
         const me = g?.player;
         if (!g || !me) throw new Error('no hay juego cargado');
         const cur = me.profile?.cosmetics?.skin;
         if (!String(cur || '').startsWith(MFPACK_PREFIX) &&
-            !String(cur || '').startsWith(CUSTOM_PREFIX)) return false; // ya está en server skin
-        // restaurar la skin del server recordada (memoria o sessionStorage).
-        // Sin backup NO inventamos una: vacío = que el server reponga la
-        // suya (nunca sobreescribir p.ej. chris con bob por adivinar)
+            !String(cur || '').startsWith(CUSTOM_PREFIX)) return false; 
+        
         const backup = savedServerSkin();
         me.profile.cosmetics.skin = backup || '';
         let mesh = null;
@@ -911,7 +777,6 @@
         return true;
     }
 
-    // índice unificado builtin + custom
     function rebuildPackIndex() {
         packIndex.length = 0;
         for (const p of builtinPacks) packIndex.push(p);
@@ -919,30 +784,21 @@
             packIndex.push({
                 id: p.id, name: p.name, author: p.author, version: p.version,
                 uuid: p.uuid || null,
-                // custom: los "file" de fs: son CLAVES de sprites (no
-                // filenames) → packImg(id, 'front') resuelve el dataURL
+                
                 front: 'front', left: 'left',
                 right: 'right', blink: 'blink',
-                up: p.sprites.up ? 'up' : null,       // opcionales
+                up: p.sprites.up ? 'up' : null,       
                 down: p.sprites.down ? 'down' : null,
                 brow: p.sprites.brow ? 'brow' : null,
                 skinFile: null, custom: true, server: false
             });
         }
-        // registrar TODAS las skins de pack en el conducto nativo del
-        // juego (interceptor <img>) para que estén disponibles al vuelo
+        
         installPackImgHook();
         for (const p of packIndex) { try { registerPackSkin(p.id); } catch {} }
         renderPacksTab();
     }
 
-    // builtin: leer pack.json de cada directorio conocido vía fetch.
-    // skins/facialskins/ = SOLO skins NATIVAS del server (catálogo del
-    // juego: cat, alice, bob…): el juego ya sabe cargarlas → sus packs NO
-    // necesitan inyección, solo activan el modo auto.
-    // skins/mypacks/ = packs CUSTOM (skins propias que NO están en el
-    // server): esos sí se registran en el bundle (id custom:mf_<id>, la
-    // clase nativa "Custom Skin" del juego) para que las trate como nativas.
     const builtinPacks = [];
     const SERVER_SKINS = new Set([
         'bob', 'alice', 'techno', 'ganyu', 'klee', 'hutao', 'kyoko',
@@ -972,17 +828,16 @@
                     name: j.name || id,
                     author: j.author || '',
                     version: +j.version || 1,
-                    uuid: typeof j.uuid === 'string' ? j.uuid.toLowerCase() : null, // auto-activar si el player local tiene este uuid
+                    uuid: typeof j.uuid === 'string' ? j.uuid.toLowerCase() : null, 
                     front: sp.front || null,
                     left: sp.left || 'izquierda.png',
                     right: sp.right || 'derecha.png',
-                    up: sp.up || null,      // opcional: mirar arriba
-                    down: sp.down || null,  // opcional: mirar abajo
-                    brow: sp.brow || null,  // opcional: ceja levantada ("?" chat)
+                    up: sp.up || null,      
+                    down: sp.down || null,  
+                    brow: sp.brow || null,  
                     blink: sp.blink || 'blink.png',
                     skinFile: j.skin || null,
-                    // server: el juego ya tiene esta skin (solo auto-mode).
-                    // custom: skin propia no-server → registro custom:mf_
+                    
                     server: isServerSkin(j.id || id)
                 };
             } catch { return null; }
@@ -991,11 +846,8 @@
         rebuildPackIndex();
     }
 
-    // lista de directorios con pack.json: facialskins/ (server) +
-    // mypacks/ (custom). mypacks no existe en versiones viejas → fetch
-    // 404 da lista vacía, no error.
     const MY_PACKS_DIR = 'skins/mypacks/';
-    // ids de packs custom builtin (carpeta skins/mypacks/ de la extensión)
+    
     const MY_PACKS_IDS = ['shusukegxe', 'angrywolfx', 'eve'];
     async function builtinDirs() {
         const known = [
@@ -1010,14 +862,12 @@
         return [...known, ...mine];
     }
 
-    // URL de un archivo de pack builtin (con extensión tal cual)
     function packFileUrl(id, file) {
         const custom = customPacks.get(id);
-        if (custom) return custom.sprites[file] || null; // sprites custom son dataURL
+        if (custom) return custom.sprites[file] || null; 
         return extAssetUrl(packBaseUrl(id) + id + '/' + file);
     }
 
-    // ── sesión de textura (patrón SkinChanger) ──
     function ensureSession() {
         const mesh = getMesh();
         if (!mesh) throw new Error('jugador no disponible (entra al mundo primero)');
@@ -1026,16 +876,8 @@
         const src = mats[0].map;
         if (!src?.image) throw new Error('textura de skin no legible');
 
-        // guardar cabeza original SOLO la primera vez (o cuando cambia la
-        // skin: la base anterior ya no corresponde a la actual).
-        // La textura puede ser HD (128x128, 512x512…) → el cuadrante de
-        // cabeza ocupa 64x16*k → se captura A RESOLUCIÓN NATIVA (64k x 16k)
-        // para no perder detalle al restaurar/pintar en texturas HD.
         const skinIdNow = currentSkinId();
-        // NUNCA capturar a mitad de un parpadeo: los frames 'face' vacían
-        // el cuadrado frontal del hat y ese agujero quedaría grabado en la
-        // base para siempre (hat invisible). Se captura en el próximo
-        // paintFace que no esté dentro de la ventana de blink.
+        
         if ((!state.baseHead || state.baseHeadSkin !== skinIdNow) && !auto._blinkUntil) {
             try {
                 const k = Math.max(1, Math.round(src.image.width / 64));
@@ -1044,7 +886,7 @@
                 c.getContext('2d').drawImage(src.image, 0, 0, 64 * k, 16 * k, 0, 0, 64 * k, 16 * k);
                 state.baseHead = c; state.baseHeadK = k;
                 state.baseHeadSkin = skinIdNow;
-                // la base cambió → invalidar todo lo cacheado contra ella
+                
                 state.frameCache.clear();
                 auto._blinkCache = null;
                 auto._blinkCacheZone = null;
@@ -1055,16 +897,14 @@
             state.tex = src;
             return src.image;
         }
-        // montar canvas editable propio
+        
         const c = document.createElement('canvas');
         c.width = src.image.width; c.height = src.image.height;
         c.getContext('2d').drawImage(src.image, 0, 0);
         let nt = null;
         try { nt = new src.constructor(c); } catch {}
         if (!nt) throw new Error('no se pudo crear textura editable');
-        // marcador: este canvas contiene MI skin — los módulos de "otros
-        // players" (otherSession/peerEditableCanvas) NUNCA deben adoptarlo
-        // como base de la cara de otra persona
+        
         nt.__mfLocalCanvas = true;
         try {
             nt.magFilter = src.magFilter; nt.minFilter = src.minFilter;
@@ -1076,41 +916,27 @@
         return c;
     }
 
-    // pinta un frame sobre la textura del juego.
-    // kind 'head' → cabeza completa 64x16 (presets dibujados y sprites de
-    //   pack: traen la franja completa, hat incluido, en 32..64)
-    // kind 'face' → solo la región de cara 8x8 (emociones de FaceSwap)
     function paintFace(frame) {
         const canvas = ensureSession();
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
-        // la textura puede ser HD (k = múltiplo de 64): todas las
-        // coordenadas están en unidades lógicas 64x64 → escalar por k
+        
         const k = Math.max(1, Math.round(canvas.width / 64));
         if (frame.kind === 'head') {
             ctx.clearRect(0, 0, 64 * k, 16 * k);
-            // el frame puede tener k propio (sprite de pack HD): se pinta
-            // completo a la resolución de la textura, 1:1 si k coincide
+            
             ctx.drawImage(frame.canvas, 0, 0, frame.canvas.width, frame.canvas.height, 0, 0, 64 * k, 16 * k);
         } else {
             ctx.clearRect(FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
             ctx.drawImage(frame.canvas, 0, 0, 8,  8, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
         }
-        // El hat layer (overlay, x=40) se renderiza ENCIMA de la base con
-        // inflate. Los frames 'head' ya pintan su propio hat (vienen de la
-        // franja completa del pack/baseHead). Los frames 'face' no traen
-        // hat → se vacía SOLO el cuadrado de cara del overlay para que el
-        // hat opaco de la skin no tape la emoción; el resto del hat (pelo
-        // de arriba, lados, atrás) NO se toca, y stop() restaura todo.
+        
         if (frame.kind !== 'head') {
             ctx.clearRect(FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
         }
         state.tex.needsUpdate = true;
     }
 
-    // mezcla dos frames por alpha (blend suave entre keyframes).
-    // Los frames pueden tener k distintos (preset 64x16 vs pack HD) →
-    // se mezclan a la resolución MAYOR para no perder detalle.
     function blendFrames(a, b, t) {
         const w = Math.max(a.canvas.width, b.canvas.width);
         const h = Math.max(a.canvas.height, b.canvas.height);
@@ -1125,19 +951,14 @@
         return { canvas: c, kind: a.kind };
     }
 
-    // ── reproducción en loop ──
-    // El "reloj" avanza con rAF; en cada iteración se calcula el keyframe
-    // activo (por holdMs/blendMs) y se pinta la cara correspondiente. El
-    // loop NUNCA termina solo → stop() restaura la cara original.
     async function play(name) {
         const anim = state.library[name];
         if (!anim?.frames?.length) return { ok: false, error: 'facial "' + name + '" no existe o sin frames' };
         stop(false);
-        if (auto.on) autoStop(false); // el loop manda sobre auto
+        if (auto.on) autoStop(false); 
         try { ensureSession(); } catch (e) { return { ok: false, error: e.message }; }
         state.playing = name;
 
-        // precalcular frames ({canvas, kind} por keyframe)
         const frames = [];
         for (const f of anim.frames) {
             let fr = null;
@@ -1164,16 +985,14 @@
             const nxt = frames[(i + 1) % frames.length];
             try {
                 if (t > cur.holdMs && cur.blendMs > 0 && cur.kind === nxt.kind) {
-                    // fase de transición: mezclar cur → nxt (mismo kind)
+                    
                     const k = (t - cur.holdMs) / cur.blendMs;
                     paintFace(blendFrames(cur, nxt, k));
                 } else {
                     paintFace(cur);
                 }
             } catch (e) {
-                // el mesh/textura de skin desapareció (salida del mundo,
-                // cambio de dimensión): parar limpio en vez de lanzar
-                // "Uncaught (in promise)" en cada frame
+                
                 state.playing = null;
                 if (state.playTimer) { cancelAnimationFrame(state.playTimer); state.playTimer = null; }
                 console.warn(TAG + ' loop detenido: ' + e.message);
@@ -1196,43 +1015,39 @@
         return { ok: true };
     }
 
-    // ── AUTO-PRESETS REACTIVOS ──
-    // La cara reacciona a dónde miras: yaw de cámara (izquierda/derecha)
-    // y pitch (arriba/abajo) → sprite que el usuario dibjó en SkinEditor.
-    // Además parpadeo automático con intervalo random (2-7 s).
     const LS_AUTO = LS_KEY + '_auto';
     const auto = {
         on: false,
-        yawThreshold: 10,        // grados de giro para activar
+        yawThreshold: 10,        
         pitchThreshold: 10,
-        front: '',               // preset cara al frente ('' = actual)
-        left: '',                // preset al mirar a la izquierda
-        right: '',               // preset al mirar a la derecha
+        front: '',               
+        left: '',                
+        right: '',               
         up: '',
         down: '',
-        blink: true,             // parpadeo automático
-        blinkClosed: '',         // preset de ojos cerrados ('' = noface)
+        blink: true,             
+        blinkClosed: '',         
         blinkMinMs: 2000, blinkMaxMs: 7000,
-        brow: false,             // ceja levantada al ver un "?" en el chat
-        browFace: '',            // preset de ceja ('' = sintetizar sobre la zona)
-        browMs: 1400,            // duración de la ceja levantada
-        _browUntil: 0,           // timestamp de fin de la ceja actual
-        _raf: null,              // loop rAF
-        _nextBlink: 0,           // timestamp del próximo parpadeo
-        _blinkUntil: 0,          // timestamp de fin del parpadeo actual
-        _blinkCache: null,       // canvas de ojos cerrados (cache)
-        _blinkCacheZone: null,   // zona para la que se cacheó
-        _zone: 'front',          // zona actual (front/left/right/up/down)
-        _refYaw: null, _refPitch: null, _lastT: 0 // referencia del "cuerpo"
+        brow: false,             
+        browFace: '',            
+        browMs: 1400,            
+        _browUntil: 0,           
+        _raf: null,              
+        _nextBlink: 0,           
+        _blinkUntil: 0,          
+        _blinkCache: null,       
+        _blinkCacheZone: null,   
+        _zone: 'front',          
+        _refYaw: null, _refPitch: null, _lastT: 0 
     };
 
     function loadAuto() {
         try { Object.assign(auto, JSON.parse(localStorage.getItem(LS_AUTO) || '{}')); }
         catch {}
-        // migración: los defaults viejos (35/30) pasan al umbral nuevo (10)
+        
         if (auto.yawThreshold === 35) auto.yawThreshold = 10;
         if (auto.pitchThreshold === 30) auto.pitchThreshold = 10;
-        // campos de runtime no persisten
+        
         auto._raf = null; auto._nextBlink = 0; auto._blinkUntil = 0;
         auto._blinkCache = null; auto._blinkCacheZone = null; auto._zone = 'front';
         auto._browUntil = 0; auto._browPainted = false;
@@ -1250,11 +1065,6 @@
         } catch {}
     }
 
-    // ── lectura de cámara ──
-    // Rig FPS del juego (mismo que usa Baritone.turnCamera):
-    //   yawObject > pitchObject > camera, rotaciones en RADIANES.
-    //   yaw  = camera.parent.parent.rotation.y
-    //   pitch = camera.parent.rotation.x   (positivo = mirar arriba)
     function cameraRig() {
         const g = getGame();
         const me = g?.player;
@@ -1271,11 +1081,6 @@
     const wrapPi = (r) => { r = (r + Math.PI) % (Math.PI * 2); if (r < 0) r += Math.PI * 2; return r - Math.PI; };
     const D = 180 / Math.PI;
 
-    // yaw/pitch RELATIVOS al cuerpo (referencia que sigue lento a la cámara):
-    // mirar al frente → 0°. Girar la cabeza/cámara a un lado → ángulo relativo.
-    // El "cuerpo" alcanza a la cámara a ~180°/s → si mantienes el giro se
-    // normaliza (dejas de tener la cabeza girada), como en el juego real.
-    // IMPORTANTE: yaw positivo = girar a la DERECHA (convención del rig).
     function lookAngles() {
         const rig = cameraRig();
         if (!rig) return null;
@@ -1283,32 +1088,29 @@
         const dt = Math.min(0.1, (now - (auto._lastT || now)) / 1000);
         auto._lastT = now;
         if (auto._refYaw == null) { auto._refYaw = rig.yaw; auto._refPitch = rig.pitch; }
-        const follow = Math.PI * dt;            // ~180°/s
+        const follow = Math.PI * dt;            
         auto._refYaw += Math.max(-follow, Math.min(follow, wrapPi(rig.yaw - auto._refYaw)));
         const fP = follow * 0.7;
         auto._refPitch += Math.max(-fP, Math.min(fP, Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rig.pitch - auto._refPitch))));
         return {
-            yaw: wrapPi(rig.yaw - auto._refYaw) * D,     // relativo (−180..180)
+            yaw: wrapPi(rig.yaw - auto._refYaw) * D,     
             pitch: wrapPi(rig.pitch - auto._refPitch) * D,
-            absYaw: wrapPi(rig.yaw) * D,                 // absoluto (debug)
+            absYaw: wrapPi(rig.yaw) * D,                 
             absPitch: rig.pitch * D
         };
     }
 
-    // zona actual con HISTÉRESIS: entra al umbral, sale con margen extra
-    // (evita oscilar en el borde y cambiar la cara estando quieto).
-    // El margen nunca supera la mitad del umbral (para no anularlo).
     const HYST = () => Math.min(8, Math.max(2, Math.floor(Math.min(auto.yawThreshold, auto.pitchThreshold) / 2)));
     function zoneOf(a) {
         const z = auto._zone || 'front';
         const thr = auto.yawThreshold, pthr = auto.pitchThreshold;
         const hY = Math.min(HYST(), thr / 2), hP = Math.min(HYST(), pthr / 2);
-        // yaw+ = derecha, yaw− = izquierda · pitch+ = arriba, pitch− = abajo
+        
         const inUp = auto.up && a.pitch > pthr, outUp = a.pitch > pthr - hP;
         const inDown = auto.down && a.pitch < -pthr, outDown = a.pitch < -(pthr - hP);
         const inR = auto.right && a.yaw > thr, outR = a.yaw > thr - hY;
         const inL = auto.left && a.yaw < -thr, outL = a.yaw < -(thr - hY);
-        // mantener la zona actual mientras siga dentro del margen de salida
+        
         switch (z) {
             case 'up': if (auto.up && outUp) return 'up'; break;
             case 'down': if (auto.down && outDown) return 'down'; break;
@@ -1322,11 +1124,8 @@
         return 'front';
     }
 
-    // resuelve el nombre de un preset para resolveFace(): los packs
-    // ('fs:id/file') van tal cual, los presets dibujados con prefijo 'p:'
     const resolveAutoName = (n) => (typeof n === 'string' && n.startsWith('fs:')) ? n : 'p:' + n;
 
-    // pinta el preset de la zona dada ('' = frente/base)
     async function paintZone(zone, force = false) {
         if (!force && auto._zone === zone) return;
         auto._zone = zone;
@@ -1339,18 +1138,10 @@
         } catch {}
     }
 
-    // canvas de ojos cerrados (cacheado por zona):
-    //   1. preset asignado (blinkClosed) de tipo 'head' (packs) → se pinta
-    //      tal cual: su franja 64x16 ya trae el hat → el pelo/sombrero NO
-    //      desaparece durante el parpadeo
-    //   2. preset 'face' (8x8) → igual que antes
-    //   3. sintetizado: copia la cara de la ZONA ACTUAL y tapa los ojos con
-    //      el tono de piel de la propia cara (nunca deja la cara vacía)
     async function getBlinkCanvas() {
         const zone = auto._zone || 'front';
         if (auto._blinkCache && auto._blinkCacheZone === zone) return auto._blinkCache;
 
-        // helper: cara 8x8 de la zona actual (preset o base)
         const zoneFace = async () => {
             const name = zone === 'front' ? (auto.front || null) : auto[zone] || null;
             let fr = null;
@@ -1378,13 +1169,11 @@
         };
 
         try {
-            // 1) preset de ojos cerrados elegido por el usuario
+            
             if (auto.blinkClosed) {
                 const fr = await resolveFace(resolveAutoName(auto.blinkClosed)).catch(() => null);
                 if (fr) {
-                    // frame 'head' (sprite de pack): SU franja ya trae el
-                    // hat → devolverlo tal cual para pintarlo completo y no
-                    // perder el pelo/sombrero durante el parpadeo
+                    
                     if (fr.kind === 'head') {
                         auto._blinkCache = fr.canvas; auto._blinkCacheZone = zone;
                         auto._blinkCacheKind = 'head';
@@ -1400,15 +1189,15 @@
                     return c;
                 }
             }
-            // 2) sintetizar sobre la cara de la zona actual
+            
             const face = await zoneFace();
             if (face) {
                 const cx = face.getContext('2d', { willReadFrequently: true });
-                // tono de piel: pixel de mejilla izquierda (1,6)
+                
                 const cheek = cx.getImageData(1, 6, 1, 1).data;
                 cx.fillStyle = `rgb(${cheek[0]},${cheek[1]},${cheek[2]})`;
-                cx.fillRect(1, 4, 2, 2); // ojo izquierdo
-                cx.fillRect(5, 4, 2, 2); // ojo derecho
+                cx.fillRect(1, 4, 2, 2); 
+                cx.fillRect(5, 4, 2, 2); 
                 auto._blinkCache = face; auto._blinkCacheZone = zone;
                 auto._blinkCacheKind = 'face';
                 return face;
@@ -1421,17 +1210,10 @@
         auto._nextBlink = now + auto.blinkMinMs + Math.random() * Math.max(0, auto.blinkMaxMs - auto.blinkMinMs);
     }
 
-    // Facial Sync: emitir mi estado de cara por P2P (MF_Peer). El receptor
-    // lo replica sobre MI entidad en su vista. Solo animaciones temporales
-    // (blink/ceja) — las zonas de giro ya se ven con la cabeza rotando.
     function broadcastFacial(a) {
         try { window.MF_Peer?.sendStudio?.({ t: 'facial', a }); } catch {}
     }
 
-    // ── ceja levantada al ver un "?" en el chat ──
-    // Vigila game.chat.log (array de entradas): cuando aparece un mensaje
-    // NUEVO con "?", levanta la ceja por browMs. Si hay preset/sprite de
-    // ceja se usa; si no, se sintetiza sobre la cara de la zona actual.
     const chatSeen = new WeakSet();
     const DEBUG_BROW = localStorage.getItem('mff:debug-brow') === '1';
     function debugBrow(...a) { if (DEBUG_BROW) console.log('[MF Facial 🤨]', ...a); }
@@ -1440,7 +1222,7 @@
         const g = getGame() || globalThis.__MINIBLOX_GAME__ || null;
         const log = g?.chat?.log;
         if (!Array.isArray(log)) { debugBrow('sin chat: game=' + !!g + ' log=' + (log === undefined ? 'undefined' : typeof log)); return; }
-        // solo mirar las últimas entradas (el chat es append-only)
+        
         for (let i = Math.max(0, log.length - 12); i < log.length; i++) {
             const entry = log[i];
             if (!entry || typeof entry !== 'object' || chatSeen.has(entry)) continue;
@@ -1448,19 +1230,17 @@
             const text = String(entry.text ?? entry.message ?? entry.content ?? '');
             const hasQ = text.includes('?');
             debugBrow('chat[' + i + ']' + (hasQ ? ' [?]' : '') + ': ' + JSON.stringify(text.slice(0, 60)));
-            // "?" en el mensaje (¿…? también cuenta por el cierre)
+            
             if (hasQ) {
                 auto._browUntil = performance.now() + (auto.browMs || 1400);
                 debugBrow('→ ceja hasta +' + (auto.browMs || 1400) + 'ms');
-                return; // una sola reacción por tanda
+                return; 
             }
         }
     }
 
-    // canvas de ceja levantada: preset asignado o sintetizada sobre la
-    // cara de la zona actual (sube la fila de cejas 1px)
     async function getBrowCanvas() {
-        // 1) preset asignado explícitamente
+        
         if (auto.browFace) {
             const fr = await resolveFace(resolveAutoName(auto.browFace)).catch(e => { debugBrow('preset browFace falló:', e?.message || e); return null; });
             if (fr) {
@@ -1475,7 +1255,7 @@
             }
             debugBrow('preset browFace "' + auto.browFace + '" NO resolvió → siguiente fuente');
         }
-        // 2) sprite "brow" del pack activo (por filename real del pack)
+        
         const zone = auto._zone || 'front';
         const name = zone === 'front' ? (auto.front || null) : auto[zone] || null;
         if (typeof name === 'string' && name.startsWith('fs:')) {
@@ -1489,8 +1269,7 @@
                 debugBrow('pack ' + (pack ? pack.id : m?.[1]) + ' sin sprite brow');
             }
         }
-        // 3) sintetizar: copia la cara de la zona y sube la ceja 1px
-        //    (y=3 → y=2, rellenando con tono del pelo para no duplicar)
+        
         debugBrow('brow SINTETIZADA sobre zona "' + zone + '"');
         const face = await zoneFace();
         if (!face) return null;
@@ -1500,10 +1279,10 @@
         cx.imageSmoothingEnabled = false;
         cx.drawImage(face, 0, 0);
         try {
-            const hair = cx.getImageData(4, 0, 1, 1).data; // tono del pelo (arriba)
+            const hair = cx.getImageData(4, 0, 1, 1).data; 
             const row3 = cx.getImageData(0, 3, 8, 1);
-            cx.putImageData(row3, 0, 2); // subir la ceja 1px
-            // rellenar donde estaba con tono piel/pelo aclarado
+            cx.putImageData(row3, 0, 2); 
+            
             const cheek = cx.getImageData(1, 6, 1, 1).data;
             cx.fillStyle = `rgb(${Math.round((cheek[0] + hair[0]) / 2)},${Math.round((cheek[1] + hair[1]) / 2)},${Math.round((cheek[2] + hair[2]) / 2)})`;
             cx.fillRect(0, 3, 8, 1);
@@ -1515,27 +1294,24 @@
         if (!auto.on) { auto._raf = null; return; }
         const now = performance.now();
 
-        // chat "?" → ceja levantada (ventana browMs). Mientras dura la
-        // ceja no se evalúan zonas ni blink (evita que se pisen)
         chatQuestionWatch();
         if (auto._browUntil) {
             if (now >= auto._browUntil) {
                 debugBrow('fin de la ceja → restaurar zona "' + (auto._zone || 'front') + '"');
                 auto._browUntil = 0;
-                broadcastFacial('open'); // P2P: ceja abajo
-                paintZone(auto._zone || 'front', true); // restaurar la zona
+                broadcastFacial('open'); 
+                paintZone(auto._zone || 'front', true); 
             } else {
-                // pintar la ceja una vez al entrar en la ventana
+                
                 if (!auto._browPainted) {
                     auto._browPainted = true;
-                    broadcastFacial('brow'); // P2P: ceja arriba
+                    broadcastFacial('brow'); 
                     debugBrow('pintando ceja (quedan ' + Math.round(auto._browUntil - now) + 'ms)');
                     getBrowCanvas().then(fr => {
                         if (fr && auto.on && auto._browUntil) {
                             try { paintFace({ canvas: fr.canvas, kind: fr.kind }); }
                             catch (e) {
-                                // sesión de textura inválida (mesh recreado):
-                                // invalidar y dejar que el próximo ciclo recapture
+                                
                                 state.tex = null; state.baseHead = null;
                                 debugBrow('brow: sesión inválida (' + e.message + ') → recapturar');
                             }
@@ -1549,27 +1325,22 @@
             auto._browPainted = false;
         }
 
-        // parpadeo: ventana corta de ojos cerrados; al terminar SIEMPRE se
-        // repinta la cara de la zona actual (aunque el yaw no haya cambiado)
         if (auto.blink && !auto._browUntil) {
             if (auto._blinkUntil && now >= auto._blinkUntil) {
                 auto._blinkUntil = 0;
                 scheduleBlink(now);
-                broadcastFacial('open'); // P2P: ojos abiertos
-                paintZone(auto._zone || 'front', true); // restaurar ya
+                broadcastFacial('open'); 
+                paintZone(auto._zone || 'front', true); 
             } else if (!auto._blinkUntil && now >= auto._nextBlink) {
-                auto._blinkUntil = now + 45 + Math.random() * 45; // 45-90 ms
-                broadcastFacial('blink'); // P2P: ojos cerrados
+                auto._blinkUntil = now + 45 + Math.random() * 45; 
+                broadcastFacial('blink'); 
                 getBlinkCanvas().then(cv => {
-                    // pintar SOLO si el canvas ya está listo y la ventana sigue abierta
+                    
                     if (cv && auto.on && auto._blinkUntil && performance.now() < auto._blinkUntil) {
-                        // kind 'head' → el sprite del pack trae hat incluido;
-                        // 'face' → solo la cara 8x8 (vacía el hat frontal)
+                        
                         try { paintFace({ canvas: cv, kind: auto._blinkCacheKind || 'face' }); }
                         catch (e) {
-                            // el mesh se recreó (cambio de mundo/shader): la
-                            // sesión de textura quedó vieja → invalidar y
-                            // reintentar en el próximo blink
+                            
                             auto._blinkUntil = 0; scheduleBlink(performance.now());
                             state.tex = null; state.baseHead = null;
                             debugBrow('blink: sesión inválida (' + e.message + ') → recapturar');
@@ -1582,14 +1353,12 @@
             }
         }
 
-        // reacción al giro de cabeza: evaluar zona CADA tick (barato) y solo
-        // repintar cuando la zona cambia (con histéresis evita el jitter)
         if (!auto._browUntil) {
             const angles = lookAngles();
             if (angles) {
                 const z = zoneOf(angles);
                 if (z !== auto._zone && !auto._blinkUntil) {
-                    broadcastFacial(z); // P2P: giré la cabeza a la zona z
+                    broadcastFacial(z); 
                     paintZone(z);
                 }
             }
@@ -1599,10 +1368,10 @@
 
     async function autoStart() {
         try { ensureSession(); } catch (e) { return { ok: false, error: e.message }; }
-        stop(false); // parar una facial en loop si sonaba
+        stop(false); 
         auto.on = true;
-        auto._zone = null; // forzar repintar la zona actual
-        auto._refYaw = null; auto._refPitch = null; auto._lastT = 0; // re-sincronizar cuerpo
+        auto._zone = null; 
+        auto._refYaw = null; auto._refPitch = null; auto._lastT = 0; 
         scheduleBlink(performance.now());
         if (!auto._raf) auto._raf = requestAnimationFrame(autoTick);
         renderUI();
@@ -1613,7 +1382,7 @@
     function autoStop(restore = true) {
         auto.on = false;
         if (auto._raf) { cancelAnimationFrame(auto._raf); auto._raf = null; }
-        broadcastFacial('off'); // P2P: el peer restaura mi cara
+        broadcastFacial('off'); 
         if (restore && state.baseHead && state.tex) {
             try { paintFace({ canvas: state.baseHead, kind: 'head' }); } catch {}
         }
@@ -1621,19 +1390,13 @@
         return { ok: true };
     }
 
-    // ── ANIMAR A OTROS (modo machinima) ──
-    // Parpadeo local sobre los meshes de OTROS jugadores: nadie más lo
-    // ve, pero el recording sí. Cada player tiene su propia "sesión" de
-    // textura (canvas editable + baseHead 64x16 capturada UNA vez), con
-    // blink desincronizado (fase random por player) para que no parpadeen
-    // todos a la vez. 'me' nunca se toca acá (eso ya lo hace el modo auto).
     const LS_OTHERS = LS_KEY + '_others';
     const others = {
         on: false,
-        intervalMinMs: 2500,  // parpadeo de cada player: random entre min y max
+        intervalMinMs: 2500,  
         intervalMaxMs: 6500,
-        _raf: null,           // loop rAF compartido
-        _sessions: new Map()  // playerKey -> {tex, canvas, baseHead, k, nextBlink, blinkUntil, name}
+        _raf: null,           
+        _sessions: new Map()  
     };
     function loadOthers() {
         try { Object.assign(others, JSON.parse(localStorage.getItem(LS_OTHERS) || '{}')); } catch {}
@@ -1648,9 +1411,6 @@
     }
     loadOthers();
 
-    // iterar entidades de otros players (todo lo que world tiene con mesh,
-    // menos el local). La clave ES el uuid/id del player — así la sesión
-    // sobrevive aunque el objeto entidad se recree.
     function otherPlayers() {
         const g = getGame() || globalThis.__MINIBLOX_GAME__ || null;
         const me = g?.player;
@@ -1665,8 +1425,7 @@
             if (!key || seen.has(key) || isMe(key, null)) return;
             const mesh = e?.mesh;
             if (!mesh) return;
-            // skin-id del otro (para matchear su pack de facial: ej "alice"):
-            // por uuid (inmune a renombres) O por username — lo que llegue
+            
             const uuid = typeof e?.uuid === 'string' ? e.uuid.toLowerCase() : null;
             const uname = String(e?.username || e?.profile?.username || name || '').toLowerCase() || null;
             let skin = '';
@@ -1695,21 +1454,12 @@
         return out;
     }
 
-    // ── packs para OTROS ──
-    // Si la skin de un otro player tiene pack de facial (builtin de
-    // facialskins/ — ej: skin "alice" → pack "alice" — o custom:mf_<id>),
-    // sus parpadeos/zonas usan LOS SPRITES DEL PACK (franja completa
-    // 64x16, hat incluido) en vez de la cara sintetizada.
     function packForOther(skinId) {
         if (!skinId) return null;
         for (const p of packIndex) if (p.id === skinId) return p;
         return null;
     }
-    // identidad → skin override (accounts.json / DB builtin de
-    // CustomSkins). Acepta uuid O username: así un player cuya skin
-    // vanilla el juego no reporta (o llegó por spawnPlayer sin cosmetics)
-    // igual matchea su pack si está listado. Normaliza custom:mf_<id> →
-    // <id> para que packForOther lo encuentre en el índice.
+    
     function skinForIdentity(uuid, username) {
         const db = window.__MF_CustomSkins_DB__ || null;
         let v = '';
@@ -1719,8 +1469,7 @@
                 const u = String(username);
                 if (db.byName[u]) v = db.byName[u];
                 else {
-                    // loose: sin _/-/espacios (juego muestra "ShusukeGxE_",
-                    // DB puede tener "shusukegxe")
+                    
                     const k = u.toLowerCase().replace(/[\s_-]+/g, '');
                     for (const n in db.byName) {
                         if (String(n).toLowerCase().replace(/[\s_-]+/g, '') === k) { v = db.byName[n]; break; }
@@ -1730,9 +1479,7 @@
         }
         return v ? normSkinId(v) : '';
     }
-    // pre-carga los sprites del pack de un otro (async; packImg cachea).
-    // Al llegar cada sprite se marca zoneDirty para que otherTick lo use
-    // en el próximo repintado. Idempotente por _id.
+    
     function preloadOtherPack(s, pack) {
         if (!s || !pack || s.pack?._id === pack.id) return;
         const entry = { _id: pack.id, img: { front: null, left: null, right: null, up: null, down: null, blink: null } };
@@ -1745,8 +1492,7 @@
                 .catch(() => {});
         }
     }
-    // pinta la franja de cabeza COMPLETA (sprite de pack 64x16) sobre el
-    // canvas de un otro — mismo criterio que paintFace kind 'head'
+    
     function paintOtherStrip(s, img) {
         try {
             const k = s.k || 1, cx = s.canvas.getContext('2d');
@@ -1757,22 +1503,11 @@
         } catch {}
     }
 
-    // sesión de textura de otro player (patrón ensureSession pero por key).
-    // Reglas para no pisar a nadie:
-    //  · JAMÁS se pinta un canvas ajeno (del juego, local o del look-sync
-    //    P2P): siempre se monta un canvas PROPIO etiquetado
-    //    __mfOtherKey = key del player
-    //  · el canvas local (__mfLocalCanvas = MI skin) y el del look-sync P2P
-    //    (__mfPeerCanvas — ese módulo es dueño de la cara del peer) se
-    //    ignoran; si no queda otra fuente → este player no se anima
-    //  · si OTRO player ya montó su canvas (material compartido por skin-id),
-    //    ese player lo anima; este no (evita doble-parpadeo cruzado)
     function otherSession(p) {
         let s = others._sessions.get(p.key);
         const mats = findSkinMaterials(p.mesh);
         if (!mats.length) return null;
 
-        // autoridad = textura del juego (o nuestro propio canvas ya montado)
         let src = null;
         const srcMats = [];
         for (const m of mats) {
@@ -1787,10 +1522,7 @@
         }
         const srcIsOurs = !!(src && src.image instanceof HTMLCanvasElement && src.__mfOtherKey === p.key);
         const now = performance.now();
-        // estado estable: todos los materiales ya apuntan a NUESTRO canvas y
-        // la sesión vive → seguir animando sin tocar nada. Excepción: si la
-        // fuente del juego era un canvas que se repinta solo (skin animada),
-        // seguir espejándola en nuestro canvas
+        
         if (srcIsOurs && s?.tex) {
             const auth = s.authTex;
             if (auth?.image instanceof HTMLCanvasElement && now - (s.lastMirror || 0) > 400) {
@@ -1799,12 +1531,12 @@
                     const cx = s.canvas.getContext('2d');
                     cx.imageSmoothingEnabled = false;
                     cx.drawImage(auth.image, 0, 0);
-                    if (!s.blinkUntil) s.zoneDirty = true; // zona sobre el espejo fresco
+                    if (!s.blinkUntil) s.zoneDirty = true; 
                 } catch {}
             }
             return s;
         }
-        if (!src) return null; // cara administrada por otro módulo (P2P/local)
+        if (!src) return null; 
         if (!s) {
             s = { tex: null, canvas: null, baseHead: null, k: 1, nextBlink: 0, blinkUntil: 0, name: p.name, srcId: null, lastMirror: 0, authTex: null };
             others._sessions.set(p.key, s);
@@ -1812,14 +1544,12 @@
 
         const srcId = String(src.uuid ?? '') + ':' + src.image.width + 'x' + src.image.height;
         const changed = s.srcId !== srcId;
-        // ¿el juego re-montó su textura (respawn/mundo con textura cacheada,
-        // misma uuid) o cambió de skin? → re-montar la nuestra
+        
         const needsMount = srcMats.some(m => m.map !== s.tex);
         if (changed || !s.tex || needsMount) {
             s.lastMirror = now;
-            s.authTex = srcIsOurs ? null : src; // autoridad viva (por si es un canvas animado)
-            // base limpia desde la autoridad (re-capturada al cambiar la skin;
-            // al ser del juego nunca contiene nuestros parpadeos)
+            s.authTex = srcIsOurs ? null : src; 
+            
             if (changed || !s.baseHead) {
                 try {
                     const k = Math.max(1, Math.round(src.image.width / 64));
@@ -1829,15 +1559,14 @@
                     s.baseHead = c; s.k = k;
                 } catch { return null; }
             }
-            // canvas propio: UNO por player (se re-crea solo si cambia el
-            // tamaño de la skin), nunca el del juego
+            
             if (!s.tex || s.canvas.width !== src.image.width || s.canvas.height !== src.image.height) {
                 const c = document.createElement('canvas');
                 c.width = src.image.width; c.height = src.image.height;
                 let nt = null;
                 try { nt = new src.constructor(c); } catch {}
                 if (!nt) { others._sessions.delete(p.key); return null; }
-                nt.__mfOtherKey = p.key; // nuestro canvas para ESTE player
+                nt.__mfOtherKey = p.key; 
                 try {
                     nt.magFilter = src.magFilter; nt.minFilter = src.minFilter;
                     if (src.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = src.colorSpace;
@@ -1845,27 +1574,24 @@
                 } catch {}
                 s.tex = nt; s.canvas = c;
             }
-            // espejar el contenido actual de la autoridad en nuestro canvas
+            
             try {
                 const cx = s.canvas.getContext('2d');
                 cx.imageSmoothingEnabled = false;
                 cx.clearRect(0, 0, s.canvas.width, s.canvas.height);
                 cx.drawImage(src.image, 0, 0);
             } catch {}
-            // montar nuestro canvas donde haga falta (nunca sobre materiales
-            // de otros módulos: srcMats ya los excluye)
+            
             for (const m of srcMats) {
                 if (m.map === s.tex) continue;
                 m.map = s.tex; m.needsUpdate = true;
             }
-            if (!s.blinkUntil) s.zoneDirty = true; // repintar zona sobre el espejo fresco
+            if (!s.blinkUntil) s.zoneDirty = true; 
         }
         s.srcId = srcId;
         return s;
     }
 
-    // blink sintetizado de un otro: copia la cara 8x8 de su baseHead y
-    // tapa los ojos con el tono de piel de su propia cara
     function otherBlinkCanvas(s) {
         if (!s?.baseHead) return null;
         const k = s.k || 1;
@@ -1883,9 +1609,6 @@
         return c;
     }
 
-    // cara 8x8 de un otro mirando a 'zone' ('left'|'right'|'up'|'down'),
-    // sintetizada desde SU cara original: mueve pupilas según la dirección
-    // (no necesita sprites del pack — funciona con cualquier skin)
     function otherZoneCanvas(s, zone) {
         if (!s?.baseHead) return null;
         if (!/^(left|right|up|down)$/.test(zone)) return null;
@@ -1899,7 +1622,7 @@
             const cheek = cx.getImageData(1, 6, 1, 1).data;
             const skin = [cheek[0], cheek[1], cheek[2]];
             const rgb = a => `rgb(${a[0]},${a[1]},${a[2]})`;
-            // leer los ojos originales (y4..5, x1..2 y x5..6) y sus tonos
+            
             let iris = null, white = [219, 219, 219];
             const px = (x, y) => cx.getImageData(x, y, 1, 1).data;
             for (let x = 1; x <= 6; x++) {
@@ -1911,7 +1634,7 @@
                     if (sum > white[0] + white[1] + white[2]) white = [d[0], d[1], d[2]];
                 }
             }
-            if (!iris) return c; // ojos no detectados: cara original
+            if (!iris) return c; 
             if (zone === 'left' || zone === 'right') {
                 const dir = zone === 'left' ? -1 : 1;
                 const y = 4;
@@ -1923,7 +1646,7 @@
                 pair(1, dir); pair(5, dir);
             } else {
                 const dy = zone === 'up' ? -1 : 1;
-                const row = cx.getImageData(0, 4, 8, 2); // ojos originales y4..5
+                const row = cx.getImageData(0, 4, 8, 2); 
                 cx.fillStyle = rgb(skin);
                 cx.fillRect(1, 4, 2, 2); cx.fillRect(5, 4, 2, 2);
                 cx.putImageData(row, 0, 4 + dy);
@@ -1932,13 +1655,11 @@
         return c;
     }
 
-    // zona de un player según la rotación REAL de su cabeza (headPivot
-    // relativo al body — mismos nombres de joint que usa MF_Pose/MF_Studio)
     function otherZone(p) {
         try {
             const m = p.mesh;
             if (!m) return null;
-            // BFS corto por el rig: headPivot y body viven anidados en el mesh
+            
             const queue = [m];
             const seen = new WeakSet();
             let head = null, body = null, visited = 0;
@@ -1953,7 +1674,7 @@
             if (!head) return null;
             const yaw = wrapPi((Number(head.rotation.y) || 0) - (Number(body?.rotation.y) || 0));
             const pitch = Number(head.rotation.x) || 0;
-            const thr = 22; // grados, umbral conservative para zonas
+            const thr = 22; 
             if (pitch > thr * Math.PI / 180) return 'up';
             if (pitch < -thr * Math.PI / 180) return 'down';
             if (yaw > thr * Math.PI / 180) return 'right';
@@ -1968,32 +1689,30 @@
         const live = new Set();
         for (const p of otherPlayers()) {
             live.add(p.key);
-            // SOLO se animan skins CON pack de facial (ej: "alice" → pack
-            // alice). El resto (skin vanilla sin pack / URL externa) ni
-            // se les monta canvas: su textura queda intacta.
+            
             const pack = packForOther(p.skin);
             if (!pack) {
-                // si antes tenía pack y cambió a una sin pack → restaurar
+                
                 const s = others._sessions.get(p.key);
                 if (s) restoreOther(p.key);
                 continue;
             }
             const s = otherSession(p);
             if (!s) continue;
-            // pre-carga de los sprites del pack (idempotente por _id)
+            
             preloadOtherPack(s, pack);
-            // zona según la rotación real de su cabeza (left/right/up/down)
+            
             const z = otherZone(p) || 'front';
             if (s.zone !== z) { s.zone = z; s.zoneDirty = true; }
-            if (!s.nextBlink) s.nextBlink = now + 800 + Math.random() * others.intervalMinMs; // fase random
+            if (!s.nextBlink) s.nextBlink = now + 800 + Math.random() * others.intervalMinMs; 
             if (s.blinkUntil && now >= s.blinkUntil) {
                 s.blinkUntil = 0;
                 s.nextBlink = now + others.intervalMinMs + Math.random() * Math.max(0, others.intervalMaxMs - others.intervalMinMs);
-                s.zoneDirty = true; // al abrir ojos, repintar la zona actual
+                s.zoneDirty = true; 
             } else if (!s.blinkUntil && now >= s.nextBlink && s.zone === 'front') {
                 s.blinkUntil = now + 45 + Math.random() * 45;
                 if (s.pack?.img?.blink) {
-                    // sprite de blink del SU pack (franja completa)
+                    
                     paintOtherStrip(s, s.pack.img.blink);
                 } else {
                     const cv = otherBlinkCanvas(s);
@@ -2002,15 +1721,13 @@
                             const k = s.k || 1, cx = s.canvas.getContext('2d');
                             cx.imageSmoothingEnabled = false;
                             cx.drawImage(cv, 0, 0, 8, 8, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
-                            cx.clearRect(FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k); // el hat no tape los ojos
+                            cx.clearRect(FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k); 
                             s.tex.needsUpdate = true;
                         } catch {}
                     }
                 }
             } else if (s.zoneDirty && !s.blinkUntil) {
-                // pintar la zona a la que mira (o restaurar el frente).
-                // Con pack: sprite del pack (franja completa, hat incluido);
-                // sin pack: cara sintetizada sobre SU cara original
+                
                 s.zoneDirty = false;
                 const strip = s.pack?.img ? (s.zone === 'front' ? s.pack.img.front : s.pack.img[s.zone]) : null;
                 if (strip) {
@@ -2032,14 +1749,11 @@
                 }
             }
         }
-        // limpiar sesiones de players que se fueron del mundo
+        
         for (const key of others._sessions.keys()) if (!live.has(key)) others._sessions.delete(key);
         others._raf = requestAnimationFrame(otherTick);
     }
 
-    // restaurar la franja de cabeza COMPLETA de un otro desde su baseHead
-    // y soltar su sesión (se usa al apagar el modo y cuando un player
-    // cambia de una skin CON pack a una SIN pack)
     function restoreOther(key) {
         const s = others._sessions.get(key);
         if (!s) return;
@@ -2065,8 +1779,7 @@
     function othersStop() {
         others.on = false;
         if (others._raf) { cancelAnimationFrame(others._raf); others._raf = null; }
-        // restaurar TODAS las caras tocadas (la franja completa: los
-        // sprites de pack pintan el head entero 64x16, no solo la cara)
+        
         for (const key of [...others._sessions.keys()]) restoreOther(key);
         others._sessions.clear();
         saveOthers();
@@ -2075,14 +1788,13 @@
         return { ok: true };
     }
 
-    // ── biblioteca (localStorage) ──
     function loadLibrary() {
         let lib = {};
         try { lib = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch {}
         const out = {};
         for (const [k, v] of Object.entries(lib)) {
-            if (Array.isArray(v)) out[k] = { frames: v };        // formato viejo roto
-            else if (v && Array.isArray(v.frames)) out[k] = v;   // formato correcto
+            if (Array.isArray(v)) out[k] = { frames: v };        
+            else if (v && Array.isArray(v.frames)) out[k] = v;   
         }
         state.library = out;
     }
@@ -2090,8 +1802,6 @@
         try { localStorage.setItem(LS_KEY, JSON.stringify(state.library)); } catch {}
     }
 
-    // plantillas rápidas para empezar — se adaptan a lo que tengas:
-    // si tienes presets dibujados los usan; si no, emociones de Verity
     function buildTemplates() {
         const presets = (window.MF_SkinEditor?.presets?.() || []).map(p => 'p:' + p.name);
         const T = {};
@@ -2115,7 +1825,6 @@
         return T;
     }
 
-    // ── UI ──
     function buildUI() {
         if (document.getElementById(ID)) { renderUI(); return; }
         const style = document.createElement('style');
@@ -2256,7 +1965,6 @@
         makeDraggable(root);
     }
 
-    // arrastrar la ventana por la barra de título
     function makeDraggable(root) {
         const head = root.querySelector('.mff-head');
         let sx = 0, sy = 0, ox = 0, oy = 0, drag = false;
@@ -2279,18 +1987,17 @@
         head.addEventListener('pointercancel', up);
     }
 
-    // biblioteca de caras disponibles para los keyframes
     function faceOptions() {
         const opts = [{ v: 'base', t: 'base (tu cabeza actual)' }];
-        // presets DIBUJADOS por el usuario en el SkinEditor (64x16)
+        
         for (const pr of (window.MF_SkinEditor?.presets?.() || [])) {
             opts.push({ v: 'p:' + pr.name, t: '✏️ ' + pr.name });
         }
-        // caras de skins PNG del SkinChanger
+        
         for (const it of (window.MF_SkinChanger?.items || [])) {
             opts.push({ v: 'skin_' + it.name, t: '👕 ' + it.name });
         }
-        // sprites de packs (builtin + zip importados)
+        
         for (const p of packIndex) {
             const nm = (p.name || p.id) + (p.custom ? ' (zip)' : '');
             opts.push({ v: 'fs:' + p.id + '/' + p.front, t: '📦 ' + nm + ' frente' });
@@ -2298,19 +2005,19 @@
             opts.push({ v: 'fs:' + p.id + '/' + p.right, t: '📦 ' + nm + ' derecha' });
             opts.push({ v: 'fs:' + p.id + '/' + p.blink, t: '📦 ' + nm + ' blink' });
         }
-        // emociones de FaceSwap (assets de Verity)
+        
         for (const n of (window.MF_FaceSwap?.list?.() || [])) {
             opts.push({ v: n, t: n });
         }
         return opts;
     }
 
-    let editing = null; // name de la facial en edición
+    let editing = null; 
 
     function renderUI() {
         const root = document.getElementById(ID);
         if (!root) return;
-        // lista de facials
+        
         const list = root.querySelector('#mff-list');
         list.innerHTML = '';
         const names = Object.keys(state.library);
@@ -2337,22 +2044,22 @@
             it.onclick = () => loadEditor(n);
             list.appendChild(it);
         }
-        // selector de caras
+        
         const fsel = root.querySelector('#mff-face');
         if (fsel) {
             const cur = fsel.value;
             fsel.innerHTML = faceOptions().map(o => `<option value="${o.v}">${o.t}</option>`).join('');
             if (cur) fsel.value = cur;
         }
-        // estado en el pie
+        
         const st = root.querySelector('#mff-status');
         if (st) st.textContent = auto.on
             ? '⚡ auto ' + (state.playing ? '(loop pausado)' : '')
             : (state.playing ? '▶ ' + state.playing : (editing ? 'editando: ' + editing : 'nada en reproducción'));
         updateAutoToggle();
-        // pestaña auto abierta → refrescar su form
+        
         if (root.querySelector('[data-page="auto"]')?.style.display !== 'none') renderAutoForm();
-        // frames en edición
+        
         renderFrames();
     }
 
@@ -2387,18 +2094,16 @@
         const total = frames.reduce((s, f) => s + (+f.holdMs || 400) + (+f.blendMs || 0), 0);
         const tot = el('div', '', `<span style="color:#8a8a96;font-size:10px">ciclo: ${total} ms · ${(1000 / Math.max(1, total)).toFixed(2)} loops/s</span>`);
         box.appendChild(tot);
-        // miniaturas de las caras (async, no bloquea)
+        
         fillThumbs(box);
     }
 
-    // llena los <img data-thumb> con la cara resuelta
     function fillThumbs(box) {
         box.querySelectorAll('img[data-thumb]').forEach(img => {
             const name = img.dataset.thumb;
             resolveFace(name).then(fr => {
                 if (!fr || !img.isConnected) return;
-                // recorte de la CARA (8x8 lógico) de cualquier kind, a la
-                // resolución del propio frame ('head' HD → k = width/64)
+                
                 const k = fr.kind === 'head' ? Math.max(1, Math.round(fr.canvas.width / 64)) : 1;
                 const c = document.createElement('canvas');
                 c.width = 8; c.height = 8;
@@ -2411,9 +2116,6 @@
         });
     }
 
-    // ── pestaña AUTO: formularios ──
-    // opciones de presets: los dibujados (p:) + sprites de packs (fs:)
-    // kind: 'dir' → izquierda/derecha/frente · 'blink' → blink
     function presetOptions(sel, kind = 'dir') {
         const names = (window.MF_SkinEditor?.presets?.() || []).map(p => p.name);
         let html = '<option value="" ' + (sel ? '' : 'selected') + '>— (sin cambio)</option>' +
@@ -2436,8 +2138,7 @@
         return html;
     }
 
-    // ── pestaña PACKS: lista + detalle ──
-    let packSel = null; // id del pack mostrado en el detalle
+    let packSel = null; 
     function renderPacksTab() {
         const root = document.getElementById(ID);
         if (!root) return;
@@ -2456,7 +2157,7 @@
             it.onclick = () => { packSel = p.id; renderPacksTab(); };
             list.appendChild(it);
         }
-        // detalle
+        
         const det = root.querySelector('#mff-packdetail');
         if (det) {
             const p = packIndex.find(x => x.id === packSel);
@@ -2484,23 +2185,18 @@
                 };
                 det.querySelector('[data-pk="apply"]').onclick = async () => {
                     if (p.server) {
-                        // skin DEL SERVER: el juego ya la conoce — aplicar por
-                        // su propio conducto (armario) para que también quede
-                        // en la cuenta. El modo auto arranca al detectar el id.
+                        
                         alert('"' + (p.name || p.id) + '" es una skin del server:\nponla desde el armario del juego (dressing room).\nLa cara animada se activa sola al detectar la skin.');
                         return;
                     }
                     try {
-                        // conducto NATIVO del juego: id custom:mf_<id> (la
-                        // clase "Custom Skin" de fábrica) → el skinManager
-                        // lo registra con ratio/materiales correctos; el
-                        // servidor no ve el id
+                        
                         await applyPackSkinToGame(p.id);
                         renderPacksTab();
                     } catch (e) { alert('no se pudo aplicar: ' + e.message); }
                 };
                 det.querySelector('[data-pk="auto"]').onclick = async () => {
-                    // forzar el pack elegido aunque la skin no coincida
+                    
                     auto.front = 'fs:' + p.id + '/' + p.front;
                     auto.left = 'fs:' + p.id + '/' + p.left;
                     auto.right = 'fs:' + p.id + '/' + p.right;
@@ -2552,7 +2248,7 @@
 <input type="number" min="5" max="80" step="5" value="${auto.pitchThreshold}" data-auton="pitchThreshold" title="Grados de pitch para activar (default 10)"></div>`;
             form.querySelectorAll('[data-auto]').forEach(s => s.onchange = () => {
                 auto[s.dataset.auto] = s.value; saveAuto();
-                auto._zone = null; // forzar repintar con el nuevo preset
+                auto._zone = null; 
             });
             form.querySelectorAll('[data-auton]').forEach(i => i.onchange = () => {
                 auto[i.dataset.auton] = Math.max(5, +i.value || 10); saveAuto();
@@ -2587,7 +2283,7 @@
             if (sel) sel.onchange = () => {
                 auto.blinkClosed = sel.value; saveAuto();
                 state.frameCache.delete('p:' + sel.value);
-                auto._blinkCache = null; // recargar el canvas de ojos cerrados
+                auto._blinkCache = null; 
             };
             bf.querySelectorAll('[data-blink]').forEach(i => i.onchange = () => {
                 const v = Math.max(0.3, +i.value || 2) * 1000;
@@ -2619,7 +2315,6 @@
         updateAutoLive();
     }
 
-    // panel "Live" de la pestaña auto: ángulos y preset activo en vivo
     function updateAutoLive() {
         const root = document.getElementById(ID);
         const live = root?.querySelector('#mff-autolive');
@@ -2675,7 +2370,6 @@
         renderUI();
     }
 
-    // si no hay facial seleccionada, coge la primera (o la que esté sonando)
     function ensureEditing() {
         if (editing && state.library[editing]) return editing;
         const names = Object.keys(state.library);
@@ -2693,19 +2387,19 @@
 
     function bindUI(root) {
         root.querySelector('[data-act="close"]').onclick = () => close();
-        // pestañas
+        
         root.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
             root.querySelectorAll('[data-tab]').forEach(x => x.classList.toggle('on', x === b));
             root.querySelectorAll('.mff-body').forEach(pg =>
                 pg.style.display = (pg.dataset.page === b.dataset.tab) ? 'flex' : 'none');
             if (b.dataset.tab === 'auto') renderAutoForm();
         });
-        // toggle auto
+        
         const at = root.querySelector('#mff-autotoggle');
         if (at) at.onclick = async () => {
             if (auto.on) { autoStop(); skinWatch.userOff = true; }
             else { const r = await autoStart(); if (!r.ok) alert(r.error); }
-            saveAuto(); // persistir la intención del usuario
+            saveAuto(); 
             updateAutoToggle();
         };
         root.querySelector('#mff-new').onclick = () => {
@@ -2747,7 +2441,7 @@
         root.querySelector('#mff-seed').onclick = () => {
             window.MF_Facial.seedTemplates();
         };
-        // packs: import ZIP
+        
         const pfile = root.querySelector('#mff-packfile');
         const pbtn = root.querySelector('#mff-packimport');
         if (pbtn) {
@@ -2771,13 +2465,12 @@
                 }
             };
         }
-        // tab packs → refrescar lista al abrirla
+        
         const ptab = root.querySelector('[data-tab="packs"]');
         if (ptab) ptab.addEventListener('click', renderPacksTab);
         updateAutoToggle();
     }
 
-    // marca el botón ⚡ Auto según el estado
     function updateAutoToggle() {
         const at = document.querySelector('#' + ID + ' #mff-autotoggle');
         if (at) at.classList.toggle('on', auto.on);
@@ -2788,13 +2481,13 @@
         state.open = true;
         loadLibrary(); state.dirty = false;
         loadAuto();
-        // sembrar plantillas la primera vez (o si no hay nada válido)
+        
         if (!Object.keys(state.library).length) {
             state.library = { ...buildTemplates() };
             saveLibrary();
         }
         buildUI();
-        ensureEditing(); // dejar la primera facial ya seleccionada
+        ensureEditing(); 
     }
 
     function close() {
@@ -2803,37 +2496,36 @@
         state.open = false;
     }
 
-    // ── API ──
     window.MF_Facial = {
         open, close,
         play, stop,
         loadLibrary, saveLibrary,
         get library() { return state.library; },
         get playing() { return state.playing; },
-        // auto-presets reactivos (giro de cabeza + parpadeo random)
+        
         get autoOn() { return auto.on; },
         autoStart, autoStop,
         get autoConfig() { return auto; },
         setAutoConfig(patch) {
             Object.assign(auto, patch);
             saveAuto();
-            auto._zone = null;      // forzar repintar la zona
-            auto._blinkCache = null; // recargar blink si cambió
+            auto._zone = null;      
+            auto._blinkCache = null; 
             renderAutoForm();
             return { ok: true };
         },
-        // plantillas adaptadas a los presets dibujados actuales
+        
         seedTemplates() {
             state.library = { ...state.library, ...buildTemplates() };
             saveLibrary();
             renderUI();
             return { ok: true };
         },
-        // packs faciales (builtin + ZIP importados)
+        
         get packs() { return packIndex.map(p => ({ ...p })); },
         importPackZip, exportPackZip,
-        applyPack: applyPackSkinToGame, // aplicar la skin PNG de un pack (custom:mf_)
-        releasePack: releasePackSkin,   // volver a la skin del server
+        applyPack: applyPackSkinToGame, 
+        releasePack: releasePackSkin,   
         deletePack: async function (id) {
             await packsDbDel(id);
             customPacks.delete(id);
@@ -2841,9 +2533,7 @@
             rebuildPackIndex();
             return { ok: true };
         },
-        // clase NATIVA custom: del juego — sin tocar las skins del server.
-        // Registra el PNG y aplica "custom:mf_<name>" al player local.
-        // name: id del pack (usa su skin PNG), pngUrl: URL/dataURL directo
+        
         applyCustomSkin: async function (name, pngUrl) {
             if (pngUrl) {
                 packSkinReg[MF_NAME_PREFIX + name] = pngUrl;
@@ -2853,7 +2543,7 @@
             installPackImgHook();
             return applyPackSkinToGame(name);
         },
-        // registro de redirección crudo (para FeatherLite y scripts)
+        
         registerCustomSkin: function (name, pngUrl) {
             if (typeof name !== 'string' || typeof pngUrl !== 'string') return false;
             installPackImgHook();
@@ -2863,8 +2553,6 @@
     };
     window.__MF_Facial = true;
 
-    // ── independencia del Studio ──
-    // 1) Hotkey global: Shift+F abre/cierra el panel (no requiere Studio)
     window.addEventListener('keydown', (ev) => {
         if (ev.shiftKey && (ev.key === 'F' || ev.key === 'f')) {
             const t = ev.target;
@@ -2874,15 +2562,14 @@
         }
     });
 
-    // 2) Autostart: reanudar la última facial que sonaba (persistido)
     const LS_LAST = LS_KEY + '_last';
     try {
         loadAuto();
         const last = localStorage.getItem(LS_LAST);
-        const wantAuto = auto.on; // el modo auto también se reanuda
+        const wantAuto = auto.on; 
         if (last || wantAuto) loadLibrary();
         if (wantAuto || (last && state.library[last])) {
-            // esperar a que el jugador esté en el mundo
+            
             const boot = setInterval(() => {
                 if (state.playing || auto._raf) { clearInterval(boot); return; }
                 try {
@@ -2902,7 +2589,6 @@
         }
     } catch {}
 
-    // autostart de "animar a otros" (persistido como auto)
     if (others.on) {
         const boot2 = setInterval(() => {
             if (others._raf) { clearInterval(boot2); return; }
@@ -2918,10 +2604,6 @@
         setTimeout(() => clearInterval(boot2), 60000);
     }
 
-    // 3) Monitor de PACKS faciales: si el juego está usando una skin con
-    //    pack en skins/facialskins/, activa el modo auto con sus sprites.
-    //    Detecta el id de la skin actual (profile.cosmetics.skin o
-    //    model.skin) y mapea a los PNG del pack.
     const skinWatch = { timer: null, lastApplied: null, userOff: false, busy: false, uuidDone: false };
     async function applyPackForSkin(force = false) {
         if (skinWatch.busy) return null;
@@ -2929,22 +2611,14 @@
         try {
             const skinId = currentSkinId();
             if (!skinId) return null;
-            // match por uuid (pack.json "uuid") primero: el pack se aplica
-            // aunque la skin del server sea otra. Los packs custom además
-            // registran su skin (custom:mf_) para el conducto nativo.
-            // uuidDone: SOLO UNA VEZ por sesión — si el usuario elige otra
-            // skin del server (p.ej. chris) en el armario, se respeta y no
-            // se vuelve a reemplazar en el siguiente ciclo del monitor.
+            
             const uid = currentPlayerUuid();
             let pack = uid ? packIndex.find(p => p.uuid === uid) : null;
             if (pack && pack.id !== skinId) {
-                if (skinWatch.uuidDone) return null; // ya se aplicó: respetar la skin elegida
+                if (skinWatch.uuidDone) return null; 
                 skinWatch.uuidDone = true;
                 if (!force && skinWatch.lastApplied === pack.id) return null;
-                // MODO FACIAL-ONLY: NO reemplazar la skin completa del cuerpo
-                // (antes: applyPackSkinToGame → custom:mf_ sobre toda la piel).
-                // Solo usamos el pack para los SPRITES de la cara (blink,
-                // cejas, direcciones) pintados encima de la skin actual.
+                
                 debugBrow('uuid skin: facial-only (skin intacta: ' + skinId + ')');
             } else {
                 pack = packIndex.find(p => p.id === skinId);
@@ -2953,33 +2627,30 @@
             const pid = pack.id;
             if (!force && skinWatch.lastApplied === pid) return null;
 
-            // resolver el archivo de "frente" (varía por pack)
             let frontFile = pack.front || null;
             if (!frontFile) {
                 const hit = await loadPackFront(pid);
                 if (!hit) return null;
                 frontFile = hit.usedName;
-                pack.front = frontFile; // cache para la próxima
+                pack.front = frontFile; 
             }
 
-            // esperar a que exista el mesh del player para poder pintar
             let tries = 0;
             while (tries++ < 20 && !getMesh()) await new Promise(r => setTimeout(r, 250));
             if (!getMesh()) return null;
 
-            // aplicar los presets del pack al modo auto y encenderlo
             auto.front = 'fs:' + pid + '/' + frontFile;
             auto.left = 'fs:' + pid + '/' + pack.left;
             auto.right = 'fs:' + pid + '/' + pack.right;
             auto.up = pack.up ? 'fs:' + pid + '/' + pack.up : '';
             auto.down = pack.down ? 'fs:' + pid + '/' + pack.down : '';
             auto.browFace = pack.brow ? 'fs:' + pid + '/' + pack.brow : '';
-            auto.brow = !!pack.brow; // el pack trae ceja → modo 🤨 ON
+            auto.brow = !!pack.brow; 
             auto.blinkClosed = 'fs:' + pid + '/' + pack.blink;
             auto.blink = true;
             saveAuto();
             skinWatch.lastApplied = pid;
-            skinWatch.userOff = false; // skin nueva → reactivar aunque lo apagaran
+            skinWatch.userOff = false; 
             const r = await autoStart();
             if (r.ok) console.log(TAG + ' pack "' + pid + '"' + (pid !== skinId ? ' (uuid ' + uid + ')' : '') + ' → auto facial (' + frontFile + '/izquierda/derecha/' + (pack.up ? 'arriba/' : '') + (pack.down ? 'abajo/' : '') + 'blink' + (pack.brow ? '/ceja🤨' : '') + ') · brow=' + auto.brow + ' browFace=' + (auto.browFace || '(sintetizada)') + ' browMs=' + auto.browMs);
             return r;
@@ -2988,11 +2659,8 @@
 
     skinWatch.timer = setInterval(() => {
         if (skinWatch.busy) return;
-        fetchApiSkin().then(() => { // refrescar la skin de la cuenta primero
-            // auto-activado por uuid: pack.json con "uuid" que coincida con
-            // el player local → aplicar ESE pack (gana al match por skin-id).
-            // Solo la PRIMERA vez por sesión: si el usuario cambia a una
-            // skin del server (chris…), no se le reemplaza de nuevo.
+        fetchApiSkin().then(() => { 
+            
             if (!auto.on && !skinWatch.userOff && !skinWatch.uuidDone) {
                 const uid = currentPlayerUuid();
                 const byUuid = uid ? packIndex.find(p => p.uuid === uid) : null;
@@ -3004,22 +2672,22 @@
             }
             const sid = currentSkinId();
             if (!sid) return;
-            // cambiar de skin con pack → skin SIN pack: apagar y restaurar
+            
             if (auto.on && skinWatch.lastApplied && skinWatch.lastApplied !== sid &&
                 !packIndex.some(p => p.id === sid)) {
                 skinWatch.lastApplied = null;
-                autoStop(true); // restaura la textura
+                autoStop(true); 
                 return;
             }
             if (!auto.on) {
-                // respetar un apagado manual mientras la skin no cambie
+                
                 if (!skinWatch.userOff && skinWatch.lastApplied !== sid) applyPackForSkin().catch(() => {});
             } else if (sid !== skinWatch.lastApplied) {
                 applyPackForSkin(true).catch(() => {});
             }
         });
     }, 4000);
-    // primer chequeo al entrar al mundo (precarga la skin de la API)
+    
     const packBoot = setInterval(() => {
         if (getMesh() && currentSkinId()) {
             clearInterval(packBoot);
@@ -3027,15 +2695,13 @@
         }
     }, 1000);
     setTimeout(() => clearInterval(packBoot), 120000);
-    // índice de packs: builtin (pack.json fetch) + custom (IndexedDB).
-    // El primer chequeo del monitor espera a que el índice esté listo.
+    
     const packsReady = Promise.all([
         loadBuiltinPacks().catch(() => {}),
         loadCustomPacks().catch(() => {})
     ]);
     packsReady.then(() => applyPackForSkin().catch(() => {}));
 
-    // registrar la última reproducida
     {
         const origPlay = window.MF_Facial.play;
         window.MF_Facial.play = async function (name) {

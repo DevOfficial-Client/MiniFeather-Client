@@ -3,8 +3,6 @@
 
     const TAG = '[MiniFeather VerityAI]';
 
-    // ─── Providers de chat ───────────────────────────────────────────
-    // puter (default, gratis sin key) | openrouter | glm
     const PROVIDERS = {
         puter: {
             label: 'puter.js (gratis, sin API key)',
@@ -42,9 +40,9 @@
         provider: 'puter',
         apiKey: '',
         model: '',
-        autoReply: false, // responder a TODO lo que escribas en el chat global
-        busy: false,      // anti-spam: una consulta a la vez
-        // config persistida (provider/apiKey/model) se carga abajo
+        autoReply: false, 
+        busy: false,      
+        
     };
 
     try {
@@ -83,8 +81,6 @@
         return state.loading;
     }
 
-    // Chrome carga las voces de speechSynthesis async (la 1a getVoices() sale vacia).
-    // Pedirlas ya y refrescar cuando lleguen.
     try {
         const synth = globalThis.speechSynthesis;
         if (synth) {
@@ -95,7 +91,6 @@
         }
     } catch {}
 
-    // ─── Chat via API directa (openrouter / glm) ─────────────────────
     async function chatViaApi(text) {
         const prov = PROVIDERS[state.provider];
         if (!prov?.endpoint) throw new Error('provider sin endpoint');
@@ -109,8 +104,7 @@
         const headers = { 'Content-Type': 'application/json' };
         headers[prov.keyHeader] = prov.keyPrefix + state.apiKey;
         log('chatViaApi:', state.provider, 'model=' + model, 'keyLen=' + (state.apiKey || '').length, 'header=' + prov.keyHeader + ': ' + prov.keyPrefix + (state.apiKey || '').slice(0, 4) + '...');
-        // max_tokens bajo: respuestas cortas y evita 402 "can only afford N tokens"
-        // en cuentas con pocos creditos (openrouter). Con 402 reintenta con menos.
+        
         let maxTokens = 150;
         for (let attempt = 0; attempt < 2; attempt++) {
             const ac = new AbortController();
@@ -131,7 +125,7 @@
                 return out;
             }
             const errText = await resp.text().catch(() => '');
-            // 402: creditos insuficientes para este max_tokens → reintentar con la mitad
+            
             if (resp.status === 402 && attempt === 0) {
                 maxTokens = 64;
                 log('402 creditos bajos, reintentando con max_tokens=' + maxTokens);
@@ -162,8 +156,7 @@
     function startTalk(ms) {
         try { MF_CustomModels?.playAnim?.('verity', 'talk', ms || 2000); } catch {}
     }
-    // mantiene la anim talk viva mientras suena el audio: la re-extiende
-    // hasta que llegue 'ended'/'pause' del elemento (o expire el keep-alive)
+    
     function keepTalkWhileAudio(audio) {
         if (!audio || typeof audio.addEventListener !== 'function') return;
         stopTalkKeeper();
@@ -179,19 +172,16 @@
         if (talkKeeper) { clearInterval(talkKeeper); talkKeeper = null; }
     }
 
-    // TTS de respaldo: speechSynthesis del navegador (gratis, offline).
-    // Devuelve un pseudo-audio con play/pause/ended para keepTalkWhileAudio.
     function speakBrowser(text) {
         return new Promise((resolve, reject) => {
             try {
                 const synth = globalThis.speechSynthesis;
                 if (!synth) throw new Error('speechSynthesis no disponible');
-                // limpiar estado previo: una utterance pausada/colgada hace
-                // que speak() falle con "synthesis-failed"
+                
                 try { synth.cancel(); } catch {}
                 let voices = [];
                 try { voices = synth.getVoices() || []; } catch {}
-                // voz preferida: la elegida a mano → espanol femenina → cualquier espanol → null
+                
                 const pick = () => {
                     if (state.voiceName) {
                         const chosen = voices.find((v) => v.name === state.voiceName)
@@ -217,8 +207,7 @@
                     if (voice) { u.voice = voice; u.lang = voice.lang; }
                     u.onend = () => { fake.ended = true; };
                     u.onerror = (e) => {
-                        // retry 1 vez con voz default del sistema (la voz elegida
-                        // puede no estar disponible → "synthesis-failed")
+                        
                         if (tries++ === 0 && voice) {
                             warn('voz "' + voice.name + '" fallo (' + (e?.error || '?') + '), reintentando con voz default');
                             try { synth.cancel(); } catch {}
@@ -241,7 +230,7 @@
 
     async function speak(text) {
         if (!state.enabled) return null;
-        // 1) intentar puter con timeout corto; si cuelga/falla → voz del navegador
+        
         try {
             const ok = await loadPuter();
             if (!ok) throw new Error('puter.js no disponible');
@@ -249,14 +238,13 @@
             try {
                 const opts = { rate: state.rate };
                 if (state.voice) opts.voice = state.voice;
-                // carrera contra timeout: puter puede colgarse (login requerido, red, etc)
-                // y sin error el fallback nunca se activaria
+                
                 const audio = await Promise.race([
                     Promise.resolve(globalThis.puter.ai.txt2speech(text, opts)),
                     new Promise((_, rej) => setTimeout(() => rej(new Error('puter timeout 8s')), 8000))
                 ]);
                 log('TTS via puter OK');
-                // anim talk desde que el audio empieza, extendida mientras suene
+                
                 startTalk(Math.max(1500, Math.min(8000, text.length * 65)));
                 keepTalkWhileAudio(audio);
                 if (audio && typeof audio.play === 'function') {
@@ -290,8 +278,6 @@
         return reply;
     }
 
-    // respuesta automatica a mensajes del chat global (llamado por el hook de
-    // ClientCommands). Ignora comandos; anti-spam con "busy".
     async function autoReplyChat(text) {
         if (!state.autoReply || !state.enabled) return false;
         const clean = String(text || '').trim();
@@ -302,7 +288,7 @@
             log('auto-reply a:', clean.slice(0, 60));
             const reply = await ask(clean);
             if (reply) {
-                // mostrar la respuesta tambien en el chat del juego
+                
                 try { state.chatHook?.(reply); } catch {}
             }
             return !!reply;
@@ -323,7 +309,7 @@
         set voice(v) {
             if (v && typeof v === 'object' && v.name) {
                 state.voiceName = v.name;
-                state.voice = null; // para speakBrowser: buscar por nombre
+                state.voice = null; 
                 log('voice=' + v.name);
             } else {
                 state.voiceName = String(v || '');
@@ -331,7 +317,7 @@
                 log('voice=' + state.voiceName);
             }
         },
-        // listar voces TTS instaladas en el sistema (para elegir la "loquendo")
+        
         listVoices() {
             const synth = globalThis.speechSynthesis;
             const voices = synth?.getVoices?.() || [];
@@ -340,7 +326,7 @@
             return list;
         },
         set rate(r) { state.rate = Math.max(0.5, Math.min(2, +r || 1)); },
-        // ─── config de providers ───
+        
         get provider() { return state.provider; },
         get model() { return state.model || (PROVIDERS[state.provider]?.defaultModel || ''); },
         get providers() { return Object.fromEntries(Object.entries(PROVIDERS).map(([k, p]) => [k, { label: p.label, needsKey: p.needsKey, defaultModel: p.defaultModel || null }])); },
@@ -352,7 +338,7 @@
                 const prevDefault = prevProv?.defaultModel || '';
                 state.provider = p;
                 const newDefault = PROVIDERS[p].defaultModel || '';
-                // si el modelo era el default del provider anterior, cambiar al del nuevo
+                
                 if (!state.model || state.model === prevDefault) {
                     state.model = newDefault;
                 }
@@ -367,7 +353,7 @@
         say,
         chat,
         speak,
-        // responder a todo el chat global (on/off, persistido)
+        
         get autoReply() { return state.autoReply; },
         set autoReply(v) {
             state.autoReply = !!v;
@@ -375,7 +361,7 @@
             log('autoReply=' + state.autoReply + (state.autoReply ? ' — verity respondera a todo lo que escribas (menos comandos /)' : ''));
         },
         autoReplyChat,
-        // registrar callback para mostrar respuestas en el chat del juego
+        
         setChatHook(fn) { state.chatHook = typeof fn === 'function' ? fn : null; },
         spawn() { return MF_CustomModels?.followVerity?.(); },
         despawn() { return MF_CustomModels?.despawn?.('verity'); },

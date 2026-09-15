@@ -1,14 +1,6 @@
 (function () {
   'use strict';
 
-  // Splash cinematográfico al caer al agua (portado del mod "Shine").
-  // Detecta la transición aire→agua de cualquier entidad (jugador local,
-  // remotos y mobs) con velocidad de caída, y renderiza las 4 capas del
-  // "trailer splash" como DECALS HORIZONTALES a ras del agua (patrón
-  // GrassFlowers: quad plano con normal +Y, constructores robados de meshes
-  // vivos + material con depthTest). Es como un bloque decorativo que
-  // aparece en la superficie: sin colisión, no gira con la cámara.
-
   const EVENT_CONFIG = 'minifeather:water-splash-config';
   const GLOBAL_KEY = '__MINIFEATHER_WATER_SPLASH__';
   const TAG = '[MiniFeather WaterSplash]';
@@ -18,7 +10,6 @@
   const MIN_FALL_SPEED = 0.08;
   const HOOK_MS = 900;
 
-  // Capas: [carpeta, frames, retraso (ms), altura de origen (bloques), escala base]
   const LAYERS = [
     { dir: 'band',   frames: 10, delay: 0,   yOffset: 0.10, scale: 1.30 },
     { dir: 'low',    frames: 8,  delay: 40,  yOffset: 0.15, scale: 1.05 },
@@ -29,10 +20,8 @@
   const DROPLET_COUNT = 14;
   const DROPLET_LIFE_MS = 620;
 
-  // Lluvia: mini-splashes (ondas) sobre la superficie del agua.
-  // Usa el pack Particular: water_ripple_1..7 (7 frames animados reales)
   const RAIN_MS = 130;
-  const RAIN_RADIUS = 22;      // zona de ondas: radio 22 bloques alrededor
+  const RAIN_RADIUS = 22;      
   const RAIN_MAX_MESHES = 140;
   const RAIN_LIFE_MS = 480;
   const RAIN_FRAMES = 7;
@@ -55,13 +44,13 @@
     game: null,
     entityMap: null,
     lastGameScan: 0,
-    wasInWater: new Map(), // entityKey -> { inWater, seenAt }
-    splashes: [],          // { mesh, mat, start, layer, power, x,y,z }
-    droplets: [],          // { mesh, mat, start, x,y,z, vx,vy,vz, seed }
-    // recursos compartidos (robados del juego, patrón GrassFlowers)
+    wasInWater: new Map(), 
+    splashes: [],          
+    droplets: [],          
+    
     referenceMesh: null,
-    textures: new Map(),   // url -> texture
-    materials: new Map(),  // url -> material (uno por frame para swap barato)
+    textures: new Map(),   
+    materials: new Map(),  
     quadGeometry: null,
     dropletGeometry: null,
     assetsBase: '',
@@ -70,8 +59,6 @@
     scanTimer: 0,
     raf: 0
   };
-
-  // ── juego / escena / entidades ───────────────────────────────────
 
   function findGame(force = false) {
     const now = performance.now();
@@ -106,8 +93,7 @@
     const gs = game?.gameScene;
     if (gs?.scene?.isObject3D) return gs.scene;
     if (gs?.isObject3D) return gs;
-    // la raíz puede llamarse distinto según versión: buscar el primer
-    // Object3D (con add/traverse) dentro de gameScene
+    
     try {
       for (const key of Object.keys(gs || {})) {
         const value = gs[key];
@@ -119,7 +105,6 @@
     return game?.scene?.scene || gs || game?.scene || null;
   }
 
-  // Inspección de escena para diagnóstico: qué hay y con qué materiales
   function inspectScene() {
     const game = findGame(true);
     const scene = getScene(game);
@@ -154,16 +139,8 @@
     return game?.gameScene?.camera || game?.camera || null;
   }
 
-  // Busca la Y de la SUPERFICIE del agua escaneando bloques hacia arriba
-  // desde los pies de la entidad: al detectarse la entrada al agua los
-  // pies ya están bajo la superficie, y un decal sumergido no se ve.
-  // Usa el id del bloque donde están los pies como referencia de "agua".
-  // registro de bloques del juego (patrón WorldMap.js): permite resolver
-  // el NOMBRE del bloque ('water') en vez de depender de ids numéricos
   let _blockRegistry = null;
 
-  // recorre la cadena de prototipos buscando los métodos de mundo (el
-  // juego puede tenerlos a más de un nivel — patrón getWorldProto2)
   function getWorldProtoDeep(world) {
     try {
       let proto = world && Object.getPrototypeOf(world);
@@ -181,9 +158,7 @@
     try {
       const proto = getWorldProtoDeep(world);
       if (!proto?.getChunkByID) return null;
-      // chunk (0,0) suele estar DESCARGADO lejos del spawn (WorldMap
-      // escanea chunks cerca del jugador): probar el chunk del jugador y
-      // vecinos hasta dar con uno cargado
+      
       const candidates = [];
       const p = state.game?.player?.pos || findGame()?.player?.pos;
       if (p) {
@@ -217,24 +192,20 @@
     }
   }
 
-  // ids de agua APRENDIDOS: cuando una entidad entra al agua, el bloque en
-  // sus pies ES agua por definición — lo capturamos como fallback para
-  // cuando el registro de bloques no está disponible
   const knownWaterIds = new Set();
 
   function isWaterBlock(world, blockState) {
     if (!blockState) return false;
-    // fallback rápido: id ya aprendido del juego real
+    
     if (knownWaterIds.size && knownWaterIds.has(blockState.id)) return true;
     const name = blockNameOf(world, blockState);
     if (name === 'water' || name === 'water_cauldron' || name === 'flowing_water') {
-      knownWaterIds.add(blockState.id); // aprender para próximos chequeos
+      knownWaterIds.add(blockState.id); 
       return true;
     }
     return false;
   }
 
-  // captura el id del bloque en los pies de una entidad que está en agua
   function learnWaterIdFromEntity(game, entity) {
     try {
       if (!entity?.inWater || !entity?.pos) return;
@@ -263,9 +234,7 @@
 
       const at = (yy) => {
         try {
-          // world.getBlockState exige instanceof Vec3i y loguea "Invalid
-          // position" con objetos planos; la ruta chunk no valida (patrón
-          // documentado en Baritone.js:533)
+          
           if (typeof proto.getChunk === 'function') {
             const chunk = proto.getChunk.call(world, { x: bx, y: yy, z: bz });
             if (chunk != null && !chunk.isDummyChunk && typeof chunk.getBlockState === 'function') {
@@ -279,25 +248,21 @@
         }
       };
 
-      // sondeo tipo heightmap: desde 24 bloques arriba del jugador hacia
-      // abajo hasta dar con el primer bloque no-aire de la columna. Si
-      // ese bloque es agua → esa es la superficie (robusto contra orillas,
-      // colinas y cualquier diferencia de altura con el jugador)
       for (let d = 24; d >= -4; d--) {
         const s = at(by + d);
-        if (!s || s.id === 0) continue; // aire (o sin datos): seguir bajando
+        if (!s || s.id === 0) continue; 
         if (isWaterBlock(world, s)) {
-          // superficie: último bloque de agua contiguo hacia arriba
+          
           let top = by + d;
           for (let i = 1; i <= 6; i++) {
             const up = at(by + d + i);
             if (up && isWaterBlock(world, up)) top = by + d + i;
             else break;
           }
-          // superficie visual del agua (el bloque no se llena del todo)
+          
           return top + 0.9;
         }
-        // sólido: en esta columna no hay agua a la vista
+        
         return null;
       }
       return null;
@@ -344,11 +309,6 @@
     return null;
   }
 
-  // ── recursos 3D (patrón GrassFlowers) ────────────────────────────
-
-  // runtime invalidado (extensión recargada sin F5): getURL devuelve
-  // chrome-extension://invalid/ y el meta/config del frame quedan viejos.
-  // Validar antes de aceptar y NUNCA cachear una URL envenenada
   function isValidAssetsUrl(url) {
     return typeof url === 'string' && url.startsWith('chrome-extension://') && !url.startsWith('chrome-extension://invalid/');
   }
@@ -357,13 +317,13 @@
     if (isValidAssetsUrl(state.assetsBase)) return state.assetsBase;
     state.assetsBase = '';
     try {
-      // 1) meta propio (lo inyecta SplashScreen al recargar la extensión)
+      
       const meta = document.querySelector('meta[name="mf-particles-base"]');
       if (isValidAssetsUrl(meta?.content)) {
         state.assetsBase = meta.content;
         return state.assetsBase;
       }
-      // 2) fallback: derivar de un meta existente cambiando el sufijo
+      
       for (const [name, suffix] of [
         ['mf-mirror-base', 'assets/mfpack/'],
         ['mf-skins-base', 'skins/']
@@ -386,10 +346,6 @@
     return `${base}water_splash/${dir}/${dir === 'band' ? 'splash_band' : dir}_${frame}.png`;
   }
 
-  // Busca un material con textura en las raíces nativas de render del juego
-  // (chunkMeshes/entityMeshes/...) — en miniblox los chunks NO cuelgan de la
-  // escena raíz, el renderer las recorre por su cuenta (LocalGames tiene que
-  // forzar scene.add para sus mundos).
   function findReferenceInRoots(game) {
     const gs = game?.gameScene;
     if (!gs) return null;
@@ -435,8 +391,7 @@
 
     try {
       scene.traverse(obj => {
-        // skinned (skins de jugadores): su material lleva skinning y colapsa
-        // un quad estático a un punto — solo meshes normales
+        
         if (!obj?.isMesh || obj.isSkinnedMesh || obj.geometry?.attributes?.skinIndex) return;
         if (!obj.geometry?.attributes?.position || !obj.geometry?.attributes?.uv) return;
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
@@ -454,9 +409,6 @@
     return state.referenceMesh;
   }
 
-  // Carga vía <img> (no fetch): la CSP de la página puede bloquear
-  // connect-src a chrome-extension://, pero img-src sí permite los
-  // web_accessible_resources (mismo camino que usa CustomSkins).
   async function loadImageUrl(url) {
     const image = await new Promise((resolve, reject) => {
       const img = new Image();
@@ -503,7 +455,7 @@
       material.transparent = true;
       material.opacity = 1;
       material.alphaTest = 0.05;
-      material.depthTest = true;   // oclusión real contra el terreno
+      material.depthTest = true;   
       material.depthWrite = false;
       material.side = 2;
       material.fog = true;
@@ -512,8 +464,7 @@
       if ('metalness' in material) material.metalness = 0;
       material.color?.set?.(0xffffff);
       material.emissive?.set?.(0x000000);
-      // despega el decal de la superficie del agua (z-fighting): sin esto
-      // el quad pierde el depth-test contra la cara superior del agua
+      
       material.polygonOffset = true;
       material.polygonOffsetFactor = -2;
       material.polygonOffsetUnits = -2;
@@ -525,13 +476,11 @@
     return material;
   }
 
-  // Quad horizontal tipo decal (plano XZ, normal +Y), como las flores de
-  // piso: pivote en una esquina para escalar desde ahí, sin billboard.
   function buildQuadGeometry(referenceMesh) {
     if (state.quadGeometry) return state.quadGeometry;
     const geo = buildQuad(referenceMesh, false);
     state.quadGeometry = geo;
-    // quad vertical separado para las gotitas (billboards)
+    
     state.dropletGeometry = buildQuad(referenceMesh, true);
     return geo;
   }
@@ -546,7 +495,7 @@
 
       const geometry = new Geometry();
       if (vertical) {
-        // billboard vertical (plano XY, pivote abajo-centro) para gotitas
+        
         geometry.setAttribute('position', new Attr(new Float32Array([
           -0.5, 0.0, 0,   0.5, 0.0, 0,   -0.5, 1.0, 0,   0.5, 1.0, 0
         ]), 3));
@@ -558,7 +507,7 @@
         ]), 2));
         geometry.setIndex([0, 1, 2, 2, 1, 3]);
       } else {
-        // decal horizontal en XZ a y=0, quad unitario 1x1 centrado
+        
         geometry.setAttribute('position', new Attr(new Float32Array([
           -0.5, 0, -0.5,   0.5, 0, -0.5,   -0.5, 0, 0.5,   0.5, 0, 0.5
         ]), 3));
@@ -578,8 +527,6 @@
     }
   }
 
-  // log de diagnóstico con throttle: los fallos reintentan cada 900ms y no
-  // hay que llenar la consola (antes fallaban en silencio absoluto)
   let _lastFailLog = 0;
   function logResourceFail(code, detail) {
     const now = performance.now();
@@ -599,7 +546,6 @@
       let source = Array.isArray(ref?.material) ? ref.material[0] : ref?.material;
       let sourceMap = source?.map;
 
-      // Plan B: raíces nativas del renderer (chunkMeshes/entityMeshes/...)
       if (!ref || !sourceMap) {
         const fromRoots = findReferenceInRoots(game);
         if (fromRoots) {
@@ -610,7 +556,6 @@
         }
       }
 
-      // Plan C (patrón CustomModels): rig del brazo del jugador
       let meshCtor = ref?.constructor;
       if (!ref || !sourceMap) {
         try {
@@ -653,8 +598,7 @@
       }
 
       try {
-        // núcleo obligatorio: gotita + 4 capas del splash de entidad. Si
-        // una de estas falla, no hay nada que mostrar
+        
         const coreUrls = new Set([`${base}water_splash/water_particle_splash.png`]);
         for (const spec of LAYERS) {
           for (let i = 0; i < spec.frames; i++) coreUrls.add(layerFrameUrl(spec.dir, i));
@@ -677,9 +621,6 @@
         }));
         state.lastErrorDetail = { loaded };
 
-        // ondas de lluvia del pack Particular (7 frames): opcionales —
-        // si no existen todavía, la lluvia no dibuja pero el splash de
-        // entidad sí (antes un ripple faltante mataba TODO por Promise.all)
         const rainFailures = [];
         await Promise.all(Array.from({ length: RAIN_FRAMES }, async (_, i) => {
           const url = rainFrameUrl(i);
@@ -704,8 +645,7 @@
         }
 
         if (!state.quadGeometry || !state.dropletGeometry) {
-          // buildQuadGeometry crea y guarda AMBOS quads (horizontal decal +
-          // vertical gotitas) en state
+          
           if (!buildQuadGeometry(state.referenceMesh)) {
             state.lastError = 'NO_QUAD';
             state.resourcesPromise = null;
@@ -726,17 +666,12 @@
       }
     })();
 
-    // cachear la promesa FUERA del IIFE: los return false internos ya no
-    // pisan el cache con null (eso congelaba el intento fallido para
-    // siempre y nunca reintentaba)
     state.resourcesPromise = attempt.finally(() => {
       if (!state.resourcesReady) state.resourcesPromise = null;
     });
 
     return state.resourcesPromise;
   }
-
-  // ── spawn de splashes ────────────────────────────────────────────
 
   function spawnSplash(x, y, z, fallSpeed, width, options = {}) {
     if (!state.enabled || !state.resourcesReady) return;
@@ -745,7 +680,6 @@
     const scene = getScene(game);
     if (!scene?.add) return;
 
-    // colocar el decal SOBRE la superficie real del agua
     const surfaceY = findWaterSurfaceY(game, x, y, z);
     const splashY = surfaceY != null ? surfaceY + 0.02 : y + 0.1;
 
@@ -774,15 +708,12 @@
         mesh.receiveShadow = false;
         mesh.frustumCulled = false;
         mesh.renderOrder = 4;
-        // decal horizontal a ras del agua; yOffset mínimo: la capa sube un
-        // poco con el power (el chorro central se ve más alto)
+        
         mesh.position.set(x, splashY + spec.yOffset * 0.15 * baseWidth, z);
-        // escala en XZ (tamaño del anillo); la altura del "chorro" se
-        // simula creciendo el decal a medida que avanza el frame
+        
         mesh.rotation.y = Math.random() * Math.PI * 2;
         mesh.scale.set(1, 1, 1);
-        // el juego congela matrices en objetos estáticos (chunks): sin esto
-        // el quad queda dibujado en el origen del mundo (patrón MF_Film)
+        
         mesh.matrixAutoUpdate = true;
         mesh.updateMatrix();
         mesh.updateMatrixWorld(true);
@@ -799,7 +730,6 @@
       } catch (_) {}
     }
 
-    // gotitas
     const dropletUrl = `${base}water_splash/water_particle_splash.png`;
     const dropletMat = state.materials.get(dropletUrl);
     const geometry = state.dropletGeometry || state.quadGeometry;
@@ -839,22 +769,15 @@
     }
   }
 
-  // ── lluvia: ondas de gota sobre el agua ──────────────────────────
-
   function isRainingNow(game) {
     try {
       const world = game?.world;
       if (world) {
-        // API del juego (ver NoWeather.js): world.isRaining() /
-        // world.getRainStrength()
+        
         if (typeof world.isRaining === 'function' && world.isRaining()) return true;
         if (typeof world.getRainStrength === 'function' && Number(world.getRainStrength()) > 0.15) return true;
         if (world.isRaining === true) return true;
 
-        // BYPASS de NoWeather: lo parchea como propiedad propia de la
-        // instancia, pero el prototipo conserva el original — llamarlo
-        // directo lee el clima REAL (así las ondas salen aunque la lluvia
-        // esté oculta visualmente)
         const proto = Object.getPrototypeOf(world);
         if (proto) {
           if (typeof proto.isRaining === 'function' && proto.isRaining !== world.isRaining) {
@@ -865,11 +788,9 @@
           }
         }
 
-        // dato crudo del mundo (NoWeather solo parchea métodos, no campos)
         if (Number(world.rainStrength) > 0.15) return true;
       }
 
-      // el visual no miente: si el mesh de lluvia está visible, llueve
       const weather = game?.gameScene?.weather;
       if (weather?.rain?.mesh?.visible === true) return true;
 
@@ -879,16 +800,13 @@
     }
   }
 
-  // Spawnea mini-splashes en puntos aleatorios alrededor del jugador,
-  // SOLO donde hay superficie de agua (findWaterSurfaceY valida el bloque)
   function tickRain() {
     if (!state.enabled || state.destroyed || !state.resourcesReady) { state.rainBlocked = 'disabled/recursos'; return; }
-    if (!state.rainFramesReady) { state.rainBlocked = 'sin-frames-ripple'; return; } // sin frames cargados no hay lluvia
+    if (!state.rainFramesReady) { state.rainBlocked = 'sin-frames-ripple'; return; } 
 
     const game = findGame();
     if (!game) { state.rainBlocked = 'sin-game'; return; }
 
-    // lluvia real O forzada para diagnóstico (10s)
     const forced = state.forceRain && performance.now() < state.forceRain;
     if (state.forceRain && !forced) state.forceRain = 0;
     if (!forced && !isRainingNow(game)) { state.rainBlocked = 'no-llueve'; return; }
@@ -900,14 +818,11 @@
     const scene = getScene(game);
     if (!scene?.add) { state.rainBlocked = 'sin-escena'; return; }
 
-    // presupuesto de meshes activos: la lluvia no debe saturar
     if (state.splashes.length + state.droplets.length > RAIN_MAX_MESHES) return;
 
     const now = performance.now();
     state.rainTicks = (state.rainTicks || 0) + 1;
 
-    // 4 intentos por tick: descarta posiciones sin agua. SIN break: cada
-    // intento con agua spawnea su onda (1 cada 60ms era demasiado escaso)
     for (let attempt = 0; attempt < 4; attempt++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = 1.5 + Math.random() * (RAIN_RADIUS - 1.5);
@@ -954,8 +869,6 @@
     }
   }
 
-  // ── animación 3D ─────────────────────────────────────────────────
-
   function tick(now) {
     if (state.destroyed || !state.enabled) {
       state.raf = 0;
@@ -965,8 +878,6 @@
     const game = findGame();
     const camera = getCamera(game);
 
-    // decal horizontal: sin billboard — no gira con la cámara, pero sí
-    // miramos desde arriba para no dibujarlo si la cámara está bajo el agua
     if (camera?.position) {
       const camY = Number(camera.position.y) || 0;
       for (const splash of state.splashes) {
@@ -974,14 +885,12 @@
       }
     }
 
-    // gotitas: billboard vertical
     if (camera) {
       for (const droplet of state.droplets) {
         try { droplet.mesh.quaternion.copy(camera.quaternion); } catch (_) {}
       }
     }
 
-    // capas del splash: frame según progreso
     for (let i = state.splashes.length - 1; i >= 0; i--) {
       const splash = state.splashes[i];
       const age = now - splash.start;
@@ -998,17 +907,16 @@
         continue;
       }
 
-      // lluvia: ciclo de los 7 frames del water_ripple (pack Particular)
       let material;
       if (splash.rain) {
-        // frameLoop (debug): los 7 frames en loop de ~480ms por ciclo
+        
         const frameIndex = splash.frameLoop
           ? Math.floor((age % RAIN_LIFE_MS) / RAIN_LIFE_MS * RAIN_FRAMES)
           : Math.min(RAIN_FRAMES - 1, Math.floor(progress * RAIN_FRAMES));
         material = state.materials.get(rainFrameUrl(frameIndex));
       } else {
         const { spec } = splash;
-        // forever: frame 2 fijo (visible de inmediato), sin animación
+        
         const frameIndex = splash.life === Infinity
           ? 1
           : Math.min(spec.frames - 1, Math.floor(progress * spec.frames));
@@ -1019,14 +927,10 @@
         splash.mesh.material = material;
       }
 
-      // el decal crece desde el punto de impacto (expandiendo el anillo);
-      // en modo forever queda a tamaño final. En lluvia NO crece: los 7
-      // frames del water_ripple ya expanden la onda por sí mismos
       const grow = (splash.life === Infinity || splash.rain) ? 1 : 0.45 + progress * 0.55;
       const scale = splash.targetScale * grow;
       try { splash.mesh.scale.set(scale, 1, scale); } catch (_) {}
 
-      // fade (nada en modo forever)
       let opacity = 1;
       if (splash.life !== Infinity) {
         if (progress < 0.06) opacity = progress / 0.06;
@@ -1037,7 +941,6 @@
       splash.mesh.visible = true;
     }
 
-    // gotitas: balística con gravedad
     const gravity = 13.5;
     for (let i = state.droplets.length - 1; i >= 0; i--) {
       const droplet = state.droplets[i];
@@ -1067,15 +970,12 @@
     state.raf = requestAnimationFrame(tick);
   }
 
-  // ── detección de entrada al agua ─────────────────────────────────
-
   function scanEntities() {
     if (!state.enabled || state.destroyed) return;
 
     const game = findGame();
     if (!game) return;
 
-    // lluvia: ondas en el agua mientras llovía (mismo intervalo del scan)
     tickRain();
 
     const now = performance.now();
@@ -1090,7 +990,6 @@
       const inWater = entity.inWater === true;
       const prev = state.wasInWater.get(key);
 
-      // aprender el id del agua del propio juego (fallback anti-registro)
       if (inWater) learnWaterIdFromEntity(game, entity);
 
       if (prev && !prev.inWater && inWater) {
@@ -1126,8 +1025,6 @@
       }
     }
   }
-
-  // ── ciclo de vida ────────────────────────────────────────────────
 
   function clearVisuals() {
     for (const splash of state.splashes) {
@@ -1190,10 +1087,7 @@
       try { config = JSON.parse(detail); } catch (_) { config = null; }
     }
     if (!config || typeof config !== 'object') return;
-    // el panel (ISOLATED) nos pasa la URL de los assets: el MAIN world no
-    // tiene chrome.runtime y el meta de SplashScreen puede no existir aquí.
-    // Si llega una URL válida y distinta (runtime recargado), reemplazar la
-    // vieja y descargar los recursos ya cargados con la base anterior
+    
     if (isValidAssetsUrl(config.assetsBase)) {
       if (state.assetsBase && state.assetsBase !== config.assetsBase && state.resourcesReady) {
         disposeResources();
@@ -1211,10 +1105,9 @@
 
   document.addEventListener(EVENT_CONFIG, onConfig);
 
-  // re-scan lento: mundos nuevos / cámara tras F5
   const hookTimer = window.setInterval(() => {
     if (state.enabled && !state.resourcesReady) void ensureResources();
-    if (state.enabled) state.entityMap = null; // re-resolver mapa de entidades
+    if (state.enabled) state.entityMap = null; 
   }, HOOK_MS);
 
   function destroy() {
@@ -1231,13 +1124,11 @@
 
   globalThis[GLOBAL_KEY] = {
     destroy,
-    // diagnóstico
+    
     debug: {
       get state() { return { enabled: state.enabled, resourcesReady: state.resourcesReady, rainFramesReady: state.rainFramesReady === true, error: state.lastError, errorDetail: state.lastErrorDetail, splashes: state.splashes.length, droplets: state.droplets.length, entities: state.wasInWater.size, materials: state.materials.size, assetsBase: state.assetsBase, scene: inspectScene(), rainBlocked: state.rainBlocked || null, rainTicks: state.rainTicks || 0, rainAttempts: state.rainAttempts || 0, rainHits: state.rainHits || 0, waterIdsAprendidos: [...knownWaterIds], blockRegistry: !!getBlockRegistry(findGame()?.world), llueve: (() => { try { return isRainingNow(findGame()); } catch (_) { return null; } })() }; },
       splash() {
-        // dispara un splash ETERNO en frente del jugador para diagnóstico:
-        // queda visible estático hasta clear() — sirve para ver si el mesh
-        // se dibuja y dónde quedó posicionado
+        
         const game = findGame(true);
         const p = game?.player?.pos;
         if (!p) { console.warn(TAG, 'no hay jugador'); return; }
@@ -1260,9 +1151,7 @@
       },
       clear() { clearVisuals(); },
       ripple() {
-        // onda de lluvia ETERNA en frente del jugador para diagnóstico:
-        // cicla los 7 frames en loop hasta clear() — prueba la cadena
-        // completa de la lluvia sin necesitar clima
+        
         const game = findGame(true);
         const p = game?.player?.pos;
         if (!p) { console.warn(TAG, 'no hay jugador'); return; }
@@ -1295,8 +1184,7 @@
         else void ensureResources().then(ok => { if (ok) fire(); });
       },
       rain(force = true) {
-        // fuerza la lluvia de ondas ON/OFF para prueba (independiente del
-        // clima real); sin args la activa 10s
+        
         state.forceRain = force === true ? performance.now() + 10000 : 0;
         console.log(TAG, 'lluvia forzada:', !!state.forceRain, '→ detectada real:', isRainingNow(findGame()));
       },

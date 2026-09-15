@@ -1,34 +1,12 @@
-// MF_SkinEditor.js — Editor de píxeles EN VIVO para la skin del jugador:
-// dos modos: SOLO CABEZA (64x16, rápido) y SKIN COMPLETA (todo el cuerpo).
-// Cada trazo se pinta directo sobre el canvas de la textura que el juego
-// renderiza → el cambio se ve al instante en el personaje.
-//
-// Zona de la CABEZA en una skin MC (64x64 o 64x32): el rect (0,0)-(64,16).
-//   · Mitad izquierda  (x 0..32)  = capa BASE: top(8,0) bottom(16,0)
-//     right(0,8) front/cara(8,8) left(16,8) back(24,8)
-//   · Mitad derecha    (x 32..64) = capa OVERLAY (hat): mismas caras +32.
-//
-// MODO FULL: edita TODO el canvas de la skin (cabeza + cuerpo + brazos +
-// piernas, base + overlay) con guía de rectángulos de cada parte.
-//
-// Herramientas: lápiz, borrador, cuentagotas, relleno (flood), pinceles
-// 1-3, filtro de capa (ambas/base/overlay), grid, undo/redo, revertir
-// skin original, presets en localStorage y exportar PNG.
-//
-// Uso:
-//   MF_SkinEditor.open()    // panel flotante (botón en el Studio también)
-//   MF_SkinEditor.close()
-//   MF_SkinEditor.revert()  // restaurar la skin original
 
 (function () {
     'use strict';
     if (window.__MF_SkinEditor) return;
     const TAG = '[MF SkinEditor]';
 
-    const HEAD = { x: 0, y: 0, w: 64, h: 16 }; // zona de la cabeza
-    const OVERLAY_X = 32;                      // x>=32 → hat layer
-    // modo FULL: zonas del cuerpo en la skin 64x64 (y<16 = cabeza)
-    // rects base {x,y,w,h} de cada parte (overlay = +32 en x)
+    const HEAD = { x: 0, y: 0, w: 64, h: 16 }; 
+    const OVERLAY_X = 32;                      
+    
     const BODY_PARTS = [
         { n: 'cabeza', base: { x: 0, y: 0, w: 32, h: 16 } },
         { n: 'cuerpo', base: { x: 16, y: 16, w: 24, h: 16 } },
@@ -40,7 +18,6 @@
     const LS_KEY = 'minifeather_headskins_v1';
     const ID = 'mf-skineditor';
 
-    // etiquetas de cada cara (posición en la textura)
     const REGIONS = [
         { n: 'arriba', x: 8, y: 0, ov: 40 }, { n: 'abajo', x: 16, y: 0, ov: 48 },
         { n: 'der', x: 0, y: 8, ov: 32 }, { n: 'CARA', x: 8, y: 8, ov: 40 },
@@ -49,23 +26,22 @@
 
     const state = {
         open: false,
-        mode: 'head',        // head | full (solo cabeza | skin completa)
-        zoom: 10,            // px de UI por pixel de skin
-        tool: 'pencil',      // pencil | eraser | picker | fill
+        mode: 'head',        
+        zoom: 10,            
+        tool: 'pencil',      
         color: '#1a1a1a',
         brush: 1,
         grid: true,
-        layer: 'both',       // both | base | overlay
-        mats: [],            // TODOS los materiales de skin (uno por parte)
-        orig: new Map(),     // material → textura original (para revert)
+        layer: 'both',       
+        mats: [],            
+        orig: new Map(),     
         tex: null, texCanvas: null,
         watchdog: null,
         undo: [], redo: [],
         painting: false, lastCell: null,
-        p2pCells: []            // celdas del trazo actual (Look Sync P2P)
+        p2pCells: []            
     };
 
-    // zona editable según modo
     function zone() {
         if (state.mode === 'full') {
             const c = state.texCanvas;
@@ -75,7 +51,6 @@
         return HEAD;
     }
 
-    // ── acceso al juego (patrón del cliente) ──
     function getGame() {
         if (globalThis.miniblox?.player) return globalThis.miniblox;
         try {
@@ -98,7 +73,6 @@
         return me?.mesh || null;
     }
 
-    // canvas legible a partir de la imagen de una textura
     function skinCanvasFromTexture(tex) {
         const img = tex?.image;
         if (!img) return null;
@@ -120,11 +94,6 @@
         return null;
     }
 
-    // ── sesión de trabajo: crear/reutilizar la textura editable ──
-    // El jugador suele tener UN material por parte (cuerpo/cabeza/brazos...)
-    // que comparten la misma textura. Creamos UNA textura editable y se la
-    // asignamos a TODOS → lo que pintas se ve en la cabeza al instante.
-    // Un watchdog re-aplica si el juego re-asigna material.map en su loop.
     function findSkinMaterials(mesh) {
         const out = [];
         if (!mesh) return out;
@@ -136,7 +105,7 @@
                 if (m?.map && !seen.has(m)) { seen.add(m); out.push(m); }
             }
         });
-        // priorizar los de proporción 64x64/64x32 (skin real)
+        
         const skins = out.filter(m => {
             const w = m.map?.image?.width, h = m.map?.image?.height;
             return w === 64 && (h === 64 || h === 32);
@@ -148,12 +117,11 @@
         const mesh = getMesh();
         if (!mesh) throw new Error('jugador no disponible (entra al mundo primero)');
 
-        // sesión viva: la textura editable sigue montada en algún material
         if (state.tex?.userData?.__mfSkinEditor && state.texCanvas) {
             const mats = findSkinMaterials(mesh);
             const alive = mats.some(m => m.map === state.tex);
             if (alive) { state.mats = mats; return true; }
-            // el juego pisó el map → re-montar la sesión (no perder dibujo)
+            
             for (const m of mats) { state.orig.set(m, m.map); m.map = state.tex; m.needsUpdate = true; }
             state.mats = mats;
             startWatchdog();
@@ -166,14 +134,10 @@
         const base = skinCanvasFromTexture(src);
         if (!base) throw new Error('no se pudo leer la skin actual');
 
-        // copia editable de la skin completa (willReadFrequently: la
-        // editamos con getImageData/putImageData — flood fill, snapshots,
-        // cuentagotas — y sin el flag Chrome lo advierte y va lento)
         const c = document.createElement('canvas');
         c.width = base.width; c.height = base.height;
         c.getContext('2d', { willReadFrequently: true }).drawImage(base, 0, 0);
 
-        // nueva textura con el CONSTRUCTOR de la actual (sin globalThis.THREE)
         let tex = null;
         try { tex = new src.constructor(c); } catch {}
         if (!tex) {
@@ -192,7 +156,7 @@
             tex.offset?.copy?.(src.offset);
         } catch {}
         tex.userData = { __mfSkinEditor: true };
-        tex.__mfLocalCanvas = true; // contiene MI skin: nunca base de otros players
+        tex.__mfLocalCanvas = true; 
         tex.needsUpdate = true;
 
         state.orig.clear();
@@ -202,8 +166,6 @@
         return true;
     }
 
-    // el juego puede re-asignar material.map (reload de skin, cambio de
-    // dimensión...): vigilar y re-montar la textura editable
     function startWatchdog() {
         stopWatchdog();
         state.watchdog = setInterval(() => {
@@ -221,7 +183,7 @@
                 }
             }
             state.mats = mats;
-            if (rebind) renderUI(); // por si la skin mostrada cambió de base
+            if (rebind) renderUI(); 
         }, 250);
     }
 
@@ -229,9 +191,8 @@
         if (state.watchdog) { clearInterval(state.watchdog); state.watchdog = null; }
     }
 
-    // ── pintado ──
     function layerAllows(sx) {
-        if (state.mode === 'full') return true; // en full se pintan ambas mitades
+        if (state.mode === 'full') return true; 
         if (state.layer === 'both') return true;
         return state.layer === 'base' ? sx < OVERLAY_X : sx >= OVERLAY_X;
     }
@@ -241,7 +202,6 @@
         return x >= z.x && y >= z.y && x < z.x + z.w && y < z.y + z.h;
     }
 
-    // pinta una celda (con tamaño de pincel) sobre la textura del juego
     function paintCell(sx, sy, erase) {
         if (!state.texCanvas || !state.tex) return;
         const ctx = state.texCanvas.getContext('2d');
@@ -252,14 +212,13 @@
                 if (!inZone(x, y) || !layerAllows(x)) continue;
                 if (erase) ctx.clearRect(x, y, 1, 1);
                 else { ctx.fillStyle = state.color; ctx.fillRect(x, y, 1, 1); }
-                // Look Sync P2P: acumular celda del trazo actual
+                
                 state.p2pCells.push([x, y, erase ? null : state.color]);
             }
         }
-        state.tex.needsUpdate = true; // ← tiempo real: el juego la re-sube ya
+        state.tex.needsUpdate = true; 
     }
 
-    // relleno por color dentro de la zona editable y capa activa
     function floodFill(sx, sy) {
         if (!state.texCanvas || !state.tex || !inZone(sx, sy) || !layerAllows(sx)) return;
         const Z = zone();
@@ -271,10 +230,10 @@
         const lx = sx - Z.x, ly = sy - Z.y;
         const t = idx(lx, ly);
         const tr = d[t], tg = d[t + 1], tb = d[t + 2], ta = d[t + 3];
-        // color destino del pincel
+        
         const hex = state.color.replace('#', '');
         const fr = parseInt(hex.substr(0, 2), 16), fg = parseInt(hex.substr(2, 2), 16), fb = parseInt(hex.substr(4, 2), 16);
-        if (tr === fr && tg === fg && tb === fb && ta === 255) return; // ya es el color
+        if (tr === fr && tg === fg && tb === fb && ta === 255) return; 
         const stack = [[lx, ly]];
         while (stack.length) {
             const [x, y] = stack.pop();
@@ -288,11 +247,10 @@
         }
         ctx.putImageData(img, Z.x, Z.y);
         state.tex.needsUpdate = true;
-        // Look Sync P2P: flood = cambio de zona completa
+        
         emitZoneRect();
     }
 
-    // cuentagotas: lee el color de una celda
     function pickColorAt(sx, sy) {
         if (!state.texCanvas || !inZone(sx, sy)) return null;
         const d = state.texCanvas.getContext('2d').getImageData(sx, sy, 1, 1).data;
@@ -301,7 +259,6 @@
         return '#' + h(d[0]) + h(d[1]) + h(d[2]);
     }
 
-    // ── undo/redo (snapshots de la zona editable) ──
     function snapshot() {
         if (!state.texCanvas) return;
         const Z = zone();
@@ -317,13 +274,10 @@
         stackB.push(ctx.getImageData(Z.x, Z.y, Z.w, Z.h));
         ctx.putImageData(stackA.pop(), Z.x, Z.y);
         state.tex.needsUpdate = true;
-        // Look Sync P2P: undo/redo = zona completa tras el cambio
+        
         emitZoneRect();
     }
 
-    // Look Sync P2P: emitir la zona editable como PNG
-    // - modo head  → 'head-rect' (64x16) [formato corto, compatible]
-    // - modo full  → 'skin' (canvas completo) [el peer la aplica entera]
     function emitZoneRect() {
         try {
             if (!state.texCanvas) return;
@@ -338,7 +292,6 @@
         } catch {}
     }
 
-    // línea Bresenham entre celdas (para trazos continuos sin huecos)
     function lineCells(x0, y0, x1, y1, cb) {
         const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
         const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
@@ -352,16 +305,14 @@
         }
     }
 
-    // ── UI ──
     const W = () => zone().w * state.zoom;
     const H = () => zone().h * state.zoom;
 
-    // cambiar tamaño del canvas UI al cambiar de modo
     function resizeCanvasUI() {
         const cv = document.querySelector('#' + ID + ' canvas.mfse-cv');
         if (!cv) return;
         cv.width = W(); cv.height = H();
-        // en full la skin es más alta: bajar zoom para que no tape la pantalla
+        
         cv.style.maxHeight = '60vh';
         cv.style.width = 'auto';
         renderUI();
@@ -370,7 +321,7 @@
     function setMode(m) {
         if (state.mode === m) return;
         state.mode = m;
-        state.undo.length = 0; state.redo.length = 0; // zonas distintas
+        state.undo.length = 0; state.redo.length = 0; 
         document.querySelectorAll('#' + ID + ' [data-mode]').forEach(b =>
             b.classList.toggle('on', b.dataset.mode === m));
         const lay = document.querySelector('#' + ID + ' [data-row="layers"]');
@@ -468,7 +419,7 @@
     }
 
     function bindUI(root) {
-        // herramientas / pincel / capa / grid / modo: marcar botón activo
+        
         const setActive = (sel, btn) => {
             root.querySelectorAll(sel).forEach(b => b.classList.toggle('on', b === btn));
         };
@@ -488,7 +439,6 @@
         const colorInput = root.querySelector('input[type=color]');
         colorInput.oninput = () => { state.color = colorInput.value; };
 
-        // acciones
         root.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
             switch (b.dataset.act) {
                 case 'close': close(); break;
@@ -503,14 +453,12 @@
             }
         });
 
-        // miniatura "en vivo": arrastrar el dibujo ACTUAL al timeline (V2)
-        // sin haberlo guardado como preset
         const thumb = root.querySelector('#mfse-live-thumb');
         if (thumb) {
             thumb.addEventListener('dragstart', (ev) => {
                 if (!state.texCanvas) return;
                 thumb.dataset.dragging = '1';
-                // capturar el dibujo actual como preset temporal
+                
                 const c = document.createElement('canvas');
                 c.width = HEAD.w; c.height = HEAD.h;
                 const cx = c.getContext('2d');
@@ -525,13 +473,12 @@
                 ev.dataTransfer.setData('text/mf-head', name);
                 ev.dataTransfer.setData('text/plain', name);
                 ev.dataTransfer.effectAllowed = 'copy';
-                // imagen fantasma del drag = la miniatura misma
+                
                 try { ev.dataTransfer.setDragImage(thumb, 13, 13); } catch {}
             });
             thumb.addEventListener('dragend', () => { delete thumb.dataset.dragging; });
         }
 
-        // dibujo en el canvas
         const cv = root.querySelector('canvas.mfse-cv');
         const cellOf = (e) => {
             const Z = zone();
@@ -571,7 +518,7 @@
         const stop = () => {
             state.painting = false;
             state.lastCell = null;
-            // Look Sync P2P: emitir el trazo completo al terminar
+            
             if (state.p2pCells.length) {
                 try {
                     window.MF_Peer?.sendLook?.({
@@ -586,7 +533,6 @@
         cv.addEventListener('pointercancel', stop);
     }
 
-    // ── render del canvas UI (checker + zona + grid + guías) ──
     function renderUI() {
         const cv = document.querySelector('#' + ID + ' canvas.mfse-cv');
         if (!cv || !state.texCanvas) return;
@@ -595,17 +541,15 @@
         const z = state.zoom, w = W(), h = H();
         ctx.imageSmoothingEnabled = false;
 
-        // checker para distinguir transparente
         for (let y = 0; y < h; y += 8) {
             for (let x = 0; x < w; x += 8) {
                 ctx.fillStyle = ((x / 8 + y / 8) % 2) ? '#1b1b22' : '#22222b';
                 ctx.fillRect(x, y, 8, 8);
             }
         }
-        // zona editable tal cual está en la textura del juego
+        
         ctx.drawImage(state.texCanvas, Z.x, Z.y, Z.w, Z.h, 0, 0, w, h);
 
-        // rejilla por pixel
         if (state.grid) {
             ctx.strokeStyle = 'rgba(255,255,255,.06)';
             ctx.beginPath();
@@ -615,12 +559,12 @@
         }
 
         if (state.mode === 'full') {
-            // guías de cada parte del cuerpo (base + overlay)
+            
             ctx.font = '9px system-ui';
             for (const p of BODY_PARTS) {
                 for (const ox of [0, 32]) {
                     const r = p.base;
-                    if (r.x + ox + r.w > Z.w) continue; // fuera (skin 64x32 no tiene overlay inferior)
+                    if (r.x + ox + r.w > Z.w) continue; 
                     ctx.strokeStyle = 'rgba(255,255,255,.28)';
                     ctx.strokeRect(r.x * z + .5, r.y * z + .5, r.w * z - 1, r.h * z - 1);
                     ctx.fillStyle = 'rgba(0,0,0,.55)';
@@ -630,13 +574,13 @@
                 }
             }
         } else {
-            // separadores de caras (fuertes)
+            
             ctx.strokeStyle = 'rgba(255,255,255,.28)';
             ctx.beginPath();
             for (const gx of [0, 8, 16, 24, 40, 48, 56, 64]) { ctx.moveTo(gx * z + .5, 0); ctx.lineTo(gx * z + .5, h); }
             for (const gy of [0, 8, 16]) { ctx.moveTo(0, gy * z + .5); ctx.lineTo(w, gy * z + .5); }
             ctx.stroke();
-            // frontera base | overlay
+            
             ctx.strokeStyle = '#ff6b2b';
             ctx.setLineDash([4, 3]);
             ctx.beginPath();
@@ -644,7 +588,6 @@
             ctx.stroke();
             ctx.setLineDash([]);
 
-            // etiquetas de caras
             ctx.font = '9px system-ui';
             for (const r of REGIONS) {
                 for (const rx of [r.x, r.ov]) {
@@ -657,15 +600,13 @@
             }
         }
 
-        // miniatura "en vivo" al día con el dibujo actual
         updateLiveThumb();
     }
 
-    // refrescar la miniatura en vivo desde la textura del juego
     function updateLiveThumb() {
         const thumb = document.getElementById('mfse-live-thumb');
         if (!thumb || !state.texCanvas) return;
-        // no tocar el src si hay un drag en curso (cambiarlo cancela el drag)
+        
         if (thumb.dataset.dragging === '1') return;
         const c = document.createElement('canvas');
         c.width = HEAD.w; c.height = HEAD.h;
@@ -675,7 +616,6 @@
         thumb.src = c.toDataURL('image/png');
     }
 
-    // ── presets (localStorage) ──
     function loadPresets() {
         try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; }
     }
@@ -693,7 +633,7 @@
         if (!state.texCanvas) return;
         const name = prompt('Nombre del preset de cabeza:', 'cabeza-' + (Object.keys(loadPresets()).length + 1));
         if (!name) return;
-        // extraer solo la zona de cabeza como PNG dataURL
+        
         const c = document.createElement('canvas');
         c.width = HEAD.w; c.height = HEAD.h;
         c.getContext('2d').drawImage(state.texCanvas, HEAD.x, HEAD.y, HEAD.w, HEAD.h, 0, 0, HEAD.w, HEAD.h);
@@ -701,7 +641,7 @@
         p[name] = c.toDataURL('image/png');
         storePresets(p);
         refreshPresetList();
-        // avisar al Studio para que refresque el Media Pool
+        
         window.dispatchEvent(new CustomEvent('mf:skineditor-presets'));
         err('');
     }
@@ -720,7 +660,7 @@
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(img, 0, 0, img.width, img.height, HEAD.x, HEAD.y, HEAD.w, HEAD.h);
             state.tex.needsUpdate = true;
-            emitZoneRect(); // Look Sync P2P
+            emitZoneRect(); 
             renderUI();
         };
         img.src = data;
@@ -746,14 +686,11 @@
         a.click();
     }
 
-    // lista de presets con miniatura (para el Media Pool del Studio)
     function listPresets() {
         const p = loadPresets();
         return Object.entries(p).map(([name, dataURL]) => ({ name, thumb: dataURL }));
     }
 
-    // aplicar un preset SIN panel abierto (para triggers del timeline):
-    // monta la sesión si no existe y pinta la zona de cabeza del preset
     function applyPresetByName(name) {
         const data = loadPresets()[name];
         if (!data) return { ok: false, error: 'preset "' + name + '" no existe' };
@@ -768,7 +705,7 @@
                     ctx.imageSmoothingEnabled = false;
                     ctx.drawImage(img, 0, 0, img.width, img.height, HEAD.x, HEAD.y, HEAD.w, HEAD.h);
                     state.tex.needsUpdate = true;
-                    emitZoneRect(); // Look Sync P2P
+                    emitZoneRect(); 
                     resolve({ ok: true, name });
                 } catch (e) { resolve({ ok: false, error: e.message }); }
             };
@@ -777,14 +714,13 @@
         });
     }
 
-    // ── API ──
     function open() {
         if (state.open) { renderUI(); return; }
         try {
             ensureWorkCanvas();
         } catch (e) {
             console.warn(TAG, e.message);
-            // panel con el error visible para debug
+            
             state.open = true;
             buildUI();
             err(e.message);
@@ -799,14 +735,13 @@
     }
 
     function close() {
-        // NO revierte: el dibujo queda aplicado en la textura del juego
+        
         document.getElementById(ID)?.remove();
         document.getElementById(ID + '-style')?.remove();
         state.open = false;
         state.painting = false;
     }
 
-    // restaurar la textura original del juego (en TODOS los materiales)
     function revert() {
         if (!state.mats.length) { err('no hay original guardado'); return; }
         try {
@@ -822,15 +757,15 @@
         state.undo.length = 0; state.redo.length = 0;
         renderUI();
         err('');
-        // Look Sync P2P: restaurar la cabeza del peer también
+        
         try { window.MF_Peer?.sendLook?.({ a: 'revert', what: 'head' }); } catch {}
     }
 
     window.MF_SkinEditor = {
         open, close, revert,
-        presets: listPresets,          // [{name, thumb}] para el Media Pool
-        applyPreset: applyPresetByName,// trigger desde el timeline
-        __tex: () => state.tex,        // textura editable activa (SkinChanger)
+        presets: listPresets,          
+        applyPreset: applyPresetByName,
+        __tex: () => state.tex,        
         get isOpen() { return state.open; }
     };
     window.__MF_SkinEditor = true;

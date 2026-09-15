@@ -1,7 +1,6 @@
 (function () {
   'use strict';
 
-
   const KEY = '__MINIFEATHER_CLIENT_CHAT__';
   const CONFIG_EVENT = 'minifeather:client-chat-config';
   const COMMAND_EVENT = 'minifeather:client-chat-command';

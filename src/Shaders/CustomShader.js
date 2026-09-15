@@ -1,10 +1,3 @@
-// MiniFeather â€” Custom Shader System
-// Inyecta GLSL custom en los materiales del juego vÃ­a Three.js onBeforeCompile.
-//
-// Settings (localStorage):
-//   miniblox_customshader          â†’ 'true' | 'false'
-//   miniblox_customshader_preset   → 'spooklementary' (preset combinado: greyscale + cel + horror + vhs + glitch + crt + linterna + sharpen)
-//   miniblox_customshader_strength â†’ '0.0' .. '1.0'
 
 (function () {
     'use strict';
@@ -28,36 +21,24 @@
         lastScan: 0
     };
 
-    // â”€â”€â”€ CatÃ¡logo de presets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Cada preset:
-    //   uniforms:     { name: {value} }  â€” uniforms a inyectar (ambos shaders)
-    //   vertexCode:   string  â€” declaraciones GLSL prependadas al vertex shader
-    //   vertexMain:   string  â€” cÃ³digo a inyectar tras #include <begin_vertex>
-    //   fragmentCode: string  â€” declaraciones GLSL prependadas al fragment shader
-    //   postMain:     string  â€” cÃ³digo ejecutado despuÃ©s del main original (modifica gl_FragColor)
-    //   update:       fn(uniforms, dt)   â€” actualiza uniforms cada frame
     const PRESETS = {
-        // â”€â”€â”€ SPOOKLEMENTARY (combinado) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        // Greyscale + Cel Shading + Horror + VHS + VHS Glitch + CRT +
-        // Flashlight + Sharpen, cada uno con su propio uniform de mezcla.
-        // uCsStrength controla el conjunto; uCsVhs y uCsCrt son los
-        // controles finos de VHS y TV pedidos.
+        
         spooklementary: {
             uniforms: {
                 uCsTime: { value: 0 },
-                uCsStrength: { value: 0.8 },   // mezcla global
-                uCsVhs: { value: 0.6 },        // intensidad de VHS (0 = off)
-                uCsCrt: { value: 0.6 },        // intensidad de TV/CRT (0 = off)
-                uCsCel: { value: 0.6 },        // cuantizaciÃ³n de bandas
-                uCsFog: { value: 0.7 },        // niebla que se cierra
-                uCsGrain: { value: 0.5 },      // grano/ruido
-                uCsGlitch: { value: 0.4 },     // datamosh/static/blackout
-                uCsFlash: { value: 0.5 },      // flashes rojos esporÃ¡dicos
-                uCsLightOn: { value: 0 },      // linterna (tecla F)
+                uCsStrength: { value: 0.8 },   
+                uCsVhs: { value: 0.6 },        
+                uCsCrt: { value: 0.6 },        
+                uCsCel: { value: 0.6 },        
+                uCsFog: { value: 0.7 },        
+                uCsGrain: { value: 0.5 },      
+                uCsGlitch: { value: 0.4 },     
+                uCsFlash: { value: 0.5 },      
+                uCsLightOn: { value: 0 },      
                 uCsLightRadius: { value: 20.0 },
                 uCsConeAngle: { value: 0.35 },
-                uCsSharp: { value: 0.5 },      // afilado CAS
-                uCsResolution: { value: [1600.0, 900.0] } // resolución real (se actualiza cada frame)
+                uCsSharp: { value: 0.5 },      
+                uCsResolution: { value: [1600.0, 900.0] } 
             },
             vertexCode: `
                 uniform float uCsTime;
@@ -260,18 +241,13 @@
             }
         },
 
-        // â”€â”€â”€â”€â”€â”€ ULTRAFAST (ligero y bonito) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        // Look estilizado con coste casi nulo: vibrance + contraste en
-        // curva S + split-tone cinematogrÃ¡fico. Todo ALU puro â€” cero
-        // texturas, cero bucles, cero derivadas, ni siquiera vertex extra.
-        // Pensado para ganar FPS, sobre todo junto a Render Scale.
         ultrafast: {
             version: 2,
             uniforms: {
-                uUfStrength: { value: 0.8 },   // mezcla global (slider Intensidad)
-                uUfSat: { value: 1.35 },       // vibrance (1 = neutro, >1 vibrante)
-                uUfContrast: { value: 0.45 },  // profundidad de la curva S
-                uUfTone: { value: 0.35 }       // split-tone sombras frÃ­as / luces cÃ¡lidas
+                uUfStrength: { value: 0.8 },   
+                uUfSat: { value: 1.35 },       
+                uUfContrast: { value: 0.45 },  
+                uUfTone: { value: 0.35 }       
             },
             fragmentCode: `
                 uniform float uUfStrength;
@@ -303,23 +279,17 @@
             }
         },
 
-        // ─────────── PHOTON (port del shaderpack de Minecraft) ───────────
-        // Porte del look de Photon (SixthSurge): tonemapping AgX con las
-        // matrices EXACTAS del pack (Lib/Programs/Final.glsl, AGX_EV=13),
-        // niebla atmosférica estilo VolumetricFog y un agujero negro
-        // interactivo (horizonte de sucesos + disco de acreción + lente
-        // gravitacional) como efecto de pantalla.
         photon: {
             uniforms: {
                 uPhTime: { value: 0 },
-                uPhStrength: { value: 0.6 },   // mezcla global (slider Intensidad)
-                uPhAgx: { value: 0.8 },        // cantidad de tonemap AgX
-                uPhFog: { value: 0.5 },        // niebla atmosférica
-                uPhEnd: { value: 0.0 },        // cielo del End (0 = off)
-                uPhBH: { value: 0.0 },         // agujero negro (0 = off)
-                uPhBHSize: { value: 0.35 },    // radio angular de la sombra
-                uPhBHSpin: { value: 1.0 },     // velocidad del disco de acreción
-                uPhCamPos: { value: [0.0, 0.0, 0.0] }, // cámara (coords de mundo)
+                uPhStrength: { value: 0.6 },   
+                uPhAgx: { value: 0.8 },        
+                uPhFog: { value: 0.5 },        
+                uPhEnd: { value: 0.0 },        
+                uPhBH: { value: 0.0 },         
+                uPhBHSize: { value: 0.35 },    
+                uPhBHSpin: { value: 1.0 },     
+                uPhCamPos: { value: [0.0, 0.0, 0.0] }, 
                 uPhResolution: { value: [1600.0, 900.0] }
             },
             vertexCode: `
@@ -496,7 +466,6 @@
                 u.uPhTime.value += dt;
                 u.uPhStrength.value = state.strength;
 
-                // Posición de cámara (mundo) para efectos direccionales
                 const cam = state.camera || state.game?.camera ||
                     state.game?.gameScene?.camera;
                 if (cam && Number.isFinite(cam.x)) {
@@ -507,21 +476,17 @@
             }
         },
 
-        // ─────────── CEMENTERIO (graveyard) ───────────
-        // Niebla densa gris-verdosa con poca visibilidad, color frío
-        // desaturado, grano sutil y luz que muere rápido con la
-        // distancia. Look de cementerio al amanecer.
         graveyard: {
             version: 2,
             uniforms: {
                 uGvTime: { value: 0 },
-                uGvStrength: { value: 0.7 },   // mezcla global
-                uGvFog: { value: 0.8 },        // densidad de la niebla
-                uGvFogDist: { value: 30.0 },   // distancia (bloques) de visibilidad
-                uGvDesat: { value: 0.55 },     // desaturación del color
-                uGvBlue: { value: 0.35 },      // tinte frío azulado
-                uGvGrain: { value: 0.3 },      // grano de película vieja
-                uGvLight: { value: 0.3 }       // luz cenital pálida (difusa)
+                uGvStrength: { value: 0.7 },   
+                uGvFog: { value: 0.8 },        
+                uGvFogDist: { value: 30.0 },   
+                uGvDesat: { value: 0.55 },     
+                uGvBlue: { value: 0.35 },      
+                uGvGrain: { value: 0.3 },      
+                uGvLight: { value: 0.3 }       
             },
             vertexCode: `
                 varying vec3 mfGvWorldPos;
@@ -610,27 +575,18 @@
             }
         },
 
-        // ─────────── COMPLEMENTARY REIMAGINED (port del pack r5.8.1) ───────────
-        // Port de la matemática exacta de Complementary Shaders (EminGT):
-        //  - DoCompTonemap (composite5.glsl:36): Lottes 2016 modificado
-        //    con darkLift, path-to-white y desaturación de sombras.
-        //    Defaults: TM_EXPOSURE=1.0, TM_CONTRAST=1.05,
-        //    TM_DARK_DESATURATION=0.25, TM_WHITE_PATH=1.0
-        //  - DoBSLColorSaturation (composite5.glsl:89): vibrance real BSL.
-        //  - Viñeta VIGNETTE_R (final.glsl:153): modulada por luminancia.
-        //  - Niebla: adaptación del look (tinte por altura).
         complementaryInspired: {
             uniforms: {
-                uCrStrength: { value: 0.8 },    // mezcla global (slider Intensidad)
-                uCrTonemap: { value: 0.8 },     // cantidad de Lottes tonemap
-                uCrExposure: { value: 1.0 },    // TM_EXPOSURE
-                uCrContrast: { value: 1.05 },   // TM_CONTRAST
-                uCrSaturation: { value: 1.0 },  // T_SATURATION
-                uCrVibrance: { value: 1.0 },    // T_VIBRANCE
-                uCrVignette: { value: 0.5 },    // VIGNETTE_R amount
-                uCrFog: { value: 0.4 },         // ATM_FOG_MULT adaptado
-                uCrDayFactor: { value: 1.0 },   // 0=noche 1=día (desde el juego)
-                uCrDither: { value: 1.0 },      // dither final (final.glsl:159)
+                uCrStrength: { value: 0.8 },    
+                uCrTonemap: { value: 0.8 },     
+                uCrExposure: { value: 1.0 },    
+                uCrContrast: { value: 1.05 },   
+                uCrSaturation: { value: 1.0 },  
+                uCrVibrance: { value: 1.0 },    
+                uCrVignette: { value: 0.5 },    
+                uCrFog: { value: 0.4 },         
+                uCrDayFactor: { value: 1.0 },   
+                uCrDither: { value: 1.0 },      
                 uCrTime: { value: 0 },
                 uCrResolution: { value: [1600.0, 900.0] }
             },
@@ -827,11 +783,10 @@
             update: (u, dt) => {
                 u.uCrTime.value += dt;
                 u.uCrStrength.value = state.strength;
-                // worldTime: 0-24000 ticks; día 6000-18000, noche 18000-6000
-                // Convertir a factor 0=noche 1=día para el fog del pack
+                
                 try {
                     const wt = Number(state.game?.world?.worldTime ?? 12000);
-                    // Coseno: 6000=mediodía(1.0), 18000=medianoche(0.0)
+                    
                     const dayF = 0.5 + 0.5 * Math.cos((wt - 6000) / 24000 * Math.PI * 2);
                     u.uCrDayFactor.value = dayF;
                 } catch (_) {}
@@ -839,9 +794,6 @@
         },
     };
 
-
-    // â”€â”€â”€â”€â”€â”€ DefiniciÃ³n de sub-efectos persistibles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Compartido por presets: nombre de la GUI â†’ uniform + lÃ­mite.
     const EFFECT_DEFS = {
         vhs:        { key: 'uCsVhs',      max: 1 },
         crt:        { key: 'uCsCrt',      max: 1 },
@@ -876,8 +828,6 @@
         gvlight:    { key: 'uGvLight',    max: 1 }
     };
 
-    // â”€â”€â”€ Tecla F para toggle de linterna + rueda para radio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Solo se activa cuando el preset 'flashlight' estÃ¡ en uso
     if (!window.__MF_FLASHLIGHT_KEYS__) {
         window.__MF_FLASHLIGHT_KEYS__ = true;
         const keyHandler = (e) => {
@@ -913,7 +863,6 @@
         window.addEventListener('wheel', wheelHandler, { passive: false });
     }
 
-    // â”€â”€â”€ Encontrar el game object (React fiber mining) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     function findGame() {
         const react = document.getElementById('react');
         if (!react) return null;
@@ -935,9 +884,6 @@
                null;
     }
 
-    // â”€â”€â”€ Resolver el WebGLRenderer de Three.js â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Duck-typing: isWebGLRenderer === true o presencia de
-    // setPixelRatio + setSize + domElement (canvas).
     function looksLikeRenderer(value) {
         if (!value || typeof value !== 'object') return false;
         if (value.isWebGLRenderer === true) return true;
@@ -946,7 +892,6 @@
                value.domElement instanceof HTMLCanvasElement;
     }
 
-    // Rutas directas candidatas primero; BFS de respaldo si fallan.
     function resolveRenderer(game) {
         if (looksLikeRenderer(state.renderer)) return state.renderer;
 
@@ -965,7 +910,6 @@
             }
         }
 
-        // BFS de respaldo sobre el game object (patrÃ³n resolveCamera de TitanTiny)
         const queue = [{ value: game, depth: 0 }];
         const seen = new WeakSet();
         let visited = 0;
@@ -1000,22 +944,11 @@
         return null;
     }
 
-    // â”€â”€â”€ Render Scale (modo DLSS-style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Reduce la resoluciÃ³n interna del renderer para ganar FPS.
-    // 1.0 = resoluciÃ³n nativa, 0.5 = mitad de pÃ­xeles (4x menos trabajo).
-    //
-    // IMPORTANTE: el juego llama a setPixelRatio/setSize en su propio bucle
-    // de resize, lo que revertirÃ­a un cambio puntual. Por eso hookeamos
-    // setPixelRatio de forma persistente: TODO valor que el juego establezca
-    // se multiplica por el factor de escala. AsÃ­ sobrevive a cualquier
-    // resize del juego o de la ventana.
     function applyRenderScale(scale) {
         const clamped = Math.max(0.5, Math.min(1.0, parseFloat(scale) || 1.0));
 
-        // A escala nativa no hay nada que escalar: evitar el warning
-        // del renderer (el juego no lo expone fuera de su closure).
         if (clamped >= 1.0) {
-            // Si había un hook activo con factor < 1, restaurar nativo
+            
             const g = state.game || findGame();
             const r = g ? resolveRenderer(g) : null;
             if (r && r.__mfScaleHook) {
@@ -1036,7 +969,6 @@
             return false;
         }
 
-        // Instalar el hook persistente una sola vez
         if (!renderer.__mfScaleHook) {
             const originalSetPixelRatio = renderer.setPixelRatio.bind(renderer);
             renderer.__mfScaleHook = {
@@ -1054,7 +986,7 @@
 
         if (clamped >= 1.0) {
             hook.factor = 1.0;
-            // Restaurar resoluciÃ³n nativa
+            
             hook.originalSetPixelRatio(window.devicePixelRatio || 1);
             console.log(`${TAG} Render scale restaurado a nativo (1.0).`);
         } else {
@@ -1063,7 +995,6 @@
             console.log(`${TAG} Render scale aplicado: ${clamped.toFixed(2)} â€” se mantiene tras resizes del juego.`);
         }
 
-        // Forzar reajuste del tamaÃ±o del buffer con el nuevo ratio
         try {
             const canvas = renderer.domElement;
             const w = canvas.clientWidth || window.innerWidth;
@@ -1075,20 +1006,6 @@
         return true;
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // POSTFX: pass full-screen propio (raw WebGL, sin clases THREE)
-    // ══════════════════════════════════════════════════════════════════
-    // Desbloquea efectos que requieren muestrear píxeles vecinos:
-    // bloom, aberración cromática real, DOF radial, lens dirt.
-    //
-    // Estrategia: hookear renderer.render(). Tras el render del juego:
-    //   1. copiar el framebuffer a una textura nuestra
-    //   2. dibujar un quad con un shader que mezcla: base + bloom blur
-    //      + aberración cromática + DOF radial + lens dirt animado
-    // Todo en UN solo fragment (una pasada, mínimo coste).
-    //
-    // Raw WebGL: el juego puede no exponer THREE global, así que usamos
-    // el contexto GL del canvas directamente (compatible siempre).
     const postfx = {
         enabled: false,
         gl: null,
@@ -1210,27 +1127,18 @@
         return sh;
     }
 
-    // Instalar el pass. El renderer del juego NO es alcanzable desde el
-    // objeto game (vive en un closure del módulo) — lo verificado con BFS
-    // exhaustivo (7000+ objetos). En su lugar: el canvas principal + su
-    // contexto GL + un rAF encadenado. Si registramos nuestro rAF callback
-    // en cada frame DESPUÉS de que el juego registre el suyo, corremos
-    // tras su render en el mismo frame (antes del compositing del browser)
-    // y podemos leer/escribir el framebuffer.
     function findMainGameCanvas() {
-        // Vía preferida: registro temprano de canvases GL (TextureInterceptor
-        // hookea getContext desde document_start). El primer canvas GL grande
-        // creado por el juego es el principal.
+        
         const registry = window.__MF_GL_CANVASES__;
         if (Array.isArray(registry) && registry.length) {
             const live = registry.filter(c =>
                 c.isConnected && !c.__mfIsHUD &&
                 c.width >= 300 && c.height >= 200);
-            // El del mayor área (el juego escala el principal al viewport)
+            
             live.sort((a, b) => b.width * b.height - a.width * a.height);
             if (live[0]) return live[0];
         }
-        // Fallback: heurística por tamaño (sesiones sin el registro)
+        
         const canvases = [...document.querySelectorAll('canvas')];
         return canvases
             .filter(c => c.width >= 300 && c.height >= 200)
@@ -1271,8 +1179,6 @@
 
         const sceneTex = gl.createTexture();
 
-        // VAO propio: aísla el estado de vertex attribs del juego para
-        // que nuestro quad no contamine sus draw calls posteriores.
         let vao = null;
         if (typeof gl.createVertexArray === 'function') {
             vao = gl.createVertexArray();
@@ -1302,9 +1208,6 @@
         postfx.active = true;
         postfx.canvas = canvas;
 
-        // rAF encadenado: nuestro callback corre después del render del
-        // juego en el mismo frame. Nos re-registramos cada frame para
-        // mantenernos SIEMPRE al final de la cola de callbacks.
         const loop = () => {
             if (!postfx.active) return;
             try { postfxDraw(gl); } catch (_) {}
@@ -1320,7 +1223,6 @@
         if (!postfx.active || !postfx.enabled) return;
         if (gl.isContextLost()) return;
 
-        // ¿Algún efecto activo? Si no, ni gastar un frame.
         const p = postfx.params;
         if (p.bloom <= 0.001 && p.ca <= 0.001 && p.dof <= 0.001 &&
             p.dirt <= 0.001 && p.vignette <= 0.001) return;
@@ -1333,10 +1235,6 @@
         postfx.time += (now - postfx.lastT) / 1000;
         postfx.lastT = now;
 
-        // ── Guardar TODO el estado GL que tocamos ──────────────────
-        // Three.js cachea el estado GL: si cambiamos algo detrás de su
-        // espalda sin restaurar, su caché miente y el juego se rompe
-        // (texturas negras, reflejos corruptos, feedback loops).
         const lastProg = gl.getParameter(gl.CURRENT_PROGRAM);
         const lastActiveTex = gl.getParameter(gl.ACTIVE_TEXTURE);
         const lastFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
@@ -1345,7 +1243,6 @@
         const lastVao = gl.VERTEX_ARRAY_BINDING !== undefined
             ? gl.getParameter(gl.VERTEX_ARRAY_BINDING) : null;
 
-        // Binding de textura de la unidad 0 (la única que tocamos)
         gl.activeTexture(gl.TEXTURE0);
         const lastTex0 = gl.getParameter(gl.TEXTURE_BINDING_2D);
 
@@ -1355,15 +1252,10 @@
         });
 
         try {
-            // ── 1. Copiar la imagen final (framebuffer por defecto) ──
-            // copyTexSubImage2D lee del READ framebuffer: bindear null
-            // garantiza que leemos el canvas visible, no un FBO interno
-            // del juego (reflexiones/pases). Es GPU→GPU, sin readback.
+            
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.viewport(0, 0, w, h);
 
-            // Bindear NUESTRA textura ANTES de copiar (copyTex* escribe a
-            // la textura bindeada — sería copiar dentro de la del juego)
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, postfx.sceneTex);
 
@@ -1380,13 +1272,11 @@
                 gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, w, h);
             }
 
-            // ── 2. Dibujar el quad al framebuffer por defecto ──
             gl.disable(gl.BLEND);
             gl.disable(gl.DEPTH_TEST);
             gl.disable(gl.CULL_FACE);
             gl.useProgram(postfx.program);
 
-            // VAO propio: el estado de vertex attribs queda aislado
             if (postfx.vao) gl.bindVertexArray(postfx.vao);
 
             gl.activeTexture(gl.TEXTURE0);
@@ -1404,7 +1294,7 @@
 
             if (postfx.vao) gl.bindVertexArray(null);
         } finally {
-            // ── 3. Restaurar TODO el estado en orden inverso ──
+            
             gl.bindFramebuffer(gl.FRAMEBUFFER, lastFbo);
             gl.bindBuffer(gl.ARRAY_BUFFER, lastArrayBuf);
             if (lastVao !== null && gl.bindVertexArray) gl.bindVertexArray(lastVao);
@@ -1414,7 +1304,7 @@
                 if (!lastEnabled.includes(cap)) gl.disable(cap);
             });
             gl.viewport(lastViewport[0], lastViewport[1], lastViewport[2], lastViewport[3]);
-            // Textura original de la unidad 0 (Three cachea esto)
+            
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, lastTex0);
             gl.activeTexture(lastActiveTex);
@@ -1432,7 +1322,7 @@
         postfx.enabled = !!(postfx.params.bloom > 0 || postfx.params.ca > 0 ||
             postfx.params.dof > 0 || postfx.params.dirt > 0 || postfx.params.vignette > 0);
         if (postfx.enabled && !postfx.active) {
-            // El renderer puede no existir aún: reintentar breve
+            
             const retry = setInterval(() => {
                 if (installPostFx() || !postfx.enabled) clearInterval(retry);
             }, 1000);
@@ -1440,9 +1330,6 @@
         }
     }
 
-    // ─── NUBES: localizar el mesh 'clouds' y ajustar sus uniforms ────
-    // El juego usa un ShaderMaterial con uCoverage, uNoiseScale, uWind,
-    // uThickness, uCloudY, uOpacity sobre un PlaneGeometry de 8000x8000.
     function resolveClouds() {
         if (state.cloudsMesh && state.cloudsMesh.parent) return state.cloudsMesh;
 
@@ -1470,11 +1357,6 @@
         return null;
     }
 
-    // ─── NUBES: forma custom por dibujo (máscara 2D extruida a textura 3D) ───
-    // El usuario dibuja en un canvas de la GUI (blanco = nube, negro = cielo).
-    // El dibujo se convierte en Data3DTexture (depth=1) y se inyecta en el
-    // fragment shader del material de nubes: cloudShape / cloudDensity /
-    // cloudShadowDensity mezclan el FBM procedural con la máscara dibujada.
     const LS_SHAPE = 'miniblox_clouds_shape';
     const LS_SHAPE_MIX = 'miniblox_clouds_shape_mix';
     const LS_SHAPE_TILE = 'miniblox_clouds_shape_tile';
@@ -1486,9 +1368,6 @@
         textureFor: null
     };
 
-    // GLSL ES 3.00 (el material usa glslVersion GLSL3 como el resto del juego).
-    // La máscara se muestrea en coords de mundo XZ absolutas (fijas en el mundo)
-    // con el mismo desplazamiento de viento que el FBM, y se repite en tiles.
     const MF_SHAPE_GLSL = `
   uniform sampler3D uMfShapeTex;
   uniform float uMfShapeMix;
@@ -1502,8 +1381,6 @@
   }
 `;
 
-    // Crea una Data3DTexture con la clase real del juego (Data3DTexture),
-    // accesible via el constructor de su textura de ruido.
     function makeShapeTexture(data, size) {
         const noiseTex = state.cloudsMesh?.material?.uniforms?.uNoiseTex?.value;
         if (!noiseTex || typeof noiseTex.constructor !== 'function') return null;
@@ -1525,8 +1402,6 @@
         }
     }
 
-    // Parchea el fragment shader UNA sola vez. Si algún ancla del shader del
-    // juego cambia (update del bundle), aborta sin romper el material.
     function ensureCloudsShapePatch(mat) {
         if (mat.__mfCloudShapePatched) return true;
         const orig = mat.fragmentShader;
@@ -1542,21 +1417,19 @@
 
         let frag = orig;
         frag = frag.replace(anchor, MF_SHAPE_GLSL + '\n' + anchor);
-        // cloudShape (modo Fast)
+        
         frag = frag.replace('return cloudFbm(q);', 'return mfMixShape(cloudFbm(q), xz);');
-        // cloudDensity (modo Fancy)
+        
         frag = frag.replace(
             'smoothstep(uCoverage, uCoverage + 0.25, cloudFbm(q))',
             'smoothstep(uCoverage, uCoverage + 0.25, mfMixShape(cloudFbm(q), p.xz))'
         );
-        // cloudShadowDensity (auto-sombra del sol)
+        
         frag = frag.replace(
             'smoothstep(uCoverage, uCoverage + 0.25, n)',
             'smoothstep(uCoverage, uCoverage + 0.25, mfMixShape(n, p.xz))'
         );
 
-        // Placeholder negro (sin nube) mientras se decodifica el dibujo:
-        // así el sampler nunca es null.
         const placeholder = makeShapeTexture(new Uint8Array(8 * 8), 8);
         if (!placeholder) return false;
 
@@ -1570,7 +1443,6 @@
         return true;
     }
 
-    // Decodifica un dataURL PNG → textura (canal R = máscara 0..255).
     function decodeShapeTexture(dataUrl, cb) {
         const img = new Image();
         img.onload = () => {
@@ -1632,11 +1504,6 @@
         cloudsShape.textureFor = null;
     }
 
-    // ─── NUBES: texturas 3D reales del pack Photon ──────────────────────
-    // CloudNoise_128_128_128.bin (RGBA, 128³, 8MB) reemplaza el ruido
-    // procedural (uNoiseTex). El formato se deriva del tamaño real del
-    // archivo: el pack usa RGBA en 128³; si un .bin viniera en RGB se
-    // expande a RGBA (formato garantizado por Data3DTexture del juego).
     const LS_PACK_NOISE = 'miniblox_clouds_packnoise';
 
     const packNoise = {
@@ -1656,8 +1523,6 @@
             .then(buf => new Uint8Array(buf));
     }
 
-    // Construye la Data3DTexture con la clase real del juego (misma clase
-    // que su uNoiseTex), derivando el formato del conteo de bytes.
     function buildPack3DTexture(bytes, w, h, d) {
         const noiseTex = state.cloudsMesh?.material?.uniforms?.uNoiseTex?.value;
         if (!noiseTex || typeof noiseTex.constructor !== 'function') return null;
@@ -1665,10 +1530,10 @@
         const bytesPerVoxel = bytes.length / voxels;
         let format, type;
         if (bytesPerVoxel === 4) {
-            format = 1023;  // THREE.RGBAFormat
-            type = 1009;    // THREE.UnsignedByteType
+            format = 1023;  
+            type = 1009;    
         } else if (bytesPerVoxel === 3) {
-            // RGB → RGBA (Data3DTexture sólo soporta 1/2/4 canales)
+            
             const rgba = new Uint8Array(voxels * 4);
             for (let i = 0; i < voxels; i++) {
                 const s = i * 3, t = i * 4;
@@ -1681,7 +1546,7 @@
             format = 1023;
             type = 1009;
         } else if (bytesPerVoxel === 1) {
-            format = 1022;  // THREE.RedFormat
+            format = 1022;  
             type = 1009;
         } else {
             console.warn(`${TAG} Bytes por vóxel inesperados: ${bytesPerVoxel}`);
@@ -1741,19 +1606,13 @@
         } else if (packNoise.enabled && packNoise.texture) {
             applyPackNoiseToMesh();
         } else if (!packNoise.enabled && packNoise.texture) {
-            // Desactivado: marcar needsUpdate no basta si el material fue
-            // recreado por el juego; el sampler seguirá con nuestra textura
-            // hasta que el usuario recargue. Aceptable para un toggle.
+            
             const mesh = resolveClouds();
             const u = mesh?.material?.uniforms;
             if (u?.uNoiseTex) u.uNoiseTex.value.needsUpdate = true;
         }
     }
 
-    // cfg: { dataUrl: string|null|undefined, mix, tile }
-    //   string  → aplicar ese dibujo
-    //   null    → quitar la forma (restaura shader original)
-    //   undefined → no tocar la forma (solo mix/tile)
     function handleCloudsShape(cfg) {
         if (cfg.dataUrl === null) {
             clearCloudsShape();
@@ -1779,7 +1638,6 @@
         }
     }
 
-    // cfg: { coverage, scale, wind, thickness, height, opacity } — undefined = no tocar
     function applyClouds(cfg) {
         const mesh = resolveClouds();
         if (!mesh) {
@@ -1796,7 +1654,6 @@
         return true;
     }
 
-    // ─── BFS manual sobre el scene graph ─────────────────────────────
     function collectMeshes(root) {
         const result = [];
         const seen = new WeakSet();
@@ -1809,8 +1666,6 @@
             seen.add(obj);
             visited++;
 
-            // Cualquier objeto con material sirve (Mesh, Sprite, Points,
-            // sky domes custom). El filtro isMesh dejaba el cielo fuera.
             if (obj.material) {
                 result.push(obj);
             }
@@ -1825,12 +1680,8 @@
         return result;
     }
 
-    // â”€â”€â”€ InyecciÃ³n GLSL: insertar antes del cierre de main() â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Busca el Ãºltimo "}" del shader (que cierra main) e inserta el cÃ³digo
-    // justo antes. Esto mantiene intacto el main original y funciona con
-    // cualquier material de Three.js.
     function injectBeforeMainEnd(src, code) {
-        // Encontrar el Ãºltimo cierre de llave (fin de main)
+        
         const lastBrace = src.lastIndexOf('}');
         if (lastBrace < 0) return src;
 
@@ -1839,24 +1690,15 @@
                src.slice(lastBrace);
     }
 
-    // â”€â”€â”€ Hookear onBeforeCompile de un material â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     function hookMaterial(material) {
         if (state.hooked.has(material)) return false;
         if (typeof material.onBeforeCompile !== 'function') return false;
 
-        // SpiderBot: las patas de las arañas comparten UN material. Si lo
-        // hookeamos, el shader inyectado puede fallar en la geometría simple
-        // del cubo (sin UVs) y TODAS las patas se vuelven invisibles.
-        // Los meshes se marcan con __mfSkipHook para que el renderer los
-        // respete: solo necesitan color base.
         if (material.__mfSkipHook) return false;
 
         const preset = PRESETS[state.preset];
         if (!preset) return false;
 
-        // Solo hookear materiales de geometrÃ­a estÃ¡ndar de Three.js.
-        // Los ShaderMaterial de post-procesado (bloom, HDR, agua, cielo) no
-        // comparten las varyings/#include estÃ¡ndar y romperÃ­an la compilaciÃ³n.
         const matType = material.type || material.constructor?.name || '';
         const SAFE_MATERIALS = [
             'MeshLambertMaterial', 'MeshStandardMaterial', 'MeshBasicMaterial',
@@ -1865,13 +1707,6 @@
         ];
         if (!SAFE_MATERIALS.includes(matType)) return false;
 
-        // ── Desenredar hooks de una sesión anterior de la extensión ──
-        // Recargar la extensión sin F5 deja materiales hookeados: nuestro
-        // hook nuevo capturaría el viejo como "original" y las uniforms
-        // se inyectarían DOS veces (redefinition → link fail).
-        // El wrapper viejo tiene __mfCsKill: apagarlo (neutralización)
-        // en vez de restaurar su original — el onBeforeCompile ACTUAL
-        // puede contener el wrapper de PBR de otra sesión viva encima.
         if (material.__mfHooked) {
             if (typeof material.onBeforeCompile?.__mfCsKill === 'function') {
                 material.onBeforeCompile.__mfCsKill();
@@ -1887,19 +1722,17 @@
         const originalOnBeforeCompile = material.onBeforeCompile.bind(material);
         const originalCacheKey = material.customProgramCacheKey;
 
-        // Neutralización simétrica a la de PBRTextures: flag vivo en el
-        // closure; unhook lo apaga sin restaurar onBeforeCompile.
         let csAlive = true;
 
         const liveUniforms = {};
-        // Mapa inverso uniform → nombre GUI (para restaurar valores guardados)
+        
         const lsNameByUniform = {};
         for (const [fxName, def] of Object.entries(EFFECT_DEFS)) {
             if (preset.uniforms[def.key]) lsNameByUniform[def.key] = fxName;
         }
         for (const key in preset.uniforms) {
             let initial = preset.uniforms[key].value;
-            // Restaurar valores de sub-efectos persistidos
+            
             const fxName = lsNameByUniform[key];
             if (fxName) {
                 const saved = parseFloat(localStorage.getItem('miniblox_customshader_fx_' + fxName));
@@ -1909,18 +1742,14 @@
         }
 
         const wrapper = function (shader) {
-            // 1. Llamar al onBeforeCompile original del juego (GI, wind, etc.)
+            
             originalOnBeforeCompile(shader);
-            if (!csAlive) return; // desmontado: passthrough limpio
+            if (!csAlive) return; 
 
-            // 2. Inyectar uniforms
             for (const key in liveUniforms) {
                 shader.uniforms[key] = liveUniforms[key];
             }
 
-            // 3. Vertex: prepend declaraciones — solo si no hay inyección
-            // previa de otra sesión de la extensión (evita redefinition).
-            // La marca es una varying única que TODO preset declara primero.
             if (preset.vertexCode && !shader.vertexShader.includes('uPhTime') &&
                 !shader.vertexShader.includes('uCsTime') &&
                 !shader.vertexShader.includes('mfCrDepth') &&
@@ -1928,8 +1757,6 @@
                 shader.vertexShader = preset.vertexCode + '\n' + shader.vertexShader;
             }
 
-            // 4. Vertex shader: inyectar lÃ³gica tras begin_vertex.
-            // Solo si existe el include (garantiza que 'transformed' existe).
             if (preset.vertexMain && shader.vertexShader.includes('#include <begin_vertex>') &&
                 !shader.vertexShader.includes('mfCrMvPos =') &&
                 !shader.vertexShader.includes('mfPhDepth =') &&
@@ -1940,8 +1767,6 @@
                 );
             }
 
-            // 5. Fragment: prepend declaraciones — solo si no hay inyección
-            // previa (la marca es un identificador único de cada preset)
             if (preset.fragmentCode && !shader.fragmentShader.includes('mfPhHash') &&
                 !shader.fragmentShader.includes('mfHash') &&
                 !shader.fragmentShader.includes('mfCrGetLuminance') &&
@@ -1952,9 +1777,6 @@
                 shader.fragmentShader = preset.fragmentCode + '\n' + shader.fragmentShader;
             }
 
-            // 6. Fragment shader: inyectar postMain antes del cierre de main()
-            // Guarda idempotente: el marcador local evita doble inyección si
-            // una sesión anterior de la extensión ya inyectó su postMain.
             if (preset.postMain && !shader.fragmentShader.includes('mfPostMainInjected')) {
                 shader.fragmentShader = injectBeforeMainEnd(
                     shader.fragmentShader,
@@ -1963,28 +1785,21 @@
             }
         };
 
-        // Colgar el wrapper con marca de neutralización para otros módulos
         wrapper.__mfCsKill = function () { csAlive = false; };
         material.onBeforeCompile = wrapper;
 
-        // Marca de hookeado + originales: si se recarga la extensión sin
-        // F5, la sesión nueva restaura el ORIGINAL DEL JUEGO (no nuestro
-        // hook viejo) — evita inyectar el preset dos veces
         material.__mfHooked = true;
         material.__mfOriginalOnBeforeCompile = originalOnBeforeCompile;
         material.__mfOriginalCacheKey = originalCacheKey;
 
         material.customProgramCacheKey = function () {
             const base = originalCacheKey ? originalCacheKey.call(material) : '';
-            // La versión del preset invalida el caché de programas de
-            // Three.js: al cambiar el GLSL del preset (tweaks), la clave
-            // cambia y fuerza recompilación en vez de reusar el viejo.
+            
             return 'mfcs_' + state.preset + '_v' + (preset.version || 1) + '_' + base;
         };
 
         material.needsUpdate = true;
 
-        // Callback del preset (ej: xray necesita transparent=true)
         if (preset.onHook) {
             try { preset.onHook(material); } catch (_) {}
         }
@@ -2005,16 +1820,10 @@
         const entry = state.hooked.get(material);
         if (!entry) return;
 
-        // Restaurar propiedades del material modificadas por onHook
         if (entry.onUnhook) {
             try { entry.onUnhook(material); } catch (_) {}
         }
 
-        // NEUTRALIZAR en vez de restaurar: el onBeforeCompile actual puede
-        // tener wrappers de otros módulos (ej: PBR de MiniFeather) que se
-        // hookearon DESPUÉS de nosotros y nos envuelven — restaurar
-        // ciegamente `entry.originalOnBeforeCompile` los destruiría de
-        // paso. El wrapper queda en la cadena como passthrough limpio.
         if (entry.wrapper?.__mfCsKill) entry.wrapper.__mfCsKill();
         if (entry.originalCacheKey) {
             material.customProgramCacheKey = entry.originalCacheKey;
@@ -2023,10 +1832,9 @@
         }
         material.needsUpdate = true;
         state.hooked.delete(material);
-        delete material.__mfHooked;  // la marca debe morir con el hook
+        delete material.__mfHooked;  
     }
 
-    // â”€â”€â”€ Loop de animaciÃ³n de uniforms â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let lastTime = performance.now();
     let rafId = null;
 
@@ -2035,7 +1843,6 @@
         const dt = Math.min((now - lastTime) / 1000, 0.1);
         lastTime = now;
 
-        // Resolución real del canvas (para CRT/VHS a pantalla completa)
         let resX = 0, resY = 0;
         const dom = state.renderer?.domElement;
         if (dom) {
@@ -2064,7 +1871,6 @@
         rafId = requestAnimationFrame(animate);
     }
 
-    // â”€â”€â”€ Escanear y aplicar hooks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     function scan() {
         if (!state.enabled) return;
 
@@ -2077,8 +1883,6 @@
         if (!scene) return;
         state.scene = scene;
 
-        // Recolectar de la escena Y de la cámara (el skybox de Miniblox
-        // puede colgar de la cámara en vez de la escena).
         const meshes = collectMeshes(scene);
         const cam = state.camera || state.game?.camera ||
             state.game?.gameScene?.camera;
@@ -2110,8 +1914,6 @@
             }
         }
 
-        // Re-aplicar la forma de nubes dibujada si el juego recreó el mesh
-        // (p.ej. al cambiar de mundo). Barato si ya está parcheado.
         if (localStorage.getItem(LS_SHAPE)) {
             try { applyCloudsShapeToMesh(); } catch (_) {}
         }
@@ -2137,7 +1939,6 @@
         }
     }
 
-    // â”€â”€â”€ API pÃºblica â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     window.MF_CustomShader = {
         enable() {
             state.enabled = true;
@@ -2162,9 +1963,7 @@
             state.strength = Math.max(0, Math.min(1, parseFloat(val) || 0));
             localStorage.setItem('miniblox_customshader_strength', String(state.strength));
         },
-        // Sub-controles de presets. name ∈ vhs|crt|cel|fog|grain|glitch|
-        // flash|sharp|ufsat|ufcontrast|uftone (solo aplica si el uniform
-        // existe en el preset activo)
+        
         setEffect(name, val) {
             const def = EFFECT_DEFS[name];
             if (!def) {
@@ -2179,10 +1978,9 @@
                     applied = true;
                 }
             }
-            // Uniforms de otros presets (ej. sliders VHS al usar Complementary)
-            // son esperados: no loguear warning.
+            
             if (!applied) return;
-            // Persistir para restaurarlo al recargar
+            
             localStorage.setItem('miniblox_customshader_fx_' + name, String(value));
         },
         getEffect(name) {
@@ -2199,12 +1997,11 @@
             localStorage.setItem('miniblox_customshader_renderscale', String(clamped));
             applyRenderScale(clamped);
         },
-        // Nubes: cfg con { coverage, scale, wind, thickness, height, opacity }
+        
         setClouds(cfg) {
             return applyClouds(cfg || {});
         },
-        // Forma custom por dibujo: { dataUrl, mix, tile } — dataUrl: string
-        // (aplicar) | null (quitar) | undefined (solo ajustar mix/tile)
+        
         setCloudsShape(cfg) {
             handleCloudsShape(cfg || {});
         },
@@ -2242,7 +2039,6 @@
         }
     };
 
-    // â”€â”€â”€ Eventos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     window.addEventListener('message', (event) => {
         if (event.data?.type === 'MINIBLOX_REFRESH_CUSTOM_SHADER') {
             if (state.enabled) scan();
@@ -2259,14 +2055,12 @@
             return;
         }
 
-        // Orden correcto: actualizar estado ANTES de escanear/hookear,
-        // asÃ­ enable() ya usa el preset/strength nuevos.
         let needsRescan = false;
 
         if (cfg.preset && PRESETS[cfg.preset] && cfg.preset !== state.preset) {
             state.preset = cfg.preset;
             localStorage.setItem('miniblox_customshader_preset', cfg.preset);
-            // Si ya hay materiales hookeados, hay que rehacerlos con el nuevo preset
+            
             if (state.hooked.size > 0) {
                 disable();
                 needsRescan = true;
@@ -2276,29 +2070,25 @@
         if (cfg.strength !== undefined) {
             state.strength = Math.max(0, Math.min(1, parseFloat(cfg.strength) || 0));
             localStorage.setItem('miniblox_customshader_strength', String(state.strength));
-            // Los updates de cada frame ya leen state.strength, no hace falta re-scan
+            
         }
 
-        // Render scale es independiente del preset: funciona siempre que
-        // el mÃ³dulo estÃ© activo (modo DLSS-style: bajar resoluciÃ³n + afilar)
         if (cfg.renderScale !== undefined) {
             state.renderScale = Math.max(0.5, Math.min(1.0, parseFloat(cfg.renderScale) || 1.0));
             localStorage.setItem('miniblox_customshader_renderscale', String(state.renderScale));
             applyRenderScale(state.renderScale);
         }
 
-        // Sub-efectos configurables del preset (vhs, crt, cel, fog, grain, glitch, flash, sharp)
         if (cfg.effects && typeof cfg.effects === 'object') {
             for (const [fxName, fxVal] of Object.entries(cfg.effects)) {
                 window.MF_CustomShader.setEffect(fxName, fxVal);
             }
         }
 
-        // Nubes: forma y comportamiento del cielo
         if (cfg.clouds && typeof cfg.clouds === 'object') {
             const pending = () => applyClouds(cfg.clouds);
             if (!pending()) {
-                // El mesh de nubes puede no existir aún: reintentar al escanear
+                
                 const retry = setInterval(() => {
                     if (applyClouds(cfg.clouds) || !state.enabled) clearInterval(retry);
                 }, 2000);
@@ -2306,17 +2096,14 @@
             }
         }
 
-        // Nubes: forma custom por dibujo (máscara)
         if (cfg.cloudsShape && typeof cfg.cloudsShape === 'object') {
             handleCloudsShape(cfg.cloudsShape);
         }
 
-        // Nubes: ruido 3D del pack Photon (CloudNoise 128³)
         if (cfg.cloudsPackNoise !== undefined) {
             setPackNoise(!!cfg.cloudsPackNoise);
         }
 
-        // PostFX: pass full-screen (bloom, aberración cromática, DOF, dirt)
         if (cfg.postfx && typeof cfg.postfx === 'object') {
             setPostFx(cfg.postfx);
         }
@@ -2326,12 +2113,12 @@
                 state.enabled = true;
                 localStorage.setItem('miniblox_customshader', 'true');
                 scan();
-                // Aplicar render scale pendiente si viene de un arranque con settings guardados
+                
                 if (state.renderScale < 1.0) {
                     setTimeout(() => applyRenderScale(state.renderScale), 500);
                 }
             } else {
-                // Al desactivar, restaurar resolución nativa + apagar PostFX
+                
                 if (state.renderScale < 1.0) applyRenderScale(1.0);
                 postfx.enabled = false;
                 window.MF_CustomShader.disable();
@@ -2344,9 +2131,8 @@
         }
     });
 
-    // â”€â”€â”€ Bucle de escaneo periÃ³dico â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     state.scanTimer = setInterval(() => {
-        if (!state.enabled) return; // no cancelar: se reanuda al reactivar
+        if (!state.enabled) return; 
 
         if (state.hooked.size > 0) {
             if (performance.now() - state.lastScan > 10000) {
@@ -2360,17 +2146,11 @@
         state.lastScan = performance.now();
     }, 2000);
 
-    // ─── Diagnóstico de link GLSL ─────────────────────────────────────
-    // El build de producción del juego desactiva checkShaderErrors de
-    // Three.js, así que un programa que falla al linkear NO se loguea:
-    // solo explota después como "useProgram: program not valid" (×256).
-    // Este hook revela el error real de compilación/link la primera vez.
     (function installLinkDiagnostic() {
         if (window.__MF_LINK_DIAG__) return;
         window.__MF_LINK_DIAG__ = true;
         const proto = WebGL2RenderingContext?.prototype || WebGLRenderingContext.prototype;
 
-        // Mapa shader → fuente (para poder volcar el GLSL que falla)
         const shaderSources = new WeakMap();
 
         const origShaderSource = proto.shaderSource;
@@ -2386,7 +2166,7 @@
             try {
                 const log = this.getShaderInfoLog(shader) || 'sin log';
                 const src = shaderSources.get(shader) || '';
-                // Marcar las líneas para ubicar el error citado en el log
+                
                 const numbered = src.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n');
                 console.error('[MiniFeather] Shader falló al COMPILAR. Log:', log,
                     '\n— Fuente numerada —\n', numbered.slice(0, 4000));
@@ -2407,8 +2187,7 @@
 
     if (state.enabled) {
         setTimeout(scan, 3000);
-        // Restaurar forma de nubes dibujada guardada (si el mesh tarda en
-        // existir, el reintento interno lo aplica luego)
+        
         if (localStorage.getItem(LS_SHAPE)) {
             setTimeout(() => handleCloudsShape({}), 4000);
         }

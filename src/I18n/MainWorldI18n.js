@@ -124,7 +124,6 @@
     return translated === core ? value : leading + translated + trailing;
   }
 
-
   function translateInline(value) {
     if (typeof value !== 'string' || !value) return value;
     const direct = translate(value);
@@ -219,7 +218,6 @@
     return state.language;
   }
 
-  // t('key', {var: 'x'}) → string (con fallback a en, luego a la clave)
   function t(key, vars) {
     const values = state.entries.get(key);
     if (!values) return key;

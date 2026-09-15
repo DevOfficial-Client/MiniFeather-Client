@@ -2,11 +2,10 @@
     'use strict';
     const TAG = '[MiniFeather Freelook]';
 
-    // ── Config
     let FREELOOK_KEY = 'KeyZ';
-    let FREELOOK_MODE = 'hold'; // 'toggle' | 'hold' | 'off'
+    let FREELOOK_MODE = 'hold'; 
     const PITCH_LIMIT = Math.PI / 2 - 0.02;
-    // ── State 
+    
     let active = false;
     let sensitivity = 0.002;
     let calibrated = false;
@@ -178,9 +177,7 @@
                   options
               );
           }
-          // Chrome bloquea 'unload' vía Permissions Policy; convertirlo a
-          // 'pagehide' (reemplazo oficial) evita la violación y mantiene
-          // el callback del script original.
+          
           if (type === 'unload') type = 'pagehide';
           return originalAddEventListener.call(
               this,

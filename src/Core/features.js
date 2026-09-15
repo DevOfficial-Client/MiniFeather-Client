@@ -1,13 +1,3 @@
-// MiniFeather Features — Block Highlight
-// Ported from the working inject(3).js implementation.
-//
-// Settings:
-//   miniblox_blockhighlight
-//   miniblox_blockhighlight_color
-//   miniblox_blockhighlight_thickness
-//
-// Refresh message:
-//   MINIBLOX_REFRESH_BLOCK_HIGHLIGHT
 
 (function () {
     'use strict';
@@ -95,7 +85,6 @@
         return game;
     }
 
-    // Exact thickness technique from inject(3).js.
     function applySelectBoxThickness(selectBox, thicknessVal, colorHex) {
         const level = parseInt(thicknessVal || '1', 10);
 
@@ -135,7 +124,6 @@
 
                 const offsets = [];
 
-                // Level 2
                 if (level >= 2) {
                     offsets.push(
                         [localD, 0, 0],
@@ -177,7 +165,6 @@
                     );
                 }
 
-                // Level 3
                 if (level >= 3) {
                     const d4 = localD * 1.7;
 
@@ -213,7 +200,6 @@
                     );
                 }
 
-                // Level 4
                 if (level >= 4) {
                     const d6 = localD * 2.4;
 
@@ -349,8 +335,6 @@
         }
     }
 
-    // Find PlayerController from the cached game bundle
-    // and patch select().
     function patchSelectMethod(module) {
         if (window.__MF_BLOCK_HIGHLIGHT_SELECT_PATCHED__) {
             return true;
@@ -414,11 +398,6 @@
         return true;
     }
 
-    // The dynamic import() re-executes the game bundle's top-level
-    // code. If the canvas/DOM it expects is not there yet (game still
-    // booting, or Studio re-arranging canvases), evaluation throws
-    // "Cannot read properties of null (reading 'getContext')".
-    // Gate on an existing game canvas and retry a few times.
     const MAX_BUNDLE_ATTEMPTS = 10;
 
     let bundleAttempts = 0;
@@ -429,8 +408,6 @@
             'script[src*="/assets/index-"]'
         );
 
-        // Game bundle not present yet, or game has not created
-        // its canvas — wait for the next tick.
         if (!script || !document.querySelector('canvas')) {
             return false;
         }
@@ -466,7 +443,7 @@
                         err?.message || err
                     );
                 } else {
-                    // Allow a retry on the next interval tick.
+                    
                     bundleStarted = false;
                 }
             });
@@ -488,7 +465,7 @@
 
     let bundleStarted = false;
     let intervalTicks = 0;
-    const MAX_INTERVAL_TICKS = 120; // ~60s, then stop polling
+    const MAX_INTERVAL_TICKS = 120; 
 
     const interval = setInterval(() => {
         intervalTicks++;
@@ -585,7 +562,6 @@
         }
     );
 
-    // Public API for MiniFeather.
     window.MF_FEATURES = {
         refreshBlockHighlight,
 

@@ -1,4 +1,4 @@
-// GUI Patch Script - Inyecta modificaciones de GUI al bundle original de miniblox.io
+
 (function () {
   'use strict';
 
@@ -7,10 +7,6 @@
   let cachedGame = null;
   let lastGameScan = 0;
 
-  // El parche SOLO debe afectar al bundle de GUI de miniblox (assets/GuiHud-*.js).
-  // El hash del nombre cambia con cada deploy, por eso se detecta dinámicamente.
-  // IMPORTANTE: el buffer de performance.getEntriesByType() se llena (250) antes
-  // de que cargue el GuiHud, así que se usa PerformanceObserver en tiempo real.
   const GUI_BUNDLE_RE = /\/assets\/GuiHud[^/]*\.js(\?.*)?$/i;
   let guiBundleActive = false;
 
@@ -18,8 +14,6 @@
     return GUI_BUNDLE_RE.test(url || '');
   }
 
-  // Observar scripts que se cargan a partir de ahora (captura el GuiHud aunque
-  // el buffer de recursos ya esté lleno). buffered:true cubre los ya cargados.
   try {
     new PerformanceObserver((list) => {
       for (const e of list.getEntries()) {
@@ -31,7 +25,6 @@
     }).observe({ type: 'resource', buffered: true });
   } catch (_) {}
 
-  // Interceptar <script src=".../GuiHud-*.js"> insertados en el DOM
   const scriptObserver = new MutationObserver((muts) => {
     for (const m of muts) {
       for (const n of m.addedNodes) {
@@ -47,11 +40,11 @@
   function isGuiHudBundleActive() {
     if (guiBundleActive) return true;
     try {
-      // Scripts estáticos presentes en el documento
+      
       for (const s of document.scripts) {
         if (testGuiHudUrl(s.getAttribute('src'))) return (guiBundleActive = true);
       }
-      // Por si acaso: entradas aún visibles en el buffer de recursos
+      
       for (const e of performance.getEntriesByType('resource')) {
         if (e.initiatorType === 'script' && testGuiHudUrl(e.name)) return (guiBundleActive = true);
       }
@@ -63,9 +56,6 @@
     return state.enabled && GUI_BASE && isGuiHudBundleActive();
   }
 
-  // Modos sin vitales relevantes: el juego muestra corazones/comida/XP atenuados
-  // o directamente los oculta (showVitals && gamemode.isSurvival()).
-  // Para creativo/espectador nuestra GUI se vuelve translúcida.
   function isGhostMode(game) {
     try {
       if (game?.info?.spectating) return true;
@@ -103,18 +93,11 @@
     return cachedGame?.player ? cachedGame : null;
   }
 
-  // ¿El jugador ya está dentro del mundo? Durante la carga de un mundo
-  // (connState=0, inLoadedChunk=false) existe una barra de progreso centrada
-  // abajo que cumple TODOS los heurísticos de detección del HUD. No se debe
-  // escanear/nukear nada hasta que el chunk del jugador esté cargado.
-  // Verificado en vivo: cargando → connState=0/inLoadedChunk=false/health=0;
-  // en partida → connState=6/inLoadedChunk=true/health=20.
   function isGameReady(game) {
     try {
       if (!game?.info) return false;
       if (game.info.inLoadedChunk === false) return false;
-      // health llega a 0 durante la carga y al respawn; combinado con
-      // inLoadedChunk false es suficiente señal de "cargando"
+      
       return true;
     } catch (_) {}
     return false;
@@ -148,34 +131,25 @@
     }, 500);
   }
 
-  // =========================================================================
-  // Detección de barras originales en el DOM — múltiples estrategias
-  // =========================================================================
-
-  // El chat también está en el bundle GuiHud y vive abajo-izquierda: NUNCA
-  // tocarlo. Se excluye por input, atributos data-* típicos del chat o si
-  // el ancestro contiene un input/textarea.
   function isInChatArea(el) {
     if (!el) return false;
     if (el.closest('input, textarea, [contenteditable], [data-chat], [class*="chat" i]')) return true;
     return false;
   }
 
-  // El HUD de vitals está centrado horizontalmente (como en Minecraft);
-  // el chat está a la izquierda. Esta verificación es por elemento.
   function isCenteredLikeHud(el) {
     const r = el.getBoundingClientRect();
     if (!r.width) return false;
     const cx = r.left + r.width / 2;
     const center = window.innerWidth / 2;
-    // Dentro del 25% central de la pantalla
+    
     return Math.abs(cx - center) < window.innerWidth * 0.25;
   }
 
   function findOriginalBars() {
     const result = { healthBar: null, foodBar: null };
     try {
-      // 1. Usar referencias cacheadas si siguen conectadas y con nuestro contenido
+      
       if (state.healthBarRef && state.healthBarRef.isConnected) {
         if (state.healthBarRef.querySelector('.mf-hearts')) {
           result.healthBar = state.healthBarRef;
@@ -192,9 +166,6 @@
       }
       if (result.healthBar && result.foodBar) return result;
 
-      // 2. Buscar por texto "X / 20" o "X/20"
-      // El chat puede contener mensajes tipo "10/20": se exige estar
-      // centrado como el HUD y fuera del área del chat.
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
       const textBars = [];
       while (walker.nextNode()) {
@@ -211,8 +182,6 @@
         return result;
       }
 
-      // 3. Buscar contenedores con texto numérico cerca del bottom del HUD
-      // Miniblox usa divs con clases css-* generadas por React/emotion
       const allDivs = document.querySelectorAll('div');
       const hudCandidates = [];
       for (const el of allDivs) {
@@ -220,7 +189,6 @@
         if (el.querySelector('.mf-hearts, .mf-food, .mf-xp-icons')) continue;
         if (isInChatArea(el)) continue;
 
-        // Buscar elementos que contengan texto con "/" (formato X/Y)
         const ownText = Array.from(el.childNodes)
           .filter(n => n.nodeType === 3)
           .map(n => n.textContent.trim())
@@ -234,9 +202,6 @@
         if (!result.foodBar) { result.foodBar = hudCandidates[1]; state.foodBarRef = hudCandidates[1]; }
       }
 
-      // 4. Estrategia adicional: buscar por elementos con bordes/fondos oscuros
-      // cerca del bottom-center (donde está el HUD)
-      // PELIGROSA: solo con verificación central estricta + fuera del chat
       if (!result.healthBar || !result.foodBar) {
         const bordered = [];
         for (const el of allDivs) {
@@ -249,18 +214,18 @@
           if (!isCenteredLikeHud(el)) continue;
           try {
             const s = window.getComputedStyle(el);
-            // Buscar elementos con borde visible o fondo semi-oscuro
+            
             const hasBorder = s.border && s.border !== 'none' && s.border.includes('px');
             const hasBg = s.backgroundColor && s.backgroundColor !== 'rgba(0, 0, 0, 0)' && s.backgroundColor !== 'transparent';
             if (hasBorder || hasBg) {
-              // Verificar que está en la parte inferior (HUD)
+              
               if (rect.top > window.innerHeight * 0.4) {
                 bordered.push(el);
               }
             }
           } catch (_) {}
         }
-        // Ordenar por posición Y (más abajo primero) luego X
+        
         bordered.sort((a, b) => {
           const ra = a.getBoundingClientRect();
           const rb = b.getBoundingClientRect();
@@ -275,9 +240,6 @@
     return result;
   }
 
-  // =========================================================================
-  // Parchear lista de jugadores con iconos de wifi
-  // =========================================================================
   function patchPlayerList() {
     const observer = new MutationObserver(() => {
       if (!canPatch()) return;
@@ -307,9 +269,6 @@
     state.observers.push(observer);
   }
 
-  // =========================================================================
-  // Verificar si un color es "saturado" (no gris/blanco/negro)
-  // =========================================================================
   function isSaturatedColor(bg) {
     const m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
     if (!m) return false;
@@ -327,17 +286,13 @@
     return false;
   }
 
-  // =========================================================================
-  // Reemplazar la barra de XP — detección agresiva
-  // =========================================================================
   function patchXPBar() {
     let lastXpKey = '';
     const interval = setInterval(() => {
       if (!canPatch()) return;
       const game = getGame();
       if (!game || !game.info) return;
-      // No tocar el DOM mientras carga el mundo (la barra de progreso pasa
-      // todos los heurísticos de la barra de XP)
+      
       if (!isGameReady(game)) return;
 
       const experience = (game.info?.xp?.experience || 0);
@@ -347,16 +302,12 @@
       const totalIcons = 18;
       const filledIcons = Math.round(experience * totalIcons);
 
-      // --- Buscar la barra de XP ---
       let xpBar = null;
 
-      // 1. Referencia cacheada
       if (state.xpBarRef && state.xpBarRef.isConnected) {
         xpBar = state.xpBarRef;
       }
 
-      // 2. Escanear todo el DOM buscando barras con color
-      // Excluir chat (misma área inferior-izquierda) y elementos no centrados
       if (!xpBar) {
         const allDivs = document.querySelectorAll('div');
         for (const el of allDivs) {
@@ -365,24 +316,22 @@
           if (el.classList.contains('mf-food') || el.closest('.mf-food')) continue;
           if (el.dataset.mfReplaced || el.dataset.mfXpReplaced) continue;
           if (isInChatArea(el)) continue;
-          // Saltar elementos que contengan corazones o comida
+          
           if (el.querySelector('.mf-hearts, .mf-food')) continue;
-          // Saltar barras de vida/comida (tienen texto "X / 20")
+          
           const textContent = el.textContent.trim();
           if (/^\d+\.?\d*\s*\/\s*\d+$/.test(textContent)) continue;
 
           const h = el.offsetHeight;
           const w = el.offsetWidth;
-          // La barra de XP es delgada y larga
+          
           if (h < 3 || h > 25) continue;
           if (w < 60 || w < h * 3) continue;
 
-          // Debe estar en la mitad inferior de la pantalla (HUD), no en nametags
           const rect = el.getBoundingClientRect();
           if (rect.top < window.innerHeight * 0.5) continue;
           if (!isCenteredLikeHud(el)) continue;
 
-          // Debe tener fondo colorido (en el elemento o hijos directos)
           let colored = hasColoredBg(el);
           if (!colored) {
             for (const child of el.children) {
@@ -391,7 +340,6 @@
           }
           if (!colored) continue;
 
-          // Usar SOLO este elemento, sin subir a padres
           xpBar = el;
           state.xpBarRef = el;
           break;
@@ -399,24 +347,21 @@
       }
 
       if (!xpBar) return;
-      // Seguridad absoluta: no tocar si contiene corazones o comida
+      
       if (xpBar.querySelector('.mf-hearts, .mf-food')) return;
 
-      // --- Evitar re-render si nada cambió ---
-      // Creativo/espectador: GUI translúcida
       const ghost = isGhostMode(game);
       const guiOpacity = ghost ? 0.35 : 1;
       const xpKey = filledIcons + ':' + level + ':' + isMobile + ':' + ghost;
       const existing = xpBar.querySelector('.mf-xp-icons');
       if (existing) {
-        // Aplicar opacidad aunque el resto no haya cambiado
+        
         existing.style.opacity = guiOpacity;
         existing.style.transition = 'opacity 0.3s';
         if (lastXpKey === xpKey) return;
       }
       lastXpKey = xpKey;
 
-      // --- Limpiar backgrounds suavemente (sin destruir layout) ---
       const nukeBg = (el) => {
         if (!el) return;
         el.style.background = 'transparent';
@@ -430,16 +375,15 @@
       nukeBg(xpBar);
       xpBar.dataset.mfXpReplaced = '1';
 
-      // --- Reutilizar o crear contenedor ---
       let container = xpBar.querySelector('.mf-xp-icons');
       if (!container) {
-        // Eliminar contenido original
+        
         xpBar.innerHTML = '';
         container = document.createElement('div');
         container.className = 'mf-xp-icons';
         xpBar.appendChild(container);
       } else {
-        // Limpiar solo el contenido interno del contenedor
+        
         container.innerHTML = '';
       }
 
@@ -451,7 +395,6 @@
         'box-shadow:inset 1px 1px 0 #373737, inset -1px -1px 0 #373737'
       ].join(';');
 
-      // Renderizar 18 segmentos: EXPVASSEL de base + exp{i} encima si está lleno
       for (let i = 1; i <= totalIcons; i++) {
         const slot = document.createElement('div');
         slot.style.cssText = 'position:relative;width:' + iconSize + 'px;height:' + iconSize + 'px;';
@@ -471,7 +414,6 @@
         container.appendChild(slot);
       }
 
-      // Icono central
       const midImg = document.createElement('img');
       midImg.src = GUI_BASE + 'exp/middle.png';
       midImg.style.cssText = [
@@ -483,7 +425,6 @@
       ].join(';');
       container.appendChild(midImg);
 
-      // Nivel
       const levelText = document.createElement('span');
       levelText.textContent = level;
       levelText.style.cssText = [
@@ -538,10 +479,6 @@
     state.observers.push(observer);
   }
 
-  // =========================================================================
-  // Reemplaza barras originales con corazones y comida
-  // (corazones dorados superpuestos encima de los rojos sin desplazar)
-  // =========================================================================
   function createHealthFoodOverlay() {
     if (state.overlay) return;
     state.overlay = true;
@@ -551,23 +488,20 @@
 
       const game = getGame();
       if (!game || !game.info) return;
-      // No escanear mientras carga el mundo (evita capturar la barra de progreso)
+      
       if (!isGameReady(game)) return;
 
       const health = game.info.health ?? 20;
       const food = game.info.food ?? 20;
       const absorption = game.info.absorption ?? 0;
       const iconSize = 22;
-      // Detectar mundo hardcore (el propio juego lee serverInfo.hardcore en el GuiHud)
+      
       const hardcore = game.serverInfo?.hardcore === true ||
                        game.serverInfo?.metadata?.hardcore === true;
-      // Creativo/espectador: GUI translúcida
+      
       const ghost = isGhostMode(game);
       const guiOpacity = ghost ? 0.35 : 1;
 
-      // El HUD nativo NO muestra barras de vida/comida en creativo/espectador
-      // (gamemode.isSurvival() requerido). Buscarlas ahí solo captura elementos
-      // ajenos (chat): si ya reemplazamos las barras, solo las actualizamos.
       const bars = (state.healthBarRef?.isConnected && state.foodBarRef?.isConnected)
         ? { healthBar: state.healthBarRef, foodBar: state.foodBarRef }
         : (ghost ? { healthBar: null, foodBar: null } : findOriginalBars());
@@ -583,14 +517,12 @@
         el.dataset.mfReplaced = '1';
       };
 
-      // --- Reemplazar barra de vida con corazones ---
       if (bars.healthBar) {
         const bar = bars.healthBar;
         nuke(bar);
         nuke(bar.parentElement);
         nuke(bar.parentElement?.parentElement);
 
-        // Nukear hijos recursivamente
         bar.querySelectorAll('*').forEach(child => {
           if (child.classList.contains('mf-hearts') || child.closest('.mf-hearts')) return;
           child.style.background = 'transparent';
@@ -615,8 +547,6 @@
         hearts.innerHTML = '';
         hearts.style.cssText = 'position:relative;display:flex;gap:2px;align-items:center;opacity:' + guiOpacity + ';transition:opacity 0.3s;';
 
-        // Fila de corazones rojos (salud base, máximo 10)
-        // En hardcore se usan los sprites hardcore/* con ojos distintos
         const redRow = document.createElement('div');
         redRow.style.cssText = 'display:flex;gap:2px;align-items:center;';
         for (let i = 0; i < 10; i++) {
@@ -641,7 +571,6 @@
         }
         hearts.appendChild(redRow);
 
-        // Corazones dorados (absorción) — apilados encima de los rojos (misma posición)
         const absorptionHearts = Math.ceil(absorption / 2);
         if (absorptionHearts > 0) {
           const goldRow = document.createElement('div');
@@ -664,7 +593,6 @@
         }
       }
 
-      // --- Reemplazar barra de comida con sprites ---
       if (bars.foodBar) {
         const bar = bars.foodBar;
         nuke(bar);

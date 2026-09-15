@@ -320,8 +320,6 @@
             f.type === 'image/png' || f.name.toLowerCase().endsWith('.png')
         );
 
-        // Sufijos PBR estilo OptiFine: base_n = normal, base_s = specular,
-        // base_e = emissive. Devuelve null si NO es un mapa PBR.
         function pbrKind(name) {
             const base = name.replace(/\.png$/i, '');
             if (/_n$/.test(base)) return { kind: 'n', base: base.slice(0, -2) };
@@ -365,36 +363,25 @@
         return { customSprites, pbrMaps, loaded };
     }
 
-    // ── Atlases PBR (_n / _s / _e) ──
-    // Mismo layout de frames.json que el atlas diffuse, tiles faltantes con
-    // valor neutro (azul para normal, negro para spec/emissive), guardados en
-    // IndexedDB porque 3 atlas PNG no caben en la cuota de localStorage.
-
     function pbrNeutral(kind) {
         return kind === 'n' ? '#8080ff' : '#000000';
     }
 
-    // Downscale por CPU (box-average real). Necesario porque Chrome IGNORA
-    // imageSmoothingEnabled=false al reducir >3x: aplica su box filter interno
-    // que aplana el ruido de alta frecuencia de los normal maps hacia el
-    // neutro (verificado: dirt_n 128px → tile 16px con 0/256 px no-neutros,
-    // mientras el box-average real da 130/256). Esto dejaba el atlas 'n'
-    // "vacío" para el check de píxeles en un loop de regeneración infinito.
     function drawTileDownscaled(ctx, img, fx, fy, fw, fh) {
         const iw = img.naturalWidth || img.width;
         const ih = img.naturalHeight || img.height;
         if (iw === fw && ih === fh) {
-            ctx.drawImage(img, fx, fy, fw, fh);  // 1:1, sin pérdida
+            ctx.drawImage(img, fx, fy, fw, fh);  
             return;
         }
-        // Pintar el source a tamaño NATIVO en un canvas temp y leer píxeles
+        
         const tmp = document.createElement('canvas');
         tmp.width = iw; tmp.height = ih;
         const tctx = tmp.getContext('2d', { willReadFrequently: true });
         tctx.drawImage(img, 0, 0);
         let src;
         try { src = tctx.getImageData(0, 0, iw, ih); }
-        catch (_) { ctx.drawImage(img, fx, fy, fw, fh); return; }  // fallback GPU
+        catch (_) { ctx.drawImage(img, fx, fy, fw, fh); return; }  
         const dst = ctx.createImageData(fw, fh);
         for (let y = 0; y < fh; y++) {
             const y0 = Math.floor((y * ih) / fh), y1 = Math.max(y0 + 1, Math.floor(((y + 1) * ih) / fh));
@@ -405,7 +392,7 @@
                     let sp = (sy * iw + x0) * 4;
                     for (let sx = x0; sx < x1; sx++, sp += 4) {
                         const al = src.data[sp + 3];
-                        // Premultiplicar por alpha para overlays (grass side)
+                        
                         r += src.data[sp] * al; g += src.data[sp + 1] * al;
                         b += src.data[sp + 2] * al; a += al; n++;
                     }
@@ -426,7 +413,7 @@
         if (!frames) return null;
         if (!maps || maps.size === 0) return null;
 
-        const scale = 1;  // los maps PBR de estos packs son 16x
+        const scale = 1;  
         const atlasSize = ATLAS_SIZE * scale;
         const canvas = document.createElement('canvas');
         canvas.width = atlasSize;
@@ -434,7 +421,6 @@
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
 
-        // Rellenar TODO el atlas con el valor neutro del kind
         ctx.fillStyle = pbrNeutral(kind);
         ctx.fillRect(0, 0, atlasSize, atlasSize);
 
@@ -452,7 +438,7 @@
             const fh = (frame.h || TILE_SIZE) * scale;
             const baseName = fileName.replace(/\.png$/, '');
             const img = maps.get(baseName) || lower.get(baseName.toLowerCase());
-            if (!img) continue;  // tile neutro
+            if (!img) continue;  
             if (data.rotated) {
                 ctx.save();
                 ctx.translate(fx, fy);
@@ -491,9 +477,6 @@
         });
     }
 
-    // Cola serializada: cada generación corre tras la anterior. Sin pisarse
-    // (escrituras IndexedDB paralelas) ni descartarse (un pack subido por el
-    // usuario mientras corre la instalación del integrado espera su turno).
     let pbrGenChain = Promise.resolve();
 
     function generateAndStorePbr(pbrMaps) {
@@ -521,7 +504,7 @@
         const anyOk = Object.values(results).some(v => v > 0);
         console.log(`${TAG} ✓ PBR maps:`, results,
             anyOk ? '(guardados en IndexedDB)' : '(NINGUNO guardado — revisa arriba)');
-        // Avisar al módulo MAIN para que recargue los atlases ya
+        
         try {
             document.dispatchEvent(new CustomEvent('minifeather:pbr-update'));
         } catch (_) {}
@@ -537,8 +520,6 @@
             return { success: false, error: 'No valid PNG files' };
         }
 
-        // Si el pack SOLO trae maps PBR (_n/_s/_e), no tocar el atlas diffuse
-        // — el vanilla sigue visible y solo se aplican normal/specular/emissive.
         const hasPbr = pbrMaps.n.size || pbrMaps.s.size || pbrMaps.e.size;
         if (hasPbr) {
             const pbrStats = await generateAndStorePbr(pbrMaps);
@@ -599,7 +580,7 @@
         idbDeleteAll().then((ok) => {
             try {
                 localStorage.setItem('mf_pbr_available', 'false');
-                // el pack manual (MF_PbrEditor) murió con los atlas
+                
                 localStorage.removeItem('mf_pbr_manual');
                 document.dispatchEvent(new CustomEvent('minifeather:pbr-update'));
             } catch (_) {}
@@ -623,19 +604,10 @@
         }
     }
 
-    // ── PBR integrado (bundled) ──
-    // El pack MLGImposter Ray-tracing V1.1 viene incluido en assets/pbr/.
-    // Instalarlo la primera vez que PBR se active sin atlas en IndexedDB,
-    // para que el usuario no tenga que subir el ZIP manualmente.
-
     function bundledManifestUrl() {
         return chrome.runtime.getURL('assets/pbr/manifest.json');
     }
 
-    // ── Presets PBR online ──
-    // Packs con licencia que permite su uso/descarga (NO se redistribuyen:
-    // se descargan on-demand desde el CDN oficial). El extractor reutiliza
-    // los sufijos OptiFine (_n/_s/_e) y frames.json del juego.
     const PBR_PRESETS = [
         {
             id: 'ultimacraft',
@@ -693,8 +665,6 @@
         catch (_) { return 'bundled'; }
     }
 
-    // Descarga el ZIP del CDN, extrae _n/_s/_e y regenera los atlases.
-    // extractZip() ya devuelve { name, img } con el basename sin .png.
     async function doInstallPreset(presetId) {
         const preset = PBR_PRESETS.find(p => p.id === presetId);
         if (!preset) return { success: false, error: `preset desconocido: ${presetId}` };
@@ -724,8 +694,7 @@
         for (const { name, img } of extracted) {
             const info = pbrKind(name);
             if (!info) continue;
-            // Los packs traen overrides/mcmeta con duplicados: gana la ruta
-            // más corta (assets/minecraft/textures/block/dirt_n.png).
+            
             const prev = pbrMaps[info.kind].get(info.base);
             if (!prev) {
                 img.nameLen = name.length;
@@ -747,7 +716,7 @@
         if (anyOk) {
             try {
                 localStorage.setItem('mf_pbr_preset', preset.id);
-                localStorage.removeItem('mf_pbr_manual');  // preset pisa lo manual
+                localStorage.removeItem('mf_pbr_manual');  
             } catch (_) {}
             console.log(`${TAG} ✓ Preset PBR "${preset.name}" instalado:`, results, `— crédito: ${preset.credit}`);
         }
@@ -772,8 +741,7 @@
     let bundledPbrInFlight = null;
 
     function installBundledPbr() {
-        // Deduplicar llamadas concurrentes (mismo motivo que el lock de
-        // generateAndStorePbr — el pack integrado es siempre el mismo).
+        
         if (bundledPbrInFlight) return bundledPbrInFlight;
         bundledPbrInFlight = doInstallBundledPbr().finally(() => {
             bundledPbrInFlight = null;
@@ -831,10 +799,6 @@
         }
     };
 
-    // Puente MAIN → ISOLATED: la consola del usuario corre en MAIN y no ve
-    // MF_TEXTURE_PACK. PBRTextures (MAIN) dispara CustomEvents que cruzan
-    // mundos (detail serializado: el objeto crudo NO cruza) y contestamos
-    // con eventos de resultado, también serializados.
     document.addEventListener('minifeather:pbr-presets-list', () => {
         document.dispatchEvent(new CustomEvent('minifeather:pbr-presets-result', {
             detail: JSON.stringify({ presets: listPresets(), current: currentPreset() })

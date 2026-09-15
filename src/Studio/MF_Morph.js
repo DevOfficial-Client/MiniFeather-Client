@@ -1,31 +1,3 @@
-// MF_Morph.js — Morph del jugador local: transformarse en un mob del mundo
-// (creeper, cerdo, lobo…), 100% visual y client-side, ideal para machinimas.
-//
-// Cómo funciona (investigado del bundle de miniblox.io):
-// - Cada entidad tiene `entity.mesh` (clase MeshRenderer del juego) y el
-//   bucle de render llama `mesh.render()` por frame, leyendo pos/yaw/pose
-//   de `mesh.entity`.
-// - El player usa la clase de mesh "LF" (humanoide). Los mobs usan sus
-//   propias clases (creeper, pig, wolf…), CONSTRUCTOR(ENTITY).
-// - Los nombres de clases cambian en cada build (minificados), así que NO
-//   se referencian por nombre: se COSECHAN de los mobs vivos del mundo —
-//   cada entidad de `world.entities` aporta su `constructor` y el
-//   `constructor` de su mesh.
-// - El morph construye `new MeshClass(proxyPlayer)`: un Proxy que devuelve
-//   las propiedades del player real (pos, yaw, limbSwing, sneak…) y valores
-//   neutros (0 / noop) para métodos que solo tienen los mobs (p.ej. la
-//   hinchazón del creeper). Así el propio juego anima el mob siguiendo al
-//   player, sin tocar al servidor.
-// - El swap solo toca la escena: quita el mesh humanoide de entityMeshes,
-//   cuelga el del mob y un watchdog lo mantiene visible (el juego oculta
-//   el player en primera persona). Revert restaura el mesh original.
-//
-// Uso:
-//   MF_Morph.scan()                // lista de mobs disponibles en el mundo
-//   MF_Morph.apply('creeper')      // transformarse
-//   MF_Morph.revert()              // volver a la forma humana
-//   MF_Morph.open()                // panel UI
-//   MF_Morph.applyAtTick(t, 'pig') // clip para el timeline V2
 
 (function () {
     'use strict';
@@ -37,18 +9,15 @@
 
     const state = {
         open: false,
-        // typeKey -> { type, MeshClass, label }
-        // typeKey: `creeper`, `pig`… deducido de entity.type o className
+        
         catalog: new Map(),
         catalogAt: 0,
-        current: null,        // typeKey aplicado al player LOCAL (UI)
-        // morphs activos por entidad (local + remotas vía P2P Look Sync):
-        // entity.id -> { entity, origMesh, morphMesh, type }
+        current: null,        
+        
         targets: new Map(),
         watchdog: null
     };
 
-    // ── acceso al juego (patrón del cliente) ──
     function getGame() {
         if (globalThis.miniblox?.player) return globalThis.miniblox;
         try {
@@ -74,9 +43,6 @@
         return game?.gameScene?.entityMeshes || null;
     }
 
-    // ── cosecha del catálogo: clases mesh de los mobs vivos ──
-    // Recorre world.entities (y world.players para el propio player como
-    // fallback del humanoide) y registra cada clase de mesh distinta.
     function typeKeyOf(entity) {
         if (typeof entity?.type === 'string' && entity.type) return entity.type;
         const cn = entity?.constructor?.name || '';
@@ -97,14 +63,12 @@
 
         const consider = (entity) => {
             if (!entity || entity.id === meId) return;
-            // SOLO mobs vivientes: items/flechas/orbes/TNT también están en
-            // world.entities pero sus meshes leen props que el player no
-            // tiene (item.stack, motion de flecha…) y crashean el render
+            
             if (typeof entity.getHealth !== 'function') return;
             const mesh = entity.mesh;
             const MeshClass = mesh?.constructor;
             if (!MeshClass || MeshClass === Object) return;
-            // descartar el humanoid del player (misma clase que mi mesh)
+            
             if (me?.mesh?.constructor === MeshClass) return;
             const key = typeKeyOf(entity);
             if (!key || key === 'player') return;
@@ -124,16 +88,6 @@
         return [...state.catalog.values()];
     }
 
-    // ── Proxy del player: la "entidad" que verá el mesh del mob ──
-    // Devuelve props del player real; métodos/props desconocidas → neutro.
-    //
-    // El fallback neutro es una FUNCIÓN que devuelve 0 y además sabe
-    // comportarse como 0 (valueOf/Symbol.toPrimitive): los renderers de
-    // mobs llaman a métodos que el player no tiene (hinchazón del creeper,
-    // lana de oveja…) — si devolviéramos 0 pelado, `0(e)` lanzaría
-    // "TypeError: 0 is not a function" DENTRO del render loop del juego
-    // y lo congelaría. Con la fn-callable no crashea y los cálculos
-    // (`t > 0`, `t * x`) caen a 0 de forma segura.
     function makeCallableZero() {
         const fn = function () { return 0; };
         fn.valueOf = () => 0;
@@ -143,13 +97,13 @@
     }
 
     function makeProxyEntity(player) {
-        const cache = new Map(); // misma fn para una misma prop (identidad estable)
+        const cache = new Map(); 
         return new Proxy(player, {
             get(target, prop) {
                 try {
                     if (prop in target) {
                         const v = Reflect.get(target, prop, target);
-                        // bind para que los métodos internos no vean el Proxy
+                        
                         if (typeof v === 'function') return v.bind(target);
                         return v;
                     }
@@ -158,8 +112,7 @@
                 if (!cache.has(prop)) cache.set(prop, makeCallableZero());
                 return cache.get(prop);
             },
-            // reflejar el target real: decir "true" para TODO rompía los
-            // chequeos de features del propio renderer
+            
             has(target, prop) {
                 try { return prop in target; } catch { return false; }
             },
@@ -170,9 +123,6 @@
         });
     }
 
-    // ── morph ──
-    // applyOn(entity, typeKey): morfa una ENTIDAD cualquiera (local o
-    // remota). El player local usa apply() (compat con timeline/Studio).
     function applyOn(entity, typeKey) {
         if (!entity) throw new Error('entidad no disponible');
         if (!entity.mesh) throw new Error('la entidad no tiene mesh');
@@ -182,8 +132,6 @@
             throw new Error('morph "' + typeKey + '" no disponible — acércate a uno de esos mobs y reintenta (scan)');
         }
 
-        // si ya hay un morph en esta entidad, desmontarlo y usar el mesh
-        // resultante como base
         const prev = state.targets.get(entity.id);
         if (prev?.morphMesh) detachFrom(entity.id);
 
@@ -199,7 +147,6 @@
         }
         if (!morph) throw new Error('mesh de ' + typeKey + ' nulo');
 
-        // ocultar el mesh original y colgar el morph donde estaba
         const group = getEntityMeshesGroup(getGame());
         try { group?.remove?.(origMesh); } catch {}
         try { origMesh.parent?.remove?.(origMesh); } catch {}
@@ -210,7 +157,6 @@
             entity, type: typeKey, origMesh, morphMesh: morph
         });
 
-        // primer render para que tome posición/pose (patrón del spawner)
         try { morph.render(); } catch {}
         forceVisible(morph);
         startWatchdog();
@@ -224,7 +170,7 @@
         applyOn(me, typeKey);
         state.current = typeKey;
         renderUI();
-        // Look Sync P2P: el peer me verá como ese mob
+        
         try { window.MF_Peer?.sendLook?.({ a: 'morph', type: typeKey }); } catch {}
         console.log(TAG + ' morph aplicado: ' + typeKey);
         return { ok: true, type: typeKey };
@@ -248,7 +194,7 @@
         try {
             root.traverse(o => {
                 o.visible = true;
-                o.frustumCulled = false; // actor de machinima: siempre visible
+                o.frustumCulled = false; 
                 o.matrixAutoUpdate = true;
             });
         } catch {}
@@ -258,20 +204,19 @@
         stopWatchdog();
         state.watchdog = setInterval(() => {
             const game = getGame();
-            // por cada morph activo (local + remotos del Look Sync)
+            
             for (const [id, t] of state.targets) {
                 const me = t.entity;
                 if (!me) continue;
                 if (me.mesh !== t.morphMesh) {
-                    // el juego recreó el mesh (respawn, cambio de mundo…) →
-                    // re-montar el morph si sigue activo
+                    
                     const group = getEntityMeshesGroup(game);
                     try { group?.remove?.(me.mesh); } catch {}
                     try { group?.add?.(t.morphMesh); } catch {}
                     me.mesh = t.morphMesh;
                     continue;
                 }
-                // re-forzar visibilidad (el render loop la toca según perspectiva)
+                
                 try {
                     t.morphMesh.traverse(o => {
                         if (o.visible === false) o.visible = true;
@@ -289,18 +234,17 @@
         const game = getGame();
         if (!game) return { ok: false, error: 'sin juego' };
         if (!state.targets.size) return { ok: false, error: 'no hay morph activo' };
-        // revertir todos los morphs activos (local + remotos)
+        
         for (const id of [...state.targets.keys()]) detachFrom(id);
         state.current = null;
         stopWatchdog();
         renderUI();
-        // Look Sync P2P: avisar al peer que volví a humano
+        
         try { window.MF_Peer?.sendLook?.({ a: 'unmorph' }); } catch {}
         console.log(TAG + ' revert: forma humana restaurada');
         return { ok: true };
     }
 
-    // trigger para el timeline V2 (tipo 'morph' via FaceSwap)
     function applyAtTick(tick, typeKey, durationTicks) {
         const FS = window.MF_FaceSwap;
         if (!FS?.applyAtTick) return { ok: false, error: 'FaceSwap no disponible' };
@@ -309,9 +253,6 @@
         return { ok: true };
     }
 
-    // ── miniatura: render del mob a un canvas pequeño ──
-    // Sin acceso fácil al canvas WebGL del juego desde aquí (preservar
-    // drawing buffer es opcional), las cards usan un emoji por tipo.
     const MOJI = {
         creeper: '🟩', pig: '🐖', cow: '🐄', chicken: '🐔', sheep: '🐑',
         wolf: '🐺', cat: '🐈', zombie: '🧟', skeleton: '💀', slime: '🟢',
@@ -326,7 +267,6 @@
         return '🧬';
     }
 
-    // ── UI ──
     function buildUI() {
         if (document.getElementById(ID)) { renderUI(); return; }
         const style = document.createElement('style');
@@ -433,15 +373,14 @@
         state.open = false;
     }
 
-    // ── API ──
     window.MF_Morph = {
         open, close,
         scan,
         apply, revert,
         applyAtTick,
-        // morph de una entidad concreta (Look Sync P2P / API avanzada)
+        
         applyOn, detachFrom,
-        // localizar la entidad de un jugador por username (para P2P)
+        
         findEntityByName(username) {
             const game = getGame();
             if (!game || !username) return null;
@@ -462,7 +401,6 @@
     };
     window.__MF_Morph = true;
 
-    // escaneo inicial cuando haya juego (para que el Studio pueda listar)
     const boot = setInterval(() => {
         const g = getGame();
         if (g?.world?.entities?.size) {

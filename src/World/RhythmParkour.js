@@ -1,8 +1,4 @@
-// RhythmParkour - Transforma Miniblox en un juego de ritmo/parkour
-// Port del mod original MinibloxRhythmParkour adaptado a MiniFeather Client.
-// Los obstáculos se generan al ritmo de la música cargada.
-// Incluye: comandos de chat (/rp), P2P multijugador (BroadcastChannel + WebRTC)
-// y mensajes good/miss sobre la hotbar.
+
 (function () {
 'use strict';
 
@@ -21,7 +17,6 @@ function onLanguageConfig(event) {
 }
 document.addEventListener(EVENT_LANGUAGE, onLanguageConfig);
 
-
 const state = {
   enabled: false,
   game: null,
@@ -33,7 +28,7 @@ const state = {
   beats: [],
   beatCount: 0,
   currentBeat: 0,
-  obstacles: [],      // grupos de obstáculos (cada uno con offsets relativos)
+  obstacles: [],      
   nextObstacleId: 0,
   isPlaying: false,
   score: 0,
@@ -63,8 +58,7 @@ const config = {
   travelTime: 4.0
 };
 
-// ---- Cachés de bloques y conversiones ----
-const blockStateCache = new Map();   // blockName → blockState
+const blockStateCache = new Map();   
 const blockNameCache = {
   stone: 'stone', dirt: 'dirt', cobblestone: 'cobblestone',
   oak_planks: 'oak_planks', bricks: 'bricks',
@@ -75,9 +69,6 @@ const blockNameCache = {
   brown_wool: 'brown_wool', green_wool: 'green_wool', red_wool: 'red_wool', black_wool: 'black_wool'
 };
 
-// ---- BlockPos compatible con el juego (port del original) ----
-// El mundo espera un BlockPos con getters; un objeto plano rompe
-// setBlockState silenciosamente.
 class MFBlockPos {
   constructor(x, y, z) {
     this.x = Math.floor(x);
@@ -89,8 +80,6 @@ class MFBlockPos {
   getZ() { return this.z; }
 }
 
-// ---- Captura de la instancia del juego ----
-// Prioridad: globales del juego (como el mod original) y luego React fiber.
 function getGame(force = false) {
   if (globalThis.miniblox?.player && globalThis.miniblox?.world) {
     return globalThis.miniblox;
@@ -112,7 +101,6 @@ function getGame(force = false) {
   return state.game?.player && state.game?.world ? state.game : null;
 }
 
-// ---- Utilidades de bloques (con caché) ----
 function getBlockState(blockName) {
   const cached = blockStateCache.get(blockName);
   if (cached) return cached;
@@ -126,7 +114,7 @@ function getBlockState(blockName) {
       blk = k ? B[k] : null;
     } catch { blk = null; }
   }
-  // 'air' debe resolverse al bloque real del juego; nunca caer a stone
+  
   if (!blk && blockName === 'air') return null;
   if (!blk) blk = B?.stone || null;
   if (!blk) return null;
@@ -137,7 +125,7 @@ function getBlockState(blockName) {
 
 function setBlockRaw(x, y, z, blockState) {
   if (!blockState) return;
-  // Resolver el world fresco (el juego puede recrearlo al cambiar de mundo)
+  
   let w = state.world;
   if (!w || typeof w.setBlockState !== 'function') {
     const g = getGame();
@@ -148,8 +136,7 @@ function setBlockRaw(x, y, z, blockState) {
   try {
     w.setBlockState(new MFBlockPos(x, y, z), blockState, 3);
   } catch (e) {
-    // Avisar una sola vez: un fallo silencioso aquí hace que los bloques
-    // nunca se borren y la pista se llene de basura
+    
     if (!setBlockRaw.__warned) {
       setBlockRaw.__warned = true;
       console.warn('[MiniFeather RhythmParkour] setBlockState falló:', e);
@@ -159,7 +146,6 @@ function setBlockRaw(x, y, z, blockState) {
 
 function clearBlock(x, y, z) { setBlockRaw(x, y, z, getBlockState('air')); }
 
-// ---- Análisis de audio y detección de beats ----
 async function loadAudioFile(file) {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -250,11 +236,6 @@ async function loadAudioFile(file) {
   }
 }
 
-// ---- Generación de obstáculos (como grupo con offsets) ----
-// Cada obstáculo es un objeto con:
-//   x, y, z = posición de origen (esquina)
-//   cells = [[dx,dy,dz,typeOverride?], ...] relativas a x,y,z
-// Esto permite mover el grupo entero con un solo seguimiento de X.
 function generateObstacle(beat) {
   const id = state.nextObstacleId++;
   const spawnX = config.spawnArea.minX;
@@ -282,10 +263,9 @@ function generateObstacle(beat) {
 
   const cells = [];
 
-  // Generar offsets relativos (dx=0 para obstáculos de pared)
   switch (pattern) {
     case 'duck_with_jump_base': {
-      // Muro amarillo de 2 de alto con hueco 2x2 en izquierda o derecha
+      
       const gapOnLeft = Math.random() < 0.5;
       const gapStart = gapOnLeft ? zStart : zEnd - 2;
       const gapEnd = gapOnLeft ? zStart + 2 : zEnd;
@@ -301,7 +281,7 @@ function generateObstacle(beat) {
       for (let z = zStart; z <= zEnd; z++) cells.push([0, 0, z - zStart]);
       break;
     case 'jump_high_wall': {
-      // Pared tipo arco: 2 bloques en el centro, 1 en los lados
+      
       const totalWidth = zEnd - zStart;
       for (let dy = 0; dy < 2; dy++) {
         for (let z = zStart; z <= zEnd; z++) {
@@ -313,7 +293,7 @@ function generateObstacle(beat) {
       break;
     }
     case 'double_wall': {
-      // Pared doble de 3 de alto con hueco central de 1/3
+      
       const zRange = zEnd - zStart;
       const gapSize = Math.floor(zRange / 3);
       const gapStart = zStart + Math.floor(gapSize);
@@ -332,7 +312,7 @@ function generateObstacle(beat) {
           cells.push([dx, 0, z - zStart]);
       break;
     case 'platform_with_base': {
-      // Base 3x3 verde + plataforma encima, en izquierda o derecha
+      
       const platformIsLeft = Math.random() < 0.5;
       const pzc = Math.floor(platformIsLeft ? (zStart + centerZ) / 2 : (centerZ + zEnd) / 2);
       const baseDz = pzc - zStart;
@@ -344,11 +324,11 @@ function generateObstacle(beat) {
           cells.push([dx, 0, baseDz + dz, blockType]);
       break;
     }
-    case 'gap': break; // sin celdas
+    case 'gap': break; 
     default: cells.push([0, 0, Math.floor(centerZ - zStart)]);
   }
 
-  if (!cells.length) return; // gap/tunnel no generan obstáculo
+  if (!cells.length) return; 
 
   const obstacle = {
     id,
@@ -365,7 +345,6 @@ function generateObstacle(beat) {
     floatX: spawnX
   };
 
-  // Pre-cachear el blockState para este tipo
   getBlockState(blockType);
   for (const cell of cells) {
     if (cell[3]) getBlockState(cell[3]);
@@ -375,7 +354,6 @@ function generateObstacle(beat) {
   placeObstacle(obstacle);
 }
 
-// Coloca todas las celdas del obstáculo en su posición actual
 function placeObstacle(obs) {
   const baseState = getBlockState(obs.type);
   if (!baseState) return;
@@ -386,14 +364,12 @@ function placeObstacle(obs) {
   obs.prevCellX = obs.x;
 }
 
-// Limpia todas las celdas del obstáculo en su posición previa
 function clearObstacleAt(obs, cellX) {
   for (const [dx, dy, dz] of obs.cells) {
     clearBlock(cellX + dx, obs.y + dy, obs.z + dz);
   }
 }
 
-// ---- Game loop optimizado ----
 function gameLoop(timestamp) {
   if (!state.isPlaying) return;
   const now = timestamp || performance.now();
@@ -437,25 +413,19 @@ function updateRhythmGame(deltaTime, now) {
     state.obstacles = state.obstacles.filter(o => !o.finished);
   }
 
-  // Throttle de collision check a ~10fps
   if (now - state.lastCollisionCheck > 100) {
     state.lastCollisionCheck = now;
     checkPlayerCollisions();
   }
 
-  // Throttle de dispatchState a ~5fps
   if (now - state.lastStateSync > 200) {
     state.lastStateSync = now;
     dispatchState();
   }
 
-  // Sincronizar P2P si hay peers conectados
   if (p2pManager?.connections?.length > 0) p2pManager.syncGameState();
 }
 
-// ¿Hay alguna celda sólida del obstáculo en (px, py) con |dz| <= 1?
-// (como el original, que chequeaba cada bloque individualmente — el
-// hueco del muro duck debe salvar al jugador que está dentro de él)
 function obstacleHasCellNear(obs, px, py, pz, yTol = 1, zTol = 1) {
   for (const [dx, dy, dz] of obs.cells) {
     const cx = obs.x + dx;
@@ -468,7 +438,6 @@ function obstacleHasCellNear(obs, px, py, pz, yTol = 1, zTol = 1) {
   return false;
 }
 
-// Verificar si el jugador pasó correctamente el obstáculo (port del original)
 function checkIfPlayerPassed(obs) {
   const p = state.game?.player;
   if (!p) return true;
@@ -479,9 +448,8 @@ function checkIfPlayerPassed(obs) {
   const oZ = obs.z;
   const oX = obs.x;
 
-  // Saltar (cyan): estar 2+ bloques más alto, esquivar en Z o ya haber pasado
   if (obs.type === 'cyan_wool') return (pY - oY) >= 2 || Math.abs(pZ - oZ) > 5 || pX > oX;
-  // Agacharse/pasar por hueco (yellow / slab)
+  
   if (obs.type === 'yellow_wool' || obs.type === 'oak_slab')
     return (pY - oY) <= 0 || Math.abs(pZ - oZ) > 5 || pX > oX;
   return true;
@@ -503,7 +471,7 @@ function checkPlayerCollisions() {
       state.combo = 0;
       showNotification(tr('rhythmOuchHeart', '💥 Ouch! -1 heart'), 'error');
       showHitMessage('miss');
-      // Notificar a otros jugadores en modo cooperativo
+      
       if (p2pManager?.gameMode === 'cooperative') p2pManager.notifyHit(2);
     }
   }
@@ -521,13 +489,12 @@ function applyDamage(damage) {
     } else if (typeof p.hurt === 'function') {
       p.hurt(damage);
     } else if (typeof p.damage === 'function') {
-      p.damage(damage);   // fallback extra del original
+      p.damage(damage);   
     }
     state.health = Math.max(0, state.health - 1);
   } catch {}
 }
 
-// ---- Control del juego ----
 function startGame() {
   if (!state.currentSong || !state.beats.length) { showNotification(tr('rhythmLoadSongFirst', '❌ Load a song first (/rp load)'), 'error'); return false; }
   if (state.isPlaying) { showNotification(tr('rhythmAlreadyRunning', '⚠ Game already in progress'), 'info'); return false; }
@@ -594,8 +561,6 @@ function removeAllObstacles() {
   state.obstacles = [];
 }
 
-// ---- Comandos de chat (port del original) ----
-// /rp start | /rp stop | /rp load | /rp status | /rp debug | /pr load
 function statusText() {
   return `Jugando: ${state.isPlaying} | Score: ${state.score} | Combo: ${state.combo} | Vidas: ${state.health} | Beat: ${state.currentBeat}/${state.beatCount} | BPM: ${state.detectedBPM}`;
 }
@@ -613,7 +578,7 @@ function debugInfo() {
 }
 
 function triggerSongPicker() {
-  // Usar el input de la UI si existe; si no, crear uno temporal (port del original)
+  
   const existing = document.getElementById('mf-rhythm-file');
   if (existing) { existing.click(); return; }
   const input = document.createElement('input');
@@ -643,8 +608,6 @@ function executeCommand(raw) {
   return false;
 }
 
-// Intercepción del chat: listener delegado en capture (más robusto que
-// asignar onkeydown a un input concreto que puede re-crearse)
 function installChatCommands() {
   if (state.chatHooked) return;
   state.chatHooked = true;
@@ -666,8 +629,6 @@ function installChatCommands() {
   }, true);
 }
 
-// ==================== SISTEMA P2P MULTIJUGADOR (port del original) ====================
-// Descubrimiento de salas via BroadcastChannel + WebRTC data channels.
 class P2PManager {
   constructor() {
     this.connections = [];
@@ -692,7 +653,6 @@ class P2PManager {
 
   hasBroadcast() { return typeof BroadcastChannel === 'function'; }
 
-  // Descubrimiento dinámico de salas
   startDynamicDiscovery() {
     if (!this.hasBroadcast() || this.discoveryChannel) return;
     this.discoveryChannel = new BroadcastChannel('rhythm_p2p_discovery');
@@ -722,7 +682,6 @@ class P2PManager {
       }
     };
 
-    // Limpiar salas sin heartbeat cada 5s
     this.cleanupInterval = setInterval(() => {
       const now = Date.now();
       for (const [roomId, room] of this.availableRooms) {
@@ -767,7 +726,6 @@ class P2PManager {
     }, 2000);
   }
 
-  // Matchmaking automático
   autoMatchmake(mode = 'competitive') {
     this.autoMatchmaking = true;
     showNotification(tr('rhythmAutoMatchmaking', '🎮 Finding a match automatically...'), 'info');
@@ -827,7 +785,6 @@ class P2PManager {
     this.gameMode = room.mode;
   }
 
-  // Señalización via BroadcastChannel
   startSignalingListener() {
     if (!this.hasBroadcast()) {
       showNotification(tr('rhythmBroadcastUnavailable', '❌ BroadcastChannel is not available in this browser'), 'error');
@@ -1068,7 +1025,6 @@ function ensureP2P() {
   return p2pManager;
 }
 
-// ---- UI del panel P2P (port de createP2PUI, integrado en la UI del mod) ----
 function getP2PPanelHtml() {
   const m = p2pManager;
   return `
@@ -1171,7 +1127,6 @@ function bindP2PControls(container) {
     m.disconnect();
   });
 
-  // Clic para copiar el ID de sala
   container.querySelector('#mf-rhythm-room-id')?.addEventListener('click', function () {
     const roomId = this.textContent;
     if (roomId && roomId !== '-') {
@@ -1185,7 +1140,6 @@ function bindP2PControls(container) {
   });
 }
 
-// ---- Comunicación de estado hacia content.js ----
 function dispatchState() {
   updateHud();
   document.dispatchEvent(new CustomEvent(EVENT_STATE, {
@@ -1203,7 +1157,6 @@ function dispatchState() {
   }));
 }
 
-// ---- UI Overlay (creada cuando el modulo está activo) ----
 function createUI() {
   removeUI();
   ensureP2P();
@@ -1235,7 +1188,6 @@ function createUI() {
   container.querySelector('#mf-rhythm-start')?.addEventListener('click', () => startGame());
   container.querySelector('#mf-rhythm-stop')?.addEventListener('click', () => { stopGame(); showNotification(tr('rhythmGameStopped', '⏹ Game stopped'), 'info'); });
 
-  // Toggle del panel P2P
   const p2pToggle = container.querySelector('#mf-rhythm-p2p-toggle');
   const p2pPanel = container.querySelector('#mf-rhythm-p2p');
   p2pToggle?.addEventListener('click', () => {
@@ -1271,7 +1223,6 @@ function removeUI() {
   state.ui = null;
 }
 
-// ---- Notificaciones y mensajes good/miss ----
 function showNotification(msg, type = 'info') {
   const colors = { success: '#4ade80', error: '#ef4444', info: '#7c5cff' };
   const n = document.createElement('div');
@@ -1281,7 +1232,6 @@ function showNotification(msg, type = 'info') {
   setTimeout(() => n.remove(), 3000);
 }
 
-// Mensaje good/miss flotante sobre la hotbar con fuente Faithful
 function showHitMessage(kind) {
   const isGood = kind === 'good';
   const msg = document.createElement('div');
@@ -1295,7 +1245,6 @@ function showHitMessage(kind) {
   setTimeout(() => msg.remove(), 650);
 }
 
-// ---- Ciclo de vida del módulo ----
 function enable() {
   state.enabled = true;
   const g = getGame(true);
@@ -1303,7 +1252,7 @@ function enable() {
   state.world = g?.world || null;
   installChatCommands();
   createUI();
-  // Vigilar la aparición del world (al entrar a una partida)
+  
   if (!state.world) {
     const finder = setInterval(() => {
       if (!state.enabled) { clearInterval(finder); return; }
@@ -1326,7 +1275,6 @@ function disable() {
   removeUI();
 }
 
-// ---- Escucha de configuración desde content.js ----
 document.addEventListener(EVENT_CONFIG, (e) => {
   try {
     const cfg = JSON.parse(e.detail || '{}');
@@ -1335,7 +1283,6 @@ document.addEventListener(EVENT_CONFIG, (e) => {
   } catch {}
 });
 
-// ---- Exposición para depuración / comandos manuales ----
 window.MF_RhythmParkour = {
   enable, disable,
   start: startGame, stop: stopGame,

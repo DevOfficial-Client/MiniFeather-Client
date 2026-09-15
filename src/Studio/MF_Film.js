@@ -1,40 +1,3 @@
-// MF_Film.js — Film mode estilo BBS (Fase 1 del plan): recorder de acciones
-// del jugador a 20Hz + playback mediante actores puppet visuales.
-//
-// Conceptos (reimplementados, no portados de BBS):
-// - TICKS de 20Hz fijos (50ms) como unidad de tiempo → determinismo entre
-//   sesiones/FPS. Nunca se graba por frame.
-// - Delta encoding: solo se guarda un keyframe si algo cambió respecto al
-//   anterior; el playback interpola (lerp para pos, slerp-ish para yaw).
-// - Actor puppet: entidad client-side (patrón MF_Peer/Verity) que en cada
-//   tick se mueve a la posición grabada y reproduce las rotaciones de joints
-//   (verificado por Emotes.js: el juego NO resetea joints).
-//
-// Formato .mffilm.json:
-// {
-//   "version": 1, "name": "...", "fps": 20, "durationTicks": N,
-//   "recordedAt": 12345, "server": "survival",
-//   "actors": [{
-//     "id": "actor-1", "skin": "EstebanGrp_",
-//     "frames": [ { "t":0, "p":[x,y,z], "yaw":0, "pitch":0,
-//                    "sneak":false, "sprint":false, "swing":0,
-//                    "j": { "headPivot":[rx,ry,rz], ... } } ]
-//   }]
-// }
-//
-// Uso:
-//   /film record            → empieza a grabar (tiempo real, 20Hz)
-//   /film stop              → detiene y guarda en memoria (última toma)
-//   /film save <nombre>     → persiste en localStorage
-//   /film list              → tomas guardadas
-//   /film play [nombre]     → reproduce con actor puppet
-//   /film pause | stop      → control de playback
-//   /film despawn           → quita los actores
-//   /film export [nombre]   → descarga .mffilm.json
-//   /film delete <nombre>   → borra una toma
-//
-// Integración futura (Fase 3): MF_FaceSwap.onTick(t) se llama cada tick de
-// playback para que los triggers de cara se disparen en su punto del video.
 
 (function () {
     'use strict';
@@ -42,47 +5,46 @@
     if (window.__MF_Film) return;
     const TAG = '[MF Film]';
 
-    const TPS = 20;               // ticks por segundo (convención MC/BBS)
+    const TPS = 20;               
     const TICK_MS = 1000 / TPS;
-    const JOINT_NAMES = [         // joints del modelo del jugador (Emotes.js)
+    const JOINT_NAMES = [         
         'headPivot', 'body', 'skeleton',
         'leftShoulderJoint', 'leftElbowJoint',
         'rightShoulderJoint', 'rightElbowJoint',
         'leftHipJoint', 'leftKneeJoint',
         'rightHipJoint', 'rightKneeJoint'
     ];
-    // skeleton solo posición (es la raíz global), nunca rotación (Emotes.js)
+    
     const POS_ONLY_JOINTS = new Set(['skeleton']);
-    const EPS = 1e-4;             // umbral de cambio para delta encoding
+    const EPS = 1e-4;             
     const LS_KEY = 'minifeather_films_v1';
-    const LS_LIMIT = 45 * 1024 * 1024; // ~45MB de tomas
+    const LS_LIMIT = 45 * 1024 * 1024; 
 
     const state = {
-        // recorder
+        
         recording: false,
-        recStart: 0,              // performance.now() del tick 0
+        recStart: 0,              
         recTick: 0,
         recTimer: null,
         frames: [],
         lastFrame: null,
         droppedTicks: 0,
-        // playback
+        
         playing: false,
         paused: false,
-        playStart: 0,             // performance.now() al reanudar
-        playTickBase: 0,          // tick acumulado al pausar
-        playRange: null,          // {from,to} en ticks — rango In/Out (null = toda la toma)
+        playStart: 0,             
+        playTickBase: 0,          
+        playRange: null,          
         playRaf: null,
         playFilm: null,
-        playMode: 'film',         // 'film' (una toma) | 'sequence' (clips del timeline)
-        playSeq: null,            // items de la secuencia en reproducción
-        // actores spawneados
-        actors: new Map(),        // actorId -> { recId, entry, lastTick }
-        // tomas guardadas (localStorage)
+        playMode: 'film',         
+        playSeq: null,            
+        
+        actors: new Map(),        
+        
         films: null
     };
 
-    // ── Acceso al juego (patrón común del cliente) ──
     function getGame() {
         if (globalThis.miniblox?.player) return globalThis.miniblox;
         try {
@@ -97,7 +59,6 @@
         return null;
     }
 
-    // Entidad del jugador local con mesh visible (patrón Emotes.js)
     function getLocalPlayerEntity(game) {
         const me = game?.player;
         if (!me) return null;
@@ -115,7 +76,6 @@
         return me?.mesh ? me : null;
     }
 
-    // BFS de joints sobre el mesh (patrón VanillaAnimations/Emotes)
     function findJoint(mesh, name) {
         if (!mesh) return null;
         if (mesh[name] && mesh[name].rotation) return mesh[name];
@@ -135,8 +95,6 @@
         return null;
     }
 
-    // ── RECORDER ──
-
     function captureFrame(ent, tick) {
         const mesh = ent?.mesh;
         const pos = ent?.pos || mesh?.position;
@@ -151,7 +109,6 @@
             sprint: !!ent?.sprinting
         };
 
-        // joints: solo los que existen en este mesh
         if (mesh) {
             const j = {};
             for (const name of JOINT_NAMES) {
@@ -169,7 +126,6 @@
         return frame;
     }
 
-    // delta encoding: true si el frame aporta información nueva
     function frameDiffers(a, b) {
         if (!a) return true;
         if (Math.abs(a.yaw - b.yaw) > EPS || Math.abs(a.pitch - b.pitch) > EPS) return true;
@@ -187,11 +143,10 @@
     function recorderTick() {
         const game = getGame();
         const ent = getLocalPlayerEntity(game);
-        if (!ent) return; // sin entidad un instante → no abortar la toma
+        if (!ent) return; 
 
         const now = performance.now();
-        // ticks esperados vs reales: si el timer se retrasó (pestaña en
-        // background, GC), contar el hueco para diagnóstico
+        
         const expected = Math.floor((now - state.recStart) / TICK_MS);
         if (expected > state.recTick + 1) {
             state.droppedTicks += expected - state.recTick - 1;
@@ -225,7 +180,7 @@
         clearInterval(state.recTimer);
         state.recTimer = null;
         state.recording = false;
-        // asegurar el frame final aunque no cambie (cierre limpio)
+        
         state.frames.push({ ...(state.lastFrame || { t: state.recTick, p: [0, 0, 0] }), t: state.recTick });
         return {
             ok: true,
@@ -234,8 +189,6 @@
             droppedTicks: state.droppedTicks
         };
     }
-
-    // ── PERSISTENCIA (localStorage) ──
 
     function loadFilms() {
         if (state.films) return state.films;
@@ -265,7 +218,7 @@
             server: (game?.server || '').toString().slice(0, 64) || null,
             actors: [{
                 id: 'actor-1',
-                // skin por defecto: la del jugador local si es accesible, si no null
+                
                 skin: game?.player?.profile?.username || null,
                 frames: state.frames
             }]
@@ -304,7 +257,6 @@
         return { ok: true, name: film.name };
     }
 
-    // importar un .mffilm.json exportado (para el Media Pool del Studio)
     function importFilm(name, data) {
         if (!data || typeof data !== 'object') return { ok: false, error: 'datos inválidos' };
         if (!Array.isArray(data.actors) || !data.actors.length) {
@@ -324,25 +276,17 @@
         return r.ok ? { ok: true, name: finalName, ticks: film.durationTicks } : r;
     }
 
-    // ── ACTOR: clon del mesh 3D del jugador (skin y joints reales) ──
-
-    // cuenta de nodos de una jerarquía (sanidad del clon)
     function countNodes(o) {
         let n = 1;
         for (const c of (o.children || [])) n += countNodes(c);
         return n;
     }
 
-    // Reconstrucción manual de la jerarquía cuando clone() falla o rompe.
-    // Comparte geometría y MATERIALES (la skin vive en la textura compartida
-    // → el clon se ve exactamente igual al jugador) y replica transforms.
     function manualCloneNode(src) {
         let node;
         try {
             if (src.isSkinnedMesh) {
-                // SkinnedMesh sin bindMode/skeleton no renderiza: pasar la
-                // MISMA geometría+material+esqueleto (comparte huesos con el
-                // original — los joints del clon mueven sus propios pivots)
+                
                 node = new src.constructor(src.geometry, src.material);
                 try {
                     node.bind(src.skeleton, src.bindMatrix || src.matrixWorld?.clone?.() || null);
@@ -360,7 +304,7 @@
             if (src.name) node.name = src.name;
             node.visible = src.visible !== false;
             node.matrixAutoUpdate = true;
-            node.frustumCulled = false; // siempre visible: actor de escena
+            node.frustumCulled = false; 
         } catch {}
         for (const child of (src.children || [])) {
             const c = manualCloneNode(child);
@@ -369,11 +313,6 @@
         return node;
     }
 
-    // Clona el mesh del jugador local. Estrategias:
-    // 1) mesh.clone(true) — nativo, rápido (comparte geo/mats → misma skin)
-    // 2) reconstrucción manual — si clone lanza o deja jerarquía incompleta
-    // Los joints (headPivot, hombros…) quedan replicados con los mismos
-    // nombres → lo grabado aplica directo sobre el clon.
     function clonePlayerMesh() {
         const ent = getLocalPlayerEntity(getGame());
         const mesh = ent?.mesh;
@@ -383,8 +322,7 @@
         if (typeof mesh.clone === 'function') {
             try {
                 const c = mesh.clone(true);
-                // sanidad: el clon debe tener la misma estructura que el
-                // original (clone roto puede dejar hijos atrás)
+                
                 if (c && countNodes(c) === countNodes(mesh)) clone = c;
             } catch {}
         }
@@ -399,25 +337,23 @@
         try {
             clone.traverse(o => {
                 o.matrixAutoUpdate = true;
-                o.frustumCulled = false; // siempre visible: es un actor de escena
-                // el juego oculta el mesh del player en primera persona
-                // (o partes por culling de armadura): el actor SIEMPRE visible
+                o.frustumCulled = false; 
+                
                 o.visible = true;
             });
         } catch {}
-        // el juego puede re-ocultar partes del clon (anims/estados) → un
-        // watchdog corto re-fuerza visibilidad hasta que el playback aplica
+        
         try {
             let checks = 0;
             const wd = setInterval(() => {
                 checks++;
                 try {
-                    if (!clone.parent) { clearInterval(wd); return; } // ya no existe
+                    if (!clone.parent) { clearInterval(wd); return; } 
                     clone.traverse(o => {
                         if (o.visible === false) o.visible = true;
                     });
                 } catch {}
-                if (checks >= 40) clearInterval(wd); // ~10s y fuera
+                if (checks >= 40) clearInterval(wd); 
             }, 250);
         } catch {}
         return clone;
@@ -442,7 +378,6 @@
         const first = actor.frames[0];
         despawnOne(actor.id);
 
-        // 1) preferido: clon del jugador real (misma skin + joints que lo grabado)
         const clone = clonePlayerMesh();
         if (clone) {
             clone.position.set(first.p[0], first.p[1], first.p[2]);
@@ -454,7 +389,6 @@
             return rec;
         }
 
-        // 2) fallback: CustomModels con modelo base (sin skin)
         const CM = window.MF_CustomModels;
         if (!CM?.spawn) return null;
         CM.spawn('verity_full_model.glb', first.p[0], first.p[1], first.p[2], {
@@ -474,15 +408,14 @@
         if (!rec) rec = spawnActor(actor);
         if (!rec) return null;
         if (!rec.isClone) {
-            // el root del custom llega async (carga del GLB): refrescar
+            
             rec.root = window.MF_CustomModels?.getRecord?.(rec.cmId)?.root || rec.root || null;
         }
         return rec;
     }
 
-    // Interpolación entre dos keyframes para el tick fraccional f (0..1)
     function sampleFrame(frames, tick) {
-        // búsqueda binaria del keyframe <= tick
+        
         let lo = 0, hi = frames.length - 1;
         if (tick <= frames[0].t) return { frame: frames[0], prev: frames[0], f: 0 };
         if (tick >= frames[hi].t) return { frame: frames[hi], prev: frames[hi], f: 0 };
@@ -509,14 +442,12 @@
         if (!root) return;
         const { prev, frame, f } = sampleFrame(actor.frames, tick);
 
-        // posición interpolada
         root.position.set(lerp(prev.p[0], frame.p[0], f), lerp(prev.p[1], frame.p[1], f), lerp(prev.p[2], frame.p[2], f));
-        // yaw por camino corto
+        
         const yaw = prev.yaw + shortestAngle(prev.yaw, frame.yaw) * f;
         rec.yaw = yaw;
         root.rotation.y = yaw;
 
-        // joints: en el clon comparten nombres con el original, aplica directo
         const ja = prev.j || {}, jb = frame.j || {};
         for (const name in jb) {
             const joint = findJoint(root, name);
@@ -539,12 +470,12 @@
         if (!film) { stopPlayback(); return; }
 
         const tick = state.playTickBase + (performance.now() - state.playStart) / TICK_MS;
-        // rango de reproducción (In/Out): si hay out-point, parar ahí
+        
         const endTick = state.playRange.to ?? film.durationTicks;
         const startTick = state.playRange.from ?? 0;
 
         if (tick >= endTick) {
-            // fin: congelar en el out-point y parar
+            
             for (const actor of film.actors) {
                 const rec = ensureActor(film, actor);
                 if (rec) applyActorFrame(rec, actor, endTick);
@@ -559,7 +490,6 @@
             if (rec) applyActorFrame(rec, actor, tick);
         }
 
-        // triggers de face-swap y futuros eventos del timeline (Fase 3)
         const intTick = Math.floor(tick);
         if (window.MF_FaceSwap && intTick !== state.lastFaceTick) {
             state.lastFaceTick = intTick;
@@ -569,7 +499,6 @@
         state.playRaf = requestAnimationFrame(playbackLoop);
     }
 
-    // definir/consultar el rango In/Out para la próxima reproducción
     function setPlayRange(from, to) {
         if (from == null && to == null) { state.playRange = null; return { ok: true, range: null }; }
         state.playRange = {
@@ -588,7 +517,6 @@
             : (state.frames.length ? currentTakeAsFilm(null) : null);
         if (!film) return { ok: false, error: 'toma no encontrada (graba o indica nombre de /film list)' };
 
-        // rango In/Out: clamped a la duración de la toma, from < to
         let r = range || state.playRange;
         if (r && typeof r === 'object') {
             const from = Math.max(0, Math.min(r.from ?? 0, film.durationTicks - 1));
@@ -604,34 +532,25 @@
         state.playStart = performance.now();
         state.lastFaceTick = -1;
 
-        // triggers listos para una nueva reproducción
         try { window.MF_FaceSwap?.resetForPlayback?.(); } catch {}
 
-        // triggers de cara/cabeza antes del In-point: marcarlos como ya
-        // consumidos para que no se disparen todos de golpe al arrancar
         if (r && window.MF_FaceSwap?.skipBefore) {
             try { window.MF_FaceSwap.skipBefore(r.from); } catch {}
         }
 
-        // Desactivar emotes activos para que no peleen por los joints del
-        // jugador local (los actores usan sus propios meshes, pero el emote
-        // del player podría confundirse visualmente en escena)
         try { window.MF_Emotes?.stop?.(); } catch {}
 
         state.playRaf = requestAnimationFrame(playbackLoop);
         return { ok: true, name: film.name, ticks: film.durationTicks, actors: film.actors.length };
     }
 
-    // ── Reproducción de SECUENCIA (los clips del timeline) ──
-    // Un "clip" = { filmName, start (tick global), duration }.
-    // Reproduce los clips en orden usando el tick global como reloj.
     function playSequence(clips) {
         if (state.playing) stopPlayback();
         if (!Array.isArray(clips) || !clips.length) {
             return { ok: false, error: 'la secuencia está vacía — arrastra tomas al timeline' };
         }
         const films = loadFilms();
-        // resolver films y resolver solapamientos en una misma "pista virtual"
+        
         const items = [];
         for (const c of clips) {
             const film = films[c.filmName];
@@ -649,15 +568,13 @@
         state.paused = false;
         state.playMode = 'sequence';
         state.playSeq = items;
-        state.playFilm = null; // modo secuencia no usa playFilm directo
+        state.playFilm = null; 
         state.playTickBase = 0;
         state.playStart = performance.now();
         state.lastFaceTick = -1;
 
-        // triggers listos para una nueva reproducción
         try { window.MF_FaceSwap?.resetForPlayback?.(); } catch {}
 
-        // respetar el In/Out del estudio si está definido (y saltar triggers previos)
         if (state.playRange?.from) {
             state.playTickBase = Math.min(state.playRange.from, seqTotalTicks(items) - 1);
             try { window.MF_FaceSwap?.skipBefore?.(state.playTickBase); } catch {}
@@ -682,7 +599,7 @@
         const endTick = state.playRange?.to ?? total;
 
         if (tick >= endTick) {
-            // fin: congelar en el out/fin y parar
+            
             applySeqFrame(items, endTick);
             stopPlayback();
             window.dispatchEvent(new CustomEvent('mf:film-ended', { detail: { atTick: Math.floor(endTick) } }));
@@ -691,7 +608,6 @@
 
         applySeqFrame(items, tick);
 
-        // triggers de V2 con el tick global de la secuencia
         const intTick = Math.floor(tick);
         if (window.MF_FaceSwap && intTick !== state.lastFaceTick) {
             state.lastFaceTick = intTick;
@@ -701,7 +617,6 @@
         state.playRaf = requestAnimationFrame(sequenceLoop);
     }
 
-    // aplica a cada actor todos los clips activos en el tick global dado
     function applySeqFrame(items, tick) {
         for (const it of items) {
             const localTick = tick - it.start;
@@ -726,7 +641,7 @@
         if (!state.playing || !state.paused) return { ok: false, error: 'no está pausado' };
         state.paused = false;
         state.playStart = performance.now();
-        // reanudar el loop del modo activo (film o secuencia)
+        
         state.playRaf = requestAnimationFrame(state.playMode === 'sequence' ? sequenceLoop : playbackLoop);
         return { ok: true };
     }
@@ -748,7 +663,6 @@
         return { ok: true };
     }
 
-    // ── DIAGNÓSTICO ──
     function diag() {
         const game = getGame();
         const ent = getLocalPlayerEntity(game);
@@ -766,7 +680,6 @@
         };
     }
 
-    // ── API pública ──
     window.MF_Film = {
         startRecording, stopRecording,
         saveFilm, deleteFilm, exportFilm, importFilm,
@@ -788,7 +701,6 @@
     };
     window.__MF_Film = true;
 
-    // Bridge de config desde content.js (mundo ISOLATED)
     document.addEventListener('minifeather:film-config', (e) => {
         try {
             const cfg = JSON.parse(e.detail);
@@ -797,7 +709,6 @@
         } catch {}
     }, true);
 
-    // Reporte de estado para el GUI (dashboard de film)
     document.addEventListener('minifeather:film-state-request', () => {
         try {
             document.dispatchEvent(new CustomEvent('minifeather:film-state', {

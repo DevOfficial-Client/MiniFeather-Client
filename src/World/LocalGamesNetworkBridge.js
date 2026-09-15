@@ -1,7 +1,6 @@
 (function () {
   'use strict';
 
-
   const REQUEST_EVENT = 'minifeather:localgames-signal-request';
   const RESPONSE_EVENT = 'minifeather:localgames-signal-response';
   const PORT_NAME = 'minifeather-localgames-network';

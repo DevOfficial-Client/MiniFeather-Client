@@ -1,51 +1,30 @@
-// ============================================================
-// MiniFeather MESH — red en malla P2P sin autoridad central.
-//
-// "Una cadena donde nadie es host a 100%: uno hostea y otro se
-//  conecta a él, pero ese host también puede conectarse a otro,
-//  y todos tienen las mismas facultades."
-//
-// Modelo: cada cliente = un NODO igualitario del mesh.
-//   · Cada nodo publica su código "mfm-<id>" al chat del juego.
-//   · Otros clientes con la extensión lo detectan (auto-detección)
-//     y se conectan → cadena.
-//   · GOSSIP: al handshakéar, cada nodo comparte la lista de códigos
-//     que conoce → todos se conectan entre sí → malla completa.
-//   · Nadie rechaza conexiones: TODOS aceptan a TODOS.
-//   · Las skins (CustomSkinAPI: custom:mfup_*) se propagan por el
-//     mesh y se aplican a la entidad del emisor en cada vista.
-//
-// Transporte: PeerJS (mismo cloud de señalización que MF_Peer).
-// Este módulo NO toca Verity/Studio (eso sigue en MF_Peer 1:1).
-// ============================================================
+
 (function () {
 'use strict';
 const PREV = globalThis.MF_Mesh;
-if (PREV) { try { PREV.dispose?.(); } catch {} }   // hot-reload: dispose
+if (PREV) { try { PREV.dispose?.(); } catch {} }   
 
 const TAG = '[MiniFeather Mesh]';
 const PEERJS_CDN = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
 const CODE_RE = /mfm2p[:\s]+([A-Za-z0-9-]{4,24})/i;
 const ANNOUNCE = 'mfm2p:';
-const CAP = 12;                    // máx vecinos simultáneos
-const RECONNECT_MS = 20000;        // cooldown de reintento por código
+const CAP = 12;                    
+const RECONNECT_MS = 20000;        
 
-// ---------- estado ----------
 const state = {
     peer: null, myCode: null,
-    conns: new Map(),              // peerId → DataConnection
-    names: new Map(),              // peerId → username
-    seenCodes: new Map(),          // code → ts intento
-    status: 'off',                 // off | starting | listening | error
+    conns: new Map(),              
+    names: new Map(),              
+    seenCodes: new Map(),          
+    status: 'off',                 
     chatSeen: new WeakSet(),
     announceTimer: null,
-    skinTold: new Map(),           // peerId → Set(skinId) ya enviados
+    skinTold: new Map(),           
 };
 
 function log(...a) { console.log(TAG, ...a); }
 function warn(...a) { console.warn(TAG, ...a); }
 
-// ---------- PeerJS loader ----------
 let peerjsPromise = null;
 function loadPeerJS() {
     if (globalThis.Peer) return Promise.resolve(true);
@@ -55,7 +34,7 @@ function loadPeerJS() {
         s.src = PEERJS_CDN;
         s.onload = () => resolve(!!globalThis.Peer);
         s.onerror = () => { peerjsPromise = null; resolve(false); };
-        // document.head puede no existir aún si el script inyectó muy temprano
+        
         const parent = document.head || document.documentElement;
         if (!parent) { peerjsPromise = null; resolve(false); return; }
         parent.appendChild(s);
@@ -63,7 +42,6 @@ function loadPeerJS() {
     return peerjsPromise;
 }
 
-// ---------- acceso al juego ----------
 const scan = { game: null, lastGameScan: 0 };
 
 function getGame(force = false) {
@@ -115,9 +93,8 @@ function resolveEntityMap(game) {
     return null;
 }
 
-// ---------- skins compartidas ----------
 const packSkinReg = (globalThis.__MF_PACK_SKINS__ ||= {});
-const skinById = new Map();       // mfup id → { dataURL, name }
+const skinById = new Map();       
 
 function registerSharedSkin(id, dataURL, name) {
     if (!id || typeof dataURL !== 'string' || !dataURL.startsWith('data:image/')) return false;
@@ -126,7 +103,6 @@ function registerSharedSkin(id, dataURL, name) {
     return true;
 }
 
-// ---------- nodo ----------
 async function start() {
     if (state.peer) return state.myCode;
     if (!(await loadPeerJS())) { state.status = 'error'; warn('no se pudo cargar PeerJS'); return null; }
@@ -142,14 +118,14 @@ async function start() {
         announce(pid);
         if (state.announceTimer) clearInterval(state.announceTimer);
         state.announceTimer = setInterval(() => {
-            if (state.conns.size === 0) announce(pid);   // re-publicar si solo
+            if (state.conns.size === 0) announce(pid);   
         }, 60000);
     });
     peer.on('connection', (c) => accept(c));
     peer.on('disconnected', () => { try { peer.reconnect(); } catch {} });
     peer.on('error', (e) => {
         const type = e?.type || '';
-        if (type === 'peer-unavailable') return;   // código viejo del gossip: normal
+        if (type === 'peer-unavailable') return;   
         warn('peer error:', e?.message || type || e);
     });
     return code;
@@ -212,22 +188,21 @@ function sendTo(conn, obj) { try { conn?.send?.(obj); } catch {} }
 
 function broadcast(obj) { for (const c of state.conns.values()) sendTo(c, obj); }
 
-// ---------- mensajes ----------
 function handleMsg(conn, m) {
     if (!m || typeof m !== 'object') return;
     switch (m.t) {
         case 'hello': {
             state.names.set(conn.peer, m.name || 'nodo');
             log('handshake: ' + (m.name || '?') + ' (' + m.code + ')');
-            // GOSSIP: unir la cadena en malla
+            
             if (Array.isArray(m.peers)) {
                 for (const code of m.peers) {
                     if (typeof code === 'string' && code !== state.myCode && !state.conns.has(code)) {
-                        setTimeout(() => connect(code), 500 + Math.random() * 3000);   // jitter: evitar tormenta
+                        setTimeout(() => connect(code), 500 + Math.random() * 3000);   
                     }
                 }
             }
-            // skins que él ya tiene → no re-enviar; las que faltan → pedir
+            
             if (Array.isArray(m.skins)) {
                 const missing = m.skins.filter(id => !skinById.has(id));
                 if (missing.length) sendTo(conn, { t: 'need-skins', ids: missing });
@@ -239,7 +214,7 @@ function handleMsg(conn, m) {
             if (!Array.isArray(m.ids)) break;
             for (const id of m.ids) {
                 const s = skinById.get(id);
-                // name = dueño original de la skin (de quién la recibimos)
+                
                 if (s) sendTo(conn, { t: 'skin', id, dataURL: s.dataURL, name: s.name || myName() });
             }
             break;
@@ -251,7 +226,7 @@ function handleMsg(conn, m) {
                 if (isNew) {
                     log('skin ← ' + m.id + ' (de ' + (m.name || '?') + ')');
                     applySkinToPeer(m.name, m.id, m.dataURL);
-                    // re-enviar a vecinos que no la tienen (gossip)
+                    
                     for (const [pid, c] of state.conns) {
                         if (pid === conn.peer) continue;
                         sendTo(c, { t: 'skin', id: m.id, dataURL: m.dataURL, name: m.name });
@@ -269,7 +244,6 @@ function handleMsg(conn, m) {
     }
 }
 
-// ---------- skins ----------
 function mySkinIds() {
     const out = [];
     try {
@@ -288,9 +262,7 @@ function resendMySkin(conn) {
     } catch {}
 }
 
-// ---------- aplicar skin del peer a su entidad en MI vista ----------
-// patrón del Look Sync de MF_Peer (peerEditableCanvas + drawImage)
-const meshOriginals = new WeakMap();   // entity → { skinCanvas, skinTex }
+const meshOriginals = new WeakMap();   
 
 function entityByUsername(name) {
     if (!name) return null;
@@ -355,20 +327,20 @@ function editableCanvas(entity) {
 
 function applySkinToPeer(name, id, dataURL) {
     if (!name) return;
-    // encolar si la entidad aún no cargó
+    
     pendingSkins.set(name, { id, dataURL });
     drainPending();
 }
 
-const pendingSkins = new Map();   // name → {id, dataURL}
+const pendingSkins = new Map();   
 
 function drainPending() {
     for (const [name, skin] of pendingSkins) {
         const entity = entityByUsername(name);
-        if (!entity) continue;   // aún no visible
+        if (!entity) continue;   
         const s = editableCanvas(entity);
         if (!s) continue;
-        // guardar el original la PRIMERA vez (para revert al desconectar)
+        
         let rec = meshOriginals.get(entity);
         if (!rec) {
             const c = document.createElement('canvas');
@@ -391,10 +363,10 @@ function drainPending() {
         };
         img.onerror = () => { pendingSkins.delete(name); };
         img.src = skin.dataURL;
-        return;   // una por drain (evita bloquear el hilo con muchas)
+        return;   
     }
 }
-setInterval(drainPending, 1500);   // reintentar entidades que aparecen tarde
+setInterval(drainPending, 1500);   
 
 function revertMeshSkin(name) {
     if (!name) return;
@@ -413,7 +385,6 @@ function revertMeshSkin(name) {
     } catch {}
 }
 
-// ---------- autodetección por chat ----------
 function announce(code) {
     const g = getGame();
     const chat = g?.chat;
@@ -444,13 +415,12 @@ function chatWatchTick() {
         if (code === state.myCode) continue;
         const from = entry.from != null ? String(entry.from) : null;
         if (meUuid && from === meUuid) continue;
-        connect(code);   // cooldown interno evita bucles
+        connect(code);   
     }
 }
 
 const chatTimer = setInterval(chatWatchTick, 1500);
 
-// ---------- arranque ----------
 async function boot() {
     const saved = (() => { try { return localStorage.getItem('mf:mesh:auto'); } catch { return null; } })();
     if (saved === '0') { log('auto-arranque desactivado (mf:mesh:auto=0)'); return; }
@@ -459,7 +429,6 @@ async function boot() {
 }
 boot();
 
-// ---------- API ----------
 globalThis.MF_Mesh = {
     get status() { return state.status; },
     get code() { return state.myCode; },
@@ -467,7 +436,7 @@ globalThis.MF_Mesh = {
     get names() { return Object.fromEntries(state.names); },
     get connected() { return state.conns.size; },
     start, connect,
-    // CustomSkinAPI notifica un upload nuevo → difundirlo al mesh
+    
     shareSkinUp(id, dataURL) {
         if (!id || typeof dataURL !== 'string') return;
         registerSharedSkin(id, dataURL, myName());
@@ -476,9 +445,9 @@ globalThis.MF_Mesh = {
         }
         log('skin propia difundida: ' + id);
     },
-    // forzar republicación del código al chat
+    
     announceNow() { if (state.myCode) announce(state.myCode); },
-    // facultades iguales: todos pueden compartir su skin
+    
     shareSkin() { for (const c of state.conns.values()) resendMySkin(c); },
     skinStatus() {
         return {

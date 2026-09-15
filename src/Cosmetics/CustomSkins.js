@@ -19,18 +19,11 @@
 
     log("starting (profile patch mode)");
 
-    // ─── Base de skins locales ───────────────────────────────────────
-    // MAIN world no tiene chrome.runtime: SplashScreen (ISOLATED) inyecta
-    // meta[name=mf-skins-base] con la URL de /skins/ de la extensión.
     function skinsBaseUrl() {
         var meta = document.querySelector('meta[name="mf-skins-base"]');
         return meta && meta.content ? meta.content : null;
     }
 
-    // ─── IDs compartidos con packs custom (MF_Facial) ────────────────
-    // Registro vivo "nombre custom → URL del PNG" + interceptor <img src>.
-    // Comparte globals con MF_Facial (instala el hook quien llegue primero;
-    // el registro se lee EN VIVO al resolver cada URL).
     var packSkinReg = (globalThis.__MF_PACK_SKINS__ ||= {});
     var CUSTOM_URL_RE = /(?:^|\/)auth-api\/skins\/custom\/([^\/?#]+)\.png(?:[?#]|$)/;
     var MF_DEV_SKINS = ['eve', 'gab', 'itzesteban', 'nightrise', 'notsenpai'];
@@ -51,13 +44,7 @@
                     if (reg) {
                         var m = v.match(CUSTOM_URL_RE);
                         if (m && reg[m[1]]) { origSet.call(this, reg[m[1]]); return; }
-                        // rutas del juego con o sin subdirectorios:
-                        //   textures/entity/skins/devs/itzesteban.png
-                        //   textures/entity/skins/chris.png
-                        // se les quita prefijo y .png y se busca en el registro.
-                        // INGAME el juego también pide la ruta plana para ids
-                        // custom (textures/entity/skins/custom:mf_x.png):
-                        // reintentar sin el prefijo "custom:".
+                        
                         var m2 = v.match(/(?:^|\/)textures\/entity\/skins\/(.+?)\.png(?:[?#]|$)/);
                         if (m2) {
                             var k2 = reg[m2[1]] ? m2[1]
@@ -72,21 +59,18 @@
         globalThis.__MF_PACK_IMG_HOOK__ = true;
     }
 
-    // skins sueltas de skins/devs/ → ids custom:mf_dev_<nombre>. Se registra
-    // en cuanto la meta mf-skins-base está disponible (SplashScreen).
     var devSkinsRegistered = false;
     function registerDevSkins() {
         if (devSkinsRegistered) return;
         var base = skinsBaseUrl();
         if (!base) return;
-        // la meta apunta DENTRO de /skins/ (chrome-extension://<id>/skins/)
+        
         base = String(base).replace(/\/*$/, '/');
         for (var i = 0; i < MF_DEV_SKINS.length; i++) {
             var n = MF_DEV_SKINS[i];
             packSkinReg['mf_dev_' + n] = base + 'devs/' + n + '.png';
         }
-        // packs builtin de skins/mypacks/ (id custom:mf_<pack>) por si
-        // MF_Facial aún no cargó — misma URL que usa su packSkinUrl
+        
         var packs = {
             estebangxe: 'EstebanExG__1_1.png',
             angrywolfx: 'angrywolfx.png',
@@ -103,29 +87,14 @@
         log('ids custom listos (devs + mypacks)');
     }
 
-    // ─── Carga de la base de datos de overrides ──────────────────────
-    // Formato de la caché local:
-    //   { "players": { "<uuid>": { "skin": "devs/itzesteban", ... } } }
-    // Acepta clave por uuid (preferido, inmune a renombres) o username.
-    // "skin" puede ser:
-    //   - ruta relativa a /skins/ sin extensión ("devs/itzesteban")
-    //   - ruta con extensión ("devs/itzesteban.png")
-    //   - nombre de skin vanilla de miniblox ("chris") → se reescribe el
-    //     campo profile.cosmetics.skin del JSON del servidor tal cual
     var DB_KEY = 'minifeather:custom-skins-db';
 
-    // ─── DB builtin (viene con la extensión) ─────────────────────────
-    // Mapa jugador → id de skin custom. Los ids custom:mf_* los resuelve
-    // el interceptor de arriba contra /skins/ del client (así TODOS los
-    // usuarios del client ven la skin, sin depender del server).
-    // Se puede sobreescribir/añadir con accounts.json (fetch) o editando
-    // assets/accounts.json en el repo.
     var BUILTIN_DB = {
         players: {
-            // packs de skins/mypacks/ (uuid del pack.json → custom:mf_<id>)
-            '6eb7369a-551e-406a-9a63-6db7a358e1e5': { skin: 'custom:mf_estebangxe' }, // EstebanGxE
-            'c4201f43-2de9-4275-930a-301fae4cce6c': { skin: 'custom:mf_angrywolfx' }, // AngryWolfX
-            // skins sueltas de skins/devs/ (username → custom:mf_dev_<png>)
+            
+            '6eb7369a-551e-406a-9a63-6db7a358e1e5': { skin: 'custom:mf_estebangxe' }, 
+            'c4201f43-2de9-4275-930a-301fae4cce6c': { skin: 'custom:mf_angrywolfx' }, 
+            
             'itzesteban': { skin: 'custom:mf_dev_itzesteban' },
             'nightrise': { skin: 'custom:mf_dev_nightrise' },
             'notsenpai': { skin: 'custom:mf_dev_notsenpai' },
@@ -134,14 +103,14 @@
         }
     };
 
-    var db = null;            // { uuidOrName: {skin, ...} }
-    var dbByUuid = null;      // uuid lowercase → entry
-    var dbByName = null;      // username lowercase → entry
+    var db = null;            
+    var dbByUuid = null;      
+    var dbByName = null;      
     var dbLoading = null;
 
     function normalizeSkinValue(value) {
         if (typeof value !== 'string') return null;
-        // ids custom (clase nativa del juego) pasan tal cual
+        
         if (value.indexOf('custom:') === 0) return value;
         var v = value.trim().replace(/\\/g, '/').replace(/^\/+/, '');
         if (!v) return null;
@@ -151,17 +120,15 @@
     }
 
     function isVanillaSkinId(id) {
-        // ids vanilla: solo [a-z0-9_] sin barras (p.ej. "chris", "bob").
-        // Si lleva barra es una ruta a /skins/ del pack.
+        
         return typeof id === 'string' && id && /^[a-z0-9_]+$/i.test(id) && id.indexOf('/') === -1;
     }
 
     function entrySkinUrl(entry) {
         if (!entry || !entry.__skin) return null;
-        // id custom: → lo resuelve el hook de /auth-api/skins/custom/ (no
-        // hay URL directa que construir aquí)
+        
         if (String(entry.__skin).indexOf('custom:') === 0) return null;
-        if (isVanillaSkinId(entry.__skin)) return null; // se reescribe el id, no la URL
+        if (isVanillaSkinId(entry.__skin)) return null; 
         var base = skinsBaseUrl();
         if (!base) return null;
         return base + entry.__skin + '.png';
@@ -195,7 +162,7 @@
         if (dbLoading) return dbLoading;
 
         var finish = function (data) {
-            // builtin primero; accounts.json (si existe) sobreescribe/añade
+            
             parseDb(BUILTIN_DB, true);
             parseDb(data, false);
             db = data || {};
@@ -205,10 +172,6 @@
             return db;
         };
 
-        // el MAIN world no tiene chrome.runtime.getURL garantizado en todas
-        // las versiones: pasamos por sendMessage → background, que sí tiene
-        // acceso a los recursos de la extensión. Fallback: si chrome.runtime
-        // no está disponible (raro), intentar getURL directamente.
         dbLoading = new Promise(function (resolve) {
             var done = false;
             var finishFromExt = function (json) {
@@ -220,7 +183,7 @@
                 if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
                     chrome.runtime.sendMessage({ type: 'mfAccounts:get' }, function (res) {
                         if (chrome.runtime.lastError || !res || !res.success) {
-                            // fallback: intentar getURL directo
+                            
                             try {
                                 fetch(chrome.runtime.getURL('assets/accounts.json'), { cache: 'no-store' })
                                     .then(function (r) { return r.ok ? r.json() : null; })
@@ -256,7 +219,6 @@
         return dbLoading;
     }
 
-    // ─── Lookup de override para un perfil ───────────────────────────
     function lookupEntry(profile) {
         if (!dbByUuid && !dbByName) return null;
         var uuid = typeof profile.uuid === 'string' ? profile.uuid.toLowerCase() : null;
@@ -268,15 +230,6 @@
         return null;
     }
 
-    // ─── Parche del JSON ─────────────────────────────────────────────
-    // El servidor manda el perfil plano: { username, uuid, skin, cape, ... }.
-    // El juego lo parsea con mP: cosmetics.skin = e.skin. Reescribimos
-    // e.skin ANTES de que el juego lo vea:
-    //   - skin vanilla ("chris") → cambiamos el id y el juego carga su PNG
-    //   - skin del pack ("devs/itzesteban") → id custom + la URL la resuelve
-    //     el interceptor de <img> de más abajo
-    //   - URL absoluta (raw.githubusercontent) → el juego tiene
-    //     loadSkinFromUrl y el TextureInterceptor la espeja localmente
     var patchedProfiles = new WeakSet();
 
     function patchProfile(profile) {
@@ -296,8 +249,6 @@
         }
     }
 
-    // Camina el JSON buscando objetos con uuid (perfiles sueltos, listas
-    // de amigos, leaderboards...). Profundidad limitada por rendimiento.
     function walkAndPatch(node, depth) {
         if (!node || typeof node !== 'object' || depth > 3) return false;
         var changed = false;
@@ -323,7 +274,6 @@
         return changed;
     }
 
-    // ─── Interceptor de respuestas JSON (fetch) ──────────────────────
     function isProfileResponse(url) {
         return url.indexOf('miniblox.io') !== -1 ||
                url.indexOf('miniblox.online') !== -1 ||
@@ -347,8 +297,6 @@
             var promise = originalFetch.apply(this, args);
             if (!reqUrl || !isProfileResponse(reqUrl)) return promise;
 
-            // Reconstruir la Response con el JSON parcheado para que el
-            // juego lea el perfil ya modificado.
             return promise.then(function (response) {
                 try {
                     var ct = response.headers && response.headers.get
@@ -384,12 +332,8 @@
         return true;
     }
 
-    // ─── Interceptor de <img src> para skins del pack ────────────────
-    // El juego carga textures/entity/skins/<id>.png. Si <id> es uno de
-    // nuestros ids custom, lo servimos desde /skins/ de la extensión.
-    // Las skins vanilla de otros usuarios pasan intactas.
     var SKIN_PATH_REGEX = /^textures\/entity\/skins\/([^/?#]+)\.png(?:[?#].*)?$/i;
-    // mismo hook pero para rutas con subdirectorio (devs/…, custom:…/…)
+    
     var SKIN_PATH_REGEX_DEEP = /^textures\/entity\/skins\/(.+?)\.png(?:[?#].*)?$/i;
     var patched = false;
 
@@ -404,12 +348,6 @@
         return null;
     }
 
-    // ─── Watcher en vivo de perfiles del mundo ───────────────────────
-    // Los perfiles de otros jugadores llegan por socket (protobuf), no por
-    // fetch: spawnPlayer asigna profile.cosmetics = packet.cosmetics.
-    // Recorremos world.players y reescribimos cosmetics.skin por uuid.
-    // El propio juego hace mesh.recreate() al detectar el cambio (lo usa
-    // en applyEntry y en el sync de contenido mod).
     function findGame() {
         try {
             if (window.miniblox?.player) return window.miniblox;
@@ -427,7 +365,7 @@
     var lastLiveScan = 0;
 
     function applyLiveOverrides() {
-        registerDevSkins(); // idempotente: espera la meta mf-skins-base
+        registerDevSkins(); 
         if (dbByUuid === null && dbByName === null) return;
 
         var game = findGame();
@@ -446,19 +384,12 @@
         } catch (e) {}
     }
 
-    // ─── Reemplazo de TEXTURA directa (sin recreate) ─────────────────
-    // El recreate() nativo del juego es async (getModel → downloadSkin):
-    // si la skin custom tarda en resolver, monta un modelo NUEVO sin
-    // desmontar el viejo → el espectador ve DOS modelos superpuestos.
-    // Pintar la textura del mesh ya montado es visualmente idéntico y no
-    // toca la jerarquía (mismo patrón que MF_Mesh.applySkinToPeer).
     var paintedPlayers = new WeakSet();
 
     function resolveSkinImageUrl(entry) {
         if (!entry || !entry.__skin) return null;
         var s = String(entry.__skin);
-        // custom:<id> → registro compartido __MF_PACK_SKINS__ (lo llena
-        // parseDb para URLs y MF_Facial/registerDevSkins para packs)
+        
         if (s.indexOf('custom:') === 0) {
             var reg = globalThis.__MF_PACK_SKINS__ || {};
             return reg[s.slice(7)] || null;
@@ -478,7 +409,7 @@
                 }
             });
         } catch (_) {}
-        // heurística de textura de skin: múltiplo de 64, cuadrada o 2:1
+        
         var skins = out.filter(function (m) {
             var w = m.map?.image?.width, h = m.map?.image?.height;
             if (!w || !h) return false;
@@ -497,7 +428,7 @@
             var mats = skinMaterialsOf(mesh);
             if (!mats.length) return false;
             var img = new Image();
-            img.crossOrigin = 'anonymous'; // imprescindible para WebGL
+            img.crossOrigin = 'anonymous'; 
             img.onload = function () {
                 for (var i = 0; i < mats.length; i++) {
                     var t = mats[i].map;
@@ -517,7 +448,7 @@
                             if (t.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = t.colorSpace;
                             nt.flipY = t.flipY; nt.wrapS = t.wrapS; nt.wrapT = t.wrapT;
                         } catch (_) {}
-                        nt.__mfPainted = url; // marca: esta textura es nuestra
+                        nt.__mfPainted = url; 
                         mats[i].map = nt;
                         mats[i].needsUpdate = true;
                     } catch (_) {}
@@ -525,7 +456,7 @@
             };
             img.onerror = function () {
                 warn('no se pudo pintar la skin custom:', url);
-                paintedPlayers.delete(player); // reintentar en el próximo scan
+                paintedPlayers.delete(player); 
             };
             img.src = url;
             return true;
@@ -542,8 +473,7 @@
         if (!entry) return;
 
         var target = entry.__skin;
-        // ¿la textura sigue siendo la nuestra? (respawn/recreate del juego
-        // resetea los materiales → re-pintar)
+        
         var url = resolveSkinImageUrl(entry);
         var stillPainted = false;
         if (paintedPlayers.has(player) && url && player.mesh) {
@@ -558,9 +488,7 @@
         if (cosmetics.skin === target && paintedPlayers.has(player)) return;
 
         if (isVanillaSkinId(target)) {
-            // skin vanilla (chris…): la vía nativa es segura — el juego
-            // ya tiene la textura en su atlas, el recreate es instantáneo
-            // y no deja modelos colgando
+            
             if (cosmetics.skin === target) return;
             try {
                 cosmetics.skin = target;
@@ -571,17 +499,11 @@
             return;
         }
 
-        // pintar la textura del modelo YA montado (sin recreate → sin
-        // segundo modelo). Si aún no hay materiales (mesh cargando), el
-        // próximo scan del watcher reintenta.
         if (paintEntitySkin(player, entry)) {
             paintedPlayers.add(player);
             log('live override (textura)', profile.uuid || profile.username, '->', target);
         }
-        // NUNCA escribir cosmetics.skin = custom:… para players remotos:
-        // el juego detecta el cambio y hace su recreate() async, que monta
-        // el modelo custom ENCIMA del ya existente (doble modelo). La
-        // textura pintada es la única fuente visual del cuerpo.
+        
     }
 
     function startLiveWatcher() {
@@ -622,13 +544,12 @@
                 }
 
                 var skinId = match[1];
-                // el juego pide la ruta plana también para ids custom:
-                // textures/entity/skins/custom:mf_x.png → probar sin prefijo
+                
                 if (skinId.indexOf('custom:') === 0) skinId = skinId.slice(7);
                 var custom = getCustomSkinForId(skinId);
 
                 if (!custom) {
-                    originalSet.call(this, value); // skin vanilla u otra: intacta
+                    originalSet.call(this, value); 
                     return;
                 }
 
@@ -675,14 +596,13 @@
         var pollTicks = 0;
         var setupInterval = setInterval(function () {
             pollTicks++;
-            registerDevSkins(); // la meta mf-skins-base llega con SplashScreen
+            registerDevSkins(); 
             if (tryPatch()) {
                 clearInterval(setupInterval);
             }
         }, 250);
     }
 
-    // Precargar la DB y cachearla para navegaciones siguientes
     loadDb().then(function (data) {
         if (!data) return;
         try {
@@ -692,6 +612,5 @@
         } catch (_) {}
     });
 
-    // Watcher de perfiles en vivo (socket protobuf)
     startLiveWatcher();
 })();

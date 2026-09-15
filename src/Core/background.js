@@ -18,8 +18,6 @@ const CAPES = [
 
 const GAME_DOMAINS = ["miniblox.io", "miniblox.online"];
 
-// cache en memoria de assets/accounts.json (lo pide el MAIN world via
-// sendMessage; leer el archivo en cada llamada sería innecesario)
 let accountsCache = null;
 
 const ASSET_TYPES = {
@@ -123,9 +121,7 @@ function getActiveAssets(type, sendResponse) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // accounts.json del paquete: lo pide CustomSkins.js desde el MAIN world
-  // (no puede usar chrome.runtime.getURL de forma confiable). Cacheamos el
-  // JSON en memoria para no leer el archivo en cada llamada.
+  
   if (message?.type === 'mfAccounts:get') {
     const url = chrome.runtime.getURL('assets/accounts.json');
     if (accountsCache && accountsCache.url === url) {
@@ -185,9 +181,6 @@ const SPRITESHEET_URL = "https://raw.githubusercontent.com/EstebanGrp/MiniFeathe
 const SPRITESHEET_FALLBACK_URL = chrome.runtime.getURL("assets/pvtexpack.png");
 const SPRITESHEET_RULE_ID = 999;
 
-// Local-first: el PNG empaquetado siempre está disponible y es instantáneo.
-// GitHub raw sufre 429/503 con facilidad; el remoto queda como respaldo
-// por si el asset empaquetado no existe (build sin assets).
 async function getActiveSpritesheetUrl() {
   const { mfCustomSpritesheetUrl } = await chrome.storage.local.get(["mfCustomSpritesheetUrl"]);
   if (mfCustomSpritesheetUrl) return mfCustomSpritesheetUrl;
@@ -228,7 +221,6 @@ const TEXTURE_PACK_RULE_IDS = [
   ...EXTRA_TEXTURES.map(texture => texture.id)
 ];
 
-// MFGEN:LOCAL_TEXTURES:start
 const LOCAL_TEXTURES = [
   "entity/armorstand/wood.png",
   "entity/arrow.png",
@@ -572,13 +564,10 @@ const LOCAL_TEXTURES = [
   "spear/stone_spear.png",
   "spear/wooden_spear.png"
 ];
-// MFGEN:LOCAL_TEXTURES:end
 
-// MFGEN:MENU_UI_IMAGES:start
 const MENU_UI_IMAGES = [
   
 ];
-// MFGEN:MENU_UI_IMAGES:end
 
 const LOCAL_TEXTURES_BASE_ID = 20000;
 const LOCAL_TEXTURES_MAX_ID = 29999;
@@ -637,8 +626,6 @@ async function applySpritesheet() {
   const { spritesheetEnabled } = await chrome.storage.local.get(["spritesheetEnabled"]);
   const spritesheetUrl = await getActiveSpritesheetUrl();
 
-  // URL null = ninguna fuente disponible: dejar solo las reglas extra de
-  // entidades y NO redirigir el spritesheet principal (evita drawImage roto)
   const spritesheetRules = (spritesheetEnabled !== false && spritesheetUrl)
     ? [{
         id: SPRITESHEET_RULE_ID,
@@ -671,11 +658,7 @@ async function applySpritesheet() {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Zoom de página (el de Ctrl+ruedita): lo pide el panel desde el
-  // content script porque chrome.tabs no existe allí.
-  // Deduplicado: si la pestaña ya está en ese zoom no se vuelve a
-  // llamar setZoom, porque cada llamada dispara el flyout de zoom
-  // de Edge/Chrome (el globito con −/+/%) y es molesto.
+  
   if (message.type === "mfSetPageZoom") {
     const zoom = Math.min(5, Math.max(0.25, Number(message.zoom) || 1));
     const tabId = sender?.tab?.id;
@@ -779,8 +762,6 @@ applySpritesheet();
 applyLocalTextures();
 applyMenuUi();
 
-
-// MF_AUTO_UPDATER_V2
 (function () {
   'use strict';
 
@@ -795,10 +776,6 @@ applyMenuUi();
   const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
   const DEFAULT_SETTINGS = Object.freeze({ autoCheck: true, autoDownload: false, autoApply: true });
 
-  // ── HOT UPDATE: cargar .js actualizados directo desde GitHub ──
-  // hotload.json (empaquetado) lista los módulos hot-releables con sus
-  // guards. El texto de los que difieren del paquete instalado se guarda
-  // en chrome.storage (mfHotCache) y HotLoader lo inyecta en el arranque.
   const HOT_KEY = 'mfHotCache';
   const HOT_APPLIED = 'mfHotAppliedCommit';
 
@@ -837,8 +814,6 @@ applyMenuUi();
     return stored[HOT_KEY] || { v: 1, commit: null, ts: 0, files: {}, guards: {}, ok: {} };
   }
 
-  // comparar cada módulo hot contra el árbol remoto: distinto → cachear el
-  // texto nuevo; igual (p.ej. reinstalaste la versión nueva) → quitarlo
   async function updateHotCache(remoteCommit, remoteTree) {
     const hotList = await readHotList();
     const cache = await getHotCache();
@@ -874,8 +849,6 @@ applyMenuUi();
     cache.ts = Date.now();
     await chrome.storage.local.set({ [HOT_KEY]: cache });
 
-    // auto-aplicar: recargar las pestañas del juego UNA vez por commit para
-    // que HotLoader arranque ya con el plan nuevo
     if (changed && Object.keys(cache.files).length) {
       const settings = await getSettings();
       if (settings.autoApply) {
@@ -1126,7 +1099,7 @@ applyMenuUi();
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    // HOT: el HotLoader pide el plan (texto de los .js actualizados)
+    
     if (message?.type === 'mfHot:sync') {
       getHotCache()
         .then(cache => sendResponse({
@@ -1196,7 +1169,6 @@ applyMenuUi();
 
   ensureAlarm();
 })();
-
 
 const NTFY_HTTP_BASE = "https://ntfy.sh";
 const CLIENT_CHAT_TOPIC = "mfcc-7f41c6d8b92e4a63b5f1-global-v2";

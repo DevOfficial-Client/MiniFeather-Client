@@ -11,35 +11,32 @@
   const GLOBAL_TOPIC_URL = 'https://ntfy.sh/mf-global-chat-v1';
   const MAX_HISTORY = 120;
 
-  // ---------- State ----------
   const state = {
     nickname: '',
-    activeMode: 'global', // 'global' | 'private'
-    // Global chat
-    globalStatus: 'connecting', // 'connecting' | 'connected' | 'error'
+    activeMode: 'global', 
+    
+    globalStatus: 'connecting', 
     globalMessages: [],
     globalEventSource: null,
     seenGlobalIds: new Set(),
-    // Private P2P chat
-    privateStatus: 'off', // 'off' | 'connecting' | 'hosting' | 'connected' | 'error'
+    
+    privateStatus: 'off', 
     privateRoomCode: '',
-    privateRole: null, // 'host' | 'guest' | null
-    peer: null, // PeerJS instance
-    hostConn: null, // Guest's connection to host
-    guestConns: new Map(), // Host's connections: peerId -> DataConnection
-    roster: new Map(), // peerId -> nickname
+    privateRole: null, 
+    peer: null, 
+    hostConn: null, 
+    guestConns: new Map(), 
+    roster: new Map(), 
     privateMessages: [],
-    // Unread counters
+    
     unreadGlobal: 0,
     unreadPrivate: 0,
     destroyed: false
   };
 
-  // Helper logging
   function log(...args) { console.log(TAG, ...args); }
   function warn(...args) { console.warn(TAG, ...args); }
 
-  // Resolve player name from game instance
   function resolvePlayerName() {
     try {
       const game = globalThis.__MINIBLOX_GAME__ || globalThis.miniblox;
@@ -54,7 +51,6 @@
     return 'Player_' + Math.random().toString(36).slice(2, 6);
   }
 
-  // PeerJS loader
   let peerjsPromise = null;
   function loadPeerJS() {
     if (globalThis.Peer) return Promise.resolve(true);
@@ -69,7 +65,6 @@
     return peerjsPromise;
   }
 
-  // Emit state update to UI (isolated context)
   function emitState() {
     if (state.destroyed) return;
     const rosterNames = Array.from(state.roster.values());
@@ -95,16 +90,12 @@
     }));
   }
 
-  // ============================================================
-  // PUBLIC GLOBAL CHAT
-  // ============================================================
   function initGlobalChat() {
     if (state.globalEventSource) {
       try { state.globalEventSource.close(); } catch (_) {}
       state.globalEventSource = null;
     }
 
-    // 1. Fetch recent messages
     fetch(`${GLOBAL_TOPIC_URL}/json?poll=1&since=2h`)
       .then(r => r.text())
       .then(text => {
@@ -127,7 +118,6 @@
       })
       .catch(() => {});
 
-    // 2. Connect live EventSource SSE stream
     try {
       const es = new EventSource(`${GLOBAL_TOPIC_URL}/sse`);
       state.globalEventSource = es;
@@ -194,9 +184,6 @@
     }
   }
 
-  // ============================================================
-  // PRIVATE P2P CHAT (PeerJS WebRTC)
-  // ============================================================
   function normalizeRoomCode(code) {
     return String(code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 16);
   }
@@ -287,11 +274,9 @@
           state.roster.set(conn.peer, guestNick);
           addPrivateSystemMessage(`${guestNick} joined the room.`);
 
-          // Send current roster to all guests
           const rosterList = Array.from(state.roster.values());
           broadcastToGuests({ type: 'roster', roster: rosterList });
 
-          // Send back welcome with room info
           try {
             conn.send(JSON.stringify({
               type: 'welcome',
@@ -304,7 +289,7 @@
         }
 
         if (data.type === 'msg') {
-          // Relayed chat message from a guest
+          
           const msg = {
             id: data.id || `pm_${Date.now()}`,
             sender: data.sender || 'Peer',
@@ -316,7 +301,6 @@
           if (state.activeMode !== 'private') state.unreadPrivate++;
           emitState();
 
-          // Relay to all other guests
           broadcastToGuests(data, conn.peer);
           return;
         }
@@ -368,7 +352,7 @@
           conn.on('open', () => {
             state.privateStatus = 'connected';
             addPrivateSystemMessage(`Connected to room ${code}!`);
-            // Handshake
+            
             conn.send(JSON.stringify({
               type: 'hello',
               sender: state.nickname
@@ -499,9 +483,6 @@
     emitState();
   }
 
-  // ============================================================
-  // EVENT BRIDGE WITH UI
-  // ============================================================
   function onChatAction(event) {
     let payload = event.detail;
     if (typeof payload === 'string') {
@@ -565,7 +546,6 @@
     }
   }
 
-  // Teardown
   function destroy() {
     state.destroyed = true;
     document.removeEventListener('minifeather:chat-action', onChatAction);
@@ -576,12 +556,10 @@
     leavePrivateRoom();
   }
 
-  // Init
   state.nickname = resolvePlayerName();
   document.addEventListener('minifeather:chat-action', onChatAction);
   initGlobalChat();
 
-  // Expose API
   globalThis[GLOBAL_KEY] = {
     destroy,
     get state() { return state; },

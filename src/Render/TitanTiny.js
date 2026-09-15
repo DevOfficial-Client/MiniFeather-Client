@@ -295,8 +295,6 @@
         } catch {}
     }
 
-
-
     function validPosition(value) {
         return !!(
             value &&
@@ -504,8 +502,6 @@
         let eyeHeight =
             state.cameraBaseEyeHeight;
 
-        // Refresh eye height every ~2s in case the game changes it
-        // (e.g. player respawns, eats, etc.)
         if (
             !Number.isFinite(eyeHeight) ||
             eyeHeight <= 0 ||
@@ -615,22 +611,17 @@
         state.cameraHookDepth++;
 
         try {
-            // Let the game update the matrix normally
+            
             const result = original.apply(
                 thisArg,
                 args
             );
 
-            // Apply Y offset directly to the matrixWorld translation
-            // matrixWorld.elements[13] = Y translation component
-            // This avoids touching camera.position (which the game's
-            // logic reads for raycasting, audio, etc.)
             const mx = camera.matrixWorld;
             if (mx && mx.elements) {
                 mx.elements[13] += offset;
             }
 
-            // Also update matrixWorldInverse if it exists (used by projection)
             const mxi = camera.matrixWorldInverse;
             if (mxi && mxi.elements) {
                 mxi.elements[13] -= offset;
@@ -653,9 +644,6 @@
 
         uninstallCameraHook();
 
-        // Only hook updateMatrixWorld — it's the single entry point
-        // for matrix updates. Hooking updateWorldMatrix too caused
-        // double-offset application and jitter.
         const originalUpdateMatrixWorld =
             typeof camera.updateMatrixWorld ===
                 'function'
@@ -936,14 +924,6 @@
         updateUI();
     }
 
-
-    // =========================================================
-    // Native NameTag Height Sync
-    // =========================================================
-    // MiniBlox keeps the floating player label separate from the body mesh.
-    // This moves the native label anchor to the visual top of Tiny/Titan while
-    // preserving the original text size so name/range/health stay readable.
-
     const NATIVE_NAMETAG_OFFSET_METHOD =
         'DskCNsFNrprfkz';
 
@@ -1126,23 +1106,6 @@
                     )
                     : 0.70;
 
-            /*
-             * Current MiniBlox build:
-             *
-             * DskCNsFNrprfkz(){return .7+dt}
-             *
-             * ABPXLcQiyzFdP() renders the floating label with:
-             *
-             * y: this.position.y + this.DskCNsFNrprfkz()
-             *
-             * The visual body is scaled independently, so vanilla keeps
-             * returning the normal-height offset. Preserve MiniBlox's
-             * 0.70 label gap and scale only the body portion.
-             *
-             * At scale 1 this is exactly vanilla.
-             * Observed vanilla offset: 2.195
-             * Body portion: 2.195 - 0.70 = 1.495
-             */
             const bodyOffset =
                 vanilla -
                 nativeGap;
@@ -2077,8 +2040,6 @@
         const mesh = resolveRenderTarget(force);
         if (!mesh) return;
 
-        // These three sync systems are intentionally always on while the
-        // Titan & Tiny module is enabled. There are no user-facing toggles.
         state.hitboxEnabled = true;
         state.cameraHeightEnabled = true;
         state.nameTagEnabled = true;

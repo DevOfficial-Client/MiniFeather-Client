@@ -1,30 +1,3 @@
-// MF_Studio.js — GUI tipo DaVinci Resolve para el film mode de MiniFeather.
-//
-// Reemplaza la UI del juego (HUD/inventario ocultos) con una interfaz de
-// edición de video profesional mientras el estudio está abierto:
-//
-//   ┌──────────────────────────────────────────────┐
-//   │ Barra superior: logo | proyecto | ▶ ⏸ ⏹ REC  │
-//   ├──────┬─────────────────────────────┬─────────┤
-//   │ Media│                             │ Props  │
-//   │ (l.) │     Preview (el juego)      │ (der.) │
-//   │      │                             │        │
-//   ├──────┴─────────────────────────────┴─────────┤
-//   │ Timeline: regla de ticks + pistas            │
-//   │ [V1 actors] [V2 faces] [A1 audio]            │
-//   └──────────────────────────────────────────────┘
-//
-// - El juego sigue corriendo DETRÁS (es un overlay semi-transparente en los
-//   paneles laterales; la zona preview es un agujero transparente → se ve el
-//   mundo). Con "modo cine" el HUD del juego se oculta (adiós inventario).
-// - La cabecera reproduce/grav​a vía MF_Film; el timeline dibuja los
-//   keyframes de la toma activa y permite scrub con click/drag.
-// - Paleta DaVinci: gris muy oscuro #1b1b1f, acento naranja #ff6b2b,
-//   texto claro #e8e8ec. Fuente pixel para números (Faithful).
-//
-// Atajos: F1 abre/cierra · Space play/pause · Home ir a 0 · R grabar
-//
-// Se activa con el comando /studio (o F1). Todo es client-side.
 
 (function () {
     'use strict';
@@ -261,31 +234,29 @@
 
     const state = {
         open: false,
-        cinema: true,          // ocultar HUD del juego
-        films: [],             // lista de tomas [{name, ticks, kfs}]
-        activeFilm: null,      // nombre
-        activeTake: null,      // objeto film activo (memoria o storage)
+        cinema: true,          
+        films: [],             
+        activeFilm: null,      
+        activeTake: null,      
         playheadTick: 0,
         raf: null,
         hiddenHudEls: []
     };
 
-    // ── Studio Sync P2P: compartir pose/animación con el peer (cámara local) ──
     const p2p = {
-        share: false,          // toggle del usuario (emite mis cambios)
-        camRemote: null,       // { x,y,z, yaw, pitch } target remoto
-        camLerp: 0.25,         // suavizado
-        camActive: false,      // compatibilidad con peers antiguos
-        followRemoteCamera: false, // compartir animación nunca secuestra la cámara
-        lastCamOut: 0,         // reservado para compatibilidad
-        lastPoseOut: 0,        // throttle emisión pose (20 Hz)
-        applying: false        // guard anti-eco: aplicando datos remotos
+        share: false,          
+        camRemote: null,       
+        camLerp: 0.25,         
+        camActive: false,      
+        followRemoteCamera: false, 
+        lastCamOut: 0,         
+        lastPoseOut: 0,        
+        applying: false        
     };
     function sendStudio(obj) {
         try { return window.MF_Peer?.sendStudio?.(obj) === true; } catch { return false; }
     }
 
-    // ── helpers ──
     function getGame() {
         if (globalThis.miniblox?.player) return globalThis.miniblox;
         try {
@@ -305,7 +276,6 @@
         return e;
     }
 
-    // ── datos ──
     function listFilms() {
         let films = {};
         try { films = JSON.parse(localStorage.getItem('minifeather_films_v1') || '{}'); } catch {}
@@ -323,14 +293,9 @@
         } catch { return null; }
     }
 
-    // ── cargador de modelos 3D (.glb/.gltf/.obj) ──
-    // Los bytes del archivo se registran en el cache de CustomModels
-    // (registerModelBytes) y de ahí se spawnean como entidad client-side
-    // delante del jugador. Los nombres se prefijan "user_" para no chocar
-    // con los modelos del paquete (models/entities/).
     const models = {
-        loaded: new Map(),       // file -> { name, size, at, id }
-        picker: null,            // <input type=file> reutilizable
+        loaded: new Map(),       
+        picker: null,            
         seq: 0
     };
 
@@ -343,7 +308,7 @@
             inp.style.display = 'none';
             inp.addEventListener('change', () => {
                 if (inp.files?.length) modelLoadFiles([...inp.files]);
-                inp.value = ''; // permitir recargar el mismo archivo
+                inp.value = ''; 
             });
             document.body.appendChild(inp);
             models.picker = inp;
@@ -363,7 +328,7 @@
                 models.loaded.set(file, { name: f.name, size: f.size, at: Date.now(), id: null });
                 updateStatus(`📦 "${f.name}" cargado (${(f.size / 1024).toFixed(0)} KB) — click en la lista para spawnear`);
                 refreshModels();
-                // spawn inmediato frente al jugador
+                
                 modelSpawn(file);
             } catch (e) {
                 updateStatus(`⚠ "${f.name}": ${e?.message || e}`);
@@ -371,14 +336,13 @@
         }
     }
 
-    // spawn delante del jugador (2 bloques, dirección de la cámara del estudio)
     function modelSpawn(file) {
         const CM = window.MF_CustomModels;
         const info = models.loaded.get(file);
         if (!CM?.spawn) return;
         const p = getGame()?.player?.pos;
         if (!p) { updateStatus('⚠ sin player para spawnear'); return; }
-        // dirección: yaw de la cámara del estudio si está activa
+        
         let dx = 1, dz = 0;
         if (cam.active) { dx = -Math.sin(cam.yaw); dz = -Math.cos(cam.yaw); }
         const x = p.x + dx * 2, z = p.z + dz * 2;
@@ -429,7 +393,6 @@
         }
     }
 
-    // ── Skins PNG (SkinChanger) ──
     async function skinsImport(files) {
         const SC = window.MF_SkinChanger;
         if (!SC?.importFiles) { updateStatus('⚠ SkinChanger no disponible'); return; }
@@ -479,7 +442,6 @@
         box.appendChild(grid);
     }
 
-    // ── Morph (mobs del mundo → transformarse) ──
     function refreshMorphList() {
         const box = document.getElementById('mfs-morph-list');
         if (!box) return;
@@ -538,13 +500,6 @@
         return '🧬';
     }
 
-    // ── anti-AFK del estudio ──
-    // Grabar/posar/editar puede dejar al jugador quieto mucho tiempo y el
-    // servidor lo kickea. Este guardián hace micro-movimientos NATIVOS
-    // (jitter de yaw ±0.3°, sin desplazamiento) por el mismo camino que el
-    // input real (apply/send del player, patrón AntiAFK), SOLO mientras el
-    // estudio esté abierto. La cámara del estudio es aparte: el actor no se
-    // mueve ni gira en pantalla — solo se reporta rotación al servidor.
     const afk = {
         on: false,
         timer: null,
@@ -557,8 +512,6 @@
         lastBeat: 0
     };
 
-    // busca el método apply(input) del player por firma en el código fuente
-    // (nombres ofuscados: se identifican por contenido, igual que AntiAFK)
     function afkFindApply(player) {
         const seen = new Set();
         let proto = player, best = null;
@@ -611,7 +564,6 @@
         return best?.score >= 10 ? best : null;
     }
 
-    // construye el input del beat: todo neutral + jitter de yaw mínimo
     function afkBeatInput(player) {
         const base = player.currentInput || {};
         return {
@@ -623,12 +575,11 @@
         };
     }
 
-    // un "beat": aplica input neutral+jitter y lo envía al servidor
     function afkBeat() {
         if (!afk.on) return;
         const player = getGame()?.player;
         if (!player) return;
-        // hook perdido (respawn/cambio de mundo) → re-scan
+        
         if (afk.player !== player || (afk.applyName && player[afk.applyName] !== undefined && !player[afk.applyName])) {
             afkHookPlayer(player);
         }
@@ -638,7 +589,7 @@
             afk.lastBeat = Date.now();
             if (afk.sendName) player[afk.sendName]?.call(player);
         } catch {
-            // algo cambió: re-scan en el próximo beat
+            
             afk.applyName = null;
         }
     }
@@ -653,11 +604,11 @@
         afk.sendName = send?.name || null;
         afk.originalApply = apply.fn;
         afk.applyHadOwn = Object.prototype.hasOwnProperty.call(player, apply.name);
-        return true; // no hookeamos: llamamos apply directamente en cada beat
+        return true; 
     }
 
     function afkRestoreHook() {
-        // no hay hook que restaurar (usamos llamadas directas), solo limpiar
+        
         afk.player = null;
         afk.applyName = null;
         afk.sendName = null;
@@ -677,8 +628,8 @@
         if (afk.on) {
             afkHookPlayer(getGame()?.player);
             afkBeat();
-            afk.timer = setInterval(afkBeat, 30000);       // beat cada 30s
-            afk.rescanTimer = setInterval(() => {          // re-hook si cambió el player
+            afk.timer = setInterval(afkBeat, 30000);       
+            afk.rescanTimer = setInterval(() => {          
                 if (!afk.on) return;
                 const p = getGame()?.player;
                 if (p && p !== afk.player) afkHookPlayer(p);
@@ -691,7 +642,6 @@
         }
     }
 
-    // ── DOM ──
     function build() {
         if (document.getElementById(ID)) return;
 
@@ -704,29 +654,26 @@
         root.id = ID;
         if (state.cinema) root.classList.add('cinema');
 
-        // ═══ layout BBS: [mainzone: timeline 66% | rightzone: preview+editArea] + iconBar + taskbar ═══
         const main = el('div');
         main.id = 'mf-studio-main';
 
-        // ── mainzone (izquierda, 66%): timeline de clips de cámara ──
         const mainzone = el('div');
         mainzone.id = 'mf-studio-mainzone';
         const tl = el('div');
         tl.id = 'mf-studio-timeline';
         mainzone.appendChild(tl);
 
-        // ── rightzone (34%): preview arriba + editArea (inspector) abajo ──
         const rightzone = el('div');
         rightzone.id = 'mf-studio-rightzone';
 
         const preview = el('div');
         preview.id = 'mf-studio-preview';
-        // indicador sobre el preview
+        
         const status = el('div', 'mfs-status');
         status.id = 'mfs-status';
         status.style.cssText = 'position:absolute;top:10px;left:10px;pointer-events:auto;';
         preview.appendChild(status);
-        // toggle gizmo: botón único que alterna mover ⇄ rotar
+        
         const gtoggle = el('button');
         gtoggle.id = 'mfs-gizmo-mode';
         gtoggle.className = 'mfs-btn';
@@ -735,7 +682,7 @@
         gtoggle.style.cssText = `
             position:absolute;top:10px;right:10px;pointer-events:auto;`;
         preview.appendChild(gtoggle);
-        // hint de controles de cámara (se desvanece)
+        
         const hint = el('div');
         hint.innerHTML = '🖱 Click+arrastrar: rotar cámara · WASD/QE: mover · Ctrl: rápido · 🦴 Posing: click der. en extremidad';
         hint.style.cssText = `
@@ -744,7 +691,7 @@
             font-size:10px;color:#aaa;pointer-events:none;
             animation:mfs-fadeout 6s forwards;white-space:nowrap;`;
         preview.appendChild(hint);
-        // ── fila de botones del preview (BBS: centrada abajo, gradiente) ──
+        
         const pbar = el('div');
         pbar.id = 'mfs-previewbar';
         pbar.innerHTML = `
@@ -758,7 +705,7 @@
             <button class="mfs-btn icon" id="mfs-pv-video"    title="Renderizar a video .webm">⏺</button>
             <button class="mfs-btn icon" id="mfs-pv-traj"     title="Lienzo de trayectoria (T) — dibuja el recorrido de los clips de cámara">🧭</button>`;
         preview.appendChild(pbar);
-        // ── lienzo de trayectoria de cámara (overlay encima del juego) ──
+        
         const trajCv = el('canvas');
         trajCv.id = 'mf-studio-traj';
         preview.appendChild(trajCv);
@@ -768,14 +715,12 @@
         trajCv.appendChild(trajHint);
         rightzone.appendChild(preview);
 
-        // ── editArea (inspector, abajo derecha) ──
         const right = el('div');
         right.id = 'mf-studio-right';
         right.innerHTML = `<div class="mfs-section"><h3>Propiedades</h3><div id="mfs-props"></div></div>
 <div class="mfs-section"><h3>Editor de pose</h3><div id="mfs-pose"></div></div>`;
         rightzone.appendChild(right);
 
-        // ── overlay del media pool (panel izquierdo deslizante, BBS) ──
         const pool = el('div');
         pool.id = 'mf-studio-pool';
         pool.innerHTML = `
@@ -798,7 +743,6 @@
             </div>`;
         mainzone.appendChild(pool);
 
-        // ── iconBar (derecha, 20px) — orden BBS ──
         const iconbar = el('div');
         iconbar.id = 'mf-studio-iconbar';
         iconbar.innerHTML = `
@@ -817,7 +761,6 @@
             <button class="ib" id="mfs-ib-afk"    title="Anti-AFK">🛡</button>
             <button class="ib" id="mfs-ib-close"  title="Cerrar (F1)">✕</button>`;
 
-        // ── taskbar (abajo, 20px) — transporte + rango, BBS ──
         const top = el('div', '', '');
         top.id = 'mf-studio-top';
         top.innerHTML = `
@@ -840,17 +783,13 @@
         main.appendChild(rightzone);
         main.appendChild(iconbar);
         root.appendChild(main);
-        root.appendChild(top); // taskbar al fondo (BBS la tiene abajo)
+        root.appendChild(top); 
         document.body.appendChild(root);
-
-        // mover los modales existentes (skin editor/changer/morph) no hace
-        // falta: viven fuera del overlay y applyCinema los respeta (mf-*)
 
         bind();
         window.MF_Timeline?.mount(tl, { onChange: onTimelineChange });
     }
 
-    // ── eventos ──
     function bind() {
         const $ = (id) => document.getElementById(id);
 
@@ -867,7 +806,7 @@
         };
         $('mfs-rec').onclick = toggleRec;
         $('mfs-model-add').onclick = modelPickFiles;
-        // zona drop de modelos + drag&drop de archivos
+        
         const dropZone = $('mfs-model-drop');
         if (dropZone) {
             dropZone.onclick = modelPickFiles;
@@ -881,7 +820,7 @@
             });
         }
         $('mfs-afk')?.addEventListener?.('click', () => afkToggle());
-        // ── clips de cámara estilo BBS (MF_FilmCamera) ──
+        
         $('mfs-cam-clear').onclick = () => {
             if (!confirm('¿Borrar TODOS los clips de cámara, subtítulos y audio?')) return;
             window.MF_FilmCamera?.clear?.();
@@ -889,7 +828,7 @@
             window.MF_Timeline?.render?.();
         };
         refreshCamList();
-        // ── skins PNG (SkinChanger): sección del pool ──
+        
         const skinsInput = el('input');
         skinsInput.type = 'file';
         skinsInput.accept = 'image/png,.png';
@@ -912,22 +851,22 @@
         }
         window.addEventListener('mf:skinchanger-items', () => refreshSkinsList(), { once: false });
         refreshSkinsList();
-        // ── morph (MF_Morph): sección izquierda ──
+        
         $('mfs-morph-rescan').onclick = () => {
             window.MF_Morph?.scan?.(true);
             refreshMorphList();
         };
         window.addEventListener('mf:morph-catalog', () => refreshMorphList(), { once: false });
         refreshMorphList();
-        // toggle gizmo mover/rotar (botón único)
+        
         const gm = document.getElementById('mfs-gizmo-mode');
         if (gm) {
             gm.onclick = () => gizmoSetMode(gizmo.mode === 'move' ? 'rotate' : 'move');
-            gizmoSetMode(gizmo.mode); // estado inicial
+            gizmoSetMode(gizmo.mode); 
         }
-        // ── iconBar (BBS) ──
+        
         const ib = (id, fn) => { const b = $(id); if (b) b.onclick = fn; };
-        // pool overlay (media pool deslizante estilo BBS)
+        
         const p = document.getElementById('mf-studio-pool');
         if (p) {
             if (!poolOpen) p.classList.add('hidden');
@@ -951,11 +890,11 @@
         document.getElementById('mfs-ib-cinema')?.classList.toggle('on', state.cinema);
         ib('mfs-ib-afk', () => afkToggle());
         ib('mfs-ib-close', close);
-        // ── previewbar (BBS) ──
+        
         $('mfs-pv-replays').onclick = () => poolToggle(true);
         $('mfs-pv-plause').onclick = togglePlay;
         $('mfs-pv-teleport').onclick = () => {
-            // llevar al jugador a la cámara (teleport estilo BBS)
+            
             const g = getGame();
             const p = g?.player;
             if (p && cam.pos) {
@@ -974,17 +913,14 @@
         $('mfs-pv-record').onclick = toggleRec;
         $('mfs-pv-traj').onclick = () => trajToggle();
         $('mfs-pv-video').onclick = renderVideo;
-        // ── pool overlay ──
+        
         ib('mfs-pool-close', () => poolToggle(false));
 
-        // atajos de teclado (registrados UNA sola vez: guard contra acumulación
-        // de listeners en reaperturas del estudio, que congelaba la página)
         if (!state.keysBound) {
             state.keysBound = true;
             window.addEventListener('keydown', (ev) => {
                 if (!state.open) return;
-                // en modo control del jugador las teclas son del juego
-                // (WASD/salto/esc); solo F1 y H siguen siendo nuestros
+                
                 if (playerCtrl.active) {
                     if (ev.key === 'F1') { ev.preventDefault(); close(); }
                     return;
@@ -1004,27 +940,24 @@
                     gizmoSetMode(gizmo.mode === 'move' ? 'rotate' : 'move');
                 }
             });
-            // presets de cabeza creados/borrados en el SkinEditor → pool
+            
             window.addEventListener('mf:skineditor-presets', () => {
                 if (state.open) refreshMediaPool();
             });
         }
 
-        // bucle de UI (incluye watchdog del pointer lock: si el juego
-        // re-atrapa el ratón por otra vía, se libera de inmediato)
         state.raf = requestAnimationFrame(uiLoop);
     }
 
-    // Callback de eventos del timeline NLE
     function onTimelineChange(kind, payload) {
         switch (kind) {
             case 'scrub':
-                // sincronizar el playhead viejo del estudio con el nuevo
+                
                 state.playheadTick = payload;
                 seek(payload);
                 break;
             case 'clip-open':
-                // doble click en un clip: cargar esa toma como activa
+                
                 if (payload && payload !== state.activeFilm) {
                     state.activeFilm = payload;
                     state.activeTake = loadFilm(payload);
@@ -1046,14 +979,13 @@
         return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
     }
 
-    // ── acciones ──
     function togglePlay() {
         const F = window.MF_Film;
         if (!F) return;
         const s = F.status;
         if (s.recording) return;
         if (!s.playing) {
-            // ¿hay secuencia en el timeline? → reproducir la SECUENCIA
+            
             const TL = window.MF_Timeline;
             const clips = TL?.clips || [];
             if (clips.length) {
@@ -1080,7 +1012,7 @@
         if (s.recording) {
             const r = F.stopRecording();
             if (r.ok) {
-                // auto-guardar con nombre corto para que aparezca en Media
+                
                 F.saveFilm('toma-' + new Date().toTimeString().slice(0, 8).replace(/:/g, ''));
                 refreshTakes(); refreshMediaPool();
             }
@@ -1094,14 +1026,13 @@
 
     function seek(tick) {
         state.playheadTick = Math.max(0, tick);
-        // Si está reproduciendo, reiniciar desde ese punto (F2 traerá seek real)
+        
         const F = window.MF_Film;
         const s = F?.status;
         if (s?.playing && !s.paused) { F.stopPlayback(); F.playFilm(state.activeFilm || undefined); }
         updatePlayhead();
     }
 
-    // ── Rango de reproducción In/Out (estilo DaVinci Resolve) ──
     function markIn() {
         const F = window.MF_Film;
         if (!F) return;
@@ -1115,7 +1046,7 @@
         if (!F) return;
         const cur = F.getPlayRange();
         let from = cur?.from ?? 0;
-        // el OUT nunca puede quedar antes del IN
+        
         if (state.playheadTick <= from) from = Math.max(0, state.playheadTick - 1);
         F.setPlayRange(from, Math.max(1, state.playheadTick));
         updateRangeUI();
@@ -1146,7 +1077,6 @@
         renderTimeline();
     }
 
-    // ── render de paneles ──
     function refreshTakes() {
         const box = document.getElementById('mfs-takes');
         if (!box) return;
@@ -1159,27 +1089,24 @@
         for (const f of state.films) {
             const item = el('div', 'mfs-item' + (f.name === state.activeFilm ? ' active' : ''),
                 `<span>${f.name}</span><span class="meta">${(f.ticks / TPS).toFixed(1)}s · ${f.kfs}kf</span>`);
-            // click: añadir como clip al final de la secuencia (como "Media Pool" de Resolve)
+            
             item.onclick = () => {
                 const TL = window.MF_Timeline;
                 const film = loadFilm(f.name);
                 if (!TL || !film) return;
-                TL.addClip(film, TL.seqDuration);   // append al final
-                // y también dejarla como toma activa para el inspector
+                TL.addClip(film, TL.seqDuration);   
+                
                 state.activeFilm = f.name;
                 state.activeTake = film;
                 document.getElementById('mfs-project').textContent = 'Proyecto: ' + f.name;
                 refreshTakes(); updateProps(); updateStatus(`Clip añadido: ${f.name}`);
             };
-            // doble click: solo cargar como toma activa (sin añadir clip)
+            
             item.ondblclick = (ev) => { ev.stopPropagation(); };
             box.appendChild(item);
         }
     }
 
-    // ── Media Pool: biblioteca de tomas con drag→timeline, importar, bin ──
-    // Estado persistente: lista de nombres de tomas en el pool + papelera
-    // (nombres en el bin no se muestran, pero siguen en localStorage).
     const pool = { bin: [] };
 
     function refreshMediaPool() {
@@ -1188,7 +1115,7 @@
         box.innerHTML = '';
         const F = window.MF_Film;
         const films = listFilms().filter(f => !pool.bin.includes(f.name));
-        // barra de acciones: importar + bin
+        
         const bar = el('div');
         bar.style.cssText = 'display:flex;gap:4px;margin-bottom:6px;';
         const impBtn = el('button', 'mfs-btn', '📥 Importar');
@@ -1210,7 +1137,7 @@
             bar.appendChild(binBtn);
         }
         box.appendChild(bar);
-        // ── sección presets de cabeza (SkinEditor) ──
+        
         const SE = window.MF_SkinEditor;
         const headPresets = SE?.presets?.() || [];
         if (headPresets.length) {
@@ -1239,7 +1166,7 @@
                 `<span class="thumb">🎬</span><div class="mi-body"><span class="mi-name">${f.name}</span>` +
                 `<span class="meta">${(f.ticks / TPS).toFixed(1)}s · ${f.kfs}kf</span></div>`);
             item.title = 'Arrastra al timeline · click = añadir al final · 🗑 = al bin';
-            // drag al timeline (el timeline acepta drops en su contenedor)
+            
             item.draggable = true;
             item.ondragstart = (ev) => {
                 ev.dataTransfer.setData('text/mf-film', f.name);
@@ -1265,7 +1192,7 @@
             };
             item.appendChild(del);
             box.appendChild(item);
-            if (!F) break; // solo mostrar el aviso si no hay Film
+            if (!F) break; 
         }
     }
 
@@ -1284,7 +1211,7 @@
                     const res = F.importFilm(name, data);
                     if (res?.ok !== false) {
                         ok++;
-                        // sacarlo del bin si estaba
+                        
                         pool.bin = pool.bin.filter(n => n !== name);
                         updateStatus(`Importado: ${name}`);
                     } else fail++;
@@ -1295,7 +1222,6 @@
         }
     }
 
-    // restaurar del bin todo lo que exista (botón vaciar bin)
     function mediaPoolEmptyBin() {
         pool.bin.length = 0;
         refreshMediaPool();
@@ -1308,14 +1234,14 @@
         box.innerHTML = '';
         const faces = window.MF_FaceSwap?.list() || [];
         if (!faces.length) { box.appendChild(el('div', 'mfs-item', '<span>FaceSwap no disponible</span>')); return; }
-        // botones compactos en grid
+        
         const grid = el('div');
         grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px;';
         for (const name of faces.slice(0, 16)) {
             const b = el('button', 'mfs-btn', name);
             b.style.cssText = 'height:24px;font-size:10px;padding:0 6px;justify-content:center;';
             b.title = 'Click = trigger en el playhead · arrastra al timeline V2';
-            // arrastrar al timeline (clip de V2)
+            
             b.draggable = true;
             b.ondragstart = (ev) => {
                 ev.dataTransfer.setData('text/mf-face', name);
@@ -1333,12 +1259,12 @@
     }
 
     function renderTimeline() {
-        // delegado al timeline NLE (MF_Timeline)
+        
         window.MF_Timeline?.render();
     }
 
     function updatePlayhead() {
-        // delegado: el playhead vive ahora en MF_Timeline
+        
         const TL = window.MF_Timeline;
         const s = window.MF_Film?.status;
         if (TL && s?.playing) TL.playheadTick = s.tick;
@@ -1366,11 +1292,11 @@
     }
 
     function updateStatus(extra) {
-        state.statusExtra = extra || null; // recordado para el loop throttled
+        state.statusExtra = extra || null; 
         const box = document.getElementById('mfs-status');
         if (!box) return;
         const s = window.MF_Film?.status;
-        const fps = 0; // TODO F2: medidor real de FPS
+        const fps = 0; 
         box.innerHTML =
             `<span style="color:${s?.recording ? '#e33' : '#9a9aa6'}">● ${s?.recording ? 'REC' : s?.playing ? (s.paused ? 'PAUSA' : 'PLAY') : 'LISTO'}</span><br>` +
             `tick ${s?.playing ? s.tick : Math.floor(state.playheadTick)} / ${state.activeTake?.durationTicks || '—'}<br>` +
@@ -1378,9 +1304,6 @@
             (extra ? `<span style="color:#4fc3f7">${extra}</span>` : '');
     }
 
-    // ── editor de pose (panel derecho) ──
-    // sliders por parte (pitch/yaw/roll/bend) que escriben los joints del
-    // jugador en vivo vía MF_Pose; botones de presets y guardar/cargar
     function refreshPosePanel() {
         const box = document.getElementById('mfs-pose');
         if (!box) return;
@@ -1397,7 +1320,7 @@
             { key: 'bend', label: 'B', onlyLimbs: true }
         ];
 
-        const angleState = {}; // part -> {pitch, yaw, roll, bend}
+        const angleState = {}; 
 
         for (const part of parts) {
             const isLimb = part.includes('Arm') || part.includes('Leg');
@@ -1424,7 +1347,7 @@
                     num.textContent = inp.value;
                     try { P.setPart(part, angleState[part]); } catch (e) { num.textContent = '×'; }
                 };
-                // doble click = 0
+                
                 inp.ondblclick = () => {
                     inp.value = 0; num.textContent = '0';
                     angleState[part][ax.key] = 0;
@@ -1437,7 +1360,6 @@
             box.appendChild(row);
         }
 
-        // presets + acciones
         const actions = el('div');
         actions.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;';
         for (const preset of (P.presets || [])) {
@@ -1461,7 +1383,6 @@
         };
         actions.appendChild(saveB);
 
-        // poses guardadas
         const saved = P.list();
         if (saved.length) {
             const loadRow = el('div');
@@ -1477,7 +1398,6 @@
         }
         box.appendChild(actions);
 
-        // ── ANIMATION MODE (estilo Blockbench) ──
         const A = window.MF_Animation;
         if (A) {
             const anim = el('div');
@@ -1488,7 +1408,6 @@
             }));
             anim.lastChild.style.cssText = 'font-size:11px;font-weight:700;color:#d4a3ff;margin-bottom:6px;';
 
-            // fila: crear + selector + duración
             const rowA = el('div');
             rowA.style.cssText = 'display:flex;gap:4px;margin-bottom:6px;';
             const newB = el('button', 'mfs-btn', '+ Anim');
@@ -1514,7 +1433,6 @@
             rowA.appendChild(sel);
             anim.appendChild(rowA);
 
-            // controles de animación (solo si hay una abierta)
             if (A.current) {
                 const rowB = el('div');
                 rowB.style.cssText = 'display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap;';
@@ -1529,7 +1447,7 @@
                 mkBtn('▶', () => { A.play(); updateStatus('Anim: play'); }, 'Reproducir');
                 mkBtn('⏸', () => { A.pause(); updateStatus('Anim: pausa'); }, 'Pausar');
                 mkBtn('⏹', () => { A.stop(); refreshPosePanel(); updateStatus('Anim: stop'); }, 'Parar y rebobinar');
-                // ── botón +: añadir keyframe de la pose ACTUAL ──
+                
                 const kp = mkBtn('◆+', () => {
                     const part = posing.selPart || null;
                     const r = A.snapKey(part);
@@ -1541,21 +1459,21 @@
                     refreshPosePanel();
                 }, 'Añadir keyframe con la pose actual en el playhead\n(sin parte seleccionada = todo el cuerpo)');
                 kp.style.color = '#7bd88f';
-                // auto-key toggle
+                
                 const ak = mkBtn(A.autoKeyEnabled ? '⏺ AutoKey' : '⏹ AutoKey', (e) => {
                     A.setAutoKey(!A.autoKeyEnabled);
                     e.target.textContent = A.autoKeyEnabled ? '⏺ AutoKey' : '⏹ AutoKey';
                     e.target.style.color = A.autoKeyEnabled ? '#ff6b2b' : '';
                 }, 'Posar escribe keyframes en el playhead');
                 ak.style.color = A.autoKeyEnabled ? '#ff6b2b' : '';
-                // mirror toggle
+                
                 const mb = mkBtn(A.mirrorEnabled ? '🪞 ON' : '🪞 OFF', (e) => {
                     A.setMirror(!A.mirrorEnabled);
                     e.target.textContent = A.mirrorEnabled ? '🪞 ON' : '🪞 OFF';
                     e.target.style.color = A.mirrorEnabled ? '#d4a3ff' : '';
                 }, 'Mirror animating: editar un lado refleja al otro');
                 mb.style.color = A.mirrorEnabled ? '#d4a3ff' : '';
-                // interpolación
+                
                 mkBtn('∿ ' + (curAnimInterp() || 'smooth'), () => {
                     const modes = ['smooth', 'linear', 'step'];
                     const curI = curAnimInterp() || 'smooth';
@@ -1565,7 +1483,6 @@
                 }, 'Interpolación: smooth (Catmull-Rom) / linear / step');
                 anim.appendChild(rowB);
 
-                // playhead numérico + canal de la parte seleccionada
                 const rowC = el('div');
                 rowC.style.cssText = 'display:flex;gap:4px;align-items:center;margin-bottom:4px;';
                 rowC.appendChild(Object.assign(el('span'), { textContent: '⏱' }));
@@ -1578,7 +1495,6 @@
                 rowC.appendChild(Object.assign(el('span'), { textContent: '/ ' + A.length() + 's' }));
                 anim.appendChild(rowC);
 
-                // ── slider de FPS máximo de aplicación (5-180) ──
                 const rowF = el('div');
                 rowF.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:4px;';
                 rowF.appendChild(Object.assign(el('span'), { textContent: '🎚 FPS', title: 'Máx. de veces por segundo que se aplica la pose durante la reproducción' }));
@@ -1595,7 +1511,6 @@
                 rowF.appendChild(fpsVal);
                 anim.appendChild(rowF);
 
-                // canales de la parte seleccionada con botón + (como BB)
                 if (posing.selPart) {
                     const chanRow = el('div');
                     chanRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;';
@@ -1618,7 +1533,6 @@
         }
     }
 
-    // interp de la animación actual (helper para el botón del panel)
     function curAnimInterp() {
         return window.MF_Animation?.interp || 'smooth';
     }
@@ -1649,13 +1563,6 @@
         };
     }
 
-    // ── modo cine (ocultar SOLO la UI del juego, nunca el canvas) ──
-    // PROBLEMA ANTERIOR: se ocultaban divs fixed/absolute que contenían el
-    // canvas WebGL del juego → se veía el fondo de pantalla. Ahora:
-    // 1) Se oculta #canvas-hud (el HUD 2D: hotbar/inventario/crosshair).
-    // 2) Se ocultan overlays de texto/UI del juego que NO contengan canvas
-    //    del juego ni video (filtros por contenido).
-    // 3) El canvas WebGL principal queda siempre visible bajo el preview.
     function looksLikeGameCanvas(node) {
         if (!(node instanceof HTMLCanvasElement)) return false;
         const c = document.querySelector('#react canvas, body > canvas, #game canvas');
@@ -1664,7 +1571,7 @@
     function hasGameCanvasInside(node) {
         if (looksLikeGameCanvas(node)) return true;
         return [...node.querySelectorAll?.('canvas') ?? []].some(c => {
-            // el canvas del juego es el grande, a pantalla completa
+            
             const r = c.getBoundingClientRect();
             return r.width > 500 && r.height > 400;
         });
@@ -1677,10 +1584,10 @@
                 hud.style.visibility = 'hidden';
                 state.hiddenHudEls.push(hud);
             }
-            // ocultar solo overlays de UI pura (sin canvas grande dentro)
+            
             document.querySelectorAll('body > div, body > section').forEach(d => {
                 if (d.id === ID || d.id?.startsWith('mf-')) return;
-                if (d.id === 'react') return; // app React: contiene el juego
+                if (d.id === 'react') return; 
                 if (hasGameCanvasInside(d)) return;
                 const pos = getComputedStyle(d).position;
                 if (pos === 'fixed' || pos === 'absolute') {
@@ -1701,41 +1608,32 @@
         }
     }
 
-    // ── loop de UI (throttled: el juego ya satura el hilo con WebGL;
-    //    escribir DOM 60 veces/s congelaba la página) ──
     let lastUiUpdate = 0;
     let lastCamFrame = 0;
-    const UI_INTERVAL_MS = 200; // 5Hz: suficiente para status/playhead
+    const UI_INTERVAL_MS = 200; 
 
     function uiLoop(now) {
         if (!state.open) return;
-        // mantener el canvas del juego dentro del preview: el juego escribe
-        // estilos inline !important en su resize y pisan la regla CSS;
-        // re-escribirlos cada frame DESPUÉS del render del juego
+        
         clampGameCanvas();
-        // watchdog del pointer lock: el estudio abierto nunca debe tener
-        // el ratón atrapado (lo pide el juego vía eventos que no controlamos)
-        // EXCEPTO en modo control del jugador: ahí el lock lo pedimos
-        // nosotros a propósito (el juego mueve al jugador con el ratón)
+        
         if (document.pointerLockElement && !playerCtrl.active) releasePointerLock();
-        // lienzo de trayectoria: redibujar si está activo (la cámara
-        // se mueve → la proyección de las rutas cambia cada frame)
+        
         if (traj.on) trajDraw();
-        // cámara WASD: 60fps con delta time real
+        
         if (lastCamFrame) {
-            // Un lag spike o volver de otra pestaña no debe convertirse en un
-            // salto enorme de cámara en un único frame.
+            
             const dt = Math.min(0.05, Math.max(0, (now - lastCamFrame) / 1000));
             applyCameraMovement(dt);
         }
         lastCamFrame = now;
-        // clips de cámara estilo BBS durante el playback (pose + subtítulos)
+        
         playbackCamTick();
-        // Studio Sync: emitir pose local (20 Hz interno, solo si cambió)
+        
         if (p2p.share) emitLocalPose();
-        // playhead siempre fluido (solo 1 style write, barato)
+        
         updatePlayhead();
-        // status/botones solo cada 200ms y solo si cambió el estado
+        
         if (now - lastUiUpdate >= UI_INTERVAL_MS) {
             lastUiUpdate = now;
             const s = window.MF_Film?.status;
@@ -1749,13 +1647,6 @@
         state.raf = requestAnimationFrame(uiLoop);
     }
 
-    // ── cámara del estudio: AUTOCONTENIDA (no usa FreeCam) ──
-    // FreeCam requiere permiso de admin del servidor, así que el estudio
-    // maneja la cámara del juego directamente:
-    //   1) detach: la cámara pasa de estar colgada del jugador a la escena
-    //   2) click+drag en preview = yaw/pitch (sin pointer lock)
-    //   3) WASD/QE = mover con delta time
-    //   4) al cerrar: re-attach al padre original y restaurar transform
     const cam = {
         active: false, dragging: false, lastX: 0, lastY: 0,
         keys: {}, keysBound: false,
@@ -1763,11 +1654,9 @@
         pos: null, yaw: 0, pitch: 0,
         origPos: null, origQuat: null
     };
-    // El preview se recrea en cada open(), pero estos listeners viven en window.
-    // Sin este guard se acumulaban y multiplicaban la sensibilidad al reabrir.
+    
     let camMouseBound = false;
 
-    // pose actual de la cámara del estudio (para MF_FilmCamera.addFromStudio)
     function getStudioCamPose() {
         if (cam.active && cam.pos) {
             return { x: cam.pos.x, y: cam.pos.y, z: cam.pos.z, yaw: cam.yaw, pitch: cam.pitch,
@@ -1775,7 +1664,7 @@
         }
         return null;
     }
-    // FOV de la cámara del studio (dolly zoom / keyframes lo animan)
+    
     function applyCamFov(fov) {
         if (!cam.camera || !fov) return;
         try {
@@ -1785,7 +1674,6 @@
         } catch {}
     }
 
-    // ── pool overlay (media pool deslizante estilo BBS) ──
     let poolOpen = true;
     function poolToggle(open) {
         poolOpen = !!open;
@@ -1793,11 +1681,10 @@
         document.getElementById('mfs-ib-pool')?.classList.toggle('on', poolOpen);
     }
 
-    // ── clips de cámara estilo BBS (MF_FilmCamera) — panel izquierdo ──
     let camPanelOpen = false;
     function camPanelToggle() {
         camPanelOpen = !camPanelOpen;
-        // la sección vive dentro del pool overlay: si está cerrado, ábrelo
+        
         if (camPanelOpen) poolToggle(true);
         const sec = document.getElementById('mfs-cam-list')?.closest('.mfs-section');
         if (sec) sec.style.display = camPanelOpen ? '' : 'none';
@@ -1811,7 +1698,7 @@
         if (!clips.length) {
             box.innerHTML = '<div class="mfs-empty">Sin clips.<br>Posiciona la cámara y añade uno:</div>';
         }
-        // botones de creación (con la pose actual de la cámara)
+        
         const btns = el('div');
         btns.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:6px 0;';
         const types = ['idle', 'keyframe', 'path', 'dolly', 'orbit', 'look', 'shake', 'translate', 'subtitle', 'audio'];
@@ -1846,7 +1733,7 @@
                     <span style="font-size:10px;color:#8a8a96;">${(c.start / 20).toFixed(1)}s</span>`;
                 row.title = `Capa ${c.layer} · ${T.label}\nClick = seleccionar · botones de la derecha para editar`;
                 row.onclick = () => { FC.selectedId = c.id; refreshCamList(); window.MF_Timeline?.render?.(); };
-                // menú de acciones rápido por clip
+                
                 const acts = el('span');
                 acts.style.cssText = 'display:flex;gap:2px;';
                 const mk = (txt, fn, title) => {
@@ -1872,11 +1759,6 @@
         }
     }
 
-    // ── cámara durante el playback: aplicar la pose evaluada ──
-    // BBS evalúa los clips de cámara cada tick del film; aquí el hook de
-    // applyCamPose del studio se queda corto (solo impone cam.pos/yaw/pitch),
-    // así que en playback escribimos cam.* directamente y applyCamPose la
-    // impone en el render del juego.
     let playbackCamActive = false;
     function playbackCamTick() {
         const F = window.MF_Film;
@@ -1887,7 +1769,7 @@
             if (playbackCamActive) {
                 playbackCamActive = false;
                 FC.reset();
-                // restaurar FOV si lo animamos
+                
                 if (cam.origFov != null && cam.camera) {
                     try { cam.camera.fov = cam.origFov; cam.camera.updateProjectionMatrix?.(); } catch {}
                 }
@@ -1902,7 +1784,7 @@
             cam.pos.x = pose.x; cam.pos.y = pose.y; cam.pos.z = pose.z;
             cam.yaw = pose.yaw; cam.pitch = pose.pitch;
             applyCamFov(pose.fov || null);
-            // roll: el juego usa rotation YXZ; el roll va como Z
+            
             if (pose.roll && cam.camera?.rotation?.set) {
                 try { cam._roll = pose.roll; } catch {}
             }
@@ -1910,7 +1792,6 @@
         renderSubtitle(FC.subtitle);
     }
 
-    // ── subtítulos (clip subtitle de MF_FilmCamera) ──
     let subEl = null;
     function renderSubtitle(sub) {
         if (!sub) { if (subEl) { subEl.remove(); subEl = null; } return; }
@@ -1936,10 +1817,9 @@
         subEl.textContent = sub.text || '';
     }
 
-    // ── render de video: MediaRecorder sobre el canvas del juego ──
     const renderer = { rec: null, chunks: [] };
     function renderVideo() {
-        if (renderer.rec) { // parar manualmente
+        if (renderer.rec) { 
             try { renderer.rec.stop(); } catch {}
             return;
         }
@@ -1951,8 +1831,7 @@
             .find(m => MediaRecorder.isTypeSupported?.(m));
         if (!mime) return updateStatus('⚠ este navegador no soporta MediaRecorder webm');
         const stream = canvas.captureStream(60);
-        // nota: el audio de los clips suena por los Audio elements de
-        // MF_FilmCamera durante la sesión (no se muxea al webm — F2)
+        
         renderer.chunks = [];
         const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
         rec.ondataavailable = (e) => { if (e.data?.size) renderer.chunks.push(e.data); };
@@ -1972,7 +1851,7 @@
         rec.start(250);
         document.getElementById('mfs-pv-video')?.classList.add('rec-on');
         updateStatus('⏺ renderizando… click ⏺ otra vez para terminar y guardar');
-        // reproducir la secuencia; al terminar, parar la grabación
+        
         const startPlayback = window.MF_Timeline?.clips?.length
             ? () => F.playSequence(window.MF_Timeline.clips.map(c => ({ filmName: c.film.name, start: c.start, duration: c.duration })))
             : () => F.playFilm(state.activeFilm || undefined);
@@ -1989,14 +1868,6 @@
         return null;
     }
 
-    // ── minimizar la ESCENA al rect del preview vía transform ──
-    // El canvas del juego es fullscreen y el juego defiende su tamaño con
-    // estilos inline. En vez de pelear, NO se toca su tamaño: se aplica un
-    // transform (translate + scale anisótropo) que llena el rect del
-    // preview EXACTO, sin letterbox. El juego jamás escribe 'transform',
-    // así que no hay batalla. La cámara ajusta su aspect al del preview
-    // cada frame para que la escena no se deforme (mismo efecto que
-    // renderer.setSize con el rect del preview).
     const viewport = { canvases: [], origAspect: null };
     let clampLogN = 0, clampLogLast = 0;
     function dumpCanvases() {
@@ -2013,16 +1884,13 @@
         } catch {}
         return out.join('  ·  ') || 'NINGUNO';
     }
-    // recopila TODOS los canvas del juego: el juego puede usar varios
-    // (3D + HUD 2D apilados); si solo se transforma uno, el otro queda
-    // fullscreen y la escena se sigue viendo centrada en la pantalla.
-    // Criterio: layout (offsetWidth/Height, ignora transforms) ≈ ventana.
+    
     function collectGameCanvases() {
         const found = [];
         try {
             for (const cv of document.querySelectorAll('canvas')) {
                 if (!cv.isConnected) continue;
-                if (cv.closest('#mf-studio')) continue; // nuestra UI
+                if (cv.closest('#mf-studio')) continue; 
                 const w = cv.offsetWidth || cv.getBoundingClientRect().width;
                 const h = cv.offsetHeight || cv.getBoundingClientRect().height;
                 if (w >= window.innerWidth * 0.9 && h >= window.innerHeight * 0.9) found.push(cv);
@@ -2030,11 +1898,7 @@
         } catch {}
         return found;
     }
-    // calcula el transform que encaja un canvas fullscreen DENTRO del rect
-    // del preview, llenándolo por completo. Escala NO uniforme (sx, sy) +
-    // aspect de la cámara forzado al del preview = sin letterbox y sin
-    // deformación percibida (la cámara compensa la diferencia de aspect).
-    // Devuelve { tx, ty, sx, sy }.
+    
     function fitTransform() {
         const p = document.getElementById('mf-studio-preview');
         if (!p) return null;
@@ -2046,7 +1910,7 @@
             sy: pr.height / window.innerHeight
         };
     }
-    // lee el transform actual de un canvas; null si no hay
+    
     function parseTransform(cv) {
         const t = cv.style.transform;
         if (!t || t === 'none') return null;
@@ -2055,7 +1919,7 @@
         return { tx: +nums[0], ty: +nums[1], sx: +nums[2], sy: +nums[3] };
     }
     function clampGameCanvas() {
-        // re-colectar si cambió el set (el juego puede crear/eliminar canvas)
+        
         const want = fitTransform();
         if (!want) return;
         if (!viewport.canvases.length) {
@@ -2083,8 +1947,7 @@
                     }
                 }
             }
-            // aspect de la cámara = aspect del preview: compensa la escala
-            // anisótropa, así la escena no se deforma
+            
             const p = document.getElementById('mf-studio-preview');
             const pr = p.getBoundingClientRect();
             const c = cam.camera;
@@ -2100,7 +1963,7 @@
             console.log(TAG + ' clamp: ERROR ' + e);
         }
     }
-    // recalcula el transform (ventana resize o cambios de layout)
+    
     function applyViewportRect() { clampGameCanvas(); }
     function viewportEnable() {
         const cvs = collectGameCanvases();
@@ -2114,7 +1977,7 @@
         viewport.canvases = cvs;
         clampGameCanvas();
         window.addEventListener('resize', applyViewportRect);
-        // snapshot del estado tras 1s para diagnóstico
+        
         setTimeout(() => {
             if (!viewport.canvases.length) return;
             const pr = (document.getElementById('mf-studio-preview') || {}).getBoundingClientRect?.() || { width: 0, height: 0 };
@@ -2135,7 +1998,7 @@
             } catch {}
         }
         if (viewport.canvases.length) console.log(TAG + ' viewportDisable: transforms eliminados');
-        // restaurar el aspect original de la cámara
+        
         if (cam.camera && viewport.origAspect != null) {
             try {
                 cam.camera.aspect = viewport.origAspect;
@@ -2151,12 +2014,11 @@
         const scene = game?.gameScene?.scene;
         let camera = game?.gameScene?.camera || game?.camera || null;
         if (!camera) {
-            // buscar por la escena
+            
             camera = scene?.camera || null;
         }
         if (!camera || !scene) return false;
 
-        // guardar estado original
         cam.camera = camera;
         cam.origParent = camera.parent || null;
         cam.origIndex = Array.isArray(cam.origParent?.children) ? cam.origParent.children.indexOf(camera) : -1;
@@ -2166,17 +2028,14 @@
             cam.origQuat = { x: camera.quaternion.x, y: camera.quaternion.y, z: camera.quaternion.z, w: camera.quaternion.w };
         } catch { cam.origQuat = null; }
 
-        // partir de la vista actual
         cam.pos = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
-        // world position si está colgada del jugador (Vector3 interno del juego)
+        
         try {
             camera.updateMatrixWorld?.(true);
             const wp = camera.getWorldPosition?.(new camera.position.constructor());
             if (wp && Number.isFinite(wp.x)) { cam.pos = { x: wp.x, y: wp.y, z: wp.z }; }
         } catch {}
-        // detach a la escena (mantiene transform mundial). La orientación
-        // se captura DESPUÉS del attach; antes era local al padre del jugador
-        // y podía producir un salto/desgarro al primer frame.
+        
         try {
             if (typeof scene.attach === 'function') scene.attach(camera);
             else scene.add(camera);
@@ -2192,14 +2051,14 @@
         bindCameraKeys();
         installCamHooks(camera);
         applyCamPose();
-        // La cámara del Studio es local; compartir animación no la publica.
+        
         console.log(TAG + ' cámara de studio activa (click+drag=rotar · WASD/QE=mover · Ctrl=rápido)');
         return true;
     }
 
     function cameraDisable() {
         if (!cam.active) return;
-        // La cámara del Studio es local; no hay estado remoto que apagar.
+        
         cam.active = false;
         cam.dragging = false;
         cam.keys = {};
@@ -2207,7 +2066,7 @@
         const camera = cam.camera;
         if (camera && cam.origParent) {
             try {
-                // restaurar transform original
+                
                 if (cam.origPos) camera.position.set(cam.origPos.x, cam.origPos.y, cam.origPos.z);
                 if (cam.origQuat) camera.quaternion.set(cam.origQuat.x, cam.origQuat.y, cam.origQuat.z, cam.origQuat.w);
                 cam.origParent.add(camera);
@@ -2224,18 +2083,12 @@
         cam.camera = null; cam.origParent = null; cam.scene = null;
     }
 
-    // reaplicar pose de cámara cada frame (el juego puede pisarla).
-    // Mismo mecanismo que FreeCam: hookear updateMatrixWorld/updateWorldMatrix
-    // para que la pose del estudio se aplique ANTES de que el juego calcule
-    // sus matrices (el juego reescribe la cámara en su propio loop).
     const camHooks = { umw: null, uwm: null, updating: false };
     function applyCamPose() {
         const c = cam.camera;
         if (!c) return;
-        // cámara remota compartida: interpolar hacia el target del peer en
-        // lugar de usar mi pose local. Si arrastro o uso WASD, TOMO el
-        // control (dejo de seguir y mi cámara pasa a compartirse).
-        if (p2p.applying) return; // ya viene de datos remotos
+        
+        if (p2p.applying) return; 
         if (p2p.followRemoteCamera && p2p.camActive && p2p.camRemote) {
             if (cam.dragging || camKeysActive()) {
                 p2p.camActive = false;
@@ -2258,8 +2111,7 @@
         if (typeof c.rotation?.set === 'function') {
             try { c.rotation.set(cam.pitch, cam.yaw, 0, 'YXZ'); } catch { c.rotation.set(cam.pitch, cam.yaw, 0); }
         }
-        // P2P del Studio comparte pose/animación, no la cámara. Esto evita
-        // bloquear o secuestrar la vista del jugador conectado.
+        
     }
     function installCamHooks(camera) {
         if (!camera) return;
@@ -2303,8 +2155,7 @@
         cam.keysBound = true;
         window.addEventListener('keydown', (ev) => {
             if (!cam.active || !state.open) return;
-            // en modo control del jugador, WASD se lo queda el JUEGO (mueve
-            // al actor); la cámara estática no debe consumir las teclas
+            
             if (playerCtrl.active) return;
             if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE'].includes(ev.code)) {
                 cam.keys[ev.code] = true;
@@ -2314,8 +2165,6 @@
         window.addEventListener('keyup', (ev) => { cam.keys[ev.code] = false; });
     }
 
-    // ¿hay teclas de movimiento de cámara presionadas? (para ceder el
-    // control a la cámara remota compartida)
     function camKeysActive() {
         return !!(cam.keys.KeyW || cam.keys.KeyA || cam.keys.KeyS ||
             cam.keys.KeyD || cam.keys.KeyQ || cam.keys.KeyE);
@@ -2337,26 +2186,20 @@
             cam.pos.z += (-cy * f - sy * s) * dist;
             cam.pos.y += v * dist;
         }
-        applyCamPose(); // siempre: el juego puede pisar la cámara
+        applyCamPose(); 
     }
 
-    // ── Studio Sync: recepción de datos remotos ──
-    // el peer movió su cámara: guardar target (applyCamPose interpola)
     function applyRemoteCam(p) {
-        // Compatibilidad con clientes viejos que aún mandan studio-cam.
-        // Se acepta el paquete, pero NUNCA se activa/mueve la cámara local.
+        
         if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) return;
         p2p.camRemote = { x: p.x, y: p.y, z: p.z, yaw: +p.yaw || 0, pitch: +p.pitch || 0 };
     }
 
-    // Compatibilidad con peers antiguos. Compartir animación no implica seguir
-    // su cámara: el receptor conserva control total de su vista.
     function remoteCamActive(on) {
         p2p.camActive = !!on;
         if (!on) p2p.camRemote = null;
     }
 
-    // el peer posó su actor: aplicar localmente (radianes, formato MF_Film)
     function applyRemotePose(pose, reset) {
         if (reset) {
             p2p.applying = true;
@@ -2365,7 +2208,7 @@
             return;
         }
         if (!pose || typeof pose !== 'object') return;
-        // suprimir eco: si mi emisión lee esta misma pose, no re-enviarla
+        
         try { p2p._poseKey = JSON.stringify(pose); } catch {}
         p2p._remotePoseAt = performance.now();
         p2p.applying = true;
@@ -2376,18 +2219,16 @@
         p2p.applying = false;
     }
 
-    // ── Studio Sync: emisión de pose local (throttle 20 Hz) ──
     function emitLocalPose(force) {
         if (!p2p.share || p2p.applying) return;
-        // anti-eco: si acabo de aplicar pose remota, esperar 150ms antes
-        // de volver a emitir (mi propio bucle podría leer la pose del peer)
+        
         if (p2p._remotePoseAt && performance.now() - p2p._remotePoseAt < 150) return;
         const now = performance.now();
         if (!force && now - p2p.lastPoseOut < 50) return;
         p2p.lastPoseOut = now;
         const pose = window.MF_Pose?.getPose?.();
         if (!pose) return;
-        // compactar a 3 decimales y comparar con lo último enviado
+        
         const out = {};
         for (const part in pose) {
             out[part] = [+pose[part][0].toFixed(3), +pose[part][1].toFixed(3), +pose[part][2].toFixed(3)];
@@ -2406,9 +2247,7 @@
 
         preview.addEventListener('mousedown', (ev) => {
             if (!cam.active || ev.button !== 0) return;
-            // posing activo: el gesto es para posar, no para la cámara.
-            // (El listener de posing se registra DESPUÉS que este, así que
-            // no puede cortarnos; decidimos nosotros ceder el gesto.)
+            
             if (posing.enabled) return;
             cam.dragging = true;
             cam.lastX = ev.clientX; cam.lastY = ev.clientY;
@@ -2435,12 +2274,6 @@
         }
     }
 
-    // ── posing directo en viewport, estilo Blockbench ──
-    // Click derecho sobre una extremidad del jugador = seleccionarla
-    // (resaltada). Arrastrar con derecho = rotar (X ratón→pitch, Y→roll).
-    // Rueda durante selección = yaw. Shift = espejo en la parte opuesta.
-    // Ctrl = snap a 15°. Esc o click al vacío = deseleccionar.
-    // (Botón derecho para no pelear con el click-izq de la cámara.)
     const posing = { enabled: false, selected: null, selPart: null, dragging: false, lastX: 0, lastY: 0, startX: 0, startY: 0, rotHandle: null, bound: false, outline: null };
     let posingWinBound = false;
 
@@ -2456,10 +2289,6 @@
         if (preview) preview.style.cursor = posing.enabled ? 'crosshair' : 'grab';
     }
 
-    // ── lienzo de trayectoria de cámara (estilo BBS UIOverlay) ──
-    // Dibuja sobre el preview el recorrido 3D de los clips de cámara
-    // (MF_FilmCamera): muestrea cada clip con su propia evaluación y
-    // proyecta los puntos con la cámara del studio. Toggle con T o 🧭.
     const traj = { on: false, sel: -1 };
     const TRAJ_COLORS = ['#57F52A', '#0088FF', '#FFA500', '#DE2E9F', '#6820AD', '#D82253'];
     function trajToggle(on) {
@@ -2473,9 +2302,7 @@
         if (btn) btn.classList.toggle('on', traj.on);
         if (traj.on) trajDraw();
     }
-    // proyecta un punto 3D a coordenadas del lienzo con las matrices de la
-    // cámara (manual, sin THREE — miniblox es bundle sin window.THREE;
-    // misma técnica que Waypoints/PatPat)
+    
     function matrixVec(m, x, y, z, w) {
         return {
             x: m[0] * x + m[4] * y + m[8] * z + m[12] * w,
@@ -2490,12 +2317,12 @@
         if (!view || !proj) return null;
         const v = matrixVec(view, p.x, p.y, p.z, 1);
         const c = matrixVec(proj, v.x, v.y, v.z, v.w);
-        if (!Number.isFinite(c.w) || c.w <= 0.00001) return null; // detrás
+        if (!Number.isFinite(c.w) || c.w <= 0.00001) return null; 
         const nx = c.x / c.w, ny = c.y / c.w, nz = c.z / c.w;
         if (![nx, ny, nz].every(Number.isFinite)) return null;
         return { x: (nx * 0.5 + 0.5) * w, y: (-ny * 0.5 + 0.5) * h };
     }
-    // genera la polilínea 3D de un clip de cámara (x,y,z por tick)
+    
     function trajClipPoints(c) {
         const FC = window.MF_FilmCamera;
         if (!FC || !c) return [];
@@ -2509,14 +2336,14 @@
         }
         return pts;
     }
-    // keyframes/waypoints explícitos de un clip (para puntos)
+    
     function trajClipKeys(c) {
         const P = c.props || {};
         if (c.type === 'path') return P.points || [];
         if (c.type === 'keyframe') return P.keys || [];
         if (c.type === 'idle' || c.type === 'dolly') return [P.pose || {}].filter(Boolean);
         if (c.type === 'orbit') {
-            // 8 puntos alrededor del target
+            
             const t = P.target || { x: 0, y: 0, z: 0 }, out = [];
             const d = P.distance || 8, h = P.height || 2;
             for (let i = 0; i < 8; i++) {
@@ -2530,7 +2357,7 @@
         const a = deg * Math.PI / 180;
         out.push({ x: t.x + Math.cos(a) * d, y: t.y + h, z: t.z + Math.sin(a) * d });
     }
-    // ¿es dibujable? (tiene posición propia en el mundo)
+    
     function trajDrawable(c) {
         return !['subtitle', 'audio', 'look', 'shake', 'translate'].includes(c.type);
     }
@@ -2540,7 +2367,7 @@
         const FC = window.MF_FilmCamera;
         const camera = cam.camera;
         if (!FC || !camera) return;
-        // tamaño del lienzo = tamaño del preview (device pixels para nitidez)
+        
         const r = cv.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
         if (cv.width !== Math.round(r.width * dpr) || cv.height !== Math.round(r.height * dpr)) {
@@ -2554,7 +2381,7 @@
         ctx.clearRect(0, 0, w, h);
         const clips = (FC.clips || []).filter(trajDrawable);
         if (!clips.length) return;
-        // dibujar todos los clips; el seleccionado más grueso y opaco
+        
         clips.forEach((c, ci) => {
             const poses = trajClipPoints(c);
             if (poses.length < 2) return;
@@ -2574,7 +2401,7 @@
             }
             ctx.stroke();
             ctx.setLineDash([]);
-            // keyframes como puntos
+            
             const keys = trajClipKeys(c);
             ctx.fillStyle = color;
             ctx.globalAlpha = 1;
@@ -2587,7 +2414,7 @@
                 ctx.arc(pr.x, pr.y, sel ? 4 : 3, 0, Math.PI * 2);
                 ctx.fill();
             }
-            // etiqueta del clip
+            
             if (firstLabel) {
                 ctx.font = '10px Consolas, monospace';
                 ctx.fillText(FC.TYPES?.[c.type]?.label || c.type, firstLabel.x + 6, firstLabel.y - 4);
@@ -2595,46 +2422,35 @@
         });
         ctx.globalAlpha = 1;
     }
-    // clip seleccionado en el lienzo: ◀/▶ navegan los clips dibujables
+    
     function trajCycle(dir) {
         const FC = window.MF_FilmCamera;
         const drawable = (FC?.clips || []).filter(trajDrawable);
         if (!drawable.length) return;
         traj.sel = (traj.sel + dir + drawable.length) % drawable.length;
-        // sincronizar selección con FilmCamera/timeline
+        
         try { FC.select?.(drawable[traj.sel].id); } catch {}
         trajDraw();
     }
 
-    // ── modo "control del jugador" (estilo toggleControl de BBS) ──
-    // El jugador se mueve con WASD/salto y el RATÓN lo rota, mientras la
-    // cámara del studio permanece estática. En BBS esto se hace dando el
-    // pointer-lock al juego (GLFW_CURSOR_DISABLED) y dejando que su motor
-    // mueva al actor; la cámara queda bajo control del runner del film.
-    // Aquí: el patch de requestPointerLock se relaja SOLO para un request
-    // generado por nosotros, el canvas del juego captura el lock real (el
-    // juego mueve y rota al jugador), y applyCamPose() —que ya corre cada
-    // frame en el uiLoop— re-fija la cámara del studio encima, estática.
     const playerCtrl = { active: false, bound: false, recHeld: false };
     function playerControlToggle() {
         playerCtrl.active = !playerCtrl.active;
         const btn = document.getElementById('mfs-pv-player');
         if (btn) btn.classList.toggle('on', playerCtrl.active);
         if (playerCtrl.active) {
-            // desactivar modos que compiten por el input
+            
             posingToggle(false);
-            // forzar cámara del studio activa (si no lo está, activarla
-            // para que el frame que pinta sea el de la cámara estática)
+            
             if (!cam.active) try { cameraEnable(); } catch {}
-            // pedir el pointer lock REAL para el canvas del juego: el juego
-            // vuelve a leer WASD/ratón y mueve/rota AL JUGADOR
-            lock.forceNext = true; // el patch deja pasar el próximo request
+            
+            lock.forceNext = true; 
             const cv = viewport.canvases[0];
             try { cv?.requestPointerLock?.(); } catch {}
             updateStatus('🎮 Control del jugador ON — WASD=mover · ratón=rotar jugador · cámara estática · H/ESC=salir');
             console.log(TAG + ' playerControl ON');
         } else {
-            if (playerCtrl.recHeld) playerCtrlRecStop(); // cortar toma colgada
+            if (playerCtrl.recHeld) playerCtrlRecStop(); 
             releasePointerLock();
             updateStatus('🎮 Control del jugador OFF');
             console.log(TAG + ' playerControl OFF');
@@ -2647,12 +2463,10 @@
             if (!state.open || !playerCtrl.active) return;
             if (ev.code === 'KeyH' || ev.key === 'Escape') {
                 ev.preventDefault();
-                playerControlToggle(); // toggle → OFF
+                playerControlToggle(); 
             }
         }, true);
-        // MANTENER ALT IZQUIERDO = grabar los movimientos en un clip:
-        // keydown arranca la toma, keyup la corta, guarda y añade el clip
-        // al timeline en el playhead actual (estilo hold-to-record de BBS)
+        
         window.addEventListener('keydown', (ev) => {
             if (!state.open || !playerCtrl.active) return;
             if (ev.code === 'AltLeft' && !playerCtrl.recHeld && !isTypingTarget(ev.target)) {
@@ -2663,11 +2477,11 @@
         window.addEventListener('keyup', (ev) => {
             if (ev.code === 'AltLeft' && playerCtrl.recHeld) playerCtrlRecStop();
         }, true);
-        // blur de ventana: cortar la toma para no dejar grabación colgada
+        
         window.addEventListener('blur', () => {
             if (playerCtrl.recHeld) playerCtrlRecStop();
         });
-        // si el juego pierde el lock (alt-tab, click fuera), salir del modo
+        
         document.addEventListener('pointerlockchange', () => {
             if (playerCtrl.active && !document.pointerLockElement) {
                 if (playerCtrl.recHeld) playerCtrlRecStop();
@@ -2678,7 +2492,7 @@
             }
         });
     }
-    // arranca la toma (MF_Film recorder a 20Hz)
+    
     function playerCtrlRecStart() {
         const F = window.MF_Film;
         if (!F || F.status?.recording) return;
@@ -2687,7 +2501,7 @@
         playerCtrl.recHeld = true;
         updateStatus('⏺ GRABANDO movimiento (suelta Alt izq. para cortar)');
     }
-    // corta la toma, la guarda y la añade como clip en el playhead
+    
     function playerCtrlRecStop() {
         playerCtrl.recHeld = false;
         const F = window.MF_Film;
@@ -2698,7 +2512,7 @@
         const s = F.saveFilm(name);
         if (s.ok) {
             refreshTakes(); refreshMediaPool();
-            // añadir como clip de la toma activa en el playhead actual
+            
             const film = F.getFilm?.(name) || null;
             if (film && window.MF_Timeline) {
                 try { window.MF_Timeline.addClip(film, Math.floor(state.playheadTick)); } catch {}
@@ -2708,7 +2522,6 @@
         }
     }
 
-    // ── Studio Sync P2P: activar/desactivar compartir mis cambios ──
     function shareToggle(on) {
         if (on === undefined) on = !p2p.share;
         p2p.share = !!on;
@@ -2718,8 +2531,7 @@
             p2p._camKey = null;
             p2p._poseKey = null;
         } else {
-            // al activar: mandar snapshot inmediato de pose/animación.
-            // La cámara permanece siempre local para cada jugador.
+            
             emitLocalPose(true);
         }
         const st = window.MF_Peer?.status;
@@ -2734,15 +2546,13 @@
         posing.selected = pick.object;
         posing.selPart = pick.part;
         try {
-            // resaltar: emissive naranja IN-PLACE (sin clonar — el clone
-            // pierde la textura de la skin y se veía azul/oscura)
+            
             posing.outline = makeEmissiveHighlight(pick.object, 0x552200);
         } catch {}
         updateStatus('Pose: ' + pick.part + ' — 🖱 izq=rotar · anillos XYZ=rotar eje · flechas XYZ=mover · der=mover · rueda=yaw · Alt+rueda=tamaño · Shift=espejo · Esc=salir');
         attachGizmoToPart(pick);
     }
 
-    // ── gizmo de flechas XYZ (estilo Blockbench move tool) ──
     const gizmo = {
         hoverAxis: null, draggingAxis: null, startOffset: null,
         axisApplied: 0, axisScale: 1,
@@ -2751,7 +2561,6 @@
         mode: 'move'
     };
 
-    // aplicar/validar el modo del gizmo (move | rotate)
     function gizmoSetMode(mode) {
         gizmo.mode = (mode === 'rotate') ? 'rotate' : 'move';
         window.MF_Gizmo?.setMode?.(gizmo.mode);
@@ -2766,17 +2575,15 @@
     function attachGizmoToPart(pick) {
         const G = window.MF_Gizmo;
         if (!G) return;
-        // el gizmo se ancla al joint de la parte (pick.joint si el picking lo dio)
+        
         const joint = pick.joint || getJointOfPart(pick.part);
         if (!joint) return;
         G.attach(joint, null);
-        G.setMode?.(gizmo.mode); // restaurar modo mover/rotar tras re-attach
+        G.setMode?.(gizmo.mode); 
     }
 
     function getJointOfPart(part) {
-        // reutilizar el resolvedor de MF_Pose: findJoint interno no está
-        // expuesto, pero pickPart devuelve el joint; como fallback,
-        // buscamos por nombre en el mesh del jugador
+        
         try {
             const g = getGame();
             const me = g?.player;
@@ -2789,7 +2596,7 @@
                 leftLeg: 'leftHipJoint', rightLeg: 'rightHipJoint'
             }[part];
             if (!names) return null;
-            // BFS
+            
             const queue = [mesh];
             const seen = new WeakSet();
             let visited = 0;
@@ -2812,17 +2619,13 @@
         window.MF_Gizmo?.endDrag?.();
     }
 
-    // aplicar translate solo en el eje arrastrado (eje MUNDO del gizmo,
-    // convertido a local por MF_Pose — el personaje tiene yaw)
     function applyGizmoDrag(dxTotal, dyTotal) {
         const G = window.MF_Gizmo;
         const part = posing.selPart;
         const P = window.MF_Pose;
         const axis = gizmo.draggingAxis;
         if (!G || !part || !P || !axis) return;
-        // Proyección congelada + delta total = movimiento X/Y/Z lineal. Aplicar
-        // solo la diferencia contra el frame anterior lo vuelve independiente
-        // de FPS y de cuántos mousemove entregue el navegador.
+        
         const raw = G.dragDeltaFromStart?.(dxTotal, dyTotal);
         const target = (Number.isFinite(raw) ? raw : 0) * gizmo.axisScale;
         const step = target - gizmo.axisApplied;
@@ -2833,8 +2636,6 @@
         autoKeyTransform(part, 'position', [next.x, next.y, next.z], false);
     }
 
-    // rotación por anillo: eje MUNDO fijo (x/y/z), ángulo medido en el
-    // plano del anillo — reutiliza el handle de beginRotateWorld
     function applyRingDrag(angleRad, snap15, mirror) {
         const part = posing.selPart;
         const P = window.MF_Pose;
@@ -2866,26 +2667,17 @@
         posing.dragging = false;
     }
 
-    // espejo left↔right para Shift
     function mirrorPart(part) {
         return ({ leftArm: 'rightArm', rightArm: 'leftArm', leftLeg: 'rightLeg', rightLeg: 'leftLeg' })[part] || null;
     }
 
-    // auto-key: si hay animación abierta, cada transform escribe keyframe
-    // en el playhead (igual que el Animation Mode de Blockbench)
     function autoKeyTransform(part, channel, value, mirror) {
         const A = window.MF_Animation;
         if (!A?.autoKeyEnabled || !A.current) return;
-        // autoKey del módulo ya refleja al lado opuesto; pasamos forceMirror
-        // explícito para no duplicar (nuestro Shift ya lo decide el usuario)
+        
         A.autoKey(part, channel, value, !!mirror);
     }
 
-    // rotación estilo Blockbench: el drag se aplica en espacio MUNDO
-    // alrededor de los ejes right/up de la cámara → el brazo sigue al
-    // ratón hacia adelante/atrás sin importar el ángulo de la cámara.
-    // Los deltas son TOTALES desde el mousedown (rotHandle captura la
-    // pose inicial), así el snap y los eventos repetidos no acumulan error.
     function applyRotFromDrag(dxTotal, dyTotal, snap15, mirror) {
         const part = posing.selPart;
         const P = window.MF_Pose;
@@ -2901,7 +2693,7 @@
                 return;
             }
         }
-        // fallback: pitch/roll locales (sin cuaterniones disponibles)
+        
         const pose = P.getPose();
         const cur = pose?.[part] || [0, 0, 0];
         const deg = (r) => r * 180 / Math.PI;
@@ -2933,13 +2725,12 @@
         }
     }
 
-    // Alt+rueda sobre parte seleccionada = escala uniforme (resize BB)
     function applyScaleFromWheel(deltaY, mirror) {
         const part = posing.selPart;
         const P = window.MF_Pose;
         if (!part || !P?.setScale) return;
         const cur = P.getScale(part) || { x: 1, y: 1, z: 1 };
-        // rueda arriba crece, abajo decrece; step 5%
+        
         let u = cur.x * (deltaY < 0 ? 1.05 : 1 / 1.05);
         try { P.setScale(part, { uniform: u }); } catch {}
         autoKeyTransform(part, 'scale', [u, u, u], mirror);
@@ -2950,10 +2741,7 @@
     }
 
     function bindViewportPosing() {
-        // El preview se RECREA en cada open() (close() remueve el DOM), así
-        // que el guard debe ser por-elemento: si el closure marcara bound=true
-        // para siempre, la 2ª apertura quedaría sin listeners (sin hover,
-        // sin selección). Los de window() solo se registran una vez.
+        
         const bindPreview = () => {
             const preview = document.getElementById('mf-studio-preview');
             if (!preview || preview.dataset.posingBound) return;
@@ -2964,14 +2752,13 @@
             ev.preventDefault();
         });
 
-        // ── hover: resaltar parte (azul) y detectar eje del gizmo ──
         let hoverThrottle = 0;
         preview.addEventListener('mousemove', (ev) => {
             if (!posing.enabled || posing.dragging) return;
             const now = performance.now();
-            if (now - hoverThrottle < 50) return; // 20Hz max
+            if (now - hoverThrottle < 50) return; 
             hoverThrottle = now;
-            // prioridad: anillo de rotación > flecha del gizmo > parte
+            
             const G = window.MF_Gizmo;
             if (G?.visible() && posing.selPart) {
                 const ring = G.pickRing?.(ev.clientX, ev.clientY, cam.camera);
@@ -3003,10 +2790,9 @@
         });
         preview.addEventListener('mouseleave', clearHoverHighlight);
 
-        // ── click izquierdo: flecha del gizmo = mover por eje; si no, seleccionar ──
         preview.addEventListener('mousedown', (ev) => {
             if (!posing.enabled || ev.button !== 0) return;
-            // 1) ¿anillo de rotación bajo el cursor? → rotar por eje mundo
+            
             const G = window.MF_Gizmo;
             if (G?.pickRing && posing.selPart) {
                 const ring = G.pickRing(ev.clientX, ev.clientY, cam.camera);
@@ -3026,7 +2812,7 @@
                     return;
                 }
             }
-            // 2) ¿flecha del gizmo bajo el cursor? → drag por eje
+            
             if (G?.visible() && posing.selPart) {
                 const axis = G.pick(ev.clientX, ev.clientY, cam.camera);
                 if (axis) {
@@ -3045,22 +2831,21 @@
                     return;
                 }
             }
-            // 2) si no: seleccionar parte (y rotar con el drag)
+            
             const pick = window.MF_Pose?.pickPart?.(ev.clientX, ev.clientY);
-            if (!pick) return; // no golpea nada: la cámara rota normal
+            if (!pick) return; 
             posingSelect(pick);
             posing.dragging = true;
             posing.dragMode = 'rotate';
             posing.lastX = ev.clientX; posing.lastY = ev.clientY;
             posing.startX = ev.clientX; posing.startY = ev.clientY;
-            // handle de rotación mundo-relativa: congela pose inicial del joint
+            
             posing.rotHandle = window.MF_Pose?.beginRotateWorld?.(posing.selPart, cam.camera) ?? null;
             clearHoverHighlight();
             ev.preventDefault();
-            ev.stopImmediatePropagation(); // que la cámara no rote también
+            ev.stopImmediatePropagation(); 
         });
 
-        // ── click derecho: seleccionar + modo "move" (translate) ──
         preview.addEventListener('mousedown', (ev) => {
             if (!posing.enabled || ev.button !== 2) return;
             const pick = window.MF_Pose?.pickPart?.(ev.clientX, ev.clientY);
@@ -3071,16 +2856,15 @@
             posing.lastX = ev.clientX; posing.lastY = ev.clientY;
             ev.preventDefault();
         });
-        // rueda durante selección: yaw · Alt+rueda: escala (resize)
+        
         preview.addEventListener('wheel', (ev) => {
             if (!posing.enabled || !posing.selPart) return;
             ev.preventDefault();
             if (ev.altKey) applyScaleFromWheel(ev.deltaY, ev.shiftKey);
             else applyYawFromWheel(ev.deltaY, ev.ctrlKey, ev.shiftKey);
         }, { passive: false });
-        }; // fin bindPreview
+        }; 
 
-        // listeners de window: solo una vez (sobreviven a close/open)
         if (!posingWinBound) {
             posingWinBound = true;
             window.addEventListener('mousemove', (ev) => {
@@ -3092,8 +2876,7 @@
                     applyGizmoDrag(ev.clientX - posing.startX, ev.clientY - posing.startY);
                 }
                 else if (posing.dragMode === 'ring') {
-                    // Acumular deltas cortos evita el salto ±π de medir siempre
-                    // desde el mousedown después de cruzar media vuelta.
+                    
                     const G = window.MF_Gizmo;
                     const step = G?.ringDragDelta?.(
                         gizmo.draggingRing,
@@ -3107,8 +2890,7 @@
                 }
                 else if (posing.dragMode === 'move') applyMoveFromDrag(dx, dy, ev.ctrlKey, ev.shiftKey);
                 else {
-                    // deltas TOTALES desde el mousedown (la pose inicial ya está
-                    // congelada en el handle → sin error acumulado)
+                    
                     const dxTotal = ev.clientX - posing.startX;
                     const dyTotal = ev.clientY - posing.startY;
                     applyRotFromDrag(dxTotal, dyTotal, ev.ctrlKey, ev.shiftKey);
@@ -3129,20 +2911,15 @@
                     }
                 }
             });
-            // Esc deselecciona Y se traga (si llega al juego, abre su menú)
+            
             window.addEventListener('keydown', (ev) => {
                 if (!posing.enabled) return;
                 if (ev.key === 'Escape') { posingDeselect(); ev.preventDefault(); ev.stopImmediatePropagation(); }
             }, true);
         }
-        bindPreview(); // (re)bindear al preview actual (nuevo en cada open)
+        bindPreview(); 
     }
 
-    // resaltados ──
-    // seleccionado: naranja emissive · hover: azul tenue emissive.
-    // IN-PLACE: guardar emissive/emissiveIntensity y restaurarlos. NO se
-    // clona el material — el clone() del juego pierde la textura map y la
-    // parte se veía azul/oscura (color plano + emissive).
     function makeEmissiveHighlight(obj, color) {
         if (!obj?.material) return null;
         try {
@@ -3174,7 +2951,7 @@
     function setHoverHighlight(obj) {
         if (hoverHl?.obj === obj) return;
         clearHoverHighlight();
-        // no pisar el resaltado de selección
+        
         if (posing.outline?.obj === obj) return;
         const hl = makeEmissiveHighlight(obj, 0x113355);
         if (hl) hoverHl = hl;
@@ -3185,11 +2962,6 @@
         hoverHl = null;
     }
 
-    // ── translate con drag (modo move, botón derecho) ──
-    // dx/dy de ratón → offset del joint en el plano de cámara (screen-space)
-    // mover en el plano de pantalla: right/up de la CÁMARA → mundo → local.
-    // Así el torso (y cualquier parte) sigue al cursor libremente sin
-    // importar el yaw del personaje ni el ángulo de la cámara.
     function applyMoveFromDrag(dx, dy, slow, mirror) {
         const part = posing.selPart;
         const P = window.MF_Pose;
@@ -3198,7 +2970,6 @@
         if (!camera?.matrixWorld) return;
         try { camera.updateMatrixWorld?.(); } catch {}
 
-        // escala px→mundo según distancia cámara→parte seleccionada
         const mesh = getPoseMesh();
         let worldPerPx = 0.01;
         try {
@@ -3212,7 +2983,6 @@
         } catch {}
         const step = worldPerPx * (slow ? 0.2 : 1);
 
-        // ejes right/up de la cámara en mundo
         const V3 = camera.position.constructor;
         const e = camera.matrixWorld.elements;
         const right = new V3(e[0], e[1], e[2]).normalize();
@@ -3227,12 +2997,11 @@
         }
     }
 
-    // posición mundo del joint seleccionado (para escalar el drag por distancia)
     function getSelectedJointWorldPos(part) {
         try {
             const P = window.MF_Pose;
             if (!P) return null;
-            // reutilizar el picking: no hay API directa; usar el joint vía BFS
+            
             const g = getGame();
             const me = g?.player;
             const e = g?.world?.getPlayerById?.(me.id) || g?.world?.players?.get?.(me.id) || g?.world?.entities?.get?.(me.id) || me;
@@ -3263,7 +3032,7 @@
     }
 
     function getPoseMesh() {
-        // mesh del jugador local para medir distancia cámara→parte
+        
         try {
             const g = getGame();
             const me = g?.player;
@@ -3272,10 +3041,6 @@
         } catch { return null; }
     }
 
-    // ── pointer lock: liberar al abrir, bloquear recaptura del juego ──
-    // El juego pide pointer-lock en cada click sobre su canvas. Mientras el
-    // estudio está abierto, salimos del lock y neutralizamos requests
-    // nuevos (patch a requestPointerLock durante la sesión de estudio).
     const lock = { patched: false, orig: null, forceNext: false };
 
     function releasePointerLock() {
@@ -3289,8 +3054,7 @@
         const orig = lock.orig;
         Element.prototype.requestPointerLock = function (...args) {
             if (state.open) {
-                // estudio abierto: el juego no puede atrapar el ratón...
-                // salvo que lo pidamos nosotros (modo control del jugador)
+                
                 if (lock.forceNext) {
                     lock.forceNext = false;
                     return orig.apply(this, args);
@@ -3307,18 +3071,10 @@
         lock.patched = false;
     }
 
-    // ── tragarse pointerlockchange/error mientras el estudio está abierto ──
-    // El juego abre su MENÚ DE PAUSA cuando pierde el pointer lock (mismo
-    // camino que pulsar Esc). Como el estudio libera el lock al abrir, ese
-    // evento llegaría al juego y pausaría. Este listener va en window con
-    // capture: dispara ANTES que cualquier listener del juego (en document)
-    // y con stopImmediatePropagation el juego nunca se entera.
     let lockEventsBound = false;
     function swallowLockEvent(ev) {
         if (!state.open) return;
-        // en modo control del jugador, dejar que el juego VEA el lock
-        // ganado (necesita saber que el ratón está atrapado para el
-        // mouse-look); el lock PERDIDO se sigue tragando (menú de pausa)
+        
         if (playerCtrl.active && ev.type === 'pointerlockchange' && document.pointerLockElement) return;
         ev.stopImmediatePropagation();
     }
@@ -3329,27 +3085,23 @@
         window.addEventListener('pointerlockerror', swallowLockEvent, true);
     }
 
-    // ── abrir/cerrar ──
     function open() {
         if (state.open) return;
         build();
         state.open = true;
         lastCamFrame = 0;
-        // ORDEN CRÍTICO: primero bloquear pointerlockchange (si no, el juego
-        // ve la pérdida del lock como "Esc" y abre su menú de pausa),
-        // después liberar el lock, después parchear requestPointerLock.
+        
         blockLockEvents();
         releasePointerLock();
         patchPointerLock();
         playerControlBindKeys();
-        globalThis.__MF_STUDIO_OPEN__ = true; // FreeCam deja de interceptar input
+        globalThis.__MF_STUDIO_OPEN__ = true; 
         refreshTakes(); refreshMediaPool(); refreshModels(); refreshFaces(); refreshPosePanel(); renderTimeline(); updateProps(); updateStatus(); updateButtons();
         applyCinema();
         bindPreviewCamera();
         bindViewportPosing();
         cameraEnable();
-        // minimizar el canvas al rect del preview: reintentar unos frames
-        // porque en el frame del open() el layout puede medir 0×0
+        
         if (!viewportEnable()) {
             let tries = 0;
             const retry = () => {
@@ -3359,7 +3111,7 @@
             };
             requestAnimationFrame(retry);
         }
-        afkToggle(true); // anti-kick: editar puede dejar al player quieto mucho rato
+        afkToggle(true); 
         console.log(TAG + ' abierto. Click+drag en preview=rotar cámara · WASD=mover · Space=play · R=rec · F1=cerrar');
     }
 
@@ -3368,21 +3120,20 @@
         state.open = false;
         lastCamFrame = 0;
         cancelAnimationFrame(state.raf);
-        if (playerCtrl.active) playerControlToggle(); // soltar lock del jugador
-        viewportDisable(); // restaurar render fullscreen
+        if (playerCtrl.active) playerControlToggle(); 
+        viewportDisable(); 
         cameraDisable();
         posingToggle(false);
         afkToggle(false);
-        unpatchPointerLock(); // devolver el lock al juego
+        unpatchPointerLock(); 
         globalThis.__MF_STUDIO_OPEN__ = false;
-        state.cinema = false; applyCinema(); // restaurar HUD del juego
+        state.cinema = false; applyCinema(); 
         const root = document.getElementById(ID);
         const style = document.getElementById(ID + '-style');
         root?.remove(); style?.remove();
         console.log(TAG + ' cerrado');
     }
 
-    // ── API + registro ──
     window.MF_Studio = {
         open, close,
         get isOpen() { return state.open; },
@@ -3392,17 +3143,16 @@
             document.getElementById(ID)?.classList.toggle('cinema', state.cinema);
             applyCinema();
         },
-        // Studio Sync P2P
+        
         get share() { return p2p.share; },
         set share(v) { shareToggle(!!v); },
         applyRemotePose, applyRemoteCam, remoteCamActive,
-        // clips de cámara estilo BBS (MF_FilmCamera)
+        
         getStudioCamPose,
         renderVideo
     };
     window.__MF_Studio = true;
 
-    // F1 abre/cierra (aunque el estudio esté cerrado, el listener global vive aquí)
     window.addEventListener('keydown', (ev) => {
         if (ev.key === 'F1') { ev.preventDefault(); state.open ? close() : open(); }
     });

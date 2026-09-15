@@ -1,23 +1,4 @@
-// MF PBR Textures — soporte PBR estilo OptiFine (_n normal, _s specular,
-// _e emissive) sobre el atlas del terreno de miniblox.
-//
-// Arquitectura:
-//   - TexturePackManager (ISOLATED) detecta los sufijos _n/_s/_e del zip y
-//     reconstruye 3 atlases PBR con el MISMO layout de frames.json, los
-//     guarda en IndexedDB (mf_pbr_store) y avisa con CustomEvent
-//     'minifeather:pbr-update'.
-//   - Este módulo (MAIN world) hookea los materiales del atlas de terreno
-//     vía onBeforeCompile (patrón CustomShader) e inyecta:
-//       * normal mapping con TBN por derivadas de pantalla (los chunks no
-//         traen atributo tangent — técnica de normal_fragment_maps)
-//       * specular Blinn-Phong contra las luces direccionales del juego,
-//         acumulado en totalEmissiveRadiance (Lambert no suma
-//         directSpecular en su outgoingLight, pero sí totalEmissiveRadiance)
-//       * emissive aditivo sobre totalEmissiveRadiance
-//     Se samplea con varying propio vMfPbrUv copiado del atributo uv —
-//     inmune al rename vUv→vMapUv de three r151+ y a rotaciones de frames
-//     (mismas UVs que el diffuse).
-//   - El panel (ISOLATED) controla por CustomEvent 'minifeather:pbr-config'.
+
 (function () {
     'use strict';
 
@@ -34,8 +15,6 @@
     const EVT_CONFIG = 'minifeather:pbr-config';
     const EVT_REINSTALL = 'minifeather:pbr-reinstall';
 
-    // Materiales hookeables. Los sin pipeline de luces (Basic) o Lambert
-    // vertex-lit (three < r155) reciben el fallback autocontenido.
     const LIGHT_MATERIALS = [
         'MeshLambertMaterial', 'MeshStandardMaterial',
         'MeshPhongMaterial', 'MeshToonMaterial', 'MeshBasicMaterial'
@@ -51,18 +30,16 @@
         scanTimer: null,
         loading: null,
         webgl2: null,
-        texFlipY: null,      // flipY del atlas del juego — convención capturada
-        builtFlipY: null,    // flipY con el que se construyeron las texturas actuales
-        texSettings: null,   // filtros del atlas del juego — copiados al hookear
+        texFlipY: null,      
+        builtFlipY: null,    
+        texSettings: null,   
         atlasRetryDone: false,
-        reinstallCount: 0,   // anti-loop: reinstalaciones auto-disparadas en esta página
+        reinstallCount: 0,   
         diagLogged: false,
-        lastFrag: null,      // último fragment shader generado (debug)
-        lastVert: null,      // último vertex shader generado (debug)
-        lastGameUv: null     // varying con la que el juego samplea su diffuse
+        lastFrag: null,      
+        lastVert: null,      
+        lastGameUv: null     
     };
-
-    // ───────────────────── acceso al juego ─────────────────────
 
     function findGame() {
         try {
@@ -97,7 +74,7 @@
             visited++;
             if (!obj || seen.has(obj)) continue;
             seen.add(obj);
-            // Material único o array — con que UNO tenga .map, el mesh entra.
+            
             const mats = Array.isArray(obj.material) ? obj.material : (obj.material ? [obj.material] : null);
             if (mats && mats.some(m => m && m.map)) out.push(obj);
             if (Array.isArray(obj.children)) {
@@ -107,9 +84,6 @@
         return out;
     }
 
-    // Log de diagnóstico (una sola vez) — materiales y LUCES de la escena.
-    // Clave para depurar "PBR no hace nada": si directional=0, el juego usa
-    // iluminación custom y los anchors estándar no producen efecto.
     function diagScene() {
         if (state.diagLogged) return;
         const scene = getScene(findGame());
@@ -148,10 +122,6 @@
         }
     }
 
-    // Derivadas (dFdx/dFdy) son core en WebGL2 pero requieren extensión en
-    // WebGL1 — el normal mapping por tangentes de pantalla solo se inyecta
-    // si el juego corre WebGL2. El registro __MF_GL_CANVASES__ lo mantiene
-    // TextureInterceptor (mismo mundo MAIN).
     function isWebGL2() {
         if (state.webgl2 !== null) return state.webgl2;
         state.webgl2 = false;
@@ -162,16 +132,13 @@
                     break;
                 }
             }
-            // Sin registro aún (arranque temprano): asumir WebGL2 (moderno)
+            
             if (!(window.__MF_GL_CANVASES__ || []).length) state.webgl2 = true;
         } catch (_) {
             state.webgl2 = true;
         }
         return state.webgl2;
     }
-
-    // ───────────────────── IndexedDB ─────────────────────
-    // Mismo store que escribe TexturePackManager (mismo origen).
 
     function idbOpen() {
         return new Promise((resolve) => {
@@ -212,9 +179,6 @@
         }));
     }
 
-    // ¿El dataUrl del atlas es TODO neutro? Fallback para registros viejos
-    // SIN el campo `placed`. Muestreo a RESOLUCIÓN COMPLETA (reducir el
-    // canvas diluye tiles de 16px y da falsos "vacío") con stride.
     function atlasLooksEmpty(dataUrl, kind) {
         return loadImage(dataUrl).then((img) => {
             if (!img || !img.width) return true;
@@ -222,10 +186,10 @@
             const cv = document.createElement('canvas');
             cv.width = w; cv.height = h;
             const ctx = cv.getContext('2d', { willReadFrequently: true });
-            ctx.drawImage(img, 0, 0);  // mismo tamaño → sin pérdida
+            ctx.drawImage(img, 0, 0);  
             let data;
             try { data = ctx.getImageData(0, 0, w, h).data; }
-            catch (_) { return false; }  // sin datos → no concluir
+            catch (_) { return false; }  
             let other = 0, total = 0;
             const stride = Math.max(1, Math.floor((w * h) / 50000));
             for (let p = 0; p < data.length; p += 4 * stride) {
@@ -237,13 +201,10 @@
                     if (r > 10 || g > 10 || b > 10) other++;
                 }
             }
-            // Umbral 0.05%: un atlas válido con solo 8 tiles 16x16 da ~0.2%;
-            // un relicto que pintó 0 tiles da exactamente 0%.
+            
             return total > 0 && (other / total) < 0.0005;
         });
     }
-
-    // ───────────────────── texturas ─────────────────────
 
     function loadImage(dataUrl) {
         return new Promise((resolve) => {
@@ -256,8 +217,7 @@
 
     function grabTexCtor() {
         if (state.TexCtor) return state.TexCtor;
-        // Robar la clase THREE.Texture desde cualquier material del juego
-        // (misma técnica que CustomShader usa para Data3DTexture).
+        
         const game = findGame();
         for (const mesh of collectMeshes(getScene(game))) {
             const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -277,8 +237,7 @@
         if (!TexCtor) return null;
         try {
             const tex = new TexCtor(img);
-            // Filtros: copiar del atlas diffuse del juego para que el PBR
-            // se filtre igual que la textura visible (coherencia de píxel).
+            
             const ts = state.texSettings;
             if (ts) {
                 if (ts.magFilter !== null && ts.magFilter !== undefined) tex.magFilter = ts.magFilter;
@@ -288,9 +247,8 @@
                 tex.generateMipmaps = !!ts.generateMipmaps;
                 if (ts.anisotropy) tex.anisotropy = ts.anisotropy;
             }
-            if (srgb) tex.colorSpace = 'srgb';  // ignorado en three < r152
-            // Mismo flipY que el atlas del terreno del juego: si difiere, las
-            // UVs PBR caen en tiles equivocados (todo neutral → sin efecto).
+            if (srgb) tex.colorSpace = 'srgb';  
+            
             if (state.texFlipY !== null) tex.flipY = state.texFlipY;
             tex.needsUpdate = true;
             state.builtFlipY = tex.flipY;
@@ -304,7 +262,7 @@
         const c = document.createElement('canvas');
         c.width = 1; c.height = 1;
         const ctx = c.getContext('2d');
-        // Normal neutral: Z+ hacia el viewer (128,128,255). Resto: negro.
+        
         ctx.fillStyle = kind === 'n' ? 'rgb(128,128,255)' : '#000000';
         ctx.fillRect(0, 0, 1, 1);
         return makeTexture(c, false);
@@ -312,8 +270,7 @@
 
     async function loadAtlases() {
         if (state.loading) return state.loading;
-        // Texturas ya construidas con un flipY distinto al capturado del
-        // juego → descartarlas: muestrean tiles equivocados.
+        
         const stale = state.builtFlipY !== null
             && state.texFlipY !== null
             && state.builtFlipY !== state.texFlipY;
@@ -332,12 +289,7 @@
                 state.kinds[kind] = false;
                 const rec = await idbGet('atlas_' + kind);
                 if (rec && rec.dataUrl) {
-                    // Auto-curación: analizar los PÍXELES REALES del atlas
-                    // cargado (no confiar en `placed` — un bug del generador
-                    // puede contar tiles que no quedaron pintados, ej:
-                    // PNGs 128px dibujados con globalCompositeOperation raro
-                    // o tinte transparente → canvas vacío con placed=35).
-                    // `placed` queda solo como señal secundaria.
+                    
                     let empty;
                     if (typeof rec.placed === 'number' && rec.placed <= 0) {
                         empty = true;
@@ -361,14 +313,7 @@
                     }
                 }
             }
-            // Un solo kind borrado ya dispara la reinstalación completa (el
-            // generador regenera los tres juntos). También si FALTA alguno.
-            // ANTI-LOOP: máximo 3 reintentos por sesión de página — sin esto,
-            // un falso positivo del check vacío dispara generate→update→
-            // delete→generate... infinito (y con dispatch doble, exponencial).
-            // EXCEPCIÓN: mf_pbr_manual=1 (MF_PbrEditor guardó un pack a
-            // mano) — la reinstalación lo PISARÍA. Se limpia al instalar
-            // un preset o al borrar los maps.
+            
             const missing = ['n', 's', 'e'].filter(k => !state.kinds[k]);
             const reinstallKinds = [...new Set([...emptiedKinds, ...missing])];
             let manual = false;
@@ -395,8 +340,6 @@
         return p;
     }
 
-    // ───────────────────── uniforms compartidos ─────────────────────
-
     function num(key, def) {
         const v = parseFloat(localStorage.getItem(key));
         return isNaN(v) ? def : v;
@@ -405,7 +348,7 @@
     function ensureUniforms() {
         if (state.uniforms) return state.uniforms;
         const dN = makeDummy('n');
-        if (!dN) return null;  // juego aún sin texturas — reintentar luego
+        if (!dN) return null;  
         state.uniforms = {
             uMfPbrN: { value: dN },
             uMfPbrS: { value: makeDummy('s') },
@@ -428,7 +371,6 @@
         if (state.kinds.e && state.textures.e) u.uMfPbrE.value = state.textures.e;
     }
 
-    // Regenerar las texturas PBR con el flipY correcto recién capturado.
     function rebuildTextures() {
         loadAtlases().then(() => {
             refreshUniformValues();
@@ -436,8 +378,6 @@
         });
     }
 
-    // El juego puede tardar en crear el material del terreno. Mientras no
-    // haya flipY capturado, reintentar hasta conseguirlo (máx ~20s).
     function ensureFlipYCaptured() {
         if (state.texFlipY !== null || state.atlasRetryDone) return;
         let tries = 0;
@@ -452,17 +392,6 @@
         }, 1000);
     }
 
-    // ───────────────────── GLSL ─────────────────────
-
-    // NOTA UVs: el terreno del juego NO muestrea el atlas con `uv` crudo —
-    // su fragment declara `centroid varying vec2 vCentroidMapUv` (UV con
-    // transformación por cara + animación de frames) y samplea
-    // `texture2D(map, vCentroidMapUv + offset)`. Muestrear PBR con `uv`
-    // crudo cae en tiles EQUIVOCADOS → casi siempre neutro → sin relieve.
-    // Solución: macro MF_PBR_UV — se define como vCentroidMapUv cuando el
-    // shader del juego la declara (detectado por shader en runtime), y como
-    // nuestro varying vMfPbrUv (=uv) en el resto de materiales.
-    // FRAG_DECL se construye dinámicamente en hookMaterial.
     const FRAG_UNIFORMS_DECL = `
         uniform sampler2D uMfPbrN;
         uniform sampler2D uMfPbrS;
@@ -480,19 +409,11 @@
         varying vec3 vMfPbrViewPos;
     `;
 
-    // Copiado del atributo uv (declarado SIEMPRE en el prefix de three).
-    // vMfPbrViewPos: posición en view space para el fallback — se calcula
-    // manualmente porque begin_vertex aún no tiene mvPosition.
     const VERT_MAIN = `
         vMfPbrUv = uv;
         vMfPbrViewPos = (modelViewMatrix * vec4(transformed, 1.0)).xyz;
     `;
 
-    // TBN por derivadas de pantalla — fórmula de getTangentFrame de
-    // three.js (normal_fragment_maps). VERIFICADO EN VIVO: el Lambert del
-    // juego NO declara vViewPosition en el fragment (error GLSL → shader
-    // entero muerto) → usar nuestro propio varying vMfPbrViewPos.
-    // Inyectado tras normal_fragment_begin (donde `normal` ya está declarada).
     const FRAG_NORMAL = `
         {
             vec3 mfMapN = texture2D(uMfPbrN, MF_PBR_UV).xyz * 2.0 - 1.0;
@@ -509,10 +430,6 @@
         }
     `;
 
-    // Specular: Blinn-Phong con las luces direccionales del juego, sumado a
-    // totalEmissiveRadiance (presente en Lambert/Standard/Phong/Toon —
-    // Lambert no vuelca directSpecular en outgoingLight pero sí emissive).
-    // vMfPbrViewPos en vez de vViewPosition (verificado: no existe aquí).
     const FRAG_SPEC = `
         #if NUM_DIR_LIGHTS > 0
         {
@@ -533,19 +450,10 @@
         #endif
     `;
 
-    // Emissive: aditivo sobre totalEmissiveRadiance.
     const FRAG_EMISSIVE = `
         totalEmissiveRadiance += texture2D(uMfPbrE, MF_PBR_UV).rgb * uMfPbrEmiStr;
     `;
 
-    // Fallback autocontenido — para materiales SIN pipeline de luces por
-    // fragmento (MeshBasicMaterial, o Lambert de three < r155 donde la luz
-    // viene de vLightFront por vértice y perturbar `normal` no altera nada).
-    // Relight relativo: la normal geométrica plana da factor 1.0 (color del
-    // juego intacto) y solo el relieve del normal map crea contraste.
-    // Se inyecta justo antes del cierre de main() (patrón CustomShader).
-    // Piezas separadas: el emissive del anchor estándar podría aterrizar en
-    // Lambert viejo — solo inyectar lo que falta.
     const FRAG_FALLBACK_NORMAL = `
         // Sin llaves: mfN queda en scope de main() — el bloque spec fallback
         // lo referencia.
@@ -576,8 +484,6 @@
         gl_FragColor.rgb += gl_FragColor.rgb * mfRim * 0.30 * uMfPbrNormalStr;
     `;
 
-    // Specular fallback — variante con la mfN del bloque normal (misma
-    // rama del #if, declarada justo antes).
     const FRAG_FALLBACK_SPEC_MFN = `
         {
             vec3 mfSun2 = normalize(vec3(0.35, 0.9, 0.25));
@@ -591,7 +497,6 @@
         }
     `;
 
-    // Specular fallback plano (WebGL1, sin dFdx): media normal al viewer.
     const FRAG_FALLBACK_SPEC_FLAT = `
         {
             vec3 mfSun3 = normalize(vec3(0.35, 0.9, 0.25));
@@ -605,12 +510,9 @@
         }
     `;
 
-    // Fallback emissive (solo si el anchor estándar no aterrizó).
     const FRAG_FALLBACK_EMISSIVE = `
         gl_FragColor.rgb += texture2D(uMfPbrE, MF_PBR_UV).rgb * uMfPbrEmiStr;
     `;
-
-    // ───────────────────── hook de material ─────────────────────
 
     function anchorFrag(frag, includeName, code) {
         const anchor = '#include <' + includeName + '>';
@@ -620,25 +522,14 @@
 
     function hookMaterial(material) {
         if (state.hooked.has(material)) {
-            // ── AUTO-CURACIÓN de cadena rota por CustomShader ──
-            // Cuando CustomShader cambia de preset hace unhookAll() y
-            // restaura SU "original" guardado — que puede ser el juego
-            // puro (si CS hookeó antes que nosotros en algún momento).
-            // Eso destruye nuestro wrapper, pero nuestra marca y el
-            // registro siguen mintiendo "estoy hookeado" → nunca nos
-            // re-armaríamos. VERIFICACIÓN REAL: nuestro wrapper contiene
-            // el literal 'uMfPbrN' (guard de doble inyección) en su
-            // propio código fuente. Si la cadena viva no lo tiene,
-            // estamos fuera → re-hookear de cero sobre la cadena actual.
+            
             let chainHasPbr = false;
             try {
                 chainHasPbr = String(material.onBeforeCompile).includes('uMfPbrN');
             } catch (_) { chainHasPbr = false; }
             if (chainHasPbr) return false;
-            state.hooked.delete(material);  // cadena rota → re-armar
-            // La marca y su original guardado son de la cadena MUERTA:
-            // restaurarlos destruiría el wrapper nuevo de CustomShader.
-            // La cadena actual (CS nuevo o juego) es la base correcta.
+            state.hooked.delete(material);  
+            
             delete material.__mfPbrHooked;
             delete material.__mfPbrOriginalOnBeforeCompile;
             delete material.__mfPbrOriginalCacheKey;
@@ -648,9 +539,6 @@
         if (typeof material.onBeforeCompile !== 'function') return false;
         if (!material.map || !material.map.isTexture) return false;
 
-        // Capturar flipY y filtros reales del atlas del juego (convención de
-        // carga que usa el motor). Si difieren, las UVs PBR caen en tiles
-        // equivocados y los filtros rompen el sampling (textura negra).
         try {
             const fy = material.map.flipY;
             const map = material.map;
@@ -665,24 +553,18 @@
             if (fy !== state.texFlipY) {
                 const hadTextures = state.builtFlipY !== null;
                 state.texFlipY = fy;
-                // Primera captura con texturas ya construidas con otra
-                // convención, o cambio posterior → regenerar.
+                
                 if (hadTextures && state.builtFlipY !== fy) rebuildTextures();
             }
             const tsChanged = JSON.stringify(ts) !== JSON.stringify(state.texSettings);
             if (tsChanged) {
                 const hadTextures = state.builtFlipY !== null;
                 state.texSettings = ts;
-                // Primera captura con texturas ya construidas con otros
-                // filtros, o cambio posterior → regenerar.
+                
                 if (hadTextures) rebuildTextures();
             }
         } catch (_) {}
 
-        // Desenredar sesión previa (recarga de extensión sin F5).
-        // El wrapper viejo tiene __mfPbrKill: apagarlo (neutralización)
-        // en vez de restaurar su original — el onBeforeCompile ACTUAL
-        // puede contener el wrapper de CustomShader de otra sesión viva.
         if (material.__mfPbrHooked) {
             if (typeof material.onBeforeCompile?.__mfPbrKill === 'function') {
                 material.onBeforeCompile.__mfPbrKill();
@@ -699,35 +581,17 @@
         const originalCacheKey = material.customProgramCacheKey;
         const useNormal = isWebGL2();
 
-        // Neutralización: este flag vive en el closure del wrapper. Al
-        // deshookear NO restauramos onBeforeCompile (destruiría wrappers
-        // de otros módulos que nos envuelven, ej: CustomShader) — el
-        // wrapper queda en la cadena pero pasa por el original sin
-        // inyectar nada.
         let pbrAlive = true;
 
         const wrapper = function (shader) {
             originalOnBeforeCompile(shader);
-            if (!pbrAlive) return; // desmontado: passthrough limpio
-            if (shader.fragmentShader.includes('uMfPbrN')) return; // ya inyectado
+            if (!pbrAlive) return; 
+            if (shader.fragmentShader.includes('uMfPbrN')) return; 
 
             const u = ensureUniforms();
             if (!u) return;
             for (const key in u) shader.uniforms[key] = u[key];
 
-            // DECL dinámico: detectar la varying con la que el JUEGO
-            // samplea su DIFFUSE y usar ESA para PBR. El shader del
-            // terreno tiene VARIOS samplers de `map` (overlay primero);
-            // el primero puede ser el layer overlay (transparente → negro
-            // en debug), no el diffuse. Jerarquía:
-            //   1) vCentroidMapUv si aparece entre los samplers (la UV
-            //      real del diffuse del terreno, con transform por cara)
-            //   2) primer sampler que NO sea un nombre de overlay
-            //   3) primer sampler
-            // GUARD: solo varyings GLOBALES (`varying vec2 X;` o
-            // `varying centroid vec2 X;`). Variables locales (ej: waveUv
-            // del agua, declarada dentro de main) no pueden usarse en
-            // nuestros anchors (van arriba de main) → no compila.
             let gameUvExpr = '';
             const candidates = [...shader.fragmentShader.matchAll(
                 /texture2D\s*\(\s*map\s*,\s*([A-Za-z_][A-Za-z0-9_]*)/g)].map(m => m[1]);
@@ -742,23 +606,15 @@
                     '(samplers candidatos:', candidates.join(',') || 'ninguno', ')');
                 state.lastGameUv = gameUvExpr;
             }
-            // VERT_DECL (varyings) va SIEMPRE en el fragment: vMfPbrViewPos
-            // lo usan el TBN y el specular; vMfPbrUv queda sin usar con la
-            // UV del juego, pero debe existir en ambos stages para el linker.
+            
             const decl = FRAG_UNIFORMS_DECL + VERT_DECL
                 + (gameUvExpr ? '#define MF_PBR_UV ' + gameUvExpr + '\n'
                               : '#define MF_PBR_UV vMfPbrUv\n')
                 + '\n';
             let frag = decl + shader.fragmentShader;
 
-            // 1) ¿El shader tiene pipeline de luces por fragmento? Se decide
-            // por el include ANTES de inyectar. Lambert de three < r155 es
-            // vertex-lit (vLightFront): no tiene este include y además no
-            // declara vViewPosition en el fragment — ahí los anchors
-            // estándar compilarían con error o no harían nada.
             const litPerFragment = frag.includes('#include <lights_fragment_begin>');
 
-            // 2) Anchors estándar — SOLO con pipeline de luces por fragmento.
             if (litPerFragment) {
                 frag = anchorFrag(frag, 'lights_fragment_begin', FRAG_SPEC);
                 if (useNormal) {
@@ -770,28 +626,8 @@
                 'vec3 totalEmissiveRadiance = emissive;\n' + FRAG_EMISSIVE
             );
 
-            // 3) Relight relativo INCONDICIONAL sobre gl_FragColor.
-            //
-            // VERIFICADO EN VIVO (Puppeteer + shader del terreno real): el
-            // juego ilumina el terreno con luz voxel por vértice (vLight)
-            // multiplicada sobre gl_FragColor DESPUÉS del tonemapping:
-            //   brightness = (uAmbient + (1-uAmbient)*max(vLight.x*uSunLight,
-            //                  vLight.y)) * vLight.z;
-            //   gl_FragColor.rgb *= brightness;
-            // Las luces de three.js son débiles (ambient 1.67, dirs ~0.33):
-            // perturbar `normal` en el pipeline estándar es casi invisible.
-            // → El relieve PBR debe multiplicarse sobre gl_FragColor en el
-            //   MISMO punto (justo antes de fog_fragment), integrándose con
-            //   la luz voxel como si fuera parte del juego.
             const okE = frag.includes('uMfPbrE, MF_PBR_UV');
-            // Held lights: el terreno del juego declara uHeldLightPos[8]/
-            // Level/Count (antorcha en mano, glowstone cercano) + vWorldPos.
-            // Si están, el relieve PBR reacciona: spec por luz + realce de
-            // la normal map orientada hacia cada luz (el brillo "viaja" al
-            // pasar la antorcha frente a un bloque, igual que el diffuse).
-            // OJO: el check de vWorldPos exige la DECLARACIÓN del varying
-            // (regex) — por string suelto matchea el agua, que menciona el
-            // nombre en un comentario pero NO lo declara → error de compile.
+            
             const hasHeldLights = /varying\s+(centroid\s+)?vec3\s+vWorldPos\s*;/.test(frag)
                 && frag.includes('uHeldLightPos')
                 && frag.includes('uHeldLightLevel')
@@ -800,7 +636,7 @@
             if (useNormal) {
                 fb += FRAG_FALLBACK_NORMAL + FRAG_FALLBACK_SPEC_MFN;
             } else {
-                // WebGL1 sin derivadas: specular plano contra el sol estimado.
+                
                 fb += FRAG_FALLBACK_SPEC_FLAT;
             }
             if (!okE) fb += FRAG_FALLBACK_EMISSIVE;
@@ -841,19 +677,11 @@
     }
 `;
             }
-            // Tint de diagnóstico — se inyecta SIEMPRE (incondicional):
-            // con uMfPbrTint > 0 toda la geometría hookeada se ve roja.
-            // Si no se ve roja con blast() → la inyección NO corre.
+            
             fb += 'gl_FragColor.rgb += vec3(uMfPbrTint, 0.0, 0.0);\n';
-            // Modo debug de UVs: pinta el terreno con el contenido REAL del
-            // atlas normal tal como lo muestrean las UVs del terreno. Si las
-            // UVs caen en tiles neutros (azul #8080ff liso) o fuera del
-            // atlas, se ve azul plano o negro — data bug, no shader bug.
+            
             fb += 'if (uMfPbrDebug > 0.5) { gl_FragColor.rgb = texture2D(uMfPbrN, MF_PBR_UV).rgb; }\n';
-            // Modo debug 2 — DESVIACIÓN XY del nmap: negro = neutro (0,0,1),
-            // blanco = relieve presente. OJO: la magnitud 3D NO sirve — los
-            // normales son unitarios y siempre dan ~1.0. Es la desviación XY
-            // la que distingue neutral de bumpy. Retícula magenta = tiles.
+            
             fb += 'if (uMfPbrDebug > 1.5) {\n';
             fb += '  vec3 mfDbgN = texture2D(uMfPbrN, MF_PBR_UV).rgb;\n';
             fb += '  vec2 mfDbgXY = mfDbgN.xy * 2.0 - 1.0;\n';
@@ -863,23 +691,12 @@
             fb += '  float mfDbgLine = (mfDbgGrid.x < 0.03 || mfDbgGrid.y < 0.03) ? 1.0 : 0.0;\n';
             fb += '  gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 0.0, 1.0), mfDbgLine * 0.35);\n';
             fb += '}\n';
-            // Modo debug 3 — RATIO REAL del relight (el multiplicador que
-            // va a gl_FragColor). mfDiffN/mfDiffG quedan en scope de main
-            // porque FRAG_FALLBACK_NORMAL no usa llaves. Gris plano 0.5 =
-            // ratio 1.0 (neutro) → el shading NO produce variación → ahí
-            // está el bug. Gris con grano/textura = el relieve existe en
-            // la matemática y el problema es posterior (post-proceso).
+            
             fb += 'if (uMfPbrDebug > 2.5) {\n';
             fb += '  float mfDbgRatio = clamp(mfDiffN / max(mfDiffG, 0.05), 0.5, 1.8);\n';
             fb += '  gl_FragColor.rgb = vec3((mfDbgRatio - 0.5) / 1.3);\n';
             fb += '}\n';
-            // Modo debug 4 — TRÍO DIAGNÓSTICO por píxel:
-            //   R = tile PBR neutro (0) vs con datos (1): ¿lee el tile bien?
-            //   G = diffuse muestreado por el juego, luminancia: ¿coincide
-            //       con la textura visible del bloque?
-            //   B = coordenada Y del tile dentro del atlas (fila):
-            //       franja por fila → si R=1 solo en filas raras,
-            //       desalineación de layout vertical.
+            
             fb += 'if (uMfPbrDebug > 3.5) {\n';
             fb += '  vec3 mfDbgN4 = texture2D(uMfPbrN, MF_PBR_UV).rgb;\n';
             fb += '  float mfIsNeutral = (abs(mfDbgN4.x - 0.5) < 0.02 && abs(mfDbgN4.y - 0.5) < 0.02) ? 1.0 : 0.0;\n';
@@ -887,9 +704,7 @@
             fb += '  gl_FragColor.rgb = vec3(1.0 - mfIsNeutral, mfDiff4, floor(MF_PBR_UV.y * 64.0) / 64.0);\n';
             fb += '}\n';
             if (fb) {
-                // Punto de anclaje: donde el juego aplica su brightness
-                // voxel (antes de fog). Fallback: tonemapping, y si no, el
-                // cierre de main() (patrón CustomShader).
+                
                 const anchorFog = '#include <fog_fragment>';
                 const anchorTm = '#include <tonemapping_fragment>';
                 let at = -1;
@@ -911,7 +726,6 @@
             shader.fragmentShader = frag;
             state.lastFrag = frag;
 
-            // Vertex: declarar varying y copiar uv
             if (!shader.vertexShader.includes('vMfPbrUv')) {
                 shader.vertexShader = VERT_DECL + '\n' + shader.vertexShader;
                 shader.vertexShader = shader.vertexShader.replace(
@@ -922,20 +736,17 @@
             state.lastVert = shader.vertexShader;
         };
 
-        // Colgar el wrapper con las marcas de neutralización para que
-        // otros módulos (o futuras sesiones) puedan desmontarlo sin
-        // destruir la cadena: material.__mfPbrKill() lo apaga.
         wrapper.__mfPbrKill = function () { pbrAlive = false; };
         material.onBeforeCompile = wrapper;
 
         material.customProgramCacheKey = function () {
             const base = originalCacheKey ? originalCacheKey.call(material) : '';
-            // v18: v10 + held lights simples (antorchas/glowstone).
+            
             return 'mfpbr_v18_' + (useNormal ? 'n' : '-') + base;
         };
 
         material.needsUpdate = true;
-        // Marcas para desenredar sesiones futuras (recarga sin F5)
+        
         material.__mfPbrHooked = true;
         material.__mfPbrOriginalOnBeforeCompile = originalOnBeforeCompile;
         material.__mfPbrOriginalCacheKey = originalCacheKey;
@@ -945,8 +756,7 @@
 
     function unhookAll() {
         for (const [material, entry] of state.hooked) {
-            // Neutralizar en vez de restaurar: la cadena puede tener
-            // wrappers de otros módulos (CustomShader) envolviéndonos.
+            
             if (entry.wrapper?.__mfPbrKill) entry.wrapper.__mfPbrKill();
             material.customProgramCacheKey = entry.originalCacheKey;
             material.needsUpdate = true;
@@ -954,8 +764,6 @@
         }
         state.hooked.clear();
     }
-
-    // ───────────────────── escaneo ─────────────────────
 
     function scan() {
         const scene = getScene(findGame());
@@ -967,7 +775,7 @@
                 if (m && hookMaterial(m)) added++;
             }
         }
-        // Telemetría: sin esto, "PBR activo pero 0 hookeados" es invisible.
+        
         if (added > 0) {
             console.log(TAG, 'Hookeados', added, 'materiales nuevos (total:',
                 state.hooked.size + ')');
@@ -980,12 +788,10 @@
         state.scanTimer = setInterval(() => {
             if (state.enabled) {
                 scan();
-                diagScene();  // reintenta si la escena no estaba lista en enable()
+                diagScene();  
             }
         }, 4000);
     }
-
-    // ───────────────────── API pública ─────────────────────
 
     function enable() {
         state.enabled = true;
@@ -1003,8 +809,7 @@
                 console.log(TAG, 'PBR activo:', { ...state.kinds },
                     u ? ('| fuerza normal=' + u.uMfPbrNormalStr.value
                         + ' spec=' + u.uMfPbrSpecStr.value) : '');
-                // El caso #1 de "no hay relieve" con pipeline sano: fuerzas
-                // quedadas en 0 por sesiones de debug viejas.
+                
                 if (u && u.uMfPbrNormalStr.value <= 0) {
                     console.warn(TAG, 'Fuerza normal=0 — el relieve está',
                         'APAGADO. Ejecuta MF_PBR.resetStrength() para',
@@ -1040,9 +845,6 @@
         try { localStorage.setItem(LS[kind] || kind, String(v)); } catch (_) {}
     }
 
-    // Restaurar fuerzas a defaults — útil cuando un localStorage viejo
-    // quedó en 0 (sesiones de debug) y el usuario no sabe por qué no
-    // hay relieve. MF_PBR.resetStrength() lo arregla en un comando.
     function resetStrength() {
         try {
             localStorage.removeItem(LS.normal);
@@ -1067,15 +869,10 @@
         };
     }
 
-    // Acceso interno para MF_PbrEditor (MAIN): la textura THREE del atlas
-    // por kind — el editor reemplaza .image por un canvas editable y marca
-    // needsUpdate para ver el cambio en vivo.
     function texFor(kind) {
         return state.textures[kind] || null;
     }
 
-    // Diffuse del juego (atlas del material ancla, mismo layout frames.json)
-    // para la referencia visual del editor.
     let diffuseCv = null;
     function diffuseCanvas() {
         if (diffuseCv) return diffuseCv;
@@ -1100,11 +897,6 @@
         return null;
     }
 
-    // CustomEvent desde TexturePackManager (ISOLATED) → recargar atlases.
-    // IMPORTANTE: escuchar en `document`, no en `window` — el panel despacha
-    // con document.dispatchEvent y CustomEvent sin bubbles (default false)
-    // NO propaga a window. El DOM es compartido entre mundos MAIN/ISOLATED,
-    // así que document sí recibe el evento desde el panel.
     document.addEventListener(EVT_UPDATE, () => {
         loadAtlases().then(() => {
             if (state.enabled) {
@@ -1114,7 +906,6 @@
         });
     });
 
-    // CustomEvent desde el panel (ISOLATED) → enable/disable/strength
     document.addEventListener(EVT_CONFIG, (ev) => {
         try {
             const cfg = JSON.parse(ev.detail || '{}');
@@ -1127,13 +918,6 @@
         } catch (_) {}
     });
 
-    // Arranque: el panel (ISOLATED) envía 'pbr-config' con el settings
-    // persistido (experimentalPbr) en applyGuiSettings() — única fuente de
-    // verdad del estado enabled.
-
-    // Autopsia runtime: ¿mi GLSL llegó al shader compilado? ¿Cuántas luces
-    // define el programa real? Lee renderer.info.programs (GLSL final tras
-    // resolver includes y defines) — evidencia directa de la GPU.
     function debug() {
         const out = {
             status: status(),
@@ -1151,7 +935,7 @@
             builtFlipY: state.builtFlipY,
             webgl2: isWebGL2()
         };
-        // Último shader generado por nuestro hook
+        
         if (state.lastFrag) {
             out.lastFragHas = {
                 decl: state.lastFrag.includes('uMfPbrN'),
@@ -1160,15 +944,13 @@
                 fallback: state.lastFrag.includes('mfDiffN'),
                 emissive: state.lastFrag.includes('uMfPbrE, MF_PBR_UV'),
                 vertVarying: (state.lastVert || '').includes('vMfPbrUv = uv'),
-                // ¿Con qué UV se samplea PBR? Debe ser la MISMA con la que
-                // el juego samplea su diffuse (autodetectada del primer
-                // texture2D(map, X) del shader, ej: vOverlayUV del terreno).
+                
                 gameUv: (state.lastFrag.match(/#define MF_PBR_UV (\w+)/) || [])[1] || null
             };
         } else {
             out.lastFrag = '¡NUNCA se compiló ningún material hookeado — el hook NO corre!';
         }
-        // Programas reales del renderer: defines de luces + nuestra marca
+        
         try {
             const game = findGame();
             const scene = getScene(game);
@@ -1194,8 +976,7 @@
             out.gpu = 'error: ' + e.message;
         }
         console.log(TAG, 'DEBUG', out);
-        // Versión PLANA — sobrevive el copy-paste de consola (los objetos
-        // anidados salen colapsados {…} y no se pueden leer desde el log).
+        
         const lf = out.lastFragHas;
         console.log(TAG, 'DIAG ▸ enabled=' + out.status.enabled
             + ' hooked=' + out.status.hooked
@@ -1212,10 +993,6 @@
         return out;
     }
 
-    // Test nuclear: fuerza valores extremos 10 segundos. Si la pantalla NO
-    // cambia en absoluto → la inyección no está corriendo en la GPU (hook
-    // pisado o material sin recompilar). Si cambia → el pipeline está vivo
-    // y el problema es de datos/atlas.
     function blast() {
         const u = ensureUniforms();
         if (!u) { console.warn(TAG, 'BLAST: sin uniforms'); return; }
@@ -1226,13 +1003,12 @@
         };
         console.log(TAG, 'BLAST ON — 10s. Si el terreno NO se tiñe rojo,',
             'la inyección no corre en la GPU. Ejecuta MF_PBR.debug().');
-        u.uMfPbrTint.value = 1.0;  // tinte rojo universal e incondicional
+        u.uMfPbrTint.value = 1.0;  
         u.uMfPbrEmiStr.value = 2.0;
         u.uMfPbrSpecStr.value = 3.0;
         u.uMfPbrNormalStr.value = 3.0;
         u.uMfPbrShiny.value = 4.0;
-        // Tint rojo universal vía emissive del atlas E (tiles sin _e son
-        // negros) + spec alto: cualquier tile con _s destella.
+        
         setTimeout(() => {
             u.uMfPbrTint.value = prev.t;
             u.uMfPbrNormalStr.value = prev.n;
@@ -1243,11 +1019,8 @@
         }, 10000);
     }
 
-    // Analiza los píxeles del atlas _n REALMENTE cargado en el uniform.
-    // Si el atlas es todo neutro (#8080ff), el generador falló o el pack
-    // no matcheó — morado uniforme en showAtlas() vendría de ahí, no de UVs.
     async function atlasStats() {
-        // Forzar carga si aún no hay uniforms (atlasStats antes de enable)
+        
         if (!state.uniforms) {
             await loadAtlases();
             ensureUniforms();
@@ -1275,7 +1048,7 @@
             ctx.drawImage(img, 0, 0);
             const data = ctx.getImageData(0, 0, w, h).data;
             let neutral = 0, colorful = 0, black = 0;
-            const step = Math.max(1, Math.floor(w * h / 20000));  // muestrear ~20k px
+            const step = Math.max(1, Math.floor(w * h / 20000));  
             let total = 0;
             for (let i = 0; i < data.length; i += 4 * step) {
                 const r = data[i], g = data[i + 1], b = data[i + 2];
@@ -1288,8 +1061,7 @@
                 ...out,
                 size: w + 'x' + h,
                 sampled: total,
-                // Tiles 16x16 con contenido ≈ colorful px / 256. Un pack de
-                // 29 tiles da ~29; un relicto vacío da 0.
+                
                 estTiles: Math.round(colorful / 256),
                 neutralPct: Math.round(neutral / total * 100),
                 colorfulPct: Math.round(colorful / total * 100),
@@ -1306,13 +1078,11 @@
             return r;
         }
     }
-    // Modo debug visual: pinta el terreno con el atlas normal real via las
-    // UVs del terreno. Toggle con MF_PBR.showAtlas().
+    
     function showAtlas() {
         const u = ensureUniforms();
         if (!u) return false;
-        // Ciclo 4 estados: OFF → atlas crudo (1) → magnitud+grid (2) →
-        // ratio relight (3) → trío diagnóstico (4) → OFF
+        
         const cur = u.uMfPbrDebug.value;
         const next = cur <= 0.5 ? 1 : (cur <= 1.5 ? 2 : (cur <= 2.5 ? 3 : (cur <= 3.5 ? 4 : 0)));
         u.uMfPbrDebug.value = next;
@@ -1328,13 +1098,6 @@
         return next;
     }
 
-    // Compara tile-a-tile el atlas DIFFUSE del juego (material del terreno)
-    // contra nuestro atlas _n: ¿los tiles PINTADOS coinciden en posición?
-    // Si el juego pinta el tile (col,7) y nosotros el (col,3) → offset de
-    // layout → el terreno lee neutro aunque el atlas tenga datos.
-    // Devuelve: total de tiles del juego con contenido, cuántos de esos
-    // tienen también contenido PBR en la MISMA celda, y los primeros
-    // desalineados con coordenadas de ambos.
     async function atlasDiff() {
         const game = findGame();
         const gs = game?.gameScene;
@@ -1354,7 +1117,7 @@
             const d = ctx.getImageData(col * size, row * size, size, size).data;
             let sum = 0;
             for (let i = 0; i < d.length; i += 4) sum += Math.abs(d[i] - 128) + Math.abs(d[i + 1] - 128) + Math.abs(d[i + 2] - 255);
-            return sum / (size * size);  // 0 = neutro exacto
+            return sum / (size * size);  
         };
         const load = (img) => {
             const cv = document.createElement('canvas');
@@ -1369,8 +1132,7 @@
             const pCtx = load(pbrTex.image);
             const cols = Math.min(gameMap.width, pbrTex.image.width) / size;
             const rows = Math.min(gameMap.height, pbrTex.image.height) / size;
-            // Mapa de tiles con contenido: juego (varianza) y PBR (desv. del
-            // neutro). Se usa para probar las 4 orientaciones de una vez.
+            
             const gameHas = [], pbrHas = [];
             let gameTiles = 0, pbrTiles = 0;
             for (let r = 0; r < rows; r++) {
@@ -1389,9 +1151,7 @@
                     if (pbrHas[r][c]) pbrTiles++;
                 }
             }
-            // Probar las 4 orientaciones: identidad, flipV (flipY), flipH,
-            // rot180 (flipH+flipV). El atlas del juego y el PNG generado por
-            // TexturePackManager pueden diferir en la convención vertical.
+            
             const orient = {
                 identidad: (c, r) => [c, r],
                 flipV: (c, r) => [c, rows - 1 - r],
@@ -1445,11 +1205,6 @@
         }
     }
 
-    // Autopsia del TERRENO específicamente: captura el shader REAL del
-    // material de chunkMeshes (no el lastFrag genérico que puede ser de
-    // una entidad). CLAVE: three.js con el MISMO cacheKey reúsa el
-    // programa cacheado SIN llamar onBeforeCompile → hay que cambiar la
-    // key también, no solo needsUpdate.
     function probeTerrain() {
         const game = findGame();
         const gs = game?.gameScene;
@@ -1464,9 +1219,7 @@
             pbrHooked: !!mat?.__mfPbrHooked,
             csHooked: !!mat?.__mfHooked
         };
-        // RUTA ALTERNATIVA (más fiable): el programa YA compilado del
-        // renderer tiene el GLSL final con la macro resuelta. Buscar el
-        // programa cuyo fragment declare vCentroidMapUv Y uMfPbrN.
+        
         try {
             const renderer = game?.renderer || gs?.renderer || game?.scene?.renderer;
             const progs = renderer?.info?.programs;
@@ -1492,7 +1245,7 @@
         } catch (e) {
             res.gpuErr = String(e.message);
         }
-        // Fallback: forzar recompilación (key distinta → onBeforeCompile corre)
+        
         const origOBC = mat.onBeforeCompile;
         const origKey = mat.customProgramCacheKey;
         window.__mfTerrainShader = null;
@@ -1511,24 +1264,18 @@
                 window.__mfTerrainFrag = fs;
                 const varys = [...fs.matchAll(/varying\s+vec2\s+(\w+)/g)].map(m => m[1]);
                 const sampler = ((fs.match(/texture2D\(\s*map\s*,\s*([^)]+)\)/) || [])[1] || '?').trim();
-                // TODOS los samplers de `map` (el juego tiene varios: overlay,
-                // diffuse con vCentroidMapUv, etc.) — el primero puede ser el
-                // del layer overlay (transparente/negro), no el diffuse.
+                
                 const allMapSamplers = [...fs.matchAll(/texture2D\s*\(\s*map\s*,\s*([A-Za-z_][A-Za-z0-9_]*)/g)].map(m => m[1]);
                 console.log(TAG, 'TERRENO ▸ pbrDecl=' + fs.includes('uMfPbrN')
                     + ' pbrUv=' + (((fs.match(/#define MF_PBR_UV (\w+)/) || [])[1]) || 'NINGUNA')
                     + ' declaraCentroid=' + fs.includes('vCentroidMapUv')
                     + ' | varyingsVec2=' + varys.join(',')
                     + ' | TODOS mapSamplers=' + allMapSamplers.join(','));
-                // AUTOPSIA UV: cómo se construye vCentroidMapUv en el
-                // VERTEX (ahí vive el flip/offset de tile que hay que
-                // replicar en el sampling PBR). Dump completo en
-                // window.__mfTerrainVert para inspección manual.
+                
                 const shFull = window.__mfTerrainShaderFull;
                 if (shFull) {
                     window.__mfTerrainVert = shFull.vertexShader;
-                    // vCentroidMapUv = vMapUv (probe anterior) — falta ver
-                    // cómo se construye vMapUv (tile/offset por cara).
+                    
                     const lines = shFull.vertexShader.split('\n')
                         .filter(l => /vMapUv|vOverlayUV|vCentroidMapUv|atlasUv|tileUv|uvTransform/.test(l))
                         .map(l => l.trim()).slice(0, 20);
@@ -1537,8 +1284,7 @@
             } else {
                 console.warn(TAG, 'TERRENO ▸ no recompiló en 3s — render pausado');
             }
-            // AUTOPSIA LUCES: qué uniforms de luz dinámica (antorchas,
-            // glowstone) usa el terreno — nombres, tipos y cómo iteran.
+            
             const fsDump = window.__mfTerrainFrag || window.__mfTerrainShader;
             if (fsDump) {
                 const lightUniforms = [...new Set([...fsDump.matchAll(/uniform\s+(int|float|vec[234]|vec[234]\[\w+\]|mat[34])\s+(\w*[Ll]ight\w*|\w*[Tt]orch\w*|\w*[Gg]low\w*|\w*[Pp]oint\w*)\s*(\[[^\]]*\])?\s*;/g)].map(m => m[0]))];
@@ -1554,7 +1300,6 @@
         return { ...res, probe: 'espera 3s — mira la línea TERRENO ▸' };
     }
 
-    // Censo de luces de la escena — BFS sobre el grafo de escena completo.
     function countLights() {
         const scene = getScene(findGame());
         if (!scene) return null;
@@ -1578,10 +1323,6 @@
         return out;
     }
 
-    // ── Presets PBR (puente MAIN → ISOLATED vía CustomEvent) ──
-    // MF_TEXTURE_PACK vive en el mundo ISOLATED; este módulo corre en MAIN.
-    // CustomEvents cruzan mundos: pedimos la instalación y escuchamos la
-    // respuesta asíncrona (la descarga del ZIP puede tardar).
     function pbrPresets() {
         return new Promise((resolve) => {
             const timer = setTimeout(() => resolve({ error: 'timeout esperando a MF_TEXTURE_PACK' }), 4000);
@@ -1603,7 +1344,7 @@
             const onDone = (ev) => {
                 let detail = null;
                 try { detail = JSON.parse(ev.detail); } catch (_) { detail = ev.detail; }
-                if (detail?.presetId !== id) return;  // respuesta de otro preset
+                if (detail?.presetId !== id) return;  
                 clearTimeout(timer);
                 document.removeEventListener('minifeather:pbr-preset-result', onDone);
                 resolve(detail);

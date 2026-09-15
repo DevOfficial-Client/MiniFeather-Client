@@ -81,8 +81,6 @@ function getGame(force = false) {
     return state.game?.player ? state.game : null;
 }
 
-// --- Raycast / Target Detection ---
-
 function getLookVector(player) {
     try {
         let proto = Object.getPrototypeOf(player);
@@ -129,11 +127,9 @@ function rayBoxIntersect(origin, dir, box, maxDist) {
     return tmin;
 }
 
-// Voxel raycast (DDA algorithm) — steps through blocks looking for solid hits
 function raycastVoxel(world, origin, dir, maxDist) {
     if (!world) return null;
 
-    // Access getBlockState from the parent prototype
     const proto = Object.getPrototypeOf(world);
     if (typeof proto.getBlockState !== 'function') return null;
 
@@ -145,7 +141,6 @@ function raycastVoxel(world, origin, dir, maxDist) {
     const stepY = dir.y > 0 ? 1 : -1;
     const stepZ = dir.z > 0 ? 1 : -1;
 
-    // Distance to next voxel boundary
     const tDeltaX = Math.abs(dir.x) < 1e-8 ? Infinity : Math.abs(1 / dir.x);
     const tDeltaY = Math.abs(dir.y) < 1e-8 ? Infinity : Math.abs(1 / dir.y);
     const tDeltaZ = Math.abs(dir.z) < 1e-8 ? Infinity : Math.abs(1 / dir.z);
@@ -194,7 +189,6 @@ function detectTarget(game, player) {
     }
     state.lastRaycastScan = now;
 
-    // Air check (isAirborne is unreliable, use onGround + motion.y)
     if (!player.onGround && (Number(player.motion?.y) || 0) > 0.05) {
         return setSituation('air');
     }
@@ -215,7 +209,6 @@ function detectTarget(game, player) {
     const REACH = 5.0;
     const playerId = player.id;
 
-    // Entity scan with id filter
     const entities = game.world?.entities;
     let closestEntity = null;
     let closestDist = REACH;
@@ -235,7 +228,6 @@ function detectTarget(game, player) {
         }
     }
 
-    // Classify entity hit
     if (closestEntity) {
         if (closestEntity.profile) return setSituation('player');
         if (closestEntity.creatureClass) return setSituation('enemy');
@@ -248,11 +240,9 @@ function detectTarget(game, player) {
         return setSituation('entity');
     }
 
-    // Voxel raycast — check if looking at a block or sky/void
     const blockHit = raycastVoxel(game.world, origin, look, REACH);
     const targetingBlock = blockHit !== null || player.selectBox?.visible === true;
 
-    // Movement-based situations
     const motion = player.motion;
 
     if (motion) {
@@ -269,7 +259,6 @@ function detectTarget(game, player) {
 
     if (targetingBlock) return setSituation('block');
 
-    // Not looking at anything — sky or void
     return setSituation('default');
 }
 
@@ -277,8 +266,6 @@ function setSituation(name) {
     state.currentSituation = name;
     return name;
 }
-
-// --- Crosshair Rendering ---
 
 function findOriginalCrosshair() {
     const svgs = document.querySelectorAll('svg');
@@ -306,7 +293,7 @@ function getCrosshairUrl(filename) {
     if (state.assetBaseUrl) {
         return state.assetBaseUrl + file;
     }
-    // Fallbacks for MAIN world
+    
     try {
         return chrome.runtime.getURL('assets/crosshair/' + file);
     } catch (_) {}
@@ -389,8 +376,6 @@ function updateCrosshair(situation) {
     }
 }
 
-// --- Config ---
-
 function applyConfig(detail) {
     let config = detail;
     if (typeof config === 'string') {
@@ -463,8 +448,6 @@ function setEnabled(enabled) {
     emitState();
 }
 
-// --- Main Loop ---
-
 function loop() {
     if (state.enabled) {
         const game = getGame();
@@ -486,13 +469,9 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-// --- Events ---
-
 document.addEventListener(EVENT_CONFIG, event => {
     applyConfig(event.detail);
 }, true);
-
-// --- Public API ---
 
 globalThis.DynamicCrosshair = {
     enable() {

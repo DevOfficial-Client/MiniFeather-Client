@@ -277,7 +277,7 @@
       return `${base}|mf-aurora-v4-world-anchored`;
     };
 
-    material.needsUpdate = true; // one compile only; toggling is uniform-only afterwards.
+    material.needsUpdate = true; 
     state.patchApplied = true;
     return true;
   }
@@ -362,7 +362,6 @@
 
   document.addEventListener(EVENT_NAME, onConfig);
 
-  // Slow fallback scan so worlds created after page load are picked up even before a frame loop starts.
   state.scanTimer = window.setInterval(() => {
     if (!state.enabled || state.destroyed) return;
     const game = findGame(true);

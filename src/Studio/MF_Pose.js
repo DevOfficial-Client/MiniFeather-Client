@@ -1,25 +1,3 @@
-// MF_Pose.js — Editor de poses del jugador para el film mode.
-//
-// Permite modificar la pose (rotaciones de joints) del jugador local en
-// vivo y guardar snapshots reutilizables. Basado en el hallazgo verificado
-// de Emotes.js: el juego NO resetea las rotaciones de joints, así que
-// escribir joint.rotation queda persistente hasta que se restaure.
-//
-// Partes editables (mismos joints que graba MF_Film):
-//   head, body(torso), leftArm, rightArm, leftLeg, rightLeg
-//   (brazos y piernas con bend de codo/rodilla)
-//
-// Uso:
-//   MF_Pose.setPart('head', { pitch: 15, yaw: -30, roll: 0 })
-//   MF_Pose.save('pose-agachado')      // snapshot de todas las partes
-//   MF_Pose.apply('pose-agachado')     // aplicar un snapshot guardado
-//   MF_Pose.reset()                    // volver a la pose vanilla
-//   MF_Pose.list()                     // poses guardadas
-//   MF_Pose.getPose()                  // pose actual como objeto
-//   MF_Pose.addFaceTrigger(tick, face) // delega en FaceSwap (comodidad)
-//
-// Las poses se guardan en localStorage['minifeather_poses_v1'] y son
-// compatibles con el formato de joints de MF_Film (radianes directos).
 
 (function () {
     'use strict';
@@ -28,7 +6,6 @@
     const TAG = '[MF Pose]';
     const LS_KEY = 'minifeather_poses_v1';
 
-    // partes → joints del juego (tabla PARTS de Emotes.js, simplificada)
     const PARTS = {
         head:     { joints: ['headPivot'] },
         torso:    { joints: ['body'] },
@@ -40,12 +17,11 @@
     const ALL_JOINTS = Object.values(PARTS).flatMap(p => p.joints);
 
     const state = {
-        // joint -> {x,y,z} rotación vanilla capturada al inicializar
+        
         rest: null,
         poses: null
     };
 
-    // ── acceso al juego (patrón común) ──
     function getGame() {
         if (globalThis.miniblox?.player) return globalThis.miniblox;
         try {
@@ -94,7 +70,6 @@
         return getLocalPlayerEntity(getGame())?.mesh || null;
     }
 
-    // ── pose vanilla (rest) ──
     function captureRest() {
         const mesh = getMesh();
         if (!mesh) return null;
@@ -103,8 +78,8 @@
             const j = findJoint(mesh, name);
             if (j) rest[name] = {
                 x: j.rotation.x, y: j.rotation.y, z: j.rotation.z,
-                sx: j.scale.x, sy: j.scale.y, sz: j.scale.z, // escala vanilla
-                px: j.position.x, py: j.position.y, pz: j.position.z // pivot vanilla
+                sx: j.scale.x, sy: j.scale.y, sz: j.scale.z, 
+                px: j.position.x, py: j.position.y, pz: j.position.z 
             };
         }
         state.rest = rest;
@@ -116,11 +91,8 @@
         return state.rest;
     }
 
-    // ── lectura/escritura de pose ──
-    // grados → radianes por eje (interfaz amigable)
     function deg2rad(d) { return (Array.isArray(d) ? d : [d]).map(v => v * Math.PI / 180); }
 
-    // setPart('head', {pitch, yaw, roll}) — grados
     function setPart(part, angles) {
         const def = PARTS[part];
         if (!def) throw new Error('parte desconocida: ' + part + ' (usa: ' + Object.keys(PARTS).join(', ') + ')');
@@ -136,16 +108,15 @@
             y: (angles.yaw || 0) * Math.PI / 180,
             z: (angles.roll || 0) * Math.PI / 180
         };
-        // primer joint (hombro/cadera/cabeza/cuerpo) recibe la rotación completa
+        
         joints[0].rotation.set(rad.x, rad.y, rad.z);
-        // segundo joint (codo/rodilla) solo bend si se pidió
+        
         if (joints[1] && angles.bend != null) {
             joints[1].rotation.set((angles.bend || 0) * Math.PI / 180, 0, 0);
         }
         return { ok: true, part, applied: angles };
     }
 
-    // getPose() → { head: [rx,ry,rz], ... } en radianes (formato MF_Film)
     function getPose() {
         const mesh = getMesh();
         if (!mesh) return null;
@@ -157,7 +128,6 @@
         return pose;
     }
 
-    // applyPose(pose) — aplica un objeto de radianes por parte
     function applyPoseObj(pose) {
         const mesh = getMesh();
         if (!mesh) throw new Error('jugador/mesh no disponible');
@@ -170,7 +140,6 @@
         return { ok: true };
     }
 
-    // reset() — restaura la pose Y escala vanilla capturada
     function reset() {
         const rest = ensureRest();
         const mesh = getMesh();
@@ -185,7 +154,6 @@
         return { ok: true };
     }
 
-    // ── persistencia de poses ──
     function loadPoses() {
         if (state.poses) return state.poses;
         try { state.poses = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { state.poses = {}; }
@@ -221,7 +189,6 @@
         return { ok: true };
     }
 
-    // presets útiles de serie (grados)
     const PRESETS = {
         'tpose': { leftArm: { pitch: 0, roll: 90 }, rightArm: { pitch: 0, roll: -90 } },
         'wave-ready': { rightArm: { pitch: -170, roll: 20, bend: 30 } },
@@ -239,12 +206,6 @@
         return { ok: true, preset: name };
     }
 
-    // ── picking estilo Blockbench: click en una extremidad del jugador ──
-    // OJO: miniblox NO expone globalThis.THREE (bundle webpack). Pero las
-    // instancias del juego SÍ son de las clases internas de three.js:
-    //   camera.position.constructor === THREE.Vector3
-    // Con eso obtenemos Vector3 completo (unproject, getWorldPosition...)
-    // sin necesitar el global. El raycast punto-a-arte se hace a mano.
     function getV3(camera) {
         try { return camera?.position?.constructor || null; } catch { return null; }
     }
@@ -254,7 +215,6 @@
         return g?.gameScene?.camera || g?.camera || window.MF_FREECAM?.camera || null;
     }
 
-    // canvas del juego (para NDC correcto, no contra la ventana entera)
     function getGameCanvas() {
         const g = getGame();
         const c = g?.gameScene?.renderer?.domElement || g?.renderer?.domElement;
@@ -268,15 +228,12 @@
         return best;
     }
 
-    // radios de detección por parte (en bloques, jugador ~1.8 alto)
     const PART_RADIUS = {
         head: 0.32, torso: 0.38,
         leftArm: 0.42, rightArm: 0.42,
         leftLeg: 0.42, rightLeg: 0.42
     };
 
-    // ── intersección rayo-triángulo (Möller–Trumbore) ──
-    // devuelve t (distancia a lo largo del rayo) o null
     function rayTri(orig, dir, v0, v1, v2) {
         const e1x = v1.x - v0.x, e1y = v1.y - v0.y, e1z = v1.z - v0.z;
         const e2x = v2.x - v0.x, e2y = v2.y - v0.y, e2z = v2.z - v0.z;
@@ -298,7 +255,6 @@
         return t > 1e-6 ? t : null;
     }
 
-    // devuelve { part, jointName, object, hit } o null
     function pickPart(clientX, clientY) {
         const ent = getLocalPlayerEntity(getGame());
         const mesh = ent?.mesh;
@@ -306,13 +262,10 @@
         const V3 = getV3(camera);
         if (!mesh || !camera || !V3) return null;
 
-        // NDC sobre el rect del canvas: con el Studio abierto el canvas
-        // está minimizado/anclado al preview, así que su rect ya es correcto
         const rect = (getGameCanvas() || document.body).getBoundingClientRect();
         const ndcX = ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
         const ndcY = -((clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;
 
-        // rayo: origen = pos mundo de la cámara, dir = unproject del punto
         let origin, dir;
         try {
             camera.updateMatrixWorld?.();
@@ -323,8 +276,6 @@
 
         try { mesh.updateMatrixWorld(true); } catch {}
 
-        // recolectar meshes con su parte asociada
-        // mapa joint→parte con TODOS los joints (primario + codo/rodilla)
         const jointToPart = {};
         for (const part in PARTS) for (const j of PARTS[part].joints) jointToPart[j] = part;
 
@@ -332,9 +283,7 @@
         mesh.traverse(o => { if (o?.isMesh && o.geometry) meshes.push(o); });
         if (!meshes.length) return null;
 
-        // intersecar rayo contra TODOS los triángulos; el hit MÁS CERCANO a
-        // la cámara gana (así la cabeza delante del torso se selecciona bien)
-        let best = null; // { t, part, obj, tri }
+        let best = null; 
         const vA = new V3(), vB = new V3(), vC = new V3();
         for (const m of meshes) {
             const geo = m.geometry;
@@ -343,7 +292,6 @@
             let index = geo.index?.array || null;
             const count = posAttr.count;
 
-            // parte dueña de este mesh: subir la jerarquía buscando un joint
             let ownerPart = null, ownerJoint = null;
             let node = m;
             while (node && node !== mesh.parent) {
@@ -351,7 +299,6 @@
                 node = node.parent;
             }
 
-            // matriz local→mundo de este mesh
             let mw = null;
             try { m.updateMatrixWorld?.(true); mw = m.matrixWorld; } catch {}
             if (!mw) continue;
@@ -359,7 +306,7 @@
 
             const worldOf = (i, out) => {
                 const x = posAttr.getX(i), y = posAttr.getY(i), z = posAttr.getZ(i);
-                // multiplicar matriz 4x4 (column-major, estilo three.js)
+                
                 out.x = e[0] * x + e[4] * y + e[8] * z + e[12];
                 out.y = e[1] * x + e[5] * y + e[9] * z + e[13];
                 out.z = e[2] * x + e[6] * y + e[10] * z + e[14];
@@ -377,15 +324,13 @@
             }
         }
         if (!best || !best.part) {
-            // sin hit exacto o sin dueño por jerarquía (modelo skinned):
-            // fallback al joint más cercano al rayo (radio por parte)
+            
             return pickByProximity(mesh, origin, dir, V3);
         }
         const point = new V3().copy(dir).multiplyScalar(best.t).add(origin);
         return { part: best.part, jointName: best.jointName, object: best.obj, hit: { point } };
     }
 
-    // fallback: joint cuyo pivot esté más cerca del eje del rayo (skinned)
     function pickByProximity(mesh, origin, dir, V3) {
         let best = null;
         const wp = new V3(), tmp = new V3();
@@ -404,7 +349,7 @@
             }
         }
         if (!best) return null;
-        // objeto para resaltar: mesh hijo más cercano al punto
+        
         let obj = null, bestD = Infinity;
         const probe = new V3();
         mesh.traverse(o => {
@@ -418,9 +363,6 @@
         return { part: best.part, jointName: best.jointName, object: obj || mesh, hit: { point: best.point } };
     }
 
-    // ── escala de partes (resize estilo Blockbench) ──
-    // setScale(part, {x, y, z}) con multiplicadores absolutos (1 = vanilla).
-    // El rest-pose también captura la escala original para revertirla.
     function getScale(part) {
         const def = PARTS[part];
         if (!def) throw new Error('parte desconocida: ' + part);
@@ -446,9 +388,6 @@
         return { ok: true, part, scale: { x: nx, y: ny, z: nz } };
     }
 
-    // ── translate de partes (offset de posición del joint) ──
-    // getOffset(part) → offset en unidades de mundo respecto al pivot vanilla
-    // setOffset(part, {x,y,z}) — en bloques (1 = 1 bloque)
     function getOffset(part) {
         const def = PARTS[part];
         if (!def) throw new Error('parte desconocida: ' + part);
@@ -479,21 +418,6 @@
         return { ok: true, part, offset: { x: nx - r.px, y: ny - r.py, z: nz - r.pz } };
     }
 
-    // ── rotación de partes relativa a la cámara (estilo Blockbench) ──
-    // El drag del ratón se convierte en una rotación en ESPACIO MUNDO
-    // alrededor de los ejes right/up de la CÁMARA, y luego se convierte
-    // al espacio local del joint con cuaterniones. Así "adelante/atrás"
-    // funciona sin importar desde dónde mires al personaje:
-    //   qDelta  = rot(up, aU) * rot(right, aR)      (en mundo)
-    //   qNewWorld = qDelta * qStartWorld            (premultiply en mundo)
-    //   qLocal  = qParentWorld⁻¹ * qNewWorld        (a espacio del joint)
-    //   euler   = setFromQuaternion(qLocal, order)  (orden del joint)
-    //
-    // Flujo por drag (los deltas son TOTALES desde el mousedown, para
-    // que el snap de 15° y la repetición de eventos sean estables):
-    //   const h = MF_Pose.beginRotateWorld('rightArm', camera)
-    //   MF_Pose.applyRotateWorld(h, dxTotal, dyTotal, snap15, mirror)
-    //   MF_Pose.endRotateWorld(h)
     const rotDrags = new Map();
     let rotDragSeq = 0;
 
@@ -501,7 +425,6 @@
         try { return q.invert(); } catch { return q.conjugate(); }
     }
 
-    // refleja un eje a través del plano con normal n (espejo sagital)
     function reflectAxis(a, n) {
         if (!n) return a;
         const d = 2 * (a.x * n.x + a.y * n.y + a.z * n.z);
@@ -527,7 +450,6 @@
             if (j.parent?.quaternion) j.parent.getWorldQuaternion(st.qParentWorldInv);
             qInv(st.qParentWorldInv);
 
-            // normal de espejo = eje X local del personaje en mundo (plano sagital)
             try {
                 mesh.updateMatrixWorld?.(true);
                 const V3 = camera?.position?.constructor || j.position.constructor;
@@ -535,7 +457,6 @@
                 st.mirrorN = new V3(e[0], e[1], e[2]).normalize();
             } catch {}
 
-            // parte espejo capturada al inicio (Shift puede activarse a mitad del drag)
             const mp = ({ leftArm: 'rightArm', rightArm: 'leftArm', leftLeg: 'rightLeg', rightLeg: 'leftLeg' })[part];
             if (mp) {
                 const mj = findJoint(mesh, PARTS[mp].joints[0]);
@@ -564,14 +485,9 @@
             camera.updateMatrixWorld?.();
             const V3 = camera.position.constructor;
             const e = camera.matrixWorld.elements;
-            const right = new V3(e[0], e[1], e[2]).normalize(); // columna X
-            const back = new V3(e[8], e[9], e[10]).normalize(); // columna Z (hacia el espectador)
+            const right = new V3(e[0], e[1], e[2]).normalize(); 
+            const back = new V3(e[8], e[9], e[10]).normalize(); 
 
-            // drag vertical → eje horizontal de la cámara (sube/baja, va y
-            // viene en profundidad = adelante/atrás). drag horizontal → eje
-            // de VISTA (barrido lateral en el plano de la pantalla). Rotar
-            // sobre el eje vertical era un twist invisible para un brazo
-            // colgando — así ambos drags SIEMPRE mueven la parte.
             const k = 0.5 * Math.PI / 180;
             let aR = dyTotal * k;
             let aB = dxTotal * k;
@@ -583,18 +499,14 @@
 
             const qDelta = new st.Q().setFromAxisAngle(back, aB).multiply(new st.Q().setFromAxisAngle(right, aR));
 
-            // joint seleccionado: delta en mundo → espacio local
             const qNew = qDelta.clone().multiply(st.qStartWorld);
             const qLocal = st.qParentWorldInv.clone().multiply(qNew);
-            // Aplicar el quaternion directo evita conversiones Euler repetidas
-            // y discontinuidades visibles cerca de ±180° / gimbal lock.
+            
             st.joint.quaternion.copy(qLocal);
 
             const deg = (r) => r * 180 / Math.PI;
             const out = { deg: [deg(st.joint.rotation.x), deg(st.joint.rotation.y), deg(st.joint.rotation.z)] };
 
-            // espejo: la reflexión invierte el sentido (det=-1):
-            // M·rot(a,θ)·M⁻¹ = rot(Ma,−θ) → ambos lados van "adelante" juntos
             if (mirror && st.mirrorJoint) {
                 const mR = reflectAxis(right, st.mirrorN);
                 const mB = reflectAxis(back, st.mirrorN);
@@ -610,10 +522,6 @@
 
     function endRotateWorld(handle) { rotDrags.delete(handle); }
 
-    // ── rotación por eje mundo (anillos del gizmo) ──
-    // Igual que applyRotateWorld pero el eje es MUNDO fijo (x/y/z), no
-    // relativo a cámara. angle en radianes, regla mano derecha. Con espejo,
-    // refleja el eje e invierte el ángulo (M·rot(a,θ)·M⁻¹ = rot(Ma,−θ)).
     function applyAxisRotateWorld(handle, axis, angle, snap15, mirror) {
         const st = rotDrags.get(handle);
         if (!st) return null;
@@ -649,11 +557,6 @@
         } catch { return null; }
     }
 
-    // ── mover partes en espacio MUNDO (gizmo y drag con click der.) ──
-    // El personaje tiene yaw → local ≠ mundo. Convertimos los ejes mundo
-    // al espacio del padre del joint antes de tocar la posición.
-
-    // eje unitario mundo → vector en espacio local del padre del joint
     function worldAxisToLocal(joint, ax, ay, az) {
         try {
             joint.parent?.updateMatrixWorld?.(true);
@@ -678,7 +581,6 @@
         j.position.z = r.pz + Math.min(2, Math.max(-2, j.position.z - r.pz));
     }
 
-    // mover una parte a lo largo de un eje MUNDO (lo que arrastra el gizmo)
     function addWorldOffset(part, axisName, amount) {
         const def = PARTS[part];
         if (!def) throw new Error('parte desconocida: ' + part);
@@ -697,9 +599,6 @@
         return getOffset(part);
     }
 
-    // mover una parte en el PLANO DE PANTALLA de la cámara (drag libre con
-    // click derecho): right/up de la cámara → espacio local del joint.
-    // dy invertido porque en pantalla Y crece hacia abajo.
     function addScreenOffset(part, camRight, camUp, dxWorld, dyWorld) {
         const def = PARTS[part];
         if (!def) throw new Error('parte desconocida: ' + part);

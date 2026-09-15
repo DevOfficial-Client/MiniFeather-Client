@@ -712,8 +712,7 @@ function pat() {
     squish(target);
     createHand(target, game);
     playSound();
-    // P2P: compartir el pat — el otro jugador vera la mano y el squish
-    // sobre ESTA entidad (identificada por username o pos)
+    
     try {
         const P2P = globalThis.MF_Peer;
         if (P2P?.status === 'host' || P2P?.status === 'guest') {
@@ -723,21 +722,17 @@ function pat() {
             if (pos) P2P.sendPat({ target: { x: pos.x, y: pos.y, z: pos.z, name }, from: from ? { x: from.x, y: from.y, z: from.z } : null });
         }
     } catch {}
-    // si el objetivo es el peer P2P, ademas "agachar" su camara alla
+    
     return true;
 }
 
-// ---- P2P: pat recibido del otro jugador ----
-// el otro cliente hizo pat sobre una entidad (posiblemente Y). Reproducir
-// el squish + mano localmente sobre esa entidad si la tenemos a la vista.
 function remotePat(msg) {
     if (!state.enabled) return;
     const game = getGame(false);
     if (!game?.player) return;
     const tp = msg?.target;
     if (!tp) return;
-    // 1) ¿el pat fue para MI? (pos del objetivo ≈ mi pos; tolerancia vertical
-    // generosa porque entity.pos va a los pies y player.pos puede ir al ojo)
+    
     const me = getPos(game.player);
     if (me) {
         const dh = Math.hypot(tp.x - me.x, tp.z - me.z);
@@ -747,7 +742,7 @@ function remotePat(msg) {
             duckCamera(game);
         }
     }
-    // 2) buscar la entidad local que coincide (por username o por cercania)
+    
     const entities = resolveEntityMap(game);
     if (!entities) return;
     let target = null;
@@ -761,31 +756,26 @@ function remotePat(msg) {
         }
     } catch {}
     if (!target) return;
-    // mano + squish sobre la entidad encontrada (swing no: no es nuestro brazo)
+    
     squish(target);
     createHand(target, game);
     playSound();
 }
 
-// "agachar" la camara del que recibio el pat. Mover el camera MISMO (hijo
-// del pitchObject). GUARD CRITICO: si llega otro pat mientras ya esta
-// agachada, NO recapturar la base (sino cada pat bajaria mas y mas y la
-// camara nunca recuperaria su altura original).
 const duck = { active: false, baseY: 0, camera: null };
 
 function duckCamera(game) {
     try {
         const camera = resolveCamera(game);
         if (!camera?.position) return;
-        // pat durante una agachada activa: ignorar (ya la estan acariciando)
+        
         if (duck.active) return;
-        // si quedo una animacion colgada en OTRA camara (respawn), restaurarla
+        
         if (duck.camera && duck.camera !== camera && duck.camera.position) {
             try { duck.camera.position.y = duck.baseY; } catch {}
             duck.camera = null;
         }
-        // sanity: si camera.position.y no esta en reposo (~0 local), es un
-        // leftover de una animacion perdida — resetear a 0 antes de empezar
+        
         if (Math.abs(camera.position.y) > 0.001) {
             try { camera.position.y = 0; } catch {}
         }
@@ -794,11 +784,11 @@ function duckCamera(game) {
         duck.baseY = camera.position.y;
         const start = performance.now();
         const DURATION = 460;
-        const DROP = 0.34; // bloques que baja la camara
+        const DROP = 0.34; 
         const frame = () => {
-            if (!duck.active || duck.camera !== camera) return; // otra animacion tomo el control
+            if (!duck.active || duck.camera !== camera) return; 
             const t = Math.min(1, (performance.now() - start) / DURATION);
-            // curva: cae rapido (30%), aguanta un toque, sube suave
+            
             let dip;
             if (t < 0.3) dip = (t / 0.3) * DROP;
             else if (t < 0.45) dip = DROP;
@@ -808,7 +798,7 @@ function duckCamera(game) {
                 requestAnimationFrame(frame);
                 return;
             }
-            // restaurar SIEMPRE a la base original capturada al inicio
+            
             camera.position.y = duck.baseY;
             duck.active = false;
             duck.camera = null;

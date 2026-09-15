@@ -1,25 +1,3 @@
-// MF_Animation.js — Sistema de animación de poses estilo Blockbench.
-//
-// Copia el modelo de "Animation Mode" de Blockbench aplicado al jugador
-// en vivo dentro de miniblox:
-//   - Cada PARTE (head/torso/brazos/piernas) tiene 3 CANALES:
-//       rotation [x,y,z] deg · position [x,y,z] bloques · scale [x,y,z] mult
-//   - KEYFRAMES {t, v} por canal, en SEGUNDOS (como BB).
-//   - Interpolación: smooth (Catmull-Rom, default de BB), linear, step.
-//   - AUTO-KEY: al posar una parte se escribe keyframe en el playhead.
-//   - MIRROR: editar un lado refleja al opuesto con signos invertidos.
-//   - Playback: aplica la pose interpolada al jugador cada frame.
-//
-// API (window.MF_Animation):
-//   create(name, len) / open(name) / list() / del(name)
-//   setChannel(part, channel, t, value)  // escribe/actualiza keyframe
-//   getKey(part, channel, t) / delKey(part, channel, t)
-//   play() / pause() / stop() / setTime(t) / time()
-//   applyAtTime(t)                        // aplica pose interpolada
-//   autoKey(part, channel, value, mirror) // lo llama el posing del Studio
-//   setInterp(mode) / setLoop(bool) / length()
-//
-// Persistencia: localStorage['minifeather_anims_v1'] (formato exportable).
 
 (function () {
     'use strict';
@@ -30,22 +8,21 @@
     const CHANNELS = ['rotation', 'position', 'scale'];
     const MIRROR_PART = { leftArm: 'rightArm', rightArm: 'leftArm', leftLeg: 'rightLeg', rightLeg: 'leftLeg' };
 
-    // valores espejo por canal (qué ejes se invierten al reflejar)
     const MIRROR_SIGN = {
-        rotation: [1, -1, -1], // pitch igual, yaw/roll invertidos
+        rotation: [1, -1, -1], 
         position: [-1, 1, 1],
         scale: [1, 1, 1]
     };
 
     const state = {
-        anims: null,          // { name: {length, loop, interp, keys} }
-        cur: null,            // nombre de la animación abierta
+        anims: null,          
+        cur: null,            
         playing: false,
-        t: 0,                 // playhead en segundos
+        t: 0,                 
         raf: 0,
         lastFrame: 0,
-        fps: 60,              // FPS máx. de aplicación de la animación (5-180)
-        fpsClock: 0,          // acumulador para el limitador
+        fps: 60,              
+        fpsClock: 0,          
         autoKey: true,
         mirror: true
     };
@@ -66,7 +43,6 @@
         return state.cur ? a[state.cur] || null : null;
     }
 
-    // ── gestión de animaciones ──
     function create(name, len) {
         const a = load();
         a[name] = { length: len || 2, loop: true, interp: 'smooth', keys: {} };
@@ -95,8 +71,6 @@
 
     function list() { return Object.keys(load()); }
 
-    // ── keyframes ──
-    // keys = { part: { rotation: [{t, v:[x,y,z]}], position: [...], scale: [...] } }
     function keysOf(part, channel, createIfMissing) {
         const a = cur();
         if (!a) return null;
@@ -115,7 +89,7 @@
         if (!CHANNELS.includes(channel)) throw new Error('canal: ' + channel + ' (usa ' + CHANNELS.join(', ') + ')');
         const arr = keysOf(part, channel, true);
         const v = [value[0] || 0, value[1] || 0, value[2] || 0];
-        // reemplazar si hay key en el mismo instante (±1ms)
+        
         const existing = arr.find(k => Math.abs(k.t - t) < 0.001);
         if (existing) existing.v = v;
         else {
@@ -142,15 +116,14 @@
         return { ok: true };
     }
 
-    // ── interpolación ──
     function interp3(a, b, c, d, u, mode) {
-        // a..d = valores vec3 (b..c el segmento); u = 0..1
+        
         const out = [0, 0, 0];
         for (let i = 0; i < 3; i++) {
             if (mode === 'step') out[i] = b[i];
             else if (mode === 'linear') out[i] = b[i] + (c[i] - b[i]) * u;
             else {
-                // smooth = Catmull-Rom (default de Blockbench)
+                
                 const p0 = a ? a[i] : b[i] * 2 - c[i];
                 const p3 = d ? d[i] : c[i] * 2 - b[i];
                 const u2 = u * u, u3 = u2 * u;
@@ -177,7 +150,6 @@
         return arr[arr.length - 1].v;
     }
 
-    // ── aplicar al jugador (vía MF_Pose) ──
     function applyAtTime(t) {
         const a = cur();
         const P = window.MF_Pose;
@@ -185,17 +157,17 @@
         const base = P.getPose() || {};
         for (const part in a.keys) {
             const chans = a.keys[part];
-            // rotation (grados) → setPart
+            
             const rot = sampleChannel(chans.rotation, t, a.interp);
             if (rot) {
                 try { P.setPart(part, { pitch: rot[0], yaw: rot[1], roll: rot[2] }); } catch {}
             }
-            // position (bloques) → setOffset (relativo al rest)
+            
             const pos = sampleChannel(chans.position, t, a.interp);
             if (pos && P.setOffset) {
                 try { P.setOffset(part, { x: pos[0], y: pos[1], z: pos[2] }); } catch {}
             }
-            // scale (multiplicador) → setScale
+            
             const sc = sampleChannel(chans.scale, t, a.interp);
             if (sc && P.setScale) {
                 try { P.setScale(part, { x: sc[0], y: sc[1], z: sc[2] }); } catch {}
@@ -204,7 +176,6 @@
         return { ok: true };
     }
 
-    // ── playback ──
     function loop(now) {
         if (!state.playing) return;
         const a = cur();
@@ -213,15 +184,13 @@
         state.lastFrame = now;
         state.t += dt;
 
-        // limitador de FPS: el playhead avanza en tiempo real, pero la pose
-        // solo se APLICA al ritmo indicado (acumulador clásico de game-loop)
         const minStep = 1 / state.fps;
         state.fpsClock += dt;
         if (state.fpsClock < minStep) {
             state.raf = requestAnimationFrame(loop);
-            return; // aún no toca aplicar frame
+            return; 
         }
-        state.fpsClock = 0; // no acumular deuda: aplica y sigue
+        state.fpsClock = 0; 
 
         if (state.t > a.length) {
             if (a.loop) state.t = state.t % a.length;
@@ -269,9 +238,6 @@
         return { ok: !!a };
     }
 
-    // ── AUTO-KEY: lo llama el posing del Studio al transformar una parte ──
-    // Igual que Blockbench: transformar un bone escribe keyframe en el
-    // playhead actual, también en la parte espejo si mirror está activo.
     function autoKey(part, channel, value, forceMirror) {
         if (!state.autoKey || !state.cur) return { ok: false, skipped: true };
         try { setChannel(part, channel, state.t, value); } catch { return { ok: false }; }
@@ -286,7 +252,6 @@
         return { ok: true };
     }
 
-    // pose actual de una parte como valores por canal (para el botón +)
     function readPart(part) {
         const P = window.MF_Pose;
         if (!P) return null;
@@ -311,10 +276,6 @@
         return out;
     }
 
-    // ── SNAP KEYFRAME: botón "+" ──
-    // Graba la pose ACTUAL de una parte (rotación/posición/escala) como
-    // keyframe en el playhead. Si no hay parte seleccionada, graba todas.
-    // Devuelve los canales escritos (para feedback en la UI).
     function snapKey(part, opts) {
         if (!state.cur) return { ok: false, error: 'abre o crea una animación primero' };
         const written = [];
@@ -340,11 +301,10 @@
         return { ok: written.length > 0, written, t: state.t };
     }
 
-    // nombres de todas las partes posables
     function ALL_PARTS() {
         const P = window.MF_Pose;
         if (P?.PARTS) return P.PARTS;
-        return Object.keys(MIRROR_PART); // fallback: mitades espejo
+        return Object.keys(MIRROR_PART); 
     }
 
     window.MF_Animation = {

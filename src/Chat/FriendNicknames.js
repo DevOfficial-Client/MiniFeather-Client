@@ -658,7 +658,6 @@
         }
     }
 
-
     function getReactRootFibers() {
         const roots = [];
         const seen = new Set();

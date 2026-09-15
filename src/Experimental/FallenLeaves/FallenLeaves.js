@@ -1,31 +1,20 @@
 (() => {
   'use strict';
 
-  // Hojas caídas bajo los árboles (patrón GrassFlowers): escanea los chunks
-  // alrededor del jugador, detecta columnas con copa de *_leaves arriba y
-  // suelo natural abajo, y pinta decals de hojas caídas del pack Particular
-  // TINTADAS con el color primaveral de cada especie (las texturas del pack
-  // son escala de grises, diseñadas para teñirse). Además spawnea hojas que
-  // CAEN LENTAMENTE desde el borde inferior de las copas, con vaivén amplio
-  // y billboard total hacia el jugador. Solo visual: no toca bloques.
-
   const W = globalThis;
   const EVENT_NAME = 'minifeather:fell-leaves-config';
   const TAG = '[MiniFeather Fallen Leaves]';
-  const REGION_RADIUS = 2; // 5x5 chunks alrededor del jugador
+  const REGION_RADIUS = 2; 
   const REFRESH_MS = 9000;
-  const SURFACE_EPSILON = 0.0047; // mismo offset que GrassFlowers
-  const DENSITY = 0.35;           // probabilidad de hoja por columna bajo árbol
+  const SURFACE_EPSILON = 0.0047; 
+  const DENSITY = 0.35;           
   const MIN_SIZE = 0.42;
   const MAX_SIZE = 0.78;
 
-  // hojas cayendo: presupuesto y ritmo (modo primavera: lluvia suave de hojas)
   const FALLING_MAX = 110;
   const FALL_SPAWN_MS = 90;
-  const FALL_SPEED = 0.22;        // bloques/seg (caída MUY lenta, hoja)
+  const FALL_SPEED = 0.22;        
 
-  // especies: tex = prefijo de textura del pack Particular, color = tinte de
-  // follaje PRIMAVERA (frescos y luminosos; la textura gris multiplica ~0.55)
   const SPECIES = [
     { id: 'oak',      tex: 'oak',    color: 0xB4E861, match: ['oak_leaves'],              frames: 6 },
     { id: 'dark_oak', tex: 'oak',    color: 0x86C94F, match: ['dark_oak_leaves'],         frames: 6 },
@@ -35,7 +24,6 @@
     { id: 'jungle',   tex: 'jungle', color: 0xA9F072, match: ['jungle_leaves'],           frames: 3 }
   ];
 
-  // bloques de suelo natural donde tiene sentido ver hojas caídas
   const GROUND = new Set([
     'grass_block', 'dirt', 'podzol', 'coarse_dirt', 'muck',
     'snow', 'snow_block', 'mossy_cobblestone', 'mycelium',
@@ -51,15 +39,15 @@
     world: null,
     scene: null,
     referenceMesh: null,
-    materials: [],      // [{ url, species, frame, material }]
+    materials: [],      
     textures: [],
-    buckets: [],        // arrays de decals paralelos a materials
-    speciesIndex: new Map(), // nombre de hoja → entry de frame 0 de su especie
-    speciesFrames: new Map(), // id de especie → [entries de material]
-    bundle: [],         // meshes estáticos del suelo { mesh, geometry }
-    verticalGeometry: null, // quad vertical para hojas cayendo (billboard)
-    falling: [],        // hojas en caída { mesh, material, x, y, z, ... }
-    canopySpots: [],    // puntos de copa para el spawner { x, y, z, targetY, species }
+    buckets: [],        
+    speciesIndex: new Map(), 
+    speciesFrames: new Map(), 
+    bundle: [],         
+    verticalGeometry: null, 
+    falling: [],        
+    canopySpots: [],    
     stateNameCache: new Map(),
     centerCx: Number.NaN,
     centerCz: Number.NaN,
@@ -149,8 +137,6 @@
     return h >>> 0;
   }
 
-  // ── recursos (texturas del pack Particular vía chrome-extension) ──
-
   function isValidAssetsUrl(url) {
     return typeof url === 'string' && url.startsWith('chrome-extension://') && !url.includes('://invalid/');
   }
@@ -188,8 +174,6 @@
     });
   }
 
-  // umbraliza el alfa: el pack trae píxeles semi-transparentes (efecto
-  // "papel"); al binarizar quedan hojas opacas con borde limpio
   function binarizeAlpha(image) {
     try {
       const canvas = document.createElement('canvas');
@@ -278,8 +262,7 @@
       material.polygonOffsetUnits = -1;
       if ('roughness' in material) material.roughness = 1;
       if ('metalness' in material) material.metalness = 0;
-      // tinte de especie: las texturas del pack son GRISES y se diseñaron
-      // para colorearse con el follaje de cada árbol
+      
       material.color?.set?.(tintColor ?? 0xffffff);
       material.emissive?.set?.(0x000000);
       material.onBeforeCompile = function () {};
@@ -289,8 +272,6 @@
     return material;
   }
 
-  // quad vertical (plano XY, pivote abajo-centro) para hojas cayendo —
-  // mismo patrón que las gotitas de WaterSplash
   function buildVerticalGeometry(referenceMesh) {
     if (state.verticalGeometry) return state.verticalGeometry;
     const refGeo = referenceMesh?.geometry;
@@ -328,7 +309,6 @@
     const sourceMap = source?.map;
     if (!ref || !source || !sourceMap || typeof sourceMap.constructor !== 'function') return false;
 
-    // lista plana de { url, species, frame, color } y buckets paralelos
     const entries = [];
     for (const species of SPECIES) {
       for (let i = 0; i < species.frames; i++) {
@@ -366,11 +346,9 @@
       if (!buildVerticalGeometry(ref)) {
         console.warn(TAG, 'sin quad vertical: las hojas no caerán (solo decals)');
       }
-      // Vector3 real (robado del juego): lookAt() con objetos planos genera
-      // matrices NaN y el renderer descarta el mesh silenciosamente
+      
       try { state.scratchVec3 = ref.position.clone(); } catch (_) {}
-      // índices rápidos: nombre de bloque de hoja → material de frame 0, y
-      // especie → lista de frames (para el spawner)
+      
       for (const species of SPECIES) {
         const frames = materials.filter(m => m.species === species.id);
         state.speciesFrames.set(species.id, frames);
@@ -385,8 +363,6 @@
       return false;
     }
   }
-
-  // ── escaneo de chunks ────────────────────────────────────────────
 
   function blockNameAt(chunk, stateId, wx, y, wz) {
     if (state.stateNameCache.has(stateId)) return state.stateNameCache.get(stateId);
@@ -414,8 +390,8 @@
         const wx = cx * 16 + lx;
         const wz = cz * 16 + lz;
 
-        let species = null;    // entry de frame 0 de la especie de la copa
-        let lastLeafY = -1;    // y del bloque de hoja MÁS BAJO visto (bordes de copa)
+        let species = null;    
+        let lastLeafY = -1;    
         let stop = false;
 
         for (let ci = chunk.cells.length - 1; ci >= 0 && !stop; ci--) {
@@ -430,21 +406,20 @@
             let raw = 0;
             try { raw = cell.bitArray.get(blockIndex); } catch (_) { continue; }
             const id = cell.palette?.length ? cell.palette[raw] : raw;
-            if (id === 0) continue; // aire: seguir bajando
+            if (id === 0) continue; 
 
             const name = blockNameAt(chunk, id, wx, realY, wz);
             if (!name) { stop = true; break; }
 
             if (state.speciesIndex.has(name)) {
-              lastLeafY = realY; // seguimos bajando: el más bajo gana
-              species = state.speciesIndex.get(name); // copa: recordar y seguir
+              lastLeafY = realY; 
+              species = state.speciesIndex.get(name); 
               continue;
             }
-            // tronco/rama: transparente para el escaneo
+            
             if (name.endsWith('_log') || name.endsWith('_wood')) continue;
             if (name === 'vine' || name === 'cobweb') continue;
 
-            // primer bloque "suelo": si pasó por una copa, colocar hoja
             if (species && GROUND.has(name)) {
               const h = hashXZ(wx, wz);
               if (h / 4294967296 < DENSITY) {
@@ -461,9 +436,7 @@
                   }
                 }
               }
-              // punto de copa para el spawner de hojas cayendo (muestra).
-              // Usa el borde INFERIOR de la copa: las hojas se desprenden
-              // de las ramas bajas, no del tope del árbol
+              
               if (lastLeafY >= 0 && state.canopySpots.length < 800 && (h & 7) === 0) {
                 state.canopySpots.push({
                   x: wx + 0.5,
@@ -474,14 +447,12 @@
                 });
               }
             }
-            stop = true; // el suelo tapa lo de abajo
+            stop = true; 
           }
         }
       }
     }
   }
-
-  // ── geometría decals del suelo ───────────────────────────────────
 
   function uvForRotation(rot) {
     const base = [[0, 1], [1, 1], [0, 0], [1, 0]];
@@ -542,7 +513,7 @@
       mesh.receiveShadow = false;
       mesh.frustumCulled = true;
       mesh.renderOrder = 3;
-      // patrón MF_Film: forzar matrices o el mesh queda en el origen
+      
       mesh.matrixAutoUpdate = true;
       mesh.updateMatrix();
       mesh.updateMatrixWorld(true);
@@ -555,15 +526,11 @@
     else setTimeout(() => fn({ timeRemaining: () => 4 }), 0);
   }
 
-  // ── hojas cayendo (partículas con balanceo) ──────────────────────
-
   function spawnFallingLeaf(now) {
     if (!state.canopySpots.length || state.falling.length >= FALLING_MAX) return;
     const scene = state.scene;
     if (!scene?.add || !state.verticalGeometry) return;
 
-    // sesgo por cercanía: probabilidad ∝ 1/(1+dist) — el grueso de las
-    // hojas cae cerca del jugador, donde sí se ven (máx 40 bloques)
     const p = state.game?.player?.pos;
     let spot = null;
     if (p) {
@@ -588,7 +555,7 @@
     const entry = frames[(Math.random() * frames.length) | 0];
 
     try {
-      // material propio por hoja (clonado del de su especie)
+      
       const material = entry.material.clone();
       const MeshCtor = state.referenceMesh.constructor;
       const mesh = new MeshCtor(state.verticalGeometry, material);
@@ -614,9 +581,9 @@
         targetY: spot.targetY,
         start: now,
         phase: Math.random() * Math.PI * 2,
-        swayFreq: 0.15 + Math.random() * 0.10,  // periodo 4-7s: vaivén MUY lento
-        swayAmp: 0.9 + Math.random() * 0.8,     // deriva lateral amplia (bloques)
-        spinFreq: 0.25 + Math.random() * 0.2,   // giro lento y perezoso
+        swayFreq: 0.15 + Math.random() * 0.10,  
+        swayAmp: 0.9 + Math.random() * 0.8,     
+        spinFreq: 0.25 + Math.random() * 0.2,   
         fallJitter: 0.8 + Math.random() * 0.4
       });
     } catch (_) {}
@@ -627,9 +594,6 @@
     state.lastFrame = now;
     const camera = getCamera(state.game || findGame());
 
-    // objetivo del billboard: posición MUNDO de la cámara. camera.position
-    // es LOCAL (la cámara cuelga de grupos con transformación) — se extrae
-    // de matrixWorld (columna de traslación); si no hay, ojos del jugador
     let lookX = NaN, lookY = NaN, lookZ = NaN;
     try {
       const el = camera?.matrixWorld?.elements;
@@ -642,7 +606,6 @@
     const v3 = state.scratchVec3;
     const canLook = !!v3 && !Number.isNaN(lookX);
 
-    // spawner: ritmo constante de hojas nuevas
     if (now - state.lastSpawn > FALL_SPAWN_MS && state.falling.length < FALLING_MAX) {
       state.lastSpawn = now;
       spawnFallingLeaf(now);
@@ -653,7 +616,6 @@
       const age = (now - leaf.start) / 1000;
       const remaining = leaf.y - leaf.targetY;
 
-      // aterrizaje: remover (el decal del suelo ya representa la hoja)
       if (remaining <= 0.02) {
         try { leaf.mesh.removeFromParent?.(); } catch (_) {}
         try { leaf.material.dispose?.(); } catch (_) {}
@@ -661,14 +623,10 @@
         continue;
       }
 
-      // caída lenta con vaivén amplio
       leaf.y -= FALL_SPEED * leaf.fallJitter * dt;
       const sway = Math.sin(age * leaf.swayFreq * Math.PI * 2 + leaf.phase) * leaf.swayAmp;
       leaf.mesh.position.set(leaf.x + sway, leaf.y, leaf.z + sway * 0.35);
 
-      // billboard total: el quad SIEMPRE mira al jugador; el giro de caída
-      // se hace sobre el eje que apunta a la cámara (rotateZ local tras
-      // lookAt), así nunca se pone de canto
       try {
         if (canLook) {
           v3.set(lookX, lookY, lookZ);
@@ -677,9 +635,6 @@
         }
       } catch (_) {}
 
-      // patrón MF_Film: el juego puede congelar matrixWorld del scene root;
-      // sin esto la hoja queda CLAVADA en su spawn (dentro de la copa,
-      // oculta). Forzar la actualización cada frame para meshes en movimiento
       try {
         leaf.mesh.updateMatrix();
         leaf.mesh.updateMatrixWorld(true);
@@ -688,8 +643,6 @@
       leaf.mesh.visible = true;
     }
   }
-
-  // ── reconstrucción de la región ──────────────────────────────────
 
   async function rebuildRegion(game, centerCx, centerCz, token) {
     const world = game?.world;
@@ -774,8 +727,6 @@
     try { state.verticalGeometry?.dispose?.(); } catch (_) {}
     state.verticalGeometry = null;
   }
-
-  // ── ciclo de vida ────────────────────────────────────────────────
 
   function schedule(force = false) {
     if (!state.enabled || state.destroyed) return;
@@ -866,7 +817,7 @@
     if (!cfg || typeof cfg !== 'object') return;
     if (isValidAssetsUrl(cfg.assetsBase) && state.assetsBase !== cfg.assetsBase) {
       state.assetsBase = cfg.assetsBase;
-      disposeResources(); // recargar texturas con la base nueva
+      disposeResources(); 
     }
     setEnabled(cfg.enabled);
   }

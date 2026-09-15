@@ -1,12 +1,9 @@
-// Modelos baby del drop "Tiny Takeover" (MC 26.1), porteados a un formato
-// de datos simple desde Tiny-Takeover-Backport (MIT, evanbones).
-// convención por caja: { u, v, coords: [x,y,z,w,h,d] } en píxeles MC,
-// y crece hacia abajo; pivot [x,y,z] en px MC; rot en radianes MC.
+
 (() => {
   'use strict';
 
   const MODELS = {
-    // BabyWolfModel.java — textura 32x32
+    
     wolf: {
       texW: 32, texH: 32, texName: 'wolf_baby', texDir: 'wolf',
       texVariants: { tame: 'wolf_tame_baby', angry: 'wolf_angry_baby' },
@@ -39,7 +36,6 @@
       }
     },
 
-    // BabyCowModel.java — textura 64x64
     cow: {
       texW: 64, texH: 64, texName: 'cow_temperate_baby', texDir: 'cow',
       root: {
@@ -63,7 +59,6 @@
       }
     },
 
-    // BabyPigModel.java — textura 32x32
     pig: {
       texW: 32, texH: 32, texName: 'pig_temperate_baby', texDir: 'pig',
       root: {
@@ -85,7 +80,6 @@
       }
     },
 
-    // BabySheepModel.java — textura 64x32
     sheep: {
       texW: 64, texH: 32, texName: 'sheep_baby', texDir: 'sheep',
       root: {
@@ -101,7 +95,6 @@
       }
     },
 
-    // BabyChickenModel.java — textura 16x16 (cabeza vacía en el original)
     chicken: {
       texW: 16, texH: 16, texName: 'chicken_temperate_baby', texDir: 'chicken',
       root: {

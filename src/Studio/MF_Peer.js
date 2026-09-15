@@ -1,31 +1,25 @@
-// ============================================================
-// MiniFeather P2P — Verity compartida entre dos jugadores
-// via PeerJS (WebRTC). Host = autoridad (corre la IA local de
-// Verity), invitado = puppet interpolado por red a 20 Hz.
-// ============================================================
+
 (function () {
 'use strict';
 
 const TAG = '[MiniFeather P2P]';
 const PEERJS_CDN = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
 
-// ---------- state ----------
 const state = {
-    peer: null,          // instancia PeerJS
-    conn: null,          // DataConnection activo
-    role: null,          // 'host' | 'guest'
-    peerId: null,        // mi id publico (host)
-    peerName: null,      // username del otro jugador (del handshake)
-    status: 'off',       // off | connecting | host | guest | error
-    sendTimer: null,     // interval de broadcast del host
-    lastFrameIn: 0,      // ultimo paquete recibido (guest)
-    puppetTarget: null   // { x,y,z,yaw } objetivo de interpolacion
+    peer: null,          
+    conn: null,          
+    role: null,          
+    peerId: null,        
+    peerName: null,      
+    status: 'off',       
+    sendTimer: null,     
+    lastFrameIn: 0,      
+    puppetTarget: null   
 };
 
 function log(...a) { console.log(TAG, ...a); }
 function warn(...a) { console.warn(TAG, ...a); }
 
-// ---------- PeerJS loader ----------
 let peerjsPromise = null;
 function loadPeerJS() {
     if (globalThis.Peer) return Promise.resolve(true);
@@ -40,7 +34,6 @@ function loadPeerJS() {
     return peerjsPromise;
 }
 
-// ---------- acceso al juego (patron PatPat: global → React fiber) ----------
 const scan = { game: null, entityMap: null, lastGameScan: 0 };
 
 function getGame(force = false) {
@@ -121,14 +114,13 @@ function resolveEntityMap(game) {
     return null;
 }
 
-// ---------- helpers ----------
 function myName() {
     try {
         const game = getGame();
         const p = game?.player;
         if (p?.profile?.username) return p.profile.username;
         if (p?.username) return p.username;
-        // fallback: mi propia entidad esta en el entityMap — buscar por id
+        
         const ents = p ? resolveEntityMap(game) : null;
         if (ents?.get && p?.id !== undefined) {
             const me = ents.get(p.id) || ents.get(String(p.id));
@@ -138,41 +130,19 @@ function myName() {
     return 'yo';
 }
 
-// ---------- protocolo ----------
-// { t:'hello', name, role }               handshake
-// { t:'sync', p:{x,y,z,yaw,anim,moving} } host → guest (20 Hz)
-// { t:'pos',  p:{x,y,z} }                 guest → host (reporta su pos, 5 Hz)
-// { t:'ents', ents:[{id,file,x,y,z,yaw,anim,scale,height}] } 10 Hz, ambos roles
-// { t:'need-file', file }                 "no tengo ese .glb, envialo"
-// { t:'file-h', file, size, chunks }      inicio de transferencia
-// { t:'file-c', file, i, data }           chunk base64 (32 KB)
-// { t:'file-e', file }                    fin de transferencia
-// { t:'despawn' }                         verity se fue
-// { t:'chat', text }                      lo que verity dijo en el host
-// { t:'look', a:... }                     Look Sync: cambio visual del peer
-//   a:'stroke' {cells:[[x,y,color|null]]}   trazos del editor de cabeza
-//   a:'head-rect' {png}                     cabeza completa (fill/undo/preset)
-//   a:'face' {name, dataURL?, region?}      emoción de cara
-//   a:'skin' {name, dataURL}                skin PNG completa
-//   a:'revert' {what:'head'|'face'|'skin'}  restaurar original
-//   a:'morph' {type}                        peer se transformó en un mob
-//   a:'unmorph' {}                          peer volvió a humano
-
 function send(obj) {
     try { state.conn?.send?.(obj); } catch {}
 }
 
-// posicion del invitado tal como la conoce el host (para multi-target)
 state.guestPos = null;
 
-// ---------- HOST: broadcast del transform ----------
 function startBroadcast() {
     stopBroadcast();
-    // sync de verity: SOLO host (el guest no tiene autoridad sobre verity)
+    
     state.sendTimer = setInterval(() => {
         if (state.role !== 'host') return;
         const rec = window.MF_CustomModels?.getRecord?.('verity');
-        if (!rec?.root) return; // sin verity local: no emitir
+        if (!rec?.root) return; 
         send({
             t: 'sync',
             p: {
@@ -183,13 +153,12 @@ function startBroadcast() {
                 anim: rec.curAnim || rec.anim || null
             }
         });
-        // multi-target: publicar la pos del invitado a CustomModels para que
-        // verity (host, autoridad) persiga al MAS CERCANO de los dos jugadores
+        
         if (state.guestPos) {
             try { window.MF_CustomModels?.setPeerTarget?.('verity_peer', state.guestPos); } catch {}
         }
-    }, 50); // 20 Hz
-    // escala TitanTiny → al otro cliente (ambos roles, solo cuando cambia)
+    }, 50); 
+    
     state.scaleTimer = setInterval(() => {
         try {
             const tt = globalThis.TitanTiny;
@@ -200,7 +169,7 @@ function startBroadcast() {
             }
         } catch {}
     }, 250);
-    // guest → host: reportar mi pos (5 Hz basta, solo para elegir objetivo)
+    
     state.posTimer = setInterval(() => {
         if (state.role !== 'guest') return;
         const p = getPos();
@@ -220,7 +189,6 @@ function getPos() {
     } catch { return null; }
 }
 
-// ---------- GUEST: puppet ----------
 function spawnPuppet(p) {
     const CM = window.MF_CustomModels;
     if (!CM) return;
@@ -228,7 +196,7 @@ function spawnPuppet(p) {
     CM.spawn('verity_full_model.glb', p.x, p.y, p.z, {
         id: 'verity',
         height: 0.85,
-        followPlayer: false, // sin IA local: el host manda
+        followPlayer: false, 
         puppet: true,
         anim: p.anim || 'idle'
     });
@@ -246,7 +214,7 @@ function onSyncGuest(msg) {
     if (!p) return;
     state.lastFrameIn = performance.now();
     if (!window.MF_CustomModels?.getRecord?.('verity')) {
-        spawnPuppet(p); // primer frame: nace el puppet donde esta el host
+        spawnPuppet(p); 
         return;
     }
     state.puppetTarget = { x: p.x, y: p.y, z: p.z, yaw: p.yaw };
@@ -255,7 +223,6 @@ function onSyncGuest(msg) {
     }
 }
 
-// interpolacion suave hacia el ultimo target (corre cada frame)
 function puppetTick() {
     const rec = window.MF_CustomModels?.getRecord?.('verity');
     if (!rec?.root || !state.puppetTarget || rec.puppet !== true) return;
@@ -270,12 +237,6 @@ function puppetTick() {
     rec.root.rotation.y = rec.yaw;
 }
 
-// ---- TitanTiny P2P: escalar la entidad del peer en mi mundo ----
-// El juego resetea mesh.scale periodicamente (anims, respawn), asi que se
-// re-aplica cada frame. La escala base se captura UNA vez por mesh.
-
-// hooks onBeforeRender sobre el mesh del peer (patron TitanTiny): el juego
-// pisa mesh.scale en su propio update; re-aplicar justo antes de dibujar
 function installPeerRenderHooks(root) {
     try {
         const queue = [root];
@@ -313,7 +274,7 @@ function peerScaleTick() {
     if (!state.peerName || !state.conn) return;
     const factor = Number(state.peerScale) || 1;
     if (!Number.isFinite(factor) || Math.abs(factor - 1) < 0.01) {
-        // escala 1: restaurar si habia quedado escalado
+        
         if (state._peerMesh && state._peerBase) {
             try {
                 state._peerMesh.scale.set(state._peerBase.x, state._peerBase.y, state._peerBase.z);
@@ -321,11 +282,11 @@ function peerScaleTick() {
         }
         return;
     }
-    // buscar la entidad del peer por username (cacheada, re-scan 1s)
+    
     let mesh = state._peerMesh;
     const now = performance.now();
     if (mesh && (!mesh.parent || now - (state._peerMeshAt || 0) > 1500)) {
-        // mesh vieja (desmontada) o refresco periodico → re-escanear
+        
         state._peerMesh = null;
         mesh = null;
     }
@@ -344,9 +305,7 @@ function peerScaleTick() {
             }
         } catch {}
         if (mesh) {
-            // capturar base la primera vez que vemos este mesh + hookear el
-            // render (el juego pisa mesh.scale en su update, hay que
-            // re-aplicar justo antes de dibujar, como hace TitanTiny local)
+            
             if (state._peerMeshBaseOf !== mesh) {
                 state._peerMeshBaseOf = mesh;
                 state._peerBase = { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z };
@@ -366,23 +325,18 @@ function peerScaleTick() {
     } catch {}
 }
 
-// ---- modelos genericos compartidos por P2P ----
-// cada custom local (maternal, stalker, caballo...) se replica en el otro
-// cliente como puppet interpolado. Si el otro no tiene el .glb, se lo
-// enviamos por chunks base64 y lo cacheamos en CustomModels.
-
 const ents = {
-    local: null,        // ultimo snapshot mio enviado
-    remote: new Map(),  // id -> { x,y,z,yaw,anim,scale,height, file, seenAt, rec }
-    knownFiles: new Set(), // archivos que ya se que el peer NO tiene (no re-pedir)
-    sending: new Set(), // archivos en envio actual
-    recv: new Map()     // file -> { size, chunks:Map(i->base64), received }
+    local: null,        
+    remote: new Map(),  
+    knownFiles: new Set(), 
+    sending: new Set(), 
+    recv: new Map()     
 };
 
 function entsTick() {
     const CM = window.MF_CustomModels;
     if (!CM?.listLive) return;
-    // 1) emitir mi snapshot (10 Hz, solo si cambio)
+    
     const now = performance.now();
     if (now - (ents._lastSend || 0) > 100) {
         const snap = CM.listLive();
@@ -393,16 +347,16 @@ function entsTick() {
             send({ t: 'ents', ents: snap });
         }
     }
-    // 2) interpolar puppets remotos hacia su target
+    
     for (const [id, r] of ents.remote) {
-        if (now - r.seenAt > 3000) { // el peer lo despawneo: limpiar
+        if (now - r.seenAt > 3000) { 
             try { CM.despawn(id); } catch {}
             ents.remote.delete(id);
             continue;
         }
         const rec = CM.getRecord(id);
         if (!rec?.root) {
-            // no existe: spawnearlo (el archivo ya fue resuelto al recibir ents)
+            
             if (!r.file || ents.pendingSpawn === id) continue;
             CM.tryLoad(r.file).then((ok) => {
                 ents.pendingSpawn = null;
@@ -418,7 +372,7 @@ function entsTick() {
             setTimeout(() => { if (ents.pendingSpawn === id) ents.pendingSpawn = null; }, 2000);
             continue;
         }
-        // interpolar hacia el target
+        
         const L = 0.25;
         rec.root.position.x += (r.x - rec.root.position.x) * L;
         rec.root.position.y += (r.y - rec.root.position.y) * L;
@@ -429,8 +383,7 @@ function entsTick() {
         rec.yaw = (rec.yaw || 0) + dyaw * L;
         rec.root.rotation.y = rec.yaw;
     }
-    // 3) des-spawnear mis customs que el peer ya no reporta (fue remoto y desaparecio)
-    //    (los remotos viven en ents.remote; los que no estan y son peer_* ya se limpiaron arriba)
+    
 }
 
 function spawnPuppetEnt(id, r) {
@@ -441,14 +394,13 @@ function spawnPuppetEnt(id, r) {
         height: r.height || 0,
         scale: r.scale || 1,
         puppet: true,
-        room: r.room === true,   // rooms P2P: mantener modo room (sin fisica)
+        room: r.room === true,   
         anim: r.anim || null,
         followPlayer: false
     });
     log('puppet "' + id + '" (' + r.file + ') spawneado en (' + r.x + ', ' + r.y + ', ' + r.z + ')');
 }
 
-// ---- transferencia de .glb por chunks base64 ----
 const CHUNK = 32 * 1024;
 
 async function sendFile(file) {
@@ -461,10 +413,10 @@ async function sendFile(file) {
         const total = Math.ceil(bytes.length / CHUNK);
         send({ t: 'file-h', file, size: bytes.length, chunks: total });
         const b64 = bytesToBase64(bytes);
-        const stride = Math.ceil(b64.length / total); // trozos EXACTOS de b64
+        const stride = Math.ceil(b64.length / total); 
         for (let i = 0; i < total; i++) {
             send({ t: 'file-c', file, i, data: b64.substr(i * stride, stride) });
-            if (i % 8 === 7) await new Promise((res) => setTimeout(res, 30)); // no saturar
+            if (i % 8 === 7) await new Promise((res) => setTimeout(res, 30)); 
         }
         send({ t: 'file-e', file });
         log('archivo "' + b64name(file) + '" enviado (' + bytes.length + ' B)');
@@ -493,7 +445,6 @@ function base64ToBytes(b64) {
     return out;
 }
 
-// enfile: reensamblar chunks recibidos y cachear el modelo
 function handleFileEnd(file) {
     const CM = window.MF_CustomModels;
     const st = ents.recv.get(file);
@@ -512,7 +463,7 @@ function handleFileEnd(file) {
     }
     log('recibido "' + file + '" (' + st.size + ' B) — cacheando modelo');
     CM.registerModelBytes(file, bytes.buffer).then(() => {
-        // reintentar spawn de todos los puppets que esperaban este archivo
+        
         for (const [id, r] of ents.remote) {
             if (r.file === file && !CM.getRecord(id)?.root) spawnPuppetEnt(id, r);
         }
@@ -530,28 +481,24 @@ let puppetRafId = 0;
     puppetRafId = requestAnimationFrame(puppetLoop);
 })();
 
-// ---------- mensajes ----------
 function handleMsg(msg) {
     if (!msg || typeof msg !== 'object') return;
     switch (msg.t) {
         case 'hello':
             state.peerName = msg.name || null;
             log('handshake con', msg.name, '(rol remoto: ' + msg.role + ')');
-            // ambos roles emiten: host hace broadcast completo (sync verity),
-            // guest solo escala/nombre. startBroadcast autolimita por rol.
+            
             if (!state.sendTimer) startBroadcast();
-            // Look Sync: re-enviar mi look actual (por si el peer conectó
-            // tarde y no vio la skin/morph que ya tenía puesta)
+            
             setTimeout(() => { try { window.MF_Peer.resendLook(); } catch {} }, 800);
-            // SpiderSync: si soy host, re-enviar el estado de las arañas
-            // (el sim emite un 'add' por cada una al recibir 'hello')
+            
             setTimeout(() => { try { globalThis.MF_SPIDER_BOT?.onPeerConnected?.(); } catch {} }, 600);
             break;
         case 'sync':
             if (state.role === 'guest') onSyncGuest(msg);
             break;
         case 'pos':
-            // guest → host: actualizar pos conocida del invitado
+            
             if (state.role === 'host' && msg.p) {
                 state.guestPos = { x: msg.p.x, y: msg.p.y, z: msg.p.z };
             }
@@ -563,26 +510,21 @@ function handleMsg(msg) {
             if (state.role === 'guest') showRemoteChat(msg.text);
             break;
         case 'pat':
-            // pat compartido: reproducirlo localmente (mano + squish + agachada
-            // de camara si el que lo recibio soy yo)
+            
             try { globalThis.MiniFeatherPatPat?.remotePat?.(msg); } catch {}
             break;
         case 'spider':
-            // SpiderSync: mensaje del sim de arañas del peer → renderer local
+            
             try { globalThis.MF_SPIDER_BOT?.remoteApply?.(msg.m); } catch {}
             break;
         case 'scale':
-            // TitanTiny compartido: escalar la entidad del OTRO jugador en MI
-            // mundo. El juego puede resetear mesh.scale (respawn, anim), asi
-            // que se re-aplica por frame con la escala guardada.
+            
             if (msg.name && msg.name !== 'yo') state.peerName = msg.name;
             state.peerScale = Number(msg.scale) || 1;
             log('escala remota recibida: ' + msg.name + ' → x' + state.peerScale);
             break;
         case 'ents': {
-            // customs genericos del peer: actualizar/crear targets.
-            // id local del peer 'X' → mi puppet 'peer_X' (evita colision si
-            // yo tmbn tengo un custom con el mismo id)
+            
             if (!Array.isArray(msg.ents)) break;
             const now = performance.now();
             const seen = new Set();
@@ -598,19 +540,19 @@ function handleMsg(msg) {
                     scale: +e.scale || 1, height: +e.height || 0,
                     seenAt: now
                 });
-                // anim cambio y ya tengo el puppet: aplicarla
+                
                 if (prev && prev.anim !== e.anim && e.anim) {
                     try { window.MF_CustomModels?.setAnim?.(pid, e.anim); } catch {}
                 }
             }
-            // los que ya no reporta: eliminar de remote (el tick los limpia)
+            
             for (const id of [...ents.remote.keys()]) {
                 if (!seen.has(id)) ents.remote.delete(id);
             }
             break;
         }
         case 'need-file':
-            // el peer no tiene este .glb: enviarselo entero por chunks
+            
             if (msg.file && /\.glb$/i.test(msg.file)) sendFile(msg.file);
             break;
         case 'file-h':
@@ -629,36 +571,31 @@ function handleMsg(msg) {
         case 'file-e':
             if (msg.file) handleFileEnd(msg.file);
             break;
-        // ---- Studio Sync: animación + cámara compartidas ----
+        
         case 'studio-pose':
-            // pose de partes del actor local (radianes, formato MF_Film)
+            
             try { window.MF_Studio?.applyRemotePose?.(msg.pose, msg.reset); } catch {}
             break;
         case 'studio-cam':
-            // cámara del estudio: target para interpolar (no salto seco)
+            
             try { window.MF_Studio?.applyRemoteCam?.(msg.p); } catch {}
             break;
         case 'studio-cam-on':
         case 'studio-cam-off':
-            // el peer activó/desactivó su cámara compartida
+            
             try { window.MF_Studio?.remoteCamActive?.(msg.t === 'studio-cam-on'); } catch {}
             break;
         case 'look':
-            // Look Sync: replicar un cambio visual del peer en mi vista
+            
             if (msg.a && typeof msg.a === 'object') applyLook(msg.a);
             break;
         case 'facial':
-            // Facial Sync: parpadeo/ceja del peer en tiempo real
+            
             try { applyRemoteFacial(msg); } catch {}
             break;
     }
 }
 
-// ---------- FACIAL SYNC: animaciones de cara del peer ----------
-// El otro cliente (MF_Facial en modo auto) emite {t:'facial', a} con su
-// estado de cara; se aplica sobre SU entidad en mi vista usando la cara
-// original cacheada (patrón Look Sync). Sintetizado: no necesita sprites,
-// usa el tono de piel de la propia cara del peer.
 function applyRemoteFacial(msg) {
     if (!msg || typeof msg.a !== 'string') return;
     const entity = peerEntity();
@@ -674,29 +611,29 @@ function applyRemoteFacial(msg) {
     const FR = { x: FACE_RECT.x * k, y: FACE_RECT.y * k, w: FACE_RECT.w * k, h: FACE_RECT.h * k };
     const FOR = { x: FACE_OVERLAY_RECT.x * k, y: FACE_OVERLAY_RECT.y * k, w: FACE_OVERLAY_RECT.w * k, h: FACE_OVERLAY_RECT.h * k };
     if (msg.a === 'open' || msg.a === 'off' || msg.a === 'front') {
-        // restaurar la cara original del peer
+        
         ctx.drawImage(orig, FR.x, FR.y, FR.w, FR.h, FR.x, FR.y, FR.w, FR.h);
         ctx.drawImage(orig, FOR.x, FOR.y, FOR.w, FOR.h, FOR.x, FOR.y, FOR.w, FOR.h);
         s.tex.needsUpdate = true;
         return;
     }
-    // copiar la cara original a 8x8 lógico y sintetizar la animación
+    
     const ok = Math.max(1, Math.round(orig.width / 64));
     const face = document.createElement('canvas');
     face.width = 8 * ok; face.height = 8 * ok;
-    // willReadFrequently: leemos muchos getImageData por animación
+    
     const fx = face.getContext('2d', { willReadFrequently: true });
     fx.imageSmoothingEnabled = false;
     fx.drawImage(orig, FACE_RECT.x * ok, FACE_RECT.y * ok, FACE_RECT.w * ok, FACE_RECT.h * ok, 0, 0, face.width, face.height);
     try {
         if (msg.a === 'blink') {
-            // tapar los ojos con el tono de piel de su mejilla
+            
             const cheek = fx.getImageData(1 * ok, 6 * ok, 1, 1).data;
             fx.fillStyle = `rgb(${cheek[0]},${cheek[1]},${cheek[2]})`;
             fx.fillRect(1 * ok, 4 * ok, 2 * ok, 2 * ok);
             fx.fillRect(5 * ok, 4 * ok, 2 * ok, 2 * ok);
         } else if (msg.a === 'brow') {
-            // subir la fila de cejas 1px (y3 → y2) y rellenar con tono piel/pelo
+            
             const hair = fx.getImageData(4 * ok, 0, 1, 1).data;
             const row3 = fx.getImageData(0, 3 * ok, face.width, ok);
             fx.putImageData(row3, 0, 2 * ok);
@@ -704,11 +641,11 @@ function applyRemoteFacial(msg) {
             fx.fillStyle = `rgb(${Math.round((cheek[0] + hair[0]) / 2)},${Math.round((cheek[1] + hair[1]) / 2)},${Math.round((cheek[2] + hair[2]) / 2)})`;
             fx.fillRect(0, 3 * ok, face.width, ok);
         } else if (msg.a === 'left' || msg.a === 'right' || msg.a === 'up' || msg.a === 'down') {
-            // zona: mover pupilas según la dirección, con los tonos de SU cara
+            
             const cheek = fx.getImageData(1 * ok, 6 * ok, 1, 1).data;
             const skin = [cheek[0], cheek[1], cheek[2]];
             const rgb = a => `rgb(${a[0]},${a[1]},${a[2]})`;
-            // detectar iris (píxel más oscuro del área de ojos) y blanco
+            
             let iris = null, white = [219, 219, 219];
             for (let x = 1; x <= 6; x++) {
                 for (let y = 4; y <= 5; y++) {
@@ -730,7 +667,7 @@ function applyRemoteFacial(msg) {
                     pair(1); pair(5);
                 } else {
                     const dy = msg.a === 'up' ? -1 : 1;
-                    const row = fx.getImageData(0, 4 * ok, 8 * ok, 2 * ok); // ojos originales
+                    const row = fx.getImageData(0, 4 * ok, 8 * ok, 2 * ok); 
                     fx.fillStyle = rgb(skin);
                     fx.fillRect(1 * ok, 4 * ok, 2 * ok, 2 * ok);
                     fx.fillRect(5 * ok, 4 * ok, 2 * ok, 2 * ok);
@@ -740,11 +677,10 @@ function applyRemoteFacial(msg) {
         } else return;
     } catch { return; }
     ctx.drawImage(face, 0, 0, face.width, face.height, FR.x, FR.y, FR.w, FR.h);
-    ctx.clearRect(FOR.x, FOR.y, FOR.w, FOR.h); // que el hat no tape la animación
+    ctx.clearRect(FOR.x, FOR.y, FOR.w, FOR.h); 
     s.tex.needsUpdate = true;
 }
 
-// mostrar en el chat del juego lo que verity dijo en el host
 function showRemoteChat(text) {
     if (!text) return;
     try {
@@ -753,20 +689,16 @@ function showRemoteChat(text) {
     try { document.dispatchEvent(new CustomEvent('minifeather:verity-p2p-chat', { detail: { text } })); } catch {}
 }
 
-// ---------- LOOK SYNC: replicar cambios visuales del peer ----------
-// "TODA modificación compartida en tiempo real": el peer aplica skin/cara/
-// morph/edita su cabeza y MI cliente lo replica sobre la entidad del peer
-// tal como la ve el servidor — sin tocar su juego, solo mi vista.
 const look = {
-    entity: null,       // entidad del peer (cacheada, se re-resuelve)
-    entityAt: 0,        // cuándo se resolvió por última vez
-    faceCache: new Map(), // dataURL -> Promise<HTMLImageElement>
-    pending: [],        // cola de acciones si aún no hay entidad
-    lastApplied: 0,     // anti-eco: ignorar mis propios broadcasts
-    lastTexAction: null, // última acción de textura aplicada (watchdog)
-    mountedTex: null,   // textura que montamos en el peer
-    morphType: null,    // morph actual del peer
-    _lastWD: 0          // gate del watchdog (600 ms)
+    entity: null,       
+    entityAt: 0,        
+    faceCache: new Map(), 
+    pending: [],        
+    lastApplied: 0,     
+    lastTexAction: null, 
+    mountedTex: null,   
+    morphType: null,    
+    _lastWD: 0          
 };
 
 function peerEntity() {
@@ -775,12 +707,12 @@ function peerEntity() {
     look.entityAt = now;
     look.entity = null;
     if (!state.peerName) return null;
-    // 1) el propio módulo Morph sabe buscar por username
+    
     try {
         const e = window.MF_Morph?.findEntityByName?.(state.peerName);
         if (e?.mesh) { look.entity = e; return e; }
     } catch {}
-    // 2) fallback genérico sobre el entityMap
+    
     try {
         const ents = resolveEntityMap(getGame());
         if (ents?.values) {
@@ -794,7 +726,6 @@ function peerEntity() {
     return null;
 }
 
-// materiales de skin de una entidad cualquiera (patrón SkinChanger)
 function peerSkinMaterials(entity) {
     const out = [];
     if (!entity?.mesh) return out;
@@ -809,20 +740,13 @@ function peerSkinMaterials(entity) {
     const skins = out.filter(m => {
         const w = m.map?.image?.width, h = m.map?.image?.height;
         if (!w || !h) return false;
-        // 64x64/64x32 o múltiplo HD (128x128…) — ratio 1:1 o 2:1
+        
         const k64 = w / 64;
         return Number.isInteger(k64) && (h === w || h === w / 2);
     });
     return skins.length ? skins : out;
 }
 
-// textura editable del peer (canvas propio montado, nunca la del juego).
-// · re-utiliza NUESTRO canvas si ya está montado (__mfPeerCanvas)
-// · JAMÁS pinta el canvas local (__mfLocalCanvas = MI skin) ni el de
-//   "animar a otros" (__mfOtherKey): si ese es el único disponible, toma el
-//   relevo COPIANDO su contenido a un canvas nuestro (así los dos módulos
-//   no se pelean el mismo canvas)
-// · la textura del juego también se copia (nunca se pinta la original)
 function peerEditableCanvas(entity) {
     const mats = peerSkinMaterials(entity);
     if (!mats.length) return null;
@@ -831,18 +755,18 @@ function peerEditableCanvas(entity) {
         m.map?.image && !(isCanvas(m.map) && m.map.__mfLocalCanvas));
     if (!usable.length) return null;
     const tex = usable[0].map;
-    // estado estable: ya montamos nuestro canvas → re-utilizarlo
+    
     if (isCanvas(tex) && tex.__mfPeerCanvas) {
         return { canvas: tex.image, tex, mats: usable.filter(m => m.map === tex) };
     }
-    // del juego, de "animar a otros" o sin dueño → copia editable propia
+    
     const c = document.createElement('canvas');
     c.width = tex.image.width; c.height = tex.image.height;
     try { c.getContext('2d').drawImage(tex.image, 0, 0); } catch { return null; }
     let nt = null;
     try { nt = new tex.constructor(c); } catch {}
     if (!nt) return null;
-    nt.__mfPeerCanvas = true; // canvas del peer montado por nosotros
+    nt.__mfPeerCanvas = true; 
     try {
         nt.magFilter = tex.magFilter; nt.minFilter = tex.minFilter;
         if (tex.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = tex.colorSpace;
@@ -864,8 +788,7 @@ function loadImg(url) {
     return look.faceCache.get(url);
 }
 
-// Historia de textura del peer para reverts de cara/skin (una por entidad)
-const peerOriginals = new WeakMap(); // entity -> { headCanvas, skinCanvas }
+const peerOriginals = new WeakMap(); 
 
 function rememberPeerOriginal(entity, kind) {
     const s = peerEditableCanvas(entity);
@@ -875,8 +798,7 @@ function rememberPeerOriginal(entity, kind) {
         rec = { headCanvas: null, skinCanvas: null, headTex: null, skinTex: null };
         peerOriginals.set(entity, rec);
     }
-    // re-capturar si la textura cambió (skin nueva): el snapshot viejo ya no
-    // corresponde al original actual del peer
+    
     if (!rec[kind + 'Canvas'] || rec[kind + 'Tex'] !== s.tex) {
         const c = document.createElement('canvas');
         c.width = s.canvas.width; c.height = s.canvas.height;
@@ -891,12 +813,10 @@ const HEAD_RECT = { x: 0, y: 0, w: 64, h: 16 };
 const FACE_RECT = { x: 8, y: 8, w: 8, h: 8 };
 const FACE_OVERLAY_RECT = { x: 40, y: 8, w: 8, h: 8 };
 
-// aplica una acción de Look Sync sobre la entidad del peer
 function applyLook(a) {
     const entity = peerEntity();
     if (!entity) {
-        // entidad aún no visible: encolar hasta 20 acciones (se drenan al
-        // resolver la entidad; si llegan muchas, se suelta lo viejo)
+        
         if (look.pending.length < 20) look.pending.push(a);
         return;
     }
@@ -905,7 +825,7 @@ function applyLook(a) {
     try {
         switch (a.a) {
             case 'stroke': {
-                // trazos píxel a píxel del editor de cabeza del peer
+                
                 const s = rememberPeerOriginal(entity, 'head');
                 if (!s) return;
                 look.mountedTex = s.tex;
@@ -918,7 +838,7 @@ function applyLook(a) {
                 break;
             }
             case 'head-rect': {
-                // cabeza completa (64x16): preset/fill/undo del peer
+                
                 const s = rememberPeerOriginal(entity, 'head');
                 if (!s) return;
                 look.mountedTex = s.tex;
@@ -934,7 +854,7 @@ function applyLook(a) {
                 break;
             }
             case 'face': {
-                // emoción de cara (8x8 en la región frontal + overlay)
+                
                 const s = rememberPeerOriginal(entity, 'face');
                 if (!s) return;
                 look.mountedTex = s.tex;
@@ -951,7 +871,7 @@ function applyLook(a) {
                 break;
             }
             case 'skin': {
-                // skin PNG completa (64x64/64x32)
+                
                 const s = rememberPeerOriginal(entity, 'skin');
                 if (!s) return;
                 look.mountedTex = s.tex;
@@ -967,14 +887,14 @@ function applyLook(a) {
                 break;
             }
             case 'revert': {
-                // restaurar el original guardado del peer (head | face | skin)
+                
                 const rec = peerOriginals.get(entity);
                 const s = peerEditableCanvas(entity);
                 if (!rec || !s) return;
                 const src = rec[a.what + 'Canvas'];
                 if (!src) return;
                 look.mountedTex = s.tex;
-                look.lastTexAction = null;   // ya no hay acción que vigilar
+                look.lastTexAction = null;   
                 look.lastTexImg = null;
                 const ctx = s.canvas.getContext('2d');
                 ctx.imageSmoothingEnabled = false;
@@ -984,7 +904,7 @@ function applyLook(a) {
                 break;
             }
             case 'morph': {
-                // peer se transformó en un mob: morfar SU entidad en mi vista
+                
                 try {
                     window.MF_Morph?.applyOn?.(entity, a.type);
                     look.morphType = a.type;
@@ -1004,7 +924,6 @@ function applyLook(a) {
     }
 }
 
-// drena la cola pendiente cuando la entidad del peer aparece
 function drainLookPending() {
     if (!look.pending.length) return;
     const entity = peerEntity();
@@ -1013,19 +932,17 @@ function drainLookPending() {
     for (const a of q) applyLook(a);
 }
 
-// watchdog del Look Sync: entidad cacheada muerta + cola pendiente +
-// re-aplicar la última textura si el juego la pisó (patrón SkinChanger)
 function lookTick() {
     if (!state.conn) return;
     if (look.pending.length) drainLookPending();
-    // validar que la entidad cacheada sigue viva
+    
     if (look.entity && (look.entity.mesh == null || look.entity.removed)) {
         look.entity = null;
     }
     const now = performance.now();
     if (now - look._lastWD < 600) return;
     look._lastWD = now;
-    // ¿el juego re-asignó la textura del peer? re-aplicar lo último
+    
     if (look.lastTexAction && look.mountedTex) {
         const entity = peerEntity();
         if (entity) {
@@ -1039,7 +956,6 @@ function lookTick() {
     }
 }
 
-// re-aplicar la última acción de textura completa (skin/head/face)
 function reappliedLastTexAction(entity) {
     const a = look.lastTexAction;
     if (!a) return;
@@ -1063,9 +979,6 @@ function reappliedLastTexAction(entity) {
     s.tex.needsUpdate = true;
 }
 
-// desconexión: restaurar la textura del peer a su original recordado y
-// liberar el canvas (__mfPeerCanvas off) para que "animar a otros"
-// (MF_Facial) vuelva a hacerse cargo de esa cara
 function revertPeerLook() {
     try {
         const entity = (look.entity?.mesh != null && !look.entity.removed) ? look.entity : peerEntity();
@@ -1081,15 +994,12 @@ function revertPeerLook() {
             ctx.drawImage(src, 0, 0);
             s.tex.needsUpdate = true;
         }
-        // soltar la propiedad del canvas (queda con el contenido original)
+        
         try { s.tex.__mfPeerCanvas = false; } catch {}
         log('look-sync: peer fuera — skin restaurada, cara liberada');
     } catch (e) { warn('revert look falló: ' + (e?.message || e)); }
 }
 
-
-
-// ---------- conexión ----------
 function wireConn(conn) {
     state.conn = conn;
     conn.on('open', () => {
@@ -1103,26 +1013,25 @@ function wireConn(conn) {
     conn.on('close', () => {
         log('conexion cerrada');
         if (state.role === 'guest') killPuppet();
-        // SpiderSync: fuera las arañas remotas del peer
+        
         try { globalThis.MF_SPIDER_BOT?.remoteApply?.({ type: 'clear' }); } catch {}
-        // limpiar customs genericos remotos (puppets)
+        
         for (const id of [...ents.remote.keys()]) {
             try { window.MF_CustomModels?.despawn?.(id, true); } catch {}
             ents.remote.delete(id);
         }
         ents._lastKey = null;
         ents.recv.clear();
-        // limpiar Look Sync (morph del peer pendiente de revert)
+        
         if (look.entity && look.morphType) {
             try { window.MF_Morph?.detachFrom?.(look.entity.id); } catch {}
         }
-        // restaurar la skin del peer a su original y liberar su canvas
+        
         revertPeerLook();
         look.entity = null; look.pending.length = 0;
         look.morphType = null;
         look.lastTexAction = null; look.lastTexImg = null; look.mountedTex = null;
-        // desactivar cámaras/poses remotas del Studio Sync: sin esto el
-        // invitado queda con la cámara detachada siguiendo un target muerto
+        
         try { window.MF_Studio?.remoteCamActive?.(false); } catch {}
         try { window.MF_Studio?.applyRemotePose?.(null, true); } catch {}
         stopBroadcast();
@@ -1132,15 +1041,11 @@ function wireConn(conn) {
     conn.on('error', (e) => warn('error de conexion:', e?.message || e));
 }
 
-// ---------- P2P auto-share por chat ----------
-// Al crear sala: el código se envía al chat del juego (chat.submit → llega
-// al server). Los demás clientes con la extensión lo detectan en chat.log y
-// se conectan solos. Formato discreto: "mfp2p:<codigo>".
 const autoShare = {
     on: (() => { try { return localStorage.getItem('mf:p2p:autoshare') !== '0'; } catch { return true; } })(),
-    myCodes: new Set(),      // códigos que YO creé (no auto-unirme a mí mismo)
-    seenCodes: new Map(),    // code → ts del último intento (evita bucles)
-    chatSeen: new WeakSet(), // entradas de chat ya examinadas
+    myCodes: new Set(),      
+    seenCodes: new Map(),    
+    chatSeen: new WeakSet(), 
 };
 
 function sendRoomToChat(code) {
@@ -1158,7 +1063,6 @@ function sendRoomToChat(code) {
     try { chat.closeInput?.(); } catch {}
 }
 
-// escanea las últimas líneas del chat buscando "mfp2p:<code>" de OTRO player
 function chatWatchTick() {
     if (!autoShare.on || state.conn || state.peer) return;
     const g = getGame();
@@ -1173,11 +1077,11 @@ function chatWatchTick() {
         const m = text.match(/mfp2p[:\s]+([A-Za-z0-9-]{4,24})/i);
         if (!m) continue;
         const code = m[1];
-        if (autoShare.myCodes.has(code)) continue; // mío
+        if (autoShare.myCodes.has(code)) continue; 
         const from = entry.from != null ? String(entry.from) : null;
-        if (meUuid && from === meUuid) continue;   // mensaje propio
+        if (meUuid && from === meUuid) continue;   
         const now = Date.now();
-        if (now - (autoShare.seenCodes.get(code) || 0) < 10 * 60 * 1000) continue; // ya intentado
+        if (now - (autoShare.seenCodes.get(code) || 0) < 10 * 60 * 1000) continue; 
         autoShare.seenCodes.set(code, now);
         log('sala P2P detectada en el chat → auto-join ' + code);
         join(code);
@@ -1198,12 +1102,11 @@ async function host(code) {
     peer.on('open', (pid) => {
         log('sala lista. Tu amigo entra con:  /p2p join ' + pid);
         console.log('%c/p2p join ' + pid, 'font-size:16px;color:#7ec8ff');
-        // auto-share: publicar el código al chat del juego — los demás con
-        // la extensión lo detectan y se conectan solos
+        
         sendRoomToChat(pid);
     });
     peer.on('connection', (c) => {
-        if (state.conn) { try { c.close(); } catch {} return; } // 1 invitado
+        if (state.conn) { try { c.close(); } catch {} return; } 
         wireConn(c);
     });
     peer.on('error', (e) => {
@@ -1242,7 +1145,6 @@ function off() {
     log('P2P apagado');
 }
 
-// ---------- API ----------
 window.MF_Peer = {
     get status() { return state.status; },
     get role() { return state.role; },
@@ -1250,7 +1152,7 @@ window.MF_Peer = {
     get connected() { return !!state.conn; },
     _chatHook: null,
     host, join, off,
-    // hot-reload: soltar TODO (timers, conexión, raf) para re-crear limpio
+    
     dispose() {
         try { off(); } catch {}
         try { clearInterval(state.sendTimer); } catch {}
@@ -1259,7 +1161,7 @@ window.MF_Peer = {
         try { clearInterval(chatWatchTimer); } catch {}
         try { cancelAnimationFrame(puppetRafId); } catch {}
     },
-    // /p2p auto [on|off] — compartir código al chat + auto-join al detectarlo
+    
     auto(on) {
         if (on === true || on === false) {
             autoShare.on = on;
@@ -1268,29 +1170,27 @@ window.MF_Peer = {
         }
         return autoShare.on;
     },
-    // pat compartido (PatPat): envia la info del pat al otro cliente
+    
     sendPat(info) {
         if (!state.conn) return false;
         send({ t: 'pat', target: info?.target || null, from: info?.from || null });
         return true;
     },
-    // Studio Sync: enviar eventos del estudio (pose/cámara) al peer.
-    // Devuelve false si no hay conexión (el emisor no debe acumular).
+    
     sendStudio(obj) {
         if (!state.conn || state.status === 'off') return false;
         send(obj);
         return true;
     },
-    // Look Sync: enviar un cambio visual propio (skin/cara/morph/trazo).
-    // Devuelve false si no hay conexión → el emisor continúa en local.
+    
     sendLook(a) {
         if (!state.conn || state.status === 'off') return false;
         send({ t: 'look', a });
         return true;
     },
-    // estado del Look Sync para UI/debug
+    
     get lookSynced() { return !!(state.conn && state.peerName); },
-    // diagnóstico del Look Sync (para cuando "no se ve nada")
+    
     lookStatus() {
         const e = look.entity || peerEntity();
         return {
@@ -1306,17 +1206,17 @@ window.MF_Peer = {
             lastAppliedAgoMs: look.lastApplied ? Math.round(performance.now() - look.lastApplied) : null
         };
     },
-    // re-enviar mi look actual (skin/morph) al peer — útil si conectó tarde
+    
     resendLook() {
         if (!state.conn) return { ok: false, error: 'sin conexión' };
         let sent = 0;
-        // skin PNG activa
+        
         const sc = window.MF_SkinChanger;
         if (sc?.current) {
             sc.apply(sc.current).catch(() => {});
             sent++;
         }
-        // morph activo
+        
         if (window.MF_Morph?.current) {
             try { window.MF_Peer.sendLook({ a: 'morph', type: window.MF_Morph.current }); sent++; } catch {}
         }
@@ -1325,7 +1225,6 @@ window.MF_Peer = {
     }
 };
 
-// retransmitir lo que verity dice (host) via patch de say()
 try {
     const V = window.MF_Verity;
     if (V?.say && !V.__p2pPatched) {
@@ -1337,7 +1236,7 @@ try {
             return r;
         };
     }
-    // capturar el chatHook del juego para reusarlo como guest
+    
     if (V?.setChatHook && !V.__p2pHookPatched) {
         V.__p2pHookPatched = true;
         const origSet = V.setChatHook.bind(V);
@@ -1348,7 +1247,6 @@ try {
     }
 } catch {}
 
-// retransmitir despawn de verity (host) via patch de despawn()
 try {
     const CM = window.MF_CustomModels;
     if (CM?.despawn && !CM.__p2pPatched) {

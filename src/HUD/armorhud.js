@@ -1,15 +1,13 @@
 (function () {
    'use strict';       
    const TAG = '[MiniFeather Armor HUD]';       
-   // CONFIG      
+   
    const CONFIG = {       
        right: 18,
        bottom: 18,       
        iconSize: 44,       
        gap: 10,       
-       // 'percentage' = show 95%
-       // 'bar'        = show durability bar
-       // 'both'       = show percentage + bar    
+       
        durabilityDisplay: 'both',       
        durabilityBarHeight: 4,       
        updateInterval: 150,       
@@ -442,7 +440,7 @@
                flexShrink: '0'
            }
        );       
-       // DURABILITY BAR 
+       
        Object.assign(
            durabilityTrack.style,
            {
@@ -468,7 +466,7 @@
                borderRadius: '2px'
            }
        );       
-       // PERCENTAGE      
+       
        Object.assign(
            percentage.style,
            {
@@ -709,7 +707,7 @@
                 'none';
         }
     }       
-   // CREATE HUD
+   
    function createHUD() {       
        if (root) {
            return;

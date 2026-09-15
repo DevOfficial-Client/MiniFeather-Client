@@ -1,21 +1,14 @@
 (function () {
     'use strict';
 
-    /**
-     * VanillaAnimations — Freezes elbow and knee joints rigid for ALL players.
-     * Scans the entity map and freezes joints on every biped entity.
-     */
-
     const state = {
         enabled: false,
         game: null,
-        trackedJoints: [],   // [{joint, origUpdateMatrixWorld}]
+        trackedJoints: [],   
         lastGameScan: 0,
         lastScan: 0,
         rafId: null
     };
-
-    // ── Game discovery ───────────────────────────────────────
 
     function getGame(force = false) {
         const now = performance.now();
@@ -35,8 +28,6 @@
         } catch {}
         return state.game?.player ? state.game : null;
     }
-
-    // ── Entity map resolution ────────────────────────────────
 
     function isMapLike(value) {
         return !!(value && typeof value.get === 'function' && typeof value.values === 'function');
@@ -96,8 +87,6 @@
         return null;
     }
 
-    // ── Joint extraction ─────────────────────────────────────
-
     function findJoint(mesh, name) {
         if (!mesh) return null;
         if (mesh[name] && mesh[name].rotation) return mesh[name];
@@ -132,8 +121,6 @@
         return joints;
     }
 
-    // ── Freeze / Unfreeze ────────────────────────────────────
-
     function freezeJoint(joint) {
         if (joint._mfFrozen) return;
         joint._mfFrozen = true;
@@ -163,13 +150,10 @@
         state.trackedJoints = [];
     }
 
-    // ── Scan all entities ────────────────────────────────────
-
     function scanEntities() {
         const game = getGame();
         if (!game) return;
 
-        // Use a Set to track already-frozen joints
         const stillValid = new Set();
 
         const entities = resolveEntityMap(game);
@@ -191,15 +175,12 @@
             } catch {}
         }
 
-        // Unfreeze joints that are no longer tracked (entity despawned)
         state.trackedJoints = state.trackedJoints.filter(joint => {
             if (stillValid.has(joint)) return true;
             unfreezeJoint(joint);
             return false;
         });
     }
-
-    // ── Render Loop ──────────────────────────────────────────
 
     function loop() {
         if (!state.enabled) return;
@@ -210,7 +191,6 @@
             try { scanEntities(); } catch {}
         }
 
-        // Freeze all tracked joints every frame
         for (const joint of state.trackedJoints) {
             if (joint && joint.rotation) {
                 joint.rotation.x = 0;
@@ -221,8 +201,6 @@
 
         state.rafId = requestAnimationFrame(loop);
     }
-
-    // ── Public API ───────────────────────────────────────────
 
     function setEnabled(enabled) {
         if (enabled === state.enabled) return;
@@ -263,13 +241,9 @@
         } catch (e) {}
     }
 
-    // ── Event listeners ──────────────────────────────────────
-
     document.addEventListener('minifeather:vanillaanimations-config', (e) => {
         applyConfig(e.detail);
     });
-
-    // ── Export ───────────────────────────────────────────────
 
     globalThis.VanillaAnimations = {
         setEnabled,

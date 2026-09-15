@@ -24,7 +24,6 @@
 
   const MODELS = globalThis.MF_TINY_MODELS;
 
-  // ─── Game/escena/entidades (patrones WaterSplash/TitanTiny) ───
   function findGame(force = false) {
     const now = performance.now();
     if (!force && state.game?.player && state.game?.world && now - state.lastGameScan < 1200) return state.game;
@@ -109,7 +108,6 @@
     return false;
   }
 
-  // baby: childAge/age < 0, o hitbox pequeña (umbral por especie)
   function isBabyEntity(entity, type) {
     try {
       if (typeof entity.childAge === 'number' && entity.childAge < 0) return true;
@@ -124,9 +122,8 @@
     return false;
   }
 
-  // ─── Constructores three.js robados ───
   function findReferenceMesh(game) {
-    // Plan A: traverse de la escena raíz
+    
     const scene = getScene(game);
     let best = null;
     let bestRank = 99;
@@ -147,7 +144,6 @@
       if (scene?.traverse) scene.traverse(consider);
     } catch (_) {}
 
-    // Plan B: raíces nativas del renderer del juego
     if (!best) {
       const gs = game?.gameScene;
       try {
@@ -163,7 +159,6 @@
       } catch (_) {}
     }
 
-    // Plan C (patrón CustomModels): rig del brazo del jugador
     if (!best) {
       try {
         const cam = game?.gameScene?.axesHelper?.parent;
@@ -192,10 +187,6 @@
     const TextureCtor = material.map.constructor;
     const MeshCtor = ref.mesh.constructor;
 
-    // Object3D/Group: el renderer del juego SOLO dibuja sus propias clases
-    // (patrón CustomModels): el rig del brazo del jugador es el Group real.
-    // Buscamos primero por findHandRenderer; el fallback sube la cadena de
-    // prototipos hasta el nodo cuyo padre es Object.prototype (= Object3D).
     let GroupCtor = null;
     try {
       const cam = game?.gameScene?.axesHelper?.parent;
@@ -225,7 +216,6 @@
     return true;
   }
 
-  // ─── Assets ───
   function isValidAssetsUrl(url) {
     return typeof url === 'string' && url.startsWith('chrome-extension://') && !url.startsWith('chrome-extension://invalid/');
   }
@@ -269,20 +259,16 @@
     });
   }
 
-  // NearestFilter en mag/min + ClampToEdge: pixel art nítido estilo MC.
-  // El constructor del juego puede pisar los filtros al decodificar el
-  // bitmap async: re-aplicar en diferido (rAF + timeout) para que gane.
   function applyPixelTextureSettings(texture) {
     const apply = () => {
       try {
-        texture.magFilter = 9728;   // NearestFilter
-        texture.minFilter = 9728;   // NearestFilter (sin mipmaps)
+        texture.magFilter = 9728;   
+        texture.minFilter = 9728;   
         texture.generateMipmaps = false;
-        texture.wrapS = 33071;      // ClampToEdgeWrapping
+        texture.wrapS = 33071;      
         texture.wrapT = 33071;
         texture.anisotropy = 1;
-        // flipY=true: las UVs ya convierten v MC (abajo) a GL (arriba) con
-        // 1 - v_px/texH; con false la textura queda invertida.
+        
         texture.flipY = true;
         texture.needsUpdate = true;
       } catch (_) {}
@@ -293,9 +279,6 @@
     setTimeout(apply, 1200);
   }
 
-  // ─── Mini-runtime de modelos MC → three.js ───
-  // MC: 1px = 1/16 bloque; modelo cuelga de y=24px; y MC hacia abajo
-  // → three.js y = (24 - y_px)/16
   function mcY(yPx) { return (24 - yPx) / 16; }
 
   function buildBoxGeometry(box, texW, texH) {
@@ -308,14 +291,13 @@
     const yBot = (24 - y - h - grow) / 16;
     const z0 = (z - grow) / 16, z1 = (z + d + grow) / 16;
 
-    // UV box-format estándar MC
     const u = box.u, v = box.v;
-    const uvS = [u + d + w, v + d, u + d + w + w, v + d + h];          // south
-    const uvN = [u + d, v + d, u + d + w, v + d + h];                  // north
-    const uvE = [u + d + w, v + d, u + d + w + d, v + d + h];          // east
-    const uvW = [u, v + d, u + d, v + d + h];                          // west
-    const uvU = [u + d, v, u + d + w, v + d];                          // up
-    const uvD = [u + d + w, v, u + d + w + w, v + d];                  // down
+    const uvS = [u + d + w, v + d, u + d + w + w, v + d + h];          
+    const uvN = [u + d, v + d, u + d + w, v + d + h];                  
+    const uvE = [u + d + w, v + d, u + d + w + d, v + d + h];          
+    const uvW = [u, v + d, u + d, v + d + h];                          
+    const uvU = [u + d, v, u + d + w, v + d];                          
+    const uvD = [u + d + w, v, u + d + w + w, v + d];                  
     const uvs2 = box.mirror ? { s: uvS, n: uvN, e: uvW, w: uvE, u: uvU, d: uvD } : { s: uvS, n: uvN, e: uvE, w: uvW, u: uvU, d: uvD };
 
     const positions = [];
@@ -379,8 +361,7 @@
   function buildRig(def, texture, materialSource) {
     const { Object3DCtor, MeshCtor } = state.ctors;
     const root = new Object3DCtor();
-    // marcar el rig: si cuelga de la cámara por accidente (side-effect del
-    // constructor del juego), purgeUnderCam puede identificarlo y quitarlo
+    
     try { root.userData = root.userData || {}; root.userData.__mfTiny = true; } catch (_) {}
     const parts = {};
 
@@ -414,7 +395,6 @@
     return { root, parts };
   }
 
-  // ─── Animaciones (de prepareMobModel de cada Baby*Model) ───
   function animateWolf(rig, ctx) {
     const p = rig.parts;
     const limb = ctx.limbSwing;
@@ -449,7 +429,6 @@
       p.left_front_leg.rotation.x = swing;
     }
 
-    // cabeza sigue la mirada
     p.head.rotation.y = ctx.headYaw;
     p.head.rotation.x = ctx.pitch;
   }
@@ -467,7 +446,7 @@
       p.head.rotation.y = ctx.headYaw;
       p.head.rotation.x = ctx.pitch;
     }
-    // alas del pollo
+    
     if (p.left_wing && p.right_wing) {
       const flap = Math.sin(limb * 0.3 + performance.now() * 0.001) * 0.1;
       p.left_wing.rotation.z = flap;
@@ -475,7 +454,6 @@
     }
   }
 
-  // ─── Bindings juego → contexto de animación ───
   function buildContext(entity, key) {
     let limbSwing = 0, limbSpeed = 0;
     try {
@@ -508,7 +486,6 @@
     };
   }
 
-  // ─── Instanciación por entidad ───
   function spawnRig(entity, key, type) {
     const def = MODELS[type];
     if (!def || !state.ctors) return;
@@ -527,14 +504,13 @@
       rig.entity = null;
       disableCullingDeep(rig.root);
       scene.add(rig.root);
-      // las clases del juego auto-registran en el rig de cámara: purgar
+      
       setTimeout(() => { try { purgeUnderCam(); } catch (_) {} }, 0);
       setTimeout(() => { try { purgeUnderCam(); } catch (_) {} }, 500);
       state.rigs.set(key, rig);
     }).catch(err => console.warn(TAG, 'textura fallida', def.texName, err.message));
   }
 
-  // ─── Scan + tick ───
   function scanEntities() {
     if (!state.enabled || state.destroyed) return;
     const game = findGame();
@@ -561,7 +537,7 @@
     }
 
     for (const [key, rig] of state.rigs) {
-      if (key.startsWith('local:')) continue; // spawns del /baby: viven aparte
+      if (key.startsWith('local:')) continue; 
       if (!seen.has(key)) {
         restoreVanillaMesh(rig);
         try { rig?.root?.removeFromParent?.(); } catch (_) {}
@@ -588,11 +564,10 @@
     const game = findGame();
     const entities = resolveEntityMap(game);
 
-    // babies locales del /baby spawn
     tickLocalSpawns(dt);
 
     for (const [key, rig] of state.rigs) {
-      // rigs locales: usar su estado propio
+      
       if (rig.local) {
         const e = rig.local;
         try {
@@ -623,7 +598,6 @@
       const entity = findEntityByKey(entities, key);
       if (!entity) continue;
 
-      // ocultar mesh vanilla del baby mientras el rig esté activo
       if (entity.mesh && entity.mesh.visible !== false) {
         try { entity.mesh.visible = false; rig._hidVanilla = true; } catch (_) {}
       }
@@ -631,8 +605,7 @@
 
       try {
         const p = entity.pos;
-        // pos.y es el CENTRO de la hitbox en miniblox: bajar height/2 para
-        // apoyar el modelo (que cuelga de y=24px = pies en el origen) en el suelo
+        
         const half = Number(entity.height) || 0;
         rig.root.position.set(Number(p.x) || 0, (Number(p.y) || 0) - half / 2, Number(p.z) || 0);
         rig.root.rotation.y = Number(entity.yaw) || 0;
@@ -665,7 +638,6 @@
     return null;
   }
 
-  // ─── Enable/disable ───
   function start() {
     if (state.enabled || state.destroyed) return;
     state.enabled = true;
@@ -675,10 +647,7 @@
     console.log(TAG, 'activado');
   }
 
-  // ─── Spawn client-side (comando /baby) ───
-  // entidades locales simuladas: no existen en el servidor; el tick las
-  // anima igual que a las reales (walk cycle, cola, cabeza)
-  const localSpawns = new Map(); // name -> { type, pos, yaw, motion, ctx }
+  const localSpawns = new Map(); 
 
   function spawnLocal(name, type, x, y, z) {
     if (!MODELS[type]) return false;
@@ -696,7 +665,7 @@
       tamed: true,
       follow: null
     });
-    start(); // arranca el módulo si no estaba activo
+    start(); 
     return true;
   }
 
@@ -718,13 +687,12 @@
     for (const name of [...localSpawns.keys()]) despawnLocal(name);
   }
 
-  // IA local simple: caminar hacia el jugador si está lejos
   function tickLocalSpawns(dt) {
     const game = findGame();
     const player = game?.player;
     for (const [name, entry] of localSpawns) {
       const rigKey = 'local:' + name;
-      // spawn rig si aún no existe (throttle de reintento si falla)
+      
       if (!state.rigs.has(rigKey)) {
         const now2 = performance.now();
         if (!entry._lastTry || now2 - entry._lastTry > 2000) {
@@ -733,23 +701,23 @@
         }
         continue;
       }
-      // seguir al jugador si está a más de 2.5 bloques
+      
       if (player?.pos) {
         const px = Number(player.pos.x) || 0;
         const py = Number(player.pos.y) || 0;
         const pz = Number(player.pos.z) || 0;
-        // el jugador también tiene pos.y al centro: apuntar a sus pies
+        
         const feetY = py - (Number(player.height) || 1.8) / 2;
         const dx = px - entry.pos.x;
         const dy = feetY - entry.pos.y;
         const dz = pz - entry.pos.z;
         const dist = Math.hypot(dx, dz);
         if (dist > 2.5 && !entry.sitting) {
-          const speed = 2.6; // bloques/seg
+          const speed = 2.6; 
           const step = Math.min(dist, speed * dt);
           entry.pos.x += (dx / dist) * step;
           entry.pos.z += (dz / dist) * step;
-          // gravedad simple: caer hasta quedar a ras de los pies del jugador
+          
           entry.pos.y += Math.max(-3 * dt, Math.min(3 * dt, (feetY - 0.1 - entry.pos.y) * 4 * dt));
           entry.yaw = Math.atan2(dx, dz);
           entry.limbSpeed = Math.min(1, 0.65);
@@ -777,7 +745,7 @@
       rig.local = entry;
       disableCullingDeep(rig.root);
       scene.add(rig.root);
-      // las clases del juego auto-registran en el rig de cámara: purgar
+      
       setTimeout(() => { try { purgeUnderCam(); } catch (_) {} }, 0);
       setTimeout(() => { try { purgeUnderCam(); } catch (_) {} }, 500);
       state.rigs.set(rigKey, rig);
@@ -793,7 +761,6 @@
     try { walk(root); } catch (_) {}
   }
 
-  // red de seguridad: quitar objetos MF colgados del rig de la cámara
   function purgeUnderCam() {
     const cam = findGame()?.gameScene?.axesHelper?.parent;
     if (!cam) return;
@@ -811,7 +778,6 @@
     if (purged) console.warn(TAG, 'purgados', purged, 'objetos pegados a la cámara');
   }
 
-  // limpia los rigs locales (al desactivar o destruir el módulo)
   function clearVisuals() {
     for (const [, rig] of state.rigs) {
       restoreVanillaMesh(rig);
@@ -850,14 +816,14 @@
     get rigCount() { return state.rigs.size; },
     get textureCount() { return state.textures.size; },
     get types() { return Object.keys(MODELS || {}); },
-    // spawn client-side: aparece al lado del jugador
+    
     spawn(name, type, x, y, z) {
       if (x === undefined) {
         const game = findGame();
         const p = game?.player?.pos;
         if (p) {
           const yaw = Number(game.player.yaw) || 0;
-          // pos.y del jugador es el centro de su hitbox: usar los pies
+          
           const feetY = (Number(p.y) || 0) - (Number(game.player.height) || 1.8) / 2;
           return spawnLocal(name, type, (Number(p.x) || 0) + Math.sin(yaw) * 2, feetY, (Number(p.z) || 0) + Math.cos(yaw) * 2);
         }
@@ -876,7 +842,7 @@
     list() {
       return [...localSpawns.entries()].map(([name, e]) => ({ name, type: e.type, sitting: e.sitting, pos: { ...e.pos } }));
     },
-    // re-aplicar NearestFilter a todas las texturas (debug en vivo)
+    
     repixel() {
       let n = 0;
       for (const [, tex] of state.textures) { applyPixelTextureSettings(tex); n++; }

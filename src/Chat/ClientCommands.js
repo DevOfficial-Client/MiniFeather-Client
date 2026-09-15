@@ -99,10 +99,7 @@
   }
 
   function findGame() {
-    // 1) PRIMERO el arbol de React: es el objeto game VIVO. Al reconectar a
-    //    un mundo React crea un game nuevo con un chat nuevo — si devolvemos
-    //    el cache (state.game) hookeariamos el chat viejo para siempre y
-    //    ningun comando se interceptaria ("ya no me detecta el /room").
+    
     try {
       const react = document.querySelector('#react');
       if (react) {
@@ -113,7 +110,6 @@
       }
     } catch (_) {}
 
-    // 2) cache propio (solo si el arbol de React no tiene game aun)
     if (isGame(state.game)) return state.game;
 
     const waypointGame = globalThis.__MINIFEATHER_WAYPOINTS__?.game;
@@ -182,7 +178,7 @@
   function shouldIntercept(line) {
     const { command, args } = parseCommand(line);
     if (!RECOGNIZED.has(command)) return false;
-    // /mf: interceptar siempre (help, models, models clear...)
+    
     if (command === 'mf') return true;
     return true;
   }
@@ -312,7 +308,7 @@
     const action = (args[0] || 'spawn').toLowerCase();
 
     if (action === 'spawn') {
-      // caja en el suelo; click derecho encima la abre y suelta a Verity
+      
       if (api.spawnIaBox) {
         const id = api.spawnIaBox();
         addChat(id ? 'IA box placed. Right-click it to summon Verity!' : 'Could not place the IA box.', id ? 'success' : 'error');
@@ -349,7 +345,7 @@
       if (on === 'on' || on === 'off' || on === '') {
         const val = on === '' ? !ai.autoReply : on === 'on';
         ai.autoReply = val;
-        // mostrar las respuestas de verity en el chat del juego
+        
         try { ai.setChatHook?.((txt) => addChat('\\aqua\\Verity: \\reset\\' + String(txt).slice(0, 200), 'normal')); } catch (_) {}
         addChat(val ? 'Verity will reply to everything you type in chat (not commands).' : 'Verity auto-reply OFF.', 'success');
       } else {
@@ -505,7 +501,7 @@
         return;
       }
       if (action === 'open') {
-        // setAnim (permanente): "open" tiene hold_on_last_frame, se queda abierta
+        
         const ok = api.setAnim('caja', 'open');
         addChat(ok ? 'Box opening...' : 'Box is not spawned.', ok ? 'success' : 'error');
         return;
@@ -536,7 +532,7 @@
         const ok = api.spawn(name, type);
         if (!ok) { addChat('Could not spawn (name in use?).', 'error'); return; }
         addChat(`Baby ${type} spawned${type === 'wolf' ? ' \u00a1lobezno!' : ''}. Follows you around.`, 'success');
-        // diagnóstico: verificar que el pipeline arrancó de verdad
+        
         setTimeout(() => {
           try {
             const d = api.debug();
@@ -578,15 +574,13 @@
     }
 
     if (command === 'spider' || command === 'arana' || command === 'araña') {
-      // IIFE async: MF_SPIDER_SIM.send devuelve Promise (handler 'ai' conecta
-      // al server Python de deep learning antes de responder)
+      
       void (async () => {
       const api = globalThis.MF_SPIDER_BOT;
       if (!api) { addChat('SpiderBot is not ready yet (reload page).', 'error'); return; }
       const action = (args[0] || 'help').toLowerCase();
       if (action === 'spawn') {
-        // /spider spawn <preset> [scale <altura>] [gallop] — nace al lado tuyo.
-        // scale: altura del cuerpo en bloques (1..200), p.ej. "kraken scale 4"
+        
         const preset = (args[1] || 'hexbot').toLowerCase();
         let gallop = false;
         let scale;
@@ -605,7 +599,7 @@
         return;
       }
       if (action === 'target' || action === 'laser') {
-        // /spider target — láser hacia donde miras (guía la araña más cercana)
+        
         const player = state.game?.player;
         if (!player?.pos) { addChat('No player position.', 'error'); return; }
         const yaw = Number(player.yaw) || 0;
@@ -621,7 +615,7 @@
         return;
       }
       if (action === 'follow') {
-        // /spider follow [dist|off] — siguen tu posición en vivo (A* pathfinding)
+        
         const arg = (args[1] || '').toLowerCase();
         if (arg === 'off' || arg === 'stop') {
           const r = await api.send({ type: 'follow', off: true });
@@ -636,7 +630,7 @@
         return;
       }
       if (action === 'goto' || action === 'path') {
-        // /spider goto <x> [y] <z> | off — caminan a coordenadas con A*
+        
         const a1 = (args[1] || '').toLowerCase();
         if (a1 === 'off' || a1 === 'stop') {
           const r = await api.send({ type: 'goto', off: true });
@@ -667,7 +661,7 @@
         return;
       }
       if (action === 'replace' || action === 'server') {
-        // /spider replace [scale] | off — arañas del server → preset 'spider'
+        
         const arg = (args[1] || '').toLowerCase();
         if (arg === 'off' || arg === 'stop') {
           const r = await api.send({ type: 'replace', off: true });
@@ -683,7 +677,7 @@
         return;
       }
       if (action === 'hunt' || action === 'caza') {
-        // /spider hunt [range] [agg] | off — IA de caza: acecho, rodeo, emboscada y mordisco
+        
         const arg = (args[1] || '').toLowerCase();
         if (arg === 'off' || arg === 'stop') {
           const r = await api.send({ type: 'hunt', off: true });
@@ -705,7 +699,7 @@
         return;
       }
       if (action === 'evolve' || action === 'evolucion' || action === 'evo') {
-        // /spider evolve [n] | off — IA evolutiva con selección natural
+        
         const arg = (args[1] || '').toLowerCase();
         if (arg === 'off' || arg === 'stop') {
           const r = await api.send({ type: 'evolve', off: true });
@@ -721,7 +715,7 @@
         return;
       }
       if (action === 'stats' || action === 'evostats') {
-        // /spider stats — población evolutiva ordenada por fitness
+        
         const r = await api.send({ type: 'evostats' });
         if (!r || !r.ok) { addChat('Evolution not running. Start with /spider evolve.', 'error'); return; }
         const s = r.stats;
@@ -734,7 +728,7 @@
         return;
       }
       if (action === 'clear' || action === 'remove' || action === 'kill') {
-        // /spider clear — elimina TODAS las arañas cargadas (renderer + sim)
+        
         const n = api.list().length;
         api.clear();
         addChat(n ? `Removed all spiders (${n}).` : 'No spiders loaded.', 'success');
@@ -761,7 +755,7 @@
         return;
       }
       if (action === 'log') {
-        // /spider log [0-3] — 0=off 1=info 2=detalle 3=verboso · sin arg = volcar últimos
+        
         const lvl = parseInt(args[1] ?? '', 10);
         if (Number.isFinite(lvl)) {
           api.log(lvl);
@@ -805,14 +799,14 @@
         return;
       }
       if (action === 'ai' || action === 'ia' || action === 'brain') {
-        // /spider ai [url] [n] | off — cerebro DQN en el server Python
+        
         const arg = (args[1] || '').toLowerCase();
         if (arg === 'off' || arg === 'stop') {
           const r = await api.send({ type: 'ai', off: true });
           addChat(r.ok ? `AI OFF: ${r.removed} spider(s) freed from the neural net.` : r.error, r.ok ? 'success' : 'error');
           return;
         }
-        // /spider ai http://host:port/ws 5
+        
         let url = '';
         let count;
         for (let i = 1; i < args.length; i++) {
@@ -828,7 +822,7 @@
         return;
       }
       if (action === 'predators' || action === 'predador' || action === 'amenaza' || action === 'threats') {
-        // /spider predators [n] | off — amenazas que cazan arañas
+        
         const arg = (args[1] || '').toLowerCase();
         if (arg === 'off' || arg === 'stop') {
           const r = await api.send({ type: 'predators', off: true });
@@ -1058,7 +1052,7 @@
       }
       const action = (args[0] || 'spawn').toLowerCase();
       if (action === 'spawn' || action === 'load') {
-        // /room [file.glb|scale|auto] — sin args: auto (~80 bloques)
+        
         let file = null;
         let scale = null;
         for (const a of args.slice(1)) {
@@ -1070,8 +1064,7 @@
         file = file || 'backrooms_level_0.glb';
         const pos = currentCoords();
         if (!pos) { addChat('Player coordinates are not available yet.', 'error'); return; }
-        // habitacion: sin fisica, piso pegado al suelo real, centrada en ti,
-        // con colision de paredes. autoSize si no se especifica escala.
+        
         const id = api.spawn(file, pos.x, pos.y, pos.z, {
           id: 'room',
           room: true,
@@ -1081,8 +1074,7 @@
           lookAtPlayer: false
         });
         addChat(id ? `Room "${file}" building (size: ${scale == null ? 'auto ~80 blocks' : 'x' + scale})...` : `Could not load "${file}".`, id ? 'normal' : 'error');
-        // el spawn es async: si el GLB falla en cargar, avisarlo en el chat
-        // (antes el error solo iba a consola y parecia que el comando no hacia nada)
+        
         if (id && typeof api.tryLoad === 'function') {
           api.tryLoad(file).then(ok => {
             if (!ok) addChat(`Room failed: could not load "${file}" (check console F12).`, 'error');
@@ -1125,7 +1117,7 @@
           return;
         }
         const opts = { followPlayer: true };
-        // parse simple: 3er arg numero → height, 4to → anim, 'stay' en cualquier lado
+        
         const rest = args.slice(2).map(a => a.toLowerCase());
         if (rest.includes('stay') || rest.includes('quieto')) opts.followPlayer = false;
         const h = rest.find(a => /^\d+(\.\d+)?$/.test(a));
@@ -1267,14 +1259,14 @@
         addChat('Baritone is not ready yet.', 'error');
         return;
       }
-      // /goto y /follow como atajos directos
+      
       let action, rest;
       if (command === 'goto') { action = 'goto'; rest = args; }
       else if (command === 'follow') { action = 'follow'; rest = args; }
       else { action = (args[0] || 'status').toLowerCase(); rest = args.slice(1); }
 
       if (action === 'goto') {
-        // coordenadas directas: /baritone goto 100 64 -200
+        
         const nums = rest.slice(0, 3).map(Number);
         if (rest.length >= 3 && nums.every(n => Number.isFinite(n))) {
           const ok = api.goto(nums[0], nums[1], nums[2]);
@@ -1282,14 +1274,13 @@
           else addChat('No path found to those coords.', 'error');
           return;
         }
-        // waypoint por nombre: /baritone goto casa
+        
         const name = rest.join(' ').trim();
         if (!name) {
           addChat('Usage: /baritone goto <x y z> | <waypoint name>', 'error');
           return;
         }
-        // Un jugador conocido tiene prioridad sobre un waypoint del mismo
-        // nombre. Si sigue cargado, usar follow para actualizar la ruta.
+        
         const tracked = api.locate(name);
         if (tracked) {
           if (tracked.loaded && api.follow(name)) {
@@ -1468,7 +1459,7 @@
           : 'rooms are private again (manual /p2p join only).'}`, 'success');
         return;
       }
-      // status
+      
       const st = api.status;
       const role = api.role ? ` (${api.role})` : '';
       addChat(st === 'off' ? 'P2P: off — use /p2p host or /p2p join <code>' : `P2P: ${st}${role}`);
@@ -1501,7 +1492,7 @@
         addChat('Mesh node closed.', 'success');
         return;
       }
-      // status
+      
       const st = api.status;
       const n = api.connected;
       const names = Object.values(api.names || {}).join(', ') || '—';
@@ -1527,7 +1518,7 @@
         return;
       }
       if (action === 'reload' || action === 'recargar') {
-        // el cache vive en MF_Emotes; recargar = descartar y volver a pedir
+        
         api.stop();
         try { delete globalThis.MF_Emotes; } catch (_) {}
         location.reload();
@@ -1548,7 +1539,7 @@
         addChat(`Playing: ${api.playing || 'none'}. Usage: /emote <name> | stop | list | reload | debug`, 'normal');
         return;
       }
-      // nombre con espacios: /emote sit adorably == /emote "Sit Adorably"
+      
       const name = action === 'stop' || action === 'parar' || action === 'list' || action === 'lista' || action === 'reload' || action === 'recargar'
         ? action
         : args.join(' ');

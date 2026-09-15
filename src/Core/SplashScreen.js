@@ -2,22 +2,18 @@
 'use strict';
 try{globalThis.__MINIFEATHER_SPLASH__?.destroy?.()}catch(_){ }
 
-// ─── Puente ISOLATED→MAIN: base del espejo local de GitHub raw ───
-// TextureInterceptor corre en MAIN world (sin chrome.runtime). Le pasamos
-// la URL base de assets/mfpack/ vía meta tag para que pueda servir las
-// texturas/skins del repo desde el espejo empaquetado (GitHub down-safe).
 try {
   if (document.documentElement) {
     const meta = document.createElement('meta');
     meta.name = 'mf-mirror-base';
     meta.content = chrome.runtime.getURL('assets/mfpack/');
     document.documentElement.appendChild(meta);
-    // base de skins locales para CustomSkins (MAIN world no tiene chrome.runtime)
+    
     const metaSkins = document.createElement('meta');
     metaSkins.name = 'mf-skins-base';
     metaSkins.content = chrome.runtime.getURL('skins/');
     document.documentElement.appendChild(metaSkins);
-    // base de partículas para WaterSplash (MAIN world no tiene chrome.runtime)
+    
     const metaParticles = document.createElement('meta');
     metaParticles.name = 'mf-particles-base';
     metaParticles.content = chrome.runtime.getURL('assets/particles/');

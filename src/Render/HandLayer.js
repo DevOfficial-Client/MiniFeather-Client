@@ -161,8 +161,6 @@
 
         const cnt = lf.rightArm.geometry.attributes.position?.count ?? 0;
 
-        // sincronizar material: si el juego cargo/actualizo la skin del brazo
-        // original despues de nuestro rebuild, copiarla al mesh overlay
         try {
             const orig = lf.__mfOrigArm;
             if (orig && lf.rightArm.material !== orig.material) {
@@ -185,8 +183,7 @@
             neu.position.copy(old.position);
             neu.quaternion.copy(old.quaternion);
             lf.remove(old);
-            // mantener el original en escena oculto: el juego sigue actualizando
-            // su material cuando carga la skin, y nosotros lo sincronizamos arriba
+            
             old.visible = false;
             lf.add(old);
             lf.__mfOrigArm = old;

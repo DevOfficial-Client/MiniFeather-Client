@@ -1,24 +1,8 @@
-// MiniFeather — SpiderBot: arañas-robot animadas por el simulador EMBEBIDO
-// (SpiderSim.js — port 1:1 de TheCymaera/minecraft-spider dentro de la página)
-//
-// Arquitectura (fusión: ya NO hay proceso Node ni WebSocket):
-//   MF_SPIDER_SIM (física real: FABRIK, gallop, normal force sobre los chunks
-//   nativos del juego) ──llamada directa──▶ este módulo (solo render)
-//
-// Modelo de patas optimizado:
-//   - Torso simple: 2 cubos (cefalotórax + abdomen) con geometría/material
-//     compartidos, posicionados por la matriz torso.m que envía el sim.
-//   - Cada pata = segmentos de cubo alargado reutilizando la MISMA
-//     geometry y material para todas las arañas del mundo.
-//   - Los cubos se posicionan, orientan y escalan cada frame desde los joints
-//     que calcula el simulador (sin allocs por frame).
 
 (() => {
   'use strict';
   const TAG = '[MiniFeather SpiderBot]';
 
-  // ═══ logging de diagnóstico (nivel 0=off 1=básico 2=detalle 3=verboso) ═══
-  // Comparte nivel con SpiderSim vía localStorage['mf:spiderlog'].
   const LOG = (() => {
     let level = 0;
     try { level = parseInt(localStorage.getItem('mf:spiderlog') || '0', 10) || 0; } catch (_) {}
@@ -42,7 +26,7 @@
         level = (l | 0);
         try { localStorage.setItem('mf:spiderlog', String(level)); } catch (_) {}
         console.log(TAG, 'log level →', level);
-        // sincronizar con el sim (mismo storage)
+        
         try { globalThis.MF_SPIDER_SIM?.log?.(level); } catch (_) {}
       },
       refresh() { try { level = parseInt(localStorage.getItem('mf:spiderlog') || '0', 10) || 0; } catch (_) {} },
@@ -56,20 +40,19 @@
   const state = {
     enabled: false, ctors: null, game: null,
     simConnected: false,
-    spiders: new Map(), // name → { root, legs[] }
-    pendingSpiders: [], // 'add' recibidos antes de haber escena/ctors
+    spiders: new Map(), 
+    pendingSpiders: [], 
     lastGameScan: 0,
     lastTick: 0, raf: 0,
     lastFrame: null,
     lastAppliedFrameT: -1,
-    // SpiderSync (P2P vía MF_Peer)
-    remoteFrame: null, // último frame del peer
+    
+    remoteFrame: null, 
     lastAppliedRemoteT: -1,
-    remoteNames: new Set(), // arañas que vienen del peer
-    frameSendCount: 0, // throttle: reenviar cada 2º frame (10 Hz)
+    remoteNames: new Set(), 
+    frameSendCount: 0, 
   };
 
-  // ═══ conexión con el simulador embebido (llamada directa, sin ws) ═══
   function simAPI() {
     return globalThis.MF_SPIDER_SIM || null;
   }
@@ -77,9 +60,9 @@
   function connectSim() {
     const sim = simAPI();
     if (!sim) { LOG.i('connectSim: MF_SPIDER_SIM no existe aún'); return false; }
-    // recibir add/remove/frame del sim
+    
     sim.onMessage(handleSimMessage);
-    // estado completo por si las arañas ya existían
+    
     sim.send({ type: 'hello' });
     state.simConnected = true;
     LOG.i('connectSim: conectado al sim embebido');
@@ -102,7 +85,7 @@
       state.lastFrame = msg;
       LOG.v('← frame t=' + msg.t, msg.poses?.length + ' poses');
     } else if (msg.type === 'hunt') {
-      // mordisco de la IA de caza → mensaje en el chat del juego
+      
       LOG.i('← hunt:', msg.event, msg.name, { bites: msg.bites, at: msg.at });
       if (msg.event === 'bite') {
         try {
@@ -112,7 +95,7 @@
         } catch (_) {}
       }
     } else if (msg.type === 'evo') {
-      // eventos de la IA evolutiva → chat (nacimientos, muertes, mordiscos)
+      
       LOG.i('← evo:', msg.event, msg.name ?? '');
       try {
         if (msg.event === 'bite') {
@@ -128,21 +111,16 @@
             text: `\\green\\🐣 nació ${msg.name} (gen ${msg.gen}, hijo de ${msg.parent})`,
           });
         }
-        // 'eat' / 'food' / 'on' / 'off' son silenciosos (spam) —
-        // verlos con /spider log 2
+        
       } catch (_) {}
     }
   }
 
-  // ═══ SpiderSync P2P (vía MF_Peer /p2p host|join) ═══
-  // El HOST es autoridad: reenvía add/remove/frame de su sim al peer; el
-  // guest los aplica con remoteApply. Frames a 10 Hz y números a 2 decimales
-  // (~300 B/araña/frame — PeerJS DataChannel confiable lo sobra).
   function forwardToPeer(msg) {
     const peer = globalThis.MF_Peer;
     if (!peer || typeof peer.sendStudio !== 'function') return;
     if (msg.type === 'frame') {
-      if ((state.frameSendCount++ & 1) !== 0) return; // cada 2º frame
+      if ((state.frameSendCount++ & 1) !== 0) return; 
       peer.sendStudio({ t: 'spider', m: { type: 'frame', t: msg.t, poses: compressPoses(msg.poses) } });
     } else if (msg.type === 'add' || msg.type === 'remove') {
       peer.sendStudio({ t: 'spider', m: msg });
@@ -162,7 +140,6 @@
     }));
   }
 
-  // aplica un mensaje del sim REMOTO (spiders del peer)
   function remoteApply(m) {
     if (!m || typeof m !== 'object') return;
     if (m.type === 'add') {
@@ -185,17 +162,10 @@
     }
   }
 
-  // el peer conectó tarde: pedirle al sim local que re-emita sus arañas
-  // (mensaje 'hello' → un 'add' por cada una, que forwardToPeer reenvía)
   function onPeerConnected() {
     try { simAPI()?.send?.({ type: 'hello' }); } catch (_) {}
   }
 
-  // ═══ infra (patrones TinyTakeover/WaterSplash) ═══
-  // resolución robusta del singleton del juego: la ruta React (#react fiber)
-  // solo funciona si el árbol está montado, y globalThis.miniblox solo lo
-  // setea LocalGames. En mundos normales (servidores reales) hacemos dynamic
-  // import del módulo principal — misma técnica que LocalGames.resolveGameSingleton.
   let moduleGameResolvePromise = null;
 
   function findGame(force = false) {
@@ -217,7 +187,7 @@
         }
       }
     } catch (_) {}
-    // async: resolver vía import del módulo principal (no bloquea el tick)
+    
     resolveGameFromModule();
     return state.game?.player && state.game?.world ? state.game : null;
   }
@@ -371,12 +341,8 @@
     return true;
   }
 
-  // ═══ geometría ═══
   function cubeGeometry(ctors) {
-    // Cubo unitario CENTRADO en (0,0,0) — vértices de -0.5 a +0.5.
-    // applyPose coloca el mesh en el punto medio del segmento y escala
-    // (grosor, grosor, longitud): si el cubo no está centrado, cada mesh
-    // queda desplazado media longitud y las patas se ven con huecos.
+    
     const P = [
       -0.5,-0.5,0.5, 0.5,-0.5,0.5, 0.5,0.5,0.5,  -0.5,-0.5,0.5, 0.5,0.5,0.5, -0.5,0.5,0.5,
       0.5,-0.5,-0.5, -0.5,-0.5,-0.5, -0.5,0.5,-0.5,  0.5,-0.5,-0.5, -0.5,0.5,-0.5, 0.5,0.5,-0.5,
@@ -414,20 +380,16 @@
     }
   }
 
-  // Punta de la pata: pirámide con base cuadrada (z=-0.5, half-extent 0.5)
-  // que se afila hasta un vértice en z=+0.5. Se escala igual que el cubo
-  // (grosor, grosor, longitud) → el ápice cae exactamente en el end effector
-  // (el punto donde la física apoya la pata en el suelo).
   function tipGeometry(ctors) {
     const A = [-0.5,-0.5,-0.5], B = [0.5,-0.5,-0.5], C = [0.5,0.5,-0.5], D = [-0.5,0.5,-0.5];
     const T = [0,0,0.5];
     const P = [].concat(
-      A, B, T,   // cara inferior
-      D, T, C,   // cara superior
-      B, C, T,   // cara +X
-      A, T, D,   // cara -X
-      A, D, C,   // base (z-) triángulo 1
-      A, C, B    // base (z-) triángulo 2
+      A, B, T,   
+      D, T, C,   
+      B, C, T,   
+      A, T, D,   
+      A, D, C,   
+      A, C, B    
     );
     const UV = [];
     for (let f = 0; f < 6; f++) UV.push(0, 0, 1, 0, 1, 1);
@@ -440,36 +402,28 @@
     return geo;
   }
 
-  // ═══ geometría/material compartidos (todos los cubos de patas lo reusan) ═══
-  // Esto reduce drásticamente las allocs/estado por araña: 1 geometry + 1 material
-  // para todas las patas de todas las arañas. El mesh solo guarda position/quat/scale.
   let _sharedLegGeo = null;
   let _sharedTipGeo = null;
   let _sharedLegMat = null;
   let _sharedTorsoGeo = null;
 
-  // Torso de araña en UNA geometría fusionada (1 mesh, 1 draw call):
-  //   cefalotórax: cubo 1.0×0.55×0.9 centrado en el origen del cuerpo
-  //   abdomen:     cubo 0.8×0.5×0.75 desplazado hacia atrás (z-)
-  // El mesh completo se transforma con la matriz torso.m del sim (que ya
-  // lleva la orientación del cuerpo y la escala por bodyModel).
   function torsoGeometry(ctors) {
     const cubo = (cx, cy, cz, sx, sy, sz, out) => {
       const hx = sx / 2, hy = sy / 2, hz = sz / 2;
-      // 6 caras × 2 tris × 3 verts, centrado en (cx,cy,cz)
+      
       const x0 = cx - hx, x1 = cx + hx, y0 = cy - hy, y1 = cy + hy, z0 = cz - hz, z1 = cz + hz;
       out.push(
-        x0,y0,z1, x1,y0,z1, x1,y1,z1,  x0,y0,z1, x1,y1,z1, x0,y1,z1,   // +Z
-        x1,y0,z0, x0,y0,z0, x0,y1,z0,  x1,y0,z0, x0,y1,z0, x1,y1,z0,   // -Z
-        x1,y0,z1, x1,y0,z0, x1,y1,z0,  x1,y0,z1, x1,y1,z0, x1,y1,z1,   // +X
-        x0,y0,z0, x0,y0,z1, x0,y1,z1,  x0,y0,z0, x0,y1,z1, x0,y1,z0,   // -X
-        x0,y1,z1, x1,y1,z1, x1,y1,z0,  x0,y1,z1, x1,y1,z0, x0,y1,z0,   // +Y
-        x0,y0,z0, x1,y0,z0, x1,y0,z1,  x0,y0,z0, x1,y0,z1, x0,y0,z1    // -Y
+        x0,y0,z1, x1,y0,z1, x1,y1,z1,  x0,y0,z1, x1,y1,z1, x0,y1,z1,   
+        x1,y0,z0, x0,y0,z0, x0,y1,z0,  x1,y0,z0, x0,y1,z0, x1,y1,z0,   
+        x1,y0,z1, x1,y0,z0, x1,y1,z0,  x1,y0,z1, x1,y1,z0, x1,y1,z1,   
+        x0,y0,z0, x0,y0,z1, x0,y1,z1,  x0,y0,z0, x0,y1,z1, x0,y1,z0,   
+        x0,y1,z1, x1,y1,z1, x1,y1,z0,  x0,y1,z1, x1,y1,z0, x0,y1,z0,   
+        x0,y0,z0, x1,y0,z0, x1,y0,z1,  x0,y0,z0, x1,y0,z1, x0,y0,z1    
       );
     };
     const P = [];
-    cubo(0, 0.02, 0.1, 1.0, 0.55, 0.9, P);    // cefalotórax
-    cubo(0, 0.05, -0.55, 0.8, 0.5, 0.75, P);  // abdomen (atrás y un poco arriba)
+    cubo(0, 0.02, 0.1, 1.0, 0.55, 0.9, P);    
+    cubo(0, 0.05, -0.55, 0.8, 0.5, 0.75, P);  
     const UV = [];
     for (let f = 0; f < 12; f++) UV.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1);
     const geo = new ctors.Geometry();
@@ -483,17 +437,13 @@
 
   function ensureSharedLegAssets(ctors) {
     if (!_sharedLegGeo) {
-      // cubo unitario centrado (1×1×1) — la escala real se aplica con mesh.scale en applyPose
+      
       _sharedLegGeo = cubeGeometry(ctors);
-      // punta afilada para el último segmento de cada pata
+      
       _sharedTipGeo = tipGeometry(ctors);
     }
     if (!_sharedLegMat) {
-      // Material FRESCO (patrón TinyTakeover.makeMaterial): no clonamos el
-      // material de referencia — el clon hereda wrappers de CustomShader
-      // (onBeforeCompile/customProgramCacheKey con closures rotas) y el
-      // resultado es un shader que no dibuja color: solo bloquea la vista
-      // ("sombras sin cuerpo"). new constructor() parte de cero.
+      
       let mat = null;
       try { mat = new state.refMaterial.constructor(); } catch (_) {
         try { mat = state.refMaterial.clone(); } catch (_2) {}
@@ -504,7 +454,7 @@
         return { geo: _sharedLegGeo, tipGeo: _sharedTipGeo, mat: null };
       }
       try {
-        // sin texturas: solo color plano
+        
         mat.map = null;
         mat.alphaMap = null; mat.aoMap = null; mat.lightMap = null;
         mat.normalMap = null; mat.bumpMap = null; mat.displacementMap = null;
@@ -512,17 +462,17 @@
         mat.vertexColors = false;
         mat.transparent = false;
         mat.alphaTest = 0;
-        mat.side = 2; // DoubleSide
+        mat.side = 2; 
         mat.fog = true;
         mat.toneMapped = state.refMaterial.toneMapped !== false;
         if ('roughness' in mat) mat.roughness = 1;
         if ('metalness' in mat) mat.metalness = 0;
         mat.color?.set?.(0x6b3a14);
         mat.emissive?.set?.(0x000000);
-        // neutralizar cualquier hook de shader: shader plano del juego
+        
         mat.onBeforeCompile = function () {};
         mat.customProgramCacheKey = () => 'mf-spider-leg-v2';
-        // Marca para que CustomShader no hookee este material compartido
+        
         mat.__mfSkipHook = true;
         mat.needsUpdate = true;
       } catch (_) {}
@@ -531,15 +481,8 @@
     return { geo: _sharedLegGeo, tipGeo: _sharedTipGeo, mat: _sharedLegMat };
   }
 
-  // grosor por segmento de la pata: LARGAS y DELGADAS en todos los presets.
-  // Decrece hacia el extremo (fémur más grueso que la tibia). Los grosores
-  // se compensan con la longitud extendida (LEG_STYLE.length=1.6 en el sim)
-  // para que sigan visibles a distancia sin parecer troncos.
   function legThickness(si) { return Math.max(0.07, 0.16 - si * 0.045); }
 
-  // Factor de tamaño del cuerpo por preset: la longitud TOTAL de la primera
-  // pata del preset 'spider' (garden) es 2 segmentos × 1.1 = 2.2. El torso
-  // escala proporcional a esa longitud → arañas gigantes (×3) tienen torso ×3.
   function estimateTorsoScale(legs) {
     const segs = legs?.[0]?.segments;
     if (!Array.isArray(segs) || !segs.length) return 1;
@@ -548,12 +491,8 @@
     return Math.min(80, Math.max(0.4, total / 2.2));
   }
 
-  // ═══ construir spider desde el mensaje 'add' del simulador ═══
-  // Torso (1 mesh fusionado) + patas (segmentos de cubo alargado) con la
-  // MISMA geometry y material compartidos para todas las arañas.
-  // ~9-17 meshes/araña (1 torso + 8-16 de patas), muy lejos de los ~80 de antes.
   function addSimSpider(info) {
-    if (state.spiders.has(info.name)) return true; // ya está (evita duplicar)
+    if (state.spiders.has(info.name)) return true; 
     if (!ensureCtors()) { LOG.d('addSimSpider: sin ctors →', info.name); return false; }
     const ctors = state.ctors;
     const scene = getScene(state.game);
@@ -566,33 +505,25 @@
     root.userData.__mfSpider = true;
     root.name = 'MiniFeatherSpider_' + info.name;
 
-    // torso: 1 mesh con la geometría fusionada (cefalotórax + abdomen).
-    // La escala real se compone cada frame: torso.m (rot+escala del bodyModel)
-    // × torsoScale (factor de tamaño del preset, derivado de las patas).
     const torsoScale = estimateTorsoScale(info.legs);
     const torsoMesh = new ctors.Mesh(_sharedTorsoGeo, sharedMat);
     torsoMesh.userData.__mfSpider = true;
     torsoMesh.frustumCulled = false;
     root.add(torsoMesh);
 
-    // patas: segmentos de cubo alargado por pata, posicionados y
-    // orientados cada frame en applyPose a partir de los joints del sim.
     const legs = [];
     for (const legInfo of info.legs) {
       const legGroup = new ctors.Group();
       legGroup.userData.__mfSpider = true;
       const segments = [];
-      // Se renderizan TODOS los segmentos de la cadena cinemática.
-      // Antes solo se dibujaban 2: el sim simulaba 4 y la mitad inferior
-      // de cada pata (la que toca el suelo) quedaba invisible → araña mocha.
+      
       const renderCount = legInfo.segments.length;
       for (let si = 0; si < renderCount; si++) {
-        // el último segmento usa geometría de punta (pirámide afilada);
-        // el resto, cubo centrado
+        
         const isTip = si === renderCount - 1;
         const mesh = new ctors.Mesh(isTip ? sharedTipGeo : sharedGeo, sharedMat);
         mesh.userData.__mfSpider = true;
-        mesh.frustumCulled = false; // cubos pequeños: ahorra tests de frustum
+        mesh.frustumCulled = false; 
         legGroup.add(mesh);
         segments.push({ mesh, thickness: legThickness(si), index: si, isTip });
       }
@@ -620,24 +551,19 @@
     return true;
   }
 
-  // ═══ aplicar frame ═══
-  // OPTIMIZACIÓN: cada cubo se coloca en el punto medio del segmento,
-  // se escala (grosor × grosor × longitud) y se orienta con setQuatLookAtZ
-  // (sin allocs por frame). Sin segGroup intermedio, sin rotación acumulada
-  // del sim (no la necesitamos: la geometría del cubo es uniforme).
   function setQuatLookAtZ(node, fx, fy, fz) {
     const q = node.quaternion;
     if (!q || typeof q.set !== 'function') return;
-    const dot = fz; // (0,0,1)·f
+    const dot = fz; 
     if (dot > 0.99999) { q.set(0, 0, 0, 1); }
     else if (dot < -0.99999) {
-      q.set(1, 0, 0, 0); // 180° sobre X
+      q.set(1, 0, 0, 0); 
     } else {
       let ax = -fy, ay = fx;
       const al = Math.hypot(ax, ay) || 1;
       ax /= al; ay /= al;
-      const w = Math.sqrt((1 + dot) / 2); // cos(θ/2)
-      const s = Math.sqrt(1 - w * w);     // sin(θ/2)
+      const w = Math.sqrt((1 + dot) / 2); 
+      const s = Math.sqrt(1 - w * w);     
       q.set(ax * s, ay * s, 0, w);
     }
     if (node.rotation && typeof node.rotation.setFromQuaternion === 'function') {
@@ -645,10 +571,8 @@
     }
   }
 
-  // tracking del último tick aplicado: el sim emite a 20 Hz pero el RAF va
-  // a 60 Hz → sin este check reaplicaríamos el mismo frame 3 veces por tick.
   function applyFrame(frame, dedupKey = 'lastAppliedFrameT') {
-    if (!frame || frame.t === state[dedupKey]) return; // mismo frame → nada
+    if (!frame || frame.t === state[dedupKey]) return; 
     state[dedupKey] = frame.t;
     for (const pose of frame.poses) {
       if (!pose?.n) continue;
@@ -667,10 +591,6 @@
 
     sp.root.position.set(lx, ly, lz);
 
-    // torso: la matriz torso.m es rotación+escala del cuerpo SIN traslación
-    // (quatToMatrix produce column-major con m[12..14]=0) → local al root,
-    // que ya está en la posición del mundo. Se descompone a pos/quat/scale
-    // y se multiplica la escala por torsoScale (tamaño del preset).
     if (sp.torsoMesh && pose.torso?.m) {
       sp.torsoMesh.matrix.fromArray(pose.torso.m);
       sp.torsoMesh.matrix.decompose(
@@ -682,11 +602,6 @@
       sp.torsoMesh.visible = false;
     }
 
-    // patas: cada cubo se coloca/orienta/escala desde los joints del sim:
-    //   1. posición = punto medio entre 'from' y 'to' (coords locales al root)
-    //   2. scale   = (grosor, grosor, longitud del segmento)
-    //   3. quat    = rotación que alinea +Z con la dirección del segmento
-    // El cubo unitario centrado en (0,0,0) se estira así a lo largo del eje.
     for (let li = 0; li < sp.legs.length; li++) {
       const leg = sp.legs[li];
       const legPose = pose.legs[li];
@@ -703,20 +618,18 @@
         const len = Math.hypot(fx, fy, fz);
         const mesh = seg.mesh;
         if (len < 1e-6) {
-          // colapsado: esconder el cubo para evitar render artefact
+          
           mesh.visible = false;
           continue;
         }
         mesh.visible = true;
-        // punto medio, en coords locales al root
+        
         mesh.position.set(
           (from[0] + to[0]) * 0.5 - lx,
           (from[1] + to[1]) * 0.5 - ly,
           (from[2] + to[2]) * 0.5 - lz
         );
-        // grosor proporcional al tamaño: con scale 100 los segmentos miden
-        // ~160 bloques y un grosor fijo de 0.16 sería un hilo invisible.
-        // Escalamos por la longitud de reposo del segmento (≈1.8 en normal).
+        
         const restLen = leg.segLengths?.[si] || len;
         const sizeF = Math.min(80, Math.max(1, restLen / 1.8));
         const th = seg.thickness * sizeF;
@@ -726,7 +639,6 @@
     }
   }
 
-  // ═══ limpieza ═══
   function disableCullingDeep(root) {
     const walk = (n) => {
       n.frustumCulled = false;
@@ -760,7 +672,6 @@
     for (const name of [...state.spiders.keys()]) removeSpider(name);
   }
 
-  // ═══ tick ═══
   function tick() {
     if (!state.enabled) { state.raf = requestAnimationFrame(tick); return; }
     try {
@@ -768,22 +679,22 @@
       if (game) state.game = game;
       const sim = simAPI();
       if (sim) {
-        // reconectar si el sim apareció tarde (carga de scripts en desorden)
+        
         if (!state.simConnected) connectSim();
-        // reportar posición del jugador al sim cada 500ms (spawns + anclaje)
+        
         reportPlayer(game, sim);
-        // arañas iniciales del garden: cuando sepamos dónde está el jugador
+        
         sim.refreshGame();
         sim.ensureInitialSpiders();
       }
-      // arañas que llegaron antes de haber escena 3D lista
+      
       if (state.pendingSpiders.length) {
         const retry = state.pendingSpiders.splice(0);
         for (const info of retry) if (!addSimSpider(info)) state.pendingSpiders.push(info);
       }
       if (state.lastFrame) applyFrame(state.lastFrame);
       if (state.remoteFrame) applyFrame(state.remoteFrame, 'lastAppliedRemoteT');
-      // cambio de mundo: la escena nueva no contiene las raíces → re-agregar
+      
       if (state.spiders.size) {
         const scene = getScene(state.game);
         if (scene) {
@@ -794,7 +705,7 @@
           }
         }
       }
-      // CRÍTICO: el juego congela el matrixWorld — sin update manual nada se anima
+      
       for (const sp of state.spiders.values()) {
         try {
           sp.root.updateMatrix();
@@ -823,10 +734,6 @@
         }
       }
 
-      // foto de render cada 5s (nivel ≥2): pos de mesh, distancia a cámara, on-screen
-      // OPTIMIZACIÓN: el bloque completo está envuelto en LOG.level >= 2 para
-      // evitar ejecutar cálculos costosos (updateWorldMatrix, project, etc.)
-      // cuando el log está apagado (caso normal).
       const now = performance.now();
       if (LOG.level >= 2 && now - (state.lastRenderSnapshot || 0) > 5000 && state.spiders.size) {
         state.lastRenderSnapshot = now;
@@ -842,7 +749,7 @@
               snap.camDist = Math.round(v.distanceTo(camWorld) * 10) / 10;
               const p = v.clone().project(cam);
               snap.onScreen = Math.abs(p.x) < 1 && Math.abs(p.y) < 1 && p.z < 1;
-              // DIAG patas: nº segments, worldPos del primer mesh
+              
               if (sp.legs[0]?.segments[0]?.mesh) {
                 const leg0 = sp.legs[0].segments[0].mesh;
                 leg0.updateWorldMatrix(true, false);
@@ -887,9 +794,8 @@
     }
   }
 
-  // ═══ API pública ═══
   window.MF_SPIDER_BOT = {
-    // hot-reload: quitar meshes de la escena y parar el raf
+    
     dispose() {
       state.enabled = false;
       try { clearAll(); } catch (_) {}
@@ -905,7 +811,7 @@
       if (!sim) return { ok: false, error: 'SpiderSim not loaded' };
       return sim.send(obj);
     },
-    // láser: mover la araña más cercana al punto mirado
+    
     target(x, y, z) { return this.send({ type: 'target', x, y, z }); },
     staystill() { return this.send({ type: 'staystill' }); },
     list() {
@@ -917,7 +823,7 @@
         const p = state.pendingSpiders.find((x) => x.name === name);
         return { name, preset: p?.preset, gallop: p?.gallop, pending: true };
       }).map((entry) => {
-        // añadir pos vivo del sim
+        
         const live = sim?.list?.().find((l) => l.name === entry.name);
         return live ? { ...entry, pos: live.pos, grounded: live.grounded } : entry;
       });
@@ -927,7 +833,7 @@
       const sim = simAPI();
       sim?.clear?.();
     },
-    // SpiderSync P2P: mensajes del sim del peer + snapshot al conectar
+    
     remoteApply,
     onPeerConnected,
     enable,
@@ -948,13 +854,13 @@
         logLevel: LOG.level,
       };
     },
-    // nivel: 0=off 1=info 2=detalle 3=verboso
+    
     log(level) {
       if (level === undefined || level === null) return LOG.level;
       LOG.setLevel(level);
       return LOG.level;
     },
-    // volcado de logs (ring buffer) — útil sin abrir la consola
+    
     logs(n = 25) {
       const botLogs = LOG.dump(n);
       const simLogs = simAPI()?.logs?.(n) || [];
@@ -964,6 +870,5 @@
 
   console.log(TAG, 'cargado (simulador EMBEBIDO — sin Node/ws). Usa window.MF_SPIDER_BOT o /spider');
 
-  // auto-arranque: renderizar las arañas del simulador sin comandos.
   enable(true);
 })();

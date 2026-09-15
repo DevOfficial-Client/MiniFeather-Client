@@ -25,9 +25,7 @@
   const SIGNAL_REQUEST_EVENT = 'minifeather:localgames-signal-request';
   const SIGNAL_RESPONSE_EVENT = 'minifeather:localgames-signal-response';
   const STUN_URL = 'stun:stun.cloudflare.com:3478';
-  // TURN público de Open Relay (metered.ca, gratuito y sin registro).
-  // STUN solo no atraviesa NAT simétrico/CGNAT (típico en móviles y
-  // redes escolares/empresariales): sin TURN el P2P nunca conecta.
+  
   const ICE_SERVERS = [
     { urls: [STUN_URL, 'stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
     { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
@@ -65,15 +63,8 @@
   const OUTGOING_ALLOW = new Set(['SPacketPing']);
   const INCOMING_ALLOW = new Set(['CPacketPong']);
 
-  // Direct local worlds used to generate only 5x5 chunks (80x80 blocks).
-  // 15x15 keeps startup manageable while giving Sandbox/hosted local worlds
-  // a much larger 240x240-block area. Both Local Sandbox and Create World use
-  // this exact generator, so the size stays consistent between modes.
   const LOCAL_TERRAIN_RADIUS_CHUNKS = 7;
 
-  // ── Logging ────────────────────────────────────────────────────────
-  // Activar con: localStorage.setItem('mflg:log', '1')  (o 'trace' para más detalle)
-  // Desactivar:  localStorage.removeItem('mflg:log')
   const LOG_PREFIX = '[MiniFeather LocalGames]';
   const LOG_LEVEL = (() => {
     try {
@@ -222,7 +213,6 @@
       lastError: ''
     }
   };
-
 
   function loadSavedServers() {
     try {
@@ -432,9 +422,6 @@
   function startGlobalServiceLoop() {
     if (state.globalPollTimer) clearInterval(state.globalPollTimer);
 
-    // ntfy gratuito limita las peticiones por topic (~60/h). Un poll cada 5s
-    // provoca 429 y bloquea también la señalización P2P (mismo mecanismo).
-    // Backoff exponencial: 15s → 30s → 60s (tope). Reinicia al tener éxito.
     state.registryBackoffMs = state.registryBackoffMs || 15000;
     state.lastRegistryPollAt = 0;
 
@@ -462,10 +449,10 @@
       const ok = await pollGlobalRegistry();
 
       if (ok) {
-        // Éxito → volver al intervalo base
+        
         state.registryBackoffMs = 15000;
       } else {
-        // Fallo (429/red) → duplicar hasta 60s
+        
         state.registryBackoffMs = Math.min(
           (state.registryBackoffMs || 15000) * 2,
           60000
@@ -530,7 +517,6 @@
     state.error = error;
     emitState();
   }
-
 
   function mainModuleCandidates() {
     const urls = [];
@@ -1013,11 +999,6 @@
     };
   }
 
-  // En mundo local directo, newChunkReceived() solo encola el chunk; el
-  // upload final del mesh depende del focalPosition del chunkRenderQueue
-  // (que sigue al jugador). Si la cámara aún no llegó al spawn local, los
-  // resultados del worker quedan en pendingUploads y nunca suben. Este
-  // drain periódico fuerza la subida mientras el mundo local esté activo.
   function installPendingUploadDrain() {
     if (state.uploadDrainTimer) {
       clearInterval(state.uploadDrainTimer);
@@ -1033,9 +1014,6 @@
       try {
         const crm = state.game?.chunkRenderManager;
 
-        // El drain sube los meshes diferidos aunque el focal aún no
-        // apunte al spawn local. pendingUploadOrder es un array nativo;
-        // pendingUploads es un wrapper Map-like (no instanceof Map).
         if (crm?.pendingUploadOrder?.length > 0) {
           logTrace(`uploadDrain: forzando subida de ${crm.pendingUploadOrder.length} mesh(es) pendiente(s)`);
           crm.scheduleUploadDrain?.();
@@ -1051,12 +1029,6 @@
     }
   }
 
-  // ── Watchdog del render loop ───────────────────────────────────────
-  // Game.update() mata su propio rAF loop de forma PERMANENTE tras una sola
-  // excepción (catch { if(!renderLoopErrored) throw renderLoopErrored=true }).
-  // Un error puntual durante la transición al mundo local (cámara, tick,
-  // timing) deja la pantalla negra aunque chunks/meshes estén perfectos.
-  // Este watchdog detecta el loop muerto y lo revive.
   function installRenderLoopWatchdog() {
     if (state.renderWatchdogTimer) {
       clearInterval(state.renderWatchdogTimer);
@@ -1089,7 +1061,6 @@
         `renderLoop watchdog: loop muerto (errored=${game.renderLoopErrored === true}, sin frames ${lastRenderTime > 0 ? Math.round(now - lastRenderTime) + 'ms' : 'n/a'}) → reviviendo (intento ${state.renderWatchdogRevives})`
       );
 
-      // Repara primero el estado nativo que puede matar el frame loop.
       try {
         repairGameSceneTick(game);
         ensureNativeSceneRoots(game);
@@ -1149,12 +1120,6 @@
     state.providerGuard = null;
   }
 
-  // ── Reparación del GameScene nativo ────────────────────────────────
-  // GameScene.tick es un Single estático del cliente (tiene get()/set()).
-  // LocalGames antes lo reemplazaba por el número 0; eso puede romper
-  // GameScene.update() y matar el rAF de Miniblox dejando HUD + cielo vivos
-  // pero el mundo 3D negro. Guardamos la referencia nativa ANTES de limpiar
-  // el mundo y la restauramos si alguna transición la corrompe.
   function isNativeSingle(value) {
     return !!(
       value &&
@@ -1266,7 +1231,6 @@
       typeof value === 'function' && list.indexOf(value) === index
     );
 
-    // Si alguna referencia de la clase sigue sana, úsala como fuente de verdad.
     for (const candidate of classes) {
       try {
         if (!isNativeSingle(candidate.tick)) continue;
@@ -1280,14 +1244,12 @@
       } catch (_) {}
     }
 
-    // Restaurar el mismo Single capturado antes de gameScene.clear().
     if (isNativeSingle(state.gameSceneTickRef)) {
       const ok = assignGameSceneTick(game, state.gameSceneTickRef);
       if (ok) state.gameSceneTickRecovered = true;
       return ok;
     }
 
-    // Último recurso: reconstruir el Single con su constructor nativo.
     const TickCtor = state.gameSceneTickCtor;
     if (typeof TickCtor === 'function') {
       try {
@@ -1467,10 +1429,6 @@
     return probe;
   }
 
-  // ── Blindaje de gameScene.update ───────────────────────────────────
-  // Conserva siempre el update nativo. Si falla, primero repara tick/roots y
-  // lo reintenta; solo ese frame usa el fallback de cielo. Así no ocultamos un
-  // error permanente ni sustituimos el pipeline 3D por un renderer falso.
   function patchGameSceneUpdateForLocal(game) {
     const gs = game?.gameScene;
 
@@ -1547,10 +1505,6 @@
     state.sceneUpdateRestore = null;
   }
 
-  // ── Reloj de UI (e.tick) ───────────────────────────────────────────
-  // (Reemplazado por patchGameSceneUpdateForLocal: el observable vive en un
-  // closure interno del bundle y no es accesible para reparación directa.)
-
   function createFreshNativeLocalWorld(game, dimension = 0) {
     if (!game?.world || !game?.gameScene) {
       return false;
@@ -1565,7 +1519,6 @@
 
     restoreProviderGuard();
 
-    // Capture the native static Single before any world/scene cleanup.
     captureGameSceneTick(game);
 
     try {
@@ -1592,11 +1545,6 @@
       return false;
     }
 
-    // El reloj de UI (e.tick) se inicializa solo conectando a un servidor
-    // real. Sin él, gameScene.update() lanza "e.tick.set is not a function"
-    // en CADA frame → el render 3D nunca corre (solo se ve el cielo).
-    // El patch blinda update() con fallback manual (el reloj vive en un
-    // closure del bundle y no es accesible para repararlo directamente).
     patchGameSceneUpdateForLocal(game);
 
     if (
@@ -1680,9 +1628,6 @@
 
     if (!mod || typeof mod !== 'object') return null;
 
-    // Current Miniblox exports the singleton texture manager from the main
-    // module. Prefer the known aliases when present, then fall back to shape
-    // detection so this keeps working when Rollup/Vite changes export names.
     for (const key of ['Bo', 'Ei']) {
       const candidate = mod[key];
       if (!looksLikeWorldAssetManager(candidate)) continue;
@@ -1704,9 +1649,6 @@
 
     if (!mod) return null;
 
-    // Current Miniblox exposes the live renderer/composer singleton as an
-    // object. Older builds exposed a function-like singleton. Prefer the live
-    // object first, then keep the legacy shape as a compatibility fallback.
     for (const value of Object.values(mod)) {
       if (
         value &&
@@ -1856,9 +1798,7 @@
     let lastInnerHeight = 0;
 
     const ensureSize = (force = false) => {
-      // medir el DOM (getBoundingClientRect) fuerza layout — hacerlo cada
-      // frame es layout thrashing puro y caen los FPS. Cachear 500ms y
-      // re-medir antes si la ventana cambió (lee innerWidth: barato).
+      
       const now = performance.now();
       const windowResized =
         innerWidth !== lastInnerWidth ||
@@ -1924,9 +1864,7 @@
         height !== lastHeight ||
         ratio !== lastRatio
       ) {
-        // Keep the native composer correctly sized on miniblox.online.
-        // miniblox.io still gets the same size repair even when Local Games
-        // uses the direct-render fallback below.
+        
         try {
           composer?.setSize?.(width, height);
         } catch (_) {}
@@ -1969,8 +1907,6 @@
 
         ensureSize();
 
-        // Resolve the active camera every frame. F5 changes the native camera
-        // mode, so retaining an older camera object breaks first/third person.
         const liveScene = state.game?.gameScene?.scene;
         const liveCamera = state.game?.gameScene?.camera;
 
@@ -2044,11 +1980,7 @@
   }
 
   function worldTextureAssetsReady(assets) {
-    // The terrain renderer only needs the native world/fluid materials and
-    // their atlas texture maps. `atlas` is an Image and `spritesheetPixels`
-    // is mainly used by UI/tint helpers; treating those as hard requirements
-    // caused false LOCAL_TEXTURE_ASSETS_FAILED errors even when the renderer
-    // already had a usable GPU texture.
+    
     return !!(
       assets?.materialWorld?.map &&
       assets?.materialFluidWorld?.map
@@ -2186,8 +2118,6 @@
         )
       : 1;
 
-    // Miniblox terrain shader expects: x = sky light, y = block light,
-    // z = AO/face shade. Use daylight, no fake block emission, full AO.
     for (let i = 0; i + 2 < array.length; i += itemSize) {
       array[i] = full;
       array[i + 1] = 0;
@@ -2306,8 +2236,6 @@
 
     if (!scene || !root) return null;
 
-    // Keep Miniblox in charge of materials, shaders and renderer.render().
-    // The previous repair path could race the native chunk worker/render loop.
     try {
       if (root.parent !== scene) scene.add(root);
       root.visible = true;
@@ -2341,9 +2269,6 @@
           if (lightAttributeLooksBlack(light)) {
             stats.blackLightAttributes++;
 
-            // Only touch the worker-produced light attribute after the native
-            // lighting pass had a chance to run. Never replace the material or
-            // texture atlas: that was the source of the old white/blue worlds.
             if (force && repairBlackLightAttribute(light)) {
               stats.repairedLightAttributes++;
             }
@@ -2366,11 +2291,6 @@
       });
     } catch (_) {}
 
-    // Los meshes heredan el singleton N.materialWorld al crearse. Si el
-    // atlas terminó de cargar DESPUÉS (mundo local arrancado desde el
-    // menú, sin assets de mundo), el material compartido queda sin map y
-    // todos los chunks se ven como color plano. updateTexture() es la
-    // ruta nativa que reasigna materialWorld (con atlas) a cada mesh.
     if (
       force &&
       stats.nativeMaterials > 0 &&
@@ -2459,11 +2379,7 @@
     };
 
     try {
-      // Mirror Miniblox's native boot order. Game.init() owns this promise and
-      // prepareEngine() waits for it before booting WebGL. Do not clear or
-      // replace menuTexturesPromise: doing so races the game's own loader.
-      // `withTimeout`: en un perfil limpio menuLoad puede quedarse colgado
-      // indefinidamente (CDN lento) y atrapar el mundo local en "Starting...".
+      
       if (game?.menuLoad && typeof game.menuLoad.then === 'function') {
         await withTimeout(
           game.menuLoad,
@@ -2478,14 +2394,12 @@
         );
       }
 
-      // Normal Game.connect() waits for world assets after boot/prewarm.
       await withTimeout(
         assets.ensureWorldAssets?.() ?? Promise.resolve(),
         30000,
         'World asset load timed out (ensureWorldAssets).'
       ).catch(assetTimeout => {
-        // No interrumpir el flujo: waitForTerrainMaterials() abajo decide si
-        // ya hay suficiente material para renderizar el mundo local.
+        
         console.warn(
           LOG_PREFIX,
           'ensureWorldAssets timeout (continuando):',
@@ -2494,8 +2408,7 @@
       });
 
       if (!await waitForTerrainMaterials(2500)) {
-        // One controlled native retry is safe. Unlike v5.5, never reset the
-        // singleton's promises/flags and never start parallel texture loads.
+        
         if (typeof assets.loadSpritesheet === 'function') {
           await assets.loadSpritesheet();
         } else if (typeof assets.ensureMenuTextures === 'function') {
@@ -2514,9 +2427,6 @@
 
       error = String(detail || 'Texture loading failed');
 
-      // A TextureLoader error is commonly delivered as an Event. If a native
-      // load was already in progress, give that original load time to finish
-      // instead of declaring failure immediately.
       try {
         await waitForTerrainMaterials(5000);
       } catch (_) {}
@@ -2547,7 +2457,6 @@
 
     return ready;
   }
-
 
   function findLocalCanvasHolder() {
     return (
@@ -3094,8 +3003,6 @@
 
         state.blockRegistry = value;
 
-        // A few older MiniFeather modules still look for window.Blocks.
-        // Expose the exact native registry only after positively identifying it.
         try {
           if (!globalThis.Blocks) globalThis.Blocks = value;
         } catch (_) {}
@@ -3483,8 +3390,6 @@
     const block = previousState?.getBlock?.();
     if (!stack || !block) return;
 
-    // The online client may already predict tool wear. Only apply the native
-    // ItemStack hook when this break did not change durability on its own.
     const damageAfter = Number(stack.itemDamage);
     if (
       Number.isFinite(Number(damageBefore)) &&
@@ -3743,10 +3648,6 @@
     const dz = z - centerZ;
     const distance = Math.hypot(dx, dz);
 
-    // Large-scale shape first, then hills/detail. The old generator forced an
-    // island falloff after ~42 blocks, which meant enlarging the world mostly
-    // produced ocean. Keep the terrain deterministic but let useful land
-    // continue throughout the bigger local world.
     const continental =
       smoothNoise(x, z, 64, seed + 11) * 2 - 1;
 
@@ -3759,8 +3660,6 @@
     const detail =
       smoothNoise(x, z, 7, seed + 47) * 2 - 1;
 
-    // Ridge noise gives broader mountain/valley silhouettes without adding
-    // any new blocks or changing Miniblox's renderer.
     const ridgeRaw =
       smoothNoise(x, z, 43, seed + 61) * 2 - 1;
     const ridge = 1 - Math.abs(ridgeRaw);
@@ -3774,7 +3673,6 @@
       detail * 1.25 +
       ridge * mountainMask * 8;
 
-    // Keep spawn predictable and safe regardless of the seed.
     if (distance < 7) {
       const blend = Math.max(0, Math.min(1, (distance - 3) / 4));
       height = 67 * (1 - blend) + height * blend;
@@ -3818,9 +3716,6 @@
     ]);
   }
 
-  // Corre una promesa con tope de tiempo. Si expira, rechaza con `message`
-  // en lugar de dejar la inicialización colgada para siempre. La promesa
-  // original sigue su curso en segundo plano (no se puede cancelar).
   function withTimeout(promise, timeoutMs, message = 'Timed out') {
     let timer = null;
 
@@ -4026,17 +3921,6 @@
       }
     } catch (_) {}
 
-    // ── reparar el modelo del jugador si quedó a medias ──
-    // El build() del modelo es async: `await downloadSkin(skin)` cuando el
-    // skin no está cacheado. Sin sesión (perfil limpio) esa promesa cuelga
-    // para siempre → `model.parts` queda incompleto → el renderer del brazo
-    // en primera persona lanza `Cannot read properties of undefined (reading
-    // 'width')` en CADA frame → Game.update() mata su rAF loop de forma
-    // PERMANENTE → pantalla del color de fondo (celeste) y nada se renderiza.
-    // Fix: detectar el modelo roto y reconstruirlo con su propio constructor
-    // nativo — el constructor llena `parts` síncronamente (las UV boxes) y
-    // solo `init()` es async (skin/cosméticos), que tras la reconstrucción
-    // resuelve porque el constructor ya registró el skin por defecto.
     try {
       const model = player.mesh?.model;
       const parts = model?.parts;
@@ -4053,11 +3937,6 @@
         const ModelCtor = model.constructor;
         const mesh = player.mesh;
 
-        // el constructor nativo hace super(e, e.entity.profile.cosmetics.skin):
-        // espera el MESH (con .entity), no la entidad. Sin sesión el profile
-        // queda sin skin → `await downloadSkin('')` cuelga para siempre y
-        // parts queda incompleto. Sintetizar el perfil cosmético mínimo con
-        // el skin default del juego (bob, ya cacheado en el atlas).
         if (!mesh.entity?.profile?.cosmetics?.skin) {
           try {
             mesh.entity = mesh.entity || {};
@@ -4415,8 +4294,6 @@
       return { ok: false, error: 'INVALID_MODE' };
     }
 
-    // Hardcore sólo aplica a survival; si está activo y se pide creativo/
-    // adventure/spectator, mantenemos el flag pero aplicamos el modo real.
     const targetMode =
       state.localHardcore && id !== 'survival' ? 'survival' : id;
 
@@ -4465,8 +4342,6 @@
         player.abilities.flying = false;
       }
 
-      // Si hardcore está activo, anclar vitals siempre visibles y forzar
-      // permisos de survival aunque el modo visible sea survival.
       if (state.localHardcore) {
         state.game.info.showVitals = true;
         if (player.abilities?.mayFly) player.abilities.mayFly = false;
@@ -4476,7 +4351,6 @@
       state.localGameMode = targetMode;
       syncNativePlayerList();
 
-      // Anunciar al chat para feedback local
       if (state.localHardcore) {
         addSystemChat(
           `Mode set to Hardcore (survival) — ${id !== 'survival' ? `${id} requested but locked while hardcore is on` : 'permanent death enabled'}.`
@@ -4485,7 +4359,6 @@
         addSystemChat(`Game mode: ${targetMode}`);
       }
 
-      // Notificar a los peers (host) o al host (guest)
       if (state.mode === 'host' || state.mode === 'single') {
         broadcastReliable({
           t: 'mode',
@@ -4522,7 +4395,7 @@
     state.localHardcore = next;
 
     if (next) {
-      // Hardcore = survival permanente. Forzar modo survival y vitals.
+      
       addSystemChat('Hardcore enabled — one life, no flight, no regen.');
       const result = setLocalGamemode('survival');
       return result.ok
@@ -4869,12 +4742,6 @@
       return false;
     }
 
-    // Miniblox older builds handled CPacketChunkData with the simple sequence:
-    //   ChunkProvider.loadChunk -> ChunkRenderManager.newChunkReceived.
-    // The current client moved that exact sequence into
-    // ClientChunkManager.applyChunkData(). Calling it directly avoids the
-    // network/cache/render-distance gates in handlePacketChunkData() and lets
-    // Miniblox itself feed NEW_CHUNK + GENERATE_GEOMETRY + Offscreen.
     try {
       if (typeof chunkManager.applyChunkData === 'function') {
         state.chunkLoadDiagnostics.nativeApply =
@@ -4897,8 +4764,6 @@
         ).slice(0, 160)}`;
     }
 
-    // Compatibility with the older client supplied by the user. Its
-    // handlePacketChunkData() directly performed loadChunk + newChunkReceived.
     try {
       if (typeof chunkManager.handlePacketChunkData === 'function') {
         state.chunkLoadDiagnostics.nativeIngest =
@@ -4919,9 +4784,6 @@
         ).slice(0, 160)}`;
     }
 
-    // Last compatibility path: reproduce the old Miniblox contract directly.
-    // Do not only put the chunk in ChunkProvider; newChunkReceived() is what
-    // sends NEW_CHUNK to the render workers and ultimately reaches Offscreen.
     try {
       const loadedChunk = await provider.loadChunk?.(x, z, packet);
 
@@ -5002,8 +4864,6 @@
       return result;
     }
 
-    // All local chunks must already be in ChunkProvider before this pass.
-    // Miniblox lighting can then propagate sky/block light across neighbours.
     const px = Math.floor(Number(state.game?.player?.pos?.x) || 0) >> 4;
     const pz = Math.floor(Number(state.game?.player?.pos?.z) || 0) >> 4;
 
@@ -5041,8 +4901,6 @@
         ).slice(0, 180);
       }
 
-      // Lighting is CPU-heavy; yield periodically so the Miniblox render loop
-      // and the native Web Worker can keep pumping.
       if ((index & 3) === 3) {
         await new Promise(resolve => setTimeout(resolve, 0));
       }
@@ -5070,11 +4928,6 @@
       return { seeded, queued, failed: list.length, lastError: 'sendNewChunk unavailable' };
     }
 
-    // The local provider already contains every generated chunk. Calling
-    // ChunkRenderManager.newChunkReceived(packet) one packet at a time would
-    // immediately enqueue neighbour jobs because provider.isLoaded() is true
-    // for all neighbours, even when those neighbours have not yet reached the
-    // worker. Seed ALL NEW_CHUNK data first; only then enqueue geometry jobs.
     for (const packet of list) {
       try {
         workerManager.sendNewChunk(packet);
@@ -5181,10 +5034,6 @@
       world.invalidateChunkCache?.();
     } catch (_) {}
 
-    // Reset renderer/worker/Offscreen BEFORE sending any local chunk. This is
-    // the important ordering taken from comparing the old and current clients.
-    // Once packets begin flowing, never clear/reload the renderer again unless
-    // we intentionally replay every packet through the full native pipeline.
     try {
       renderManager.clear?.();
       renderManager.world = world;
@@ -5199,9 +5048,6 @@
 
     log(`generateLocalChunks: workerReady=${workerReady}, despachando ${packets.length} packets...`);
 
-    // updateTexture() uses the current client's own texture singleton and also
-    // calls Offscreen.sendAtlas(). It is safe here because the world assets were
-    // already awaited before local terrain generation.
     try {
       await Promise.resolve(renderManager.updateTexture?.());
       log('generateLocalChunks: updateTexture() OK (atlas re-sincronizado)');
@@ -5213,11 +5059,6 @@
         ).slice(0, 140)}`;
     }
 
-    // Do not initialize light manually. The current ChunkRenderWorker/WASM
-    // returns chunkLight and ChunkRenderManager.updateChunkMesh() applies it.
-    // A normal current Miniblox server does not call lightEngine.initChunkLight
-    // before newChunkReceived(), so Local Games should not either.
-
     let accepted = 0;
 
     for (let index = 0; index < packets.length; index++) {
@@ -5227,8 +5068,6 @@
         accepted++;
       }
 
-      // Let worker message queues drain periodically. This also prevents one
-      // giant synchronous burst from delaying Offscreen ADD_CHUNK uploads.
       if ((index & 3) === 3) {
         await new Promise(resolve => setTimeout(resolve, 0));
       }
@@ -5311,7 +5150,7 @@
     const gravel = stateForAny('gravel', 'stone');
     const water = stateForAny('water');
     const bedrock = stateForAny('bedrock', 'stone');
-    // OJO: no llamarlo "log" — colisiona con la función log() y causa TDZ
+    
     const oakLog = stateForAny('oak_log', 'log', 'stone');
     const leaves = stateForAny('oak_leaves', 'leaves', 'grass_block');
     const flowerA = stateForAny('dandelion', 'yellow_flower');
@@ -5430,20 +5269,12 @@
         }
       }
     } else if (map === 'garden') {
-      // ── Spider Garden: mundo real precacheado en assets/garden/world.json ──
-      // El simulador de arañas ahora vive DENTRO de la extensión (SpiderSim.js):
-      // la física corre sobre los chunks de este mundo en vivo. Aquí solo
-      // construimos el terreno EXACTAMENTE como el create world: grid COMPLETO
-      // contiguo de chunks, fondo bedrock/stone + subsuelo en TODAS las
-      // columnas (el renderer de miniblox no hace meshing de chunks huérfanos
-      // sin vecinos) y la superficie real del garden encima. El jugador queda
-      // DENTRO del mundo real que el simulador pisa.
+      
       let gardenData = null;
 
       setStatus('Loading the Spider Garden world...', '');
       log('garden: cargando assets/garden/world.json');
 
-      // base de assets de la extensión (meta inyectada por SplashScreen)
       const gardenUrl = (() => {
         try {
           const meta = document.querySelector('meta[name="mf-mirror-base"]');
@@ -5464,7 +5295,7 @@
         }
       }
       if (!gardenData) {
-        // fallback: simulador PC viejo (si sigue corriendo)
+        
         try {
           const response = await fetch('http://127.0.0.1:8765/world.json', { cache: 'no-store' });
           if (response.ok) gardenData = await response.json();
@@ -5481,13 +5312,12 @@
         return false;
       }
 
-      // resolver paleta minecraft:xxx → block state nativo de miniblox
       const mcName = (full) => String(full || '').replace(/^minecraft:/, '');
       const stateCache = new Map();
       const paletteStates = gardenData.palette.map((full) => {
         const key = mcName(full);
         if (stateCache.has(key)) return stateCache.get(key);
-        // p. ej. minecraft:short_grass → short_grass|grass, minecraft:grass_block → grass_block|grass
+        
         const base = key.split('[')[0];
         const stem = base.split('_')[0];
         const state = stateForAny(base, `${stem}_block`, stem === 'grass' ? 'grass' : stem, 'stone');
@@ -5497,8 +5327,6 @@
       const resolvedCount = paletteStates.filter(Boolean).length;
       log(`garden: paleta resuelta ${resolvedCount}/${gardenData.palette.length}: ${gardenData.palette.map((p, i) => `${mcName(p)}=${paletteStates[i] ? 'ok' : '?'}`).join(', ')}`);
 
-      // rango de chunks: grid COMPLETO contiguo con margen de 1 chunk
-      // (mismo patrón que el create world/sandbox)
       const b = gardenData.bounds || {};
       const minChunkX = Math.floor((Number(b.minX) || -48) >> 4) - 1;
       const maxChunkX = Math.floor((Number(b.maxX) || 48) >> 4) + 1;
@@ -5551,8 +5379,7 @@
         }
       };
 
-      // ── PASO 1: columna más alta del garden por (x,z) ──
-      const columnTop = new Map(); // "x,z" → y más alto
+      const columnTop = new Map(); 
       for (let i = 0; i < flat.length; i += 4) {
         const x = flat[i], y = flat[i + 1], z = flat[i + 2];
         const key = `${x},${z}`;
@@ -5560,19 +5387,13 @@
         if (prev === undefined || y > prev) columnTop.set(key, y);
       }
 
-      // ── PASO 2: base de terreno completa (patrón create world) ──
-      // bedrock en bottomY, stone hasta height-4, subsuelo hasta height-1.
-      // En TODAS las columnas del grid — así no hay chunks/columnas huecos
-      // y el renderer + la física del juego ven suelo sólido por doquier.
       const defaultHeight = Math.floor(Number(gardenData.spawn?.y) || Number(gardenData.seaLevel) || 62);
       let generationRows = 0;
 
       for (let x = minX; x <= maxX; x++) {
         for (let z = minZ; z <= maxZ; z++) {
           const top = columnTop.get(`${x},${z}`);
-          // altura objetivo: la del garden si hay bloques, si no una base
-          // plana suave (interpolación barata desde el borde más cercano
-          // con bloques no compensa: mejor una meseta al nivel del mar)
+          
           const height = Number.isFinite(top) ? top : defaultHeight;
           state.terrainSurface.set(`${x},${z}`, height);
 
@@ -5594,7 +5415,6 @@
       }
       log(`garden: base de terreno completa (${((maxX - minX + 1) * (maxZ - minZ + 1))} columnas)`);
 
-      // ── PASO 3: los bloques REALES del garden encima de la base ──
       let placed = 0, skipped = 0;
 
       for (let i = 0; i < flat.length; i += 4) {
@@ -5609,9 +5429,8 @@
 
       log(`garden: ${placed} bloques colocados, ${skipped} saltados`);
 
-      // arena/origin alrededor del spawn real del mundo
       const sp = gardenData.spawn || { x: 0, y: 66, z: 0 };
-      // altura real de la superficie en el spawn (columna más alta en 3x3)
+      
       let spawnSurface = Number(sp.y) || 66;
       for (let dx = -1; dx <= 1; dx++) {
         for (let dz = -1; dz <= 1; dz++) {
@@ -5635,9 +5454,6 @@
       };
       log(`garden: spawn en superficie y=${spawnSurface}`);
 
-      // ordenar chunks por distancia al spawn (AHORA que origin existe):
-      // los primeros en serializarse y despacharse serán los del spawn →
-      // la puerta nativa (9 chunks) abre ya
       {
         const spx = state.origin.x, spz = state.origin.z;
         const dist = (chunk) => {
@@ -6061,9 +5877,6 @@
       return replayed;
     };
 
-    // forceReplay means a previous stage explicitly detected that the renderer
-    // lost state. Re-run the whole native packet path instead of enqueueing
-    // coordinates into a worker that may not know those chunks.
     if (forceReplay) {
       await replayAllThroughNativePipeline();
     }
@@ -6082,18 +5895,12 @@
       repairGameSceneTick(game);
       ensureNativeSceneRoots(game);
 
-      // Offscreen uploads normally drain from the game loop. During a broken
-      // local transition that loop may have died before the watchdog starts,
-      // so drain pending native uploads right here as well.
       try {
         if (manager?.pendingUploadOrder?.length > 0) {
           manager.scheduleUploadDrain?.();
         }
       } catch (_) {}
 
-      // If chunks are loaded but the native renderer still has zero output,
-      // seed NEW_CHUNK data directly into the existing Miniblox worker. This
-      // helper already existed in LocalGames but was never used.
       if (
         !directSeedDone &&
         performance.now() - started > 1800 &&
@@ -6117,9 +5924,6 @@
         try { manager.scheduleUploadDrain?.(); } catch (_) {}
       }
 
-      // Second recovery: initialize the local light engine and replay the full
-      // native path. This only runs when the first worker seed produced no
-      // visible chunks, so normal online-like rendering remains untouched.
       if (
         !lightingRecoveryDone &&
         performance.now() - started > 4200 &&
@@ -6236,8 +6040,6 @@
           gateReadyAt = performance.now();
         }
 
-        // Native Game.update() normally performs this transition. The
-        // fallback is allowed only AFTER the same native entry gates pass.
         if (performance.now() - gateReadyAt > 1200) {
           try {
             game.state = 6;
@@ -6278,12 +6080,7 @@
 
     try {
       logTrace('initializeDirectLocalGame: prepareEngine + waitForAccount...');
-      // Follow the same engine preparation path Miniblox uses on the title
-      // screen. prepareEngine() waits for menu textures before booting WebGL
-      // and also prewarms the native chunk worker/shaders.
-      // `withTimeout`: en un perfil limpio la descarga de texturas del menú
-      // puede quedarse colgada indefinidamente (ads saturando la red) — sin
-      // timeout el mundo local queda atrapado en "Starting..." para siempre.
+      
       await withTimeout(
         Promise.all([
           (async () => {
@@ -6372,7 +6169,6 @@
     state.localGameStateBefore =
       Number(game.state) || 0;
 
-    // Sanitize renderer size/pixel ratio before the local world begins.
     installNativeRenderRecovery();
     state.freshWorldCreated = false;
 
@@ -6406,8 +6202,6 @@
       return false;
     }
 
-    // createFreshNativeLocalWorld replaces game.world. Re-bind the safe render
-    // distance wrapper to the new world while keeping the same renderer fix.
     refreshNativeRenderRecovery();
 
     log('initializeDirectLocalGame: fresh world creado, configurando jugador...');
@@ -6479,7 +6273,6 @@
       game.chunkManager.warmCache?.();
     } catch (_) {}
 
-    // Never replace GameScene.tick with a number. It is a native Single.
     captureGameSceneTick(game);
     repairGameSceneTick(game);
     ensureNativeSceneRoots(game);
@@ -6557,9 +6350,6 @@
       )
     );
 
-    // The camera is parented to Miniblox's native player/camera rig.
-    // Writing world coordinates into camera.position offsets that rig and
-    // causes wrong eye/player height, especially after changing camera with F5.
     repairGameSceneTick(game);
     ensureNativeSceneRoots(game);
     synchronizeLocalCamera(game);
@@ -6814,9 +6604,6 @@
       return false;
     }
 
-    // Keep camera positioning owned by Miniblox. synchronizeLocalCamera()
-    // below asks the native player/camera rig to update without injecting
-    // world coordinates into a local camera transform.
     refreshNativeRenderRecovery();
 
     repairGameSceneTick(game);
@@ -6848,10 +6635,6 @@
       ''
     );
 
-    // Vigilancia de texturas: en un mundo local arrancado desde el menú, el
-    // atlas puede terminar de cargar DESPUÉS de que los meshes existan. El
-    // material singleton (N.materialWorld) queda sin map → color plano.
-    // Reintentar updateTexture() hasta 15s mientras queden meshes sin textura.
     watchTextureResync();
 
     return true;
@@ -7148,7 +6931,6 @@
       }
     }
 
-
     captureCurrentBlockState();
     return true;
   }
@@ -7282,10 +7064,6 @@
 
       patchNetwork();
 
-      // Local Sandbox used to skip this hook because Create World installed it
-      // later in createWorldServer(). That made single-player Sandbox miss the
-      // same block/drop handling that hosted local worlds received. Install it
-      // here for ALL direct local worlds; the function is idempotent.
       patchWorldBlockBroadcast();
 
       startLoops();
@@ -7872,9 +7650,6 @@
     return false;
   }
 
-  // ── Slash command router ────────────────────────────────────────────
-  // Formato: /<cmd> [args...]. Si mode=join, los comandos se envían al
-  // host para que los ejecute (mismo flujo que runServerCommand).
   function handleLocalChatCommand(rawText) {
     const body = rawText.replace(/^\/+/, '').trim();
     if (!body) return false;
@@ -7886,7 +7661,6 @@
     const myRole = state.localRole || (state.mode === 'host' ? 'owner' : 'player');
     const isMod = myRole === 'owner' || myRole === 'coowner';
 
-    // Comandos disponibles para todos
     switch (cmd) {
       case 'help':
       case '?': {
@@ -7924,7 +7698,6 @@
       }
     }
 
-    // Comandos que el host puede auto-aplicarse a sí mismo sin permisos
     switch (cmd) {
       case 'heal': {
         if (args.length === 0) {
@@ -7946,7 +7719,7 @@
       case 'survival':
       case 'adventure':
       case 'spectator': {
-        // /gamemode <mode> [player]   o   /creative (corto)
+        
         const realCmd = cmd === 'gm' ? 'gamemode' : cmd;
         const realArgs = cmd === 'gamemode' || cmd === 'gm' ? args : (args.length ? args : []);
         if (state.mode === 'host' || state.mode === 'single') return !!executeHostCommand('', realCmd, realArgs);
@@ -7961,7 +7734,7 @@
           return true;
         }
         if (state.mode === 'host' || state.mode === 'single') {
-          // Llamada directa: toggle al peer por nombre
+          
           if (!isMod) {
             addGameChat('\\red\\You can only toggle your own flight.', '');
             return true;
@@ -8531,7 +8304,6 @@
 
       const [peerId, peer] = found;
 
-
       if (sourceRole === 'coowner' && peer.role === 'coowner') {
         privateCommandMessage(sourcePeer, 'Co-Owners cannot kick other Co-Owners.', true);
         return true;
@@ -9014,8 +8786,7 @@
     }
 
     if (message.t === 'mode') {
-      // El peer anuncia su modo actual. Lo registramos en su entrada de
-      // roster para que el resto lo vea en la lista de jugadores.
+      
       const newMode = String(message.mode || 'survival').toLowerCase();
       const newHardcore = !!message.hardcore;
 
@@ -9111,7 +8882,6 @@
       return;
     }
 
-
     if (message.t === 'chat') {
       if (state.active && state.directLocal) {
         addPlayerChat(message.profile, message.text);
@@ -9202,7 +8972,7 @@
     }
 
     if (message.t === 'mode') {
-      // El host nos avisa del cambio de modo global
+      
       const newMode = String(message.mode || 'survival').toLowerCase();
       const newHardcore = !!message.hardcore;
 
@@ -9355,8 +9125,7 @@
       const current = pc.connectionState;
 
       if (current === 'connected' || current === 'failed' || current === 'closed') {
-        // Refrescar el anuncio del lobby para que el contador de
-        // jugadores esté al día sin esperar los 150s del ciclo.
+        
         if (state.mode === 'host' && state.serverAddress) {
           state.lastRegistryPublish = 0;
         }
@@ -9608,10 +9377,6 @@
         }
       }
 
-      // Si el host no respondió tras 15s (p. ej. su WebSocket de
-      // señalización se reconectó y perdió el join), re-publicar la
-      // oferta para que vuelva a verla. El host ignora joins duplicados
-      // de un peerId que ya registró.
       if (typeof republish === 'function' && performance.now() >= nextRepublishAt) {
         await republish().catch(() => {});
         nextRepublishAt = performance.now() + SIGNAL_RETRY_INTERVAL_MS;
@@ -9755,7 +9520,6 @@
       return false;
     }
   }
-
 
   function matrixVec(matrix, x, y, z, w) {
     return {
@@ -9922,7 +9686,7 @@
         state.directLocal && state.map === 'sandbox'
           ? 38
           : state.map === 'garden'
-            ? (state.arena?.floorY ?? 60) - 12 // garden tiene terreno real: umbral generoso
+            ? (state.arena?.floorY ?? 60) - 12 
             : arena.floorY - 4;
 
       if (Number(player.pos.y) < fallThreshold) {

@@ -71,9 +71,7 @@ const PROFILES = Object.freeze({
     flowerDensity: 0.78
   }),
   extreme: Object.freeze({
-    // Extreme keeps the expensive density close to the player and falls off hard.
-    // One regional mesh + GPU deformation is still substantially cheaper than one
-    // object/model per blade.
+    
     radius: 14.5,
     maxBlades: 5200,
     segments: 6,
@@ -286,9 +284,6 @@ function topGrassInColumn(chunk, lx, lz, cx, cz) {
       const y = yBase + ly;
       const name = blockNameAt(chunk, Number(id) || 0, wx, y, wz);
 
-      // MiniBlox's native grass/flowers are real replaceable blocks above grass_block.
-      // Skip those visual plants so the procedural replacement can still be generated
-      // on the grass block underneath instead of treating the plant itself as terrain.
       if (VEGETATION_PASS_THROUGH.has(name) && skippedVegetation < 3) {
         if (!cover) cover = name;
         skippedVegetation++;
@@ -342,8 +337,6 @@ function bladeCountForDistance(d, surface) {
   const p = state.profile;
   let count = d < p.nearDistance ? p.near : d < p.midDistance ? p.mid : p.far;
 
-  // Extreme deliberately avoids a uniform carpet. Density changes per block while
-  // staying high enough near the player to visually cover most of the grass top.
   if (state.level === 'extreme' && surface) {
     const patch = 0.78 + rand01(surface.x, surface.z, 707) * 0.56;
     count = Math.max(2, Math.round(count * patch));
@@ -398,15 +391,14 @@ function makeBladeGeometry(referenceGeometry, surfaces, centerX, centerZ) {
       const margin = extreme ? 0.018 : state.level === 'high' ? 0.045 : 0.07;
       let rootX, rootZ;
       if (extreme) {
-        // Stratified jitter fills the block without looking like either a grid or a
-        // random clump. Every block gets a slightly different local pattern.
+        
         const countGrid = Math.max(2, Math.ceil(Math.sqrt(count)));
         const gx = j % countGrid;
         const gz = Math.floor(j / countGrid) % countGrid;
         const span = 1 - margin * 2;
         rootX = surface.x + margin + ((gx + 0.12 + r0 * 0.76) / countGrid) * span;
         rootZ = surface.z + margin + ((gz + 0.12 + r1 * 0.76) / countGrid) * span;
-        // Small domain warp stops neighboring blocks from lining up visually.
+        
         rootX += (r6 - 0.5) * 0.035;
         rootZ += (r5 - 0.5) * 0.035;
       } else {
@@ -421,18 +413,17 @@ function makeBladeGeometry(referenceGeometry, surfaces, centerX, centerZ) {
       let height;
       let flex = 1.0;
       if (extreme) {
-        // Three overlapping height populations. The per-block patch value nudges the
-        // mix so a meadow contains short, medium and tall areas instead of clones.
+        
         const patchBias = rand01(surface.x, surface.z, 991) - 0.5;
         const type = Math.max(0, Math.min(0.999, r7 + patchBias * 0.12));
         if (type < 0.30) {
-          height = 0.22 + r3 * 0.22;      // short grass
+          height = 0.22 + r3 * 0.22;      
           flex = 0.72 + r8 * 0.16;
         } else if (type < 0.76) {
-          height = 0.43 + r3 * 0.31;      // medium grass
+          height = 0.43 + r3 * 0.31;      
           flex = 0.90 + r8 * 0.20;
         } else {
-          height = 0.74 + r3 * 0.34;      // tall grass
+          height = 0.74 + r3 * 0.34;      
           flex = 1.08 + r8 * 0.24;
         }
       } else {
@@ -461,8 +452,7 @@ function makeBladeGeometry(referenceGeometry, surfaces, centerX, centerZ) {
           positions[p] = cx + ribbonX * halfW * sign;
           positions[p + 1] = y;
           positions[p + 2] = cz + ribbonZ * halfW * sign;
-          // Slight upward component gives the lighting a soft rounded-leaf look
-          // without a normal map or extra texture sample.
+          
           normals[p] = ribbonX * sign;
           normals[p + 1] = 0.18 + t * 0.42;
           normals[p + 2] = ribbonZ * sign;
@@ -787,8 +777,6 @@ function rebuild3DGrass(force = false) {
   });
 }
 
-// Native flowers/ferns remain interactive. This patch is intentionally much
-// lighter than the procedural grass shader and only adds player bending.
 function patchNativeMaterial(material) {
   if (!material || state.nativePatched.has(material)) return;
   const previousCompile = material.onBeforeCompile;
@@ -980,7 +968,6 @@ function stop() {
   resetMotion();
 }
 
-
 function normalizeLevel(value) {
   const level = String(value || '').toLowerCase();
   return Object.prototype.hasOwnProperty.call(PROFILES, level) ? level : 'medium';
@@ -994,8 +981,6 @@ function setLevel(value) {
   uniforms.quality.value = state.profile.quality;
   if (!state.enabled) return;
 
-  // Quality changes only rebuild the lightweight procedural grass mesh. The
-  // MiniBlox world/chunks are never regenerated or mutated.
   if (state.timer) clearInterval(state.timer);
   state.timer = setInterval(() => rebuild3DGrass(false), state.profile.rebuildInterval);
   state.buildToken++;

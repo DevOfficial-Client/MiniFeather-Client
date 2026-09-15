@@ -481,9 +481,6 @@
     panel.style.setProperty('--mf-ui-panel', background);
   }
 
-  // Zoom de PÁGINA (el de Ctrl+ruedita): 50-120%, default 68. Se aplica
-  // vía chrome.tabs.setZoom desde el background (el content script no
-  // tiene la API de tabs). El panel de la GUI queda a tamaño natural.
   function clampPanelScale(value) {
     const n = Math.round(Number(value));
     if (!Number.isFinite(n)) return DEFAULT_SETTINGS.panelScale;
@@ -615,9 +612,7 @@
   }
 
   function sendLanguageConfig() {
-    // Enviamos TODOS los idiomas cargados (no solo el actual) para que el
-    // módulo MAIN pueda resolver `t('key')` en cualquiera de los 10 al
-    // cambiar de idioma en caliente sin esperar un nuevo bridge.
+    
     const languages = ['en', 'es', 'ja', 'it', 'zh', 'fr', 'de', 'pt', 'ru', 'ko'];
     const strings = {};
     for (const lang of languages) {
@@ -770,9 +765,6 @@
     });
   }
 
-  // El fondo del menú vive en /assets/default-<hash>.webp (el hash cambia con
-  // cada deploy del sitio, así que se matchea por patrón) y también como
-  // background-image CSS del <body>.
   const MENU_BG_PATTERN = /\/assets\/default-[A-Za-z0-9_-]+\.(?:webp|png|jpg)/;
 
   function replaceBackground() {
@@ -795,7 +787,7 @@
         const local = `url("${CONFIG.background}")`;
         if (bodyStyle.backgroundImage !== local) bodyStyle.backgroundImage = local;
       } else if (document.body.dataset.mfBgOriginal) {
-        // restaurar si el sitio ya no usa el fondo default
+        
         bodyStyle.backgroundImage = document.body.dataset.mfBgOriginal;
         delete document.body.dataset.mfBgOriginal;
       }
@@ -2859,8 +2851,6 @@
     ];
   }
 
-  // Feather-style inline SVG icons. Inline SVG keeps the icons crisp at any size,
-  // avoids extension/page asset loading issues, and does not depend on external files.
   const MF_SVG_ICONS = {
     home:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/>',
     hud:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/>',
@@ -2913,7 +2903,6 @@
     const key = MF_SVG_ICONS[name] ? name : 'grid';
     return `<svg class="mf-svg-icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${MF_SVG_ICONS[key]}</svg>`;
   }
-
 
   function renderNavList() {
     return NAV_ITEMS.map(item => `
@@ -3157,7 +3146,6 @@
       }));
     }
   });
-
 
   function initWaypointsModule() {
     registerModule('waypoints', () => createLifecycle({
@@ -4464,7 +4452,6 @@
       if (event.target === backdrop) cleanup();
     });
   }
-
 
   function sendZoomConfig(enabled = settings.zoom) {
     const detail = JSON.stringify({
@@ -6470,8 +6457,6 @@
       return fallback;
     }
   }
-
-
 
   function renderWaypointsPage() {
     const data = readWaypointV2State();

@@ -11,7 +11,7 @@
         loading: new Set(),
         customs: new Map(),
         customSeq: 0,
-        peerTarget: null   // pos del otro jugador via P2P (multi-target)
+        peerTarget: null   
     };
 
     try {
@@ -19,7 +19,7 @@
         state.mappings = JSON.parse(localStorage.getItem('miniblox_custommodels_map') || '{}');
         state.entityAnims = JSON.parse(localStorage.getItem('miniblox_custommodels_anims') || '{}');
     } catch {}
-    // avisar si quedan reemplazos de mobs guardados (faciles de olvidar)
+    
     if (Object.keys(state.mappings).length) {
         console.log(TAG + ' mapeos activos guardados: ' + JSON.stringify(state.mappings) + ' — usa MF_CustomModels.clear() para restaurar');
     }
@@ -83,8 +83,7 @@
             const cp = wp(cam) || [0, 0, 0];
             console.log(TAG + ' === DIAG ===');
             console.log(TAG + ' game: ' + (game ? 'ok' : 'NO') + ' | cam: ' + (cam ? (cam.constructor?.name || '?') : 'NO') + ' @ ' + cp.map((v) => +v.toFixed(1)).join(','));
-            // 1) reemplazos a mobs: a que mesh esta pegado cada root y quien es su parent
-            // state.applied es WeakMap (no iterable): escanear entidades del mundo y ver si tienen rec
+            
             let appliedCount = 0;
             try {
                 const check = (e) => {
@@ -105,7 +104,7 @@
                 try { for (const p of game?.world?.playersIterator?.() ?? []) check(p); } catch {}
                 if (!appliedCount) console.log(TAG + ' applied: 0 (sin reemplazos activos)');
             } catch (e) { console.warn(TAG + ' applied scan fallo: ' + e); }
-            // 2) customs: donde esta cada root
+            
             for (const rec of state.customs.values()) {
                 rows.push({
                     donde: 'CUSTOM ' + rec.id, tipo: 'root', nombre: rec.file.slice(0, 40),
@@ -114,11 +113,10 @@
                     path: 'parent=' + (rec.root?.parent ? (rec.root.parent.name || rec.root.parent.constructor?.name) : 'NINGUNO')
                 });
             }
-            // 3) arbol de la camara y de la escena
+            
             if (cam) scanTree(cam, '>>> CAMARA');
             if (game?.gameScene?.scene) scanTree(game.gameScene.scene, 'escena');
-            // 3) caza por huella: cualquier mesh creado por CustomModels (userData.__mfCM)
-            //    o con textura de la extension, colgado en CUALQUIER arbol de la pagina
+            
             const extOrigin = 'chrome-extension://';
             const chain = (o) => {
                 const parts = [];
@@ -197,17 +195,17 @@
                 lostSince: 0,
                 anim: opts.anim || null,
                 animSpeed: +(opts.animSpeed || 1),
-                hover: !!opts.hover,          // flota: sin gravedad ni colision
-                room: !!opts.room,            // habitacion: estatica, centrada en el player, sin fisica
-                autoSize: !!opts.autoSize,    // room: escalar automaticamente a ~80 bloques
-                sink: opts.sink !== false,    // room: hundir 1 bloque el piso (default true)
-                weeping: !!opts.weeping,      // se congela si el player lo mira
+                hover: !!opts.hover,          
+                room: !!opts.room,            
+                autoSize: !!opts.autoSize,    
+                sink: opts.sink !== false,    
+                weeping: !!opts.weeping,      
                 lookAtPlayer: opts.lookAtPlayer !== false,
                 stay: !!opts.stay,
-                puppet: !!opts.puppet,        // marioneta P2P: la mueve la red, no la IA
-                spawnAnim: opts.spawnAnim || null,   // anim de aparicion (una vez)
-                catchAnim: opts.catchAnim || null,   // anim al acercarse al player
-                despawnAnim: opts.despawnAnim || null, // anim de despedida
+                puppet: !!opts.puppet,        
+                spawnAnim: opts.spawnAnim || null,   
+                catchAnim: opts.catchAnim || null,   
+                despawnAnim: opts.despawnAnim || null, 
                 caught: false,
                 root: null, inst: null, animStart: 0
             };
@@ -221,47 +219,37 @@
                 rec.inst = inst;
                 rec.root = inst.root;
                 if (rec.room) {
-                    // habitacion: tamano real (o escala indicada) y CENTRADA en el
-                    // player: el centro XZ del modelo queda en rec.pos, su piso en
-                    // rec.pos.y. El origen del GLB puede estar a cientos de unidades
-                    // del centro real (backrooms: 406x411 con origen en -190,-199).
-                    // P2P: si es puppet, rec.pos ya es la pos FINAL del host (con
-                    // offset) — no re-centrar.
+                    
                     let s = (rec.scale && rec.scale !== 1) ? rec.scale : 1;
                     if (rec.autoSize) {
-                        // escalar al mayor lado horizontal ≈ 80 bloques
+                        
                         const maxSide = Math.max(built.max[0] - built.min[0], built.max[2] - built.min[2]);
                         s = 80 / (maxSide || 1);
                     }
                     if (s !== 1) inst.root.scale.multiplyScalar(s);
-                    s = inst.root.scale.x; // escala uniforme final
+                    s = inst.root.scale.x; 
                     if (rec.puppet) {
                         inst.root.position.set(rec.pos.x, rec.pos.y, rec.pos.z);
                     } else {
-                        // pegar al suelo: el piso de la room se mete 1 bloque en
-                        // el terreno (borde inferior del GLB 1 bloque bajo la
-                        // superficie) para que no asomen rendijas del mundo real.
-                        // sink:false → piso EXACTO en la superficie (niveles
-                        // generados con piso plano en y=0)
+                        
                         let floorY = rec.pos.y;
                         try {
                             for (let dy = 0; dy < 8; dy++) {
                                 const solid = blockSolidAt(rec.pos.x, rec.pos.y - dy - 0.5, rec.pos.z);
                                 if (solid === true) { floorY = Math.floor(rec.pos.y - dy - 0.5) + 1; break; }
-                                if (solid === null) break; // chunk no cargado
+                                if (solid === null) break; 
                             }
                         } catch {}
-                        const sink = rec.sink === false ? 0 : 1; // sink:false → piso exacto en superficie
+                        const sink = rec.sink === false ? 0 : 1; 
                         inst.root.position.set(
                             rec.pos.x - built.center.x * s,
                             floorY - built.min[1] * s - sink,
                             rec.pos.z - built.center.z * s
                         );
                     }
-                    // AABB local para ocultar el terreno dentro (updateRoomTerrainHiding)
+                    
                     rec.terrBox = { min: built.min, max: built.max };
-                    // grid de colision para el player: AABBs por celda de 1 bloque
-                    // extraidos de las mallas del modelo (paredes/piso/techo)
+                    
                     if (!rec.puppet) {
                         try { buildRoomColliders(rec, built, s); } catch {}
                     }
@@ -280,7 +268,7 @@
                     rec.anim = null;
                 }
                 rec.animStart = performance.now();
-                // anim de aparicion (terror): reproducir una vez como override
+                
                 if (rec.spawnAnim) {
                     const an = findAnim(inst, rec.spawnAnim);
                     if (an) {
@@ -291,19 +279,18 @@
                         console.log(TAG + ' "' + id + '" aparece con "' + an + '"');
                     }
                 }
-                // posicion final (room ya seteo su Y alineada al piso arriba)
+                
                 if (!rec.room) inst.root.position.set(rec.pos.x, rec.pos.y, rec.pos.z);
                 disableCullingDeep(inst.root);
                 inst.root.matrixAutoUpdate = true;
                 scene.add(inst.root);
-                // las clases del juego auto-registran instancias en el rig de camara;
-                // purgar inmediatamente para que el "fantasma" ni asome
+                
                 setTimeout(() => { try { purgeUnderCam(); } catch {} }, 0);
                 setTimeout(() => { try { purgeUnderCam(); } catch {} }, 500);
                 const animInfo = inst.anims.length ? ' anims: ' + inst.anims.map((a) => a.name).join(', ') : '';
                 console.log(TAG + ' entidad client-side "' + id + '" spawneada' + (rec.anim ? ' animando "' + rec.anim + '"' : '') + animInfo);
             }).catch((e) => {
-                // mensaje accionable: que archivo fallo y por que
+                
                 const msg = String(e?.message || e);
                 const hint = /Failed to fetch/.test(msg)
                     ? ' (extension recargada? refresca la pagina de miniblox; o el archivo no existe en models/entities/)'
@@ -346,7 +333,7 @@
             if (!rec.inst.anims.some((a) => a.name === animName)) return false;
             const now = performance.now();
             const prev = rec.animOverride;
-            // si ya suena la misma anim y sigue vigente, extender sin reiniciar (loop suave)
+            
             if (prev && prev.name === animName && now < prev.until) {
                 prev.until = Math.max(prev.until, now + (+ms || 1500));
                 return true;
@@ -357,15 +344,14 @@
         despawn(id, force) {
             const rec = state.customs.get(id);
             if (!rec) return false;
-            // anim de despedida (terror): desvanecerse antes de desaparecer
-            // (force=true la mata al instante, para respawn sin overlap)
+            
             if (!force && rec.despawnAnim && rec.inst && !rec.dying && !rec.dead) {
                 const an = findAnim(rec.inst, rec.despawnAnim);
                 if (an) {
                     const anim = rec.inst.anims.find((a) => a.name === an);
                     const ms = Math.max(900, (anim?.duration || 1) * 1000);
                     rec.dying = true;
-                    rec.stay = true; // quieto mientras se despide
+                    rec.stay = true; 
                     rec.animOverride = { name: an, start: performance.now(), until: performance.now() + ms };
                     console.log(TAG + ' "' + id + '" se despide con "' + an + '"');
                     setTimeout(() => { if (state.customs.get(id) === rec) MF_CustomModels.despawn(id); }, ms);
@@ -375,7 +361,7 @@
             rec.dead = true;
             try { rec.root?.parent?.remove(rec.root); } catch {}
             state.customs.delete(id);
-            // si era room, su terreno oculto se restaura en el proximo tick
+            
             return true;
         },
         move(id, x, y, z, yaw) {
@@ -386,7 +372,7 @@
             if (rec.root) rec.root.position.set(rec.pos.x, rec.pos.y, rec.pos.z);
             return true;
         },
-        // congelar en el sitio / reanudar persecucion
+        
         stay(id, on = true) {
             const rec = state.customs.get(id);
             if (!rec) return false;
@@ -405,7 +391,7 @@
             console.log(TAG + ' entidades client-side: ' + JSON.stringify(out));
             return out;
         },
-        // record interno (para MF_Peer: leer transform de verity sin exponer todo)
+        
         getRecord(id) {
             const rec = state.customs.get(id);
             if (!rec || rec.dead) return null;
@@ -419,15 +405,12 @@
                 id: rec.id
             };
         },
-        // pos del otro jugador via P2P (multi-target): con esto, las entidades
-        // followPlayer persiguen al MAS CERCANO entre el player local y el peer
+        
         setPeerTarget(tag, pos) {
             state.peerTarget = pos ? { ...pos, at: performance.now() } : null;
             return true;
         },
-        // ---- P2P: modelos genericos compartidos (MF_Peer) ----
-        // snapshot de customs locales vivos (excluye puppets remotos y a
-        // verity, que tiene canal dedicado)
+        
         listLive() {
             const out = [];
             for (const rec of state.customs.values()) {
@@ -448,26 +431,24 @@
             }
             return out;
         },
-        // ¿puedo cargar este archivo localmente? (para saber si pedirlo por P2P)
+        
         async tryLoad(file) {
             try { await loadModel(file); return true; } catch { return false; }
         },
-        // bytes del .glb/.gltf/.obj para enviar al peer
+        
         async getGLBBytes(file) {
             if (!/\.(glb|gltf|obj)$/i.test(file)) throw new Error('solo archivos .glb/.gltf/.obj via P2P');
             return fetchModelArrayBuffer(file);
         },
-        // registrar un modelo (.glb/.gltf/.obj) recibido por red en el cache
+        
         registerModelBytes(file, arrayBuffer) {
             const p = (async () => {
                 let parsed;
                 if (/\.obj$/i.test(file)) {
-                    // OBJ via P2P: sin .mtl/texturas (se envian solo los bytes
-                    // del obj) → material por defecto
+                    
                     parsed = parseOBJ(new TextDecoder().decode(arrayBuffer), file, null);
                 } else if (/\.gltf$/i.test(file)) {
-                    // glTF via P2P: el JSON llega por red; .bin/texturas se
-                    // intentan resolver localmente (mismo paquete en ambos lados)
+                    
                     parsed = await resolveGLTFExternal(JSON.parse(new TextDecoder().decode(arrayBuffer)));
                 } else {
                     parsed = parseGLB(arrayBuffer);
@@ -501,15 +482,13 @@
             if (res) playIntro('verity', res);
             return res;
         },
-        // Caja de invocacion: spawnea en el suelo; click derecho encima la abre
-        // (sube/abre/encoge) y de ahi cae Verity del cielo.
-        // Guard: solo un listener y solo mientras exista la caja.
+        
         spawnIaBox(offset = 2, opts = {}) {
             const p = getGame()?.player?.pos;
             if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
             if (state.customs.has('verity')) MF_CustomModels.despawn('verity');
             if (state.customs.has('caja_intro')) MF_CustomModels.despawn('caja_intro');
-            // quitar listener previo si quedo vivo
+            
             if (state.iaBoxListener) {
                 document.removeEventListener('mousedown', state.iaBoxListener, true);
                 state.iaBoxListener = null;
@@ -520,15 +499,14 @@
                 id: boxId,
                 height: opts.boxHeight || 1.0,
                 bodyHalf: 0.56
-                // sin anim: quieta en el suelo, esperando el click
+                
             });
             let opened = false;
             const listener = (ev) => {
                 if (ev.button !== 2 || opened) return;
                 const rec = state.customs.get(boxId);
                 if (!rec || !rec.root) { cleanup(); return; }
-                // direccion de mirada: preferir la CAMARA (columna -Z de matrixWorld),
-                // fallback lookDirection / yaw+pitch
+                
                 const game = getGame();
                 const player = game?.player;
                 const origin = player?.pos;
@@ -539,7 +517,7 @@
                     const cam = game?.gameScene?.camera;
                     const e = cam?.matrixWorld?.elements;
                     if (e && e.length >= 16) {
-                        // en three.js la camara mira hacia -Z local; en world es -colZ
+                        
                         dx = -e[8]; dy = -e[9]; dz = -e[10];
                     } else throw 0;
                 } catch {
@@ -565,8 +543,8 @@
                 const perpSq = Math.max(0, dist * dist - along * along);
                 const r = Math.max(0.9, (rec.height || 1) * 0.8);
                 console.log(TAG + ' click: src=' + src + ' dist=' + dist.toFixed(2) + ' along=' + along.toFixed(2) + ' perp=' + Math.sqrt(perpSq).toFixed(2) + ' (r=' + r.toFixed(2) + ')');
-                if (along <= 0 || along > 5.5 || perpSq > r * r) return; // no apunta a la caja
-                // ¡click valido!
+                if (along <= 0 || along > 5.5 || perpSq > r * r) return; 
+                
                 opened = true;
                 ev.preventDefault?.();
                 cleanup();
@@ -581,7 +559,7 @@
                         id: 'verity',
                         height: opts.height || 0.85,
                         followPlayer: true,
-                        fallingSpawn: true, // caer recto sobre la caja, sin perseguir
+                        fallingSpawn: true, 
                         stopDistance: opts.stopDistance || offset,
                         autoAnim: true,
                         maxSpeed: opts.maxSpeed || 4.3,
@@ -614,27 +592,25 @@
             });
             return res;
         },
-        // Caballo de Minecraft (minecraft_-_horse.glb): spawnea en el suelo
-        // y persigue al jugador como Verity. Sin anims (el GLB no trae).
+        
         spawnHorse(offset = 2, opts = {}) {
             const p = getGame()?.player?.pos;
             if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
             if (state.customs.has('caballo')) MF_CustomModels.despawn('caballo');
             return MF_CustomModels.spawn('minecraft_-_horse.glb', p.x + offset, p.y, p.z, {
                 id: 'caballo',
-                height: opts.height || 1.6,      // un caballo mide ~1.6 bloques
+                height: opts.height || 1.6,      
                 bodyHalf: opts.bodyHalf || 0.7,
                 followPlayer: opts.followPlayer !== false,
                 stopDistance: opts.stopDistance != null ? opts.stopDistance : Math.max(1.5, offset),
-                maxSpeed: opts.maxSpeed || 5.6,  // los caballos corren mas que el jugador
+                maxSpeed: opts.maxSpeed || 5.6,  
                 loseDistance: opts.loseDistance != null ? opts.loseDistance : 12,
                 lostTimeMs: opts.lostTimeMs != null ? opts.lostTimeMs : 5000,
                 lookAtPlayer: true,
                 ...opts
             });
         },
-        // Maternal Wraith (oldest_maternal_wraith.glb): fantasma de terror.
-        // Flota (sin gravedad), te acecha despacio y SIEMPRE te mira.
+        
         spawnMaternal(offset = 4, opts = {}) {
             const p = getGame()?.player?.pos;
             if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
@@ -645,20 +621,19 @@
                 bodyHalf: opts.bodyHalf || 0.6,
                 followPlayer: opts.followPlayer !== false,
                 stopDistance: opts.stopDistance != null ? opts.stopDistance : 2.5,
-                maxSpeed: opts.maxSpeed || 2.2,   // lenta... pero constante
+                maxSpeed: opts.maxSpeed || 2.2,   
                 loseDistance: opts.loseDistance != null ? opts.loseDistance : 30,
                 lostTimeMs: opts.lostTimeMs != null ? opts.lostTimeMs : 8000,
                 lookAtPlayer: true,
                 autoAnim: true,
-                hover: true,                      // flota: sin gravedad
-                spawnAnim: 'up',                  // emerge al aparecer
-                catchAnim: 'spotted',             // te vio... de cerca
-                despawnAnim: 'despawn',           // se desvanece
+                hover: true,                      
+                spawnAnim: 'up',                  
+                catchAnim: 'spotted',             
+                despawnAnim: 'despawn',           
                 ...opts
             });
         },
-        // Stalker (stalker_3d_angry.glb): Weeping Angel. Corre hacia ti,
-        // pero se CONGELA cuando lo miras. Parpadea y ya esta mas cerca.
+        
         spawnStalker(offset = 12, opts = {}) {
             const p = getGame()?.player?.pos;
             if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
@@ -674,25 +649,23 @@
                 lostTimeMs: opts.lostTimeMs != null ? opts.lostTimeMs : 10000,
                 lookAtPlayer: true,
                 autoAnim: true,
-                weeping: true,   // se congela si lo miras
+                weeping: true,   
                 ...opts
             });
             return rec;
         },
         rescan
     };
-    // reproducir un sonido de assets/sounds/ (para comandos)
+    
     window.MF_CustomModels.playSound = (file, vol = 0.8) => playSoundUrl(file, vol);
     state.yawSign = 1;
 
-    // Reproduce el intro.ogg cuando aparece Verity, con la anim "talk"
-    // viva durante TODO el audio (keep-alive, igual que el TTS de VerityAI).
     async function playIntro(id, recId) {
         try {
             const url = await bridgeFetchUrl('intro.ogg', 'assets');
             const audio = new Audio(url);
             audio.volume = 0.9;
-            // anim talk extendida mientras suene el intro
+            
             MF_CustomModels.playAnim(recId, 'talk', 10000);
             const keeper = setInterval(() => {
                 const rec = state.customs.get(recId);
@@ -711,7 +684,6 @@
         }
     }
 
-    // Reproduce un .ogg de assets/sounds/ (silencioso si no existe)
     async function playSoundUrl(file, volume = 0.8) {
         try {
             const url = await bridgeFetchUrl(file, 'assets/sounds');
@@ -720,7 +692,7 @@
             await audio.play();
             return audio;
         } catch {
-            return null; // sonido opcional: no existe → silencio
+            return null; 
         }
     }
 
@@ -749,9 +721,6 @@
         return null;
     }
 
-    // red de seguridad: si algun objeto de CustomModels quedo colgado del rig de
-    // la camara (clase del juego con side-effects), lo remueve y avisa.
-    // Traverse profundo: el eco puede estar a varios niveles bajo la camara.
     function purgeUnderCam() {
         const cam = getGame()?.gameScene?.axesHelper?.parent;
         if (!cam) return;
@@ -760,7 +729,7 @@
             for (const c of [...(o.children || [])]) {
                 if (c?.userData?.__mfCM) {
                     try { o.remove(c); purged++; } catch {}
-                    continue; // sus hijos marcados ya no cuelgan de la camara
+                    continue; 
                 }
                 walk(c);
             }
@@ -776,10 +745,7 @@
             const arm = lf?.rightArm;
             if (!arm?.geometry?.attributes?.position) return null;
             const armMat = arm.material;
-            // OJO: el renderer del juego SOLO dibuja sus propias clases (traversal
-            // custom) — con clases vanilla de three.js el modelo queda INVISIBLE.
-            // Usamos las clases exactas del juego; el side-effect de auto-registro
-            // en el rig de la camara lo neutraliza purgeUnderCam().
+            
             state.ctors = {
                 Mesh: arm.constructor,
                 Group: lf.constructor,
@@ -817,12 +783,6 @@
         return { json, bin };
     }
 
-    // ─── .gltf (JSON) con .bin/imagenes EXTERNAS → {json, bin} ───
-    // El pipeline lee un UNICO bin (readAccessor/getTextureFor), asi que:
-    // 1) se cargan todos los buffers (archivos .bin junto al .gltf o data
-    //    URIs), se concatenan en uno y se remapean los bufferViews
-    // 2) las imagenes con uri externo se fetchean y se convierten a data URI
-    //    (getTextureFor ya soporta data URIs y bufferViews)
     function b64ToBytes(b64) {
         const raw = atob(b64);
         const out = new Uint8Array(raw.length);
@@ -830,10 +790,8 @@
         return out;
     }
 
-    // resuelve .bin/imagenes externos de un json glTF → {json, bin}
-    // (usado por parseGLTFModel y por modelos recibidos via P2P)
     async function resolveGLTFExternal(json, base) {
-        // 1) buffers → bin unico concatenado + bufferViews remapeados
+        
         const bufs = [];
         let total = 0;
         for (const b of json.buffers || []) {
@@ -841,7 +799,7 @@
             if (typeof b.uri === 'string' && b.uri.startsWith('data:')) {
                 bytes = b64ToBytes(b.uri.slice(b.uri.indexOf(',') + 1));
             } else if (typeof b.uri === 'string' && b.uri) {
-                // archivo junto al .gltf (basename: el puente no acepta rutas)
+                
                 const name = decodeURIComponent(b.uri.split('/').pop());
                 try { bytes = new Uint8Array(await fetchModelArrayBuffer(name)); } catch {}
             }
@@ -859,7 +817,6 @@
             bv.buffer = 0;
         }
 
-        // 2) imagenes externas → data URI
         const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
         for (const img of json.images || []) {
             if (typeof img.uri !== 'string' || img.uri.startsWith('data:')) continue;
@@ -873,10 +830,9 @@
                 const ext = (name.split('.').pop() || 'png').toLowerCase();
                 img.uri = 'data:' + (MIME[ext] || 'image/png') + ';base64,' + btoa(s);
                 img.mimeType = MIME[ext] || 'image/png';
-            } catch { /* sin textura: material cae a color plano */ }
+            } catch {  }
         }
 
-        // fallback del .bin por nombre base si ningun buffer resolvio
         if (!total && json.buffers?.length && base) {
             try {
                 const bytes = new Uint8Array(await fetchModelArrayBuffer(base + '.bin'));
@@ -1030,9 +986,7 @@
                 if ('alphaTest' in mat) mat.alphaTest = 0;
                 if ('transparent' in mat) mat.transparent = false;
                 if ('fog' in mat) mat.fog = false;
-                // CRITICO: el material del brazo 1a persona usa depthTest=false
-                // (para no ser cortado por el mundo). Sin forzar esto, TODOS los
-                // modelos custom se dibujan encima de todo = "pegados a la camara"
+                
                 if ('depthTest' in mat) mat.depthTest = true;
                 if ('depthWrite' in mat) mat.depthWrite = true;
                 if (mat.color?.set) mat.color.set(0xffffff);
@@ -1096,7 +1050,7 @@
     async function buildScene(parsed, ctors, fallbackMat) {
         const { json: gltf } = parsed;
         const root = new ctors.Group();
-        // marca de agua tambien en los originales (el cache los conserva vivos)
+        
         try { (root.userData = root.userData || {}).__mfCM = true; } catch {}
         const groups = new Map();
         const min = [Infinity, Infinity, Infinity];
@@ -1112,11 +1066,7 @@
             if (node.matrix) {
                 const m = node.matrix;
                 try {
-                    // descomponer TRS completo: la matriz puede mezclar
-                    // rotacion+escala (p.ej. Sketchfab: Z-up→Y-up * 1.25).
-                    // Extraer el quaternion a mano con escala mezclada da una
-                    // rotacion corrupta = modelo inclinado, y la escala se
-                    // perdia = modelo mas chico que sus bounds.
+                    
                     g.matrix.fromArray(m);
                     g.matrix.decompose(g.position, g.quaternion, g.scale);
                 } catch {
@@ -1191,17 +1141,13 @@
 
     async function fetchModelArrayBuffer(file) {
         if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
-            // cache:'reload' → forzar revalidacion: tras actualizar archivos de
-            // la extension, el cache HTTP puede servir un .glb VIEJO (p.ej. el
-            // /room mostrando el modelo generado del port en vez del original)
+            
             const url = chrome.runtime.getURL('models/entities/' + file);
             let resp;
             try {
                 resp = await fetch(url, { cache: 'reload' });
             } catch (e) {
-                // fetch a chrome-extension:// lanza TypeError (Failed to fetch)
-                // si el archivo NO existe (o la extension fue recargada y esta
-                // URL murio). Distinguirlo del resto de errores:
+                
                 throw new Error('no se encontro "' + file + '" en models/entities/ (fetch ' + (e?.message || e) + ')');
             }
             if (!resp.ok) throw new Error('HTTP ' + resp.status + ' para ' + file);
@@ -1218,10 +1164,6 @@
         return resp.arrayBuffer();
     }
 
-    // ─── Bedrock .geo.json → pseudo-GLTF (cajas/entidades estilo MCPE) ──
-    // Convierte bones/cubes con UV de caja Bedrock a la misma forma que
-    // produce parseGLB, para que buildScene/cloneInstance funcionen igual.
-    // 1 unidad Bedrock = 1 pixel = 1/16 bloque.
     let geoImageSeq = 1000;
 
     function parseBedrockGeo(json, texUri) {
@@ -1253,8 +1195,6 @@
             return accessors.length - 1;
         }
 
-        // UV de caja Bedrock: norte (u+d,v+d,w,h), sur (u+2d+w,...), este,
-        // oeste, up, down. Cubos con una dimension 0 = plano (una sola cara).
         function faceQuads(cube) {
             const [ox, oy, oz] = cube.origin;
             const [sx, sy, sz] = cube.size;
@@ -1275,12 +1215,12 @@
                 F([minX, maxY, minZ], [minX, minY, minZ], [minX, minY, maxZ], [minX, maxY, maxZ], [u, v + d, d, h], [-1, 0, 0]);
                 return quads;
             }
-            F([maxX, maxY, minZ], [maxX, minY, minZ], [minX, minY, minZ], [minX, maxY, minZ], [u + d, v + d, w, h], [0, 0, -1]); // norte
-            F([minX, maxY, maxZ], [minX, minY, maxZ], [maxX, minY, maxZ], [maxX, maxY, maxZ], [u + 2 * d + w, v + d, w, h], [0, 0, 1]); // sur
-            F([maxX, maxY, maxZ], [maxX, minY, maxZ], [maxX, minY, minZ], [maxX, maxY, minZ], [u + d + w, v + d, d, h], [1, 0, 0]); // este
-            F([minX, maxY, minZ], [minX, minY, minZ], [minX, minY, maxZ], [minX, maxY, maxZ], [u, v + d, d, h], [-1, 0, 0]); // oeste
-            F([minX, maxY, minZ], [minX, maxY, maxZ], [maxX, maxY, maxZ], [maxX, maxY, minZ], [u + d, v, w, d], [0, 1, 0]); // arriba
-            F([maxX, minY, minZ], [maxX, minY, maxZ], [minX, minY, maxZ], [minX, minY, minZ], [u + d + w, v, w, d], [0, -1, 0]); // abajo
+            F([maxX, maxY, minZ], [maxX, minY, minZ], [minX, minY, minZ], [minX, maxY, minZ], [u + d, v + d, w, h], [0, 0, -1]); 
+            F([minX, maxY, maxZ], [minX, minY, maxZ], [maxX, minY, maxZ], [maxX, maxY, maxZ], [u + 2 * d + w, v + d, w, h], [0, 0, 1]); 
+            F([maxX, maxY, maxZ], [maxX, minY, maxZ], [maxX, minY, minZ], [maxX, maxY, minZ], [u + d + w, v + d, d, h], [1, 0, 0]); 
+            F([minX, maxY, minZ], [minX, minY, minZ], [minX, minY, maxZ], [minX, maxY, maxZ], [u, v + d, d, h], [-1, 0, 0]); 
+            F([minX, maxY, minZ], [minX, maxY, maxZ], [maxX, maxY, maxZ], [maxX, maxY, minZ], [u + d, v, w, d], [0, 1, 0]); 
+            F([maxX, minY, minZ], [maxX, minY, maxZ], [minX, minY, maxZ], [minX, minY, minZ], [u + d + w, v, w, d], [0, -1, 0]); 
             return quads;
         }
 
@@ -1343,7 +1283,6 @@
             } else roots.push(i);
         }
 
-        // indice de imagen unico (evita colisionar el cache de texturas con GLBs)
         const imgIdx = geoImageSeq++;
         const images = [];
         images[imgIdx] = { uri: texUri, mimeType: 'image/png' };
@@ -1382,7 +1321,7 @@
         let s = '';
         for (let i = 0; i < texBytes.length; i += 0x8000) s += String.fromCharCode.apply(null, texBytes.subarray(i, i + 0x8000));
         const parsed = parseBedrockGeo(json, 'data:image/png;base64,' + btoa(s));
-        // Animaciones Bedrock: mismo nombre base + .animation.json (opcional)
+        
         const animFile = file.replace(/\.geo\.json$/i, '') + '.animation.json';
         try {
             const animJson = JSON.parse(new TextDecoder().decode(await fetchModelArrayBuffer(animFile)));
@@ -1394,21 +1333,11 @@
         return parsed;
     }
 
-    // ─── Wavefront .obj → pseudo-GLTF ───
-    // Mismo patrón que parseBedrockGeo: se emite glTF JSON con accessors en
-    // un bin propio, para que buildScene/cloneInstance funcionen igual.
-    // - Grupos "o"/"g" → un nodo glTF cada uno (jerarquia plana).
-    // - "usemtl" + .mtl (map_Kd) → textura por material; la imagen se
-    //   resuelve a base64 en parseOBJModel (buscada junto al .obj).
-    // - Coordenadas: OBJ y GLB usan Y-up; Blockbench exporta OBJ con
-    //   1 unidad = 1 bloque → SIN escala (igual que un GLB exportado).
-    // - UV: OBJ tiene origen abajo-izquierda, la textura se crea con
-    //   flipY=false (glTF) → v_glTF = 1 - v_obj.
     function parseOBJ(text, file, mtlMap) {
         const verts = [];
         const uvs = [];
         const norms = [];
-        const groups = [];          // { name, mat, pos:[], uv:[], nor:[], idx:[] }
+        const groups = [];          
         let cur = null;
 
         function newGroup(name) {
@@ -1451,7 +1380,7 @@
                     break;
                 case 'f': {
                     if (!cur) newGroup('default');
-                    // f v/vt/vn v/vt/vn ... (indices 1-based; negativos = desde el final)
+                    
                     const corners = rest.split(/\s+/);
                     const base = cur.pos.length / 3;
                     const nv = verts.length / 3, nt = uvs.length / 2, nn = norms.length / 3;
@@ -1466,12 +1395,12 @@
                         if (ni < 0) ni = nn + ni + 1;
                         const vOff = (vi - 1) * 3, tOff = (ti - 1) * 2, nOff = (ni - 1) * 3;
                         cur.pos.push(verts[vOff] || 0, verts[vOff + 1] || 0, verts[vOff + 2] || 0);
-                        if (ti > 0) cur.uv.push(uvs[tOff], 1 - uvs[tOff + 1]); // flip v
+                        if (ti > 0) cur.uv.push(uvs[tOff], 1 - uvs[tOff + 1]); 
                         else cur.uv.push(0, 0);
                         if (ni > 0) cur.nor.push(norms[nOff], norms[nOff + 1], norms[nOff + 2]);
                         else cur.nor.push(0, 0, 0);
                     }
-                    // fan triangulacion
+                    
                     for (let i = 1; i + 1 < corners.length; i++) {
                         cur.idx.push(base, base + i, base + i + 1);
                     }
@@ -1480,13 +1409,9 @@
             }
         }
 
-        // grupos sin caras se descartan
         const solid = groups.filter((g) => g.idx.length);
         if (!solid.length) throw new Error('OBJ sin caras (f)');
 
-        // materiales: agrupar por usemtl → material glTF; textura del .mtl
-        // (map_Kd, ya resuelta a base64 por parseOBJModel). Material i usa
-        // texture i (indices paralelos cuando hay textura).
         const matNames = new Set(solid.map((g) => g.mat).filter(Boolean));
         const materials = [];
         const textures = [];
@@ -1505,7 +1430,6 @@
             matIndex.set(mn, mi);
         }
 
-        // accessors + bin
         const bufferViews = [];
         const accessors = [];
         const chunks = [];
@@ -1570,7 +1494,6 @@
         };
     }
 
-    // parsea un .mtl: usemtl → { map: base64png | null, kd: [r,g,b] }
     function parseMTL(text) {
         const map = new Map();
         let cur = null;
@@ -1584,7 +1507,7 @@
                 cur = { map: null, kd: null };
                 map.set(rest, cur);
             } else if (cur && kw === 'map_Kd') {
-                cur.map = rest.split(/\s+/).pop(); // nombre del archivo de imagen
+                cur.map = rest.split(/\s+/).pop(); 
             } else if (cur && kw === 'Kd') {
                 const c = rest.split(/\s+/).map(Number);
                 if (c.length >= 3) cur.kd = [c[0], c[1], c[2], 1];
@@ -1596,9 +1519,7 @@
     async function parseOBJModel(file) {
         const text = new TextDecoder().decode(await fetchModelArrayBuffer(file));
         const base = file.replace(/\.obj$/i, '');
-        // .mtl opcional (mtllib en el OBJ); texto plano junto al .obj.
-        // fallback: <base>.mtl (el mtllib puede quedar viejo tras renombrar
-        // el .obj, p.ej. "idk XD.mtl" vs idkXD.obj)
+        
         let mtlMap = null;
         {
             const mtlName = (text.match(/^\s*mtllib\s+(.+)$/m) || [])[1];
@@ -1610,11 +1531,10 @@
                     const mtlText = new TextDecoder().decode(await fetchModelArrayBuffer(cand));
                     mtlMap = parseMTL(mtlText);
                     break;
-                } catch { /* siguiente candidato */ }
+                } catch {  }
             }
         }
-        // resolver texturas de los materiales: <base>.png junto al .obj
-        // (Blockbench exporta la textura con el nombre del modelo)
+        
         if (mtlMap) {
             for (const m of mtlMap.values()) {
                 if (m.map) {
@@ -1636,17 +1556,13 @@
         return parsed;
     }
 
-    // ─── Animaciones Bedrock (.animation.json) → tracks glTF ───
-    // Bedrock rota en GRADOS con pitch/roll de signo invertido a three.js
-    // (yaw igual; verificado con las tapas de la caja: sin invertir Z se
-    // clavan a traves de la caja en "open"). Positions en px → ×1/16.
     function deg2quat(x, y, z) {
         const d = Math.PI / 180;
         const hx = -x * d / 2, hy = y * d / 2, hz = -z * d / 2;
         const cx = Math.cos(hx), sx = Math.sin(hx);
         const cy = Math.cos(hy), sy = Math.sin(hy);
         const cz = Math.cos(hz), sz = Math.sin(hz);
-        // Euler XYZ → quaternion
+        
         const w = cx * cy * cz + sx * sy * sz;
         const qx = sx * cy * cz - cx * sy * sz;
         const qy = cx * sy * cz + sx * cy * sz;
@@ -1661,7 +1577,6 @@
         easeInOutSine: (u) => -(Math.cos(Math.PI * u) - 1) / 2
     };
 
-    // nodeIdxOf: Map boneName → indice de nodo; nodes: array glTF (rest pose)
     function bedrockAnimToTracks(animJson, nodeIdxOf, nodes) {
         const anims = [];
         const S = 1 / 16;
@@ -1675,7 +1590,7 @@
                 for (const path of ['position', 'rotation', 'scale']) {
                     const chan = channels[path];
                     if (!chan) continue;
-                    // iterar con la clave ORIGINAL: Number→String rompe "1.0"→"1"
+                    
                     const entries = Object.entries(chan)
                         .map(([k, kf]) => ({ ts: +k, kf }))
                         .filter((e) => Number.isFinite(e.ts))
@@ -1687,11 +1602,11 @@
                         eases.push(kf?.easing || 'linear');
                         if (path === 'rotation') values.push(...deg2quat(vec[0], vec[1], vec[2]));
                         else if (path === 'scale') values.push(vec[0], vec[1], vec[2]);
-                        // Bedrock ANADE a la pose rest; glTF la reemplaza → sumar rest
+                        
                         else values.push(rest[0] + vec[0] * S, rest[1] + vec[1] * S, rest[2] + vec[2] * S);
                     }
                     if (times.length > 1) {
-                        // path glTF: 'position' bedrock == 'translation' en el sampler
+                        
                         tracks.push({ nodeIdx, path: path === 'position' ? 'translation' : path, times, values, eases, interp: 'LINEAR', comps: path === 'rotation' ? 4 : 3 });
                         if (times[times.length - 1] > duration) duration = times[times.length - 1];
                     }
@@ -1769,7 +1684,7 @@
         const { json: gltf } = parsed;
         const anims = [];
         for (const a of gltf.animations || []) {
-            // ya convertidas (bedrockAnimToTracks) → passthrough directo
+            
             if (Array.isArray(a.tracks)) { anims.push(a); continue; }
             const tracks = [];
             let duration = 0;
@@ -1814,7 +1729,7 @@
             for (const k of orig.children) c.add(cp(k));
             return c;
         })(built.root);
-        // marca de agua: identificar todo lo creado por CustomModels
+        
         try {
             root2.userData = root2.userData || {};
             root2.userData.__mfCM = true;
@@ -1825,7 +1740,7 @@
             const n = map.get(g);
             if (n) groups.set(idx, n);
         }
-        // buscar el grupo de la cabeza por nombre (head/cabeza/face) para el pitch
+        
         let headNode = null;
         try {
             root2.traverse((o) => {
@@ -1855,7 +1770,7 @@
         const anim = inst.anims.find((a) => a.name === animName);
         if (!anim) return false;
         if (anim.duration > 0) {
-            // hold_on_last_frame: congela al final en vez de loopear
+            
             if (anim.holdOnLast && t > anim.duration) t = anim.duration - 0.0001;
             else t = t % anim.duration;
         } else t = 0;
@@ -1871,7 +1786,7 @@
             let u = t1 > t0 ? (t - t0) / (t1 - t0) : 0;
             if (u < 0) u = 0; if (u > 1) u = 1;
             if (tr.interp === 'STEP') u = 0;
-            // easing del keyframe DESTINO (eases[i+2]; eases[0] es padding)
+            
             if (tr.eases && !last) {
                 const fn = EASINGS[tr.eases[i + 2]] || EASINGS.linear;
                 u = fn(u);
@@ -1970,7 +1885,7 @@
             root.scale.multiplyScalar(s);
             root.position.y = -built.minY * root.scale.y;
             mesh.add(root);
-            // purgar el eco en el rig de camara inmediatamente
+            
             setTimeout(() => { try { purgeUnderCam(); } catch {} }, 0);
             setTimeout(() => { try { purgeUnderCam(); } catch {} }, 500);
 
@@ -2016,14 +1931,10 @@
         if (!myStamp.alive) return;
         if (!state.enabled && Object.keys(state.mappings).length === 0) return;
         try { rescan(); } catch {}
-        // red de seguridad: nada creado por CustomModels debe vivir bajo la camara
+        
         try { purgeUnderCam(); } catch {}
     }, 2000);
 
-    // ── Anti-instancia-zombi ──
-    // Recargar la extension sin F5 deja el script MAIN viejo corriendo:
-    // materiales depthTest=false, mapeos en memoria, tick duplicado.
-    // Solo una instancia puede ser la activa; las viejas se apagan solas.
     const myStamp = { alive: true };
     try {
         const prev = window.__MF_CustomModels_Active;
@@ -2071,10 +1982,6 @@
         }
     }
 
-    // ---- room: ocultar el terreno del juego dentro del volumen de la room ----
-    // Las rooms son interiores GLB: si el terreno del mundo asoma dentro, se
-    // ven fragmentos raros mezclados. Esto oculta los chunk-meshes cuyo AABB
-    // intersecta el volumen de la room y los restaura al despawnear.
     function restoreHiddenChunks() {
         for (const m of state.hiddenChunks || []) {
             try { m.visible = true; } catch {}
@@ -2082,12 +1989,8 @@
         state.hiddenChunks = [];
     }
 
-    // ---- room: colisiones del player contra las paredes del GLB ----
-    // Se extraen AABBs (celdas de 1 bloque) de las mallas del modelo y se
-    // guardan en un grid espacial. Cada frame, si el player se mete dentro
-    // de un AABB, se le empuja fuera (resolucion por eje minimo).
     function buildRoomColliders(rec, built, s) {
-        const cells = new Map(); // "x,y,z" -> true
+        const cells = new Map(); 
         const root = rec.root;
         root.updateMatrixWorld(true);
         const v = new (Object.getPrototypeOf(root.position).constructor)();
@@ -2097,15 +2000,12 @@
             const pos = o.geometry.attributes?.position;
             const nor = o.geometry.attributes?.normal;
             if (!pos?.array) return;
-            // voxelize tosca: por cada N vertices, la celda del bloque.
-            // SKIP de superficies horizontales hacia arriba (piso/techo):
-            // el player camina sobre el terreno real — el piso del GLB es
-            // visual, no debe generar un bloque fantasma que lo empuje.
+            
             const stride = Math.max(3, Math.floor(pos.count / 4000) * 3);
             for (let i = 0; i < pos.array.length; i += stride) {
                 if (nor?.array) {
                     const ny = nor.array[i + 1];
-                    if (ny > 0.5) continue; // cara superior (piso): sin colision
+                    if (ny > 0.5) continue; 
                 }
                 v.set(pos.array[i], pos.array[i + 1], pos.array[i + 2]);
                 o.localToWorld(v);
@@ -2122,29 +2022,29 @@
         if (!rec.roomCells?.size) return;
         const p = getGame()?.player?.pos;
         if (!p) return;
-        const HALF = 0.3;  // radio del player
-        const EYE = 1.62;  // altura de ojos (colision hasta la cabeza)
-        const FEET = 0.05; // margen para no chocar con el piso
-        // AABB del player: pies a cabeza
+        const HALF = 0.3;  
+        const EYE = 1.62;  
+        const FEET = 0.05; 
+        
         const px0 = p.x - HALF, px1 = p.x + HALF;
         const py0 = p.y - EYE + FEET, py1 = p.y + 0.1;
         const pz0 = p.z - HALF, pz1 = p.z + HALF;
-        // revisar celdas cercanas (3x5x3 alrededor)
+        
         let pushX = 0, pushY = 0, pushZ = 0;
         let hit = false;
         const cx = Math.floor(p.x), cy = Math.floor(p.y - EYE / 2), cz = Math.floor(p.z);
         for (let dx = -1; dx <= 1; dx++) for (let dy = -3; dy <= 3; dy++) for (let dz = -1; dz <= 1; dz++) {
             if (!rec.roomCells.has((cx + dx) + ',' + (cy + dy) + ',' + (cz + dz))) continue;
             const bx0 = cx + dx, bx1 = bx0 + 1, by0 = cy + dy, by1 = by0 + 1, bz0 = cz + dz, bz1 = bz0 + 1;
-            // solapamiento AABB
+            
             const ox = Math.min(px1, bx1) - Math.max(px0, bx0);
             const oy = Math.min(py1, by1) - Math.max(py0, by0);
             const oz = Math.min(pz1, bz1) - Math.max(pz0, bz0);
             if (ox <= 0 || oy <= 0 || oz <= 0) continue;
             hit = true;
-            // resolver por el eje de menor penetracion
+            
             if (oy <= ox && oy <= oz) {
-                pushY = (py0 + py1) / 2 < (by0 + by1) / 2 ? oy : -oy; // empujar hacia abajo si el bloque esta arriba
+                pushY = (py0 + py1) / 2 < (by0 + by1) / 2 ? oy : -oy; 
             } else if (ox <= oz) {
                 pushX = p.x < (bx0 + bx1) / 2 ? -ox : ox;
             } else {
@@ -2152,10 +2052,10 @@
             }
         }
         if (hit) {
-            // aplicar push-out directo a la posicion del player
+            
             try {
                 p.x += pushX; p.y += pushY; p.z += pushZ;
-                // cancelar velocidad del juego en el eje empujado
+                
                 const vel = getGame()?.player?.vel;
                 if (vel) {
                     if (pushX) vel.x = 0;
@@ -2174,7 +2074,7 @@
         }
         const chunkRoot = getGame()?.gameScene?.chunkMeshes;
         if (!chunkRoot) return;
-        // AABB de cada room en mundo
+        
         const boxes = rooms.map((r) => {
             const p = r.root.position, s = r.root.scale.x || 1;
             const rec2 = r.terrBox;
@@ -2193,7 +2093,7 @@
         try {
             chunkRoot.traverse((o) => {
                 if (!o?.isMesh || !o.geometry) return;
-                // AABB del chunk-mesh en mundo
+                
                 const bb = o.geometry.boundingBox || (o.geometry.boundingBox = (() => {
                     try { o.geometry.computeBoundingBox(); return o.geometry.boundingBox; } catch { return null; }
                 })());
@@ -2207,13 +2107,12 @@
                         return;
                     }
                 }
-                // ya no intersecta: restaurar si estaba oculto
+                
                 if (hidden.has(o)) { hidden.delete(o); o.visible = true; changed = true; }
             });
         } catch {}
         state.hiddenChunks = [...hidden];
-        // si cambió el conjunto, guardar referencias (débiles: el GC de chunks del
-        // juego recrea meshes; un mesh restaurado puede morir sin avisar)
+        
     }
 
     function blockSolidAt(x, y, z) {
@@ -2247,8 +2146,6 @@
         return false;
     }
 
-    // ¿el jugador esta mirando a la entidad? (dot de mirada de camara vs dir a la entidad)
-    // busca una anim por nombre exacto o sufijo ("run" → "animation.stalker.run")
     function findAnim(inst, wanted) {
         if (!inst?.anims?.length || !wanted) return null;
         for (const a of inst.anims) if (a.name === wanted) return a.name;
@@ -2266,12 +2163,12 @@
             const cam = getGame()?.gameScene?.camera;
             if (!cam?.matrixWorld) return false;
             const e = cam.matrixWorld.elements;
-            // -Z de la camara = hacia donde miras
+            
             const fx = -e[8], fy = -e[9], fz = -e[10];
             const root = rec.root;
             const cx = root.position.x, cy = root.position.y + (rec.height || 1) * 0.6, cz = root.position.z;
             const p = getGame()?.player?.pos;
-            const ox = p.x, oy = p.y + 1.6, oz = p.z; // ojos del player
+            const ox = p.x, oy = p.y + 1.6, oz = p.z; 
             let dx = cx - ox, dy = cy - oy, dz = cz - oz;
             const d = Math.hypot(dx, dy, dz);
             if (d < 1e-4) return true;
@@ -2282,8 +2179,6 @@
         }
     }
 
-    // posiciones de jugadores reales cercanos (para colision): entidad de cada
-    // jugador del server (patron HealthNameTags) + peer P2P + player local
     function getPlayerBodies(rec) {
         const bodies = [];
         const r = rec.bodyHalf || 0.21;
@@ -2295,12 +2190,12 @@
                 for (const e of ents.values()) {
                     if (!e?.pos || !e?.profile?.username) continue;
                     const d = Math.hypot(e.pos.x - root.position.x, e.pos.z - root.position.z);
-                    if (d > 8) continue; // solo cercanos (perf)
+                    if (d > 8) continue; 
                     bodies.push({ x: e.pos.x, y: e.pos.y, z: e.pos.z, half: 0.3, height: 1.8, name: e.profile.username });
                 }
             }
         } catch {}
-        // peer P2P
+        
         const pt = state.peerTarget;
         if (pt && performance.now() - pt.at < 3000) {
             bodies.push({ x: pt.x, y: pt.y, z: pt.z, half: 0.3, height: 1.8, name: 'peer' });
@@ -2308,16 +2203,15 @@
         return bodies;
     }
 
-    // colision AABB entidad ↔ cuerpo de jugador (empuje en XZ, bloqueo de paso)
     function resolvePlayerCollisions(rec, wantX, wantZ) {
         const root = rec.root;
         const myHalf = rec.bodyHalf || 0.21;
         const myY0 = root.position.y, myY1 = root.position.y + (rec.height || 0.85);
         let blockedX = false, blockedZ = false;
         for (const b of getPlayerBodies(rec)) {
-            // solape vertical?
+            
             if (b.y + b.height <= myY0 + 0.05 || b.y >= myY1 - 0.05) continue;
-            // ¿estaria solapando en X tras moverse en X?
+            
             if (wantX !== 0) {
                 const nx = root.position.x + wantX;
                 const overlapX = Math.abs(nx - b.x) < (myHalf + b.half);
@@ -2336,24 +2230,23 @@
 
     function physicsStep(rec, dt, wantX, wantZ) {
         const root = rec.root;
-        // colision con cuerpos de jugadores: si el paso caeria dentro de un
-        // jugador cercano, cancelar ese eje (la entidad no atraviesa gente)
+        
         if (!rec.puppet && (wantX !== 0 || wantZ !== 0)) {
             const { blockedX, blockedZ } = resolvePlayerCollisions(rec, wantX, wantZ);
             if (blockedX) wantX = 0;
             if (blockedZ) wantZ = 0;
         }
-        // hover: flota — sin gravedad ni colision, movimiento directo
+        
         if (rec.hover) {
             let moved = false;
             if (Math.abs(wantX) > 1e-9) { root.position.x += wantX; moved = true; }
             if (Math.abs(wantZ) > 1e-9) { root.position.z += wantZ; moved = true; }
-            // mantener la altura objetivo (flota ~1 bloque sobre el suelo, si hay)
+            
             const half = rec.bodyHalf || 0.21;
             const targetY = rec.hoverY != null ? rec.hoverY : root.position.y;
             const c = boxCollides(root.position.x, targetY - 0.5, root.position.z, half, 0.5);
             if (c === true) {
-                // sube suave hasta salir del suelo
+                
                 root.position.y += 2 * dt;
             } else {
                 root.position.y += (targetY - root.position.y) * Math.min(1, dt * 2);
@@ -2407,12 +2300,9 @@
         return moved;
     }
 
-    // objetivo multi-jugador: si hay peer P2P activo, elegir al MAS CERCANO
-    // entre el player local y el peer. Devuelve { x,y,z, peer:bool } y setea
-    // rec._targetPeer para que la mirada sepa a quien mirar.
     function getTargetPos(rec, p) {
         const pt = state.peerTarget;
-        // peer valido solo si es fresco (< 3s) — si se fue, ignorarlo
+        
         if (!pt || performance.now() - pt.at > 3000) {
             rec._targetPeer = false;
             return p;
@@ -2420,7 +2310,7 @@
         const root = rec.root;
         const dLocal = Math.hypot(p.x - root.position.x, p.z - root.position.z);
         const dPeer = Math.hypot(pt.x - root.position.x, pt.z - root.position.z);
-        if (dPeer < dLocal * 0.9) { // histéresis: el peer debe ser claramente más cerca
+        if (dPeer < dLocal * 0.9) { 
             rec._targetPeer = true;
             return pt;
         }
@@ -2430,11 +2320,10 @@
 
     function followTick(rec, dt, t) {
         const root = rec.root;
-        if (rec.room) return; // habitacion: estatica, no la toca ni la fisica ni la IA
-        if (rec.puppet) return; // marioneta P2P: la mueve la red (MF_Peer), no la IA local
+        if (rec.room) return; 
+        if (rec.puppet) return; 
         if (!rec.followPlayer || rec.stay) {
-            // entidad estatica (o en modo "stay"): solo gravedad, para asentarse
-            // en el suelo. "stay" congela la persecucion pero NO despawnea.
+            
             physicsStep(rec, dt, 0, 0);
             rec.actuallyMoving = false;
             return;
@@ -2443,12 +2332,10 @@
         if (!local) return;
         const p = getTargetPos(rec, local);
         const distToPlayer = Math.hypot(p.x - root.position.x, p.y - root.position.y, p.z - root.position.z);
-        // modo persistente: si te alejas demasiado NO desaparece; se queda
-        // esperando en su pos actual (los chunks descargados congelan la fisica
-        // solos via boxCollides→null) y reaparece al volver / recargar chunks
+        
         if (rec.persist !== false && rec.loseDistance > 0 && distToPlayer > rec.loseDistance * 4) {
             if (rec.smooth === false) {
-                // solo el modo teleport directo se recupera asi (cambio de mundo)
+                
                 root.position.set(p.x, p.y, p.z);
                 rec.vy = 0;
                 console.log(TAG + ' "' + rec.id + '" teleportada a tu lado (cambio de mundo?)');
@@ -2457,7 +2344,7 @@
                     rec.waitingFar = true;
                     console.log(TAG + ' "' + rec.id + '" esperando en (' + root.position.x.toFixed(1) + ', ' + root.position.y.toFixed(1) + ', ' + root.position.z.toFixed(1) + ') hasta que vuelvas');
                 }
-                physicsStep(rec, dt, 0, 0); // gravedad si el terreno lo permite
+                physicsStep(rec, dt, 0, 0); 
                 rec.actuallyMoving = false;
                 return;
             }
@@ -2476,7 +2363,7 @@
                     console.log(TAG + ' "' + rec.id + '" desaparecio tras perderte.');
                     return false;
                 }
-                // persistente: se queda esperando, no despawnea
+                
                 return;
             }
         } else if (rec.lost) {
@@ -2485,11 +2372,11 @@
         }
         const stopDist = rec.stopDistance || 1.8;
         let movingThisTick = false;
-        // weeping (Weeping Angel): si lo estas mirando, se congela
+        
         if (rec.weeping && isPlayerLookingAt(rec, 0.86)) {
             rec.frozen = true;
             rec.actuallyMoving = false;
-            return; // ni fisica: estatua total
+            return; 
         }
         if (rec.frozen) {
             rec.frozen = false;
@@ -2499,12 +2386,11 @@
             root.position.set(p.x, p.y, p.z);
             movingThisTick = true;
         } else if (rec.fallingSpawn && rec.onGround === false) {
-            // spawn aereo: caer RECTO (solo gravedad) hasta aterrizar; sin esto
-            // la persecucion horizontal la arrastra hasta el player mientras cae
+            
             physicsStep(rec, dt, 0, 0);
             movingThisTick = false;
         } else if (rec.fallingSpawn && rec.onGround !== false) {
-            rec.fallingSpawn = false; // aterrizo: comportamiento normal desde ya
+            rec.fallingSpawn = false; 
             physicsStep(rec, dt, 0, 0);
         } else if (distToPlayer > stopDist) {
             const speed = rec.maxSpeed > 0 ? rec.maxSpeed : 4.3;
@@ -2512,18 +2398,17 @@
             let dz = p.z - root.position.z;
             const dy = p.y - root.position.y;
             const distH = Math.hypot(dx, dz);
-            // esquivar jugadores en el camino (steering): si un cuerpo esta en
-            // la linea al objetivo, deslizar el rumbo perpendicular alrededor
+            
             if (!rec.puppet && distH > 1e-4) {
-                const ux = dx / distH, uz = dz / distH; // rumbo unitario
+                const ux = dx / distH, uz = dz / distH; 
                 for (const b of getPlayerBodies(rec)) {
                     const bx = b.x - root.position.x, bz = b.z - root.position.z;
-                    const along = bx * ux + bz * uz;          // distancia al objetivo por delante
-                    if (along <= 0 || along > distH) continue; // fuera de la linea
-                    const side = bx * -uz + bz * ux;           // desvio lateral
+                    const along = bx * ux + bz * uz;          
+                    if (along <= 0 || along > distH) continue; 
+                    const side = bx * -uz + bz * ux;           
                     const clear = (rec.bodyHalf || 0.21) + b.half + 0.1;
                     if (Math.abs(side) < clear) {
-                        // empujar el rumbo hacia el lado con mas espacio
+                        
                         const push = (clear - Math.abs(side)) + 0.3;
                         const s = side >= 0 ? 1 : -1;
                         dx = dx + (-uz) * s * push * 2;
@@ -2560,7 +2445,7 @@
         let dt = Math.min(0.1, (t - (state.lastTickT || t)) / 1000);
         state.lastTickT = t;
         try { updateRoomTerrainHiding(); } catch {}
-        // colision player contra paredes de rooms locales (puppets P2P no)
+        
         for (const rec of state.customs.values()) {
             if (rec.room && !rec.dead && !rec.puppet && rec.roomCells?.size) {
                 try { roomCollidePlayer(rec); } catch {}
@@ -2606,13 +2491,12 @@
                         } else if (moving && stable) {
                             want = findAnim(rec.inst, 'walk') || findAnim(rec.inst, 'run') || rec.anim || findAnim(rec.inst, 'idle');
                         } else if (moving && !stable) {
-                            // transicion: mantener la anim actual si ya corre
+                            
                             want = (rec.curAnim && findAnim(rec.inst, rec.curAnim) ? rec.curAnim : (findAnim(rec.inst, 'run') || findAnim(rec.inst, 'walk')));
                         } else {
                             want = rec.anim || findAnim(rec.inst, 'idle') || findAnim(rec.inst, 'calm');
                         }
-                        // catchAnim (terror): al llegar por primera vez a distancia
-                        // de contacto, reproducir la anim de "te atrape" una vez
+                        
                         if (rec.catchAnim && !rec.caught && !(rec.animOverride && t < rec.animOverride.until)) {
                             const pp2 = getGame()?.player?.pos;
                             const distNow = pp2 ? Math.hypot(pp2.x - root.position.x, pp2.z - root.position.z) : Infinity;
@@ -2645,18 +2529,15 @@
                             while (delta > Math.PI) delta -= 2 * Math.PI;
                             while (delta < -Math.PI) delta += 2 * Math.PI;
                             root.rotation.y += delta * Math.min(1, dt * 8);
-                            // al caminar la cara vuelve a nivel (pitch 0)
+                            
                             rec.headPitch = (rec.headPitch || 0) * (1 - Math.min(1, dt * 6));
                         } else if (rec.lookAtPlayer !== false && !rec.frozen) {
-                            // quieta: mirar al objetivo (player local o peer P2P).
-                            // con peer activo: ALTERNAR la mirada entre los dos
-                            // (cada ~2.2s cambia de "interlocutor") — verity
-                            // "conversa" con ambos a la vez
+                            
                             let look = getGame()?.player?.pos;
                             const pt = state.peerTarget;
                             const peerAlive = pt && performance.now() - pt.at < 3000;
                             if (peerAlive) {
-                                // reloj de alternancia: mitad del tiempo cada uno
+                                
                                 const phase = Math.floor(t / 2200) % 2;
                                 const peerFirst = (rec._lookPhaseSeed || 0) === 0;
                                 const usePeer = phase === 0 ? peerFirst : !peerFirst;
@@ -2670,17 +2551,16 @@
                                     let delta = targetYaw - root.rotation.y;
                                     while (delta > Math.PI) delta -= 2 * Math.PI;
                                     while (delta < -Math.PI) delta += 2 * Math.PI;
-                                    root.rotation.y += delta * Math.min(1, dt * 4); // giro lento y suave
+                                    root.rotation.y += delta * Math.min(1, dt * 4); 
                                 }
-                                // pitch: inclinar la cara hacia arriba/abajo segun su altura
-                                // (se aplica despues de sampleAnim para que la anim no lo pise)
+                                
                                 if (rec.lookUp !== false) {
                                     const headY = root.position.y + (rec.headHeight ?? 1.3);
                                     const dy = look.y - headY;
                                     const dHoriz = Math.sqrt(Math.max(dHoriz2, 0.04));
                                     let pitch = Math.atan2(dy, dHoriz);
-                                    if (pitch > 0.75) pitch = 0.75;   // ~43 grados arriba
-                                    if (pitch < -0.75) pitch = -0.75; // ~43 grados abajo
+                                    if (pitch > 0.75) pitch = 0.75;   
+                                    if (pitch < -0.75) pitch = -0.75; 
                                     rec.headPitch = (rec.headPitch || 0) + (pitch - (rec.headPitch || 0)) * Math.min(1, dt * 4);
                                 }
                             }
@@ -2692,8 +2572,7 @@
                         if (animToPlay) {
                             restoreRest(rec.inst);
                             const animT0 = (ov && now < ov.until) ? ov.start : rec.animStart;
-                            // estatua (weeping angel congelado): el tiempo de anim
-                            // tambien se congela — queda en un pose fija
+                            
                             if (rec.frozen) {
                                 if (rec.frozenAnimT == null) rec.frozenAnimT = (now - animT0) / 1000 * rec.animSpeed;
                             } else {
@@ -2702,21 +2581,17 @@
                             const at = rec.frozen ? rec.frozenAnimT : (now - animT0) / 1000 * rec.animSpeed;
                             sampleAnim(rec.inst, animToPlay, at);
                         }
-                        // pitch de mirada (aplicado DESPUES de sampleAnim para que la
-                        // animacion no lo pise): inclinar la cabeza hacia el jugador
-                        // (excepto congelado: una estatua no gira la cabeza)
+                        
                         if (rec.headPitch && !rec.frozen) {
                             try {
                                 const hn = rec.inst.headNode;
                                 if (hn) {
-                                    // restaurar pose de reposo y aplicar UNA sola rotacion
-                                    // (rotateX acumula; sin reset gira sin parar)
+                                    
                                     const restQ = hn.userData.__mfHeadRestQ;
                                     if (restQ) hn.quaternion.copy(restQ);
                                     hn.rotateX(rec.headPitch);
                                 } else {
-                                    // sin bone cabeza: inclinar el cuerpo (asignacion directa,
-                                    // sin acumular). Base = rotation.x del root al primer uso.
+                                    
                                     if (typeof rec.rootPitchBase !== 'number') rec.rootPitchBase = root.rotation.x;
                                     root.rotation.x = rec.rootPitchBase + rec.headPitch;
                                 }
