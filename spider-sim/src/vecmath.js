@@ -1,4 +1,4 @@
-// Vector estilo Bukkit + extensiones de utilities/maths/maths.kt
+
 'use strict';
 const { Quat, V3 } = require('./joml');
 
@@ -28,7 +28,6 @@ class Vec {
   distance(v) { return Math.sqrt(this.distanceSquared(v)); }
   isZero() { return this.x === 0 && this.y === 0 && this.z === 0; }
 
-  // Bukkit rotateAroundY
   rotateAroundY(angle) {
     const cos = Math.cos(angle), sin = Math.sin(angle);
     const x = this.x * cos + this.z * sin;
@@ -36,7 +35,7 @@ class Vec {
     this.x = x; this.z = z;
     return this;
   }
-  // Bukkit rotateAroundX
+  
   rotateAroundX(angle) {
     const cos = Math.cos(angle), sin = Math.sin(angle);
     const y = this.y * cos - this.z * sin;
@@ -44,38 +43,36 @@ class Vec {
     this.y = y; this.z = z;
     return this;
   }
-  // extensión maths.kt rotate(quaternion)
+  
   rotate(q) {
-    // v' = q * v * q⁻¹
+    
     const inv = new Quat(q.x, q.y, q.z, q.w).invert();
     const vq = new Quat(this.x, this.y, this.z, 0);
     const out = vq.premul(q).mul(inv);
     this.x = out.x; this.y = out.y; this.z = out.z;
     return this;
   }
-  // maths.kt pitch()
+  
   pitch() { return -Math.atan2(this.y, Math.hypot(this.x, this.z)); }
-  // maths.kt yaw()
+  
   yaw() { return -Math.atan2(-this.x, this.z); }
-  // utilities_maths.kt horizontalDistance / verticalDistance / horizontalLength
+  
   horizontalDistance(v) { return Math.hypot(this.x - v.x, this.z - v.z); }
   verticalDistance(v) { return Math.abs(this.y - v.y); }
   horizontalLength() { return Math.hypot(this.x, this.z); }
   toV3() { return new V3(this.x, this.y, this.z); }
 }
 
-// ext moved to Vec (Vec.rotate) — helpers libres:
 function rotateAroundY(origin, angle) {
   return (v) => v.sub(origin).rotateAroundY(angle).add(origin);
 }
 
-// maths.kt lerp / moveTowards de doubles
 function lerp(a, b, t) { return a * (1 - t) + b * t; }
 function moveTowards(current, target, speed) {
   const d = target - current;
   return Math.abs(d) < speed ? target : current + speed * Math.sign(d);
 }
-// lerp de Vector (in place)
+
 function vecLerp(v, other, t) {
   v.x += (other.x - v.x) * t;
   v.y += (other.y - v.y) * t;
@@ -94,7 +91,6 @@ function average(vectors) {
   return out.mul(1 / vectors.length);
 }
 
-// Capsule (utilities_maths.kt)
 class Capsule {
   constructor(point1, point2, radius) { this.point1 = point1; this.point2 = point2; this.radius = radius; }
   contains(point) { return lineDistanceSquared(this.point1, this.point2, point) <= this.radius * this.radius; }
@@ -116,7 +112,6 @@ class LineSegment {
   vector() { return this.point2.clone().sub(this.point1); }
 }
 
-// polygons.kt
 function pointInPolygon(px, pz, polygon) {
   let count = 0;
   for (let i = 0; i < polygon.length; i++) {
@@ -150,7 +145,6 @@ function nearestPointInPolygon(px, pz, polygon) {
   return closest;
 }
 
-// maths2.kt Double.eased
 function eased(t) { return t * t * (3 - 2 * t); }
 
 module.exports = {

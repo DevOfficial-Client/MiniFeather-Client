@@ -1,4 +1,4 @@
-// Prueba headless: araña hexbot en galope caminando 100 ticks hacia un target
+
 'use strict';
 const { Vec } = require('./src/vecmath');
 const { SpiderBody } = require('./src/spider-body');
@@ -6,7 +6,6 @@ const { Gait } = require('./src/gait');
 const { PRESETS } = require('./src/presets');
 const { ECS, setupBehaviours, setupSpiderBody, TargetBehaviour } = require('./src/behaviour');
 
-// mundo plano sintético de y=0 (suelo en y=64+1)
 class FlatWorld {
   constructor(groundY = 65) { this.groundY = groundY; }
   getBlock(x, y, z) {
@@ -14,7 +13,7 @@ class FlatWorld {
     return { name: 'minecraft:air', isPassable: true };
   }
   raycastGround(position, direction, maxDistance) {
-    // DDA simplificado sobre plano
+    
     if (direction.y >= -1e-6) return null;
     const t = (position.y - this.groundY) / -direction.y;
     if (t > maxDistance) return null;
@@ -31,7 +30,7 @@ class FlatWorld {
 
 const world = new FlatWorld(65);
 const app = new ECS();
-setupSpiderBody(app); // cuerpo primero (orden setupSpider.kt)
+setupSpiderBody(app); 
 setupBehaviours(app);
 
 const bodyPlan = PRESETS.hexbot(4, 1.0);

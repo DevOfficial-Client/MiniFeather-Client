@@ -1,11 +1,9 @@
-// Lector de mundo Minecraft: NBT (gzip) + Anvil .mca + colisiones por heightmap.
-// Solo lectura — el simulador no modifica el mundo.
+
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-// ─── NBT ───
 const TAG = { END: 0, BYTE: 1, SHORT: 2, INT: 3, LONG: 4, FLOAT: 5, DOUBLE: 6, BYTE_ARRAY: 7, STRING: 8, LIST: 9, COMPOUND: 10, INT_ARRAY: 11, LONG_ARRAY: 12 };
 
 class NBTReader {
@@ -62,7 +60,7 @@ class NBTReader {
   root() {
     const t = this.u8();
     if (t !== TAG.COMPOUND) throw new Error('NBT root no es COMPOUND');
-    this.str(); // nombre raíz vacío
+    this.str(); 
     return this.payload(TAG.COMPOUND);
   }
 }
@@ -74,13 +72,12 @@ function readNBT(file) {
   return new NBTReader(buf).root();
 }
 
-// ─── Anvil .mca ───
 class RegionFile {
   constructor(file) {
     this.file = file;
     this.header = fs.readFileSync(file, { start: 0, end: 8191 });
     this.fd = fs.openSync(file, 'r');
-    this.cache = new Map(); // chunkKey → secciones
+    this.cache = new Map(); 
   }
 
   chunkIndex(lx, lz) {
@@ -102,7 +99,7 @@ class RegionFile {
       const type = buf[4];
       let data = buf.subarray(5, 5 + length);
       if (type === 2) data = zlib.inflateSync(data);
-      // El root NBT del chunk es el compound del chunk directamente (sin wrapper '')
+      
       const nbt = new NBTReader(data).root();
       result = nbt ? nbt.sections || [] : [];
     }
@@ -114,7 +111,7 @@ class RegionFile {
 }
 
 function extractBlocks(sections) {
-  // devuelve Map "y,z,x" → blockName (solo no-air)
+  
   const blocks = new Map();
   if (!sections) return blocks;
   for (const section of sections) {
@@ -164,7 +161,6 @@ function readBitsBE(longs, index, bits) {
 }
 function mask(bits) { return (1n << BigInt(bits)) - 1n; }
 
-// bloques no-sólidos para colisión (raycast NEVER + passable)
 const NON_SOLID = new Set([
   'minecraft:air', 'minecraft:water', 'minecraft:lava', 'minecraft:short_grass', 'minecraft:grass',
   'minecraft:tall_grass', 'minecraft:fern', 'minecraft:large_fern', 'minecraft:dead_bush',
@@ -176,12 +172,11 @@ const NON_SOLID = new Set([
   'minecraft:cobweb', 'minecraft:vine', 'minecraft:glow_lichen', 'minecraft:oak_sign', 'minecraft:crimson_sign',
 ]);
 
-// ─── World con raycast ───
 class World {
   constructor(worldDir) {
     this.worldDir = worldDir;
-    this.regions = new Map(); // "rx,rz" → RegionFile
-    this.sectionBlocks = new Map(); // sección NBT → Map de bloques
+    this.regions = new Map(); 
+    this.sectionBlocks = new Map(); 
     this.spawnedEntities = [];
   }
 
@@ -191,7 +186,7 @@ class World {
       const file = path.join(this.worldDir, 'region', `r.${rx}.${rz}.mca`);
       const region = fs.existsSync(file) ? new RegionFile(file) : null;
       if (region) {
-        // base absoluta de los chunks de esta región (para exportar coords mundo)
+        
         region.baseCx = rx * 32;
         region.baseCz = rz * 32;
       }
@@ -217,7 +212,7 @@ class World {
   blocksFor(sections, sectionY) {
     for (const s of sections) {
       if ((s.Y ?? s.y ?? 0) === sectionY) {
-        // caché por identidad de sección (las secciones ya viven en el caché de RegionFile)
+        
         let blocks = this.sectionBlocks.get(s);
         if (!blocks) {
           blocks = extractBlocks([s]);
@@ -229,7 +224,6 @@ class World {
     return null;
   }
 
-  // DDA sobre voxels — replica Bukkit rayTraceBlocks(hitPosition en la cara de entrada)
   raycastGround(position, direction, maxDistance) {
     const dirLen = direction.length();
     if (dirLen < 1e-12) return null;
@@ -253,7 +247,7 @@ class World {
     for (;;) {
       const block = this.getBlock(bx, by, bz);
       if (block && !block.isPassable) {
-        // punto exacto de entrada al voxel
+        
         return new (require('./vecmath').Vec)(ox + dx * t, oy + dy * t, oz + dz * t);
       }
       if (tMaxX < tMaxY && tMaxX < tMaxZ) {
@@ -283,9 +277,9 @@ class World {
 }
 
 function intbound(s, ds) {
-  // distancia a lo largo del rayo (dir normalizada) hasta el próximo límite de voxel
+  
   if (ds > 0) return (Math.floor(s) + 1 - s) / ds;
-  return (s - Math.floor(s)) / -ds; // ds<0; s entero → 0: cruza al voxel previo inmediatamente (como Bukkit)
+  return (s - Math.floor(s)) / -ds; 
 }
 
 module.exports = { readNBT, World, RegionFile, extractBlocks, NON_SOLID };

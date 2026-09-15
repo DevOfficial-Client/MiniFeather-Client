@@ -1,4 +1,4 @@
-// Port 1:1 de spider/components/body/Leg.kt
+
 'use strict';
 const { Quat } = require('./joml');
 const { Vec, UP_VECTOR, DOWN_VECTOR, lerp, moveTowards, Capsule, LineSegment, average } = require('./vecmath');
@@ -25,7 +25,6 @@ class Leg {
     this.endEffector = this.target.position.clone();
     this.previousEndEffector = this.endEffector.clone();
 
-    // KinematicChain init: positions along rest direction
     let stride = 0;
     const segments = legPlan.segments.map((segment) => {
       stride += segment.length;
@@ -55,26 +54,21 @@ class Leg {
     const scanOrientation = PIVOT_MODES[this.spider.gait.scanPivotMode](this.spider);
     const upVector = UP_VECTOR().rotate(scanOrientation);
 
-    // rest position
     this.restPosition = this.legPlan.restPosition.clone();
     this.restPosition.add(upVector.clone().mul(-lerpedGait.bodyHeight));
     this.restPosition.rotate(scanOrientation).add(this.spider.position);
 
-    // lookahead
     this.lookAheadPosition = this.lookAheadPositionFn(this.restPosition, lerpedGait.triggerZoneRadius);
 
-    // scan line
     const scanStartAxis = upVector.clone().mul(lerpedGait.bodyHeight * 1.6);
     const scanAxis = upVector.clone().mul(-lerpedGait.bodyHeight * 2.5);
     this.scanLine = LineSegment.fromOffset(this.lookAheadPosition.clone().add(scanStartAxis), scanAxis);
 
-    // trigger/comfort zones
     const zoneStart = this.restPosition.clone().add(scanStartAxis);
     const zoneEnd = zoneStart.clone().add(scanAxis);
     this.triggerZone = new Capsule(zoneStart, zoneEnd, lerpedGait.triggerZoneRadius);
     this.comfortZone = new Capsule(zoneStart, zoneEnd, this.spider.gait.comfortZoneRadius);
 
-    // attachment
     this.attachmentPosition = this.legPlan.attachmentPosition.clone()
       .rotate(this.spider.orientation).add(this.spider.position);
   }
@@ -84,7 +78,7 @@ class Leg {
     this.chain.root.copy(this.attachmentPosition);
 
     if (this.spider.gait.straightenLegs) {
-      // Kotlin: Quaternionf(pivot) — ¡copia! (mutar el pivot corrompería spider.orientation)
+      
       const pivot = PIVOT_MODES[this.spider.gait.legChainPivotMode](this.spider);
       const pivotCopy = new Quat(pivot.x, pivot.y, pivot.z, pivot.w);
       const direction = this.endEffector.clone().sub(this.attachmentPosition);

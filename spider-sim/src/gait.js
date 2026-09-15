@@ -1,4 +1,4 @@
-// Port 1:1 de spider/configuration/Gait.kt + LegLookUp.kt + GaitType.kt
+
 'use strict';
 
 class LerpGait {
@@ -23,7 +23,7 @@ const PIVOT_MODES = {
 
 class Gait {
   constructor(walkSpeed, type) {
-    this.type = type; // 'WALK' | 'GALLOP'
+    this.type = type; 
     this.stationary = new LerpGait(1.1, 0.25);
     this.moving = new LerpGait(1.1, 0.8);
     this.maxBodyDistanceFromGround = 0.25;
@@ -91,7 +91,6 @@ class Gait {
   }
 }
 
-// ─── LegLookUp.kt ───
 const LegLookUp = {
   diagonalPairs(legs) { return legs.map((it) => [this.diagonalFront(it), this.diagonalBack(it), it]); },
   isLeftLeg(leg) { return leg % 2 === 0; },
@@ -114,7 +113,6 @@ function unIndexLeg(spider, indices) {
   return indices.map((i) => spider.legs[i]).filter(Boolean);
 }
 
-// ─── GaitType.kt: canMoveLeg de WALK y GALLOP ───
 const WalkGaitType = {
   getLegsInUpdateOrder(spider) {
     const indices = spider.legs.length;

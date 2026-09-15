@@ -1,4 +1,4 @@
-// Port 1:1 de spider/components/body/SpiderBody.kt
+
 'use strict';
 const { Quat, V3 } = require('./joml');
 const { Vec, DOWN_VECTOR, FORWARD_VECTOR, UP_VECTOR, lerp, average } = require('./vecmath');
@@ -31,7 +31,7 @@ class SpiderBody {
     this.normal = null;
     this.normalAcceleration = new Vec(0, 0, 0);
     this.debug = { disableFabrik: false };
-    this.events = []; // [(tipo, spiderId, legIndex)]
+    this.events = []; 
     this.stepCount = 0;
     this.lastAppliedBodyPlan = null;
     this.isWalking = false;
@@ -139,11 +139,9 @@ class SpiderBody {
     const groundedLegs = this.legs.filter((l) => l.isGrounded());
     const fractionOfLegsGrounded = groundedLegs.length / this.legs.length;
 
-    // gravedad y resistencia del aire
     this.velocity.y -= this.gait.gravityAcceleration;
     this.velocity.y *= 1 - this.gait.airDragCoefficient;
 
-    // velocidad rotacional
     const angularSpeed = this.rotationalVelocity.length();
     if (angularSpeed > 1e-8) {
       this.orientation.premul(
@@ -156,18 +154,15 @@ class SpiderBody {
       );
     }
 
-    // drag de patas en el suelo
     if (!this.isWalking) {
       const legDrag = 1 - this.gait.groundDragCoefficient * fractionOfLegsGrounded;
       this.velocity.x *= legDrag;
       this.velocity.z *= legDrag;
     }
 
-    // drag rotacional
     const rotDrag = 1 - this.gait.rotationalDragCoefficient * fractionOfLegsGrounded;
     this.rotationalVelocity.mul(rotDrag);
 
-    // drag del cuerpo en el suelo
     if (this.onGround) {
       const bodyDrag = 0.5;
       this.velocity.x *= bodyDrag;
@@ -175,7 +170,6 @@ class SpiderBody {
       this.rotationalVelocity.mul(bodyDrag);
     }
 
-    // normal force
     const normal = this.calcNormal();
     this.normal = normal;
 
@@ -191,10 +185,8 @@ class SpiderBody {
       this.velocity.add(this.normalAcceleration);
     }
 
-    // aplicar velocidad
     this.position.add(this.velocity);
 
-    // colisión — rayo exacto del repo: length = max(1, |vy|)
     const rayLength = Math.max(1.0, Math.abs(this.velocity.y));
     const collision = this.world.resolveCollision(this.position, new Vec(0, -rayLength, 0));
     if (collision) {
@@ -206,7 +198,6 @@ class SpiderBody {
       this.onGround = this.world.isOnGround(this.position, DOWN_VECTOR().rotate(this.orientation));
     }
 
-    // patas
     const updateOrder = GAIT_TYPES[this.gait.type].getLegsInUpdateOrder(this);
     for (const leg of updateOrder) leg.updateMemo();
     for (const leg of updateOrder) leg.update();
@@ -307,4 +298,3 @@ function vecLerpInPlace(v, target, t) {
 }
 
 module.exports = { SpiderBody, NormalInfo };
-

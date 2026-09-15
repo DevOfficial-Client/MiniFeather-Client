@@ -1,4 +1,4 @@
-// Port 1:1 de spider/presets/presets.kt — bodyPlans biped..octopod y bots
+
 'use strict';
 const { Vec, FORWARD_VECTOR } = require('./vecmath');
 
@@ -6,7 +6,7 @@ class SegmentPlan {
   constructor(length, initDirection) {
     this.length = length;
     this.initDirection = initDirection;
-    this.model = null; // no se usa en sim (el cliente renderiza)
+    this.model = null; 
   }
   clone() { return new SegmentPlan(this.length, this.initDirection.clone()); }
 }
@@ -103,9 +103,7 @@ const PRESETS = {
     p.addLegPair(new Vec(0.2, -0.35, -0.3), new Vec(1.3 * 1.1, 0, -1.6), createRobotSegments(sc, 1.3 * 0.7 * sl));
     return p;
   },
-  // Araña real: 8 patas (4 pares) × 2 segmentos (fémur + tibia) = cadena corta
-  // para minimizar coste del FABRIK. El renderer ignora el bodyModel (no se
-  // dibuja torso) y solo usa los 2 primeros segmentos como cubos alargados.
+  
   spider(sc = 2, sl = 1.0) {
     const p = new BodyPlan();
     p.bodyModel = 'flat';
@@ -118,4 +116,3 @@ const PRESETS = {
 };
 
 module.exports = { PRESETS, BodyPlan, LegPlan, SegmentPlan, createRobotSegments };
-

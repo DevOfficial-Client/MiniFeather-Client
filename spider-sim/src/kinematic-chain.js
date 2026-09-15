@@ -1,4 +1,4 @@
-// Port 1:1 de utilities/KinematicChain.kt — FABRIK real + getRelativeRotations
+
 'use strict';
 const { Quat } = require('./joml');
 const { Vec } = require('./vecmath');
@@ -21,7 +21,7 @@ function moveSegment(point, pullTowards, segment) {
 
 class KinematicChain {
   constructor(root, segments) {
-    this.root = root; // Vec (referencia viva a attachmentPosition)
+    this.root = root; 
     this.segments = segments;
     this.maxIterations = 20;
     this.tolerance = 0.01;
@@ -72,7 +72,6 @@ class KinematicChain {
     });
   }
 
-  // utilities_maths.kt getRotationAroundAxis
   static getRotationAroundAxis(vec, pivot) {
     const orientation = new Quat().rotationTo(0, 0, 1, vec.x, vec.y, vec.z);
     return quatEulerYXZRelative(orientation, pivot);
@@ -93,13 +92,12 @@ class KinematicChain {
   getRotations(pivot) {
     const rotations = this.getRelativeRotations(pivot);
     for (let i = 1; i < rotations.length; i++) {
-      rotations[i].mul(rotations[i - 1]); // cumulate: r[i] = r[i] * r[i-1]
+      rotations[i].mul(rotations[i - 1]); 
     }
     return rotations;
   }
 }
 
-// utilities_maths.kt Quaternionf.getYXZRelative
 function quatEulerYXZRelative(q, pivot) {
   const { quatDifference } = require('./joml');
   const relative = quatDifference(pivot, q);

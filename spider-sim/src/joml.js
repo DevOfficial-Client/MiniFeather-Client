@@ -1,5 +1,4 @@
-// Port 1:1 de JOML Quaternionf (subset usado por el mod) + Vector3f.
-// Fórmulas copiadas de joml/Quaternionf.java (JOML-CI/JOML master).
+
 'use strict';
 
 class Quat {
@@ -17,15 +16,14 @@ class Quat {
     return this;
   }
 
-  // this = this * q (JOML mul)
   mul(q) {
     return mulInto(this, this, q);
   }
-  // this = q * this (JOML premul)
+  
   premul(q) {
     return mulInto(this, q, this);
   }
-  // this = q⁻¹ (normalizado) — usado por difference
+  
   invert() {
     const invNorm = 1 / this.lengthSquared();
     this.x = -this.x * invNorm; this.y = -this.y * invNorm;
@@ -33,7 +31,6 @@ class Quat {
     return this;
   }
 
-  // JOML rotationYXZ(angleY, angleX, angleZ): set absoluto
   rotationYXZ(angleY, angleX, angleZ) {
     const sx = Math.sin(angleX * 0.5), cx = Math.cos(angleX * 0.5);
     const sy = Math.sin(angleY * 0.5), cy = Math.cos(angleY * 0.5);
@@ -46,7 +43,6 @@ class Quat {
     return this;
   }
 
-  // JOML rotateYXZ: right-multiply
   rotateYXZ(angleY, angleX, angleZ) {
     const sx = Math.sin(angleX * 0.5), cx = Math.cos(angleX * 0.5);
     const sy = Math.sin(angleY * 0.5), cy = Math.cos(angleY * 0.5);
@@ -59,7 +55,6 @@ class Quat {
     return mulInto(this, this, { x, y, z, w });
   }
 
-  // JOML rotateAxis: right-multiply por axis-angle
   rotateAxis(angle, axisX, axisY, axisZ) {
     const hangle = angle / 2;
     const sinAngle = Math.sin(hangle);
@@ -71,11 +66,9 @@ class Quat {
     return mulInto(this, this, { x: rx, y: ry, z: rz, w: rw });
   }
 
-  // JOML rotateX / rotateZ: right-multiply (axis unitaria → mismo resultado)
   rotateX(angle) { return this.rotateAxis(angle, 1, 0, 0); }
   rotateZ(angle) { return this.rotateAxis(angle, 0, 0, 1); }
 
-  // JOML rotationTo(from, to): rotación de arco más corto entre direcciones
   rotationTo(fx, fy, fz, tx, ty, tz) {
     const fn = 1 / Math.sqrt(fx * fx + fy * fy + fz * fz);
     const tn = 1 / Math.sqrt(tx * tx + ty * ty + tz * tz);
@@ -100,7 +93,6 @@ class Quat {
     return this;
   }
 
-  // JOML getEulerAnglesYXZ
   getEulerAnglesYXZ() {
     const safeAsin = (v) => Math.asin(Math.max(-1, Math.min(1, v)));
     return {
@@ -110,7 +102,6 @@ class Quat {
     };
   }
 
-  // JOML slerp(target, alpha)
   slerp(target, alpha) {
     const cosom = this.x * target.x + this.y * target.y + this.z * target.z + this.w * target.w;
     const absCosom = Math.abs(cosom);
@@ -134,7 +125,6 @@ class Quat {
   }
 }
 
-// Hamilton product dest = a * b (fórmula JOML dest.set con fma expandido)
 function mulInto(dest, a, b) {
   const x = a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y;
   const y = a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x;
@@ -144,14 +134,12 @@ function mulInto(dest, a, b) {
   return dest;
 }
 
-// JOML difference: this⁻¹ * other
 function quatDifference(q, other) {
   const invNorm = 1 / q.lengthSquared();
   const x = -q.x * invNorm, y = -q.y * invNorm, z = -q.z * invNorm, w = q.w * invNorm;
   return mulInto(new Quat(), { x, y, z, w }, other);
 }
 
-// Vector3f mínimo (para rotationalVelocity y ejes)
 class V3 {
   constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
   set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }

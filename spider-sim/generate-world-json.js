@@ -1,6 +1,4 @@
-// Generador one-off: produce assets/garden/world.json desde el mundo real
-// (Anvil .mca) para que la extensión no necesite el servidor local.
-// Uso: node spider-sim/generate-world-json.js
+
 'use strict';
 const path = require('path');
 const fs = require('fs');
@@ -12,7 +10,6 @@ const OUT_FILE = path.join(__dirname, '..', 'assets', 'garden', 'world.json');
 
 const world = new World(WORLD_DIR);
 
-// spawn desde level.dat
 const { readNBT } = require('./src/mcworld');
 let spawn = { x: 0, y: 64, z: 0 };
 try {
@@ -25,14 +22,12 @@ try {
 }
 console.log('spawn', JSON.stringify(spawn));
 
-// registrar TODAS las regiones
 const regionDir = path.join(WORLD_DIR, 'region');
 for (const f of fs.readdirSync(regionDir)) {
   const m = /^r\.(-?\d+)\.(-?\d+)\.mca$/.exec(f);
   if (m) world.region(Number(m[1]), Number(m[2]));
 }
 
-// ── buildWorldJson (idéntico al que servía el server por HTTP) ──
 function buildWorldJson(radius = 48) {
   const t0 = Date.now();
   const paletteList = [];

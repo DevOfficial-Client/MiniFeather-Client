@@ -1,4 +1,4 @@
-// Port 1:1 de spider/components/Behaviour.kt + ECS de utilities/ecs/ecs.kt
+
 'use strict';
 const { Quat, V3, quatDifference } = require('./joml');
 const { Vec, FORWARD_VECTOR, vecMoveTowards } = require('./vecmath');
@@ -11,7 +11,6 @@ class DirectionBehaviour {
   constructor(targetDirection, walkDirection) { this.targetDirection = targetDirection; this.walkDirection = walkDirection; }
 }
 
-// Behaviour.kt — rotateTowards (private)
 function rotateTowards(spider, targetVector) {
   const currentEuler = spider.orientation.getEulerAnglesYXZ();
 
@@ -19,25 +18,20 @@ function rotateTowards(spider, targetVector) {
     .rotationTo(0, 0, 1, targetVector.x, targetVector.y, targetVector.z)
     .getEulerAnglesYXZ();
 
-  // clamp pitch
   targetEuler.x = Math.max(
     spider.preferredPitch - spider.gait.preferredPitchLeeway,
     Math.min(spider.preferredPitch + spider.gait.preferredPitchLeeway, targetEuler.x)
   );
 
-  // clamp roll
   targetEuler.z = spider.preferredRoll;
 
-  // clamp yaw si incómodo
   if (spider.legs.some((leg) => leg.isUncomfortable && !leg.isMoving)) targetEuler.y = currentEuler.y;
 
   const targetOrientation = new Quat().rotationYXZ(targetEuler.y, targetEuler.x, targetEuler.z);
 
-  // softenedTarget = orientation.slerp(target, 1 - rotationLerp)
   const softenedTarget = new Quat(spider.orientation.x, spider.orientation.y, spider.orientation.z, spider.orientation.w)
     .slerp(targetOrientation, 1 - spider.gait.rotationLerp);
 
-  // desiredDelta = softenedTarget * orientation⁻¹ (delta en mundo, premul)
   const inv = spider.orientation.clone().invert();
   const delta = mulQuats(softenedTarget, inv);
   const axisAngle = quatToAxisAngle(delta);
@@ -76,7 +70,6 @@ function v3MoveTowards(v, target, speed) {
   return v.add(diff.mul(speed / d));
 }
 
-// Behaviour.kt — walkAt (private)
 function walkAt(spider, targetVelocity, stunned = false) {
   const acceleration = spider.gait.moveAcceleration;
   const target = targetVelocity.clone();
@@ -95,9 +88,8 @@ function walkAt(spider, targetVelocity, stunned = false) {
   if (stunned && targetVelocity.isZero()) spider.isWalking = false;
 }
 
-// setupBehaviours
 function setupBehaviours(app) {
-  // StayStill
+  
   app.onTick(() => {
     for (const [entity, spider] of app.query('SpiderBody', 'StayStillBehaviour')) {
       walkAt(spider, new Vec(0, 0, 0));
@@ -105,7 +97,6 @@ function setupBehaviours(app) {
     }
   });
 
-  // Target
   app.onTick(() => {
     for (const [entity, spider, behaviour] of app.query('SpiderBody', 'TargetBehaviour')) {
       const direction = behaviour.target.clone().sub(spider.position).normalize();
@@ -123,7 +114,6 @@ function setupBehaviours(app) {
     }
   });
 
-  // Direction
   app.onTick(() => {
     for (const [entity, spider, behaviour] of app.query('SpiderBody', 'DirectionBehaviour')) {
       rotateTowards(spider, behaviour.targetDirection);
@@ -132,7 +122,6 @@ function setupBehaviours(app) {
   });
 }
 
-// setupSpider.kt — orden de sistemas: cuerpo primero, luego behaviours
 function setupSpiderBody(app) {
   app.onTick(() => {
     for (const [entity, spider] of app.query('SpiderBody')) {
@@ -142,7 +131,6 @@ function setupSpiderBody(app) {
   });
 }
 
-// setupSpider.kt — default behaviour cuando no hay láser
 function setupDefaultBehaviour(app) {
   app.onTick(() => {
     for (const [entity] of app.query('SpiderBody')) {
@@ -153,10 +141,9 @@ function setupDefaultBehaviour(app) {
   });
 }
 
-// ─── ECS minimal (port de ecs.kt) ───
 class ECSEntity {
   constructor() {
-    this.components = new Map(); // nombre → instancia
+    this.components = new Map(); 
     this.scheduledForRemoval = false;
   }
   add(name, component) { this.components.set(name, component); return this; }
