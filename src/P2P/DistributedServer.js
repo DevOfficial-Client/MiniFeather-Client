@@ -596,8 +596,7 @@
     handleLoadBalanceRequest(peerId, request) {
       if (this.role !== NODE_ROLE.ORCHESTRATOR) return;
 
-      // Reasignar regiones basado en carga actual
-      this.redistributeLoad(request overloadedNode);
+      this.redistributeLoad(request.overloadedNode);
     }
 
     /**
