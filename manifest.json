@@ -96,7 +96,6 @@
         "src/Experimental/FallenLeaves/FallenLeaves.js",
         "src/Experimental/AnimatedItems/AnimatedItems.js",
         "src/Experimental/BetterAnimationCape/BetterAnimationCape.js",
-
         "src/World/AutoRespawn.js",
         "src/Movement/AntiAFK.js",
         "src/Movement/MovementAssist.js",
@@ -122,6 +121,10 @@
         "src/Studio/MF_Peer.js",
         "src/Shaders/CustomShader.js",
         "src/Shaders/CustomShaderSafetyPatch.js",
+        "src/Experimental/Realistic/RealisticProfiles.js",
+        "src/Experimental/Realistic/ShadowSystem.js",
+        "src/Experimental/Realistic/FluidShaderPatch.js",
+        "src/Experimental/Realistic/CloudShaderPatch.js",
         "src/Experimental/Realistic/RealisticMode.js",
         "src/HUD/GUIPatch.js",
         "src/Cosmetics/Emotes.js",

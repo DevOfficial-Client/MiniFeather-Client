@@ -5913,7 +5913,8 @@
               const description = exp.descriptionKey ? t(exp.descriptionKey) : String(exp.description || '');
               const levelKey = String(exp.levelKey || '');
               const levels = Array.isArray(exp.levels) ? exp.levels : [];
-              const currentLevel = levelKey ? String(guiSettings[levelKey] || settings[levelKey] || 'medium') : '';
+              const rawLevel = levelKey ? String(guiSettings[levelKey] || settings[levelKey] || 'medium') : '';
+              const currentLevel = levelKey === 'experimentalRealisticLevel' && rawLevel === 'extreme' ? 'ultra' : rawLevel;
               return `
                 <label class="mf-toggle" data-key="${escapeHtml(key)}">
                   <span class="mf-feature-icon" aria-hidden="true" style="font-size:34px;line-height:1;">${escapeHtml(exp.icon || '🧪')}</span>
@@ -9628,9 +9629,11 @@ function renderCreditsPage() {
       new CustomEvent('minifeather:realistic-config', {
         detail: JSON.stringify({
           enabled: !!settings.experimentalRealistic,
-          level: ['low', 'medium', 'high', 'extreme'].includes(String(settings.experimentalRealisticLevel))
-            ? String(settings.experimentalRealisticLevel)
-            : 'medium',
+          level: String(settings.experimentalRealisticLevel) === 'extreme'
+            ? 'ultra'
+            : (['low', 'medium', 'high', 'ultra'].includes(String(settings.experimentalRealisticLevel))
+              ? String(settings.experimentalRealisticLevel)
+              : 'medium'),
           leafEnabled: !!settings.leafWind,
           leafStrength: Number(settings.leafWindStrength) || 0.085,
           auroraEnabled: !!settings.experimentalAurora,
