@@ -51,8 +51,19 @@
                     if (reg) {
                         var m = v.match(CUSTOM_URL_RE);
                         if (m && reg[m[1]]) { origSet.call(this, reg[m[1]]); return; }
-                        var m2 = v.match(/^textures\/entity\/skins\/([^\/?#]+)\.png/);
-                        if (m2 && reg[m2[1]]) { origSet.call(this, reg[m2[1]]); return; }
+                        // rutas del juego con o sin subdirectorios:
+                        //   textures/entity/skins/devs/itzesteban.png
+                        //   textures/entity/skins/chris.png
+                        // se les quita prefijo y .png y se busca en el registro.
+                        // INGAME el juego también pide la ruta plana para ids
+                        // custom (textures/entity/skins/custom:mf_x.png):
+                        // reintentar sin el prefijo "custom:".
+                        var m2 = v.match(/(?:^|\/)textures\/entity\/skins\/(.+?)\.png(?:[?#]|$)/);
+                        if (m2) {
+                            var k2 = reg[m2[1]] ? m2[1]
+                                : m2[1].replace(/^custom:/i, '');
+                            if (reg[k2]) { origSet.call(this, reg[k2]); return; }
+                        }
                     }
                 }
                 origSet.call(this, v);
@@ -378,6 +389,8 @@
     // nuestros ids custom, lo servimos desde /skins/ de la extensión.
     // Las skins vanilla de otros usuarios pasan intactas.
     var SKIN_PATH_REGEX = /^textures\/entity\/skins\/([^/?#]+)\.png(?:[?#].*)?$/i;
+    // mismo hook pero para rutas con subdirectorio (devs/…, custom:…/…)
+    var SKIN_PATH_REGEX_DEEP = /^textures\/entity\/skins\/(.+?)\.png(?:[?#].*)?$/i;
     var patched = false;
 
     function getCustomSkinForId(skinId) {
@@ -488,13 +501,16 @@
                     return;
                 }
 
-                var match = value.match(SKIN_PATH_REGEX);
+                var match = value.match(SKIN_PATH_REGEX) || value.match(SKIN_PATH_REGEX_DEEP);
                 if (!match) {
                     originalSet.call(this, value);
                     return;
                 }
 
                 var skinId = match[1];
+                // el juego pide la ruta plana también para ids custom:
+                // textures/entity/skins/custom:mf_x.png → probar sin prefijo
+                if (skinId.indexOf('custom:') === 0) skinId = skinId.slice(7);
                 var custom = getCustomSkinForId(skinId);
 
                 if (!custom) {
