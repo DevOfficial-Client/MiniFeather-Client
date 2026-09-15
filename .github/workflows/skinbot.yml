@@ -1,0 +1,55 @@
+# ============================================================
+# MiniFeather SkinBot — 24/7 en GitHub Actions (repo público = gratis)
+# ============================================================
+# El job corre el bot ~5h50m; al terminar, el cron de cada 10 min
+# + la cola de concurrencia encadenan el siguiente → ~99.8% uptime.
+#
+# REQUISITOS (una sola vez):
+#   1. Repo PRIVADO para las cuentas (ej. mfaccs-private) — ver guía.
+#      El token MFSB_GH_TOKEN debe tener Contents:write en AMBOS repos.
+#   2. Secrets en ESTE repo (mfaccs) → Settings → Secrets and variables
+#      → Actions → New repository secret:
+#        MFSB_TOKEN      → token del bot de Discord
+#        MFSB_GH_TOKEN   → token fine-grained de GitHub
+#        MFSB_ADMINS     → ids de admin separados por coma
+#        MFSB_CHANNEL    → id del canal autorizado
+#        MFSB_ACC_REPO   → owner/repo privado de cuentas
+# ============================================================
+name: skinbot
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # cada 10 min mantiene la cadena viva
+  workflow_dispatch: {}       # botón "Run workflow" para arrancar a mano
+
+# un solo bot a la vez: el nuevo espera a que muera el anterior
+concurrency:
+  group: skinbot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350      # 5h50m — GitHub corta a 6h de todos modos
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install discord.py requests
+
+      - name: Arrancar el bot
+        env:
+          MFSB_TOKEN: ${{ secrets.MFSB_TOKEN }}
+          MFSB_GH_TOKEN: ${{ secrets.MFSB_GH_TOKEN }}
+          MFSB_ADMINS: ${{ secrets.MFSB_ADMINS }}
+          MFSB_CHANNEL: ${{ secrets.MFSB_CHANNEL }}
+          MFSB_REPO: ${{ github.repository }}   # este repo = la DB de skins
+          MFSB_ACC_REPO: ${{ secrets.MFSB_ACC_REPO }}
+        run: python ai/discord_skinbot.py

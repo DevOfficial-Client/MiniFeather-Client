@@ -5,9 +5,10 @@
 //   MF_SPIDER_SIM (física real: FABRIK, gallop, normal force sobre los chunks
 //   nativos del juego) ──llamada directa──▶ este módulo (solo render)
 //
-// Modelo simplificado (optimización de lag, solicitado):
-//   - SIN torso: solo se renderizan las patas.
-//   - Cada pata = 2 cubos alargados (fémur + tibia) reutilizando la MISMA
+// Modelo de patas optimizado:
+//   - Torso simple: 2 cubos (cefalotórax + abdomen) con geometría/material
+//     compartidos, posicionados por la matriz torso.m que envía el sim.
+//   - Cada pata = segmentos de cubo alargado reutilizando la MISMA
 //     geometry y material para todas las arañas del mundo.
 //   - Los cubos se posicionan, orientan y escalan cada frame desde los joints
 //     que calcula el simulador (sin allocs por frame).
@@ -110,6 +111,26 @@
           });
         } catch (_) {}
       }
+    } else if (msg.type === 'evo') {
+      // eventos de la IA evolutiva → chat (nacimientos, muertes, mordiscos)
+      LOG.i('← evo:', msg.event, msg.name ?? '');
+      try {
+        if (msg.event === 'bite') {
+          state.game?.chat?.addChat?.({
+            text: `\\red\\🕷 ${msg.name} te mordió! (E=${msg.energy})`,
+          });
+        } else if (msg.event === 'death') {
+          state.game?.chat?.addChat?.({
+            text: `\\gray\\💀 ${msg.name} murió de hambre (gen ${msg.gen}, fitness ${msg.fitness})`,
+          });
+        } else if (msg.event === 'birth') {
+          state.game?.chat?.addChat?.({
+            text: `\\green\\🐣 nació ${msg.name} (gen ${msg.gen}, hijo de ${msg.parent})`,
+          });
+        }
+        // 'eat' / 'food' / 'on' / 'off' son silenciosos (spam) —
+        // verlos con /spider log 2
+      } catch (_) {}
     }
   }
 
@@ -425,6 +446,41 @@
   let _sharedLegGeo = null;
   let _sharedTipGeo = null;
   let _sharedLegMat = null;
+  let _sharedTorsoGeo = null;
+
+  // Torso de araña en UNA geometría fusionada (1 mesh, 1 draw call):
+  //   cefalotórax: cubo 1.0×0.55×0.9 centrado en el origen del cuerpo
+  //   abdomen:     cubo 0.8×0.5×0.75 desplazado hacia atrás (z-)
+  // El mesh completo se transforma con la matriz torso.m del sim (que ya
+  // lleva la orientación del cuerpo y la escala por bodyModel).
+  function torsoGeometry(ctors) {
+    const cubo = (cx, cy, cz, sx, sy, sz, out) => {
+      const hx = sx / 2, hy = sy / 2, hz = sz / 2;
+      // 6 caras × 2 tris × 3 verts, centrado en (cx,cy,cz)
+      const x0 = cx - hx, x1 = cx + hx, y0 = cy - hy, y1 = cy + hy, z0 = cz - hz, z1 = cz + hz;
+      out.push(
+        x0,y0,z1, x1,y0,z1, x1,y1,z1,  x0,y0,z1, x1,y1,z1, x0,y1,z1,   // +Z
+        x1,y0,z0, x0,y0,z0, x0,y1,z0,  x1,y0,z0, x0,y1,z0, x1,y1,z0,   // -Z
+        x1,y0,z1, x1,y0,z0, x1,y1,z0,  x1,y0,z1, x1,y1,z0, x1,y1,z1,   // +X
+        x0,y0,z0, x0,y0,z1, x0,y1,z1,  x0,y0,z0, x0,y1,z1, x0,y1,z0,   // -X
+        x0,y1,z1, x1,y1,z1, x1,y1,z0,  x0,y1,z1, x1,y1,z0, x0,y1,z0,   // +Y
+        x0,y0,z0, x1,y0,z0, x1,y0,z1,  x0,y0,z0, x1,y0,z1, x0,y0,z1    // -Y
+      );
+    };
+    const P = [];
+    cubo(0, 0.02, 0.1, 1.0, 0.55, 0.9, P);    // cefalotórax
+    cubo(0, 0.05, -0.55, 0.8, 0.5, 0.75, P);  // abdomen (atrás y un poco arriba)
+    const UV = [];
+    for (let f = 0; f < 12; f++) UV.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1);
+    const geo = new ctors.Geometry();
+    geo.setAttribute('position', new ctors.Attr(new Float32Array(P), 3));
+    geo.setAttribute('uv', new ctors.Attr(new Float32Array(UV), 2));
+    const N = new Float32Array(P.length);
+    recomputeFlatNormals(N, P);
+    geo.setAttribute('normal', new ctors.Attr(N, 3));
+    return geo;
+  }
+
   function ensureSharedLegAssets(ctors) {
     if (!_sharedLegGeo) {
       // cubo unitario centrado (1×1×1) — la escala real se aplica con mesh.scale en applyPose
@@ -481,11 +537,21 @@
   // para que sigan visibles a distancia sin parecer troncos.
   function legThickness(si) { return Math.max(0.07, 0.16 - si * 0.045); }
 
+  // Factor de tamaño del cuerpo por preset: la longitud TOTAL de la primera
+  // pata del preset 'spider' (garden) es 2 segmentos × 1.1 = 2.2. El torso
+  // escala proporcional a esa longitud → arañas gigantes (×3) tienen torso ×3.
+  function estimateTorsoScale(legs) {
+    const segs = legs?.[0]?.segments;
+    if (!Array.isArray(segs) || !segs.length) return 1;
+    const total = segs.reduce((a, s) => a + (Number.isFinite(s) ? s : 0), 0);
+    if (!Number.isFinite(total) || total <= 0) return 1;
+    return Math.min(80, Math.max(0.4, total / 2.2));
+  }
+
   // ═══ construir spider desde el mensaje 'add' del simulador ═══
-  // OPTIMIZACIÓN: solo patas (sin torso). Cada pata = 2 cubos alargados
-  // (fémur + tibia) reutilizando la MISMA geometry y material para todas
-  // las arañas. Antes: torso ~30 meshes + 4 segmentos × 3-7 meshes/pata =
-  // hasta ~80 meshes/araña. Ahora: 2 meshes × N patas = 8-16 meshes/araña.
+  // Torso (1 mesh fusionado) + patas (segmentos de cubo alargado) con la
+  // MISMA geometry y material compartidos para todas las arañas.
+  // ~9-17 meshes/araña (1 torso + 8-16 de patas), muy lejos de los ~80 de antes.
   function addSimSpider(info) {
     if (state.spiders.has(info.name)) return true; // ya está (evita duplicar)
     if (!ensureCtors()) { LOG.d('addSimSpider: sin ctors →', info.name); return false; }
@@ -494,13 +560,22 @@
     if (!scene) { LOG.d('addSimSpider: sin escena 3D →', info.name); return false; }
 
     const { geo: sharedGeo, tipGeo: sharedTipGeo, mat: sharedMat } = ensureSharedLegAssets(ctors);
+    if (!_sharedTorsoGeo) _sharedTorsoGeo = torsoGeometry(ctors);
 
     const root = new ctors.Group();
     root.userData.__mfSpider = true;
     root.name = 'MiniFeatherSpider_' + info.name;
 
-    // SIN torso: solo las patas — como arañas reales.
-    // patas: 2 cubos alargados por pata (fémur + tibia), posicionados y
+    // torso: 1 mesh con la geometría fusionada (cefalotórax + abdomen).
+    // La escala real se compone cada frame: torso.m (rot+escala del bodyModel)
+    // × torsoScale (factor de tamaño del preset, derivado de las patas).
+    const torsoScale = estimateTorsoScale(info.legs);
+    const torsoMesh = new ctors.Mesh(_sharedTorsoGeo, sharedMat);
+    torsoMesh.userData.__mfSpider = true;
+    torsoMesh.frustumCulled = false;
+    root.add(torsoMesh);
+
+    // patas: segmentos de cubo alargado por pata, posicionados y
     // orientados cada frame en applyPose a partir de los joints del sim.
     const legs = [];
     for (const legInfo of info.legs) {
@@ -532,7 +607,7 @@
 
     state.spiders.set(info.name, {
       key: info.name, preset: info.preset, gallop: info.gallop,
-      root, bodyGroup: null, legs,
+      root, torsoMesh, torsoScale, legs,
       lastPose: null,
     });
     LOG.i('araña construida:', info.name, info.preset, {
@@ -592,8 +667,22 @@
 
     sp.root.position.set(lx, ly, lz);
 
-    // SIN torso: no hay bodyGroup que actualizar (se renderiza 0 meshes del cuerpo).
-    // Cada pata = 2 cubos. Para cada cubo:
+    // torso: la matriz torso.m es rotación+escala del cuerpo SIN traslación
+    // (quatToMatrix produce column-major con m[12..14]=0) → local al root,
+    // que ya está en la posición del mundo. Se descompone a pos/quat/scale
+    // y se multiplica la escala por torsoScale (tamaño del preset).
+    if (sp.torsoMesh && pose.torso?.m) {
+      sp.torsoMesh.matrix.fromArray(pose.torso.m);
+      sp.torsoMesh.matrix.decompose(
+        sp.torsoMesh.position, sp.torsoMesh.quaternion, sp.torsoMesh.scale
+      );
+      sp.torsoMesh.scale.multiplyScalar(sp.torsoScale || 1);
+      sp.torsoMesh.visible = true;
+    } else if (sp.torsoMesh) {
+      sp.torsoMesh.visible = false;
+    }
+
+    // patas: cada cubo se coloca/orienta/escala desde los joints del sim:
     //   1. posición = punto medio entre 'from' y 'to' (coords locales al root)
     //   2. scale   = (grosor, grosor, longitud del segmento)
     //   3. quat    = rotación que alinea +Z con la dirección del segmento

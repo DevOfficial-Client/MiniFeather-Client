@@ -6807,7 +6807,7 @@ function renderCreditsPage() {
     <div class="mf-page-stack">
       <div class="mf-card">
         <div class="mf-card-title">${t('credits')}</div>
-        <div class="mf-muted">EstebanGxE_</div>
+        <div class="mf-muted">ShusukeGxE_</div>
         <div class="mf-muted">ItzNightrise</div>
         <div class="mf-muted">Not_Senpai</div>
         <div class="mf-muted">Botless</div>

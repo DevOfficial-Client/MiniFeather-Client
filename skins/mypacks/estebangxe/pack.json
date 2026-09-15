@@ -1,0 +1,17 @@
+{
+  "id": "estebangxe",
+  "name": "EstebanGxE",
+  "author": "ShusukeGxE_",
+  "version": 1,
+  "uuid": "6eb7369a-551e-406a-9a63-6db7a358e1e5",
+  "skin": "EstebanExG__1_1.png",
+  "sprites": {
+    "front": "alfrente.png",
+    "left": "izquierda.png",
+    "right": "derecha.png",
+    "up": "mirando arriba.png",
+    "down": "mirando abajo.png",
+    "blink": "ojo cerrado.png",
+    "brow": "ceja levantada.png"
+  }
+}

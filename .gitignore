@@ -1,5 +1,46 @@
-# archivos grandes (bloquean el push a GitHub, límite 100 MB)
-models/entities/backrooms_level_0.glb
+```
+# Dependencies
+node_modules/
 
-# chat interno del agente
-.commandcode/
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git/modules/
+.DS_Store
+
+# MiniFeather — datos sensibles/pesados
+# ai/mf_accounts.json: hashes de contraseñas del bot (NUNCA al repo)
+ai/mf_accounts.json
+mfbot/
+mfbot_actions.log
+*.pt
+```

@@ -70,6 +70,8 @@
         "src/Render/PBRTextures.js",
         "src/Cosmetics/LegacyUnlocks.js",
         "src/Cosmetics/CustomSkins.js",
+        "src/Cosmetics/CustomSkinAPI.js",
+        "src/P2P/MF_Mesh.js",
         "src/Core/inject.js",
         "src/Render/FreeCam.js",
         "src/Render/Freelook.js",

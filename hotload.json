@@ -6,6 +6,8 @@
     { "path": "src/Render/SpiderSim.js", "guards": [], "ok": ["MF_SPIDER_SIM"] },
     { "path": "src/Render/SpiderBot.js", "guards": [], "ok": ["MF_SPIDER_BOT"] },
     { "path": "src/Chat/ClientCommands.js", "guards": [], "ok": ["__MINIFEATHER_CLIENT_COMMANDS__"] },
-    { "path": "src/Cosmetics/CustomSkins.js", "guards": ["__MF_CustomSkins"], "ok": ["__MF_CustomSkins"] }
+    { "path": "src/Cosmetics/CustomSkins.js", "guards": ["__MF_CustomSkins"], "ok": ["__MF_CustomSkins"] },
+    { "path": "src/Cosmetics/CustomSkinAPI.js", "guards": ["__MF_CustomSkinAPI"], "ok": ["__MF_CustomSkinAPI"] },
+    { "path": "src/P2P/MF_Mesh.js", "guards": [], "ok": ["MF_Mesh"] }
   ]
 }

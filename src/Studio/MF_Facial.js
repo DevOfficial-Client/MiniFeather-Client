@@ -248,6 +248,18 @@
         return null;
     }
 
+    // normalizar un id de skin cualquiera: quita rutas/extensiones y los
+    // prefijos del conducto de packs (custom:mf_<id> actual, mfpack:<id>
+    // legacy) → "alice", "eve", "mf_eve"→"eve"…
+    function normSkinId(v) {
+        if (typeof v !== 'string' || !v) return '';
+        let s = v.split('/').pop().replace(/\.png$/i, '');
+        const cl = CUSTOM_PREFIX + MF_NAME_PREFIX;   // custom:mf_
+        if (s.toLowerCase().startsWith(cl)) s = s.slice(cl.length);
+        else if (s.toLowerCase().startsWith(MFPACK_PREFIX)) s = s.slice(MFPACK_PREFIX.length);
+        return s.toLowerCase();
+    }
+
     // ¿qué skin se está usando ahora?
     // Prioridad:
     //   1. MF_SkinChanger.current — skin aplicada EN VIVO localmente
@@ -259,13 +271,7 @@
         // normalizar: quitar rutas/extensiones y los prefijos de skin de
         // pack aplicadas por el conducto nativo del juego:
         //   custom:mf_<id> (clase nativa, actual) y mfpack:<id> (legacy)
-        const norm = (v) => {
-            let s = String(v).split('/').pop().replace(/\.png$/i, '');
-            const cl = CUSTOM_PREFIX + MF_NAME_PREFIX;   // custom:mf_
-            if (s.toLowerCase().startsWith(cl)) s = s.slice(cl.length);
-            else if (s.toLowerCase().startsWith(MFPACK_PREFIX)) s = s.slice(MFPACK_PREFIX.length);
-            return s.toLowerCase();
-        };
+        const norm = normSkinId;
         try {
             const sc = window.MF_SkinChanger?.current;
             if (typeof sc === 'string' && sc) return norm(sc);
@@ -990,7 +996,7 @@
     // 404 da lista vacía, no error.
     const MY_PACKS_DIR = 'skins/mypacks/';
     // ids de packs custom builtin (carpeta skins/mypacks/ de la extensión)
-    const MY_PACKS_IDS = ['estebangxe', 'angrywolfx', 'eve'];
+    const MY_PACKS_IDS = ['shusukegxe', 'angrywolfx', 'eve'];
     async function builtinDirs() {
         const known = [
             'adele', 'adventure', 'aether', 'alice', 'apex', 'ariel', 'aurora',
@@ -1659,7 +1665,15 @@
             if (!key || seen.has(key) || isMe(key, null)) return;
             const mesh = e?.mesh;
             if (!mesh) return;
-            seen.add(key); out.push({ key: String(key), mesh, name: String(name || key).slice(0, 16) });
+            // skin-id del otro (para matchear su pack de facial: ej "alice"):
+            // por uuid (inmune a renombres) O por username — lo que llegue
+            const uuid = typeof e?.uuid === 'string' ? e.uuid.toLowerCase() : null;
+            const uname = String(e?.username || e?.profile?.username || name || '').toLowerCase() || null;
+            let skin = '';
+            const sc = e?.profile?.cosmetics?.skin || e?.profile?.skin || e?.mesh?.model?.skin;
+            if (typeof sc === 'string' && sc) skin = normSkinId(sc);
+            if (!skin) skin = skinForIdentity(uuid, uname);
+            seen.add(key); out.push({ key: String(key), mesh, name: String(name || key).slice(0, 16), skin });
         };
         try {
             if (g.world?.players instanceof Map) {
@@ -1679,6 +1693,68 @@
             }
         } catch {}
         return out;
+    }
+
+    // ── packs para OTROS ──
+    // Si la skin de un otro player tiene pack de facial (builtin de
+    // facialskins/ — ej: skin "alice" → pack "alice" — o custom:mf_<id>),
+    // sus parpadeos/zonas usan LOS SPRITES DEL PACK (franja completa
+    // 64x16, hat incluido) en vez de la cara sintetizada.
+    function packForOther(skinId) {
+        if (!skinId) return null;
+        for (const p of packIndex) if (p.id === skinId) return p;
+        return null;
+    }
+    // identidad → skin override (accounts.json / DB builtin de
+    // CustomSkins). Acepta uuid O username: así un player cuya skin
+    // vanilla el juego no reporta (o llegó por spawnPlayer sin cosmetics)
+    // igual matchea su pack si está listado. Normaliza custom:mf_<id> →
+    // <id> para que packForOther lo encuentre en el índice.
+    function skinForIdentity(uuid, username) {
+        const db = window.__MF_CustomSkins_DB__ || null;
+        let v = '';
+        if (db) {
+            if (uuid && db.byUuid && db.byUuid[uuid]) v = db.byUuid[uuid];
+            if (!v && username && db.byName) {
+                const u = String(username);
+                if (db.byName[u]) v = db.byName[u];
+                else {
+                    // loose: sin _/-/espacios (juego muestra "ShusukeGxE_",
+                    // DB puede tener "shusukegxe")
+                    const k = u.toLowerCase().replace(/[\s_-]+/g, '');
+                    for (const n in db.byName) {
+                        if (String(n).toLowerCase().replace(/[\s_-]+/g, '') === k) { v = db.byName[n]; break; }
+                    }
+                }
+            }
+        }
+        return v ? normSkinId(v) : '';
+    }
+    // pre-carga los sprites del pack de un otro (async; packImg cachea).
+    // Al llegar cada sprite se marca zoneDirty para que otherTick lo use
+    // en el próximo repintado. Idempotente por _id.
+    function preloadOtherPack(s, pack) {
+        if (!s || !pack || s.pack?._id === pack.id) return;
+        const entry = { _id: pack.id, img: { front: null, left: null, right: null, up: null, down: null, blink: null } };
+        s.pack = entry;
+        for (const which of ['front', 'left', 'right', 'up', 'down', 'blink']) {
+            const file = pack[which];
+            if (!file) continue;
+            packImg(pack.id, file)
+                .then(img => { if (img && s.pack === entry) { entry.img[which] = img; s.zoneDirty = true; } })
+                .catch(() => {});
+        }
+    }
+    // pinta la franja de cabeza COMPLETA (sprite de pack 64x16) sobre el
+    // canvas de un otro — mismo criterio que paintFace kind 'head'
+    function paintOtherStrip(s, img) {
+        try {
+            const k = s.k || 1, cx = s.canvas.getContext('2d');
+            cx.imageSmoothingEnabled = false;
+            cx.clearRect(0, 0, 64 * k, 16 * k);
+            cx.drawImage(img, 0, 0, img.width, img.height, 0, 0, 64 * k, 16 * k);
+            s.tex.needsUpdate = true;
+        } catch {}
     }
 
     // sesión de textura de otro player (patrón ensureSession pero por key).
@@ -1892,8 +1968,20 @@
         const live = new Set();
         for (const p of otherPlayers()) {
             live.add(p.key);
+            // SOLO se animan skins CON pack de facial (ej: "alice" → pack
+            // alice). El resto (skin vanilla sin pack / URL externa) ni
+            // se les monta canvas: su textura queda intacta.
+            const pack = packForOther(p.skin);
+            if (!pack) {
+                // si antes tenía pack y cambió a una sin pack → restaurar
+                const s = others._sessions.get(p.key);
+                if (s) restoreOther(p.key);
+                continue;
+            }
             const s = otherSession(p);
             if (!s) continue;
+            // pre-carga de los sprites del pack (idempotente por _id)
+            preloadOtherPack(s, pack);
             // zona según la rotación real de su cabeza (left/right/up/down)
             const z = otherZone(p) || 'front';
             if (s.zone !== z) { s.zone = z; s.zoneDirty = true; }
@@ -1904,37 +1992,65 @@
                 s.zoneDirty = true; // al abrir ojos, repintar la zona actual
             } else if (!s.blinkUntil && now >= s.nextBlink && s.zone === 'front') {
                 s.blinkUntil = now + 45 + Math.random() * 45;
-                const cv = otherBlinkCanvas(s);
-                if (cv) {
+                if (s.pack?.img?.blink) {
+                    // sprite de blink del SU pack (franja completa)
+                    paintOtherStrip(s, s.pack.img.blink);
+                } else {
+                    const cv = otherBlinkCanvas(s);
+                    if (cv) {
+                        try {
+                            const k = s.k || 1, cx = s.canvas.getContext('2d');
+                            cx.imageSmoothingEnabled = false;
+                            cx.drawImage(cv, 0, 0, 8, 8, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
+                            cx.clearRect(FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k); // el hat no tape los ojos
+                            s.tex.needsUpdate = true;
+                        } catch {}
+                    }
+                }
+            } else if (s.zoneDirty && !s.blinkUntil) {
+                // pintar la zona a la que mira (o restaurar el frente).
+                // Con pack: sprite del pack (franja completa, hat incluido);
+                // sin pack: cara sintetizada sobre SU cara original
+                s.zoneDirty = false;
+                const strip = s.pack?.img ? (s.zone === 'front' ? s.pack.img.front : s.pack.img[s.zone]) : null;
+                if (strip) {
+                    paintOtherStrip(s, strip);
+                } else {
+                    const cv = s.zone === 'front' ? null : otherZoneCanvas(s, s.zone);
                     try {
                         const k = s.k || 1, cx = s.canvas.getContext('2d');
                         cx.imageSmoothingEnabled = false;
-                        cx.drawImage(cv, 0, 0, 8, 8, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
-                        cx.clearRect(FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k); // el hat no tape los ojos
+                        if (cv) {
+                            cx.drawImage(cv, 0, 0, 8, 8, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
+                            cx.clearRect(FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
+                        } else {
+                            cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
+                            cx.drawImage(s.baseHead, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
+                        }
                         s.tex.needsUpdate = true;
                     } catch {}
                 }
-            } else if (s.zoneDirty && !s.blinkUntil) {
-                // pintar la zona a la que mira (o restaurar el frente)
-                s.zoneDirty = false;
-                const cv = s.zone === 'front' ? null : otherZoneCanvas(s, s.zone);
-                try {
-                    const k = s.k || 1, cx = s.canvas.getContext('2d');
-                    cx.imageSmoothingEnabled = false;
-                    if (cv) {
-                        cx.drawImage(cv, 0, 0, 8, 8, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
-                        cx.clearRect(FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
-                    } else {
-                        cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
-                        cx.drawImage(s.baseHead, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
-                    }
-                    s.tex.needsUpdate = true;
-                } catch {}
             }
         }
         // limpiar sesiones de players que se fueron del mundo
         for (const key of others._sessions.keys()) if (!live.has(key)) others._sessions.delete(key);
         others._raf = requestAnimationFrame(otherTick);
+    }
+
+    // restaurar la franja de cabeza COMPLETA de un otro desde su baseHead
+    // y soltar su sesión (se usa al apagar el modo y cuando un player
+    // cambia de una skin CON pack a una SIN pack)
+    function restoreOther(key) {
+        const s = others._sessions.get(key);
+        if (!s) return;
+        try {
+            const k = s.k || 1, cx = s.canvas.getContext('2d');
+            cx.imageSmoothingEnabled = false;
+            cx.clearRect(0, 0, 64 * k, 16 * k);
+            cx.drawImage(s.baseHead, 0, 0, 64 * k, 16 * k, 0, 0, 64 * k, 16 * k);
+            s.tex.needsUpdate = true;
+        } catch {}
+        others._sessions.delete(key);
     }
 
     function othersStart() {
@@ -1949,16 +2065,9 @@
     function othersStop() {
         others.on = false;
         if (others._raf) { cancelAnimationFrame(others._raf); others._raf = null; }
-        // restaurar TODAS las caras tocadas
-        for (const [key, s] of others._sessions) {
-            try {
-                const k = s.k || 1, cx = s.canvas.getContext('2d');
-                cx.imageSmoothingEnabled = false;
-                cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
-                cx.drawImage(s.baseHead, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
-                s.tex.needsUpdate = true;
-            } catch {}
-        }
+        // restaurar TODAS las caras tocadas (la franja completa: los
+        // sprites de pack pintan el head entero 64x16, no solo la cara)
+        for (const key of [...others._sessions.keys()]) restoreOther(key);
         others._sessions.clear();
         saveOthers();
         renderUI();
@@ -2832,7 +2941,11 @@
                 if (skinWatch.uuidDone) return null; // ya se aplicó: respetar la skin elegida
                 skinWatch.uuidDone = true;
                 if (!force && skinWatch.lastApplied === pack.id) return null;
-                try { await applyPackSkinToGame(pack.id); } catch (e) { debugBrow('uuid skin: ' + (e?.message || e)); }
+                // MODO FACIAL-ONLY: NO reemplazar la skin completa del cuerpo
+                // (antes: applyPackSkinToGame → custom:mf_ sobre toda la piel).
+                // Solo usamos el pack para los SPRITES de la cara (blink,
+                // cejas, direcciones) pintados encima de la skin actual.
+                debugBrow('uuid skin: facial-only (skin intacta: ' + skinId + ')');
             } else {
                 pack = packIndex.find(p => p.id === skinId);
             }

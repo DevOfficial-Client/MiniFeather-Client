@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña']);
 
   function parseDetail(event) {
     try {
@@ -578,6 +578,9 @@
     }
 
     if (command === 'spider' || command === 'arana' || command === 'araña') {
+      // IIFE async: MF_SPIDER_SIM.send devuelve Promise (handler 'ai' conecta
+      // al server Python de deep learning antes de responder)
+      void (async () => {
       const api = globalThis.MF_SPIDER_BOT;
       if (!api) { addChat('SpiderBot is not ready yet (reload page).', 'error'); return; }
       const action = (args[0] || 'help').toLowerCase();
@@ -595,7 +598,7 @@
             if (Number.isFinite(v)) { scale = Math.max(1, Math.min(200, v)); i++; }
           }
         }
-        const r = api.send({ type: 'spawn', preset, gallop, scale });
+        const r = await api.send({ type: 'spawn', preset, gallop, scale });
         if (!r.ok) { addChat(r.error || 'SpiderSim not loaded.', 'error'); return; }
         api.enable(true);
         addChat(`Spawn requested: ${preset}${scale ? ` (body height: ${scale} blocks)` : ''}${gallop ? ' gallop' : ''} (embedded simulator).`, 'success');
@@ -608,12 +611,12 @@
         const yaw = Number(player.yaw) || 0;
         const x = Number(player.pos.x) + Math.sin(yaw) * 8;
         const z = Number(player.pos.z) + Math.cos(yaw) * 8;
-        const r = api.target(x, Number(player.pos.y) || 64, z);
+        const r = await api.target(x, Number(player.pos.y) || 64, z);
         addChat(r.ok ? 'Laser on! Guiding nearest spider.' : r.error, r.ok ? 'success' : 'error');
         return;
       }
       if (action === 'staystill' || action === 'stop') {
-        const r = api.staystill();
+        const r = await api.staystill();
         addChat(r.ok ? 'Spiders stopped.' : r.error, r.ok ? 'success' : 'error');
         return;
       }
@@ -621,13 +624,13 @@
         // /spider follow [dist|off] — siguen tu posición en vivo (A* pathfinding)
         const arg = (args[1] || '').toLowerCase();
         if (arg === 'off' || arg === 'stop') {
-          const r = api.send({ type: 'follow', off: true });
+          const r = await api.send({ type: 'follow', off: true });
           addChat(r.ok ? 'Spiders no longer following you.' : r.error, r.ok ? 'success' : 'error');
         } else {
           const dist = parseFloat(arg);
           const n = api.list().length;
           if (!n) { addChat('No spiders yet (spawn one with /spider spawn).', 'error'); return; }
-          const r = api.send({ type: 'follow', distance: Number.isFinite(dist) && dist > 0 ? dist : 3 });
+          const r = await api.send({ type: 'follow', distance: Number.isFinite(dist) && dist > 0 ? dist : 3 });
           addChat(r.ok ? `${n} spider${n === 1 ? '' : 's'} following you${Number.isFinite(dist) && dist > 0 ? ` (stop distance: ${dist})` : ''} — A* pathfinding on.` : r.error, r.ok ? 'success' : 'error');
         }
         return;
@@ -636,7 +639,7 @@
         // /spider goto <x> [y] <z> | off — caminan a coordenadas con A*
         const a1 = (args[1] || '').toLowerCase();
         if (a1 === 'off' || a1 === 'stop') {
-          const r = api.send({ type: 'goto', off: true });
+          const r = await api.send({ type: 'goto', off: true });
           addChat(r.ok ? 'Pathfinding target cleared.' : r.error, r.ok ? 'success' : 'error');
           return;
         }
@@ -652,12 +655,12 @@
           addChat('Usage: /spider goto <x> <z> | /spider goto <x> <y> <z> | /spider goto off', 'error');
           return;
         }
-        const r = api.send({ type: 'goto', x, y, z });
+        const r = await api.send({ type: 'goto', x, y, z });
         addChat(r.ok ? `${n} spider${n === 1 ? '' : 's'} pathfinding (A*) to ${x}, ${y ?? 'auto'}, ${z}.` : r.error, r.ok ? 'success' : 'error');
         return;
       }
       if (action === 'tphere') {
-        const r = api.send({ type: 'tphere' });
+        const r = await api.send({ type: 'tphere' });
         const list = api.list();
         const n = list.length;
         addChat(r.ok ? (n > 0 ? `${n} spider${n === 1 ? '' : 's'} teleported to you.` : 'No spiders to teleport.') : r.error, r.ok ? 'success' : 'error');
@@ -667,13 +670,13 @@
         // /spider replace [scale] | off — arañas del server → preset 'spider'
         const arg = (args[1] || '').toLowerCase();
         if (arg === 'off' || arg === 'stop') {
-          const r = api.send({ type: 'replace', off: true });
+          const r = await api.send({ type: 'replace', off: true });
           addChat(r.ok ? 'Server spiders restored to their vanilla model.' : r.error, r.ok ? 'success' : 'error');
           return;
         }
         const scale = parseFloat(args[1]);
         const h = Number.isFinite(scale) && scale > 0 ? Math.min(200, scale) : 100;
-        const r = api.send({ type: 'replace', scale: h });
+        const r = await api.send({ type: 'replace', scale: h });
         if (!r.ok) { addChat(r.error, 'error'); return; }
         api.enable(true);
         addChat(`Replacing server spiders with preset 'spider' (${h} blocks tall). Their vanilla models are hidden. /spider replace off to restore.`, 'success');
@@ -683,7 +686,7 @@
         // /spider hunt [range] [agg] | off — IA de caza: acecho, rodeo, emboscada y mordisco
         const arg = (args[1] || '').toLowerCase();
         if (arg === 'off' || arg === 'stop') {
-          const r = api.send({ type: 'hunt', off: true });
+          const r = await api.send({ type: 'hunt', off: true });
           addChat(r.ok ? 'Hunt mode OFF.' : r.error, r.ok ? 'success' : 'error');
           return;
         }
@@ -691,7 +694,7 @@
         if (!n) { addChat('No spiders yet (spawn one with /spider spawn).', 'error'); return; }
         const range = parseFloat(args[1]);
         const agg = parseFloat(args[2]);
-        const r = api.send({
+        const r = await api.send({
           type: 'hunt',
           range: Number.isFinite(range) && range > 0 ? range : 48,
           aggression: Number.isFinite(agg) && agg > 0 ? agg : 1,
@@ -699,6 +702,35 @@
         addChat(r.ok
           ? `Hunt mode ON: ${n} spider${n === 1 ? '' : 's'} stalking you — they circle, pounce and BITE. /spider hunt off to stop.`
           : r.error, r.ok ? 'success' : 'error');
+        return;
+      }
+      if (action === 'evolve' || action === 'evolucion' || action === 'evo') {
+        // /spider evolve [n] | off — IA evolutiva con selección natural
+        const arg = (args[1] || '').toLowerCase();
+        if (arg === 'off' || arg === 'stop') {
+          const r = await api.send({ type: 'evolve', off: true });
+          addChat(r.ok ? 'Evolution OFF: spiders survive but no longer evolve.' : r.error, r.ok ? 'success' : 'error');
+          return;
+        }
+        const n = parseInt(arg, 10);
+        const r = await api.send({ type: 'evolve', count: Number.isFinite(n) && n > 0 ? n : 6 });
+        if (!r.ok) { addChat(r.error || 'Evolution failed to start.', 'error'); return; }
+        api.enable(true);
+        const c = r.count ?? '?';
+        addChat(`Evolution ON: ${c} random spiders (gen 0). Food spawns near you; they eat, bite, starve, reproduce and MUTATE. Watch with /spider stats.`, 'success');
+        return;
+      }
+      if (action === 'stats' || action === 'evostats') {
+        // /spider stats — población evolutiva ordenada por fitness
+        const r = await api.send({ type: 'evostats' });
+        if (!r || !r.ok) { addChat('Evolution not running. Start with /spider evolve.', 'error'); return; }
+        const s = r.stats;
+        addChat(`— EVOLUTION gen=${s.generation} births=${s.births} deaths=${s.deaths} alive=${r.population.length} ticks=${s.ticks} —`, 'info');
+        for (const p of r.population.slice(0, 10)) {
+          const st = p.stamina !== undefined ? ` ⚡${Math.round(p.stamina * 100)}%${p.tired ? '😩' : ''}` : '';
+          addChat(`  ${p.name} g${p.gen} fit=${p.fitness} E=${p.energy}${st}${p.food ? ` 🍖${p.food}` : ''}${p.bites ? ` 🦷${p.bites}` : ''}${p.children ? ` 🐣${p.children}` : ''}`, 'info');
+        }
+        if (!r.population.length) addChat('  (population extinct — restart with /spider evolve)', 'error');
         return;
       }
       if (action === 'clear' || action === 'remove' || action === 'kill') {
@@ -716,7 +748,7 @@
           addChat(n ? `Removed all spiders (${n}).` : 'No spiders loaded.', 'success');
           return;
         }
-        const r = api.send({ type: 'despawn', name });
+        const r = await api.send({ type: 'despawn', name });
         addChat(r.ok ? 'Despawn requested.' : r.error, r.ok ? 'success' : 'error');
         return;
       }
@@ -755,6 +787,8 @@
           '\\yellow\\/spider follow [dist|off]\\reset\\ - Follow you with A* pathfinding',
           '\\yellow\\/spider goto <x> <z> [y] | off\\reset\\ - Walk to coords with A* pathfinding',
           '\\yellow\\/spider hunt [range] [agg] | off\\reset\\ - Hunting AI: stalk, circle, pounce, bite',
+          '\\yellow\\/spider evolve [n] | off\\reset\\ - NATURAL SELECTION: spiders eat, starve, reproduce & mutate',
+          '\\yellow\\/spider stats\\reset\\ - Evolution leaderboard (fitness, generation, energy)',
           '\\yellow\\/spider replace [h] | off\\reset\\ - Server spiders become preset spider (h blocks tall, default 100)',
           '\\yellow\\Spiders auto-share via P2P: /p2p host (owner) + /p2p join <code> (friend)\\reset\\',
           '\\yellow\\/spider clear | despawn all\\reset\\ - Remove ALL loaded spiders',
@@ -763,10 +797,64 @@
           '\\yellow\\/spider list\\reset\\ - Spiders + simulator status',
           '\\yellow\\/spider status\\reset\\ - Debug info',
           '\\yellow\\/spider log [0-3]\\reset\\ - Debug logging (or dump last entries)',
+          '\\yellow\\/spider ai [url] [n] | off\\reset\\ - Deep learning: DQN brain in ai/server.py (Python)',
+          '\\yellow\\/spider aistats\\reset\\ - Neural net status (steps, epsilon, loss, thoughts)',
+          '\\yellow\\/spider predators [n] | off\\reset\\ - THREATS: hunters that patrol and kill spiders',
           'Simulator is embedded in the extension — no external process needed'
         ]) state.chat?.addChat?.({ text: line });
         return;
       }
+      if (action === 'ai' || action === 'ia' || action === 'brain') {
+        // /spider ai [url] [n] | off — cerebro DQN en el server Python
+        const arg = (args[1] || '').toLowerCase();
+        if (arg === 'off' || arg === 'stop') {
+          const r = await api.send({ type: 'ai', off: true });
+          addChat(r.ok ? `AI OFF: ${r.removed} spider(s) freed from the neural net.` : r.error, r.ok ? 'success' : 'error');
+          return;
+        }
+        // /spider ai http://host:port/ws 5
+        let url = '';
+        let count;
+        for (let i = 1; i < args.length; i++) {
+          const t = args[i];
+          if (/^wss?:\/\//.test(t)) url = t;
+          else { const v = parseInt(t, 10); if (Number.isFinite(v) && v > 0) count = v; }
+        }
+        addChat(`Connecting to motor AI server ${url || 'ws://127.0.0.1:8766/ws'} …`, 'info');
+        const r = await api.send({ type: 'ai', url, count, useExisting: arg === 'evo' || arg === 'existing' });
+        if (!r.ok) { addChat(r.error || 'AI failed to start.', 'error'); return; }
+        api.enable(true);
+        addChat(`Motor AI ON: ${r.count} spider(s) — every muscle controlled by a neuroevolved net (${r.backend || 'motor'}${r.device ? `, ${r.device}` : ''})${r.predators ? `, ${r.predators} predators hunting them` : ''}. NO preprogrammed gait: movement emerges from physics. /spider aistats`, 'success');
+        return;
+      }
+      if (action === 'predators' || action === 'predador' || action === 'amenaza' || action === 'threats') {
+        // /spider predators [n] | off — amenazas que cazan arañas
+        const arg = (args[1] || '').toLowerCase();
+        if (arg === 'off' || arg === 'stop') {
+          const r = await api.send({ type: 'predators', off: true });
+          addChat(r.ok ? `Predators OFF (${r.kills} total kills).` : r.error, r.ok ? 'success' : 'error');
+          return;
+        }
+        const n = parseInt(arg, 10);
+        const r = await api.send({ type: 'predators', count: Number.isFinite(n) && n > 0 ? n : 2 });
+        if (!r.ok) { addChat(r.error, 'error'); return; }
+        api.enable(true);
+        addChat(`Predators ON: ${r.count} hunters patrolling and CHASING spiders. The AI must learn to flee. /spider predators off to remove.`, 'success');
+        return;
+      }
+      if (action === 'aistats' || action === 'statsai' || action === 'brainstats') {
+        const r = await api.send({ type: 'aistats' });
+        if (!r?.ok) { addChat('AI status unavailable.', 'error'); return; }
+        const c = r.conn || {};
+        addChat(`— MOTOR BRAIN ${c.connected ? '🟢 connected' : '🔴 offline'} gen=${c.generation ?? '—'} device=${c.device || '?'} motors=${c.motors ?? 28} —`, c.connected ? 'success' : 'error');
+        for (const m of (r.minds || []).slice(0, 12)) {
+          addChat(`  ${m.name} · edad ${m.age}t · viajó ${m.travel}m · swing ${m.legs ?? '—'} lift ${m.lift ?? '—'}`, 'info');
+        }
+        if (r.evolve) addChat(`  economy: births=${r.evolve.births} deaths=${r.evolve.deaths} gen=${r.evolve.generation}`, 'info');
+        if (!c.connected) addChat('  1) python ai/ecoserver.py (evolve champion)  2) python ai/server.py  3) /spider ai', 'info');
+        return;
+      }
+      })();
       return;
     }
 
@@ -1384,6 +1472,42 @@
       const st = api.status;
       const role = api.role ? ` (${api.role})` : '';
       addChat(st === 'off' ? 'P2P: off — use /p2p host or /p2p join <code>' : `P2P: ${st}${role}`);
+      return;
+    }
+
+    if (command === 'mesh') {
+      const api = globalThis.MF_Mesh;
+      if (!api) { addChat('Mesh module is not ready yet.', 'error'); return; }
+      const action = (args[0] || 'status').toLowerCase();
+      if (action === 'on' || action === 'start') {
+        api.start().then(code => {
+          if (!code) { addChat('Could not start the mesh (check console).', 'error'); return; }
+          addChat(`Mesh node ${code} — announcing to chat, auto-connecting to others.`, 'success');
+        });
+        return;
+      }
+      if (action === 'announce' || action === 'anunciar') {
+        api.announceNow();
+        addChat('Mesh code re-announced to chat.', 'success');
+        return;
+      }
+      if (action === 'share' || action === 'compartir') {
+        api.shareSkin();
+        addChat('Your current custom skin was shared to the mesh.', 'success');
+        return;
+      }
+      if (action === 'off' || action === 'stop') {
+        api.dispose();
+        addChat('Mesh node closed.', 'success');
+        return;
+      }
+      // status
+      const st = api.status;
+      const n = api.connected;
+      const names = Object.values(api.names || {}).join(', ') || '—';
+      addChat(st === 'off'
+        ? 'Mesh: off — use /mesh on'
+        : `Mesh: ${st} — ${n} node(s): ${names}`);
       return;
     }
 

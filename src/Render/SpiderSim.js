@@ -692,8 +692,8 @@
       return p;
     },
     // Araña real: 8 patas (4 pares) × 2 segmentos (fémur + tibia) = cadena corta
-    // para minimizar coste del FABRIK. El renderer ignora el bodyModel (no se
-    // dibuja torso) y solo usa los 2 primeros segmentos como cubos alargados.
+    // para minimizar coste del FABRIK. El renderer dibuja el torso como
+    // 1 mesh fusionado (cefalotórax+abdomen) escalado por bodyModel y tamaño.
     spider(sc = 2, sl = 1.0) {
       const p = new BodyPlan();
       p.bodyModel = 'flat';
@@ -941,6 +941,37 @@
       this.previousEndEffector = this.endEffector.clone();
       this.timeSinceBeginMove += 1;
       this.timeSinceStopMove += 1;
+
+      // MODO MOTOR (IA neuroevolutiva): la red coloca los pies —
+      // sin gait preprogramado. Solo física: inercia + colisión suelo.
+      if (this.spider.motorControlled) {
+        if (this.motorSwing) {
+          // swing SUAVE: velocidad muscular finita hacia el objetivo,
+          // proporcional al tamaño del cuerpo (gigantes: pasos largos)
+          const spd = (this.spider.gait.stepMoveSpeed || 0.35) * (this.spider.motorScale || 1);
+          const dx = this.motorSwing.wx - this.endEffector.x;
+          const dz = this.motorSwing.wz - this.endEffector.z;
+          const d = Math.hypot(dx, dz);
+          if (d > 1e-4) {
+            const step = Math.min(d, spd);
+            this.endEffector.x += (dx / d) * step;
+            this.endEffector.z += (dz / d) * step;
+          }
+          // pie en el aire: baja por gravedad hasta tocar suelo
+          this.endEffector.y -= 0.25;
+        } else {
+          // pie plantado: el cuerpo se mueve → arrastrarlo (inercia)
+          this.applyBodyMotion(this.endEffector);
+        }
+        const collision = this.world.resolveCollision(this.endEffector, DOWN_VECTOR());
+        if (collision) {
+          this.touchingGround = true;
+          this.endEffector.y = collision.position.y;
+        } else if (!this.motorSwing) {
+          this.touchingGround = false;
+        }
+        return;
+      }
 
       const oldTargetPosition = this.target.position.clone();
       const ground = this.locateGroundTarget();
@@ -1628,6 +1659,787 @@
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  // IA EVOLUTIVA — selección natural
+  // ══════════════════════════════════════════════════════════════════
+  // Cada araña tiene un GENOMA que controla su fenotipo (velocidad real de
+  // sus gaits, longitud de patas, temperamento) y su comportamiento
+  // (estrategia de búsqueda de comida vs caza del jugador).
+  //
+  // Ciclo de vida:
+  //   energía: se gasta al moverse (proporcional a velocidad y masa) y se
+  //   gana al comer comida (food) o morder al jugador (caza).
+  //   muerte: energía ≤ 0 → la araña muere y se elimina (selección: los
+  //   genomas ineficientes desaparecen solos).
+  //   reproducción: energía ≥ umbral → nace una cría con el genoma del
+  //   padre + mutación gaussiana. La energía se divide entre padre y cría.
+  //
+  // El sistema corre como un onTick más del ECS y NO interfiere con los
+  // otros modos (follow/goto/hunt/replace): solo se activa con el
+  // comando `evolve` y despacha componentes `EvolutionBehaviour`.
+
+  // Genoma: números normalizados ~U[0,1] que se traducen a fenotipo en
+  // applyGenome(). Mutación = perturbación gaussiana por gen.
+  class Genome {
+    constructor(genes) {
+      // 15 genes: speed, accel, legLen, bodyHeight, aggression, huntRange,
+      // foodVsHunt (0=recolecta, 1=caza), metabolism, reproThreshold,
+      // turnRate, bitePower, legMoveSpeed, strength (músculo máx),
+      // endurance (estamina máx), recovery (regeneración)
+      this.genes = genes || Genome.random();
+      this.generation = 0;
+      this.lineage = []; // nombres de ancestros (para el árbol)
+    }
+    static random() {
+      const g = {};
+      for (const k of Genome.GENE_LIST) g[k] = Math.random();
+      return g;
+    }
+    static mutate(parentGenes, rate = 0.18, sigma = 0.16) {
+      const g = { ...parentGenes };
+      for (const k of Genome.GENE_LIST) {
+        if (Math.random() < rate) {
+          // gaussiana aproximada (suma de uniformes) centrada en el valor
+          const noise = (Math.random() + Math.random() + Math.random() - 1.5) / 1.5 * sigma;
+          g[k] = Math.max(0, Math.min(1, g[k] + noise));
+        }
+      }
+      return g;
+    }
+    clone() {
+      const g = new Genome({ ...this.genes });
+      g.generation = this.generation;
+      g.lineage = [...this.lineage];
+      return g;
+    }
+    child() {
+      const g = new Genome(Genome.mutate(this.genes));
+      g.generation = this.generation + 1;
+      g.lineage = [...this.lineage, this.generation].slice(-8);
+      return g;
+    }
+  }
+  Genome.GENE_LIST = [
+    'speed', 'accel', 'legLen', 'bodyHeight', 'aggression', 'huntRange',
+    'foodVsHunt', 'metabolism', 'reproThreshold', 'turnRate', 'bitePower', 'legMoveSpeed',
+    'strength', 'endurance', 'recovery',
+  ];
+
+  // Traduce genoma → fenotipo del SpiderBody (gaits) + parámetros de
+  // conducta. Se llama al nacer (spawnSpiderEvolution) y define lo que la
+  // selección puede "ver": una araña lenta pero eficiente puede vivir más
+  // que una rápida derrochadora.
+  function applyGenome(spider, genome) {
+    const g = genome.genes;
+    // locomoción: mapear [0,1] → rangos jugosos (comparables a los default)
+    const walkSpeed = 0.08 + g.speed * 0.25;        // 0.08..0.33 (def 0.15)
+    const gallopSpeed = walkSpeed * (1.6 + g.speed * 1.4);
+    // MÚSCULO: más strength = más empuje (aceleración y salto), pero masa
+    // muscular extra cuesta metabolismo (la selección equilibra músculo vs
+    // eficiencia). El empuje escala ~strength², el coste ~lineal.
+    const muscleBoost = 0.7 + g.strength * 1.1;     // 0.7..1.8 ×
+    for (const gait of [spider.walkGait, spider.gallopGait]) {
+      gait.maxSpeed = walkSpeed;
+      gait.moveAcceleration = (0.02 + g.accel * 0.06) * muscleBoost; // def 0.0375
+      gait.rotateAcceleration = (0.02 + g.accel * 0.08) * muscleBoost;
+      gait.legMoveSpeed = walkSpeed * (1.8 + g.legMoveSpeed * 2.2); // def ×2.5
+      gait.rotationLerp = 0.15 + g.turnRate * 0.4;   // def 0.3
+      gait.stationary.bodyHeight = 0.7 + g.bodyHeight * 0.9; // def 1.1
+      gait.moving.bodyHeight = 0.7 + g.bodyHeight * 1.1;
+      // patas más fuertes levantan más el cuerpo al andar (empuje real)
+      gait.legLiftHeight = 0.25 + g.strength * 0.3;  // def 0.35
+    }
+    spider.gallopGait.maxSpeed = gallopSpeed;
+    // metabolismo: lo usa el sistema evolutivo (coste por tick)
+    spider.__mfGenome = genome;
+    return spider;
+  }
+
+  // Estado evolutivo por araña
+  class EvolutionBehaviour {
+    constructor(genome) {
+      this.genome = genome;
+      this.energy = 55;       // arranque: suficiente para explorar
+      this.maxEnergy = 100;
+      // ESTAMINA: capacidad de esfuerzo físico. Se gasta al correr/cazar
+      // (más rápido con músculo grande), se regenera quieta o al andar
+      // suave. Sin estamina la araña no puede sprintar ni morder fuerte.
+      this.maxStamina = 0.6 + genome.genes.endurance * 1.4; // 0.6..2.0 (×segundos de sprint)
+      this.stamina = this.maxStamina; // nace descansada
+      this.staminaDrain = 0;  // diagnóstico: drenaje del último tick
+      this.age = 0;           // ticks vividos
+      this.bites = 0;
+      this.foodEaten = 0;
+      this.children = 0;
+      this.dead = false;
+      this.reproCooldown = 0;
+      // runtime de deambular (wander) hacia comida
+      this.wanderDir = Math.random() * Math.PI * 2;
+      this.wanderT = 0;
+      this.targetFood = null;
+    }
+  }
+
+  // Comida: puntos del mundo que las arañas pueden comer. Se generan cerca
+  // del jugador (radio 24) sobre el suelo y expiran.
+  const evoFood = {
+    items: [], // { pos: Vec, t: ms de vida restante, id }
+    nextId: 1,
+    spawnEvery: 0, // ticks hasta el próximo spawn
+    rate: 4,      // comida nueva cada N ticks (austero: la competencia muerde)
+  };
+
+  function evoSpawnFood() {
+    const p = sim.lastPlayerPos;
+    if (!p || (p.x === 0 && p.y === 0 && p.z === 0)) return;
+    if (evoFood.items.length >= 14) return; // escasez = presión selectiva
+    const ang = Math.random() * Math.PI * 2;
+    const rad = 4 + Math.random() * 20;
+    const x = p.x + Math.cos(ang) * rad;
+    const z = p.z + Math.sin(ang) * rad;
+    const hit = sim.world.raycastGround(new Vec(x, (p.y || 64) + 24, z), DOWN_VECTOR(), 48);
+    if (!hit) return;
+    evoFood.items.push({ pos: new Vec(hit.x, hit.y, hit.z), t: 45000, id: evoFood.nextId++ });
+    emit({ type: 'evo', event: 'food', at: [round3(hit.x), round3(hit.y), round3(hit.z)] });
+  }
+
+  // ¿Está la simulación evolutiva activa? (comando evolve)
+  let evoActive = false;
+  let evoStats = { births: 0, deaths: 0, generation: 0, bestFitness: 0, ticks: 0 };
+
+  // ════════════════════════════════════════════════════════════
+  // AMENAZAS: depredadores que patrullan y CAZAN arañas
+  // ════════════════════════════════════════════════════════════
+  // Como los Predator de ai/env.py: velocidad 0.30 (< sprint 0.40
+  // → huir SIRVE), sentido 14 bloques, atrapan a 2. La IA los ve
+  // en su observación (features 6-8 + 16) y aprende a escapar.
+  const predators = {
+    items: [],   // { pos: Vec, heading, state: 'patrol'|'chase', wanderT }
+    on: false,
+    count: 2,
+    kills: 0,
+  };
+
+  function predatorSpawn() {
+    const p = sim.lastPlayerPos;
+    if (!p || (p.x === 0 && p.y === 0 && p.z === 0)) return;
+    // nace lejos de las arañas
+    for (let tries = 0; tries < 8; tries++) {
+      const ang = Math.random() * Math.PI * 2;
+      const rad = 26 + Math.random() * 12;
+      const x = p.x + Math.cos(ang) * rad;
+      const z = p.z + Math.sin(ang) * rad;
+      const hit = sim.world.raycastGround(new Vec(x, (p.y || 64) + 30, z), DOWN_VECTOR(), 60);
+      if (!hit) continue;
+      predators.items.push({
+        pos: new Vec(hit.x, hit.y, hit.z),
+        heading: Math.random() * Math.PI * 2,
+        state: 'patrol',
+        wanderT: 0,
+        wanderDir: Math.random() * Math.PI * 2,
+      });
+      return;
+    }
+  }
+
+  function setupPredators(app) {
+    app.onTick(() => {
+      if (!predators.on) return;
+      // mantener población
+      while (predators.items.length < predators.count) predatorSpawn();
+      const SENSE = 14, EAT = 2, SPD = 0.30, CHASE_DIV = 1.4;
+      for (const pr of predators.items) {
+        // presa más cercana (araña viva más lenta que el depredador)
+        let prey = null, pd = Infinity;
+        for (const s of sim.spiders) {
+          const d = s.body.position.distanceSquared(pr.pos);
+          if (d < pd) { pd = d; prey = s; }
+        }
+        const dist = Math.sqrt(pd);
+        if (prey && dist < SENSE) {
+          pr.state = 'chase';
+          pr.heading = Math.atan2(prey.body.position.z - pr.pos.z, prey.body.position.x - pr.pos.x);
+          const spd = SPD * (dist > 6 ? 1.25 : 1.0); // embiste al final
+          pr.pos.x += Math.cos(pr.heading) * spd;
+          pr.pos.z += Math.sin(pr.heading) * spd;
+          // ATRAPADA
+          if (dist < EAT) {
+            const evo = prey.entity.components.get('EvolutionBehaviour');
+            const ai = prey.entity.components.get('RemoteAIBehaviour');
+            const fitness = evo ? round3(evoFitness(evo)) : 0;
+            predators.kills++;
+            evoStats.deaths++;
+            if (ai) { aiSendReset(ai); }
+            emit({ type: 'evo', event: 'predation', name: prey.name, fitness });
+            const idx = sim.spiders.indexOf(prey);
+            if (idx >= 0) sim.spiders.splice(idx, 1);
+            prey.entity.remove();
+            emit({ type: 'remove', name: prey.name });
+          }
+        } else {
+          pr.state = 'patrol';
+          if (--pr.wanderT <= 0) { pr.wanderDir = Math.random() * Math.PI * 2; pr.wanderT = 120 + Math.random() * 260; }
+          pr.heading = pr.wanderDir;
+          pr.pos.x += Math.cos(pr.heading) * SPD * 0.6;
+          pr.pos.z += Math.sin(pr.heading) * SPD * 0.6;
+        }
+        // pegar al suelo
+        const hit = sim.world.raycastGround(new Vec(pr.pos.x, pr.pos.y + 20, pr.pos.z), DOWN_VECTOR(), 40);
+        if (hit) { pr.pos.y = hit.y; }
+        void CHASE_DIV;
+      }
+      emit({ type: 'evo', event: 'preds', positions: predators.items.map((pr) => [round3(pr.pos.x), round3(pr.pos.y), round3(pr.pos.z), pr.state === 'chase' ? 1 : 0]) });
+    });
+  }
+
+  // El corazón: sistema ECS de la evolución
+  function setupEvolution(app) {
+    app.onTick(() => {
+      if (!evoActive) return;
+      const now = sim.tickCount * TICK_MS;
+      const p = sim.lastPlayerPos;
+
+      // 1) comida: spawn cadencioso + expiración
+      if (--evoFood.spawnEvery <= 0) { evoSpawnFood(); evoFood.spawnEvery = evoFood.rate * 20; }
+      for (let i = evoFood.items.length - 1; i >= 0; i--) {
+        evoFood.items[i].t -= TICK_MS;
+        if (evoFood.items[i].t <= 0) evoFood.items.splice(i, 1);
+      }
+
+      // 2) por cada araña evolutiva
+      const names = new Map();
+      for (const s of sim.spiders) names.set(s.body, s.name);
+      const newborns = [];
+      for (const [entity, spider, evo] of app.query('SpiderBody', 'EvolutionBehaviour')) {
+        void entity;
+        evo.age++;
+        if (evo.reproCooldown > 0) evo.reproCooldown--;
+
+        // ── metabolismo: coste por tick (velocidad × masa-ish) ──
+        // El MÚSCULO pesa: masa muscular extra sube el gasto base
+        const g = evo.genome.genes;
+        const speed = Math.hypot(spider.velocity.x, spider.velocity.z);
+        const speedFactor = Math.min(1, speed / (spider.gait.maxSpeed || 0.2));
+        const muscleMass = 0.8 + g.strength * 0.7;  // 0.8..1.5 × coste base
+        const metabRate = (0.006 + g.metabolism * 0.03) * (0.35 + speedFactor * 0.65) * muscleMass;
+        evo.energy -= metabRate;
+
+        // ── ESTAMINA: esfuerzo físico (sprint/caza) drena, descanso llena ──
+        // drenaje: correr por encima del 60% de capacidad; escala con el
+        // músculo (empujar masa grande cansa más)
+        const drainThreshold = 0.6;
+        let drain = 0;
+        if (speedFactor > drainThreshold) {
+          drain = (speedFactor - drainThreshold) * (0.025 + g.strength * 0.02); // por tick
+        }
+        // regeneración: quieta/andando suave (más lenta con músculo grande)
+        if (drain === 0) {
+          const regen = (0.0015 + g.recovery * 0.004) / muscleMass;
+          evo.stamina = Math.min(evo.maxStamina, evo.stamina + regen);
+        } else {
+          evo.stamina = Math.max(0, evo.stamina - drain);
+        }
+        evo.staminaDrain = drain;
+        // fatiga: por debajo del 15% de estamina, el rendimiento cae (cap
+        // de velocidad y mordiscos débiles) — como un músculo agotado
+        const fatigued = evo.stamina < evo.maxStamina * 0.15;
+        const speedCap = fatigued ? 0.45 : 1;   // la araña agotada tropieza
+
+        // ── percepción: comida más cercana ──
+        let bestFood = null, bestD = Infinity;
+        for (const f of evoFood.items) {
+          const d = spider.position.distanceSquared(f.pos);
+          if (d < bestD) { bestD = d; bestFood = f; }
+        }
+
+        // ── conducta: gen foodVsHunt elige estrategia ──
+        const hungry = evo.energy < 70;
+        if (bestFood && hungry && g.foodVsHunt < 0.55) {
+          // recolectar: ir a por la comida (sprint si hay estamina)
+          const d = Math.sqrt(bestD);
+          const dir = new Vec(bestFood.pos.x - spider.position.x, 0, bestFood.pos.z - spider.position.z);
+          if (d > 0.8) {
+            rotateTowards(spider, dir);
+            const urgency = d > 6 ? 1 : 0.7; // lejos: sprint; cerca: moderado
+            walkAt(spider, dir.clone().normalize().mul(spider.gait.maxSpeed * urgency * speedCap));
+          } else {
+            walkAt(spider, new Vec(0, 0, 0));
+          }
+          if (d < 1.4 && bestFood) {
+            // comer: +energía, quitar comida, evento
+            const idx = evoFood.items.indexOf(bestFood);
+            if (idx >= 0) {
+              evoFood.items.splice(idx, 1);
+              evo.energy = Math.min(evo.maxEnergy, evo.energy + 32);
+              evo.stamina = Math.min(evo.maxStamina, evo.stamina + 0.15); // comer reanima
+              evo.foodEaten++;
+              emit({ type: 'evo', event: 'eat', name: names.get(spider) || '?', at: [round3(bestFood.pos.x), round3(bestFood.pos.y), round3(bestFood.pos.z)], energy: round3(evo.energy) });
+            }
+          }
+        } else if (g.foodVsHunt >= 0.55 && hungry && p) {
+          // cazar al jugador (versión evolutiva: usa aggression del genoma)
+          const dx = p.x - spider.position.x;
+          const dz = p.z - spider.position.z;
+          const d = Math.hypot(dx, dz);
+          const dir = new Vec(dx, 0, dz);
+          if (d > 2.2) {
+            rotateTowards(spider, dir);
+            walkAt(spider, dir.clone().normalize().mul(spider.gait.maxSpeed * (0.6 + g.aggression * 0.5) * speedCap));
+          } else if (d < 2.2 && now > (evo.nextBiteOk || 0)) {
+            // mordisco al jugador: mucha energía (recompensa por arriesgar).
+            // Con fatiga el mordisco es débil: el músculo agotado no aprieta
+            const biteMult = fatigued ? 0.35 : 1;
+            evo.nextBiteOk = now + 4000 / (0.4 + g.aggression * (fatigued ? 0.5 : 1));
+            evo.energy = Math.min(evo.maxEnergy, evo.energy + (14 + g.bitePower * 16) * biteMult);
+            evo.stamina = Math.max(0, evo.stamina - 0.12); // morder cuesta esfuerzo
+            evo.bites++;
+            emit({
+              type: 'evo', event: 'bite', name: names.get(spider) || '?',
+              at: [round3(p.x), round3(p.y), round3(p.z)], bites: evo.bites, energy: round3(evo.energy),
+            });
+          } else {
+            walkAt(spider, new Vec(0, 0, 0));
+          }
+        } else {
+          // saciada (o sin comida): deambular suave cerca (ahorra energía)
+          evo.wanderT -= TICK_MS;
+          if (evo.wanderT <= 0) {
+            evo.wanderDir = Math.random() * Math.PI * 2;
+            evo.wanderT = 1500 + Math.random() * 2500;
+          }
+          const dir = new Vec(Math.cos(evo.wanderDir), 0, Math.sin(evo.wanderDir));
+          rotateTowards(spider, dir);
+          walkAt(spider, dir.mul(spider.gait.maxSpeed * 0.35 * speedCap));
+        }
+
+        // ── muerte por inanición: SELECCIÓN NATURAL ──
+        if (evo.energy <= 0) {
+          const rec = sim.spiders.find((r) => r.body === spider);
+          const name = names.get(spider) || rec?.name || '?';
+          const fitness = evoFitness(evo);
+          evoStats.deaths++;
+          // fin del episodio de esa mente → memoria GRU a cero en el server
+          const aiDead = rec ? rec.entity.components.get('RemoteAIBehaviour') : entity.components.get('RemoteAIBehaviour');
+          if (aiDead) { aiSendReset(aiDead); aiDead.obs = null; }
+          emit({ type: 'evo', event: 'death', name, fitness: round3(fitness), gen: evo.genome.generation, age: evo.age });
+          if (rec) {
+            const idx = sim.spiders.indexOf(rec);
+            if (idx >= 0) sim.spiders.splice(idx, 1);
+            rec.entity.remove();
+            emit({ type: 'remove', name: rec.name });
+          } else {
+            entity.remove();
+          }
+          continue;
+        }
+
+        // ── reproducción: cría mutada ──
+        const reproAt = 62 + g.reproThreshold * 30; // 62..92
+        if (evo.energy >= reproAt && evo.age > 240 && evo.reproCooldown <= 0) {
+          const rec = sim.spiders.find((r) => r.body === spider);
+          if (rec && sim.spiders.length < 16) {
+            const child = evoSpawnChild(rec, evo);
+            if (child) newborns.push(child);
+          }
+          evo.energy *= 0.45; // criar cuesta: el padre dona energía
+          evo.children++;
+          evo.reproCooldown = 600; // 30 s
+        }
+      }
+
+      // 3) contabilidad
+      evoStats.ticks++;
+      if (newborns.length) {
+        evoStats.births += newborns.length;
+        let maxGen = evoStats.generation;
+        for (const n of newborns) maxGen = Math.max(maxGen, n.generation);
+        evoStats.generation = maxGen;
+      }
+      void now;
+    });
+  }
+
+  function evoFitness(evo) {
+    // fitness = comida×3 + mordiscos×5 + crías×8 + edad×0.002 + eficiencia
+    // física (sobrevivir con estamina en reserva = músculo bien gestionado)
+    const staminaBonus = (evo.stamina / Math.max(0.001, evo.maxStamina)) * 2;
+    return evo.foodEaten * 3 + evo.bites * 5 + evo.children * 8 + evo.age * 0.002 + staminaBonus;
+  }
+
+  // nace una cría junto al padre, con genoma mutado
+  function evoSpawnChild(parentRec, parentEvo) {
+    const genome = parentEvo.genome.child();
+    const ang = Math.random() * Math.PI * 2;
+    const x = parentRec.body.position.x + Math.cos(ang) * 2.5;
+    const z = parentRec.body.position.z + Math.sin(ang) * 2.5;
+    const hit = sim.world.raycastGround(new Vec(x, parentRec.body.position.y + 12, z), DOWN_VECTOR(), 24);
+    const y = (hit ? hit.y : parentRec.body.position.y) + 2;
+    const name = 'evo-' + genome.generation + '-' + (sim.spiders.length + 1);
+    const spider = spawnSpiderGenome(name, x, y, z, ang, genome);
+    const rec = sim.spiders[sim.spiders.length - 1];
+    const evo = rec?.body === spider ? new EvolutionBehaviour(genome) : null;
+    if (evo) {
+      evo.energy = Math.max(20, parentEvo.energy * 0.4); // herencia
+      rec.entity.replace('EvolutionBehaviour', evo);
+      evoStats.bestFitness = Math.max(evoStats.bestFitness, evoFitness(parentEvo));
+      emit({
+        type: 'evo', event: 'birth', name,
+        gen: genome.generation, parent: parentRec.name,
+        parentFitness: round3(evoFitness(parentEvo)),
+        genes: { ...genome.genes },
+      });
+    }
+    return genome;
+  }
+
+  // spawn con genoma (preset base 'spider' + fenotipo del genoma)
+  function spawnSpiderGenome(name, x, y, z, yaw, genome) {
+    const spider = spawnSpider(name, 'spider', x, y, z, yaw, genome.genes.speed > 0.6);
+    applyGenome(spider, genome);
+    return spider;
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // IA REMOTA MOTOR — control de CADA músculo (neuroevolución)
+  // ══════════════════════════════════════════════════════════════════
+  // Cero comportamientos preprogramados: la red (ai/server.py) emite
+  // 28 comandos continuos = 8 patas × [swing, lateral, lift] +
+  // cuerpo × [pitch, roll, yaw, thrust]. El movimiento EMERGE de la
+  // física del juego (pie plantado se retrae → empuja el cuerpo).
+  // Aprendizaje: SOLO selección natural en ai/ecoserver.py.
+  class RemoteAIBehaviour {
+    constructor() {
+      this.sid = null;         // id de sesión (memoria GRU por araña)
+      this.motors = null;      // últimos 28 comandos recibidos
+      this.obs = null;
+      this.prevFoodDist = null;
+      this.prevPredDist = null;
+      this.eaten = 0;
+      this.bites = 0;
+      this.biteCd = 0;
+      this.travel = 0;
+      this.lastPos = null;
+      this.mindAge = 0;        // ticks desde el último reset de memoria
+      this.kills = 0;          // 5 mordidas = kill
+      this.fightTicks = 0;     // persecución sostenida
+      this.preyHp = 60;        // HP virtual de la presa (jugador)
+      this.postFight = 0;
+    }
+  }
+
+  // cliente WebSocket del AI server (compartido por todas las arañas)
+  const aiws = {
+    sock: null,
+    url: '',
+    ready: false,
+    pending: new Map(), // requestId → resolve
+    nextId: 1,
+    stats: { connected: false, backend: null, generation: null, device: null, sent: 0, recvd: 0 },
+  };
+
+  function aiConnect(url) {
+    if (aiws.sock && aiws.url === url && aiws.ready) return Promise.resolve(true);
+    aiDisconnect();
+    aiws.url = url;
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (ok) => { if (!settled) { settled = true; resolve(ok); } };
+      let sock;
+      try { sock = new WebSocket(url); } catch (e) { finish(false); return; }
+      aiws.sock = sock;
+      sock.onopen = () => {
+        sock.send(JSON.stringify({ t: 'init' }));
+      };
+      sock.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.t === 'ready') {
+            aiws.ready = true;
+            aiws.stats.connected = true;
+            aiws.stats.backend = msg.stats?.backend ?? null;
+            aiws.stats.generation = msg.stats?.generation ?? null;
+            aiws.stats.device = msg.stats?.device ?? null;
+            aiws.stats.mem = msg.stats?.mem ?? null;
+            aiws.stats.motors = msg.stats?.motors ?? null;
+            LOG.i('AI motor server listo:', msg.stats);
+            finish(true);
+          } else if (msg.t === 'motors') {
+            const p = aiws.pending.get(msg.id);
+            if (p) {
+              aiws.pending.delete(msg.id);
+              p(Array.isArray(msg.m) ? msg.m : null);
+              aiws.stats.recvd++;
+            }
+          } else if (msg.t === 'stats') {
+            aiws.stats.generation = msg.stats?.generation ?? aiws.stats.generation;
+            aiws.stats.device = msg.stats?.device ?? null;
+          }
+        } catch (_) {}
+      };
+      sock.onclose = () => {
+        aiws.ready = false;
+        aiws.stats.connected = false;
+        aiws.sock = null;
+        for (const [, p] of aiws.pending) { try { p(null); } catch (_) {} }
+        aiws.pending.clear();
+      };
+      sock.onerror = () => { finish(false); };
+      setTimeout(() => finish(aiws.ready), 3000);
+    });
+  }
+
+  function aiDisconnect() {
+    try { aiws.sock?.close(); } catch (_) {}
+    aiws.sock = null;
+    aiws.ready = false;
+    aiws.stats.connected = false;
+  }
+
+  // pedir comandos de músculo (async; null = sin respuesta → relajar).
+  // pending se indexa por SID: el server responde {"t":"motors","id":<sid>}
+  // — el mismo id de sesión que enviamos en "act".
+  function aiAct(obs, ai) {
+    return new Promise((resolve) => {
+      if (!aiws.ready) { resolve(null); return; }
+      if (!ai.sid) ai.sid = aiws.nextId++;
+      const sid = ai.sid;
+      // petición anterior de ESTA araña sin resolver → descartar (la nueva
+      // obs la suplanta); resolver null para no colgar el .then viejo
+      const old = aiws.pending.get(sid);
+      if (old) { try { old(null); } catch (_) {} aiws.pending.delete(sid); }
+      aiws.pending.set(sid, resolve);
+      aiws.stats.sent++;
+      try {
+        aiws.sock.send(JSON.stringify({ t: 'act', id: sid, obs }));
+        setTimeout(() => {
+          // solo caduca si sigue siendo NUESTRA promesa (no una más nueva)
+          if (aiws.pending.get(sid) === resolve) {
+            aiws.pending.delete(sid);
+            resolve(null);
+          }
+        }, 250);
+      } catch (_) { aiws.pending.delete(sid); resolve(null); }
+    });
+  }
+
+  // araña muerta/nueva → memoria de la GRU a cero
+  function aiSendReset(ai) {
+    if (!aiws.ready || !ai.sid) return;
+    try { aiws.sock.send(JSON.stringify({ t: 'reset', id: ai.sid })); } catch (_) {}
+  }
+
+  // ── observación de UNA araña (26 floats, misma forma que env.py) ──
+  function aiObservation(spider, ai, evo) {
+    const p = sim.lastPlayerPos;
+    const A = 24;
+    const SENSE = 14;
+    const yaw = spider.orientation.getEulerAnglesYXZ().y;
+    // comida más cercana
+    let fa = 0, fdist = 2;
+    if (evoFood.items.length) {
+      let best = null, bd = Infinity;
+      for (const f of evoFood.items) {
+        const d = spider.position.distanceSquared(f.pos);
+        if (d < bd) { bd = d; best = f; }
+      }
+      if (best) {
+        fa = relAngleTo(spider.position, best.pos, yaw);
+        fdist = Math.min(2, Math.sqrt(bd) / A);
+      }
+    }
+    // jugador
+    let pa = 0, pdist = 2;
+    if (p) {
+      pa = relAngleTo(spider.position, p, yaw);
+      pdist = Math.min(2, spider.position.distance(p) / A);
+    }
+    // amenaza más cercana
+    let ta = 0, tdist = 2, chasing = 0;
+    if (predators.items.length) {
+      let best = null, bd = Infinity;
+      for (const pr of predators.items) {
+        const d = spider.position.distanceSquared(pr.pos);
+        if (d < bd) { bd = d; best = pr; }
+      }
+      if (best) {
+        ta = relAngleTo(spider.position, best.pos, yaw);
+        tdist = Math.min(2, Math.sqrt(bd) / A);
+        chasing = Math.sqrt(bd) < SENSE ? 1 : 0;
+      }
+    }
+    const speed = Math.hypot(spider.velocity.x, spider.velocity.z);
+    const maxSp = spider.gait.maxSpeed || 0.2;
+    const stMax = evo ? evo.maxStamina : 1.3;
+    const st = evo ? evo.stamina : 1;
+    // propiocepción: ¿cada pie está en el suelo? (16-23) + fracción (24)
+    const grounded = spider.legs.map((l) => (l.isGrounded() ? 1 : 0));
+    // altura del cuerpo sobre el suelo (normalizada ~0..1.5)
+    const groundY = typeof spider.getGroundHeight === 'function'
+      ? spider.getGroundHeight() : (spider.gait?.bodyHeight ?? 0.9);
+    const height = clamp((spider.position.y - groundY) + 0.9, 0.25, 2.5);
+    // combate: HP virtual de la presa (60 − mordidas×12) y flag en-combate
+    const preyHp = clamp(1 - (ai.bites * 12) / 60, 0, 1);
+    const inCombat = p && spider.position.distance(p) < 8 ? 1 : 0;
+    return [
+      round3(Math.sin(fa)), round3(Math.cos(fa)), round3(fdist),
+      round3(Math.sin(pa)), round3(Math.cos(pa)), round3(pdist),
+      round3(Math.sin(ta)), round3(Math.cos(ta)), round3(tdist),
+      round3(Math.sin(yaw)), round3(Math.cos(yaw)),
+      round3(evo ? evo.energy / 100 : 0.5),
+      round3(st / stMax),
+      round3(Math.min(1.5, speed / maxSp)),
+      round3(spider.rotationalVelocity.y || 0),
+      st < stMax * 0.15 ? 1 : 0,
+      ...grounded,
+      round3(grounded.reduce((a, b) => a + b, 0) / (spider.legs.length || 8)),
+      round3(height),
+      round3(preyHp),      // 26: HP de la presa
+      inCombat,            // 27: en combate (< 8 bloques)
+      1,
+    ];
+  }
+
+  // ángulo relativo (-π..π; 0 = justo al frente de la araña)
+  function relAngleTo(from, to, yaw) {
+    const ang = Math.atan2(to.z - from.z, to.x - from.x) - yaw;
+    return Math.atan2(Math.sin(ang), Math.cos(ang));
+  }
+
+  // aplicar los 28 comandos de músculo a la física del juego
+  // (núcleo del control motor puro: el pie plantado se retrae hacia
+  //  su objetivo → el suelo resiste → el CUERPO es empujado)
+  function aiApplyMotors(spider, m) {
+    if (!m || m.length < 24) {
+      // músculos relajados: el cuerpo cae si nadie lo sostiene
+      spider.velocity.y -= 0.06;
+      return;
+    }
+    const N = Math.min(spider.legs.length, 8);
+    const yaw = spider.orientation.getEulerAnglesYXZ().y;
+    const cos = Math.cos(yaw), sin = Math.sin(yaw);
+
+    // escala del cuerpo: proporcional al alcance real de las patas.
+    // Normal 'spider': rest0 = (1.6, 2.56) → hypot 3.02 → escala 1.0
+    // (física IDÉNTICA a la actual). Gigante ×3: 9.06 → escala 3.0.
+    const baseRest = spider.legs[0]?.legPlan?.restPosition;
+    const scale = Math.max(1, baseRest ? Math.hypot(baseRest.x, baseRest.z) / 3.02 : 1);
+    spider.motorScale = scale;
+    const LEG_REACH = 2.6 * scale;
+    const PUSH = 0.09, FOOT_SLIP = 0.14;
+
+    // ── 1) patas: colocar pies y acumular empuje + sustento ──
+    for (let i = 0; i < N; i++) {
+      const leg = spider.legs[i];
+      const swing = clamp(m[i * 3], -1, 1);
+      const lateral = clamp(m[i * 3 + 1], -1, 1);
+      const lift = clamp(m[i * 3 + 2], -1, 1);
+
+      // objetivo del pie en marco del cuerpo: anclaje + desplazamiento.
+      // El clamp es RELATIVO al anclaje (±reach), no absoluto → escala
+      // con el cuerpo (gigantes mueven los pies en proporción a su tamaño).
+      const anchor = leg.legPlan.restPosition; // dir. de reposo (local)
+      const axMin = anchor.x - LEG_REACH, axMax = anchor.x + LEG_REACH;
+      const azMin = anchor.z - LEG_REACH, azMax = anchor.z + LEG_REACH;
+      const ax = clamp(anchor.x * (1 + lateral * 0.4), axMin, axMax);
+      const az = clamp(anchor.z + swing * LEG_REACH, azMin, azMax);
+      // extensión REAL de la pata: distancia anclaje→pie
+      const ext = Math.hypot(ax - anchor.x, az - anchor.z);
+
+      // a coordenadas mundo
+      const wx = spider.position.x + ax * cos - az * sin;
+      const wz = spider.position.z + ax * sin + az * cos;
+
+      if (lift > 0.3) {
+        // pie en el AIRE: swing SUAVE hacia el objetivo (nada de teleport)
+        leg.isMoving = true;
+        leg.touchingGround = false;
+        leg.motorSwing = { wx, wz };
+      } else {
+        // pie PLANTADO: tira hacia su objetivo → el suelo resiste →
+        // el CUERPO es empujado (propulsión emergente)
+        leg.isMoving = false;
+        const dx = wx - leg.endEffector.x;
+        const dz = wz - leg.endEffector.z;
+        spider.velocity.x += dx * PUSH;
+        spider.velocity.z += dz * PUSH;
+        leg.endEffector.x += dx * FOOT_SLIP;
+        leg.endEffector.z += dz * FOOT_SLIP;
+        leg.touchingGround = true;
+        leg.motorSwing = null;
+      }
+    }
+
+    // ── 2) cuerpo: SOLO yaw. La altura la resuelve la física propia
+    //    del juego: fractionOfLegsGrounded escala la aceleración de
+    //    sustento (calcPreferredY) y la gravedad tira hacia abajo →
+    //    levantar muchas patas = el cuerpo SE HUNDE solo.
+    const yawT = m.length >= 27 ? clamp(m[26], -1, 1) : 0;
+    spider.rotationalVelocity.y = clamp(spider.rotationalVelocity.y + yawT * 0.02, -0.15, 0.15);
+    spider.isWalking = Math.hypot(spider.velocity.x, spider.velocity.z) > 0.02;
+  }
+
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+  // sistema: tick de las arañas con IA remota MOTOR
+  function setupRemoteAI(app) {
+    app.onTick(() => {
+      const p = sim.lastPlayerPos;
+      const names = new Map();
+      for (const s of sim.spiders) names.set(s.body, s.name);
+      for (const [entity, spider, ai] of app.query('SpiderBody', 'RemoteAIBehaviour')) {
+        void entity;
+        // sin server → músculos relajados (fail-safe)
+        if (!aiws.ready) { aiApplyMotors(spider, null); continue; }
+        const rec = sim.spiders.find((r) => r.body === spider);
+        const evo = rec ? rec.entity.components.get('EvolutionBehaviour') : null;
+
+        // ── mecánica de mordida (combate real contra el jugador) ──
+        const pDist = p ? spider.position.distance(p) : Infinity;
+        if (p && pDist < 8) ai.fightTicks++;
+        else {
+          if (ai.fightTicks > 90) ai.postFight = 240;   // retirada lograda
+          ai.fightTicks = 0;
+        }
+        if (p && pDist < 1.6 && ai.biteCd <= 0) {
+          ai.bites++;
+          ai.biteCd = 80;                       // 4s entre mordidas
+          ai.preyHp = Math.max(0, ai.preyHp - 12);
+          if (ai.preyHp <= 0) {
+            ai.kills++;
+            ai.preyHp = 60;                     // nueva presa
+          }
+          if (evo) evo.energy = Math.min(100, evo.energy + 18);
+          emit({
+            type: 'ai', event: 'bite',
+            name: names.get(spider) || '?',
+            at: [round3(spider.position.x), round3(spider.position.y), round3(spider.position.z)],
+            bites: ai.bites, kills: ai.kills,
+          });
+        }
+        if (ai.biteCd > 0) ai.biteCd--;
+        if (ai.postFight > 0) ai.postFight--;
+
+        // obs → server → 28 comandos → física
+        const obs = aiObservation(spider, ai, evo);
+        aiAct(obs, ai).then((motors) => {
+          if (motors) { ai.motors = motors; aiApplyMotors(spider, motors); }
+          else aiApplyMotors(spider, null);
+        });
+        ai.mindAge++;
+
+        // tracking de viaje (para el fitness en vivo)
+        if (ai.lastPos) {
+          ai.travel += Math.hypot(
+            spider.position.x - ai.lastPos.x,
+            spider.position.z - ai.lastPos.z,
+          );
+        }
+        ai.lastPos = { x: spider.position.x, z: spider.position.z };
+        void p; void names;
+      }
+    });
+  }
+
   function rotateTowards(spider, targetVector) {
     const currentEuler = spider.orientation.getEulerAnglesYXZ();
 
@@ -2217,7 +3029,7 @@
     try { sim.onMessage?.(msg); } catch (e) { LOG.i('ERROR: onMessage lanzó:', e?.message || e); }
   }
 
-  function handleMessage(msg) {
+  async function handleMessage(msg) {
     if (!msg || typeof msg !== 'object') return;
     LOG.d('msg ←', msg.type, msg.name ?? '');
     if (msg.type === 'hello') {
@@ -2326,6 +3138,200 @@
         s.entity.replace('HuntBehaviour', new HuntBehaviour(opts));
       }
       LOG.i('hunt ON', opts);
+    } else if (msg.type === 'evolve') {
+      // /spider evolve [n] | evolve off — IA evolutiva con selección natural
+      const off = (msg.off === true) || String(msg.off ?? '').toLowerCase() === 'off';
+      if (off) {
+        for (const s of [...sim.spiders]) {
+          // las arañas con IA remota conservan su economía (energía/comida)
+          if (s.entity.has('RemoteAIBehaviour')) continue;
+          s.entity.components.delete('EvolutionBehaviour');
+        }
+        // la economía sigue viva mientras queden arañas que la usen
+        evoActive = sim.spiders.some((s) => s.entity.has('EvolutionBehaviour'));
+        if (!evoActive) evoFood.items.length = 0;
+        LOG.i('evolve OFF');
+        emit({ type: 'evo', event: 'off' });
+        return;
+      }
+      const n = Number(msg.count);
+      const count = Number.isFinite(n) && n > 0 ? Math.min(24, Math.round(n)) : 6;
+      // población inicial: genomas aleatorios (generación 0)
+      const p = sim.lastPlayerPos;
+      if (!p || (p.x === 0 && p.y === 0 && p.z === 0)) {
+        LOG.i('evolve: esperando posición del jugador…');
+        return;
+      }
+      // limpiar modos incompatibles de las arañas existentes
+      for (const s of sim.spiders) {
+        s.entity.components.delete('TargetBehaviour');
+        s.entity.components.delete('StayStillBehaviour');
+        s.entity.components.delete('PathfindBehaviour');
+        s.entity.components.delete('HuntBehaviour');
+      }
+      let spawned = 0;
+      const firstNames = [];
+      for (let i = 0; i < count; i++) {
+        const ang = (i / count) * Math.PI * 2;
+        const rad = 4 + Math.random() * 3;
+        const x = p.x + Math.cos(ang) * rad;
+        const z = p.z + Math.sin(ang) * rad;
+        const hit = sim.world.raycastGround(new Vec(x, p.y + 20, z), DOWN_VECTOR(), 40);
+        const y = (hit ? hit.y : p.y) + 2;
+        const genome = new Genome();
+        const name = 'evo-0-' + (sim.spiders.length + 1);
+        const spider = spawnSpiderGenome(name, x, y, z, ang, genome);
+        const rec = sim.spiders[sim.spiders.length - 1];
+        if (rec?.body === spider) {
+          rec.entity.replace('EvolutionBehaviour', new EvolutionBehaviour(genome));
+          firstNames.push(name);
+          spawned++;
+        }
+      }
+      // limpiar arañas NO evolutivas sobrantes (las garden iniciales)
+      for (const s of [...sim.spiders]) {
+        if (!s.entity.has('EvolutionBehaviour')) {
+          const idx = sim.spiders.indexOf(s);
+          if (idx >= 0) sim.spiders.splice(idx, 1);
+          s.entity.remove();
+          emit({ type: 'remove', name: s.name });
+        }
+      }
+      evoActive = true;
+      evoStats = { births: 0, deaths: 0, generation: 0, bestFitness: 0, ticks: 0 };
+      LOG.i('evolve ON:', spawned, 'arañas gen-0 (selección natural activa)');
+      emit({ type: 'evo', event: 'on', count: spawned });
+    } else if (msg.type === 'ai') {
+      // /spider ai [url|off] — IA remota (deep learning via ai/server.py)
+      if (msg.off === true) {
+        // quitar behaviour + liberar los músculos de las arañas
+        let removed = 0;
+        for (const s of sim.spiders) {
+          const ai = s.entity.components.get('RemoteAIBehaviour');
+          if (ai) { aiSendReset(ai); s.body.motorControlled = false; }
+          if (s.entity.components.delete('RemoteAIBehaviour')) removed++;
+        }
+        // la economía evolutiva sigue viva solo si quedan arañas evo
+        evoActive = sim.spiders.some((s) => s.entity.has('EvolutionBehaviour'));
+        aiDisconnect();
+        LOG.i('IA motor OFF:', removed, 'arañas liberadas (gait normal restaurado)');
+        return { ok: true, removed };
+      }
+      const url = typeof msg.url === 'string' && msg.url
+        ? msg.url
+        : 'ws://127.0.0.1:8766/ws';
+      const n = Number(msg.count);
+      const count = Number.isFinite(n) && n > 0 ? Math.min(12, Math.round(n)) : 3;
+      const p = sim.lastPlayerPos;
+      if (!p || (p.x === 0 && p.y === 0 && p.z === 0)) {
+        return { ok: false, error: 'espera a estar en el mundo (sin posición del jugador)' };
+      }
+      const connected = await aiConnect(url);
+      if (!connected) {
+        return { ok: false, error: `no se pudo conectar a ${url} — ¿está corriendo ai/server.py?` };
+      }
+      // población: genomas ALEATORIOS (fenotipos variados para que la IA
+      // explore capacidades distintas) o reutilizar las evo existentes
+      let spawned = 0;
+      const useExisting = msg.useExisting === true;
+      if (useExisting) {
+        for (const s of sim.spiders) {
+          if (s.entity.has('EvolutionBehaviour')) {
+            s.body.motorControlled = true;
+            s.entity.replace('RemoteAIBehaviour', new RemoteAIBehaviour());
+            spawned++;
+          }
+        }
+        if (spawned) evoActive = true; // comida + metabolismo activos
+      }
+      for (let i = spawned; i < count; i++) {
+        const ang = (i / count) * Math.PI * 2;
+        const rad = 4 + Math.random() * 3;
+        const x = p.x + Math.cos(ang) * rad;
+        const z = p.z + Math.sin(ang) * rad;
+        const hit = sim.world.raycastGround(new Vec(x, p.y + 20, z), DOWN_VECTOR(), 40);
+        const y = (hit ? hit.y : p.y) + 2;
+        const genome = new Genome();
+        const name = 'ai-' + (sim.spiders.length + 1);
+        const spider = spawnSpiderGenome(name, x, y, z, ang, genome);
+        const rec = sim.spiders[sim.spiders.length - 1];
+        if (rec?.body === spider) {
+          // cuerpo controlado MÚSCULO a MÚSCULO: el gait preprogramado
+          // queda desactivado; la economía (energía/comida/muerte) sigue
+          spider.motorControlled = true;
+          evoActive = true;
+          rec.entity.replace('EvolutionBehaviour', new EvolutionBehaviour(genome));
+          rec.entity.replace('RemoteAIBehaviour', new RemoteAIBehaviour());
+          spawned++;
+        }
+      }
+      evoStats = { births: 0, deaths: 0, generation: 0, bestFitness: 0, ticks: 0 };
+      // amenazas activas por defecto: la IA aprende a huir
+      if (msg.noPredators !== true) { predators.on = true; predators.kills = 0; }
+      LOG.i('AI remota ON:', spawned, 'arañas controladas por el DQN en', url,
+        predators.on ? `(+${predators.count} depredadores)` : '(sin amenazas)');
+      return { ok: true, count: spawned, url, backend: aiws.stats.backend, predators: predators.on ? predators.count : 0 };
+    } else if (msg.type === 'predators') {
+      // /spider predators [n] | off — amenazas que cazan arañas
+      if (msg.off === true) {
+        predators.on = false;
+        predators.items.length = 0;
+        LOG.i('depredadores OFF');
+        return { ok: true, kills: predators.kills };
+      }
+      const n = Number(msg.count);
+      predators.count = Number.isFinite(n) && n > 0 ? Math.min(8, Math.round(n)) : 2;
+      predators.on = true;
+      LOG.i('depredadores ON:', predators.count, '(patrullan y cazan arañas)');
+      return { ok: true, count: predators.count, kills: predators.kills };
+    } else if (msg.type === 'aistats') {
+      // estado del cerebro motor + qué músculo está usando cada araña
+      const minds = [];
+      for (const s of sim.spiders) {
+        const ai = s.entity.components.get('RemoteAIBehaviour');
+        if (ai) {
+          const m = ai.motors;
+          minds.push({
+            name: s.name,
+            sid: ai.sid ?? null,
+            age: ai.mindAge,
+            travel: round3(ai.travel),
+            bites: ai.bites,
+            kills: ai.kills,
+            fight: ai.fightTicks,
+            // resumen de actividad muscular: media |swing| de las 8 patas
+            legs: m && m.length >= 24
+              ? round3(m.slice(0, 24).filter((_, i) => i % 3 === 0).reduce((a, b) => a + Math.abs(b), 0) / 8)
+              : null,
+            lift: m && m.length >= 24
+              ? round3(m.slice(0, 24).filter((_, i) => i % 3 === 2).reduce((a, b) => a + Math.abs(b), 0) / 8)
+              : null,
+          });
+        }
+      }
+      return { ok: true, conn: { ...aiws.stats }, minds, evolve: evoActive ? evoStats : null };
+    } else if (msg.type === 'evostats') {
+      // /spider stats — tabla de la población viva (ordenada por fitness)
+      const rows = [];
+      for (const s of sim.spiders) {
+        const evo = s.entity.components.get('EvolutionBehaviour');
+        if (!evo) continue;
+        rows.push({
+          name: s.name,
+          gen: evo.genome.generation,
+          energy: round3(evo.energy),
+          stamina: round3(evo.stamina / Math.max(0.001, evo.maxStamina)), // 0..1
+          tired: evo.stamina < evo.maxStamina * 0.15,
+          age: evo.age,
+          food: evo.foodEaten,
+          bites: evo.bites,
+          children: evo.children,
+          fitness: round3(evoFitness(evo)),
+          genes: Object.fromEntries(Genome.GENE_LIST.map((k) => [k, round3(evo.genome.genes[k])])),
+        });
+      }
+      rows.sort((a, b) => b.fitness - a.fitness);
+      return { ok: true, active: evoActive, stats: evoStats, population: rows };
     } else if (msg.type === 'replace') {
       // /spider replace [scale] | off — arañas del server → preset 'spider'
       const off = (msg.off === true) || String(msg.off ?? '').toLowerCase() === 'off';
@@ -2446,7 +3452,7 @@
   function setupDefaultBehaviourTick() {
     for (const [entity] of sim.app.query('SpiderBody')) {
       if (!entity.has('TargetBehaviour') && !entity.has('StayStillBehaviour') && !entity.has('PathfindBehaviour')
-        && !entity.has('HuntBehaviour') && !entity.has('PuppetBehaviour')) {
+        && !entity.has('HuntBehaviour') && !entity.has('PuppetBehaviour') && !entity.has('EvolutionBehaviour')) {
         entity.add('StayStillBehaviour', new StayStillBehaviour());
       }
     }
@@ -2578,6 +3584,9 @@
   // ── arranque ──
   setupSpiderBody(sim.app);
   setupBehaviours(sim.app);
+  setupEvolution(sim.app);
+  setupPredators(sim.app);
+  setupRemoteAI(sim.app);
 
   function start() {
     if (sim.running) return;
@@ -2608,13 +3617,16 @@
   // ═══ API pública (misma forma que el WebSocket viejo) ═══
   const api = {
     send(msg) {
-      try { handleMessage(msg); return { ok: true }; }
-      catch (e) { return { ok: false, error: e.message }; }
+      return Promise.resolve(handleMessage(msg))
+        .then((r) => (r !== undefined ? r : { ok: true }))
+        .catch((e) => ({ ok: false, error: e.message }));
     },
     onMessage(fn) { sim.onMessage = fn; },
     start, stop,
     reportPlayer,
     refreshGame,
+    // stats de la evolución (población viva ordenada por fitness)
+    evolveStats() { return api.send({ type: 'evostats' }); },
     // arañas iniciales: se crean cuando se conoce la posición del jugador.
     // Solo UNA vez por sesión: /spider clear marca el flag y no vuelven a
     // aparecer (antes el tick del renderer las re-creaba al ver la lista vacía).
@@ -2628,7 +3640,7 @@
       }
       const side = 3;
       // arañas reales por defecto: preset 'spider' = 8 patas × 2 segmentos
-      // (el renderer solo dibuja 2 cubos alargados por pata, sin torso)
+      // + torso fusionado (cefalotórax + abdomen) en el renderer
       const g0 = spawnSpider('garden-0', 'spider', p.x + side, p.y + 2, p.z, 0, true);
       spawnSpider('garden-1', 'spider', p.x - side - 1, p.y + 2, p.z + side, 90, false);
       emit({ type: 'add', spider: serializeSpider(g0, 'garden-0', 'spider') });
@@ -2672,6 +3684,7 @@
         player: sim.lastPlayerPos ? [round3(sim.lastPlayerPos.x), round3(sim.lastPlayerPos.y), round3(sim.lastPlayerPos.z)] : null,
         cache: sim.world.blockCache.size,
         logLevel: LOG.level,
+        evolve: evoActive ? { ...evoStats, population: sim.spiders.filter((s) => s.entity.has('EvolutionBehaviour')).length } : null,
       };
     },
     // nivel de log: 0=off 1=info 2=detalle 3=verboso
