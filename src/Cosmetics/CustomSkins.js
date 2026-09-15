@@ -517,6 +517,7 @@
                             if (t.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = t.colorSpace;
                             nt.flipY = t.flipY; nt.wrapS = t.wrapS; nt.wrapT = t.wrapT;
                         } catch (_) {}
+                        nt.__mfPainted = url; // marca: esta textura es nuestra
                         mats[i].map = nt;
                         mats[i].needsUpdate = true;
                     } catch (_) {}
@@ -541,8 +542,20 @@
         if (!entry) return;
 
         var target = entry.__skin;
-        var painted = paintedPlayers.has(player);
-        if (cosmetics.skin === target && painted) return;
+        // ¿la textura sigue siendo la nuestra? (respawn/recreate del juego
+        // resetea los materiales → re-pintar)
+        var url = resolveSkinImageUrl(entry);
+        var stillPainted = false;
+        if (paintedPlayers.has(player) && url && player.mesh) {
+            try {
+                var mm = skinMaterialsOf(player.mesh);
+                stillPainted = mm.length > 0 && mm.every(function (m) {
+                    return m.map && m.map.__mfPainted === url;
+                });
+            } catch (_) { stillPainted = false; }
+        }
+        if (!stillPainted) paintedPlayers.delete(player);
+        if (cosmetics.skin === target && paintedPlayers.has(player)) return;
 
         if (isVanillaSkinId(target)) {
             // skin vanilla (chris…): la vía nativa es segura — el juego
@@ -561,16 +574,14 @@
         // pintar la textura del modelo YA montado (sin recreate → sin
         // segundo modelo). Si aún no hay materiales (mesh cargando), el
         // próximo scan del watcher reintenta.
-        if (!painted && paintEntitySkin(player, entry)) {
+        if (paintEntitySkin(player, entry)) {
             paintedPlayers.add(player);
             log('live override (textura)', profile.uuid || profile.username, '->', target);
         }
-        // el id queda en cosmetics para tab/nametags y para que un
-        // recreate NATIVO futuro (respawn, sombrero…) la cargue por el
-        // hook de <img> — nunca llamamos recreate() nosotros
-        if (cosmetics.skin !== target) {
-            try { cosmetics.skin = target; } catch (e) {}
-        }
+        // NUNCA escribir cosmetics.skin = custom:… para players remotos:
+        // el juego detecta el cambio y hace su recreate() async, que monta
+        // el modelo custom ENCIMA del ya existente (doble modelo). La
+        // textura pintada es la única fuente visual del cuerpo.
     }
 
     function startLiveWatcher() {
