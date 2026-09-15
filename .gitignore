@@ -44,3 +44,5 @@ mfbot/
 mfbot_actions.log
 *.pt
 ```
+# GLB HD local (225MB, excede limite GitHub)
+models/entities/backrooms_level_0.glb
