@@ -510,6 +510,7 @@
   let updateTimer = 0;
   let activePage = 'dashboard';
   let searchQuery = '';
+  let activeCategory = 'all';
   let favoritesOnly = false;
   let favoriteModules = new Set();
   let featureSettingsCleanup = null;
@@ -2682,6 +2683,12 @@
       .mf-feather-category.active { background:var(--mf-ui-accent); color:#fff; }
       .mf-feather-category:hover { background:#23272c; color:#ddd; }
       .mf-feather-category.active:hover { background:var(--mf-ui-accent); }
+      .mf-new-badge {
+        display:inline-block; vertical-align:2px; margin-left:6px; padding:2px 7px;
+        border-radius:999px; font:700 9px/1.3 system-ui,sans-serif; font-style:normal;
+        letter-spacing:.06em; background:rgba(124,58,237,.18); border:1px solid rgba(167,139,250,.45);
+        color:#c4b5fd;
+      }
       .mf-feather-tools { display:flex; gap:9px; align-items:center; margin-left:auto; }
       #mf-gui-search {
         width:267px; max-width:267px; height:36px; margin:0; padding:0 15px;
@@ -2814,42 +2821,42 @@
 
   function getModuleIndex() {
     return [
-      { page: 'hud', key: 'keystrokes', title: t('keystrokes'), desc: t('keystrokesDesc') },
-      { page: 'hud', key: 'fpsCounter', title: t('fpsCounter'), desc: t('fpsCounterDesc') },
-      { page: 'hud', key: 'cpsCounter', title: t('cpsCounter'), desc: t('cpsCounterDesc') },
-      { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc') },
-      { page: 'hud', key: 'armorHud', title: t('armorHud'), desc: t('armorHudDesc') },
-      { page: 'hud', key: 'guiPatch', title: t('guiPatch'), desc: t('guiPatchDesc') },
-      { page: 'hud', key: 'coordinates', title: t('coordinates'), desc: t('coordinatesDesc') },
-      { page: 'hud', key: 'dynamicCrosshair', title: t('dynamicCrosshair'), desc: t('dynamicCrosshairDesc') },
-      { page: 'waypoints', key: 'waypoints', title: t('waypoints'), desc: t('waypointsDesc') },
-      { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc') },
-      { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc') },
-      { page: 'render', key: 'betterPlayerLayers', title: t('betterPlayerLayers'), desc: t('betterPlayerLayersDesc') },
-      { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc') },
-      { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc') },
-      { page: 'render', key: 'damageParticles', title: t('damageParticles'), desc: t('damageParticlesDesc') },
-      { page: 'render', key: 'waterSplash', title: t('waterSplash'), desc: t('waterSplashDesc') },
-      { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc') },
-      { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc') },
-      { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc') },
-      { page: 'render', key: 'vanillaAnimations', title: t('vanillaAnimations'), desc: t('vanillaAnimationsDesc') },
-      { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc') },
-      { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc') },
-      { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc') },
-      { page: 'render', key: 'freecam', title: t('freecam'), desc: t('freecamDesc') },
-      { page: 'shaders', key: 'customShader', title: t('navShaders'), desc: t('shadersDesc') },
-      { page: 'movement', key: 'autoSprint', title: t('autoSprint'), desc: t('autoSprintDesc') },
-      { page: 'movement', key: 'safeSneak', title: t('safeSneak'), desc: t('safeSneakDesc') },
-      { page: 'movement', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc') },
-      { page: 'world', key: 'autoRespawn', title: t('autoRespawn'), desc: t('autoRespawnDesc') },
-      { page: 'world', key: 'rhythmParkour', title: t('rhythmParkour'), desc: t('rhythmParkourDescShort') },
-      { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc') },
-      { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc') },
-      { page: 'chat', key: 'chatMemes', title: t('chatMemes'), desc: t('chatMemesDesc') },
-      { page: 'chat', key: 'clientChat', title: t('clientChat'), desc: t('clientChatDesc') },
-      { page: 'settings', key: 'discord', title: t('discordRedirect'), desc: t('discordRedirectDesc') },
-      { page: 'settings', key: 'supportAds', title: t('supportAds'), desc: t('supportAdsDesc') }
+      { page: 'hud', key: 'keystrokes', title: t('keystrokes'), desc: t('keystrokesDesc'), tags: ['hud'] },
+      { page: 'hud', key: 'fpsCounter', title: t('fpsCounter'), desc: t('fpsCounterDesc'), tags: ['hud'] },
+      { page: 'hud', key: 'cpsCounter', title: t('cpsCounter'), desc: t('cpsCounterDesc'), tags: ['hud', 'pvp'] },
+      { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc'), tags: ['hud', 'pvp'] },
+      { page: 'hud', key: 'armorHud', title: t('armorHud'), desc: t('armorHudDesc'), tags: ['hud', 'pvp'] },
+      { page: 'hud', key: 'guiPatch', title: t('guiPatch'), desc: t('guiPatchDesc'), tags: ['hud'] },
+      { page: 'hud', key: 'coordinates', title: t('coordinates'), desc: t('coordinatesDesc'), tags: ['hud'] },
+      { page: 'hud', key: 'dynamicCrosshair', title: t('dynamicCrosshair'), desc: t('dynamicCrosshairDesc'), tags: ['hud', 'pvp', 'new'] },
+      { page: 'waypoints', key: 'waypoints', title: t('waypoints'), desc: t('waypointsDesc'), tags: ['new'] },
+      { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc'), tags: [] },
+      { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc'), tags: [] },
+      { page: 'render', key: 'betterPlayerLayers', title: t('betterPlayerLayers'), desc: t('betterPlayerLayersDesc'), tags: [] },
+      { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc'), tags: ['pvp'] },
+      { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc'), tags: ['pvp'] },
+      { page: 'render', key: 'damageParticles', title: t('damageParticles'), desc: t('damageParticlesDesc'), tags: ['pvp'] },
+      { page: 'render', key: 'waterSplash', title: t('waterSplash'), desc: t('waterSplashDesc'), tags: ['new'] },
+      { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc'), tags: [] },
+      { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc'), tags: [] },
+      { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc'), tags: [] },
+      { page: 'render', key: 'vanillaAnimations', title: t('vanillaAnimations'), desc: t('vanillaAnimationsDesc'), tags: [] },
+      { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc'), tags: ['pvp'] },
+      { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc'), tags: [] },
+      { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc'), tags: [] },
+      { page: 'render', key: 'freecam', title: t('freecam'), desc: t('freecamDesc'), tags: [] },
+      { page: 'shaders', key: 'customShader', title: t('navShaders'), desc: t('shadersDesc'), tags: [] },
+      { page: 'movement', key: 'autoSprint', title: t('autoSprint'), desc: t('autoSprintDesc'), tags: ['pvp'] },
+      { page: 'movement', key: 'safeSneak', title: t('safeSneak'), desc: t('safeSneakDesc'), tags: ['pvp'] },
+      { page: 'movement', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc'), tags: [] },
+      { page: 'world', key: 'autoRespawn', title: t('autoRespawn'), desc: t('autoRespawnDesc'), tags: ['pvp'] },
+      { page: 'world', key: 'rhythmParkour', title: t('rhythmParkour'), desc: t('rhythmParkourDescShort'), tags: ['new'] },
+      { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc'), tags: [] },
+      { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc'), tags: [] },
+      { page: 'chat', key: 'chatMemes', title: t('chatMemes'), desc: t('chatMemesDesc'), tags: [] },
+      { page: 'chat', key: 'clientChat', title: t('clientChat'), desc: t('clientChatDesc'), tags: ['new'] },
+      { page: 'settings', key: 'discord', title: t('discordRedirect'), desc: t('discordRedirectDesc'), tags: [] },
+      { page: 'settings', key: 'supportAds', title: t('supportAds'), desc: t('supportAdsDesc'), tags: [] }
     ];
   }
 
@@ -2959,11 +2966,10 @@
         <div id="mf-gui-content">
           <div id="mf-feather-filterbar">
             <div class="mf-feather-categories">
-              <button class="mf-feather-category active" data-category="all">${t('filterAll')}</button>
-              <button class="mf-feather-category" data-category="new">${t('filterNew')}</button>
-              <button class="mf-feather-category" data-category="hud">${t('filterHud')}</button>
-              <button class="mf-feather-category" data-category="hypixel">${t('filterHypixel')}</button>
-              <button class="mf-feather-category" data-category="pvp">${t('filterPvp')}</button>
+              <button class="mf-feather-category ${activeCategory === 'all' ? 'active' : ''}" data-category="all">${t('filterAll')}</button>
+              <button class="mf-feather-category ${activeCategory === 'new' ? 'active' : ''}" data-category="new">${t('filterNew')}</button>
+              <button class="mf-feather-category ${activeCategory === 'hud' ? 'active' : ''}" data-category="hud">${t('filterHud')}</button>
+              <button class="mf-feather-category ${activeCategory === 'pvp' ? 'active' : ''}" data-category="pvp">${t('filterPvp')}</button>
             </div>
             <div class="mf-feather-tools">
               <input id="mf-gui-search" type="text" placeholder="${t('searchPlaceholder')}" value="${searchQuery.replace(/"/g, '&quot;')}">
@@ -2977,14 +2983,15 @@
     `;
   }
 
-  function renderToggle(key, title, description) {
+  function renderToggle(key, title, description, opts) {
     const enabled = !!guiSettings[key];
     const favorite = favoriteModules.has(key);
+    const isNew = !!(opts && opts.tags && opts.tags.includes('new'));
     return `
       <label class="mf-toggle" data-key="${key}">
         <span class="mf-feature-icon" aria-hidden="true">${moduleIcon(key)}</span>
         <span class="mf-toggle-copy">
-          <strong>${title}</strong>
+          <strong>${title}${isNew ? ' <em class="mf-new-badge">NEW</em>' : ''}</strong>
           <span>${description}</span>
         </span>
         <button type="button" class="mf-feature-favorite ${favorite ? 'active' : ''}" data-mf-favorite title="${favorite ? t('removeFavorite') : t('addFavorite')}" aria-label="${favorite ? t('removeFavorite') : t('addFavorite')}">${iconSvg('heart')}</button>
@@ -5691,10 +5698,16 @@
   }
 
   function renderDashboardPage() {
-    const modules = getModuleIndex();
+    let modules = getModuleIndex();
+    if (activeCategory !== 'all') {
+      modules = modules.filter(entry => (entry.tags || []).includes(activeCategory));
+    }
+    if (!modules.length) {
+      return `<div class="mf-page-stack"><div class="mf-card"><div class="mf-muted">${t('searchNoResults')}</div></div></div>`;
+    }
     return `
       <div class="mf-feather-module-grid">
-        ${modules.map(entry => renderToggle(entry.key, entry.title, entry.desc)).join('')}
+        ${modules.map(entry => renderToggle(entry.key, entry.title, entry.desc, entry)).join('')}
       </div>
     `;
   }
@@ -7106,6 +7119,10 @@ function renderCreditsPage() {
     const pageContainer = panel.querySelector('#mf-gui-page');
     const titleEl = panel.querySelector('#mf-gui-page-title');
     if (!pageContainer) return;
+
+    // la barra de filtros solo tiene sentido en el dashboard
+    const filterBar = panel.querySelector('#mf-feather-filterbar');
+    if (filterBar) filterBar.style.display = (activePage === 'dashboard' || searchQuery.trim() || favoritesOnly) ? '' : 'none';
 
     if (favoritesOnly && !searchQuery.trim()) {
       if (titleEl) titleEl.textContent = 'Favorites';
@@ -9752,6 +9769,23 @@ function renderCreditsPage() {
 
     panel.querySelectorAll('[data-page]').forEach(nav => {
       nav.addEventListener('click', () => setActivePage(nav.dataset.page), { signal: panelSignal });
+    });
+
+    panel.querySelectorAll('.mf-feather-category').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeCategory = btn.dataset.category || 'all';
+        // elegir un filtro limpia la búsqueda: los dos a la vez confunden
+        if (searchQuery) {
+          searchQuery = '';
+          const searchInput = panel.querySelector('#mf-gui-search');
+          if (searchInput) searchInput.value = '';
+          panel.querySelectorAll('[data-page]').forEach(nav => {
+            nav.classList.toggle('active', !searchQuery.trim() && nav.dataset.page === activePage);
+          });
+        }
+        panel.querySelectorAll('.mf-feather-category').forEach(b => b.classList.toggle('active', b === btn));
+        renderCurrentPageContent();
+      }, { signal: panelSignal });
     });
 
     panel.querySelector('#mf-gui-search')?.addEventListener('input', event => {
