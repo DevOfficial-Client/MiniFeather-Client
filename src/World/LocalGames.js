@@ -434,10 +434,10 @@
         if (
           message.autoJoin === true &&
           !state.active &&
-          state.mode === 'idle' &&
           Number(message.players) < Number(message.maxPlayers)
         ) {
           log(`autoConnect: uniéndose a ${message.worldName || message.address} (host=${message.hostName})`);
+          setStatus(`🌐 Auto-connecting to "${cleanText(message.worldName, 30)}"...`);
           joinWorldServer(message.address).catch(() => {});
         }
       } else if (message.type === 'server-closed') {
