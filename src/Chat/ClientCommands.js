@@ -598,6 +598,16 @@
         addChat(`Spawn requested: ${preset}${scale ? ` (body height: ${scale} blocks)` : ''}${gallop ? ' gallop' : ''} (embedded simulator).`, 'success');
         return;
       }
+      if (action === 'body' || action === 'cuerpo') {
+        const sub = (args[1] || '').toLowerCase();
+        if (sub !== 'on' && sub !== 'off') {
+          addChat('Usage: /spider body on|off — toggle the spider torso (off = legs only).', 'error');
+          return;
+        }
+        const r = api.body(sub === 'on');
+        addChat(r.legsOnly ? 'Torso hidden — legs only.' : 'Torso visible again.', 'success');
+        return;
+      }
       if (action === 'target' || action === 'laser') {
         
         const player = state.game?.player;

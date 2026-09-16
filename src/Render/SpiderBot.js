@@ -40,17 +40,18 @@
   const state = {
     enabled: false, ctors: null, game: null,
     simConnected: false,
-    spiders: new Map(), 
-    pendingSpiders: [], 
+    spiders: new Map(),
+    pendingSpiders: [],
     lastGameScan: 0,
     lastTick: 0, raf: 0,
     lastFrame: null,
     lastAppliedFrameT: -1,
-    
-    remoteFrame: null, 
+
+    remoteFrame: null,
     lastAppliedRemoteT: -1,
-    remoteNames: new Set(), 
-    frameSendCount: 0, 
+    remoteNames: new Set(),
+    frameSendCount: 0,
+    legsOnly: false,
   };
 
   function simAPI() {
@@ -509,6 +510,7 @@
     const torsoMesh = new ctors.Mesh(_sharedTorsoGeo, sharedMat);
     torsoMesh.userData.__mfSpider = true;
     torsoMesh.frustumCulled = false;
+    torsoMesh.visible = !state.legsOnly;
     root.add(torsoMesh);
 
     const legs = [];
@@ -597,7 +599,7 @@
         sp.torsoMesh.position, sp.torsoMesh.quaternion, sp.torsoMesh.scale
       );
       sp.torsoMesh.scale.multiplyScalar(sp.torsoScale || 1);
-      sp.torsoMesh.visible = true;
+      sp.torsoMesh.visible = !state.legsOnly;
     } else if (sp.torsoMesh) {
       sp.torsoMesh.visible = false;
     }
@@ -837,6 +839,13 @@
     remoteApply,
     onPeerConnected,
     enable,
+    body(visible) {
+      state.legsOnly = visible === false || visible === 'off';
+      for (const sp of state.spiders.values()) {
+        if (sp.torsoMesh) sp.torsoMesh.visible = !state.legsOnly;
+      }
+      return { ok: true, legsOnly: state.legsOnly };
+    },
     debug() {
       const sim = simAPI();
       const d = sim?.debug?.() || {};
