@@ -117,6 +117,7 @@
     localChunkGuardRevision: -1,
     lastVisualModeRefresh: 0,
     lastItemDespawnScan: 0,
+    lastMasterRendererResolve: 0,
     moduleNamespace: null,
     moduleUrl: '',
     blockRegistry: null,
@@ -1982,6 +1983,13 @@
   function refreshNativeRenderRecovery() {
     if (!state.active || !state.directLocal) return;
 
+    const now = performance.now();
+    if (now - state.lastMasterRendererResolve < 500) {
+      state.nativeRenderRecovery?.ensureSize?.();
+      return;
+    }
+    state.lastMasterRendererResolve = now;
+
     const currentMaster = resolveMasterRenderer();
     const currentWorld = state.world || state.game?.world;
     const recovery = state.nativeRenderRecovery;
@@ -3640,6 +3648,10 @@
     if (!world?.entities) return;
 
     const maxAge = 300000;
+    const MAX_LOCAL_ITEMS = 256;
+    let removed = 0;
+
+    const mfDrops = [];
 
     for (const [id, entity] of world.entities) {
       if (!entity || entity === state.game?.player) continue;
@@ -3652,12 +3664,48 @@
         continue;
       }
 
+      mfDrops.push({ id, entity, spawnedAt });
+
       if (now - spawnedAt < maxAge) continue;
 
-      try { world.removeEntity?.(entity); } catch (_) {}
+      entity.isDead = true;
+      entity.__mfDespawned = true;
+      try { world.removeEntityFromWorld?.(id); } catch (_) {}
       try {
         if (world.entities?.get?.(id) === entity) world.entities.delete(id);
       } catch (_) {}
+      removed++;
+    }
+
+    if (mfDrops.length > MAX_LOCAL_ITEMS) {
+      const excess = mfDrops
+        .filter(entry => entry.entity.isDead !== true)
+        .sort((a, b) => a.spawnedAt - b.spawnedAt)
+        .slice(0, mfDrops.length - MAX_LOCAL_ITEMS);
+
+      for (const { id, entity } of excess) {
+        entity.isDead = true;
+        entity.__mfDespawned = true;
+        try { world.removeEntityFromWorld?.(id); } catch (_) {}
+        try {
+          if (world.entities?.get?.(id) === entity) world.entities.delete(id);
+        } catch (_) {}
+        removed++;
+      }
+    }
+
+    if (removed > 0) {
+      try {
+        if (Array.isArray(world.loadedEntityList)) {
+          for (let i = world.loadedEntityList.length - 1; i >= 0; i--) {
+            const entry = world.loadedEntityList[i];
+            if (entry?.isDead === true && entry?.__mfDespawned === true) {
+              world.loadedEntityList.splice(i, 1);
+            }
+          }
+        }
+      } catch (_) {}
+      logTrace(`despawnStaleLocalItems: ${removed} items eliminados`);
     }
   }
 
