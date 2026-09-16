@@ -202,6 +202,17 @@
             parseDb(data, false);
             db = data || {};
             dbLoading = null;
+            // DB viva: la del repo de GitHub se aplica ENCIMA de la local,
+            // así editarla ahí actualiza el client sin publicar extensión.
+            fetch('https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/accounts.json', { cache: 'no-store' })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (live) {
+                    if (!live || !live.players) return;
+                    parseDb(live, false);
+                    log('DB viva aplicada (' + Object.keys(live.players).length + ' entradas)');
+                    try { prefetchRemoteSkins(); } catch (_) {}
+                })
+                .catch(function () {});
             var n = Object.keys(dbByUuid).length + Object.keys(dbByName).length;
             log('DB lista (' + n + ' overrides)');
             try { prefetchRemoteSkins(); } catch (_) {}
