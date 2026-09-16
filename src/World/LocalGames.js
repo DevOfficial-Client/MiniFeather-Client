@@ -7462,13 +7462,20 @@
     const p2pid = normalizeServerAddress(state.serverAddress);
     if (!p2pid?.startsWith('MF-')) return '';
     const safeName = String(username || profileSnapshot()?.name || '').replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 16);
-    return `https://miniblox.io/local.P2P/${encodeURIComponent(p2pid)}/${safeName || 'Player'}`;
+    return `https://miniblox.io/#/local.P2P/${encodeURIComponent(p2pid)}/${safeName || 'Player'}`;
   }
 
   function parseShareLink(url) {
     try {
-      const parsed = new URL(url || globalThis.location?.href || '');
-      const match = decodeURIComponent(parsed.pathname).match(/^\/local\.P2P\/(MF-[A-Z2-9-]+)\/([A-Za-z0-9_.-]{1,16})\/?$/i);
+      const raw = String(url || globalThis.location?.href || '');
+      const parsed = new URL(raw);
+      let source = parsed.pathname;
+
+      if (source === '/' || source === '') {
+        source = parsed.hash.replace(/^#\/?/, '');
+      }
+
+      const match = decodeURIComponent(source).match(/^\/?(?:local\.P2P\/)?(MF-[A-Z2-9-]+)\/([A-Za-z0-9_.-]{1,16})\/?$/i);
       if (!match) return null;
       const address = normalizeServerAddress(match[1]);
       if (!address) return null;
