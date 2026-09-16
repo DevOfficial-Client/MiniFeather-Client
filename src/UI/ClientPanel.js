@@ -7161,7 +7161,7 @@ function renderCreditsPage() {
 
   // --- Bridge con la GUI nativa de miniblox (tab "MiniFeather" en Ajustes) ---
   const NSB_BOOLEAN_KEYS = [
-    'rebrand', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
+    'rebrand', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
     'waterSplash', 'patPat', 'itemPhysics', 'noWeather', 'antiAfk', 'autoSprint',
     'safeSneak', 'autoRespawn', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
