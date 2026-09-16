@@ -622,14 +622,24 @@
         registerPanelAssets('cape', detail.capes);
     }
 
+    var panelAssetsReceived = false;
     document.addEventListener('minifeather:panel-assets', function (e) {
+        panelAssetsReceived = true;
         try { handlePanelAssets(typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail); } catch (_) {}
     });
 
-    // Pedir los assets actuales cuando el panel esté listo
-    setTimeout(function () {
+    // Pedir los assets al panel con reintentos: el panel (ISOLATED) carga después
+    // que este script, así que el primer request se perdería sin esto.
+    document.dispatchEvent(new CustomEvent('minifeather:panel-assets-request', { detail: '{}' }));
+    var panelReqAttempts = 0;
+    var panelReqTimer = setInterval(function () {
+        if (panelAssetsReceived || panelReqAttempts >= 40) {
+            clearInterval(panelReqTimer);
+            return;
+        }
+        panelReqAttempts++;
         document.dispatchEvent(new CustomEvent('minifeather:panel-assets-request', { detail: '{}' }));
-    }, 300);
+    }, 1500);
     function registerPanelAssets(kind, assets) {
         if (!assets || typeof assets !== 'object') return;
         var changed = false;
@@ -646,44 +656,58 @@
     }
 
     // Repinta entidades vivas con las skins/capes del panel (data: URLs en packSkinReg).
-    // Cubre al jugador local aunque no esté en la DB de overrides.
+    // Cubre al jugador local aunque no esté en la DB de overrides. Usa el patrón
+    // editable-canvas de MF_Mesh: una sola textura nueva reemplazada en todos los materiales.
     function forceRepaintAll() {
         var game = findGame();
         var world = game?.world;
-        if (!world || !world.players) return;
+        if (!world) return;
         var targets = [];
+        var seen = new Set();
+        function add(p) { if (p && p.mesh && p.profile && !seen.has(p)) { seen.add(p); targets.push(p); } }
         try {
-            if (typeof world.players.forEach === 'function') world.players.forEach(function (p) { targets.push(p); });
-            else if (typeof world.players.values === 'function') {
-                var it = world.players.values(), e;
-                while (!(e = it.next()).done) targets.push(e.value);
+            var players = world.players;
+            if (typeof players?.forEach === 'function') players.forEach(add);
+            else if (typeof players?.values === 'function') {
+                var it = players.values(), e;
+                while (!(e = it.next()).done) add(e.value);
             }
-        } catch (_) { return; }
+        } catch (_) {}
+        try {
+            if (Array.isArray(world.loadedEntityList)) {
+                for (var j = 0; j < world.loadedEntityList.length; j++) add(world.loadedEntityList[j]);
+            }
+        } catch (_) {}
+        if (Array.isArray(world.entitiesDump)) {
+            for (var k = 0; k < world.entitiesDump.length; k++) add(world.entitiesDump[k]);
+        }
+        if (!targets.length) return;
+        var touched = 0;
         for (var i = 0; i < targets.length; i++) {
             var player = targets[i];
             var skin = player?.profile?.cosmetics?.skin;
-            if (typeof skin === 'string' && packSkinReg[skin.replace(/^custom:/i, '')]) {
-                paintPlayerUrl(player, packSkinReg[skin.replace(/^custom:/i, '')]);
-            }
+            if (typeof skin === 'string' && paintPlayerUrl(player, packSkinReg[skin.replace(/^custom:/i, '')])) touched++;
             var cape = player?.profile?.cosmetics?.cape;
-            if (typeof cape === 'string' && packSkinReg[cape.replace(/^custom:/i, '')]) {
-                paintPlayerUrl(player, packSkinReg[cape.replace(/^custom:/i, '')]);
-            }
+            if (typeof cape === 'string' && paintPlayerUrl(player, packSkinReg[cape.replace(/^custom:/i, '')])) touched++;
         }
+        if (touched) log('repintado en vivo: ' + touched + ' entidades');
     }
 
     function paintPlayerUrl(player, url) {
+        if (!url) return false;
         try {
             var mesh = player.mesh;
-            if (!mesh || typeof mesh.traverse !== 'function') return;
+            if (!mesh || typeof mesh.traverse !== 'function') return false;
             var mats = skinMaterialsOf(mesh);
-            if (!mats.length) return;
+            if (!mats.length) return false;
             var img = new Image();
             img.crossOrigin = 'anonymous';
             img.onload = function () {
                 for (var i = 0; i < mats.length; i++) {
-                    var t = mats[i].map;
-                    if (!t || t.__mfPainted === url) continue;
+                    var m = mats[i];
+                    var t = m.map;
+                    if (!t) continue;
+                    if (t.__mfPainted === url) continue;
                     try {
                         var c = document.createElement('canvas');
                         c.width = img.naturalWidth || img.width;
@@ -700,13 +724,15 @@
                             nt.flipY = t.flipY; nt.wrapS = t.wrapS; nt.wrapT = t.wrapT;
                         } catch (_) {}
                         nt.__mfPainted = url;
-                        mats[i].map = nt;
-                        mats[i].needsUpdate = true;
+                        m.map = nt;
+                        m.needsUpdate = true;
                     } catch (_) {}
                 }
             };
+            img.onerror = function () { warn('repintado falló (imagen):', url.slice(0, 40)); };
             img.src = url;
-        } catch (_) {}
+            return true;
+        } catch (_) { return false; }
     }
 
     startLiveWatcher();

@@ -7326,6 +7326,10 @@ function renderCreditsPage() {
 
   document.addEventListener('minifeather:panel-assets-request', () => pushPanelAssetsToMain());
 
+  // Push proactivo al cargar: MAIN puede pedir los assets antes de que este script exista
+  setTimeout(pushPanelAssetsToMain, 1500);
+  setTimeout(pushPanelAssetsToMain, 4000);
+
   function refreshActiveSkins() {
     pushPanelAssetsToMain();
     chrome.runtime.sendMessage({ type: 'getSkins' }, response => {
