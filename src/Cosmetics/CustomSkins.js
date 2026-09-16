@@ -521,9 +521,12 @@
             if (!url) return false;
             var mats = skinMaterialsOf(mesh);
             if (!mats.length) return false;
+            var who = (player.profile && (player.profile.username || player.profile.uuid)) || 'player';
+            var pendingName = who;
             var img = new Image();
             if (/^https?:/i.test(url)) img.crossOrigin = 'anonymous';
             img.onload = function () {
+                var done = 0;
                 for (var i = 0; i < mats.length; i++) {
                     var t = mats[i].map;
                     if (!t) continue;
@@ -545,7 +548,16 @@
                         nt.__mfPainted = url; 
                         mats[i].map = nt;
                         mats[i].needsUpdate = true;
-                    } catch (_) {}
+                        done++;
+                    } catch (e) {
+                        warn('repintado falló en material', i, 'de', pendingName, ':', e && e.message);
+                    }
+                }
+                if (done > 0) {
+                    log('✔ skin aplicada:', pendingName, '—', done + '/' + mats.length + ' materiales,', img.naturalWidth + 'x' + img.naturalHeight, url.indexOf('data:') === 0 ? '(cache)' : url.slice(-30));
+                } else {
+                    warn('✘ imagen cargó pero 0 materiales repintados para', pendingName);
+                    paintedPlayers.delete(player);
                 }
             };
             img.onerror = function () {
@@ -589,7 +601,10 @@
                 if (player.mesh && typeof player.mesh.recreate === 'function') {
                     player.mesh.recreate();
                 }
-            } catch (e) {}
+                log('✔ skin vanilla aplicada:', profile.uuid || profile.username, '→', target);
+            } catch (e) {
+                warn('falló aplicar skin vanilla', target, ':', e && e.message);
+            }
             return;
         }
 
@@ -654,6 +669,7 @@
                 }
 
                 originalUrls.set(this, value);
+                log('[Image.src] skin reemplazada:', skinId, '→', url.indexOf('data:') === 0 ? '(dataURL)' : url.slice(-30));
 
                 var self = this;
                 this.addEventListener(
