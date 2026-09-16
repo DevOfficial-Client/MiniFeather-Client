@@ -4,7 +4,11 @@
     window.__MF_CustomSkins = true;
 
     var TAG = "[MiniFeather Skins]";
-    var VERBOSE = false;
+    // Logs de diagnóstico ON por defecto; apagar con localStorage mf_skins_verbose=0
+    var VERBOSE;
+    try {
+        VERBOSE = localStorage.getItem('mf_skins_verbose') !== '0';
+    } catch (_) { VERBOSE = true; }
 
     function log() {
         if (!VERBOSE) return;
@@ -379,6 +383,9 @@
         if (!world || !world.players) return;
 
         try {
+            // El jugador local no siempre está en world.players — incluirlo explícito
+            if (game?.player?.profile) overridePlayer(game.player);
+
             var players = world.players;
             if (typeof players.forEach === 'function') {
                 players.forEach(function (player) { overridePlayer(player); });
@@ -569,6 +576,8 @@
         } catch (_) { return false; }
     }
 
+    var seenProfileIds = new WeakSet();
+
     function overridePlayer(player) {
         if (!player || !player.profile) return;
         var profile = player.profile;
@@ -576,6 +585,15 @@
         if (!cosmetics || typeof cosmetics !== 'object') return;
 
         var entry = lookupEntry(profile);
+
+        // Diagnóstico único por jugador: username/uuid detectados y si matcheó
+        if (!seenProfileIds.has(player)) {
+            seenProfileIds.add(player);
+            var pn = profile.username || profile.name || '(sin username)';
+            var pu = profile.uuid || '(sin uuid)';
+            log('jugador detectado:', pn, '| uuid:', pu, entry ? '→ MATCH en DB' : '(sin override en DB)');
+        }
+
         if (!entry) return;
 
         var target = entry.__skin;
