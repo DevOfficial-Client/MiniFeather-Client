@@ -167,13 +167,14 @@
         if (dbLoading) return dbLoading;
 
         var finish = function (data) {
-            
+
             parseDb(BUILTIN_DB, true);
             parseDb(data, false);
             db = data || {};
             dbLoading = null;
             var n = Object.keys(dbByUuid).length + Object.keys(dbByName).length;
             log('DB lista (' + n + ' overrides)');
+            try { prefetchRemoteSkins(); } catch (_) {}
             return db;
         };
 
@@ -391,15 +392,103 @@
 
     var paintedPlayers = new WeakSet();
 
+    // Caché persistente de skins remotas: se descargan solas al primer uso y
+    // de ahí en adelante se pintan desde dataURLs locales (sin red ni CORS).
+    var REMOTE_CACHE_KEY = 'mf:remoteskins:v1';
+    var remoteCache = null;
+    var remoteFailed = {};
+    var remotePending = {};
+
+    function loadRemoteCache() {
+        if (remoteCache) return;
+        remoteCache = {};
+        try {
+            var raw = localStorage.getItem(REMOTE_CACHE_KEY);
+            if (raw) {
+                var obj = JSON.parse(raw);
+                if (obj && typeof obj === 'object') remoteCache = obj;
+            }
+        } catch (_) {}
+    }
+
+    function saveRemoteCache() {
+        try {
+            localStorage.setItem(REMOTE_CACHE_KEY, JSON.stringify(remoteCache));
+        } catch (_) {
+            // quota: tira la mitad más vieja y reintenta una vez
+            try {
+                var keys = Object.keys(remoteCache);
+                for (var i = 0; i < Math.ceil(keys.length / 2); i++) delete remoteCache[keys[i]];
+                localStorage.setItem(REMOTE_CACHE_KEY, JSON.stringify(remoteCache));
+            } catch (_) {}
+        }
+    }
+
+    function scheduleRemoteDownload(url) {
+        if (!url || remoteCache[url] || (remoteFailed[url] || 0) >= 3 || remotePending[url]) return;
+        remotePending[url] = true;
+        fetch(url, { mode: 'cors' })
+            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+            .then(function (b) {
+                return new Promise(function (res, rej) {
+                    var fr = new FileReader();
+                    fr.onload = function () { res(fr.result); };
+                    fr.onerror = function () { rej(new Error('read')); };
+                    fr.readAsDataURL(b);
+                });
+            })
+            .then(function (dataUrl) {
+                if (typeof dataUrl === 'string' && dataUrl.indexOf('data:image') === 0) {
+                    remoteCache[url] = dataUrl;
+                    saveRemoteCache();
+                    log('skin remota cacheada:', url.slice(-28));
+                } else throw new Error('no image');
+            })
+            .catch(function () {
+                remoteFailed[url] = (remoteFailed[url] || 0) + 1;
+                warn('descarga de skin remota falló (' + remoteFailed[url] + '/3):', url.slice(-28));
+            })
+            .then(function () { delete remotePending[url]; });
+    }
+
+    function cachedRemoteOrKick(url) {
+        if (remoteCache[url]) return remoteCache[url];
+        scheduleRemoteDownload(url);
+        // Si ya no se puede cachear (3 fallos), usa la URL directa como antes
+        if ((remoteFailed[url] || 0) >= 3) return url;
+        // Aún descargando: null fuerza al watcher a reintentar en su próximo tick
+        return null;
+    }
+
+    function prefetchRemoteSkins() {
+        loadRemoteCache();
+        var seen = {};
+        function scan(map) {
+            if (!map) return;
+            for (var k in map) {
+                if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
+                var u = entrySkinUrl(map[k]);
+                if (u && /^https?:/i.test(u) && !seen[u]) { seen[u] = 1; scheduleRemoteDownload(u); }
+            }
+        }
+        scan(dbByUuid);
+        scan(dbByName);
+    }
+
     function resolveSkinImageUrl(entry) {
         if (!entry || !entry.__skin) return null;
         var s = String(entry.__skin);
-        
+
         if (s.indexOf('custom:') === 0) {
             var reg = globalThis.__MF_PACK_SKINS__ || {};
             return reg[s.slice(7)] || null;
         }
-        return entrySkinUrl(entry);
+        var url = entrySkinUrl(entry);
+        if (url && /^https?:/i.test(url) && url.indexOf(location.origin) !== 0) {
+            loadRemoteCache();
+            return cachedRemoteOrKick(url);
+        }
+        return url;
     }
 
     function skinMaterialsOf(mesh) {
