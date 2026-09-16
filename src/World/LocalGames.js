@@ -495,6 +495,7 @@
           maxPlayers: MAX_PLAYERS,
           worldName: state.worldName,
           serverAddress: state.serverAddress,
+          shareLink: makeShareLink(),
           role: state.localRole,
           gameMode: state.localGameMode,
           hardcore: state.localHardcore,
@@ -7395,6 +7396,29 @@
     return `mf-local-${normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   }
 
+  function makeShareLink(username = '') {
+    const match = String(state.serverAddress || '').match(/^10\.(\d{1,3})\.(\d{1,3})\.(\d{1,3}):(\d{1,5})$/);
+    if (!match) return '';
+    const id = `10${match[1].padStart(3, '0')}${match[2].padStart(3, '0')}${match[3].padStart(3, '0')}${match[4].padStart(5, '0')}`;
+    const safeName = String(username || profileSnapshot()?.name || '').replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 16);
+    return `https://miniblox.io/local.P2P/${id}/${safeName || 'Player'}`;
+  }
+
+  function parseShareLink(url) {
+    try {
+      const parsed = new URL(url || globalThis.location?.href || '');
+      const match = parsed.pathname.match(/^\/local\.P2P\/(\d{16})\/([A-Za-z0-9_.-]{1,16})\/?$/i);
+      if (!match) return null;
+      const digits = match[1];
+      const octets = [digits.slice(2, 5), digits.slice(5, 8), digits.slice(8, 11)].map(Number);
+      const port = Number(digits.slice(11));
+      if (octets.some(part => part > 255) || port < 1024 || port > 65535) return null;
+      return { address: `10.${octets.join('.')}:${port}`, username: match[2] };
+    } catch (_) {
+      return null;
+    }
+  }
+
   function bytesToBase64(bytes) {
     let binary = '';
     const chunk = 0x8000;
@@ -10027,6 +10051,26 @@
   }
 
   document.addEventListener(COMMAND_EVENT, onCommand);
+
+  (function autoJoinFromShareLink() {
+    const invite = parseShareLink();
+    if (!invite) return;
+    setStatus(`🔗 P2P invite detected — joining ${invite.username}'s world...`);
+    log(`autoJoin: link ${invite.address} user=${invite.username}`);
+
+    const tryJoin = async (attempt) => {
+      if (state.active || state.destroyed) return;
+      const game = state.game || await resolveGameSingleton().catch(() => null);
+      if (!game && attempt < 15) {
+        setTimeout(() => tryJoin(attempt + 1), 2000);
+        return;
+      }
+      const ok = await joinWorldServer(invite.address);
+      if (!ok && !state.destroyed) logWarn('autoJoin: no se pudo conectar');
+    };
+
+    setTimeout(() => tryJoin(0), 2500);
+  })();
 
   window.addEventListener('pagehide', () => {
     state.destroyed = true;

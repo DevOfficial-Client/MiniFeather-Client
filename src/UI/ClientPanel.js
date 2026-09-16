@@ -3825,6 +3825,11 @@
             <span>${t('localGamesAddress')}: <code>${escapeHtml(lg.serverAddress || '-')}</code></span>
             ${lg.serverAddress ? `<button id="mf-lg-copy-address" class="mf-small-btn" type="button">${t('localGamesCopyAddress')}</button>` : ''}
           </div>
+          ${lg.shareLink ? `
+          <div class="mf-muted" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;">🔗 <code>${escapeHtml(lg.shareLink)}</code></span>
+            <button id="mf-lg-copy-link" class="mf-small-btn" type="button">Copy Link</button>
+          </div>` : ''}
           ${lg.renderStats ? `<div class="mf-muted" style="margin-top:2px;font-size:10px;opacity:0.8;">${t('localGamesRender')}: ${Number(lg.renderStats.visible || 0)}/${Number(lg.renderStats.meshes || 0)} · ${t('localGamesTextures')}: ${Number(lg.renderStats.textured || 0)}/${Number(lg.renderStats.nativeMaterials || 0)}</div>` : ''}
         </div>
         <div class="mf-card-title" style="margin-top:6px;">${t('localGamesModeTitle')}</div>
@@ -3885,6 +3890,21 @@
           button.textContent = t('localGamesCopied');
           window.setTimeout(() => {
             if (button.isConnected) button.textContent = t('localGamesCopyAddress');
+          }, 1200);
+        }
+      } catch (_) {}
+    });
+
+    container.querySelector('#mf-lg-copy-link')?.addEventListener('click', async () => {
+      const link = String(lg.shareLink || '');
+      if (!link) return;
+      try {
+        await navigator.clipboard.writeText(link);
+        const button = container.querySelector('#mf-lg-copy-link');
+        if (button) {
+          button.textContent = '✓ Copied';
+          window.setTimeout(() => {
+            if (button.isConnected) button.textContent = 'Copy Link';
           }, 1200);
         }
       } catch (_) {}
