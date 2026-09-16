@@ -7303,7 +7303,31 @@ function renderCreditsPage() {
     element.style.color = color;
   }
 
+  // Empuja los assets activos (data: URLs de skins/capes) al hook de Image.src en MAIN.
+  // Chrome ya no permite redirects DNR a data:, así que MAIN los aplica interceptando la carga.
+  function pushPanelAssetsToMain() {
+    chrome.runtime.sendMessage({ type: 'getSkins' }, skinsRes => {
+      chrome.runtime.sendMessage({ type: 'getCapes' }, capesRes => {
+        const skins = skinsRes?.skins || {};
+        const capes = capesRes?.capes || {};
+        const clean = obj => {
+          const out = {};
+          for (const [name, url] of Object.entries(obj)) {
+            if (typeof url === 'string' && url.startsWith('data:')) out[name] = url;
+          }
+          return out;
+        };
+        document.dispatchEvent(new CustomEvent('minifeather:panel-assets', {
+          detail: JSON.stringify({ skins: clean(skins), capes: clean(capes) })
+        }));
+      });
+    });
+  }
+
+  document.addEventListener('minifeather:panel-assets-request', () => pushPanelAssetsToMain());
+
   function refreshActiveSkins() {
+    pushPanelAssetsToMain();
     chrome.runtime.sendMessage({ type: 'getSkins' }, response => {
       const container = panel?.querySelector('#mf-active-skins');
       if (!container) return;
@@ -7348,6 +7372,7 @@ function renderCreditsPage() {
   }
 
   function refreshActiveCapes() {
+    pushPanelAssetsToMain();
     chrome.runtime.sendMessage({ type: 'getCapes' }, response => {
       const container = panel?.querySelector('#mf-active-capes');
       if (!container) return;

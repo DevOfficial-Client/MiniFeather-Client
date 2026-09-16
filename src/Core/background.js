@@ -51,28 +51,36 @@ function getRuleId(type, name) {
 async function setAsset(type, name, customUrl) {
   const config = getAssetConfig(type);
   const originalPath = `${config.basePath}${name}.png`;
-  const redirectUrl = customUrl || null;
+  const isHttpUrl = typeof customUrl === 'string' && /^https?:\/\//i.test(customUrl);
+  // Chrome bloquea redirects DNR a data: URLs (fix de seguridad 2025), así que
+  // los dataURLs solo se guardan en storage y los aplica el hook de Image.src en MAIN.
+  const redirectUrl = isHttpUrl ? customUrl : null;
   const ruleId = getRuleId(type, name);
 
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: [ruleId],
-    addRules: [{
-      id: ruleId,
-      priority: 1,
-      action: redirectUrl
-        ? { type: "redirect", redirect: { url: redirectUrl } }
-        : { type: "allow" },
-      condition: {
-        requestDomains: GAME_DOMAINS,
-        urlFilter: `${originalPath}*`,
-        resourceTypes: ["image", "other"]
-      }
-    }]
-  });
+  if (redirectUrl) {
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [ruleId],
+      addRules: [{
+        id: ruleId,
+        priority: 1,
+        action: { type: "redirect", redirect: { url: redirectUrl } },
+        condition: {
+          requestDomains: GAME_DOMAINS,
+          urlFilter: `${originalPath}*`,
+          resourceTypes: ["image", "other"]
+        }
+      }]
+    });
+  } else {
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [ruleId]
+    });
+  }
 
   const stored = await chrome.storage.local.get([config.storageKey]);
   const activeAssets = stored[config.storageKey] || {};
-  activeAssets[name] = redirectUrl || originalPath;
+  if (customUrl) activeAssets[name] = customUrl;
+  else delete activeAssets[name];
   await chrome.storage.local.set({ [config.storageKey]: activeAssets });
 }
 
