@@ -859,15 +859,32 @@ applyMenuUi();
 
     if (changed && Object.keys(cache.files).length) {
       const settings = await getSettings();
-      if (settings.autoApply) {
-        const prev = (await chrome.storage.local.get([HOT_APPLIED]))[HOT_APPLIED] || '';
-        if (remoteCommit && prev !== remoteCommit) {
-          await chrome.storage.local.set({ [HOT_APPLIED]: remoteCommit });
-          try {
-            const tabs = await chrome.tabs.query({ url: ['https://miniblox.io/*', 'https://miniblox.online/*'] });
+      const prev = (await chrome.storage.local.get([HOT_APPLIED]))[HOT_APPLIED] || '';
+      const isNew = remoteCommit && prev !== remoteCommit;
+      if (settings.autoApply && isNew) {
+        await chrome.storage.local.set({ [HOT_APPLIED]: remoteCommit });
+        // auto-apply: recargar pestañas para que HotLoader inyecte lo nuevo.
+        // Si el usuario está en partida (título = nombre del server), no
+        // interrumpir: dejar el banner pidiendo recargar manual.
+        try {
+          const tabs = await chrome.tabs.query({ url: ['https://miniblox.io/*', 'https://miniblox.online/*'] });
+          let playing = false;
+          for (const tab of tabs) {
+            // en partida el título del tab muestra el server (planet-…)
+            if (/planet-|in game|playing/i.test(tab.title || '')) { playing = true; break; }
+          }
+          if (!playing) {
             for (const tab of tabs) { try { chrome.tabs.reload(tab.id); } catch (_) {} }
-          } catch (_) {}
-        }
+          } else {
+            // dejar constancia para que el banner pida el reinicio manual
+            const st = (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
+            await saveState({ ...st, updateAvailable: true, reason: 'hot', hotCommit: remoteCommit });
+          }
+        } catch (_) {}
+      } else if (isNew) {
+        // autoApply off: solo avisar
+        const st = (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
+        await saveState({ ...st, updateAvailable: true, reason: 'hot', hotCommit: remoteCommit });
       }
     }
     return cache;
@@ -1030,6 +1047,9 @@ applyMenuUi();
       const remoteVersion = remoteManifest.version || '0.0.0';
 
       const comparison = await compareLocalWithTree(localManifest, remoteManifest, remoteTree);
+      // hot-reload: refrescar archivos marcados en hotload.json contra el commit remoto
+      let hotCache = null;
+      try { hotCache = await updateHotCache(remoteCommit, remoteTree); } catch (_) {}
       const versionNewer = compareVersions(remoteVersion, localVersion) > 0;
       const builtAtMs = buildInfo?.builtAt ? Date.parse(buildInfo.builtAt) : NaN;
       const remoteDateMs = remoteCommitDate ? Date.parse(remoteCommitDate) : NaN;
@@ -1037,6 +1057,8 @@ applyMenuUi();
 
       let updateAvailable = false;
       let reason = 'current';
+      const prevReason = previousState?.reason || '';
+      const prevUpdate = !!previousState?.updateAvailable;
 
       if (comparison.matches) {
         reason = 'current';
@@ -1050,6 +1072,9 @@ applyMenuUi();
       } else if (Number.isFinite(builtAtMs) && Number.isFinite(remoteDateMs) && remoteDateMs > builtAtMs + 60000) {
         updateAvailable = true;
         reason = 'build';
+      } else if (prevReason === 'hot' && hotCache && !Object.keys(hotCache.files || {}).length) {
+        // el aviso 'hot' ya fue aplicado y no quedan archivos pendientes: limpiar
+        reason = 'current';
       } else {
         reason = 'local_modified';
       }

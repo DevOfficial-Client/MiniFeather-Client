@@ -39,10 +39,113 @@
 
   globalThis.MF_AutoUpdater = api;
 
+  // ── Aviso en pantalla cuando hay una actualización disponible ──
+  // El background chequea el repo (cada 6h + al iniciar). Cuando detecta
+  // novedad, guardó mfUpdaterState.updateAvailable=true y aquí avisamos:
+  // banner arriba con versión/commit + botón "Update now" que descarga el
+  // ZIP nuevo y pide recargar la extensión.
+  function fmtState(state) {
+    if (!state) return null;
+    if (!state.updateAvailable) return null;
+    const cur = state.installedVersion || '?';
+    const next = state.remoteVersion && state.remoteVersion !== cur ? ` → ${state.remoteVersion}` : '';
+    const sha = state.remoteShortCommit ? ` (${state.remoteShortCommit})` : '';
+    return { cur, next, sha, msg: state.remoteMessage || '', reason: state.reason || '' };
+  }
+
+  function showUpdateBanner(info) {
+    if (document.getElementById('mf-update-banner')) return;
+    const isHot = info.reason === 'hot';
+
+    const banner = document.createElement('div');
+    banner.id = 'mf-update-banner';
+    banner.style.cssText = [
+      'position:fixed', 'top:12px', 'left:50%', 'transform:translateX(-50%)',
+      'z-index:2147483647', 'display:flex', 'align-items:center', 'gap:12px',
+      'max-width:min(560px,92vw)', 'padding:10px 16px', 'border-radius:12px',
+      'background:rgba(20,22,30,.96)', 'border:1px solid #7c3aed',
+      'box-shadow:0 8px 30px rgba(0,0,0,.45)', 'color:#e8e8f0',
+      'font:13px/1.45 system-ui,sans-serif', 'backdrop-filter:blur(6px)'
+    ].join(';');
+
+    const label = document.createElement('span');
+    label.textContent = isHot
+      ? `MiniFeather update downloaded — reload to apply${info.sha}`
+      : `MiniFeather update available — v${info.cur}${info.next}${info.sha}`;
+    banner.appendChild(label);
+
+    if (info.msg) {
+      const note = document.createElement('span');
+      note.style.cssText = 'color:#9aa0b4;font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      note.textContent = info.msg;
+      note.title = info.msg;
+      banner.appendChild(note);
+    }
+
+    const actions = document.createElement('span');
+    actions.style.cssText = 'display:flex;gap:6px;flex-shrink:0;';
+
+    const updateBtn = document.createElement('button');
+    updateBtn.textContent = isHot ? 'Reload now' : 'Update now';
+    updateBtn.style.cssText = 'padding:6px 12px;border-radius:8px;border:0;background:#7c3aed;color:#fff;font:600 12px system-ui,sans-serif;cursor:pointer;';
+    updateBtn.addEventListener('click', async () => {
+      if (isHot) {
+        updateBtn.disabled = true;
+        updateBtn.textContent = 'Reloading…';
+        location.reload();
+        return;
+      }
+      updateBtn.disabled = true;
+      updateBtn.textContent = 'Downloading…';
+      const res = await api.download();
+      if (res?.success) {
+        updateBtn.textContent = 'Restart to apply';
+        banner.title = 'Unzip over your extension folder (or drag into chrome://extensions) and reload the page.';
+        const restart = document.createElement('button');
+        restart.textContent = 'How to apply';
+        restart.style.cssText = 'padding:6px 12px;border-radius:8px;border:0;background:#2a2e37;color:#e8e8f0;font:600 12px system-ui,sans-serif;cursor:pointer;';
+        restart.addEventListener('click', () => window.open('https://github.com/DevOfficial-Client/MiniFeather-Client#readme', '_blank', 'noopener,noreferrer'));
+        actions.appendChild(restart);
+      } else {
+        updateBtn.textContent = 'Retry';
+        updateBtn.disabled = false;
+      }
+    });
+    actions.appendChild(updateBtn);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '×';
+    closeBtn.title = 'Dismiss';
+    closeBtn.style.cssText = 'width:26px;height:26px;border-radius:8px;border:0;background:transparent;color:#9aa0b4;font:16px system-ui,sans-serif;cursor:pointer;';
+    closeBtn.addEventListener('click', () => banner.remove());
+    actions.appendChild(closeBtn);
+
+    banner.appendChild(actions);
+    (document.body || document.documentElement).appendChild(banner);
+  }
+
+  async function maybeShowBanner() {
+    try {
+      const res = await api.getState();
+      const info = fmtState(res?.state);
+      if (info) showUpdateBanner(info);
+    } catch (_) {}
+  }
+
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local' || (!changes.mfUpdaterState && !changes.mfUpdaterSettings)) return;
       window.dispatchEvent(new CustomEvent('minifeather:updater-change'));
+      if (changes.mfUpdaterState?.newValue?.updateAvailable) {
+        const info = fmtState(changes.mfUpdaterState.newValue);
+        if (info) showUpdateBanner(info);
+      }
     });
   } catch (_) {}
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => maybeShowBanner());
+  } else {
+    maybeShowBanner();
+  }
 })();
