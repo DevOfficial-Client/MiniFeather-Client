@@ -389,6 +389,9 @@ function announce(code) {
     const g = getGame();
     const chat = g?.chat;
     if (!chat || typeof chat.submit !== 'function') return;
+    // Solo anunciar si hay sesión de chat activa (dentro de una partida).
+    // Fuera de partida el submit del engine lanza "...reading 'inGame'".
+    if (!Array.isArray(chat.log) || chat.log.length === 0) return;
     const text = ANNOUNCE + code;
     try {
         try { chat.setInputValue?.(text); } catch { try { chat.inputValue = text; } catch {} }

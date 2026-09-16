@@ -1105,9 +1105,20 @@
 
   document.addEventListener(EVENT_CONFIG, onConfig);
 
+  // Reintento con backoff: tras varios fallos seguidos se espacia hasta 60s
+  // para no spamear "recursos no listos" cuando el juego aún no expone los meshes.
+  let hookAttempts = 0;
+  let hookNextAt = 0;
   const hookTimer = window.setInterval(() => {
-    if (state.enabled && !state.resourcesReady) void ensureResources();
-    if (state.enabled) state.entityMap = null; 
+    const now = performance.now();
+    if (state.enabled && !state.resourcesReady && now >= hookNextAt) {
+      void ensureResources().then(ok => {
+        if (ok) { hookAttempts = 0; return; }
+        hookAttempts++;
+        hookNextAt = now + Math.min(60000, 5000 * hookAttempts);
+      });
+    }
+    if (state.enabled) state.entityMap = null;
   }, HOOK_MS);
 
   function destroy() {
