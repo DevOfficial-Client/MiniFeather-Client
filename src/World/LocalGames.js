@@ -7364,10 +7364,11 @@
   }
 
   function makeServerAddress() {
-    const bytes = randomBytes(6);
-    const portSeed = (bytes[3] << 8) | bytes[4];
-    const port = 20000 + (portSeed % 40000);
-    return `10.${bytes[0]}.${bytes[1]}.${bytes[2]}:${port}`;
+    const alphabet = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
+    const bytes = randomBytes(20);
+    let token = '';
+    for (let i = 0; i < bytes.length; i++) token += alphabet[bytes[i] % alphabet.length];
+    return `MF-${token.match(/.{1,5}/g).join('-')}`;
   }
 
   function normalizeServerAddress(value) {
@@ -7397,23 +7398,21 @@
   }
 
   function makeShareLink(username = '') {
-    const match = String(state.serverAddress || '').match(/^10\.(\d{1,3})\.(\d{1,3})\.(\d{1,3}):(\d{1,5})$/);
-    if (!match) return '';
-    const id = `10${match[1].padStart(3, '0')}${match[2].padStart(3, '0')}${match[3].padStart(3, '0')}${match[4].padStart(5, '0')}`;
+    if (state.mode !== 'host' || !state.serverAddress) return '';
+    const p2pid = normalizeServerAddress(state.serverAddress);
+    if (!p2pid?.startsWith('MF-')) return '';
     const safeName = String(username || profileSnapshot()?.name || '').replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 16);
-    return `https://miniblox.io/local.P2P/${id}/${safeName || 'Player'}`;
+    return `https://miniblox.io/local.P2P/${encodeURIComponent(p2pid)}/${safeName || 'Player'}`;
   }
 
   function parseShareLink(url) {
     try {
       const parsed = new URL(url || globalThis.location?.href || '');
-      const match = parsed.pathname.match(/^\/local\.P2P\/(\d{16})\/([A-Za-z0-9_.-]{1,16})\/?$/i);
+      const match = decodeURIComponent(parsed.pathname).match(/^\/local\.P2P\/(MF-[A-Z2-9-]+)\/([A-Za-z0-9_.-]{1,16})\/?$/i);
       if (!match) return null;
-      const digits = match[1];
-      const octets = [digits.slice(2, 5), digits.slice(5, 8), digits.slice(8, 11)].map(Number);
-      const port = Number(digits.slice(11));
-      if (octets.some(part => part > 255) || port < 1024 || port > 65535) return null;
-      return { address: `10.${octets.join('.')}:${port}`, username: match[2] };
+      const address = normalizeServerAddress(match[1]);
+      if (!address) return null;
+      return { address, username: match[2] };
     } catch (_) {
       return null;
     }
