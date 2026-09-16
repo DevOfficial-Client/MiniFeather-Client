@@ -113,6 +113,10 @@
     lastTimeSync: 0,
     destroyed: false,
     directLocal: false,
+    localChunkGuardSet: null,
+    localChunkGuardRevision: -1,
+    lastVisualModeRefresh: 0,
+    lastItemDespawnScan: 0,
     moduleNamespace: null,
     moduleUrl: '',
     blockRegistry: null,
@@ -943,6 +947,21 @@
     return result;
   }
 
+  function ensureLocalChunkGuardSet() {
+    if (state.localChunkGuardSet && state.localChunkGuardRevision === state.localChunks.length) {
+      return state.localChunkGuardSet;
+    }
+
+    state.localChunkGuardSet = localChunkCoordinateSet();
+    state.localChunkGuardRevision = state.localChunks.length;
+    return state.localChunkGuardSet;
+  }
+
+  function invalidateLocalChunkGuardSet() {
+    state.localChunkGuardSet = null;
+    state.localChunkGuardRevision = -1;
+  }
+
   function installProviderGuard() {
     const provider = state.world?.chunkProvider;
 
@@ -966,7 +985,7 @@
       if (
         state.active &&
         state.directLocal &&
-        localChunkCoordinateSet().has(`${Number(x)},${Number(z)}`)
+        ensureLocalChunkGuardSet().has(`${Number(x)},${Number(z)}`)
       ) {
         return;
       }
@@ -2224,7 +2243,7 @@
 
     const now = performance.now();
 
-    if (!force && now - state.localRenderFixAt < 200) {
+    if (!force && now - state.localRenderFixAt < 2000) {
       return state.localRenderStats;
     }
 
@@ -2762,6 +2781,10 @@
     if (!state.visualRestore) {
       enterLocalVisualMode();
     }
+
+    const now = performance.now();
+    if (now - state.lastVisualModeRefresh < 500) return;
+    state.lastVisualModeRefresh = now;
 
     if (document.body) {
       document.body.style.setProperty(
@@ -3323,6 +3346,7 @@
       try { entity.setPickupDelay?.(10); } catch (_) {}
       entity.__mfLocalPickupReadyAt = performance.now() + 500;
       entity.__mfLocalDrop = true;
+      entity.__mfLocalDropAt = performance.now();
 
       try {
         if (entity.motion) {
@@ -3602,6 +3626,38 @@
       } catch (_) {}
 
       state.dropStats.pickedUp++;
+    }
+  }
+
+  function despawnStaleLocalItems() {
+    if (!state.active || !state.directLocal) return;
+
+    const now = performance.now();
+    if (now - state.lastItemDespawnScan < 2000) return;
+    state.lastItemDespawnScan = now;
+
+    const world = state.world;
+    if (!world?.entities) return;
+
+    const maxAge = 300000;
+
+    for (const [id, entity] of world.entities) {
+      if (!entity || entity === state.game?.player) continue;
+      if (entity.__mfLocalDrop !== true) continue;
+      if (typeof entity.getEntityItem !== 'function') continue;
+
+      const spawnedAt = Number(entity.__mfLocalDropAt);
+      if (!Number.isFinite(spawnedAt)) {
+        entity.__mfLocalDropAt = now;
+        continue;
+      }
+
+      if (now - spawnedAt < maxAge) continue;
+
+      try { world.removeEntity?.(entity); } catch (_) {}
+      try {
+        if (world.entities?.get?.(id) === entity) world.entities.delete(id);
+      } catch (_) {}
     }
   }
 
@@ -4621,6 +4677,7 @@
     } catch (_) {}
 
     state.localChunks.push(chunk);
+    invalidateLocalChunkGuardSet();
     return chunk;
   }
 
@@ -5105,6 +5162,7 @@
       collectLoadedChunks()
         .map(entry => entry.chunk)
         .filter(Boolean);
+    invalidateLocalChunkGuardSet();
 
     for (const chunk of state.localChunks) {
       try {
@@ -5140,6 +5198,7 @@
     }
 
     state.localChunks.length = 0;
+    invalidateLocalChunkGuardSet();
     state.terrainSurface.clear();
 
     const air = stateForAny('air');
@@ -7179,6 +7238,7 @@
         state.directLocal = false;
         state.world = null;
         state.localChunks.length = 0;
+        invalidateLocalChunkGuardSet();
         return false;
       }
 
@@ -9877,6 +9937,7 @@
         }
 
         pickupNearbyLocalItems();
+        despawnStaleLocalItems();
       }
 
       if (state.directLocal) {
