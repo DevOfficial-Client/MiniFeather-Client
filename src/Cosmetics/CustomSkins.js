@@ -110,28 +110,33 @@
 
     function normalizeSkinValue(value) {
         if (typeof value !== 'string') return null;
-        
+
         if (value.indexOf('custom:') === 0) return value;
-        var v = value.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+        var v = value.trim().replace(/\\/g, '/');
         if (!v) return null;
+        // URLs absolutas (http/https/data) se guardan tal cual; se limpian backticks de más
+        if (/^`?(https?:|data:image)/i.test(v)) return v.replace(/^`+|`+$/g, '');
+        v = v.replace(/^\/+/, '');
         var m = v.match(/^skins\/(.+)$/i);
         if (m) v = m[1];
         return v.replace(/\.png$/i, '');
     }
 
     function isVanillaSkinId(id) {
-        
+
         return typeof id === 'string' && id && /^[a-z0-9_]+$/i.test(id) && id.indexOf('/') === -1;
     }
 
     function entrySkinUrl(entry) {
         if (!entry || !entry.__skin) return null;
-        
-        if (String(entry.__skin).indexOf('custom:') === 0) return null;
-        if (isVanillaSkinId(entry.__skin)) return null; 
+        var s = String(entry.__skin);
+
+        if (s.indexOf('custom:') === 0) return null;
+        if (/^(https?:|data:image)/i.test(s)) return s;
+        if (isVanillaSkinId(s)) return null;
         var base = skinsBaseUrl();
         if (!base) return null;
-        return base + entry.__skin + '.png';
+        return base + s + '.png';
     }
 
     function parseDb(data, reset) {
@@ -428,7 +433,7 @@
             var mats = skinMaterialsOf(mesh);
             if (!mats.length) return false;
             var img = new Image();
-            img.crossOrigin = 'anonymous'; 
+            if (/^https?:/i.test(url)) img.crossOrigin = 'anonymous';
             img.onload = function () {
                 for (var i = 0; i < mats.length; i++) {
                     var t = mats[i].map;
@@ -701,7 +706,7 @@
             var mats = skinMaterialsOf(mesh);
             if (!mats.length) return false;
             var img = new Image();
-            img.crossOrigin = 'anonymous';
+            if (/^https?:/i.test(url)) img.crossOrigin = 'anonymous';
             img.onload = function () {
                 for (var i = 0; i < mats.length; i++) {
                     var m = mats[i];
