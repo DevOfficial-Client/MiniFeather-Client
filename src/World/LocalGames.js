@@ -368,9 +368,10 @@
 
   function loadGlobalWorldPreference() {
     try {
-      return localStorage.getItem('mf_global_world') !== 'off';
+      // Solo manual: el mundo global nunca se auto-une, hay que entrar con el botón
+      return localStorage.getItem('mf_global_world') === 'on';
     } catch (_) {
-      return true;
+      return false;
     }
   }
 
@@ -391,8 +392,8 @@
     });
   }
 
-  async function tryJoinGlobalWorld() {
-    if (!loadGlobalWorldPreference()) return;
+  async function tryJoinGlobalWorld(manual = false) {
+    if (!manual && !loadGlobalWorldPreference()) return;
     if (state.active || state.destroyed) return;
     if (state.serverAddress === GLOBAL_WORLD_ADDRESS) return;
 
@@ -10360,6 +10361,27 @@
       state.autoJoinEnabled = enabled;
       persistAutoJoinPreference(enabled);
       publishServerAdvert(true).catch(() => {});
+      emitState();
+      return;
+    }
+
+    if (action === 'join-global') {
+      const enabled = command?.enabled !== false;
+      try {
+        localStorage.setItem('mf_global_world', enabled ? 'on' : 'off');
+      } catch (_) {}
+      if (enabled) {
+        if (state.active && state.serverAddress === GLOBAL_WORLD_ADDRESS) {
+          emitState();
+          return;
+        }
+        if (state.active) {
+          setStatus('Leave the current world first (Stop).', 'BUSY');
+          emitState();
+          return;
+        }
+        await tryJoinGlobalWorld(true);
+      }
       emitState();
       return;
     }

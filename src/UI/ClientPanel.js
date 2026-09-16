@@ -3865,6 +3865,7 @@
           <button id="mf-lg-sandbox" class="mf-btn secondary">${t('localGamesSandbox')}</button>
         </div>
         <button id="mf-lg-garden" class="mf-btn secondary" style="width:100%;margin-top:6px;padding:6px;font-size:12px;">🕷️ Spider Garden</button>
+        <button id="mf-lg-global" class="mf-btn primary" style="width:100%;margin-top:6px;padding:6px;font-size:12px;">🌍 Global World</button>
         <div style="display:flex;gap:6px;margin-top:6px;">
           <button id="mf-lg-import" class="mf-btn secondary" style="flex:1;padding:6px;font-size:12px;">📦 Import World</button>
           <button id="mf-lg-play-imported" class="mf-btn secondary" style="flex:1;padding:6px;font-size:12px;" title="Load the imported world">▶ Imported</button>
@@ -3947,6 +3948,14 @@
 
     container.querySelector('#mf-lg-garden')?.addEventListener('click', () => {
       sendLocalGamesCommand('start-garden');
+    });
+
+    container.querySelector('#mf-lg-global')?.addEventListener('click', (event) => {
+      const button = event.currentTarget;
+      const original = button ? button.textContent : '';
+      if (button) button.textContent = '⏳ Joining the Global World...';
+      sendLocalGamesCommand('join-global', { enabled: true });
+      window.setTimeout(() => { if (button?.isConnected) button.textContent = original; }, 2500);
     });
 
     container.querySelector('#mf-lg-import')?.addEventListener('click', () => {
@@ -7149,6 +7158,82 @@ function renderCreditsPage() {
     if (MODULES.get('rebrand')?.enabled) replaceAllLogos();
     refreshLogoControls();
   }
+
+  // --- Bridge con la GUI nativa de miniblox (tab "MiniFeather" en Ajustes) ---
+  const NSB_BOOLEAN_KEYS = [
+    'rebrand', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
+    'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
+    'waterSplash', 'patPat', 'itemPhysics', 'noWeather', 'antiAfk', 'autoSprint',
+    'safeSneak', 'autoRespawn', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
+    'dynamicCrosshair', 'vanillaAnimations', 'leafWind', 'handSway', 'betterPlayerLayers',
+    'chatVideos', 'chatLinks', 'chatMemes', 'clientChat', 'rhythmParkour', 'guiPatch',
+    'customShader', 'freelook', 'blockHighlight', 'discord', 'supportAds',
+    'experimentalRealistic', 'experimentalAurora', 'experimentalGrassFlowers',
+    'experimentalInteractiveVegetation', 'experimentalFallenLeaves',
+    'experimentalTinyTakeover', 'experimentalAnimatedItems',
+    'experimentalBetterAnimationCape', 'experimentalPbr'
+  ];
+
+  function nsbStatePayload() {
+    const settingsOut = {};
+    for (const key of NSB_BOOLEAN_KEYS) settingsOut[key] = settings[key] === true;
+    return JSON.stringify({ settings: settingsOut, source: 'clientpanel' });
+  }
+
+  function initNativeSettingsBridge() {
+    document.addEventListener('minifeather:nsb-state', () => {
+      document.dispatchEvent(new CustomEvent('minifeather:nsb-state-data', {
+        detail: nsbStatePayload()
+      }));
+    }, { signal: runtimeController?.signal });
+
+    document.addEventListener('minifeather:nsb-toggle', event => {
+      let payload = null;
+      try {
+        payload = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+      } catch (_) {}
+      if (!payload?.key) return;
+      const key = String(payload.key);
+      if (!NSB_BOOLEAN_KEYS.includes(key)) return;
+      const enabled = payload.enabled !== false;
+
+      // Misma lógica que el toggle del panel: freecam requiere permiso
+      if (key === 'freecam' && enabled && !requestFreecamAccess()) {
+        showFreecamDenied();
+        document.dispatchEvent(new CustomEvent('minifeather:nsb-state-data', {
+          detail: nsbStatePayload()
+        }));
+        return;
+      }
+
+      guiSettings[key] = enabled;
+      settings[key] = enabled;
+      saveSettings(true);
+      applyGuiSettings();
+      update();
+
+      // Confirmar el estado final al bridge
+      document.dispatchEvent(new CustomEvent('minifeather:nsb-state-data', {
+        detail: nsbStatePayload()
+      }));
+    }, { signal: runtimeController?.signal });
+
+    document.addEventListener('minifeather:nsb-open-panel', event => {
+      let payload = null;
+      try {
+        payload = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+      } catch (_) {}
+      const page = payload?.page && NAV_ITEMS.some(item => item.id === payload.page) ? payload.page : 'dashboard';
+      showGUI();
+      setActivePage(page);
+    }, { signal: runtimeController?.signal });
+
+    // Estado inicial para el bridge si ya está escuchando
+    document.dispatchEvent(new CustomEvent('minifeather:nsb-state-data', {
+      detail: nsbStatePayload()
+    }));
+  }
+
 
   function resetLogo() {
     currentLogo = CONFIG.defaultLogo;
@@ -10358,6 +10443,7 @@ function renderCreditsPage() {
     injectWaypointsPanelStyles();
     sendClientBindsConfig();
     sendWaypointsConfig();
+    initNativeSettingsBridge();
     applyGuiSettings();
     update();
   }

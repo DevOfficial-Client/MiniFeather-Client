@@ -73,6 +73,7 @@
         "src/Cosmetics/CustomSkinAPI.js",
         "src/P2P/MF_Mesh.js",
         "src/Core/inject.js",
+        "src/UI/NativeSettingsBridge.js",
         "src/Render/FreeCam.js",
         "src/Render/Freelook.js",
         "src/Render/ElytraFlight.js",
