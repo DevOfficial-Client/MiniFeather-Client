@@ -3839,10 +3839,15 @@
           <button class="mf-btn ${(lg.gameMode||'')==='adventure'?'primary':'secondary'}" style="padding:4px;font-size:11px;" data-lg-mode="adventure">🗺️ ${t('localGamesModeAdventure')}</button>
           <button class="mf-btn ${(lg.gameMode||'')==='spectator'?'primary':'secondary'}" style="padding:4px;font-size:11px;" data-lg-mode="spectator">👁️ ${t('localGamesModeSpectator')}</button>
         </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:8px;cursor:pointer;user-select:none;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:4px;cursor:pointer;user-select:none;">
           <input type="checkbox" id="mf-lg-hardcore" ${lg.hardcore ? 'checked' : ''} style="cursor:pointer;">
           <span>💀 <b>${t('localGamesHardcore')}</b> <span class="mf-muted">· ${t('localGamesHardcoreHint')}</span></span>
         </label>
+        ${lg.mode === 'host' ? `
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:8px;cursor:pointer;user-select:none;">
+          <input type="checkbox" id="mf-lg-autojoin" ${lg.autoJoinEnabled ? 'checked' : ''} style="cursor:pointer;">
+          <span>🌐 <b>Auto-connect everyone</b> <span class="mf-muted">· All MiniFeather clients in the menu join this world automatically</span></span>
+        </label>` : ''}
         <div class="mf-card-title" style="margin-top:6px;">${t('localGamesChatTitle')}</div>
         <div style="display:flex;gap:4px;margin-bottom:8px;">
           <input id="mf-lg-chat-input" type="text" placeholder="${t('localGamesChatPlaceholder')}" maxlength="256"
@@ -3989,6 +3994,10 @@
 
     container.querySelector('#mf-lg-hardcore')?.addEventListener('change', (e) => {
       sendLocalGamesCommand('set-hardcore', { enabled: !!e.target.checked });
+    });
+
+    container.querySelector('#mf-lg-autojoin')?.addEventListener('change', (e) => {
+      sendLocalGamesCommand('set-autojoin', { enabled: !!e.target.checked });
     });
 
     const sendChat = () => {

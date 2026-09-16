@@ -118,6 +118,7 @@
     lastVisualModeRefresh: 0,
     lastItemDespawnScan: 0,
     lastMasterRendererResolve: 0,
+    autoJoinEnabled: loadAutoJoinPreference(),
     moduleNamespace: null,
     moduleUrl: '',
     blockRegistry: null,
@@ -337,10 +338,25 @@
       hostUuid: profile.uuid,
       players: 1 + connectedHostPeers().length,
       maxPlayers: MAX_PLAYERS,
+      autoJoin: state.autoJoinEnabled === true,
       online,
       createdAt: Number(state.start?.at) || Date.now(),
       lastSeen: Date.now()
     };
+  }
+
+  function persistAutoJoinPreference(enabled) {
+    try {
+      localStorage.setItem('mf_localgames_autojoin', enabled ? 'on' : 'off');
+    } catch (_) {}
+  }
+
+  function loadAutoJoinPreference() {
+    try {
+      return localStorage.getItem('mf_localgames_autojoin') === 'on';
+    } catch (_) {
+      return false;
+    }
   }
 
   async function publishServerAdvert(online = true) {
@@ -414,6 +430,16 @@
             lastSeen > 0 &&
             now - lastSeen <= SERVER_STALE_AFTER_MS
         });
+
+        if (
+          message.autoJoin === true &&
+          !state.active &&
+          state.mode === 'idle' &&
+          Number(message.players) < Number(message.maxPlayers)
+        ) {
+          log(`autoConnect: uniéndose a ${message.worldName || message.address} (host=${message.hostName})`);
+          joinWorldServer(message.address).catch(() => {});
+        }
       } else if (message.type === 'server-closed') {
         markSavedServerOffline(message.address);
       }
@@ -504,6 +530,7 @@
           role: state.localRole,
           gameMode: state.localGameMode,
           hardcore: state.localHardcore,
+          autoJoinEnabled: state.autoJoinEnabled === true,
           savedServers: state.savedServers.slice(0, 30).map(entry => ({ ...entry })),
           peerName:
             state.mode === 'join'
@@ -10147,6 +10174,15 @@
 
     if (action === 'set-hardcore') {
       setLocalHardcore(command?.enabled !== false);
+      return;
+    }
+
+    if (action === 'set-autojoin') {
+      const enabled = command?.enabled !== false;
+      state.autoJoinEnabled = enabled;
+      persistAutoJoinPreference(enabled);
+      publishServerAdvert(true).catch(() => {});
+      emitState();
       return;
     }
   }
