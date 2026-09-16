@@ -63,6 +63,32 @@
         globalThis.__MF_PACK_IMG_HOOK__ = true;
     }
 
+    // Resuelve una URL pedida por el engine (auth-api/skins/custom/<id>.png o
+    // textures/entity/skins/<id>.png) a una textura local cuando exista.
+    // Busca en __MF_PACK_SKINS__ (data: URLs del panel + packs) y, si la entrada
+    // de la DB apunta a una URL remota, usa la caché persistente dataURL.
+    function resolveCustomTextureUrl(url) {
+        if (!url || typeof url !== 'string') return null;
+        var m = url.match(CUSTOM_URL_RE);
+        if (!m) {
+            var m2 = url.match(/(?:^|\/)textures\/entity\/skins\/([^\/?#]+)\.png(?:[?#]|$)/);
+            if (!m2) return null;
+            m = m2;
+        }
+        var skinId = m[1].replace(/^custom:/i, '');
+
+        var reg = globalThis.__MF_PACK_SKINS__;
+        if (reg && reg[skinId]) return reg[skinId];
+
+        // Entrada de la DB con skin remota: servir desde la caché dataURL
+        var entry = getCustomSkinForId(skinId);
+        if (entry) {
+            var u = resolveSkinImageUrl(entry);
+            if (u && /^data:/i.test(u)) return u;
+        }
+        return null;
+    }
+
     var devSkinsRegistered = false;
     function registerDevSkins() {
         if (devSkinsRegistered) return;
@@ -189,32 +215,51 @@
                 done = true;
                 resolve(json);
             };
+            // En MAIN world no existe chrome.runtime: se llega a accounts.json
+            // vía el meta mf-skins-base que inyecta SplashScreen (ISOLATED).
+            var tryMetaUrl = function (attempt) {
+                attempt = attempt || 0;
+                var base = null;
+                try { base = skinsBaseUrl(); } catch (_) {}
+                if (!base || !/^chrome-extension:/i.test(base)) {
+                    if (attempt < 20) return setTimeout(function () { tryMetaUrl(attempt + 1); }, 250);
+                    return finishFromExt(null);
+                }
+                var url = base.replace(/skins\/?$/i, '') + 'assets/accounts.json';
+                fetch(url, { cache: 'no-store' })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (json) {
+                        if (json && json.players) finishFromExt(json);
+                        else if (attempt < 20) tryMetaUrl(attempt + 1);
+                        else finishFromExt(null);
+                    })
+                    .catch(function () {
+                        if (attempt < 20) tryMetaUrl(attempt + 1);
+                        else finishFromExt(null);
+                    });
+            };
             try {
-                if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+                if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
                     chrome.runtime.sendMessage({ type: 'mfAccounts:get' }, function (res) {
-                        if (chrome.runtime.lastError || !res || !res.success) {
-                            
-                            try {
-                                fetch(chrome.runtime.getURL('assets/accounts.json'), { cache: 'no-store' })
-                                    .then(function (r) { return r.ok ? r.json() : null; })
-                                    .then(finishFromExt)
-                                    .catch(function () { finishFromExt(null); });
-                            } catch (_) { finishFromExt(null); }
-                            return;
+                        if (!chrome.runtime.lastError && res && res.success && res.json) {
+                            finishFromExt(res.json);
+                        } else {
+                            tryMetaUrl();
                         }
-                        finishFromExt(res.json || null);
                     });
                     return;
                 }
             } catch (_) {}
             try {
-                fetch(chrome.runtime.getURL('assets/accounts.json'), { cache: 'no-store' })
-                    .then(function (r) { return r.ok ? r.json() : null; })
-                    .then(finishFromExt)
-                    .catch(function () { finishFromExt(null); });
-                return;
+                if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+                    fetch(chrome.runtime.getURL('assets/accounts.json'), { cache: 'no-store' })
+                        .then(function (r) { return r.ok ? r.json() : null; })
+                        .then(function (json) { if (json) finishFromExt(json); else tryMetaUrl(); })
+                        .catch(tryMetaUrl);
+                    return;
+                }
             } catch (_) {}
-            finishFromExt(null);
+            tryMetaUrl();
         })
             .then(finish)
             .catch(function (e) {
@@ -304,6 +349,19 @@
                 reqUrl = typeof input === 'string' ? input : (input && input.url ? input.url : '');
             } catch (e) {}
 
+            // Servir texturas custom:mf_* localmente — el server responde 404 para
+            // ids que no conoce y el engine regenera materiales vanilla en bucle.
+            if (reqUrl && typeof reqUrl === 'string') {
+                var localSkin = resolveCustomTextureUrl(reqUrl);
+                if (localSkin) {
+                    log('[fetch] textura custom servida local:', reqUrl.slice(-44));
+                    // fetch() recursivo seguro: la URL local (chrome-extension:/data:)
+                    // no matchea CUSTOM_URL_RE ni isProfileResponse → pasa directo.
+                    return originalFetch.call(this, localSkin, { cache: 'force-cache' })
+                        .catch(function () { return originalFetch.apply(this, args); });
+                }
+            }
+
             var promise = originalFetch.apply(this, args);
             if (!reqUrl || !isProfileResponse(reqUrl)) return promise;
 
@@ -349,15 +407,17 @@
 
     function getCustomSkinForId(skinId) {
         if (!dbByUuid && !dbByName) return null;
+        var withPrefix = 'custom:' + skinId;
         for (var uuid in dbByUuid) {
-            if (dbByUuid[uuid].__skin === skinId) return dbByUuid[uuid];
+            var s1 = dbByUuid[uuid].__skin;
+            if (s1 === skinId || s1 === withPrefix) return dbByUuid[uuid];
         }
         for (var name in dbByName) {
-            if (dbByName[name].__skin === skinId) return dbByName[name];
+            var s2 = dbByName[name].__skin;
+            if (s2 === skinId || s2 === withPrefix) return dbByName[name];
         }
         return null;
     }
-
     function findGame() {
         try {
             if (window.miniblox?.player) return window.miniblox;
@@ -577,6 +637,7 @@
     }
 
     var seenProfileIds = new WeakSet();
+    var engineApplied = new WeakSet();
 
     function overridePlayer(player) {
         if (!player || !player.profile) return;
@@ -597,22 +658,33 @@
         if (!entry) return;
 
         var target = entry.__skin;
-        
-        var url = resolveSkinImageUrl(entry);
-        var stillPainted = false;
-        if (paintedPlayers.has(player) && url && player.mesh) {
-            try {
-                var mm = skinMaterialsOf(player.mesh);
-                stillPainted = mm.length > 0 && mm.every(function (m) {
-                    return m.map && m.map.__mfPainted === url;
-                });
-            } catch (_) { stillPainted = false; }
-        }
-        if (!stillPainted) paintedPlayers.delete(player);
-        if (cosmetics.skin === target && paintedPlayers.has(player)) return;
 
+        // 1) custom:<id> con textura local disponible → vía engine-nativa:
+        //    setear cosmetics.skin y recrear; el hook de fetch/Image sirve la
+        //    textura local, el engine la conserva y no hay guerra de repintados.
+        if (target.indexOf('custom:') === 0) {
+            var cid = target.slice(7);
+            var reg = globalThis.__MF_PACK_SKINS__ || {};
+            var avail = reg[cid];
+            if (!avail) return; // sin textura local: el server daría 404, no insistir
+            if (cosmetics.skin === target && engineApplied.has(player)) return;
+            try {
+                cosmetics.skin = target;
+                engineApplied.add(player);
+                paintedPlayers.delete(player);
+                if (player.mesh && typeof player.mesh.recreate === 'function') {
+                    player.mesh.recreate();
+                }
+                log('✔ skin custom aplicada (engine):', profile.uuid || profile.username, '→', target);
+            } catch (e) {
+                warn('falló aplicar skin custom', target, ':', e && e.message);
+            }
+            return;
+        }
+
+        // 2) id vanilla
         if (isVanillaSkinId(target)) {
-            
+
             if (cosmetics.skin === target) return;
             try {
                 cosmetics.skin = target;
@@ -626,11 +698,27 @@
             return;
         }
 
+        // 3) URL directa (pack remoto/extension): pintar materiales del mesh.
+        //    Re-pintar solo si el engine regeneró los materiales (pintó y lo pisó).
+        var url = resolveSkinImageUrl(entry);
+        if (!url) return;
+        var stillPainted = false;
+        if (paintedPlayers.has(player) && player.mesh) {
+            try {
+                var mm = skinMaterialsOf(player.mesh);
+                stillPainted = mm.length > 0 && mm.every(function (m) {
+                    return m.map && m.map.__mfPainted === url;
+                });
+            } catch (_) { stillPainted = false; }
+        }
+        if (stillPainted) return;
+        paintedPlayers.delete(player);
+
         if (paintEntitySkin(player, entry)) {
             paintedPlayers.add(player);
             log('live override (textura)', profile.uuid || profile.username, '->', target);
         }
-        
+
     }
 
     function startLiveWatcher() {

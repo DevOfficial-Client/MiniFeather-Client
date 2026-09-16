@@ -177,6 +177,7 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "assets/accounts.json",
         "assets/icon.png",
         "assets/background.png",
         "assets/Faithful.ttf",
