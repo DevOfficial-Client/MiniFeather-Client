@@ -37,6 +37,27 @@
   function log(...args) { console.log(TAG, ...args); }
   function warn(...args) { console.warn(TAG, ...args); }
 
+  let gameChatPollAttempts = 0;
+  function pushToGameChat(sender, text) {
+    try {
+      const game = globalThis.__MINIBLOX_GAME__ || globalThis.miniblox;
+      const chat = game?.chat;
+      if (typeof chat?.addChat !== 'function') {
+        if (gameChatPollAttempts < 40) {
+          gameChatPollAttempts++;
+          setTimeout(() => pushToGameChat(sender, text), 3000);
+        }
+        return;
+      }
+      gameChatPollAttempts = 0;
+      const safeSender = String(sender || 'Player').slice(0, 24);
+      const safeText = String(text || '').slice(0, 256);
+      chat.addChat({ text: `\\aqua\\[G] \\white\\${safeSender}\\reset\\: ${safeText}` });
+    } catch (e) {
+      warn('pushToGameChat failed:', e);
+    }
+  }
+
   function resolvePlayerName() {
     try {
       const game = globalThis.__MINIBLOX_GAME__ || globalThis.miniblox;
@@ -140,6 +161,9 @@
               }
               if (state.activeMode !== 'global' && msg.sender !== state.nickname) {
                 state.unreadGlobal++;
+              }
+              if (!msg.system && msg.sender !== state.nickname) {
+                pushToGameChat(msg.sender, msg.text);
               }
               emitState();
             }

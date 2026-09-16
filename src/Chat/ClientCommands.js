@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña']);
 
   function parseDetail(event) {
     try {
@@ -83,6 +83,7 @@
       '\\yellow\\/baritone locate <player> | players\\reset\\ - Show live/last known positions',
       '\\yellow\\/baritone automine <on|off>\\reset\\ - Mine blocks that obstruct a route',
       '\\yellow\\/baritone stop\\reset\\ - Stop walking',
+      '\\yellow\\/g <message>\\reset\\ - Send to the MiniFeather global chat (all clients + Discord)',
       '\\yellow\\/p2p host [code]\\reset\\ - Share your Verity (friend: /p2p join <code>)',
       '\\yellow\\/p2p join <code>\\reset\\ - See friend\\\'s Verity',
       '\\yellow\\/p2p off\\reset\\ - End the shared session',
@@ -1441,6 +1442,21 @@
         return;
       }
       addChat('Usage: /backrooms [0|1|2|324|pool|grass|noclip|spawn <ent>|event|exit]', 'error');
+      return;
+    }
+
+    if (command === 'g' || command === 'global') {
+      const text = args.join(' ').trim();
+      if (!text) {
+        const api = globalThis.__MINIFEATHER_P2P_CHAT__;
+        const nick = api?.state?.nickname || '(unset)';
+        addChat('Usage: /g <message> — sends to the MiniFeather global chat (all clients + Discord).', 'error');
+        addChat(`Your nickname: ${nick} — change it in the MiniFeather panel or with /mf chat.`, 'normal');
+        return;
+      }
+      document.dispatchEvent(new CustomEvent('minifeather:chat-action', {
+        detail: JSON.stringify({ action: 'send-global', text })
+      }));
       return;
     }
 
