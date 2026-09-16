@@ -80,6 +80,7 @@
     { id: 'shaders', icon: '🌈', labelKey: 'navShaders' },
     { id: 'experimental', icon: '🧪', labelKey: 'navExperimental' },
     { id: 'cosmetics', icon: '👕', labelKey: 'tabSkins' },
+    { id: 'accounts', icon: '🪪', labelKey: 'navAccounts' },
     { id: 'chat', icon: '💬', labelKey: 'sectionChat' },
     { id: 'waypoints', icon: '📍', labelKey: 'navWaypoints' },
     { id: 'movement', icon: '👟', labelKey: 'navMovement' },
@@ -6767,6 +6768,146 @@
     `;
   }
 
+  // ─── Accounts: creador de cuentas MiniFeather + uuid de la cuenta Miniblox ───
+  const MF_ACC_TOPIC = 'mf-accounts-req-v1';
+
+  function renderAccountsPage() {
+    return `
+      <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-card-title">${t('accYourAccount')}</div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px;margin-top:8px;align-items:center;">
+            <div class="mf-muted">${t('accUsername')}</div><div id="mf-acc-username">--</div>
+            <div class="mf-muted">${t('accUuid')}</div><div id="mf-acc-uuid" style="font-family:monospace;word-break:break-all;">--</div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">
+            <button id="mf-acc-copy-uuid" class="mf-btn">${t('accCopyUuid')}</button>
+            <button id="mf-acc-refresh" class="mf-btn">${t('accRefresh')}</button>
+          </div>
+          <div class="mf-muted" style="margin-top:8px;" id="mf-acc-status"></div>
+        </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('accCreateTitle')}</div>
+          <div class="mf-muted">${t('accCreateDesc')}</div>
+          <div style="display:grid;gap:8px;margin-top:12px;">
+            <input id="mf-acc-new-user" class="mf-input" placeholder="${t('accNewUserPh')}" maxlength="16" autocomplete="off" style="background:var(--mf-bg2,#1a1d24);border:1px solid var(--mf-border,#2a2e37);border-radius:8px;color:inherit;padding:8px 10px;">
+            <input id="mf-acc-new-pass" class="mf-input" type="password" placeholder="${t('accNewPassPh')}" maxlength="64" autocomplete="new-password" style="background:var(--mf-bg2,#1a1d24);border:1px solid var(--mf-border,#2a2e37);border-radius:8px;color:inherit;padding:8px 10px;">
+            <input id="mf-acc-new-skin" class="mf-input" placeholder="${t('accNewSkinPh')}" maxlength="200" autocomplete="off" style="background:var(--mf-bg2,#1a1d24);border:1px solid var(--mf-border,#2a2e37);border-radius:8px;color:inherit;padding:8px 10px;">
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">
+            <button id="mf-acc-create" class="mf-btn primary">${t('accCreateBtn')}</button>
+          </div>
+          <div class="mf-muted" style="margin-top:8px;" id="mf-acc-create-status">${t('accCreateHint')}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Pide el uuid de la cuenta a MF_Accounts (MAIN world) via CustomEvent
+  let accDataListener = null;
+  function requestAccountData(cb) {
+    try {
+      if (!accDataListener) {
+        accDataListener = function (e) {
+          try {
+            const data = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail;
+            if (!data) return;
+            if (accPendingCb) { const cb2 = accPendingCb; accPendingCb = null; cb2(data); }
+          } catch (_) {}
+        };
+        document.addEventListener('minifeather:accounts-data', accDataListener);
+      }
+      accPendingCb = cb;
+      document.dispatchEvent(new CustomEvent('minifeather:accounts-request', { detail: '{}' }));
+      setTimeout(() => {
+        if (accPendingCb === cb) { accPendingCb = null; cb(null); }
+      }, 3000);
+    } catch (_) { cb(null); }
+  }
+  let accPendingCb = null;
+
+  async function refreshAccountCard() {
+    if (!panel || activePage !== 'accounts') return;
+    const userEl = panel.querySelector('#mf-acc-username');
+    const uuidEl = panel.querySelector('#mf-acc-uuid');
+    requestAccountData(acc => {
+      if (!panel || activePage !== 'accounts') return;
+      if (userEl) userEl.textContent = acc?.username || t('accGuestOrNone');
+      if (uuidEl) uuidEl.textContent = acc?.uuid || '--';
+    });
+  }
+
+  async function createMiniFeatherAccount() {
+    if (!panel) return;
+    const userEl = panel.querySelector('#mf-acc-new-user');
+    const passEl = panel.querySelector('#mf-acc-new-pass');
+    const skinEl = panel.querySelector('#mf-acc-new-skin');
+    const statusEl = panel.querySelector('#mf-acc-create-status');
+    const btn = panel.querySelector('#mf-acc-create');
+    const user = (userEl?.value || '').trim();
+    const pass = passEl?.value || '';
+    const skin = (skinEl?.value || '').trim();
+    if (!/^[a-zA-Z0-9_]{3,16}$/.test(user)) {
+      if (statusEl) statusEl.textContent = t('accErrUser');
+      return;
+    }
+    if (pass.length < 6) {
+      if (statusEl) statusEl.textContent = t('accErrPass');
+      return;
+    }
+    if (btn) btn.disabled = true;
+    if (statusEl) statusEl.textContent = t('accSending');
+    // La petición viaja por ntfy; el bot de Discord (24/7 en GitHub Actions)
+    // la procesa, crea la cuenta y la refleja en accounts.json del repo.
+    const payload = {
+      type: 'mf_account_create',
+      username: user,
+      password: pass, // el SkinBot la hashea (PBKDF2) antes de guardar
+      skin: skin || undefined,
+      client: MODULE_VERSION,
+      at: Date.now()
+    };
+    try {
+      await new Promise((resolve, reject) => {
+        try {
+          const port = chrome.runtime.connect({ name: 'minifeather-localgames-network' });
+          const timer = setTimeout(() => { try { port.disconnect(); } catch (_) {} reject(new Error('TIMEOUT')); }, 8000);
+          port.onMessage.addListener(msg => {
+            if (msg?.type === 'published' && msg.requestId === 'mfacc') {
+              clearTimeout(timer);
+              try { port.disconnect(); } catch (_) {}
+              msg.ok ? resolve() : reject(new Error(msg.error || 'PUBLISH_FAILED'));
+            }
+          });
+          port.postMessage({ type: 'publish', requestId: 'mfacc', topic: MF_ACC_TOPIC, message: JSON.stringify(payload) });
+        } catch (e) { reject(e); }
+      });
+      if (statusEl) statusEl.textContent = t('accCreated', { user });
+      if (userEl) userEl.value = '';
+      if (passEl) passEl.value = '';
+      if (skinEl) skinEl.value = '';
+    } catch (e) {
+      if (statusEl) statusEl.textContent = t('accCreateFail');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function bindAccountsControls() {
+    if (!panel || activePage !== 'accounts') return;
+    panel.querySelector('#mf-acc-copy-uuid')?.addEventListener('click', async () => {
+      const uuidEl = panel.querySelector('#mf-acc-uuid');
+      const uuid = uuidEl?.textContent?.trim();
+      if (uuid && uuid !== '--') {
+        try { await navigator.clipboard.writeText(uuid); const st = panel.querySelector('#mf-acc-status'); if (st) st.textContent = t('accUuidCopied'); }
+        catch (_) {}
+      }
+    });
+    panel.querySelector('#mf-acc-refresh')?.addEventListener('click', refreshAccountCard);
+    panel.querySelector('#mf-acc-create')?.addEventListener('click', createMiniFeatherAccount);
+    refreshAccountCard();
+  }
+
   function renderAboutPage() {
     return `
       <div class="mf-page-stack">
@@ -6924,6 +7065,7 @@ function renderCreditsPage() {
     shaders: renderShadersPage,
     experimental: renderExperimentalPage,
     cosmetics: renderCosmeticsPage,
+    accounts: renderAccountsPage,
     chat: renderChatPage,
     waypoints: renderWaypointsPage,
     movement: renderMovementPage,
@@ -8432,6 +8574,7 @@ function renderCreditsPage() {
     if (!panel) return;
 
     bindLocalizedFileInputs();
+    bindAccountsControls();
 
     panel.querySelector('#mf-language-select')?.addEventListener('change', event => {
       const language = String(event.target.value || 'en');

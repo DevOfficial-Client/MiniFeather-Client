@@ -43,6 +43,8 @@ ai/mf_accounts.json
 mfbot/
 mfbot_actions.log
 *.pt
+# SkinBot staging (copia local para subir al repo mfaccs)
+.skinbot/
 ```
 # GLB HD local (225MB, excede limite GitHub)
 models/entities/backrooms_level_0.glb
