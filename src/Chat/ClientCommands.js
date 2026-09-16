@@ -598,6 +598,19 @@
         addChat(`Spawn requested: ${preset}${scale ? ` (body height: ${scale} blocks)` : ''}${gallop ? ' gallop' : ''} (embedded simulator).`, 'success');
         return;
       }
+      if (action === 'auto') {
+        const sub = (args[1] || '').toLowerCase();
+        if (sub !== 'on' && sub !== 'off') {
+          const cur = (localStorage.getItem('mf_spider_auto') || 'off') === 'on';
+          addChat(`Usage: /spider auto on|off — spawn spiders on startup (currently ${cur ? 'ON' : 'OFF'}).`, 'error');
+          return;
+        }
+        localStorage.setItem('mf_spider_auto', sub);
+        addChat(sub === 'on'
+          ? 'Spiders will spawn on startup.'
+          : 'No spiders on startup — use /spider spawn when you want one.', 'success');
+        return;
+      }
       if (action === 'body' || action === 'cuerpo') {
         const sub = (args[1] || '').toLowerCase();
         if (sub !== 'on' && sub !== 'off') {

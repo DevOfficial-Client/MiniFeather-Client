@@ -3453,16 +3453,20 @@
 
   start();
 
-  sim.initialWatcher = setInterval(() => {
-    if (sim.spiders.length) { clearInterval(sim.initialWatcher); return; }
-    refreshGame();
-    const player = simGame?.player;
-    const pos = player?.pos;
-    if (pos && Number.isFinite(Number(pos.x)) && !(pos.x === 0 && pos.y === 0 && pos.z === 0)) {
-      reportPlayer(Number(pos.x), Number(pos.y), Number(pos.z), Number(player.yaw) || 0);
-      if (api.ensureInitialSpiders()) clearInterval(sim.initialWatcher);
+  try {
+    if ((localStorage.getItem('mf_spider_auto') || 'off') === 'on') {
+      sim.initialWatcher = setInterval(() => {
+        if (sim.spiders.length) { clearInterval(sim.initialWatcher); return; }
+        refreshGame();
+        const player = simGame?.player;
+        const pos = player?.pos;
+        if (pos && Number.isFinite(Number(pos.x)) && !(pos.x === 0 && pos.y === 0 && pos.z === 0)) {
+          reportPlayer(Number(pos.x), Number(pos.y), Number(pos.z), Number(player.yaw) || 0);
+          if (api.ensureInitialSpiders()) clearInterval(sim.initialWatcher);
+        }
+      }, 1000);
     }
-  }, 1000);
+  } catch (_) {}
 
   console.log(TAG, 'cargado — simulador embebido (sin Node, sin WebSocket). window.MF_SPIDER_SIM');
 })();
