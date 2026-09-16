@@ -1,7 +1,7 @@
 {
-  "builtAt": "2026-09-14T01:14:00Z",
+  "builtAt": "2026-09-15T23:12:00Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Realistic Mode adds shader-pack water with strong angle-dependent transparency, multi-directional swells, choppy crests, fast ripples, Fresnel sky reflections and bright moving highlights while preserving lava and native refraction.",
-  "version": "4.14.6"
+  "note": "Realistic Mode V3 adds dynamic sun/moon shadow tuning, clearer water, persistent rain/water wetness with configurable drying, reflective wet sheen, volumetric cloud tuning and preserved native SSR/refraction.",
+  "version": "4.14.7"
 }

@@ -449,6 +449,7 @@
     pageZoomEnabled: true,
     experimentalRealistic: false,
     experimentalRealisticLevel: 'medium',
+    experimentalWetDrySeconds: 180,
     experimentalAurora: false,
     experimentalAuroraLevel: 'medium',
     experimentalGrassFlowers: false,
@@ -5938,6 +5939,16 @@
             }).join('')}
           </div>
         </div>
+        <div class="mf-card" id="mf-realistic-wetness-section">
+          <div class="mf-card-title">💧 ${escapeHtml(t('experimentalWetnessTitle'))}</div>
+          <div style="font-size:11px;color:#aaa;margin-bottom:10px;line-height:1.5;">${escapeHtml(t('experimentalWetnessDesc'))}</div>
+          <div class="mf-tt-row">
+            <span style="font-size:11px;">${escapeHtml(t('experimentalWetnessDryTime'))}</span>
+            <strong style="font-size:11px;" data-mf-wet-dry-value>${Math.round(Number(guiSettings.experimentalWetDrySeconds || settings.experimentalWetDrySeconds || 180))} s</strong>
+          </div>
+          <input type="range" min="30" max="600" step="15" value="${Math.round(Number(guiSettings.experimentalWetDrySeconds || settings.experimentalWetDrySeconds || 180))}" data-mf-wet-dry style="width:100%;">
+          <div class="mf-muted" style="margin-top:7px;font-size:10px;">${escapeHtml(t('experimentalWetnessDryHint'))}</div>
+        </div>
         <div class="mf-card" id="mf-pbr-section">
           <div class="mf-card-title">✨ PBR Textures</div>
           <div style="font-size: 11px; color: #aaa; margin-bottom: 10px; line-height: 1.5;">
@@ -7052,6 +7063,10 @@ function renderCreditsPage() {
           const key = String(select.dataset.mfExperimentalLevel || '');
           if (key && key in guiSettings) select.value = String(guiSettings[key]);
         });
+        const wetDry = panel.querySelector('[data-mf-wet-dry]');
+        const wetDryValue = panel.querySelector('[data-mf-wet-dry-value]');
+        if (wetDry) wetDry.value = String(Math.round(Number(guiSettings.experimentalWetDrySeconds || 180)));
+        if (wetDryValue) wetDryValue.textContent = `${Math.round(Number(guiSettings.experimentalWetDrySeconds || 180))} s`;
       }
     });
   }
@@ -8961,6 +8976,20 @@ function renderCreditsPage() {
       });
     });
 
+    const wetDryRange = panel.querySelector('[data-mf-wet-dry]');
+    const wetDryValue = panel.querySelector('[data-mf-wet-dry-value]');
+    const applyWetDry = (persist) => {
+      if (!wetDryRange) return;
+      const seconds = Math.max(30, Math.min(600, Math.round(Number(wetDryRange.value) || 180)));
+      guiSettings.experimentalWetDrySeconds = seconds;
+      settings.experimentalWetDrySeconds = seconds;
+      if (wetDryValue) wetDryValue.textContent = `${seconds} s`;
+      if (persist) saveSettings(true);
+      applyGuiSettings();
+    };
+    wetDryRange?.addEventListener('input', () => applyWetDry(false));
+    wetDryRange?.addEventListener('change', () => applyWetDry(true));
+
     panel.querySelector('#mf-replay-intro')?.addEventListener('click', () => {
       document.dispatchEvent(new CustomEvent('minifeather:splash-replay'));
     });
@@ -9634,6 +9663,7 @@ function renderCreditsPage() {
             : (['low', 'medium', 'high', 'ultra'].includes(String(settings.experimentalRealisticLevel))
               ? String(settings.experimentalRealisticLevel)
               : 'medium'),
+          wetDrySeconds: Math.max(30, Math.min(600, Number(settings.experimentalWetDrySeconds) || 180)),
           leafEnabled: !!settings.leafWind,
           leafStrength: Number(settings.leafWindStrength) || 0.085,
           auroraEnabled: !!settings.experimentalAurora,

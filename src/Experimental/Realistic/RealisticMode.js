@@ -8,6 +8,7 @@
   const state = {
     enabled: false,
     level: 'medium',
+    wetDrySeconds: 180,
     game: null,
     stars: new Map(),
     raf: 0,
@@ -134,7 +135,7 @@
   }
 
   function playerPosition(game) {
-    const p = game?.player?.position || game?.player?.getPosition?.() || game?.player?.mesh?.position;
+    const p = game?.player?.pos || game?.player?.position || game?.player?.getPosition?.() || game?.player?.mesh?.position;
     if (!p) return null;
     const x = Number(p.x), y = Number(p.y), z = Number(p.z);
     return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? { x, y, z } : null;
@@ -165,6 +166,8 @@
     if (!p) return;
     W.MF_RealisticFluid?.setProfile?.(p);
     W.MF_RealisticClouds?.setProfile?.(p);
+    W.MF_RealisticWetness?.enable?.();
+    W.MF_RealisticWetness?.setProfile?.(p, state.wetDrySeconds);
     const game = findGame();
     if (game) W.MF_RealisticShadows?.apply?.(game, p);
   }
@@ -179,8 +182,10 @@
     if (!game || !p) return;
     W.MF_RealisticFluid?.setProfile?.(p);
     W.MF_RealisticClouds?.setProfile?.(p);
+    W.MF_RealisticWetness?.setProfile?.(p, state.wetDrySeconds);
     scanFluids(game);
     W.MF_RealisticClouds?.scan?.(game);
+    W.MF_RealisticWetness?.scan?.(game);
     W.MF_RealisticShadows?.apply?.(game, p);
     snapshotStars(game);
   }
@@ -188,9 +193,15 @@
   function tick(now) {
     if (!state.enabled || state.destroyed) return void (state.raf = 0);
     scan();
+    const game = findGame();
+    const p = currentProfile();
+    if (game && p) {
+      W.MF_RealisticShadows?.update?.(game, p);
+      W.MF_RealisticWetness?.update?.(game, now);
+    }
     if (now - state.lastBiomeScan > 2500) {
       state.lastBiomeScan = now;
-      const game = findGame(), pos = playerPosition(game);
+      const pos = playerPosition(game);
       if (game && pos) {
         const snowy = isSnowBiome(biomeValue(game, pos));
         if (snowy !== null && snowy !== state.snowy) {
@@ -220,6 +231,7 @@
       state.raf = 0;
       W.MF_RealisticFluid?.restore?.();
       W.MF_RealisticClouds?.restore?.();
+      W.MF_RealisticWetness?.restore?.();
       W.MF_RealisticShadows?.restore?.();
       restoreStars();
       applyCompanions(true);
@@ -231,6 +243,7 @@
     if (typeof c === 'string') try { c = JSON.parse(c); } catch (_) { return; }
     if (!c || typeof c !== 'object') return;
     state.level = profiles()?.normalizeLevel?.(c.level) || 'medium';
+    state.wetDrySeconds = Math.max(15, Math.min(900, Number(c.wetDrySeconds) || currentProfile()?.wetness?.drySeconds || 180));
     state.baseLeafEnabled = !!c.leafEnabled;
     state.baseLeafStrength = Math.max(0, Math.min(1, Number(c.leafStrength) || 0.085));
     state.baseAuroraEnabled = !!c.auroraEnabled;
@@ -259,6 +272,7 @@
       level: state.level,
       fluids: state.fluidCount,
       clouds: W.MF_RealisticClouds?.count?.() || 0,
+      wetness: W.MF_RealisticWetness?.getState?.() || null,
       stars: state.stars.size,
       snowy: state.snowy
     })
