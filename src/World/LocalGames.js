@@ -33,6 +33,9 @@
   ];
   const RTC_CONNECT_TIMEOUT_MS = 14000;
   const SIGNAL_RETRY_INTERVAL_MS = 2200;
+  const GLOBAL_WORLD_ADDRESS = 'MF-GLOBA-LWORL-DGLOB-ALWOR-LD222-2';
+  const GLOBAL_WORLD_NAME = 'MiniFeather Global World';
+  const CHAT_BRIDGE_TOPIC = 'mf-chat-bridge';
   const LOCAL_WALK_SPEED = 0.1;
   const LOCAL_ABILITY_FLY_SPEED = 0.05;
   const LOCAL_PLAYER_FLY_SPEED = 0.04;
@@ -119,6 +122,10 @@
     lastItemDespawnScan: 0,
     lastMasterRendererResolve: 0,
     autoJoinEnabled: loadAutoJoinPreference(),
+    globalWorldCursor: '',
+    chatBridgeCursor: '',
+    globalWorldTimer: null,
+    chatBridgeTimer: null,
     moduleNamespace: null,
     moduleUrl: '',
     blockRegistry: null,
@@ -357,6 +364,101 @@
     } catch (_) {
       return false;
     }
+  }
+
+  function loadGlobalWorldPreference() {
+    try {
+      return localStorage.getItem('mf_global_world') !== 'off';
+    } catch (_) {
+      return true;
+    }
+  }
+
+  async function globalWorldHeartbeat() {
+    const advert = serverAdvertPayload(true);
+    advert.address = GLOBAL_WORLD_ADDRESS;
+    advert.worldName = GLOBAL_WORLD_NAME;
+    advert.autoJoin = true;
+    await publishSignal(topicFromAddress(GLOBAL_WORLD_ADDRESS), {
+      type: 'global-heartbeat',
+      protocol: PROTOCOL,
+      address: GLOBAL_WORLD_ADDRESS,
+      worldName: GLOBAL_WORLD_NAME,
+      hostName: advert.hostName,
+      players: advert.players,
+      maxPlayers: advert.maxPlayers,
+      lastSeen: Date.now()
+    });
+  }
+
+  async function tryJoinGlobalWorld() {
+    if (!loadGlobalWorldPreference()) return;
+    if (state.active || state.destroyed) return;
+    if (state.serverAddress === GLOBAL_WORLD_ADDRESS) return;
+
+    const topic = topicFromAddress(GLOBAL_WORLD_ADDRESS);
+
+    try {
+      const messages = await pollSignalsWithCursor(topic, 'globalWorldCursor');
+
+      let latestHeartbeat = null;
+
+      for (const entry of messages) {
+        const message = entry.payload;
+        if (Number(message?.protocol) !== PROTOCOL) continue;
+        if (message.type !== 'global-heartbeat') continue;
+        const lastSeen = Number(message.lastSeen) || 0;
+        if (!latestHeartbeat || lastSeen > Number(latestHeartbeat.lastSeen || 0)) {
+          latestHeartbeat = message;
+        }
+      }
+
+      const fresh = latestHeartbeat && Date.now() - Number(latestHeartbeat.lastSeen) < 60000;
+
+      if (fresh) {
+        log(`globalWorld: host activo (host=${latestHeartbeat.hostName}) → uniéndose`);
+        setStatus(`🌐 Joining the Global World...`);
+        await joinWorldServer(GLOBAL_WORLD_ADDRESS);
+        return;
+      }
+
+      log('globalWorld: sin host activo → reclamando el mundo');
+      const ok = await createWorldServer(GLOBAL_WORLD_NAME, { addressOverride: GLOBAL_WORLD_ADDRESS });
+
+      if (ok) {
+        await globalWorldHeartbeat();
+        addSystemChat('🌐 This is the Global World — everyone using MiniFeather joins here.');
+        emitState();
+      }
+    } catch (error) {
+      logWarn(`globalWorld: ${error?.message || error}`);
+    }
+  }
+
+  function startGlobalWorldLoop() {
+    if (state.globalWorldTimer) clearInterval(state.globalWorldTimer);
+    let busy = false;
+
+    state.globalWorldTimer = setInterval(async () => {
+      if (state.destroyed || busy) return;
+      if (!loadGlobalWorldPreference()) return;
+
+      const isGlobalHost = state.active && state.mode === 'host' && state.serverAddress === GLOBAL_WORLD_ADDRESS;
+
+      if (isGlobalHost) {
+        globalWorldHeartbeat().catch(() => {});
+        return;
+      }
+
+      if (!state.active) {
+        busy = true;
+        try {
+          await tryJoinGlobalWorld();
+        } finally {
+          busy = false;
+        }
+      }
+    }, 20000);
   }
 
   async function publishServerAdvert(online = true) {
@@ -7707,6 +7809,34 @@
     return result;
   }
 
+  async function pollSignalsWithCursor(topic, cursorField) {
+    const response = await signalRequest('poll', {
+      topic,
+      since: state[cursorField] || '5m'
+    });
+
+    const messages = Array.isArray(response.messages)
+      ? response.messages
+      : [];
+
+    if (messages.length) {
+      state[cursorField] = String(messages[messages.length - 1].id || state[cursorField]);
+    }
+
+    const result = [];
+
+    for (const message of messages) {
+      try {
+        result.push({
+          id: message.id,
+          payload: await unpackSignal(message.message)
+        });
+      } catch (_) {}
+    }
+
+    return result;
+  }
+
   function stopSignalLoop() {
     if (state.signalPollTimer) {
       clearTimeout(state.signalPollTimer);
@@ -7901,6 +8031,10 @@
     });
   }
 
+  function isGlobalWorldHost() {
+    return state.active && state.mode === 'host' && state.serverAddress === GLOBAL_WORLD_ADDRESS;
+  }
+
   function sendChatToAll(profile, text) {
     const message = cleanText(text, 256);
     if (!message) return;
@@ -7911,6 +8045,48 @@
       profile,
       text: message
     });
+
+    if (isGlobalWorldHost()) {
+      publishSignal(CHAT_BRIDGE_TOPIC, {
+        type: 'chat',
+        protocol: PROTOCOL,
+        world: 'global',
+        source: 'client',
+        name: cleanText(profile?.name, 24) || 'Player',
+        text: message
+      }).catch(() => {});
+    }
+  }
+
+  function startChatBridgeLoop() {
+    if (state.chatBridgeTimer) clearInterval(state.chatBridgeTimer);
+
+    state.chatBridgeTimer = setInterval(async () => {
+      if (state.destroyed) return;
+
+      if (!isGlobalWorldHost()) {
+        return;
+      }
+
+      try {
+        const messages = await pollSignalsWithCursor(CHAT_BRIDGE_TOPIC, 'chatBridgeCursor');
+
+        for (const entry of messages) {
+          const message = entry.payload;
+          if (Number(message?.protocol) !== PROTOCOL) continue;
+          if (message.type !== 'chat') continue;
+          if (message.world !== 'global') continue;
+          if (message.source === 'client') continue;
+
+          broadcastReliable({
+            t: 'chat',
+            profile: { name: `Discord · ${cleanText(message.name, 20)}` },
+            text: cleanText(message.text, 256)
+          });
+          addPlayerChat({ name: `Discord · ${cleanText(message.name, 20)}` }, cleanText(message.text, 256));
+        }
+      } catch (_) {}
+    }, 3000);
   }
 
   function sendLocalChat(text) {
@@ -9601,7 +9777,7 @@
     scheduleSignalPoll(handleJoinSignal, 100);
   }
 
-  async function createWorldServer(worldName) {
+  async function createWorldServer(worldName, options = {}) {
     if (state.active) {
       setStatus('A Local Games world is already active.', 'ALREADY_ACTIVE');
       return false;
@@ -9615,7 +9791,9 @@
 
     removeConnectionLostOverlay();
     state.worldName = name;
-    state.serverAddress = makeServerAddress();
+    state.serverAddress = typeof options.addressOverride === 'string' && options.addressOverride
+      ? options.addressOverride
+      : makeServerAddress();
     state.roomTopic = topicFromAddress(state.serverAddress);
     state.signalLastId = '';
     state.localRole = 'owner';
@@ -10208,6 +10386,9 @@
     if (!invite) return;
     setStatus(`🔗 P2P invite detected — joining ${invite.username}'s world...`);
     log(`autoJoin: link ${invite.address} user=${invite.username}`);
+    state.shareLinkJoinPending = true;
+    state.globalWorldTimer && clearInterval(state.globalWorldTimer);
+    state.globalWorldTimer = null;
 
     const tryJoin = async (attempt) => {
       if (state.active || state.destroyed) return;
@@ -10345,6 +10526,8 @@
     logWarn('boot: pollGlobalRegistry falló (no crítico):', err?.message || err);
   });
   startGlobalServiceLoop();
+  startGlobalWorldLoop();
+  startChatBridgeLoop();
   emitState();
 
   if (LOG_LEVEL >= 1) {
