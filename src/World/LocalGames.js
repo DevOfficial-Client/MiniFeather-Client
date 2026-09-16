@@ -28,9 +28,8 @@
   
   const ICE_SERVERS = [
     { urls: [STUN_URL, 'stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+    { urls: 'turns:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:80?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
   ];
   const RTC_CONNECT_TIMEOUT_MS = 14000;
   const SIGNAL_RETRY_INTERVAL_MS = 2200;
@@ -132,6 +131,7 @@
     serverAddress: '',
     roomTopic: '',
     worldSeedOverride: null,
+    importedWorld: null,
     localRole: 'player',
     localGameMode: 'survival',
     localHardcore: false,
@@ -265,7 +265,6 @@
 
     if (index >= 0) {
       state.savedServers[index] = { ...state.savedServers[index], ...next };
-    } else {
       state.savedServers.unshift(next);
     }
 
@@ -5463,6 +5462,126 @@
         };
         state.localChunks.sort((a, b) => dist(a) - dist(b));
       }
+    } else if (map === 'imported') {
+      const importedData = state.importedWorld;
+      if (!importedData?.ok || !Array.isArray(importedData.blocks) || !Array.isArray(importedData.palette)) {
+        logError('imported: sin datos de mundo (¿import falló?)');
+        setStatus('No imported world data found. Use Import World first.', 'IMPORTED_NO_DATA');
+        return false;
+      }
+
+      const mcName = (full) => String(full || '').replace(/^minecraft:/, '');
+      const stateCache = new Map();
+      const paletteStates = importedData.palette.map((full) => {
+        const key = mcName(full);
+        if (stateCache.has(key)) return stateCache.get(key);
+        const base = key.split('[')[0];
+        const stem = base.split('_')[0];
+        const state = stateForAny(base, `${stem}_block`, stem === 'grass' ? 'grass' : stem, 'stone');
+        stateCache.set(key, state);
+        return state;
+      });
+      const resolvedCount = paletteStates.filter(Boolean).length;
+      log(`imported: paleta resuelta ${resolvedCount}/${importedData.palette.length}`);
+
+      const b = importedData.bounds || {};
+      const minChunkX = Math.floor((Number(b.minX) || 0) >> 4) - 1;
+      const maxChunkX = Math.floor((Number(b.maxX) || 0) >> 4) + 1;
+      const minChunkZ = Math.floor((Number(b.minZ) || 0) >> 4) - 1;
+      const maxChunkZ = Math.floor((Number(b.maxZ) || 0) >> 4) + 1;
+      const spanChunks = (maxChunkX - minChunkX + 1) * (maxChunkZ - minChunkZ + 1);
+      if (spanChunks > 4096) {
+        logError(`imported: mundo demasiado grande (${spanChunks} chunks > 4096)`);
+        setStatus('World too large (max 4096 chunks). Import a smaller area.', 'IMPORTED_TOO_LARGE');
+        return false;
+      }
+      const minX = minChunkX * 16;
+      const maxX = (maxChunkX + 1) * 16 - 1;
+      const minZ = minChunkZ * 16;
+      const maxZ = (maxChunkZ + 1) * 16 - 1;
+      const bottomY = -64;
+
+      state.worldSeed = 0;
+      state.worldBounds = {
+        minX,
+        maxX,
+        minZ,
+        maxZ,
+        minY: bottomY,
+        maxY: 320
+      };
+
+      const flat = importedData.blocks;
+      const chunks = new Map();
+      let created = 0;
+      for (let cx = minChunkX; cx <= maxChunkX; cx++) {
+        for (let cz = minChunkZ; cz <= maxChunkZ; cz++) {
+          const chunk = insertLocalChunk(cx, cz);
+          if (!chunk) {
+            setStatus(`Could not construct native Miniblox Chunk ${cx},${cz}.`, 'LOCAL_CHUNK_CONSTRUCTOR_FAILED');
+            return false;
+          }
+          chunks.set(`${cx},${cz}`, chunk);
+          created++;
+          if ((created & 15) === 15) await new Promise(resolve => setTimeout(resolve, 0));
+        }
+      }
+      log(`imported: ${created} chunks nativos`);
+
+      const setLocal = (x, y, z, blockState) => {
+        const cx = Math.floor(x) >> 4;
+        const cz = Math.floor(z) >> 4;
+        const chunk = chunks.get(`${cx},${cz}`);
+        if (!chunk || !blockState) return false;
+        try {
+          return !!chunk.setBlockState(blockPos(x, y, z), Number(blockState.id), false);
+        } catch (_) {
+          return false;
+        }
+      };
+
+      let placed = 0, skipped = 0;
+      for (let i = 0; i < flat.length; i += 4) {
+        const blockState = paletteStates[flat[i + 3]];
+        if (!blockState) { skipped++; continue; }
+        if (setLocal(flat[i], flat[i + 1], flat[i + 2], blockState)) placed++;
+        else skipped++;
+        if ((i & 16383) === 16383) await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      log(`imported: ${placed} bloques colocados, ${skipped} saltados`);
+
+      const sp = importedData.spawn || { x: (minX + maxX) / 2, y: 70, z: (minZ + maxZ) / 2 };
+      let topY = Number(sp.y) || 70;
+      for (let i = 0; i < flat.length; i += 4) {
+        if (flat[i] === Math.floor(sp.x) && flat[i + 2] === Math.floor(sp.z)) {
+          if (flat[i + 1] > topY) topY = flat[i + 1];
+        }
+      }
+
+      state.arena = {
+        cx: Math.floor(sp.x),
+        cz: Math.floor(sp.z),
+        floorY: topY,
+        radius: 8,
+        height: 24,
+        chunkX: Math.floor(sp.x) >> 4,
+        chunkZ: Math.floor(sp.z) >> 4
+      };
+      state.origin = {
+        x: Math.floor(sp.x) + 0.5,
+        y: topY + 1,
+        z: Math.floor(sp.z) + 0.5
+      };
+
+      {
+        const spx = state.origin.x, spz = state.origin.z;
+        const dist = (chunk) => {
+          const cx = Number(chunk?.xPosition), cz = Number(chunk?.zPosition);
+          if (!Number.isFinite(cx) || !Number.isFinite(cz)) return Infinity;
+          return Math.hypot(cx * 16 + 8 - spx, cz * 16 + 8 - spz);
+        };
+        state.localChunks.sort((a, b) => dist(a) - dist(b));
+      }
     } else {
       const minChunk = -LOCAL_TERRAIN_RADIUS_CHUNKS;
       const maxChunk = LOCAL_TERRAIN_RADIUS_CHUNKS;
@@ -6326,7 +6445,7 @@
     const expectedSpawn =
       map === 'spleef'
         ? { x: 8, y: 82.05, z: 8 }
-        : map === 'garden'
+        : map === 'garden' || map === 'imported'
           ? {
               x: state.origin?.x ?? 8,
               y: (state.origin?.y ?? 83) + 2.05,
@@ -7017,7 +7136,7 @@
     }
 
     state.game = game;
-    state.map = map === 'spleef' ? 'spleef' : (map === 'garden' ? 'garden' : 'sandbox');
+    state.map = map === 'spleef' ? 'spleef' : (map === 'garden' ? 'garden' : (map === 'imported' ? 'imported' : 'sandbox'));
     state.mode = mode;
     state.directLocal = false;
 
@@ -7076,7 +7195,9 @@
       setStatus(
         state.map === 'spleef'
           ? 'Local Spleef running without a Miniblox game server.'
-          : 'Local Sandbox running without a Miniblox game server.'
+          : state.map === 'imported'
+            ? 'Imported world running without a Miniblox game server.'
+            : 'Local Sandbox running without a Miniblox game server.'
       );
 
       return true;
@@ -8785,6 +8906,11 @@
       return;
     }
 
+    if (message.t === 'snapshot-request') {
+      sendBlockSnapshot(peer);
+      return;
+    }
+
     if (message.t === 'mode') {
       
       const newMode = String(message.mode || 'survival').toLowerCase();
@@ -8823,6 +8949,13 @@
     if (state.deferredBlocks.length) {
       const blocks = state.deferredBlocks.splice(0, state.deferredBlocks.length);
       applyNetworkBlocks(blocks, true);
+    }
+
+    if (state.deferredBlocksDropped && state.hostPeer?.stateChannel) {
+      state.deferredBlocksDropped = false;
+      try {
+        sendJSON(state.hostPeer.stateChannel, { t: 'snapshot-request' });
+      } catch (_) {}
     }
 
     if (state.deferredMessages.length) {
@@ -8901,6 +9034,7 @@
         state.deferredBlocks.push(...message.changes.slice(0, 256));
         if (state.deferredBlocks.length > 4096) {
           state.deferredBlocks.splice(0, state.deferredBlocks.length - 4096);
+          state.deferredBlocksDropped = true;
         }
       }
       return;
@@ -9814,6 +9948,44 @@
       await startWorld('garden', 'single', 0, {
         forceDirect: true,
         worldName: 'Spider Garden',
+        role: 'owner'
+      });
+      return;
+    }
+
+    if (action === 'import-world') {
+      try {
+        const payload = command?.world || globalThis.__MF_IMPORTED_WORLD__;
+        if (payload?.ok && Array.isArray(payload.blocks) && Array.isArray(payload.palette)) {
+          state.importedWorld = payload;
+          setStatus(`World imported: ${payload.count} blocks, ${payload.palette.length} block types.`, '');
+          log(`imported: ${payload.count} bloques, paleta ${payload.palette.length}`);
+          return;
+        }
+        if (command?.file instanceof File) {
+          setStatus('Importing world...', '');
+          const world = await globalThis.MF_WorldImport.importFromFile(command.file);
+          state.importedWorld = world;
+          setStatus(`World imported: ${world.count} blocks, ${world.palette.length} block types.`, '');
+          return;
+        }
+        setStatus('No world data received.', 'IMPORT_FAILED');
+      } catch (error) {
+        logError('import-world:', error);
+        setStatus(`World import failed: ${error?.message || error}`, 'IMPORT_FAILED');
+      }
+      return;
+    }
+
+    if (action === 'start-imported') {
+      if (!state.importedWorld?.ok) {
+        setStatus('No imported world. Use Import World first.', 'IMPORTED_NO_DATA');
+        return;
+      }
+      const name = cleanText(command?.worldName, 30) || 'Imported World';
+      await startWorld('imported', 'single', 0, {
+        forceDirect: true,
+        worldName: name,
         role: 'owner'
       });
       return;

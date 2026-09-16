@@ -112,6 +112,8 @@
         "src/World/WorldMap.js",
         "src/World/RhythmParkour.js",
         "src/World/LocalGames.js",
+        "src/World/LocalGamesNetworkBridge.js",
+        "src/World/MF_WorldImport.js",
         "src/Render/VanillaAnimations.js",
         "src/Render/HandSway.js",
         "src/Render/BetterPlayerLayers.js",

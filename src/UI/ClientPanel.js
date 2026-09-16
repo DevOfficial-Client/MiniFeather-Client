@@ -3855,6 +3855,12 @@
           <button id="mf-lg-sandbox" class="mf-btn secondary">${t('localGamesSandbox')}</button>
         </div>
         <button id="mf-lg-garden" class="mf-btn secondary" style="width:100%;margin-top:6px;padding:6px;font-size:12px;">🕷️ Spider Garden</button>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button id="mf-lg-import" class="mf-btn secondary" style="flex:1;padding:6px;font-size:12px;">📦 Import World</button>
+          <button id="mf-lg-play-imported" class="mf-btn secondary" style="flex:1;padding:6px;font-size:12px;" title="Load the imported world">▶ Imported</button>
+        </div>
+        <input id="mf-lg-import-file" type="file" accept=".zip,.mca" style="display:none;">
+        <div class="mf-muted" style="font-size:10px;margin-top:4px;">Java world .zip or .mca region file</div>
         <div class="mf-card-title" style="margin-top:12px;">${t('localGamesJoinByAddress')}</div>
         <div style="display:flex;gap:6px;margin-top:6px;">
           <input id="mf-lg-address-input" class="mf-input" type="text" placeholder="${t('localGamesAddressPlaceholder')}" autocomplete="off" spellcheck="false">
@@ -3916,6 +3922,43 @@
 
     container.querySelector('#mf-lg-garden')?.addEventListener('click', () => {
       sendLocalGamesCommand('start-garden');
+    });
+
+    container.querySelector('#mf-lg-import')?.addEventListener('click', () => {
+      container.querySelector('#mf-lg-import-file')?.click();
+    });
+
+    container.querySelector('#mf-lg-import-file')?.addEventListener('change', async (event) => {
+      const file = event.target?.files?.[0];
+      if (!file) return;
+      const button = container.querySelector('#mf-lg-import');
+      const original = button ? button.textContent : '';
+      try {
+        if (button) button.textContent = '⏳ Importing...';
+        if (!globalThis.MF_WorldImport) throw new Error('importer not loaded');
+        const world = await globalThis.MF_WorldImport.importFromFile(file, (done, total, blocks) => {
+          if (button) button.textContent = `⏳ ${done}/${total} (${blocks})`;
+        });
+        globalThis.__MF_IMPORTED_WORLD__ = world;
+        sendLocalGamesCommand('import-world');
+        if (button) {
+          button.textContent = `✓ ${world.count} blocks`;
+          window.setTimeout(() => { if (button.isConnected) button.textContent = original; }, 3500);
+        }
+      } catch (error) {
+        console.error('[MF WorldImport] fallo:', error);
+        if (button) {
+          button.textContent = '✗ Failed';
+          window.setTimeout(() => { if (button.isConnected) button.textContent = original; }, 2500);
+        }
+      } finally {
+        event.target.value = '';
+      }
+    });
+
+    container.querySelector('#mf-lg-play-imported')?.addEventListener('click', () => {
+      const name = container.querySelector('#mf-lg-worldname')?.value?.trim();
+      sendLocalGamesCommand('start-imported', name ? { worldName: name } : {});
     });
 
     container.querySelectorAll('[data-lg-mode]').forEach(btn => {
