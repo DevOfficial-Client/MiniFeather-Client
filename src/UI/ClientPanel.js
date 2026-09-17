@@ -2951,7 +2951,7 @@
   const HAND_DRAWN_ICONS = new Set([
     'armorHud', 'betterPlayerLayers', 'coordinates', 'cpsCounter', 'dynamicCrosshair',
     'experimental', 'fpsCounter', 'guiPatch', 'keystrokes', 'pingCounter',
-    'titanTiny', 'waypoints'
+    'rebrand', 'titanTiny', 'waypoints'
   ]);
 
   function handDrawnIconImg(name, className = '') {
