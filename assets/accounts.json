@@ -1,18 +1,17 @@
 {
-  "$note": "Mapa jugador → skin custom (fallback offline). La DB viva vive en https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/accounts.json y el client la aplica encima de esta. Clave = uuid (preferido, inmune a renombres) o username. Campo 'skin' puede ser: (1) id custom:mf_<pack> o custom:mf_dev_<png> (resuelto por el client), (2) ruta a /skins/ sin/con .png (devs/itzesteban), (3) nombre de skin vanilla (chris), (4) URL absoluta https://... / chrome-extension://... / data:image/...",
-  "$example_url": "https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/skins/shusukegxe.png",
+  "$note": "Mapa jugador → skin/rank custom (fallback offline). La DB viva vive en https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/accounts.json y el client la aplica encima de esta. Clave = uuid (preferido) o username. 'skin': (1) id custom:mf_<pack>, (2) ruta /skins/, (3) nombre vanilla, (4) URL absoluta. 'rank': key de la sección 'ranks'. 'name': nombre a mostrar (opcional).",
+  "ranks": {
+    "dev": { "label": "DEV", "color": "#00FFFF", "bold": true, "glow": true, "shiny": true, "priorityBase": "eternus" }
+  },
   "players": {
-    "6eb7369a-551e-406a-9a63-6db7a358e1e5": { "skin": "https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/skins/shusukegxe.png" },
-    "c4201f43-2de9-4275-930a-301fae4cce6c": { "skin": "custom:mf_angrywolfx" },
-    "481511cf-be21-4c1c-9ad1-aa8cba0d0d26": { "skin": "custom:mf_angrywolfx" },
-    "shusukegxe": { "skin": "https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/skins/shusukegxe.png" },
-    "shusukegxe_": { "skin": "https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/skins/shusukegxe.png" },
+    "6eb7369a-551e-406a-9a63-6db7a358e1e5": { "skin": "https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/skins/shusukegxe/20260916-212035.png", "rank": "dev", "name": "ShusukeGxE_" },
+    "shusukegxe_": { "skin": "https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/skins/shusukegxe/20260916-212035.png", "rank": "dev" },
+    "angrywolfx": { "rank": "dev" },
     "itzesteban": { "skin": "custom:mf_dev_itzesteban" },
     "nightrise": { "skin": "custom:mf_dev_nightrise" },
     "notsenpai": { "skin": "custom:mf_dev_notsenpai" },
     "gab": { "skin": "custom:mf_dev_gab" },
     "eve": { "skin": "custom:mf_eve" },
-    "angrywolfx": { "skin": "https://t.novaskin.me/31c57b47825af14e2ea709d08b2a817f7db1b3fba6df7f996a6151993feaf85a" },
-    "not_senpai": { "skin": "https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/skins/not_senpai.png" }
+    "not_senpai": { "skin": "https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/skins/not_senpai/20260916-212032.png" }
   }
 }

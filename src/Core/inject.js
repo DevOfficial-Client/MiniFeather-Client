@@ -1,17 +1,23 @@
 (function () {
   'use strict';
 
-  const RANK_KEY = 'dev';
-  const RANK_LABEL = 'DEV';
-  const RANK_COLOR = '#00FFFF';
-  
-  const TARGET_UUIDS = new Map([
-    ['6eb7369a-551e-406a-9a63-6db7a358e1e5', 'ShusukeGxE_']
-  ]);
-  
-  const TARGETS = new Map([
-    ['angrywolfx', 'AngryWolfX']
-  ]);
+  // ── Rangos definidos en accounts.json (local + DB viva en GitHub) ──
+  // Estructura:
+  //   "ranks": { "dev": { "label": "DEV", "color": "#00FFFF", "bold": true,
+  //                        "glow": true, "shiny": true, "priorityBase": "eternus" } },
+  //   "players": { "shusukegxe_": { "skin": "...", "rank": "dev", "name": "ShusukeGxE_" } }
+  // "name" (opcional) = nombre a mostrar; entradas por uuid lo aprenden del juego.
+  // Fallback offline hardcodeado (mismo comportamiento que siempre):
+  const BUILTIN_RANKS = {
+    dev: { label: 'DEV', color: '#00FFFF', bold: true, glow: true, shiny: true, priorityBase: 'eternus' }
+  };
+  const BUILTIN_PLAYERS = {
+    '6eb7369a-551e-406a-9a63-6db7a358e1e5': { name: 'ShusukeGxE_', rank: 'dev' },
+    'shusukegxe_': { rank: 'dev' },
+    'angrywolfx': { rank: 'dev' }
+  };
+  const LIVE_DB_URL = 'https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/accounts.json';
+  const PUSH_TOPIC = 'mf-skins-updates-v1';
 
   const state = {
     game: null,
@@ -26,49 +32,179 @@
     uuidToName: new Map(),
     seenChatEntries: new WeakSet(),
     responseJsonOriginal: null,
-    responseJsonWrapped: null
+    responseJsonWrapped: null,
+    ranksReady: false,
+    ranksVersion: 0
   };
 
-  globalThis.__MF_NATIVE_CUSTOM_RANKS__ = {
-    defs: {
-      [RANK_KEY]: {
-        color: RANK_COLOR,
-        shiny: true,
-        priorityBase: 'eternus'
-      }
-    }
+  // ── DB de rangos: builtin → local (assets/accounts.json) → viva (GitHub) ──
+  const ranks = {
+    defs: { ...BUILTIN_RANKS },
+    byUuid: new Map(),
+    byName: new Map()
   };
 
-  function isTargetUuid(value) {
-    if (typeof value !== 'string' || !value) return null;
-    return TARGET_UUIDS.get(value.toLowerCase()) || null;
+  function normRankKey(v) {
+    return String(v || '').trim().toLowerCase();
   }
 
-  function isTargetName(value) {
-    if (typeof value !== 'string') return null;
-    return TARGETS.get(value.trim().toLowerCase()) || null;
+  function applyRanksDb(data) {
+    if (!data || typeof data !== 'object') return false;
+    const defs = { ...BUILTIN_RANKS };
+    if (data.ranks && typeof data.ranks === 'object') {
+      for (const key of Object.keys(data.ranks)) {
+        const def = data.ranks[key];
+        if (!def || typeof def !== 'object') continue;
+        defs[key.toLowerCase()] = {
+          label: String(def.label || key).toUpperCase(),
+          color: typeof def.color === 'string' && /^#[0-9a-f]{3,8}$/i.test(def.color) ? def.color : '#00FFFF',
+          bold: def.bold !== false,
+          glow: !!def.glow,
+          shiny: !!def.shiny,
+          priorityBase: typeof def.priorityBase === 'string' && def.priorityBase ? def.priorityBase : 'eternus'
+        };
+      }
+    }
+    const byUuid = new Map();
+    const byName = new Map();
+    if (data.players && typeof data.players === 'object') {
+      for (const key of Object.keys(data.players)) {
+        const raw = data.players[key];
+        if (!raw || typeof raw !== 'object' || !raw.rank) continue;
+        const rankKey = normRankKey(raw.rank);
+        if (!defs[rankKey]) continue;
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key)) {
+          byUuid.set(key.toLowerCase(), rankKey);
+          if (raw.name && typeof raw.name === 'string') byName.set(raw.name.trim().toLowerCase(), rankKey);
+        } else {
+          byName.set(key.trim().toLowerCase(), rankKey);
+        }
+      }
+    }
+    if (!byUuid.size && !byName.size) return false;   // nada que aplicar
+    ranks.defs = defs;
+    ranks.byUuid = byUuid;
+    ranks.byName = byName;
+    state.ranksVersion++;
+    state.ranksReady = true;
+    return true;
+  }
+
+  // accounts.json local desde MAIN world: vía el meta mf-skins-base
+  // (mismo truco que CustomSkins).
+  function localDbUrl() {
+    try {
+      const meta = document.querySelector('meta[name="mf-skins-base"]');
+      const base = meta?.content;
+      if (base && /^chrome-extension:/i.test(base)) {
+        return base.replace(/skins\/?$/i, '') + 'assets/accounts.json';
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  function loadRanksFromDb() {
+    // 1) builtin ya está aplicado de arranque
+    // 2) local
+    const localUrl = localDbUrl();
+    const localP = localUrl
+      ? fetch(localUrl, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null)
+      : Promise.resolve(null);
+    // 3) viva (GitHub)
+    const liveP = fetch(LIVE_DB_URL, { cache: 'reload' }).then(r => r.ok ? r.json() : null).catch(() => null);
+
+    localP.then(local => {
+      if (local) applyRanksDb(local);
+      return liveP;
+    }).then(live => {
+      if (live && applyRanksDb(live)) {
+        refreshAllTags();
+      } else if (live) {
+        // la viva no trae ranks: local manda si definió algo distinto
+        refreshAllTags();
+      }
+    }).catch(() => {});
+  }
+
+  // Push en vivo (ntfy SSE): recarga los rangos al instante cuando el bot
+  // escribe accounts.json — mismo topic que las skins.
+  var pushRetry = 0;
+  var pushTimer = null;
+  function startRanksPushListener() {
+    try {
+      const es = new EventSource('https://ntfy.sh/' + PUSH_TOPIC + '/sse');
+      es.onmessage = function (e) {
+        try {
+          const m = JSON.parse(e.data);
+          if (m && m.event === 'message' && state.ranksReady) {
+            if (pushTimer) return;
+            pushTimer = setTimeout(function () {
+              pushTimer = null;
+              fetch(LIVE_DB_URL, { cache: 'reload' })
+                .then(r => r.ok ? r.json() : null)
+                .then(live => { if (live && applyRanksDb(live)) refreshAllTags(); })
+                .catch(() => {});
+            }, 600);
+          }
+        } catch (_) {}
+      };
+      es.onerror = function () {
+        try { es.close(); } catch (_) {}
+        const wait = Math.min(120000, 5000 * Math.pow(2, pushRetry++));
+        setTimeout(startRanksPushListener, wait);
+        if (pushRetry > 1) pushRetry--;
+      };
+      es.onopen = function () { pushRetry = 0; };
+    } catch (_) {}
+  }
+
+  // Defs vivas: el proxy de GuiToast lee de aquí, así que se actualiza solo
+  // cuando applyRanksDb() cambia los rangos.
+  globalThis.__MF_NATIVE_CUSTOM_RANKS__ = {
+    defs: ranks.defs
+  };
+
+  function rankOf(value) {
+    // uuid directo
+    if (typeof value === 'string' && value) {
+      const byUuid = ranks.byUuid.get(value.toLowerCase());
+      if (byUuid) return byUuid;
+      return ranks.byName.get(value.trim().toLowerCase()) || null;
+    }
+    if (!value || typeof value !== 'object') return null;
+    const byUuid = ranks.byUuid.get(String(value.uuid || '').toLowerCase());
+    if (byUuid) return byUuid;
+    const byName = ranks.byName.get(String(value.username || value.name || '').trim().toLowerCase());
+    if (byName) return byName;
+    const profile = value.profile;
+    if (profile && typeof profile === 'object') {
+      const pu = ranks.byUuid.get(String(profile.uuid || '').toLowerCase());
+      if (pu) return pu;
+      return ranks.byName.get(String(profile.username || profile.name || '').trim().toLowerCase()) || null;
+    }
+    return null;
+  }
+
+  function displayTarget(value) {
+    // Nombre a mostrar para el target (mayúsculas como el original)
+    if (!value || typeof value !== 'object') return null;
+    const candidates = [value.username, value.name, value.profile?.username, value.profile?.name];
+    for (const c of candidates) {
+      if (typeof c === 'string' && c.trim()) return c.trim();
+    }
+    return null;
   }
 
   function rememberNativeRank(name, rank) {
-    if (!name || !rank || String(rank).toLowerCase() === RANK_KEY) return;
-    const key = name.toLowerCase();
-    if (!state.nativeRanks.has(key)) state.nativeRanks.set(key, String(rank));
+    if (!name || !rank) return;
+    state.nativeRanks.set(String(name).toLowerCase(), String(rank));
   }
 
   function targetNameFromObject(value) {
-    if (!value || typeof value !== 'object') return null;
-    
-    const byUuid = isTargetUuid(value.uuid);
-    if (byUuid) return byUuid;
-    const direct = isTargetName(value.username) || isTargetName(value.name);
-    if (direct) return direct;
-    const profile = value.profile;
-    if (profile && typeof profile === 'object') {
-      const profileByUuid = isTargetUuid(profile.uuid);
-      if (profileByUuid) return profileByUuid;
-      return isTargetName(profile.username) || isTargetName(profile.name);
-    }
-    return null;
+    // ¿Tiene rango asignado en la DB? → es target
+    const rk = rankOf(value);
+    if (!rk) return null;
+    return displayTarget(value) || value?.profile?.username || value?.username || value?.name || null;
   }
 
   function patchRecord(value) {
@@ -76,17 +212,18 @@
     const target = targetNameFromObject(value);
     if (!target) return null;
 
+    const rk = rankOf(value);
+
     if ('rank' in value) {
       rememberNativeRank(target, value.rank);
-      try { value.rank = RANK_KEY; } catch (_) {}
+      try { value.rank = rk; } catch (_) {}
     }
 
     if (value.profile && typeof value.profile === 'object') {
-      const profileTarget = isTargetUuid(value.profile.uuid) ||
-        isTargetName(value.profile.username) || isTargetName(value.profile.name) || target;
+      const profileTarget = displayTarget(value) || target;
       if (profileTarget && 'rank' in value.profile) {
         rememberNativeRank(profileTarget, value.profile.rank);
-        try { value.profile.rank = RANK_KEY; } catch (_) {}
+        try { value.profile.rank = rk; } catch (_) {}
       }
       if (profileTarget && value.profile.uuid) state.uuidToName.set(String(value.profile.uuid), profileTarget);
     }
@@ -312,7 +449,7 @@
           const entity = this.game?.world?.getPlayerById?.(entry.id);
           if (entity?.profile) {
             rememberNativeRank(target, entity.profile.rank);
-            entity.profile.rank = RANK_KEY;
+            entity.profile.rank = rankOf(entry) || rankOf(entity);
           }
         } catch (_) {}
       }
@@ -338,26 +475,41 @@
     return String(text || '').replace(/\\[^\\]*\\/g, '').replace(/\s+/g, ' ').trim();
   }
 
-  function rankTag() {
-    return `\\bold\\\\glow\\\\${RANK_COLOR}\\\\shiny\\[${RANK_LABEL}]\\reset\\`;
+  function rankTag(rankKey) {
+    const d = ranks.defs[rankKey] || ranks.defs['dev'];
+    let tag = '\\';
+    if (d.bold) tag += 'bold\\';
+    if (d.glow) tag += 'glow\\' + d.color + '\\';
+    if (d.shiny) tag += 'shiny\\';
+    return `${tag}[${d.label}]\\reset\\`;
   }
 
-  function chatLine(name, message) {
-    return `${rankTag()} \\${RANK_COLOR}\\${name}:\\reset\\ ${message}`;
+  function chatLine(name, message, rankKey) {
+    const d = ranks.defs[rankKey] || ranks.defs['dev'];
+    return `${rankTag(rankKey)} \\${d.color}\\${name}:\\reset\\ ${message}`;
   }
 
-  function systemLine(name, action) {
-    return `${rankTag()} \\${RANK_COLOR}\\${name}\\reset\\ \\yellow\\${action}`;
+  function systemLine(name, action, rankKey) {
+    const d = ranks.defs[rankKey] || ranks.defs['dev'];
+    return `${rankTag(rankKey)} \\${d.color}\\${name}\\reset\\ \\yellow\\${action}`;
   }
 
   function targetFromChat(data) {
     if (data?.from) {
       const byUuid = state.uuidToName.get(String(data.from));
-      if (byUuid) return byUuid;
+      if (byUuid) {
+        return { name: byUuid, rank: ranks.byUuid.get(String(data.from).toLowerCase()) || null };
+      }
     }
     const plain = stripFormatting(data?.text);
-    for (const target of TARGETS.values()) {
-      if (plain.includes(target)) return target;
+    // usernames conocidos de la DB (por nombre) + aprendidos del juego
+    const names = new Set(ranks.byName.keys());
+    for (const [n] of state.nativeRanks) names.add(n);
+    for (const rawName of names) {
+      if (!rawName || typeof rawName !== 'string') continue;
+      if (ranks.defs[rawName]) continue;   // era un rankKey, no un username
+      const rank = ranks.byName.get(rawName.toLowerCase()) || null;
+      if (plain.includes(rawName)) return { name: rawName, rank };
     }
     return null;
   }
@@ -365,23 +517,23 @@
   function rewriteChatData(data) {
     if (!data || typeof data !== 'object' || typeof data.text !== 'string') return false;
     const target = targetFromChat(data);
-    if (!target) return false;
+    if (!target || !target.name) return false;
     const plain = stripFormatting(data.text);
     let next = null;
 
-    const chatPrefix = target + ':';
+    const chatPrefix = target.name + ':';
     const chatIndex = plain.indexOf(chatPrefix);
     if (chatIndex >= 0 && data.publicChat) {
       const message = plain.slice(chatIndex + chatPrefix.length).trimStart();
-      next = chatLine(target, message);
-    } else if (plain.includes(target + ' has joined the server')) {
-      next = systemLine(target, 'has joined the server');
-    } else if (plain.includes(target + ' has left the server')) {
-      next = systemLine(target, 'has left the server');
-    } else if (plain.includes(target + ' joined the server')) {
-      next = systemLine(target, 'joined the server');
-    } else if (plain.includes(target + ' left the server')) {
-      next = systemLine(target, 'left the server');
+      next = chatLine(target.name, message, target.rank);
+    } else if (plain.includes(target.name + ' has joined the server')) {
+      next = systemLine(target.name, 'has joined the server', target.rank);
+    } else if (plain.includes(target.name + ' has left the server')) {
+      next = systemLine(target.name, 'has left the server', target.rank);
+    } else if (plain.includes(target.name + ' joined the server')) {
+      next = systemLine(target.name, 'joined the server', target.rank);
+    } else if (plain.includes(target.name + ' left the server')) {
+      next = systemLine(target.name, 'left the server', target.rank);
     }
 
     if (!next || next === data.text) return false;
@@ -412,8 +564,18 @@
     return true;
   }
 
+  function refreshAllTags() {
+    // Reparchear todo lo conocido con la DB nueva de rangos
+    const game = state.game || findGame();
+    if (!game) return;
+    try { patchKnownGameData(game); } catch (_) {}
+    try { patchChatLog(game); } catch (_) {}
+  }
+
   installEarlyDataHook();
   installNativeResolver();
+  loadRanksFromDb();
+  startRanksPushListener();
 
   state.boot = setInterval(() => {
     if (installRuntime()) clearInterval(state.boot);
