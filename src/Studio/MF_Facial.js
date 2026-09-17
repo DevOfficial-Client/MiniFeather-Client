@@ -148,7 +148,7 @@
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => resolve(img);
-            img.onerror = () => reject(new Error('no se pudo cargar la imagen'));
+            img.onerror = () => reject(new Error('could not load the image'));
             img.src = url;
         });
     }
@@ -396,7 +396,7 @@
         for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 66000); i--) {
             if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
         }
-        if (eocd < 0) throw new Error('ZIP inválido (sin EOCD)');
+        if (eocd < 0) throw new Error('invalid ZIP (no EOCD)');
         const count = dv.getUint16(eocd + 10, true);
         let off = dv.getUint32(eocd + 16, true); 
         const entries = [];
@@ -504,11 +504,11 @@
         
         const names = [...files.keys()];
         const pjName = names.find(n => /(^|\/)pack\.json$/i.test(n));
-        if (!pjName) throw new Error('el ZIP no tiene pack.json');
+        if (!pjName) throw new Error('the ZIP has no pack.json');
         const dir = pjName.includes('/') ? pjName.slice(0, pjName.lastIndexOf('/') + 1) : '';
         const j = JSON.parse(new TextDecoder().decode(files.get(pjName)));
         const id = String(j.id || file.name.replace(/\.zip$/i, '')).toLowerCase().replace(/[^a-z0-9_-]/g, '');
-        if (!id) throw new Error('pack.json sin "id"');
+        if (!id) throw new Error('pack.json without "id"');
 
         const pick = (v, fallback) => {
             const n = typeof v === 'string' ? v : (v && v.file);
@@ -560,7 +560,7 @@
             const du = await blobOf(spriteFiles[key]);
             if (!du) {
                 if (OPTIONAL.has(key)) continue; 
-                throw new Error('falta sprite "' + key + '" (' + spriteFiles[key] + ')');
+                throw new Error('missing sprite "' + key + '" (' + spriteFiles[key] + ')');
             }
             pack.sprites[key] = du;
         }
@@ -591,7 +591,7 @@
 
     async function exportPackZip(id) {
         const p = packIndex.find(x => x.id === id);
-        if (!p) throw new Error('pack "' + id + '" no encontrado');
+        if (!p) throw new Error('pack "' + id + '" not found');
         const files = [];
         const j = { id: p.id, name: p.name || p.id, author: p.author || '', version: p.version || 1 };
         const sprites = {};
@@ -736,8 +736,8 @@
     async function applyPackSkinToGame(packId) {
         const g = getGame();
         const me = g?.player;
-        if (!g || !me) throw new Error('no hay juego cargado (entra a un mundo primero)');
-        if (!registerPackSkin(packId)) throw new Error('el pack no tiene skin PNG');
+        if (!g || !me) throw new Error('no game loaded (enter a world first)');
+        if (!registerPackSkin(packId)) throw new Error('the pack has no PNG skin');
         
         const cur = me.profile?.cosmetics?.skin;
         if (cur && !String(cur).startsWith(MFPACK_PREFIX) && !String(cur).startsWith(CUSTOM_PREFIX)) {
@@ -759,7 +759,7 @@
     async function releasePackSkin() {
         const g = getGame();
         const me = g?.player;
-        if (!g || !me) throw new Error('no hay juego cargado');
+        if (!g || !me) throw new Error('no game loaded');
         const cur = me.profile?.cosmetics?.skin;
         if (!String(cur || '').startsWith(MFPACK_PREFIX) &&
             !String(cur || '').startsWith(CUSTOM_PREFIX)) return false; 
@@ -870,11 +870,11 @@
 
     function ensureSession() {
         const mesh = getMesh();
-        if (!mesh) throw new Error('jugador no disponible (entra al mundo primero)');
+        if (!mesh) throw new Error('player not available (enter a world first)');
         const mats = findSkinMaterials(mesh);
-        if (!mats.length) throw new Error('no se encontró material de skin');
+        if (!mats.length) throw new Error('no skin material found');
         const src = mats[0].map;
-        if (!src?.image) throw new Error('textura de skin no legible');
+        if (!src?.image) throw new Error('skin texture not readable');
 
         const skinIdNow = currentSkinId();
         
@@ -903,7 +903,7 @@
         c.getContext('2d').drawImage(src.image, 0, 0);
         let nt = null;
         try { nt = new src.constructor(c); } catch {}
-        if (!nt) throw new Error('no se pudo crear textura editable');
+        if (!nt) throw new Error('could not create an editable texture');
         
         nt.__mfLocalCanvas = true;
         try {
@@ -953,7 +953,7 @@
 
     async function play(name) {
         const anim = state.library[name];
-        if (!anim?.frames?.length) return { ok: false, error: 'facial "' + name + '" no existe o sin frames' };
+        if (!anim?.frames?.length) return { ok: false, error: 'facial "' + name + '" does not exist or has no frames' };
         stop(false);
         if (auto.on) autoStop(false); 
         try { ensureSession(); } catch (e) { return { ok: false, error: e.message }; }
@@ -1806,19 +1806,19 @@
         const presets = (window.MF_SkinEditor?.presets?.() || []).map(p => 'p:' + p.name);
         const T = {};
         if (presets.length >= 2) {
-            T['alternar presets'] = { frames: [
+            T['alternate presets'] = { frames: [
                 { face: presets[0], holdMs: 1200, blendMs: 250 },
                 { face: presets[1], holdMs: 1200, blendMs: 250 }
             ] };
-            T['ciclo presets'] = { frames: presets.slice(0, 4).map(p => ({ face: p, holdMs: 900, blendMs: 150 })) };
+            T['preset cycle'] = { frames: presets.slice(0, 4).map(p => ({ face: p, holdMs: 900, blendMs: 150 })) };
         }
-        T['parpadear'] = { frames: [
+        T['blink'] = { frames: [
             { face: 'base', holdMs: 2600, blendMs: 80 },
             { face: 'noface', holdMs: 90, blendMs: 80 },
             { face: 'base', holdMs: 60, blendMs: 80 },
             { face: 'noface', holdMs: 90, blendMs: 80 }
         ] };
-        T['serio ↔ serio_1'] = { frames: [
+        T['serious ↔ serious_1'] = { frames: [
             { face: 'base', holdMs: 1400, blendMs: 300 },
             { face: 'serious_1', holdMs: 1400, blendMs: 300 }
         ] };
@@ -1896,41 +1896,41 @@
         const root = document.createElement('div');
         root.id = ID;
         root.innerHTML = `
-<div class="mff-head"><span class="dot"></span>👀 FACIALES — animaciones de cara en loop
+<div class="mff-head"><span class="dot"></span>👀 FACIALS — looping face animations
     <span style="font-size:10px;color:#8a8a96;font-weight:400">Shift+F</span>
     <button data-act="close" style="margin-left:auto">✕</button></div>
 <div class="mff-tabs">
     <button data-tab="loop" class="on">Loops</button>
-    <button data-tab="auto" title="La cara reacciona a dónde miras + parpadeo random">Auto</button>
-    <button data-tab="packs" title="Packs de skins con caras animadas (builtin + ZIP)">Packs</button>
+    <button data-tab="auto" title="The face reacts to where you look + random blinking">Auto</button>
+    <button data-tab="packs" title="Skin packs with animated faces (builtin + ZIP)">Packs</button>
 </div>
 <div class="mff-body" data-page="loop">
   <div class="mff-left">
-    <div class="mff-sec">Biblioteca</div>
+    <div class="mff-sec">Library</div>
     <div class="mff-list" id="mff-list"></div>
     <div class="mff-pad mff-row">
-      <button id="mff-new" title="Crear nueva facial vacía" style="flex:1">+ Nueva</button>
-      <button id="mff-seed" title="Regenerar plantillas con tus presets dibujados actuales">✨</button>
+      <button id="mff-new" title="Create a new empty facial" style="flex:1">+ New</button>
+      <button id="mff-seed" title="Regenerate templates with your current drawn presets">✨</button>
     </div>
   </div>
   <div class="mff-right">
-    <div class="mff-sec">Editor de keyframes</div>
-    <div class="mff-hint">Cada frame = una cara + cuánto se mantiene + transición. Se repite en loop hasta que pares.</div>
+    <div class="mff-sec">Keyframe editor</div>
+    <div class="mff-hint">Each frame = a face + how long it holds + transition. Loops until you stop.</div>
     <div class="mff-pad mff-row" style="margin-bottom:4px">
-      <select id="mff-face" title="Cara del keyframe"></select>
-      <button id="mff-add" title="Añadir keyframe" style="white-space:nowrap">+ Frame</button>
+      <select id="mff-face" title="Keyframe face"></select>
+      <button id="mff-add" title="Add keyframe" style="white-space:nowrap">+ Frame</button>
     </div>
     <div class="mff-frames" id="mff-frames"></div>
   </div>
 </div>
 <div class="mff-body" data-page="auto" style="display:none">
   <div class="mff-left">
-    <div class="mff-sec">Presets por dirección</div>
-    <div class="mff-hint">Dibuja los sprites en el editor de skin, guárdalos como presets y asígnalos aquí. Gira la cabeza y la cara cambia sola.</div>
+    <div class="mff-sec">Per-direction presets</div>
+    <div class="mff-hint">Draw sprites in the skin editor, save them as presets and assign them here. Turn your head and the face changes on its own.</div>
     <div class="mff-autoform" id="mff-autoform"></div>
   </div>
   <div class="mff-right">
-    <div class="mff-sec">Parpadeo automático</div>
+    <div class="mff-sec">Auto blinking</div>
     <div class="mff-autoform" id="mff-blinkform" style="padding:0 12px"></div>
     <div class="mff-sec">Live</div>
     <div class="mff-pad" id="mff-autolive" style="font:11px 'Consolas',monospace;color:#9a9aa6;line-height:1.8"></div>
@@ -1938,26 +1938,26 @@
 </div>
 <div class="mff-body" data-page="packs" style="display:none">
   <div class="mff-left">
-    <div class="mff-sec">Packs faciales</div>
-    <div class="mff-hint">Cada pack = skin + sprites (frente / izq / der / blink). Si usas su skin, la cara anima sola.</div>
+    <div class="mff-sec">Facial packs</div>
+    <div class="mff-hint">Each pack = skin + sprites (front / left / right / blink). If you wear its skin, the face animates on its own.</div>
     <div class="mff-list" id="mff-packs"></div>
     <div class="mff-pad mff-row">
-      <button id="mff-packimport" title="Importar pack desde un ZIP (pack.json + PNGs)" style="flex:1">📥 Importar ZIP</button>
+      <button id="mff-packimport" title="Import pack from a ZIP (pack.json + PNGs)" style="flex:1">📥 Import ZIP</button>
       <input type="file" id="mff-packfile" accept=".zip" style="display:none">
     </div>
   </div>
   <div class="mff-right">
-    <div class="mff-sec">Pack seleccionado</div>
+    <div class="mff-sec">Selected pack</div>
     <div class="mff-pad" id="mff-packdetail" style="font-size:11px;color:#c8c8d2"></div>
   </div>
 </div>
 <div class="mff-foot">
-  <button id="mff-autotoggle" title="Auto: la cara reacciona al giro de cabeza y parpadea sola">⚡ Auto</button>
-  <button id="mff-save" title="Guardar en la biblioteca">💾 Guardar</button>
-  <button id="mff-play" title="Reproducir en loop">▶ Loop</button>
-  <button id="mff-stop" title="Detener y restaurar">⏹ Stop</button>
+  <button id="mff-autotoggle" title="Auto: the face reacts to head rotation and blinks on its own">⚡ Auto</button>
+  <button id="mff-save" title="Save to library">💾 Save</button>
+  <button id="mff-play" title="Play on loop">▶ Loop</button>
+  <button id="mff-stop" title="Stop and restore">⏹ Stop</button>
   <span id="mff-status" style="font-size:10px;color:#8a8a96;margin-left:auto;align-self:center"></span>
-  <button id="mff-del" title="Eliminar facial en edición">🗑</button>
+  <button id="mff-del" title="Delete the facial being edited">🗑</button>
 </div>
         `;
         document.body.appendChild(root);
@@ -1988,7 +1988,7 @@
     }
 
     function faceOptions() {
-        const opts = [{ v: 'base', t: 'base (tu cabeza actual)' }];
+        const opts = [{ v: 'base', t: 'base (your current head)' }];
         
         for (const pr of (window.MF_SkinEditor?.presets?.() || [])) {
             opts.push({ v: 'p:' + pr.name, t: '✏️ ' + pr.name });
@@ -2000,9 +2000,9 @@
         
         for (const p of packIndex) {
             const nm = (p.name || p.id) + (p.custom ? ' (zip)' : '');
-            opts.push({ v: 'fs:' + p.id + '/' + p.front, t: '📦 ' + nm + ' frente' });
-            opts.push({ v: 'fs:' + p.id + '/' + p.left, t: '📦 ' + nm + ' izquierda' });
-            opts.push({ v: 'fs:' + p.id + '/' + p.right, t: '📦 ' + nm + ' derecha' });
+            opts.push({ v: 'fs:' + p.id + '/' + p.front, t: '📦 ' + nm + ' front' });
+            opts.push({ v: 'fs:' + p.id + '/' + p.left, t: '📦 ' + nm + ' left' });
+            opts.push({ v: 'fs:' + p.id + '/' + p.right, t: '📦 ' + nm + ' right' });
             opts.push({ v: 'fs:' + p.id + '/' + p.blink, t: '📦 ' + nm + ' blink' });
         }
         
@@ -2022,15 +2022,15 @@
         list.innerHTML = '';
         const names = Object.keys(state.library);
         if (!names.length) {
-            list.innerHTML = '<div style="color:#8a8a96;font-size:11px;padding:4px 2px">Sin facials guardadas — usa una plantilla o crea una</div>';
+            list.innerHTML = '<div style="color:#8a8a96;font-size:11px;padding:4px 2px">No saved facials — use a template or create one</div>';
         }
         for (const n of names) {
             const nf = state.library[n]?.frames?.length ?? 0;
             const it = el('div', 'mff-item' + (state.playing === n ? ' on' : '') + (editing === n ? ' editing' : ''));
             it.innerHTML = `<span class="nm">${n}</span><span class="meta">${nf}f</span>
-                <button data-x="edit" title="Editar">✎</button>
-                <button data-x="play" title="Reproducir en loop">▶</button>
-                <button data-x="del" title="Eliminar">✕</button>`;
+                <button data-x="edit" title="Edit">✎</button>
+                <button data-x="play" title="Play on loop">▶</button>
+                <button data-x="del" title="Delete">✕</button>`;
             it.querySelector('[data-x="edit"]').onclick = (e) => { e.stopPropagation(); loadEditor(n); };
             it.querySelector('[data-x="play"]').onclick = (e) => { e.stopPropagation(); play(n); renderUI(); };
             it.querySelector('[data-x="del"]').onclick = (e) => {
@@ -2054,8 +2054,8 @@
         
         const st = root.querySelector('#mff-status');
         if (st) st.textContent = auto.on
-            ? '⚡ auto ' + (state.playing ? '(loop pausado)' : '')
-            : (state.playing ? '▶ ' + state.playing : (editing ? 'editando: ' + editing : 'nada en reproducción'));
+            ? '⚡ auto ' + (state.playing ? '(loop paused)' : '')
+            : (state.playing ? '▶ ' + state.playing : (editing ? 'editing: ' + editing : 'nothing playing'));
         updateAutoToggle();
         
         if (root.querySelector('[data-page="auto"]')?.style.display !== 'none') renderAutoForm();
@@ -2068,23 +2068,23 @@
         if (!root) return;
         const box = root.querySelector('#mff-frames');
         if (!editing || !state.library[editing]) {
-            box.innerHTML = '<div style="color:#8a8a96;font-size:11px;padding:4px 0">Crea una facial (+ Nueva) o selecciona una de la biblioteca para editar sus frames</div>';
+            box.innerHTML = '<div style="color:#8a8a96;font-size:11px;padding:4px 0">Create a facial (+ New) or select one from the library to edit its frames</div>';
             return;
         }
         box.innerHTML = '';
         const frames = state.library[editing].frames;
         if (!frames.length) {
-            box.innerHTML = '<div style="color:#8a8a96;font-size:11px;padding:4px 0">Sin frames — elige una cara y pulsa "+ Frame"</div>';
+            box.innerHTML = '<div style="color:#8a8a96;font-size:11px;padding:4px 0">No frames — pick a face and press "+ Frame"</div>';
             return;
         }
         frames.forEach((f, i) => {
             const row = el('div', 'mff-frame');
             row.innerHTML = `
 <select data-k="face">${faceOptions().map(o => `<option value="${o.v}" ${o.v === f.face ? 'selected' : ''}>${o.t}</option>`).join('')}</select>
-<input data-k="holdMs" type="number" min="20" step="20" value="${f.holdMs ?? 400}" title="Mantener (ms)">
-<input data-k="blendMs" type="number" min="0" step="20" value="${f.blendMs ?? 0}" title="Transición (ms)">
-<img class="thumb" data-thumb="${f.face}" title="Vista previa de la cara" alt="">
-<button data-x="rm" title="Quitar frame">✕</button>`;
+<input data-k="holdMs" type="number" min="20" step="20" value="${f.holdMs ?? 400}" title="Hold (ms)">
+<input data-k="blendMs" type="number" min="0" step="20" value="${f.blendMs ?? 0}" title="Transition (ms)">
+<img class="thumb" data-thumb="${f.face}" title="Face preview" alt="">
+<button data-x="rm" title="Remove frame">✕</button>`;
             row.querySelector('[data-k="face"]').onchange = (e) => { f.face = e.target.value; renderFrames(); };
             row.querySelector('[data-k="holdMs"]').onchange = (e) => { f.holdMs = +e.target.value || 400; };
             row.querySelector('[data-k="blendMs"]').onchange = (e) => { f.blendMs = +e.target.value || 0; };
@@ -2092,7 +2092,7 @@
             box.appendChild(row);
         });
         const total = frames.reduce((s, f) => s + (+f.holdMs || 400) + (+f.blendMs || 0), 0);
-        const tot = el('div', '', `<span style="color:#8a8a96;font-size:10px">ciclo: ${total} ms · ${(1000 / Math.max(1, total)).toFixed(2)} loops/s</span>`);
+        const tot = el('div', '', `<span style="color:#8a8a96;font-size:10px">cycle: ${total} ms · ${(1000 / Math.max(1, total)).toFixed(2)} loops/s</span>`);
         box.appendChild(tot);
         
         fillThumbs(box);
@@ -2118,10 +2118,10 @@
 
     function presetOptions(sel, kind = 'dir') {
         const names = (window.MF_SkinEditor?.presets?.() || []).map(p => p.name);
-        let html = '<option value="" ' + (sel ? '' : 'selected') + '>— (sin cambio)</option>' +
+        let html = '<option value="" ' + (sel ? '' : 'selected') + '>— (no change)</option>' +
             names.map(n => `<option value="${n}" ${n === sel ? 'selected' : ''}>✏️ ${n}</option>`).join('');
         if (packIndex.length) {
-            html += '<optgroup label="Packs faciales">';
+            html += '<optgroup label="Facial packs">';
             for (const p of packIndex) {
                 const front = p.front || 'alfrente';
                 const opts = kind === 'blink'
@@ -2147,7 +2147,7 @@
         if (packSel && !packIndex.some(p => p.id === packSel)) packSel = null;
         list.innerHTML = '';
         if (!packIndex.length) {
-            list.innerHTML = '<div style="color:#8a8a96;font-size:11px;padding:4px 2px">Sin packs — importa un ZIP</div>';
+            list.innerHTML = '<div style="color:#8a8a96;font-size:11px;padding:4px 2px">No packs — import a ZIP</div>';
         }
         for (const p of packIndex) {
             const it = el('div', 'mff-item' + (packSel === p.id ? ' editing' : ''));
@@ -2162,38 +2162,38 @@
         if (det) {
             const p = packIndex.find(x => x.id === packSel);
             if (!p) {
-                det.innerHTML = '<span style="color:#8a8a96">Selecciona un pack de la lista</span>';
+                det.innerHTML = '<span style="color:#8a8a96">Select a pack from the list</span>';
             } else {
                 const cur = currentSkinId();
                 det.innerHTML = `
 <div style="font-weight:700;font-size:13px;margin-bottom:2px">${p.name || p.id}</div>
-<div style="color:#8a8a96;margin-bottom:8px">id: ${p.id}${p.author ? ' · por ' + p.author : ''} · v${p.version || 1} · ${p.server ? 'skin del server (activa al ponértela en el armario)' : p.custom ? 'ZIP importado' : 'custom (mypacks)'}</div>
+<div style="color:#8a8a96;margin-bottom:8px">id: ${p.id}${p.author ? ' · by ' + p.author : ''} · v${p.version || 1} · ${p.server ? 'server skin (activates when you wear it in the wardrobe)' : p.custom ? 'ZIP imported' : 'custom (mypacks)'}</div>
 <div class="mff-row" style="flex-wrap:wrap">
-  <button data-pk="apply" title="Poner la skin del pack (solo builtin)">👕 Usar skin</button>
-  <button data-pk="release" title="Quitar la skin custom y volver a la del server">↩ Quitar skin</button>
-  <button data-pk="auto" title="Activar el modo auto con los sprites de este pack">⚡ Activar</button>
-  <button data-pk="export" title="Descargar el pack como ZIP (pack.json + PNGs)">📤 Exportar ZIP</button>
-  ${p.custom ? '<button data-pk="del" title="Eliminar el pack importado">🗑</button>' : ''}
+  <button data-pk="apply" title="Wear the pack's skin (builtin only)">👕 Use skin</button>
+  <button data-pk="release" title="Remove the custom skin and go back to the server one">↩ Remove skin</button>
+  <button data-pk="auto" title="Enable auto mode with this pack's sprites">⚡ Activate</button>
+  <button data-pk="export" title="Download the pack as a ZIP (pack.json + PNGs)">📤 Export ZIP</button>
+  ${p.custom ? '<button data-pk="del" title="Delete the imported pack">🗑</button>' : ''}
 </div>
-<div style="color:#8a8a96;margin-top:8px;font-size:10px">${cur === p.id ? '✓ esta skin está puesta — la cara anima sola' : 'la cara anima cuando la skin ' + p.id + ' esté en uso'}</div>`;
+<div style="color:#8a8a96;margin-top:8px;font-size:10px">${cur === p.id ? '✓ this skin is worn — the face animates on its own' : 'the face animates when skin ' + p.id + ' is in use'}</div>`;
                 det.querySelector('[data-pk="release"]').onclick = async () => {
                     try {
                         const ok = await releasePackSkin();
-                        if (!ok) alert('no hay skin custom puesta (ya estás con la del server)');
+                        if (!ok) alert('no custom skin worn (you\'re already on the server one)');
                         renderPacksTab();
-                    } catch (e) { alert('no se pudo quitar: ' + e.message); }
+                    } catch (e) { alert('could not remove: ' + e.message); }
                 };
                 det.querySelector('[data-pk="apply"]').onclick = async () => {
                     if (p.server) {
                         
-                        alert('"' + (p.name || p.id) + '" es una skin del server:\nponla desde el armario del juego (dressing room).\nLa cara animada se activa sola al detectar la skin.');
+                        alert('"' + (p.name || p.id) + '" is a server skin:\nput it on from the game\'s wardrobe (dressing room).\nThe animated face activates on its own when the skin is detected.');
                         return;
                     }
                     try {
                         
                         await applyPackSkinToGame(p.id);
                         renderPacksTab();
-                    } catch (e) { alert('no se pudo aplicar: ' + e.message); }
+                    } catch (e) { alert('could not apply: ' + e.message); }
                 };
                 det.querySelector('[data-pk="auto"]').onclick = async () => {
                     
@@ -2218,7 +2218,7 @@
                 };
                 const del = det.querySelector('[data-pk="del"]');
                 if (del) del.onclick = async () => {
-                    if (!confirm('¿Eliminar el pack "' + (p.name || p.id) + '"?')) return;
+                    if (!confirm('Delete pack "' + (p.name || p.id) + '"?')) return;
                     await packsDbDel(p.id);
                     customPacks.delete(p.id);
                     if (skinWatch.lastApplied === p.id) skinWatch.lastApplied = null;
@@ -2237,15 +2237,15 @@
 <div class="mff-field"><label>${label}</label>
 <select data-auto="${key}">${presetOptions(auto[key])}</select></div>`;
             form.innerHTML =
-                field('front', '⬆ frente') +
-                field('left', '⬅ mirar izq') +
-                field('right', '➡ mirar der') +
-                field('up', '⬆ mirar arriba') +
-                field('down', '⬇ mirar abajo') +
-                `<div class="mff-field"><label>umbral giro</label>
-<input type="number" min="5" max="120" step="5" value="${auto.yawThreshold}" data-auton="yawThreshold" title="Grados de yaw para activar (default 10)"></div>` +
-                `<div class="mff-field"><label>umbral vert</label>
-<input type="number" min="5" max="80" step="5" value="${auto.pitchThreshold}" data-auton="pitchThreshold" title="Grados de pitch para activar (default 10)"></div>`;
+                field('front', '⬆ front') +
+                field('left', '⬅ look left') +
+                field('right', '➡ look right') +
+                field('up', '⬆ look up') +
+                field('down', '⬇ look down') +
+                `<div class="mff-field"><label>turn threshold</label>
+<input type="number" min="5" max="120" step="5" value="${auto.yawThreshold}" data-auton="yawThreshold" title="Yaw degrees to activate (default 10)"></div>` +
+                `<div class="mff-field"><label>vert threshold</label>
+<input type="number" min="5" max="80" step="5" value="${auto.pitchThreshold}" data-auton="pitchThreshold" title="Pitch degrees to activate (default 10)"></div>`;
             form.querySelectorAll('[data-auto]').forEach(s => s.onchange = () => {
                 auto[s.dataset.auto] = s.value; saveAuto();
                 auto._zone = null; 
@@ -2258,24 +2258,24 @@
         if (bf) {
             bf.innerHTML = `
 <div class="mff-check"><input type="checkbox" id="mff-blinkon" ${auto.blink ? 'checked' : ''}>
-  <label for="mff-blinkon">Parpadear solo con intervalo random</label></div>
-<div class="mff-field"><label>ojos cerrados</label>
+  <label for="mff-blinkon">Blink only at random intervals</label></div>
+<div class="mff-field"><label>closed eyes</label>
 <select data-auto="blinkClosed">${presetOptions(auto.blinkClosed, 'blink')}</select></div>
-<div class="mff-field"><label>cada mín (s)</label>
+<div class="mff-field"><label>every min (s)</label>
 <input type="number" min="0.5" max="30" step="0.5" value="${(auto.blinkMinMs / 1000).toFixed(1)}" data-blink="min"></div>
-<div class="mff-field"><label>cada máx (s)</label>
+<div class="mff-field"><label>every max (s)</label>
 <input type="number" min="1" max="60" step="0.5" value="${(auto.blinkMaxMs / 1000).toFixed(1)}" data-blink="max"></div>
 <div class="mff-check"><input type="checkbox" id="mff-browon" ${auto.brow ? 'checked' : ''}>
-  <label for="mff-browon">🤨 levantar la ceja al ver un "?" en el chat</label></div>
-<div class="mff-field"><label>ceja (opcional)</label>
-<select data-auto="browFace">${presetOptions(auto.browFace, 'ceja')}</select></div>
-<div class="mff-field"><label>duración (s)</label>
+  <label for="mff-browon">🤨 raise the brow when a "?" appears in chat</label></div>
+<div class="mff-field"><label>brow (optional)</label>
+<select data-auto="browFace">${presetOptions(auto.browFace, 'brow')}</select></div>
+<div class="mff-field"><label>duration (s)</label>
 <input type="number" min="0.3" max="5" step="0.1" value="${(auto.browMs / 1000).toFixed(1)}" data-brow="ms"></div>
 <div class="mff-check"><input type="checkbox" id="mff-otherson" ${others.on ? 'checked' : ''}>
-  <label for="mff-otherson">👥 animar a otros (blink local, machinima)</label></div>
-<div class="mff-field"><label>otros mín (s)</label>
+  <label for="mff-otherson">👥 animate others (local blink, machinima)</label></div>
+<div class="mff-field"><label>others min (s)</label>
 <input type="number" min="0.5" max="30" step="0.5" value="${(others.intervalMinMs / 1000).toFixed(1)}" data-others="min"></div>
-<div class="mff-field"><label>otros máx (s)</label>
+<div class="mff-field"><label>others max (s)</label>
 <input type="number" min="1" max="60" step="0.5" value="${(others.intervalMaxMs / 1000).toFixed(1)}" data-others="max"></div>`;
             const chk = bf.querySelector('#mff-blinkon');
             if (chk) chk.onchange = () => { auto.blink = chk.checked; saveAuto(); };
@@ -2325,14 +2325,14 @@
         if (a) {
             rows.push('rel: ' + a.yaw.toFixed(0) + '° / ' + a.pitch.toFixed(0) + '° · abs: ' + a.absYaw.toFixed(0) + '° / ' + a.absPitch.toFixed(0) + '°');
             const z = zoneOf(a);
-            const preset = z === 'front' ? (auto.front || '(frente actual)') : (auto[z] || '(sin preset)');
-            rows.push('zona: ' + z + ' → ' + preset);
+            const preset = z === 'front' ? (auto.front || '(current front)') : (auto[z] || '(no preset)');
+            rows.push('zone: ' + z + ' → ' + preset);
         } else {
-            rows.push('(entra al mundo para ver ángulos)');
+            rows.push('(enter a world to see angles)');
         }
         if (auto.blink) {
             const next = Math.max(0, (auto._nextBlink - performance.now()) / 1000).toFixed(1);
-            rows.push('próx parpadeo: ' + (auto.on ? next + ' s' : '—'));
+            rows.push('next blink: ' + (auto.on ? next + ' s' : '—'));
         }
         live.innerHTML = rows.join('<br>');
         if (auto.on && root && !root.dataset.autoLiveRaf) {
@@ -2355,12 +2355,12 @@
         if (a) {
             rows.push('rel: ' + a.yaw.toFixed(0) + '° / ' + a.pitch.toFixed(0) + '° · abs: ' + a.absYaw.toFixed(0) + '° / ' + a.absPitch.toFixed(0) + '°');
             const z = zoneOf(a);
-            const preset = z === 'front' ? (auto.front || '(frente actual)') : (auto[z] || '(sin preset)');
-            rows.push('zona: ' + z + ' → ' + preset);
+            const preset = z === 'front' ? (auto.front || '(current front)') : (auto[z] || '(no preset)');
+            rows.push('zone: ' + z + ' → ' + preset);
         }
         if (auto.blink && auto.on) {
             const next = Math.max(0, (auto._nextBlink - performance.now()) / 1000).toFixed(1);
-            rows.push('próx parpadeo: ' + next + ' s');
+            rows.push('next blink: ' + next + ' s');
         }
         live.innerHTML = rows.join('<br>');
     }
@@ -2403,28 +2403,28 @@
             updateAutoToggle();
         };
         root.querySelector('#mff-new').onclick = () => {
-            const n = prompt('Nombre de la nueva facial:', 'mi facial');
+            const n = prompt('New facial name:', 'my facial');
             if (!n) return;
-            if (state.library[n]) { alert('ya existe'); return; }
+            if (state.library[n]) { alert('already exists'); return; }
             state.library[n] = { frames: [] };
             saveLibrary();
             editing = n;
             renderUI();
         };
         root.querySelector('#mff-add').onclick = () => {
-            if (!ensureEditing()) { alert('crea una facial primero con "+ Nueva"'); return; }
+            if (!ensureEditing()) { alert('create a facial first with "+ New"'); return; }
             const face = root.querySelector('#mff-face').value || 'base';
             state.library[editing].frames.push({ face, holdMs: 400, blendMs: 0 });
             saveLibrary();
             renderUI();
         };
         root.querySelector('#mff-save').onclick = () => {
-            if (!ensureEditing()) { alert('crea una facial primero'); return; }
+            if (!ensureEditing()) { alert('create a facial first'); return; }
             saveLibrary();
             renderUI();
         };
         root.querySelector('#mff-play').onclick = async () => {
-            if (!ensureEditing()) { alert('crea una facial primero'); return; }
+            if (!ensureEditing()) { alert('create a facial first'); return; }
             const r = await play(editing);
             if (!r.ok) alert(r.error);
             renderUI();
@@ -2450,17 +2450,17 @@
                 const f = pfile.files?.[0];
                 pfile.value = '';
                 if (!f) return;
-                pbtn.textContent = '⏳ importando…';
+                pbtn.textContent = '⏳ importing…';
                 pbtn.disabled = true;
                 try {
                     const p = await importPackZip(f);
                     packSel = p.id;
                     renderPacksTab();
-                    alert('pack "' + (p.name || p.id) + '" importado ✓\n(skin aplicada y cara animada activa)');
+                    alert('pack "' + (p.name || p.id) + '" imported ✓\n(skin applied and animated face active)');
                 } catch (e) {
                     alert('import ZIP: ' + e.message);
                 } finally {
-                    pbtn.textContent = '📥 Importar ZIP';
+                    pbtn.textContent = '📥 Import ZIP';
                     pbtn.disabled = false;
                 }
             };
@@ -2538,7 +2538,7 @@
             if (pngUrl) {
                 packSkinReg[MF_NAME_PREFIX + name] = pngUrl;
             } else if (!registerPackSkin(name)) {
-                throw new Error('el pack "' + name + '" no tiene skin PNG');
+                throw new Error('the pack "' + name + '" has no PNG skin');
             }
             installPackImgHook();
             return applyPackSkinToGame(name);

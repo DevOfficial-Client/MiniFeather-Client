@@ -64,10 +64,10 @@
                     state.faceCache.set(name, { img, canvas: c });
                     resolve(c);
                 };
-                img.onerror = () => reject(new Error('no se pudo cargar "' + name + '.png" (' + url + ')'));
+                img.onerror = () => reject(new Error('could not load "' + name + '.png" (' + url + ')'));
                 img.src = url;
             })
-            : Promise.reject(new Error('sin base de assets de la extensión (¿estás en la página del juego?)'));
+            : Promise.reject(new Error('no extension asset base (are you on the game page?)'));
         if (!state.faceCache.has(name)) state.faceCache.set(name, { promise });
         return promise;
     }
@@ -127,14 +127,14 @@
     }
 
     async function applyFace(faceName, opts = {}) {
-        if (!state.enabled) throw new Error('FaceSwap deshabilitado');
+        if (!state.enabled) throw new Error('FaceSwap disabled');
         const game = getGame();
-        if (!game?.player?.mesh) throw new Error('jugador/mesh no disponible todavía');
+        if (!game?.player?.mesh) throw new Error('player/mesh not available yet');
         const mesh = opts.mesh || game.player.mesh;
 
         const faceCanvas = await (loadExternalFace(faceName) || loadFaceImage(faceName));
         const mat = findSkinMaterial(mesh);
-        if (!mat?.map) throw new Error('no se encontró material de skin en el mesh');
+        if (!mat?.map) throw new Error('no skin material found on mesh');
 
         if (!state.originals.has(mesh)) {
             const origCanvas = mat.map.image instanceof HTMLCanvasElement
@@ -151,7 +151,7 @@
         }
 
         const base = skinCanvasFromTexture(mat.map);
-        if (!base) throw new Error('no se pudo leer la skin actual (formato de textura no soportado)');
+        if (!base) throw new Error('could not read current skin (texture format not supported)');
 
         const tex = mat.map;
         const tcanvas = tex.image instanceof HTMLCanvasElement ? tex.image : null;
@@ -196,9 +196,9 @@
     function revertFace(opts = {}) {
         const game = getGame();
         const mesh = opts.mesh || game?.player?.mesh;
-        if (!mesh) return { ok: false, error: 'sin mesh' };
+        if (!mesh) return { ok: false, error: 'no mesh' };
         const saved = state.originals.get(mesh);
-        if (!saved) return { ok: false, error: 'no había cambio pendiente' };
+        if (!saved) return { ok: false, error: 'no pending change' };
         const mat = findSkinMaterial(mesh);
         if (mat) {
             if (saved.canvas && mat.map?.image instanceof HTMLCanvasElement) {
@@ -371,7 +371,7 @@
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => resolve(img);
-            img.onerror = () => reject(new Error('no se pudo cargar imagen'));
+            img.onerror = () => reject(new Error('could not load image'));
             img.src = url;
         });
     }

@@ -74,7 +74,7 @@
             defaults: { target: { x: 0, y: 0, z: 0 }, keepPos: true },
         },
         shake: {
-            label: 'Sacudida', icon: '🌀', overwrite: false, layer: 4,
+            label: 'Shake', icon: '🌀', overwrite: false, layer: 4,
             defaults: { freq: 2, amount: 0.4, mask: { x: false, y: false, z: false, yaw: true, pitch: true, roll: false, fov: false } },
         },
         translate: {
@@ -82,8 +82,8 @@
             defaults: { offset: { x: 0, y: 0, z: 0 }, addYaw: 0, addPitch: 0 },
         },
         subtitle: {
-            label: 'Subtítulo', icon: '💬', overwrite: false, layer: 9,
-            defaults: { text: 'Texto…', size: 20, x: 0.5, y: 0.85, color: '#ffffff', background: true },
+            label: 'Subtitle', icon: '💬', overwrite: false, layer: 9,
+            defaults: { text: 'Text…', size: 20, x: 0.5, y: 0.85, color: '#ffffff', background: true },
         },
         audio: {
             label: 'Audio', icon: '🔊', overwrite: false, layer: 10,

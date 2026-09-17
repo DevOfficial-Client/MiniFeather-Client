@@ -108,9 +108,9 @@
 
     function delKey(part, channel, t) {
         const arr = keysOf(part, channel);
-        if (!arr) return { ok: false, error: 'sin keyframes' };
+        if (!arr) return { ok: false, error: 'no keyframes' };
         const i = arr.findIndex(k => Math.abs(k.t - t) < 0.001);
-        if (i < 0) return { ok: false, error: 'no hay keyframe en ' + t + 's' };
+        if (i < 0) return { ok: false, error: 'no keyframe at ' + t + 's' };
         arr.splice(i, 1);
         persist();
         return { ok: true };
@@ -277,7 +277,7 @@
     }
 
     function snapKey(part, opts) {
-        if (!state.cur) return { ok: false, error: 'abre o crea una animación primero' };
+        if (!state.cur) return { ok: false, error: 'open or create an animation first' };
         const written = [];
         const mirror = opts?.mirror ?? state.mirror;
         for (const p of (part ? [part] : ALL_PARTS())) {

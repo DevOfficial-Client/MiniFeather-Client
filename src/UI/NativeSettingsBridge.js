@@ -80,63 +80,63 @@
   // Cada entry de modules: { key } toggle | { link } abre panel MF | { custom } función
   const TABS = [
     {
-      id: 'mf-dashboard', icon: 'home', label: 'MF Inicio',
+      id: 'mf-dashboard', icon: 'home', label: 'MF Home',
       header: 'MiniFeather',
       sections: [
         {
-          title: 'Accesos rápidos',
-          description: 'Abre el panel completo de MiniFeather en cada sección.',
+          title: 'Quick access',
+          description: 'Opens the full MiniFeather panel on each section.',
           modules: [
-            { link: 'dashboard', linkLabel: 'Abrir' },
-            { link: 'settings', linkLabel: 'Abrir' },
-            { link: 'about', linkLabel: 'Abrir' }
+            { link: 'dashboard', linkLabel: 'Open' },
+            { link: 'settings', linkLabel: 'Open' },
+            { link: 'about', linkLabel: 'Open' }
           ]
         },
         {
           title: 'General',
-          description: 'Opciones globales del client.',
+          description: 'Global client options.',
           modules: [
-            { key: 'rebrand', label: 'Rebrand (logo MF)' },
-            { key: 'discord', label: 'Redirect a Discord' },
-            { key: 'supportAds', label: 'Soportar anuncios' }
+            { key: 'rebrand', label: 'Rebrand (MF logo)' },
+            { key: 'discord', label: 'Discord redirect' },
+            { key: 'supportAds', label: 'Support ads' }
           ]
         }
       ]
     },
     {
       id: 'mf-hud', icon: 'hud', label: 'MF HUD',
-      header: 'HUD de MiniFeather',
+      header: 'MiniFeather HUD',
       sections: [
         {
           title: 'Overlays',
-          description: 'Información en pantalla.',
+          description: 'On-screen information.',
           modules: [
             { key: 'keystrokes', label: 'Keystrokes' },
-            { key: 'fpsCounter', label: 'Contador de FPS' },
-            { key: 'cpsCounter', label: 'Contador de CPS' },
-            { key: 'pingCounter', label: 'Contador de ping' },
+            { key: 'fpsCounter', label: 'FPS counter' },
+            { key: 'cpsCounter', label: 'CPS counter' },
+            { key: 'pingCounter', label: 'Ping counter' },
             { key: 'armorHud', label: 'Armor HUD' },
-            { key: 'coordinates', label: 'Coordenadas' },
+            { key: 'coordinates', label: 'Coordinates' },
             { key: 'guiPatch', label: 'GUI Patch' },
-            { key: 'dynamicCrosshair', label: 'Crosshair dinámico' }
+            { key: 'dynamicCrosshair', label: 'Dynamic crosshair' }
           ]
         },
         {
           title: 'Waypoints',
-          description: 'Marcadores en el mundo.',
+          description: 'Markers in the world.',
           modules: [
-            { link: 'waypoints', linkLabel: 'Configurar' }
+            { link: 'waypoints', linkLabel: 'Configure' }
           ]
         }
       ]
     },
     {
       id: 'mf-render', icon: 'render', label: 'MF Render',
-      header: 'Render de MiniFeather',
+      header: 'MiniFeather Render',
       sections: [
         {
-          title: 'Cámara',
-          description: 'Zoom, cámara libre y overhaul.',
+          title: 'Camera',
+          description: 'Zoom, free camera and overhaul.',
           modules: [
             { key: 'zoom', label: 'Zoom' },
             { key: 'freecam', label: 'Freecam' },
@@ -146,8 +146,8 @@
           ]
         },
         {
-          title: 'Jugadores y mobs',
-          description: 'Tags, capas y animaciones.',
+          title: 'Players and mobs',
+          description: 'Tags, layers and animations.',
           modules: [
             { key: 'titanTiny', label: 'Titan/Tiny' },
             { key: 'betterPlayerLayers', label: 'Better Player Layers' },
@@ -158,8 +158,8 @@
           ]
         },
         {
-          title: 'Mundo',
-          description: 'Físicas y efectos del entorno.',
+          title: 'World',
+          description: 'Physics and environment effects.',
           modules: [
             { key: 'damageParticles', label: 'Damage Particles' },
             { key: 'waterSplash', label: 'Water Splash' },
@@ -173,39 +173,39 @@
       ]
     },
     {
-      id: 'mf-music', icon: 'music', label: 'MF Música',
-      header: 'YouTube Music de MiniFeather',
+      id: 'mf-music', icon: 'music', label: 'MF Music',
+      header: 'MiniFeather YouTube Music',
       sections: [
         {
           title: 'YouTube Music',
-          description: 'Reproductor integrado en el juego.',
+          description: 'In-game music player.',
           modules: [
-            { link: 'youtubeMusic', linkLabel: 'Abrir reproductor' }
+            { link: 'youtubeMusic', linkLabel: 'Open player' }
           ]
         }
       ]
     },
     {
       id: 'mf-shaders', icon: 'shaders', label: 'MF Shaders',
-      header: 'Shaders de MiniFeather',
+      header: 'MiniFeather Shaders',
       sections: [
         {
           title: 'Shaders',
-          description: 'Shaders personalizados del client.',
+          description: 'Custom client shaders.',
           modules: [
-            { key: 'customShader', label: 'Shader activo' },
-            { link: 'shaders', linkLabel: 'Elegir shader' }
+            { key: 'customShader', label: 'Active shader' },
+            { link: 'shaders', linkLabel: 'Choose shader' }
           ]
         }
       ]
     },
     {
       id: 'mf-experimental', icon: 'flask', label: 'MF Experimental',
-      header: 'Experimental de MiniFeather',
+      header: 'MiniFeather Experimental',
       sections: [
         {
-          title: 'Experimentos',
-          description: 'Funciones en desarrollo. Los toggles viven en el registro experimental.',
+          title: 'Experiments',
+          description: 'Work-in-progress features. Toggles live in the experimental registry.',
           modules: [
             { key: 'experimentalRealistic', label: 'Realistic' },
             { key: 'experimentalAurora', label: 'Aurora' },
@@ -216,31 +216,31 @@
             { key: 'experimentalAnimatedItems', label: 'Animated Items' },
             { key: 'experimentalBetterAnimationCape', label: 'Better Animation Cape' },
             { key: 'experimentalPbr', label: 'PBR' },
-            { link: 'experimental', linkLabel: 'Niveles y más' }
+            { link: 'experimental', linkLabel: 'Levels and more' }
           ]
         }
       ]
     },
     {
-      id: 'mf-cosmetics', icon: 'shirt', label: 'MF Cosméticos',
-      header: 'Cosméticos de MiniFeather',
+      id: 'mf-cosmetics', icon: 'shirt', label: 'MF Cosmetics',
+      header: 'MiniFeather Cosmetics',
       sections: [
         {
-          title: 'Skins y capas',
-          description: 'Gestión de skins y capas propias.',
+          title: 'Skins and capes',
+          description: 'Manage your own skins and capes.',
           modules: [
-            { link: 'cosmetics', linkLabel: 'Abrir' }
+            { link: 'cosmetics', linkLabel: 'Open' }
           ]
         }
       ]
     },
     {
       id: 'mf-chat', icon: 'chat', label: 'MF Chat',
-      header: 'Chat de MiniFeather',
+      header: 'MiniFeather Chat',
       sections: [
         {
-          title: 'Mejoras del chat',
-          description: 'Videos, links y memes en el chat.',
+          title: 'Chat enhancements',
+          description: 'Videos, links and memes in chat.',
           modules: [
             { key: 'chatVideos', label: 'Chat Videos' },
             { key: 'chatLinks', label: 'Chat Links' },
@@ -252,24 +252,24 @@
     },
     {
       id: 'mf-waypoints', icon: 'pin', label: 'MF Waypoints',
-      header: 'Waypoints de MiniFeather',
+      header: 'MiniFeather Waypoints',
       sections: [
         {
           title: 'Waypoints',
-          description: 'Marcadores persistentes en el mundo.',
+          description: 'Persistent markers in the world.',
           modules: [
-            { link: 'waypoints', linkLabel: 'Gestionar waypoints' }
+            { link: 'waypoints', linkLabel: 'Manage waypoints' }
           ]
         }
       ]
     },
     {
-      id: 'mf-movement', icon: 'shoe', label: 'MF Movimiento',
-      header: 'Movimiento de MiniFeather',
+      id: 'mf-movement', icon: 'shoe', label: 'MF Movement',
+      header: 'MiniFeather Movement',
       sections: [
         {
-          title: 'Automatizaciones',
-          description: 'Movimiento asistido.',
+          title: 'Automations',
+          description: 'Assisted movement.',
           modules: [
             { key: 'autoSprint', label: 'Auto Sprint' },
             { key: 'safeSneak', label: 'Safe Sneak' },
@@ -279,40 +279,40 @@
       ]
     },
     {
-      id: 'mf-world', icon: 'world', label: 'MF Mundo',
-      header: 'Mundo de MiniFeather',
+      id: 'mf-world', icon: 'world', label: 'MF World',
+      header: 'MiniFeather World',
       sections: [
         {
-          title: 'Automatizaciones',
-          description: 'Acciones dentro del mundo.',
+          title: 'Automations',
+          description: 'In-world actions.',
           modules: [
             { key: 'autoRespawn', label: 'Auto Respawn' },
             { key: 'rhythmParkour', label: 'Rhythm Parkour' }
           ]
         },
         {
-          title: 'Mundos locales',
-          description: 'Servidores locales y mundo global.',
+          title: 'Local worlds',
+          description: 'Local servers and the global world.',
           modules: [
-            { link: 'world', linkLabel: 'Mundos locales' },
+            { link: 'world', linkLabel: 'Local worlds' },
             { custom: 'global-world', label: 'Global World' }
           ]
         }
       ]
     },
     {
-      id: 'mf-settings', icon: 'gear', label: 'MF Ajustes',
-      header: 'Ajustes de MiniFeather',
+      id: 'mf-settings', icon: 'gear', label: 'MF Settings',
+      header: 'MiniFeather Settings',
       sections: [
         {
           title: 'General',
-          description: 'Preferencias del client.',
+          description: 'Client preferences.',
           modules: [
             { key: 'rebrand', label: 'Rebrand' },
-            { key: 'discord', label: 'Redirect a Discord' },
-            { key: 'supportAds', label: 'Soportar anuncios' },
-            { key: 'startupAnimation', label: 'Animación de inicio' },
-            { link: 'settings', linkLabel: 'Más ajustes' }
+            { key: 'discord', label: 'Discord redirect' },
+            { key: 'supportAds', label: 'Support ads' },
+            { key: 'startupAnimation', label: 'Startup animation' },
+            { link: 'settings', linkLabel: 'More settings' }
           ]
         }
       ]
@@ -323,9 +323,9 @@
       sections: [
         {
           title: 'MiniFeather Client',
-          description: 'Extensión no oficial para Miniblox. Panel completo: Shift derecho.',
+          description: 'Unofficial extension for Miniblox. Full panel: Right Shift.',
           modules: [
-            { link: 'about', linkLabel: 'Ver info completa' }
+            { link: 'about', linkLabel: 'View full info' }
           ]
         }
       ]
@@ -404,7 +404,7 @@
       btn.setAttribute('aria-checked', on ? 'true' : 'false');
       const txt = document.createElement('p');
       txt.className = NATIVE.switchLabel;
-      txt.textContent = on ? 'Activado' : 'Desactivado';
+      txt.textContent = on ? 'Enabled' : 'Disabled';
       const knob = document.createElement('div');
       knob.className = on ? NATIVE.switchKnob : NATIVE.switchKnobOff;
       btn.textContent = '';
@@ -471,15 +471,15 @@
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = NATIVE.actionButton;
-      btn.textContent = 'Unirse';
+      btn.textContent = 'Join';
       btn.addEventListener('click', event => {
         event.preventDefault();
         event.stopPropagation();
         document.dispatchEvent(new CustomEvent('minifeather:localgames-command', {
           detail: JSON.stringify({ action: 'join-global', enabled: true })
         }));
-        btn.textContent = '⏳ Uniéndose...';
-        setTimeout(() => { if (btn.isConnected) btn.textContent = 'Unirse'; }, 2500);
+        btn.textContent = '⏳ Joining...';
+        setTimeout(() => { if (btn.isConnected) btn.textContent = 'Join'; }, 2500);
       });
       wrap.appendChild(btn);
       row.appendChild(wrap);

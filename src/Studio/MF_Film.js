@@ -161,10 +161,10 @@
     }
 
     function startRecording() {
-        if (state.recording) return { ok: false, error: 'ya está grabando' };
+        if (state.recording) return { ok: false, error: 'already recording' };
         const game = getGame();
         const ent = getLocalPlayerEntity(game);
-        if (!ent) return { ok: false, error: 'jugador/mesh no disponible (¿estás en partida?)' };
+        if (!ent) return { ok: false, error: 'player/mesh not available (are you in a game?)' };
         state.recording = true;
         state.recStart = performance.now();
         state.recTick = 0;
@@ -176,7 +176,7 @@
     }
 
     function stopRecording() {
-        if (!state.recording) return { ok: false, error: 'no está grabando' };
+        if (!state.recording) return { ok: false, error: 'not recording' };
         clearInterval(state.recTimer);
         state.recTimer = null;
         state.recording = false;
@@ -199,11 +199,11 @@
     function persistFilms() {
         try {
             const json = JSON.stringify(state.films);
-            if (json.length > LS_LIMIT) return { ok: false, error: 'límite de almacenamiento (' + (LS_LIMIT / 1048576).toFixed(0) + 'MB) alcanzado: exporta y borra tomas viejas' };
+            if (json.length > LS_LIMIT) return { ok: false, error: 'storage limit (' + (LS_LIMIT / 1048576).toFixed(0) + 'MB) reached: export and delete old takes' };
             localStorage.setItem(LS_KEY, json);
             return { ok: true };
         } catch (e) {
-            return { ok: false, error: 'no se pudo guardar (¿quota?): ' + (e?.message || e) };
+            return { ok: false, error: 'could not save (quota?): ' + (e?.message || e) };
         }
     }
 
@@ -211,7 +211,7 @@
         const game = getGame();
         return {
             version: 1,
-            name: name || ('toma-' + new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')),
+            name: name || ('take-' + new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')),
             fps: TPS,
             durationTicks: state.recTick,
             recordedAt: Date.now(),
@@ -226,7 +226,7 @@
     }
 
     function saveFilm(name) {
-        if (!state.frames.length) return { ok: false, error: 'no hay toma en memoria (graba primero)' };
+        if (!state.frames.length) return { ok: false, error: 'no take in memory (record first)' };
         const films = loadFilms();
         const film = currentTakeAsFilm(name);
         films[film.name] = film;
@@ -237,7 +237,7 @@
 
     function deleteFilm(name) {
         const films = loadFilms();
-        if (!(name in films)) return { ok: false, error: 'no existe "' + name + '"' };
+        if (!(name in films)) return { ok: false, error: 'does not exist "' + name + '"' };
         delete films[name];
         state.films = films;
         const r = persistFilms();
@@ -247,7 +247,7 @@
     function exportFilm(name) {
         const films = loadFilms();
         const film = name ? films[name] : (state.frames.length ? currentTakeAsFilm(name) : null);
-        if (!film) return { ok: false, error: 'toma no encontrada (ni en memoria ni guardada)' };
+        if (!film) return { ok: false, error: 'take not found (neither in memory nor saved)' };
         const blob = new Blob([JSON.stringify(film)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -258,12 +258,12 @@
     }
 
     function importFilm(name, data) {
-        if (!data || typeof data !== 'object') return { ok: false, error: 'datos inválidos' };
+        if (!data || typeof data !== 'object') return { ok: false, error: 'invalid data' };
         if (!Array.isArray(data.actors) || !data.actors.length) {
-            return { ok: false, error: 'formato .mffilm.json no reconocido (sin actors)' };
+            return { ok: false, error: '.mffilm.json format not recognized (no actors)' };
         }
         const films = loadFilms();
-        const finalName = name || data.name || ('importado-' + Date.now());
+        const finalName = name || data.name || ('imported-' + Date.now());
         const film = {
             ...data,
             name: finalName,
@@ -515,7 +515,7 @@
         const film = name
             ? films[name] || null
             : (state.frames.length ? currentTakeAsFilm(null) : null);
-        if (!film) return { ok: false, error: 'toma no encontrada (graba o indica nombre de /film list)' };
+        if (!film) return { ok: false, error: 'take not found (record one or specify a name from /film list)' };
 
         let r = range || state.playRange;
         if (r && typeof r === 'object') {
@@ -547,7 +547,7 @@
     function playSequence(clips) {
         if (state.playing) stopPlayback();
         if (!Array.isArray(clips) || !clips.length) {
-            return { ok: false, error: 'la secuencia está vacía — arrastra tomas al timeline' };
+            return { ok: false, error: 'sequence is empty — drag takes to the timeline' };
         }
         const films = loadFilms();
         
@@ -561,7 +561,7 @@
                 duration: Math.max(1, Math.min(c.duration, film.durationTicks))
             });
         }
-        if (!items.length) return { ok: false, error: 'ningún clip del timeline existe en la biblioteca' };
+        if (!items.length) return { ok: false, error: 'no timeline clip exists in the library' };
         items.sort((a, b) => a.start - b.start);
 
         state.playing = true;
@@ -630,7 +630,7 @@
     }
 
     function pausePlayback() {
-        if (!state.playing || state.paused) return { ok: false, error: 'no está reproduciendo' };
+        if (!state.playing || state.paused) return { ok: false, error: 'not playing' };
         state.paused = true;
         state.playTickBase += (performance.now() - state.playStart) / TICK_MS;
         cancelAnimationFrame(state.playRaf);
@@ -638,7 +638,7 @@
     }
 
     function resumePlayback() {
-        if (!state.playing || !state.paused) return { ok: false, error: 'no está pausado' };
+        if (!state.playing || !state.paused) return { ok: false, error: 'not paused' };
         state.paused = false;
         state.playStart = performance.now();
         

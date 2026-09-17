@@ -145,9 +145,9 @@
         const tb = el('div');
         tb.id = 'mft-toolbar';
         tb.innerHTML = `
-            <button id="mft-zoom-out" title="Alejar">−</button>
-            <button id="mft-zoom-in" title="Acercar">+</button>
-            <button id="mft-zoom-fit" title="Ajustar a la secuencia">Ajustar</button>
+            <button id="mft-zoom-out" title="Zoom out">−</button>
+            <button id="mft-zoom-in" title="Zoom in">+</button>
+            <button id="mft-zoom-fit" title="Fit to sequence">Fit</button>
             <span style="opacity:.35">|</span>
             <label style="cursor:pointer"><input type="checkbox" id="mft-snap" checked> Snap</label>
             <span id="mft-info" style="color:#6e6e7a"></span>
@@ -370,13 +370,13 @@
         drawRuler(); 
 
         const v1 = el('div', 'mft-track');
-        v1.innerHTML = '<span class="label">V1 · Tomas</span>';
+        v1.innerHTML = '<span class="label">V1 · Takes</span>';
         const lane1 = el('div', 'mft-lane');
         for (const clip of state.clips) lane1.appendChild(renderClip(clip));
         v1.appendChild(lane1);
 
         const v2 = el('div', 'mft-track');
-        v2.innerHTML = '<span class="label">V2 · Caras</span>';
+        v2.innerHTML = '<span class="label">V2 · Faces</span>';
         const lane2 = el('div', 'mft-lane');
         (window.MF_FaceSwap?.triggers || []).forEach((t, i) => {
             lane2.appendChild(renderTriggerClip(t, i));
@@ -384,7 +384,7 @@
         v2.appendChild(lane2);
 
         const cam = el('div', 'mft-track');
-        cam.innerHTML = '<span class="label">CAM · Cámara</span>';
+        cam.innerHTML = '<span class="label">CAM · Camera</span>';
         const laneCam = el('div', 'mft-lane');
         (window.MF_FilmCamera?.clips || []).forEach((c) => {
             if (c.type !== 'subtitle' && c.type !== 'audio') laneCam.appendChild(renderCamClip(c));
@@ -392,7 +392,7 @@
         cam.appendChild(laneCam);
 
         const sub = el('div', 'mft-track');
-        sub.innerHTML = '<span class="label">SUB/A1 · Texto y audio</span>';
+        sub.innerHTML = '<span class="label">SUB/A1 · Text and audio</span>';
         const laneSub = el('div', 'mft-lane');
         (window.MF_FilmCamera?.clips || []).forEach((c) => {
             if (c.type === 'subtitle' || c.type === 'audio') laneSub.appendChild(renderCamClip(c));
@@ -465,9 +465,9 @@
             <span class="len">${((t.durationTicks || TPS) / TPS).toFixed(1)}s</span>
             <div class="grip r" data-edge="r"></div>
         `;
-        div.title = `${isHead ? 'Preset de cabeza' : isSkin ? 'Skin PNG: ' + label : isMorph ? 'Morph: ' + label : 'Cara: ' + t.face}\n` +
-            `Inicio: ${(t.tick / TPS).toFixed(2)}s · Duración: ${((t.durationTicks || TPS) / TPS).toFixed(2)}s\n` +
-            `Arrastra para mover · grips para duración · click derecho = borrar`;
+        div.title = `${isHead ? 'Head preset' : isSkin ? 'PNG skin: ' + label : isMorph ? 'Morph: ' + label : 'Face: ' + t.face}\n` +
+            `Start: ${(t.tick / TPS).toFixed(2)}s · Duration: ${((t.durationTicks || TPS) / TPS).toFixed(2)}s\n` +
+            `Drag to move · grips for duration · right-click = delete`;
 
         div.addEventListener('mousedown', (ev) => {
             if (ev.button !== 0) return;
@@ -541,10 +541,10 @@
             <span class="len">${(c.duration / TPS).toFixed(1)}s</span>
             <div class="grip r" data-edge="r"></div>
         `;
-        div.title = `${T.label || c.type} (capa ${c.layer})\n` +
-            `Inicio: ${(c.start / TPS).toFixed(2)}s · Duración: ${(c.duration / TPS).toFixed(2)}s\n` +
-            (c.enabled ? '' : '(deshabilitado)\n') +
-            `Arrastra para mover · grips para duración · click derecho = borrar`;
+        div.title = `${T.label || c.type} (layer ${c.layer})\n` +
+            `Start: ${(c.start / TPS).toFixed(2)}s · Duration: ${(c.duration / TPS).toFixed(2)}s\n` +
+            (c.enabled ? '' : '(disabled)\n') +
+            `Drag to move · grips for duration · right-click = delete`;
 
         div.addEventListener('mousedown', (ev) => {
             if (ev.button !== 0 || !FC) return;

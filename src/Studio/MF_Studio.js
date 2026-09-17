@@ -370,17 +370,17 @@
         if (!box) return;
         box.innerHTML = '';
         if (!models.loaded.size) {
-            box.appendChild(el('div', 'mfs-item', '<span style="color:#6e6e7a;font-size:11px">Sin modelos cargados</span>'));
+            box.appendChild(el('div', 'mfs-item', '<span style="color:#6e6e7a;font-size:11px">No models loaded</span>'));
             return;
         }
         for (const [file, info] of models.loaded) {
             const row = el('div', 'model-item' + (info.id ? ' live' : ''));
-            row.title = file + ' — click: spawn frente a ti';
+            row.title = file + ' — click: spawn in front of you';
             row.innerHTML = `
                 <span class="m-icon">${/\.obj$/i.test(file) ? '🔷' : '📦'}</span>
                 <span class="m-name">${info.name}</span>
                 ${info.id ? '<span class="m-tag">live</span>' : ''}
-                <span class="m-act m-del" title="Quitar del mundo">✕</span>
+                <span class="m-act m-del" title="Remove from world">✕</span>
             `;
             row.addEventListener('click', (ev) => {
                 if (ev.target.classList.contains('m-del')) {
@@ -433,7 +433,7 @@
             };
             d.onclick = () => {
                 SC.apply(it.name).then(() => {
-                    updateStatus('👕 Skin aplicada: ' + it.name);
+                    updateStatus('👕 Skin applied: ' + it.name);
                     refreshSkinsList();
                 }).catch(e => updateStatus('⚠ ' + (e?.message || e)));
             };
@@ -449,14 +449,14 @@
         const items = M?.catalog || [];
         box.innerHTML = '';
         if (!items.length) {
-            box.appendChild(el('div', 'mfs-item', '<span style="color:#6e6e7a;font-size:11px">Sin mobs cerca — pulsa ⟳ con mobs a la vista</span>'));
+            box.appendChild(el('div', 'mfs-item', '<span style="color:#6e6e7a;font-size:11px">No mobs nearby — press ⟳ with mobs in view</span>'));
             return;
         }
         const grid = el('div');
         grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:4px;';
         for (const it of items) {
             const d = el('div', 'media-head' + (M.current === it.type ? ' on' : ''));
-            d.title = it.label + ' — click = morph en vivo · arrastra al timeline V2 como clip de morph';
+            d.title = it.label + ' — click = live morph · drag to V2 timeline as morph clip';
             d.draggable = true;
             d.style.cssText = 'display:flex;align-items:center;justify-content:center;font-size:20px;';
             d.textContent = MOJI_OF(it.type);
@@ -475,11 +475,11 @@
             };
             grid.appendChild(d);
         }
-        const rev = el('div', 'mfs-item', '<span style="font-size:11px">↺ Volver a humano</span>');
+        const rev = el('div', 'mfs-item', '<span style="font-size:11px">↺ Back to human</span>');
         rev.style.cursor = 'pointer';
         rev.onclick = () => {
             M?.revert?.();
-            updateStatus('🧬 Forma humana restaurada');
+            updateStatus('🧬 Human form restored');
             refreshMorphList();
         };
         box.appendChild(grid);
@@ -684,7 +684,7 @@
         preview.appendChild(gtoggle);
         
         const hint = el('div');
-        hint.innerHTML = '🖱 Click+arrastrar: rotar cámara · WASD/QE: mover · Ctrl: rápido · 🦴 Posing: click der. en extremidad';
+        hint.innerHTML = '🖱 Click+drag: rotate camera · WASD/QE: move · Ctrl: fast · 🦴 Posing: right-click a limb';
         hint.style.cssText = `
             position:absolute;bottom:26px;left:50%;transform:translateX(-50%);
             background:rgba(0,0,0,.73);border:1px solid rgba(255,255,255,.13);padding:4px 10px;
@@ -695,15 +695,15 @@
         const pbar = el('div');
         pbar.id = 'mfs-previewbar';
         pbar.innerHTML = `
-            <button class="mfs-btn icon" id="mfs-pv-replays"  title="Replays / tomas grabadas (media pool)">🎞</button>
-            <button class="mfs-btn icon" id="mfs-pv-plause"   title="Play/Pausa (Space)">▶</button>
-            <button class="mfs-btn icon" id="mfs-pv-teleport" title="Teleportarse a la cámara">✈</button>
-            <button class="mfs-btn icon on" id="mfs-pv-flight" title="Modo vuelo (cámara libre)">🛩</button>
-            <button class="mfs-btn icon" id="mfs-pv-control"  title="Controlar actor / posar extremidades">🦴</button>
-            <button class="mfs-btn icon" id="mfs-pv-player"   title="Controlar jugador (H) — WASD mueve al jugador, cámara estática, mouse bloqueado">🎮</button>
-            <button class="mfs-btn icon" id="mfs-pv-record"   title="Grabar replay (R)">●</button>
-            <button class="mfs-btn icon" id="mfs-pv-video"    title="Renderizar a video .webm">⏺</button>
-            <button class="mfs-btn icon" id="mfs-pv-traj"     title="Lienzo de trayectoria (T) — dibuja el recorrido de los clips de cámara">🧭</button>`;
+            <button class="mfs-btn icon" id="mfs-pv-replays"  title="Replays / recorded takes (media pool)">🎞</button>
+            <button class="mfs-btn icon" id="mfs-pv-plause"   title="Play/Pause (Space)">▶</button>
+            <button class="mfs-btn icon" id="mfs-pv-teleport" title="Teleport to camera">✈</button>
+            <button class="mfs-btn icon on" id="mfs-pv-flight" title="Fly mode (free camera)">🛩</button>
+            <button class="mfs-btn icon" id="mfs-pv-control"  title="Control actor / pose limbs">🦴</button>
+            <button class="mfs-btn icon" id="mfs-pv-player"   title="Control player (H) — WASD moves the player, static camera, mouse locked">🎮</button>
+            <button class="mfs-btn icon" id="mfs-pv-record"   title="Record replay (R)">●</button>
+            <button class="mfs-btn icon" id="mfs-pv-video"    title="Render to .webm video">⏺</button>
+            <button class="mfs-btn icon" id="mfs-pv-traj"     title="Trajectory canvas (T) — draws the camera clips path">🧭</button>`;
         preview.appendChild(pbar);
         
         const trajCv = el('canvas');
@@ -711,14 +711,14 @@
         preview.appendChild(trajCv);
         const trajHint = el('div');
         trajHint.className = 'traj-hint';
-        trajHint.textContent = '🧭 Trayectoria: puntos = keyframes · línea = recorrido · ◀▶ = clip anterior/siguiente';
+        trajHint.textContent = '🧭 Trajectory: dots = keyframes · line = path · ◀▶ = previous/next clip';
         trajCv.appendChild(trajHint);
         rightzone.appendChild(preview);
 
         const right = el('div');
         right.id = 'mf-studio-right';
-        right.innerHTML = `<div class="mfs-section"><h3>Propiedades</h3><div id="mfs-props"></div></div>
-<div class="mfs-section"><h3>Editor de pose</h3><div id="mfs-pose"></div></div>`;
+        right.innerHTML = `<div class="mfs-section"><h3>Properties</h3><div id="mfs-props"></div></div>
+<div class="mfs-section"><h3>Pose editor</h3><div id="mfs-pose"></div></div>`;
         rightzone.appendChild(right);
 
         const pool = el('div');
@@ -747,36 +747,36 @@
         iconbar.id = 'mf-studio-iconbar';
         iconbar.innerHTML = `
             <button class="ib" id="mfs-ib-pool"   title="Media pool (P)">🗂</button>
-            <button class="ib" id="mfs-ib-cam"    title="Clips de cámara">🎥</button>
-            <button class="ib" id="mfs-ib-undo"   title="Deshacer (Ctrl+Z)">↶</button>
-            <button class="ib" id="mfs-ib-redo"   title="Rehacer (Ctrl+Y)">↷</button>
+            <button class="ib" id="mfs-ib-cam"    title="Camera clips">🎥</button>
+            <button class="ib" id="mfs-ib-undo"   title="Undo (Ctrl+Z)">↶</button>
+            <button class="ib" id="mfs-ib-redo"   title="Redo (Ctrl+Y)">↷</button>
             <div class="ib-div"></div>
-            <button class="ib" id="mfs-ib-skineditor" title="Editor de cabeza">🎨</button>
-            <button class="ib" id="mfs-ib-skinchanger" title="Skins PNG">👕</button>
+            <button class="ib" id="mfs-ib-skineditor" title="Head editor">🎨</button>
+            <button class="ib" id="mfs-ib-skinchanger" title="PNG Skins">👕</button>
             <button class="ib" id="mfs-ib-morph"  title="Morph (mobs)">🧬</button>
-            <button class="ib" id="mfs-ib-models" title="Modelos 3D">📦</button>
+            <button class="ib" id="mfs-ib-models" title="3D Models">📦</button>
             <div class="ib-gap"></div>
-            <button class="ib" id="mfs-ib-share"  title="Compartir pose + cámara con el peer (P2P)">📡</button>
-            <button class="ib" id="mfs-ib-cinema" title="Modo cine (ocultar HUD)">🎬</button>
+            <button class="ib" id="mfs-ib-share"  title="Share pose + camera with peer (P2P)">📡</button>
+            <button class="ib" id="mfs-ib-cinema" title="Cinema mode (hide HUD)">🎬</button>
             <button class="ib" id="mfs-ib-afk"    title="Anti-AFK">🛡</button>
-            <button class="ib" id="mfs-ib-close"  title="Cerrar (F1)">✕</button>`;
+            <button class="ib" id="mfs-ib-close"  title="Close (F1)">✕</button>`;
 
         const top = el('div', '', '');
         top.id = 'mf-studio-top';
         top.innerHTML = `
             <span class="logo">MF STUDIO</span>
-            <span class="project" id="mfs-project">Proyecto: sin toma activa</span>
+            <span class="project" id="mfs-project">Project: no active take</span>
             <span class="spacer"></span>
             <span class="btn-group">
-                <button class="mfs-btn icon" id="mfs-home" title="Ir al inicio (Home)">⏮</button>
-                <button class="mfs-btn primary" id="mfs-play" title="Reproducir/Pausa (Space)">▶</button>
-                <button class="mfs-btn icon" id="mfs-stop" title="Detener (S)">⏹</button>
-                <button class="mfs-btn rec" id="mfs-rec" title="Grabar (R)">●</button>
+                <button class="mfs-btn icon" id="mfs-home" title="Go to start (Home)">⏮</button>
+                <button class="mfs-btn primary" id="mfs-play" title="Play/Pause (Space)">▶</button>
+                <button class="mfs-btn icon" id="mfs-stop" title="Stop (S)">⏹</button>
+                <button class="mfs-btn rec" id="mfs-rec" title="Record (R)">●</button>
             </span>
             <span class="btn-group">
-                <button class="mfs-btn" id="mfs-in" title="Marcar IN aquí (I)">{ IN</button>
-                <button class="mfs-btn" id="mfs-out" title="Marcar OUT aquí (O)">OUT }</button>
-                <button class="mfs-btn icon" id="mfs-range-clear" title="Quitar In/Out (reproduce todo)" style="display:none">⨯</button>
+                <button class="mfs-btn" id="mfs-in" title="Mark IN here (I)">{ IN</button>
+                <button class="mfs-btn" id="mfs-out" title="Mark OUT here (O)">OUT }</button>
+                <button class="mfs-btn icon" id="mfs-range-clear" title="Clear In/Out (play all)" style="display:none">⨯</button>
             </span>`;
 
         main.appendChild(mainzone);
@@ -970,7 +970,7 @@
                 updateStatus(`Secuencia: ${window.MF_Timeline?.clips.length || 0} clips`);
                 break;
             case 'drop-rejected':
-                updateStatus(`No se pudo soltar "${payload}" (toma no encontrada)`);
+                updateStatus(`Could not drop "${payload}" (take not found)`);
                 break;
         }
     }
@@ -995,7 +995,7 @@
                 if (!r.ok) { updateStatus('⚠ ' + r.error); return; }
             } else {
                 const r = F.playFilm(state.activeFilm || undefined);
-                if (!r?.ok) { updateStatus('⚠ ' + (r?.error || 'nada que reproducir')); return; }
+                if (!r?.ok) { updateStatus('⚠ ' + (r?.error || 'nothing to play')); return; }
             }
         } else if (s.paused) {
             F.resumePlayback();
@@ -1013,7 +1013,7 @@
             const r = F.stopRecording();
             if (r.ok) {
                 
-                F.saveFilm('toma-' + new Date().toTimeString().slice(0, 8).replace(/:/g, ''));
+                F.saveFilm('take-' + new Date().toTimeString().slice(0, 8).replace(/:/g, ''));
                 refreshTakes(); refreshMediaPool();
             }
         } else {
@@ -1056,7 +1056,7 @@
         const F = window.MF_Film;
         F?.setPlayRange(null, null);
         updateRangeUI();
-        updateStatus('Rango In/Out quitado — reproduce toda la toma');
+        updateStatus('In/Out range cleared — plays the whole take');
     }
     function updateRangeUI() {
         const F = window.MF_Film;
@@ -1118,9 +1118,9 @@
         
         const bar = el('div');
         bar.style.cssText = 'display:flex;gap:4px;margin-bottom:6px;';
-        const impBtn = el('button', 'mfs-btn', '📥 Importar');
+        const impBtn = el('button', 'mfs-btn', '📥 Import');
         impBtn.style.cssText = 'height:22px;font-size:10px;padding:0 8px;';
-        impBtn.title = 'Importar archivos .mffilm.json';
+        impBtn.title = 'Import .mffilm.json files';
         const impInput = el('input');
         impInput.type = 'file';
         impInput.accept = '.json,application/json';
@@ -1145,14 +1145,14 @@
             heads.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:6px;';
             for (const hp of headPresets) {
                 const d = el('div', 'media-head');
-                d.title = hp.name + ' — arrastra a V2 (Caras) o click = aplicar ya';
+                d.title = hp.name + ' — drag to V2 (Faces) or click = apply now';
                 d.draggable = true;
                 d.innerHTML = `<img src="${hp.thumb}" alt="">`;
                 d.ondragstart = (ev) => {
                     ev.dataTransfer.setData('text/mf-head', hp.name);
                     ev.dataTransfer.effectAllowed = 'copy';
                 };
-                d.onclick = () => { SE.applyPreset(hp.name); updateStatus('Cabeza: ' + hp.name); };
+                d.onclick = () => { SE.applyPreset(hp.name); updateStatus('Head: ' + hp.name); };
                 heads.appendChild(d);
             }
             box.appendChild(heads);
@@ -1165,7 +1165,7 @@
             const item = el('div', 'mfs-item media-item',
                 `<span class="thumb">🎬</span><div class="mi-body"><span class="mi-name">${f.name}</span>` +
                 `<span class="meta">${(f.ticks / TPS).toFixed(1)}s · ${f.kfs}kf</span></div>`);
-            item.title = 'Arrastra al timeline · click = añadir al final · 🗑 = al bin';
+            item.title = 'Drag to timeline · click = append · 🗑 = to bin';
             
             item.draggable = true;
             item.ondragstart = (ev) => {
@@ -1180,11 +1180,11 @@
                 TL.addClip(film, TL.seqDuration);
                 state.activeFilm = f.name;
                 state.activeTake = film;
-                document.getElementById('mfs-project').textContent = 'Proyecto: ' + f.name;
-                updateStatus(`Clip añadido: ${f.name}`);
+                document.getElementById('mfs-project').textContent = 'Project: ' + f.name;
+                updateStatus(`Clip added: ${f.name}`);
             };
             const del = el('span', 'mi-del', '🗑');
-            del.title = 'Mover al bin (no borra el archivo)';
+            del.title = 'Move to bin (doesn\'t delete the file)';
             del.onclick = (ev) => {
                 ev.stopPropagation();
                 pool.bin.push(f.name);
@@ -1233,14 +1233,14 @@
         if (!box) return;
         box.innerHTML = '';
         const faces = window.MF_FaceSwap?.list() || [];
-        if (!faces.length) { box.appendChild(el('div', 'mfs-item', '<span>FaceSwap no disponible</span>')); return; }
+        if (!faces.length) { box.appendChild(el('div', 'mfs-item', '<span>FaceSwap not available</span>')); return; }
         
         const grid = el('div');
         grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px;';
         for (const name of faces.slice(0, 16)) {
             const b = el('button', 'mfs-btn', name);
             b.style.cssText = 'height:24px;font-size:10px;padding:0 6px;justify-content:center;';
-            b.title = 'Click = trigger en el playhead · arrastra al timeline V2';
+            b.title = 'Click = trigger at playhead · drag to V2 timeline';
             
             b.draggable = true;
             b.ondragstart = (ev) => {
@@ -1251,7 +1251,7 @@
                 const tick = Math.floor(state.playheadTick);
                 window.MF_FaceSwap?.applyAtTick(tick, name);
                 renderTimeline();
-                updateStatus('Cara "' + name + '" en tick ' + tick);
+                updateStatus('Face "' + name + '" at tick ' + tick);
             };
             grid.appendChild(b);
         }
@@ -1373,13 +1373,13 @@
         resetB.onclick = () => { P.reset(); updateStatus('Pose vanilla restaurada'); };
         actions.appendChild(resetB);
 
-        const saveB = el('button', 'mfs-btn primary', '💾 Guardar pose');
+        const saveB = el('button', 'mfs-btn primary', '💾 Save pose');
         saveB.style.cssText = 'height:24px;font-size:10px;padding:0 8px;width:100%;margin-top:6px;';
         saveB.onclick = () => {
-            const name = prompt('Nombre de la pose:', 'pose-' + (P.list().length + 1));
+            const name = prompt('Pose name:', 'pose-' + (P.list().length + 1));
             if (!name) return;
             const r = P.save(name);
-            updateStatus(r.ok ? 'Pose "' + name + '" guardada' : r.error);
+            updateStatus(r.ok ? 'Pose "' + name + '" saved' : r.error);
         };
         actions.appendChild(saveB);
 
@@ -1444,20 +1444,20 @@
                     rowB.appendChild(b);
                     return b;
                 };
-                mkBtn('▶', () => { A.play(); updateStatus('Anim: play'); }, 'Reproducir');
-                mkBtn('⏸', () => { A.pause(); updateStatus('Anim: pausa'); }, 'Pausar');
-                mkBtn('⏹', () => { A.stop(); refreshPosePanel(); updateStatus('Anim: stop'); }, 'Parar y rebobinar');
+                mkBtn('▶', () => { A.play(); updateStatus('Anim: play'); }, 'Play');
+                mkBtn('⏸', () => { A.pause(); updateStatus('Anim: pause'); }, 'Pause');
+                mkBtn('⏹', () => { A.stop(); refreshPosePanel(); updateStatus('Anim: stop'); }, 'Stop and rewind');
                 
                 const kp = mkBtn('◆+', () => {
                     const part = posing.selPart || null;
                     const r = A.snapKey(part);
                     if (!r.ok) {
-                        updateStatus('⚠ ' + (r.error || 'no se pudo grabar el keyframe (posea una parte primero)'));
+                        updateStatus('⚠ ' + (r.error || 'could not record keyframe (pose a part first)'));
                         return;
                     }
-                    updateStatus(`Keyframe ${part || 'todo el cuerpo'} @ ${A.time().toFixed(2)}s (${r.written.length} canales)`);
+                    updateStatus(`Keyframe ${part || 'whole body'} @ ${A.time().toFixed(2)}s (${r.written.length} channels)`);
                     refreshPosePanel();
-                }, 'Añadir keyframe con la pose actual en el playhead\n(sin parte seleccionada = todo el cuerpo)');
+                }, 'Add keyframe with current pose at playhead\n(no part selected = whole body)');
                 kp.style.color = '#7bd88f';
                 
                 const ak = mkBtn(A.autoKeyEnabled ? '⏺ AutoKey' : '⏹ AutoKey', (e) => {
@@ -1480,7 +1480,7 @@
                     const next = modes[(modes.indexOf(curI) + 1) % modes.length];
                     A.setInterp(next);
                     refreshPosePanel();
-                }, 'Interpolación: smooth (Catmull-Rom) / linear / step');
+                }, 'Interpolation: smooth (Catmull-Rom) / linear / step');
                 anim.appendChild(rowB);
 
                 const rowC = el('div');
@@ -1541,7 +1541,7 @@
         const box = document.getElementById('mfs-props');
         if (!box) return;
         const take = state.activeTake;
-        if (!take) { box.innerHTML = '<div class="mfs-prop"><label>Sin toma activa</label></div>'; return; }
+        if (!take) { box.innerHTML = '<div class="mfs-prop"><label>No active take</label></div>'; return; }
         const s = getGame()?.player?.pos;
         box.innerHTML = `
             <div class="mfs-prop"><label>Nombre</label><span class="val">${take.name}</span></div>
@@ -1554,10 +1554,10 @@
             <button class="mfs-btn" id="mfs-del" style="width:100%;margin-top:4px;">🗑 Borrar toma</button>`;
         document.getElementById('mfs-export').onclick = () => window.MF_Film?.exportFilm(state.activeFilm);
         document.getElementById('mfs-del').onclick = () => {
-            if (state.activeFilm && confirm('¿Borrar la toma "' + state.activeFilm + '"?')) {
+            if (state.activeFilm && confirm('Delete take "' + state.activeFilm + '"?')) {
                 window.MF_Film?.deleteFilm(state.activeFilm);
                 state.activeFilm = null; state.activeTake = null;
-                document.getElementById('mfs-project').textContent = 'Proyecto: sin toma activa';
+                document.getElementById('mfs-project').textContent = 'Project: no active take';
                 refreshTakes(); renderTimeline(); updateProps();
             }
         };
@@ -1696,7 +1696,7 @@
         const FC = window.MF_FilmCamera;
         const clips = FC?.clips || [];
         if (!clips.length) {
-            box.innerHTML = '<div class="mfs-empty">Sin clips.<br>Posiciona la cámara y añade uno:</div>';
+            box.innerHTML = '<div class="mfs-empty">No clips.<br>Position the camera and add one:</div>';
         }
         
         const btns = el('div');
@@ -1747,9 +1747,9 @@
                 if (c.type === 'keyframe' || c.type === 'path') {
                     acts.appendChild(mk('＋', () => {
                         FC.addKeyAt(c.id, Math.max(0, Math.round((state.playheadTick || 0) - c.start)));
-                        updateStatus('🎥 waypoint añadido con la pose actual');
+                        updateStatus('🎥 waypoint added with current pose');
                         refreshCamList();
-                    }, 'Añadir keyframe/waypoint en el playhead con la pose actual'));
+                    }, 'Add keyframe/waypoint at playhead with current pose'));
                 }
                 acts.appendChild(mk('🗑', () => { FC.remove(c.id); refreshCamList(); window.MF_Timeline?.render?.(); }, 'Eliminar clip'));
                 row.appendChild(acts);
@@ -1824,7 +1824,7 @@
             return;
         }
         const F = window.MF_Film;
-        if (!F) return updateStatus('⚠ MF_Film no disponible');
+        if (!F) return updateStatus('⚠ MF_Film not available');
         const canvas = document.querySelector('#react canvas') || document.querySelector('canvas');
         if (!canvas) return updateStatus('⚠ no hay canvas del juego');
         const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
@@ -1850,7 +1850,7 @@
         renderer.rec = rec;
         rec.start(250);
         document.getElementById('mfs-pv-video')?.classList.add('rec-on');
-        updateStatus('⏺ renderizando… click ⏺ otra vez para terminar y guardar');
+        updateStatus('⏺ recording… click ⏺ again to finish and save');
         
         const startPlayback = window.MF_Timeline?.clips?.length
             ? () => F.playSequence(window.MF_Timeline.clips.map(c => ({ filmName: c.film.name, start: c.start, duration: c.duration })))
@@ -2093,7 +2093,7 @@
             if (cam.dragging || camKeysActive()) {
                 p2p.camActive = false;
                 p2p.camRemote = null;
-                updateStatus('📡 Tomaste el control de la cámara local');
+                updateStatus('📡 You took control of the local camera');
             } else {
                 const L = p2p.camLerp;
                 const r = p2p.camRemote;
@@ -2447,7 +2447,7 @@
             lock.forceNext = true; 
             const cv = viewport.canvases[0];
             try { cv?.requestPointerLock?.(); } catch {}
-            updateStatus('🎮 Control del jugador ON — WASD=mover · ratón=rotar jugador · cámara estática · H/ESC=salir');
+            updateStatus('🎮 Player control ON — WASD=move · mouse=rotate player · static camera · H/ESC=exit');
             console.log(TAG + ' playerControl ON');
         } else {
             if (playerCtrl.recHeld) playerCtrlRecStop(); 
@@ -2488,7 +2488,7 @@
                 playerCtrl.active = false;
                 const btn = document.getElementById('mfs-pv-player');
                 if (btn) btn.classList.remove('on');
-                updateStatus('🎮 Control del jugador OFF (lock perdido)');
+                updateStatus('🎮 Player control OFF (lock lost)');
             }
         });
     }
@@ -2499,7 +2499,7 @@
         F.stopPlayback();
         F.startRecording();
         playerCtrl.recHeld = true;
-        updateStatus('⏺ GRABANDO movimiento (suelta Alt izq. para cortar)');
+        updateStatus('⏺ RECORDING movement (release left Alt to cut)');
     }
     
     function playerCtrlRecStop() {
@@ -2566,7 +2566,7 @@
         window.MF_Gizmo?.setMode?.(gizmo.mode);
         const btn = document.getElementById('mfs-gizmo-mode');
         if (btn) {
-            btn.textContent = gizmo.mode === 'rotate' ? '⟳ Rotar' : '↔ Mover';
+            btn.textContent = gizmo.mode === 'rotate' ? '⟳ Rotate' : '↔ Move';
             btn.classList.toggle('warm', gizmo.mode === 'rotate');
             btn.classList.toggle('on', gizmo.mode === 'rotate');
         }
@@ -2808,7 +2808,7 @@
                     clearHoverHighlight();
                     ev.preventDefault();
                     ev.stopImmediatePropagation();
-                    updateStatus('Rotando eje ' + ring.toUpperCase() + ' de ' + posing.selPart + ' (Ctrl=snap 15°, Shift=espejo)');
+                    updateStatus('Rotating ' + ring.toUpperCase() + ' axis of ' + posing.selPart + ' (Ctrl=snap 15°, Shift=mirror)');
                     return;
                 }
             }
@@ -2827,7 +2827,7 @@
                     clearHoverHighlight();
                     ev.preventDefault();
                     ev.stopImmediatePropagation();
-                    updateStatus('Moviendo eje ' + axis.toUpperCase() + ' de ' + posing.selPart + ' (Ctrl=fino)');
+                    updateStatus('Moving ' + axis.toUpperCase() + ' axis of ' + posing.selPart + ' (Ctrl=fine)');
                     return;
                 }
             }
@@ -2849,7 +2849,7 @@
         preview.addEventListener('mousedown', (ev) => {
             if (!posing.enabled || ev.button !== 2) return;
             const pick = window.MF_Pose?.pickPart?.(ev.clientX, ev.clientY);
-            if (!pick) { posingDeselect(); updateStatus('Pose: nada seleccionado'); return; }
+            if (!pick) { posingDeselect(); updateStatus('Pose: nothing selected'); return; }
             posingSelect(pick);
             posing.dragging = true;
             posing.dragMode = 'move';

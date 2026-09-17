@@ -1208,7 +1208,7 @@ window.MF_Peer = {
     },
     
     resendLook() {
-        if (!state.conn) return { ok: false, error: 'sin conexión' };
+        if (!state.conn) return { ok: false, error: 'not connected' };
         let sent = 0;
         
         const sc = window.MF_SkinChanger;

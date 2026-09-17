@@ -107,7 +107,7 @@
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => resolve(img);
-            img.onerror = () => reject(new Error('no se pudo cargar la imagen'));
+            img.onerror = () => reject(new Error('could not load the image'));
             img.src = src;
         });
     }
@@ -445,15 +445,15 @@
         if (!grid) return;
         grid.innerHTML = '';
         if (!state.items.length) {
-            grid.innerHTML = '<div style="grid-column:1/-1;color:#8a8a96;font-size:11px;text-align:center;padding:8px;">Sin skins importadas aún</div>';
+            grid.innerHTML = '<div style="grid-column:1/-1;color:#8a8a96;font-size:11px;text-align:center;padding:8px;">No imported skins yet</div>';
             return;
         }
         for (const item of state.items) {
             const d = document.createElement('div');
             d.className = 'mfsch-item' + (state.current === item.name ? ' on' : '');
-            d.title = item.name + ' (' + item.w + 'x' + item.h + ') — click = aplicar · arrastra al timeline V2';
+            d.title = item.name + ' (' + item.w + 'x' + item.h + ') — click = apply · drag to V2 timeline';
             d.draggable = true;
-            d.innerHTML = `<img src="${item.thumb}" alt=""><span class="nm">${item.name}</span><button class="del" title="Quitar de la biblioteca">✕</button>`;
+            d.innerHTML = `<img src="${item.thumb}" alt=""><span class="nm">${item.name}</span><button class="del" title="Remove from library">✕</button>`;
             d.ondragstart = (ev) => {
                 ev.dataTransfer.setData('text/mf-skin', item.name);
                 ev.dataTransfer.setData('text/plain', item.name);

@@ -162,7 +162,7 @@
 
     function save(name) {
         const pose = getPose();
-        if (!pose) return { ok: false, error: 'jugador/mesh no disponible' };
+        if (!pose) return { ok: false, error: 'player/mesh not available' };
         const poses = loadPoses();
         poses[name] = pose;
         state.poses = poses;
@@ -170,7 +170,7 @@
             localStorage.setItem(LS_KEY, JSON.stringify(poses));
             return { ok: true, name };
         } catch (e) {
-            return { ok: false, error: 'no se pudo guardar: ' + (e?.message || e) };
+            return { ok: false, error: 'could not save: ' + (e?.message || e) };
         }
     }
 
@@ -200,7 +200,7 @@
 
     function applyPreset(name) {
         const p = PRESETS[name];
-        if (!p) return { ok: false, error: 'preset "' + name + '" no existe: ' + Object.keys(PRESETS).join(', ') };
+        if (!p) return { ok: false, error: 'preset "' + name + '" does not exist: ' + Object.keys(PRESETS).join(', ') };
         reset();
         for (const part in p) setPart(part, p[part]);
         return { ok: true, preset: name };
@@ -583,15 +583,15 @@
 
     function addWorldOffset(part, axisName, amount) {
         const def = PARTS[part];
-        if (!def) throw new Error('parte desconocida: ' + part);
+        if (!def) throw new Error('unknown part: ' + part);
         const mesh = getMesh();
-        if (!mesh) throw new Error('jugador/mesh no disponible');
+        if (!mesh) throw new Error('player/mesh not available');
         const j = findJoint(mesh, def.joints[0]);
-        if (!j) throw new Error('joint "' + def.joints[0] + '" no encontrado');
+        if (!j) throw new Error('joint "' + def.joints[0] + '" not found');
         const axes = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
-        if (!axes[axisName]) throw new Error('eje desconocido: ' + axisName);
+        if (!axes[axisName]) throw new Error('unknown axis: ' + axisName);
         const v = worldAxisToLocal(j, axes[axisName][0], axes[axisName][1], axes[axisName][2]);
-        if (!v) throw new Error('sin conversión mundo→local');
+        if (!v) throw new Error('no world→local conversion');
         j.position.x += v.x * amount;
         j.position.y += v.y * amount;
         j.position.z += v.z * amount;
@@ -601,14 +601,14 @@
 
     function addScreenOffset(part, camRight, camUp, dxWorld, dyWorld) {
         const def = PARTS[part];
-        if (!def) throw new Error('parte desconocida: ' + part);
+        if (!def) throw new Error('unknown part: ' + part);
         const mesh = getMesh();
-        if (!mesh) throw new Error('jugador/mesh no disponible');
+        if (!mesh) throw new Error('player/mesh not available');
         const j = findJoint(mesh, def.joints[0]);
-        if (!j) throw new Error('joint "' + def.joints[0] + '" no encontrado');
+        if (!j) throw new Error('joint "' + def.joints[0] + '" not found');
         const rx = worldAxisToLocal(j, camRight.x, camRight.y, camRight.z);
         const uy = worldAxisToLocal(j, camUp.x, camUp.y, camUp.z);
-        if (!rx || !uy) throw new Error('sin conversión mundo→local');
+        if (!rx || !uy) throw new Error('no world→local conversion');
         j.position.x += rx.x * dxWorld + uy.x * dyWorld;
         j.position.y += rx.y * dxWorld + uy.y * dyWorld;
         j.position.z += rx.z * dxWorld + uy.z * dyWorld;
