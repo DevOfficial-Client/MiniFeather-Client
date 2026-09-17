@@ -477,15 +477,21 @@
 
   function rankTag(rankKey) {
     const d = ranks.defs[rankKey] || ranks.defs['dev'];
-    let tag = '\\';
-    if (d.bold) tag += 'bold\\';
-    if (d.glow) tag += 'glow\\' + d.color + '\\';
-    if (d.shiny) tag += 'shiny\\';
-    return `${tag}[${d.label}]\\reset\\`;
+    // Formato del chat de miniblox: tokens \code\ separados por \\ dobles.
+    // Byte-exacto con el formato original: \bold\\glow\\#color\\shiny\[TAG]\reset\
+    const label = String(d.label || 'DEV');
+    const shown = label.startsWith('[') ? label : '[' + label + ']';
+    let tag = '';
+    if (d.bold) tag += '\\bold';
+    if (d.glow) tag += '\\\\glow\\\\' + d.color;
+    if (d.shiny) tag += '\\\\shiny';
+    if (tag) tag += '\\';
+    return tag + shown + '\\reset\\';
   }
 
   function chatLine(name, message, rankKey) {
     const d = ranks.defs[rankKey] || ranks.defs['dev'];
+    // byte-exacto con el original: [tag] \#color\name:\reset\ message
     return `${rankTag(rankKey)} \\${d.color}\\${name}:\\reset\\ ${message}`;
   }
 
