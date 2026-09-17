@@ -9,6 +9,15 @@
         var args = [TAG].concat(Array.prototype.slice.call(arguments));
         console.warn.apply(console, args);
     }
+    // log de diagnóstico del doll (solo una vez por mensaje)
+    var dollLogged = {};
+    function dollLog() {
+        var key = Array.prototype.join.call(arguments, '|');
+        if (dollLogged[key]) return;
+        dollLogged[key] = true;
+        var args = [TAG].concat(Array.prototype.slice.call(arguments));
+        console.log.apply(console, args);
+    }
 
 
     function skinsBaseUrl() {
@@ -1037,21 +1046,17 @@
         CanvasRenderingContext2D.prototype.drawImage = function () {
             var args = arguments;
             var cvs = this.canvas;
-            // registro del atlas de skin: IMG de skin dibujada sobre un
-            // canvas offscreen (el builder del engine hace drawImage(img,0,0)
-            // sobre un canvas cuadrado del mismo ancho que la IMG). Se guarda
-            // el id de la skin para saber a quién pertenece el atlas.
+            // registro del atlas de skin: el builder del engine dibuja la IMG
+            // de la skin sobre un canvas offscreen (compacto o no, cualquier
+            // forma de drawImage — la de 9 args remapea regiones de la IMG).
+            // La IMG es la fuente; el canvas destino, cuadrado y offscreen.
             if (!replaying) {
                 var m0 = skinSrcMatch(args[0]);
-                if (m0) {
+                if (m0 && cvs && !document.body.contains(cvs) &&
+                    cvs.width === cvs.height) {
                     try {
-                        var sim = args[0];
-                        var sw = sim.naturalWidth || sim.width;
-                        if (cvs && !document.body.contains(cvs) &&
-                            cvs.width === sw && cvs.height === sw &&
-                            args.length <= 5) { // forma drawImage(img, dx, dy)
-                            skinAtlasInfo.set(cvs, { id: m0[1], w: sw });
-                        }
+                        skinAtlasInfo.set(cvs, { id: m0[1] });
+                        dollLog('atlas registrado', cvs.width + 'x' + cvs.height, 'skin=' + m0[1]);
                     } catch (_) {}
                 }
             }
@@ -1142,6 +1147,7 @@
                     glCtx.bindTexture(p.target, p.tex);
                     glCtx.texImage2D(p.target, p.level, p.ifmt, p.fmt, p.type, swap);
                     pendingSwaps.delete(glCtx);
+                    dollLog('doll: re-subida aplicada (custom llegó tarde)');
                 } catch (_) { pendingSwaps.delete(glCtx); }
             });
             if (retry && pendingSwaps.size) {
@@ -1163,10 +1169,11 @@
                         var cvs = this.canvas;
                         var args = Array.prototype.slice.call(arguments);
                         var src = args.length === 6 ? args[5] : null;
-                        if (cvs && !replaying &&
-                            (isMenuPreviewCanvas(cvs) || isOffscreenDollCanvas(cvs)) &&
-                            (skinSrcMatch(src) ||
-                             (src instanceof HTMLCanvasElement && skinAtlasInfo.has(src)))) {
+                        var inDoll = cvs && !replaying &&
+                            (isMenuPreviewCanvas(cvs) || isOffscreenDollCanvas(cvs));
+                        var isSkin = skinSrcMatch(src) ||
+                            (src instanceof HTMLCanvasElement && skinAtlasInfo.has(src));
+                        if (inDoll && isSkin) {
                             var entry = entryForLocalPlayer();
                             var url = entry && resolveSkinImageUrl(entry);
                             if (url) {
@@ -1180,11 +1187,23 @@
                                     swap = atlasSwap(src, rep); // atlas (custom:<id>)
                                 }
                                 if (swap) {
+                                    dollLog('doll: swap aplicado',
+                                        (cvs.width + 'x' + cvs.height),
+                                        src instanceof HTMLCanvasElement ? 'atlas' : 'img');
                                     args[5] = swap;
                                     return orig.apply(this, args);
                                 }
                                 schedulePendingSwap(this, args);
+                                dollLog('doll: custom no lista → re-subida agendada');
+                            } else {
+                                dollLog('doll: sin entry del jugador local (¿no logueado o sin skin?)');
                             }
+                        } else if (inDoll) {
+                            // fuente no reconocida como skin: log para diagnosticar
+                            var d = src && (src.constructor && src.constructor.name || typeof src);
+                            var sz = src && (src.naturalWidth || src.width) + 'x' + (src.naturalHeight || src.height);
+                            var u = src && src.src ? String(src.src).slice(-60) : '';
+                            dollLog('doll: fuente ignorada', d, sz, u);
                         }
                     } catch (_) {}
                     return orig.apply(this, arguments);
