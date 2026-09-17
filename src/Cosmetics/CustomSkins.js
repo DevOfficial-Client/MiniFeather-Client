@@ -975,6 +975,13 @@
         var drawnCalls = new WeakMap(); // canvas -> [{ctx, args}]
         var replaying = false;
 
+        // Canvases-atlas de skin: el engine dibuja la skin (IMG) sobre un
+        // canvas offscreen cuadrado (yIwkPEvphTDgWU) y crea la textura desde
+        // ese CANVAS. El paperdoll/preview suben ese canvas por texImage2D —
+        // se registran aquí para reemplazar la subida solo en el contexto del
+        // muñeco (el atlas es compartido con el mundo: no se muta).
+        var skinAtlasInfo = new WeakMap(); // canvas -> {w,h} de la IMG original
+
         function skinSrcMatch(img) {
             if (!img || !(img instanceof HTMLImageElement)) return null;
             var src = img.src || '';
@@ -997,11 +1004,53 @@
             return null;
         }
 
+        // Copia privada del atlas de skin con la custom pintada encima.
+        // Mismo tamaño que el atlas original (cuadrado del ancho de la skin
+        // vanilla); la custom se dibuja con su ratio nativo (2:1 o cuadrada)
+        // para no romper el mapeado UV del modelo.
+        var atlasSwapCache = new WeakMap(); // orig canvas -> swap canvas
+        function atlasSwap(atlas, rep) {
+            if (!atlas || !rep) return null;
+            if (!rep.complete || !rep.naturalWidth) return null;
+            var cached = atlasSwapCache.get(atlas);
+            if (cached && cached.__mfEpoch === paintEpoch) return cached;
+            try {
+                var c = document.createElement('canvas');
+                c.width = atlas.width;
+                c.height = atlas.height;
+                var ctx = c.getContext('2d');
+                ctx.imageSmoothingEnabled = false;
+                // top half = skin (ratio de la custom), bottom half vacío en
+                // atlas compact… pero el engine pinta la IMG completa sobre el
+                // cuadrado: replicar eso con la custom.
+                ctx.drawImage(rep, 0, 0, rep.naturalWidth, rep.naturalHeight,
+                              0, 0, atlas.width,
+                              rep.naturalHeight * (atlas.width / rep.naturalWidth));
+                c.__mfEpoch = paintEpoch;
+                atlasSwapCache.set(atlas, c);
+                return c;
+            } catch (_) { return null; }
+        }
+
         var origDrawImage = CanvasRenderingContext2D.prototype.drawImage;
 
         CanvasRenderingContext2D.prototype.drawImage = function () {
             var args = arguments;
             var cvs = this.canvas;
+            // registro del atlas de skin: IMG de skin dibujada sobre un
+            // canvas offscreen (el builder del engine hace drawImage(img,0,0)
+            // sobre un canvas cuadrado del mismo ancho que la IMG)
+            if (!replaying && skinSrcMatch(args[0])) {
+                try {
+                    var sim = args[0];
+                    var sw = sim.naturalWidth || sim.width;
+                    if (cvs && !document.body.contains(cvs) &&
+                        cvs.width === sw && cvs.height === sw &&
+                        args.length <= 5) { // forma drawImage(img, dx, dy)
+                        skinAtlasInfo.set(cvs, { w: sw });
+                    }
+                } catch (_) {}
+            }
             if (!replaying && isMenuPreviewCanvas(cvs) && skinSrcMatch(args[0])) {
                 var entry = entryForLocalPlayer();
                 var url = entry && resolveSkinImageUrl(entry);
@@ -1025,16 +1074,19 @@
 
         // WebGL: si el preview sube la skin como textura directamente
         // (texImage2D con HTMLImageElement), sustituir la fuente igual.
-        // Cubre dos casos:
+        // Cubre:
         //  - preview del menú de cosméticos (canvas visible 109x185)
-        //  - paperdoll de la pantalla de inicio/inventario: un canvas WebGL
-        //    offscreen (~95x161) renderiza el modelo 3D y lo copia al 2D
-        //    visible. La skin sube ahí como textura.
+        //  - paperdoll offscreen (~95x161, render → syncToVisible)
+        //  - avatar de cuenta: renderiza DIRECTO a un canvas WebGL visible
+        //    en el DOM (useRenderToCanvas sin offscreen)
+        // En todos los casos la skin sube como atlas-canvas (yIwkPEvphTDgWU
+        // dibuja la IMG sobre un canvas cuadrado) o como IMG directa.
         function isOffscreenDollCanvas(c) {
-            // offscreen (no en DOM) y tamaño de muñeco (ni HUD ni mundo)
-            if (!c || document.body.contains(c)) return false;
+            if (!c) return false;
             var w = c.width, h = c.height;
-            return w >= 40 && w <= 400 && h >= 60 && h <= 500;
+            // muñeco/preview: chico (dpr incluido). El canvas del mundo y el
+            // HUD son tamaño ventana (>=900px típicamente).
+            return w >= 40 && w <= 900 && h >= 40 && h <= 900;
         }
 
         function patchPreviewWebGL() {
@@ -1050,17 +1102,26 @@
                     try {
                         var cvs = this.canvas;
                         var argImg = arguments.length === 6 ? arguments[5] : null;
-                        var match = skinSrcMatch(argImg) &&
-                            (isMenuPreviewCanvas(cvs) || isOffscreenDollCanvas(cvs));
-                        if (cvs && match && !replaying) {
+                        if (cvs && !replaying &&
+                            (isMenuPreviewCanvas(cvs) || isOffscreenDollCanvas(cvs))) {
                             var entry = entryForLocalPlayer();
                             var url = entry && resolveSkinImageUrl(entry);
                             if (url) {
                                 var rep = repImages[url] && repImages[url].complete
                                     ? repImages[url] : getReplacement(url, function () {});
-                                if (rep) {
+                                var swap = null;
+                                if (rep && skinSrcMatch(argImg)) {
+                                    // IMG directa de skin (bob/alice sin login)
+                                    swap = rep;
+                                } else if (rep && argImg instanceof HTMLCanvasElement &&
+                                           skinAtlasInfo.has(argImg)) {
+                                    // atlas-canvas de skin (skins custom:<id> del
+                                    // catálogo): copia con la custom, mismo tamaño
+                                    swap = atlasSwap(argImg, rep);
+                                }
+                                if (swap) {
                                     var a = Array.prototype.slice.call(arguments);
-                                    a[5] = rep;
+                                    a[5] = swap;
                                     return orig.apply(this, a);
                                 }
                             }
