@@ -499,22 +499,22 @@
             }
             if (!lf || typeof lf.traverse !== 'function') return;
 
-            // materiales con textura de skin del brazo (solo los que matchean
-            // dimensiones de skin: w múltiplo de 64, ratio 1:1 o 2:1)
-            var mats = [], seenM = new Set();
-            lf.traverse(function (o) {
-                if (!o || !o.material) return;
-                var list = Array.isArray(o.material) ? o.material : [o.material];
-                for (var j = 0; j < list.length; j++) {
-                    var m = list[j];
-                    var im = m && m.map ? m.map.image : null;
-                    var w = im ? im.width : 0, h = im ? im.height : 0;
-                    if (!w || !h) continue;
-                    var k = w / 64;
-                    if (!Number.isInteger(k)) continue;
-                    if (h !== w && h !== w / 2) continue;
-                    if (!seenM.has(m)) { seenM.add(m); mats.push(m); }
-                }
+            // materiales de skin del brazo. SOLO lf.rightArm mismo, sin
+            // traverse: el renderer completo incluye lf.item (mesh del item
+            // sostenido, atlas 256/512 múltiplo de 64 cuadrado que este
+            // filtro confundiría con skin → el item desaparecería), y los
+            // hijos del brazo pueden ser overlays de armor (64x32 también
+            // pasa el filtro). El brazo es un mesh con el atlasMat de skin.
+            var arm = lf.rightArm;
+            if (!arm || !arm.material) return;
+            var mats = Array.isArray(arm.material) ? arm.material : [arm.material];
+            mats = mats.filter(function (m) {
+                if (!m || !m.map) return false;
+                var im = m.map.image;
+                var w = im ? im.width : 0, h = im ? im.height : 0;
+                if (!w || !h) return false;
+                var k = w / 64;
+                return Number.isInteger(k) && (h === w || h === w / 2);
             });
             if (!mats.length) return;
 
