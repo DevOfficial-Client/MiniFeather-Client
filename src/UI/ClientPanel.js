@@ -2567,14 +2567,26 @@
         width:20px; height:20px; display:block;
         flex:0 0 auto; user-select:none; pointer-events:none;
       }
+      .mf-pixel-icon {
+        width:20px; height:20px; display:block; image-rendering:pixelated;
+        flex:0 0 auto; user-select:none; pointer-events:none;
+      }
       .mf-nav-icon .mf-svg-icon { width:18px; height:18px; }
+      .mf-nav-icon .mf-pixel-icon { width:18px; height:18px; }
       .mf-feather-grid-icon .mf-svg-icon { width:21px; height:21px; }
+      .mf-feather-grid-icon .mf-pixel-icon { width:21px; height:21px; }
       .mf-feather-tab-icon .mf-svg-icon { width:22px; height:22px; }
+      .mf-feather-tab-icon .mf-pixel-icon { width:22px; height:22px; }
       .mf-feather-close .mf-svg-icon { width:20px; height:20px; margin:auto; }
+      .mf-feather-close .mf-pixel-icon { width:20px; height:20px; margin:auto; }
       .mf-feather-tool .mf-svg-icon { width:19px; height:19px; margin:auto; }
+      .mf-feather-tool .mf-pixel-icon { width:19px; height:19px; margin:auto; }
       .mf-feature-icon .mf-svg-icon { width:54px; height:54px; opacity:.96; }
+      .mf-feature-icon .mf-pixel-icon { width:64px; height:64px; opacity:.96; }
       .mf-feature-settings .mf-svg-icon { width:17px; height:17px; margin:auto; }
+      .mf-feature-settings .mf-pixel-icon { width:17px; height:17px; margin:auto; }
       .mf-feature-favorite .mf-svg-icon { width:16px; height:16px; margin:auto; }
+      .mf-feature-favorite .mf-pixel-icon { width:16px; height:16px; margin:auto; }
     `;
     style.textContent += `
       /* Feather-style GUI skin: visual-only overrides. */
@@ -2909,8 +2921,88 @@
   };
 
   function iconSvg(name, className = '') {
+    if (MF_PIXEL_ICONS[name]) return pixelIconSvg(name, className);
     const key = MF_SVG_ICONS[name] ? name : 'grid';
     return `<svg class="mf-svg-icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${MF_SVG_ICONS[key]}</svg>`;
+  }
+
+  // ── Pixel-art icons (8×8, Minecraft-style) ─────────────────────
+  // Cada icono = 8 filas de 8 chars. La paleta mapea char → color.
+  const PIXEL_PALETTE = {
+    '.': null,          // transparente
+    '#': '#f2f3f7',     // blanco highlight
+    '+': '#aab0bd',     // outline gris claro
+    '-': '#565d6b',     // gris oscuro
+    'a': '#a78bfa',     // acento morado
+    'b': '#6ee7f5',     // cian
+    'g': '#5ade80',     // verde
+    'r': '#f0575b',     // rojo
+    'y': '#f3c53d',     // amarillo
+    'o': '#f08c3a',     // naranja
+    'p': '#f48fb8',     // rosa
+    'k': '#22252c'      // casi negro
+  };
+
+  const MF_PIXEL_ICONS = {
+    home:      ['...++...','..+..+..','.+....+.','.+....+.','+......+','+.+..+.+','+......+','.++++++.'],
+    grid:      ['++..++..','++..++..','........','++..++..','++..++..','........','++..++..','++..++..'],
+    close:     ['.+....+.','..+..+..','...++...','...++...','..+..+..','.+....+.','........','........'],
+    search:    ['..+++...','.+...+..','+.....+.','+.....+.','.+...+..','..+++a+.','.....aa.','......a.'],
+    heart:     ['.pp..pp.','p#pppppp','pppppppp','pppppppp','.pppppp.','..pppp..','...pp...','........'],
+    settings:  ['..+..+..','.++++++.','++....++','+..++..+','+..++..+','++....++','.++++++.','..+..+..'],
+    hud:       ['++++++++','+......+','+.++++.+','+......+','+.++.+.+','+......+','++++++++','........'],
+    render:    ['...++...','..+bb+..','.+b##b+.','+b####b+','.+b##b+.','..+bb+..','...++...','........'],
+    cosmetics: ['.++++++.','.+####+.','.++++++.','+.+#y#.+','+.+##+.+','+.####.+','.++++++.','........'],
+    chat:      ['.++++++.','+......+','+.+.+.+.','+......+','.++++++.','..+.....','.+......','........'],
+    waypoints: ['...++...','...+....','.+aaa+..','.+a#a+..','.+aaa+..','...+....','...+....','........'],
+    movement:  ['..++....','..++....','..++....','..++.+..','..+++...','.+++++..','.++++++.','........'],
+    world:     ['..++++..','.+ggggg+','+gg#+gg+','+g++++g+','+gg+ggg+','.+gggg.+','..++++..','........'],
+    about:     ['..++++..','.+....+.','+..++..+','+......+','+..++..+','+..++..+','.+....+.','..++++..'],
+    shaders:   ['........','.++++++.','++++++++','+#+bb+#+','++++++++','.++++++.','........','........'],
+    experimental: ['...++...','...++...','..+..+..','..+..+..','+.+gg.+.','+..gg..+','+.gggg.+','.++++++.'],
+    keystrokes: ['++++++++','+.+.+.+.','++++++++','+.+.+.+.','++++++++','+.aaa..+','++++++++','........'],
+    fpsCounter:  ['........','......bb','.....bbb','....bb..','...bb...','..bb....','.bb.....','bbbb....'],
+    cpsCounter:  ['+##.....','+.+#..a.','+..#..a.','+...a.a.','+...#...','+...#...','.+++.+..','........'],
+    pingCounter: ['.....bb.','.....bb.','..b..bb.','..b..bb.','b.b.b.b.','b.b.b.b.','bbb.bbb.','........'],
+    guiPatch:    ['.rr..rr.','r#rrrrrr','rrrrrrrr','rrrrrrrr','.rrrrrr.','..rrrr..','...rr...','........'],
+    armorHud:    ['+.+..+.+','++++++++','+##++##+','+######+','+.####.+','+.####.+','++++++++','........'],
+    coordinates: ['...++...','+..++..+','.+....+.','..+aa+..','..+aa+..','.+....+.','+..++..+','...++...'],
+    dynamicCrosshair: ['...++...','...++...','...++...','+++..+++','...++...','...++...','...++...','........'],
+    rebrand:  ['...bb...','...bb...','.bbbbbb.','bbb##bbb','.bb##bb.','.bb..bb.','+b....b+','........'],
+    titanTiny:   ['.++++.+.','.+##+.++','+++++++#','.+##+#+.','.+..+.++','........','........','........'],
+    healthNameTags: ['.rr..rr.','rrrrrrrr','.rrrrrr.','..rrrr..','........','.++++++.','+#aaaa#+','.++++++.'],
+    distanceNameTags: ['.++++++.','+.aa..+.','.++++++.','........','+.....+.','.+...+..','..+.+...','...+....'],
+    patPat:   ['.+.+.+..','.+.+.+..','.+.+.+..','.+++++..','+.....+.','+.....+.','.+++++..','........'],
+    itemPhysics: ['.++++++.','.+####+.','.++++++.','........','...++...','..+..+..','...++...','........'],
+    noWeather:   ['...b....','.b.b.b..','..bbb...','.bb#bb..','..bbb...','.b.b.b..','...b....','........'],
+    vanillaAnimations: ['..####..','..####..','..++++..','.######.','#.#aa#.#','..####..','..+..+..','.+..+...'],
+    zoom:     ['..+++...','.+...+..','+..+..+.','+.....+.','.+...+a.','..+++a..','.....aa.','......a.'],
+    cameraOverhaul: ['...++...','.++++++.','+#+##+#+','+......+','+.#+#.++','+......+','.++++++.','........'],
+    elytraFlight: ['++....++','+++..+++','.++..++.','.++++++.','..+##+..','..+##+..','..+..+..','........'],
+    freecam:  ['........','..++++..','.+....+.','+.+aa+.+','+.+aa+.+','.+....+.','..++++..','........'],
+    freelook: ['..++++..','.+####+.','+a#..#a+','+......+','+..aa..+','.+####+.','..++++..','........'],
+    blockHighlight: ['.++++++.','.+....+.','+.++.+.+','+.++.+.+','.+....+.','.+....+.','.++++++.','........'],
+    antiAfk:  ['..++++..','.+....+.','+..#+..+','+..#+..+','+...+..+','.+....+.','..++++..','........'],
+    rhythmParkour: ['.....##.','.....##.','.....#..','.....#..','.....#..','..##.#..','.####...','..##....'],
+    chatVideos: ['++++++++','+......+','+.##...+','+.###..+','+.##...+','+......+','++++++++','........'],
+    chatLinks: ['.+++++..','.+...+..','+.+++++.','.+...+..','.+++++..','...+....','...++++.','...+....'],
+    chatMemes: ['..++++..','.+....+.','+.+..+.+','+......+','+.+..+.+','+..##..+','.+....+.','..++++..'],
+    clientChat: ['.++++++.','+.aaaa.+','+.a##a.+','+.aaaa.+','.+++++..','..+.....','.+......','........'],
+    discord:  ['..+..+..','.+....+.','+......+','+.+..+.+','+.+..+.+','+......+','.+....+.','........'],
+    supportAds: ['..++++..','.+yyyy+.','+y...y.+','+.yyy..+','+..y...+','+y...y.+','.+yyyy+.','..++++..']
+  };
+
+  function pixelIconSvg(name, className = '') {
+    const grid = MF_PIXEL_ICONS[name];
+    let rects = '';
+    for (let y = 0; y < grid.length; y++) {
+      const row = grid[y];
+      for (let x = 0; x < row.length; x++) {
+        const color = PIXEL_PALETTE[row[x]];
+        if (color) rects += `<rect x="${x}" y="${y}" width="1" height="1" fill="${color}"/>`;
+      }
+    }
+    return `<svg class="mf-pixel-icon ${className}" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true">${rects}</svg>`;
   }
 
   function renderNavList() {
