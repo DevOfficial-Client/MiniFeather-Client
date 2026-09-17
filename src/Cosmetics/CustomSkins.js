@@ -1014,9 +1014,12 @@
         }
 
         // Copia privada del atlas de skin con la custom pintada encima.
-        // Mismo tamaño que el atlas original (cuadrado del ancho de la skin
-        // vanilla); la custom se dibuja con su ratio nativo (2:1 o cuadrada)
-        // para no romper el mapeado UV del modelo.
+        // El atlas del engine es SIEMPRE cuadrado (w×w) y el modelo lee el
+        // layout 64×64 clásico de MC (parts: brazo izq en (32,48), pierna
+        // izq en (16,48) — decodificado de addBox/generateGeometry del
+        // bundle). Las vanilla son cuadradas; una custom 2:1 legacy debe
+        // CONVERTIRSE: copiar su contenido tal cual y espejar brazo/pierna
+        // derechos a las regiones izquierdas (que en 2:1 no existen).
         var atlasSwapCache = new WeakMap(); // orig canvas -> swap canvas
         function atlasSwap(atlas, rep) {
             if (!atlas || !rep) return null;
@@ -1029,12 +1032,36 @@
                 c.height = atlas.height;
                 var ctx = c.getContext('2d');
                 ctx.imageSmoothingEnabled = false;
-                // top half = skin (ratio de la custom), bottom half vacío en
-                // atlas compact… pero el engine pinta la IMG completa sobre el
-                // cuadrado: replicar eso con la custom.
-                ctx.drawImage(rep, 0, 0, rep.naturalWidth, rep.naturalHeight,
-                              0, 0, atlas.width,
-                              rep.naturalHeight * (atlas.width / rep.naturalWidth));
+                var rw = rep.naturalWidth, rh = rep.naturalHeight;
+                var legacy = rh * 2 <= rw;   // 2:1 (64x32 / 128x64): sin capas izq.
+                if (!legacy) {
+                    // cuadrada: mismo layout del engine, estirar directo
+                    ctx.drawImage(rep, 0, 0, rw, rh, 0, 0, atlas.width, atlas.height);
+                } else {
+                    var s = atlas.width / 64;   // px de atlas por px-MC
+                    var u = rw / 64;            // px de la custom por px-MC
+                    var box = function (sx, sy, w, h, dx, dy, flip) {
+                        try {
+                            if (flip) {
+                                ctx.save();
+                                ctx.translate((dx + w) * s, 0);
+                                ctx.scale(-1, 1);
+                                ctx.drawImage(rep, sx * u, sy * u, w * u, h * u,
+                                              0, dy * s, w * s, h * s);
+                                ctx.restore();
+                            } else {
+                                ctx.drawImage(rep, sx * u, sy * u, w * u, h * u,
+                                              dx * s, dy * s, w * s, h * s);
+                            }
+                        } catch (_) {}
+                    };
+                    box(0, 0, 32, 16, 0, 0);            // cabeza
+                    box(16, 16, 24, 16, 16, 16);        // torso
+                    box(40, 16, 16, 16, 40, 16);        // brazo derecho
+                    box(0, 16, 16, 16, 0, 16);          // pierna derecha
+                    box(40, 16, 16, 16, 32, 48, true);  // brazo izq (espejo)
+                    box(0, 16, 16, 16, 16, 48, true);   // pierna izq (espejo)
+                }
                 c.__mfEpoch = paintEpoch;
                 atlasSwapCache.set(atlas, c);
                 return c;
