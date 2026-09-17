@@ -2571,6 +2571,7 @@
         width:20px; height:20px; display:block; image-rendering:pixelated;
         flex:0 0 auto; user-select:none; pointer-events:none;
       }
+      img.mf-pixel-icon { object-fit:contain; }
       .mf-nav-icon .mf-svg-icon { width:18px; height:18px; }
       .mf-nav-icon .mf-pixel-icon { width:18px; height:18px; }
       .mf-feather-grid-icon .mf-svg-icon { width:21px; height:21px; }
@@ -2921,6 +2922,7 @@
   };
 
   function iconSvg(name, className = '') {
+    if (HAND_DRAWN_ICONS.has(name)) return handDrawnIconImg(name, className);
     if (MF_PIXEL_ICONS[name]) return pixelIconSvg(name, className);
     const key = MF_SVG_ICONS[name] ? name : 'grid';
     return `<svg class="mf-svg-icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${MF_SVG_ICONS[key]}</svg>`;
@@ -2942,6 +2944,20 @@
     'p': '#f48fb8',     // rosa
     'k': '#22252c'      // casi negro
   };
+
+  // Iconos dibujados a mano por el equipo (assets/ui/*.png). Tienen prioridad
+  // sobre los pixel generados: se resuelven de forma síncrona con getURL y el
+  // <img> se monta dentro del mismo wrapper que los SVG/pixel.
+  const HAND_DRAWN_ICONS = new Set([
+    'armorHud', 'betterPlayerLayers', 'coordinates', 'cpsCounter', 'dynamicCrosshair',
+    'experimental', 'fpsCounter', 'guiPatch', 'keystrokes', 'pingCounter',
+    'titanTiny', 'waypoints'
+  ]);
+
+  function handDrawnIconImg(name, className = '') {
+    const url = chrome.runtime.getURL(`assets/ui/${name}.png`);
+    return `<img class="mf-pixel-icon ${className}" src="${url}" alt="" aria-hidden="true"/>`;
+  }
 
   const MF_PIXEL_ICONS = {
     home:      ['...++...','..+..+..','.+....+.','.+....+.','+......+','+.+..+.+','+......+','.++++++.'],

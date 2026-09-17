@@ -204,6 +204,7 @@
         "assets/shadertextures/*",
         "assets/menu/*",
         "assets/garden/*",
+        "assets/ui/*",
         "textures/*",
         "textures/*/*",
         "textures/*/*/*",
