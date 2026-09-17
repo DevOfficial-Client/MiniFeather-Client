@@ -1108,21 +1108,40 @@
         // contextos GL con textura de skin pendiente de re-subir con la custom
         var pendingSwaps = new Map();
 
-        function schedulePendingSwap(glCtx, args) {
+        // fuente skin → canvas/IMG de reemplazo (o null). Agenda re-subida si
+        // la custom aún no cargó. mode: 'img' (texImage2D 6-arg) o 'sub'
+        // (texSubImage2D — WebGL2/three.js usa texStorage2D + texSubImage2D
+        // para texturas inmutables: la subida con fuente va por ACÁ).
+        function swapSourceFor(glCtx, src) {
+            var entry = entryForLocalPlayer();
+            var url = entry && resolveSkinImageUrl(entry);
+            if (!url) {
+                dollLog('doll: sin entry del jugador local (¿no logueado o sin skin?)');
+                return null;
+            }
+            var rep = repImages[url] && repImages[url].complete
+                ? repImages[url] : getReplacement(url, function () {});
+            if (!rep || !rep.complete || !rep.naturalWidth) {
+                schedulePendingSwap(glCtx, src);
+                dollLog('doll: custom no lista → re-subida agendada', url.slice(-30));
+                return null;
+            }
+            if (skinSrcMatch(src)) return rep; // IMG directa
+            if (src instanceof HTMLCanvasElement && skinAtlasInfo.has(src)) {
+                return atlasSwap(src, rep); // atlas-canvas
+            }
+            return null;
+        }
+
+        function schedulePendingSwap(glCtx, src) {
             try {
-                var src = args.length === 6 ? args[5] : null;
                 if (!(src instanceof HTMLCanvasElement) || !skinAtlasInfo.has(src)) return;
                 var entry = entryForLocalPlayer();
                 if (!entry || !resolveSkinImageUrl(entry)) return;
-                // la textura bound en el momento del upload: el re-upload debe
-                // apuntar a ESA textura (texImage2D pisa la que está bound)
                 var tex = glCtx.getParameter(glCtx.TEXTURE_BINDING_2D);
                 var unit = glCtx.getParameter(glCtx.ACTIVE_TEXTURE);
                 if (!tex) return;
-                pendingSwaps.set(glCtx, {
-                    target: args[0], level: args[1], ifmt: args[2],
-                    fmt: args[3], type: args[4], tex: tex, unit: unit, src: src
-                });
+                pendingSwaps.set(glCtx, { tex: tex, unit: unit, src: src });
                 if (!schedulePendingSwap.timer) {
                     schedulePendingSwap.timer = setTimeout(pendingSwapTick, 700);
                 }
@@ -1139,16 +1158,20 @@
                     if (!url) { pendingSwaps.delete(glCtx); return; }
                     var rep = repImages[url] && repImages[url].complete
                         ? repImages[url] : getReplacement(url, function () {});
-                    if (!rep) { retry = true; return; }
-                    var swap = atlasSwap(p.src, rep);
+                    var swap = rep && atlasSwap(p.src, rep);
                     if (!swap) { retry = true; return; }
-                    // re-subir sobre la textura original del atlas
+                    // re-subir sobre la textura original del atlas. La textura
+                    // es inmutable (texStorage2D): re-subir con texSubImage2D.
                     glCtx.activeTexture(p.unit);
-                    glCtx.bindTexture(p.target, p.tex);
-                    glCtx.texImage2D(p.target, p.level, p.ifmt, p.fmt, p.type, swap);
+                    glCtx.bindTexture(glCtx.TEXTURE_2D, p.tex);
+                    glCtx.texSubImage2D(glCtx.TEXTURE_2D, 0, 0, 0,
+                                        glCtx.RGBA, glCtx.UNSIGNED_BYTE, swap);
                     pendingSwaps.delete(glCtx);
                     dollLog('doll: re-subida aplicada (custom llegó tarde)');
-                } catch (_) { pendingSwaps.delete(glCtx); }
+                } catch (e) {
+                    pendingSwaps.delete(glCtx);
+                    dollLog('doll: re-subida falló', e && e.message);
+                }
             });
             if (retry && pendingSwaps.size) {
                 schedulePendingSwap.timer = setTimeout(pendingSwapTick, 700);
@@ -1161,53 +1184,62 @@
             try { protos.push(window.WebGL2RenderingContext); } catch (_) {}
             protos.forEach(function (P) {
                 if (!P || !P.prototype || P.prototype.__mfPreviewHook) return;
-                var orig = P.prototype.texImage2D;
-                if (typeof orig !== 'function') return;
                 P.prototype.__mfPreviewHook = true;
-                P.prototype.texImage2D = function () {
-                    try {
-                        var cvs = this.canvas;
-                        var args = Array.prototype.slice.call(arguments);
-                        var src = args.length === 6 ? args[5] : null;
-                        var inDoll = cvs && !replaying &&
-                            (isMenuPreviewCanvas(cvs) || isOffscreenDollCanvas(cvs));
-                        var isSkin = skinSrcMatch(src) ||
-                            (src instanceof HTMLCanvasElement && skinAtlasInfo.has(src));
-                        if (inDoll && isSkin) {
-                            var entry = entryForLocalPlayer();
-                            var url = entry && resolveSkinImageUrl(entry);
-                            if (url) {
-                                var rep = repImages[url] && repImages[url].complete
-                                    ? repImages[url] : getReplacement(url, function () {});
-                                var swap = null;
-                                if (rep && skinSrcMatch(src)) {
-                                    swap = rep; // IMG directa (bob/alice)
-                                } else if (rep && src instanceof HTMLCanvasElement &&
-                                           skinAtlasInfo.has(src)) {
-                                    swap = atlasSwap(src, rep); // atlas (custom:<id>)
-                                }
+
+                // --- texImage2D (forma 6-arg con fuente en args[5]) ---
+                var origTex = P.prototype.texImage2D;
+                if (typeof origTex === 'function') {
+                    P.prototype.texImage2D = function () {
+                        try {
+                            var cvs = this.canvas;
+                            var args = Array.prototype.slice.call(arguments);
+                            var src = args.length === 6 ? args[5] : null;
+                            var inDoll = cvs && !replaying &&
+                                (isMenuPreviewCanvas(cvs) || isOffscreenDollCanvas(cvs));
+                            var isSkin = src && (skinSrcMatch(src) ||
+                                (src instanceof HTMLCanvasElement && skinAtlasInfo.has(src)));
+                            if (inDoll && isSkin) {
+                                var swap = swapSourceFor(this, src);
                                 if (swap) {
-                                    dollLog('doll: swap aplicado',
-                                        (cvs.width + 'x' + cvs.height),
-                                        src instanceof HTMLCanvasElement ? 'atlas' : 'img');
+                                    dollLog('doll: swap texImage2D', cvs.width + 'x' + cvs.height,
+                                            src instanceof HTMLCanvasElement ? 'atlas' : 'img');
                                     args[5] = swap;
-                                    return orig.apply(this, args);
+                                    return origTex.apply(this, args);
                                 }
-                                schedulePendingSwap(this, args);
-                                dollLog('doll: custom no lista → re-subida agendada');
-                            } else {
-                                dollLog('doll: sin entry del jugador local (¿no logueado o sin skin?)');
                             }
-                        } else if (inDoll) {
-                            // fuente no reconocida como skin: log para diagnosticar
-                            var d = src && (src.constructor && src.constructor.name || typeof src);
-                            var sz = src && (src.naturalWidth || src.width) + 'x' + (src.naturalHeight || src.height);
-                            var u = src && src.src ? String(src.src).slice(-60) : '';
-                            dollLog('doll: fuente ignorada', d, sz, u);
-                        }
-                    } catch (_) {}
-                    return orig.apply(this, arguments);
-                };
+                        } catch (_) {}
+                        return origTex.apply(this, arguments);
+                    };
+                }
+
+                // --- texSubImage2D (forma 7-arg con fuente en args[6]) ---
+                // WebGL2: three.js sube las texturas por acá (texStorage2D +
+                // texSubImage2D inmutable) — texImage2D con fuente nunca se
+                // llama. Sin este hook el doll queda vanilla.
+                var origSub = P.prototype.texSubImage2D;
+                if (typeof origSub === 'function') {
+                    P.prototype.texSubImage2D = function () {
+                        try {
+                            var cvs = this.canvas;
+                            var args = Array.prototype.slice.call(arguments);
+                            var src = args.length === 7 ? args[6] : null;
+                            var inDoll = cvs && !replaying &&
+                                (isMenuPreviewCanvas(cvs) || isOffscreenDollCanvas(cvs));
+                            var isSkin = src && (skinSrcMatch(src) ||
+                                (src instanceof HTMLCanvasElement && skinAtlasInfo.has(src)));
+                            if (inDoll && isSkin) {
+                                var swap = swapSourceFor(this, src);
+                                if (swap) {
+                                    dollLog('doll: swap texSubImage2D', cvs.width + 'x' + cvs.height,
+                                            src instanceof HTMLCanvasElement ? 'atlas' : 'img');
+                                    args[6] = swap;
+                                    return origSub.apply(this, args);
+                                }
+                            }
+                        } catch (_) {}
+                        return origSub.apply(this, arguments);
+                    };
+                }
             });
         }
         patchPreviewWebGL();
