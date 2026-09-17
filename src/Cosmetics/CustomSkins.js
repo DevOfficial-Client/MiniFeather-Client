@@ -1039,17 +1039,21 @@
             var cvs = this.canvas;
             // registro del atlas de skin: IMG de skin dibujada sobre un
             // canvas offscreen (el builder del engine hace drawImage(img,0,0)
-            // sobre un canvas cuadrado del mismo ancho que la IMG)
-            if (!replaying && skinSrcMatch(args[0])) {
-                try {
-                    var sim = args[0];
-                    var sw = sim.naturalWidth || sim.width;
-                    if (cvs && !document.body.contains(cvs) &&
-                        cvs.width === sw && cvs.height === sw &&
-                        args.length <= 5) { // forma drawImage(img, dx, dy)
-                        skinAtlasInfo.set(cvs, { w: sw });
-                    }
-                } catch (_) {}
+            // sobre un canvas cuadrado del mismo ancho que la IMG). Se guarda
+            // el id de la skin para saber a quién pertenece el atlas.
+            if (!replaying) {
+                var m0 = skinSrcMatch(args[0]);
+                if (m0) {
+                    try {
+                        var sim = args[0];
+                        var sw = sim.naturalWidth || sim.width;
+                        if (cvs && !document.body.contains(cvs) &&
+                            cvs.width === sw && cvs.height === sw &&
+                            args.length <= 5) { // forma drawImage(img, dx, dy)
+                            skinAtlasInfo.set(cvs, { id: m0[1], w: sw });
+                        }
+                    } catch (_) {}
+                }
             }
             if (!replaying && isMenuPreviewCanvas(cvs) && skinSrcMatch(args[0])) {
                 var entry = entryForLocalPlayer();
@@ -1073,20 +1077,76 @@
         };
 
         // WebGL: si el preview sube la skin como textura directamente
-        // (texImage2D con HTMLImageElement), sustituir la fuente igual.
-        // Cubre:
+        // (texImage2D con HTMLImageElement o canvas-atlas), sustituir la
+        // fuente. Cubre:
         //  - preview del menú de cosméticos (canvas visible 109x185)
-        //  - paperdoll offscreen (~95x161, render → syncToVisible)
-        //  - avatar de cuenta: renderiza DIRECTO a un canvas WebGL visible
-        //    en el DOM (useRenderToCanvas sin offscreen)
-        // En todos los casos la skin sube como atlas-canvas (yIwkPEvphTDgWU
-        // dibuja la IMG sobre un canvas cuadrado) o como IMG directa.
+        //  - paperdoll offscreen (~95x161) y avatar de cuenta (52x52)
+        // El engine sube la textura UNA VEZ: si la custom aún no estaba
+        // lista, se agenda re-subida (pendingSwaps) para cuando lo esté.
         function isOffscreenDollCanvas(c) {
             if (!c) return false;
+            var inDom;
+            try { inDom = document.body && document.body.contains(c); } catch (_) { inDom = false; }
+            if (inDom) {
+                // avatar de cuenta visible (52x52): rect chico. El canvas del
+                // mundo/HUD es visible pero ocupa toda la ventana → fuera.
+                try {
+                    var r = c.getBoundingClientRect();
+                    return r.width > 0 && r.width <= 300 && r.height <= 400;
+                } catch (_) { return false; }
+            }
+            // paperdoll offscreen (no en DOM): tamaño de muñeco, nunca ventana
             var w = c.width, h = c.height;
-            // muñeco/preview: chico (dpr incluido). El canvas del mundo y el
-            // HUD son tamaño ventana (>=900px típicamente).
-            return w >= 40 && w <= 900 && h >= 40 && h <= 900;
+            return w >= 40 && w <= 700 && h >= 40 && h <= 700;
+        }
+
+        // contextos GL con textura de skin pendiente de re-subir con la custom
+        var pendingSwaps = new Map();
+
+        function schedulePendingSwap(glCtx, args) {
+            try {
+                var src = args.length === 6 ? args[5] : null;
+                if (!(src instanceof HTMLCanvasElement) || !skinAtlasInfo.has(src)) return;
+                var entry = entryForLocalPlayer();
+                if (!entry || !resolveSkinImageUrl(entry)) return;
+                // la textura bound en el momento del upload: el re-upload debe
+                // apuntar a ESA textura (texImage2D pisa la que está bound)
+                var tex = glCtx.getParameter(glCtx.TEXTURE_BINDING_2D);
+                var unit = glCtx.getParameter(glCtx.ACTIVE_TEXTURE);
+                if (!tex) return;
+                pendingSwaps.set(glCtx, {
+                    target: args[0], level: args[1], ifmt: args[2],
+                    fmt: args[3], type: args[4], tex: tex, unit: unit, src: src
+                });
+                if (!schedulePendingSwap.timer) {
+                    schedulePendingSwap.timer = setTimeout(pendingSwapTick, 700);
+                }
+            } catch (_) {}
+        }
+
+        function pendingSwapTick() {
+            schedulePendingSwap.timer = null;
+            var retry = false;
+            pendingSwaps.forEach(function (p, glCtx) {
+                try {
+                    var entry = entryForLocalPlayer();
+                    var url = entry && resolveSkinImageUrl(entry);
+                    if (!url) { pendingSwaps.delete(glCtx); return; }
+                    var rep = repImages[url] && repImages[url].complete
+                        ? repImages[url] : getReplacement(url, function () {});
+                    if (!rep) { retry = true; return; }
+                    var swap = atlasSwap(p.src, rep);
+                    if (!swap) { retry = true; return; }
+                    // re-subir sobre la textura original del atlas
+                    glCtx.activeTexture(p.unit);
+                    glCtx.bindTexture(p.target, p.tex);
+                    glCtx.texImage2D(p.target, p.level, p.ifmt, p.fmt, p.type, swap);
+                    pendingSwaps.delete(glCtx);
+                } catch (_) { pendingSwaps.delete(glCtx); }
+            });
+            if (retry && pendingSwaps.size) {
+                schedulePendingSwap.timer = setTimeout(pendingSwapTick, 700);
+            }
         }
 
         function patchPreviewWebGL() {
@@ -1098,32 +1158,32 @@
                 var orig = P.prototype.texImage2D;
                 if (typeof orig !== 'function') return;
                 P.prototype.__mfPreviewHook = true;
-                P.prototype.texImage2D = function (target, level, internalformat, f4, f5, img) {
+                P.prototype.texImage2D = function () {
                     try {
                         var cvs = this.canvas;
-                        var argImg = arguments.length === 6 ? arguments[5] : null;
+                        var args = Array.prototype.slice.call(arguments);
+                        var src = args.length === 6 ? args[5] : null;
                         if (cvs && !replaying &&
-                            (isMenuPreviewCanvas(cvs) || isOffscreenDollCanvas(cvs))) {
+                            (isMenuPreviewCanvas(cvs) || isOffscreenDollCanvas(cvs)) &&
+                            (skinSrcMatch(src) ||
+                             (src instanceof HTMLCanvasElement && skinAtlasInfo.has(src)))) {
                             var entry = entryForLocalPlayer();
                             var url = entry && resolveSkinImageUrl(entry);
                             if (url) {
                                 var rep = repImages[url] && repImages[url].complete
                                     ? repImages[url] : getReplacement(url, function () {});
                                 var swap = null;
-                                if (rep && skinSrcMatch(argImg)) {
-                                    // IMG directa de skin (bob/alice sin login)
-                                    swap = rep;
-                                } else if (rep && argImg instanceof HTMLCanvasElement &&
-                                           skinAtlasInfo.has(argImg)) {
-                                    // atlas-canvas de skin (skins custom:<id> del
-                                    // catálogo): copia con la custom, mismo tamaño
-                                    swap = atlasSwap(argImg, rep);
+                                if (rep && skinSrcMatch(src)) {
+                                    swap = rep; // IMG directa (bob/alice)
+                                } else if (rep && src instanceof HTMLCanvasElement &&
+                                           skinAtlasInfo.has(src)) {
+                                    swap = atlasSwap(src, rep); // atlas (custom:<id>)
                                 }
                                 if (swap) {
-                                    var a = Array.prototype.slice.call(arguments);
-                                    a[5] = swap;
-                                    return orig.apply(this, a);
+                                    args[5] = swap;
+                                    return orig.apply(this, args);
                                 }
+                                schedulePendingSwap(this, args);
                             }
                         }
                     } catch (_) {}
