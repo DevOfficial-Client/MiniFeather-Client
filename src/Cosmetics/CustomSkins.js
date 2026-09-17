@@ -468,6 +468,91 @@
                 while (!(entry = it.next()).done) overridePlayer(entry.value);
             }
         } catch (e) {}
+
+        // La mano FP vive fuera de player.mesh (colgada de la cámara):
+        // necesita su propio pase cada scan.
+        repaintFirstPersonHand();
+    }
+    // El renderer de la mano FP es un objeto SEPARADO colgado de la cámara
+    // (gameScene.axesHelper.parent → hijo con updateArmAnimation/rightArm),
+    // no forma parte de player.mesh → overridePlayer nunca lo pintó y la
+    // mano quedaba con el atlas vanilla. Este pase pinta sus materiales de
+    // skin por jerarquía. Filtro de tamaño SIN fallback: la textura de un
+    // item sostenido (16x16) no es múltiplo de 64 → nunca se toca.
+    function repaintFirstPersonHand() {
+        try {
+            var game = findGame();
+            if (!game || !game.player || !game.gameScene) return;
+            var entry = game.player.profile ? lookupEntry(game.player.profile) : null;
+            if (!entry) return;
+            var url = resolveSkinImageUrl(entry);
+            if (!url || !/^(https?|data|chrome-extension|blob):/i.test(url)) return;
+
+            var camParent = game.gameScene.axesHelper && game.gameScene.axesHelper.parent;
+            var kids = (camParent && camParent.children) || [];
+            var lf = null;
+            for (var i = 0; i < kids.length; i++) {
+                if (typeof kids[i].updateArmAnimation === 'function' && kids[i].rightArm) {
+                    lf = kids[i];
+                    break;
+                }
+            }
+            if (!lf || typeof lf.traverse !== 'function') return;
+
+            // materiales con textura de skin del brazo (solo los que matchean
+            // dimensiones de skin: w múltiplo de 64, ratio 1:1 o 2:1)
+            var mats = [], seenM = new Set();
+            lf.traverse(function (o) {
+                if (!o || !o.material) return;
+                var list = Array.isArray(o.material) ? o.material : [o.material];
+                for (var j = 0; j < list.length; j++) {
+                    var m = list[j];
+                    var im = m && m.map ? m.map.image : null;
+                    var w = im ? im.width : 0, h = im ? im.height : 0;
+                    if (!w || !h) continue;
+                    var k = w / 64;
+                    if (!Number.isInteger(k)) continue;
+                    if (h !== w && h !== w / 2) continue;
+                    if (!seenM.has(m)) { seenM.add(m); mats.push(m); }
+                }
+            });
+            if (!mats.length) return;
+
+            var pending = mats.filter(function (m) {
+                return m.map && (m.map.__mfPainted !== url || m.map.__mfEpoch !== paintEpoch);
+            });
+            if (!pending.length) return;
+
+            var img = new Image();
+            if (/^https?:/i.test(url)) img.crossOrigin = 'anonymous';
+            img.onload = function () {
+                for (var i = 0; i < pending.length; i++) {
+                    var t = pending[i].map;
+                    if (!t) continue;
+                    try {
+                        var c = document.createElement('canvas');
+                        c.width = img.naturalWidth || img.width;
+                        c.height = img.naturalHeight || img.height;
+                        var ctx = c.getContext('2d');
+                        ctx.imageSmoothingEnabled = false;
+                        ctx.drawImage(img, 0, 0);
+                        var nt = null;
+                        try { nt = new t.constructor(c); } catch (_) {}
+                        if (!nt) continue;
+                        try {
+                            nt.magFilter = t.magFilter; nt.minFilter = t.minFilter;
+                            if (t.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = t.colorSpace;
+                            nt.flipY = t.flipY; nt.wrapS = t.wrapS; nt.wrapT = t.wrapT;
+                        } catch (_) {}
+                        nt.__mfPainted = url;
+                        nt.__mfEpoch = paintEpoch;
+                        pending[i].map = nt;
+                        pending[i].needsUpdate = true;
+                    } catch (e) {}
+                }
+            };
+            img.src = url;
+        } catch (_) {}
     }
 
     // Época actual de pintado (ver bumpEpoch): fuerza repintados cuando el
