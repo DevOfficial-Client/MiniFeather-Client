@@ -8,6 +8,19 @@
   let showTimer = 0;
   let tooltip = null;
 
+  const LANGUAGE_NAMES = Object.freeze({
+    en: 'English',
+    es: 'Español',
+    ja: '日本語',
+    it: 'Italiano',
+    zh: '中文',
+    fr: 'Français',
+    de: 'Deutsch',
+    pt: 'Português',
+    ru: 'Русский',
+    ko: '한국어'
+  });
+
   const css = `
     #mf-gui {
       animation: mfPanelPolishIn 180ms cubic-bezier(.2,.75,.25,1) both;
@@ -91,107 +104,6 @@
       filter: brightness(1.08);
     }
 
-    /* Unify old settings windows with the current Feather-style panel. */
-    #mf-gui .mf-tt-backdrop,
-    #mf-gui .mf-feature-modal-backdrop {
-      background: rgba(0,0,0,.58) !important;
-      backdrop-filter: blur(7px) saturate(115%);
-      -webkit-backdrop-filter: blur(7px) saturate(115%);
-    }
-
-    #mf-gui .mf-tt-dialog,
-    #mf-gui .mf-feature-modal {
-      background:
-        linear-gradient(180deg,
-          color-mix(in srgb, var(--mf-ui-panel, #0e1115) 91%, #fff 9%),
-          var(--mf-ui-panel, #0e1115)) !important;
-      border: 1px solid color-mix(in srgb, var(--mf-ui-accent, #ef3b3b) 24%, #30363d 76%) !important;
-      border-radius: 12px !important;
-      box-shadow:
-        0 26px 80px rgba(0,0,0,.58),
-        0 0 0 1px rgba(255,255,255,.025) inset !important;
-      color: #f3f4f6 !important;
-      animation: mfSettingsDialogIn 150ms cubic-bezier(.2,.8,.25,1) both;
-    }
-
-    @keyframes mfSettingsDialogIn {
-      from { opacity:0; transform:translateY(7px) scale(.985); }
-      to { opacity:1; transform:translateY(0) scale(1); }
-    }
-
-    #mf-gui .mf-tt-title,
-    #mf-gui .mf-feature-modal-title {
-      color:#f8fafc !important;
-      letter-spacing:.01em;
-    }
-
-    #mf-gui .mf-feature-modal-desc,
-    #mf-gui .mf-tt-hint {
-      color:#9299a3 !important;
-    }
-
-    #mf-gui .mf-tt-scale-value,
-    #mf-gui .mf-co-control-head strong,
-    #mf-gui .mf-feature-modal-row strong {
-      color:var(--mf-ui-accent, #ef3b3b) !important;
-    }
-
-    #mf-gui .mf-tt-range,
-    #mf-gui .mf-co-range,
-    #mf-gui input[type="range"] {
-      accent-color:var(--mf-ui-accent, #ef3b3b) !important;
-    }
-
-    #mf-gui .mf-tt-bind-box,
-    #mf-gui .mf-co-control,
-    #mf-gui .mf-dc-row,
-    #mf-gui .mf-feature-modal-row {
-      border-color:color-mix(in srgb, var(--mf-ui-accent, #ef3b3b) 14%, #30363d 86%) !important;
-      background:color-mix(in srgb, var(--mf-ui-panel, #0e1115) 91%, #fff 9%) !important;
-    }
-
-    #mf-gui .mf-tt-presets .active,
-    #mf-gui .mf-co-presets .active,
-    #mf-gui .mf-feature-state.enabled,
-    #mf-gui .mf-btn.primary {
-      background:var(--mf-ui-accent, #ef3b3b) !important;
-      border-color:var(--mf-ui-accent, #ef3b3b) !important;
-      color:#fff !important;
-    }
-
-    #mf-gui .mf-close,
-    #mf-gui .mf-feature-modal-actions .mf-btn.secondary,
-    #mf-gui .mf-tt-bind-actions .mf-btn,
-    #mf-gui .mf-tt-presets .mf-btn {
-      border-color:color-mix(in srgb, var(--mf-ui-accent, #ef3b3b) 18%, #30363d 82%) !important;
-      background:color-mix(in srgb, var(--mf-ui-panel, #0e1115) 88%, #fff 12%) !important;
-      color:#dfe3e8 !important;
-    }
-
-    #mf-gui .mf-close:hover,
-    #mf-gui .mf-feature-modal-actions .mf-btn.secondary:hover,
-    #mf-gui .mf-tt-bind-actions .mf-btn:hover,
-    #mf-gui .mf-tt-presets .mf-btn:hover {
-      border-color:color-mix(in srgb, var(--mf-ui-accent, #ef3b3b) 55%, #30363d 45%) !important;
-      background:color-mix(in srgb, var(--mf-ui-accent, #ef3b3b) 13%, var(--mf-ui-panel, #0e1115) 87%) !important;
-    }
-
-    #mf-gui .mf-select,
-    #mf-gui select,
-    #mf-gui .mf-co-number,
-    #mf-gui .mf-dc-select {
-      border-color:color-mix(in srgb, var(--mf-ui-accent, #ef3b3b) 15%, #30363d 85%) !important;
-      background:color-mix(in srgb, var(--mf-ui-panel, #0e1115) 90%, #fff 10%) !important;
-      color:#f3f4f6 !important;
-    }
-
-    #mf-gui .mf-select:focus,
-    #mf-gui select:focus,
-    #mf-gui .mf-co-number:focus,
-    #mf-gui .mf-dc-select:focus {
-      border-color:var(--mf-ui-accent, #ef3b3b) !important;
-    }
-
     #${ROOT_ID} {
       position: fixed;
       z-index: 2147483647;
@@ -252,6 +164,76 @@
       white-space: nowrap;
     }
 
+
+
+    /* Unify all legacy settings/dialog accents with the panel theme. */
+    #mf-gui,
+    #mf-gui-overlay,
+    [class^="mf-"][class*="backdrop"],
+    [class*=" mf-"][class*="backdrop"] {
+      --mf-accent: var(--mf-ui-accent, var(--mf-global-accent, #ef3b3b));
+      --mf-accent2: color-mix(in srgb, var(--mf-ui-accent, var(--mf-global-accent, #ef3b3b)) 82%, #fff 18%);
+    }
+
+    #mf-gui .mf-btn.primary,
+    #mf-gui button.primary,
+    #mf-gui [class*="bind"] .mf-btn.primary,
+    #mf-gui [class*="settings"] .mf-btn.primary,
+    #mf-gui [class*="modal"] .mf-btn.primary {
+      background: linear-gradient(180deg,
+        color-mix(in srgb, var(--mf-ui-accent, var(--mf-global-accent, #ef3b3b)) 92%, #fff 8%),
+        color-mix(in srgb, var(--mf-ui-accent, var(--mf-global-accent, #ef3b3b)) 78%, #000 22%)) !important;
+      border-color: color-mix(in srgb, var(--mf-ui-accent, var(--mf-global-accent, #ef3b3b)) 48%, transparent) !important;
+      color:#fff !important;
+    }
+
+    #mf-gui input[type="range"],
+    #mf-gui input[type="checkbox"],
+    #mf-gui input[type="radio"] {
+      accent-color: var(--mf-ui-accent, var(--mf-global-accent, #ef3b3b)) !important;
+    }
+
+    #mf-gui .mf-toggle:hover,
+    #mf-gui .mf-toggle:has(input:checked),
+    #mf-gui .mf-toggle:has(.mf-switch-hidden:checked),
+    #mf-gui [class*="preset"].active,
+    #mf-gui [class*="option"].active,
+    #mf-gui [class*="tab"].active {
+      border-color: var(--mf-ui-accent, var(--mf-global-accent, #ef3b3b)) !important;
+    }
+
+    #mf-gui .mf-toggle:has(input:checked),
+    #mf-gui .mf-toggle:has(.mf-switch-hidden:checked),
+    #mf-gui [class*="preset"].active,
+    #mf-gui [class*="option"].active {
+      background: color-mix(in srgb, var(--mf-ui-accent, var(--mf-global-accent, #ef3b3b)) 15%, transparent) !important;
+    }
+
+    #mf-gui .mf-select:focus,
+    #mf-gui .mf-input:focus,
+    #mf-gui input:focus,
+    #mf-gui select:focus {
+      border-color: color-mix(in srgb, var(--mf-ui-accent, var(--mf-global-accent, #ef3b3b)) 70%, #fff 30%) !important;
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--mf-ui-accent, var(--mf-global-accent, #ef3b3b)) 26%, transparent) !important;
+    }
+
+    /* Native select highlight follows the current panel accent where supported. */
+    #mf-gui .mf-select option:checked,
+    #mf-language-select option:checked {
+      background: var(--mf-ui-accent, var(--mf-global-accent, #ef3b3b)) !important;
+      color:#fff !important;
+    }
+
+    /* Key-capture states use the same theme instead of legacy purple. */
+    #mf-gui button[data-zoom-bind],
+    #mf-gui button[data-fc-bind],
+    #mf-gui button[data-co-bind],
+    #mf-gui button[data-tt-bind],
+    #mf-gui button[data-fl-bind],
+    #mf-gui [data-mf-binding="true"] {
+      border-color: color-mix(in srgb, var(--mf-ui-accent, var(--mf-global-accent, #ef3b3b)) 55%, transparent) !important;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       #mf-gui,
       #mf-gui *,
@@ -291,6 +273,26 @@
     tooltip.innerHTML = '<span class="mf-polish-tooltip-icon" aria-hidden="true"></span><span class="mf-polish-tooltip-name"></span>';
     (document.body || document.documentElement).appendChild(tooltip);
     return tooltip;
+  }
+
+  function normalizeLanguageOptions(root = document) {
+    const selects = [];
+    if (root instanceof HTMLSelectElement) selects.push(root);
+    root.querySelectorAll?.('select').forEach(select => selects.push(select));
+
+    for (const select of selects) {
+      const id = String(select.id || '').toLowerCase();
+      const aria = String(select.getAttribute('aria-label') || '').toLowerCase();
+      const values = [...select.options].map(option => String(option.value || '').toLowerCase());
+      const looksLikeLanguage = id.includes('language') || aria.includes('language') || values.filter(value => LANGUAGE_NAMES[value]).length >= 4;
+      if (!looksLikeLanguage) continue;
+
+      for (const option of select.options) {
+        const code = String(option.value || '').toLowerCase();
+        const name = LANGUAGE_NAMES[code];
+        if (name) option.textContent = name;
+      }
+    }
   }
 
   function normalizeTitles(root = document) {
@@ -389,33 +391,10 @@
     if (leaving === activeAnchor || !next || !(next instanceof Element) || !activeAnchor.contains(next)) hide();
   }
 
-  const LANGUAGE_NAMES = Object.freeze({
-    en: 'English',
-    es: 'Español',
-    ja: '日本語',
-    it: 'Italiano',
-    zh: '中文',
-    fr: 'Français',
-    de: 'Deutsch',
-    pt: 'Português',
-    ru: 'Русский',
-    ko: '한국어'
-  });
-
-  function normalizeLanguageSelect(root = document) {
-    const select = root.querySelector?.('#mf-language-select') ||
-      (root.id === 'mf-language-select' ? root : null);
-    if (!select) return;
-    for (const option of select.options || []) {
-      const label = LANGUAGE_NAMES[option.value];
-      if (label && option.textContent !== label) option.textContent = label;
-    }
-  }
-
   function init() {
     injectStyle();
     normalizeTitles();
-    normalizeLanguageSelect();
+    normalizeLanguageOptions();
     document.addEventListener('pointerover', onPointerOver, true);
     document.addEventListener('pointerout', onPointerOut, true);
     document.addEventListener('pointerdown', hide, true);
@@ -427,16 +406,17 @@
         for (const node of record.addedNodes) {
           if (!(node instanceof Element)) continue;
           if (node.id === 'mf-gui' || node.closest?.('#mf-gui') || node.querySelector?.('#mf-gui')) {
-            const scope = node.matches?.('#mf-gui') ? node : document;
-            normalizeTitles(scope);
-            normalizeLanguageSelect(scope);
-          } else if (node.id === 'mf-language-select' || node.querySelector?.('#mf-language-select')) {
-            normalizeLanguageSelect(node.id === 'mf-language-select' ? node : document);
+            normalizeTitles(node.matches?.('#mf-gui') ? node : document);
+            normalizeLanguageOptions(node.matches?.('#mf-gui') ? node : document);
           }
         }
       }
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
+
+    document.addEventListener('focusin', event => {
+      if (event.target instanceof HTMLSelectElement) normalizeLanguageOptions(event.target);
+    }, true);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });

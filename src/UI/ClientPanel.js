@@ -634,22 +634,20 @@
   }
 
   function applyPanelTheme() {
-    if (!panel) return;
     const accent = normalizePanelColor(settings.panelAccentColor, DEFAULT_SETTINGS.panelAccentColor);
     const background = normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor);
 
-    // Modern theme variables.
+    // Keep one global theme source so dialogs/toasts outside #mf-gui can match the panel.
+    const root = document.documentElement;
+    root?.style.setProperty('--mf-global-accent', accent);
+    root?.style.setProperty('--mf-global-panel', background);
+
+    if (!panel) return;
     panel.style.setProperty('--mf-ui-accent', accent);
     panel.style.setProperty('--mf-ui-panel', background);
-
-    // Legacy settings dialogs still use the original variable names. Keep them
-    // mapped to the same user-selected theme so every panel follows one palette.
     panel.style.setProperty('--mf-accent', accent);
-    panel.style.setProperty('--mf-accent2', accent);
+    panel.style.setProperty('--mf-accent2', `color-mix(in srgb, ${accent} 82%, white 18%)`);
     panel.style.setProperty('--mf-bg', background);
-    panel.style.setProperty('--mf-panel', background);
-    panel.style.setProperty('--mf-panel2', `color-mix(in srgb, ${background} 88%, #ffffff 12%)`);
-    panel.style.setProperty('--mf-border', `color-mix(in srgb, ${accent} 24%, #30363d 76%)`);
   }
 
   function clampPanelScale(value) {
@@ -1882,12 +1880,12 @@
         display:none;
       }
       #mf-gui {
-        --mf-bg:#090b11;
-        --mf-panel:#11151d;
-        --mf-panel2:#171c26;
-        --mf-border:#252d3b;
-        --mf-accent:#7c5cff;
-        --mf-accent2:#9a84ff;
+        --mf-bg:var(--mf-ui-panel,#090b11);
+        --mf-panel:color-mix(in srgb,var(--mf-ui-panel,#0e1115) 88%,#fff 12%);
+        --mf-panel2:color-mix(in srgb,var(--mf-ui-panel,#0e1115) 78%,#fff 22%);
+        --mf-border:color-mix(in srgb,var(--mf-ui-panel,#0e1115) 58%,#fff 42%);
+        --mf-accent:var(--mf-ui-accent,#ef3b3b);
+        --mf-accent2:color-mix(in srgb,var(--mf-ui-accent,#ef3b3b) 82%,#fff 18%);
         --mf-text:#ffffff;
         --mf-sub:#9ea8b7;
         position:fixed;
@@ -7625,16 +7623,6 @@ function renderCreditsPage() {
 
   function showGUI() {
     ensureGUI();
-
-    // Always open from the true viewport center. A previous drag used to leave
-    // transform:none behind, which could make left:50% place the whole panel in
-    // the lower/right area on the next open.
-    panel.style.left = '50%';
-    panel.style.top = '50%';
-    panel.style.right = 'auto';
-    panel.style.bottom = 'auto';
-    panel.style.transform = 'translate(-50%, -50%)';
-
     overlay.style.display = 'block';
     panel.style.display = 'block';
     panel.style.pointerEvents = 'auto';
@@ -10339,34 +10327,48 @@ function renderCreditsPage() {
     }, { signal: panelSignal });
 
     const topbar = panel.querySelector('#mf-gui-topbar');
-    let dragPending = false;
     let dragging = false;
+    let dragPending = false;
     let startX = 0;
     let startY = 0;
     let offX = 0;
     let offY = 0;
+    let startRect = null;
+
+    const centerPanel = () => {
+      panel.style.left = '50%';
+      panel.style.top = '50%';
+      panel.style.transform = 'translate(-50%, -50%)';
+    };
 
     topbar?.addEventListener('mousedown', event => {
       const target = event.target.closest('button, select, input');
       if (target || event.button !== 0) return;
-      const rect = panel.getBoundingClientRect();
       dragPending = true;
       dragging = false;
       startX = event.clientX;
       startY = event.clientY;
-      offX = event.clientX - rect.left;
-      offY = event.clientY - rect.top;
+      startRect = panel.getBoundingClientRect();
+      offX = event.clientX - startRect.left;
+      offY = event.clientY - startRect.top;
+    }, { signal: panelSignal });
+
+    topbar?.addEventListener('dblclick', event => {
+      if (event.target.closest('button, select, input')) return;
+      centerPanel();
     }, { signal: panelSignal });
 
     document.addEventListener('mousemove', event => {
       if (!dragPending && !dragging) return;
       if (!dragging) {
-        if (Math.hypot(event.clientX - startX, event.clientY - startY) < 5) return;
-        const rect = panel.getBoundingClientRect();
+        if (Math.hypot(event.clientX - startX, event.clientY - startY) < 4) return;
         dragging = true;
-        panel.style.transform = 'none';
-        panel.style.left = `${rect.left}px`;
-        panel.style.top = `${rect.top}px`;
+        dragPending = false;
+        if (startRect) {
+          panel.style.transform = 'none';
+          panel.style.left = `${startRect.left}px`;
+          panel.style.top = `${startRect.top}px`;
+        }
       }
       const panelWidth = panel.offsetWidth;
       const panelHeight = panel.offsetHeight;
@@ -10377,15 +10379,9 @@ function renderCreditsPage() {
     }, { signal: panelSignal });
 
     document.addEventListener('mouseup', () => {
-      dragPending = false;
       dragging = false;
-    }, { signal: panelSignal });
-
-    topbar?.addEventListener('dblclick', event => {
-      if (event.target.closest('button, select, input')) return;
-      panel.style.left = '50%';
-      panel.style.top = '50%';
-      panel.style.transform = 'translate(-50%, -50%)';
+      dragPending = false;
+      startRect = null;
     }, { signal: panelSignal });
 
     renderCurrentPageContent();
