@@ -1074,13 +1074,13 @@
             var args = arguments;
             var cvs = this.canvas;
             // registro del atlas de skin: el builder del engine dibuja la IMG
-            // de la skin sobre un canvas offscreen (compacto o no, cualquier
-            // forma de drawImage — la de 9 args remapea regiones de la IMG).
-            // La IMG es la fuente; el canvas destino, cuadrado y offscreen.
+            // de la skin COMPLETA sobre un canvas offscreen cuadrado (forma
+            // drawImage(img,0,0) — ≤5 args). Los head-icons (I3e) remapean con
+            // 9 args: NO registrarlos (pintarles un body encima deforma).
             if (!replaying) {
                 var m0 = skinSrcMatch(args[0]);
                 if (m0 && cvs && !document.body.contains(cvs) &&
-                    cvs.width === cvs.height) {
+                    cvs.width === cvs.height && args.length <= 5) {
                     try {
                         skinAtlasInfo.set(cvs, { id: m0[1] });
                         dollLog('atlas registrado', cvs.width + 'x' + cvs.height, 'skin=' + m0[1]);
@@ -1153,11 +1153,38 @@
                 dollLog('doll: custom no lista → re-subida agendada', url.slice(-30));
                 return null;
             }
-            if (skinSrcMatch(src)) return rep; // IMG directa
+            if (skinSrcMatch(src)) {
+                // IMG directa: la textura se alocó al tamaño de ESA imagen
+                // (bob/alice 128x128). Escalar la custom al mismo tamaño —
+                // subir una 64x64 a una textura 128x128 inmutable llena solo
+                // un cuarto y deforma.
+                return scaleTo(rep, src.naturalWidth || src.width,
+                               src.naturalHeight || src.height);
+            }
             if (src instanceof HTMLCanvasElement && skinAtlasInfo.has(src)) {
                 return atlasSwap(src, rep); // atlas-canvas
             }
             return null;
+        }
+
+        // rep estirada a w×h (cacheada por época)
+        var scaleCache = new Map(); // "w×h" -> canvas
+        function scaleTo(rep, w, h) {
+            if (!w || !h) return null;
+            if (w === rep.naturalWidth && h === rep.naturalHeight) return rep;
+            var key = w + 'x' + h + '@' + paintEpoch;
+            var c = scaleCache.get(key);
+            if (c) return c;
+            try {
+                c = document.createElement('canvas');
+                c.width = w; c.height = h;
+                var ctx = c.getContext('2d');
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(rep, 0, 0, rep.naturalWidth, rep.naturalHeight,
+                              0, 0, w, h);
+                scaleCache.set(key, c);
+                return c;
+            } catch (_) { return null; }
         }
 
         function schedulePendingSwap(glCtx, src) {
@@ -1189,10 +1216,15 @@
                     if (!swap) { retry = true; return; }
                     // re-subir sobre la textura original del atlas. La textura
                     // es inmutable (texStorage2D): re-subir con texSubImage2D.
+                    // three.js alterna UNPACK_FLIP_Y por upload: fijarlo acá
+                    // (true = flipY de CanvasTexture) y restaurar después.
                     glCtx.activeTexture(p.unit);
                     glCtx.bindTexture(glCtx.TEXTURE_2D, p.tex);
+                    var prevFlip = glCtx.getParameter(glCtx.UNPACK_FLIP_Y_WEBGL);
+                    glCtx.pixelStorei(glCtx.UNPACK_FLIP_Y_WEBGL, true);
                     glCtx.texSubImage2D(glCtx.TEXTURE_2D, 0, 0, 0,
                                         glCtx.RGBA, glCtx.UNSIGNED_BYTE, swap);
+                    glCtx.pixelStorei(glCtx.UNPACK_FLIP_Y_WEBGL, prevFlip);
                     pendingSwaps.delete(glCtx);
                     dollLog('doll: re-subida aplicada (custom llegó tarde)');
                 } catch (e) {
