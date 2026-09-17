@@ -399,6 +399,14 @@
     var SKIN_PATH_REGEX = /^(?:[a-z][a-z0-9+.-]*:\/\/[^\/]+)?\/?textures\/entity\/skins\/([^\/?#]+)\.png(?:[?#].*)?$/i;
 
     var SKIN_PATH_REGEX_DEEP = /^(?:[a-z][a-z0-9+.-]*:\/\/[^\/]+)?\/?textures\/entity\/skins\/(.+?)\.png(?:[?#].*)?$/i;
+
+    // Skins del catálogo equipadas: el engine las referencia como custom:<id>
+    // y las pide a la API de sesión (<origin>/auth-api/skins/custom/<id>.png
+    // o https://session.<host>/skins/custom/<id>.png). El paperdoll y el
+    // preview las suben igual (texImage2D/drawImage con HTMLImageElement),
+    // pero con esta URL que las regex de textures/ de arriba no ven — por eso
+    // el reemplazo solo funcionaba con bob/alice (ids planos).
+    var SKIN_API_URL_RE = /(?:^|\/)skins\/custom\/([^\/?#]+)\.png(?:[?#].*)?$/i;
     var patched = false;
 
     function getCustomSkinForId(skinId) {
@@ -970,7 +978,11 @@
         function skinSrcMatch(img) {
             if (!img || !(img instanceof HTMLImageElement)) return null;
             var src = img.src || '';
-            return src.match(SKIN_PATH_REGEX) || src.match(SKIN_PATH_REGEX_DEEP) || null;
+            // bob/alice (ids planos) suben con URL textures/entity/skins/;
+            // el resto del catálogo equipado va como custom:<id> → URL de la
+            // API de sesión (auth-api/skins/custom/ o session.<host>/skins/custom/).
+            return src.match(SKIN_PATH_REGEX) || src.match(SKIN_PATH_REGEX_DEEP)
+                || src.match(SKIN_API_URL_RE) || null;
         }
 
         function getReplacement(url, onReady) {
