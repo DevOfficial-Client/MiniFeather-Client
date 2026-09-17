@@ -200,11 +200,7 @@
         }       
         saveLayout(layout);     
         applyPositions();       
-        console.log(
-            TAG,
-            '✓ Armor HUD layout applied:',
-            layout
-        );
+        void 0;
     }
 
     document.addEventListener(
@@ -841,10 +837,7 @@
        updateHeldItem();
    }         
    function start() {       
-       console.log(
-           TAG,
-           'Starting...'
-       );             
+       void 0;             
        const timer =
            setInterval(() => {       
                try {       
@@ -872,17 +865,11 @@
                root?.remove();       
                root = null;
                slots = [];       
-               console.log(
-                   TAG,
-                   'Destroyed'
-               );
+               void 0;
            },       
            update
        };       
-       console.log(
-           TAG,
-           '✓ Armor HUD initialized'
-       );
+       void 0;
    }            
    if (
        document.readyState ===

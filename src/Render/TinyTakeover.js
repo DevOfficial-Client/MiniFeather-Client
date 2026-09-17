@@ -212,7 +212,7 @@
     }
     if (!GroupCtor) return false;
     state.ctors = { Geometry, Attr, TextureCtor, MeshCtor, Object3DCtor: GroupCtor };
-    console.log(TAG, 'constructores robados', Geometry?.name, MeshCtor?.name, GroupCtor?.name);
+    void 0;
     return true;
   }
 
@@ -644,7 +644,7 @@
     ensureCtors();
     state.scanTimer = window.setInterval(scanEntities, SCAN_MS);
     state.raf = requestAnimationFrame(tick);
-    console.log(TAG, 'activado');
+    void 0;
   }
 
   const localSpawns = new Map(); 
@@ -796,7 +796,7 @@
     if (state.raf) { cancelAnimationFrame(state.raf); state.raf = 0; }
     clearVisuals();
     clearLocalSpawns();
-    console.log(TAG, 'desactivado');
+    void 0;
   }
 
   function applyConfig(detail) {
@@ -867,5 +867,5 @@
     }
   };
 
-  console.log(TAG, 'Tiny Takeover listo (baby wolf incluido)');
+  void 0;
 })();

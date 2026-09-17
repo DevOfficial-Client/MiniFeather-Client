@@ -16,7 +16,7 @@
     globalThis[GLOBAL_KEY]?.destroy?.();
   } catch (_) {}
 
-  function log(...args) { try { console.log(TAG, ...args); } catch (_) {} }
+  function log(...args) { try { void 0; } catch (_) {} }
   function warn(...args) { try { console.warn(TAG, ...args); } catch (_) {} }
 
   // --- Markup nativo (clases de Chakra extraídas del modal real de miniblox.io) ---

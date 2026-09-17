@@ -36,7 +36,7 @@
     globalThis[GLOBAL_KEY]?.destroy?.();
   } catch (_) {}
 
-  console.log(TAG, 'script cargado, esperando config del panel...');
+  void 0;
 
   const state = {
     enabled: false,
@@ -656,12 +656,12 @@
 
         state.lastError = null;
         state.resourcesReady = true;
-        console.log(TAG, `recursos listos: ${state.materials.size} materiales, base=${base}`);
+        void 0;
         return true;
       } catch (err) {
         state.lastError = 'LOAD_FAIL';
         state.lastErrorDetail = String(err?.message || err);
-        console.log(TAG, 'recursos no listos:', state.lastErrorDetail);
+        void 0;
         return false;
       }
     })();
@@ -1094,7 +1094,7 @@
       }
       state.assetsBase = config.assetsBase;
     }
-    console.log(TAG, `config: enabled=${!!config.enabled} assetsBase=${state.assetsBase ? 'sí' : 'no'} (antes enabled=${state.enabled})`);
+    void 0;
     if (config.enabled) start();
     else stop();
   }
@@ -1147,15 +1147,7 @@
         const fire = () => {
           spawnSplash(Number(p.x), Number(p.y), Number(p.z) + 2, -0.8, 0.6, { forever: true, debugInfo: info });
           const s = state.splashes[state.splashes.length - 1];
-          console.log(TAG, 'splash eterno creado:', {
-            superficieAgua: info.surfaceY,
-            yDelDecal: s?.mesh?.position?.y,
-            escala: s?.mesh?.scale,
-            enEscena: !!s?.mesh?.parent,
-            visible: s?.mesh?.visible,
-            material: s?.mesh?.material?.type,
-            mapaCargado: !!s?.mesh?.material?.map?.image
-          });
+          void 0;
         };
         if (state.resourcesReady) fire();
         else void ensureResources().then(ok => { if (ok) fire(); });
@@ -1186,7 +1178,7 @@
             getScene(game)?.add(mesh);
             const now = performance.now();
             state.splashes.push({ mesh, spec: null, start: now, life: Infinity, baseWidth: 1, targetScale: 0.6, rain: true, frameLoop: true });
-            console.log(TAG, 'ripple eterno creado en', { x, y: surfaceY + 0.03, z }, '— usa clear() para borrarlo');
+            void 0;
           } catch (err) {
             console.warn(TAG, 'ripple: fallo al crear mesh:', String(err?.message || err));
           }
@@ -1197,9 +1189,9 @@
       rain(force = true) {
         
         state.forceRain = force === true ? performance.now() + 10000 : 0;
-        console.log(TAG, 'lluvia forzada:', !!state.forceRain, '→ detectada real:', isRainingNow(findGame()));
+        void 0;
       },
-      resources() { return ensureResources().then(ok => { console.log(TAG, 'recursos listos:', ok, 'materiales:', state.materials.size); return ok; }); }
+      resources() { return ensureResources().then(ok => { void 0; return ok; }); }
     },
     triggerSplash(x, y, z, fallSpeed = -0.6) {
       if (state.resourcesReady) {

@@ -193,8 +193,7 @@
                 return;
             }
             patchGithubRaw();
-            console.log('[MiniFeather mfpack] GitHub raw → espejo local activo (' +
-                Object.keys(map).length + ' archivos)');
+            void 0;
         });
     }
 
@@ -215,5 +214,5 @@
         }, 100);
     }
 
-    console.log('[MiniFeather TexturePack] Early MAIN world interceptor ready');
+    void 0;
 })();

@@ -523,7 +523,7 @@ globalThis.DynamicCrosshair = {
     get available() { return [...AVAILABLE]; }
 };
 
-console.log(`${TAG} Dynamic Crosshair loaded.`);
+void 0;
 
 requestAnimationFrame(loop);
 })();

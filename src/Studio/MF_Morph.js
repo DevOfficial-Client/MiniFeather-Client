@@ -172,7 +172,7 @@
         renderUI();
         
         try { window.MF_Peer?.sendLook?.({ a: 'morph', type: typeKey }); } catch {}
-        console.log(TAG + ' morph aplicado: ' + typeKey);
+        void 0;
         return { ok: true, type: typeKey };
     }
 
@@ -241,7 +241,7 @@
         renderUI();
         
         try { window.MF_Peer?.sendLook?.({ a: 'unmorph' }); } catch {}
-        console.log(TAG + ' revert: forma humana restaurada');
+        void 0;
         return { ok: true };
     }
 
@@ -411,5 +411,5 @@
     }, 1500);
     setTimeout(() => clearInterval(boot), 120000);
 
-    console.log(TAG + ' listo. MF_Morph.open() — transformarse en mobs del mundo.');
+    void 0;
 })();

@@ -349,6 +349,163 @@
     return `${minutes}m ${remaining}s`;
   }
 
+  const REALISTIC_CUSTOM_DEFAULTS = Object.freeze({
+    renderBlocks: 96,
+    optimizeFps: true,
+    targetFps: 60,
+    shadowResolution: 4096,
+    shadowSamples: 24,
+    shadowSharpness: 75,
+    shadowSoftness: 28,
+    shadowDistanceSoftening: 85,
+    shadowSunAngleSoftening: 100,
+    shadowDarkness: 82,
+    shadowArtifactFix: 55,
+    moonShadows: true,
+    waterTransparency: 60,
+    waterWaveStrength: 135,
+    waterWaveSpeed: 100,
+    waterMicroDetail: 135,
+    waterReflection: 110,
+    waterRefraction: 100,
+    waterSsrSteps: 32,
+    lavaOpacity: 99,
+    lavaWaveStrength: 130,
+    lavaWaveSpeed: 100,
+    lavaBubbles: 100,
+    lavaEmission: 100,
+    cloudSteps: 40,
+    cloudShadowSteps: 5,
+    cloudDensity: 110,
+    cloudThickness: 115,
+    cloudOpacity: 105,
+    cloudSpeed: 100,
+    cloudSilverLining: 100,
+    wetCells: 48,
+    wetRadius: 10,
+    wetDarken: 22,
+    wetSaturation: 14,
+    wetSheen: 34,
+    wetGloss: 78,
+    wetDetail: 100,
+    puddles: true,
+    maxPuddles: 28,
+    puddleReflection: 40,
+    puddleRipple: 42,
+    puddleDetail: 100,
+    drySeconds: 180
+  });
+
+  const REALISTIC_ULTRA_CUSTOM = Object.freeze({
+    ...REALISTIC_CUSTOM_DEFAULTS,
+    renderBlocks: 96,
+    optimizeFps: true,
+    shadowResolution: 8192,
+    shadowSamples: 16,
+    shadowSharpness: 82,
+    shadowSoftness: 24,
+    shadowDistanceSoftening: 100,
+    shadowSunAngleSoftening: 100,
+    shadowDarkness: 82,
+    waterTransparency: 67,
+    waterWaveStrength: 135,
+    waterWaveSpeed: 100,
+    waterMicroDetail: 135,
+    waterReflection: 100,
+    waterRefraction: 100,
+    waterSsrSteps: 20,
+    cloudSteps: 36,
+    cloudShadowSteps: 5,
+    cloudDensity: 114,
+    cloudThickness: 115,
+    cloudOpacity: 105,
+    cloudSpeed: 105,
+    wetCells: 48,
+    wetRadius: 10,
+    wetDarken: 22,
+    wetSaturation: 14,
+    wetSheen: 34,
+    wetGloss: 78,
+    wetDetail: 100,
+    maxPuddles: 28,
+    puddleReflection: 40,
+    puddleRipple: 42,
+    puddleDetail: 100,
+    drySeconds: 300
+  });
+
+  function clampRealisticCustom(source) {
+    const raw = source && typeof source === 'object' ? source : {};
+    const s = { ...REALISTIC_CUSTOM_DEFAULTS, ...raw };
+    const optimizeFps = Object.prototype.hasOwnProperty.call(raw, 'optimizeFps') ? !!raw.optimizeFps : (Object.prototype.hasOwnProperty.call(raw, 'adaptive') ? !!raw.adaptive : true);
+    const n = (key, min, max, fallback = REALISTIC_CUSTOM_DEFAULTS[key]) => {
+      const value = Number(s[key]);
+      return Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
+    };
+    const nearestPow2 = value => [512, 1024, 2048, 4096, 8192].reduce((best, x) => Math.abs(x - value) < Math.abs(best - value) ? x : best, 4096);
+    return {
+      ...s,
+      renderBlocks: Math.round(n('renderBlocks', 10, 200)),
+      optimizeFps,
+      targetFps: Math.round(n('targetFps', 30, 144)),
+      shadowResolution: nearestPow2(n('shadowResolution', 512, 8192)),
+      shadowSamples: Math.round(n('shadowSamples', 1, 64)),
+      shadowSharpness: n('shadowSharpness', 0, 100),
+      shadowSoftness: n('shadowSoftness', 0, 100),
+      shadowDistanceSoftening: n('shadowDistanceSoftening', 0, 200),
+      shadowSunAngleSoftening: n('shadowSunAngleSoftening', 0, 200),
+      shadowDarkness: n('shadowDarkness', 0, 100),
+      shadowArtifactFix: n('shadowArtifactFix', 0, 100),
+      moonShadows: s.moonShadows !== false,
+      waterTransparency: n('waterTransparency', 0, 90),
+      waterWaveStrength: n('waterWaveStrength', 0, 250),
+      waterWaveSpeed: n('waterWaveSpeed', 25, 300),
+      waterMicroDetail: n('waterMicroDetail', 0, 250),
+      waterReflection: n('waterReflection', 0, 150),
+      waterRefraction: n('waterRefraction', 0, 150),
+      waterSsrSteps: Math.round(n('waterSsrSteps', 4, 64)),
+      lavaOpacity: n('lavaOpacity', 50, 100),
+      lavaWaveStrength: n('lavaWaveStrength', 0, 250),
+      lavaWaveSpeed: n('lavaWaveSpeed', 25, 300),
+      lavaBubbles: n('lavaBubbles', 0, 200),
+      lavaEmission: n('lavaEmission', 0, 200),
+      cloudSteps: Math.round(n('cloudSteps', 8, 64)),
+      cloudShadowSteps: Math.round(n('cloudShadowSteps', 0, 8)),
+      cloudDensity: n('cloudDensity', 0, 200),
+      cloudThickness: n('cloudThickness', 25, 250),
+      cloudOpacity: n('cloudOpacity', 0, 150),
+      cloudSpeed: n('cloudSpeed', 0, 300),
+      cloudSilverLining: n('cloudSilverLining', 0, 200),
+      wetCells: Math.round(n('wetCells', 4, 64)),
+      wetRadius: Math.round(n('wetRadius', 2, 16)),
+      wetDarken: n('wetDarken', 0, 50),
+      wetSaturation: n('wetSaturation', 0, 40),
+      wetSheen: n('wetSheen', 0, 100),
+      wetGloss: n('wetGloss', 0, 100),
+      wetDetail: n('wetDetail', 0, 200),
+      puddles: s.puddles !== false,
+      maxPuddles: Math.round(n('maxPuddles', 0, 64)),
+      puddleReflection: n('puddleReflection', 0, 100),
+      puddleRipple: n('puddleRipple', 0, 100),
+      puddleDetail: n('puddleDetail', 0, 200),
+      drySeconds: Math.round(n('drySeconds', 10, 900))
+    };
+  }
+
+  function realisticLoadScore(values) {
+    const c = clampRealisticCustom(values);
+    let score = 0;
+    score += (c.renderBlocks - 10) / 190 * 28;
+    score += Math.log2(c.shadowResolution / 512) / 4 * 18;
+    score += c.shadowSamples / 64 * 18;
+    score += c.waterSsrSteps / 64 * 10;
+    score += c.cloudSteps / 64 * 14;
+    score += c.cloudShadowSteps / 8 * 4;
+    score += c.maxPuddles / 64 * 4;
+    score += c.wetCells / 64 * 4;
+    return Math.round(score);
+  }
+
   const DEFAULT_SETTINGS = {
     rebrand: true,
     supportAds: false,
@@ -451,6 +608,7 @@
     experimentalRealistic: false,
     experimentalRealisticLevel: 'medium',
     experimentalWetDrySeconds: 180,
+    experimentalRealisticCustom: { ...REALISTIC_CUSTOM_DEFAULTS },
     experimentalAurora: false,
     experimentalAuroraLevel: 'medium',
     experimentalGrassFlowers: false,
@@ -479,8 +637,19 @@
     if (!panel) return;
     const accent = normalizePanelColor(settings.panelAccentColor, DEFAULT_SETTINGS.panelAccentColor);
     const background = normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor);
+
+    // Modern theme variables.
     panel.style.setProperty('--mf-ui-accent', accent);
     panel.style.setProperty('--mf-ui-panel', background);
+
+    // Legacy settings dialogs still use the original variable names. Keep them
+    // mapped to the same user-selected theme so every panel follows one palette.
+    panel.style.setProperty('--mf-accent', accent);
+    panel.style.setProperty('--mf-accent2', accent);
+    panel.style.setProperty('--mf-bg', background);
+    panel.style.setProperty('--mf-panel', background);
+    panel.style.setProperty('--mf-panel2', `color-mix(in srgb, ${background} 88%, #ffffff 12%)`);
+    panel.style.setProperty('--mf-border', `color-mix(in srgb, ${accent} 24%, #30363d 76%)`);
   }
 
   function clampPanelScale(value) {
@@ -6141,6 +6310,116 @@
     `;
   }
 
+  function renderRealisticCustomControls() {
+    const c = clampRealisticCustom(guiSettings.experimentalRealisticCustom || settings.experimentalRealisticCustom);
+    const slider = (key, labelKey, min, max, step, suffix = '%') => {
+      const value = c[key];
+      return `
+        <div class="mf-tt-row" style="margin-top:7px;">
+          <span style="font-size:11px;">${escapeHtml(t(labelKey))}</span>
+          <strong style="font-size:11px;" data-mf-realistic-custom-value="${escapeHtml(key)}">${escapeHtml(String(value))}${suffix}</strong>
+        </div>
+        <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-mf-realistic-custom="${escapeHtml(key)}" data-mf-suffix="${escapeHtml(suffix)}" style="width:100%;">`;
+    };
+    const check = (key, labelKey) => `
+      <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;font-size:11px;">
+        <span>${escapeHtml(t(labelKey))}</span>
+        <input type="checkbox" data-mf-realistic-custom-check="${escapeHtml(key)}" ${c[key] ? 'checked' : ''}>
+      </label>`;
+    const section = (titleKey, body, open = false) => `
+      <details ${open ? 'open' : ''} style="margin-top:8px;border:1px solid #2c3138;border-radius:7px;padding:8px;background:#12161b;">
+        <summary style="cursor:pointer;font-weight:700;font-size:11px;color:#e5e7eb;">${escapeHtml(t(titleKey))}</summary>
+        <div style="padding-top:4px;">${body}</div>
+      </details>`;
+
+    const load = realisticLoadScore(c);
+    const loadLabel = load < 30 ? t('realisticLoadLight') : load < 55 ? t('realisticLoadMedium') : load < 78 ? t('realisticLoadHeavy') : load < 95 ? t('realisticLoadExtreme') : t('realisticLoadInsane');
+
+    return `
+      <div class="mf-card" id="mf-realistic-custom-section" style="display:${String(guiSettings.experimentalRealisticLevel || settings.experimentalRealisticLevel) === 'custom' ? 'block' : 'none'};">
+        <div class="mf-card-title">🧪 ${escapeHtml(t('experimentalRealisticCustomTitle'))}</div>
+        <div style="font-size:11px;color:#aaa;line-height:1.5;">${escapeHtml(t('experimentalRealisticCustomDesc'))}</div>
+        <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap;">
+          <button type="button" class="mf-btn secondary" data-mf-realistic-copy-ultra>${escapeHtml(t('experimentalRealisticCopyUltra'))}</button>
+          <button type="button" class="mf-btn secondary" data-mf-realistic-reset-custom>${escapeHtml(t('experimentalRealisticResetCustom'))}</button>
+        </div>
+        <div style="margin-top:10px;padding:8px;border:1px solid #323841;border-radius:7px;background:#0e1115;">
+          <div class="mf-tt-row">
+            <span style="font-size:11px;">${escapeHtml(t('experimentalRealisticGpuLoad'))}</span>
+            <strong style="font-size:11px;" data-mf-realistic-load>${load}% · ${escapeHtml(loadLabel)}</strong>
+          </div>
+          <div style="height:5px;background:#262b31;border-radius:999px;overflow:hidden;margin-top:6px;"><div data-mf-realistic-loadbar style="height:100%;width:${Math.min(100, load)}%;background:var(--mf-ui-accent,#ef3b3b);"></div></div>
+          <div class="mf-muted" style="margin-top:6px;font-size:10px;">${escapeHtml(t('experimentalRealisticGpuHint'))}</div>
+        </div>
+
+        ${section('experimentalRealisticWorld', `
+          ${slider('renderBlocks', 'experimentalRealisticRenderBlocks', 10, 200, 1, ' blocks')}
+          ${check('optimizeFps', 'experimentalRealisticOptimizeFps')}
+          <div class="mf-muted" style="margin-top:5px;font-size:10px;line-height:1.45;">${escapeHtml(t('experimentalRealisticOptimizeFpsHint'))}</div>
+          ${slider('targetFps', 'experimentalRealisticTargetFps', 30, 144, 1, ' FPS')}
+        `, true)}
+
+        ${section('experimentalRealisticShadows', `
+          <div class="mf-tt-row" style="margin-top:7px;"><span style="font-size:11px;">${escapeHtml(t('experimentalRealisticShadowResolution'))}</span><strong style="font-size:11px;" data-mf-realistic-custom-value="shadowResolution">${c.shadowResolution}</strong></div>
+          <select class="mf-input" data-mf-realistic-custom-select="shadowResolution" style="width:100%;margin-top:4px;">
+            ${[512,1024,2048,4096,8192].map(v => `<option value="${v}" ${c.shadowResolution === v ? 'selected' : ''}>${v} × ${v}</option>`).join('')}
+          </select>
+          ${slider('shadowSamples', 'experimentalRealisticShadowSamples', 1, 64, 1, '')}
+          ${slider('shadowSharpness', 'experimentalRealisticShadowSharpness', 0, 100, 1)}
+          ${slider('shadowSoftness', 'experimentalRealisticShadowSoftness', 0, 100, 1)}
+          ${slider('shadowDistanceSoftening', 'experimentalRealisticShadowDistanceSoftening', 0, 200, 1)}
+          ${slider('shadowSunAngleSoftening', 'experimentalRealisticShadowSunSoftening', 0, 200, 1)}
+          ${slider('shadowDarkness', 'experimentalRealisticShadowDarkness', 0, 100, 1)}
+          ${slider('shadowArtifactFix', 'experimentalRealisticShadowArtifactFix', 0, 100, 1)}
+          ${check('moonShadows', 'experimentalRealisticMoonShadows')}
+        `)}
+
+        ${section('experimentalRealisticWater', `
+          ${slider('waterTransparency', 'experimentalRealisticWaterTransparency', 0, 90, 1)}
+          ${slider('waterWaveStrength', 'experimentalRealisticWaterWaveStrength', 0, 250, 1)}
+          ${slider('waterWaveSpeed', 'experimentalRealisticWaterWaveSpeed', 25, 300, 1)}
+          ${slider('waterMicroDetail', 'experimentalRealisticWaterMicroDetail', 0, 250, 1)}
+          ${slider('waterReflection', 'experimentalRealisticWaterReflection', 0, 150, 1)}
+          ${slider('waterRefraction', 'experimentalRealisticWaterRefraction', 0, 150, 1)}
+          ${slider('waterSsrSteps', 'experimentalRealisticWaterSsrSteps', 4, 64, 1, ' steps')}
+        `)}
+
+        ${section('experimentalRealisticLava', `
+          ${slider('lavaOpacity', 'experimentalRealisticLavaOpacity', 50, 100, 1)}
+          ${slider('lavaWaveStrength', 'experimentalRealisticLavaWaveStrength', 0, 250, 1)}
+          ${slider('lavaWaveSpeed', 'experimentalRealisticLavaWaveSpeed', 25, 300, 1)}
+          ${slider('lavaBubbles', 'experimentalRealisticLavaBubbles', 0, 200, 1)}
+          ${slider('lavaEmission', 'experimentalRealisticLavaEmission', 0, 200, 1)}
+        `)}
+
+        ${section('experimentalRealisticClouds', `
+          ${slider('cloudSteps', 'experimentalRealisticCloudSteps', 8, 64, 1, ' steps')}
+          ${slider('cloudShadowSteps', 'experimentalRealisticCloudShadowSteps', 0, 8, 1, ' steps')}
+          ${slider('cloudDensity', 'experimentalRealisticCloudDensity', 0, 200, 1)}
+          ${slider('cloudThickness', 'experimentalRealisticCloudThickness', 25, 250, 1)}
+          ${slider('cloudOpacity', 'experimentalRealisticCloudOpacity', 0, 150, 1)}
+          ${slider('cloudSpeed', 'experimentalRealisticCloudSpeed', 0, 300, 1)}
+          ${slider('cloudSilverLining', 'experimentalRealisticCloudSilver', 0, 200, 1)}
+        `)}
+
+        ${section('experimentalRealisticWetness', `
+          ${slider('wetCells', 'experimentalRealisticWetCells', 4, 64, 1, ' cells')}
+          ${slider('wetRadius', 'experimentalRealisticWetRadius', 2, 16, 1, ' blocks')}
+          ${slider('wetDarken', 'experimentalRealisticWetDarken', 0, 50, 1)}
+          ${slider('wetSaturation', 'experimentalRealisticWetSaturation', 0, 40, 1)}
+          ${slider('wetSheen', 'experimentalRealisticWetSheen', 0, 100, 1)}
+          ${slider('wetGloss', 'experimentalRealisticWetGloss', 0, 100, 1)}
+          ${slider('wetDetail', 'experimentalRealisticWetDetail', 0, 200, 1)}
+          ${check('puddles', 'experimentalRealisticPuddles')}
+          ${slider('maxPuddles', 'experimentalRealisticMaxPuddles', 0, 64, 1, '')}
+          ${slider('puddleReflection', 'experimentalRealisticPuddleReflection', 0, 100, 1)}
+          ${slider('puddleRipple', 'experimentalRealisticPuddleRipple', 0, 100, 1)}
+          ${slider('puddleDetail', 'experimentalRealisticPuddleDetail', 0, 200, 1)}
+          ${slider('drySeconds', 'experimentalRealisticDrySeconds', 10, 900, 5, ' s')}
+        `)}
+      </div>`;
+  }
+
   function renderExperimentalPage() {
     const registry = globalThis.MF_ExperimentalRegistry;
     const experiments = registry?.list?.().filter(exp => exp?.settingsKey) || [];
@@ -6191,6 +6470,7 @@
             }).join('')}
           </div>
         </div>
+        ${renderRealisticCustomControls()}
         <div class="mf-card" id="mf-realistic-wetness-section">
           <div class="mf-card-title">💧 ${escapeHtml(t('experimentalWetnessTitle'))}</div>
           <div style="font-size:11px;color:#aaa;margin-bottom:10px;line-height:1.5;">${escapeHtml(t('experimentalWetnessDesc'))}</div>
@@ -7345,6 +7625,16 @@ function renderCreditsPage() {
 
   function showGUI() {
     ensureGUI();
+
+    // Always open from the true viewport center. A previous drag used to leave
+    // transform:none behind, which could make left:50% place the whole panel in
+    // the lower/right area on the next open.
+    panel.style.left = '50%';
+    panel.style.top = '50%';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.style.transform = 'translate(-50%, -50%)';
+
     overlay.style.display = 'block';
     panel.style.display = 'block';
     panel.style.pointerEvents = 'auto';
@@ -7460,6 +7750,12 @@ function renderCreditsPage() {
           const key = String(select.dataset.mfExperimentalLevel || '');
           if (key && key in guiSettings) select.value = String(guiSettings[key]);
         });
+        const customSection = panel.querySelector('#mf-realistic-custom-section');
+        if (customSection) customSection.style.display = String(guiSettings.experimentalRealisticLevel || settings.experimentalRealisticLevel) === 'custom' ? 'block' : 'none';
+        const incomingCustom = clampRealisticCustom(guiSettings.experimentalRealisticCustom || settings.experimentalRealisticCustom);
+        panel.querySelectorAll('[data-mf-realistic-custom]').forEach(input => { const key = String(input.dataset.mfRealisticCustom || ''); if (key in incomingCustom) input.value = String(incomingCustom[key]); });
+        panel.querySelectorAll('[data-mf-realistic-custom-check]').forEach(input => { const key = String(input.dataset.mfRealisticCustomCheck || ''); if (key in incomingCustom) input.checked = !!incomingCustom[key]; });
+        panel.querySelectorAll('[data-mf-realistic-custom-select]').forEach(input => { const key = String(input.dataset.mfRealisticCustomSelect || ''); if (key in incomingCustom) input.value = String(incomingCustom[key]); });
         const wetDry = panel.querySelector('[data-mf-wet-dry]');
         const wetDryValue = panel.querySelector('[data-mf-wet-dry-value]');
         if (wetDry) wetDry.value = String(Math.round(Number(guiSettings.experimentalWetDrySeconds || 180)));
@@ -7549,7 +7845,6 @@ function renderCreditsPage() {
       detail: nsbStatePayload()
     }));
   }
-
 
   function resetLogo() {
     currentLogo = CONFIG.defaultLogo;
@@ -9474,10 +9769,90 @@ function renderCreditsPage() {
         const value = String(select.value || 'medium');
         guiSettings[key] = value;
         settings[key] = value;
+        if (key === 'experimentalRealisticLevel') {
+          const customSection = panel.querySelector('#mf-realistic-custom-section');
+          if (customSection) customSection.style.display = value === 'custom' ? 'block' : 'none';
+        }
         saveSettings(true);
         applyGuiSettings();
       });
     });
+
+    const refreshRealisticCustomUi = () => {
+      const c = clampRealisticCustom(guiSettings.experimentalRealisticCustom || settings.experimentalRealisticCustom);
+      guiSettings.experimentalRealisticCustom = { ...c };
+      settings.experimentalRealisticCustom = { ...c };
+      panel.querySelectorAll('[data-mf-realistic-custom]').forEach(input => {
+        const key = String(input.dataset.mfRealisticCustom || '');
+        if (key && key in c) input.value = String(c[key]);
+      });
+      panel.querySelectorAll('[data-mf-realistic-custom-check]').forEach(input => {
+        const key = String(input.dataset.mfRealisticCustomCheck || '');
+        if (key && key in c) input.checked = !!c[key];
+      });
+      panel.querySelectorAll('[data-mf-realistic-custom-select]').forEach(input => {
+        const key = String(input.dataset.mfRealisticCustomSelect || '');
+        if (key && key in c) input.value = String(c[key]);
+      });
+      panel.querySelectorAll('[data-mf-realistic-custom-value]').forEach(el => {
+        const key = String(el.dataset.mfRealisticCustomValue || '');
+        if (!(key in c)) return;
+        const source = panel.querySelector(`[data-mf-realistic-custom="${key}"]`);
+        const suffix = source?.getAttribute('data-mf-suffix') || '';
+        el.textContent = `${c[key]}${suffix}`;
+      });
+      const load = realisticLoadScore(c);
+      const loadLabel = load < 30 ? t('realisticLoadLight') : load < 55 ? t('realisticLoadMedium') : load < 78 ? t('realisticLoadHeavy') : load < 95 ? t('realisticLoadExtreme') : t('realisticLoadInsane');
+      const label = panel.querySelector('[data-mf-realistic-load]');
+      const bar = panel.querySelector('[data-mf-realistic-loadbar]');
+      if (label) label.textContent = `${load}% · ${loadLabel}`;
+      if (bar) bar.style.width = `${Math.min(100, load)}%`;
+    };
+
+    const setRealisticCustomValue = (key, value, persist) => {
+      const current = clampRealisticCustom(guiSettings.experimentalRealisticCustom || settings.experimentalRealisticCustom);
+      current[key] = value;
+      const next = clampRealisticCustom(current);
+      guiSettings.experimentalRealisticCustom = { ...next };
+      settings.experimentalRealisticCustom = { ...next };
+      refreshRealisticCustomUi();
+      if (persist) saveSettings(true);
+      applyGuiSettings();
+    };
+
+    panel.querySelectorAll('[data-mf-realistic-custom]').forEach(input => {
+      const key = String(input.dataset.mfRealisticCustom || '');
+      if (!key) return;
+      input.addEventListener('input', () => setRealisticCustomValue(key, Number(input.value), false));
+      input.addEventListener('change', () => setRealisticCustomValue(key, Number(input.value), true));
+    });
+    panel.querySelectorAll('[data-mf-realistic-custom-check]').forEach(input => {
+      const key = String(input.dataset.mfRealisticCustomCheck || '');
+      if (!key) return;
+      input.addEventListener('change', () => setRealisticCustomValue(key, !!input.checked, true));
+    });
+    panel.querySelectorAll('[data-mf-realistic-custom-select]').forEach(input => {
+      const key = String(input.dataset.mfRealisticCustomSelect || '');
+      if (!key) return;
+      input.addEventListener('change', () => setRealisticCustomValue(key, Number(input.value), true));
+    });
+    panel.querySelector('[data-mf-realistic-copy-ultra]')?.addEventListener('click', event => {
+      event.preventDefault(); event.stopPropagation();
+      const next = clampRealisticCustom({ ...REALISTIC_ULTRA_CUSTOM, optimizeFps: true });
+      guiSettings.experimentalRealisticCustom = { ...next };
+      settings.experimentalRealisticCustom = { ...next };
+      refreshRealisticCustomUi();
+      saveSettings(true); applyGuiSettings();
+    });
+    panel.querySelector('[data-mf-realistic-reset-custom]')?.addEventListener('click', event => {
+      event.preventDefault(); event.stopPropagation();
+      const next = clampRealisticCustom({ ...REALISTIC_CUSTOM_DEFAULTS, optimizeFps: true });
+      guiSettings.experimentalRealisticCustom = { ...next };
+      settings.experimentalRealisticCustom = { ...next };
+      refreshRealisticCustomUi();
+      saveSettings(true); applyGuiSettings();
+    });
+    refreshRealisticCustomUi();
 
     const wetDryRange = panel.querySelector('[data-mf-wet-dry]');
     const wetDryValue = panel.querySelector('[data-mf-wet-dry-value]');
@@ -9964,26 +10339,35 @@ function renderCreditsPage() {
     }, { signal: panelSignal });
 
     const topbar = panel.querySelector('#mf-gui-topbar');
+    let dragPending = false;
     let dragging = false;
+    let startX = 0;
+    let startY = 0;
     let offX = 0;
     let offY = 0;
 
     topbar?.addEventListener('mousedown', event => {
       const target = event.target.closest('button, select, input');
-      if (target) return;
-      dragging = true;
+      if (target || event.button !== 0) return;
       const rect = panel.getBoundingClientRect();
-      // con `zoom` las clientX/Y YA están en el espacio escalado del
-      // layout → rect/offsetWidth miden igual; sin compensación extra
+      dragPending = true;
+      dragging = false;
+      startX = event.clientX;
+      startY = event.clientY;
       offX = event.clientX - rect.left;
       offY = event.clientY - rect.top;
-      panel.style.transform = 'none';
-      panel.style.left = `${rect.left}px`;
-      panel.style.top = `${rect.top}px`;
     }, { signal: panelSignal });
 
     document.addEventListener('mousemove', event => {
-      if (!dragging) return;
+      if (!dragPending && !dragging) return;
+      if (!dragging) {
+        if (Math.hypot(event.clientX - startX, event.clientY - startY) < 5) return;
+        const rect = panel.getBoundingClientRect();
+        dragging = true;
+        panel.style.transform = 'none';
+        panel.style.left = `${rect.left}px`;
+        panel.style.top = `${rect.top}px`;
+      }
       const panelWidth = panel.offsetWidth;
       const panelHeight = panel.offsetHeight;
       const x = Math.max(10, Math.min(event.clientX - offX, window.innerWidth - panelWidth - 10));
@@ -9993,7 +10377,15 @@ function renderCreditsPage() {
     }, { signal: panelSignal });
 
     document.addEventListener('mouseup', () => {
+      dragPending = false;
       dragging = false;
+    }, { signal: panelSignal });
+
+    topbar?.addEventListener('dblclick', event => {
+      if (event.target.closest('button, select, input')) return;
+      panel.style.left = '50%';
+      panel.style.top = '50%';
+      panel.style.transform = 'translate(-50%, -50%)';
     }, { signal: panelSignal });
 
     renderCurrentPageContent();
@@ -10180,9 +10572,10 @@ function renderCreditsPage() {
           enabled: !!settings.experimentalRealistic,
           level: String(settings.experimentalRealisticLevel) === 'extreme'
             ? 'ultra'
-            : (['low', 'medium', 'high', 'ultra'].includes(String(settings.experimentalRealisticLevel))
+            : (['low', 'medium', 'high', 'ultra', 'custom'].includes(String(settings.experimentalRealisticLevel))
               ? String(settings.experimentalRealisticLevel)
               : 'medium'),
+          custom: clampRealisticCustom(settings.experimentalRealisticCustom || REALISTIC_CUSTOM_DEFAULTS),
           wetDrySeconds: Math.max(30, Math.min(600, Number(settings.experimentalWetDrySeconds) || 180)),
           leafEnabled: !!settings.leafWind,
           leafStrength: Number(settings.leafWindStrength) || 0.085,
@@ -10245,7 +10638,6 @@ function renderCreditsPage() {
       if (window.MF_TEXTURE_PACK?.installBundledPbr) {
         MF_TEXTURE_PACK.installBundledPbr().then((r) => {
           if (r?.success) {
-            console.log('[MiniFeather] PBR integrado instalado:', r.loadedCount, 'maps');
             localStorage.setItem('mf_pbr_available', 'true');
           }
         }).catch(() => {
@@ -10264,7 +10656,6 @@ function renderCreditsPage() {
         if (window.MF_TEXTURE_PACK?.installBundledPbr) {
           MF_TEXTURE_PACK.installBundledPbr().then((r) => {
             if (r?.success) {
-              console.log('[MiniFeather] PBR integrado REINSTALADO (auto-curación):', r.loadedCount, 'maps');
               localStorage.setItem('mf_pbr_available', 'true');
             }
           });
@@ -10891,6 +11282,7 @@ function renderCreditsPage() {
       settings.freecamFastMultiplier = Math.max(1, Math.min(8, Number(settings.freecamFastMultiplier) || 3));
       settings.dynamicCrosshairMap = { ...DEFAULT_SETTINGS.dynamicCrosshairMap, ...(settings.dynamicCrosshairMap || {}) };
       settings.moduleBinds = { ...DEFAULT_SETTINGS.moduleBinds, ...(settings.moduleBinds || {}) };
+      settings.experimentalRealisticCustom = clampRealisticCustom(settings.experimentalRealisticCustom || REALISTIC_CUSTOM_DEFAULTS);
       settings.panelAccentColor = normalizePanelColor(settings.panelAccentColor, DEFAULT_SETTINGS.panelAccentColor);
       settings.panelBackgroundColor = normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor);
       settings.panelScale = clampPanelScale(settings.panelScale);

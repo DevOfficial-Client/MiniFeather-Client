@@ -113,8 +113,7 @@
             }
         }
         state.diagLogged = true;
-        console.log(TAG, 'Escena — materiales:', counts, '| luces:', lights,
-            '| con .map:', withMap, '| flipY capturado:', state.texFlipY);
+        void 0;
         if (lights.directional === 0) {
             console.warn(TAG, 'CERO luces direccionales de three.js — el juego',
                 'ilumina con luz custom (ambient/AO). El relight fallback con',
@@ -329,7 +328,7 @@
             }
             try { localStorage.setItem(LS.available, any ? 'true' : 'false'); } catch (_) {}
             if (any) {
-                console.log(TAG, 'Atlases PBR:', { ...state.kinds });
+                void 0;
                 if (state.uniforms) refreshUniformValues();
                 if (state.enabled) scan();
             }
@@ -474,7 +473,6 @@
         vec3 mfSun = normalize(vec3(0.35, 0.9, 0.25));
         // Relight relativo: cara plana → 1.0. El relieve del normal map
         // crea el contraste; clamp suave para no romper colores del juego.
-        // (mfDiffG/mfDiffN siguen declaradas: el modo debug 3 las reporta)
         float mfDiffG = max(dot(mfNg, mfSun), 0.0) + 0.22;
         float mfDiffN = max(dot(mfN, mfSun), 0.0) + 0.22;
         gl_FragColor.rgb *= clamp(mfDiffN / max(mfDiffG, 0.05), 0.5, 1.8);
@@ -602,8 +600,7 @@
                 || candidates.find(v => v !== 'uv' && isGlobalVarying(v));
             gameUvExpr = pick || '';
             if (gameUvExpr && gameUvExpr !== state.lastGameUv) {
-                console.log(TAG, 'PBR UV alineada a', gameUvExpr,
-                    '(samplers candidatos:', candidates.join(',') || 'ninguno', ')');
+                void 0;
                 state.lastGameUv = gameUvExpr;
             }
             
@@ -777,8 +774,7 @@
         }
         
         if (added > 0) {
-            console.log(TAG, 'Hookeados', added, 'materiales nuevos (total:',
-                state.hooked.size + ')');
+            void 0;
         }
         return added;
     }
@@ -806,9 +802,7 @@
             const anyKind = state.kinds.n || state.kinds.s || state.kinds.e;
             if (anyKind) {
                 const u = state.uniforms;
-                console.log(TAG, 'PBR activo:', { ...state.kinds },
-                    u ? ('| fuerza normal=' + u.uMfPbrNormalStr.value
-                        + ' spec=' + u.uMfPbrSpecStr.value) : '');
+                void 0;
                 
                 if (u && u.uMfPbrNormalStr.value <= 0) {
                     console.warn(TAG, 'Fuerza normal=0 — el relieve está',
@@ -831,7 +825,7 @@
             clearInterval(state.scanTimer);
             state.scanTimer = null;
         }
-        console.log(TAG, 'PBR desactivado');
+        void 0;
     }
 
     function setStrength(kind, value) {
@@ -975,21 +969,10 @@
         } catch (e) {
             out.gpu = 'error: ' + e.message;
         }
-        console.log(TAG, 'DEBUG', out);
+        void 0;
         
         const lf = out.lastFragHas;
-        console.log(TAG, 'DIAG ▸ enabled=' + out.status.enabled
-            + ' hooked=' + out.status.hooked
-            + ' kinds=' + JSON.stringify(out.status.kinds)
-            + ' | normalStr=' + (out.uniforms ? out.uniforms.normalStr : '?')
-            + ' specStr=' + (out.uniforms ? out.uniforms.specStr : '?')
-            + ' | gameUv=' + (lf ? lf.gameUv : 'nunca-compiló')
-            + ' fallback=' + (lf ? lf.fallback : '?')
-            + ' specAnchor=' + (lf ? lf.specAnchor : '?')
-            + ' | gpu=' + (typeof out.gpu === 'object'
-                ? ('withPbr=' + out.gpu.withPbr + '/' + out.gpu.totalPrograms
-                    + ' dirLights=' + JSON.stringify(out.gpu.dirLightDefs))
-                : String(out.gpu)));
+        void 0;
         return out;
     }
 
@@ -1001,8 +984,7 @@
             sh: u.uMfPbrShiny.value, e: u.uMfPbrEmiStr.value,
             t: u.uMfPbrTint.value
         };
-        console.log(TAG, 'BLAST ON — 10s. Si el terreno NO se tiñe rojo,',
-            'la inyección no corre en la GPU. Ejecuta MF_PBR.debug().');
+        void 0;
         u.uMfPbrTint.value = 1.0;  
         u.uMfPbrEmiStr.value = 2.0;
         u.uMfPbrSpecStr.value = 3.0;
@@ -1015,7 +997,7 @@
             u.uMfPbrSpecStr.value = prev.s;
             u.uMfPbrShiny.value = prev.sh;
             u.uMfPbrEmiStr.value = prev.e;
-            console.log(TAG, 'BLAST OFF — valores restaurados');
+            void 0;
         }, 10000);
     }
 
@@ -1034,7 +1016,7 @@
         };
         if (!tex || !tex.image) {
             out.error = 'sin textura (ni IndexedDB ni dummy)';
-            console.log(TAG, 'ATLAS STATS', out);
+            void 0;
             return out;
         }
         try {
@@ -1070,11 +1052,11 @@
                     ? 'ATLAS VACÍO (0 tiles) — generador falló o pack no matcheó'
                     : 'atlas con relieve real ✓ (' + Math.round(colorful / 256) + ' tiles aprox)'
             };
-            console.log(TAG, 'ATLAS STATS', result);
+            void 0;
             return result;
         } catch (e) {
             const r = { ...out, error: String(e.message) };
-            console.log(TAG, 'ATLAS STATS', r);
+            void 0;
             return r;
         }
     }
@@ -1094,7 +1076,7 @@
                     : next === 3
                         ? 'RATIO RELIGHT — gris plano=shading sin efecto, gris con grano=relieve OK'
                         : 'TRÍO: R=tile PBR con datos (negro=neutro) G=luminancia diffuse B=fila del tile';
-        console.log(TAG, 'Modo atlas', msg);
+        void 0;
         return next;
     }
 
@@ -1197,7 +1179,7 @@
                     ? 'NINGUNA orientación alinea → layout distinto (frames.json viejo u otro atlas)'
                     : 'alineación ' + best.name + ' con ' + best.match + '/' + gameTiles + ' tiles'
             };
-            console.log(TAG, 'ATLAS DIFF', result);
+            void 0;
             return result;
         } catch (e) {
             console.warn(TAG, 'ATLAS DIFF error:', e.message);
@@ -1235,9 +1217,7 @@
                     window.__mfTerrainFrag = fs;
                     const defines = [...fs.matchAll(/#define MF_PBR_UV (\w+)/g)].map(m => m[1]);
                     const samplers = [...fs.matchAll(/texture2D\(\s*map\s*,\s*([^);]+)\)/g)].map(m => m[1].trim());
-                    console.log(TAG, 'TERRENO(GPU) ▸ define=' + defines.join('|')
-                        + ' | diffuseSamplers=' + samplers.join(' ; ')
-                        + ' | pbrProgs=' + pbrProgs);
+                    void 0;
                     return { ...res, gpuProg: true, defines, samplers };
                 }
                 return { ...res, gpuProg: false, pbrProgs, note: 'ningún programa GPU combina vCentroidMapUv + PBR' };
@@ -1266,11 +1246,7 @@
                 const sampler = ((fs.match(/texture2D\(\s*map\s*,\s*([^)]+)\)/) || [])[1] || '?').trim();
                 
                 const allMapSamplers = [...fs.matchAll(/texture2D\s*\(\s*map\s*,\s*([A-Za-z_][A-Za-z0-9_]*)/g)].map(m => m[1]);
-                console.log(TAG, 'TERRENO ▸ pbrDecl=' + fs.includes('uMfPbrN')
-                    + ' pbrUv=' + (((fs.match(/#define MF_PBR_UV (\w+)/) || [])[1]) || 'NINGUNA')
-                    + ' declaraCentroid=' + fs.includes('vCentroidMapUv')
-                    + ' | varyingsVec2=' + varys.join(',')
-                    + ' | TODOS mapSamplers=' + allMapSamplers.join(','));
+                void 0;
                 
                 const shFull = window.__mfTerrainShaderFull;
                 if (shFull) {
@@ -1279,7 +1255,7 @@
                     const lines = shFull.vertexShader.split('\n')
                         .filter(l => /vMapUv|vOverlayUV|vCentroidMapUv|atlasUv|tileUv|uvTransform/.test(l))
                         .map(l => l.trim()).slice(0, 20);
-                    console.log(TAG, 'TERRENO.UV ▸ ' + lines.join(' ⏎ '));
+                    void 0;
                 }
             } else {
                 console.warn(TAG, 'TERRENO ▸ no recompiló en 3s — render pausado');
@@ -1289,8 +1265,8 @@
             if (fsDump) {
                 const lightUniforms = [...new Set([...fsDump.matchAll(/uniform\s+(int|float|vec[234]|vec[234]\[\w+\]|mat[34])\s+(\w*[Ll]ight\w*|\w*[Tt]orch\w*|\w*[Gg]low\w*|\w*[Pp]oint\w*)\s*(\[[^\]]*\])?\s*;/g)].map(m => m[0]))];
                 const lightLoops = fsDump.split('\n').filter(l => /light|Light|torch|Torch|glow|Glow|lumen|Lumen/i.test(l) && !/^\s*\/\//.test(l)).map(l => l.trim()).slice(0, 24);
-                console.log(TAG, 'TERRENO.LUCES ▸ uniforms: ' + (lightUniforms.join(' | ') || 'NINGUNO'));
-                console.log(TAG, 'TERRENO.LUCES ▸ líneas: ' + (lightLoops.join(' ⏎ ') || 'ninguna'));
+                void 0;
+                void 0;
             }
             mat.onBeforeCompile = origOBC;
             mat.customProgramCacheKey = origKey;

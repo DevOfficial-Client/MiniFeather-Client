@@ -546,5 +546,5 @@
     window.MF_Gizmo = { attach, detach, pick, beginDrag, dragDeltaFromStart, endDrag, dragDelta, visible, pickRing, ringDragDelta, setMode };
     window.__MF_Gizmo = true;
 
-    console.log(TAG + ' listo. attach(joint, onDelta) — flechas X/Y/Z para mover la parte.');
+    void 0;
 })();

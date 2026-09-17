@@ -437,5 +437,5 @@
         get subtitle() { return state.subtitle; },
     };
 
-    console.log(TAG + ' listo — clips de cámara estilo BBS (' + state.clips.length + ' clips)');
+    void 0;
 })();

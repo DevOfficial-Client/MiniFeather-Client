@@ -6,7 +6,7 @@
 
     const TAG = '[MiniFeather CustomSkinAPI]';
     const VERBOSE = localStorage.getItem('mf:csa:verbose') === '1';
-    const log = (...a) => { if (VERBOSE) console.log(TAG, ...a); };
+    const log = (...a) => { if (VERBOSE) void 0; };
     const warn = (...a) => console.warn(TAG, ...a);
 
     const KEY_SKIN = 'mf:csa:skin';

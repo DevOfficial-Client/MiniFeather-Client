@@ -327,5 +327,5 @@
     };
     window.__MF_Animation = true;
 
-    console.log(TAG + ' listo. MF_Animation.create("walk", 2) → autoKey desde el Studio al posar.');
+    void 0;
 })();

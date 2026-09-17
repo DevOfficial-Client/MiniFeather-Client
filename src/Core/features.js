@@ -79,7 +79,7 @@
 
         if (game) {
             window.miniblox = game;
-            console.log(`${TAG} ✓ Game instance captured.`);
+            void 0;
         }
 
         return game;
@@ -391,9 +391,7 @@
 
         window.__MF_BLOCK_HIGHLIGHT_SELECT_PATCHED__ = true;
 
-        console.log(
-            `${TAG} ✓ PlayerController.select patched.`
-        );
+        void 0;
 
         return true;
     }
@@ -424,9 +422,7 @@
                     patchSelectMethod(module);
                     refreshBlockHighlight();
 
-                    console.log(
-                        `${TAG} ✓ Bundle scanned.`
-                    );
+                    void 0;
                 } catch (err) {
                     console.warn(
                         `${TAG} Bundle module error:`,
@@ -488,11 +484,7 @@
         ) {
             clearInterval(interval);
 
-            console.log(
-                ready
-                    ? `${TAG} ✓ Block Highlight ready.`
-                    : `${TAG} Block Highlight idle (no select box found).`
-            );
+            void 0;
         }
     }, 500);
 
@@ -556,9 +548,7 @@
                 );
             }   
             refreshBlockHighlight();    
-            console.log(
-                `${TAG} UI Block Highlight config applied.`
-            );
+            void 0;
         }
     );
 
@@ -593,7 +583,5 @@
         }
     };
 
-    console.log(
-        `${TAG} Loaded.`
-    );
+    void 0;
 })();

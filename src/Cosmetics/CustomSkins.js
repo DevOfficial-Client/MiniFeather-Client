@@ -4,24 +4,12 @@
     window.__MF_CustomSkins = true;
 
     var TAG = "[MiniFeather Skins]";
-    // Logs de diagnóstico ON por defecto; apagar con localStorage mf_skins_verbose=0
-    var VERBOSE;
-    try {
-        VERBOSE = localStorage.getItem('mf_skins_verbose') !== '0';
-    } catch (_) { VERBOSE = true; }
-
-    function log() {
-        if (!VERBOSE) return;
-        var args = [TAG].concat(Array.prototype.slice.call(arguments));
-        console.log.apply(console, args);
-    }
 
     function warn() {
         var args = [TAG].concat(Array.prototype.slice.call(arguments));
         console.warn.apply(console, args);
     }
 
-    log("starting (profile patch mode)");
 
     function skinsBaseUrl() {
         var meta = document.querySelector('meta[name="mf-skins-base"]');
@@ -114,7 +102,6 @@
         }
         devSkinsRegistered = true;
         installCustomUrlHook();
-        log('ids custom listos (devs + mypacks)');
     }
 
     var DB_KEY = 'minifeather:custom-skins-db';
@@ -209,12 +196,10 @@
                 .then(function (live) {
                     if (!live || !live.players) return;
                     parseDb(live, false);
-                    log('DB viva aplicada (' + Object.keys(live.players).length + ' entradas)');
                     try { prefetchRemoteSkins(); } catch (_) {}
                 })
                 .catch(function () {});
             var n = Object.keys(dbByUuid).length + Object.keys(dbByName).length;
-            log('DB lista (' + n + ' overrides)');
             try { prefetchRemoteSkins(); } catch (_) {}
             return db;
         };
@@ -308,7 +293,6 @@
 
         try {
             profile.skin = entry.__skin;
-            log('skin override', profile.uuid, '->', entry.__skin);
             return true;
         } catch (e) {
             return false;
@@ -365,7 +349,6 @@
             if (reqUrl && typeof reqUrl === 'string') {
                 var localSkin = resolveCustomTextureUrl(reqUrl);
                 if (localSkin) {
-                    log('[fetch] textura custom servida local:', reqUrl.slice(-44));
                     // fetch() recursivo seguro: la URL local (chrome-extension:/data:)
                     // no matchea CUSTOM_URL_RE ni isProfileResponse → pasa directo.
                     return originalFetch.call(this, localSkin, { cache: 'force-cache' })
@@ -535,7 +518,6 @@
                     // Imagen re-descargada (repo actualizado): nueva época para
                     // que el watcher en vivo repinte con el contenido fresco.
                     if (had) bumpEpoch();
-                    log('skin remota cacheada:', url.slice(-28));
                 } else throw new Error('no image');
             })
             .catch(function () {
@@ -649,7 +631,6 @@
                     }
                 }
                 if (done > 0) {
-                    log('✔ skin aplicada:', pendingName, '—', done + '/' + mats.length + ' materiales,', img.naturalWidth + 'x' + img.naturalHeight, url.indexOf('data:') === 0 ? '(cache)' : url.slice(-30));
                 } else {
                     warn('✘ imagen cargó pero 0 materiales repintados para', pendingName);
                     paintedPlayers.delete(player);
@@ -680,7 +661,6 @@
             seenProfileIds.add(player);
             var pn = profile.username || profile.name || '(sin username)';
             var pu = profile.uuid || '(sin uuid)';
-            log('jugador detectado:', pn, '| uuid:', pu, entry ? '→ MATCH en DB' : '(sin override en DB)');
         }
 
         if (!entry) return;
@@ -703,7 +683,6 @@
                 if (player.mesh && typeof player.mesh.recreate === 'function') {
                     player.mesh.recreate();
                 }
-                log('✔ skin custom aplicada (engine):', profile.uuid || profile.username, '→', target);
             } catch (e) {
                 warn('falló aplicar skin custom', target, ':', e && e.message);
             }
@@ -719,7 +698,6 @@
                 if (player.mesh && typeof player.mesh.recreate === 'function') {
                     player.mesh.recreate();
                 }
-                log('✔ skin vanilla aplicada:', profile.uuid || profile.username, '→', target);
             } catch (e) {
                 warn('falló aplicar skin vanilla', target, ':', e && e.message);
             }
@@ -746,7 +724,6 @@
         if (paintEntitySkin(player, entry)) {
             paintedPlayers.add(player);
             try { player.__mfSkinEpoch = paintEpoch; } catch (_) {}
-            log('live override (textura)', profile.uuid || profile.username, '->', target);
         }
 
     }
@@ -810,16 +787,14 @@
                 }
                 if (!sha || sha === liveLastSha) return;
                 liveLastSha = sha;
-                log('repo actualizado (' + sha.slice(0, 7) + '), recargando DB viva...');
                 return fetch(LIVE_DB_URL, { cache: 'reload' })
                     .then(function (r) { return r.ok ? r.json() : null; })
                     .then(function (live) {
                         if (!live || !live.players) { warn('DB viva nueva sin players'); return; }
                         liveApplyDb(live);
-                        log('DB viva aplicada (' + Object.keys(live.players).length + ' entradas)');
                     });
             })
-            .catch(function (e) { log('watcher:', e && e.message || e); })
+            .catch(function () {})
             .then(function () { liveBusy = false; });
     }
 
@@ -839,16 +814,14 @@
             .then(function (live) {
                 if (!live || !live.players) { warn('DB viva nueva sin players'); return; }
                 liveApplyDb(live);
-                log('DB viva aplicada (' + Object.keys(live.players).length + ' entradas)');
             })
-            .catch(function (e) { log('reload push:', e && e.message || e); });
+            .catch(function () {});
     }
 
     function queuePushReload() {
         if (pushReloadTimer) return;
         pushReloadTimer = setTimeout(function () {
             pushReloadTimer = null;
-            log('push ntfy recibido: recargando DB viva');
             try { reloadLiveDbNow(); } catch (_) {}
         }, 600);
     }
@@ -931,7 +904,6 @@
                 }
 
                 originalUrls.set(this, value);
-                log('[Image.src] skin reemplazada:', skinId, '→', url.indexOf('data:') === 0 ? '(dataURL)' : url.slice(-30));
 
                 var self = this;
                 this.addEventListener(
@@ -1089,7 +1061,6 @@
                     origDrawImage.apply(list[i].ctx, a);
                 }
                 drawnCalls.delete(cvs);
-                log('✔ preview del menú repintado con skin custom');
             } catch (e) {
                 warn('replay del preview falló:', e && e.message);
             } finally {
@@ -1097,7 +1068,6 @@
             }
         }
 
-        log('hook de preview del menú instalado');
     }
 
     function tryPatch() {
@@ -1109,7 +1079,6 @@
     }
 
     if (tryPatch()) {
-        log('patches aplicados');
     } else {
         var pollTicks = 0;
         var setupInterval = setInterval(function () {
@@ -1168,7 +1137,6 @@
             if (packSkinReg[name] !== url) changed = true;
             packSkinReg[name] = url;
         }
-        log('assets del panel registrados (' + kind + ')');
         // Repintar entidades vivas: el hook de Image.src solo cubre cargas nuevas
         if (changed) forceRepaintAll(kind === 'cape' ? 'cape' : 'skin');
     }
@@ -1200,15 +1168,13 @@
             for (var k = 0; k < world.entitiesDump.length; k++) add(world.entitiesDump[k]);
         }
         if (!targets.length) return;
-        var touched = 0;
         for (var i = 0; i < targets.length; i++) {
             var player = targets[i];
             var skin = player?.profile?.cosmetics?.skin;
-            if (typeof skin === 'string' && paintPlayerUrl(player, packSkinReg[skin.replace(/^custom:/i, '')])) touched++;
+            if (typeof skin === 'string') paintPlayerUrl(player, packSkinReg[skin.replace(/^custom:/i, '')]);
             var cape = player?.profile?.cosmetics?.cape;
-            if (typeof cape === 'string' && paintPlayerUrl(player, packSkinReg[cape.replace(/^custom:/i, '')])) touched++;
+            if (typeof cape === 'string') paintPlayerUrl(player, packSkinReg[cape.replace(/^custom:/i, '')]);
         }
-        if (touched) log('repintado en vivo: ' + touched + ' entidades');
     }
 
     function paintPlayerUrl(player, url) {

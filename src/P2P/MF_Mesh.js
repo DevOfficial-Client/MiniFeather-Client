@@ -22,7 +22,6 @@ const state = {
     skinTold: new Map(),           
 };
 
-function log(...a) { console.log(TAG, ...a); }
 function warn(...a) { console.warn(TAG, ...a); }
 
 let peerjsPromise = null;
@@ -114,7 +113,6 @@ async function start() {
     state.peer = peer;
     peer.on('open', (pid) => {
         state.status = 'listening';
-        log('nodo listo. código: ' + pid);
         announce(pid);
         if (state.announceTimer) clearInterval(state.announceTimer);
         state.announceTimer = setInterval(() => {
@@ -174,7 +172,6 @@ function dropConn(conn) {
     const name = state.names.get(conn.peer) || conn.peer;
     state.names.delete(conn.peer);
     state.skinTold.delete(conn.peer);
-    log('nodo fuera: ' + name);
     revertMeshSkin(name);
 }
 
@@ -193,7 +190,6 @@ function handleMsg(conn, m) {
     switch (m.t) {
         case 'hello': {
             state.names.set(conn.peer, m.name || 'nodo');
-            log('handshake: ' + (m.name || '?') + ' (' + m.code + ')');
             
             if (Array.isArray(m.peers)) {
                 for (const code of m.peers) {
@@ -224,7 +220,6 @@ function handleMsg(conn, m) {
                 const isNew = !skinById.has(m.id);
                 registerSharedSkin(m.id, m.dataURL, m.name);
                 if (isNew) {
-                    log('skin ← ' + m.id + ' (de ' + (m.name || '?') + ')');
                     applySkinToPeer(m.name, m.id, m.dataURL);
                     
                     for (const [pid, c] of state.conns) {
@@ -358,7 +353,6 @@ function drainPending() {
                 ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, s.canvas.width, s.canvas.height);
                 s.tex.needsUpdate = true;
                 pendingSkins.delete(name);
-                log('skin aplicada a ' + name);
             } catch (e) { warn('drawImage falló:', e?.message || e); }
         };
         img.onerror = () => { pendingSkins.delete(name); };
@@ -396,7 +390,6 @@ function announce(code) {
     try {
         try { chat.setInputValue?.(text); } catch { try { chat.inputValue = text; } catch {} }
         chat.submit();
-        log('código mesh publicado al chat: ' + text);
     } catch (e) {
         warn('announce falló:', e?.message || e);
         // El engine puede tardar en exponer inGame justo al entrar a la
@@ -435,9 +428,8 @@ const chatTimer = setInterval(chatWatchTick, 1500);
 
 async function boot() {
     const saved = (() => { try { return localStorage.getItem('mf:mesh:auto'); } catch { return null; } })();
-    if (saved === '0') { log('auto-arranque desactivado (mf:mesh:auto=0)'); return; }
+    if (saved === '0') return;
     await start();
-    log('mesh listo — autodetección activa');
 }
 boot();
 
@@ -455,7 +447,6 @@ globalThis.MF_Mesh = {
         for (const c of state.conns.values()) {
             sendTo(c, { t: 'skin', id, dataURL, name: myName() });
         }
-        log('skin propia difundida: ' + id);
     },
     
     announceNow() { if (state.myCode) announce(state.myCode); },

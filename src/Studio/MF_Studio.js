@@ -1925,7 +1925,7 @@
         if (!viewport.canvases.length) {
             viewport.canvases = collectGameCanvases();
             if (!viewport.canvases.length) return;
-            console.log(TAG + ' clamp: ' + viewport.canvases.length + ' canvas(es) del juego encajados');
+            void 0;
         }
         const tr = `translate(${want.tx}px, ${want.ty}px) scale(${want.sx}, ${want.sy})`;
         try {
@@ -1943,7 +1943,7 @@
                     const now = performance.now();
                     if (clampLogN < 3 || now - clampLogLast > 5000) {
                         clampLogN++; clampLogLast = now;
-                        console.log(TAG + ` clamp: transform re-aplicado a ${cv.id || 'canvas'} tx=${want.tx.toFixed(1)} ty=${want.ty.toFixed(1)} sx=${want.sx.toFixed(4)} sy=${want.sy.toFixed(4)}`);
+                        void 0;
                     }
                 }
             }
@@ -1960,7 +1960,7 @@
                 }
             }
         } catch (e) {
-            console.log(TAG + ' clamp: ERROR ' + e);
+            void 0;
         }
     }
     
@@ -1968,10 +1968,9 @@
     function viewportEnable() {
         const cvs = collectGameCanvases();
         const p = document.getElementById('mf-studio-preview');
-        console.log(TAG + ' viewportEnable: ' + cvs.length + ' canvas(es) fullscreen' +
-            ' preview=' + (p ? Math.round(p.getBoundingClientRect().width) + 'x' + Math.round(p.getBoundingClientRect().height) : 'NO'));
+        void 0;
         if (!p || !cvs.length) {
-            console.log(TAG + ' viewportEnable: FALLÓ, canvases: ' + dumpCanvases());
+            void 0;
             return false;
         }
         viewport.canvases = cvs;
@@ -1985,7 +1984,7 @@
                 const r = cv.getBoundingClientRect();
                 return (cv.id || 'canvas') + ' css=' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.left) + ',' + Math.round(r.top);
             });
-            console.log(TAG + ' viewport +1s: ' + parts.join(' · ') + ' · preview=' + Math.round(pr.width) + 'x' + Math.round(pr.height));
+            void 0;
         }, 1000);
         return true;
     }
@@ -1997,7 +1996,7 @@
                 cv.style.removeProperty('transform-origin');
             } catch {}
         }
-        if (viewport.canvases.length) console.log(TAG + ' viewportDisable: transforms eliminados');
+        if (viewport.canvases.length) void 0;
         
         if (cam.camera && viewport.origAspect != null) {
             try {
@@ -2052,7 +2051,7 @@
         installCamHooks(camera);
         applyCamPose();
         
-        console.log(TAG + ' cámara de studio activa (click+drag=rotar · WASD/QE=mover · Ctrl=rápido)');
+        void 0;
         return true;
     }
 
@@ -2448,12 +2447,12 @@
             const cv = viewport.canvases[0];
             try { cv?.requestPointerLock?.(); } catch {}
             updateStatus('🎮 Player control ON — WASD=move · mouse=rotate player · static camera · H/ESC=exit');
-            console.log(TAG + ' playerControl ON');
+            void 0;
         } else {
             if (playerCtrl.recHeld) playerCtrlRecStop(); 
             releasePointerLock();
             updateStatus('🎮 Control del jugador OFF');
-            console.log(TAG + ' playerControl OFF');
+            void 0;
         }
     }
     function playerControlBindKeys() {
@@ -2518,7 +2517,7 @@
                 try { window.MF_Timeline.addClip(film, Math.floor(state.playheadTick)); } catch {}
             }
             updateStatus(`⏺ Clip "${name}" grabado (${r.ticks} ticks, ${r.keyframes} keys)`);
-            console.log(TAG + ` clip ${name}: ${r.ticks} ticks, ${r.keyframes} keyframes`);
+            void 0;
         }
     }
 
@@ -3112,7 +3111,7 @@
             requestAnimationFrame(retry);
         }
         afkToggle(true); 
-        console.log(TAG + ' abierto. Click+drag en preview=rotar cámara · WASD=mover · Space=play · R=rec · F1=cerrar');
+        void 0;
     }
 
     function close() {
@@ -3131,7 +3130,7 @@
         const root = document.getElementById(ID);
         const style = document.getElementById(ID + '-style');
         root?.remove(); style?.remove();
-        console.log(TAG + ' cerrado');
+        void 0;
     }
 
     window.MF_Studio = {
@@ -3157,5 +3156,5 @@
         if (ev.key === 'F1') { ev.preventDefault(); state.open ? close() : open(); }
     });
 
-    console.log(TAG + ' listo. F1 o /studio para abrir el estudio.');
+    void 0;
 })();

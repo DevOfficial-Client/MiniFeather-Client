@@ -239,7 +239,7 @@
         if (typeof id !== 'string' || !id) return;
         const clean = id.split('/').pop().replace(/\.png$/i, '').toLowerCase();
         if (clean && clean !== apiSkin.value) {
-            console.log(TAG + ' skin (API): ' + clean);
+            void 0;
             apiSkin.value = clean;
         }
     }
@@ -1001,7 +1001,7 @@
             state.playTimer = requestAnimationFrame(tick);
         };
         tick();
-        console.log(TAG + ' reproduciendo en loop: ' + name);
+        void 0;
         return { ok: true, name };
     }
 
@@ -1216,7 +1216,7 @@
 
     const chatSeen = new WeakSet();
     const DEBUG_BROW = localStorage.getItem('mff:debug-brow') === '1';
-    function debugBrow(...a) { if (DEBUG_BROW) console.log('[MF Facial 🤨]', ...a); }
+    function debugBrow(...a) { if (DEBUG_BROW) void 0; }
     function chatQuestionWatch() {
         if (!auto.brow || !auto.on) { debugBrow('watch off (brow=' + auto.brow + ' on=' + auto.on + ')'); return; }
         const g = getGame() || globalThis.__MINIBLOX_GAME__ || null;
@@ -1375,7 +1375,7 @@
         scheduleBlink(performance.now());
         if (!auto._raf) auto._raf = requestAnimationFrame(autoTick);
         renderUI();
-        console.log(TAG + ' auto-presets ON (reacciona al giro de cabeza + parpadeo random)');
+        void 0;
         return { ok: true };
     }
 
@@ -1773,7 +1773,7 @@
         if (!others._raf) others._raf = requestAnimationFrame(otherTick);
         renderUI();
         const n = otherPlayers().length;
-        console.log(TAG + ' animar a otros ON (' + n + ' player(s) visibles, solo local)');
+        void 0;
         return { ok: true, count: n };
     }
     function othersStop() {
@@ -1784,7 +1784,7 @@
         others._sessions.clear();
         saveOthers();
         renderUI();
-        console.log(TAG + ' animar a otros OFF');
+        void 0;
         return { ok: true };
     }
 
@@ -2576,10 +2576,10 @@
                     const g = getGame();
                     if (g?.player?.mesh) {
                         clearInterval(boot);
-                        if (wantAuto) { auto.on = false; autoStart().then(r => { if (r.ok) console.log(TAG + ' autostart: auto-presets'); }); }
+                        if (wantAuto) { auto.on = false; autoStart().then(r => { if (r.ok) void 0; }); }
                         else if (last && state.library[last]) {
                             play(last).then(r => {
-                                if (r.ok) console.log(TAG + ' autostart: ' + last);
+                                if (r.ok) void 0;
                             });
                         }
                     }
@@ -2652,7 +2652,7 @@
             skinWatch.lastApplied = pid;
             skinWatch.userOff = false; 
             const r = await autoStart();
-            if (r.ok) console.log(TAG + ' pack "' + pid + '"' + (pid !== skinId ? ' (uuid ' + uid + ')' : '') + ' → auto facial (' + frontFile + '/izquierda/derecha/' + (pack.up ? 'arriba/' : '') + (pack.down ? 'abajo/' : '') + 'blink' + (pack.brow ? '/ceja🤨' : '') + ') · brow=' + auto.brow + ' browFace=' + (auto.browFace || '(sintetizada)') + ' browMs=' + auto.browMs);
+            if (r.ok) void 0;
             return r;
         } finally { skinWatch.busy = false; }
     }
@@ -2665,7 +2665,7 @@
                 const uid = currentPlayerUuid();
                 const byUuid = uid ? packIndex.find(p => p.uuid === uid) : null;
                 if (byUuid && skinWatch.lastApplied !== byUuid.id) {
-                    console.log(TAG + ' uuid ' + uid + ' → pack "' + byUuid.id + '"');
+                    void 0;
                     applyPackForSkin(true).catch(() => {});
                     return;
                 }
@@ -2710,5 +2710,5 @@
         };
     }
 
-    console.log(TAG + ' listo (independiente). Shift+F o MF_Facial.open() — animaciones de cara en loop.');
+    void 0;
 })();

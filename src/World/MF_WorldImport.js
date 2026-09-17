@@ -292,5 +292,5 @@
     parseNBT,
   };
 
-  console.log(TAG, 'listo. MF_WorldImport.importFromFile(file) → {bounds, spawn, palette, blocks}');
+  void 0;
 })();

@@ -17,12 +17,12 @@
       const entry = { t: Math.round(performance.now() - t0), lvl, tag, msg: args.map((a) => (typeof a === 'object' ? safeJson(a) : String(a))).join(' ') };
       ring.push(entry);
       if (ring.length > 300) ring.shift();
-      if (level >= lvl) console.log(TAG, `[${entry.t}ms]`, tag, ...args.map(fmt));
+      if (level >= lvl) void 0;
     };
     const safeJson = (o) => { try { return JSON.stringify(o, (k, v) => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : v)); } catch { return String(o); } };
     return {
       get level() { return level; },
-      setLevel(l) { level = (l | 0); try { localStorage.setItem('mf:spiderlog', String(level)); } catch (_) {} console.log(TAG, 'log level →', level); },
+      setLevel(l) { level = (l | 0); try { localStorage.setItem('mf:spiderlog', String(level)); } catch (_) {} void 0; },
       i: (...a) => write(1, 'info', a),
       d: (...a) => write(2, 'detail', a),
       v: (...a) => write(3, 'verbose', a),
@@ -3468,5 +3468,5 @@
     }
   } catch (_) {}
 
-  console.log(TAG, 'cargado — simulador embebido (sin Node, sin WebSocket). window.MF_SPIDER_SIM');
+  void 0;
 })();

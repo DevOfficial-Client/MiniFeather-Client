@@ -64,7 +64,7 @@
         } catch {}
     }
 
-    function log(...a) { console.log(TAG, ...a); }
+    function log(...a) { void 0; }
     function warn(...a) { console.warn(TAG, ...a); }
 
     function loadPuter() {
@@ -322,7 +322,7 @@
             const synth = globalThis.speechSynthesis;
             const voices = synth?.getVoices?.() || [];
             const list = voices.map((v) => ({ name: v.name, lang: v.lang, def: v.default }));
-            console.table(list);
+            void 0;
             return list;
         },
         set rate(r) { state.rate = Math.max(0.5, Math.min(2, +r || 1)); },

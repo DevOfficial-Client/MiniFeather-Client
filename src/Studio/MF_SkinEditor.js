@@ -731,7 +731,7 @@
         buildUI();
         refreshPresetList();
         renderUI();
-        console.log(TAG + ' abierto — dibuja sobre la cabeza y míralo en vivo.');
+        void 0;
     }
 
     function close() {
@@ -770,5 +770,5 @@
     };
     window.__MF_SkinEditor = true;
 
-    console.log(TAG + ' listo. MF_SkinEditor.open() — editor de cabeza en vivo.');
+    void 0;
 })();

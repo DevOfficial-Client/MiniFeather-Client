@@ -716,7 +716,6 @@
                 vec3 mfCrGetAtmFogColor(float altitudeFactorRaw, float VdotS, float dayFactor) {
                     float nightFogMult = 2.5 - 0.625 * max(mfCrPow2(mfCrPow2(altitudeFactorRaw)), 0.0);
                     float dayNightFogBlend = pow(1.0 - dayFactor, 4.0 - VdotS - 2.5 * dayFactor * dayFactor);
-                    // skyColors.glsl: nightUpSkyColor y dayDownSkyColor
                     vec3 nightUpSkyColor = vec3(0.0005, 0.0008, 0.0019);
                     vec3 dayDownSkyColor = vec3(0.22, 0.35, 0.56);
                     return mix(
@@ -728,7 +727,6 @@
 
                 // DoAtmosphericFog (mainFog.glsl:120) — adaptado a forward
                 vec3 mfCrDoAtmosphericFog(vec3 color, float lViewPos, float altitude) {
-                    // SRATA=63.1, CRFTM=60 (defaults del pack en overworld)
                     float atmFogSRATA = 63.1;
                     float atmFogCRFTM = 60.0;
 
@@ -840,7 +838,7 @@
                     const u = entry.liveUniforms;
                     if (u.uCsLightOn) {
                         u.uCsLightOn.value = u.uCsLightOn.value > 0.5 ? 0 : 1;
-                        console.log(`${TAG} Linterna: ${u.uCsLightOn.value > 0.5 ? 'ON' : 'OFF'}`);
+                        void 0;
                     }
                 }
             }
@@ -988,11 +986,11 @@
             hook.factor = 1.0;
             
             hook.originalSetPixelRatio(window.devicePixelRatio || 1);
-            console.log(`${TAG} Render scale restaurado a nativo (1.0).`);
+            void 0;
         } else {
             hook.factor = clamped;
             hook.originalSetPixelRatio((window.devicePixelRatio || 1) * clamped);
-            console.log(`${TAG} Render scale aplicado: ${clamped.toFixed(2)} â€” se mantiene tras resizes del juego.`);
+            void 0;
         }
 
         try {
@@ -1215,7 +1213,7 @@
         };
         requestAnimationFrame(loop);
 
-        console.log('[MiniFeather PostFX] ✓ Pass full-screen instalado vía canvas+rAF (bloom/CA/DOF/dirt).');
+        void 0;
         return true;
     }
 
@@ -1578,7 +1576,7 @@
         if (u?.uNoiseTex && packNoise.texture) {
             if (u.uNoiseTex.value !== packNoise.texture) {
                 u.uNoiseTex.value = packNoise.texture;
-                console.log(`${TAG} ✓ Ruido de nubes del pack aplicado (128³ RGBA).`);
+                void 0;
             }
             return true;
         }
@@ -1907,7 +1905,7 @@
         }
 
         if (hooked > 0) {
-            console.log(`${TAG} âœ“ ${hooked} materiales hookeados (preset: ${state.preset}).`);
+            void 0;
             if (!rafId) {
                 lastTime = performance.now();
                 animate();
@@ -1929,7 +1927,7 @@
             rafId = null;
         }
 
-        console.log(`${TAG} Shaders custom desactivados.`);
+        void 0;
     }
 
     function switchPreset() {
@@ -2191,6 +2189,6 @@
         if (localStorage.getItem(LS_SHAPE)) {
             setTimeout(() => handleCloudsShape({}), 4000);
         }
-        console.log(`${TAG} Sistema iniciado. Preset: ${state.preset}, Strength: ${state.strength}`);
+        void 0;
     }
 })();

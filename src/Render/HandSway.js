@@ -187,7 +187,7 @@
         lf.__mfHandSwayOrig = original;
         lf.updateArmAnimation = patched;
 
-        console.log(`${TAG} Hooked first-person hand renderer.`);
+        void 0;
         return true;
     }
 
@@ -198,9 +198,7 @@
         if (!lf) return;
         if (hookHandRenderer(lf)) {
             clearInterval(interval);
-            console.log(
-                `${TAG} Loaded. Toggle: window.MF_HandSway.enabled`
-            );
+            void 0;
         }
     }, 600);
 })();

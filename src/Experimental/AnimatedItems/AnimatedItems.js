@@ -596,7 +596,7 @@
     }
     if (changed) markAtlasUpdated();
 
-    console.log(TAG, `ready: ${state.runtime.size} compatible MiniBlox items, ${profile.itemSize}x${profile.itemSize} texture-pack mode, atlas ${width}x${height}`);
+    void 0;
     return true;
   }
 

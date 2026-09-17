@@ -591,7 +591,7 @@
             state.currentDimensionId = newDimId;
             state.lastPlayerChunkX = null;
             state.lastPlayerChunkZ = null;
-            console.log(`${TAG} Server: ${newServerKey} | Dimension: ${newDimId}`);
+            void 0;
         }
 
         const worldProto2 = getWorldProto2(world);
@@ -633,7 +633,7 @@
         }
 
         if (scanned > 0) {
-            console.log(`${TAG} Scanned ${scanned} new chunks. Total: ${chunkCache.size}`);
+            void 0;
         }
 
         if (chunkCache.size > CONFIG.maxChunksPerServer) {
@@ -944,7 +944,7 @@
         renderLoop();
 
         const chunkCount = getCurrentCache()?.size || 0;
-        console.log(`${TAG} Opened. Server: ${state.currentServerKey} | Chunks: ${chunkCount}`);
+        void 0;
     }
 
     function closeMap() {
@@ -999,11 +999,11 @@
         clearCache() {
             const cache = getCurrentCache();
             if (cache) cache.clear();
-            console.log(`${TAG} Cache cleared for ${state.currentServerKey}/${state.currentDimensionId}`);
+            void 0;
         },
         clearAllCaches() {
             state.serverCaches.clear();
-            console.log(`${TAG} All caches cleared.`);
+            void 0;
         },
         setZoom(z) {
             state.zoom = Math.max(0.5, Math.min(8, Number(z) || 1));
@@ -1018,6 +1018,6 @@
         }
     };
 
-    console.log(`${TAG} Loaded. Press U to open.`);
+    void 0;
     startBackgroundScan();
 })();

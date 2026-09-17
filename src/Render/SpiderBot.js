@@ -18,14 +18,14 @@
       const entry = { t: Math.round(performance.now() - t0), lvl, tag, msg: args.map((a) => (typeof a === 'object' ? safeJson(a) : String(a))).join(' ') };
       ring.push(entry);
       if (ring.length > 300) ring.shift();
-      if (level >= lvl) console.log(TAG, `[${entry.t}ms]`, tag, ...args.map(fmt));
+      if (level >= lvl) void 0;
     };
     return {
       get level() { return level; },
       setLevel(l) {
         level = (l | 0);
         try { localStorage.setItem('mf:spiderlog', String(level)); } catch (_) {}
-        console.log(TAG, 'log level →', level);
+        void 0;
         
         try { globalThis.MF_SPIDER_SIM?.log?.(level); } catch (_) {}
       },
@@ -337,7 +337,7 @@
     state.ctors = { Geometry, Attr, Mesh: MeshCtor, Material: MaterialCtor, Group: GroupCtor };
     if (!state.ctorsLogged) {
       state.ctorsLogged = true;
-      console.log(TAG, 'constructores', Geometry?.name, MeshCtor?.name, GroupCtor?.name);
+      void 0;
     }
     return true;
   }
@@ -726,13 +726,7 @@
         }
         if (state.spiders.size && (visSegs === 0 || (LOG.level >= 1 && !state._diagLogged))) {
           state._diagLogged = true;
-          console.log(TAG, 'DIAG visibilidad patas:', visSegs + '/' + totSegs,
-            'arañas=' + state.spiders.size,
-            'ctors=' + (state.ctors ? 'ok' : 'pendiente'),
-            'materialColor=' + (state.ctors ? (() => { try { return '#' + (_sharedLegMat?.color?.getHexString?.() ?? '?'); } catch (_) { return '?'; } })() : '?'),
-            'sharedGeo=' + (!!_sharedLegGeo),
-            'sharedMat=' + (!!_sharedLegMat),
-            'skipHook=' + (_sharedLegMat?.__mfSkipHook ? 'sí' : 'no'));
+          void 0;
         }
       }
 
@@ -877,7 +871,7 @@
     },
   };
 
-  console.log(TAG, 'cargado (simulador EMBEBIDO — sin Node/ws). Usa window.MF_SPIDER_BOT o /spider');
+  void 0;
 
   enable(true);
 })();

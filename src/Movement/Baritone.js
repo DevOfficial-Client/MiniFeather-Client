@@ -138,7 +138,7 @@ function startProbe(ms = 1000) {
         restorePlayerHook();
         hookPlayerInput();
     }
-    console.log(`${TAG} probe: caminando recto ${ms}ms...`);
+    void 0;
     return true;
 }
 
@@ -166,7 +166,7 @@ function finishProbe() {
                 ? 'INYECTA PERO NO MUEVE: el apply no aplica el input (metodo equivocado o campos rotados)'
                 : 'OK: input inyectado y el player se mueve')
     };
-    console.log(`${TAG} probe result:`, report);
+    void 0;
     
     Object.assign(desiredInput, pr.prevDesired);
     if (!state.followTarget && state.path.length === 0) {
@@ -389,10 +389,7 @@ function hookPlayerInput() {
 
         if (injectedTicks === 1) {
             try {
-                console.log(`${TAG} primer input inyectado:`, {
-                    ...input,
-                    pos: input.pos === null ? 'null' : input.pos
-                });
+                void 0;
             } catch (_) {}
         }
 
@@ -407,14 +404,14 @@ function hookPlayerInput() {
                 try {
                     const after = {};
                     for (const f of applyWrites) after[f] = this[f];
-                    console.log(`${TAG} campos del player tras apply:`, after);
+                    void 0;
                 } catch (_) {}
             }
         }
     };
 
     inputHooked = true;
-    console.log(`${TAG} Input hooked: reader=${readerName}, apply=${native.applyName}, applyWrites=[${applyWrites.join(',')}]`);
+    void 0;
     return true;
 }
 
@@ -671,7 +668,7 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ, maxIterOverride) 
     if (!canStand(goalX, goalY, goalZ)) {
         const alt = findStandableNear(goalX, goalY, goalZ);
         if (alt) {
-            console.log(`${TAG} Goal ${goalX},${goalY},${goalZ} not standable — anchored to ${alt.x},${alt.y},${alt.z}`);
+            void 0;
             goalX = alt.x; goalY = alt.y; goalZ = alt.z;
         }
     }
@@ -727,7 +724,7 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ, maxIterOverride) 
 
         if (current.x === goalX && current.y === goalY && current.z === goalZ) {
             const path = reconstruct(cKey);
-            console.log(`${TAG} Path found: ${path.length} nodes in ${iterations} iterations`);
+            void 0;
             return path;
         }
 
@@ -751,7 +748,7 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ, maxIterOverride) 
 
     if (bestKey && bestH < heuristic(startX, startY, startZ, goalX, goalY, goalZ) - 8) {
         const path = reconstruct(bestKey);
-        console.log(`${TAG} Best-effort path: ${path.length} nodes (h=${bestH.toFixed(1)}), will re-path from there`);
+        void 0;
         return path;
     }
 
@@ -902,7 +899,7 @@ function executePath(player, keepAlive = false) {
             
             const g = state.goal;
             if (g && Math.hypot(g.x + 0.5 - player.pos.x, g.y - player.pos.y, g.z + 0.5 - player.pos.z) > 0.85) {
-                console.log(`${TAG} Local path done, goal still far — re-pathing`);
+                void 0;
                 repath();
                 return true;
             }
@@ -926,7 +923,7 @@ function executePath(player, keepAlive = false) {
             if (!keepAlive) {
                 const g = state.goal;
                 if (g && Math.hypot(g.x + 0.5 - player.pos.x, g.y - player.pos.y, g.z + 0.5 - player.pos.z) > 0.85) {
-                    console.log(`${TAG} Local path done, goal still far — re-pathing`);
+                    void 0;
                     repath();
                     return true;
                 }
@@ -953,11 +950,11 @@ function executePath(player, keepAlive = false) {
             const moved = Math.hypot(px - lastPos.x, pz - lastPos.z);
             if (moved < 0.5) {
                 state._stuckCount = (state._stuckCount || 0) + 1;
-                console.log(`${TAG} Stuck detected (x${state._stuckCount}), re-pathing`);
+                void 0;
                 const obstacle = state.autoMine ? blockingBlockAhead(player, dx, dz) : null;
                 if (obstacle && state.goal) {
                     const resumeGoal = { ...state.goal };
-                    console.log(`${TAG} Mining blocking block before resuming path`, obstacle);
+                    void 0;
                     startBlockAction('mine', obstacle.x, obstacle.y, obstacle.z, null, resumeGoal);
                     return false;
                 }
@@ -1000,7 +997,7 @@ function follow(username) {
     state.pathIndex = 0;
     state.followRepathAt = 0;
 
-    console.log(`${TAG} Following "${username}"`);
+    void 0;
     emitState();
     return true;
 }
@@ -1008,7 +1005,7 @@ function follow(username) {
 function stopFollow(silent = false) {
     state.followTarget = null;
     state.followEntity = null;
-    if (!silent) console.log(`${TAG} Follow stopped`);
+    if (!silent) void 0;
 }
 
 function directChase(player, dx, dz, forceJump = false) {
@@ -1214,7 +1211,7 @@ function startBlockAction(type, x, y, z, slot, resumeGoal = null) {
     if (type === 'place' && state.action.slot) selectHotbarSlot(state.action.slot);
     planActionApproach(player);
     setActionStatus('moving', 'approaching');
-    console.log(`${TAG} ${type} block at ${state.action.x}, ${state.action.y}, ${state.action.z}`);
+    void 0;
     return true;
 }
 
@@ -1233,7 +1230,7 @@ function attackPlayer(username) {
     state.actionNextAt = 0;
     state.actionStartedAt = performance.now();
     setActionStatus('moving', 'chasing');
-    console.log(`${TAG} Attacking "${username}" (local input)`);
+    void 0;
     return true;
 }
 
@@ -1243,7 +1240,7 @@ function finishAction(reason, failed = false) {
     state.action = null;
     state.actionPhase = 'idle';
     if (resumeGoal) {
-        console.log(`${TAG} ${reason}; resuming original route`);
+        void 0;
         goto(resumeGoal.x, resumeGoal.y, resumeGoal.z);
         return;
     }
@@ -1364,7 +1361,7 @@ function goto(x, y, z) {
     state.enabled = true;
     state.goal = { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) };
     state.status = 'pathfinding';
-    console.log(`${TAG} Going to ${x}, ${y}, ${z}`);
+    void 0;
 
     const p = game.player;
     const path = findPath(p.pos.x, p.pos.y, p.pos.z, state.goal.x, state.goal.y, state.goal.z);
@@ -1424,7 +1421,7 @@ function stop(status = 'idle', reason = '') {
     desiredInput.yaw = null;
     
     neutralMovement(state.player);
-    console.log(`${TAG} Stopped: ${reason}`);
+    void 0;
     emitState();
 }
 
@@ -1599,7 +1596,7 @@ globalThis.Baritone = {
     }
 };
 
-console.log(`${TAG} Baritone loaded. Use Baritone.goto(x, y, z) or Baritone.stop()`);
+void 0;
 
 requestAnimationFrame(loop);
 })();

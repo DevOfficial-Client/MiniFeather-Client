@@ -41,7 +41,7 @@
     );
     frag = frag.replace(
       'const int STEPS = 26;\n      float dt = (tf - tn) / float(STEPS);',
-      'const int MF_MAX_STEPS = 40;\n      int mfSteps = clamp(uMFCloudSteps, 8, MF_MAX_STEPS);\n      float dt = (tf - tn) / float(mfSteps);'
+      'const int MF_MAX_STEPS = 64;\n      int mfSteps = clamp(uMFCloudSteps, 8, MF_MAX_STEPS);\n      float dt = (tf - tn) / float(mfSteps);'
     );
     frag = frag.replace(
       'for (int i = 0; i < STEPS; i++) {',
@@ -49,7 +49,7 @@
     );
     frag = frag.replace(
       'for (int j = 1; j <= 3; j++) {',
-      'for (int j = 1; j <= 6; j++) {\n            if (j > uMFCloudShadowSteps) break;'
+      'for (int j = 1; j <= 8; j++) {\n            if (j > uMFCloudShadowSteps) break;'
     );
     frag = frag.replace(
       'vec3 col = mix(uShadowColor, uCloudColor, sun);',

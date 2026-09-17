@@ -78,11 +78,11 @@
   })();
 
   function log(...args) {
-    if (LOG_LEVEL >= 1) console.log(LOG_PREFIX, ...args);
+    if (LOG_LEVEL >= 1) void 0;
   }
 
   function logTrace(...args) {
-    if (LOG_LEVEL >= 2) console.log(LOG_PREFIX, '[trace]', ...args);
+    if (LOG_LEVEL >= 2) void 0;
   }
 
   function logWarn(...args) {
@@ -1573,7 +1573,7 @@
     state.renderProbe = probe;
 
     if (logResult) {
-      console.log('[MiniFeather Local Render Probe]', probe);
+      void 0;
     }
 
     return probe;
@@ -10553,6 +10553,6 @@
   emitState();
 
   if (LOG_LEVEL >= 1) {
-    console.log(`${LOG_PREFIX} módulo cargado (logging ACTIVO, nivel ${LOG_LEVEL === 2 ? 'trace' : 'info'}). API: window.__MINIFEATHER_LOCAL_GAMES__`);
+    void 0;
   }
 })();

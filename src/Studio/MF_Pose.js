@@ -630,5 +630,5 @@
     };
     window.__MF_Pose = true;
 
-    console.log(TAG + ' listo. MF_Pose.setPart("head", {pitch:15}) o presets: ' + Object.keys(PRESETS).join(', '));
+    void 0;
 })();

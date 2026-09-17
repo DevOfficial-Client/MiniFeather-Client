@@ -751,7 +751,7 @@
   }
 
   function log(...args) {
-    console.log(LOG_PREFIX, ...args);
+    void 0;
   }
 
   function logWarn(...args) {
@@ -764,7 +764,7 @@
 
   function logTrace(...args) {
     if (localStorage.getItem('mfp2p:log') === 'trace') {
-      console.log(LOG_PREFIX, '[trace]', ...args);
+      void 0;
     }
   }
 

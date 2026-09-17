@@ -7,7 +7,7 @@
     let warnedNoModel = false;
     let warnedNoLf = false;
 
-    console.log(TAG + ' cargado, monitorizando...');
+    void 0;
 
     function getGame() {
         if (globalThis.miniblox?.player) return globalThis.miniblox;
@@ -167,10 +167,7 @@
                 lf.rightArm.material = orig.material;
                 lf.armSkin = model.skin;
                 const a2 = sleeveAlphaRatio(orig.material);
-                console.log(
-                    TAG + ' skin de la mano actualizada (skin=' + model.skin +
-                    ', alfa manga=' + (a2 === null ? '?' : Math.round(a2 * 100) + '%') + ')'
-                );
+                void 0;
             }
         } catch {}
 
@@ -194,11 +191,7 @@
 
             if (neuCnt >= 48) {
                 const a = sleeveAlphaRatio(neu.material);
-                console.log(
-                    TAG + ' capa overlay activa (verts ' + cnt + ' -> ' + neuCnt +
-                    ', skin=' + model.skin + ', alfa manga=' +
-                    (a === null ? '?' : Math.round(a * 100) + '%') + ')'
-                );
+                void 0;
                 if (a !== null && a === 0) {
                     console.warn(TAG + ' tu skin NO tiene pixeles en la zona de manga (40,32)-(44,44); la capa existe pero es transparente.');
                 }

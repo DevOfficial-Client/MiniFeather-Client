@@ -37,7 +37,7 @@ class P2POrchestrator {
     this.initServer();
     this.startValidationLoop();
     
-    console.log('[P2P Orchestrator] Servidor iniciado en puerto', CONFIG.PORT);
+    void 0;
   }
 
   initServer() {
@@ -70,7 +70,7 @@ class P2POrchestrator {
     });
 
     this.httpServer.listen(CONFIG.PORT, () => {
-      console.log(`[P2P Orchestrator] Escuchando en ws://localhost:${CONFIG.PORT}/p2p`);
+      void 0;
     });
   }
 
@@ -79,7 +79,7 @@ class P2POrchestrator {
     ws.nodeId = nodeId;
     ws.state = NODE_STATE.CONNECTING;
     
-    console.log(`[P2P Orchestrator] Nueva conexión: ${nodeId}`);
+    void 0;
 
     ws.on('message', (data) => {
       try {
@@ -147,7 +147,7 @@ class P2POrchestrator {
     this.nodes.set(ws.nodeId, nodeData);
     ws.state = NODE_STATE.ACTIVE;
 
-    console.log(`[P2P Orchestrator] Nodo registrado: ${ws.nodeId} (rol: ${message.role}, score: ${message.benchmark.score})`);
+    void 0;
 
     if (message.role === NODE_ROLE.AUTHORITY || message.role === NODE_ROLE.HYBRID) {
       this.assignRegionsToNode(nodeData);
@@ -195,7 +195,7 @@ class P2POrchestrator {
   }
 
   handleShutdownNotification(ws, message) {
-    console.log(`[P2P Orchestrator] Nodo ${ws.nodeId} notificando apagado`);
+    void 0;
     
     const node = this.nodes.get(ws.nodeId);
     if (node && node.assignedRegions.length > 0) {
@@ -206,7 +206,7 @@ class P2POrchestrator {
   }
 
   handleDisconnect(ws) {
-    console.log(`[P2P Orchestrator] Nodo desconectado: ${ws.nodeId}`);
+    void 0;
     
     const node = this.nodes.get(ws.nodeId);
     if (node) {
@@ -281,7 +281,7 @@ class P2POrchestrator {
       region: region
     }));
 
-    console.log(`[P2P Orchestrator] Región ${region.id} asignada a ${node.id}`);
+    void 0;
   }
 
   reassignRegions(regions, fromNodeId) {
@@ -317,7 +317,7 @@ class P2POrchestrator {
     const overloadedNode = this.nodes.get(overloadedNodeId);
     if (!overloadedNode || overloadedNode.assignedRegions.length === 0) return;
 
-    console.log(`[P2P Orchestrator] Iniciando rebalanceo para nodo sobrecargado: ${overloadedNodeId}`);
+    void 0;
 
     const availableNodes = Array.from(this.nodes.values())
       .filter(node => 
@@ -338,7 +338,7 @@ class P2POrchestrator {
 
       if (region) {
         this.assignRegionToNode(region, targetNode);
-        console.log(`[P2P Orchestrator] Región ${regionId} transferida de ${overloadedNodeId} a ${targetNode.id}`);
+        void 0;
       }
     }
   }
@@ -381,7 +381,7 @@ class P2POrchestrator {
         node.state = NODE_STATE.DEGRADED;
         
         if (now - node.lastHeartbeat > CONFIG.HEARTBEAT_TIMEOUT * 2) {
-          console.log(`[P2P Orchestrator] Nodo marcado como offline: ${nodeId}`);
+          void 0;
           node.state = NODE_STATE.OFFLINE;
           
           if (node.assignedRegions.length > 0) {
@@ -428,7 +428,7 @@ class P2POrchestrator {
 const orchestrator = new P2POrchestrator();
 
 process.on('SIGINT', () => {
-  console.log('\n[P2P Orchestrator] Cerrando servidor...');
+  void 0;
   
   for (const node of orchestrator.nodes.values()) {
     if (node.ws.readyState === WebSocket.OPEN) {
@@ -441,7 +441,7 @@ process.on('SIGINT', () => {
 
   orchestrator.wss.close();
   orchestrator.httpServer.close(() => {
-    console.log('[P2P Orchestrator] Servidor cerrado');
+    void 0;
     process.exit(0);
   });
 });

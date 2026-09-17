@@ -537,7 +537,7 @@
         setTimeout(() => {
           try {
             const d = api.debug();
-            console.log('[MiniFeather /baby] spawn check:', d);
+            void 0;
             if (!d.rigs) addChat('Warning: rig not created (see console).', 'error');
           } catch (e) { console.warn('[MiniFeather /baby] debug failed', e); }
         }, 1500);
@@ -1571,7 +1571,7 @@
         for (const [jn, info] of Object.entries(d.keyJoints)) {
           addChat(`  ${jn}: ${info.found ? `[${info.pos}] rot[${info.rot}]` : 'NOT FOUND'}`, 'normal');
         }
-        console.log('[MF Emotes] skeleton tree:', d.tree);
+        void 0;
         return;
       }
       if (!action) {

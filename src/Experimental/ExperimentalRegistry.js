@@ -67,7 +67,8 @@ api.register({
     { value: 'low', labelKey: 'experimentalRealisticLow', label: 'Low' },
     { value: 'medium', labelKey: 'experimentalRealisticMedium', label: 'Medium' },
     { value: 'high', labelKey: 'experimentalRealisticHigh', label: 'High' },
-    { value: 'ultra', labelKey: 'experimentalRealisticUltra', label: 'Ultra / Professional' }
+    { value: 'ultra', labelKey: 'experimentalRealisticUltra', label: 'Ultra / Professional' },
+    { value: 'custom', labelKey: 'experimentalRealisticCustom', label: 'Custom' }
   ],
   title: 'Realistic Mode',
   titleKey: 'experimentalRealisticTitle',

@@ -17,7 +17,7 @@ const state = {
     puppetTarget: null   
 };
 
-function log(...a) { console.log(TAG, ...a); }
+function log(...a) { void 0; }
 function warn(...a) { console.warn(TAG, ...a); }
 
 let peerjsPromise = null;
@@ -1101,7 +1101,7 @@ async function host(code) {
     state.peer = peer;
     peer.on('open', (pid) => {
         log('sala lista. Tu amigo entra con:  /p2p join ' + pid);
-        console.log('%c/p2p join ' + pid, 'font-size:16px;color:#7ec8ff');
+        void 0;
         
         sendRoomToChat(pid);
     });

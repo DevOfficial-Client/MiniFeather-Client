@@ -66,7 +66,7 @@
         const scale = resolution / TILE_SIZE;
         const atlasSize = ATLAS_SIZE * scale;
 
-        console.log(`${TAG} Detected ${resolution}x${resolution} texture pack (scale: ${scale}x, atlas: ${atlasSize}x${atlasSize})`);
+        void 0;
 
         const entries = Object.entries(frames);
         const search = buildLookup(customFiles);
@@ -236,7 +236,6 @@
                 return origXHRopen.apply(this, arguments);
             };
 
-            console.log('[MiniFeather TexturePack] MAIN world interception active (res:'+res+'x, patterns:'+patterns.length+')');
         })();`;
 
         const script = document.createElement('script');
@@ -244,7 +243,7 @@
         (document.head || document.documentElement).appendChild(script);
         script.remove();
 
-        console.log(`${TAG} Spritesheet injection done`);
+        void 0;
     }
 
     function dataUrlToBlob(dataUrl) {
@@ -283,7 +282,7 @@
             f => !f.dir && f.name.toLowerCase().endsWith('.png')
         );
 
-        console.log(`${TAG} Found ${pngEntries.length} PNGs in all folders`);
+        void 0;
 
         const images = await Promise.all(pngEntries.map(async (entry) => {
             try {
@@ -351,13 +350,13 @@
         }
 
         for (const zipFile of zipFiles) {
-            console.log(`${TAG} Extracting ${zipFile.name}...`);
+            void 0;
             const extracted = await extractZip(zipFile);
             for (const { name, img } of extracted) {
                 if (!registerPbr(name, img)) customSprites.set(name, img);
                 loaded++;
             }
-            console.log(`${TAG} Extracted ${extracted.length} PNGs from ${zipFile.name}`);
+            void 0;
         }
 
         return { customSprites, pbrMaps, loaded };
@@ -451,7 +450,7 @@
             placed++;
         }
 
-        console.log(`${TAG} PBR atlas '${kind}': ${placed} tiles de ${Object.keys(frames).length}`);
+        void 0;
         return { dataUrl: canvas.toDataURL('image/png'), placed };
     }
 
@@ -502,8 +501,7 @@
             }
         }
         const anyOk = Object.values(results).some(v => v > 0);
-        console.log(`${TAG} ✓ PBR maps:`, results,
-            anyOk ? '(guardados en IndexedDB)' : '(NINGUNO guardado — revisa arriba)');
+        void 0;
         
         try {
             document.dispatchEvent(new CustomEvent('minifeather:pbr-update'));
@@ -512,7 +510,7 @@
     }
 
     async function generateAndApply(files) {
-        console.log(`${TAG} Processing ${files.length} files...`);
+        void 0;
         const { customSprites, pbrMaps, loaded } = await processUploadedFiles(files);
 
         if (loaded === 0) {
@@ -528,7 +526,7 @@
             }
         }
 
-        console.log(`${TAG} Loaded ${loaded} sprites. Generating atlas...`);
+        void 0;
         const result = await generateSpritesheet(customSprites);
 
         if (!result) {
@@ -544,13 +542,13 @@
         setActive(true);
         interceptSpritesheet(result.dataUrl);
 
-        console.log(`${TAG} ✓ Custom texture pack active! Stats:`, result.stats);
+        void 0;
         return { success: true, stats: result.stats, textureNames: result.textureNames };
     }
 
     function disable() {
         setActive(false);
-        console.log(`${TAG} Custom texture pack disabled. Reload page to restore original.`);
+        void 0;
     }
 
     function idbDeleteAll() {
@@ -584,14 +582,14 @@
                 localStorage.removeItem('mf_pbr_manual');
                 document.dispatchEvent(new CustomEvent('minifeather:pbr-update'));
             } catch (_) {}
-            console.log(`${TAG} PBR atlases cleared (${ok}).`);
+            void 0;
         });
     }
 
     function clearAll() {
         clearStorage();
         clearPbr();
-        console.log(`${TAG} Cleared all custom textures. Reload page.`);
+        void 0;
     }
 
     function init() {
@@ -599,7 +597,7 @@
             const dataUrl = loadFromStorage();
             if (dataUrl) {
                 interceptSpritesheet(dataUrl);
-                console.log(`${TAG} Restored custom texture pack from storage`);
+                void 0;
             }
         }
     }
@@ -676,13 +674,13 @@
             return r;
         }
 
-        console.log(`${TAG} Descargando preset PBR "${preset.name}" de ${preset.url} ...`);
+        void 0;
         const res = await fetch(preset.url);
         if (!res.ok) {
             return { success: false, error: `descarga falló (HTTP ${res.status})` };
         }
         const blob = await res.blob();
-        console.log(`${TAG} ZIP listo (${(blob.size / 1048576).toFixed(1)} MB), extrayendo PNGs...`);
+        void 0;
 
         const extracted = await extractZip(blob);
         if (!extracted || extracted.length === 0) {
@@ -705,7 +703,7 @@
             }
             pbrCount++;
         }
-        console.log(`${TAG} Preset "${preset.name}": ${pbrCount} maps PBR (${pbrMaps.n.size}n ${pbrMaps.s.size}s ${pbrMaps.e.size}e)`);
+        void 0;
 
         if (pbrMaps.n.size === 0 && pbrMaps.s.size === 0 && pbrMaps.e.size === 0) {
             return { success: false, error: 'sin maps _n/_s/_e — estructura del pack inesperada' };
@@ -718,7 +716,7 @@
                 localStorage.setItem('mf_pbr_preset', preset.id);
                 localStorage.removeItem('mf_pbr_manual');  
             } catch (_) {}
-            console.log(`${TAG} ✓ Preset PBR "${preset.name}" instalado:`, results, `— crédito: ${preset.credit}`);
+            void 0;
         }
         return { success: anyOk, results, maps: { n: pbrMaps.n.size, s: pbrMaps.s.size, e: pbrMaps.e.size } };
     }
@@ -774,7 +772,7 @@
             }
             if (loadedCount === 0) return { success: false, error: 'ningún PNG cargado' };
             const results = await generateAndStorePbr(pbrMaps);
-            console.log(`${TAG} ✓ PBR integrado instalado (${loadedCount} maps):`, results);
+            void 0;
             return { success: true, results, loadedCount };
         } catch (err) {
             console.warn(`${TAG} PBR integrado no disponible:`, err);
@@ -816,6 +814,6 @@
             })));
     });
 
-    console.log(`${TAG} Loaded.`);
+    void 0;
     init();
 })();

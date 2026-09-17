@@ -877,7 +877,7 @@
         if (!state.tiles.length) {
             err('sin lista de texturas — cierra/abre de nuevo desde el botón de la GUI');
         }
-        console.log(TAG, 'editor abierto — pinta el relieve y míralo en vivo');
+        void 0;
     }
 
     function close() {
@@ -891,5 +891,5 @@
 
     window.MF_PbrEditor = { open, close, get isOpen() { return state.open; } };
     window.__MF_PbrEditor = true;
-    console.log(TAG, 'listo. MF_PbrEditor.open() o botón "Editar pack" en la GUI');
+    void 0;
 })();

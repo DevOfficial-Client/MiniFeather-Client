@@ -9,7 +9,7 @@
 
     const TAG = '[MiniFeather Accounts]';
     const VERBOSE = (() => { try { return localStorage.getItem('mf_accounts_verbose') === '1'; } catch (_) { return false; } })();
-    const log = (...a) => { if (VERBOSE) console.log(TAG, ...a); };
+    const log = (...a) => { if (VERBOSE) void 0; };
 
     // ── estado de la cuenta ──────────────────────────────────────
     const state = {

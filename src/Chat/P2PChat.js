@@ -34,7 +34,7 @@
     destroyed: false
   };
 
-  function log(...args) { console.log(TAG, ...args); }
+  function log(...args) { void 0; }
   function warn(...args) { console.warn(TAG, ...args); }
 
   let gameChatPollAttempts = 0;

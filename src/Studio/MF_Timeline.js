@@ -126,7 +126,7 @@
     function mount(container, opts) {
         if (opts?.onChange) state.onChange = opts.onChange;
         build(container);
-        console.log(TAG + ' listo. Rueda=zoom · drag=move · grips=trim · Alt=sin snap · Supr=borrar');
+        void 0;
     }
 
     function build(container) {
@@ -737,5 +737,5 @@
     };
     window.__MF_Timeline = true;
 
-    console.log(TAG + ' cargado');
+    void 0;
 })();

@@ -2,7 +2,7 @@
   'use strict';
 
   const W = globalThis;
-  const MARKER = 'MF_REALISTIC_FLUID_V2';
+  const MARKER = 'MF_REALISTIC_FLUID_V4';
   try { W.MF_RealisticFluid?.destroy?.(); } catch (_) {}
 
   const entries = new Map();
@@ -23,11 +23,16 @@
     return {
       uMFWaterAlpha: { value: w.alpha },
       uMFWaterWaveScale: { value: w.waveScale },
+      uMFWaterWaveSpeed: { value: w.waveSpeed ?? 1 },
       uMFWaterMicroNormal: { value: w.microNormal },
+      uMFWaterReflection: { value: w.reflection ?? 1 },
+      uMFWaterRefraction: { value: w.refraction ?? 1 },
+      uMFWaterSSRSteps: { value: Math.max(4, Math.min(64, Math.round(w.ssrSteps ?? 20))) },
       uMFWaterTint: { value: { x: w.tint[0], y: w.tint[1], z: w.tint[2] } },
       uMFWaterTintStrength: { value: w.tintStrength },
       uMFLavaAlpha: { value: l.alpha },
       uMFLavaWaveScale: { value: l.waveScale },
+      uMFLavaWaveSpeed: { value: l.waveSpeed ?? 1 },
       uMFLavaBubbles: { value: l.bubbles },
       uMFLavaEmission: { value: l.emission }
     };
@@ -37,11 +42,16 @@
     const w = profile.water, l = profile.lava;
     u.uMFWaterAlpha.value = w.alpha;
     u.uMFWaterWaveScale.value = w.waveScale;
+    u.uMFWaterWaveSpeed.value = w.waveSpeed ?? 1;
     u.uMFWaterMicroNormal.value = w.microNormal;
+    u.uMFWaterReflection.value = w.reflection ?? 1;
+    u.uMFWaterRefraction.value = w.refraction ?? 1;
+    u.uMFWaterSSRSteps.value = Math.max(4, Math.min(64, Math.round(w.ssrSteps ?? 20)));
     Object.assign(u.uMFWaterTint.value, { x: w.tint[0], y: w.tint[1], z: w.tint[2] });
     u.uMFWaterTintStrength.value = w.tintStrength;
     u.uMFLavaAlpha.value = l.alpha;
     u.uMFLavaWaveScale.value = l.waveScale;
+    u.uMFLavaWaveSpeed.value = l.waveSpeed ?? 1;
     u.uMFLavaBubbles.value = l.bubbles;
     u.uMFLavaEmission.value = l.emission;
   }
@@ -64,10 +74,9 @@
     const wrapper = function (shader, renderer) {
       baseHook.call(this, shader, renderer);
       if (!entry.active || shader.fragmentShader.includes(MARKER)) return;
-
       for (const [name, ref] of Object.entries(uniforms)) shader.uniforms[name] = ref;
 
-      const waveDecl = `\nuniform float uMFWaterWaveScale;\nuniform float uMFLavaWaveScale;\n`;
+      const waveDecl = `\nuniform float uMFWaterWaveScale;\nuniform float uMFWaterWaveSpeed;\nuniform float uMFLavaWaveScale;\nuniform float uMFLavaWaveSpeed;\n`;
       if (shader.vertexShader.includes('#ifdef USE_WATER_SHADERS')) {
         shader.vertexShader = shader.vertexShader.replace('#ifdef USE_WATER_SHADERS', `${waveDecl}\n#ifdef USE_WATER_SHADERS`);
       }
@@ -75,39 +84,55 @@
         /float amp\s*=\s*kind\s*<\s*0\.5\s*\?\s*0\.01\s*:\s*\(kind\s*<\s*1\.5\s*\?\s*0\.045\s*:\s*0\.03\)\s*;/,
         'float amp = kind < 0.5 ? (0.01 * uMFLavaWaveScale) : (kind < 1.5 ? (0.045 * uMFWaterWaveScale) : (0.03 * uMFWaterWaveScale));'
       );
+      shader.vertexShader = shader.vertexShader.replace('float waveT = time * 0.12;', 'float waveT = time * 0.12 * uMFWaterWaveSpeed;');
+      shader.vertexShader = shader.vertexShader.replace('float lavaWaveT = time * 0.04;', 'float lavaWaveT = time * 0.04 * uMFLavaWaveSpeed;');
 
       const fragDecl = `
 // ${MARKER}
 uniform float uMFWaterAlpha;
+uniform float uMFWaterWaveSpeed;
 uniform float uMFWaterMicroNormal;
+uniform float uMFWaterReflection;
+uniform float uMFWaterRefraction;
+uniform int uMFWaterSSRSteps;
 uniform vec3 uMFWaterTint;
 uniform float uMFWaterTintStrength;
 uniform float uMFLavaAlpha;
+uniform float uMFLavaWaveSpeed;
 uniform float uMFLavaBubbles;
 uniform float uMFLavaEmission;
 `;
       if (shader.fragmentShader.includes('uniform float uAmbientLight;')) {
         shader.fragmentShader = shader.fragmentShader.replace('uniform float uAmbientLight;', `uniform float uAmbientLight;${fragDecl}`);
-      } else {
-        shader.fragmentShader = fragDecl + shader.fragmentShader;
-      }
+      } else shader.fragmentShader = fragDecl + shader.fragmentShader;
 
-      // Preserve MiniBlox SSR/refraction/Fresnel. Only make the surface readable and tunable.
       shader.fragmentShader = shader.fragmentShader.replace(
         /vec3 waterTint\s*=\s*vec3\(0\.30,\s*0\.52,\s*0\.64\)\s*;/,
         'vec3 waterTint = mix(vec3(0.30, 0.52, 0.64), uMFWaterTint, uMFWaterTintStrength);'
       );
+      shader.fragmentShader = shader.fragmentShader.replace(/float surfaceAlpha\s*=\s*0\.68\s*;/, 'float surfaceAlpha = uMFWaterAlpha;');
+
+      // Custom SSR/sun visibility step count. Max 64, uniform-controlled so Custom can exceed Ultra.
+      let loopIndex = 0;
+      shader.fragmentShader = shader.fragmentShader.replace(/for \(int i = 0; i < 20; i\+\+\) \{/g, match => {
+        loopIndex++;
+        return `for (int i = 0; i < 64; i++) {\n            if (i >= uMFWaterSSRSteps) break;`;
+      });
+
       shader.fragmentShader = shader.fragmentShader.replace(
-        /float surfaceAlpha\s*=\s*0\.68\s*;/,
-        'float surfaceAlpha = uMFWaterAlpha;'
+        'float refractMix = seeThrough * mix(0.65, 0.88, smoothstep(0.2, 0.85, normal.y));',
+        'float refractMix = seeThrough * mix(0.65, 0.88, smoothstep(0.2, 0.85, normal.y)) * uMFWaterRefraction;'
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'waterColor = mix(waterColor, reflected, fresnel * 0.55 * reflectionMask);',
+        'waterColor = mix(waterColor, reflected, clamp(fresnel * 0.55 * reflectionMask * uMFWaterReflection, 0.0, 0.92));'
       );
 
-      // Fine normal detail: leaves the native geometry wave intact and only enriches highlights/reflections.
       const normalAnchor = 'vec3 normal = normalize(vWorldNormal);';
       if (shader.fragmentShader.includes(normalAnchor)) {
         shader.fragmentShader = shader.fragmentShader.replace(normalAnchor, `${normalAnchor}
           vec2 mfWp = vWorldPosition.xz;
-          float mfT = time * 0.12;
+          float mfT = time * 0.12 * uMFWaterWaveSpeed;
           vec2 mfGrad = vec2(
             cos(mfWp.x * 3.1 + mfWp.y * 1.7 + mfT * 1.8) * 0.55 + cos(mfWp.x * 5.3 - mfWp.y * 2.4 - mfT * 1.3) * 0.30,
             cos(mfWp.y * 3.4 - mfWp.x * 1.5 - mfT * 1.6) * 0.55 + cos(mfWp.y * 5.8 + mfWp.x * 2.0 + mfT * 1.1) * 0.30
@@ -116,21 +141,19 @@ uniform float uMFLavaEmission;
           normal = normalize(mix(normal, mfMicroN, uMFWaterMicroNormal * smoothstep(0.35, 0.95, abs(normal.y))));`);
       }
 
-      // Lava remains on the same native fluid material; branch by vColor so water is unaffected.
       const lavaAnchor = 'if (vColor.r >= 0.5 && waterShadersEnabled > 0.5) {';
       if (shader.fragmentShader.includes(lavaAnchor)) {
         shader.fragmentShader = shader.fragmentShader.replace(lavaAnchor, `${lavaAnchor}
           vec2 mfLp = vWorldPosition.xz;
-          float mfBubbleField = sin(mfLp.x * 2.15 + time * 0.11) * sin(mfLp.y * 2.65 - time * 0.085);
-          mfBubbleField += 0.45 * sin((mfLp.x + mfLp.y) * 4.2 + time * 0.17);
+          float mfLavaTime = time * uMFLavaWaveSpeed;
+          float mfBubbleField = sin(mfLp.x * 2.15 + mfLavaTime * 0.11) * sin(mfLp.y * 2.65 - mfLavaTime * 0.085);
+          mfBubbleField += 0.45 * sin((mfLp.x + mfLp.y) * 4.2 + mfLavaTime * 0.17);
           float mfBubble = smoothstep(0.58, 0.96, mfBubbleField * 0.5 + 0.5) * smoothstep(0.40, 0.95, abs(vWorldNormal.y));
-          float mfPulse = 0.5 + 0.5 * sin(time * 0.075 + mfLp.x * 0.24 + mfLp.y * 0.19);
+          float mfPulse = 0.5 + 0.5 * sin(mfLavaTime * 0.075 + mfLp.x * 0.24 + mfLp.y * 0.19);
           gl_FragColor.rgb += vec3(1.00, 0.24, 0.025) * mfBubble * uMFLavaBubbles;
           gl_FragColor.rgb *= 1.0 + mfPulse * uMFLavaEmission;`);
       }
 
-      // Critical fix: water and lava share one transparent material. Never change material.opacity or
-      // depthWrite globally; enforce per-fluid alpha here instead.
       shader.fragmentShader = beforeMainEnd(shader.fragmentShader, `
 #ifdef USE_COLOR
 if (vColor.r < 0.49) gl_FragColor.a = max(gl_FragColor.a, uMFWaterAlpha);
@@ -143,7 +166,7 @@ else gl_FragColor.a = max(gl_FragColor.a, uMFLavaAlpha);
     material.onBeforeCompile = wrapper;
     material.customProgramCacheKey = function () {
       const base = typeof baseKey === 'function' ? baseKey.call(material) : '';
-      return `mf_realistic_fluid_v2_${base}`;
+      return `mf_realistic_fluid_v4_${base}`;
     };
     material.needsUpdate = true;
     entries.set(material, entry);
@@ -160,7 +183,7 @@ else gl_FragColor.a = max(gl_FragColor.a, uMFLavaAlpha);
       entry.active = false;
       try {
         if (material.onBeforeCompile === entry.wrapper) material.onBeforeCompile = entry.baseHook;
-        if (material.customProgramCacheKey && material.onBeforeCompile === entry.baseHook) material.customProgramCacheKey = entry.baseKey;
+        if (material.onBeforeCompile === entry.baseHook) material.customProgramCacheKey = entry.baseKey;
         material.needsUpdate = true;
       } catch (_) {}
     }

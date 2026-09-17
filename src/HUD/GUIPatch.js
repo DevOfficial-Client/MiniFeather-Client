@@ -666,7 +666,7 @@
   function enable() {
     if (state.enabled) return;
     state.enabled = true;
-    console.log('[GUIPatch] Enabling...');
+    void 0;
     initPatches();
   }
 
@@ -693,7 +693,7 @@
     } catch (err) { console.error('[GUIPatch] Error:', err); }
   });
 
-  console.log('[GUIPatch] Script loaded');
+  void 0;
   globalThis.GUIPatch = {
     enable, disable, state,
     get enabled() { return state.enabled; },

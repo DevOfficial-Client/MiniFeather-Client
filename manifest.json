@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.14.7",
-  "description": "MiniFeather Client for MiniBlox — Realistic sun/moon shadows, clear water, persistent wet surfaces, volumetric clouds, 3D grass and auroras",
+  "version": "4.15.0",
+  "description": "MiniFeather Client for MiniBlox — Realistic V4 Custom + Optimize FPS, configurable shadows/water/clouds/render distance, persistent wet surfaces, reflective puddles and polished UI.",
   "permissions": [
     "storage",
     "declarativeNetRequest",
@@ -127,9 +127,11 @@
         "src/Shaders/CustomShaderSafetyPatch.js",
         "src/Experimental/Realistic/RealisticProfiles.js",
         "src/Experimental/Realistic/ShadowSystem.js",
+        "src/Experimental/Realistic/ShadowFilterPatch.js",
         "src/Experimental/Realistic/FluidShaderPatch.js",
         "src/Experimental/Realistic/CloudShaderPatch.js",
         "src/Experimental/Realistic/WetnessSystem.js",
+        "src/Experimental/Realistic/RenderDistanceSystem.js",
         "src/Experimental/Realistic/RealisticMode.js",
         "src/HUD/GUIPatch.js",
         "src/Cosmetics/Emotes.js",
@@ -163,7 +165,8 @@
         "src/Render/TexturePackManager.js",
         "src/Core/AutoUpdater.js",
         "src/Experimental/ExperimentalRegistry.js",
-        "src/UI/ClientPanel.js"
+        "src/UI/ClientPanel.js",
+        "src/UI/PanelPolish.js"
       ],
       "run_at": "document_end",
       "all_frames": true

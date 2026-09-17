@@ -462,7 +462,7 @@
             d.onclick = () => {
                 apply(item.name).then(() => {
                     renderUI();
-                    console.log(TAG + ' skin aplicada: ' + item.name);
+                    void 0;
                 }).catch(e => console.warn(TAG + ' ' + e.message));
             };
             d.querySelector('.del').onclick = (ev) => {
@@ -484,7 +484,7 @@
         drop.onclick = () => input.click();
         input.onchange = () => {
             importFiles(input.files).then(items => {
-                if (items.length) console.log(TAG + ' importadas ' + items.length + ' skin(s)');
+                if (items.length) void 0;
             });
             input.value = '';
         };
@@ -500,10 +500,10 @@
         root.querySelector('[data-act="revert"]').onclick = () => {
             const r = revert();
             renderUI();
-            console.log(TAG + ' revert: ' + JSON.stringify(r));
+            void 0;
         };
         root.querySelector('[data-act="help"]').onclick = () => {
-            console.log(TAG + ' Importa PNGs de skin (64x64/64x32). Click en una = aplicar en vivo. Arrastra al timeline V2 = clip de skin. Las caras aparecen en el panel Caras como skin_<nombre>.');
+            void 0;
         };
     }
 
@@ -545,5 +545,5 @@
 
     load().catch(() => {});
 
-    console.log(TAG + ' listo. MF_SkinChanger.open() — skins PNG en vivo.');
+    void 0;
 })();

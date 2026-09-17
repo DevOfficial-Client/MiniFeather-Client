@@ -1358,7 +1358,7 @@
         hookWhispers();
         hookPlayerList();
         applyAll(true);
-        console.log(TAG, 'game hooks ready');
+        void 0;
     }
 
     function applyAll(force = false) {
@@ -2017,5 +2017,5 @@
         applyAll(false);
     }, 180);
 
-    console.log(TAG, 'loaded');
+    void 0;
 })();

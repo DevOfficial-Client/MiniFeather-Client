@@ -356,7 +356,7 @@
           state.speciesIndex.set(name, frames[0]);
         }
       }
-      console.log(TAG, `${materials.length} texturas de hojas listas, tintadas por especie`);
+      void 0;
       return true;
     } catch (err) {
       console.warn(TAG, 'No se pudieron cargar las hojas:', String(err?.message || err));

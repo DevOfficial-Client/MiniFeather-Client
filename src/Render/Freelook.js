@@ -82,9 +82,7 @@
           game = findGameInstance();
           if (game) {
               window.miniblox = game;
-              console.log(
-                  '[MiniFeather Freelook] ✓ Game instance captured.'
-              );
+              void 0;
           }
       }
       if (!game) {
@@ -117,9 +115,7 @@
     if (game) {
         window.miniblox = game;
 
-        console.log(
-            '[MiniFeather Freelook] ✓ Miniblox game captured.'
-        );
+        void 0;
         clearInterval(gameCaptureInterval);
     }
   }, 500);
@@ -186,13 +182,9 @@
               options
           );
       };
-      console.log(
-          `${TAG} Early mousemove hook installed.`
-      );
+      void 0;
   } else {
-      console.log(
-          `${TAG} Early mousemove hook already installed.`
-      );
+      void 0;
   }
 
   function getLocalPlayer() {
@@ -212,9 +204,7 @@
           player.toggleCameraPerspective();
       }
       perspectiveForced = true;
-      console.log(
-          `${TAG} First-person detected — switched to third-person freelook.`
-      );
+      void 0;
   }
 
   function restoreFreelookPerspective(player) {
@@ -226,9 +216,7 @@
           if (typeof player.toggleCameraPerspective === 'function') {
               player.toggleCameraPerspective();
           }        
-          console.log(
-              `${TAG} Restored original perspective: ${savedPerspective}`
-          );
+          void 0;
       }   
       savedPerspective = null;
       perspectiveForced = false;
@@ -295,10 +283,7 @@
                           delta / capturedDx
                       );
                   calibrated = true;
-                  console.log(
-                      `${TAG} Sensitivity calibrated: ` +
-                      `${sensitivity.toFixed(7)} rad/px`
-                  );
+                  void 0;
                   document.removeEventListener(
                       'mousemove',
                       tryCalibrate,
@@ -345,12 +330,7 @@
           enterFreelookPerspective(player);
           active = true;
           window._mfFreelookActive = true;
-          console.log(
-              `${TAG} ON — ` +
-              `yaw=${savedYaw.toFixed(3)} ` +
-              `pitch=${savedPitch.toFixed(3)} ` +
-              `sensitivity=${sensitivity.toFixed(7)}`
-          );
+          void 0;
       } else {
           active = false;
           window._mfFreelookActive = false;
@@ -361,9 +341,7 @@
           pitchObject.rotation.x =
               savedPitch;
           restoreFreelookPerspective(player);
-          console.log(
-              `${TAG} OFF — camera snapped back to body direction.`
-          );
+          void 0;
       }
   }
 
@@ -387,9 +365,7 @@
                       savedPitch;
                   restoreFreelookPerspective(chain.player);
               }
-              console.log(
-                  `${TAG} Auto-disabled — pointer lock released.`
-              );
+              void 0;
           }
       },
       false
@@ -412,9 +388,7 @@
                   window.MF_FREELOOK.onKeyChanged?.(
                       FREELOOK_KEY
                   );           
-                  console.log(
-                      `${TAG} Key rebound to ${FREELOOK_KEY}`
-                  );
+                  void 0;
               }            
               return;
           }
@@ -498,14 +472,7 @@
                   setFL(false);
               }
           }        
-          console.log(
-              `${TAG} UI config applied:`,
-              {
-                  enabled: config.enabled,
-                  key: FREELOOK_KEY,
-                  mode: FREELOOK_MODE
-              }
-          );
+          void 0;
       }
   );       
 
@@ -524,10 +491,7 @@
           if (!data) return;       
           window.MF_FREELOOK._binding =
               !!data.active;       
-          console.log(
-              `${TAG} UI key binding mode:`,
-              !!data.active
-          );
+          void 0;
       }
   );
 
@@ -557,9 +521,5 @@
       },
       onKeyChanged: null
   };
-  console.log(
-      `${TAG} Loaded. ` +
-      `Key=${FREELOOK_KEY} ` +
-      `Mode=${FREELOOK_MODE}`
-  );
+  void 0;
 })();

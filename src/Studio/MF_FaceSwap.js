@@ -413,5 +413,5 @@
         } catch {}
     }, true);
 
-    console.log(TAG + ' listo. MF_FaceSwap.set("happy") para probar. Caras: ' + KNOWN_FACES.length);
+    void 0;
 })();

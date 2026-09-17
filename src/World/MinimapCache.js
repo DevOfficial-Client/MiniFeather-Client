@@ -255,7 +255,7 @@
         };
 
         state.hooked = true;
-        console.log(`${TAG} ✓ Canvas hooks installed.`);
+        void 0;
     }
 
     function uninstallHook() {
@@ -336,12 +336,12 @@
             installHook();
             invalidateCache('enable');
 
-            console.log(`${TAG} ✓ Enabled. Region: ${Math.round(state.minimapX)},${Math.round(state.minimapY)} ${state.minimapW}x${state.minimapH}`);
+            void 0;
         } else {
             state.suppressingMinimap = false;
             uninstallHook();
             invalidateCache('disable');
-            console.log(`${TAG} Disabled.`);
+            void 0;
         }
     }
 
@@ -440,7 +440,7 @@
         }
     };
 
-    console.log(`${TAG} Loaded.`);
+    void 0;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init, { once: true });

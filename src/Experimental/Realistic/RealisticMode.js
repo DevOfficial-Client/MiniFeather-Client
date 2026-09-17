@@ -8,6 +8,11 @@
   const state = {
     enabled: false,
     level: 'medium',
+    custom: null,
+    adaptiveScale: 1,
+    fpsEma: 60,
+    lastFrameAt: 0,
+    lastAdaptiveAt: 0,
     wetDrySeconds: 180,
     game: null,
     stars: new Map(),
@@ -22,11 +27,14 @@
     baseAuroraEnabled: false,
     baseAuroraLevel: 'medium',
     fluidCount: 0,
+    shadowMaterials: 0,
     destroyed: false
   };
 
   const profiles = () => W.MF_RealisticProfiles;
-  const currentProfile = () => profiles()?.get?.(state.level);
+  function currentProfile() {
+    return profiles()?.get?.(state.level, state.custom, state.level === 'custom' ? state.adaptiveScale : 1);
+  }
 
   function findGame() {
     if (state.game?.player && state.game?.world) return state.game;
@@ -76,9 +84,7 @@
     for (const root of [game?.gameScene?.scene, game?.gameScene?.ambientMeshes].filter(Boolean)) {
       for (const o of collect(root)) {
         const list = Array.isArray(o.material) ? o.material : [o.material];
-        for (const m of list) {
-          if (W.MF_RealisticFluid?.isFluidMaterial?.(m) && W.MF_RealisticFluid.patch(m)) count++;
-        }
+        for (const m of list) if (W.MF_RealisticFluid?.isFluidMaterial?.(m) && W.MF_RealisticFluid.patch(m)) count++;
       }
     }
     state.fluidCount = count;
@@ -121,12 +127,9 @@
   function applyCompanions(force = false) {
     const p = currentProfile();
     if (!p) return;
-    emit('minifeather:leaf-wind-config', {
-      enabled: state.enabled || state.baseLeafEnabled,
-      strength: state.enabled ? p.leafWind : state.baseLeafStrength
-    });
+    emit('minifeather:leaf-wind-config', { enabled: state.enabled || state.baseLeafEnabled, strength: state.enabled ? p.leafWind : state.baseLeafStrength });
     const auroraEnabled = state.baseAuroraEnabled || (state.enabled && state.snowy);
-    const auroraLevel = state.enabled ? (state.level === 'ultra' ? 'high' : state.level) : state.baseAuroraLevel;
+    const auroraLevel = state.enabled ? ((state.level === 'ultra' || state.level === 'custom') ? 'high' : state.level) : state.baseAuroraLevel;
     const sig = `${auroraEnabled}:${auroraLevel}`;
     if (force || sig !== state.auroraApplied) {
       state.auroraApplied = sig;
@@ -161,15 +164,24 @@
     return text.trim() ? /snow|ice|frozen|tundra|taiga|glacier|polar|alpine|frigid/i.test(text) : null;
   }
 
+  function customDrySeconds(p) {
+    return state.level === 'custom' ? (p?.wetness?.drySeconds || state.wetDrySeconds) : state.wetDrySeconds;
+  }
+
   function applyProfile() {
     const p = currentProfile();
     if (!p) return;
     W.MF_RealisticFluid?.setProfile?.(p);
     W.MF_RealisticClouds?.setProfile?.(p);
+    W.MF_RealisticShadowFilter?.setProfile?.(p);
     W.MF_RealisticWetness?.enable?.();
-    W.MF_RealisticWetness?.setProfile?.(p, state.wetDrySeconds);
+    W.MF_RealisticWetness?.setProfile?.(p, customDrySeconds(p));
     const game = findGame();
-    if (game) W.MF_RealisticShadows?.apply?.(game, p);
+    if (game) {
+      W.MF_RealisticShadows?.apply?.(game, p);
+      if (state.level === 'custom') W.MF_RealisticRenderDistance?.apply?.(game, p.world?.renderBlocks || 96);
+      else W.MF_RealisticRenderDistance?.restore?.();
+    }
   }
 
   function scan(force = false) {
@@ -182,32 +194,60 @@
     if (!game || !p) return;
     W.MF_RealisticFluid?.setProfile?.(p);
     W.MF_RealisticClouds?.setProfile?.(p);
-    W.MF_RealisticWetness?.setProfile?.(p, state.wetDrySeconds);
+    W.MF_RealisticShadowFilter?.setProfile?.(p);
+    W.MF_RealisticWetness?.setProfile?.(p, customDrySeconds(p));
     scanFluids(game);
+    state.shadowMaterials = W.MF_RealisticShadowFilter?.scan?.(game) || 0;
     W.MF_RealisticClouds?.scan?.(game);
     W.MF_RealisticWetness?.scan?.(game);
     W.MF_RealisticShadows?.apply?.(game, p);
+    if (state.level === 'custom') W.MF_RealisticRenderDistance?.apply?.(game, p.world?.renderBlocks || 96);
     snapshotStars(game);
+  }
+
+  function updateAdaptive(now) {
+    if (state.level !== 'custom' || !(state.custom?.optimizeFps ?? state.custom?.adaptive)) {
+      if (state.adaptiveScale !== 1) { state.adaptiveScale = 1; applyProfile(); }
+      return;
+    }
+    if (now - state.lastAdaptiveAt < 1200) return;
+    state.lastAdaptiveAt = now;
+    const target = Math.max(30, Math.min(144, Number(state.custom.targetFps) || 60));
+    let next = state.adaptiveScale;
+    if (state.fpsEma < target * 0.82) next -= 0.10;
+    else if (state.fpsEma < target * 0.93) next -= 0.05;
+    else if (state.fpsEma > target * 1.10) next += 0.04;
+    next = Math.max(0.35, Math.min(1, next));
+    if (Math.abs(next - state.adaptiveScale) >= 0.025) {
+      state.adaptiveScale = next;
+      applyProfile();
+      scan(true);
+    }
   }
 
   function tick(now) {
     if (!state.enabled || state.destroyed) return void (state.raf = 0);
+    if (state.lastFrameAt) {
+      const dt = Math.max(1, now - state.lastFrameAt);
+      const fps = Math.min(240, 1000 / dt);
+      state.fpsEma += (fps - state.fpsEma) * 0.06;
+    }
+    state.lastFrameAt = now;
+    updateAdaptive(now);
     scan();
     const game = findGame();
     const p = currentProfile();
     if (game && p) {
       W.MF_RealisticShadows?.update?.(game, p);
       W.MF_RealisticWetness?.update?.(game, now);
+      if (state.level === 'custom') W.MF_RealisticRenderDistance?.apply?.(game, p.world?.renderBlocks || 96);
     }
     if (now - state.lastBiomeScan > 2500) {
       state.lastBiomeScan = now;
       const pos = playerPosition(game);
       if (game && pos) {
         const snowy = isSnowBiome(biomeValue(game, pos));
-        if (snowy !== null && snowy !== state.snowy) {
-          state.snowy = snowy;
-          applyCompanions();
-        }
+        if (snowy !== null && snowy !== state.snowy) { state.snowy = snowy; applyCompanions(); }
       }
     }
     state.raf = requestAnimationFrame(tick);
@@ -222,9 +262,8 @@
     }
     state.enabled = next;
     if (next) {
-      applyProfile();
-      scan(true);
-      applyCompanions(true);
+      state.lastFrameAt = 0;
+      applyProfile(); scan(true); applyCompanions(true);
       if (!state.raf) state.raf = requestAnimationFrame(tick);
     } else {
       if (state.raf) cancelAnimationFrame(state.raf);
@@ -232,9 +271,10 @@
       W.MF_RealisticFluid?.restore?.();
       W.MF_RealisticClouds?.restore?.();
       W.MF_RealisticWetness?.restore?.();
+      W.MF_RealisticShadowFilter?.restore?.();
       W.MF_RealisticShadows?.restore?.();
-      restoreStars();
-      applyCompanions(true);
+      W.MF_RealisticRenderDistance?.restore?.();
+      restoreStars(); applyCompanions(true);
     }
   }
 
@@ -243,19 +283,21 @@
     if (typeof c === 'string') try { c = JSON.parse(c); } catch (_) { return; }
     if (!c || typeof c !== 'object') return;
     state.level = profiles()?.normalizeLevel?.(c.level) || 'medium';
-    state.wetDrySeconds = Math.max(15, Math.min(900, Number(c.wetDrySeconds) || currentProfile()?.wetness?.drySeconds || 180));
+    state.custom = profiles()?.clampCustom?.(c.custom || state.custom || {}) || c.custom || null;
+    state.wetDrySeconds = Math.max(10, Math.min(900, Number(c.wetDrySeconds) || currentProfile()?.wetness?.drySeconds || 180));
+    if (state.level === 'custom' && state.custom) state.custom.drySeconds = Math.max(10, Math.min(900, Number(state.custom.drySeconds) || state.wetDrySeconds));
     state.baseLeafEnabled = !!c.leafEnabled;
     state.baseLeafStrength = Math.max(0, Math.min(1, Number(c.leafStrength) || 0.085));
     state.baseAuroraEnabled = !!c.auroraEnabled;
     state.baseAuroraLevel = ['low', 'medium', 'high'].includes(String(c.auroraLevel)) ? String(c.auroraLevel) : 'medium';
+    if (!(state.custom?.optimizeFps ?? state.custom?.adaptive)) state.adaptiveScale = 1;
     if (state.enabled) applyProfile();
     setEnabled(!!c.enabled);
   }
 
   function destroy() {
     if (state.destroyed) return;
-    setEnabled(false);
-    state.destroyed = true;
+    setEnabled(false); state.destroyed = true;
     document.removeEventListener(EVENT_NAME, onConfig, true);
     if (state.timer) clearInterval(state.timer);
     try { delete W.MF_RealisticMode; } catch (_) {}
@@ -268,13 +310,10 @@
   W.MF_RealisticMode = Object.freeze({
     configure, setEnabled, destroy,
     getState: () => ({
-      enabled: state.enabled,
-      level: state.level,
-      fluids: state.fluidCount,
-      clouds: W.MF_RealisticClouds?.count?.() || 0,
-      wetness: W.MF_RealisticWetness?.getState?.() || null,
-      stars: state.stars.size,
-      snowy: state.snowy
+      enabled: state.enabled, level: state.level, optimizeFps: !!(state.custom?.optimizeFps ?? state.custom?.adaptive), targetFps: Math.round(Number(state.custom?.targetFps) || 60), adaptiveScale: state.adaptiveScale, fps: Math.round(state.fpsEma),
+      fluids: state.fluidCount, shadowMaterials: state.shadowMaterials, clouds: W.MF_RealisticClouds?.count?.() || 0,
+      renderDistance: W.MF_RealisticRenderDistance?.getState?.() || null,
+      wetness: W.MF_RealisticWetness?.getState?.() || null, stars: state.stars.size, snowy: state.snowy
     })
   });
 })();

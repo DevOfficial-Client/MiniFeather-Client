@@ -328,7 +328,7 @@
         }
         if (!clone) {
             clone = manualCloneNode(mesh);
-            if (clone) console.log(TAG + ' clon manual del player OK (' + countNodes(clone) + ' nodos)');
+            if (clone) void 0;
         }
         if (!clone) {
             console.warn(TAG + ' clone del player fallo por completo');
@@ -385,7 +385,7 @@
             scene.add(clone);
             const rec = { root: clone, yaw: first.yaw || 0, isClone: true, cmId: id };
             state.actors.set(actor.id, rec);
-            console.log(TAG + ' actor "' + id + '" = clon del jugador (skin real)');
+            void 0;
             return rec;
         }
 
@@ -717,5 +717,5 @@
         } catch {}
     }, true);
 
-    console.log(TAG + ' listo (Fase 1: recorder + actor puppet). /film record para empezar.');
+    void 0;
 })();

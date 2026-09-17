@@ -567,13 +567,13 @@ function statusText() {
 
 function debugInfo() {
   const g = state.game;
-  console.log('[MiniFeather RhythmParkour] === DEBUG ===');
-  console.log('[MiniFeather RhythmParkour] Estado:', statusText());
-  console.log('[MiniFeather RhythmParkour] game:', !!g, '| world:', !!g?.world, '| player:', !!g?.player);
-  console.log('[MiniFeather RhythmParkour] world tiene setBlockState:', typeof g?.world?.setBlockState);
-  console.log('[MiniFeather RhythmParkour] Bloques (window.Blocks):', !!(window.Blocks || globalThis.Blocks));
-  console.log('[MiniFeather RhythmParkour] Canción:', !!state.currentSong, '| Obstáculos activos:', state.obstacles.length);
-  console.log('[MiniFeather RhythmParkour] P2P:', p2pManager ? { host: p2pManager.isHost, room: p2pManager.roomId, peers: p2pManager.connections.length } : null);
+  void 0;
+  void 0;
+  void 0;
+  void 0;
+  void 0;
+  void 0;
+  void 0;
   showNotification(tr('rhythmDebugDone', 'Debug complete — check console (F12)'), 'info');
 }
 
@@ -1292,5 +1292,5 @@ window.MF_RhythmParkour = {
   p2p: () => ensureP2P()
 };
 
-console.log('[MiniFeather RhythmParkour] Módulo cargado. Usa el toggle en la GUI o window.MF_RhythmParkour');
+void 0;
 })();

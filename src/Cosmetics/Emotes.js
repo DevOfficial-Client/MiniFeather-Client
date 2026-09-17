@@ -982,7 +982,7 @@
         if (ent.mesh !== hookState.mesh) hookMeshRender(ent.mesh);
     }, 2000);
 
-    function log(...args) { try { console.log(TAG, ...args); } catch {} }
+    function log(...args) { try { void 0; } catch {} }
 
     function dumpSkeleton() {
         const game = getGame();

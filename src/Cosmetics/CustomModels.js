@@ -21,7 +21,7 @@
     } catch {}
     
     if (Object.keys(state.mappings).length) {
-        console.log(TAG + ' mapeos activos guardados: ' + JSON.stringify(state.mappings) + ' — usa MF_CustomModels.clear() para restaurar');
+        void 0;
     }
 
     window.MF_CustomModels = {
@@ -46,16 +46,16 @@
             if (speed != null) state.animSpeed = +speed;
             try { localStorage.setItem('miniblox_custommodels_anims', JSON.stringify(state.entityAnims)); } catch {}
             rescan();
-            console.log(TAG + ' anim de "' + entityName + '": ' + (animName || '(ninguna)'));
+            void 0;
         },
         clear() {
             state.mappings = {};
             try { localStorage.setItem('miniblox_custommodels_map', '{}'); } catch {}
             rescan();
-            console.log(TAG + ' todos los mapeos restaurados.');
+            void 0;
         },
         list() {
-            console.log(TAG + ' mapeos: ' + JSON.stringify(state.mappings));
+            void 0;
             return state.mappings;
         },
         diag() {
@@ -81,8 +81,8 @@
                 walk(root, 0, (root.name || root.constructor?.name || '?'));
             };
             const cp = wp(cam) || [0, 0, 0];
-            console.log(TAG + ' === DIAG ===');
-            console.log(TAG + ' game: ' + (game ? 'ok' : 'NO') + ' | cam: ' + (cam ? (cam.constructor?.name || '?') : 'NO') + ' @ ' + cp.map((v) => +v.toFixed(1)).join(','));
+            void 0;
+            void 0;
             
             let appliedCount = 0;
             try {
@@ -102,7 +102,7 @@
                 };
                 try { game?.world?.entities?.forEach?.(check); } catch {}
                 try { for (const p of game?.world?.playersIterator?.() ?? []) check(p); } catch {}
-                if (!appliedCount) console.log(TAG + ' applied: 0 (sin reemplazos activos)');
+                if (!appliedCount) void 0;
             } catch (e) { console.warn(TAG + ' applied scan fallo: ' + e); }
             
             for (const rec of state.customs.values()) {
@@ -153,17 +153,17 @@
             if (cam) hunt(cam, 'CAMARA');
             if (game?.gameScene?.scene) hunt(game.gameScene.scene, 'escena');
             if (hunted.length) {
-                console.log('%c[MF] ENCONTRADOS ' + hunted.length + ' objetos de CustomModels:', 'color:red;font-weight:bold');
-                console.table(hunted);
+                void 0;
+                void 0;
             } else {
-                console.log(TAG + ' huella CustomModels: NINGUNA (ni bajo camara ni en escena)');
+                void 0;
             }
             rows.sort((a, b) => {
                 const na = a.donde.startsWith('>>>') ? 0 : 1, nb = b.donde.startsWith('>>>') ? 0 : 1;
                 return na - nb;
             });
-            console.table(rows);
-            console.log(TAG + ' overlays DOM: ' + document.querySelectorAll('canvas, iframe, video').length + ' elementos');
+            void 0;
+            void 0;
             return rows.length;
         },
         get yawSign() { return state.yawSign; },
@@ -253,11 +253,7 @@
                     if (!rec.puppet) {
                         try { buildRoomColliders(rec, built, s); } catch {}
                     }
-                    console.log(TAG + ' habitacion "' + id + '" [' + modelFile + ']: ' +
-                        ((built.max[0] - built.min[0]) * s).toFixed(1) + 'x' +
-                        ((built.max[1] - built.min[1]) * s).toFixed(1) + 'x' +
-                        ((built.max[2] - built.min[2]) * s).toFixed(1) +
-                        ' bloques, piso en Y=' + rec.pos.y.toFixed(1) + ', centro XZ sobre ti');
+                    void 0;
                 } else if (rec.height > 0 && built.height > 0) {
                     inst.root.scale.multiplyScalar(rec.height / built.height);
                 } else if (rec.scale !== 1) {
@@ -276,7 +272,7 @@
                         const ms = Math.max(1200, (anim?.duration || 1.2) * 1000);
                         rec.animOverride = { name: an, start: performance.now(), until: performance.now() + ms };
                         rec.spawnAnim = null;
-                        console.log(TAG + ' "' + id + '" aparece con "' + an + '"');
+                        void 0;
                     }
                 }
                 
@@ -288,7 +284,7 @@
                 setTimeout(() => { try { purgeUnderCam(); } catch {} }, 0);
                 setTimeout(() => { try { purgeUnderCam(); } catch {} }, 500);
                 const animInfo = inst.anims.length ? ' anims: ' + inst.anims.map((a) => a.name).join(', ') : '';
-                console.log(TAG + ' entidad client-side "' + id + '" spawneada' + (rec.anim ? ' animando "' + rec.anim + '"' : '') + animInfo);
+                void 0;
             }).catch((e) => {
                 
                 const msg = String(e?.message || e);
@@ -319,7 +315,7 @@
             const rec = state.customs.get(id) || [...state.customs.values()].find((r) => r.inst);
             if (!rec?.inst) return [];
             const names = rec.inst.anims.map((a) => a.name);
-            console.log(TAG + ' anims (' + rec.file + '): ' + names.join(', '));
+            void 0;
             return names;
         },
         despawnAll() {
@@ -353,7 +349,7 @@
                     rec.dying = true;
                     rec.stay = true; 
                     rec.animOverride = { name: an, start: performance.now(), until: performance.now() + ms };
-                    console.log(TAG + ' "' + id + '" se despide con "' + an + '"');
+                    void 0;
                     setTimeout(() => { if (state.customs.get(id) === rec) MF_CustomModels.despawn(id); }, ms);
                     return true;
                 }
@@ -379,16 +375,16 @@
             rec.stay = !!on;
             if (rec.stay) {
                 rec.actuallyMoving = false;
-                console.log(TAG + ' "' + rec.id + '" se queda quieta en (' + (rec.root?.position.x ?? 0).toFixed(1) + ', ' + (rec.root?.position.y ?? 0).toFixed(1) + ', ' + (rec.root?.position.z ?? 0).toFixed(1) + ')');
+                void 0;
             } else {
-                console.log(TAG + ' "' + rec.id + '" reanuda la persecucion');
+                void 0;
             }
             return true;
         },
         listCustoms() {
             const out = {};
             for (const [id, r] of state.customs) out[id] = { file: r.file, pos: { ...r.pos }, yaw: r.yaw, scale: r.scale };
-            console.log(TAG + ' entidades client-side: ' + JSON.stringify(out));
+            void 0;
             return out;
         },
         
@@ -542,19 +538,19 @@
                 const dist = Math.hypot(ox, oy, oz);
                 const perpSq = Math.max(0, dist * dist - along * along);
                 const r = Math.max(0.9, (rec.height || 1) * 0.8);
-                console.log(TAG + ' click: src=' + src + ' dist=' + dist.toFixed(2) + ' along=' + along.toFixed(2) + ' perp=' + Math.sqrt(perpSq).toFixed(2) + ' (r=' + r.toFixed(2) + ')');
+                void 0;
                 if (along <= 0 || along > 5.5 || perpSq > r * r) return; 
                 
                 opened = true;
                 ev.preventDefault?.();
                 cleanup();
                 MF_CustomModels.setAnim(boxId, 'open');
-                console.log(TAG + ' caja: abriendo (click derecho)...');
+                void 0;
                 const OPEN_MS = 2600;
                 setTimeout(() => {
                     if (!state.customs.has(boxId)) return;
                     MF_CustomModels.despawn(boxId);
-                    console.log(TAG + ' caja: desaparecio, soltando a Verity');
+                    void 0;
                     const res = MF_CustomModels.spawn('verity_full_model.glb', cx, cy + (opts.fallHeight || 14), cz, {
                         id: 'verity',
                         height: opts.height || 0.85,
@@ -575,7 +571,7 @@
             };
             state.iaBoxListener = listener;
             document.addEventListener('mousedown', listener, true);
-            console.log(TAG + ' caja de invocacion lista — click derecho sobre ella para abrir');
+            void 0;
             return boxId;
         },
         spawnBox(offset = 2, opts = {}) {
@@ -678,7 +674,7 @@
             audio.addEventListener('ended', () => clearInterval(keeper), { once: true });
             audio.addEventListener('pause', () => clearInterval(keeper), { once: true });
             await audio.play();
-            console.log(TAG + ' intro.ogg reproduciendose');
+            void 0;
         } catch (err) {
             console.warn(TAG + ' intro falló: ' + (err?.message || err));
         }
@@ -848,7 +844,7 @@
     async function parseGLTFModel(file) {
         const json = JSON.parse(new TextDecoder().decode(await fetchModelArrayBuffer(file)));
         const parsed = await resolveGLTFExternal(json, file.replace(/\.gltf$/i, ''));
-        console.log(TAG + ' glTF "' + file + '": ' + (json.meshes?.length || 0) + ' meshes, bin ' + parsed.bin.byteLength + ' B');
+        void 0;
         return parsed;
     }
 
@@ -1326,9 +1322,9 @@
         try {
             const animJson = JSON.parse(new TextDecoder().decode(await fetchModelArrayBuffer(animFile)));
             parsed.json.animations = bedrockAnimToTracks(animJson, parsed.nodeIdxOf, parsed.nodes);
-            console.log(TAG + ' bedrock anims: ' + parsed.json.animations.map((a) => a.name).join(', '));
+            void 0;
         } catch {
-            console.log(TAG + ' sin animaciones bedrock para ' + file);
+            void 0;
         }
         return parsed;
     }
@@ -1552,7 +1548,7 @@
             }
         }
         const parsed = parseOBJ(text, file, mtlMap);
-        console.log(TAG + ' OBJ "' + file + '": ' + parsed.json.meshes.length + ' grupos');
+        void 0;
         return parsed;
     }
 
@@ -1839,7 +1835,7 @@
                 for (const c of rec.hidden) c.visible = true;
                 if (rec.origRender) mesh.render = rec.origRender;
                 state.applied.delete(mesh);
-                console.log(TAG + ' restaurado: ' + name);
+                void 0;
             }
             return;
         }
@@ -1909,7 +1905,7 @@
 
             state.applied.set(mesh, { file, root, hidden, origRender, wrapper, inst, animState });
             const animInfo = animState ? ' anim="' + animState.name + '"' : (inst.anims.length ? ' (' + inst.anims.length + ' anims: ' + inst.anims.map((a) => a.name).join(', ') + ')' : '');
-            console.log(TAG + ' ' + name + ' -> ' + file + ' (escala=' + s.toFixed(3) + ')' + animInfo);
+            void 0;
         }).catch((e) => {
             console.warn(TAG + ' fallo ' + name + ' -> ' + file + ': ' + (e?.message || e));
         }).finally(() => state.loading.delete(key));
@@ -1962,7 +1958,7 @@
             }
             state.customs.clear();
         } catch {}
-        console.log(TAG + ' instancia anterior apagada (reload)');
+        void 0;
     }
     myStamp.shutdown = shutdown;
 
@@ -2015,7 +2011,7 @@
             }
         });
         rec.roomCells = cells;
-        console.log(TAG + ' room "' + rec.id + '": ' + cells.size + ' celdas de colision (' + boxes + ' muestras)');
+        void 0;
     }
 
     function roomCollidePlayer(rec) {
@@ -2338,11 +2334,11 @@
                 
                 root.position.set(p.x, p.y, p.z);
                 rec.vy = 0;
-                console.log(TAG + ' "' + rec.id + '" teleportada a tu lado (cambio de mundo?)');
+                void 0;
             } else {
                 if (!rec.waitingFar) {
                     rec.waitingFar = true;
-                    console.log(TAG + ' "' + rec.id + '" esperando en (' + root.position.x.toFixed(1) + ', ' + root.position.y.toFixed(1) + ', ' + root.position.z.toFixed(1) + ') hasta que vuelvas');
+                    void 0;
                 }
                 physicsStep(rec, dt, 0, 0); 
                 rec.actuallyMoving = false;
@@ -2355,12 +2351,12 @@
             if (!rec.lost) {
                 rec.lost = true;
                 rec.lostSince = t;
-                console.log(TAG + ' "' + rec.id + '" te perdio (dist=' + distToPlayer.toFixed(1) + ')');
+                void 0;
             }
             if (t - rec.lostSince > rec.lostTimeMs) {
                 if (rec.persist === false) {
                     MF_CustomModels.despawn(rec.id);
-                    console.log(TAG + ' "' + rec.id + '" desaparecio tras perderte.');
+                    void 0;
                     return false;
                 }
                 
@@ -2380,7 +2376,7 @@
         }
         if (rec.frozen) {
             rec.frozen = false;
-            console.log(TAG + ' "' + rec.id + '" se mueve otra vez...');
+            void 0;
         }
         if (rec.smooth === false) {
             root.position.set(p.x, p.y, p.z);
@@ -2509,13 +2505,13 @@
                                     rec.animOverride = { name: cn, start: t, until: t + ms };
                                     rec.curAnim = cn;
                                     rec.animStart = t;
-                                    console.log(TAG + ' "' + rec.id + '" te tiene. "' + cn + '"');
+                                    void 0;
                                 }
                             }
                         }
                         const resolved = want ? findAnim(rec.inst, want) : null;
                         if (resolved && rec.curAnim !== resolved) {
-                            if (!rec.curAnim) console.log(TAG + ' "' + rec.id + '" anim: ' + resolved);
+                            if (!rec.curAnim) void 0;
                             rec.curAnim = resolved;
                             rec.animStart = t;
                         }
@@ -2613,9 +2609,9 @@
         requestAnimationFrame(() => { if (myStamp.alive) tickCustoms(); });
     })();
 
-    console.log(TAG + ' cargado. Ejemplos:');
-    console.log(TAG + "  MF_CustomModels.set('pig', 'mipuerco.glb')");
-    console.log(TAG + "  MF_CustomModels.remove('pig')");
-    console.log(TAG + '  MF_CustomModels.list()');
-    console.log(TAG + ' Carpeta: models/entities/ del client (recarga la extension al agregar archivos)');
+    void 0;
+    void 0;
+    void 0;
+    void 0;
+    void 0;
 })();

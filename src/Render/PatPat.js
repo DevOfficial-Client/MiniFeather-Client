@@ -737,7 +737,7 @@ function remotePat(msg) {
     if (me) {
         const dh = Math.hypot(tp.x - me.x, tp.z - me.z);
         const dy = Math.abs(tp.y - me.y);
-        console.log('[PatPat] pat remoto: dh=' + dh.toFixed(2) + ' dy=' + dy.toFixed(2) + (dh < 1.3 && dy < 2.3 ? ' → PARA MI (agacho camara)' : ''));
+        void 0;
         if (dh < 1.3 && dy < 2.3) {
             duckCamera(game);
         }

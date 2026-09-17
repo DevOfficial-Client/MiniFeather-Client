@@ -1,7 +1,7 @@
 {
-  "builtAt": "2026-09-15T23:12:00Z",
+  "builtAt": "2026-09-17T02:40:00Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Realistic Mode V3 adds dynamic sun/moon shadow tuning, clearer water, persistent rain/water wetness with configurable drying, reflective wet sheen, volumetric cloud tuning and preserved native SSR/refraction.",
-  "version": "4.14.7"
+  "note": "Realistic V4 Custom rebased onto the latest client update. Adds Optimize FPS enabled by default for Custom, 10-200 block render distance, configurable 1-64 shadow samples, 4-64 SSR steps, 8-64 cloud raymarch steps, persistent wetness/puddles, UI tooltips and motion polish, plus production cleanup of debug console noise and stale debug/commented code.",
+  "version": "4.15.0"
 }
