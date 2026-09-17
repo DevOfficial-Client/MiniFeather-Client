@@ -831,13 +831,25 @@
     var livePushRetry = 0;
     var pushReloadTimer = null;
 
+    // Recarga directa de la DB viva (sin chequear SHA): la usa el push
+    // porque el aviso de ntfy YA confirma que hubo commit nuevo.
+    function reloadLiveDbNow() {
+        return fetch(LIVE_DB_URL, { cache: 'reload' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (live) {
+                if (!live || !live.players) { warn('DB viva nueva sin players'); return; }
+                liveApplyDb(live);
+                log('DB viva aplicada (' + Object.keys(live.players).length + ' entradas)');
+            })
+            .catch(function (e) { log('reload push:', e && e.message || e); });
+    }
+
     function queuePushReload() {
         if (pushReloadTimer) return;
         pushReloadTimer = setTimeout(function () {
             pushReloadTimer = null;
             log('push ntfy recibido: recargando DB viva');
-            liveLastSha = null;   // forzar que el próximo check detecte cambio
-            try { checkLiveRepo(); } catch (_) {}
+            try { reloadLiveDbNow(); } catch (_) {}
         }, 600);
     }
 

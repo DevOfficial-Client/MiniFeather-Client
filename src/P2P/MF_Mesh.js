@@ -397,9 +397,18 @@ function announce(code) {
         try { chat.setInputValue?.(text); } catch { try { chat.inputValue = text; } catch {} }
         chat.submit();
         log('código mesh publicado al chat: ' + text);
-    } catch (e) { warn('announce falló:', e?.message || e); }
+    } catch (e) {
+        warn('announce falló:', e?.message || e);
+        // El engine puede tardar en exponer inGame justo al entrar a la
+        // partida: un reintento corto aprovecha esa ventana.
+        if (!announceRetrying) {
+            announceRetrying = true;
+            setTimeout(() => { announceRetrying = false; announce(code); }, 1500);
+        }
+    }
     try { chat.closeInput?.(); } catch {}
 }
+let announceRetrying = false;
 
 function chatWatchTick() {
     if (state.status === 'off' || state.status === 'error') return;

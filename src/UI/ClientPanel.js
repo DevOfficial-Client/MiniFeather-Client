@@ -1321,6 +1321,36 @@
         return pingTarget;
       }
 
+      // RTT real del websocket del juego: cero requests HTTP, cero 403.
+      function socketRtt() {
+        try {
+          const g = window.miniblox?.player ? window.miniblox : (() => {
+            const react = document.querySelector('#react');
+            if (react) for (const key in react) {
+              const game = react[key]?.updateQueue?.baseState?.element?.props?.game;
+              if (game?.player) return game;
+            }
+            return null;
+          })();
+          let ws = null;
+          try { ws = g?.connection?.socket || g?.socket || g?.network?.socket; } catch {}
+          if (!ws) {
+            // último recurso: cualquier websocket vivo del juego
+            for (const k of Object.getOwnPropertyNames(globalThis)) {
+              try {
+                const v = globalThis[k];
+                if (v instanceof WebSocket) { ws = v; break; }
+              } catch {}
+            }
+          }
+          if (ws && typeof ws.ping === 'function') {
+            const v = Number(ws.ping());
+            if (Number.isFinite(v) && v >= 0) return v;
+          }
+        } catch {}
+        return null;
+      }
+
       async function measure() {
         if (!enabled || measuring || document.hidden) return;
         if (!navigator.onLine) {
@@ -1329,6 +1359,16 @@
           return;
         }
 
+        // 1) RTT del websocket del juego (cero HTTP)
+        const rtt = socketRtt();
+        if (rtt !== null) {
+          ping = rtt;
+          render();
+          return;
+        }
+
+        // 2) respaldo HTTP HEAD — solo si aún no sabemos que está bloqueado
+        if (pingTarget === '') { ping = connectionRtt(); render(); return; }
         measuring = true;
         requestController?.abort();
         requestController = new AbortController();
@@ -1336,12 +1376,21 @@
         const started = performance.now();
 
         try {
-          await fetch(`${location.origin}/favicon.ico?mf_ping=${Date.now()}`, {
+          const target = pingTarget !== null ? pingTarget : await findPingTarget();
+          if (!target) { ping = connectionRtt(); render(); return; }
+          const res = await fetch(`${location.origin}${target}?mf_ping=${Date.now()}`, {
             method: 'HEAD',
             cache: 'no-store',
             credentials: 'omit',
             signal: requestController.signal
           });
+          if (res.status === 403 || res.status === 429) {
+            // Cloudflare/servidor bloquea el ping HTTP: no insistir más
+            pingTarget = '';
+            ping = connectionRtt();
+            render();
+            return;
+          }
 
           if (!enabled) return;
           const measured = performance.now() - started;
