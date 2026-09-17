@@ -1013,6 +1013,18 @@
 
         // WebGL: si el preview sube la skin como textura directamente
         // (texImage2D con HTMLImageElement), sustituir la fuente igual.
+        // Cubre dos casos:
+        //  - preview del menú de cosméticos (canvas visible 109x185)
+        //  - paperdoll de la pantalla de inicio/inventario: un canvas WebGL
+        //    offscreen (~95x161) renderiza el modelo 3D y lo copia al 2D
+        //    visible. La skin sube ahí como textura.
+        function isOffscreenDollCanvas(c) {
+            // offscreen (no en DOM) y tamaño de muñeco (ni HUD ni mundo)
+            if (!c || document.body.contains(c)) return false;
+            var w = c.width, h = c.height;
+            return w >= 40 && w <= 400 && h >= 60 && h <= 500;
+        }
+
         function patchPreviewWebGL() {
             var protos = [];
             try { protos.push(window.WebGLRenderingContext); } catch (_) {}
@@ -1026,7 +1038,9 @@
                     try {
                         var cvs = this.canvas;
                         var argImg = arguments.length === 6 ? arguments[5] : null;
-                        if (cvs && isMenuPreviewCanvas(cvs) && skinSrcMatch(argImg) && !replaying) {
+                        var match = skinSrcMatch(argImg) &&
+                            (isMenuPreviewCanvas(cvs) || isOffscreenDollCanvas(cvs));
+                        if (cvs && match && !replaying) {
                             var entry = entryForLocalPlayer();
                             var url = entry && resolveSkinImageUrl(entry);
                             if (url) {
