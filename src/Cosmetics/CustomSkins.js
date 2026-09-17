@@ -470,7 +470,16 @@
         } catch (e) {}
     }
 
+    // Época actual de pintado (ver bumpEpoch): fuerza repintados cuando el
+    // repo actualiza un PNG aunque la URL sea la misma.
+
     var paintedPlayers = new WeakSet();
+
+    // Época de pintado: bump al invalidar caches → los materiales pintados con
+    // una época vieja se repintan aunque la URL sea la misma (PNG reemplazado).
+    var paintEpoch = 1;
+    globalThis.__MF_SKIN_EPOCH__ = paintEpoch;
+    function bumpEpoch() { paintEpoch++; globalThis.__MF_SKIN_EPOCH__ = paintEpoch; }
 
     // Caché persistente de skins remotas: se descargan solas al primer uso y
     // de ahí en adelante se pintan desde dataURLs locales (sin red ni CORS).
@@ -504,10 +513,11 @@
         }
     }
 
-    function scheduleRemoteDownload(url) {
-        if (!url || remoteCache[url] || (remoteFailed[url] || 0) >= 3 || remotePending[url]) return;
+    function scheduleRemoteDownload(url, force) {
+        if (!url || (remoteFailed[url] || 0) >= 3) return;
+        if (!force && (remoteCache[url] || remotePending[url])) return;
         remotePending[url] = true;
-        fetch(url, { mode: 'cors' })
+        fetch(url, { mode: 'cors', cache: force ? 'reload' : 'default' })
             .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
             .then(function (b) {
                 return new Promise(function (res, rej) {
@@ -519,8 +529,12 @@
             })
             .then(function (dataUrl) {
                 if (typeof dataUrl === 'string' && dataUrl.indexOf('data:image') === 0) {
+                    var had = !!remoteCache[url];
                     remoteCache[url] = dataUrl;
                     saveRemoteCache();
+                    // Imagen re-descargada (repo actualizado): nueva época para
+                    // que el watcher en vivo repinte con el contenido fresco.
+                    if (had) bumpEpoch();
                     log('skin remota cacheada:', url.slice(-28));
                 } else throw new Error('no image');
             })
@@ -626,6 +640,7 @@
                             nt.flipY = t.flipY; nt.wrapS = t.wrapS; nt.wrapT = t.wrapT;
                         } catch (_) {}
                         nt.__mfPainted = url; 
+                        nt.__mfEpoch = paintEpoch;
                         mats[i].map = nt;
                         mats[i].needsUpdate = true;
                         done++;
@@ -712,7 +727,8 @@
         }
 
         // 3) URL directa (pack remoto/extension): pintar materiales del mesh.
-        //    Re-pintar solo si el engine regeneró los materiales (pintó y lo pisó).
+        //    Re-pintar solo si el engine regeneró los materiales (pintó y lo pisó),
+        //    o si la época cambió (PNG del repo reemplazado con la misma URL).
         var url = resolveSkinImageUrl(entry);
         if (!url) return;
         var stillPainted = false;
@@ -720,7 +736,7 @@
             try {
                 var mm = skinMaterialsOf(player.mesh);
                 stillPainted = mm.length > 0 && mm.every(function (m) {
-                    return m.map && m.map.__mfPainted === url;
+                    return m.map && m.map.__mfPainted === url && m.map.__mfEpoch === paintEpoch;
                 });
             } catch (_) { stillPainted = false; }
         }
@@ -729,6 +745,7 @@
 
         if (paintEntitySkin(player, entry)) {
             paintedPlayers.add(player);
+            try { player.__mfSkinEpoch = paintEpoch; } catch (_) {}
             log('live override (textura)', profile.uuid || profile.username, '->', target);
         }
 
@@ -741,6 +758,79 @@
             lastLiveScan = now;
             applyLiveOverrides();
         }, 500);
+    }
+
+    // ── Watcher del repo: skins vivas sin reiniciar ────────────
+    // Vigila el repo mfaccs cada 60s: si el último commit cambió, baja la DB
+    // y repinta en vivo (nuevas entradas y PNGs reemplazados incluidos).
+    var LIVE_REPO_API = 'https://api.github.com/repos/EstebanGrp/mfaccs';
+    var LIVE_DB_URL = 'https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/accounts.json';
+    var liveLastSha = null;
+    var liveBusy = false;
+
+    function liveApplyDb(live) {
+        // Reconstruir índices con BUILTIN + local + viva (mismo orden de capas)
+        parseDb(BUILTIN_DB, true);
+        db = db || {};
+        parseDb(db, false);
+        parseDb(live, false);
+        // Invalidar PNGs remotos: bump de época para forzar repintado aunque
+        // la URL no cambió (reemplazo de imagen en el repo).
+        bumpEpoch();
+        loadRemoteCache();
+        var seen = {};
+        function scan(map) {
+            if (!map) return;
+            for (var k in map) {
+                if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
+                var u = entrySkinUrl(map[k]);
+                if (u && /^https?:/i.test(u) && !seen[u]) { seen[u] = 1; scheduleRemoteDownload(u, true); }
+            }
+        }
+        scan(dbByUuid);
+        scan(dbByName);
+        // La descarga es async: cuando termine, las URLs ya tendrán el dataURL
+        // nuevo y el repintado por época se llevará la versión fresca.
+        setTimeout(function () { forceRepaintAll(); }, 1200);
+        setTimeout(function () { forceRepaintAll(); }, 4000);
+    }
+
+    function checkLiveRepo() {
+        if (liveBusy) return;
+        liveBusy = true;
+        fetch(LIVE_REPO_API + '/commits?per_page=1', { cache: 'no-store' })
+            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function (commits) {
+                var sha = commits && commits[0] && commits[0].sha;
+                if (sha && liveLastSha === null) {
+                    // primera vista: registrar y aplicar silenciosamente si la
+                    // DB viva ya cargada difiere (descarga inicial post-arranque)
+                    liveLastSha = sha;
+                    return;
+                }
+                if (!sha || sha === liveLastSha) return;
+                liveLastSha = sha;
+                log('repo actualizado (' + sha.slice(0, 7) + '), recargando DB viva...');
+                return fetch(LIVE_DB_URL, { cache: 'reload' })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (live) {
+                        if (!live || !live.players) { warn('DB viva nueva sin players'); return; }
+                        liveApplyDb(live);
+                        log('DB viva aplicada (' + Object.keys(live.players).length + ' entradas)');
+                    });
+            })
+            .catch(function (e) { log('watcher:', e && e.message || e); })
+            .then(function () { liveBusy = false; });
+    }
+
+    function startLiveRepoWatcher() {
+        // Esperar a que la DB inicial cargue para no pisar estados
+        loadDb().then(function () {
+            try { checkLiveRepo(); } catch (_) {}
+            setInterval(function () {
+                try { checkLiveRepo(); } catch (_) {}
+            }, 60000);
+        });
     }
 
     function patchImageSrc() {
@@ -1099,6 +1189,7 @@
                             nt.flipY = t.flipY; nt.wrapS = t.wrapS; nt.wrapT = t.wrapT;
                         } catch (_) {}
                         nt.__mfPainted = url;
+                        nt.__mfEpoch = paintEpoch;
                         m.map = nt;
                         m.needsUpdate = true;
                     } catch (_) {}
@@ -1111,4 +1202,5 @@
     }
 
     startLiveWatcher();
+    startLiveRepoWatcher();
 })();
