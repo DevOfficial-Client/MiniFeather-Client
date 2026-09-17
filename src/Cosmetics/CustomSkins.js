@@ -411,9 +411,11 @@
         return true;
     }
 
-    var SKIN_PATH_REGEX = /^textures\/entity\/skins\/([^/?#]+)\.png(?:[?#].*)?$/i;
-    
-    var SKIN_PATH_REGEX_DEEP = /^textures\/entity\/skins\/(.+?)\.png(?:[?#].*)?$/i;
+    // Aceptan ruta relativa, con slash inicial o URL completa (el preview del
+    // menú carga la skin con URL absoluta y el anclaje anterior no la veía).
+    var SKIN_PATH_REGEX = /^(?:[a-z][a-z0-9+.-]*:\/\/[^\/]+)?\/?textures\/entity\/skins\/([^\/?#]+)\.png(?:[?#].*)?$/i;
+
+    var SKIN_PATH_REGEX_DEEP = /^(?:[a-z][a-z0-9+.-]*:\/\/[^\/]+)?\/?textures\/entity\/skins\/(.+?)\.png(?:[?#].*)?$/i;
     var patched = false;
 
     function getCustomSkinForId(skinId) {
@@ -810,9 +812,155 @@
         return true;
     }
 
+    // ── Preview del menú (canvas 2D) ───────────────────────────
+    // El menú dibuja el modelo del jugador en un canvas chico (109x185, el
+    // avatar del sidebar de cosméticos) con drawImage por partes de la skin.
+    // Si la imagen que usa no pasó por nuestro hook de Image.src (cacheada o
+    // con otra URL), se sustituye la fuente de esos drawImage por la textura
+    // custom de la cuenta, conservando la geometría del dibujo.
+    function patchMenuPreviewCanvas() {
+        if (window.__MF_MenuPreviewPatched) return;
+        window.__MF_MenuPreviewPatched = true;
+
+        function entryForLocalPlayer() {
+            try {
+                var game = findGame();
+                var prof = game?.player?.profile;
+                if (prof) {
+                    var e = lookupEntry(prof);
+                    if (e) return e;
+                }
+                // fallback: sesión del panel (username logueado)
+                var st = globalThis.__MF_ACCOUNT_STATE__;
+                if (st && st.username) return lookupEntry({ username: st.username });
+            } catch (_) {}
+            return null;
+        }
+
+        function isMenuPreviewCanvas(c) {
+            if (!c || c.width !== 109 || c.height !== 185) return false;
+            var el = c, depth = 0;
+            while (el && depth < 12) {
+                if (el.id === 'react') return true;
+                el = el.parentElement;
+                depth++;
+            }
+            return false;
+        }
+
+        var repImages = {};   // url -> HTMLImageElement
+        var drawnCalls = new WeakMap(); // canvas -> [{ctx, args}]
+        var replaying = false;
+
+        function skinSrcMatch(img) {
+            if (!img || !(img instanceof HTMLImageElement)) return null;
+            var src = img.src || '';
+            return src.match(SKIN_PATH_REGEX) || src.match(SKIN_PATH_REGEX_DEEP) || null;
+        }
+
+        function getReplacement(url, onReady) {
+            var im = repImages[url];
+            if (im) return (im.complete && im.naturalWidth) ? im : null;
+            im = new Image();
+            if (/^https?:/i.test(url)) im.crossOrigin = 'anonymous';
+            im.onload = function () { onReady(); };
+            im.onerror = function () { warn('preview: no cargó', url.slice(-30)); };
+            im.src = url;
+            repImages[url] = im;
+            return null;
+        }
+
+        var origDrawImage = CanvasRenderingContext2D.prototype.drawImage;
+
+        CanvasRenderingContext2D.prototype.drawImage = function () {
+            var args = arguments;
+            var cvs = this.canvas;
+            if (!replaying && isMenuPreviewCanvas(cvs) && skinSrcMatch(args[0])) {
+                var entry = entryForLocalPlayer();
+                var url = entry && resolveSkinImageUrl(entry);
+                if (url) {
+                    var rep = getReplacement(url, function () { replay(cvs); });
+                    if (rep) {
+                        var a = Array.prototype.slice.call(args);
+                        a[0] = rep;
+                        return origDrawImage.apply(this, a);
+                    }
+                    // sin reemplazo listo aún: dibujar vanilla y grabar para replay
+                    var list = drawnCalls.get(cvs) || [];
+                    if (list.length < 200) {
+                        list.push({ ctx: this, args: Array.prototype.slice.call(args) });
+                        drawnCalls.set(cvs, list);
+                    }
+                }
+            }
+            return origDrawImage.apply(this, args);
+        };
+
+        // WebGL: si el preview sube la skin como textura directamente
+        // (texImage2D con HTMLImageElement), sustituir la fuente igual.
+        function patchPreviewWebGL() {
+            var protos = [];
+            try { protos.push(window.WebGLRenderingContext); } catch (_) {}
+            try { protos.push(window.WebGL2RenderingContext); } catch (_) {}
+            protos.forEach(function (P) {
+                if (!P || !P.prototype || P.prototype.__mfPreviewHook) return;
+                var orig = P.prototype.texImage2D;
+                if (typeof orig !== 'function') return;
+                P.prototype.__mfPreviewHook = true;
+                P.prototype.texImage2D = function (target, level, internalformat, f4, f5, img) {
+                    try {
+                        var cvs = this.canvas;
+                        var argImg = arguments.length === 6 ? arguments[5] : null;
+                        if (cvs && isMenuPreviewCanvas(cvs) && skinSrcMatch(argImg) && !replaying) {
+                            var entry = entryForLocalPlayer();
+                            var url = entry && resolveSkinImageUrl(entry);
+                            if (url) {
+                                var rep = repImages[url] && repImages[url].complete
+                                    ? repImages[url] : getReplacement(url, function () {});
+                                if (rep) {
+                                    var a = Array.prototype.slice.call(arguments);
+                                    a[5] = rep;
+                                    return orig.apply(this, a);
+                                }
+                            }
+                        }
+                    } catch (_) {}
+                    return orig.apply(this, arguments);
+                };
+            });
+        }
+        patchPreviewWebGL();
+
+        function replay(cvs) {
+            var list = drawnCalls.get(cvs);
+            if (!list || !list.length) return;
+            var entry = entryForLocalPlayer();
+            var url = entry && resolveSkinImageUrl(entry);
+            var rep = url && repImages[url];
+            if (!rep || !rep.complete || !rep.naturalWidth) return;
+            replaying = true;
+            try {
+                for (var i = 0; i < list.length; i++) {
+                    var a = list[i].args.slice();
+                    a[0] = rep;
+                    origDrawImage.apply(list[i].ctx, a);
+                }
+                drawnCalls.delete(cvs);
+                log('✔ preview del menú repintado con skin custom');
+            } catch (e) {
+                warn('replay del preview falló:', e && e.message);
+            } finally {
+                replaying = false;
+            }
+        }
+
+        log('hook de preview del menú instalado');
+    }
+
     function tryPatch() {
         patchFetch();
         registerDevSkins();
+        patchMenuPreviewCanvas();
         if (typeof HTMLImageElement === 'undefined') return false;
         return patchImageSrc();
     }
