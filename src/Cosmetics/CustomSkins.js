@@ -823,13 +823,54 @@
             .then(function () { liveBusy = false; });
     }
 
+    // ── Push en vivo via ntfy (SSE): el bot avisa al cambiar la DB ──
+    // Actualización ~instantánea sin esperar el polling de GitHub. Con
+    // debounce: varios commits seguidos → una sola recarga. El polling
+    // queda como respaldo si ntfy no está disponible.
+    var PUSH_TOPIC = 'mf-skins-updates-v1';
+    var livePushRetry = 0;
+    var pushReloadTimer = null;
+
+    function queuePushReload() {
+        if (pushReloadTimer) return;
+        pushReloadTimer = setTimeout(function () {
+            pushReloadTimer = null;
+            log('push ntfy recibido: recargando DB viva');
+            liveLastSha = null;   // forzar que el próximo check detecte cambio
+            try { checkLiveRepo(); } catch (_) {}
+        }, 600);
+    }
+
+    function startPushListener() {
+        loadDb().then(function () {
+            try {
+                var es = new EventSource('https://ntfy.sh/' + PUSH_TOPIC + '/sse');
+                es.onmessage = function (e) {
+                    try {
+                        var m = JSON.parse(e.data);
+                        if (m && m.event === 'message') queuePushReload();
+                    } catch (_) {}
+                };
+                es.onerror = function () {
+                    es.close();
+                    // backoff: 5s → 10s → … → 2min máx
+                    var wait = Math.min(120000, 5000 * Math.pow(2, livePushRetry++));
+                    setTimeout(startPushListener, wait);
+                    if (livePushRetry > 1) livePushRetry--; // recuperación gradual
+                };
+                es.onopen = function () { livePushRetry = 0; };
+            } catch (_) {}
+        });
+    }
+
     function startLiveRepoWatcher() {
         // Esperar a que la DB inicial cargue para no pisar estados
         loadDb().then(function () {
             try { checkLiveRepo(); } catch (_) {}
+            // Respaldo del push ntfy: si el SSE murió, esto detecta igual
             setInterval(function () {
                 try { checkLiveRepo(); } catch (_) {}
-            }, 60000);
+            }, 120000);
         });
     }
 
@@ -1203,4 +1244,5 @@
 
     startLiveWatcher();
     startLiveRepoWatcher();
+    startPushListener();
 })();
