@@ -389,7 +389,10 @@ function announce(code) {
     const text = ANNOUNCE + code;
     try {
         try { chat.setInputValue?.(text); } catch { try { chat.inputValue = text; } catch {} }
-        chat.submit();
+        // submit(e) del engine llama e.inGame(): sin el game como arg, lanza
+        // TypeError DENTRO del try del engine (solo lo loguea, no propaga) y
+        // el mensaje nunca se envía. Pasar el game explícito.
+        chat.submit(g);
     } catch (e) {
         warn('announce falló:', e?.message || e);
         // El engine puede tardar en exponer inGame justo al entrar a la

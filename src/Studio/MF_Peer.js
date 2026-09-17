@@ -1057,7 +1057,8 @@ function sendRoomToChat(code) {
     autoShare.myCodes.add(code);
     try {
         try { chat.setInputValue?.(text); } catch { try { chat.inputValue = text; } catch {} }
-        chat.submit();
+        // submit(e) del engine llama e.inGame(): pasar el game explícito.
+        chat.submit(g);
         log('sala compartida al chat: ' + text);
     } catch (e) { warn('auto-share falló:', e?.message || e); }
     try { chat.closeInput?.(); } catch {}
