@@ -507,6 +507,45 @@
             // pasa el filtro). El brazo es un mesh con el atlasMat de skin.
             var arm = lf.rightArm;
             if (!arm || !arm.material) return;
+
+            // ── REPARACIÓN de daños de versiones viejas ──
+            // La versión con traverse completo (bfc03e7) pintó también el
+            // material ESTÁTICO de items del engine (J.material, singleton
+            // compartido por todos los items FP). Ese material no se recrea:
+            // una vez pintado con la skin, TODO item sostenido quedaba
+            // invisible (UVs de item caen en zonas transparentes de la skin).
+            // Si el material del item tiene nuestra marca → restaurar el
+            // original guardado. Si no hay stash (primera corrida tras el
+            // bug), clonar del atlas del brazo: los items NO comparten
+            // material con el brazo, así que un material marcado en lf.item
+            // solo puede ser daño nuestro.
+            try {
+                var itemMats = [];
+                if (lf.item && typeof lf.item.traverse === 'function') {
+                    lf.item.traverse(function (o) {
+                        if (!o || !o.material) return;
+                        var list = Array.isArray(o.material) ? o.material : [o.material];
+                        for (var q = 0; q < list.length; q++) {
+                            if (list[q] && list[q].map &&
+                                (list[q].map.__mfPainted || list[q].map.__mfEpoch)) {
+                                itemMats.push(list[q]);
+                            }
+                        }
+                    });
+                }
+                for (var r = 0; r < itemMats.length; r++) {
+                    var im = itemMats[r];
+                    if (im.__mfOrigMap) {
+                        im.map = im.__mfOrigMap;
+                    } else {
+                        // sin stash: crear material limpio sin textura de skin
+                        im.map = null;
+                    }
+                    im.needsUpdate = true;
+                    delete im.__mfOrigMap;
+                }
+            } catch (_) {}
+
             var mats = Array.isArray(arm.material) ? arm.material : [arm.material];
             mats = mats.filter(function (m) {
                 if (!m || !m.map) return false;
