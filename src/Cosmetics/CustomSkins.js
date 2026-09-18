@@ -26,7 +26,7 @@
     }
 
     var packSkinReg = (globalThis.__MF_PACK_SKINS__ ||= {});
-    var CUSTOM_URL_RE = /(?:^|\/)auth-api\/skins\/custom\/([^\/?#]+)\.png(?:[?#]|$)/;
+    var CUSTOM_URL_RE = /(?:^|\/)auth-api\/(?:skins|capes)\/custom\/([^\/?#]+)\.png(?:[?#]|$)/;
     var MF_DEV_SKINS = ['eve', 'gab', 'itzesteban', 'nightrise', 'notsenpai'];
 
     function installCustomUrlHook() {
@@ -48,8 +48,10 @@
 
                         var m2 = v.match(/(?:^|\/)textures\/entity\/(skins|capes)\/(.+?)\.png(?:[?#]|$)/);
                         if (m2) {
-                            var k2 = reg[m2[2]] ? m2[2]
-                                : (m2[1] === 'skins' && m2[2].replace(/^custom:/i, '')) || m2[2];
+                            // custom:<id> llega como parte del nombre de archivo:
+                            // probar con y sin el prefijo (skins y capas).
+                            var stripped = m2[2].replace(/^custom:/i, '');
+                            var k2 = reg[m2[2]] ? m2[2] : (reg[stripped] ? stripped : m2[2]);
                             if (reg[k2]) { origSet.call(this, reg[k2]); return; }
                         }
                     }
@@ -60,15 +62,13 @@
         globalThis.__MF_PACK_IMG_HOOK__ = true;
     }
 
-    // Resuelve una URL pedida por el engine (auth-api/skins/custom/<id>.png o
-    // textures/entity/skins/<id>.png) a una textura local cuando exista.
-    // Busca en __MF_PACK_SKINS__ (data: URLs del panel + packs) y, si la entrada
-    // de la DB apunta a una URL remota, usa la caché persistente dataURL.
+    // Resuelve una URL pedida por el engine (auth-api/skins|capes/custom/<id>.png
+    // o textures/entity/skins|capes/<id>.png) a una textura local cuando exista.
     function resolveCustomTextureUrl(url) {
         if (!url || typeof url !== 'string') return null;
         var m = url.match(CUSTOM_URL_RE);
         if (!m) {
-            var m2 = url.match(/(?:^|\/)textures\/entity\/skins\/([^\/?#]+)\.png(?:[?#]|$)/);
+            var m2 = url.match(/(?:^|\/)textures\/entity\/(?:skins|capes)\/([^\/?#]+)\.png(?:[?#]|$)/);
             if (!m2) return null;
             m = m2;
         }
@@ -77,10 +77,10 @@
         var reg = globalThis.__MF_PACK_SKINS__;
         if (reg && reg[skinId]) return reg[skinId];
 
-        // Entrada de la DB con skin remota: servir desde la caché dataURL
+        // Entrada de la DB con asset remoto: servir desde la caché dataURL
         var entry = getCustomSkinForId(skinId);
         if (entry) {
-            var u = resolveSkinImageUrl(entry);
+            var u = entrySkinUrl(entry) || entryCapeUrl(entry);
             if (u && /^data:/i.test(u)) return u;
         }
         return null;
@@ -153,9 +153,10 @@
         return typeof id === 'string' && id && /^[a-z0-9_]+$/i.test(id) && id.indexOf('/') === -1;
     }
 
-    function entrySkinUrl(entry) {
-        if (!entry || !entry.__skin) return null;
-        var s = String(entry.__skin);
+    function entryAssetUrl(entry, kind) {
+        if (!entry) return null;
+        var s = kind === 'cape' ? entry.__cape : entry.__skin;
+        if (!s) return null;
 
         if (s.indexOf('custom:') === 0) return null;
         if (/^(https?:|data:image)/i.test(s)) return s;
@@ -164,6 +165,9 @@
         if (!base) return null;
         return base + s + '.png';
     }
+
+    function entrySkinUrl(entry) { return entryAssetUrl(entry, 'skin'); }
+    function entryCapeUrl(entry) { return entryAssetUrl(entry, 'cape'); }
 
     function parseDb(data, reset) {
         if (reset) { dbByUuid = {}; dbByName = {}; }
@@ -176,8 +180,9 @@
             var raw = players[key];
             if (!raw || typeof raw !== 'object') continue;
             var skin = normalizeSkinValue(raw.skin);
-            if (!skin) continue;
-            var entry = { __skin: skin };
+            var cape = normalizeSkinValue(raw.cape);
+            if (!skin && !cape) continue;
+            var entry = { __skin: skin, __cape: cape };
             if (typeof raw.rank === 'string' && raw.rank) entry.rank = raw.rank;
             var uuidKey = String(key).toLowerCase();
             if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(uuidKey)) {
@@ -684,23 +689,26 @@
             if (!map) return;
             for (var k in map) {
                 if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
-                var u = entrySkinUrl(map[k]);
-                if (u && /^https?:/i.test(u) && !seen[u]) { seen[u] = 1; scheduleRemoteDownload(u); }
+                var s = entrySkinUrl(map[k]);
+                if (s && /^https?:/i.test(s) && !seen[s]) { seen[s] = 1; scheduleRemoteDownload(s); }
+                var c = entryCapeUrl(map[k]);
+                if (c && /^https?:/i.test(c) && !seen[c]) { seen[c] = 1; scheduleRemoteDownload(c); }
             }
         }
         scan(dbByUuid);
         scan(dbByName);
     }
 
-    function resolveSkinImageUrl(entry) {
-        if (!entry || !entry.__skin) return null;
-        var s = String(entry.__skin);
+    function resolveAssetImageUrl(entry, kind) {
+        if (!entry) return null;
+        var s = kind === 'cape' ? entry.__cape : entry.__skin;
+        if (!s) return null;
 
         if (s.indexOf('custom:') === 0) {
             var reg = globalThis.__MF_PACK_SKINS__ || {};
             return reg[s.slice(7)] || null;
         }
-        var url = entrySkinUrl(entry);
+        var url = entryAssetUrl(entry, kind);
         if (url && /^https?:/i.test(url) && url.indexOf(location.origin) !== 0) {
             loadRemoteCache();
             return cachedRemoteOrKick(url);
@@ -708,10 +716,30 @@
         return url;
     }
 
-    function skinMaterialsOf(mesh) {
+    function resolveSkinImageUrl(entry) { return resolveAssetImageUrl(entry, 'skin'); }
+    function resolveCapeImageUrl(entry) { return resolveAssetImageUrl(entry, 'cape'); }
+
+    // La capa vive en mesh.capeMesh (rama separada del body). Este helper la
+    // junta para que el pase de skin la EXCLUYA y el pase de capa la encuentre.
+    function capeMeshesOf(mesh) {
+        var out = [];
+        try {
+            var direct = mesh?.capeMesh;
+            if (direct) out.push(direct);
+            // la capa puede estar como hija del body en builds del engine
+            mesh?.traverse?.(function (o) {
+                if (o && o !== mesh && o.capeMesh && out.indexOf(o.capeMesh) === -1) {
+                    out.push(o.capeMesh);
+                }
+            });
+        } catch (_) {}
+        return out;
+    }
+
+    function collectMaterialsOf(root) {
         var out = [], seen = new Set();
         try {
-            mesh.traverse(function (o) {
+            root.traverse(function (o) {
                 if (!o || !o.material) return;
                 var list = Array.isArray(o.material) ? o.material : [o.material];
                 for (var i = 0; i < list.length; i++) {
@@ -720,14 +748,38 @@
                 }
             });
         } catch (_) {}
-        
-        var skins = out.filter(function (m) {
+        return out;
+    }
+
+    function skinMaterialsOf(mesh) {
+        // Excluir la rama de la capa: antes el filtro 64xN dejaba pasar la
+        // textura de capa (64x32) como "skin" y el repintado le pintaba la
+        // skin ENCIMA a la capa del jugador.
+        var capeMats = new Set();
+        capeMeshesOf(mesh).forEach(function (c) {
+            collectMaterialsOf(c).forEach(function (m) { capeMats.add(m); });
+        });
+
+        var all = collectMaterialsOf(mesh);
+        var bodyMats = all.filter(function (m) { return !capeMats.has(m); });
+
+        var skins = bodyMats.filter(function (m) {
             var w = m.map?.image?.width, h = m.map?.image?.height;
             if (!w || !h) return false;
             var k64 = w / 64;
             return Number.isInteger(k64) && (h === w || h === w / 2);
         });
-        return skins.length ? skins : out;
+        return skins.length ? skins : (bodyMats.length ? bodyMats : all);
+    }
+
+    function capeMaterialsOf(mesh) {
+        var out = [];
+        capeMeshesOf(mesh).forEach(function (c) {
+            collectMaterialsOf(c).forEach(function (m) {
+                if (out.indexOf(m) === -1) out.push(m);
+            });
+        });
+        return out;
     }
 
     function paintEntitySkin(player, entry) {
@@ -788,6 +840,122 @@
 
     var seenProfileIds = new WeakSet();
     var engineApplied = new WeakSet();
+    var engineAppliedCapes = new WeakSet();
+    var paintedCapes = new WeakSet();
+
+    // Override de CAPA: mismo patrón de 3 casos que la skin, pero sobre
+    // cosmetics.cape y los materiales de la rama mesh.capeMesh.
+    function applyCapeOverride(player, entry, cosmetics) {
+        var target = entry.__cape;
+        if (!target) return;
+
+        // 1) custom:<id> con textura local → engine-nativa: cosmetics.cape
+        //    + recreate(); el hook de Image sirve el PNG desde el registro.
+        if (target.indexOf('custom:') === 0) {
+            var cid = target.slice(7);
+            var reg = globalThis.__MF_PACK_SKINS__ || {};
+            if (!reg[cid]) return; // sin textura local, no insistir
+            if (cosmetics.cape === target && engineAppliedCapes.has(player)) return;
+            try {
+                cosmetics.cape = target;
+                engineAppliedCapes.add(player);
+                paintedCapes.delete(player);
+                if (player.mesh && typeof player.mesh.recreate === 'function') {
+                    player.mesh.recreate();
+                }
+            } catch (e) {
+                warn('falló aplicar capa custom', target, ':', e && e.message);
+            }
+            return;
+        }
+
+        // 2) id vanilla (nombres de CAPES en background.js) → engine-nativa.
+        if (isVanillaSkinId(target)) {
+            if (cosmetics.cape === target) return;
+            try {
+                cosmetics.cape = target;
+                engineAppliedCapes.add(player);
+                paintedCapes.delete(player);
+                if (player.mesh && typeof player.mesh.recreate === 'function') {
+                    player.mesh.recreate();
+                }
+            } catch (e) {
+                warn('falló aplicar capa vanilla', target, ':', e && e.message);
+            }
+            return;
+        }
+
+        // 3) URL remota → repintar solo los materiales de la capa.
+        var url = resolveCapeImageUrl(entry);
+        if (!url) return;
+        var stillPainted = false;
+        if (paintedCapes.has(player) && player.mesh) {
+            try {
+                var cm = capeMaterialsOf(player.mesh);
+                stillPainted = cm.length > 0 && cm.every(function (m) {
+                    return m.map && m.map.__mfPainted === url && m.map.__mfEpoch === paintEpoch;
+                });
+            } catch (_) { stillPainted = false; }
+        }
+        if (stillPainted) return;
+        paintedCapes.delete(player);
+
+        if (paintEntityCape(player, entry)) {
+            paintedCapes.add(player);
+            try { player.__mfCapeEpoch = paintEpoch; } catch (_) {}
+        }
+    }
+
+    function paintEntityCape(player, entry) {
+        try {
+            var mesh = player.mesh;
+            if (!mesh || typeof mesh.traverse !== 'function') return false;
+            var url = resolveCapeImageUrl(entry);
+            if (!url) return false;
+            var mats = capeMaterialsOf(mesh);
+            if (!mats.length) return false;
+            var who = (player.profile && (player.profile.username || player.profile.uuid)) || 'player';
+            var img = new Image();
+            if (/https?:/i.test(url)) img.crossOrigin = 'anonymous';
+            img.onload = function () {
+                var done = 0;
+                for (var i = 0; i < mats.length; i++) {
+                    var t = mats[i].map;
+                    if (!t) continue;
+                    try {
+                        var c = document.createElement('canvas');
+                        c.width = img.naturalWidth || img.width;
+                        c.height = img.naturalHeight || img.height;
+                        var ctx = c.getContext('2d');
+                        ctx.imageSmoothingEnabled = false;
+                        ctx.drawImage(img, 0, 0);
+                        var nt = null;
+                        try { nt = new t.constructor(c); } catch (_) {}
+                        if (!nt) continue;
+                        try {
+                            nt.magFilter = t.magFilter; nt.minFilter = t.minFilter;
+                            if (t.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = t.colorSpace;
+                            nt.flipY = t.flipY; nt.wrapS = t.wrapS; nt.wrapT = t.wrapT;
+                        } catch (_) {}
+                        nt.__mfPainted = url;
+                        nt.__mfEpoch = paintEpoch;
+                        mats[i].map = nt;
+                        mats[i].needsUpdate = true;
+                        done++;
+                    } catch (e) {
+                        warn('repintado de capa falló en material', i, 'de', who, ':', e && e.message);
+                    }
+                }
+                if (done === 0) paintedCapes.delete(player);
+            };
+            img.onerror = function () {
+                warn('no se pudo pintar la capa custom:', url);
+                paintedCapes.delete(player);
+            };
+            img.src = url;
+            return true;
+        } catch (_) { return false; }
+    }
 
     function overridePlayer(player) {
         if (!player || !player.profile) return;
@@ -805,6 +973,8 @@
         }
 
         if (!entry) return;
+
+        applyCapeOverride(player, entry, cosmetics);
 
         var target = entry.__skin;
 
@@ -1525,7 +1695,8 @@
     // Repinta entidades vivas con las skins/capes del panel (data: URLs en packSkinReg).
     // Cubre al jugador local aunque no esté en la DB de overrides. Usa el patrón
     // editable-canvas de MF_Mesh: una sola textura nueva reemplazada en todos los materiales.
-    function forceRepaintAll() {
+    // kind: 'skin' pinta el body (excluye capa), 'cape' pinta solo la rama capeMesh.
+    function forceRepaintAll(kind) {
         var game = findGame();
         var world = game?.world;
         if (!world) return;
@@ -1551,19 +1722,27 @@
         if (!targets.length) return;
         for (var i = 0; i < targets.length; i++) {
             var player = targets[i];
-            var skin = player?.profile?.cosmetics?.skin;
-            if (typeof skin === 'string') paintPlayerUrl(player, packSkinReg[skin.replace(/^custom:/i, '')]);
-            var cape = player?.profile?.cosmetics?.cape;
-            if (typeof cape === 'string') paintPlayerUrl(player, packSkinReg[cape.replace(/^custom:/i, '')]);
+            var wantCape = kind === 'cape';
+            var id = wantCape ? player?.profile?.cosmetics?.cape : player?.profile?.cosmetics?.skin;
+            if (typeof id === 'string') {
+                paintPlayerUrl(player, packSkinReg[id.replace(/^custom:/i, '')], wantCape);
+            }
+            if (!wantCape) {
+                // pase de skin: asegurar que la capa no quede pintada con la skin
+                var cid = player?.profile?.cosmetics?.cape;
+                if (typeof cid === 'string') {
+                    paintPlayerUrl(player, packSkinReg[cid.replace(/^custom:/i, '')], true);
+                }
+            }
         }
     }
 
-    function paintPlayerUrl(player, url) {
+    function paintPlayerUrl(player, url, isCape) {
         if (!url) return false;
         try {
             var mesh = player.mesh;
             if (!mesh || typeof mesh.traverse !== 'function') return false;
-            var mats = skinMaterialsOf(mesh);
+            var mats = isCape ? capeMaterialsOf(mesh) : skinMaterialsOf(mesh);
             if (!mats.length) return false;
             var img = new Image();
             if (/^https?:/i.test(url)) img.crossOrigin = 'anonymous';
