@@ -2622,6 +2622,124 @@
         width:100%;
         margin-top:14px;
       }
+      .mf-gcfg-backdrop {
+        position:absolute;
+        inset:0;
+        z-index:60;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:20px;
+        background:rgba(2,6,12,.66);
+        backdrop-filter:blur(5px);
+      }
+      .mf-gcfg-dialog {
+        width:min(560px, 100%);
+        display:flex;
+        flex-direction:column;
+        max-height:min(640px, calc(100% - 40px));
+        padding:18px;
+        border-radius:18px;
+        border:1px solid var(--mf-border);
+        background:rgba(16,20,29,.98);
+        box-shadow:0 24px 70px rgba(0,0,0,.55);
+      }
+      .mf-gcfg-head {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        margin-bottom:12px;
+      }
+      .mf-gcfg-title {
+        font-size:15px;
+        font-weight:800;
+        color:#f8fafc;
+      }
+      .mf-gcfg-close {
+        background:none;
+        border:0;
+        color:#94a3b8;
+        font-size:20px;
+        cursor:pointer;
+        padding:2px 8px;
+      }
+      .mf-gcfg-close:hover { color:#f8fafc; }
+      .mf-gcfg-body {
+        overflow-y:auto;
+        min-height:0;
+        padding-right:4px;
+      }
+      .mf-gcfg-section {
+        margin:14px 0 6px;
+        font-size:12px;
+        font-weight:800;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+        color:color-mix(in srgb,var(--mf-ui-accent) 70%,#fff 30%);
+      }
+      .mf-gcfg-body .mf-gcfg-section:first-child { margin-top:0; }
+      .mf-gcfg-muted {
+        color:#94a3b8;
+        font-size:10.5px;
+        line-height:1.5;
+        margin-bottom:6px;
+      }
+      .mf-gcfg-bind-list {
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:4px 14px;
+      }
+      .mf-gcfg-row {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        padding:7px 0;
+        border-top:1px solid rgba(255,255,255,.05);
+      }
+      .mf-gcfg-label {
+        font-size:12px;
+        font-weight:700;
+        color:#cbd5e1;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
+      }
+      .mf-gcfg-hint {
+        display:block;
+        font-style:normal;
+        font-weight:400;
+        color:#7c828a;
+        font-size:10px;
+        line-height:1.4;
+      }
+      .mf-gcfg-bind-side { display:flex; align-items:center; gap:4px; flex:none; }
+      .mf-gcfg-bind-btn { min-width:86px; padding:4px 10px; font-size:11px; }
+      .mf-gcfg-bind-btn.listening {
+        background:color-mix(in srgb,var(--mf-ui-accent) 30%,#0d1117 70%);
+        border-color:var(--mf-ui-accent);
+        color:#fff;
+      }
+      .mf-gcfg-clear {
+        background:none;
+        border:0;
+        color:#64748b;
+        font-size:15px;
+        cursor:pointer;
+        padding:2px 6px;
+        line-height:1;
+      }
+      .mf-gcfg-clear:hover { color:#f87171; }
+      .mf-gcfg-slider { margin-bottom:12px; }
+      .mf-gcfg-slider input[type="range"] { width:100%; accent-color:var(--mf-accent); margin-top:4px; }
+      .mf-gcfg-value {
+        font-variant-numeric:tabular-nums;
+        font-size:12px;
+        color:color-mix(in srgb,var(--mf-ui-accent) 58%,#fff 42%);
+        flex:none;
+      }
+      .mf-gcfg-done { width:100%; margin-top:14px; }
       .mf-co-dialog {
         max-height:min(700px, calc(100vh - 80px));
         overflow:auto;
@@ -6010,6 +6128,238 @@
     }
   }
 
+  // ─── Configuración global: keybinds + sliders de todos los módulos ───
+
+  // binds "especiales" que viven fuera de settings.moduleBinds
+  const GLOBAL_EXTRA_BINDS = Object.freeze([
+    { key: 'zoom', prop: 'zoomBind', event: () => sendZoomConfig(settings.zoom) },
+    { key: 'freelook', prop: 'freelookBind', event: () => document.dispatchEvent(new CustomEvent('minifeather:freelook-config', { detail: JSON.stringify({ enabled: !!settings.freelook, bind: String(settings.freelookBind || ''), mode: settings.freelookMode }) })) },
+    { key: 'titanTiny', prop: 'titanTinyBind', event: () => sendTitanTinyConfig(settings.titanTiny) },
+    { key: 'cameraOverhaul', prop: 'cameraOverhaulBind', event: () => sendCameraOverhaulConfig(settings.cameraOverhaul) }
+  ]);
+
+  const GLOBAL_SLIDERS = Object.freeze([
+    {
+      key: 'shineDensity', label: () => t('shineAmbienceDensity'), hint: () => t('globalSliderShineHint'),
+      get: () => Math.max(0.1, Math.min(3, Number(settings.shineAmbienceDensity ?? 1) || 1)),
+      min: 0.1, max: 3, step: 0.05, fmt: v => `${v.toFixed(2)}x`,
+      set(value) {
+        settings.shineAmbienceDensity = value;
+        guiSettings.shineAmbienceDensity = value;
+        sendShineAmbienceConfig();
+      }
+    },
+    {
+      key: 'shaderStrength', label: () => t('shadersStrength'), hint: () => '',
+      get: () => Number(settings.customShaderStrength ?? 0.5),
+      min: 0, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%`,
+      set(value) {
+        settings.customShaderStrength = value;
+        guiSettings.customShaderStrength = value;
+        if (settings.customShader) sendCustomShaderConfig(true);
+      }
+    },
+    {
+      key: 'shaderRenderScale', label: () => t('shadersRenderScale'), hint: () => '',
+      get: () => Number(settings.customShaderRenderScale ?? 1),
+      min: 0.5, max: 1, step: 0.05, fmt: v => `${Math.round(v * 100)}%`,
+      set(value) {
+        settings.customShaderRenderScale = value;
+        guiSettings.customShaderRenderScale = value;
+        if (settings.customShader) sendCustomShaderConfig(true);
+      }
+    },
+    {
+      key: 'panelScale', label: () => t('panelScale'), hint: () => '',
+      get: () => clampPanelScale(settings.panelScale),
+      min: 50, max: 120, step: 1, fmt: v => `${v}%`,
+      set(value) {
+        settings.panelScale = value;
+        guiSettings.panelScale = value;
+        applyPanelScale();
+      }
+    }
+  ]);
+
+  let globalConfigCleanup = null;
+
+  function closeGlobalConfig() {
+    if (globalConfigCleanup) {
+      const cleanup = globalConfigCleanup;
+      globalConfigCleanup = null;
+      cleanup();
+    }
+  }
+
+  function bindableModuleEntries() {
+    // todos los módulos del índice (orden del panel) menos duplicados
+    const seen = new Set();
+    const entries = [];
+    for (const item of getModuleIndex()) {
+      if (seen.has(item.key)) continue;
+      seen.add(item.key);
+      entries.push(item);
+    }
+    for (const extra of GLOBAL_EXTRA_BINDS) {
+      if (!seen.has(extra.key)) {
+        seen.add(extra.key);
+        entries.push({ page: 'render', key: extra.key, title: commandModuleLabel(extra.key), desc: '' });
+      }
+    }
+    return entries;
+  }
+
+  function openGlobalConfig() {
+    if (!panel) return;
+    closeGlobalConfig();
+    closeFeatureSettings();
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-gcfg-backdrop';
+
+    const bindRows = bindableModuleEntries().map(entry => {
+      const bound = String(settings.moduleBinds?.[entry.key] || '');
+      return `
+        <div class="mf-gcfg-row" data-gcfg-bind-row="${entry.key}">
+          <span class="mf-gcfg-label">${entry.title}</span>
+          <div class="mf-gcfg-bind-side">
+            <button type="button" class="mf-btn secondary mf-gcfg-bind-btn" data-gcfg-bind="${entry.key}">${bound ? bindLabel(bound) : t('globalBindNone')}</button>
+            <button type="button" class="mf-gcfg-clear" data-gcfg-clear="${entry.key}" title="${t('globalBindClear')}" ${bound ? '' : 'style="visibility:hidden"'}>×</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const sliderRows = GLOBAL_SLIDERS.map(s => {
+      const value = s.get();
+      return `
+        <div class="mf-gcfg-slider" data-gcfg-slider-box="${s.key}">
+          <div class="mf-gcfg-row" style="border:0;padding-top:0">
+            <span class="mf-gcfg-label">${s.label()}<em class="mf-gcfg-hint">${s.hint()}</em></span>
+            <strong class="mf-gcfg-value" data-gcfg-value="${s.key}">${s.fmt(value)}</strong>
+          </div>
+          <input type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${value}" data-gcfg-slider="${s.key}">
+        </div>
+      `;
+    }).join('');
+
+    backdrop.innerHTML = `
+      <div class="mf-gcfg-dialog" role="dialog" aria-modal="true">
+        <div class="mf-gcfg-head">
+          <div class="mf-gcfg-title">${t('globalConfigTitle')}</div>
+          <button type="button" class="mf-gcfg-close" data-gcfg-close>×</button>
+        </div>
+        <div class="mf-gcfg-body">
+          <div class="mf-gcfg-section">${t('globalSectionBinds')}</div>
+          <div class="mf-gcfg-muted">${t('globalBindsHint')}</div>
+          <div class="mf-gcfg-bind-list" data-gcfg-bind-list>${bindRows}</div>
+          <div class="mf-gcfg-section">${t('globalSectionSliders')}</div>
+          ${sliderRows}
+        </div>
+        <button type="button" class="mf-btn primary mf-gcfg-done" data-gcfg-done>${t('done')}</button>
+      </div>
+    `;
+    panel.appendChild(backdrop);
+
+    let bindingKey = null;
+
+    const bindButtonLabel = key => {
+      const btn = backdrop.querySelector(`[data-gcfg-bind="${CSS.escape(key)}"]`);
+      if (btn) btn.textContent = t('globalBindListening');
+    };
+
+    const syncBindRow = key => {
+      const bound = String(settings.moduleBinds?.[key] || '');
+      const btn = backdrop.querySelector(`[data-gcfg-bind="${CSS.escape(key)}"]`);
+      const clear = backdrop.querySelector(`[data-gcfg-clear="${CSS.escape(key)}"]`);
+      if (btn) btn.textContent = bound ? bindLabel(bound) : t('globalBindNone');
+      if (clear) clear.style.visibility = bound ? 'visible' : 'hidden';
+    };
+
+    backdrop.querySelectorAll('[data-gcfg-bind]').forEach(button => {
+      button.addEventListener('click', () => {
+        const key = button.dataset.gcfgBind;
+        bindingKey = key;
+        backdrop.querySelectorAll('[data-gcfg-bind]').forEach(b => { b.classList.remove('listening'); });
+        button.classList.add('listening');
+        bindButtonLabel(key);
+      });
+    });
+
+    backdrop.querySelectorAll('[data-gcfg-clear]').forEach(button => {
+      button.addEventListener('click', () => {
+        const key = button.dataset.gcfgClear;
+        bindingKey = null;
+        settings.moduleBinds = { ...(settings.moduleBinds || {}) };
+        delete settings.moduleBinds[key];
+        guiSettings.moduleBinds = { ...settings.moduleBinds };
+        const extra = GLOBAL_EXTRA_BINDS.find(e => e.key === key);
+        if (extra) {
+          settings[extra.prop] = '';
+          guiSettings[extra.prop] = '';
+          extra.event();
+        }
+        saveSettings(true);
+        sendClientBindsConfig();
+        syncBindRow(key);
+      });
+    });
+
+    const keyHandler = event => {
+      if (!bindingKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      const key = bindingKey;
+      bindingKey = null;
+      backdrop.querySelectorAll('[data-gcfg-bind].listening').forEach(b => b.classList.remove('listening'));
+      if (event.code === 'Escape' || event.code === 'Backspace' || event.code === 'Delete') {
+        syncBindRow(key);
+        return;
+      }
+      const extra = GLOBAL_EXTRA_BINDS.find(e => e.key === key);
+      if (extra) {
+        settings[extra.prop] = event.code;
+        guiSettings[extra.prop] = event.code;
+        extra.event();
+      } else {
+        settings.moduleBinds = { ...(settings.moduleBinds || {}), [key]: event.code };
+        guiSettings.moduleBinds = { ...settings.moduleBinds };
+      }
+      saveSettings(true);
+      sendClientBindsConfig();
+      syncBindRow(key);
+    };
+    document.addEventListener('keydown', keyHandler, true);
+
+    backdrop.querySelectorAll('[data-gcfg-slider]').forEach(range => {
+      const def = GLOBAL_SLIDERS.find(s => s.key === range.dataset.gcfgSlider);
+      if (!def) return;
+      const valueEl = backdrop.querySelector(`[data-gcfg-value="${CSS.escape(def.key)}"]`);
+      const apply = persist => {
+        const v = Math.max(def.min, Math.min(def.max, Number(range.value) || def.get()));
+        def.set(v);
+        if (valueEl) valueEl.textContent = def.fmt(v);
+        if (persist) saveSettings(true);
+      };
+      range.addEventListener('input', () => apply(false));
+      range.addEventListener('change', () => apply(true));
+    });
+
+    const cleanup = () => {
+      bindingKey = null;
+      document.removeEventListener('keydown', keyHandler, true);
+      backdrop.remove();
+    };
+    globalConfigCleanup = cleanup;
+
+    backdrop.querySelector('[data-gcfg-close]')?.addEventListener('click', closeGlobalConfig);
+    backdrop.querySelector('[data-gcfg-done]')?.addEventListener('click', closeGlobalConfig);
+    backdrop.addEventListener('mousedown', event => {
+      if (event.target === backdrop) closeGlobalConfig();
+    });
+  }
+
   function openFeatureSettings(key) {
     if (!panel) return;
     closeFeatureSettings();
@@ -6222,13 +6572,6 @@
               t('shineAmbience'),
               t('shineAmbienceDesc')
             )}
-            <div class="mf-shine-density" data-shine-density-box>
-              <div class="mf-tt-row" style="margin:0 0 6px">
-                <span>${t('shineAmbienceDensity')}</span>
-                <strong data-shine-density-value>${Number(settings.shineAmbienceDensity ?? 1).toFixed(2)}x</strong>
-              </div>
-              <input type="range" min="0.1" max="3" step="0.05" value="${Number(settings.shineAmbienceDensity ?? 1)}" data-shine-density style="width:100%">
-            </div>
             ${renderToggle(
               'vanillaAnimations',
               'Vanilla Animations',
@@ -7207,6 +7550,13 @@
   function renderSettingsPage() {
     return `
       <div class="mf-page-stack">
+        <div class="mf-card">
+          <div class="mf-card-title">${t('globalConfigTitle')}</div>
+          <div class="mf-muted">${t('globalConfigDesc')}</div>
+          <div style="margin-top:12px;">
+            <button id="mf-global-config" class="mf-btn primary">${t('globalConfigOpen')}</button>
+          </div>
+        </div>
         <div class="mf-card">
           <div class="mf-card-title">${t('language')}</div>
           <div class="mf-muted">${t('languageDesc')}</div>
@@ -9936,22 +10286,12 @@ function renderCreditsPage() {
     wetDryRange?.addEventListener('input', () => applyWetDry(false));
     wetDryRange?.addEventListener('change', () => applyWetDry(true));
 
-    const shineDensityRange = panel.querySelector('[data-shine-density]');
-    const shineDensityValue = panel.querySelector('[data-shine-density-value]');
-    const applyShineDensity = (persist) => {
-      if (!shineDensityRange) return;
-      const density = Math.max(0.1, Math.min(3, Number(shineDensityRange.value) || 1));
-      guiSettings.shineAmbienceDensity = density;
-      settings.shineAmbienceDensity = density;
-      if (shineDensityValue) shineDensityValue.textContent = `${density.toFixed(2)}x`;
-      sendShineAmbienceConfig();
-      if (persist) saveSettings(true);
-    };
-    shineDensityRange?.addEventListener('input', () => applyShineDensity(false));
-    shineDensityRange?.addEventListener('change', () => applyShineDensity(true));
-
     panel.querySelector('#mf-replay-intro')?.addEventListener('click', () => {
       document.dispatchEvent(new CustomEvent('minifeather:splash-replay'));
+    });
+
+    panel.querySelector('#mf-global-config')?.addEventListener('click', () => {
+      openGlobalConfig();
     });
 
     panel.querySelector('#mf-gui-discord')?.addEventListener('click', () => window.open(CONFIG.discord, '_blank'));
