@@ -1,7 +1,7 @@
 {
-  "builtAt": "2026-09-18T04:30:00Z",
+  "builtAt": "2026-09-18T05:10:00Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Titan & Tiny camera height now follows MiniBlox native getEyeHeight at the selected scale; FullBright v2 clamps Miniblox voxel ambient-light uniforms/worker lighting to 0.16 without exposure or saturation changes.",
-  "version": "4.15.4"
+  "note": "Movement runtime now resolves native MiniBlox input/movement APIs semantically instead of relying on minified method names. Auto Sprint uses native sprint state, Safe Sneak feeds the native input pipeline, and Anti-AFK uses native micro-rotation packets with legacy movement fallback.",
+  "version": "4.15.5"
 }

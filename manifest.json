@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.15.4",
-  "description": "MiniFeather Client for MiniBlox — fixed Titan & Tiny native eye-height camera sync and FullBright ambient-light floor 0.16, with Realistic V4 Custom, adaptive FPS, unified theming and polished UI.",
+  "version": "4.15.5",
+  "description": "MiniFeather Client for MiniBlox — movement API resolver for resilient Auto Sprint, Safe Sneak and Anti-AFK, plus Titan & Tiny camera/nametag fixes, FullBright and Realistic V4 Custom.",
   "permissions": [
     "storage",
     "declarativeNetRequest",
@@ -100,6 +100,7 @@
         "src/Experimental/AnimatedItems/AnimatedItems.js",
         "src/Experimental/BetterAnimationCape/BetterAnimationCape.js",
         "src/World/AutoRespawn.js",
+        "src/Movement/MovementAPI.js",
         "src/Movement/AntiAFK.js",
         "src/Movement/MovementAssist.js",
         "src/Waypoints/Waypoints.js",

@@ -3,21 +3,21 @@
 
   const EVENT = 'minifeather:anti-afk-config';
   const KEY = '__MINIFEATHER_ANTI_AFK__';
+  const HOOK_ID = 'minifeather-anti-afk';
 
-  const s = {
+  try { globalThis[KEY]?.destroy?.(); } catch (_) {}
+
+  const state = {
     enabled: false,
     active: false,
     destroyed: false,
     delaySeconds: 120,
-    game: null,
     player: null,
-    applyName: null,
-    sendName: null,
-    originalApply: null,
-    hookApply: null,
-    applyHadOwn: false,
     lastActivity: Date.now(),
-    lastNativeCall: 0,
+    lastNativeInput: 0,
+    lastPulse: 0,
+    nextPulseAt: 0,
+    pulseIndex: 0,
     scanTimer: 0,
     idleTimer: 0,
     fallbackTimer: 0,
@@ -25,1102 +25,269 @@
     mouseY: null
   };
 
-  try {
-    globalThis[KEY]?.destroy?.();
-  } catch {}
-
-  function clampDelay(v) {
-    const n = Number(v);
-
-    if (!Number.isFinite(n)) {
-      return 120;
-    }
-
-    return Math.max(
-      5,
-      Math.min(
-        150,
-        Math.round(n / 5) * 5
-      )
-    );
+  function movementAPI() {
+    return globalThis.__MINIFEATHER_MOVEMENT_API__ || null;
   }
 
-  function getGame(force = false) {
-    if (
-      !force &&
-      s.game?.player?.pos
-    ) {
-      return s.game;
-    }
-
-    try {
-      const direct = [
-        globalThis.__MB?.game,
-        globalThis.game,
-        globalThis.__game,
-        globalThis.minibloxGame,
-        globalThis.MiniBlox?.game
-      ];
-
-      for (const game of direct) {
-        if (game?.player?.pos) {
-          s.game = game;
-          return game;
-        }
-      }
-    } catch {}
-
-    try {
-      const roots = [
-        document.querySelector('#react'),
-        document.querySelector('#root'),
-        document.querySelector(
-          '[id*="react"]'
-        )
-      ].filter(Boolean);
-
-      for (const el of roots) {
-        for (
-          const root
-          of Object.values(el)
-        ) {
-          const candidates = [
-            root?.updateQueue
-              ?.baseState
-              ?.element
-              ?.props
-              ?.game,
-
-            root?.memoizedProps?.game,
-            root?.pendingProps?.game,
-
-            root?.return
-              ?.memoizedProps
-              ?.game,
-
-            root?.return
-              ?.return
-              ?.memoizedProps
-              ?.game,
-
-            root?.child
-              ?.memoizedProps
-              ?.game,
-
-            root?.child
-              ?.child
-              ?.memoizedProps
-              ?.game
-          ];
-
-          for (
-            const game
-            of candidates
-          ) {
-            if (game?.player?.pos) {
-              s.game = game;
-              return game;
-            }
-          }
-        }
-      }
-    } catch {}
-
-    return null;
+  function clampDelay(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 120;
+    return Math.max(5, Math.min(150, Math.round(n / 5) * 5));
   }
 
-  function methodsOf(obj) {
-    const out = [];
-    const seenFns = new Set();
-    let proto = obj;
-
-    for (let depth = 0; proto && depth < 14; depth++) {
-      let names = [];
-      try {
-        names = Object.getOwnPropertyNames(proto);
-      } catch (_) {}
-
-      for (const name of names) {
-        if (name === 'constructor') continue;
-
-        let fn = null;
-        try {
-          fn = depth === 0 ? obj[name] : proto[name];
-        } catch (_) {}
-        if (typeof fn !== 'function' || seenFns.has(fn)) continue;
-        seenFns.add(fn);
-
-        let src = '';
-        try {
-          src = Function.prototype.toString.call(fn);
-        } catch (_) {}
-
-        out.push({ name, fn, src });
-
-        if (depth === 0) {
-          let nativeFn = null;
-          let nativeProto = Object.getPrototypeOf(obj);
-          while (nativeProto) {
-            try {
-              if (Object.prototype.hasOwnProperty.call(nativeProto, name)) {
-                nativeFn = nativeProto[name];
-                break;
-              }
-            } catch (_) {}
-            nativeProto = Object.getPrototypeOf(nativeProto);
-          }
-          if (typeof nativeFn === 'function' && !seenFns.has(nativeFn)) {
-            seenFns.add(nativeFn);
-            let nativeSrc = '';
-            try {
-              nativeSrc = Function.prototype.toString.call(nativeFn);
-            } catch (_) {}
-            out.push({ name, fn: nativeFn, src: nativeSrc });
-          }
-        }
-      }
-
-      try {
-        proto = Object.getPrototypeOf(proto);
-      } catch (_) {
-        break;
-      }
-    }
-
-    return out;
+  function scheduleNextPulse(now = Date.now()) {
+    const cadence = [22000, 26000, 30000, 25000];
+    state.nextPulseAt = now + cadence[state.pulseIndex % cadence.length];
   }
 
-  function findApply(player) {
-    let best = null;
-
-    for (
-      const m
-      of methodsOf(player)
-    ) {
-      let score = 0;
-
-      const x = m.src;
-
-      if (
-        x.includes(
-          'ayHGaukUNSp'
-        )
-      ) {
-        score += 10;
-      }
-
-      if (
-        x.includes(
-          'yNDNKuoxzL'
-        )
-      ) {
-        score += 10;
-      }
-
-      if (
-        x.includes('jumping')
-      ) {
-        score += 5;
-      }
-
-      if (
-        x.includes('.right')
-      ) {
-        score += 4;
-      }
-
-      if (
-        x.includes('.left')
-      ) {
-        score += 4;
-      }
-
-      if (
-        x.includes('.up')
-      ) {
-        score += 4;
-      }
-
-      if (
-        x.includes('.down')
-      ) {
-        score += 4;
-      }
-
-      if (
-        x.includes('.jump')
-      ) {
-        score += 4;
-      }
-
-      if (
-        x.includes(
-          'usingItem'
-        )
-      ) {
-        score += 2;
-      }
-
-      if (
-        m.name ===
-        'aowZWMsCgJ'
-      ) {
-        score += 6;
-      }
-
-      if (
-        !best ||
-        score > best.score
-      ) {
-        best = {
-          ...m,
-          score
-        };
-      }
-    }
-
-    return best?.score >= 28
-      ? best
-      : null;
-  }
-
-  function findSend(player) {
-    let best = null;
-
-    for (
-      const m
-      of methodsOf(player)
-    ) {
-      let score = 0;
-
-      const x = m.src;
-
-      if (
-        x.includes(
-          'serverMoveForward'
-        )
-      ) {
-        score += 10;
-      }
-
-      if (
-        x.includes(
-          'serverMoveStrafe'
-        )
-      ) {
-        score += 10;
-      }
-
-      if (
-        x.includes(
-          'ayHGaukUNSp'
-        )
-      ) {
-        score += 5;
-      }
-
-      if (
-        x.includes(
-          'yNDNKuoxzL'
-        )
-      ) {
-        score += 5;
-      }
-
-      if (
-        x.includes(
-          'sendPacket'
-        )
-      ) {
-        score += 5;
-      }
-
-      if (
-        x.includes(
-          'serverSneakState'
-        )
-      ) {
-        score += 2;
-      }
-
-      if (
-        x.includes(
-          'serverSprintState'
-        )
-      ) {
-        score += 2;
-      }
-
-      if (
-        m.name ===
-        'GksBoXJsoTP'
-      ) {
-        score += 6;
-      }
-
-      if (
-        !best ||
-        score > best.score
-      ) {
-        best = {
-          ...m,
-          score
-        };
-      }
-    }
-
-    return best?.score >= 25
-      ? best
-      : null;
-  }
-
-  function actionAt(now) {
-    const t = now % 5200;
-
-    return {
-      up:
-        t < 260,
-
-      down:
-        t >= 520 &&
-        t < 780,
-
-      left:
-        t >= 1900 &&
-        t < 2160,
-
-      right:
-        t >= 2420 &&
-        t < 2680,
-
-      jump:
-        t >= 3600 &&
-        t < 3730
-    };
-  }
-
-  function buildInput(
-    base,
-    player
-  ) {
-    const a =
-      actionAt(Date.now());
-
-    return {
-      ...(
-        base ||
-        player.currentInput ||
-        {}
-      ),
-
-      up:
-        a.up,
-
-      down:
-        a.down,
-
-      left:
-        a.left,
-
-      right:
-        a.right,
-
-      jump:
-        a.jump,
-
-      sneak:
-        false,
-
-      usingItem:
-        false,
-
-      yaw:
-        Number.isFinite(
-          Number(player.yaw)
-        )
-          ? player.yaw
-          : base?.yaw,
-
-      pitch:
-        Number.isFinite(
-          Number(player.pitch)
-        )
-          ? player.pitch
-          : base?.pitch
-    };
-  }
-
-  function neutralInput(
-    base,
-    player
-  ) {
-    return {
-      ...(
-        base ||
-        player.currentInput ||
-        {}
-      ),
-
-      up: false,
-      down: false,
-      left: false,
-      right: false,
-      jump: false,
-      sneak: false,
-      usingItem: false,
-
-      yaw:
-        Number.isFinite(
-          Number(player.yaw)
-        )
-          ? player.yaw
-          : base?.yaw,
-
-      pitch:
-        Number.isFinite(
-          Number(player.pitch)
-        )
-          ? player.pitch
-          : base?.pitch
-    };
-  }
-
-  function sendNow(player) {
-    if (
-      !player ||
-      !s.sendName
-    ) {
-      return;
-    }
-
-    try {
-      player[
-        s.sendName
-      ]?.call(player);
-    } catch {}
-  }
-
-  function applyNow(input) {
-    const p = s.player;
-
-    if (
-      !p ||
-      typeof s.originalApply !==
-        'function'
-    ) {
-      return false;
-    }
-
-    try {
-      s.originalApply.call(
-        p,
-        input
-      );
-
-      s.lastNativeCall =
-        Date.now();
-
-      sendNow(p);
-
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  function stopMovement() {
-    const p = s.player;
-
-    if (!p) {
-      return;
-    }
-
-    applyNow(
-      neutralInput(
-        p.currentInput,
-        p
-      )
-    );
-  }
-
-  function restoreHook() {
-    const p = s.player;
-
-    if (
-      p &&
-      s.applyName &&
-      s.hookApply
-    ) {
-      try {
-        if (
-          p[s.applyName] ===
-          s.hookApply
-        ) {
-          if (
-            s.applyHadOwn
-          ) {
-            p[s.applyName] =
-              s.originalApply;
-          } else {
-            delete p[
-              s.applyName
-            ];
-          }
-        }
-      } catch {}
-    }
-
-    s.applyName = null;
-    s.sendName = null;
-    s.originalApply = null;
-    s.hookApply = null;
-    s.applyHadOwn = false;
+  function unhookPlayer() {
+    const bridge = movementAPI();
+    if (state.player && bridge) bridge.unregisterAll(state.player, HOOK_ID);
+    state.player = null;
   }
 
   function hookPlayer(player) {
-    if (!player) {
-      return false;
-    }
+    const bridge = movementAPI();
+    if (!bridge || !player) return false;
+    const api = bridge.resolve(player, true);
+    if (!api?.names?.collectInput) return false;
 
-    if (
-      s.player &&
-      s.player !== player
-    ) {
-      stopMovement();
-      restoreHook();
-    }
+    if (state.player && state.player !== player) unhookPlayer();
+    state.player = player;
 
-    s.player = player;
+    bridge.register(player, 'collectInput', HOOK_ID, {
+      before(ctx) {
+        state.lastNativeInput = Date.now();
+        if (!state.enabled || !state.active || Date.now() < state.nextPulseAt) return;
 
-    const apply =
-      findApply(player);
+        const yaw = Number(ctx.player.yaw);
+        const pitch = Number(ctx.player.pitch);
+        if (!Number.isFinite(yaw)) return;
 
-    const send =
-      findSend(player);
+        const sign = state.pulseIndex % 2 === 0 ? 1 : -1;
+        ctx.data.afkPulse = {
+          yaw,
+          pitch,
+          pulsed: true
+        };
 
-    if (!apply) {
-      return false;
-    }
-
-    s.applyName =
-      apply.name;
-
-    s.sendName =
-      send?.name || null;
-
-    s.originalApply =
-      apply.fn;
-
-    s.applyHadOwn =
-      Object.prototype
-        .hasOwnProperty
-        .call(
-          player,
-          apply.name
-        );
-
-    const hook =
-      function (
-        input,
-        ...args
-      ) {
-        s.lastNativeCall =
-          Date.now();
-
-        if (
-          !s.enabled ||
-          !s.active ||
-          s.player !== this
-        ) {
-          return s.originalApply.call(
-            this,
-            input,
-            ...args
-          );
+        ctx.player.yaw = yaw + sign * 0.0035;
+        if (Number.isFinite(pitch)) {
+          ctx.player.pitch = Math.max(-1.55, Math.min(1.55, pitch + sign * 0.0012));
         }
+      },
+      after(ctx) {
+        const pulse = ctx.data.afkPulse;
+        if (!pulse?.pulsed) return;
 
-        return s.originalApply.call(
-          this,
-          buildInput(
-            input,
-            this
-          ),
-          ...args
-        );
-      };
+        const apiNow = ctx.api || bridge.resolve(ctx.player);
+        if (!apiNow?.usesInputMovement()) apiNow?.syncPosLook();
 
-    try {
-      player[
-        apply.name
-      ] = hook;
+        ctx.player.yaw = pulse.yaw;
+        if (Number.isFinite(pulse.pitch)) ctx.player.pitch = pulse.pitch;
 
-      if (
-        player[
-          apply.name
-        ] !== hook
-      ) {
-        return false;
+        state.lastPulse = Date.now();
+        state.pulseIndex += 1;
+        scheduleNextPulse(state.lastPulse);
       }
-    } catch {
-      return false;
-    }
-
-    s.hookApply = hook;
+    });
 
     return true;
   }
 
   function ensureRuntime() {
-    if (
-      !s.enabled ||
-      s.destroyed
-    ) {
-      return false;
-    }
+    if (!state.enabled || state.destroyed) return false;
+    const bridge = movementAPI();
+    const player = bridge?.getGame()?.player;
+    if (!player?.pos) return false;
 
-    const game =
-      getGame(true);
-
-    const player =
-      game?.player;
-
-    if (!player?.pos) {
-      return false;
-    }
-
-    s.game = game;
-
-    if (
-      s.player !== player ||
-      !s.hookApply ||
-      player[
-        s.applyName
-      ] !== s.hookApply
-    ) {
-      return hookPlayer(
-        player
-      );
-    }
-
+    if (state.player !== player) return hookPlayer(player);
+    const api = bridge.resolve(player);
+    if (!api?.isValid()) return hookPlayer(player);
     return true;
   }
 
+  function pulseFallback() {
+    if (!state.enabled || !state.active || !ensureRuntime()) return;
+    if (Date.now() < state.nextPulseAt) return;
+    if (Date.now() - state.lastNativeInput < 1800) return;
+
+    const bridge = movementAPI();
+    const player = state.player;
+    const api = bridge?.resolve(player);
+    if (!api || !player) return;
+
+    const yaw = Number(player.yaw);
+    const pitch = Number(player.pitch);
+    if (!Number.isFinite(yaw)) return;
+
+    const sign = state.pulseIndex % 2 === 0 ? 1 : -1;
+    player.yaw = yaw + sign * 0.0035;
+    if (Number.isFinite(pitch)) player.pitch = Math.max(-1.55, Math.min(1.55, pitch + sign * 0.0012));
+
+    api.syncPosLook() || api.syncState();
+
+    player.yaw = yaw;
+    if (Number.isFinite(pitch)) player.pitch = pitch;
+
+    state.lastPulse = Date.now();
+    state.pulseIndex += 1;
+    scheduleNextPulse(state.lastPulse);
+  }
+
   function activate() {
-    if (
-      !s.enabled ||
-      s.active ||
-      !ensureRuntime()
-    ) {
-      return;
-    }
-
-    s.active = true;
-
-    applyNow(
-      buildInput(
-        s.player.currentInput,
-        s.player
-      )
-    );
+    if (!state.enabled || state.active || !ensureRuntime()) return;
+    state.active = true;
+    state.nextPulseAt = Date.now() + 750;
   }
 
-  function deactivate(
-    resetActivity = true
-  ) {
-    if (s.active) {
-      s.active = false;
-
-      stopMovement();
-    }
-
-    if (resetActivity) {
-      s.lastActivity =
-        Date.now();
-    }
+  function deactivate(resetActivity = true) {
+    state.active = false;
+    if (resetActivity) state.lastActivity = Date.now();
+    scheduleNextPulse();
   }
 
-  function activity(e) {
-    if (
-      e?.isTrusted === false
-    ) {
-      return;
-    }
-
+  function activity(event) {
+    if (event?.isTrusted === false) return;
     deactivate(true);
   }
 
-  function mouseMove(e) {
-    if (
-      e.isTrusted === false
-    ) {
+  function mouseMove(event) {
+    if (event.isTrusted === false) return;
+    const dx = Number(event.movementX) || 0;
+    const dy = Number(event.movementY) || 0;
+
+    if (Math.hypot(dx, dy) >= 1) {
+      state.mouseX = event.clientX;
+      state.mouseY = event.clientY;
+      activity(event);
       return;
     }
 
-    const dx =
-      Number(
-        e.movementX
-      ) || 0;
-
-    const dy =
-      Number(
-        e.movementY
-      ) || 0;
-
-    if (
-      Math.hypot(
-        dx,
-        dy
-      ) >= 1
-    ) {
-      s.mouseX =
-        e.clientX;
-
-      s.mouseY =
-        e.clientY;
-
-      activity(e);
-
+    if (state.mouseX === null || state.mouseY === null) {
+      state.mouseX = event.clientX;
+      state.mouseY = event.clientY;
       return;
     }
 
-    if (
-      s.mouseX === null ||
-      s.mouseY === null
-    ) {
-      s.mouseX =
-        e.clientX;
-
-      s.mouseY =
-        e.clientY;
-
-      return;
-    }
-
-    const d =
-      Math.hypot(
-        e.clientX -
-          s.mouseX,
-
-        e.clientY -
-          s.mouseY
-      );
-
-    s.mouseX =
-      e.clientX;
-
-    s.mouseY =
-      e.clientY;
-
-    if (d >= 4) {
-      activity(e);
-    }
+    const distance = Math.hypot(event.clientX - state.mouseX, event.clientY - state.mouseY);
+    state.mouseX = event.clientX;
+    state.mouseY = event.clientY;
+    if (distance >= 4) activity(event);
   }
 
   const listeners = [
-    [
-      'keydown',
-      activity
-    ],
-
-    [
-      'mousedown',
-      activity
-    ],
-
-    [
-      'pointerdown',
-      activity
-    ],
-
-    [
-      'wheel',
-      activity
-    ],
-
-    [
-      'touchstart',
-      activity
-    ],
-
-    [
-      'mousemove',
-      mouseMove
-    ]
+    ['keydown', activity],
+    ['mousedown', activity],
+    ['pointerdown', activity],
+    ['wheel', activity],
+    ['touchstart', activity],
+    ['mousemove', mouseMove]
   ];
 
   function addListeners() {
-    for (
-      const [
-        type,
-        fn
-      ] of listeners
-    ) {
-      window.addEventListener(
-        type,
-        fn,
-        true
-      );
-    }
+    for (const [type, fn] of listeners) window.addEventListener(type, fn, true);
   }
 
   function removeListeners() {
-    for (
-      const [
-        type,
-        fn
-      ] of listeners
-    ) {
-      window.removeEventListener(
-        type,
-        fn,
-        true
-      );
-    }
+    for (const [type, fn] of listeners) window.removeEventListener(type, fn, true);
   }
 
   function startTimers() {
-    if (!s.scanTimer) {
-      s.scanTimer =
-        setInterval(
-          () => {
-            if (
-              s.enabled
-            ) {
-              ensureRuntime();
-            }
-          },
-          1000
-        );
+    if (!state.scanTimer) {
+      state.scanTimer = setInterval(() => {
+        if (state.enabled) ensureRuntime();
+      }, 1000);
     }
 
-    if (!s.idleTimer) {
-      s.idleTimer =
-        setInterval(
-          () => {
-            if (
-              !s.enabled ||
-              s.active
-            ) {
-              return;
-            }
-
-            if (
-              Date.now() -
-                s.lastActivity >=
-              s.delaySeconds *
-                1000
-            ) {
-              activate();
-            }
-          },
-          250
-        );
+    if (!state.idleTimer) {
+      state.idleTimer = setInterval(() => {
+        if (!state.enabled || state.active) return;
+        if (Date.now() - state.lastActivity >= state.delaySeconds * 1000) activate();
+      }, 250);
     }
 
-    if (!s.fallbackTimer) {
-      s.fallbackTimer =
-        setInterval(
-          () => {
-            if (
-              !s.enabled ||
-              !s.active ||
-              !ensureRuntime()
-            ) {
-              return;
-            }
-
-            if (
-              Date.now() -
-                s.lastNativeCall <
-              300
-            ) {
-              return;
-            }
-
-            applyNow(
-              buildInput(
-                s.player
-                  .currentInput,
-                s.player
-              )
-            );
-          },
-          250
-        );
+    if (!state.fallbackTimer) {
+      state.fallbackTimer = setInterval(pulseFallback, 1000);
     }
   }
 
   function stopTimers() {
-    clearInterval(
-      s.scanTimer
-    );
-
-    clearInterval(
-      s.idleTimer
-    );
-
-    clearInterval(
-      s.fallbackTimer
-    );
-
-    s.scanTimer = 0;
-    s.idleTimer = 0;
-    s.fallbackTimer = 0;
+    clearInterval(state.scanTimer);
+    clearInterval(state.idleTimer);
+    clearInterval(state.fallbackTimer);
+    state.scanTimer = 0;
+    state.idleTimer = 0;
+    state.fallbackTimer = 0;
   }
 
   function enable() {
-    if (
-      s.destroyed
-    ) {
-      return false;
-    }
-
-    if (
-      s.enabled
-    ) {
-      return true;
-    }
-
-    s.enabled = true;
-    s.active = false;
-
-    s.lastActivity =
-      Date.now();
-
+    if (state.destroyed) return false;
+    if (state.enabled) return true;
+    state.enabled = true;
+    state.active = false;
+    state.lastActivity = Date.now();
+    scheduleNextPulse();
     addListeners();
     startTimers();
     ensureRuntime();
-
     return true;
   }
 
   function disable() {
-    s.enabled = false;
-
-    deactivate(false);
-
+    state.enabled = false;
+    state.active = false;
     stopTimers();
     removeListeners();
-    restoreHook();
-
-    s.player = null;
-    s.game = null;
-
-    s.lastActivity =
-      Date.now();
+    unhookPlayer();
+    state.lastActivity = Date.now();
+    state.lastNativeInput = 0;
   }
 
-  function applyConfig(
-    config = {}
-  ) {
-    const delay =
-      config.delaySeconds ??
-      config.delay ??
-      config.seconds;
-
-    if (
-      delay != null
-    ) {
-      s.delaySeconds =
-        clampDelay(delay);
-    }
-
-    if (
-      config.enabled === true
-    ) {
-      enable();
-    }
-
-    if (
-      config.enabled === false
-    ) {
-      disable();
-    }
+  function applyConfig(config = {}) {
+    const delay = config.delaySeconds ?? config.delay ?? config.seconds;
+    if (delay != null) state.delaySeconds = clampDelay(delay);
+    if (config.enabled === true) enable();
+    if (config.enabled === false) disable();
   }
 
-  function onConfig(e) {
+  function onConfig(event) {
     let config = {};
-
     try {
-      config =
-        typeof e.detail ===
-        'string'
-          ? JSON.parse(
-              e.detail || '{}'
-            )
-          : (
-              e.detail || {}
-            );
-    } catch {}
-
+      config = typeof event.detail === 'string'
+        ? JSON.parse(event.detail || '{}')
+        : (event.detail || {});
+    } catch (_) {}
     applyConfig(config);
   }
 
   function destroy() {
-    if (
-      s.destroyed
-    ) {
-      return;
-    }
-
-    document.removeEventListener(
-      EVENT,
-      onConfig
-    );
-
+    if (state.destroyed) return;
+    document.removeEventListener(EVENT, onConfig);
     disable();
-
-    s.destroyed = true;
-
-    try {
-      delete globalThis[
-        KEY
-      ];
-    } catch {}
+    state.destroyed = true;
+    try { if (globalThis[KEY]?.destroy === destroy) delete globalThis[KEY]; } catch (_) {}
   }
 
-  document.addEventListener(
-    EVENT,
-    onConfig
-  );
+  document.addEventListener(EVENT, onConfig);
 
   globalThis[KEY] = {
     enable,
     disable,
     destroy,
     applyConfig,
-
     get status() {
+      const api = state.player ? movementAPI()?.resolve(state.player) : null;
       return {
-        enabled:
-          s.enabled,
-
-        active:
-          s.active,
-
-        delaySeconds:
-          s.delaySeconds,
-
-        idleSeconds:
-          Math.max(
-            0,
-            (
-              Date.now() -
-              s.lastActivity
-            ) / 1000
-          ),
-
-        playerHooked:
-          !!s.player,
-
-        applyMethod:
-          s.applyName,
-
-        sendMethod:
-          s.sendName,
-
-        hidden:
-          document.hidden
+        enabled: state.enabled,
+        active: state.active,
+        delaySeconds: state.delaySeconds,
+        idleSeconds: Math.max(0, (Date.now() - state.lastActivity) / 1000),
+        playerHooked: !!state.player,
+        movementAPI: api?.names || null,
+        lastPulse: state.lastPulse,
+        nextPulseAt: state.nextPulseAt,
+        hidden: document.hidden
       };
     }
   };
