@@ -24,9 +24,10 @@
           for (let i = 1; i <= 3; i++) out.push(`world_ambience/butterfly/butterfly_${c}_0${i}.png`);
         return out;
       },
-      cap: 30, density: 0.85, spawnRate: 1.6, spawnRange: 32, minDist: 5,
+      cap: 60, density: 0.9, spawnRate: 5, spawnRange: 32, minDist: 5,
       height: 2.2, speed: 1.1, wander: 0.85, lifetime: 4, size: 0.32,
-      squishAmp: 0.18, squishFreq: 2.4
+      squishAmp: 0.18, squishFreq: 2.4,
+      group: { min: 4, max: 9, spread: 2.5, sameColor: false }
     },
     bird: {
       // orden FIJO de texturas (debe calzar con los PNG del pack en disco):
@@ -75,8 +76,9 @@
     },
     firefly: {
       texs: () => ['world_ambience/firefly/firefly_00.png', 'world_ambience/firefly/firefly_01.png'],
-      cap: 60, density: 0.75, spawnRate: 3, spawnRange: 26, minDist: 3,
-      size: 0.5, alpha: 1, lifetime: 26
+      cap: 90, density: 0.85, spawnRate: 6, spawnRange: 26, minDist: 3,
+      size: 0.5, alpha: 1, lifetime: 26,
+      group: { min: 2, max: 6, spread: 1.2, sameColor: true }
     },
     lilyPad: {
       texs: () => ['lily_pad_litter/lily_pad.png'],
@@ -462,7 +464,9 @@
   }
 
   // ── Spawn ──────────────────────────────────────────────────────────────
-  function spawnParticle(kind, def, now) {
+  // anchor: si viene, la partícula nace junto al líder de su grupo (misma
+  // posición aproximada y, en fireflies, el mismo emitter de pasto).
+  function spawnParticle(kind, def, now, anchor) {
     const mats = state.materials[kind];
     if (!mats?.length) return null;
     const game = state.game;
@@ -472,14 +476,19 @@
     if (!scene?.add) return null;
 
     let x, y, z;
-    if (kind === 'lilyPad' || kind === 'waterPollen' || kind === 'jellyfish') {
+    let emitterRef = null;
+    if (anchor) {
+      const g = def.group;
+      x = anchor.x + (Math.random() - 0.5) * g.spread * 2;
+      z = anchor.z + (Math.random() - 0.5) * g.spread * 2;
+      y = anchor.y + (Math.random() - 0.5) * g.spread;
+      emitterRef = anchor.emitterRef || null;
+    } else if (kind === 'lilyPad' || kind === 'waterPollen' || kind === 'jellyfish') {
       const em = randomEmitter('water');
       if (!em) return null;
-      const off = kind === 'lilyPad' ? 0 : (Math.random() - 0.5) * 6;
       x = em.x + (kind === 'lilyPad' ? 0 : (Math.random() - 0.5) * 5);
       z = em.z + (kind === 'lilyPad' ? 0 : (Math.random() - 0.5) * 5);
       y = kind === 'jellyfish' ? em.y - 1 - Math.random() * 4 : em.y;
-      void off;
     } else {
       const ang = Math.random() * Math.PI * 2;
       const dist = def.minDist + Math.random() * (def.spawnRange - def.minDist);
@@ -488,10 +497,16 @@
       y = pp.y + (Math.random() - 0.5) * (def.heightSpread ?? 3);
       if (kind === 'bird') y = pp.y + def.height * (0.6 + Math.random() * 0.4);
       if (kind === 'butterfly') y = groundHeightAt(x, z, pp.y) + def.height * (0.5 + Math.random() * 0.6);
-      if (kind === 'firefly') y = groundHeightAt(x, z, pp.y) + 0.3 + Math.random() * 1.2;
+      if (kind === 'firefly') {
+        emitterRef = randomEmitter('any');
+        if (emitterRef) { x = emitterRef.x; z = emitterRef.z; y = emitterRef.y + 0.3 + Math.random() * 1.2; }
+        else y = groundHeightAt(x, z, pp.y) + 0.3 + Math.random() * 1.2;
+      }
     }
 
     let matIdx = (Math.random() * mats.length) | 0;
+    // grupo monocolor: hereda la textura del líder
+    if (anchor && def.group?.sameColor && typeof anchor.matIdx === 'number') matIdx = anchor.matIdx;
     // jellyfish: color fijo (base por color, frame 0)
     let jellyBase = 0;
     if (kind === 'jellyfish') {
@@ -532,7 +547,8 @@
         lifetime: def.lifetime ? def.lifetime * (0.7 + Math.random() * 0.6) : Infinity,
         phase: Math.random() * Math.PI * 2,
         dir: Math.random() * Math.PI * 2,
-        jellyBase, birdVariant,
+        jellyBase, birdVariant, matIdx, emitterRef,
+        leaderRef: anchor || null,
         curMap: material.map
       };
     } catch (_) {
@@ -568,6 +584,20 @@
 
     switch (p.kind) {
       case 'butterfly': {
+        // seguidor de grupo: deriva hacia su líder para mantener la bandada
+        if (p.leaderRef) {
+          const L = p.leaderRef;
+          const dx = L.x - p.x, dz = L.z - p.z, dy = L.y - p.y;
+          const d2 = dx * dx + dz * dz;
+          if (d2 > 1.2) {
+            const d = Math.sqrt(d2);
+            const pull = Math.min(1, (d - 1) * 0.6) * 1.6 * dt;
+            p.x += (dx / d) * pull;
+            p.z += (dz / d) * pull;
+            p.dir = Math.atan2(dz, dx);
+          }
+          p.y += dy * Math.min(1, dt * 0.8);
+        }
         p.dir += (Math.random() - 0.5) * 0.8 * def.wander * dt * 60 * 0.05;
         const sp = def.speed * 0.35;
         p.x += Math.cos(p.dir) * sp * dt;
@@ -667,17 +697,23 @@
     const camera = getCamera(game);
     const night = isNight(game);
 
-    // spawn escalonado hasta el target por especie
+    // spawn escalonado hasta el target por especie (en grupos cuando aplica)
     for (const kind of Object.keys(SPECIES)) {
       const def = SPECIES[kind];
       if (kind === 'firefly' && !night) continue;
       const arr = state.particles[kind];
       const target = Math.min(def.cap, Math.ceil(def.cap * def.density));
       if (arr.length < target && Math.random() < def.spawnRate * dt * 2) {
-        const p = spawnParticle(kind, def, now);
-        if (p) {
-          if (kind === 'firefly') p.emitterRef = randomEmitter('any');
-          arr.push(p);
+        const leader = spawnParticle(kind, def, now);
+        if (leader) {
+          arr.push(leader);
+          if (def.group) {
+            const n = def.group.min + Math.floor(Math.random() * (def.group.max - def.group.min + 1));
+            for (let i = 1; i < n && arr.length < target; i++) {
+              const p = spawnParticle(kind, def, now, leader);
+              if (p) arr.push(p);
+            }
+          }
         }
       }
     }
