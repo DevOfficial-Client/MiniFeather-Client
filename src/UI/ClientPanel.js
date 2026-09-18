@@ -526,6 +526,7 @@
     distanceNameTags: false,
     damageParticles: false,
     waterSplash: true,
+    shineAmbience: false,
     patPat: false,
     itemPhysics: false,
     noWeather: false,
@@ -3067,6 +3068,7 @@
       { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc'), tags: ['pvp'] },
       { page: 'render', key: 'damageParticles', title: t('damageParticles'), desc: t('damageParticlesDesc'), tags: ['pvp'] },
       { page: 'render', key: 'waterSplash', title: t('waterSplash'), desc: t('waterSplashDesc'), tags: ['new'] },
+      { page: 'render', key: 'shineAmbience', title: t('shineAmbience'), desc: t('shineAmbienceDesc'), tags: ['new'] },
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc'), tags: [] },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc'), tags: [] },
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc'), tags: [] },
@@ -4040,6 +4042,26 @@
       disable() { sendWaterSplashConfig(false); },
       refresh() { sendWaterSplashConfig(MODULES.get('waterSplash')?.enabled === true); },
       destroy() { sendWaterSplashConfig(false); }
+    }));
+  }
+
+  function sendShineAmbienceConfig(enabled = settings.shineAmbience) {
+    let assetsBase = '';
+    try {
+      const url = chrome.runtime.getURL('assets/particles/');
+      if (url && !url.includes('://invalid/')) assetsBase = url;
+    } catch (_) {}
+    document.dispatchEvent(new CustomEvent('minifeather:shine-ambience-config', {
+      detail: JSON.stringify({ enabled: !!enabled, assetsBase })
+    }));
+  }
+
+  function initShineAmbienceModule() {
+    registerModule('shineAmbience', () => createLifecycle({
+      enable() { sendShineAmbienceConfig(true); },
+      disable() { sendShineAmbienceConfig(false); },
+      refresh() { sendShineAmbienceConfig(MODULES.get('shineAmbience')?.enabled === true); },
+      destroy() { sendShineAmbienceConfig(false); }
     }));
   }
 
@@ -6194,6 +6216,11 @@
               t('waterSplashDesc')
             )}
             ${renderToggle(
+              'shineAmbience',
+              t('shineAmbience'),
+              t('shineAmbienceDesc')
+            )}
+            ${renderToggle(
               'vanillaAnimations',
               'Vanilla Animations',
               'Freezes elbow and knee joints rigid for all players'
@@ -7271,7 +7298,7 @@
           <div class="mf-card-title">${t('accCreateTitle')}</div>
           <div class="mf-muted">${t('accCreateDesc')}</div>
           <div style="display:grid;gap:8px;margin-top:12px;">
-            <input id="mf-acc-new-user" class="mf-input" placeholder="${t('accNewUserPh')}" maxlength="16" autocomplete="off" style="background:var(--mf-bg2,#1a1d24);border:1px solid var(--mf-border,#2a2e37);border-radius:8px;color:inherit;padding:8px 10px;">
+            <input id="mf-acc-new-user" class="mf-input" placeholder="${t('accNewUserPh')}" maxlength="50" autocomplete="off" style="background:var(--mf-bg2,#1a1d24);border:1px solid var(--mf-border,#2a2e37);border-radius:8px;color:inherit;padding:8px 10px;">
             <input id="mf-acc-new-pass" class="mf-input" type="password" placeholder="${t('accNewPassPh')}" maxlength="64" autocomplete="new-password" style="background:var(--mf-bg2,#1a1d24);border:1px solid var(--mf-border,#2a2e37);border-radius:8px;color:inherit;padding:8px 10px;">
             <input id="mf-acc-new-skin" class="mf-input" placeholder="${t('accNewSkinPh')}" maxlength="200" autocomplete="off" style="background:var(--mf-bg2,#1a1d24);border:1px solid var(--mf-border,#2a2e37);border-radius:8px;color:inherit;padding:8px 10px;">
           </div>
@@ -7796,7 +7823,7 @@ function renderCreditsPage() {
   const NSB_BOOLEAN_KEYS = [
     'rebrand', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
-    'waterSplash', 'patPat', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
+    'waterSplash', 'shineAmbience', 'patPat', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
     'safeSneak', 'autoRespawn', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
     'dynamicCrosshair', 'vanillaAnimations', 'leafWind', 'handSway', 'betterPlayerLayers',
     'chatVideos', 'chatLinks', 'chatMemes', 'clientChat', 'rhythmParkour', 'guiPatch',
@@ -10578,6 +10605,7 @@ function renderCreditsPage() {
     setModuleEnabled('distanceNameTags', settings.distanceNameTags);
     setModuleEnabled('damageParticles', settings.damageParticles);
     setModuleEnabled('waterSplash', settings.waterSplash);
+    setModuleEnabled('shineAmbience', settings.shineAmbience);
     setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
@@ -11183,6 +11211,7 @@ function renderCreditsPage() {
     initDistanceNameTagsModule();
     initDamageParticlesModule();
     initWaterSplashModule();
+    initShineAmbienceModule();
     initPatPatModule();
     initItemPhysicsModule();
     initNoWeatherModule();
