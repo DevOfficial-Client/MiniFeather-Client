@@ -10604,7 +10604,9 @@ function renderCreditsPage() {
     setModuleEnabled('healthNameTags', settings.healthNameTags);
     setModuleEnabled('distanceNameTags', settings.distanceNameTags);
     setModuleEnabled('damageParticles', settings.damageParticles);
-    setModuleEnabled('waterSplash', settings.waterSplash);
+    // Shine Ambience comanda el pack de agua: splash + ondas de lluvia solo
+    // si AMBOS están activados (el toggle propio de waterSplash manda).
+    setModuleEnabled('waterSplash', settings.waterSplash && settings.shineAmbience);
     setModuleEnabled('shineAmbience', settings.shineAmbience);
     setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('itemPhysics', settings.itemPhysics);

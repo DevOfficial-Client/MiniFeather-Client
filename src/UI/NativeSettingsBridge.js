@@ -162,6 +162,7 @@
           description: 'Physics and environment effects.',
           modules: [
             { key: 'damageParticles', label: 'Damage Particles' },
+            { key: 'shineAmbience', label: 'Shine Ambience' },
             { key: 'waterSplash', label: 'Water Splash' },
             { key: 'patPat', label: 'PatPat' },
             { key: 'itemPhysics', label: 'Item Physics' },
