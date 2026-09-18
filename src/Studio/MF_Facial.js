@@ -1897,7 +1897,6 @@
         root.id = ID;
         root.innerHTML = `
 <div class="mff-head"><span class="dot"></span>👀 FACIALS — looping face animations
-    <span style="font-size:10px;color:#8a8a96;font-weight:400">Shift+F</span>
     <button data-act="close" style="margin-left:auto">✕</button></div>
 <div class="mff-tabs">
     <button data-tab="loop" class="on">Loops</button>
@@ -2553,13 +2552,10 @@
     };
     window.__MF_Facial = true;
 
-    window.addEventListener('keydown', (ev) => {
-        if (ev.shiftKey && (ev.key === 'F' || ev.key === 'f')) {
-            const t = ev.target;
-            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-            ev.preventDefault();
-            state.open ? close() : open();
-        }
+    // Apertura desde el panel del client (ISOLATED): el keybind Shift+F fue
+    // retirado — el botón de la página Custom despacha este evento.
+    document.addEventListener('minifeather:facial-open', () => {
+        state.open ? close() : open();
     });
 
     const LS_LAST = LS_KEY + '_last';

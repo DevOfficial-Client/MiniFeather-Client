@@ -7234,6 +7234,13 @@
           <div class="mf-card-title">${t('sectionActiveCapes')}</div>
           <div id="mf-active-capes" class="mf-active-list"></div>
         </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('sectionFacialAnimations')}</div>
+          <div class="mf-muted">${t('facialAnimationsDesc')}</div>
+          <div style="margin-top:12px;">
+            <button id="mf-facial-open" class="mf-btn primary">${t('facialAnimationsOpen')}</button>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -10464,6 +10471,11 @@ function renderCreditsPage() {
         showCapeStatus(t('capesReset'), '#facc15');
         refreshActiveCapes();
       });
+    });
+
+    // Facial Animations: abre/cierra el editor de MF_Facial (MAIN) via evento
+    panel.querySelector('#mf-facial-open')?.addEventListener('click', () => {
+      document.dispatchEvent(new CustomEvent('minifeather:facial-open', { detail: '{}' }));
     });
 
     if (panel.querySelector('#mf-spritesheet-checkbox')) {

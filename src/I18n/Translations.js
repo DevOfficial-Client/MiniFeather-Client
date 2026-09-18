@@ -76,6 +76,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorSavedOk": "✓ saved ({n} atlases) — persists after F5",
     "pbrEditorSaveEmpty": "nothing to save — enable PBR and install a pack first",
     "pbrEditorExportEmpty": "nothing to export — paint something first",
+    "sectionFacialAnimations": "Facial Animations",
+    "facialAnimationsDesc": "Looping face animations, auto eye movement and animated skin packs.",
+    "facialAnimationsOpen": "Open facial animations",
     "elytraFlight": "Elytra Flight",
     "elytraFlightDesc": "Plane-style Elytra controls with roll, banking, smoothing and optional horizon. Right-click to configure.",
     "elytraFlightSettings": "Elytra Flight Settings",
@@ -830,6 +833,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorSavedOk": "✓ guardado ({n} atlas) — persiste tras F5",
     "pbrEditorSaveEmpty": "nada que guardar — activa PBR e instala un pack primero",
     "pbrEditorExportEmpty": "nada que exportar — pinta algo primero",
+    "sectionFacialAnimations": "Animaciones Faciales",
+    "facialAnimationsDesc": "Animaciones de cara en loop, movimiento automático de ojos y packs de skins animadas.",
+    "facialAnimationsOpen": "Abrir animaciones faciales",
     "elytraFlight": "Vuelo con Elytra",
     "elytraFlightDesc": "Controles de Elytra estilo avión con roll, banking, suavizado y horizonte opcional. Clic derecho para configurar.",
     "elytraFlightSettings": "Ajustes de Vuelo con Elytra",
@@ -1573,6 +1579,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorSavedOk": "✓ 保存しました ({n}アトラス) — F5後も保持",
     "pbrEditorSaveEmpty": "保存するものなし — PBRを有効化してパックをインストール",
     "pbrEditorExportEmpty": "エクスポートなし — 先に何か描いてください",
+    "sectionFacialAnimations": "フェイシャルアニメーション",
+    "facialAnimationsDesc": "ループする顔のアニメーション、自動の目の動き、アニメ付きスキンパック。",
+    "facialAnimationsOpen": "フェイシャルアニメーションを開く",
     "elytraFlight": "エリトラフライト",
     "elytraFlightDesc": "ロール、バンク、スムージング、任意の水平線表示を備えた飛行機風エリトラ操作。右クリックで設定。",
     "elytraFlightSettings": "エリトラフライト設定",
@@ -2230,6 +2239,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorSavedOk": "✓ salvato ({n} atlanti) — persiste dopo F5",
     "pbrEditorSaveEmpty": "niente da salvare — attiva PBR e installa un pacchetto prima",
     "pbrEditorExportEmpty": "niente da esportare — dipingi qualcosa prima",
+    "sectionFacialAnimations": "Animazioni Facciali",
+    "facialAnimationsDesc": "Animazioni del volto in loop, movimento automatico degli occhi e pack di skin animate.",
+    "facialAnimationsOpen": "Apri animazioni facciali",
     "elytraFlight": "Volo Elytra",
     "elytraFlightDesc": "Controlli Elytra in stile aereo con rollio, banking, smoothing e orizzonte opzionale. Clic destro per configurare.",
     "elytraFlightSettings": "Impostazioni Volo Elytra",
@@ -2857,7 +2869,10 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorPickerInfo": "高度：{v}/255 ({p}%)",
     "pbrEditorSavedOk": "✓ 已保存（{n} 个图集）— F5 后保留",
     "pbrEditorSaveEmpty": "无可保存内容 — 请先启用 PBR 并安装材质包",
-    "pbrEditorExportEmpty": "无可导出内容 — 请先绘制一些内容"
+    "pbrEditorExportEmpty": "无可导出内容 — 请先绘制一些内容",
+    "sectionFacialAnimations": "面部动画",
+    "facialAnimationsDesc": "循环面部动画、自动眼球移动和动画皮肤包。",
+    "facialAnimationsOpen": "打开面部动画"
   },
   "fr": {
     "language": "Langue",
@@ -2913,7 +2928,10 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorPickerInfo": "hauteur : {v}/255 ({p}%)",
     "pbrEditorSavedOk": "✓ enregistré ({n} atlas) — persiste après F5",
     "pbrEditorSaveEmpty": "rien à enregistrer — activez PBR et installez un pack d'abord",
-    "pbrEditorExportEmpty": "rien à exporter — peignez d'abord"
+    "pbrEditorExportEmpty": "rien à exporter — peignez d'abord",
+    "sectionFacialAnimations": "Animations Faciales",
+    "facialAnimationsDesc": "Animations de visage en boucle, mouvement automatique des yeux et packs de skins animées.",
+    "facialAnimationsOpen": "Ouvrir les animations faciales"
   },
   "de": {
     "language": "Sprache",
@@ -2969,7 +2987,10 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorPickerInfo": "Höhe: {v}/255 ({p}%)",
     "pbrEditorSavedOk": "✓ gespeichert ({n} Atlanten) — bleibt nach F5",
     "pbrEditorSaveEmpty": "nichts zu speichern — PBR aktivieren und Paket installieren",
-    "pbrEditorExportEmpty": "nichts zu exportieren — erst etwas zeichnen"
+    "pbrEditorExportEmpty": "nichts zu exportieren — erst etwas zeichnen",
+    "sectionFacialAnimations": "Gesichtsanimationen",
+    "facialAnimationsDesc": "Loopende Gesichtanimationen, automatische Augenbewegung und animierte Skin-Packs.",
+    "facialAnimationsOpen": "Gesichtsanimationen öffnen"
   },
   "pt": {
     "language": "Idioma",
@@ -3025,7 +3046,10 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorPickerInfo": "altura: {v}/255 ({p}%)",
     "pbrEditorSavedOk": "✓ salvo ({n} atlas) — persiste após F5",
     "pbrEditorSaveEmpty": "nada para salvar — ative PBR e instale um pacote primeiro",
-    "pbrEditorExportEmpty": "nada para exportar — pinte algo primeiro"
+    "pbrEditorExportEmpty": "nada para exportar — pinte algo primeiro",
+    "sectionFacialAnimations": "Animações Faciais",
+    "facialAnimationsDesc": "Animações de rosto em loop, movimento automático dos olhos e packs de skins animadas.",
+    "facialAnimationsOpen": "Abrir animações faciais"
   },
   "ru": {
     "language": "Язык",
@@ -3081,7 +3105,10 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorPickerInfo": "высота: {v}/255 ({p}%)",
     "pbrEditorSavedOk": "✓ сохранено ({n} атласов) — сохраняется после F5",
     "pbrEditorSaveEmpty": "нечего сохранять — сначала включите PBR и установите пакет",
-    "pbrEditorExportEmpty": "нечего экспортировать — сначала нарисуйте что-нибудь"
+    "pbrEditorExportEmpty": "нечего экспортировать — сначала нарисуйте что-нибудь",
+    "sectionFacialAnimations": "Анимации лица",
+    "facialAnimationsDesc": "Циклические анимации лица, автоматическое движение глаз и анимированные паки скинов.",
+    "facialAnimationsOpen": "Открыть анимации лица"
   },
   "ko": {
     "language": "언어",
@@ -3137,7 +3164,10 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorPickerInfo": "높이: {v}/255 ({p}%)",
     "pbrEditorSavedOk": "✓ 저장됨 ({n} 아틀라스) — F5 후에도 유지",
     "pbrEditorSaveEmpty": "저장할 내용 없음 — 먼저 PBR을 켜고 팩을 설치하세요",
-    "pbrEditorExportEmpty": "내보낼 내용 없음 — 먼저 무언가 그리세요"
+    "pbrEditorExportEmpty": "내보낼 내용 없음 — 먼저 무언가 그리세요",
+    "sectionFacialAnimations": "표정 애니메이션",
+    "facialAnimationsDesc": "루프 표정 애니메이션, 자동 눈 움직임, 애니메이션 스킨 팩.",
+    "facialAnimationsOpen": "표정 애니메이션 열기"
   }
 };
 })();
