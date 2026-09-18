@@ -20,6 +20,10 @@ const state = {
     chatSeen: new WeakSet(),
     announceTimer: null,
     skinTold: new Map(),           
+    // Titan & Tiny: escala propia + escalas conocidas de peers
+    myScale: 1,
+    peerScales: new Map(),         
+    scaleTold: new Map(),          
 };
 
 function warn(...a) { console.warn(TAG, ...a); }
@@ -153,12 +157,15 @@ function wire(conn) {
     conn.on('open', () => {
         clearTimeout(to);
         state.conns.set(id, conn);
+        state.scaleTold.delete(id);
         sendTo(conn, {
             t: 'hello', name: myName(), code: state.myCode,
             peers: knownCodes(),
             skins: mySkinIds(),
+            scale: myTitanScale(),
         });
         setTimeout(() => resendMySkin(conn), 700);
+        setTimeout(() => sendMyScale(conn), 900);
     });
     conn.on('data', (m) => handleMsg(conn, m));
     conn.on('close', () => dropConn(conn));
@@ -170,7 +177,9 @@ function dropConn(conn) {
     const name = state.names.get(conn.peer) || conn.peer;
     state.names.delete(conn.peer);
     state.skinTold.delete(conn.peer);
+    state.scaleTold.delete(conn.peer);
     revertMeshSkin(name);
+    revertPeerScale(name);
 }
 
 function knownCodes() {
@@ -188,6 +197,19 @@ function handleMsg(conn, m) {
     switch (m.t) {
         case 'hello': {
             state.names.set(conn.peer, m.name || 'nodo');
+
+            // escala Titan & Tiny del peer que saluda
+            if (Number.isFinite(+m.scale) && +m.scale > 0) {
+                state.peerScales.set(String(m.name || ''), Math.min(5, Math.max(0.2, +m.scale)));
+            }
+
+            // redistribuir a los demás la escala conocida de este peer
+            if (Number.isFinite(+m.scale) && +m.scale !== 1) {
+                for (const [pid, c] of state.conns) {
+                    if (pid === conn.peer) continue;
+                    sendTo(c, { t: 'tt', scale: +m.scale, name: m.name || 'nodo' });
+                }
+            }
             
             if (Array.isArray(m.peers)) {
                 for (const code of m.peers) {
@@ -231,6 +253,20 @@ function handleMsg(conn, m) {
         case 'announce': {
             if (typeof m.code === 'string' && m.code !== state.myCode && !state.conns.has(m.code)) {
                 connect(m.code);
+            }
+            break;
+        }
+        case 'tt': {
+            // Titan & Tiny de un peer (propagado por relay)
+            const f = +m.scale;
+            if (!Number.isFinite(f) || f <= 0) break;
+            const name = String(m.name || '');
+            const clamped = Math.min(5, Math.max(0.2, f));
+            state.peerScales.set(name, clamped);
+            // relay al resto (los vecinos ya conectados quizá no lo conocen)
+            for (const [pid, c] of state.conns) {
+                if (pid === conn.peer) continue;
+                sendTo(c, { t: 'tt', scale: clamped, name });
             }
             break;
         }
@@ -377,6 +413,92 @@ function revertMeshSkin(name) {
     } catch {}
 }
 
+// ─── Titan & Tiny multiplayer: aplicar la escala reportada al mesh del peer ───
+
+function myTitanScale() {
+    try {
+        const tt = globalThis.TitanTiny;
+        return tt?.enabled ? Math.min(5, Math.max(0.2, +(Number(tt.scale) || 1))) : 1;
+    } catch { return 1; }
+}
+
+function sendMyScale(conn) {
+    try {
+        const sc = myTitanScale();
+        const id = conn?.peer;
+        if (id && state.scaleTold.get(id) === sc) return;
+        if (id) state.scaleTold.set(id, sc);
+        sendTo(conn, { t: 'tt', scale: sc, name: myName() });
+    } catch {}
+}
+
+const scaleMeshes = new Map();      // username -> { mesh, base:{x,y,z}, at }
+const PEER_SCALE_POLL = 2500;
+
+function setMeshScale(mesh, base, factor) {
+    try {
+        mesh.scale.set(base.x * factor, base.y * factor, base.z * factor);
+        if (mesh.matrixAutoUpdate === false && typeof mesh.updateMatrix === 'function') mesh.updateMatrix();
+    } catch {}
+}
+
+function revertPeerScale(name) {
+    if (!name) return;
+    state.peerScales.delete(name);
+    const rec = scaleMeshes.get(name);
+    if (rec?.mesh?.scale && rec.base) setMeshScale(rec.mesh, rec.base, 1);
+    scaleMeshes.delete(name);
+}
+
+function peerScaleTick() {
+    // 1) reportar mi propia escala cuando cambie
+    try {
+        const sc = myTitanScale();
+        if (sc !== state.myScale) {
+            state.myScale = sc;
+            broadcast({ t: 'tt', scale: sc, name: myName() });
+        }
+    } catch {}
+
+    // 2) aplicar/revertir las escalas conocidas
+    if (!state.peerScales.size) {
+        for (const [name, rec] of scaleMeshes) {
+            if (!rec.mesh?.parent) { scaleMeshes.delete(name); continue; }
+            setMeshScale(rec.mesh, rec.base, 1);
+            scaleMeshes.delete(name);
+        }
+        return;
+    }
+
+    const now = performance.now();
+    for (const [name, factor] of state.peerScales) {
+        let rec = scaleMeshes.get(name);
+
+        // mesh muerto/viejo -> re-resolver
+        if (rec && (!rec.mesh?.parent || now - rec.at > PEER_SCALE_POLL * 3)) {
+            setMeshScale(rec.mesh, rec.base, 1);
+            scaleMeshes.delete(name);
+            rec = null;
+        }
+
+        if (!rec) {
+            const entity = entityByUsername(name);
+            const mesh = entity?.mesh;
+            if (!mesh?.scale) continue;
+            rec = {
+                mesh,
+                base: { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z },
+                at: now
+            };
+            scaleMeshes.set(name, rec);
+        }
+
+        rec.at = now;
+        setMeshScale(rec.mesh, rec.base, factor);
+    }
+}
+const scaleTimer = setInterval(peerScaleTick, PEER_SCALE_POLL);
+
 function announce(code) {
     const g = getGame();
     const chat = g?.chat;
@@ -461,10 +583,14 @@ globalThis.MF_Mesh = {
     },
     dispose() {
         clearInterval(chatTimer);
+        clearInterval(scaleTimer);
         if (state.announceTimer) clearInterval(state.announceTimer);
+        for (const name of [...state.peerScales.keys()]) revertPeerScale(name);
         for (const c of state.conns.values()) { try { c.close(); } catch {} }
         state.conns.clear();
         state.names.clear();
+        state.peerScales.clear();
+        state.scaleTold.clear();
         try { state.peer?.destroy?.(); } catch {}
         state.peer = null; state.myCode = null; state.status = 'off';
     },
