@@ -76,7 +76,7 @@
     },
     firefly: {
       texs: () => ['world_ambience/firefly/firefly_00.png', 'world_ambience/firefly/firefly_01.png'],
-      cap: 90, density: 0.85, spawnRate: 6, spawnRange: 26, minDist: 3,
+      cap: 160, density: 0.95, spawnRate: 14, spawnRange: 26, minDist: 3,
       size: 0.5, alpha: 1, lifetime: 26,
       group: { min: 2, max: 6, spread: 1.2, sameColor: true }
     },
@@ -95,6 +95,20 @@
       cap: 24, density: 0.85, spawnRate: 0.5, spawnRange: 42, minDist: 12,
       swim: 0.11, drift: 0.6, lifetime: 28, size: 1.2, alpha: 0.88,
       animSpeed: 0.38
+    },
+    boatWake: {
+      // estela de bote: espuma en V detrás del casco (boat_trail_foam) +
+      // salpicaduras laterales que se alejan (boat_trail_wake).
+      // Parámetros de defaults/experimental.json (boatTrailSplash*).
+      texs: () => {
+        const out = [];
+        for (let i = 1; i <= 24; i++) out.push(`boat_trail_splash/splash_${String(i).padStart(2, '0')}.png`);
+        return out;
+      },
+      cap: 220, size: 0.48, alpha: 1, animSpeed: 1,
+      speedThreshold: 0.06, spawnRate: 20,
+      foamDensity: 11.25, outwardDensity: 1.1, hullSpread: 1,
+      followStrength: 0.78, outwardSpeed: 1, lift: 1, gravity: 1, drag: 1
     }
   };
   // jellyfish: base de índice por color (blue 0, orange 9, pink 18)
@@ -111,7 +125,7 @@
   const GRASS_BLOCKS = new Set(['grass_block', 'tall_grass', 'short_grass', 'fern', 'moss_block', 'moss_carpet']);
   const WATER_BLOCKS = new Set(['water', 'flowing_water']);
   const NIGHT_START = 13000, NIGHT_END = 23000;
-  const MAX_EMITTERS = 160;
+  const MAX_EMITTERS = 420;
 
   // ── Estado ─────────────────────────────────────────────────────────────
   const state = {
@@ -126,7 +140,8 @@
     verticalGeometry: null,
     horizontalGeometry: null,
     scratchVec3: null,
-    particles: { butterfly: [], bird: [], pollen: [], waterPollen: [], firefly: [], lilyPad: [], jellyfish: [] },
+    particles: { butterfly: [], bird: [], pollen: [], waterPollen: [], firefly: [], lilyPad: [], jellyfish: [], boatWake: [] },
+    boats: new Map(),
     emitters: [],
     lastFrame: 0,
     raf: 0,
@@ -429,7 +444,7 @@
             const h = hashXZ(wx, wz);
             const r = h / 4294967296;
             if (state.emitters.length >= MAX_EMITTERS) return;
-            if (GRASS_BLOCKS.has(name) && r < 0.12) {
+            if (GRASS_BLOCKS.has(name) && r < 0.30) {
               state.emitters.push({
                 kind: name === 'tall_grass' ? 'tall' : 'low',
                 x: wx + 0.5, y: realY + 1, z: wz + 0.5
@@ -684,6 +699,181 @@
     return true;
   }
 
+  // ── Estela de botes (boat_trail_foam + boat_trail_wake) ───────────────
+  function boatTypeKey(entity) {
+    const t = entity?.type;
+    if (typeof t === 'string' && t) return t.toLowerCase();
+    return String(entity?.constructor?.name || '').replace(/^Entity/, '').toLowerCase();
+  }
+
+  function isBoatEntity(entity) {
+    const key = boatTypeKey(entity);
+    if (!key) return false;
+    return key === 'boat' || key.endsWith('_boat') || key.includes('boat');
+  }
+
+  function resolveEntityMap() {
+    const world = state.game?.world;
+    for (const candidate of [world?.entities, world?.entityMap, world?.entitiesDump]) {
+      if (candidate && typeof candidate.values === 'function') {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  function spawnWakeParticle(kind, x, y, z, vx, vy, vz, size) {
+    const mats = state.materials.boatWake;
+    if (!mats?.length) return null;
+    const scene = getScene(state.game);
+    if (!scene?.add) return null;
+    try {
+      const matIdx = (Math.random() * mats.length) | 0;
+      const material = mats[matIdx].clone();
+      const MeshCtor = state.referenceMesh.constructor;
+      const mesh = new MeshCtor(state.horizontalGeometry, material);
+      mesh.name = 'MiniFeatherShine' + kind;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 3;
+      mesh.scale.set(size, 1, size);
+      mesh.position.set(x, y, z);
+      mesh.matrixAutoUpdate = true;
+      mesh.updateMatrix();
+      mesh.updateMatrixWorld(true);
+      scene.add(mesh);
+      return {
+        kind: 'boatWake', mesh, material, x, y, z, vx, vy, vz,
+        born: performance.now(), size,
+        life: 550 + Math.random() * 400,
+        animStart: matIdx,
+        curMap: material.map
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function updateBoatWakes(dt) {
+    const def = SPECIES.boatWake;
+    const game = state.game;
+    if (!game?.world) return;
+    const pp = game?.player?.pos;
+    if (!pp) return;
+    const now = performance.now();
+
+    const entities = resolveEntityMap();
+    if (!entities) return;
+
+    // limpiar botes que ya no existen
+    const seen = new Set();
+    try {
+      for (const entity of entities.values()) {
+        if (!isBoatEntity(entity)) continue;
+        const key = entity?.id !== undefined ? `id:${entity.id}`
+          : entity?.uuid ? `uuid:${entity.uuid}` : null;
+        if (!key || !entity?.pos) continue;
+        seen.add(key);
+
+        const speed = Math.hypot(
+          Number(entity.motion?.x ?? 0), Number(entity.motion?.z ?? 0)
+        );
+        const inWater = entity.inWater === true;
+
+        let boat = state.boats.get(key);
+        if (!boat) {
+          boat = { x: 0, y: 0, z: 0, lastSpawn: 0, lostAt: 0 };
+          state.boats.set(key, boat);
+        }
+        boat.pos = entity.pos;
+        boat.lostAt = now;
+
+        if (!inWater || speed < def.speedThreshold) continue;
+        if (now - boat.lastSpawn < 1000 / def.spawnRate) continue;
+        boat.lastSpawn = now;
+
+        const dirX = Number(entity.motion.x) / (speed || 1);
+        const dirZ = Number(entity.motion.z) / (speed || 1);
+        const yaw = Number(entity.yaw ?? entity.rotation?.y ?? 0);
+        void yaw;
+        const sternX = Number(entity.pos.x) - dirX * 0.9;
+        const sternZ = Number(entity.pos.z) - dirZ * 0.9;
+        const waterY = Number(entity.pos.y) + 0.1;
+
+        // espuma en V: partículas que siguen la dirección del bote (foam)
+        const foamCount = Math.max(1, Math.round(def.foamDensity * 0.35));
+        for (let i = 0; i < foamCount && state.particles.boatWake.length < def.cap; i++) {
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const latX = -dirZ * side, latZ = dirX * side;
+          const back = 0.3 + Math.random() * 1.4;
+          const out = (Math.random() * 0.25) * def.outwardSpeed;
+          const p = spawnWakeParticle(
+            'Foam',
+            sternX - dirX * back + latX * (0.3 + Math.random() * 0.3),
+            waterY,
+            sternZ - dirZ * back + latZ * (0.3 + Math.random() * 0.3),
+            -dirX * 0.12 * def.followStrength + latX * out,
+            def.lift * (0.5 + Math.random() * 0.5) * 0.15,
+            -dirZ * 0.12 * def.followStrength + latZ * out,
+            def.size * (0.8 + Math.random() * 0.5)
+          );
+          if (p) state.particles.boatWake.push(p);
+        }
+
+        // wake: salpicaduras laterales más rápidas que se alejan del casco
+        const wakeCount = Math.max(1, Math.round(def.outwardDensity * 0.4));
+        for (let i = 0; i < wakeCount && state.particles.boatWake.length < def.cap;  i++) {
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const latX = -dirZ * side, latZ = dirX * side;
+          const p = spawnWakeParticle(
+            'Wake',
+            sternX + latX * 0.4,
+            waterY,
+            sternZ + latZ * 0.4,
+            latX * (0.5 + Math.random() * 0.4) * def.outwardSpeed,
+            def.lift * (0.8 + Math.random() * 0.6) * 0.3,
+            latZ * (0.5 + Math.random() * 0.4) * def.outwardSpeed,
+            def.size * (0.6 + Math.random() * 0.4)
+          );
+          if (p) state.particles.boatWake.push(p);
+        }
+      }
+    } catch (_) {}
+
+    for (const [key, boat] of state.boats) {
+      if (!seen.has(key) || now - boat.lostAt > 3000) state.boats.delete(key);
+    }
+
+    // update + muerte de partículas de estela
+    const arr = state.particles.boatWake;
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const p = arr[i];
+      const progress = (now - p.born) / p.life;
+      if (progress >= 1) {
+        try { p.mesh.removeFromParent?.(); } catch (_) {}
+        try { p.material.dispose?.(); } catch (_) {}
+        arr.splice(i, 1);
+        continue;
+      }
+      const t = (now - p.born) / 1000;
+      const dragF = Math.max(0, 1 - def.drag * t);
+      p.mesh.position.set(
+        p.x + p.vx * t * dragF,
+        p.y + p.vy * t - 0.5 * def.gravity * t * t * 0.2,
+        p.z + p.vz * t * dragF
+      );
+      let opacity = 1;
+      if (progress < 0.08) opacity = progress / 0.08;
+      if (progress > 0.6) opacity = 1 - (progress - 0.6) / 0.4;
+      try { p.material.opacity = Math.max(0, Math.min(1, opacity)) * def.alpha; } catch (_) {}
+      // animación de frames 24 (secuencia splash)
+      const frame = Math.floor((now - p.born) / 1000 * 24 * def.animSpeed * 0.5) % 24;
+      setParticleFrame(p, state.materials.boatWake, frame);
+      p.mesh.visible = true;
+    }
+  }
+
   // ── Loop principal ────────────────────────────────────────────────────
   function tick(now) {
     if (!state.enabled || state.destroyed) return;
@@ -697,8 +887,11 @@
     const camera = getCamera(game);
     const night = isNight(game);
 
+    updateBoatWakes(dt);
+
     // spawn escalonado hasta el target por especie (en grupos cuando aplica)
     for (const kind of Object.keys(SPECIES)) {
+      if (kind === 'boatWake') continue; // dirigido por entidades (bots)
       const def = SPECIES[kind];
       if (kind === 'firefly' && !night) continue;
       const arr = state.particles[kind];
@@ -720,6 +913,7 @@
 
     // update + muerte
     for (const kind of Object.keys(SPECIES)) {
+      if (kind === 'boatWake') continue; // su update vive en updateBoatWakes
       const arr = state.particles[kind];
       for (let i = arr.length - 1; i >= 0; i--) {
         const p = arr[i];
