@@ -109,6 +109,18 @@
       speedThreshold: 0.06, spawnRate: 20,
       foamDensity: 11.25, outwardDensity: 1.1, hullSpread: 1,
       followStrength: 0.78, outwardSpeed: 1, lift: 1, gravity: 1, drag: 1
+    },
+    shootingStar: {
+      // Estrellas fugaces nocturnas. En el pack Shine es un efecto de shader
+      // (sin texturas), así que los sprites son procedurales; los parámetros
+      // vienen de defaults/experimental.json (shootingStar*): intervalo
+      // 25-90s, velocidad 1.28, ángulo fijo 34°±8°, tamaño 2.5, hues
+      // 150/210/285, saturación 0.416, colorPunch 2.1.
+      texs: () => [],
+      minSeconds: 25, maxSeconds: 90, firstSeconds: [6, 20],
+      travelSpeed: 1.28, curve: 1, size: 2.5,
+      hues: [150, 210, 285], saturation: 0.4157, colorPunch: 2.1,
+      cap: 2, trailLife: 0.55, trailCap: 260
     }
   };
   // jellyfish: base de índice por color (blue 0, orange 9, pink 18)
@@ -140,8 +152,10 @@
     verticalGeometry: null,
     horizontalGeometry: null,
     scratchVec3: null,
-    particles: { butterfly: [], bird: [], pollen: [], waterPollen: [], firefly: [], lilyPad: [], jellyfish: [], boatWake: [] },
+    particles: { butterfly: [], bird: [], pollen: [], waterPollen: [], firefly: [], lilyPad: [], jellyfish: [], boatWake: [], shootingStar: [] },
     boats: new Map(),
+    starSpriteTex: null,
+    nextStarAt: 0,
     emitters: [],
     lastFrame: 0,
     raf: 0,
@@ -476,6 +490,252 @@
       if (bestD < 1) break;
     }
     return best ? best.y : (fallback ?? 64);
+  }
+
+  // ── Estrellas fugaces (shader del pack → sprites procedurales) ────────
+  function starHueToRgb(hue) {
+    // HSL→RGB rápido (l calculado por quien llama)
+    const s = SPECIES.shootingStar.saturation;
+    const l = 0.75;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const hp = (((hue % 360) + 360) % 360) / 60;
+    const x = c * (1 - Math.abs((hp % 2) - 1));
+    let r = 0, g = 0, b = 0;
+    if (hp < 1) { r = c; g = x; }
+    else if (hp < 2) { r = x; g = c; }
+    else if (hp < 3) { g = c; b = x; }
+    else if (hp < 4) { g = x; b = c; }
+    else if (hp < 5) { r = x; b = c; }
+    else { r = c; b = x; }
+    const m = l - c / 2;
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  }
+
+  function buildStarSpriteTexture(source, sourceMap) {
+    if (state.starSpriteTex) return state.starSpriteTex;
+    try {
+      const size = 64;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      // glow radial blanco-cálido: núcleo sólido + halo con colorPunch
+      const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      grad.addColorStop(0, 'rgba(255,255,255,1)');
+      grad.addColorStop(0.18, 'rgba(255,255,255,0.95)');
+      grad.addColorStop(0.42, 'rgba(255,255,255,0.35)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+      const TextureCtor = sourceMap.constructor;
+      const texture = new TextureCtor(canvas);
+      copyTextureSettings(sourceMap, texture);
+      texture.needsUpdate = true;
+      state.starSpriteTex = texture;
+    } catch (_) {
+      state.starSpriteTex = null;
+    }
+    return state.starSpriteTex;
+  }
+
+  function spawnShootingStar(game, pp, now) {
+    const def = SPECIES.shootingStar;
+    const scene = getScene(game);
+    if (!scene?.add || !state.referenceMesh) return;
+
+    // sprite de la cabeza
+    const tex = buildStarSpriteTexture(null, state.materials.firefly?.[0]?.map);
+    if (!tex) return;
+    const baseMat = state.materials.firefly?.[0];
+    if (!baseMat) return;
+    try {
+      const material = baseMat.clone();
+      material.map = tex;
+      material.emissive?.set?.(0xffffff);
+      if ('emissiveIntensity' in material) material.emissiveIntensity = 1.2;
+      material.opacity = 1;
+      material.transparent = true;
+      material.depthWrite = false;
+      material.needsUpdate = true;
+      material.__mfStarColor = null; // se pinta abajo vía color
+
+      const MeshCtor = state.referenceMesh.constructor;
+      const head = new MeshCtor(state.verticalGeometry, material);
+      head.name = 'MiniFeatherShineStar';
+      head.castShadow = false; head.receiveShadow = false;
+      head.frustumCulled = false;
+      head.renderOrder = 4;
+
+      // dirección: ángulo fijo 34° ± 8° del pack, azimut aleatorio
+      const angleDeg = 34 + (Math.random() * 2 - 1) * 8;
+      const angleRad = angleDeg * Math.PI / 180;
+      const azim = Math.random() * Math.PI * 2;
+      // cae hacia abajo: x/z horizontal, y descendente según pendiente
+      const horiz = Math.cos(angleRad);
+      const speed = def.travelSpeed * 26;
+      const vx = Math.cos(azim) * horiz * speed;
+      const vz = Math.sin(azim) * horiz * speed;
+      const vy = -Math.sin(angleRad) * speed;
+
+      // spawn sobre el jugador, a la vista: 60-100 bloques de altura
+      const y = pp.y + 60 + Math.random() * 40;
+      const dist = 40 + Math.random() * 60;
+      const sx = pp.x + Math.cos(azim) * dist;
+      const sz = pp.z + Math.sin(azim) * dist;
+
+      const hue = def.hues[(Math.random() * def.hues.length) | 0];
+      // tinte del pack: mezcla blanca + hue (teal/azul/morado), colorPunch
+      // aplicado como saturación extra del tinte
+      const [r, g, b] = starHueToRgb(hue);
+      const tint = ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
+      try {
+        // color base más claro (mezcla 50/50 con blanco) para el "punch"
+        const cr = Math.min(255, Math.round((r + 255) / 2 * Math.min(1, 0.6 + 0.2 * (def.colorPunch - 1))));
+        const cg = Math.min(255, Math.round((g + 255) / 2 * Math.min(1, 0.6 + 0.2 * (def.colorPunch - 1))));
+        const cb = Math.min(255, Math.round((b + 255) / 2 * Math.min(1, 0.6 + 0.2 * (def.colorPunch - 1))));
+        material.color?.set?.((cr << 16) | (cg << 8) | cb);
+      } catch (_) {}
+      void tint;
+
+      const star = {
+        kind: 'shootingStar', mesh: head, material, x: sx, y, z: sz,
+        vx, vy, vz, born: now, size: def.size,
+        hue, tintColor: material.color?.getHex?.() ?? 0xffffff,
+        phase: Math.random() * Math.PI * 2,
+        life: 2.2 + Math.random() * 1.3,
+        trail: [], trailAcc: 0,
+        trailTex: tex
+      };
+      head.position.set(sx, y, sz);
+      head.scale.set(def.size, def.size, 1);
+      scene.add(head);
+      state.particles.shootingStar.push(star);
+    } catch (_) {}
+  }
+
+  function updateShootingStars(dt, now, camera) {
+    const def = SPECIES.shootingStar;
+    const arr = state.particles.shootingStar;
+    const game = state.game;
+    const pp = game?.player?.pos;
+
+    // spawn programado (solo de noche, igual que el shader del pack)
+    if (pp && isNight(game) && arr.length < def.cap) {
+      if (!state.nextStarAt) {
+        state.nextStarAt = now + 1000 * (def.firstSeconds[0] +
+          Math.random() * (def.firstSeconds[1] - def.firstSeconds[0]));
+      } else if (now >= state.nextStarAt) {
+        spawnShootingStar(game, pp, now);
+        state.nextStarAt = now + 1000 * (def.minSeconds +
+          Math.random() * (def.maxSeconds - def.minSeconds));
+      }
+    }
+    if (!isNight(game)) state.nextStarAt = 0;
+
+    for (let s = arr.length - 1; s >= 0; s--) {
+      const star = arr[s];
+      const t = (now - star.born) / 1000;
+      if (t > star.life) {
+        try { star.mesh.removeFromParent?.(); } catch (_) {}
+        try { star.material.dispose?.(); } catch (_) {}
+        for (const d of star.trail) {
+          try { d.mesh.removeFromParent?.(); } catch (_) {}
+          try { d.material.dispose?.(); } catch (_) {}
+        }
+        star.trail.length = 0;
+        arr.splice(s, 1);
+        continue;
+      }
+      // curva: el pack usa curve 1 → ligera caída adicional
+      const curveF = 1 + t * 0.35 * def.curve;
+      const nx = star.x + star.vx * dt * curveF;
+      const ny = star.y + star.vy * dt * curveF;
+      const nz = star.z + star.vz * dt * curveF;
+      star.x = nx; star.y = ny; star.z = nz;
+
+      // estela: spawn de puntos por distancia recorrida
+      const seg = Math.hypot(nx - (star.lx ?? nx), ny - (star.ly ?? ny), nz - (star.lz ?? nz));
+      star.lx = nx; star.ly = ny; star.lz = nz;
+      star.trailAcc += seg;
+      const step = 1.2;
+      while (star.trailAcc > step && star.trail.length < def.trailCap) {
+        star.trailAcc -= step;
+        spawnTrailDot(star, now);
+      }
+      updateTrailDots(star, now, camera);
+
+      // billboard + fade final
+      try {
+        const el = camera?.matrixWorld?.elements;
+        if (el && el.length >= 16 && state.scratchVec3) {
+          state.scratchVec3.set(el[12], el[13], el[14]);
+          star.mesh.lookAt(state.scratchVec3);
+        }
+      } catch (_) {}
+      const fadeT = t / star.life;
+      const opacity = fadeT > 0.75 ? 1 - (fadeT - 0.75) / 0.25 : 1;
+      try { star.material.opacity = opacity; } catch (_) {}
+      try {
+        star.mesh.position.set(star.x, star.y, star.z);
+        star.mesh.updateMatrix();
+        star.mesh.updateMatrixWorld(true);
+      } catch (_) {}
+    }
+  }
+
+  function spawnTrailDot(star, now) {
+    const scene = getScene(state.game);
+    if (!scene?.add) return;
+    const baseMat = state.materials.firefly?.[0];
+    if (!baseMat || !star.trailTex) return;
+    try {
+      const material = baseMat.clone();
+      material.map = star.trailTex;
+      material.opacity = 0.55;
+      material.transparent = true;
+      material.depthWrite = false;
+      material.needsUpdate = true;
+      material.color?.set?.(star.tintColor);
+      const MeshCtor = state.referenceMesh.constructor;
+      const dot = new MeshCtor(state.verticalGeometry, material);
+      dot.name = 'MiniFeatherShineStarTrail';
+      dot.castShadow = false; dot.receiveShadow = false;
+      dot.frustumCulled = false;
+      dot.renderOrder = 3;
+      dot.position.set(star.x, star.y, star.z);
+      const sz = 0.35 + Math.random() * 0.25;
+      dot.scale.set(sz, sz, 1);
+      dot.updateMatrix();
+      dot.updateMatrixWorld(true);
+      scene.add(dot);
+      star.trail.push({ mesh: dot, material, born: now, size: sz });
+    } catch (_) {}
+  }
+
+  function updateTrailDots(star, now, camera) {
+    const def = SPECIES.shootingStar;
+    for (let i = star.trail.length - 1; i >= 0; i--) {
+      const d = star.trail[i];
+      const age = (now - d.born) / 1000;
+      if (age > def.trailLife) {
+        try { d.mesh.removeFromParent?.(); } catch (_) {}
+        try { d.material.dispose?.(); } catch (_) {}
+        star.trail.splice(i, 1);
+        continue;
+      }
+      const k = 1 - age / def.trailLife;
+      try {
+        d.material.opacity = 0.55 * k;
+        const s = d.size * (0.3 + 0.7 * k);
+        d.mesh.scale.set(s, s, 1);
+        const el = camera?.matrixWorld?.elements;
+        if (el && el.length >= 16 && state.scratchVec3) {
+          state.scratchVec3.set(el[12], el[13], el[14]);
+          d.mesh.lookAt(state.scratchVec3);
+        }
+        d.mesh.updateMatrix();
+        d.mesh.updateMatrixWorld(true);
+      } catch (_) {}
+    }
   }
 
   // ── Spawn ──────────────────────────────────────────────────────────────
@@ -888,10 +1148,11 @@
     const night = isNight(game);
 
     updateBoatWakes(dt);
+    updateShootingStars(dt, now, camera);
 
     // spawn escalonado hasta el target por especie (en grupos cuando aplica)
     for (const kind of Object.keys(SPECIES)) {
-      if (kind === 'boatWake') continue; // dirigido por entidades (bots)
+      if (kind === 'boatWake' || kind === 'shootingStar') continue; // sistemas propios
       const def = SPECIES[kind];
       if (kind === 'firefly' && !night) continue;
       const arr = state.particles[kind];
@@ -913,7 +1174,7 @@
 
     // update + muerte
     for (const kind of Object.keys(SPECIES)) {
-      if (kind === 'boatWake') continue; // su update vive en updateBoatWakes
+      if (kind === 'boatWake' || kind === 'shootingStar') continue; // sistemas propios
       const arr = state.particles[kind];
       for (let i = arr.length - 1; i >= 0; i--) {
         const p = arr[i];
@@ -941,6 +1202,13 @@
       for (const p of arr) {
         try { p.mesh.removeFromParent?.(); } catch (_) {}
         try { p.material.dispose?.(); } catch (_) {}
+        if (Array.isArray(p.trail)) {
+          for (const d of p.trail) {
+            try { d.mesh.removeFromParent?.(); } catch (_) {}
+            try { d.material.dispose?.(); } catch (_) {}
+          }
+          p.trail.length = 0;
+        }
       }
       arr.length = 0;
     }
