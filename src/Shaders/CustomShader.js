@@ -1149,7 +1149,10 @@
         const canvas = findMainGameCanvas();
         if (!canvas) return false;
 
-        const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        if (!canvas.__mfGLContext) {
+            canvas.__mfGLContext = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        }
+        const gl = canvas.__mfGLContext;
         if (!gl) {
             console.warn('[MiniFeather PostFX] Sin contexto WebGL en el canvas principal.');
             return false;

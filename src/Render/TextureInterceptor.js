@@ -14,7 +14,7 @@
                     if (this.__mfIsGL !== true) {
                         this.__mfIsGL = true;
                         window.__MF_GL_CANVASES__.push(this);
-                        
+
                         if (window.__MF_GL_CANVASES__.length > 16) {
                             window.__MF_GL_CANVASES__.shift();
                         }
@@ -23,6 +23,32 @@
             }
             return ctx;
         };
+    } catch (_) {}
+
+    // Recolector: el juego crea un canvas WebGL por cada mundo/servidor al que
+    // entras; los viejos quedan referenciados y el navegador solo admite ~16
+    // vivos. Al superar ~10, se liberan con WEBGL_lose_context los canvases
+    // que ya no están en el DOM para no matar el contexto del juego actual.
+    try {
+        if (!window.__MF_GL_REAPER__) {
+            window.__MF_GL_REAPER__ = setInterval(function () {
+                var list = window.__MF_GL_CANVASES__;
+                if (!list || list.length < 10) return;
+                for (var i = list.length - 1; i >= 0; i--) {
+                    var cv = list[i];
+                    if (!cv || !cv.isConnected) {
+                        if (cv && !cv.__mfGLLost) {
+                            cv.__mfGLLost = true;
+                            try {
+                                var gl = cv.getContext('webgl2') || cv.getContext('webgl');
+                                gl && gl.getExtension('WEBGL_lose_context') && gl.getExtension('WEBGL_lose_context').loseContext();
+                            } catch (_) {}
+                        }
+                        list.splice(i, 1);
+                    }
+                }
+            }, 30000);
+        }
     } catch (_) {}
 
     var KEY = 'mf_custom_textures';

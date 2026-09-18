@@ -128,26 +128,34 @@
       this.cpuScore = results.cpu;
 
       try {
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
-        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-        
+        // Reusar un único canvas de benchmark para no crear contextos WebGL
+        // infinitos (el navegador limita a ~16 vivos; pasar el límite mata el
+        // contexto del juego con "Too many active WebGL contexts").
+        if (!window.__MF_BENCH_CANVAS__) {
+          const canvas = document.createElement('canvas');
+          canvas.width = 512;
+          canvas.height = 512;
+          window.__MF_BENCH_CANVAS__ = canvas;
+        }
+        const gl = window.__MF_BENCH_CANVAS__.getContext('webgl') || window.__MF_BENCH_CANVAS__.getContext('experimental-webgl');
+
         if (gl) {
           const gpuStart = performance.now();
           let drawCalls = 0;
-          
+
           while (performance.now() - gpuStart < 1000) {
             gl.clear(gl.COLOR_BUFFER_BIT);
             drawCalls++;
           }
-          
+
           results.gpu = drawCalls;
           this.gpuScore = results.gpu;
+          // NOTA: no se libera el contexto — loseContext() lo mataría para
+          // el siguiente benchmark. Un único contexto persistente no fuga.
         }
       } catch (e) {
         logWarn('WebGL no disponible, usando valor estimado para GPU');
-        this.gpuScore = 1000; 
+        this.gpuScore = 1000;
       }
 
       if (navigator.deviceMemory) {
