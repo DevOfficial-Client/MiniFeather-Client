@@ -13,6 +13,11 @@
     fpsEma: 60,
     lastFrameAt: 0,
     lastAdaptiveAt: 0,
+    lastAdaptiveChangeAt: 0,
+    profileCache: null,
+    profileCacheLevel: '',
+    profileCacheCustom: null,
+    profileCacheScale: -1,
     wetDrySeconds: 180,
     game: null,
     stars: new Map(),
@@ -32,8 +37,24 @@
   };
 
   const profiles = () => W.MF_RealisticProfiles;
+  function invalidateProfile() {
+    state.profileCache = null;
+    state.profileCacheLevel = '';
+    state.profileCacheCustom = null;
+    state.profileCacheScale = -1;
+  }
+
   function currentProfile() {
-    return profiles()?.get?.(state.level, state.custom, state.level === 'custom' ? state.adaptiveScale : 1);
+    const source = profiles();
+    if (!source?.get) return null;
+    const scale = state.level === 'custom' ? state.adaptiveScale : 1;
+    if (state.profileCache && state.profileCacheLevel === state.level && state.profileCacheScale === scale &&
+        (state.level !== 'custom' || state.profileCacheCustom === state.custom)) return state.profileCache;
+    state.profileCache = source.get(state.level, state.custom, scale);
+    state.profileCacheLevel = state.level;
+    state.profileCacheCustom = state.custom;
+    state.profileCacheScale = scale;
+    return state.profileCache;
   }
 
   function findGame() {
@@ -207,22 +228,30 @@
 
   function updateAdaptive(now) {
     if (state.level !== 'custom' || !(state.custom?.optimizeFps ?? state.custom?.adaptive)) {
-      if (state.adaptiveScale !== 1) { state.adaptiveScale = 1; applyProfile(); }
+      if (state.adaptiveScale !== 1) {
+        state.adaptiveScale = 1;
+        invalidateProfile();
+        applyProfile();
+      }
       return;
     }
-    if (now - state.lastAdaptiveAt < 1200) return;
+    if (now - state.lastAdaptiveAt < 1500) return;
     state.lastAdaptiveAt = now;
     const target = Math.max(30, Math.min(144, Number(state.custom.targetFps) || 60));
+    const fps = state.fpsEma;
     let next = state.adaptiveScale;
-    if (state.fpsEma < target * 0.82) next -= 0.10;
-    else if (state.fpsEma < target * 0.93) next -= 0.05;
-    else if (state.fpsEma > target * 1.10) next += 0.04;
-    next = Math.max(0.35, Math.min(1, next));
-    if (Math.abs(next - state.adaptiveScale) >= 0.025) {
-      state.adaptiveScale = next;
-      applyProfile();
-      scan(true);
-    }
+
+    if (fps < target * 0.78) next -= 0.12;
+    else if (fps < target * 0.90) next -= 0.06;
+    else if (fps > target * 1.08 && now - state.lastAdaptiveChangeAt > 3500) next += 0.035;
+    else return;
+
+    next = Math.max(0.40, Math.min(1, next));
+    if (Math.abs(next - state.adaptiveScale) < 0.02) return;
+    state.adaptiveScale = next;
+    state.lastAdaptiveChangeAt = now;
+    invalidateProfile();
+    applyProfile();
   }
 
   function tick(now) {
@@ -234,13 +263,11 @@
     }
     state.lastFrameAt = now;
     updateAdaptive(now);
-    scan();
     const game = findGame();
     const p = currentProfile();
     if (game && p) {
       W.MF_RealisticShadows?.update?.(game, p);
       W.MF_RealisticWetness?.update?.(game, now);
-      if (state.level === 'custom') W.MF_RealisticRenderDistance?.apply?.(game, p.world?.renderBlocks || 96);
     }
     if (now - state.lastBiomeScan > 2500) {
       state.lastBiomeScan = now;
@@ -256,7 +283,6 @@
   function setEnabled(value) {
     const next = !!value;
     if (state.enabled === next) {
-      if (next) { applyProfile(); scan(true); }
       applyCompanions(true);
       return;
     }
@@ -282,17 +308,29 @@
     let c = detail;
     if (typeof c === 'string') try { c = JSON.parse(c); } catch (_) { return; }
     if (!c || typeof c !== 'object') return;
+
+    const wasEnabled = state.enabled;
     state.level = profiles()?.normalizeLevel?.(c.level) || 'medium';
     state.custom = profiles()?.clampCustom?.(c.custom || state.custom || {}) || c.custom || null;
-    state.wetDrySeconds = Math.max(10, Math.min(900, Number(c.wetDrySeconds) || currentProfile()?.wetness?.drySeconds || 180));
-    if (state.level === 'custom' && state.custom) state.custom.drySeconds = Math.max(10, Math.min(900, Number(state.custom.drySeconds) || state.wetDrySeconds));
+    if (!(state.custom?.optimizeFps ?? state.custom?.adaptive)) state.adaptiveScale = 1;
+    invalidateProfile();
+
+    const profile = currentProfile();
+    state.wetDrySeconds = Math.max(10, Math.min(900, Number(c.wetDrySeconds) || profile?.wetness?.drySeconds || 180));
+    if (state.level === 'custom' && state.custom) {
+      state.custom.drySeconds = Math.max(10, Math.min(900, Number(state.custom.drySeconds) || state.wetDrySeconds));
+      invalidateProfile();
+    }
     state.baseLeafEnabled = !!c.leafEnabled;
     state.baseLeafStrength = Math.max(0, Math.min(1, Number(c.leafStrength) || 0.085));
     state.baseAuroraEnabled = !!c.auroraEnabled;
     state.baseAuroraLevel = ['low', 'medium', 'high'].includes(String(c.auroraLevel)) ? String(c.auroraLevel) : 'medium';
-    if (!(state.custom?.optimizeFps ?? state.custom?.adaptive)) state.adaptiveScale = 1;
-    if (state.enabled) applyProfile();
+
     setEnabled(!!c.enabled);
+    if (wasEnabled && state.enabled) {
+      applyProfile();
+      applyCompanions(true);
+    }
   }
 
   function destroy() {

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.15.0",
-  "description": "MiniFeather Client for MiniBlox — Realistic V4 Custom + Optimize FPS, configurable shadows/water/clouds/render distance, persistent wet surfaces, reflective puddles and polished UI.",
+  "version": "4.15.1",
+  "description": "MiniFeather Client for MiniBlox — optimized Realistic V4 Custom, adaptive FPS, unified panel theming, fixed language selector, polished UI and interaction sounds.",
   "permissions": [
     "storage",
     "declarativeNetRequest",
@@ -109,7 +109,7 @@
         "src/HUD/DynamicCrosshair.js",
         "src/Movement/Baritone.js",
         "src/Core/features.js",
-        "src/HUD/Armorhud.js",
+        "src/HUD/armorhud.js",
         "src/World/MinimapCache.js",
         "src/World/WorldMap.js",
         "src/World/RhythmParkour.js",
@@ -166,7 +166,8 @@
         "src/Core/AutoUpdater.js",
         "src/Experimental/ExperimentalRegistry.js",
         "src/UI/ClientPanel.js",
-        "src/UI/PanelPolish.js"
+        "src/UI/PanelPolish.js",
+        "src/UI/InteractionSounds.js"
       ],
       "run_at": "document_end",
       "all_frames": true

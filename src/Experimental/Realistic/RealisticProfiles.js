@@ -38,11 +38,13 @@
       world: { renderBlocks: null }, leafWind: 0.120, starScale: 1.12
     },
     ultra: {
-      shadow: { mapSize: 8192, samples: 16, noonRadius: 2.00, horizonRadius: 8.50, bias: -0.00024, normalBias: 0.030, horizonNormalBias: 0.050, intensity: 0.82, moon: true, moonMapSize: 4096, moonRadius: 6.5, moonIntensity: 0.30 },
+      // Ultra keeps the premium look but avoids pathological GPU costs. 4096² + 16-tap
+      // Vogel filtering is visually close to 8192² in motion while using 75% less shadow-map memory.
+      shadow: { mapSize: 4096, samples: 16, noonRadius: 1.90, horizonRadius: 8.00, bias: -0.00024, normalBias: 0.030, horizonNormalBias: 0.050, intensity: 0.82, moon: true, moonMapSize: 2048, moonRadius: 6.2, moonIntensity: 0.30 },
       water: { alpha: 0.50, waveScale: 1.35, waveSpeed: 1.0, microNormal: 0.27, reflection: 1.0, refraction: 1.0, ssrSteps: 20, tint: [0.14, 0.45, 0.64], tintStrength: 0.22 },
       lava: { alpha: 0.99, waveScale: 1.30, waveSpeed: 1.0, bubbles: 0.30, emission: 0.16 },
-      wetness: { maxCells: 48, radius: 10, verticalRadius: 6, columnsPerScan: 24, scanInterval: 320, drySeconds: 300, darken: 0.22, saturation: 0.14, sheen: 0.34, gloss: 0.78, detail: 1.00, rainSide: 0.22, puddles: true, maxPuddles: 28, puddleRadius: 10, puddleColumnsPerScan: 10, puddleScanInterval: 450, puddleBuildInterval: 180, puddleSkyProbe: 10, puddleDensity: 0.27, puddleRainThreshold: 0.08, puddleFillRate: 0.085, puddleVisibleThreshold: 0.24, puddleMinSize: 0.54, puddleMaxSize: 0.94, puddleOpacity: 0.31, puddleReflection: 0.40, puddleRipple: 0.42, puddleDetail: 1.00 },
-      clouds: { marchSteps: 36, shadowSteps: 5, silver: 0.16, coverageOffset: 0.025, thicknessMul: 1.15, opacityMul: 1.05, windMul: 1.05 },
+      wetness: { maxCells: 36, radius: 9, verticalRadius: 5, columnsPerScan: 14, scanInterval: 520, drySeconds: 300, darken: 0.22, saturation: 0.14, sheen: 0.34, gloss: 0.78, detail: 1.00, rainSide: 0.22, puddles: true, maxPuddles: 20, puddleRadius: 9, puddleColumnsPerScan: 6, puddleScanInterval: 740, puddleBuildInterval: 300, puddleSkyProbe: 9, puddleDensity: 0.23, puddleRainThreshold: 0.08, puddleFillRate: 0.085, puddleVisibleThreshold: 0.24, puddleMinSize: 0.54, puddleMaxSize: 0.94, puddleOpacity: 0.31, puddleReflection: 0.40, puddleRipple: 0.42, puddleDetail: 1.00 },
+      clouds: { marchSteps: 30, shadowSteps: 4, silver: 0.16, coverageOffset: 0.025, thicknessMul: 1.15, opacityMul: 1.05, windMul: 1.05 },
       world: { renderBlocks: null }, leafWind: 0.150, starScale: 1.16
     }
   };
@@ -122,9 +124,10 @@
     const horizonExtra = (c.shadowSunAngleSoftening / 100) * 8.5 + (c.shadowDistanceSoftening / 100) * 3.5;
     const artifact = c.shadowArtifactFix / 100;
     const resOptions = [512, 1024, 2048, 4096, 8192];
-    const wantedRes = c.shadowResolution;
-    let scaledRes = resOptions[0];
-    for (const r of resOptions) if (r <= wantedRes * q + 1) scaledRes = r;
+    const wantedIndex = Math.max(0, resOptions.indexOf(c.shadowResolution));
+    // Avoid resolution cliffs: a tiny FPS adjustment must not instantly halve a shadow map.
+    const resolutionDrop = q >= 0.78 ? 0 : q >= 0.55 ? 1 : 2;
+    const scaledRes = resOptions[Math.max(0, wantedIndex - resolutionDrop)];
 
     const wetRadius = Math.max(2, Math.round(c.wetRadius * Math.max(0.65, q)));
     const maxPuddles = Math.round(c.maxPuddles * Math.max(0.35, q));
@@ -148,9 +151,9 @@
       lava: { alpha: c.lavaOpacity / 100, waveScale: c.lavaWaveStrength / 100, waveSpeed: c.lavaWaveSpeed / 100, bubbles: 0.30 * c.lavaBubbles / 100, emission: 0.16 * c.lavaEmission / 100 },
       clouds: { marchSteps: cloudSteps, shadowSteps: Math.min(8, Math.round(c.cloudShadowSteps * Math.max(0.5, q))), silver: 0.16 * c.cloudSilverLining / 100, coverageOffset: (c.cloudDensity - 100) / 100 * 0.18, thicknessMul: c.cloudThickness / 100, opacityMul: c.cloudOpacity / 100, windMul: c.cloudSpeed / 100 },
       wetness: {
-        maxCells, radius: wetRadius, verticalRadius: Math.max(3, Math.round(wetRadius * 0.6)), columnsPerScan: Math.max(6, Math.round(24 * q)), scanInterval: Math.round(320 / Math.max(0.55, q)), drySeconds: c.drySeconds,
+        maxCells, radius: wetRadius, verticalRadius: Math.max(3, Math.round(wetRadius * 0.6)), columnsPerScan: Math.max(5, Math.round(18 * q)), scanInterval: Math.round(440 / Math.max(0.55, q)), drySeconds: c.drySeconds,
         darken: c.wetDarken / 100, saturation: c.wetSaturation / 100, sheen: c.wetSheen / 100, gloss: c.wetGloss / 100, detail: c.wetDetail / 100, rainSide: Math.min(0.35, c.wetSheen / 300),
-        puddles: c.puddles && maxPuddles > 0, maxPuddles, puddleRadius: wetRadius, puddleColumnsPerScan: Math.max(2, Math.round(10 * q)), puddleScanInterval: Math.round(450 / Math.max(0.55, q)), puddleBuildInterval: Math.round(180 / Math.max(0.60, q)), puddleSkyProbe: wetRadius,
+        puddles: c.puddles && maxPuddles > 0, maxPuddles, puddleRadius: wetRadius, puddleColumnsPerScan: Math.max(2, Math.round(7 * q)), puddleScanInterval: Math.round(620 / Math.max(0.55, q)), puddleBuildInterval: Math.round(260 / Math.max(0.60, q)), puddleSkyProbe: wetRadius,
         puddleDensity: Math.min(0.45, 0.15 + maxPuddles / 220), puddleRainThreshold: 0.08, puddleFillRate: 0.085, puddleVisibleThreshold: 0.24, puddleMinSize: 0.54, puddleMaxSize: 0.94,
         puddleOpacity: Math.min(0.48, 0.18 + c.puddleReflection / 300), puddleReflection: c.puddleReflection / 100, puddleRipple: c.puddleRipple / 100, puddleDetail: c.puddleDetail / 100
       },

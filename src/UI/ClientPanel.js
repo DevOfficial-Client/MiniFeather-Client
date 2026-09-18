@@ -381,15 +381,15 @@
     cloudOpacity: 105,
     cloudSpeed: 100,
     cloudSilverLining: 100,
-    wetCells: 48,
-    wetRadius: 10,
+    wetCells: 36,
+    wetRadius: 9,
     wetDarken: 22,
     wetSaturation: 14,
     wetSheen: 34,
     wetGloss: 78,
     wetDetail: 100,
     puddles: true,
-    maxPuddles: 28,
+    maxPuddles: 20,
     puddleReflection: 40,
     puddleRipple: 42,
     puddleDetail: 100,
@@ -400,7 +400,7 @@
     ...REALISTIC_CUSTOM_DEFAULTS,
     renderBlocks: 96,
     optimizeFps: true,
-    shadowResolution: 8192,
+    shadowResolution: 4096,
     shadowSamples: 16,
     shadowSharpness: 82,
     shadowSoftness: 24,
@@ -414,8 +414,8 @@
     waterReflection: 100,
     waterRefraction: 100,
     waterSsrSteps: 20,
-    cloudSteps: 36,
-    cloudShadowSteps: 5,
+    cloudSteps: 30,
+    cloudShadowSteps: 4,
     cloudDensity: 114,
     cloudThickness: 115,
     cloudOpacity: 105,
@@ -1234,7 +1234,7 @@
           if (elapsed >= 1000) {
             const fps = Math.round(frames * 1000 / elapsed);
             const color = fps >= 120 ? '#22c55e' : fps >= 60 ? '#facc15' : '#ef4444';
-            box.innerHTML = `<span style="color:#7c3aed;">MF</span><span style="color:#4b5563;padding:0 6px;">•</span><span style="color:${color};">${fps}</span><span style="color:#9ca3af;"> FPS</span>`;
+            box.innerHTML = `<span style="color:var(--mf-global-accent,#ef3b3b);">MF</span><span style="color:#4b5563;padding:0 6px;">•</span><span style="color:${color};">${fps}</span><span style="color:#9ca3af;"> FPS</span>`;
             dashboardStats.fps = fps;
             frames = 0;
             last = now;
@@ -1683,11 +1683,11 @@
             overflow:hidden;
           }
           .mf-key.active {
-            background:rgba(124,58,237,.92);
+            background:var(--mf-global-accent,#ef3b3b);
             color:#fff;
-            border-color:rgba(167,139,250,.85);
+            border-color:color-mix(in srgb,var(--mf-global-accent,#ef3b3b) 72%,#fff 28%);
             transform:scale(.92);
-            box-shadow:0 0 18px rgba(124,58,237,.35), inset 0 0 12px rgba(255,255,255,.08);
+            box-shadow:0 0 18px color-mix(in srgb,var(--mf-global-accent,#ef3b3b) 42%,transparent), inset 0 0 12px rgba(255,255,255,.08);
           }
           .mf-key .mf-cps {
             position:absolute;
@@ -2087,7 +2087,7 @@
         color:#f8fafc;
       }
       .mf-select option:checked {
-        background:#2563eb linear-gradient(0deg, #2563eb, #2563eb);
+        background:var(--mf-ui-accent) linear-gradient(0deg, var(--mf-ui-accent), var(--mf-ui-accent));
         color:#fff;
       }
       .mf-select option:disabled {
@@ -2095,7 +2095,7 @@
       }
       .mf-select:focus,
       .mf-input:focus {
-        border-color:rgba(167,139,250,.6);
+        border-color:color-mix(in srgb,var(--mf-ui-accent) 60%,transparent);
         background:rgba(255,255,255,.06);
       }
       .mf-file-picker {
@@ -2111,7 +2111,7 @@
         transition:border-color .15s ease, background .15s ease;
       }
       .mf-file-picker:focus-within {
-        border-color:rgba(167,139,250,.6);
+        border-color:color-mix(in srgb,var(--mf-ui-accent) 60%,transparent);
         background:rgba(255,255,255,.06);
       }
       .mf-file-input {
@@ -2138,10 +2138,10 @@
         transition:background .15s ease;
       }
       .mf-file-button:hover {
-        background:rgba(124,92,255,.22);
+        background:color-mix(in srgb,var(--mf-ui-accent) 22%,transparent);
       }
       .mf-file-input:focus-visible + .mf-file-button {
-        outline:2px solid rgba(167,139,250,.75);
+        outline:2px solid color-mix(in srgb,var(--mf-ui-accent) 75%,#fff 25%);
         outline-offset:-2px;
       }
       .mf-file-name {
@@ -2165,8 +2165,8 @@
         transform:translateY(-1px);
       }
       .mf-btn.primary {
-        background:linear-gradient(180deg, rgba(124,92,255,.96), rgba(91,33,182,.96));
-        border-color:rgba(167,139,250,.3);
+        background:linear-gradient(180deg,color-mix(in srgb,var(--mf-ui-accent) 92%,#fff 8%),color-mix(in srgb,var(--mf-ui-accent) 78%,#000 22%));
+        border-color:color-mix(in srgb,var(--mf-ui-accent) 38%,transparent);
         color:#fff;
       }
       .mf-btn.secondary {
@@ -2250,10 +2250,10 @@
       }
       .mf-toggle:hover {
         transform:translateY(-2px);
-        border-color:rgba(124,92,255,.4);
+        border-color:color-mix(in srgb,var(--mf-ui-accent) 40%,transparent);
       }
       .mf-toggle:has(.mf-switch-hidden:checked) {
-        background:rgba(124,92,255,.14);
+        background:color-mix(in srgb,var(--mf-ui-accent) 14%,transparent);
         border-color:var(--mf-accent);
       }
       .mf-toggle-dot {
@@ -2268,7 +2268,7 @@
       }
       .mf-toggle:has(.mf-switch-hidden:checked) .mf-toggle-dot {
         background:var(--mf-accent2);
-        box-shadow:0 0 8px rgba(154,132,255,.7);
+        box-shadow:0 0 8px color-mix(in srgb,var(--mf-ui-accent) 70%,transparent);
       }
       .mf-toggle-copy {
         display:flex;
@@ -2306,7 +2306,7 @@
       .mf-status {
         min-height:16px;
         font-size:11px;
-        color:#a78bfa;
+        color:var(--mf-ui-accent);
       }
       .mf-logo-preview-wrap {
         display:flex;
@@ -2381,7 +2381,7 @@
         font-size:10px;
         color:#64748b;
       }
-      .mf-client-chat-meta strong { color:#c4b5fd; font-size:11px; }
+      .mf-client-chat-meta strong { color:color-mix(in srgb,var(--mf-ui-accent) 65%,#fff 35%); font-size:11px; }
       .mf-client-chat-text {
         color:#e2e8f0;
         font-size:12px;
@@ -2478,7 +2478,7 @@
         overflow:hidden;
         text-overflow:ellipsis;
         white-space:nowrap;
-        color:#ddd6fe;
+        color:color-mix(in srgb,var(--mf-ui-accent) 58%,#fff 42%);
         font-family:ui-monospace,SFMono-Regular,Consolas,monospace !important;
         font-size:10px;
       }
@@ -2577,7 +2577,7 @@
       }
       .mf-tt-scale-value {
         font-weight:800;
-        color:#ddd6fe;
+        color:color-mix(in srgb,var(--mf-ui-accent) 58%,#fff 42%);
       }
       .mf-tt-range {
         width:100%;
@@ -2915,8 +2915,8 @@
       .mf-new-badge {
         display:inline-block; vertical-align:2px; margin-left:6px; padding:2px 7px;
         border-radius:999px; font:700 9px/1.3 system-ui,sans-serif; font-style:normal;
-        letter-spacing:.06em; background:rgba(124,58,237,.18); border:1px solid rgba(167,139,250,.45);
-        color:#c4b5fd;
+        letter-spacing:.06em; background:color-mix(in srgb,var(--mf-ui-accent) 18%,transparent); border:1px solid color-mix(in srgb,var(--mf-ui-accent) 45%,transparent);
+        color:color-mix(in srgb,var(--mf-ui-accent) 65%,#fff 35%);
       }
       .mf-feather-tools { display:flex; gap:9px; align-items:center; margin-left:auto; }
       #mf-gui-search {
@@ -3151,7 +3151,7 @@
     '#': '#f2f3f7',     // blanco highlight
     '+': '#aab0bd',     // outline gris claro
     '-': '#565d6b',     // gris oscuro
-    'a': '#a78bfa',     // acento morado
+    'a': 'var(--mf-ui-accent,#ef3b3b)', // acento del panel
     'b': '#6ee7f5',     // cian
     'g': '#5ade80',     // verde
     'r': '#f0575b',     // rojo
@@ -3637,19 +3637,19 @@
     const style = document.createElement('style');
     style.id = 'mf-waypoints-panel-style';
     style.textContent = `
-      .mf-waypoint-world-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px;padding:11px 12px;border-radius:10px;background:linear-gradient(135deg,rgba(139,92,246,.13),rgba(34,211,238,.06));border:1px solid rgba(167,139,250,.24)}
+      .mf-waypoint-world-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px;padding:11px 12px;border-radius:10px;background:linear-gradient(135deg,color-mix(in srgb,var(--mf-ui-accent) 13%,transparent),rgba(34,211,238,.06));border:1px solid color-mix(in srgb,var(--mf-ui-accent) 24%,transparent)}
       .mf-waypoint-world-copy{min-width:0;display:flex;flex-direction:column;gap:2px}.mf-waypoint-world-copy strong{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mf-waypoint-world-copy span{font-size:11px;color:#aeb3c2}
-      .mf-waypoint-world-badge{flex:0 0 auto;padding:5px 8px;border-radius:999px;font-size:10px;font-weight:900;letter-spacing:.04em;background:rgba(139,92,246,.15);border:1px solid rgba(167,139,250,.3);color:#d8ccff}
+      .mf-waypoint-world-badge{flex:0 0 auto;padding:5px 8px;border-radius:999px;font-size:10px;font-weight:900;letter-spacing:.04em;background:color-mix(in srgb,var(--mf-ui-accent) 15%,transparent);border:1px solid color-mix(in srgb,var(--mf-ui-accent) 30%,transparent);color:color-mix(in srgb,var(--mf-ui-accent) 55%,#fff 45%)}
       .mf-waypoint-no-world{padding:12px;border-radius:9px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.23);color:#fcd34d;font-size:12px}
-      .mf-waypoint-add-grid{display:grid;grid-template-columns:minmax(170px,1fr) 48px auto;gap:8px;align-items:center}.mf-waypoint-input,.mf-waypoint-select{min-width:0;border:1px solid rgba(255,255,255,.14);background:rgba(10,12,18,.7);color:#fff;border-radius:8px;padding:10px 12px;outline:none;font:inherit}.mf-waypoint-input:focus,.mf-waypoint-select:focus{border-color:rgba(139,92,246,.8);box-shadow:0 0 0 2px rgba(139,92,246,.18)}
-      .mf-waypoint-color{width:48px;height:39px;padding:3px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:rgba(10,12,18,.7);cursor:pointer}.mf-waypoint-status{min-height:18px;margin-top:9px;color:#c4b5fd;font-size:12px}
-      .mf-waypoint-list{display:flex;flex-direction:column;gap:9px}.mf-waypoint-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border-radius:11px;background:linear-gradient(135deg,rgba(255,255,255,.052),rgba(255,255,255,.025));border:1px solid rgba(255,255,255,.09);transition:border-color .16s ease,background .16s ease}.mf-waypoint-row:hover{border-color:rgba(167,139,250,.23);background:linear-gradient(135deg,rgba(139,92,246,.07),rgba(255,255,255,.028))}.mf-waypoint-row.is-hidden{opacity:.58}
+      .mf-waypoint-add-grid{display:grid;grid-template-columns:minmax(170px,1fr) 48px auto;gap:8px;align-items:center}.mf-waypoint-input,.mf-waypoint-select{min-width:0;border:1px solid rgba(255,255,255,.14);background:rgba(10,12,18,.7);color:#fff;border-radius:8px;padding:10px 12px;outline:none;font:inherit}.mf-waypoint-input:focus,.mf-waypoint-select:focus{border-color:color-mix(in srgb,var(--mf-ui-accent) 80%,#fff 20%);box-shadow:0 0 0 2px color-mix(in srgb,var(--mf-ui-accent) 18%,transparent)}
+      .mf-waypoint-color{width:48px;height:39px;padding:3px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:rgba(10,12,18,.7);cursor:pointer}.mf-waypoint-status{min-height:18px;margin-top:9px;color:color-mix(in srgb,var(--mf-ui-accent) 65%,#fff 35%);font-size:12px}
+      .mf-waypoint-list{display:flex;flex-direction:column;gap:9px}.mf-waypoint-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border-radius:11px;background:linear-gradient(135deg,rgba(255,255,255,.052),rgba(255,255,255,.025));border:1px solid rgba(255,255,255,.09);transition:border-color .16s ease,background .16s ease}.mf-waypoint-row:hover{border-color:color-mix(in srgb,var(--mf-ui-accent) 23%,transparent);background:linear-gradient(135deg,color-mix(in srgb,var(--mf-ui-accent) 7%,transparent),rgba(255,255,255,.028))}.mf-waypoint-row.is-hidden{opacity:.58}
       .mf-waypoint-icon{--wp-color:#8b5cf6;width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:18px;background:linear-gradient(145deg,color-mix(in srgb,var(--wp-color) 75%,#fff 25%),color-mix(in srgb,var(--wp-color) 65%,#000 35%));border:1px solid rgba(255,255,255,.38);box-shadow:0 0 14px color-mix(in srgb,var(--wp-color) 30%,transparent)}
       .mf-waypoint-copy{min-width:0;display:flex;flex-direction:column;gap:3px}.mf-waypoint-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mf-waypoint-meta{display:flex;gap:7px;align-items:center;flex-wrap:wrap;color:#aeb3c2;font-size:11px}
-      .mf-waypoint-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.mf-waypoint-actions .mf-btn{padding:7px 8px;font-size:10px}.mf-waypoint-edit{display:none;grid-column:2/4;grid-template-columns:minmax(150px,1fr) 46px auto auto auto;gap:7px;align-items:center;padding-top:8px;border-top:1px solid rgba(255,255,255,.07)}.mf-waypoint-row.editing .mf-waypoint-edit{display:grid}.mf-waypoint-mini-toggle{display:flex;align-items:center;gap:5px;color:#c6cad4;font-size:10px;white-space:nowrap}.mf-waypoint-mini-toggle input{accent-color:#8b5cf6}
-      .mf-waypoint-empty{padding:22px;text-align:center;color:#9ca3af;border:1px dashed rgba(255,255,255,.12);border-radius:10px}.mf-waypoint-count{font-size:12px;color:#a78bfa;margin-left:6px}
+      .mf-waypoint-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.mf-waypoint-actions .mf-btn{padding:7px 8px;font-size:10px}.mf-waypoint-edit{display:none;grid-column:2/4;grid-template-columns:minmax(150px,1fr) 46px auto auto auto;gap:7px;align-items:center;padding-top:8px;border-top:1px solid rgba(255,255,255,.07)}.mf-waypoint-row.editing .mf-waypoint-edit{display:grid}.mf-waypoint-mini-toggle{display:flex;align-items:center;gap:5px;color:#c6cad4;font-size:10px;white-space:nowrap}.mf-waypoint-mini-toggle input{accent-color:var(--mf-ui-accent)}
+      .mf-waypoint-empty{padding:22px;text-align:center;color:#9ca3af;border:1px dashed rgba(255,255,255,.12);border-radius:10px}.mf-waypoint-count{font-size:12px;color:var(--mf-ui-accent);margin-left:6px}
       .mf-waypoint-legacy{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;padding:11px;border-radius:10px;background:rgba(245,158,11,.075);border:1px solid rgba(245,158,11,.2)}.mf-waypoint-legacy strong{color:#fcd34d}.mf-waypoint-legacy-copy{display:flex;flex-direction:column;gap:3px;font-size:12px}.mf-waypoint-legacy-copy span{color:#c9cbd2;font-size:11px}.mf-waypoint-legacy-actions{display:flex;gap:7px}
-      .mf-waypoint-world-list{display:flex;flex-direction:column;gap:7px}.mf-waypoint-world-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border-radius:9px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)}.mf-waypoint-world-row strong{display:block;font-size:12px}.mf-waypoint-world-row span{font-size:10px;color:#9da2b1}.mf-waypoint-current-tag{color:#a78bfa!important;font-weight:800}
+      .mf-waypoint-world-list{display:flex;flex-direction:column;gap:7px}.mf-waypoint-world-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border-radius:9px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)}.mf-waypoint-world-row strong{display:block;font-size:12px}.mf-waypoint-world-row span{font-size:10px;color:#9da2b1}.mf-waypoint-current-tag{color:var(--mf-ui-accent)!important;font-weight:800}
       @media(max-width:860px){.mf-waypoint-add-grid{grid-template-columns:1fr 46px}.mf-waypoint-add-grid .mf-btn{grid-column:1/-1}.mf-waypoint-edit{grid-column:1/-1;grid-template-columns:1fr 46px auto}.mf-waypoint-edit .mf-btn{grid-column:auto}.mf-waypoint-mini-toggle{grid-row:auto}}
       @media(max-width:620px){.mf-waypoint-row{grid-template-columns:38px 1fr}.mf-waypoint-actions{grid-column:1/-1;justify-content:flex-start}.mf-waypoint-edit{grid-template-columns:1fr 1fr}.mf-waypoint-edit .mf-waypoint-color{width:100%}.mf-waypoint-add-grid{grid-template-columns:1fr 1fr}.mf-waypoint-add-grid .mf-waypoint-color{width:100%}.mf-waypoint-add-grid .mf-btn{grid-column:1/-1}}
     `;
@@ -7143,7 +7143,7 @@
           <div class="mf-muted">${t('languageDesc')}</div>
           <div class="mf-settings-row">
             <span class="mf-settings-label">${t('language')}</span>
-            <select id="mf-language-select" class="mf-select mf-language-select" aria-label="${t('language')}">
+            <select id="mf-language-select" class="mf-select mf-language-select" aria-label="${t('language')}" data-mf-i18n-skip="true" translate="no">
               <option value="en" ${settings.language === 'en' ? 'selected' : ''}>English</option>
               <option value="es" ${settings.language === 'es' ? 'selected' : ''}>Español</option>
               <option value="ja" ${settings.language === 'ja' ? 'selected' : ''}>日本語</option>
@@ -7881,21 +7881,21 @@ function renderCreditsPage() {
     }
   }
 
-  function showSkinStatus(message, color = '#a78bfa') {
+  function showSkinStatus(message, color = 'var(--mf-ui-accent,#ef3b3b)') {
     const element = panel?.querySelector('#mf-skin-status');
     if (!element) return;
     element.textContent = message;
     element.style.color = color;
   }
 
-  function showCapeStatus(message, color = '#a78bfa') {
+  function showCapeStatus(message, color = 'var(--mf-ui-accent,#ef3b3b)') {
     const element = panel?.querySelector('#mf-cape-status');
     if (!element) return;
     element.textContent = message;
     element.style.color = color;
   }
 
-  function showLogoStatus(message, color = '#a78bfa') {
+  function showLogoStatus(message, color = 'var(--mf-ui-accent,#ef3b3b)') {
     const element = panel?.querySelector('#mf-logo-status');
     if (!element) return;
     element.textContent = message;
@@ -9797,32 +9797,43 @@ function renderCreditsPage() {
       if (bar) bar.style.width = `${Math.min(100, load)}%`;
     };
 
-    const setRealisticCustomValue = (key, value, persist) => {
+    let realisticCustomApplyTimer = 0;
+    const scheduleRealisticCustomApply = (persist, immediate = false) => {
+      clearTimeout(realisticCustomApplyTimer);
+      const run = () => {
+        realisticCustomApplyTimer = 0;
+        if (persist) saveSettings(true);
+        applyGuiSettings();
+      };
+      if (immediate) run();
+      else realisticCustomApplyTimer = window.setTimeout(run, 90);
+    };
+
+    const setRealisticCustomValue = (key, value, persist, immediate = false) => {
       const current = clampRealisticCustom(guiSettings.experimentalRealisticCustom || settings.experimentalRealisticCustom);
       current[key] = value;
       const next = clampRealisticCustom(current);
       guiSettings.experimentalRealisticCustom = { ...next };
       settings.experimentalRealisticCustom = { ...next };
       refreshRealisticCustomUi();
-      if (persist) saveSettings(true);
-      applyGuiSettings();
+      scheduleRealisticCustomApply(persist, immediate);
     };
 
     panel.querySelectorAll('[data-mf-realistic-custom]').forEach(input => {
       const key = String(input.dataset.mfRealisticCustom || '');
       if (!key) return;
-      input.addEventListener('input', () => setRealisticCustomValue(key, Number(input.value), false));
-      input.addEventListener('change', () => setRealisticCustomValue(key, Number(input.value), true));
+      input.addEventListener('input', () => setRealisticCustomValue(key, Number(input.value), false, false));
+      input.addEventListener('change', () => setRealisticCustomValue(key, Number(input.value), true, true));
     });
     panel.querySelectorAll('[data-mf-realistic-custom-check]').forEach(input => {
       const key = String(input.dataset.mfRealisticCustomCheck || '');
       if (!key) return;
-      input.addEventListener('change', () => setRealisticCustomValue(key, !!input.checked, true));
+      input.addEventListener('change', () => setRealisticCustomValue(key, !!input.checked, true, true));
     });
     panel.querySelectorAll('[data-mf-realistic-custom-select]').forEach(input => {
       const key = String(input.dataset.mfRealisticCustomSelect || '');
       if (!key) return;
-      input.addEventListener('change', () => setRealisticCustomValue(key, Number(input.value), true));
+      input.addEventListener('change', () => setRealisticCustomValue(key, Number(input.value), true, true));
     });
     panel.querySelector('[data-mf-realistic-copy-ultra]')?.addEventListener('click', event => {
       event.preventDefault(); event.stopPropagation();
@@ -10454,7 +10465,7 @@ function renderCreditsPage() {
     button.className = 'chakra-button css-7qs6ql';
     button.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;color:rgb(201,184,255);';
     button.innerHTML = `
-      <svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" style="font-size:24px;color:#a78bfa;">
+      <svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" style="font-size:24px;color:var(--mf-global-accent,#ef3b3b);">
         <rect x="9" y="2" width="6" height="1"></rect>
         <rect x="8" y="3" width="8" height="1"></rect>
         <rect x="7" y="4" width="10" height="1"></rect>

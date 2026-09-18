@@ -2775,7 +2775,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
   },
 
   "zh": {
-    "language": "中文",
+    "language": "语言",
     "panelScale": "页面缩放",
     "pageZoomEnabled": "应用页面缩放",
     "pageZoomHint": "浏览器缩放（Ctrl+滚轮），作用于整个页面",
@@ -2829,7 +2829,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorExportEmpty": "无可导出内容 — 请先绘制一些内容"
   },
   "fr": {
-    "language": "Français",
+    "language": "Langue",
     "panelScale": "Zoom de page",
     "pageZoomEnabled": "Appliquer le zoom de page",
     "pageZoomHint": "Zoom du navigateur (Ctrl+molette), affecte toute la page",
@@ -2883,7 +2883,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorExportEmpty": "rien à exporter — peignez d'abord"
   },
   "de": {
-    "language": "Deutsch",
+    "language": "Sprache",
     "panelScale": "Seitenzoom",
     "pageZoomEnabled": "Seitenzoom anwenden",
     "pageZoomHint": "Browser-Zoom (Strg+Rad), wirkt auf die ganze Seite",
@@ -2937,7 +2937,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorExportEmpty": "nichts zu exportieren — erst etwas zeichnen"
   },
   "pt": {
-    "language": "Português",
+    "language": "Idioma",
     "panelScale": "Zoom da página",
     "pageZoomEnabled": "Aplicar zoom da página",
     "pageZoomHint": "Zoom do navegador (Ctrl+roda), afeta toda a página",
@@ -2991,7 +2991,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorExportEmpty": "nada para exportar — pinte algo primeiro"
   },
   "ru": {
-    "language": "Русский",
+    "language": "Язык",
     "panelScale": "Масштаб страницы",
     "pageZoomEnabled": "Применять масштаб страницы",
     "pageZoomHint": "Масштаб браузера (Ctrl+колесо), действует на всю страницу",
@@ -3045,7 +3045,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorExportEmpty": "нечего экспортировать — сначала нарисуйте что-нибудь"
   },
   "ko": {
-    "language": "한국어",
+    "language": "언어",
     "panelScale": "페이지 줌",
     "pageZoomEnabled": "페이지 줌 적용",
     "pageZoomHint": "브라우저 줌(Ctrl+휠), 전체 페이지에 적용됩니다",

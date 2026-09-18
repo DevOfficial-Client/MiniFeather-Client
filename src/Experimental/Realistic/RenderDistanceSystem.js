@@ -6,7 +6,7 @@
 
   const state = {
     game: null, world: null, camera: null, setting: null,
-    originalGetter: null, hadOwnGetter: false, originalChunks: null,
+    originalGetter: null, patchedGetter: null, hadOwnGetter: false, originalChunks: null,
     originalFar: null, desiredBlocks: 96, desiredChunks: 6, active: false,
     lastReloadChunks: 0, lastReloadAt: 0, effectiveChunks: 0
   };
@@ -59,6 +59,17 @@
     state.originalGetter = typeof state.world.getRenderDistanceChunks === 'function' ? state.world.getRenderDistanceChunks : null;
     state.hadOwnGetter = Object.prototype.hasOwnProperty.call(state.world, 'getRenderDistanceChunks');
     try { state.originalChunks = Number(state.originalGetter?.call(state.world)); } catch (_) { state.originalChunks = null; }
+    if (state.originalGetter) {
+      const original = state.originalGetter;
+      state.patchedGetter = function(...args) {
+        let native = NaN;
+        try { native = Number(original.apply(this, args)); } catch (_) {}
+        const wanted = state.desiredChunks;
+        return Number.isFinite(native) && Math.abs(native - wanted) < 0.51 ? native : wanted;
+      };
+      state.patchedGetter.__mfRealisticRenderDistance = true;
+      try { state.world.getRenderDistanceChunks = state.patchedGetter; } catch (_) {}
+    }
     if (state.camera && Number.isFinite(Number(state.camera.far))) state.originalFar = Number(state.camera.far);
     return true;
   }
@@ -83,21 +94,9 @@
     state.desiredChunks = Math.max(1, Math.min(13, Math.ceil(state.desiredBlocks / 16)));
 
     if (state.setting) {
-      try { state.setting.value = state.desiredChunks; } catch (_) {}
-    }
-
-    if (state.world && state.originalGetter) {
-      const wanted = state.desiredChunks;
-      const original = state.originalGetter;
-      const patched = function(...args) {
-        let native = NaN;
-        try { native = Number(original.apply(this, args)); } catch (_) {}
-        // If the underlying setting accepted our value, report it. Otherwise this getter still
-        // provides the requested visual/render cap to systems that query the world directly.
-        return Number.isFinite(native) && Math.abs(native - wanted) < 0.51 ? native : wanted;
-      };
-      patched.__mfRealisticRenderDistance = true;
-      try { state.world.getRenderDistanceChunks = patched; } catch (_) {}
+      try {
+        if (Number(state.setting.value) !== state.desiredChunks) state.setting.value = state.desiredChunks;
+      } catch (_) {}
     }
 
     if (state.camera) {
@@ -126,7 +125,7 @@
     if (state.camera && Number.isFinite(state.originalFar)) {
       try { state.camera.far = state.originalFar; state.camera.updateProjectionMatrix?.(); } catch (_) {}
     }
-    Object.assign(state, { game: null, world: null, camera: null, setting: null, originalGetter: null, hadOwnGetter: false, originalChunks: null, originalFar: null, active: false, effectiveChunks: 0, lastReloadChunks: 0 });
+    Object.assign(state, { game: null, world: null, camera: null, setting: null, originalGetter: null, patchedGetter: null, hadOwnGetter: false, originalChunks: null, originalFar: null, active: false, effectiveChunks: 0, lastReloadChunks: 0 });
   }
 
   W.MF_RealisticRenderDistance = Object.freeze({

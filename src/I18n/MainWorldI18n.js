@@ -52,6 +52,8 @@
     state.inline.length = 0;
     state.inlineTemplates.length = 0;
 
+    const ambiguousExact = new Set();
+
     for (const [key, values] of state.entries) {
       for (const value of Object.values(values)) {
         if (typeof value !== 'string' || !value) continue;
@@ -66,7 +68,14 @@
             });
           }
         } else {
-          state.exact.set(value, key);
+          if (!ambiguousExact.has(value)) {
+            const owner = state.exact.get(value);
+            if (!owner) state.exact.set(value, key);
+            else if (owner !== key) {
+              state.exact.delete(value);
+              ambiguousExact.add(value);
+            }
+          }
           if (value.length >= 4) state.inline.push({ key, value });
         }
       }
@@ -161,8 +170,17 @@
     return false;
   }
 
+  function isTranslationSkipped(node) {
+    let current = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    for (let depth = 0; current && depth < 20; depth += 1, current = current.parentElement) {
+      if (current.hasAttribute?.('data-mf-i18n-skip') && current.getAttribute('data-mf-i18n-skip') !== 'false') return true;
+      if (String(current.getAttribute?.('translate') || '').toLowerCase() === 'no') return true;
+    }
+    return false;
+  }
+
   function translateElement(element) {
-    if (!(element instanceof Element) || !isClientElement(element)) return;
+    if (!(element instanceof Element) || isTranslationSkipped(element) || !isClientElement(element)) return;
     for (const attr of ['title', 'placeholder', 'aria-label']) {
       if (!element.hasAttribute(attr)) continue;
       const value = element.getAttribute(attr);
@@ -172,7 +190,7 @@
   }
 
   function translateNode(node) {
-    if (!node) return;
+    if (!node || isTranslationSkipped(node)) return;
 
     if (node.nodeType === Node.TEXT_NODE) {
       if (!isClientElement(node)) return;
@@ -187,13 +205,15 @@
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
     let current = walker.currentNode;
     while (current) {
-      if (current.nodeType === Node.TEXT_NODE) {
-        if (isClientElement(current)) {
-          const next = translate(current.nodeValue);
-          if (next !== current.nodeValue) current.nodeValue = next;
+      if (!isTranslationSkipped(current)) {
+        if (current.nodeType === Node.TEXT_NODE) {
+          if (isClientElement(current)) {
+            const next = translate(current.nodeValue);
+            if (next !== current.nodeValue) current.nodeValue = next;
+          }
+        } else if (current instanceof Element && isClientElement(current)) {
+          translateElement(current);
         }
-      } else if (current instanceof Element && isClientElement(current)) {
-        translateElement(current);
       }
       current = walker.nextNode();
     }

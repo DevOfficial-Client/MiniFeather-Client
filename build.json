@@ -1,7 +1,7 @@
 {
-  "builtAt": "2026-09-17T02:40:00Z",
+  "builtAt": "2026-09-18T04:20:00Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Realistic V4 Custom rebased onto the latest client update. Adds Optimize FPS enabled by default for Custom, 10-200 block render distance, configurable 1-64 shadow samples, 4-64 SSR steps, 8-64 cloud raymarch steps, persistent wetness/puddles, UI tooltips and motion polish, plus production cleanup of debug console noise and stale debug/commented code.",
-  "version": "4.15.0"
+  "note": "Realistic/UI stability update: fixes root-cause language-name translation collisions, unifies panel/module/keybind/update colors with the configured theme, optimizes Ultra and Custom adaptive rendering, improves panel motion, and adds subtle Web Audio enable/disable interaction sounds without external audio files.",
+  "version": "4.15.1"
 }
