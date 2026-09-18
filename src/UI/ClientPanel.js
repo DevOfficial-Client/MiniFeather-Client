@@ -529,6 +529,7 @@
     patPat: false,
     itemPhysics: false,
     noWeather: false,
+    fullBright: false,
     antiAfk: false,
     antiAfkDelay: 120,
     autoSprint: false,
@@ -3069,6 +3070,7 @@
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc'), tags: [] },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc'), tags: [] },
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc'), tags: [] },
+      { page: 'render', key: 'fullBright', title: t('fullBright'), desc: t('fullBrightDesc'), tags: [] },
       { page: 'render', key: 'vanillaAnimations', title: t('vanillaAnimations'), desc: t('vanillaAnimationsDesc'), tags: [] },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc'), tags: ['pvp'] },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc'), tags: [] },
@@ -3119,6 +3121,7 @@
     patPat:'<path d="M7 11c1-4 4-6 7-6 3.5 0 6 2.5 6 6 0 5-4 9-8 9s-8-4-8-9c0-2 .7-3.6 2-5"/><path d="M9 13c1 1 3 1 4 0"/>',
     itemPhysics:'<path d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>',
     noWeather:'<path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6 11.5 3.5 3.5 0 0 0 7 18Z"/><path d="M4 4l16 16"/>',
+    fullBright:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>',
     vanillaAnimations:'<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>',
     zoom:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5M10.5 7v7M7 10.5h7"/>',
     cameraOverhaul:'<path d="M4 7h3l1.5-2h7L17 7h3v12H4V7Z"/><circle cx="12" cy="13" r="4"/>',
@@ -3207,6 +3210,7 @@
     patPat:   ['.+.+.+..','.+.+.+..','.+.+.+..','.+++++..','+.....+.','+.....+.','.+++++..','........'],
     itemPhysics: ['.++++++.','.+####+.','.++++++.','........','...++...','..+..+..','...++...','........'],
     noWeather:   ['...b....','.b.b.b..','..bbb...','.bb#bb..','..bbb...','.b.b.b..','...b....','........'],
+    fullBright:  ['...y....','y..y..y.','..yyy...','.yyyyy..','..yyy...','y..y..y.','...y....','........'],
     vanillaAnimations: ['..####..','..####..','..++++..','.######.','#.#aa#.#','..####..','..+..+..','.+..+...'],
     zoom:     ['..+++...','.+...+..','+..+..+.','+.....+.','.+...+a.','..+++a..','.....aa.','......a.'],
     cameraOverhaul: ['...++...','.++++++.','+#+##+#+','+......+','+.#+#.++','+......+','.++++++.','........'],
@@ -3258,7 +3262,7 @@
     const icons = {
       keystrokes:'keystrokes', fpsCounter:'fpsCounter', cpsCounter:'cpsCounter', pingCounter:'pingCounter', guiPatch:'guiPatch', armorHud:'armorHud',
       coordinates:'coordinates', dynamicCrosshair:'dynamicCrosshair', rebrand:'rebrand', titanTiny:'titanTiny', healthNameTags:'healthNameTags',
-      distanceNameTags:'distanceNameTags', patPat:'patPat', itemPhysics:'itemPhysics', noWeather:'noWeather', vanillaAnimations:'vanillaAnimations',
+      distanceNameTags:'distanceNameTags', patPat:'patPat', itemPhysics:'itemPhysics', noWeather:'noWeather', fullBright:'fullBright', vanillaAnimations:'vanillaAnimations',
       zoom:'zoom', cameraOverhaul:'cameraOverhaul', elytraFlight:'elytraFlight', freelook:'freelook', freecam:'freecam', blockHighlight:'blockHighlight',
       waypoints:'waypoints', customShader:'shaders', autoSprint:'movement', safeSneak:'movement', antiAfk:'antiAfk', rhythmParkour:'rhythmParkour', chatVideos:'chatVideos', chatLinks:'chatLinks', chatMemes:'chatMemes', clientChat:'clientChat',
       discord:'discord', supportAds:'supportAds'
@@ -3347,6 +3351,7 @@
     item: 'itemPhysics', itemphysics: 'itemPhysics', physics: 'itemPhysics',
     keys: 'keystrokes', keystrokes: 'keystrokes',
     noweather: 'noWeather', weather: 'noWeather',
+    fullbright: 'fullBright', bright: 'fullBright', brightness: 'fullBright',
     leafwind: 'leafWind', leaves: 'leafWind', foliage: 'leafWind',
     pat: 'patPat', patpat: 'patPat',
     ping: 'pingCounter', pingcounter: 'pingCounter',
@@ -3366,7 +3371,7 @@
     distanceNameTags: 'distanceNameTags', fpsCounter: 'fpsCounter', freelook: 'freelook', freecam: 'freecam',
     guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers',
     healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
-    keystrokes: 'keystrokes', noWeather: 'noWeather', leafWind: 'leafWind', patPat: 'patPat',
+    keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat',
     pingCounter: 'pingCounter', titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations',
     waypoints: 'waypoints', zoom: 'zoom'
   });
@@ -3822,6 +3827,29 @@
       },
       destroy() {
         sendNoWeatherConfig(false);
+      }
+    }));
+  }
+
+  function sendFullBrightConfig(enabled = settings.fullBright) {
+    document.dispatchEvent(new CustomEvent('minifeather:fullbright-config', {
+      detail: JSON.stringify({ enabled: !!enabled, floor: 0.16 })
+    }));
+  }
+
+  function initFullBrightModule() {
+    registerModule('fullBright', () => createLifecycle({
+      enable() {
+        sendFullBrightConfig(true);
+      },
+      disable() {
+        sendFullBrightConfig(false);
+      },
+      refresh() {
+        sendFullBrightConfig(MODULES.get('fullBright')?.enabled === true);
+      },
+      destroy() {
+        sendFullBrightConfig(false);
       }
     }));
   }
@@ -6151,6 +6179,11 @@
               t('noWeatherDesc')
             )}
             ${renderToggle(
+              'fullBright',
+              t('fullBright'),
+              t('fullBrightDesc')
+            )}
+            ${renderToggle(
               'leafWind',
               t('leafWind'),
               t('leafWindDesc')
@@ -7763,7 +7796,7 @@ function renderCreditsPage() {
   const NSB_BOOLEAN_KEYS = [
     'rebrand', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
-    'waterSplash', 'patPat', 'itemPhysics', 'noWeather', 'antiAfk', 'autoSprint',
+    'waterSplash', 'patPat', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
     'safeSneak', 'autoRespawn', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
     'dynamicCrosshair', 'vanillaAnimations', 'leafWind', 'handSway', 'betterPlayerLayers',
     'chatVideos', 'chatLinks', 'chatMemes', 'clientChat', 'rhythmParkour', 'guiPatch',
@@ -10548,6 +10581,7 @@ function renderCreditsPage() {
     setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
+    setModuleEnabled('fullBright', settings.fullBright);
     setModuleEnabled('autoRespawn', settings.autoRespawn);
     setModuleEnabled('antiAfk', settings.antiAfk);
     setModuleEnabled('autoSprint', settings.autoSprint);
@@ -11152,6 +11186,7 @@ function renderCreditsPage() {
     initPatPatModule();
     initItemPhysicsModule();
     initNoWeatherModule();
+    initFullBrightModule();
     initVanillaAnimationsModule();
     initLeafWindModule();
     initHandSwayModule();

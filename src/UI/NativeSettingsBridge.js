@@ -166,6 +166,7 @@
             { key: 'patPat', label: 'PatPat' },
             { key: 'itemPhysics', label: 'Item Physics' },
             { key: 'noWeather', label: 'No Weather' },
+            { key: 'fullBright', label: 'FullBright' },
             { key: 'leafWind', label: 'Leaf Wind' },
             { key: 'blockHighlight', label: 'Block Highlight' }
           ]

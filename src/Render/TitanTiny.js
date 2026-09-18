@@ -9,7 +9,7 @@
         syncCameraHeight: true,
         cameraHeightMultiplier: 1.00,
         syncNameTagHeight: true,
-        nativeNameTagGap: 0.70
+        fallbackNameTagGap: 0.40
     };
 
     const state = {
@@ -40,6 +40,7 @@
         cameraBaseEyeHeight: null,
         cameraHook: null,
         cameraHookDepth: 0,
+        eyeHeightHook: null,
         lastCameraScan: 0,
 
         nameTagEnabled: true,
@@ -47,6 +48,8 @@
         nameTagPath: null,
         nameTagBase: null,
         nameTagPatchedMesh: null,
+        nameTagOffsetMethod: null,
+        nameTagRenderMethod: null,
         nameTagOriginalOffsetFn: null,
         nameTagHadOwnOffset: false,
         nameTagOwnOffsetValue: undefined,
@@ -415,9 +418,123 @@
         return score;
     }
 
+    function uninstallEyeHeightHook() {
+        const hook = state.eyeHeightHook;
+
+        if (!hook) {
+            return;
+        }
+
+        const player = hook.player;
+
+        try {
+            if (player?.getEyeHeight === hook.wrapper) {
+                if (hook.hadOwn) {
+                    player.getEyeHeight = hook.ownValue;
+                } else {
+                    delete player.getEyeHeight;
+                }
+            }
+        } catch {}
+
+        state.eyeHeightHook = null;
+    }
+
+    function installEyeHeightHook(player) {
+        if (!player || typeof player.getEyeHeight !== 'function') {
+            uninstallEyeHeightHook();
+            return false;
+        }
+
+        if (
+            state.eyeHeightHook?.player === player &&
+            player.getEyeHeight === state.eyeHeightHook.wrapper
+        ) {
+            return true;
+        }
+
+        uninstallEyeHeightHook();
+
+        const hadOwn = Object.prototype.hasOwnProperty.call(player, 'getEyeHeight');
+        const ownValue = hadOwn ? player.getEyeHeight : undefined;
+        const original = player.getEyeHeight;
+
+        const wrapper = function (...args) {
+            let vanilla;
+
+            try {
+                vanilla = Number(original.apply(this, args));
+            } catch {
+                vanilla = 1.62;
+            }
+
+            if (!Number.isFinite(vanilla) || vanilla <= 0) {
+                vanilla = 1.62;
+            }
+
+            if (!state.enabled || !state.cameraHeightEnabled) {
+                return vanilla;
+            }
+
+            const factor = clamp(
+                Number(getEffectiveScale()) || 1,
+                CONFIG.minScale,
+                CONFIG.maxScale
+            );
+
+            return vanilla * factor * CONFIG.cameraHeightMultiplier;
+        };
+
+        try {
+            player.getEyeHeight = wrapper;
+        } catch {
+            return false;
+        }
+
+        state.eyeHeightHook = {
+            player,
+            original,
+            wrapper,
+            hadOwn,
+            ownValue
+        };
+
+        state.cameraPath = 'player.getEyeHeight';
+        return true;
+    }
+
+    function callVanillaEyeHeight(player) {
+        if (!player) {
+            return null;
+        }
+
+        const hook = state.eyeHeightHook;
+        const fn = hook?.player === player ? hook.original : player.getEyeHeight;
+
+        if (typeof fn !== 'function') {
+            return null;
+        }
+
+        try {
+            const value = Number(fn.call(player));
+            return Number.isFinite(value) && value > 0 ? value : null;
+        } catch {
+            return null;
+        }
+    }
+
     function getNativeEyeHeight(player) {
         if (!player) {
             return null;
+        }
+
+        const nativeMethodHeight = callVanillaEyeHeight(player);
+        if (
+            Number.isFinite(nativeMethodHeight) &&
+            nativeMethodHeight > 0.05 &&
+            nativeMethodHeight < 10
+        ) {
+            return nativeMethodHeight;
         }
 
         try {
@@ -426,13 +543,10 @@
                     'function' &&
                 validPosition(player.pos)
             ) {
-                const eye =
-                    player.getEyePos();
+                const eye = player.getEyePos();
 
                 if (validPosition(eye)) {
-                    const h =
-                        Number(eye.y) -
-                        Number(player.pos.y);
+                    const h = Number(eye.y) - Number(player.pos.y);
 
                     if (
                         Number.isFinite(h) &&
@@ -620,11 +734,20 @@
             const mx = camera.matrixWorld;
             if (mx && mx.elements) {
                 mx.elements[13] += offset;
-            }
 
-            const mxi = camera.matrixWorldInverse;
-            if (mxi && mxi.elements) {
-                mxi.elements[13] -= offset;
+                const mxi = camera.matrixWorldInverse;
+                if (mxi) {
+                    try {
+                        if (
+                            typeof mxi.copy === 'function' &&
+                            typeof mxi.invert === 'function'
+                        ) {
+                            mxi.copy(mx).invert();
+                        } else if (mxi.elements) {
+                            mxi.elements[13] -= offset;
+                        }
+                    } catch {}
+                }
             }
 
             return result;
@@ -675,6 +798,7 @@
 
     function resetCameraTarget() {
         uninstallCameraHook();
+        uninstallEyeHeightHook();
 
         state.camera = null;
         state.cameraPath = null;
@@ -876,33 +1000,21 @@
     }
 
     function applyCameraHeight() {
-        const game =
-            getGame();
+        const game = getGame();
 
         if (!game?.player) {
             return;
         }
 
-        const camera =
-            resolveCamera(game);
-
-        if (!camera) {
-            return;
-        }
+        uninstallCameraHook();
+        installEyeHeightHook(game.player);
 
         if (
-            !Number.isFinite(
-                state.cameraBaseEyeHeight
-            ) ||
+            !Number.isFinite(state.cameraBaseEyeHeight) ||
             state.cameraBaseEyeHeight <= 0
         ) {
-            state.cameraBaseEyeHeight =
-                getNativeEyeHeight(
-                    game.player
-                );
+            state.cameraBaseEyeHeight = getNativeEyeHeight(game.player);
         }
-
-        installCameraHook(camera);
     }
 
     function setCameraHeightEnabled(enabled) {
@@ -924,35 +1036,201 @@
         updateUI();
     }
 
-    const NATIVE_NAMETAG_OFFSET_METHOD =
-        'DskCNsFNrprfkz';
+    function getFunctionSource(fn) {
+        try {
+            return Function.prototype.toString.call(fn);
+        } catch {
+            return '';
+        }
+    }
+
+    function getPrototypeMethodNames(object) {
+        const names = [];
+        const seen = new Set();
+        let proto = object;
+
+        for (let depth = 0; proto && depth < 8; depth++) {
+            let keys = [];
+            try {
+                keys = Object.getOwnPropertyNames(proto);
+            } catch {
+                break;
+            }
+
+            for (const key of keys) {
+                if (key === 'constructor' || seen.has(key)) continue;
+                seen.add(key);
+                names.push(key);
+            }
+
+            try {
+                proto = Object.getPrototypeOf(proto);
+            } catch {
+                break;
+            }
+        }
+
+        return names;
+    }
+
+    function findNativeNameTagRenderMethod(mesh) {
+        if (!mesh) return null;
+
+        let best = null;
+
+        for (const key of getPrototypeMethodNames(mesh)) {
+            let fn;
+            try {
+                fn = mesh[key];
+            } catch {
+                continue;
+            }
+            if (typeof fn !== 'function') continue;
+
+            const source = getFunctionSource(fn);
+            if (!source || !source.includes('nameTagText')) continue;
+
+            let score = 0;
+            if (source.includes('nameTagColor')) score += 20;
+            if (source.includes('nameTagOpacity')) score += 20;
+            if (source.includes('.submit(')) score += 40;
+            if (source.includes('this.position')) score += 15;
+            if (/\by\s*:/.test(source) && /\bz\s*:/.test(source)) score += 15;
+
+            if (!best || score > best.score) {
+                best = { key, source, score };
+            }
+        }
+
+        return best?.score >= 40 ? best : null;
+    }
+
+    function methodNameFromNameTagRenderer(renderSource, mesh) {
+        if (!renderSource || !mesh) return null;
+
+        const patterns = [
+            /\by\s*:\s*[^,}]*\+\s*this\.([A-Za-z_$][\w$]*)\s*\(/,
+            /\by\s*:\s*this\.position\.y\s*\+\s*this\.([A-Za-z_$][\w$]*)\s*\(/,
+            /\.y\s*\+\s*this\.([A-Za-z_$][\w$]*)\s*\(\)/
+        ];
+
+        for (const pattern of patterns) {
+            const match = renderSource.match(pattern);
+            const key = match?.[1];
+            if (!key) continue;
+            try {
+                if (typeof mesh[key] === 'function') return key;
+            } catch {}
+        }
+
+        return null;
+    }
+
+    function findNativeNameTagOffsetMethod(mesh) {
+        if (!mesh) return null;
+
+        const renderer = findNativeNameTagRenderMethod(mesh);
+        const fromRenderer = methodNameFromNameTagRenderer(renderer?.source, mesh);
+        if (fromRenderer) {
+            return {
+                key: fromRenderer,
+                renderKey: renderer?.key || null
+            };
+        }
+
+        let best = null;
+
+        for (const key of getPrototypeMethodNames(mesh)) {
+            let fn;
+            try {
+                fn = mesh[key];
+            } catch {
+                continue;
+            }
+            if (typeof fn !== 'function') continue;
+
+            const source = getFunctionSource(fn);
+            if (!source) continue;
+
+            let score = 0;
+            if (source.includes('this.entity.height')) score += 100;
+            if (source.includes('.entity.height')) score += 40;
+            if (source.includes('return')) score += 10;
+            if (source.length < 240) score += 20;
+            if (source.includes('nameTag')) score += 15;
+
+            if (score < 40) continue;
+
+            let value = null;
+            try {
+                value = Number(fn.call(mesh));
+            } catch {}
+            if (Number.isFinite(value) && value > 0.05 && value < 20) score += 20;
+
+            if (!best || score > best.score) {
+                best = { key, score };
+            }
+        }
+
+        return best
+            ? { key: best.key, renderKey: renderer?.key || null }
+            : null;
+    }
+
+    function getNativeNameTagEntityHeight(mesh) {
+        const candidates = [
+            mesh?.entity?.height,
+            state.renderEntity?.height,
+            state.player?.height
+        ];
+
+        for (const value of candidates) {
+            const number = Number(value);
+            if (Number.isFinite(number) && number > 0.05 && number < 20) {
+                return number;
+            }
+        }
+
+        return null;
+    }
+
+    function inferNativeNameTagGap(mesh, vanillaOffset) {
+        const entityHeight = getNativeNameTagEntityHeight(mesh);
+        if (Number.isFinite(entityHeight)) {
+            const inferred = vanillaOffset - entityHeight;
+            if (Number.isFinite(inferred) && inferred >= 0 && inferred <= 2) {
+                return inferred;
+            }
+        }
+
+        return CONFIG.fallbackNameTagGap;
+    }
 
     function restoreNativeNameTagHook() {
-        const mesh =
-            state.nameTagPatchedMesh;
+        const mesh = state.nameTagPatchedMesh;
+        const method = state.nameTagOffsetMethod;
 
         if (
             mesh &&
+            method &&
             state.nameTagOriginalOffsetFn
         ) {
             try {
                 if (state.nameTagHadOwnOffset) {
-                    mesh[NATIVE_NAMETAG_OFFSET_METHOD] =
-                        state.nameTagOwnOffsetValue;
+                    mesh[method] = state.nameTagOwnOffsetValue;
                 } else {
-                    delete mesh[
-                        NATIVE_NAMETAG_OFFSET_METHOD
-                    ];
+                    delete mesh[method];
                 }
             } catch {
                 try {
-                    mesh[NATIVE_NAMETAG_OFFSET_METHOD] =
-                        state.nameTagOriginalOffsetFn;
+                    mesh[method] = state.nameTagOriginalOffsetFn;
                 } catch {}
             }
         }
 
         state.nameTagPatchedMesh = null;
+        state.nameTagOffsetMethod = null;
+        state.nameTagRenderMethod = null;
         state.nameTagOriginalOffsetFn = null;
         state.nameTagHadOwnOffset = false;
         state.nameTagOwnOffsetValue = undefined;
@@ -960,174 +1238,102 @@
     }
 
     function installNativeNameTagHook(mesh) {
-        if (
-            !state.nameTagEnabled ||
-            !mesh
-        ) {
-            return false;
-        }
-
-        const method =
-            mesh[
-                NATIVE_NAMETAG_OFFSET_METHOD
-            ];
-
-        if (
-            typeof method !==
-            'function'
-        ) {
-            return false;
-        }
+        if (!state.nameTagEnabled || !mesh) return false;
 
         if (
             state.nameTagPatchedMesh === mesh &&
-            state.nameTagOriginalOffsetFn
+            state.nameTagOffsetMethod &&
+            state.nameTagOriginalOffsetFn &&
+            typeof mesh[state.nameTagOffsetMethod] === 'function'
         ) {
             return true;
         }
 
+        const discovered = findNativeNameTagOffsetMethod(mesh);
+        const methodName = discovered?.key;
+        if (!methodName) return false;
+
+        let method;
+        try {
+            method = mesh[methodName];
+        } catch {
+            return false;
+        }
+        if (typeof method !== 'function') return false;
+
         restoreNativeNameTagHook();
 
-        const hadOwn =
-            Object.prototype
-                .hasOwnProperty
-                .call(
-                    mesh,
-                    NATIVE_NAMETAG_OFFSET_METHOD
-                );
-
-        const ownValue =
-            hadOwn
-                ? mesh[
-                    NATIVE_NAMETAG_OFFSET_METHOD
-                ]
-                : undefined;
-
-        const original =
-            method;
-
-        state.nameTagPatchedMesh =
-            mesh;
-
-        state.nameTagOriginalOffsetFn =
-            original;
-
-        state.nameTagHadOwnOffset =
-            hadOwn;
-
-        state.nameTagOwnOffsetValue =
-            ownValue;
-
-        state.nameTagObject =
-            mesh.nameTag || mesh;
-
-        state.nameTagPath =
-            `renderMesh.${NATIVE_NAMETAG_OFFSET_METHOD}`;
+        const hadOwn = Object.prototype.hasOwnProperty.call(mesh, methodName);
+        const ownValue = hadOwn ? mesh[methodName] : undefined;
+        const original = method;
 
         let vanillaOffset = null;
-
         try {
-            vanillaOffset =
-                Number(
-                    original.call(mesh)
-                );
+            vanillaOffset = Number(original.call(mesh));
         } catch {}
+        if (!Number.isFinite(vanillaOffset)) return false;
 
-        const gap =
-            Number(
-                CONFIG.nativeNameTagGap
-            );
+        const gap = inferNativeNameTagGap(mesh, vanillaOffset);
+        const bodyOffset = vanillaOffset - gap;
+        if (!Number.isFinite(bodyOffset) || bodyOffset <= 0) return false;
 
+        state.nameTagPatchedMesh = mesh;
+        state.nameTagOffsetMethod = methodName;
+        state.nameTagRenderMethod = discovered?.renderKey || null;
+        state.nameTagOriginalOffsetFn = original;
+        state.nameTagHadOwnOffset = hadOwn;
+        state.nameTagOwnOffsetValue = ownValue;
+        state.nameTagObject = mesh.nameTag || mesh;
+        state.nameTagPath = `renderMesh.${methodName}`;
         state.nameTagBase = {
             space: 'native-offset',
-            height:
-                Number.isFinite(
-                    vanillaOffset
-                )
-                    ? vanillaOffset
-                    : null,
-            gap:
-                Number.isFinite(gap)
-                    ? gap
-                    : 0.70,
-            bodyOffset:
-                Number.isFinite(
-                    vanillaOffset
-                )
-                    ? vanillaOffset -
-                        (
-                            Number.isFinite(gap)
-                                ? gap
-                                : 0.70
-                        )
-                    : null
+            height: vanillaOffset,
+            gap,
+            bodyOffset,
+            method: methodName,
+            renderMethod: discovered?.renderKey || null
         };
 
-        mesh[
-            NATIVE_NAMETAG_OFFSET_METHOD
-        ] = function (...args) {
-            const vanilla =
-                Number(
-                    original.apply(
-                        this,
-                        args
-                    )
-                );
-
-            if (
-                !Number.isFinite(
-                    vanilla
-                )
-            ) {
+        const wrapped = function (...args) {
+            const vanilla = Number(original.apply(this, args));
+            if (!Number.isFinite(vanilla) || !state.nameTagEnabled) {
                 return vanilla;
             }
 
-            if (
-                !state.nameTagEnabled
-            ) {
+            const factor = clamp(
+                Number(getEffectiveScale()) || 1,
+                CONFIG.minScale,
+                CONFIG.maxScale
+            );
+
+            if (Math.abs(factor - 1) < 0.000001) {
+                state.nameTagCurrentOffset = vanilla;
                 return vanilla;
             }
 
-            const factor =
-                clamp(
-                    Number(getEffectiveScale()) || 1,
-                    CONFIG.minScale,
-                    CONFIG.maxScale
-                );
+            const base = state.nameTagBase;
+            const nativeGap = Number(base?.gap);
+            const nativeBody = Number(base?.bodyOffset);
 
-            const nativeGap =
-                Number.isFinite(
-                    Number(
-                        CONFIG.nativeNameTagGap
-                    )
-                )
-                    ? Number(
-                        CONFIG.nativeNameTagGap
-                    )
-                    : 0.70;
+            if (!Number.isFinite(nativeGap) || !Number.isFinite(nativeBody)) {
+                state.nameTagCurrentOffset = vanilla;
+                return vanilla;
+            }
 
-            const bodyOffset =
-                vanilla -
-                nativeGap;
-
-            const result =
-                nativeGap +
-                bodyOffset *
-                factor;
-
-            state.nameTagCurrentOffset =
-                result;
-
+            const result = nativeGap + nativeBody * factor;
+            state.nameTagCurrentOffset = result;
             return result;
         };
 
         try {
-            state.nameTagCurrentOffset =
-                Number(
-                    mesh[
-                        NATIVE_NAMETAG_OFFSET_METHOD
-                    ]()
-                );
+            mesh[methodName] = wrapped;
+        } catch {
+            restoreNativeNameTagHook();
+            return false;
+        }
+
+        try {
+            state.nameTagCurrentOffset = Number(mesh[methodName]());
         } catch {}
 
         return true;
@@ -1172,23 +1378,16 @@
         }
 
         if (
-            typeof mesh[
-                NATIVE_NAMETAG_OFFSET_METHOD
-            ] !== 'function'
+            state.nameTagPatchedMesh === mesh &&
+            (
+                !state.nameTagOffsetMethod ||
+                typeof mesh[state.nameTagOffsetMethod] !== 'function'
+            )
         ) {
-            if (
-                state.nameTagPatchedMesh ===
-                mesh
-            ) {
-                clearNameTagTarget();
-            }
-
-            return null;
+            clearNameTagTarget();
         }
 
-        installNativeNameTagHook(
-            mesh
-        );
+        installNativeNameTagHook(mesh);
 
         return state.nameTagObject;
     }
@@ -1222,18 +1421,13 @@
         }
 
         try {
-            const value =
-                Number(
-                    mesh[
-                        NATIVE_NAMETAG_OFFSET_METHOD
-                    ]()
-                );
+            const method = state.nameTagOffsetMethod;
+            const value = method && typeof mesh[method] === 'function'
+                ? Number(mesh[method]())
+                : NaN;
 
-            if (
-                Number.isFinite(value)
-            ) {
-                state.nameTagCurrentOffset =
-                    value;
+            if (Number.isFinite(value)) {
+                state.nameTagCurrentOffset = value;
             }
         } catch {}
 

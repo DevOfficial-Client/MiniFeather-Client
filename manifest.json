@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.15.1",
-  "description": "MiniFeather Client for MiniBlox — optimized Realistic V4 Custom, adaptive FPS, unified panel theming, fixed language selector, polished UI and interaction sounds.",
+  "version": "4.15.4",
+  "description": "MiniFeather Client for MiniBlox — fixed Titan & Tiny native eye-height camera sync and FullBright ambient-light floor 0.16, with Realistic V4 Custom, adaptive FPS, unified theming and polished UI.",
   "permissions": [
     "storage",
     "declarativeNetRequest",
@@ -86,6 +86,7 @@
         "src/Render/PatPat.js",
         "src/Render/ItemPhysics.js",
         "src/Render/NoWeather.js",
+        "src/Render/FullBright.js",
         "src/Render/LeafWind.js",
         "src/Render/TinyModels.js",
         "src/Render/TinyTakeover.js",

@@ -1,7 +1,7 @@
 {
-  "builtAt": "2026-09-18T04:20:00Z",
+  "builtAt": "2026-09-18T04:30:00Z",
   "repository": "DevOfficial-Client/MiniFeather-Client",
   "branch": "main",
-  "note": "Realistic/UI stability update: fixes root-cause language-name translation collisions, unifies panel/module/keybind/update colors with the configured theme, optimizes Ultra and Custom adaptive rendering, improves panel motion, and adds subtle Web Audio enable/disable interaction sounds without external audio files.",
-  "version": "4.15.1"
+  "note": "Titan & Tiny camera height now follows MiniBlox native getEyeHeight at the selected scale; FullBright v2 clamps Miniblox voxel ambient-light uniforms/worker lighting to 0.16 without exposure or saturation changes.",
+  "version": "4.15.4"
 }
