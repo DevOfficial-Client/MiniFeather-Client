@@ -31,8 +31,6 @@
         width: CONFIG.defaultWidth,
         groundOffset: CONFIG.defaultGroundOffset,
         baseScale: null,
-        basePositionY: null,
-        lastAppliedOffset: 0,
 
         panelOpen: false,
         lastGameScan: 0,
@@ -2060,15 +2058,6 @@
                 state.baseScale.z
             );
         }
-
-        // revertir el offset de anclaje aplicado
-        const prev = Number(state.lastAppliedOffset) || 0;
-        if (prev && state.renderMesh?.position) {
-            try {
-                state.renderMesh.position.y -= prev;
-            } catch {}
-        }
-        state.lastAppliedOffset = 0;
     }
 
     function clearRenderTarget() {
@@ -2116,31 +2105,11 @@
             state.baseScale.z * factor * widthFactor
         );
 
-        // offset vertical (anclaje al suelo): suma un corrimiento al Y actual.
-        // El juego reposiciona el mesh cada frame; para no acumular, se resta
-        // el offset anterior aplicado y se suma el nuevo.
-        const offset =
-            state.enabled
-                ? clamp(
-                    Number(getEffectiveGroundOffset?.()) || 0,
-                    CONFIG.minGroundOffset,
-                    CONFIG.maxGroundOffset
-                ) * factor
-                : 0;
-
-        if (Number.isFinite(offset) && mesh.position) {
-            const prev = Number(state.lastAppliedOffset) || 0;
-            const nextY = Number(mesh.position.y) - prev + offset;
-            if (Number.isFinite(nextY)) {
-                try {
-                    mesh.position.y = nextY;
-                    state.lastAppliedOffset = offset;
-                } catch {}
-            }
-        } else {
-            state.lastAppliedOffset = 0;
-        }
-
+        // Anclaje al suelo: NO mutamos position (el juego es dueño de esa
+        // posición y peleábamos contra él cada frame — origen del bug del
+        // "cuerpo congelado"). En su lugar, el hook onBeforeRender aplica
+        // el offset como post-fix sobre matrixWorld (se recomputa limpia
+        // cada frame, así que no hay acumulación ni estado que revertir).
         try {
             if (
                 mesh.matrixAutoUpdate === false &&
@@ -2179,6 +2148,37 @@
                     }
 
                     applyCurrentScale();
+
+                    // offset visual de anclaje: post-fix sobre la matrixWorld
+                    // de ESTE renderable. Se aplica después de que el juego
+                    // computó la matrix del frame (antes del draw), así el
+                    // juego nunca ve un position mutado y no hay acumulación:
+                    // el frame siguiente recomputa matrixWorld desde la
+                    // cadena de padres, limpia.
+                    const offset =
+                        state.enabled
+                            ? clamp(
+                                Number(state.groundOffset) || 0,
+                                CONFIG.minGroundOffset,
+                                CONFIG.maxGroundOffset
+                            ) *
+                            clamp(
+                                Number(getEffectiveScale()) || 1,
+                                CONFIG.minScale,
+                                CONFIG.maxScale
+                            )
+                            : 0;
+
+                    if (
+                        offset &&
+                        Number.isFinite(offset) &&
+                        this?.matrixWorld?.elements
+                    ) {
+                        try {
+                            // e[13] = componente Y de la posición mundial
+                            this.matrixWorld.elements[13] += offset;
+                        } catch {}
+                    }
                 };
 
             try {
@@ -2251,9 +2251,6 @@
                 z:
                     Number(mesh.scale.z)
             };
-
-            state.basePositionY =
-                Number(mesh.position?.y);
 
             installHooks(mesh);
             discoverHitboxTargets();
