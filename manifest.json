@@ -83,6 +83,7 @@
         "src/Render/DistanceNameTags.js",
         "src/Render/DamageParticles.js",
         "src/Render/WaterSplash.js",
+        "src/Render/ShineAmbience.js",
         "src/Render/PatPat.js",
         "src/Render/ItemPhysics.js",
         "src/Render/NoWeather.js",
