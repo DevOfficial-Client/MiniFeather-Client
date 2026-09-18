@@ -22,6 +22,7 @@
         enabled: false,
         bind: '',
         scale: CONFIG.defaultScale,
+        width: CONFIG.defaultWidth,
         baseScale: null,
 
         panelOpen: false,
@@ -62,6 +63,10 @@
 
     function getEffectiveScale() {
         return state.enabled ? state.scale : 1;
+    }
+
+    function getEffectiveWidth() {
+        return state.enabled ? state.width : 1;
     }
 
     function updateUI() {}
@@ -1466,6 +1471,15 @@
         'entityHeight'
     ];
 
+    // claves cuyo factor es solo la escala vertical (altura/ojo)
+    const HITBOX_HEIGHT_KEYS = new Set([
+        'height',
+        'eyeHeight',
+        'collisionHeight',
+        'hitboxHeight',
+        'entityHeight'
+    ]);
+
     const HITBOX_NESTED_KEYS = [
         'hitbox',
         'collisionBox',
@@ -1774,6 +1788,13 @@
                 CONFIG.maxScale
             );
 
+        const widthFactor =
+            clamp(
+                Number(getEffectiveWidth()) || 1,
+                CONFIG.minWidth,
+                CONFIG.maxWidth
+            );
+
         for (
             const target
             of state.hitboxTargets
@@ -1783,18 +1804,24 @@
                     target.type ===
                     'scalar'
                 ) {
+                    const mult =
+                        HITBOX_HEIGHT_KEYS.has(target.key)
+                            ? factor
+                            : factor * widthFactor;
+
                     target.object[
                         target.key
                     ] =
                         target.base *
-                        factor;
+                        mult;
                 } else if (
                     target.type ===
                     'vector'
                 ) {
                     target.object.x =
                         target.base.x *
-                        factor;
+                        factor *
+                        widthFactor;
 
                     target.object.y =
                         target.base.y *
@@ -1802,7 +1829,8 @@
 
                     target.object.z =
                         target.base.z *
-                        factor;
+                        factor *
+                        widthFactor;
                 }
             } catch {}
         }
@@ -1845,7 +1873,8 @@
                 try {
                     object.setSize(
                         width.base *
-                            factor,
+                            factor *
+                            widthFactor,
                         height.base *
                             factor
                     );
@@ -2055,11 +2084,18 @@
                 CONFIG.maxScale
             );
 
+        const widthFactor =
+            clamp(
+                Number(getEffectiveWidth()) || 1,
+                CONFIG.minWidth,
+                CONFIG.maxWidth
+            );
+
         setScaleVector(
             mesh.scale,
-            state.baseScale.x * factor,
+            state.baseScale.x * factor * widthFactor,
             state.baseScale.y * factor,
-            state.baseScale.z * factor
+            state.baseScale.z * factor * widthFactor
         );
 
         try {
@@ -2198,6 +2234,20 @@
         updateUI();
     }
 
+    function setWidth(value) {
+        state.width =
+            clamp(
+                Number(value) || 1,
+                CONFIG.minWidth,
+                CONFIG.maxWidth
+            );
+
+        resolveRenderTarget(true);
+        applyCurrentScale();
+        applyLocalHitboxScale();
+        updateUI();
+    }
+
     function resetScale() {
         setScale(1);
     }
@@ -2218,6 +2268,7 @@
                 detail: JSON.stringify({
                     enabled: !!state.enabled,
                     scale: Number(state.scale) || 1,
+                    width: Number(state.width) || 1,
                     bind: state.bind || '',
                     reason
                 })
@@ -2346,6 +2397,7 @@
         },
         reset() {
             this.setScale(1);
+            this.setWidth(1);
         },
         refresh() {
             clearRenderTarget();
@@ -2357,6 +2409,9 @@
         },
         get scale() {
             return state.scale;
+        },
+        get width() {
+            return state.width;
         },
         get bind() {
             return state.bind;

@@ -21,8 +21,8 @@ const state = {
     announceTimer: null,
     skinTold: new Map(),           
     // Titan & Tiny: escala propia + escalas conocidas de peers
-    myScale: 1,
-    peerScales: new Map(),         
+    myScale: { s: 1, w: 1 },
+    peerScales: new Map(),         // username -> { s, w }
     scaleTold: new Map(),          
 };
 
@@ -158,11 +158,13 @@ function wire(conn) {
         clearTimeout(to);
         state.conns.set(id, conn);
         state.scaleTold.delete(id);
+        const my = myTitanScale();
         sendTo(conn, {
             t: 'hello', name: myName(), code: state.myCode,
             peers: knownCodes(),
             skins: mySkinIds(),
-            scale: myTitanScale(),
+            scale: my.s,
+            width: my.w,
         });
         setTimeout(() => resendMySkin(conn), 700);
         setTimeout(() => sendMyScale(conn), 900);
@@ -200,14 +202,18 @@ function handleMsg(conn, m) {
 
             // escala Titan & Tiny del peer que saluda
             if (Number.isFinite(+m.scale) && +m.scale > 0) {
-                state.peerScales.set(String(m.name || ''), Math.min(5, Math.max(0.2, +m.scale)));
+                state.peerScales.set(String(m.name || ''), {
+                    s: Math.min(5, Math.max(0.2, +m.scale)),
+                    w: Number.isFinite(+m.width) && +m.width > 0 ? Math.min(3, Math.max(0.3, +m.width)) : 1
+                });
             }
 
             // redistribuir a los demás la escala conocida de este peer
             if (Number.isFinite(+m.scale) && +m.scale !== 1) {
+                const known = state.peerScales.get(String(m.name || ''));
                 for (const [pid, c] of state.conns) {
                     if (pid === conn.peer) continue;
-                    sendTo(c, { t: 'tt', scale: +m.scale, name: m.name || 'nodo' });
+                    sendTo(c, { t: 'tt', scale: +m.scale, width: known?.w ?? 1, name: m.name || 'nodo' });
                 }
             }
             
@@ -262,11 +268,14 @@ function handleMsg(conn, m) {
             if (!Number.isFinite(f) || f <= 0) break;
             const name = String(m.name || '');
             const clamped = Math.min(5, Math.max(0.2, f));
-            state.peerScales.set(name, clamped);
+            const width = Number.isFinite(+m.width) && +m.width > 0
+                ? Math.min(3, Math.max(0.3, +m.width))
+                : 1;
+            state.peerScales.set(name, { s: clamped, w: width });
             // relay al resto (los vecinos ya conectados quizá no lo conocen)
             for (const [pid, c] of state.conns) {
                 if (pid === conn.peer) continue;
-                sendTo(c, { t: 'tt', scale: clamped, name });
+                sendTo(c, { t: 'tt', scale: clamped, width, name });
             }
             break;
         }
@@ -435,9 +444,9 @@ function sendMyScale(conn) {
 const scaleMeshes = new Map();      // username -> { mesh, base:{x,y,z}, at }
 const PEER_SCALE_POLL = 2500;
 
-function setMeshScale(mesh, base, factor) {
+function setMeshScale(mesh, base, factor, widthFactor = 1) {
     try {
-        mesh.scale.set(base.x * factor, base.y * factor, base.z * factor);
+        mesh.scale.set(base.x * factor * widthFactor, base.y * factor, base.z * factor * widthFactor);
         if (mesh.matrixAutoUpdate === false && typeof mesh.updateMatrix === 'function') mesh.updateMatrix();
     } catch {}
 }
@@ -454,9 +463,9 @@ function peerScaleTick() {
     // 1) reportar mi propia escala cuando cambie
     try {
         const sc = myTitanScale();
-        if (sc !== state.myScale) {
+        if (sc.s !== state.myScale.s || sc.w !== state.myScale.w) {
             state.myScale = sc;
-            broadcast({ t: 'tt', scale: sc, name: myName() });
+            broadcast({ t: 'tt', scale: sc.s, width: sc.w, name: myName() });
         }
     } catch {}
 
@@ -464,7 +473,7 @@ function peerScaleTick() {
     if (!state.peerScales.size) {
         for (const [name, rec] of scaleMeshes) {
             if (!rec.mesh?.parent) { scaleMeshes.delete(name); continue; }
-            setMeshScale(rec.mesh, rec.base, 1);
+            setMeshScale(rec.mesh, rec.base, 1, 1);
             scaleMeshes.delete(name);
         }
         return;
@@ -476,7 +485,7 @@ function peerScaleTick() {
 
         // mesh muerto/viejo -> re-resolver
         if (rec && (!rec.mesh?.parent || now - rec.at > PEER_SCALE_POLL * 3)) {
-            setMeshScale(rec.mesh, rec.base, 1);
+            setMeshScale(rec.mesh, rec.base, 1, 1);
             scaleMeshes.delete(name);
             rec = null;
         }
@@ -494,7 +503,7 @@ function peerScaleTick() {
         }
 
         rec.at = now;
-        setMeshScale(rec.mesh, rec.base, factor);
+        setMeshScale(rec.mesh, rec.base, factor.s, factor.w);
     }
 }
 const scaleTimer = setInterval(peerScaleTick, PEER_SCALE_POLL);

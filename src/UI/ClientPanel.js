@@ -3786,6 +3786,7 @@
     const detail = JSON.stringify({
       enabled: !!enabled,
       scale: Math.max(0.20, Math.min(5.00, Number(settings.titanTinyScale) || 1)),
+      width: Math.max(0.30, Math.min(3.00, Number(settings.titanTinyWidth) || 1)),
       bind: String(settings.titanTinyBind || '')
     });
     document.dispatchEvent(new CustomEvent('minifeather:titantiny-config', { detail }));
@@ -4884,6 +4885,14 @@
           changed = true;
         }
       }
+      if (Number.isFinite(Number(state.width))) {
+        const width = Math.max(0.30, Math.min(3.00, Number(state.width)));
+        if (Math.abs((Number(settings.titanTinyWidth) || 1) - width) > 0.0001) {
+          settings.titanTinyWidth = width;
+          guiSettings.titanTinyWidth = width;
+          changed = true;
+        }
+      }
       if (typeof state.bind === 'string' && settings.titanTinyBind !== state.bind) {
         settings.titanTinyBind = state.bind;
         guiSettings.titanTinyBind = state.bind;
@@ -4914,6 +4923,7 @@
     const backdrop = document.createElement('div');
     backdrop.className = 'mf-tt-backdrop';
     const scale = Math.max(0.20, Math.min(5.00, Number(settings.titanTinyScale) || 1));
+    const width = Math.max(0.30, Math.min(3.00, Number(settings.titanTinyWidth) || 1));
     const bind = String(settings.titanTinyBind || '');
 
     backdrop.innerHTML = `
@@ -4932,6 +4942,17 @@
           <button type="button" class="mf-btn secondary" data-tt-preset="0.35">${t('titanTinyTiny')}</button>
           <button type="button" class="mf-btn secondary" data-tt-preset="1">${t('titanTinyNormal')}</button>
           <button type="button" class="mf-btn secondary" data-tt-preset="3">${t('titanTinyTitan')}</button>
+        </div>
+        <div class="mf-tt-row" style="margin-top:14px">
+          <span>${t('titanTinyWidth')}</span>
+          <span class="mf-tt-scale-value" data-tt-width-value>${width.toFixed(2)}×</span>
+        </div>
+        <input class="mf-tt-range" data-tt-width type="range" min="0.30" max="3.00" step="0.01" value="${width}">
+        <input class="mf-input" data-tt-width-number type="number" min="0.30" max="3.00" step="0.01" value="${width.toFixed(2)}">
+        <div class="mf-tt-presets">
+          <button type="button" class="mf-btn secondary" data-tt-width-preset="0.55">${t('titanTinySlim')}</button>
+          <button type="button" class="mf-btn secondary" data-tt-width-preset="1">${t('titanTinyNormalWidth')}</button>
+          <button type="button" class="mf-btn secondary" data-tt-width-preset="2">${t('titanTinyFat')}</button>
         </div>
         <div class="mf-tt-row"><span>${t('titanTinyBind')}</span></div>
         <div class="mf-tt-bind-box">
@@ -4976,6 +4997,32 @@
     });
     backdrop.querySelectorAll('[data-tt-preset]').forEach(button => {
       button.addEventListener('click', () => applyScale(button.dataset.ttPreset));
+    });
+
+    const widthSlider = backdrop.querySelector('[data-tt-width]');
+    const widthNumber = backdrop.querySelector('[data-tt-width-number]');
+    const widthValue = backdrop.querySelector('[data-tt-width-value]');
+
+    const applyWidth = value => {
+      const next = Math.max(0.30, Math.min(3.00, Number(value) || 1));
+      settings.titanTinyWidth = next;
+      guiSettings.titanTinyWidth = next;
+      if (widthSlider) widthSlider.value = String(next);
+      if (widthNumber) widthNumber.value = next.toFixed(2);
+      if (widthValue) widthValue.textContent = `${next.toFixed(2)}×`;
+      saveSettings();
+      sendTitanTinyConfig(settings.titanTiny);
+    };
+
+    widthSlider?.addEventListener('input', event => applyWidth(event.target.value));
+    widthNumber?.addEventListener('change', event => applyWidth(event.target.value));
+    widthNumber?.addEventListener('keydown', event => {
+      if (event.code !== 'Enter') return;
+      event.preventDefault();
+      applyWidth(event.target.value);
+    });
+    backdrop.querySelectorAll('[data-tt-width-preset]').forEach(button => {
+      button.addEventListener('click', () => applyWidth(button.dataset.ttWidthPreset));
     });
 
     const stopBinding = () => {
