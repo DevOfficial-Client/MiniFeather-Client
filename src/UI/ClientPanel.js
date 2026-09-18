@@ -521,6 +521,8 @@
     moduleBinds: {},
     titanTiny: false,
     titanTinyScale: 1.00,
+    titanTinyWidth: 1.00,
+    titanTinyGroundOffset: 0,
     titanTinyBind: '',
     healthNameTags: false,
     distanceNameTags: false,
@@ -3787,6 +3789,7 @@
       enabled: !!enabled,
       scale: Math.max(0.20, Math.min(5.00, Number(settings.titanTinyScale) || 1)),
       width: Math.max(0.30, Math.min(3.00, Number(settings.titanTinyWidth) || 1)),
+      groundOffset: Math.max(-1.50, Math.min(1.50, Number(settings.titanTinyGroundOffset) || 0)),
       bind: String(settings.titanTinyBind || '')
     });
     document.dispatchEvent(new CustomEvent('minifeather:titantiny-config', { detail }));
@@ -4890,6 +4893,14 @@
         if (Math.abs((Number(settings.titanTinyWidth) || 1) - width) > 0.0001) {
           settings.titanTinyWidth = width;
           guiSettings.titanTinyWidth = width;
+          changed = true;
+        }
+      }
+      if (Number.isFinite(Number(state.groundOffset))) {
+        const off = Math.max(-1.50, Math.min(1.50, Number(state.groundOffset)));
+        if (Math.abs((Number(settings.titanTinyGroundOffset) || 0) - off) > 0.0001) {
+          settings.titanTinyGroundOffset = off;
+          guiSettings.titanTinyGroundOffset = off;
           changed = true;
         }
       }

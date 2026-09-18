@@ -5,6 +5,12 @@
         minScale: 0.20,
         maxScale: 5.00,
         defaultScale: 1.00,
+        minWidth: 0.30,
+        maxWidth: 3.00,
+        defaultWidth: 1.00,
+        minGroundOffset: -1.50,
+        maxGroundOffset: 1.50,
+        defaultGroundOffset: 0,
         syncLocalHitbox: true,
         syncCameraHeight: true,
         cameraHeightMultiplier: 1.00,
@@ -23,7 +29,10 @@
         bind: '',
         scale: CONFIG.defaultScale,
         width: CONFIG.defaultWidth,
+        groundOffset: CONFIG.defaultGroundOffset,
         baseScale: null,
+        basePositionY: null,
+        lastAppliedOffset: 0,
 
         panelOpen: false,
         lastGameScan: 0,
@@ -2051,6 +2060,15 @@
                 state.baseScale.z
             );
         }
+
+        // revertir el offset de anclaje aplicado
+        const prev = Number(state.lastAppliedOffset) || 0;
+        if (prev && state.renderMesh?.position) {
+            try {
+                state.renderMesh.position.y -= prev;
+            } catch {}
+        }
+        state.lastAppliedOffset = 0;
     }
 
     function clearRenderTarget() {
@@ -2097,6 +2115,31 @@
             state.baseScale.y * factor,
             state.baseScale.z * factor * widthFactor
         );
+
+        // offset vertical (anclaje al suelo): suma un corrimiento al Y actual.
+        // El juego reposiciona el mesh cada frame; para no acumular, se resta
+        // el offset anterior aplicado y se suma el nuevo.
+        const offset =
+            state.enabled
+                ? clamp(
+                    Number(getEffectiveGroundOffset?.()) || 0,
+                    CONFIG.minGroundOffset,
+                    CONFIG.maxGroundOffset
+                ) * factor
+                : 0;
+
+        if (Number.isFinite(offset) && mesh.position) {
+            const prev = Number(state.lastAppliedOffset) || 0;
+            const nextY = Number(mesh.position.y) - prev + offset;
+            if (Number.isFinite(nextY)) {
+                try {
+                    mesh.position.y = nextY;
+                    state.lastAppliedOffset = offset;
+                } catch {}
+            }
+        } else {
+            state.lastAppliedOffset = 0;
+        }
 
         try {
             if (
@@ -2209,6 +2252,9 @@
                     Number(mesh.scale.z)
             };
 
+            state.basePositionY =
+                Number(mesh.position?.y);
+
             installHooks(mesh);
             discoverHitboxTargets();
             resolveNameTag(true);
@@ -2269,6 +2315,7 @@
                     enabled: !!state.enabled,
                     scale: Number(state.scale) || 1,
                     width: Number(state.width) || 1,
+                    groundOffset: Number(state.groundOffset) || 0,
                     bind: state.bind || '',
                     reason
                 })
@@ -2328,6 +2375,20 @@
                 CONFIG.maxScale
             );
         }
+        if ('width' in config) {
+            state.width = clamp(
+                Number(config.width) || CONFIG.defaultWidth,
+                CONFIG.minWidth,
+                CONFIG.maxWidth
+            );
+        }
+        if ('groundOffset' in config) {
+            state.groundOffset = clamp(
+                Number(config.groundOffset) || 0,
+                CONFIG.minGroundOffset,
+                CONFIG.maxGroundOffset
+            );
+        }
         if ('bind' in config) setBind(config.bind, false);
         if ('enabled' in config) state.enabled = !!config.enabled;
 
@@ -2380,6 +2441,24 @@
             applyEnabledState(true);
             emitState('scale');
         },
+        setWidth(value) {
+            state.width = clamp(
+                Number(value) || CONFIG.defaultWidth,
+                CONFIG.minWidth,
+                CONFIG.maxWidth
+            );
+            applyEnabledState(true);
+            emitState('width');
+        },
+        setGroundOffset(value) {
+            state.groundOffset = clamp(
+                Number(value) || 0,
+                CONFIG.minGroundOffset,
+                CONFIG.maxGroundOffset
+            );
+            applyEnabledState(true);
+            emitState('groundOffset');
+        },
         setEnabled(value) {
             setEnabled(value, true);
         },
@@ -2398,6 +2477,7 @@
         reset() {
             this.setScale(1);
             this.setWidth(1);
+            this.setGroundOffset(0);
         },
         refresh() {
             clearRenderTarget();

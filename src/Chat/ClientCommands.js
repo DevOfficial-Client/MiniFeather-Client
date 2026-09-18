@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge']);
 
   function parseDetail(event) {
     try {
@@ -53,6 +53,9 @@
       '\\yellow\\/bind <module> <key>\\reset\\ - Bind a module toggle',
       '\\yellow\\/unbind <module>\\reset\\ - Remove a module bind',
       '\\yellow\\/binds\\reset\\ - Show your module binds',
+      '\\yellow\\/pscale <0.2-5>\\reset\\ - Player size (tiny/normal/titan)',
+      '\\yellow\\/plarge <0.3-3>\\reset\\ - Player width (slim/normal/fat)',
+      '\\yellow\\/panchor <-1.5-1.5>\\reset\\ - Fix feet to ground (0 = reset)',
       '\\yellow\\/afk <5-150>\\reset\\ - Set Anti-AFK delay',
       '\\yellow\\/copycoord\\reset\\ - Copy your current coordinates',
       '\\yellow\\/waypoint add <name>\\reset\\ - Save your current position',
@@ -1538,6 +1541,57 @@
       addChat(st === 'off'
         ? 'Mesh: off — use /mesh on'
         : `Mesh: ${st} — ${n} node(s): ${names}`);
+      return;
+    }
+
+    if (command === 'pscale' || command === 'plarge' || command === 'panchor') {
+      const api = globalThis.TitanTiny;
+      if (!api) { addChat('Titan & Tiny is not ready yet.', 'error'); return; }
+
+      const raw = String(args[0] || '').toLowerCase();
+      const keywords = {
+        tiny: 0.35, small: 0.35, chico: 0.35, pequeno: 0.35,
+        normal: 1, normalWidth: 1,
+        titan: 3, big: 3, giant: 3, grande: 3, gigante: 3,
+        slim: 0.55, skinny: 0.55, delgado: 0.55,
+        fat: 2, gordo: 2, thick: 2,
+        reset: 0, off: 0
+      };
+      const num = Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : (keywords[raw] !== undefined ? keywords[raw] : NaN);
+
+      if (command === 'pscale') {
+        if (!Number.isFinite(num)) {
+          addChat(`Size: ${api.scale.toFixed(2)}x | ${api.enabled ? 'enabled' : 'disabled'} — /pscale <0.20-5.00> | tiny | normal | titan`, 'normal');
+          return;
+        }
+        const v = Math.max(0.20, Math.min(5.00, num));
+        api.setScale(v);
+        if (!api.enabled) api.setEnabled(true);
+        addChat(`Player size set to ${v.toFixed(2)}x.`, 'success');
+        return;
+      }
+
+      if (command === 'plarge') {
+        if (!Number.isFinite(num)) {
+          addChat(`Width: ${api.width.toFixed(2)}x — /plarge <0.30-3.00> | slim | normal | fat`, 'normal');
+          return;
+        }
+        const v = Math.max(0.30, Math.min(3.00, num));
+        api.setWidth(v);
+        if (!api.enabled) api.setEnabled(true);
+        addChat(v > 1 ? `You look fat now (${v.toFixed(2)}x wide).` : v < 1 ? `You look slim now (${v.toFixed(2)}x wide).` : 'Width back to normal.', 'success');
+        return;
+      }
+
+      // panchor
+      if (!Number.isFinite(num)) {
+        addChat(`Ground anchor offset: ${api.groundOffset.toFixed(2)} — /panchor <-1.50 to 1.50> | 0 = reset (negative sinks, positive floats)`, 'normal');
+        return;
+      }
+      const v = Math.max(-1.50, Math.min(1.50, num));
+      api.setGroundOffset(v);
+      if (!api.enabled) api.setEnabled(true);
+      addChat(`Ground anchor set to ${v.toFixed(2)}${v === 0 ? ' (reset)' : ''}.`, 'success');
       return;
     }
 
