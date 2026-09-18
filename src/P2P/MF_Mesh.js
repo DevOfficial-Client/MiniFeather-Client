@@ -113,11 +113,9 @@ async function start() {
     state.peer = peer;
     peer.on('open', (pid) => {
         state.status = 'listening';
-        announce(pid);
-        if (state.announceTimer) clearInterval(state.announceTimer);
-        state.announceTimer = setInterval(() => {
-            if (state.conns.size === 0) announce(pid);   
-        }, 60000);
+        // Sin anuncio automático al chat: para publicar el código usar
+        // el comando manual "/mesh announce" (announceNow()).
+        if (state.announceTimer) { clearInterval(state.announceTimer); state.announceTimer = null; }
     });
     peer.on('connection', (c) => accept(c));
     peer.on('disconnected', () => { try { peer.reconnect(); } catch {} });
