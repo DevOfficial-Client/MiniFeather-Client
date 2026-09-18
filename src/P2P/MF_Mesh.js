@@ -427,17 +427,21 @@ function revertMeshSkin(name) {
 function myTitanScale() {
     try {
         const tt = globalThis.TitanTiny;
-        return tt?.enabled ? Math.min(5, Math.max(0.2, +(Number(tt.scale) || 1))) : 1;
-    } catch { return 1; }
+        return tt?.enabled ? {
+            s: Math.min(5, Math.max(0.2, +(Number(tt.scale) || 1))),
+            w: Math.min(3, Math.max(0.3, +(Number(tt.width) || 1)))
+        } : { s: 1, w: 1 };
+    } catch { return { s: 1, w: 1 }; }
 }
 
 function sendMyScale(conn) {
     try {
         const sc = myTitanScale();
         const id = conn?.peer;
-        if (id && state.scaleTold.get(id) === sc) return;
+        const prev = id ? state.scaleTold.get(id) : null;
+        if (id && prev && prev.s === sc.s && prev.w === sc.w) return;
         if (id) state.scaleTold.set(id, sc);
-        sendTo(conn, { t: 'tt', scale: sc, name: myName() });
+        sendTo(conn, { t: 'tt', scale: sc.s, width: sc.w, name: myName() });
     } catch {}
 }
 
