@@ -41,6 +41,20 @@
         return me?.mesh || null;
     }
 
+    // La capa vive en mesh.capeMesh (rama separada del body). El filtro 64xN
+    // de abajo también matchea la textura de la capa (64x32) y el pintado
+    // facial le inyectaba una textura 8x8 → WebGL INVALID_ENUM. Excluirla.
+    function capeMeshesOf(mesh) {
+        const out = [];
+        try {
+            if (mesh?.capeMesh) out.push(mesh.capeMesh);
+            mesh?.traverse?.(o => {
+                if (o && o !== mesh && o.capeMesh && !out.includes(o.capeMesh)) out.push(o.capeMesh);
+            });
+        } catch {}
+        return out;
+    }
+
     function findSkinMaterials(mesh) {
         const out = [];
         if (!mesh) return out;
@@ -52,14 +66,21 @@
                 if (m?.map && !seen.has(m)) { seen.add(m); out.push(m); }
             }
         });
-        const skins = out.filter(m => {
+        const capeMats = new Set();
+        capeMeshesOf(mesh).forEach(cm => cm.traverse(o => {
+            if (!o?.material) return;
+            const list = Array.isArray(o.material) ? o.material : [o.material];
+            for (const m of list) if (m?.map) capeMats.add(m);
+        }));
+        const body = out.filter(m => !capeMats.has(m));
+        const skins = body.filter(m => {
             const w = m.map?.image?.width, h = m.map?.image?.height;
             if (!w || !h) return false;
-            
+
             const k64 = w / 64;
             return Number.isInteger(k64) && (h === w || h === w / 2);
         });
-        return skins.length ? skins : out;
+        return skins.length ? skins : (body.length ? body : out);
     }
 
     function resolveFace(name) {
