@@ -527,6 +527,7 @@
     damageParticles: false,
     waterSplash: true,
     shineAmbience: false,
+    shineAmbienceDensity: 1,
     patPat: false,
     itemPhysics: false,
     noWeather: false,
@@ -4051,8 +4052,9 @@
       const url = chrome.runtime.getURL('assets/particles/');
       if (url && !url.includes('://invalid/')) assetsBase = url;
     } catch (_) {}
+    const density = Math.max(0.1, Math.min(3, Number(settings.shineAmbienceDensity ?? 1) || 1));
     document.dispatchEvent(new CustomEvent('minifeather:shine-ambience-config', {
-      detail: JSON.stringify({ enabled: !!enabled, assetsBase })
+      detail: JSON.stringify({ enabled: !!enabled, assetsBase, density })
     }));
   }
 
@@ -6220,6 +6222,13 @@
               t('shineAmbience'),
               t('shineAmbienceDesc')
             )}
+            <div class="mf-shine-density" data-shine-density-box>
+              <div class="mf-tt-row" style="margin:0 0 6px">
+                <span>${t('shineAmbienceDensity')}</span>
+                <strong data-shine-density-value>${Number(settings.shineAmbienceDensity ?? 1).toFixed(2)}x</strong>
+              </div>
+              <input type="range" min="0.1" max="3" step="0.05" value="${Number(settings.shineAmbienceDensity ?? 1)}" data-shine-density style="width:100%">
+            </div>
             ${renderToggle(
               'vanillaAnimations',
               'Vanilla Animations',
@@ -9926,6 +9935,20 @@ function renderCreditsPage() {
     };
     wetDryRange?.addEventListener('input', () => applyWetDry(false));
     wetDryRange?.addEventListener('change', () => applyWetDry(true));
+
+    const shineDensityRange = panel.querySelector('[data-shine-density]');
+    const shineDensityValue = panel.querySelector('[data-shine-density-value]');
+    const applyShineDensity = (persist) => {
+      if (!shineDensityRange) return;
+      const density = Math.max(0.1, Math.min(3, Number(shineDensityRange.value) || 1));
+      guiSettings.shineAmbienceDensity = density;
+      settings.shineAmbienceDensity = density;
+      if (shineDensityValue) shineDensityValue.textContent = `${density.toFixed(2)}x`;
+      sendShineAmbienceConfig();
+      if (persist) saveSettings(true);
+    };
+    shineDensityRange?.addEventListener('input', () => applyShineDensity(false));
+    shineDensityRange?.addEventListener('change', () => applyShineDensity(true));
 
     panel.querySelector('#mf-replay-intro')?.addEventListener('click', () => {
       document.dispatchEvent(new CustomEvent('minifeather:splash-replay'));

@@ -154,6 +154,7 @@
     scratchVec3: null,
     particles: { butterfly: [], bird: [], pollen: [], waterPollen: [], firefly: [], lilyPad: [], jellyfish: [], boatWake: [], shootingStar: [] },
     boats: new Map(),
+    density: 1,
     starSpriteTex: null,
     nextStarAt: 0,
     emitters: [],
@@ -619,7 +620,7 @@
     const pp = game?.player?.pos;
 
     // spawn programado (solo de noche, igual que el shader del pack)
-    if (pp && isNight(game) && arr.length < def.cap) {
+    if (pp && isNight(game) && arr.length < Math.ceil(def.cap * state.density)) {
       if (!state.nextStarAt) {
         state.nextStarAt = now + 1000 * (def.firstSeconds[0] +
           Math.random() * (def.firstSeconds[1] - def.firstSeconds[0]));
@@ -1050,7 +1051,7 @@
         boat.lostAt = now;
 
         if (!inWater || speed < def.speedThreshold) continue;
-        if (now - boat.lastSpawn < 1000 / def.spawnRate) continue;
+        if (now - boat.lastSpawn < 1000 / (def.spawnRate * state.density)) continue;
         boat.lastSpawn = now;
 
         const dirX = Number(entity.motion.x) / (speed || 1);
@@ -1063,7 +1064,8 @@
 
         // espuma en V: partículas que siguen la dirección del bote (foam)
         const foamCount = Math.max(1, Math.round(def.foamDensity * 0.35));
-        for (let i = 0; i < foamCount && state.particles.boatWake.length < def.cap; i++) {
+        const foamCap = Math.ceil(def.cap * state.density);
+        for (let i = 0; i < foamCount && state.particles.boatWake.length < foamCap; i++) {
           const side = Math.random() < 0.5 ? -1 : 1;
           const latX = -dirZ * side, latZ = dirX * side;
           const back = 0.3 + Math.random() * 1.4;
@@ -1083,7 +1085,7 @@
 
         // wake: salpicaduras laterales más rápidas que se alejan del casco
         const wakeCount = Math.max(1, Math.round(def.outwardDensity * 0.4));
-        for (let i = 0; i < wakeCount && state.particles.boatWake.length < def.cap;  i++) {
+        for (let i = 0; i < wakeCount && state.particles.boatWake.length < foamCap; i++) {
           const side = Math.random() < 0.5 ? -1 : 1;
           const latX = -dirZ * side, latZ = dirX * side;
           const p = spawnWakeParticle(
@@ -1151,13 +1153,15 @@
     updateShootingStars(dt, now, camera);
 
     // spawn escalonado hasta el target por especie (en grupos cuando aplica)
+    // density: multiplicador del slider de Settings (afecta a TODO el pack,
+    // incluidas las estelas de botes; el splash de WaterSplash es aparte)
     for (const kind of Object.keys(SPECIES)) {
       if (kind === 'boatWake' || kind === 'shootingStar') continue; // sistemas propios
       const def = SPECIES[kind];
       if (kind === 'firefly' && !night) continue;
       const arr = state.particles[kind];
-      const target = Math.min(def.cap, Math.ceil(def.cap * def.density));
-      if (arr.length < target && Math.random() < def.spawnRate * dt * 2) {
+      const target = Math.ceil(def.cap * def.density * state.density);
+      if (arr.length < target && Math.random() < def.spawnRate * state.density * dt * 2) {
         const leader = spawnParticle(kind, def, now);
         if (leader) {
           arr.push(leader);
@@ -1259,6 +1263,10 @@
     if (typeof detail?.assetsBase === 'string' && isValidAssetsUrl(detail.assetsBase)) {
       state.assetsBase = detail.assetsBase;
     }
+    const newDensity = Math.max(0.1, Math.min(3, Number(detail?.density) || 1));
+    const densityChanged = newDensity !== state.density;
+    state.density = newDensity;
+    if (densityChanged) clearParticles(); // repuebla con los nuevos targets
     if (state.enabled) {
       state.destroyed = false;
       start();
