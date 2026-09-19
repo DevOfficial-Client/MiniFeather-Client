@@ -7,10 +7,10 @@
     if (globalThis.MF_DuckMobs) return;
 
     const CFG = {
-        MAX: 12,                    // tope de mobs vivos
         WANDER_RADIUS: 14,          // radio de patrulla alrededor del spawn del jugador
         RESET_DIST: 40,             // reciclar mob si se aleja demasiado del jugador
-        LOOK_SIT_MS: 1800           // mirar fijo para que un pato se siente
+        LOOK_SIT_MS: 1800,          // mirar fijo para que un pato se siente
+        SPAWN_MS: 2400              // cadencia de poblado gradual
     };
 
     // ---------- especies ----------
@@ -51,6 +51,7 @@
     const state = {
         enabled: false,
         mobs: [],                   // { id, rec, sp, ai:{...} }
+        quota: 3 + Math.floor(Math.random() * 7), // 3-9 mobs por sesion
         spawnCenter: null,
         lastSpawn: 0,
         stamp: { alive: true }
@@ -86,26 +87,59 @@
             const chunk = proto.getChunk.call(world, { x: fx, y: fy, z: fz });
             if (chunk == null || chunk.isDummyChunk) return null;
             const bs = chunk.getBlockState({ x: fx, y: fy, z: fz });
-            return bs ? bs.id : 0;
+            return bs || null;
         } catch { return null; }
+    }
+
+    // nombres de bloque via cache por id (estilo WetnessSystem)
+    const nameCache = new Map();
+    function blockName(bs) {
+        if (!bs) return '';
+        const id = Number(bs.id);
+        if (Number.isFinite(id) && nameCache.has(id)) return nameCache.get(id);
+        let name = '';
+        try {
+            const block = bs.getBlock?.() || bs.block || bs._block || null;
+            name = String(block?.name || block?.id || bs.name || '').toLowerCase();
+        } catch {}
+        if (Number.isFinite(id) && name) nameCache.set(id, name);
+        return name;
     }
 
     const WATER_IDS = new Set();
     function isWaterAt(x, y, z) {
-        const id = blockIdAt(x, y, z);
-        if (id == null) return false;
-        if (!WATER_IDS.size) {
-            for (let i = 9; i <= 11; i++) WATER_IDS.add(i);
-            WATER_IDS.add(17);
+        const bs = blockIdAt(x, y, z);
+        if (!bs || !bs.id) return false;
+        if (WATER_IDS.has(bs.id)) return true;
+        const n = blockName(bs);
+        if (n === 'water' || n === 'flowing_water' || /(^|_)water($|_)/.test(n)) {
+            WATER_IDS.add(bs.id);
+            return true;
         }
-        return WATER_IDS.has(id);
+        return false;
+    }
+
+    // pasto, flores y similares: no bloquean el paso ni cuentan como suelo
+    const PASSABLE_RE = /(^|_)(grass|tall_grass|fern|seagrass|flower|tulip|dandelion|poppy|orchid|allium|bluet|cornflower|lily|sunflower|rose|peony|sapling|wheat|carrot|potato|beetroot|mushroom|snow_layer|dead_bush|sweet_berry|bush|vine|kelp)$/;
+
+    function isSolidAt(x, y, z) {
+        const bs = blockIdAt(x, y, z);
+        if (!bs || !bs.id) return false;
+        const n = blockName(bs);
+        if (!n) return true; // sin nombre: asumir solido
+        if (PASSABLE_RE.test(n) || /(^|_)(air|torch|rail|carpet|web|fire)/.test(n)) return false;
+        return true;
     }
 
     function groundYAt(x, y, z) {
         for (let dy = 0; dy < 6; dy++) {
-            const id = blockIdAt(x, y - dy, z);
-            if (id == null) return null;
-            if (id !== 0) return y - dy;
+            const yy = y - dy;
+            if (!isSolidAt(x, yy, z)) {
+                // no solido: si es aire/pasto sigue bajando; agua detiene la busqueda
+                if (isWaterAt(x, yy, z)) return null;
+                continue;
+            }
+            return yy;
         }
         return null;
     }
@@ -389,6 +423,19 @@
 
         const inWater = isWaterAt(p.x, p.y - 0.2, p.z);
 
+        // al entrar/salir del agua cambia la animacion de locomocion
+        if (inWater !== ai.wasWater) {
+            ai.wasWater = inWater;
+            if (inWater) {
+                if (ai.mode === 'walk') { ai.mode = 'swim'; setAnim(mob, 'swim'); }
+                else if (ai.mode === 'panic') setAnim(mob, 'panic_swim');
+                else if (ai.mode === 'idle' || ai.mode === 'sit') setAnim(mob, 'idle_swim');
+            } else {
+                if (ai.mode === 'swim') { ai.mode = 'walk'; setAnim(mob, 'walk'); }
+                else if (ai.mode === 'idle') setAnim(mob, 'idle');
+            }
+        }
+
         if (sp.aggressive && player) {
             const handled = gooseAggroTick(mob, ai, t, dPlayer, player, p);
             if (handled) {
@@ -553,8 +600,8 @@
             }
         }
 
-        // poblar gradualmente
-        if (p && state.mobs.length < CFG.MAX && t - state.lastSpawn > 1400) {
+        // poblar gradualmente hasta la cuota de la sesion (3-9)
+        if (p && state.mobs.length < state.quota && t - state.lastSpawn > CFG.SPAWN_MS) {
             spawnMob();
             state.lastSpawn = t;
         }
@@ -582,6 +629,7 @@
             state.enabled = true;
             state.stamp = { alive: true };
             state.lastT = performance.now();
+            if (!state.quota) state.quota = 3 + Math.floor(Math.random() * 7); // 3-9
             schedule();
             console.log(TAG + ' activado (patos + gansos)');
             return true;
