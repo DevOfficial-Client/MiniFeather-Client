@@ -2,8 +2,11 @@
   'use strict';
 
   // GIF picker for the vanilla game chat, powered by KLIPY.
-  // - typing ":gif" in the game chat input (or the tiny GIF button beside it)
-  //   opens a searchable GIF overlay
+  // - typing ":gif" in the game chat input (or the tiny GIF button inside it)
+  //   opens a preview BAR anchored right above the chat input
+  // - the chat input text itself drives the search (type "cats" to search cats)
+  // - Tab / Shift+Tab cycles the previews, Enter sends the selected GIF,
+  //   Escape closes the bar; clicking a preview also sends it
   // - picking one sends the static.klipy.com URL as a normal chat message
   // - every client with MiniFeather renders those URLs as inline GIFs
   // - API requests go MAIN -> ISOLATED bridge -> extension background (no CORS)
@@ -13,6 +16,7 @@
   const KLIPY_DEFAULT_KEY = 'TooX4OMhCyQ6UexMQ7wD9zraorJP0FJZcohUhs49XzygxcokDVWcNYD2Y3j4gEMP';
   const KLIPY_CACHE_TTL = 5 * 60 * 1000; // testing mode: 100 req/h — cache hard
   const TRIGGER_RE = /(^|\s):gif\b\s*$/i;
+  const TRIGGER_TOKEN_RE = /(^|\s):gif\b\s*/i;
   const KLIPY_URL_RE = /https:\/\/static\.klipy\.com\/[\w./-]+\.(?:gif|webp)(?=\s|$)/gi;
 
   try {
@@ -25,9 +29,10 @@
     game: null,
     chat: null,
     scanTimer: 0,
-    pickerOpen: false,
+    barOpen: false,
+    sel: -1,
     items: [],
-    overlay: null,
+    bar: null,
     button: null,
     chatInputEl: null,
     cache: new Map(), // query -> { ts, items }
@@ -37,16 +42,16 @@
 
   // ─── i18n (light; falls back to English) ─────────────────────
   const STRINGS = {
-    en: { search: 'Search GIFs…', loading: 'Loading…', none: 'No GIFs found.', error: 'Could not load GIFs.' },
-    es: { search: 'Buscar GIFs…', loading: 'Cargando…', none: 'No se encontraron GIFs.', error: 'No se pudieron cargar los GIFs.' },
-    pt: { search: 'Pesquisar GIFs…', loading: 'Carregando…', none: 'Nenhum GIF encontrado.', error: 'Não foi possível carregar os GIFs.' },
-    fr: { search: 'Rechercher des GIFs…', loading: 'Chargement…', none: 'Aucun GIF trouvé.', error: 'Impossible de charger les GIFs.' },
-    de: { search: 'GIFs suchen…', loading: 'Lädt…', none: 'Keine GIFs gefunden.', error: 'GIFs konnten nicht geladen werden.' },
-    it: { search: 'Cerca GIF…', loading: 'Caricamento…', none: 'Nessuna GIF trovata.', error: 'Impossibile caricare le GIF.' },
-    ru: { search: 'Поиск GIF…', loading: 'Загрузка…', none: 'GIF не найдены.', error: 'Не удалось загрузить GIF.' },
-    ja: { search: 'GIFを検索…', loading: '読み込み中…', none: 'GIFが見つかりませんでした。', error: 'GIFを読み込めませんでした。' },
-    ko: { search: 'GIF 검색…', loading: '로딩 중…', none: 'GIF를 찾을 수 없습니다.', error: 'GIF를 로드할 수 없습니다.' },
-    zh: { search: '搜索 GIF…', loading: '加载中…', none: '未找到 GIF。', error: '无法加载 GIF。' }
+    en: { loading: 'Loading…', none: 'No GIFs found.', error: 'Could not load GIFs.', hint: 'Tab to browse · Enter to send · Esc to close' },
+    es: { loading: 'Cargando…', none: 'No se encontraron GIFs.', error: 'No se pudieron cargar los GIFs.', hint: 'Tab para navegar · Enter para enviar · Esc para cerrar' },
+    pt: { loading: 'Carregando…', none: 'Nenhum GIF encontrado.', error: 'Não foi possível carregar os GIFs.', hint: 'Tab para navegar · Enter para enviar · Esc para fechar' },
+    fr: { loading: 'Chargement…', none: 'Aucun GIF trouvé.', error: 'Impossible de charger les GIFs.', hint: 'Tab pour parcourir · Entrée pour envoyer · Échap pour fermer' },
+    de: { loading: 'Lädt…', none: 'Keine GIFs gefunden.', error: 'GIFs konnten nicht geladen werden.', hint: 'Tab zum Blättern · Enter zum Senden · Esc zum Schließen' },
+    it: { loading: 'Caricamento…', none: 'Nessuna GIF trovata.', error: 'Impossibile caricare le GIF.', hint: 'Tab per sfogliare · Invio per inviare · Esc per chiudere' },
+    ru: { loading: 'Загрузка…', none: 'GIF не найдены.', error: 'Не удалось загрузить GIF.', hint: 'Tab — листать · Enter — отправить · Esc — закрыть' },
+    ja: { loading: '読み込み中…', none: 'GIFが見つかりませんでした。', error: 'GIFを読み込めませんでした。', hint: 'Tabで移動 · Enterで送信 · Escで閉じる' },
+    ko: { loading: '로딩 중…', none: 'GIF를 찾을 수 없습니다.', error: 'GIF를 로드할 수 없습니다.', hint: 'Tab 이동 · Enter 전송 · Esc 닫기' },
+    zh: { loading: '加载中…', none: '未找到 GIF。', error: '无法加载 GIF。', hint: 'Tab 切换 · Enter 发送 · Esc 关闭' }
   };
 
   function L(key) {
@@ -149,8 +154,13 @@
           const full = it?.file?.sd?.webp?.url || it?.file?.sm?.webp?.url || it?.file?.sd?.gif?.url || '';
           if (thumb && full) mapped.push({ thumb, full });
         }
+        console.log('[GifChat] klipyRequest OK:', list.length, 'items crudos →', mapped.length, 'mapeados');
         state.cache.set(cacheKey, { ts: Date.now(), items: mapped });
         return mapped;
+      })
+      .catch(err => {
+        console.warn('[GifChat] klipyRequest FALLÓ:', err?.message || err);
+        throw err;
       });
   }
 
@@ -161,7 +171,7 @@
     if (!node) return;
     const root = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
-    if (root.closest?.('#mf-gifchat-overlay')) return;
+    if (root.closest?.('#mf-gifchat-bar')) return;
     try {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
         acceptNode(textNode) {
@@ -242,129 +252,143 @@
     });
   }
 
-  // ─── Overlay picker UI ───────────────────────────────────────
-  function buildOverlay() {
-    if (state.overlay) return state.overlay;
-    const overlay = document.createElement('div');
-    overlay.id = 'mf-gifchat-overlay';
-    overlay.hidden = true;
-    overlay.innerHTML = `
-      <div class="mf-gifc-head">
-        <input class="mf-gifc-search" maxlength="64">
-        <button class="mf-gifc-close" type="button">✕</button>
-      </div>
-      <div class="mf-gifc-grid"></div>
-      <div class="mf-gifc-powered">Powered by <a href="https://klipy.com" target="_blank" rel="noopener noreferrer">KLIPY</a></div>
-    `;
+  // ─── GIF preview bar (inline strip above the chat input) ─────
+  function injectBarStyle() {
+    if (document.getElementById('mf-gifchat-bar-style')) return;
     const css = document.createElement('style');
+    css.id = 'mf-gifchat-bar-style';
     css.textContent = `
-      #mf-gifchat-overlay {
-        position:fixed; left:50%; bottom:22%; transform:translateX(-50%);
-        width:min(520px, 92vw);
-        background:rgba(9,14,26,.96); border:1px solid #2b3b55; border-radius:14px;
-        padding:10px; z-index:2147483000; color:#dbe4f3;
-        font-family:system-ui, sans-serif; font-size:12px;
-        display:flex; flex-direction:column; gap:8px;
-        box-shadow:0 10px 40px rgba(0,0,0,.66);
+      #mf-gifchat-bar {
+        position:absolute; bottom:calc(100% + 8px); left:0; right:0;
+        background:rgba(9,14,26,.96); border:1px solid #2b3b55; border-radius:10px;
+        padding:6px; z-index:2147483000; color:#dbe4f3;
+        font-family:system-ui, sans-serif; font-size:11px;
+        box-shadow:0 6px 24px rgba(0,0,0,.55);
       }
-      #mf-gifchat-overlay .mf-gifc-head { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
-      #mf-gifchat-overlay .mf-gifc-search {
-        background:#0f172a; border:1px solid #27354c; border-radius:8px; color:#e2e8f0;
-        padding:7px 10px; font-size:12px; outline:none;
+      #mf-gifchat-bar[hidden] { display:none; }
+      #mf-gifchat-bar .mf-gifc-row {
+        display:flex; gap:6px; overflow-x:auto; overflow-y:hidden;
+        min-height:68px; align-items:center; scrollbar-width:thin;
       }
-      #mf-gifchat-overlay .mf-gifc-search:focus { border-color:#38bdf8; }
-      #mf-gifchat-overlay .mf-gifc-close {
-        background:#1e293b; border:1px solid #27354c; color:#94a3b8; border-radius:8px;
-        width:32px; cursor:pointer; font-size:13px;
+      #mf-gifchat-bar .mf-gifc-cell {
+        flex:none; width:68px; height:68px; padding:0;
+        border:2px solid #27354c; border-radius:8px; background:#0b1220;
+        cursor:pointer; overflow:hidden;
       }
-      #mf-gifchat-overlay .mf-gifc-close:hover { color:#e2e8f0; border-color:#475569; }
-      #mf-gifchat-overlay .mf-gifc-grid {
-        display:grid; grid-template-columns:repeat(auto-fill, minmax(92px,1fr)); gap:6px;
-        max-height:min(300px, 40vh); overflow-y:auto; min-height:64px;
+      #mf-gifchat-bar .mf-gifc-cell.active { border-color:#38bdf8; box-shadow:0 0 0 1px rgba(56,189,248,.45); }
+      #mf-gifchat-bar .mf-gifc-cell img { width:100%; height:100%; object-fit:cover; display:block; }
+      #mf-gifchat-bar .mf-gifc-note { flex:1; color:#64748b; text-align:center; padding:20px 0; }
+      #mf-gifchat-bar .mf-gifc-foot {
+        display:flex; justify-content:space-between; gap:8px; align-items:center;
+        margin-top:5px; color:#64748b; font-size:10px; white-space:nowrap; overflow:hidden;
       }
-      #mf-gifchat-overlay .mf-gifc-cell {
-        padding:0; border:1px solid #27354c; border-radius:8px; background:#0b1220;
-        cursor:pointer; overflow:hidden; aspect-ratio:1/1;
-        display:flex; align-items:center; justify-content:center;
+      #mf-gifchat-bar .mf-gifc-powered a { color:#94a3b8; text-decoration:none; }
+
+      #mf-gifchat-btn {
+        position:absolute; right:6px; top:50%; transform:translateY(-50%);
+        background:rgba(30,41,59,.85); color:#7dd3fc; border:1px solid #2b4a63; border-radius:6px;
+        font-size:10px; font-weight:700; letter-spacing:.4px; padding:2px 7px;
+        cursor:pointer; z-index:50; font-family:system-ui, sans-serif;
       }
-      #mf-gifchat-overlay .mf-gifc-cell:hover { border-color:#38bdf8; }
-      #mf-gifchat-overlay .mf-gifc-cell img { width:100%; height:100%; object-fit:cover; display:block; }
-      #mf-gifchat-overlay .mf-gifc-note { grid-column:1/-1; color:#64748b; text-align:center; padding:16px 0; }
-      #mf-gifchat-overlay .mf-gifc-powered { font-size:10px; color:#64748b; text-align:right; }
-      #mf-gifchat-overlay .mf-gifc-powered a { color:#94a3b8; text-decoration:none; }
+      #mf-gifchat-btn:hover { background:#334155; color:#bae6fd; }
+      #mf-gifchat-btn.on { background:#0c4a6e; color:#e0f2fe; border-color:#38bdf8; }
+      .mf-gifchat-host > input { padding-right:44px; }
     `;
     document.head.appendChild(css);
-    document.body.appendChild(overlay);
-
-    overlay.querySelector('.mf-gifc-search').placeholder = L('search');
-    wireOverlay(overlay);
-    state.overlay = overlay;
-    return overlay;
   }
 
-  function gridHtml(items) {
+  function buildBar(wrapper) {
+    if (state.bar && state.bar.parentElement === wrapper) return state.bar;
+    state.bar?.remove();
+    state.bar = null;
+
+    const bar = document.createElement('div');
+    bar.id = 'mf-gifchat-bar';
+    bar.hidden = true;
+    bar.innerHTML = `
+      <div class="mf-gifc-row"></div>
+      <div class="mf-gifc-foot">
+        <span class="mf-gifc-hint"></span>
+        <span class="mf-gifc-powered">Powered by <a href="https://klipy.com" target="_blank" rel="noopener noreferrer">KLIPY</a></span>
+      </div>
+    `;
+    wrapper.appendChild(bar);
+    bar.querySelector('.mf-gifc-hint').textContent = L('hint');
+    bar.addEventListener('mousedown', event => event.preventDefault()); // keep chat input focused
+    bar.addEventListener('click', event => {
+      const cell = event.target.closest('.mf-gifc-cell');
+      if (!cell) return;
+      const index = Number(cell.dataset.index || -1);
+      const item = state.items[index];
+      if (item) sendGif(item);
+    });
+    state.bar = bar;
+    return bar;
+  }
+
+  function rowHtml(items) {
     if (!items.length) return `<div class="mf-gifc-note">${escapeHtml(L('none'))}</div>`;
-    return items.map(item => `
-      <button class="mf-gifc-cell" type="button" data-full="${escapeHtml(item.full)}">
+    return items.map((item, index) => `
+      <button class="mf-gifc-cell${index === state.sel ? ' active' : ''}" type="button" data-index="${index}">
         <img src="${escapeHtml(item.thumb)}" alt="" loading="lazy" decoding="async">
       </button>
     `).join('');
   }
 
-  function loadGrid(query) {
-    const grid = state.overlay?.querySelector('.mf-gifc-grid');
-    if (!grid) return;
-    grid.innerHTML = `<div class="mf-gifc-note">${escapeHtml(L('loading'))}</div>`;
+  function updateActive() {
+    const row = state.bar?.querySelector('.mf-gifc-row');
+    if (!row) return;
+    row.querySelectorAll('.mf-gifc-cell').forEach((cell, i) => {
+      cell.classList.toggle('active', i === state.sel);
+      if (i === state.sel) cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+  }
+
+  function loadBar(query) {
+    const row = state.bar?.querySelector('.mf-gifc-row');
+    if (!row) return;
+    row.innerHTML = `<div class="mf-gifc-note">${escapeHtml(L('loading'))}</div>`;
     klipyRequest(query)
       .then(items => {
-        if (!state.pickerOpen) return;
+        if (!state.barOpen) return;
         state.items = items;
-        grid.innerHTML = gridHtml(items);
+        state.sel = items.length ? 0 : -1;
+        row.innerHTML = rowHtml(items);
+        updateActive();
       })
       .catch(() => {
-        if (state.pickerOpen) grid.innerHTML = `<div class="mf-gifc-note">${escapeHtml(L('error'))}</div>`;
+        if (state.barOpen) row.innerHTML = `<div class="mf-gifc-note">${escapeHtml(L('error'))}</div>`;
       });
   }
 
-  let searchDebounce = 0;
-
-  function wireOverlay(overlay) {
-    overlay.querySelector('.mf-gifc-close').addEventListener('click', () => closePicker());
-    const search = overlay.querySelector('.mf-gifc-search');
-    search.addEventListener('input', () => {
-      clearTimeout(searchDebounce);
-      searchDebounce = setTimeout(() => loadGrid(search.value.trim()), 350);
-    });
-    search.addEventListener('keydown', event => {
-      if (event.key === 'Escape') closePicker();
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        clearTimeout(searchDebounce);
-        loadGrid(search.value.trim());
-      }
-      event.stopPropagation();
-    });
-    overlay.querySelector('.mf-gifc-grid').addEventListener('click', event => {
-      const cell = event.target.closest('.mf-gifc-cell');
-      if (!cell) return;
-      const item = state.items.find(i => i.full === cell.dataset.full);
-      if (item) sendGif(item);
-    });
+  function queryFromInput() {
+    const input = state.chatInputEl;
+    return String(input?.value || '').replace(TRIGGER_TOKEN_RE, ' ').trim();
   }
 
-  function openPicker() {
-    const chat = ensureChat();
-    if (!chat) return;
-    const overlay = buildOverlay();
-    overlay.hidden = false;
-    state.pickerOpen = true;
-    loadGrid('');
-    setTimeout(() => overlay.querySelector('.mf-gifc-search')?.focus(), 30);
+  function openBar() {
+    const input = findChatInput();
+    const wrapper = input?.parentElement;
+    if (!input || !wrapper) return;
+    injectBarStyle();
+    if (getComputedStyle(wrapper).position === 'static') wrapper.style.position = 'relative';
+    buildBar(wrapper);
+    state.bar.hidden = false;
+    state.barOpen = true;
+    state.button?.classList.add('on');
+    loadBar(queryFromInput());
+    try { input.focus(); } catch (_) {}
   }
 
-  function closePicker() {
-    state.pickerOpen = false;
-    if (state.overlay) state.overlay.hidden = true;
+  function closeBar() {
+    state.barOpen = false;
+    state.button?.classList.remove('on');
+    if (state.bar) state.bar.hidden = true;
+  }
+
+  function toggleBar() {
+    if (state.barOpen) closeBar();
+    else openBar();
   }
 
   function sendGif(item) {
@@ -379,10 +403,10 @@
       return;
     }
     try { chat.closeInput?.(); } catch (_) {}
-    closePicker();
+    closeBar();
   }
 
-  // ─── Tiny GIF button + ':gif' typing trigger ─────────────────
+  // ─── Tiny GIF button inside the chat bar ─────────────────────
   function findChatInput() {
     // the game chat input is a real <input>; while the chat is open it is
     // the visible/focused one at the bottom of the HUD
@@ -392,7 +416,7 @@
     state.chatInputEl = null;
     const candidates = document.querySelectorAll('input[type="text"], input:not([type])');
     for (const input of candidates) {
-      if (input.closest('#mf-gifchat-overlay')) continue;
+      if (input.closest('#mf-gifchat-bar')) continue;
       if (input.closest('#mf-gui, #mf-gui-overlay')) continue; // our panel
       if (input.offsetParent === null) continue; // hidden
       state.chatInputEl = input; // keep the last visible one (chat bar)
@@ -402,8 +426,18 @@
 
   function ensureButton() {
     const input = findChatInput();
-    if (!input) return;
-    if (state.button && state.button.parentElement === input.parentElement) return;
+    if (!input) {
+      // chat closed → drop the bar too
+      if (state.barOpen) closeBar();
+      return;
+    }
+    const wrapper = input.parentElement;
+    if (!wrapper) return;
+    if (state.button && state.button.parentElement === wrapper) {
+      // React may have re-rendered: re-attach the bar if it vanished while open
+      if (state.barOpen && (!state.bar || !state.bar.isConnected)) openBar();
+      return;
+    }
     state.button?.remove();
     state.button = null;
 
@@ -412,49 +446,78 @@
     btn.type = 'button';
     btn.textContent = 'GIF';
     btn.title = 'MiniFeather GIFs (:gif)';
-    const wrapper = input.parentElement;
-    if (!wrapper) return;
     if (getComputedStyle(wrapper).position === 'static') wrapper.style.position = 'relative';
+    wrapper.classList.add('mf-gifchat-host');
     wrapper.appendChild(btn);
+    btn.addEventListener('mousedown', event => event.preventDefault()); // keep chat input focused
     btn.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
-      openPicker();
+      toggleBar();
     });
     state.button = btn;
+    if (state.barOpen) openBar();
   }
 
-  function injectButtonStyle() {
-    if (document.getElementById('mf-gifchat-btn-style')) return;
-    const css = document.createElement('style');
-    css.id = 'mf-gifchat-btn-style';
-    css.textContent = `
-      #mf-gifchat-btn {
-        position:absolute; right:6px; top:50%; transform:translateY(-50%);
-        background:rgba(30,41,59,.8); color:#7dd3fc; border:1px solid #2b4a63; border-radius:6px;
-        font-size:10px; font-weight:700; letter-spacing:.4px; padding:2px 7px;
-        cursor:pointer; z-index:50; font-family:system-ui, sans-serif;
-      }
-      #mf-gifchat-btn:hover { background:#334155; color:#bae6fd; }
-    `;
-    document.head.appendChild(css);
-  }
+  // ─── ':gif' trigger + live search + Tab/Enter/Esc handling ───
+  let searchDebounce = 0;
 
   function hookTyping() {
     document.addEventListener('input', event => {
-      if (!state.enabled || state.pickerOpen) return;
+      if (!state.enabled) return;
       const target = event.target;
       if (!target || target.tagName !== 'INPUT') return;
-      if (target.closest('#mf-gifchat-overlay')) return;
+      if (target.closest('#mf-gifchat-bar')) return;
       const chat = ensureChat();
       // only when the game chat input is open — that's the chat bar
       if (!chat?.showInput && !chat?.inputOpen) return;
       const value = String(target.value || '');
+
+      if (state.barOpen) {
+        // live search: the chat input text is the query
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(() => loadBar(value.replace(TRIGGER_TOKEN_RE, ' ').trim()), 350);
+        return;
+      }
+
       if (!TRIGGER_RE.test(value)) return;
-      // clear the trigger and open the picker
+      // clear the trigger and open the bar
       try { chat.setInputValue?.(''); } catch (_) {}
       if (target.value) target.value = '';
-      openPicker();
+      openBar();
+    }, true);
+  }
+
+  function hookKeys() {
+    document.addEventListener('keydown', event => {
+      if (!state.enabled || !state.barOpen) return;
+      const input = state.chatInputEl;
+      if (!input || event.target !== input) return;
+
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const n = state.items.length;
+        if (!n) return;
+        const dir = event.shiftKey ? -1 : 1;
+        state.sel = (state.sel + dir + n) % n;
+        updateActive();
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const item = state.items[state.sel] || state.items[0];
+        if (item) sendGif(item);
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeBar();
+      }
     }, true);
   }
 
@@ -474,7 +537,7 @@
   function sync() {
     if (state.enabled && !state.destroyed) {
       startRenderer();
-      injectButtonStyle();
+      injectBarStyle();
       if (!state.scanTimer) {
         state.scanTimer = window.setInterval(() => {
           if (state.enabled) { ensureChat(); ensureButton(); }
@@ -483,11 +546,13 @@
       ensureChat();
       ensureButton();
     } else {
-      closePicker();
+      closeBar();
       stopRenderer();
       if (state.scanTimer) { clearInterval(state.scanTimer); state.scanTimer = 0; }
       state.button?.remove();
       state.button = null;
+      state.bar?.remove();
+      state.bar = null;
       state.chatInputEl = null;
     }
   }
@@ -499,16 +564,18 @@
     sync();
     clearInterval(state.scanTimer);
     document.removeEventListener(CONFIG_EVENT, onConfig);
-    state.overlay?.remove();
-    state.overlay = null;
+    state.bar?.remove();
+    state.bar = null;
     if (globalThis[GLOBAL_KEY]?.destroy === destroy) delete globalThis[GLOBAL_KEY];
   }
 
   document.addEventListener(CONFIG_EVENT, onConfig);
   hookTyping();
+  hookKeys();
   globalThis[GLOBAL_KEY] = {
-    open: openPicker,
-    close: closePicker,
+    open: openBar,
+    close: closeBar,
+    toggle: toggleBar,
     setApiKey(key) { state.apiKey = String(key || ''); state.cache.clear(); },
     destroy
   };
