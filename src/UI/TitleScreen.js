@@ -154,6 +154,7 @@
   }
 
   document.addEventListener(CONFIG_EVENT, onConfig);
+  console.log('[TitleScreen] script cargado y escuchando', CONFIG_EVENT);
   globalThis[GLOBAL_KEY] = {
     enable() { state.enabled = true; apply(); },
     disable() { state.enabled = false; apply(); },
