@@ -226,6 +226,7 @@
         "assets/pvtexpack.png",
         "assets/shadertextures/*",
         "assets/menu/*",
+        "assets/classic/*",
         "assets/garden/*",
         "assets/ui/*",
         "textures/*",

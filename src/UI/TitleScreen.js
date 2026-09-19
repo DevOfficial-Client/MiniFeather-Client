@@ -1,22 +1,21 @@
 (function () {
   'use strict';
 
-  // Classic Miniblox title screen (Miniblox-master engine homage):
-  // the original C# OpenTK engine showed a flat SkyBlue background with a
-  // HotPink triangle and a rotating gray cube (MINIBLOXGAME.cs OnLoad).
-  // This module recreates that screen as an overlay over the web title
-  // screen; the vanilla UI stays intact underneath and one toggle restores it.
+  // Classic Miniblox title screen (the old miniblox.io web GUI, 2021-2023):
+  // pixel-art background panorama, "MINIBLOX" logo top-left, a vertical menu
+  // column (Settings / Friends / Shop / Leaderboards / Discord / Contact Us),
+  // "Free PRO rank!" banner, a big ">> Play <<" button bottom-center, Sign In
+  // top-right and a small footer with links. Recreated as a full-screen overlay
+  // over the current web title screen; one toggle restores the vanilla GUI.
   //
-  // Layers (web title screen):
-  //   #react z:4 (menu z:2, navbar z:20) · #canvas-hud z:10 · overlay z:2147483000
+  // Layers (current title screen): #react z:4 · #canvas-hud z:10 · overlay z:2147483000
+  // Assets live in web_accessible_resources: assets/classic/*
 
   const GLOBAL_KEY = '__MINIFEATHER_TITLE_SCREEN__';
   const CONFIG_EVENT = 'minifeather:titlescreen-config';
-
-  // Color4.SkyBlue = (135, 206, 235, 1); Color4.HotPink = (255, 105, 180, 1)
-  const SKY_BLUE = '#87CEEB';
-  const HOT_PINK = '#FF69B4';
-  const CUBE_GRAY = '#808080';
+  const ASSET_BASE = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
+    ? chrome.runtime.getURL('assets/classic/')
+    : '';
 
   try {
     globalThis[GLOBAL_KEY]?.destroy?.();
@@ -25,101 +24,158 @@
   const state = {
     enabled: false,
     overlay: null,
-    raf: 0,
     destroyed: false
   };
 
   function destroyOverlay() {
-    if (state.raf) {
-      cancelAnimationFrame(state.raf);
-      state.raf = 0;
-    }
     state.overlay?.remove();
     state.overlay = null;
     document.getElementById('mf-titlescreen-style')?.remove();
   }
 
-  // ─── HTML overlay with CSS 3D (no WebGL needed) ──────────────
+  // ─── Classic GUI overlay (measured from the old site at 1280x720) ──
   function buildOverlay() {
     const style = document.createElement('style');
     style.id = 'mf-titlescreen-style';
     style.textContent = `
+      @font-face {
+        font-family: 'Minecraft-Regular';
+        src: url('${ASSET_BASE}Minecraft-Regular.otf') format('opentype');
+        font-display: block;
+      }
       #mf-classic-title {
         position:fixed; inset:0; z-index:2147483000;
-        background:${SKY_BLUE};
-        display:flex; align-items:center; justify-content:center;
-        font-family:'Courier New', monospace;
+        font-family:'Minecraft-Regular', monospace;
+        color:#fff; user-select:none;
+        background:#000 url('${ASSET_BASE}title.png') center / cover no-repeat;
+        image-rendering:pixelated;
+        overflow:hidden;
       }
       #mf-classic-title[hidden] { display:none; }
-      #mf-classic-title .mf-ct-scene {
-        position:relative; width:340px; height:240px;
-        perspective:520px;
+      #mf-classic-title .mct-logo {
+        position:absolute; left:16px; top:16px; width:268px; height:64px;
+        image-rendering:pixelated;
       }
-      #mf-classic-title .mf-ct-tri {
-        position:absolute; left:20px; top:60px; width:0; height:0;
-        border-left:56px solid transparent; border-right:56px solid transparent;
-        border-bottom:96px solid ${HOT_PINK};
+      #mf-classic-title .mct-menu {
+        position:absolute; left:16px; top:178px; width:200px;
+        display:flex; flex-direction:column; gap:0;
       }
-      #mf-classic-title .mf-ct-cube {
-        position:absolute; left:210px; top:70px;
-        width:64px; height:64px;
-        transform-style:preserve-3d;
-        animation:mf-ct-spin 7s linear infinite;
+      #mf-classic-title .mct-menu button, #mf-classic-title .mct-pro button,
+      #mf-classic-title .mct-signin button, #mf-classic-title .mct-play button {
+        width:100%; height:54px;
+        background:rgba(0,0,0,.4); color:#fff;
+        border:2px solid #a0a0a0; border-radius:4px;
+        font-family:inherit; font-size:18px; text-shadow:2px 2px 0 rgba(0,0,0,.6);
+        cursor:pointer; box-shadow:0 3px 0 rgba(0,0,0,.35);
       }
-      #mf-classic-title .mf-ct-cube .f {
-        position:absolute; inset:0; background:${CUBE_GRAY};
-        border:1px solid #6e6e6e;
+      #mf-classic-title .mct-menu button + button { margin-top:10px; }
+      #mf-classic-title .mct-menu button:hover, #mf-classic-title .mct-pro button:hover,
+      #mf-classic-title .mct-signin button:hover {
+        background:rgba(255,255,255,.18); border-color:#fff;
       }
-      @keyframes mf-ct-spin {
-        from { transform:rotateX(-24deg) rotateY(0deg); }
-        to   { transform:rotateX(-24deg) rotateY(360deg); }
+      #mf-classic-title .mct-pro {
+        position:absolute; left:50%; top:16px; width:200px; transform:translateX(-50%);
       }
-      #mf-classic-title .mf-ct-title {
-        position:absolute; left:0; right:0; top:8px;
-        text-align:center; color:#1b2733;
-        font-size:26px; font-weight:700; letter-spacing:3px;
+      #mf-classic-title .mct-pro .badge {
+        position:absolute; right:-6px; top:-8px; background:gold; color:#3a2c00;
+        border-radius:4px; padding:2px 6px; font-size:12px; text-shadow:none;
       }
-      #mf-classic-title .mf-ct-sub {
-        position:absolute; left:0; right:0; bottom:10px;
-        text-align:center; color:#2c3e50;
-        font-size:11px; letter-spacing:1px;
+      #mf-classic-title .mct-signin {
+        position:absolute; right:16px; top:16px; width:133px;
       }
+      #mf-classic-title .mct-play {
+        position:absolute; left:50%; bottom:24px; width:300px; height:160px;
+        transform:translateX(-50%);
+      }
+      #mf-classic-title .mct-play button {
+        height:100%; font-size:26px; border-color:#cfcfcf;
+        background:rgba(0,0,0,.4);
+      }
+      #mf-classic-title .mct-play button:hover {
+        background:rgba(255,255,255,.18); border-color:#fff;
+      }
+      #mf-classic-title .mct-footer {
+        position:absolute; left:6px; bottom:2px; width:804px;
+        display:flex; gap:18px; font-size:13px; text-shadow:1px 1px 0 rgba(0,0,0,.7);
+      }
+      #mf-classic-title .mct-footer a { color:#9ad0ff; text-decoration:none; }
+      #mf-classic-title .mct-footer a:hover { text-decoration:underline; }
       #mf-classic-restore {
-        position:absolute; right:16px; top:16px;
+        position:absolute; right:16px; top:80px;
         background:rgba(20,40,60,.75); color:#cfe8ff;
         border:1px solid #3d6a8a; border-radius:6px;
         font:600 11px/1 system-ui, sans-serif; padding:7px 12px;
-        cursor:pointer;
+        cursor:pointer; z-index:1;
       }
       #mf-classic-restore:hover { background:#274b6d; }
     `;
     document.head.appendChild(style);
 
-    // gray cube faces (ObjectFactory.CreateSolidCube)
-    const FACE_TRANSFORMS = [
-      'transform:translateZ(32px)',
-      'transform:rotateY(180deg) translateZ(32px)',
-      'transform:rotateY(90deg) translateZ(32px)',
-      'transform:rotateY(-90deg) translateZ(32px)',
-      'transform:rotateX(90deg) translateZ(32px)',
-      'transform:rotateX(-90deg) translateZ(32px)'
-    ];
-
     const overlay = document.createElement('div');
     overlay.id = 'mf-classic-title';
     overlay.innerHTML = `
-      <div class="mf-ct-scene">
-        <div class="mf-ct-title">MINIBLOX</div>
-        <div class="mf-ct-tri"></div>
-        <div class="mf-ct-cube">${FACE_TRANSFORMS.map(tr => `<div class="f" style="${tr}"></div>`).join('')}</div>
-        <div class="mf-ct-sub">Classic engine screen · MiniFeather</div>
+      <img class="mct-logo" src="${ASSET_BASE}miniblox.png" alt="Miniblox">
+      <div class="mct-menu">
+        <button type="button" data-act="settings">Settings</button>
+        <button type="button" data-act="friends">Friends</button>
+        <button type="button" data-act="shop">Shop</button>
+        <button type="button" data-act="leaderboards">Leaderboards</button>
+        <button type="button" data-act="discord">Discord</button>
+        <button type="button" data-act="contact">Contact Us</button>
+      </div>
+      <div class="mct-pro">
+        <button type="button" data-act="pro">Free PRO rank!<span class="badge">NEW</span></button>
+      </div>
+      <div class="mct-signin">
+        <button type="button" data-act="signin">Sign In</button>
+      </div>
+      <div class="mct-play">
+        <button type="button" data-act="play">&gt;&gt;   Play   &lt;&lt;</button>
+      </div>
+      <div class="mct-footer">
+        <a href="https://miniblox.io/privacy" target="_blank" rel="noopener noreferrer">Privacy</a>
+        <a href="https://miniblox.io/terms" target="_blank" rel="noopener noreferrer">Terms</a>
+        <a href="https://miniblox.io/partner-sites" target="_blank" rel="noopener noreferrer">Partner Sites</a>
+        <a href="https://miniblox.io/cookies" target="_blank" rel="noopener noreferrer">Cookies</a>
+        <a href="https://miniblox.io/changelog" target="_blank" rel="noopener noreferrer">Changelog</a>
       </div>
       <button id="mf-classic-restore" type="button">⬅ Volver a la GUI normal</button>
     `;
+
+    overlay.addEventListener('click', event => {
+      const btn = event.target.closest('button[data-act]');
+      if (!btn) return;
+      const act = btn.dataset.act;
+      if (act === 'restore') return;
+      // Play closes the classic overlay and reveals the vanilla title screen
+      // (where the player picks a server / mode to actually play).
+      if (act === 'play') {
+        document.dispatchEvent(new CustomEvent('minifeather:titlescreen-restore'));
+        return;
+      }
+      // Menu buttons: hide overlay and open the corresponding vanilla flow.
+      // The vanilla navbar at the bottom offers the same destinations.
+      document.dispatchEvent(new CustomEvent('minifeather:titlescreen-restore'));
+      setTimeout(() => {
+        const navButtons = [...document.querySelectorAll('#react button')];
+        const map = {
+          settings: /ajustes|settings|options/i,
+          friends: /friends|amigos/i,
+          shop: /shop|tienda/i,
+          leaderboards: /leaderboard|clasificaciones/i,
+          discord: /discord/i
+        };
+        const re = map[act];
+        if (!re) return;
+        const target = navButtons.find(b => re.test(b.textContent.trim()));
+        target?.click();
+      }, 60);
+    });
+
     overlay.querySelector('#mf-classic-restore').addEventListener('click', () => {
-      // restore vanilla: notify the panel to flip the setting off
       document.dispatchEvent(new CustomEvent('minifeather:titlescreen-restore'));
     });
+
     document.body.appendChild(overlay);
     state.overlay = overlay;
     return overlay;
@@ -129,13 +185,13 @@
     if (state.enabled && !state.destroyed) {
       if (!state.overlay || !state.overlay.isConnected) buildOverlay();
       state.overlay.hidden = false;
+      console.log('[TitleScreen] overlay visible (classic web GUI)');
     } else {
       destroyOverlay();
     }
   }
 
-  // ─── Config sources: panel event + direct storage (this file runs in the
-  // ISOLATED world, same as ClientPanel, so chrome.storage is available) ──
+  // ─── Config sources: panel event + direct storage (ISOLATED world) ──
   function onConfig(event) {
     let detail = event.detail;
     try { detail = typeof detail === 'string' ? JSON.parse(detail) : detail; } catch (_) { return; }
