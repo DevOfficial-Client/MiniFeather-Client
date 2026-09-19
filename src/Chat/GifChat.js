@@ -297,8 +297,8 @@
     document.head.appendChild(css);
   }
 
-  function buildBar(wrapper) {
-    if (state.bar && state.bar.parentElement === wrapper) return state.bar;
+  function buildBar() {
+    if (state.bar && state.bar.isConnected) return state.bar;
     state.bar?.remove();
     state.bar = null;
 
@@ -312,7 +312,7 @@
         <span class="mf-gifc-powered">Powered by <a href="https://klipy.com" target="_blank" rel="noopener noreferrer">KLIPY</a></span>
       </div>
     `;
-    wrapper.appendChild(bar);
+    document.body.appendChild(bar);
     bar.querySelector('.mf-gifc-hint').textContent = L('hint');
     bar.addEventListener('mousedown', event => event.preventDefault()); // keep chat input focused
     bar.addEventListener('click', event => {
@@ -366,16 +366,31 @@
     return String(input?.value || '').replace(TRIGGER_TOKEN_RE, ' ').trim();
   }
 
+  function positionBar() {
+    const bar = state.bar;
+    const input = state.chatInputEl;
+    if (!bar || !input) return;
+    const rect = input.getBoundingClientRect();
+    const width = Math.min(560, Math.max(280, rect.width), window.innerWidth * 0.92);
+    bar.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)) + 'px';
+    bar.style.top = Math.max(8, rect.top - 8) + 'px';
+    bar.style.width = width + 'px';
+    // with transform:translateY(-100%), top = input top means the bar sits
+    // just above the input; clamp so it never leaves the viewport
+    const h = bar.offsetHeight || 0;
+    if (rect.top - 8 - h < 0) bar.style.top = (rect.bottom + 8) + 'px';
+  }
+
   function openBar() {
     const input = findChatInput();
-    const wrapper = input?.parentElement;
-    if (!input || !wrapper) return;
+    if (!input) { console.warn('[GifChat] openBar: no se encontró el input del chat'); return; }
     injectBarStyle();
-    if (getComputedStyle(wrapper).position === 'static') wrapper.style.position = 'relative';
-    buildBar(wrapper);
+    buildBar();
+    positionBar();
     state.bar.hidden = false;
     state.barOpen = true;
     state.button?.classList.add('on');
+    console.log('[GifChat] barra abierta; query =', JSON.stringify(queryFromInput()));
     loadBar(queryFromInput());
     try { input.focus(); } catch (_) {}
   }
@@ -482,6 +497,7 @@
 
       if (!TRIGGER_RE.test(value)) return;
       // clear the trigger and open the bar
+      console.log('[GifChat] trigger :gif detectado — abriendo barra');
       try { chat.setInputValue?.(''); } catch (_) {}
       if (target.value) target.value = '';
       openBar();
