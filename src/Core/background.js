@@ -585,6 +585,32 @@ const LOCAL_TEXTURES_RULE_IDS = Array.from(
 );
 const MENU_UI_RULE_ID = 30000;
 
+// Remueve la CSP del documento del juego para que HotLoader pueda inyectar
+// scripts inline (hot-reload). Solo aplica al HTML principal, no a sub-recursos.
+const CSP_STRIP_RULE_ID = 40000;
+const CSP_STRIP_RULE = {
+  id: CSP_STRIP_RULE_ID,
+  priority: 1,
+  action: {
+    type: "modifyHeaders",
+    responseHeaders: [
+      { header: "content-security-policy", operation: "remove" },
+      { header: "content-security-policy-report-only", operation: "remove" }
+    ]
+  },
+  condition: {
+    requestDomains: GAME_DOMAINS,
+    resourceTypes: ["main_frame", "sub_frame"]
+  }
+};
+
+async function applyCspStrip() {
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: [CSP_STRIP_RULE_ID],
+    addRules: [CSP_STRIP_RULE]
+  });
+}
+
 function buildLocalTextureRules(enabled) {
   if (!enabled) return [];
   return LOCAL_TEXTURES.map((rel, i) => ({
@@ -764,11 +790,13 @@ chrome.runtime.onInstalled.addListener(async () => {
   await applySpritesheet();
   await applyLocalTextures();
   await applyMenuUi();
+  await applyCspStrip();
 });
 
 applySpritesheet();
 applyLocalTextures();
 applyMenuUi();
+applyCspStrip();
 
 (function () {
   'use strict';
