@@ -76,9 +76,9 @@
         const skins = body.filter(m => {
             const w = m.map?.image?.width, h = m.map?.image?.height;
             if (!w || !h) return false;
-
+            // solo proporciones de skin reales: 64x32/64x64/128x64/128x128
             const k64 = w / 64;
-            return Number.isInteger(k64) && (h === w || h === w / 2);
+            return Number.isInteger(k64) && (h === w || h === w / 2) && k64 <= 4;
         });
         return skins.length ? skins : (body.length ? body : out);
     }

@@ -766,8 +766,10 @@
         var skins = bodyMats.filter(function (m) {
             var w = m.map?.image?.width, h = m.map?.image?.height;
             if (!w || !h) return false;
+            // solo proporciones de skin reales (64x32/64x64/128x64/128x128/...):
+            // un cuadrado generico (atlas de items 256x256 en la mano) no es skin
             var k64 = w / 64;
-            return Number.isInteger(k64) && (h === w || h === w / 2);
+            return Number.isInteger(k64) && (h === w || h === w / 2) && k64 <= 4;
         });
         return skins.length ? skins : (bodyMats.length ? bodyMats : all);
     }
