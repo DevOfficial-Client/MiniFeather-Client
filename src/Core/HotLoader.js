@@ -52,6 +52,20 @@
         });
       } catch (_) {}
     });
+
+    // puente de fetch a otros origenes (MAIN -> background, CORS-free)
+    window.addEventListener('mf-bg-fetch', (e) => {
+      const d = e.detail || {};
+      const id = d.id, url = d.url;
+      if (!id || typeof url !== 'string') return;
+      chrome.runtime.sendMessage({ type: 'MF_BRIDGE_FETCH', url }, (res) => {
+        try {
+          window.dispatchEvent(new CustomEvent('mf-bg-fetch-result', {
+            detail: { id, data: res && res.data, error: res && res.error }
+          }));
+        } catch (_) {}
+      });
+    });
     return;
   }
 

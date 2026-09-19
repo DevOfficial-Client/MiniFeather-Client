@@ -203,15 +203,6 @@
     } catch (_) {}
   }
 
-  // GIFs de Klipy: solo se aceptan URLs de los dominios oficiales (ToS: no
-  // rehostear ni reconstruir; cargar directo desde la URL entregada).
-  const GIF_HOST_RE = /^https:\/\/[\w-]+\.klipy\.com\/.+\.(gif|webp|mp4)(\?.*)?$/i;
-
-  function cleanGifUrl(value) {
-    const url = String(value || '').trim().slice(0, 512);
-    return GIF_HOST_RE.test(url) ? url : '';
-  }
-
   function addMessage(message, remote = false) {
     if (!message || !rememberMessage(String(message.id || ''))) return false;
 
@@ -220,12 +211,11 @@
       from: String(message.from || ''),
       name: cleanText(message.name || 'Player', 24),
       text: cleanText(message.text),
-      gifUrl: cleanGifUrl(message.gifUrl),
       time: Math.max(0, Number(message.time) || Date.now()),
       own: String(message.from || '') === state.peerId
     };
 
-    if (!entry.text && !entry.gifUrl) return false;
+    if (!entry.text) return false;
 
     state.messages.push(entry);
     if (state.messages.length > MAX_MESSAGES) {
@@ -447,12 +437,11 @@
     return true;
   }
 
-  function sendMessage(text, gifUrl = '') {
+  function sendMessage(text) {
     if (!state.enabled || !state.connectedToSignal || !canSend()) return false;
 
     const clean = cleanText(text);
-    const gif = cleanGifUrl(gifUrl);
-    if (!clean && !gif) return false;
+    if (!clean) return false;
 
     refreshIdentity();
 
@@ -461,8 +450,7 @@
       id: `${state.peerId}-${Date.now().toString(36)}-${randomId(5)}`,
       name: state.username,
       uuid: state.uuid,
-      text: clean,
-      gifUrl: gif
+      text: clean
     };
 
     const sent = publishSignal(message);
@@ -501,7 +489,7 @@
     }
 
     if (!command || typeof command !== 'object') return;
-    if (command.action === 'send') sendMessage(command.text, command.gifUrl);
+    if (command.action === 'send') sendMessage(command.text);
     if (command.action === 'status') emitState();
     if (command.action === 'connect') start();
     if (command.action === 'disconnect') stop();

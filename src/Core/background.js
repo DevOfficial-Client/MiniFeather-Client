@@ -666,7 +666,24 @@ async function applySpritesheet() {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  
+
+  if (message.type === "MF_KLIPY_FETCH" || message.type === "MF_BRIDGE_FETCH") {
+    const KLIPY_API_RE = /^https:\/\/api\.klipy\.com\/api\/v1\/[\w-]+\/gifs\/(search|trending)(\?.*)?$/;
+    const url = String(message.url || "");
+    if (message.type === "MF_BRIDGE_FETCH" && !KLIPY_API_RE.test(url)) {
+      sendResponse({ data: "" });
+      return true;
+    }
+    fetch(url)
+      .then(r => {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.text();
+      })
+      .then(text => sendResponse({ data: text }))
+      .catch(error => sendResponse({ data: "", error: String(error?.message || error) }));
+    return true;
+  }
+
   if (message.type === "mfSetPageZoom") {
     const zoom = Math.min(5, Math.max(0.25, Number(message.zoom) || 1));
     const tabId = sender?.tab?.id;

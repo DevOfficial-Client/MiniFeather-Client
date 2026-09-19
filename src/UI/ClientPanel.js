@@ -577,6 +577,7 @@
     chatVideos: true,
     chatLinks: true,
     chatMemes: true,
+    gifChat: true,
     klipyApiKey: '',
     clientChat: false,
     clientChatMentions: true,
@@ -2410,79 +2411,12 @@
         object-fit:contain;
         background:rgba(0,0,0,.28);
       }
-      .mf-client-chat-inline-gif {
-        display:block;
-        width:auto;
-        max-width:min(260px,100%);
-        max-height:190px;
-        margin-top:6px;
-        border-radius:9px;
-        object-fit:contain;
-        background:rgba(0,0,0,.28);
-      }
       .mf-client-chat-compose {
-        display:grid;
-        grid-template-columns:auto minmax(0,1fr) auto;
-        gap:8px;
-      }
-      .mf-client-chat-compose .mf-btn { width:auto; min-width:88px; }
-      #mf-gif-toggle { min-width:52px; }
-      .mf-gif-picker {
-        margin-top:8px;
-        border:1px solid #27354c;
-        border-radius:12px;
-        background:#101827;
-        padding:8px;
-        display:flex;
-        flex-direction:column;
-        gap:8px;
-      }
-      .mf-gif-picker-head {
         display:grid;
         grid-template-columns:minmax(0,1fr) auto;
         gap:8px;
-        align-items:center;
       }
-      .mf-gif-grid {
-        display:grid;
-        grid-template-columns:repeat(auto-fill, minmax(96px,1fr));
-        gap:6px;
-        max-height:280px;
-        overflow-y:auto;
-        min-height:60px;
-      }
-      .mf-gif-cell {
-        padding:0;
-        border:1px solid #27354c;
-        border-radius:8px;
-        background:#0b1220;
-        cursor:pointer;
-        overflow:hidden;
-        aspect-ratio:1/1;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-      }
-      .mf-gif-cell:hover { border-color:#38bdf8; }
-      .mf-gif-cell img {
-        width:100%;
-        height:100%;
-        object-fit:cover;
-        display:block;
-      }
-      .mf-gif-empty {
-        grid-column:1/-1;
-        color:#64748b;
-        font-size:11px;
-        text-align:center;
-        padding:18px 0;
-      }
-      .mf-gif-powered {
-        font-size:10px;
-        color:#64748b;
-        text-align:right;
-      }
-      .mf-gif-powered a { color:#94a3b8; }
+      .mf-client-chat-compose .mf-btn { width:auto; min-width:88px; }
       .mf-client-chat-empty {
         margin:auto;
         color:#64748b;
@@ -3278,6 +3212,7 @@
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc'), tags: [] },
       { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc'), tags: [] },
       { page: 'chat', key: 'chatMemes', title: t('chatMemes'), desc: t('chatMemesDesc'), tags: [] },
+      { page: 'chat', key: 'gifChat', title: t('gifChat'), desc: t('gifChatDesc'), tags: ['new'] },
       { page: 'chat', key: 'clientChat', title: t('clientChat'), desc: t('clientChatDesc'), tags: ['new'] },
       { page: 'settings', key: 'discord', title: t('discordRedirect'), desc: t('discordRedirectDesc'), tags: [] },
       { page: 'settings', key: 'supportAds', title: t('supportAds'), desc: t('supportAdsDesc'), tags: [] }
@@ -3536,6 +3471,7 @@
     distance: 'distanceNameTags', distancenametags: 'distanceNameTags',
     damage: 'damageParticles', damageparticles: 'damageParticles',
     duck: 'duckMobs', ducks: 'duckMobs', duckmobs: 'duckMobs', patos: 'duckMobs', pato: 'duckMobs',
+    gif: 'gifChat', gifs: 'gifChat', gifchat: 'gifChat', klipy: 'gifChat', stickers: 'gifChat',
     fps: 'fpsCounter', fpscounter: 'fpsCounter',
     gui: 'guiPatch', guipatch: 'guiPatch',
     freelook: 'freelook',
@@ -3994,6 +3930,29 @@
       },
       destroy() {
         sendDuckMobsConfig(false);
+      }
+    }));
+  }
+
+  function sendGifChatConfig(enabled = settings.gifChat) {
+    document.dispatchEvent(new CustomEvent('minifeather:gifchat-config', {
+      detail: JSON.stringify({ enabled: !!enabled, apiKey: settings.klipyApiKey || '' })
+    }));
+  }
+
+  function initGifChatModule() {
+    registerModule('gifChat', () => createLifecycle({
+      enable() {
+        sendGifChatConfig(true);
+      },
+      disable() {
+        sendGifChatConfig(false);
+      },
+      refresh() {
+        sendGifChatConfig(MODULES.get('gifChat')?.enabled === true);
+      },
+      destroy() {
+        sendGifChatConfig(false);
       }
     }));
   }
@@ -7359,130 +7318,6 @@
     }));
   }
 
-  // ─── Klipy GIF picker ────────────────────────────────────────
-  const KLIPY_DEFAULT_KEY = 'TooX4OMhCyQ6UexMQ7wD9zraorJP0FJZcohUhs49XzygxcokDVWcNYD2Y3j4gEMP';
-  const KLIPY_CACHE_TTL = 5 * 60 * 1000; // 5 min: respeta el limite de testing (100/h)
-  const klipyCache = new Map(); // query -> { ts, items }
-  let klipyReqId = 0;
-
-  function klipyKey() {
-    return String(settings.klipyApiKey || KLIPY_DEFAULT_KEY).trim() || KLIPY_DEFAULT_KEY;
-  }
-
-  function klipyFetch(query) {
-    const key = klipyKey();
-    const q = String(query || '').trim();
-    const isTrend = !q;
-    const cacheKey = (isTrend ? 'trending' : 'q:' + q.toLowerCase());
-    const hit = klipyCache.get(cacheKey);
-    const now = Date.now();
-    if (hit && now - hit.ts < KLIPY_CACHE_TTL) return Promise.resolve(hit.items);
-
-    const myReq = ++klipyReqId;
-    const path = isTrend ? 'gifs/trending' : 'gifs/search';
-    const url = `https://api.klipy.com/api/v1/${encodeURIComponent(key)}/${path}`
-      + (isTrend ? '' : `?q=${encodeURIComponent(q)}&per_page=24`)
-      + (isTrend ? '?per_page=24' : '');
-
-    return fetch(url)
-      .then(r => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(data => {
-        if (myReq !== klipyReqId) return []; // respuesta tardia de otra query
-        let items = data?.data || [];
-        if (!Array.isArray(items)) items = items?.data || [];
-        const mapped = [];
-        for (const it of items) {
-          const thumb = it?.file?.xs?.jpg?.url || it?.file?.sd?.jpg?.url || '';
-          const full = it?.file?.sd?.gif?.url || it?.file?.hd?.gif?.url || it?.file?.xs?.gif?.url || '';
-          if (thumb && full) mapped.push({ thumb, full });
-        }
-        klipyCache.set(cacheKey, { ts: Date.now(), items: mapped });
-        return mapped;
-      });
-  }
-
-  function renderGifPicker() {
-    return `
-      <div id="mf-gif-picker" class="mf-gif-picker" hidden>
-        <div class="mf-gif-picker-head">
-          <input id="mf-gif-search" class="mf-input" maxlength="64" placeholder="${t('gifSearchPlaceholder')}">
-          <button id="mf-gif-close" class="mf-small-btn" type="button">✕</button>
-        </div>
-        <div id="mf-gif-grid" class="mf-gif-grid">
-          <div class="mf-gif-empty">${t('gifEmpty')}</div>
-        </div>
-        <div class="mf-gif-powered">Powered by <a href="https://klipy.com" target="_blank" rel="noopener noreferrer">KLIPY</a></div>
-      </div>
-    `;
-  }
-
-  function gifGridHtml(items) {
-    if (!items.length) return `<div class="mf-gif-empty">${t('gifNoResults')}</div>`;
-    return items.map(item => `
-      <button class="mf-gif-cell" type="button" data-full="${escapeHtml(item.full)}" title="${escapeHtml(item.full)}">
-        <img src="${escapeHtml(item.thumb)}" alt="" loading="lazy" decoding="async">
-      </button>
-    `).join('');
-  }
-
-  function initGifPicker() {
-    const picker = panel.querySelector('#mf-gif-picker');
-    const grid = panel.querySelector('#mf-gif-grid');
-    const search = panel.querySelector('#mf-gif-search');
-    const toggleBtn = panel.querySelector('#mf-gif-toggle');
-    const input = panel.querySelector('#mf-client-chat-input');
-    if (!picker || !grid || !search || !toggleBtn || !input) return;
-
-    let debounce = 0;
-
-    const load = (q) => {
-      grid.innerHTML = `<div class="mf-gif-empty">${t('gifLoading')}</div>`;
-      klipyFetch(q)
-        .then(items => {
-          if (picker.hidden) return;
-          grid.innerHTML = gifGridHtml(items);
-        })
-        .catch(() => {
-          if (!picker.hidden) grid.innerHTML = `<div class="mf-gif-empty">${t('gifError')}</div>`;
-        });
-    };
-
-    toggleBtn.addEventListener('click', () => {
-      picker.hidden = !picker.hidden;
-      if (!picker.hidden) {
-        load('');
-        search.focus();
-      }
-    });
-    picker.querySelector('#mf-gif-close')?.addEventListener('click', () => { picker.hidden = true; });
-
-    search.addEventListener('input', () => {
-      clearTimeout(debounce);
-      debounce = setTimeout(() => load(search.value.trim()), 350);
-    });
-    search.addEventListener('keydown', event => {
-      if (event.key === 'Escape') { picker.hidden = true; }
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        clearTimeout(debounce);
-        load(search.value.trim());
-      }
-    });
-
-    grid.addEventListener('click', event => {
-      const cell = event.target.closest('.mf-gif-cell');
-      if (!cell) return;
-      if (!settings.clientChat) return;
-      const text = String(input.value || '').trim();
-      sendClientChatCommand('send', { text, gifUrl: cell.dataset.full });
-      input.value = '';
-      picker.hidden = true;
-    });
-  }
-
   function initClientChatModule() {
     registerModule('clientChat', () => createLifecycle({
       enable() { sendClientChatConfig(true); },
@@ -7539,22 +7374,16 @@
     const username = String(state.username || '');
     const own = message?.own === true;
     const rawText = String(message?.text || '');
-    const gifUrl = /^https:\/\/[\w-]+\.klipy\.com\//i.test(String(message?.gifUrl || '')) ? String(message.gifUrl) : '';
     const mentioned = username && new RegExp(`@${escapeRegExp(username)}(?:\\b|$)`, 'i').test(rawText);
     const time = Number(message?.time) || Date.now();
     const timeText = new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const gifHtml = gifUrl && settings.chatMemes
-      ? `<img class="mf-client-chat-inline-gif" src="${escapeHtml(gifUrl)}" alt="GIF" loading="lazy" decoding="async">`
-      : '';
-    const textHtml = rawText ? `<div class="mf-client-chat-text">${clientChatRichHtml(rawText)}</div>` : '';
     return `
       <div class="mf-client-chat-message ${own ? 'own' : ''} ${mentioned ? 'mentioned' : ''}">
         <div class="mf-client-chat-meta">
           <strong>${escapeHtml(message?.name || 'Player')}</strong>
           <span>${escapeHtml(timeText)}</span>
         </div>
-        ${gifHtml}
-        ${textHtml}
+        <div class="mf-client-chat-text">${clientChatRichHtml(rawText)}</div>
       </div>
     `;
   }
@@ -7628,11 +7457,14 @@
             ${renderToggle('chatVideos', t('chatVideos'), t('chatVideosDesc'))}
             ${renderToggle('chatLinks', t('chatLinks'), t('chatLinksDesc'))}
             ${renderToggle('chatMemes', t('chatMemes'), t('chatMemesDesc'))}
+            ${renderToggle('gifChat', t('gifChat'), t('gifChatDesc'))}
           </div>
-          <div class="mf-muted" style="margin-top:10px;">${t('gifApiKeyLabel')}</div>
-          <div class="mf-grid-2" style="margin-top:6px;">
-            <input type="text" id="mf-klipy-key" class="mf-input" maxlength="160" placeholder="${t('gifApiKeyPlaceholder')}" value="${escapeHtml(settings.klipyApiKey || '')}">
-            <button id="mf-klipy-save" class="mf-btn primary" type="button">${t('gifApiKeySave')}</button>
+          <div id="mf-gifchat-key-row" style="${settings.gifChat ? '' : 'display:none;'}">
+            <div class="mf-muted" style="margin-top:10px;">${t('gifApiKeyLabel')}</div>
+            <div class="mf-grid-2" style="margin-top:6px;">
+              <input type="text" id="mf-klipy-key" class="mf-input" maxlength="160" placeholder="${t('gifApiKeyPlaceholder')}" value="${escapeHtml(settings.klipyApiKey || '')}">
+              <button id="mf-klipy-save" class="mf-btn primary" type="button">${t('gifApiKeySave')}</button>
+            </div>
           </div>
         </div>
         <div class="mf-card">
@@ -7652,11 +7484,9 @@
             <div class="mf-client-chat-empty">${t('clientChatEmpty')}</div>
           </div>
           <div class="mf-client-chat-compose">
-            <button id="mf-gif-toggle" class="mf-btn" type="button" title="${t('gifButton')}">GIF</button>
             <input id="mf-client-chat-input" class="mf-input" maxlength="240" placeholder="${t('clientChatPlaceholder')}">
             <button id="mf-client-chat-send" class="mf-btn primary" type="button">${t('clientChatSend')}</button>
           </div>
-          ${renderGifPicker()}
           <div class="mf-muted">${t('clientChatMentionHint')}</div>
         </div>
         <div class="mf-card">
@@ -9862,18 +9692,23 @@ function renderCreditsPage() {
       if (toggle) toggle.click();
     });
 
+    const klipyKeyInput = panel.querySelector('#mf-klipy-key');
+    panel.querySelector('#mf-klipy-save')?.addEventListener('click', () => {
+      settings.klipyApiKey = String(klipyKeyInput?.value || '').trim();
+      guiSettings.klipyApiKey = settings.klipyApiKey;
+      saveSettings(true);
+      sendGifChatConfig(MODULES.get('gifChat')?.enabled === true);
+    });
+
+    const gifChatToggle = panel.querySelector('.mf-toggle[data-key="gifChat"] input');
+    gifChatToggle?.addEventListener('change', () => {
+      const row = panel.querySelector('#mf-gifchat-key-row');
+      if (row) row.style.display = gifChatToggle.checked ? '' : 'none';
+    });
+
     if (panel.querySelector('#mf-client-chat-messages')) {
       refreshClientChatView();
       sendClientChatCommand('status');
-      initGifPicker();
-
-      const klipyKeyInput = panel.querySelector('#mf-klipy-key');
-      panel.querySelector('#mf-klipy-save')?.addEventListener('click', () => {
-        settings.klipyApiKey = String(klipyKeyInput?.value || '').trim();
-        guiSettings.klipyApiKey = settings.klipyApiKey;
-        klipyCache.clear();
-        saveSettings(true);
-      });
 
       const input = panel.querySelector('#mf-client-chat-input');
       const send = panel.querySelector('#mf-client-chat-send');
@@ -11288,6 +11123,7 @@ function renderCreditsPage() {
     setModuleEnabled('shineAmbience', settings.shineAmbience);
     setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('duckMobs', settings.duckMobs);
+    setModuleEnabled('gifChat', settings.gifChat);
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
     setModuleEnabled('fullBright', settings.fullBright);
@@ -11896,6 +11732,7 @@ function renderCreditsPage() {
     initPatPatModule();
     initItemPhysicsModule();
     initDuckMobsModule();
+    initGifChatModule();
     initNoWeatherModule();
     initFullBrightModule();
     initVanillaAnimationsModule();
