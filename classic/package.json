@@ -1,0 +1,16 @@
+{
+  "name": "minibloxio.github.io-main",
+  "version": "1.0.0",
+  "description": "",
+  "main": "gafc.js",
+  "scripts": {
+    "start": "lite-server"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "lite-server": "^2.6.1"
+  }
+}

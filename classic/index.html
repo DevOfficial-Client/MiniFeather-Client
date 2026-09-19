@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <!-- metadata -->
+  <title>Miniblox</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
+  <meta name="description"
+    content="Miniblox is an online multiplayer voxel game that offers a variety of features, including competitive minigames, a wide selection of blocks to build with, challenging parkour levels, and much more!" />
+  <meta name="theme-color" content="#6045a0" />
+
+  <!-- favicon -->
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <!-- MiniFeather classic port: stubs for the ad/analytics globals the old
+       client expects (inline scripts are blocked by the extension CSP) -->
+  <script src="mf-boot.js"></script>
+
+  <script type="module" crossorigin src="assets/index-9c634339.js"></script>
+  <link rel="stylesheet" href="assets/index-aa410e51.css">
+</head>
+
+<body>
+
+  <div style="position:absolute; right: 0" id="preroll"></div>
+
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="background-image" style="image-rendering: pixelated"></div>
+
+    <div id="loading-screen-container">
+      <div id="loading-screen-text">
+        Miniblox
+      </div>
+      <div id="progress-bar">
+        <div id="progress-bar-inner"></div>
+      </div>
+      <div id="progress-text">
+        Initializing game...
+      </div>
+    </div>
+  </div>
+
+  <!-- Game -->
+
+  <div id="react" style="position: absolute;width: 100%;height: 100%;z-index: 4"></div>
+  <canvas id="canvas-hud"></canvas>
+  <div id="canvas-holder"></div>
+  <div id="dat-gui"></div>
+</body>
+
+</html>
