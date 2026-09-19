@@ -134,7 +134,8 @@
     }
   }
 
-  // ─── Config from panel ───────────────────────────────────────
+  // ─── Config sources: panel event + direct storage (this file runs in the
+  // ISOLATED world, same as ClientPanel, so chrome.storage is available) ──
   function onConfig(event) {
     let detail = event.detail;
     try { detail = typeof detail === 'string' ? JSON.parse(detail) : detail; } catch (_) { return; }
@@ -142,6 +143,20 @@
     console.log('[TitleScreen] config recibido:', JSON.stringify(detail));
     if (typeof detail.enabled === 'boolean') state.enabled = detail.enabled;
     apply();
+  }
+
+  function readStoredSetting() {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
+      chrome.storage.local.get('settings', data => {
+        const stored = data?.settings?.classicTitle === true;
+        if (stored !== state.enabled) {
+          console.log('[TitleScreen] storage dice classicTitle =', stored);
+          state.enabled = stored;
+          apply();
+        }
+      });
+    } catch (_) {}
   }
 
   function destroy() {
@@ -154,6 +169,12 @@
   }
 
   document.addEventListener(CONFIG_EVENT, onConfig);
+  readStoredSetting();
+  try {
+    chrome.storage.onChanged?.addListener((changes, area) => {
+      if (area === 'local' && changes.settings) readStoredSetting();
+    });
+  } catch (_) {}
   console.log('[TitleScreen] script cargado y escuchando', CONFIG_EVENT);
   globalThis[GLOBAL_KEY] = {
     enable() { state.enabled = true; apply(); },
