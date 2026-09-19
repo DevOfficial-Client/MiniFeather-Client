@@ -139,6 +139,7 @@
     let detail = event.detail;
     try { detail = typeof detail === 'string' ? JSON.parse(detail) : detail; } catch (_) { return; }
     if (!detail || typeof detail !== 'object') return;
+    console.log('[TitleScreen] config recibido:', JSON.stringify(detail));
     if (typeof detail.enabled === 'boolean') state.enabled = detail.enabled;
     apply();
   }
