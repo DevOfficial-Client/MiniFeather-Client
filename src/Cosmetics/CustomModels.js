@@ -967,6 +967,18 @@
             tex.image = bitmap;
             tex.needsUpdate = true;
             if ('flipY' in tex) tex.flipY = false;
+            // Bedrock = pixel-art: nearest mantiene los pixeles nitidos.
+            // Linear (default de THREE) los difumina. Mipmaps nearest evita
+            // el ruido a distancia.
+            if (parsed.bedrock) {
+                try {
+                    const NF = 1003;   // THREE.NearestFilter
+                    const NMF = 1005;  // THREE.NearestMipmapLinearFilter
+                    tex.magFilter = NF;
+                    tex.minFilter = NMF;
+                    if ('generateMipmaps' in tex) tex.generateMipmaps = true;
+                } catch {}
+            }
             const SRGB = 'srgb';
             try { if ('colorSpace' in tex) tex.colorSpace = SRGB; } catch {}
             state.textureCache.set(key, tex);
@@ -1309,6 +1321,7 @@
 
         return {
             bin,
+            bedrock: true, // pixel-art: filtrado nearest en getTextureFor
             json: {
                 asset: { version: '2.0' },
                 scene: 0,
