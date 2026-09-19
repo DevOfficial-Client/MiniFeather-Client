@@ -1,5 +1,5 @@
-// DuckMobs: patos client-side desde el mod untitledduckmod (assets Bedrock).
-// Spawnea patos con IA (wander/nado/panico/sit) usando MF_CustomModels.
+// DuckMobs: patos y gansos client-side desde el mod untitledduckmod (assets Bedrock).
+// Dos especies: patos (wander/nado/panico/sit) y gansos (intimidan/cargan/muerden + honk ogg).
 
 (function () {
     'use strict';
@@ -7,22 +7,50 @@
     if (globalThis.MF_DuckMobs) return;
 
     const CFG = {
-        MODEL: 'duck.geo.json',
-        MAX: 12,                    // tope de patos vivos
+        MAX: 12,                    // tope de mobs vivos
         WANDER_RADIUS: 14,          // radio de patrulla alrededor del spawn del jugador
-        PANIC_DIST: 3.2,            // huyen si el jugador se acerca tanto
-        PANIC_SPEED: 3.4,
-        WALK_SPEED: 1.1,
-        SWIM_SPEED: 1.0,
-        QUACK_MIN_MS: 2500,
-        QUACK_MAX_MS: 14000,
-        QUACK_DIST: 26,
-        RESET_DIST: 40              // reciclar pato si se aleja demasiado del jugador
+        RESET_DIST: 40,             // reciclar mob si se aleja demasiado del jugador
+        LOOK_SIT_MS: 1800           // mirar fijo para que un pato se siente
+    };
+
+    // ---------- especies ----------
+
+    const SPECIES = {
+        duck: {
+            key: 'duck',
+            model: 'duck.geo.json',
+            textures: [null],                 // null = png por defecto junto al geo
+            weight: 0.62,                     // proporcion de spawns
+            aggressive: false,
+            panicDist: 3.2, panicSpeed: 3.4,
+            walkSpeed: 1.1, swimSpeed: 1.0,
+            callMinMs: 2500, callMaxMs: 14000, callDist: 26,
+            idleAnims: ['idle', 'clean', 'dance', 'eat', 'sleep'],
+            waterAnims: ['swim', 'idle_swim', 'dive']
+        },
+        goose: {
+            key: 'goose',
+            model: 'goose.geo.json',
+            textures: ['goose.png', 'canadian_goose.png', 'ping_goose.png', 'sus_goose.png', 'untitled_goose.png'],
+            weight: 0.38,
+            aggressive: true,
+            panicDist: 0, panicSpeed: 0,      // los gansos no huyen
+            walkSpeed: 0.9, swimSpeed: 0.85,
+            intimidateDist: 7,                // empieza a intimidar si el jugador entra
+            chargeDist: 4.2,                  // carga si el jugador sigue acercandose
+            biteDist: 1.7,
+            chargeSpeed: 2.9,
+            chargeMaxMs: 3500,
+            cooldownMs: 5000,
+            callMinMs: 3500, callMaxMs: 18000, callDist: 30,
+            idleAnims: ['idle', 'idle', 'clean', 'eat', 'sit'],
+            waterAnims: ['swim', 'idle_swim', 'swim_idle']
+        }
     };
 
     const state = {
         enabled: false,
-        ducks: [],                  // { rec, id, ai:{...} }
+        mobs: [],                   // { id, rec, sp, ai:{...} }
         spawnCenter: null,
         lastSpawn: 0,
         stamp: { alive: true }
@@ -67,21 +95,28 @@
         const id = blockIdAt(x, y, z);
         if (id == null) return false;
         if (!WATER_IDS.size) {
-            // heuristicas: agua en la mayoria de voxel games de miniblox
-            for (let i = 9; i <= 11; i++) WATER_IDS.add(i); // agua/pocos variantes
-            WATER_IDS.add(17); // kelp? no critico
+            for (let i = 9; i <= 11; i++) WATER_IDS.add(i);
+            WATER_IDS.add(17);
         }
         return WATER_IDS.has(id);
     }
 
     function groundYAt(x, y, z) {
-        // busca el primer bloque solido hacia abajo desde y (max 6)
         for (let dy = 0; dy < 6; dy++) {
             const id = blockIdAt(x, y - dy, z);
             if (id == null) return null;
             if (id !== 0) return y - dy;
         }
         return null;
+    }
+
+    function waterSurfaceY(x, y, z) {
+        let sy = Math.floor(y) + 0.9;
+        for (let i = 0; i < 3; i++) {
+            if (isWaterAt(x, sy + 1, z)) sy += 1;
+            else break;
+        }
+        return sy;
     }
 
     function playerLookingAt(pos, threshold) {
@@ -101,41 +136,87 @@
         } catch { return false; }
     }
 
-    // ---------- sonido quack ----------
+    // ---------- sonido: quack sintetizado (pato) + honk ogg (ganso) ----------
+
+    function audioCtx() {
+        return getGame()?.gameScene?.audio?.context
+            || getGame()?.audio?.context
+            || globalThis.__mfAudioCtx
+            || (() => {
+                try {
+                    globalThis.__mfAudioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+                    return globalThis.__mfAudioCtx;
+                } catch { return null; }
+            })();
+    }
 
     let quackBuf = null;
-    function playQuack(dist) {
+    function playQuack(actx, dist) {
         try {
-            const actx = getGame()?.gameScene?.audio?.context
-                || getGame()?.audio?.context
-                || globalThis.__mfAudioCtx
-                || (() => {
-                    try {
-                        globalThis.__mfAudioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
-                        return globalThis.__mfAudioCtx;
-                    } catch { return null; }
-                })();
-            if (!actx) return;
             if (!quackBuf) {
-                // oscilador simple tipo "quack" (sin asset .ogg en el zip de sonidos)
                 const dur = 0.16;
                 quackBuf = actx.createBuffer(1, actx.sampleRate * dur, actx.sampleRate);
                 const ch = quackBuf.getChannelData(0);
                 for (let i = 0; i < ch.length; i++) {
                     const t = i / actx.sampleRate;
-                    // envolvente rapida + pitch descendente (narth call)
                     const env = Math.min(1, t / 0.012) * Math.exp(-t / 0.05);
                     const f = 560 - 160 * (t / dur);
                     ch[i] = env * Math.sin(2 * Math.PI * f * t) * 0.6
                         + env * 0.25 * Math.sin(2 * Math.PI * f * 2 * t);
                 }
             }
+            playBuf(actx, quackBuf, dist, 0.35, 0.92 + Math.random() * 0.18);
+        } catch {}
+    }
+
+    // honks reales del mod (goose_honk.ogg / _2 / _3), decodificados bajo demanda
+    const HONK_FILES = ['goose_honk.ogg', 'goose_honk_2.ogg', 'goose_honk_3.ogg'];
+    const honks = { loading: false, bufs: [] };
+
+    async function loadHonks(actx) {
+        if (honks.loading) return;
+        honks.loading = true;
+        for (const f of HONK_FILES) {
+            try {
+                const url = chrome.runtime.getURL('models/entities/' + f);
+                const data = await (await fetch(url)).arrayBuffer();
+                const buf = await actx.decodeAudioData(data);
+                honks.bufs.push(buf);
+            } catch {}
+        }
+        if (!honks.bufs.length) console.warn(TAG + ' no se pudieron decodificar los honk ogg');
+    }
+
+    function synthHonk(actx) {
+        // respaldo si el ogg no decodifica: graznido grave sintetizado
+        const dur = 0.42;
+        const buf = actx.createBuffer(1, actx.sampleRate * dur, actx.sampleRate);
+        const ch = buf.getChannelData(0);
+        for (let i = 0; i < ch.length; i++) {
+            const t = i / actx.sampleRate;
+            const env = Math.min(1, t / 0.02) * Math.exp(-t / 0.16);
+            const f = 300 - 90 * (t / dur);
+            ch[i] = env * (Math.sin(2 * Math.PI * f * t) * 0.6
+                + Math.sin(2 * Math.PI * f * 1.5 * t) * 0.3);
+        }
+        return buf;
+    }
+
+    function playHonk(actx, dist, fast) {
+        try {
+            const pool = honks.bufs.length ? honks.bufs : null;
+            const buf = pool ? pool[(Math.random() * pool.length) | 0] : synthHonk(actx);
+            playBuf(actx, buf, dist, 0.5, fast ? 1.12 + Math.random() * 0.1 : 0.96 + Math.random() * 0.1);
+        } catch {}
+    }
+
+    function playBuf(actx, buf, dist, maxDist, rate) {
+        try {
             const src = actx.createBufferSource();
-            src.buffer = quackBuf;
+            src.buffer = buf;
             const gain = actx.createGain();
-            const vol = Math.max(0, 1 - dist / CFG.QUACK_DIST) * 0.35;
-            gain.gain.value = vol;
-            src.playbackRate.value = 0.92 + Math.random() * 0.18;
+            gain.gain.value = Math.max(0, 1 - dist / maxDist);
+            src.playbackRate.value = rate;
             src.connect(gain).connect(actx.destination);
             src.start();
         } catch {}
@@ -143,9 +224,14 @@
 
     // ---------- spawn / despawn ----------
 
-    // geo/textura: todas las variantes comparten malla (duck.geo.json);
-    // las variantes female/duckling usarian su propio png cuando parseGeoModel
-    // soporte textura arbitraria — por ahora todos son patos comunes.
+    function pickSpecies() {
+        let r = Math.random();
+        for (const sp of Object.values(SPECIES)) {
+            if (r < sp.weight) return sp;
+            r -= sp.weight;
+        }
+        return SPECIES.duck;
+    }
 
     function pickSpawnPoint(center) {
         const a = Math.random() * Math.PI * 2;
@@ -155,75 +241,145 @@
         return { x, y: center.y + 2, z };
     }
 
-    function spawnDuck() {
+    function spawnMob() {
         const CM = globalThis.MF_CustomModels;
         if (!CM) return null;
         const center = state.spawnCenter;
         if (!center) return null;
         const at = pickSpawnPoint(center);
-        const scale = 1;
-        const id = CM.spawn(CFG.MODEL, at.x, at.y, at.z, {
-            id: 'duck' + Math.floor(Math.random() * 1e9),
-            scale,
+        const sp = pickSpecies();
+        const texture = sp.textures[(Math.random() * sp.textures.length) | 0];
+        const opts = {
+            id: sp.key + Math.floor(Math.random() * 1e9),
+            scale: 1,
             stay: true,
             lookAtPlayer: false,
             persist: false,
             bob: false,
             anim: 'idle'
-        });
+        };
+        if (texture) opts.texture = texture; // variante de skin (CustomModels: loadModel(file, texOverride))
+        const id = CM.spawn(sp.model, at.x, at.y, at.z, opts);
         if (!id) return null;
-        const duck = {
+        const mob = {
             id,
             rec: null,
+            sp,
             ai: {
-                mode: 'idle',          // idle | walk | swim | panic | sit | sleep
+                mode: 'idle',          // idle | walk | swim | panic | sit | intimidate | charge | bite
                 until: performance.now() + 1000 + Math.random() * 3000,
                 dir: Math.random() * Math.PI * 2,
                 speed: 0,
-                nextQuack: performance.now() + 1500 + Math.random() * CFG.QUACK_MAX_MS,
+                nextCall: performance.now() + 1500 + Math.random() * sp.callMaxMs,
+                sitting: false,
                 sitSince: 0,
                 lookHold: 0,
-                panicDir: 0
+                panicDir: 0,
+                aggroUntil: 0
             }
         };
-        state.ducks.push(duck);
-        return duck;
+        state.mobs.push(mob);
+        return mob;
     }
 
-    function removeDuck(duck, force) {
-        const i = state.ducks.indexOf(duck);
-        if (i >= 0) state.ducks.splice(i, 1);
-        try { globalThis.MF_CustomModels?.despawn(duck.id, true); } catch {}
+    function removeMob(mob) {
+        const i = state.mobs.indexOf(mob);
+        if (i >= 0) state.mobs.splice(i, 1);
+        try { globalThis.MF_CustomModels?.despawn(mob.id, true); } catch {}
     }
 
     // ---------- IA ----------
 
-    function setDuckAnim(duck, name) {
-        try { globalThis.MF_CustomModels?.setAnim(duck.id, name, 1); } catch {}
+    function setAnim(mob, name) {
+        try { globalThis.MF_CustomModels?.setAnim(mob.id, name, 1); } catch {}
     }
 
-    function duckPos(duck) {
-        return duck.rec?.root?.position || null;
+    function mobPos(mob) { return mob.rec?.root?.position || null; }
+
+    function callMaybe(mob, t, dPlayer, force) {
+        const sp = mob.sp, ai = mob.ai;
+        if (dPlayer > sp.callDist) return;
+        const actx = audioCtx();
+        if (!actx) return;
+        if (force || t >= ai.nextCall) {
+            if (sp.key === 'goose') {
+                if (!honks.loading && !honks.bufs.length) loadHonks(actx);
+                playHonk(actx, dPlayer, force);
+                // el ganso estira el cuello al graznar (si no esta ocupado)
+                if (ai.mode === 'idle' || ai.mode === 'swim') {
+                    const inWater = mobPos(mob) ? isWaterAt(mobPos(mob).x, mobPos(mob).y - 0.2, mobPos(mob).z) : false;
+                    setAnim(mob, inWater ? 'honk_swim' : 'honk');
+                    ai.until = Math.min(ai.until, t + 1400);
+                }
+            } else {
+                playQuack(actx, dPlayer);
+            }
+            ai.nextCall = t + sp.callMinMs + Math.random() * sp.callMaxMs;
+        }
     }
 
-    function aiTick(duck, dt, t) {
+    // IA de agresion del ganso: intimidar -> cargar -> morder
+    function gooseAggroTick(mob, ai, t, dPlayer, player, p) {
+        const sp = mob.sp;
+        if (t < ai.aggroUntil) return false;
+
+        // morder: contacto tras una carga
+        if (ai.mode === 'charge' && dPlayer < sp.biteDist) {
+            ai.mode = 'bite';
+            ai.until = t + 700;
+            setAnim(mob, 'bite');
+            const actx = audioCtx();
+            if (actx) { if (!honks.loading && !honks.bufs.length) loadHonks(actx); playHonk(actx, dPlayer, true); }
+            ai.nextCall = t + sp.callMinMs;
+            return true;
+        }
+        // cargar: el jugador sigue dentro tras la intimidacion
+        if ((ai.mode === 'intimidate' || ai.mode === 'idle' || ai.mode === 'walk' || ai.mode === 'swim') && dPlayer < sp.chargeDist) {
+            ai.mode = 'charge';
+            ai.until = t + sp.chargeMaxMs;
+            setAnim(mob, 'charge');
+            ai.dir = Math.atan2(player.x - p.x, player.z - p.z);
+            return true;
+        }
+        // perseguir al jugador mientras carga
+        if (ai.mode === 'charge') {
+            ai.dir = Math.atan2(player.x - p.x, player.z - p.z);
+            return true;
+        }
+        // intimidar: el jugador entra en el territorio
+        if (ai.mode !== 'intimidate' && ai.mode !== 'bite' && dPlayer < sp.intimidateDist) {
+            ai.mode = 'intimidate';
+            ai.until = t + 1600 + Math.random() * 1200;
+            setAnim(mob, 'intimidate');
+            callMaybe(mob, t, dPlayer, true);
+            return true;
+        }
+        // seguir encarando al jugador mientras intimida
+        if (ai.mode === 'intimidate') {
+            ai.dir = Math.atan2(player.x - p.x, player.z - p.z);
+            return true;
+        }
+        return false;
+    }
+
+    function aiTick(mob, dt, t) {
         const CM = globalThis.MF_CustomModels;
         if (!CM) return;
-        if (!duck.rec) {
-            const rec = CM.record?.(duck.id);
+        if (!mob.rec) {
+            const rec = CM.record?.(mob.id);
             if (!rec?.root) return; // todavia cargando
-            duck.rec = rec;
+            mob.rec = rec;
         }
-        const root = duck.rec.root;
+        const root = mob.rec.root;
         if (!root?.position) return;
-        const ai = duck.ai;
+        const ai = mob.ai;
+        const sp = mob.sp;
         const p = root.position;
         const player = playerPos();
         const dPlayer = player ? Math.hypot(player.x - p.x, player.z - p.z) : Infinity;
 
         // gestionar reciclaje por distancia
         if (player && dPlayer > CFG.RESET_DIST) {
-            // lejos: reciclar cerca del jugador
             const at = pickSpawnPoint(state.spawnCenter || player);
             p.set(at.x, at.y, at.z);
             ai.mode = 'idle';
@@ -231,49 +387,71 @@
             return;
         }
 
-        // modo panico si el jugador se acerca
-        if (ai.mode !== 'panic' && player && dPlayer < CFG.PANIC_DIST && !ai.sitting) {
+        const inWater = isWaterAt(p.x, p.y - 0.2, p.z);
+
+        if (sp.aggressive && player) {
+            const handled = gooseAggroTick(mob, ai, t, dPlayer, player, p);
+            if (handled) {
+                moveMob(mob, dt, t, inWater);
+                return;
+            }
+        } else if (ai.mode !== 'panic' && player && dPlayer < sp.panicDist && !ai.sitting) {
+            // el pato huye; los gansos nunca entran aqui (panicDist 0 + aggressive)
             ai.mode = 'panic';
             ai.until = t + 2200 + Math.random() * 1800;
             ai.panicDir = Math.atan2(p.x - player.x, p.z - player.z);
-            setDuckAnim(duck, isWaterAt(p.x, p.y - 0.1, p.z) ? 'panic_swim' : 'panic');
-            quackMaybe(duck, t, dPlayer, true);
+            setAnim(mob, inWater ? 'panic_swim' : 'panic');
+            callMaybe(mob, t, dPlayer, true);
         }
 
-        // sentarse si el jugador lo mira fijamente un rato (y esta lejos)
-        if (ai.mode !== 'panic' && player && dPlayer > 5 && dPlayer < 20 && playerLookingAt(p, 0.94)) {
+        // sentarse si el jugador lo mira fijamente un rato (solo patos)
+        if (!sp.aggressive && ai.mode !== 'panic' && player && dPlayer > 5 && dPlayer < 20 && playerLookingAt(p, 0.94)) {
             ai.lookHold = (ai.lookHold || 0) + dt * 1000;
-            if (ai.lookHold > 1800 && ai.mode !== 'sit') {
+            if (ai.lookHold > CFG.LOOK_SIT_MS && ai.mode !== 'sit') {
                 ai.mode = 'sit';
                 ai.sitting = true;
                 ai.sitSince = t;
                 ai.until = t + 4000 + Math.random() * 4000;
-                setDuckAnimSafe(duck, 'sit');
+                setAnim(mob, 'sit');
             }
         } else {
             ai.lookHold = 0;
         }
+        // el ganso responde con un graznido si lo miras fijamente
+        if (sp.aggressive && player && dPlayer < 18 && playerLookingAt(p, 0.94)) {
+            ai.lookHold = (ai.lookHold || 0) + dt * 1000;
+            if (ai.lookHold > 1200 && t > ai.nextCall) {
+                callMaybe(mob, t, dPlayer, true);
+                ai.lookHold = 0;
+            }
+        } else if (sp.aggressive) {
+            ai.lookHold = 0;
+        }
 
-        if (t >= ai.until) chooseNext(duck, t);
+        if (t >= ai.until) chooseNext(mob, t);
 
-        // mover
-        const inWater = isWaterAt(p.x, p.y - 0.2, p.z);
+        moveMob(mob, dt, t, inWater);
+        callMaybe(mob, t, dPlayer, false);
+    }
+
+    function moveMob(mob, dt, t, inWater) {
+        const ai = mob.ai, sp = mob.sp;
+        const p = mob.rec.root.position;
         let speed = 0;
-        if (ai.mode === 'walk') speed = CFG.WALK_SPEED;
-        else if (ai.mode === 'swim') speed = CFG.SWIM_SPEED;
-        else if (ai.mode === 'panic') speed = CFG.PANIC_SPEED;
+        if (ai.mode === 'walk') speed = sp.walkSpeed;
+        else if (ai.mode === 'swim') speed = sp.swimSpeed;
+        else if (ai.mode === 'panic') speed = sp.panicSpeed;
+        else if (ai.mode === 'charge') speed = sp.chargeSpeed;
 
         if (speed > 0) {
             const step = speed * dt;
             const nx = p.x + Math.sin(ai.dir) * step;
             const nz = p.z + Math.cos(ai.dir) * step;
-            // no alejarse demasiado del centro de patrulla
             const c = state.spawnCenter;
             let blocked = false;
-            if (c) {
+            if (c && ai.mode !== 'charge') {
                 if (Math.hypot(nx - c.x, nz - c.z) > CFG.WANDER_RADIUS + 4) blocked = true;
             }
-            // terreno: si el bloque frente es 2+ mas alto, girar
             if (!blocked) {
                 const aheadY = groundYAt(nx, p.y + 1.2, nz);
                 if (aheadY != null && aheadY > p.y + 1.05 && !inWater) blocked = true;
@@ -283,7 +461,6 @@
             } else {
                 p.x = nx;
                 p.z = nz;
-                // seguir el suelo / flotar en agua
                 if (inWater) {
                     const wy = waterSurfaceY(p.x, p.y, p.z);
                     p.y += (wy - p.y) * Math.min(1, dt * 4);
@@ -292,84 +469,67 @@
                     if (gy != null) p.y += (gy + 1 - p.y) * Math.min(1, dt * 10);
                 }
             }
-            // orientar (rec.yaw: tickCustoms lo aplica cuando no sigue al player)
+        }
+        // orientar (rec.yaw: tickCustoms lo aplica cuando no sigue al player)
+        if (speed > 0 || ai.mode === 'intimidate') {
             const targetYaw = Math.atan2(-Math.sin(ai.dir), -Math.cos(ai.dir));
-            let dy = targetYaw - (duck.rec.yaw || 0);
+            let dy = targetYaw - (mob.rec.yaw || 0);
             while (dy > Math.PI) dy -= 2 * Math.PI;
             while (dy < -Math.PI) dy += 2 * Math.PI;
-            duck.rec.yaw += dy * Math.min(1, dt * 6);
-        }
-
-        quackMaybe(duck, t, dPlayer, false);
-    }
-
-    function setDuckAnimSafe(duck, name) {
-        try { globalThis.MF_CustomModels?.setAnim(duck.id, name, 1); } catch {}
-    }
-
-    function waterSurfaceY(x, y, z) {
-        // sube mientras haya agua, max 3
-        let sy = Math.floor(y) + 0.9;
-        for (let i = 0; i < 3; i++) {
-            if (isWaterAt(x, sy + 1, z)) sy += 1;
-            else break;
-        }
-        return sy;
-    }
-
-    function quackMaybe(duck, t, dPlayer, force) {
-        if (dPlayer > CFG.QUACK_DIST) return;
-        const ai = duck.ai;
-        if (force) {
-            playQuack(dPlayer);
-            ai.nextQuack = t + CFG.QUACK_MIN_MS + Math.random() * 6000;
-            return;
-        }
-        if (t >= ai.nextQuack) {
-            playQuack(dPlayer);
-            ai.nextQuack = t + CFG.QUACK_MIN_MS + Math.random() * CFG.QUACK_MAX_MS;
+            mob.rec.yaw += dy * Math.min(1, dt * (ai.mode === 'charge' ? 10 : 6));
         }
     }
 
-    function chooseNext(duck, t) {
-        const ai = duck.ai;
-        const p = duckPos(duck);
+    function chooseNext(mob, t) {
+        const ai = mob.ai, sp = mob.sp;
+        const p = mobPos(mob);
         const inWater = p ? isWaterAt(p.x, p.y - 0.2, p.z) : false;
         const r = Math.random();
         ai.sitting = false;
+
         if (ai.mode === 'panic') {
-            // despues del panico, idle
             ai.mode = 'idle';
             ai.until = t + 600 + Math.random() * 1800;
-            setDuckAnim(duck, inWater ? 'idle_swim' : 'idle');
+            setAnim(mob, inWater ? 'idle_swim' : 'idle');
             return;
         }
-        if (inWater) {
-            if (r < 0.55) { ai.mode = 'swim'; setDuckAnim(duck, 'swim'); }
-            else if (r < 0.8) { ai.mode = 'idle'; setDuckAnim(duck, 'idle_swim'); }
-            else { ai.mode = 'idle'; setDuckAnim(duck, 'dive'); }
+        if (ai.mode === 'bite') {
+            // tras morder: retirarse y enfriar la agresion
+            ai.mode = 'walk';
+            ai.dir += Math.PI + (Math.random() - 0.5);
+            ai.until = t + 2200 + Math.random() * 1200;
+            ai.aggroUntil = t + sp.cooldownMs + Math.random() * 4000;
+            setAnim(mob, 'walk');
+            return;
+        }
+        if (ai.mode === 'charge') {
+            // se rindio: enfriar y volver a deambular
+            ai.mode = 'idle';
+            ai.until = t + 1200 + Math.random() * 1500;
+            ai.aggroUntil = t + sp.cooldownMs + Math.random() * 4000;
+            setAnim(mob, inWater ? 'idle_swim' : 'idle');
+            return;
+        }
+        if (ai.mode === 'intimidate') {
+            // la intimidacion no asusto al jugador: cargar
+            ai.mode = 'charge';
+            ai.until = t + sp.chargeMaxMs;
+            setAnim(mob, 'charge');
+            return;
+        }
+
+        const anims = inWater ? sp.waterAnims : sp.idleAnims;
+        if (!inWater && r < 0.5) {
+            ai.mode = 'walk';
+            setAnim(mob, 'walk');
             ai.dir = Math.random() * Math.PI * 2;
+        } else if (!inWater && r < 0.62) {
+            ai.mode = 'idle';
+            setAnim(mob, 'clean');
         } else {
-            if (r < 0.5) {
-                ai.mode = 'walk';
-                setDuckAnim(duck, 'walk');
-                ai.dir = Math.random() * Math.PI * 2;
-            } else if (r < 0.65) {
-                ai.mode = 'idle';
-                setDuckAnim(duck, 'clean');
-            } else if (r < 0.75) {
-                ai.mode = 'idle';
-                setDuckAnim(duck, 'dance');
-            } else if (r < 0.85) {
-                ai.mode = 'idle';
-                setDuckAnim(duck, 'eat');
-            } else if (r < 0.95) {
-                ai.mode = 'idle';
-                setDuckAnim(duck, 'sleep');
-            } else {
-                ai.mode = 'idle';
-                setDuckAnim(duck, 'idle');
-            }
+            ai.mode = 'idle';
+            setAnim(mob, anims[(Math.random() * anims.length) | 0]);
+            if (inWater) ai.dir = Math.random() * Math.PI * 2;
         }
         ai.until = t + 2500 + Math.random() * 4500;
     }
@@ -387,7 +547,6 @@
         const p = playerPos();
         if (p) {
             if (!state.spawnCenter) state.spawnCenter = { x: p.x, y: p.y, z: p.z };
-            // arrastrar el centro de patrulla si el jugador se muda lejos
             const c = state.spawnCenter;
             if (Math.hypot(p.x - c.x, p.z - c.z) > 24) {
                 state.spawnCenter = { x: p.x, y: p.y, z: p.z };
@@ -395,15 +554,13 @@
         }
 
         // poblar gradualmente
-        if (p && state.ducks.length < CFG.MAX && t - state.lastSpawn > 1400) {
-            spawnDuck();
+        if (p && state.mobs.length < CFG.MAX && t - state.lastSpawn > 1400) {
+            spawnMob();
             state.lastSpawn = t;
         }
 
-        for (const duck of [...state.ducks]) {
-            try { aiTick(duck, dt, t); } catch {}
-            const pos = duckPos(duck);
-            if (!pos) continue;
+        for (const mob of [...state.mobs]) {
+            try { aiTick(mob, dt, t); } catch {}
         }
 
         schedule();
@@ -426,24 +583,27 @@
             state.stamp = { alive: true };
             state.lastT = performance.now();
             schedule();
-            console.log(TAG + ' activado');
+            console.log(TAG + ' activado (patos + gansos)');
             return true;
         },
         stop() {
             state.enabled = false;
             state.stamp.alive = false;
-            for (const duck of [...state.ducks]) removeDuck(duck, true);
+            for (const mob of [...state.mobs]) removeMob(mob);
             state.spawnCenter = null;
             console.log(TAG + ' desactivado');
         },
-        count() { return state.ducks.length; },
+        count() { return state.mobs.length; },
+        counts() {
+            const out = { duck: 0, goose: 0 };
+            for (const m of state.mobs) out[m.sp.key] = (out[m.sp.key] || 0) + 1;
+            return out;
+        },
         clear() {
-            for (const duck of [...state.ducks]) removeDuckSafe(duck);
+            for (const mob of [...state.mobs]) { try { removeMob(mob); } catch {} }
             return true;
         }
     };
-
-    function removeDuckSafe(duck) { try { removeDuck(duck, true); } catch {} }
 
     // auto-arranque si ya esta habilitado en settings
     try {

@@ -176,6 +176,7 @@
             }
             const rec = {
                 id, file: modelFile,
+                texture: opts.texture || null, // png alternativo (variantes)
                 pos: { x: +x || 0, y: +y || 0, z: +z || 0 },
                 yaw: +(opts.yaw || 0),
                 scale: +(opts.scale || 1),
@@ -210,7 +211,7 @@
                 root: null, inst: null, animStart: 0
             };
             state.customs.set(id, rec);
-            loadModel(modelFile).then((built) => {
+            loadModel(modelFile, rec.texture).then((built) => {
                 const game = getGame();
                 const scene = game?.gameScene?.scene;
                 if (!scene) { console.warn(TAG + ' no hay escena para ' + id); return; }
@@ -1340,9 +1341,10 @@
         };
     }
 
-    async function parseGeoModel(file) {
+    async function parseGeoModel(file, texOverride) {
         const json = JSON.parse(new TextDecoder().decode(await fetchModelArrayBuffer(file)));
-        const texBytes = new Uint8Array(await fetchModelArrayBuffer(file.replace(/\.geo\.json$/i, '') + '.png'));
+        const texFile = texOverride || file.replace(/\.geo\.json$/i, '') + '.png';
+        const texBytes = new Uint8Array(await fetchModelArrayBuffer(texFile));
         let s = '';
         for (let i = 0; i < texBytes.length; i += 0x8000) s += String.fromCharCode.apply(null, texBytes.subarray(i, i + 0x8000));
         const parsed = parseBedrockGeo(json, 'data:image/png;base64,' + btoa(s));
@@ -1642,11 +1644,12 @@
         return anims;
     }
 
-    async function loadModel(file) {
-        if (modelCache.has(file)) return modelCache.get(file);
+    async function loadModel(file, texOverride) {
+        const cacheKey = texOverride ? file + '::' + texOverride : file;
+        if (modelCache.has(cacheKey)) return modelCache.get(cacheKey);
         const p = (async () => {
             let parsed;
-            if (/\.geo\.json$/i.test(file)) parsed = await parseGeoModel(file);
+            if (/\.geo\.json$/i.test(file)) parsed = await parseGeoModel(file, texOverride);
             else if (/\.obj$/i.test(file)) parsed = await parseOBJModel(file);
             else if (/\.gltf$/i.test(file)) parsed = await parseGLTFModel(file);
             else parsed = parseGLB(await fetchModelArrayBuffer(file));
@@ -1658,8 +1661,8 @@
             if (!built.root.children.length) throw new Error('GLB sin geometria visible');
             return built;
         })();
-        modelCache.set(file, p);
-        p.catch(() => modelCache.delete(file));
+        modelCache.set(cacheKey, p);
+        p.catch(() => modelCache.delete(cacheKey));
         return p;
     }
 
