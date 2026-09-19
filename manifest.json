@@ -181,6 +181,7 @@
         "src/Core/AutoUpdater.js",
         "src/Experimental/ExperimentalRegistry.js",
         "src/UI/ClientPanel.js",
+        "src/UI/TitleScreen.js",
         "src/UI/PanelPolish.js",
         "src/UI/InteractionSounds.js"
       ],

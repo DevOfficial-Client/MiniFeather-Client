@@ -3186,6 +3186,7 @@
       { page: 'hud', key: 'dynamicCrosshair', title: t('dynamicCrosshair'), desc: t('dynamicCrosshairDesc'), tags: ['hud', 'pvp', 'new'] },
       { page: 'waypoints', key: 'waypoints', title: t('waypoints'), desc: t('waypointsDesc'), tags: ['new'] },
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc'), tags: [] },
+      { page: 'render', key: 'classicTitle', title: t('classicTitle'), desc: t('classicTitleDesc'), tags: ['new'] },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc'), tags: [] },
       { page: 'render', key: 'betterPlayerLayers', title: t('betterPlayerLayers'), desc: t('betterPlayerLayersDesc'), tags: [] },
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc'), tags: ['pvp'] },
@@ -6627,6 +6628,11 @@
               'rebrand',
               t('rebrand'),
               t('rebrandDesc')
+            )}
+            ${renderToggle(
+              'classicTitle',
+              t('classicTitle'),
+              t('classicTitleDesc')
             )}
             ${renderToggle(
               'titanTiny',
@@ -11123,6 +11129,7 @@ function renderCreditsPage() {
     setModuleEnabled('shineAmbience', settings.shineAmbience);
     setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('duckMobs', settings.duckMobs);
+    setModuleEnabled('classicTitle', settings.classicTitle);
     setModuleEnabled('gifChat', settings.gifChat);
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
