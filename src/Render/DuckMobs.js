@@ -31,7 +31,7 @@
         goose: {
             key: 'goose',
             model: 'goose.geo.json',
-            textures: ['goose.png', 'canadian_goose.png', 'ping_goose.png', 'sus_goose.png', 'untitled_goose.png'],
+            textures: ['goose.png', 'canadian_goose.png', 'sus_goose.png', 'untitled_goose.png'],
             weight: 0.38,
             aggressive: true,
             panicDist: 0, panicSpeed: 0,      // los gansos no huyen
