@@ -10,7 +10,10 @@
         WANDER_RADIUS: 14,          // radio de patrulla alrededor del spawn del jugador
         RESET_DIST: 40,             // reciclar mob si se aleja demasiado del jugador
         LOOK_SIT_MS: 1800,          // mirar fijo para que un pato se siente
-        SPAWN_MS: 2400              // cadencia de poblado gradual
+        FLOCK_CAP: 14,              // tope de mobs vivos a la vez
+        FLOCK_MIN_MS: 45000,        // minimo entre parvadas
+        FLOCK_MAX_MS: 150000,       // maximo entre parvadas
+        WATER_SAMPLES: 14           // intentos para hallar una gran masa de agua
     };
 
     // ---------- especies ----------
@@ -20,7 +23,8 @@
             key: 'duck',
             model: 'duck.geo.json',
             textures: [null],                 // null = png por defecto junto al geo
-            weight: 0.62,                     // proporcion de spawns
+            weight: 0.7,                      // proporcion de parvadas
+            flock: [5, 9],                    // tamano de parvada
             aggressive: false,
             panicDist: 3.2, panicSpeed: 3.4,
             walkSpeed: 1.1, swimSpeed: 1.0,
@@ -32,7 +36,8 @@
             key: 'goose',
             model: 'goose.geo.json',
             textures: ['goose.png', 'canadian_goose.png', 'sus_goose.png', 'untitled_goose.png'],
-            weight: 0.38,
+            weight: 0.3,
+            flock: [2, 4],
             aggressive: true,
             panicDist: 0, panicSpeed: 0,      // los gansos no huyen
             walkSpeed: 0.9, swimSpeed: 0.85,
@@ -51,9 +56,7 @@
     const state = {
         enabled: false,
         mobs: [],                   // { id, rec, sp, ai:{...} }
-        quota: 3 + Math.floor(Math.random() * 7), // 3-9 mobs por sesion
-        spawnCenter: null,
-        lastSpawn: 0,
+        nextFlock: 0,               // timestamp de la proxima parvada
         stamp: { alive: true }
     };
 
@@ -256,7 +259,7 @@
         } catch {}
     }
 
-    // ---------- spawn / despawn ----------
+    // ---------- spawn en parvadas sobre grandes masas de agua ----------
 
     function pickSpecies() {
         let r = Math.random();
@@ -267,21 +270,44 @@
         return SPECIES.duck;
     }
 
-    function pickSpawnPoint(center) {
-        const a = Math.random() * Math.PI * 2;
-        const r = 6 + Math.random() * (CFG.WANDER_RADIUS - 6);
-        const x = center.x + Math.cos(a) * r;
-        const z = center.z + Math.sin(a) * r;
-        return { x, y: center.y + 2, z };
+    function waterBodyScore(x, z) {
+        // cuenta muestras de agua en una cruz 5x5 centrada en (x, z); y del jugador -1
+        const y = Math.floor((playerPos()?.y ?? 64) - 1);
+        let n = 0;
+        for (let dx = -2; dx <= 2; dx++) {
+            for (let dz = -2; dz <= 2; dz++) {
+                if (isWaterAt(x + dx, y, z + dz)) n++;
+            }
+        }
+        return n; // 25 = masa grande
     }
 
-    function spawnMob() {
+    function findWaterSpot(center) {
+        // busca en anillos crecientes un punto con mucha agua alrededor
+        let best = null, bestScore = 0;
+        for (let i = 0; i < CFG.WATER_SAMPLES; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const r = 8 + Math.random() * (CFG.WANDER_RADIUS + 10);
+            const x = Math.floor(center.x + Math.cos(a) * r);
+            const z = Math.floor(center.z + Math.sin(a) * r);
+            const score = waterBodyScore(x, z);
+            if (score > bestScore) { bestScore = score; best = { x: x + 0.5, z: z + 0.5 }; }
+        }
+        return bestScore >= 18 ? best : null; // solo grandes masas (>=72% agua en 5x5)
+    }
+
+    function waterSurfaceAt(spot) {
+        const y = Math.floor((playerPos()?.y ?? 64) - 1);
+        // sube hasta hallar la superficie del agua
+        for (let dy = 0; dy < 6; dy++) {
+            if (isWaterAt(spot.x, y + dy, spot.z)) return waterSurfaceY(spot.x, y + dy, spot.z);
+        }
+        return y + 0.9;
+    }
+
+    function spawnMobAt(sp, x, y, z, dir) {
         const CM = globalThis.MF_CustomModels;
         if (!CM) return null;
-        const center = state.spawnCenter;
-        if (!center) return null;
-        const at = pickSpawnPoint(center);
-        const sp = pickSpecies();
         const texture = sp.textures[(Math.random() * sp.textures.length) | 0];
         const opts = {
             id: sp.key + Math.floor(Math.random() * 1e9),
@@ -290,19 +316,20 @@
             lookAtPlayer: false,
             persist: false,
             bob: false,
-            anim: 'idle'
+            anim: 'swim'
         };
         if (texture) opts.texture = texture; // variante de skin (CustomModels: loadModel(file, texOverride))
-        const id = CM.spawn(sp.model, at.x, at.y, at.z, opts);
+        const id = CM.spawn(sp.model, x, y, z, opts);
         if (!id) return null;
         const mob = {
             id,
             rec: null,
             sp,
+            flockCenter: { x, z },
             ai: {
-                mode: 'idle',          // idle | walk | swim | panic | sit | intimidate | charge | bite
-                until: performance.now() + 1000 + Math.random() * 3000,
-                dir: Math.random() * Math.PI * 2,
+                mode: 'swim',         // nacen nadando en el agua
+                until: performance.now() + 1500 + Math.random() * 3500,
+                dir: dir + (Math.random() - 0.5) * 0.8,
                 speed: 0,
                 nextCall: performance.now() + 1500 + Math.random() * sp.callMaxMs,
                 sitting: false,
@@ -314,6 +341,26 @@
         };
         state.mobs.push(mob);
         return mob;
+    }
+
+    function spawnFlock() {
+        const player = playerPos();
+        if (!player) return 0;
+        const spot = findWaterSpot(player);
+        if (!spot) return 0;
+        const sp = pickSpecies();
+        const count = sp.flock[0] + Math.floor(Math.random() * (sp.flock[1] - sp.flock[0] + 1));
+        const dir = Math.random() * Math.PI * 2; // rumbo comun de la parvada
+        const y = waterSurfaceAt(spot);
+        let n = 0;
+        for (let i = 0; i < count && state.mobs.length < CFG.FLOCK_CAP; i++) {
+            // pequeños offsets para que no nazcan apilados
+            const ox = (Math.random() - 0.5) * 3;
+            const oz = (Math.random() - 0.5) * 3;
+            if (spawnMobAt(sp, spot.x + ox, y, spot.z + oz, dir)) n++;
+        }
+        if (n) console.log(TAG + ' parvada de ' + n + ' ' + (sp.key === 'goose' ? 'gansos' : 'patos'));
+        return n;
     }
 
     function removeMob(mob) {
@@ -412,12 +459,9 @@
         const player = playerPos();
         const dPlayer = player ? Math.hypot(player.x - p.x, player.z - p.z) : Infinity;
 
-        // gestionar reciclaje por distancia
+        // gestionar reciclaje por distancia: despawnear (la parvada se repone sola)
         if (player && dPlayer > CFG.RESET_DIST) {
-            const at = pickSpawnPoint(state.spawnCenter || player);
-            p.set(at.x, at.y, at.z);
-            ai.mode = 'idle';
-            ai.until = t + 800;
+            removeMob(mob);
             return;
         }
 
@@ -494,10 +538,10 @@
             const step = speed * dt;
             const nx = p.x + Math.sin(ai.dir) * step;
             const nz = p.z + Math.cos(ai.dir) * step;
-            const c = state.spawnCenter;
+            const c = mob.flockCenter;
             let blocked = false;
             if (c && ai.mode !== 'charge') {
-                if (Math.hypot(nx - c.x, nz - c.z) > CFG.WANDER_RADIUS + 4) blocked = true;
+                if (Math.hypot(nx - c.x, nz - c.z) > CFG.WANDER_RADIUS) blocked = true;
             }
             if (!blocked) {
                 const aheadY = groundYAt(nx, p.y + 1.2, nz);
@@ -592,18 +636,13 @@
         if (!CM) { schedule(); return; }
 
         const p = playerPos();
-        if (p) {
-            if (!state.spawnCenter) state.spawnCenter = { x: p.x, y: p.y, z: p.z };
-            const c = state.spawnCenter;
-            if (Math.hypot(p.x - c.x, p.z - c.z) > 24) {
-                state.spawnCenter = { x: p.x, y: p.y, z: p.z };
-            }
-        }
 
-        // poblar gradualmente hasta la cuota de la sesion (3-9)
-        if (p && state.mobs.length < state.quota && t - state.lastSpawn > CFG.SPAWN_MS) {
-            spawnMob();
-            state.lastSpawn = t;
+        // parvadas: cada 45-150s aparece una (patos 5-9, gansos 2-4) sobre una gran masa de agua
+        if (p && !state.nextFlock) {
+            state.nextFlock = t + CFG.FLOCK_MIN_MS + Math.random() * (CFG.FLOCK_MAX_MS - CFG.FLOCK_MIN_MS);
+        } else if (p && t >= state.nextFlock && state.mobs.length < CFG.FLOCK_CAP) {
+            spawnFlock(); // si no hallo agua, reintenta en el proximo tick corto
+            state.nextFlock = t + (state.mobs.length ? CFG.FLOCK_MIN_MS + Math.random() * (CFG.FLOCK_MAX_MS - CFG.FLOCK_MIN_MS) : 8000);
         }
 
         for (const mob of [...state.mobs]) {
@@ -629,16 +668,16 @@
             state.enabled = true;
             state.stamp = { alive: true };
             state.lastT = performance.now();
-            if (!state.quota) state.quota = 3 + Math.floor(Math.random() * 7); // 3-9
+            state.nextFlock = 0; // primera parvada al proximo tick
             schedule();
-            console.log(TAG + ' activado (patos + gansos)');
+            console.log(TAG + ' activado (parvadas de patos y gansos)');
             return true;
         },
         stop() {
             state.enabled = false;
             state.stamp.alive = false;
             for (const mob of [...state.mobs]) removeMob(mob);
-            state.spawnCenter = null;
+            state.nextFlock = 0;
             console.log(TAG + ' desactivado');
         },
         count() { return state.mobs.length; },
