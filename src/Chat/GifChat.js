@@ -99,10 +99,15 @@
   function bridgeFetch(url) {
     return new Promise((resolve, reject) => {
       const id = 'mfgif' + Math.random().toString(36).slice(2);
+      console.log('[GifChat] bridgeFetch →', url);
       const onRes = (e) => {
-        const d = e.detail || {};
+        let d = e.detail || {};
+        if (typeof d === 'string') {
+          try { d = JSON.parse(d); } catch (_) { return; }
+        }
         if (d.id !== id) return;
         cleanup();
+        console.log('[GifChat] bridgeFetch ← id', id, 'error:', d.error, 'len:', d.data ? String(d.data).length : 0);
         if (d.error) reject(new Error(String(d.error)));
         else if (d.data == null || d.data === '') reject(new Error('empty'));
         else resolve(String(d.data));
@@ -111,7 +116,7 @@
         window.removeEventListener('mf-bg-fetch-result', onRes);
         clearTimeout(timer);
       };
-      const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, 8000);
+      const timer = setTimeout(() => { cleanup(); console.warn('[GifChat] bridgeFetch TIMEOUT (¿listener del puente ISOLATED ausente?) id', id); reject(new Error('timeout')); }, 8000);
       window.addEventListener('mf-bg-fetch-result', onRes);
       window.dispatchEvent(new CustomEvent('mf-bg-fetch', { detail: JSON.stringify({ id, url }) }));
     });

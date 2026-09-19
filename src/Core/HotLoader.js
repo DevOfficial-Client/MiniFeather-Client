@@ -53,15 +53,25 @@
       } catch (_) {}
     });
 
-    // puente de fetch a otros origenes (MAIN -> background, CORS-free)
+    // puente de fetch a otros origenes (MAIN -> background, CORS-free).
+    // CustomEvent.detail no cruza mundos como objeto: viaja como JSON string.
     window.addEventListener('mf-bg-fetch', (e) => {
-      const d = e.detail || {};
+      let d = e.detail || {};
+      if (typeof d === 'string') {
+        try { d = JSON.parse(d); } catch (_) { return; }
+      }
       const id = d.id, url = d.url;
-      if (!id || typeof url !== 'string') return;
+      console.log('[MF bridge] mf-bg-fetch recibido id', id, 'url', url);
+      if (!id || typeof url !== 'string') {
+        console.warn('[MF bridge] mf-bg-fetch inválido (falta id/url)');
+        return;
+      }
       chrome.runtime.sendMessage({ type: 'MF_BRIDGE_FETCH', url }, (res) => {
+        if (chrome.runtime.lastError) console.warn('[MF bridge] lastError:', chrome.runtime.lastError.message);
+        console.log('[MF bridge] respuesta del background id', id, 'len:', res?.data ? String(res.data).length : 0, 'error:', res?.error);
         try {
           window.dispatchEvent(new CustomEvent('mf-bg-fetch-result', {
-            detail: { id, data: res && res.data, error: res && res.error }
+            detail: JSON.stringify({ id, data: res && res.data, error: res && res.error })
           }));
         } catch (_) {}
       });

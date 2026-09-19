@@ -670,17 +670,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "MF_KLIPY_FETCH" || message.type === "MF_BRIDGE_FETCH") {
     const KLIPY_API_RE = /^https:\/\/api\.klipy\.com\/api\/v1\/[\w-]+\/gifs\/(search|trending)(\?.*)?$/;
     const url = String(message.url || "");
+    console.log("[MF bg] MF_BRIDGE_FETCH url:", url);
     if (message.type === "MF_BRIDGE_FETCH" && !KLIPY_API_RE.test(url)) {
+      console.warn("[MF bg] URL RECHAZADA por KLIPY_API_RE:", url);
       sendResponse({ data: "" });
       return true;
     }
     fetch(url)
       .then(r => {
+        console.log("[MF bg] fetch status:", r.status, "ok:", r.ok);
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.text();
       })
-      .then(text => sendResponse({ data: text }))
-      .catch(error => sendResponse({ data: "", error: String(error?.message || error) }));
+      .then(text => {
+        console.log("[MF bg] fetch OK, longitud:", text.length);
+        sendResponse({ data: text });
+      })
+      .catch(error => {
+        console.warn("[MF bg] fetch FALLÓ:", String(error?.message || error));
+        sendResponse({ data: "", error: String(error?.message || error) });
+      });
     return true;
   }
 
