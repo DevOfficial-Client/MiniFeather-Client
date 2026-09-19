@@ -52,6 +52,18 @@
         "https://miniblox.online/*"
       ],
       "js": [
+        "src/Core/HotLoader.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
+      ],
+      "js": [
         "src/Chat/FriendNicknames.js"
       ],
       "run_at": "document_start",

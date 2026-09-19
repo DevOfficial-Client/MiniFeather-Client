@@ -6,12 +6,56 @@
 
   const KEY = 'mf:hot:v1';
 
+  // Este archivo se registra dos veces: ISOLATED (puente con chrome.*) y MAIN
+  // (motor de inyeccion). Los scripts inline insertados desde el mundo
+  // aislado los bloquea la CSP minima MV3 de la extension (sin unsafe-inline);
+  // desde MAIN se evaluan contra la CSP de la pagina.
+  const IS_EXT = !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
+
   function readPlan() {
     try {
       const p = JSON.parse(localStorage.getItem(KEY) || 'null');
       return p && p.v === 1 && p.files && typeof p.files === 'object' ? p : null;
     } catch (_) { return null; }
   }
+
+  if (IS_EXT) {
+    // ── puente (ISOLATED): recursos de la extension + sync del plan ──
+    window.addEventListener('mf-hot-fetch', (e) => {
+      const d = e.detail || {};
+      const id = d.id, path = d.path;
+      if (!id || typeof path !== 'string' || path.indexOf('..') !== -1) return;
+      fetch(chrome.runtime.getURL(path))
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+        .then(code => { window.dispatchEvent(new CustomEvent('mf-hot-fetch-result', { detail: { id, code } })); })
+        .catch(() => { window.dispatchEvent(new CustomEvent('mf-hot-fetch-result', { detail: { id, code: null } })); });
+    });
+    window.addEventListener('mf-hot-sync', () => {
+      try {
+        chrome.runtime.sendMessage({ type: 'mfHot:sync' }, (res) => {
+          try {
+            if (chrome.runtime.lastError || !res || !res.success) return;
+            const next = {
+              v: 1,
+              commit: res.commit || null,
+              ts: Date.now(),
+              files: res.files && typeof res.files === 'object' ? res.files : {},
+              guards: res.guards && typeof res.guards === 'object' ? res.guards : {},
+              ok: res.ok && typeof res.ok === 'object' ? res.ok : {}
+            };
+            if (!Object.keys(next.files).length) {
+              localStorage.removeItem(KEY);
+              return;
+            }
+            localStorage.setItem(KEY, JSON.stringify(next));
+          } catch (_) {}
+        });
+      } catch (_) {}
+    });
+    return;
+  }
+
+  // ── motor (MAIN world) ──
 
   function injectInline(code) {
     const s = document.createElement('script');
@@ -20,31 +64,47 @@
     s.remove();
   }
 
+  // pedir un recurso de la extension al puente (CustomEvent, con timeout)
+  function fetchViaBridge(path) {
+    return new Promise((resolve, reject) => {
+      const id = 'mf' + Math.random().toString(36).slice(2);
+      const onRes = (e) => {
+        const d = e.detail || {};
+        if (d.id !== id) return;
+        cleanup();
+        if (d.code == null) reject(new Error('bridge fetch failed'));
+        else resolve(d.code);
+      };
+      const cleanup = () => {
+        window.removeEventListener('mf-hot-fetch-result', onRes);
+        clearTimeout(timer);
+      };
+      const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, 5000);
+      window.addEventListener('mf-hot-fetch-result', onRes);
+      window.dispatchEvent(new CustomEvent('mf-hot-fetch', { detail: { id, path } }));
+    });
+  }
+
   const plan = readPlan();
-  
+
   const paths = plan
     ? Object.keys(plan.files).filter(p => typeof plan.files[p] === 'string' && plan.files[p])
     : [];
 
   function fallback(path, guards) {
-    try {
-      fetch(chrome.runtime.getURL(path))
-        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
-        .then(code => {
-          const del = (guards || [])
-            .map(g => 'try{delete window[' + JSON.stringify(g) + ']}catch(e){}')
-            .join('');
-          injectInline(del + '\n' + code + '\n//# sourceURL=' + path + ' (fallback)');
-          try { console.warn('[MF HotLoader] hot falló → versión empaquetada:', path); } catch (_) {}
-        })
-        .catch(() => {
-          try { console.warn('[MF HotLoader] fallback no disponible:', path); } catch (_) {}
-        });
-    } catch (_) {}
+    fetchViaBridge(path).then(code => {
+      const del = (guards || [])
+        .map(g => 'try{delete window[' + JSON.stringify(g) + ']}catch(e){}')
+        .join('');
+      injectInline(del + '\n' + code + '\n//# sourceURL=' + path + ' (fallback)');
+      try { console.warn('[MF HotLoader] hot falló → versión empaquetada:', path); } catch (_) {}
+    }).catch(() => {
+      try { console.warn('[MF HotLoader] fallback no disponible:', path); } catch (_) {}
+    });
   }
 
   if (plan) {
-    
+
     let polled = false;
     const poller = () => {
       if (polled) return;
@@ -57,14 +117,14 @@
         return;
       }
       fallback(p, (plan.guards || {})[p] || []);
-      
+
       setTimeout(() => { polled = false; }, 50);
     };
     try {
       window.addEventListener('mf-hot-fallback', () => { try { poller(); } catch (_) {} });
     } catch (_) {}
     try {
-      
+
       setInterval(poller, 200);
     } catch (_) {}
   }
@@ -102,7 +162,7 @@
           'window.__MF_HOT_FAIL__[__p]=String(e&&e.message||e)}catch(_){}}' +
           'var __good=true;' +
           'for(var i=0;i<__ok.length;i++){var v=window[__ok[i]];' +
-          'if(!v||v===1){__good=false;break}}' + 
+          'if(!v||v===1){__good=false;break}}' +
           'if(!__good){try{document.documentElement.dataset.mfHotFallback=__p;' +
           'window.dispatchEvent(new Event("mf-hot-fallback"))}catch(e){}}' +
           '})();' +
@@ -121,24 +181,9 @@
     }
   }
 
-  try {
-    chrome.runtime.sendMessage({ type: 'mfHot:sync' }, (res) => {
-      try {
-        if (chrome.runtime.lastError || !res || !res.success) return;
-        const next = {
-          v: 1,
-          commit: res.commit || null,
-          ts: Date.now(),
-          files: res.files && typeof res.files === 'object' ? res.files : {},
-          guards: res.guards && typeof res.guards === 'object' ? res.guards : {},
-          ok: res.ok && typeof res.ok === 'object' ? res.ok : {}
-        };
-        if (!Object.keys(next.files).length) {
-          localStorage.removeItem(KEY);
-          return;
-        }
-        localStorage.setItem(KEY, JSON.stringify(next));
-      } catch (_) {} 
-    });
-  } catch (_) {}
+  // pedir plan fresco al background via el puente (pequeno delay para que
+  // el listener del puente este registrado)
+  setTimeout(() => {
+    try { window.dispatchEvent(new Event('mf-hot-sync')); } catch (_) {}
+  }, 300);
 })();
