@@ -650,7 +650,13 @@
             });
             return rec;
         },
-        rescan
+        rescan,
+
+        // Expone el registro interno (root, anims) — usado por DuckMobs.
+        record(id) {
+            const rec = state.customs.get(id);
+            return rec || null;
+        }
     };
     
     window.MF_CustomModels.playSound = (file, vol = 0.8) => playSoundUrl(file, vol);
@@ -1194,11 +1200,17 @@
         function faceQuads(cube) {
             const [ox, oy, oz] = cube.origin;
             const [sx, sy, sz] = cube.size;
-            const minX = ox, maxX = ox + sx, minY = oy, maxY = oy + sy, minZ = oz, maxZ = oz + sz;
+            const inf = +cube.inflate || 0;
+            const minX = ox - inf, maxX = ox + sx + inf;
+            const minY = oy - inf, maxY = oy + sy + inf;
+            const minZ = oz - inf, maxZ = oz + sz + inf;
             const u = cube.uv?.[0] || 0, v = cube.uv?.[1] || 0;
             const w = sx, h = sy, d = sz;
             const quads = [];
             const F = (tl, bl, br, tr, reg, n) => quads.push({ tl, bl, br, tr, reg, n });
+            // UV por cara (uv: {north:{uv,uv_size},...}) e inflate — usados por el pato
+            const PF = cube.uv && !Array.isArray(cube.uv) ? cube.uv : null;
+            const R = (f, fb) => (f ? [f.uv[0], f.uv[1], f.uv_size?.[0] || fb[2], f.uv_size?.[1] || fb[3]] : fb);
             if (h === 0) {
                 F([minX, maxY, minZ], [minX, maxY, maxZ], [maxX, maxY, maxZ], [maxX, maxY, minZ], [u + d, v, w, d], [0, 1, 0]);
                 return quads;
@@ -1211,12 +1223,12 @@
                 F([minX, maxY, minZ], [minX, minY, minZ], [minX, minY, maxZ], [minX, maxY, maxZ], [u, v + d, d, h], [-1, 0, 0]);
                 return quads;
             }
-            F([maxX, maxY, minZ], [maxX, minY, minZ], [minX, minY, minZ], [minX, maxY, minZ], [u + d, v + d, w, h], [0, 0, -1]); 
-            F([minX, maxY, maxZ], [minX, minY, maxZ], [maxX, minY, maxZ], [maxX, maxY, maxZ], [u + 2 * d + w, v + d, w, h], [0, 0, 1]); 
-            F([maxX, maxY, maxZ], [maxX, minY, maxZ], [maxX, minY, minZ], [maxX, maxY, minZ], [u + d + w, v + d, d, h], [1, 0, 0]); 
-            F([minX, maxY, minZ], [minX, minY, minZ], [minX, minY, maxZ], [minX, maxY, maxZ], [u, v + d, d, h], [-1, 0, 0]); 
-            F([minX, maxY, minZ], [minX, maxY, maxZ], [maxX, maxY, maxZ], [maxX, maxY, minZ], [u + d, v, w, d], [0, 1, 0]); 
-            F([maxX, minY, minZ], [maxX, minY, maxZ], [minX, minY, maxZ], [minX, minY, minZ], [u + d + w, v, w, d], [0, -1, 0]); 
+            F([maxX, maxY, minZ], [maxX, minY, minZ], [minX, minY, minZ], [minX, maxY, minZ], R(PF?.north, [u + d, v + d, w, h]), [0, 0, -1]);
+            F([minX, maxY, maxZ], [minX, minY, maxZ], [maxX, minY, maxZ], [maxX, maxY, maxZ], R(PF?.south, [u + 2 * d + w, v + d, w, h]), [0, 0, 1]);
+            F([maxX, maxY, maxZ], [maxX, minY, maxZ], [maxX, minY, minZ], [maxX, maxY, minZ], R(PF?.east, [u + d + w, v + d, d, h]), [1, 0, 0]);
+            F([minX, maxY, minZ], [minX, minY, minZ], [minX, minY, maxZ], [minX, maxY, maxZ], R(PF?.west, [u, v + d, d, h]), [-1, 0, 0]);
+            F([minX, maxY, minZ], [minX, maxY, maxZ], [maxX, maxY, maxZ], [maxX, maxY, minZ], R(PF?.up, [u + d, v, w, d]), [0, 1, 0]);
+            F([maxX, minY, minZ], [maxX, minY, maxZ], [minX, minY, maxZ], [minX, minY, minZ], R(PF?.down, [u + d + w, v, w, d]), [0, -1, 0]);
             return quads;
         }
 
@@ -1251,6 +1263,10 @@
             const pivot = b.pivot || [0, 0, 0];
             const pp = b.parent ? (boneByName.get(b.parent)?.pivot || [0, 0, 0]) : [0, 0, 0];
             node.translation = [(pivot[0] - pp[0]) * S, (pivot[1] - pp[1]) * S, (pivot[2] - pp[2]) * S];
+            // Rotación de reposo del bone (grados Bedrock XYZ → quat glTF)
+            if (Array.isArray(b.rotation) && b.rotation.some((r) => r)) {
+                node.rotation = deg2quat(b.rotation[0], b.rotation[1], b.rotation[2]);
+            }
             if (b.cubes?.length) {
                 const prims = [];
                 for (const cube of b.cubes) {

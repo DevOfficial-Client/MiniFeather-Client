@@ -531,6 +531,7 @@
     shineAmbience: false,
     shineAmbienceDensity: 1,
     patPat: false,
+    duckMobs: false,
     itemPhysics: false,
     noWeather: false,
     fullBright: false,
@@ -3191,6 +3192,7 @@
       { page: 'render', key: 'waterSplash', title: t('waterSplash'), desc: t('waterSplashDesc'), tags: ['new'] },
       { page: 'render', key: 'shineAmbience', title: t('shineAmbience'), desc: t('shineAmbienceDesc'), tags: ['new'] },
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc'), tags: [] },
+      { page: 'render', key: 'duckMobs', title: t('duckMobs'), desc: t('duckMobsDesc'), tags: ['new'] },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc'), tags: [] },
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc'), tags: [] },
       { page: 'render', key: 'fullBright', title: t('fullBright'), desc: t('fullBrightDesc'), tags: [] },
@@ -3385,7 +3387,7 @@
     const icons = {
       keystrokes:'keystrokes', fpsCounter:'fpsCounter', cpsCounter:'cpsCounter', pingCounter:'pingCounter', guiPatch:'guiPatch', armorHud:'armorHud',
       coordinates:'coordinates', dynamicCrosshair:'dynamicCrosshair', rebrand:'rebrand', titanTiny:'titanTiny', healthNameTags:'healthNameTags',
-      distanceNameTags:'distanceNameTags', patPat:'patPat', itemPhysics:'itemPhysics', noWeather:'noWeather', fullBright:'fullBright', vanillaAnimations:'vanillaAnimations',
+      distanceNameTags:'distanceNameTags', patPat:'patPat', duckMobs:'duckMobs', itemPhysics:'itemPhysics', noWeather:'noWeather', fullBright:'fullBright', vanillaAnimations:'vanillaAnimations',
       zoom:'zoom', cameraOverhaul:'cameraOverhaul', elytraFlight:'elytraFlight', freelook:'freelook', freecam:'freecam', blockHighlight:'blockHighlight',
       waypoints:'waypoints', customShader:'shaders', autoSprint:'movement', safeSneak:'movement', antiAfk:'antiAfk', rhythmParkour:'rhythmParkour', chatVideos:'chatVideos', chatLinks:'chatLinks', chatMemes:'chatMemes', clientChat:'clientChat',
       discord:'discord', supportAds:'supportAds'
@@ -3465,6 +3467,7 @@
     cps: 'cpsCounter', cpscounter: 'cpsCounter',
     distance: 'distanceNameTags', distancenametags: 'distanceNameTags',
     damage: 'damageParticles', damageparticles: 'damageParticles',
+    duck: 'duckMobs', ducks: 'duckMobs', duckmobs: 'duckMobs', patos: 'duckMobs', pato: 'duckMobs',
     fps: 'fpsCounter', fpscounter: 'fpsCounter',
     gui: 'guiPatch', guipatch: 'guiPatch',
     freelook: 'freelook',
@@ -3494,7 +3497,7 @@
     distanceNameTags: 'distanceNameTags', fpsCounter: 'fpsCounter', freelook: 'freelook', freecam: 'freecam',
     guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers',
     healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
-    keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat',
+    keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs',
     pingCounter: 'pingCounter', titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations',
     waypoints: 'waypoints', zoom: 'zoom'
   });
@@ -3900,6 +3903,29 @@
       },
       destroy() {
         sendItemPhysicsConfig(false);
+      }
+    }));
+  }
+
+  function sendDuckMobsConfig(enabled) {
+    document.dispatchEvent(new CustomEvent('minifeather:duckmobs-toggle', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initDuckMobsModule() {
+    registerModule('duckMobs', () => createLifecycle({
+      enable() {
+        sendDuckMobsConfig(true);
+      },
+      disable() {
+        sendDuckMobsConfig(false);
+      },
+      refresh() {
+        sendDuckMobsConfig(MODULES.get('duckMobs')?.enabled === true);
+      },
+      destroy() {
+        sendDuckMobsConfig(false);
       }
     }));
   }
@@ -6601,6 +6627,11 @@
               t('patPatDesc')
             )}
             ${renderToggle(
+              'duckMobs',
+              t('duckMobs'),
+              t('duckMobsDesc')
+            )}
+            ${renderToggle(
               'itemPhysics',
               t('itemPhysics'),
               t('itemPhysicsDesc')
@@ -8247,7 +8278,7 @@ function renderCreditsPage() {
   const NSB_BOOLEAN_KEYS = [
     'rebrand', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
-    'waterSplash', 'shineAmbience', 'patPat', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
+    'waterSplash', 'shineAmbience', 'patPat', 'duckMobs', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
     'safeSneak', 'autoRespawn', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
     'dynamicCrosshair', 'vanillaAnimations', 'leafWind', 'handSway', 'betterPlayerLayers',
     'chatVideos', 'chatLinks', 'chatMemes', 'clientChat', 'rhythmParkour', 'guiPatch',
@@ -11042,6 +11073,7 @@ function renderCreditsPage() {
     setModuleEnabled('waterSplash', settings.waterSplash && settings.shineAmbience);
     setModuleEnabled('shineAmbience', settings.shineAmbience);
     setModuleEnabled('patPat', settings.patPat);
+    setModuleEnabled('duckMobs', settings.duckMobs);
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
     setModuleEnabled('fullBright', settings.fullBright);
@@ -11649,6 +11681,7 @@ function renderCreditsPage() {
     initShineAmbienceModule();
     initPatPatModule();
     initItemPhysicsModule();
+    initDuckMobsModule();
     initNoWeatherModule();
     initFullBrightModule();
     initVanillaAnimationsModule();

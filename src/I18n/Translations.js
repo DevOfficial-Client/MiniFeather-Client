@@ -30,6 +30,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "patPat": "PatPat",
     "itemPhysics": "Item Physics",
     "itemPhysicsDesc": "Dropped items lie down, spin, float and bounce naturally without changing collisions.",
+    "duckMobs": "Duck Mobs",
+    "duckMobsDesc": "Spawns ambient ducks that wander, swim, panic when you approach and sit when you stare at them. Client-side only.",
     "pbrDesc": "OptiFine-style PBR maps from texture packs (suffix _n normal, _s specular, _e emissive). Upload the pack above and toggle here.",
     "pbrTitle": "PBR Textures",
     "pbrNormalStr": "Normal strength",
@@ -787,6 +789,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "patPat": "PatPat",
     "itemPhysics": "Física de Objetos",
     "itemPhysicsDesc": "Los objetos tirados se acuestan, giran, flotan y rebotan de forma natural sin cambiar las colisiones.",
+    "duckMobs": "Patos Ambulantes",
+    "duckMobsDesc": "Spawnea patos ambientales que deambulan, nadan, entran en pánico al acercarte y se sientan si los miras fijamente. Solo client-side.",
     "pbrDesc": "Maps PBR estilo OptiFine desde texture packs (sufijo _n normales, _s especular, _e emisivo). Sube el pack arriba y actívalo aquí.",
     "pbrTitle": "Texturas PBR",
     "pbrNormalStr": "Fuerza de normales",
@@ -1533,6 +1537,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "patPat": "PatPat",
     "itemPhysics": "アイテム物理",
     "itemPhysicsDesc": "落ちたアイテムを自然に寝かせ、回転、浮遊、バウンドさせます。衝突判定は変更しません。",
+    "duckMobs": "アヒルモブ",
+    "duckMobsDesc": "歩き回り、泳ぎ、近づくとパニックになり、見つめると座るアヒルをスポーンします。クライアント側のみ。",
     "pbrDesc": "テクスチャパックのOptiFine風PBRマップ（_n 法線、_s 鏡面、_e 発光）。上でパックをアップロードして切り替えます。",
     "pbrTitle": "PBRテクスチャ",
     "pbrNormalStr": "法線の強さ",
@@ -2193,6 +2199,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "patPat": "PatPat",
     "itemPhysics": "Fisica Oggetti",
     "itemPhysicsDesc": "Gli oggetti a terra si sdraiano, ruotano, fluttuano e rimbalzano in modo naturale senza modificare le collisioni.",
+    "duckMobs": "Paperelle",
+    "duckMobsDesc": "Fa comparire paperelle che vagano, nuotano, vanno in panico quando ti avvicini e si siedono se le fissi. Solo client-side.",
     "pbrDesc": "Mappe PBR in stile OptiFine dai texture pack (suffisso _n normali, _s speculare, _e emissivo). Carica il pack sopra e attivalo qui.",
     "pbrTitle": "Texture PBR",
     "pbrNormalStr": "Intensità normali",
@@ -2872,7 +2880,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorExportEmpty": "无可导出内容 — 请先绘制一些内容",
     "sectionFacialAnimations": "面部动画",
     "facialAnimationsDesc": "循环面部动画、自动眼球移动和动画皮肤包。",
-    "facialAnimationsOpen": "打开面部动画"
+    "facialAnimationsOpen": "打开面部动画",
+    "duckMobs": "鸭子生物",
+    "duckMobsDesc": "生成环境鸭子：会游荡、游泳、靠近时惊慌逃窜、被盯着看会坐下。仅客户端。"
   },
   "fr": {
     "language": "Langue",
@@ -2931,7 +2941,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorExportEmpty": "rien à exporter — peignez d'abord",
     "sectionFacialAnimations": "Animations Faciales",
     "facialAnimationsDesc": "Animations de visage en boucle, mouvement automatique des yeux et packs de skins animées.",
-    "facialAnimationsOpen": "Ouvrir les animations faciales"
+    "facialAnimationsOpen": "Ouvrir les animations faciales",
+    "duckMobs": "Canards",
+    "duckMobsDesc": "Fait apparaître des canards qui se promènent, nagent, paniquent quand vous approchez et s'assoient si vous les fixez. Client uniquement."
   },
   "de": {
     "language": "Sprache",
@@ -2990,7 +3002,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorExportEmpty": "nichts zu exportieren — erst etwas zeichnen",
     "sectionFacialAnimations": "Gesichtsanimationen",
     "facialAnimationsDesc": "Loopende Gesichtanimationen, automatische Augenbewegung und animierte Skin-Packs.",
-    "facialAnimationsOpen": "Gesichtsanimationen öffnen"
+    "facialAnimationsOpen": "Gesichtsanimationen öffnen",
+    "duckMobs": "Enten-Mobs",
+    "duckMobsDesc": "Spawnt Enten, die herumstreifen, schwimmen, in Panik geraten, wenn du dich näherst, und sich hinsetzen, wenn du sie anstarrst. Nur clientseitig."
   },
   "pt": {
     "language": "Idioma",
@@ -3049,7 +3063,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorExportEmpty": "nada para exportar — pinte algo primeiro",
     "sectionFacialAnimations": "Animações Faciais",
     "facialAnimationsDesc": "Animações de rosto em loop, movimento automático dos olhos e packs de skins animadas.",
-    "facialAnimationsOpen": "Abrir animações faciais"
+    "facialAnimationsOpen": "Abrir animações faciais",
+    "duckMobs": "Patos",
+    "duckMobsDesc": "Faz aparecer patos que vagueiam, nadam, entram em pânico quando você se aproxima e sentam se você encarar. Somente client-side."
   },
   "ru": {
     "language": "Язык",
@@ -3108,7 +3124,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorExportEmpty": "нечего экспортировать — сначала нарисуйте что-нибудь",
     "sectionFacialAnimations": "Анимации лица",
     "facialAnimationsDesc": "Циклические анимации лица, автоматическое движение глаз и анимированные паки скинов.",
-    "facialAnimationsOpen": "Открыть анимации лица"
+    "facialAnimationsOpen": "Открыть анимации лица",
+    "duckMobs": "Утки",
+    "duckMobsDesc": "Появляются утки, которые бродят, плавают, паникуют при вашем приближении и садятся, если долго смотреть. Только клиент."
   },
   "ko": {
     "language": "언어",
@@ -3167,7 +3185,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "pbrEditorExportEmpty": "내보낼 내용 없음 — 먼저 무언가 그리세요",
     "sectionFacialAnimations": "표정 애니메이션",
     "facialAnimationsDesc": "루프 표정 애니메이션, 자동 눈 움직임, 애니메이션 스킨 팩.",
-    "facialAnimationsOpen": "표정 애니메이션 열기"
+    "facialAnimationsOpen": "표정 애니메이션 열기",
+    "duckMobs": "오리 몹",
+    "duckMobsDesc": "주변을 배회하고, 헤엄치고, 다가가면 놀라 도망치고, 빤히 보면 앉는 오리를 스폰합니다. 클라이언트 전용."
   }
 };
 })();

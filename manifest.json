@@ -121,6 +121,7 @@
         "src/Render/BetterPlayerLayers.js",
         "src/Render/BetterPlayerLayersArmorPatch.js",
         "src/Cosmetics/CustomModels.js",
+        "src/Render/DuckMobs.js",
         "src/AI/VerityAI.js",
         "src/Studio/MF_Peer.js",
         "src/Shaders/CustomShader.js",
