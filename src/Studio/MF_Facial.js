@@ -2712,6 +2712,33 @@
         }
     }, 1000);
     setTimeout(() => clearInterval(packBoot), 120000);
+
+    // Siempre activo: con solo que exista config guardada (auto.front), arrancar
+    // el modo auto al mesh disponible — aunque la skin actual no tenga pack
+    // asociado y aunque el usuario lo dejara apagado en la sesion anterior.
+    const autoBoot = setInterval(() => {
+        if (!getMesh()) return;
+        clearInterval(autoBoot);
+        if (auto.front) autoStart();
+    }, 1000);
+    setTimeout(() => clearInterval(autoBoot), 120000);
+
+    // Re-montaje automatico: el engine regenera materiales al cambiar de mundo,
+    // reaparecer o recrear el mesh; la textura facial queda desmontada. Vigilar
+    // y recapturar la sesion para que la cara nunca se pierda.
+    setInterval(() => {
+        if (!auto.on || !auto.front) return;
+        const mesh = getMesh();
+        if (!mesh) return;
+        try {
+            const mats = findSkinMaterials(mesh);
+            if (mats.length && !mats.some(m => m.map === state.tex)) {
+                state.tex = null;
+                ensureSession();
+                paintZone(auto._zone || 'front', true);
+            }
+        } catch {}
+    }, 2000);
     
     const packsReady = Promise.all([
         loadBuiltinPacks().catch(() => {}),
