@@ -751,6 +751,12 @@
         return out;
     }
 
+    // Texturas montadas por MF_Facial (sesion local o de otros jugadores):
+    // ya llevan la skin + cara pintadas; repintarlas destruiria la cara.
+    function isFacialTex(t) {
+        return !!(t && (t.__mfLocalCanvas || t.__mfPeerCanvas || t.__mfOtherKey));
+    }
+
     function skinMaterialsOf(mesh) {
         // Excluir la rama de la capa: antes el filtro 64xN dejaba pasar la
         // textura de capa (64x32) como "skin" y el repintado le pintaba la
@@ -764,6 +770,7 @@
         var bodyMats = all.filter(function (m) { return !capeMats.has(m); });
 
         var skins = bodyMats.filter(function (m) {
+            if (isFacialTex(m.map)) return false; // MF_Facial controla esta textura
             var w = m.map?.image?.width, h = m.map?.image?.height;
             if (!w || !h) return false;
             // solo proporciones de skin reales (64x32/64x64/128x64/128x128/...):
@@ -771,7 +778,12 @@
             var k64 = w / 64;
             return Number.isInteger(k64) && (h === w || h === w / 2) && k64 <= 4;
         });
-        return skins.length ? skins : (bodyMats.length ? bodyMats : all);
+        if (skins.length) return skins;
+        var nonFacial = bodyMats.filter(function (m) { return !isFacialTex(m.map); });
+        if (nonFacial.length) return nonFacial;
+        // todos los materiales del cuerpo son texturas faciales: MF_Facial
+        // tiene el control del mesh; lista vacia = no repintar
+        return [];
     }
 
     function capeMaterialsOf(mesh) {
