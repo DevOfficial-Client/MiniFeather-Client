@@ -354,9 +354,9 @@ function entsTick() {
         const rec = CM.getRecord(id);
         if (!rec?.root) {
             
-            if (!r.file || ents.pendingSpawn === id) continue;
+            if (!r.file || r.spawning) continue;
+            r.spawning = true;
             CM.tryLoad(r.file).then((ok) => {
-                ents.pendingSpawn = null;
                 if (!ok && !ents.knownFiles.has(r.file)) {
                     log('no tengo "' + r.file + '" — pidiendolo al peer');
                     ents.knownFiles.add(r.file);
@@ -364,9 +364,10 @@ function entsTick() {
                 } else if (ok) {
                     spawnPuppetEnt(id, r);
                 }
+            }).catch(() => {}).finally(() => {
+                // reintentar en 2s si aun no hay root (carga async o fallo)
+                setTimeout(() => { r.spawning = false; }, 2000);
             });
-            ents.pendingSpawn = id;
-            setTimeout(() => { if (ents.pendingSpawn === id) ents.pendingSpawn = null; }, 2000);
             continue;
         }
         
@@ -468,13 +469,39 @@ function handleFileEnd(file) {
     }).catch((e) => warn('no pude parsear "' + file + '": ' + (e?.message || e)));
 }
 
+// Barrida de duplicados: roots __mfCM de la escena que ya no pertenecen a ningun
+// record vivo (quedaron huerfanos de la carrera de spawn) se remueven.
+function sweepOrphanPuppets() {
+    const CM = window.MF_CustomModels;
+    if (!CM?.liveRoots) return;
+    const scene = (() => {
+        try { return getGame()?.gameScene?.scene; } catch { return null; }
+    })();
+    if (!scene) return;
+    const live = CM.liveRoots();
+    let removed = 0;
+    for (const child of [...(scene.children || [])]) {
+        if (!child?.userData?.__mfCM) continue;
+        if (!live.has(child)) {
+            try { scene.remove(child); removed++; } catch {}
+        }
+    }
+    if (removed) log('barrido: ' + removed + ' duplicado(s) huerfano(s) removido(s)');
+}
+
 let puppetRafId = 0;
+let lastSweep = 0;
 (function puppetLoop() {
     if (state.role === 'guest' || state.role === 'host') {
         try { puppetTick(); } catch {}
         try { peerScaleTick(); } catch {}
         try { entsTick(); } catch {}
         try { lookTick(); } catch {}
+        const now = performance.now();
+        if (now - lastSweep > 10000) {
+            lastSweep = now;
+            try { sweepOrphanPuppets(); } catch {}
+        }
     }
     puppetRafId = requestAnimationFrame(puppetLoop);
 })();

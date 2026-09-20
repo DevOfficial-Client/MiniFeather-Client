@@ -216,7 +216,8 @@
                 const game = getGame();
                 const scene = game?.gameScene?.scene;
                 if (!scene) { console.warn(TAG + ' no hay escena para ' + id); return; }
-                if (!state.customs.has(id)) return;
+                // si otro spawn reemplazo este record mientras cargaba, no montar el root (evita duplicados huerfanos)
+                if (state.customs.get(id) !== rec) return;
                 const inst = cloneInstance(built);
                 rec.inst = inst;
                 rec.root = inst.root;
@@ -430,7 +431,17 @@
             }
             return out;
         },
-        
+
+        // todos los roots vivos (puppet incluidos): para detectar duplicados huerfanos en la escena
+        liveRoots() {
+            const roots = new Set();
+            for (const rec of state.customs.values()) {
+                if (rec.dead || !rec.root) continue;
+                roots.add(rec.root);
+            }
+            return roots;
+        },
+
         async tryLoad(file) {
             try { await loadModel(file); return true; } catch { return false; }
         },
