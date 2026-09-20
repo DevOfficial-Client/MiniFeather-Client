@@ -25,6 +25,12 @@
   "background": {
     "service_worker": "src/Core/background.js"
   },
+  "sandbox": {
+    "pages": ["classic/index.html"]
+  },
+  "content_security_policy": {
+    "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; child-src 'self'; worker-src 'self' blob:"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -136,6 +142,7 @@
         "src/Render/BetterPlayerLayersArmorPatch.js",
         "src/Cosmetics/CustomModels.js",
         "src/Render/DuckMobs.js",
+        "src/Render/CrittersMobs.js",
         "src/AI/VerityAI.js",
         "src/Studio/MF_Peer.js",
         "src/Shaders/CustomShader.js",

@@ -338,14 +338,11 @@ function entsTick() {
     if (!CM?.listLive) return;
     
     const now = performance.now();
-    if (now - (ents._lastSend || 0) > 100) {
+    // 5 Hz fijo (heartbeat): los mobs quietos tambien refrescan su seenAt remoto
+    if (now - (ents._lastSend || 0) > 200) {
         const snap = CM.listLive();
-        const key = JSON.stringify(snap);
-        if (key !== ents._lastKey) {
-            ents._lastKey = key;
-            ents._lastSend = now;
-            send({ t: 'ents', ents: snap });
-        }
+        ents._lastSend = now;
+        send({ t: 'ents', ents: snap });
     }
     
     for (const [id, r] of ents.remote) {
@@ -394,8 +391,9 @@ function spawnPuppetEnt(id, r) {
         height: r.height || 0,
         scale: r.scale || 1,
         puppet: true,
-        room: r.room === true,   
+        room: r.room === true,
         anim: r.anim || null,
+        texture: r.texture || null,
         followPlayer: false
     });
     log('puppet "' + id + '" (' + r.file + ') spawneado en (' + r.x + ', ' + r.y + ', ' + r.z + ')');
@@ -537,6 +535,7 @@ function handleMsg(msg) {
                     id: pid, srcId: e.id, file: e.file,
                     x: +e.x || 0, y: +e.y || 0, z: +e.z || 0,
                     yaw: +e.yaw || 0, anim: e.anim || null,
+                    texture: e.texture || null,
                     scale: +e.scale || 1, height: +e.height || 0,
                     seenAt: now
                 });

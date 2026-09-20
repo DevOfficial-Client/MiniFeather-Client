@@ -203,8 +203,9 @@
                 weeping: !!opts.weeping,      
                 lookAtPlayer: opts.lookAtPlayer !== false,
                 stay: !!opts.stay,
-                puppet: !!opts.puppet,        
-                spawnAnim: opts.spawnAnim || null,   
+                puppet: !!opts.puppet,
+                noPhysics: !!opts.noPhysics,   // IA externa controla la posicion por completo
+                spawnAnim: opts.spawnAnim || null,
                 catchAnim: opts.catchAnim || null,   
                 despawnAnim: opts.despawnAnim || null, 
                 caught: false,
@@ -421,6 +422,7 @@
                     z: +rec.root.position.z.toFixed(2),
                     yaw: +(rec.yaw ?? 0).toFixed(2),
                     anim: rec.curAnim || rec.anim || null,
+                    texture: rec.texture || null,
                     scale: +rec.scale || 1,
                     height: +rec.height || 0,
                     room: rec.room === true
@@ -2351,7 +2353,7 @@
         if (rec.room) return; 
         if (rec.puppet) return; 
         if (!rec.followPlayer || rec.stay) {
-            
+            if (rec.noPhysics) { rec.actuallyMoving = false; return; }
             physicsStep(rec, dt, 0, 0);
             rec.actuallyMoving = false;
             return;

@@ -1,3 +1,0 @@
-accessWidener v2 official
-accessible class net/minecraft/client/renderer/CloudRenderer$RelativeCameraPos
-accessible method net/minecraft/client/renderer/texture/TextureAtlasSprite <init> (Lnet/minecraft/resources/Identifier;Lnet/minecraft/client/renderer/texture/SpriteContents;IIIII)V

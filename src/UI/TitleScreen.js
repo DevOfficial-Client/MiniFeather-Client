@@ -118,13 +118,8 @@
   }
 
   document.addEventListener(CONFIG_EVENT, onConfig);
-  readStoredSetting();
-  try {
-    chrome.storage.onChanged?.addListener((changes, area) => {
-      if (area === 'local' && changes.settings) readStoredSetting();
-    });
-  } catch (_) {}
-  console.log('[TitleScreen] script cargado y escuchando', CONFIG_EVENT);
+  apply();
+  console.log('[TitleScreen] script cargado (GUI clásica activa por defecto)');
   globalThis[GLOBAL_KEY] = {
     enable() { state.enabled = true; apply(); },
     disable() { state.enabled = false; apply(); },

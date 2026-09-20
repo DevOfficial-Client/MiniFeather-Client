@@ -31,6 +31,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "itemPhysics": "Item Physics",
     "itemPhysicsDesc": "Dropped items lie down, spin, float and bounce naturally without changing collisions.",
     "duckMobs": "Duck Mobs",
+    "crittersMobs": "Critters & Companions",
+    "crittersMobsDesc": "Port of the Critters and Companions mod: 16 species (otters, ferrets, red pandas, koi, dragonflies, sea bunnies, beetles, snails and more) with their original biome spawn weights and group sizes. Client-side only.",
     "duckMobsDesc": "Spawns ambient ducks that wander, swim, panic when you approach and sit when you stare at them. Client-side only.",
     "pbrDesc": "OptiFine-style PBR maps from texture packs (suffix _n normal, _s specular, _e emissive). Upload the pack above and toggle here.",
     "pbrTitle": "PBR Textures",
@@ -1548,6 +1550,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "itemPhysics": "アイテム物理",
     "itemPhysicsDesc": "落ちたアイテムを自然に寝かせ、回転、浮遊、バウンドさせます。衝突判定は変更しません。",
     "duckMobs": "アヒルモブ",
+    "crittersMobs": "クリッターズ＆コンパニオンズ",
+    "crittersMobsDesc": "Critters and Companions modの移植：カワウソ、フェレット、レッサーパンダ、錦鯉、トンボ、ウミウシ、甲虫、カタツムリなど16種が、元のバイオーム出現率と群れサイズで登場。クライアント側のみ。",
     "duckMobsDesc": "歩き回り、泳ぎ、近づくとパニックになり、見つめると座るアヒルをスポーンします。クライアント側のみ。",
     "pbrDesc": "テクスチャパックのOptiFine風PBRマップ（_n 法線、_s 鏡面、_e 発光）。上でパックをアップロードして切り替えます。",
     "pbrTitle": "PBRテクスチャ",
@@ -2217,6 +2221,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "itemPhysics": "Fisica Oggetti",
     "itemPhysicsDesc": "Gli oggetti a terra si sdraiano, ruotano, fluttuano e rimbalzano in modo naturale senza modificare le collisioni.",
     "duckMobs": "Paperelle",
+    "crittersMobs": "Critters & Companions",
+    "crittersMobsDesc": "Port del mod Critters and Companions: 16 specie (lontra, furetto, panda rosso, koi, libellule, lepri di mare, scarabei, lumache e altre) con i pesi di spawn e le dimensioni dei gruppi originali. Solo client-side.",
     "duckMobsDesc": "Fa comparire paperelle che vagano, nuotano, vanno in panico quando ti avvicini e si siedono se le fissi. Solo client-side.",
     "pbrDesc": "Mappe PBR in stile OptiFine dai texture pack (suffisso _n normali, _s speculare, _e emissivo). Carica il pack sopra e attivalo qui.",
     "pbrTitle": "Texture PBR",
@@ -2909,6 +2915,10 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "facialAnimationsDesc": "循环面部动画、自动眼球移动和动画皮肤包。",
     "facialAnimationsOpen": "打开面部动画",
     "duckMobs": "鸭子生物",
+    "crittersMobs": "小动物与伙伴",
+    "crittersMobsDesc": "移植 Critters and Companions 模组：16 个物种（水獭、雪貂、小熊猫、锦鲤、蜻蜓、海兔、甲虫、蜗牛等），保留原版生物群系生成权重和群组大小。仅客户端。",
+    "crittersMobs": "小动物与伙伴",
+    "crittersMobsDesc": "移植 Critters and Companions 模组：16 个物种（水獭、雪貂、小熊猫、锦鲤、蜻蜓、海兔、甲虫、蜗牛等），保留原版生物群系生成权重和群组大小。仅客户端。",
     "duckMobsDesc": "生成环境鸭子：会游荡、游泳、靠近时惊慌逃窜、被盯着看会坐下。仅客户端。"
   },
   "fr": {
@@ -2975,6 +2985,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "facialAnimationsDesc": "Animations de visage en boucle, mouvement automatique des yeux et packs de skins animées.",
     "facialAnimationsOpen": "Ouvrir les animations faciales",
     "duckMobs": "Canards",
+    "crittersMobs": "Critters & Companions",
+    "crittersMobsDesc": "Portage du mod Critters and Companions : 16 espèces (loutres, furets, pandas roux, koïs, libellules, lièvres de mer, scarabées, escargots...) avec leurs poids d'apparition et tailles de groupe d'origine. Client uniquement.",
     "duckMobsDesc": "Fait apparaître des canards qui se promènent, nagent, paniquent quand vous approchez et s'assoient si vous les fixez. Client uniquement."
   },
   "de": {
@@ -3041,6 +3053,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "facialAnimationsDesc": "Loopende Gesichtanimationen, automatische Augenbewegung und animierte Skin-Packs.",
     "facialAnimationsOpen": "Gesichtsanimationen öffnen",
     "duckMobs": "Enten-Mobs",
+    "crittersMobs": "Critters & Companions",
+    "crittersMobsDesc": "Port des Critters-and-Companions-Mods: 16 Arten (Otter, Frettchen, Rote Pandas, Kois, Libellen, Seehasen, Käfer, Schnecken u.v.m.) mit den originalen Biom-Spawn-Gewichten und Gruppengrößen. Nur clientseitig.",
     "duckMobsDesc": "Spawnt Enten, die herumstreifen, schwimmen, in Panik geraten, wenn du dich näherst, und sich hinsetzen, wenn du sie anstarrst. Nur clientseitig."
   },
   "pt": {
@@ -3175,14 +3189,14 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "facialAnimationsDesc": "Циклические анимации лица, автоматическое движение глаз и анимированные паки скинов.",
     "facialAnimationsOpen": "Открыть анимации лица",
     "duckMobs": "Утки",
+    "crittersMobs": "Critters & Companions",
+    "crittersMobsDesc": "Порт мода Critters and Companions: 16 видов (выдры, хорьки, красные панды, кои, стрекозы, морские зайцы, жуки, улитки и др.) с оригинальными весами спавна по биомам и размерами групп. Только клиент.",
     "duckMobsDesc": "Появляются утки, которые бродят, плавают, паникуют при вашем приближении и садятся, если долго смотреть. Только клиент."
   },
   "ko": {
     "language": "언어",
     "fullBright": "FullBright",
     "fullBrightDesc": "발광 블록의 밝기나 채도를 높이지 않고 어두운 영역만 편안하게 보이도록 밝게 합니다.",
-    "classicTitle": "클래식 타이틀 화면",
-    "classicTitleDesc": "타이틀 화면을 클래식 Miniblox 엔진 화면(하늘색 배경, 분홍색 삼각형, 회전하는 큐브)으로 바꿉니다. 모서리의 버튼으로 일반 GUI를 복원할 수 있습니다.",
     "panelScale": "페이지 줌",
     "pageZoomEnabled": "페이지 줌 적용",
     "pageZoomHint": "브라우저 줌(Ctrl+휠), 전체 페이지에 적용됩니다",
@@ -3243,6 +3257,10 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "facialAnimationsDesc": "루프 표정 애니메이션, 자동 눈 움직임, 애니메이션 스킨 팩.",
     "facialAnimationsOpen": "표정 애니메이션 열기",
     "duckMobs": "오리 몹",
+    "crittersMobs": "크리터스 & 컴패니언즈",
+    "crittersMobsDesc": "Critters and Companions 모드 이식: 수달, 페럿, 레서판다, 비단잉어, 잠자리, 바다토끼, 딱정벌레, 달팽이 등 16종이 원작의 바이옴 스폰 가중치와 무리 크기로 등장합니다. 클라이언트 전용.",
+    "crittersMobs": "크리터스 & 컴패니언즈",
+    "crittersMobsDesc": "Critters and Companions 모드 이식: 수달, 페럿, 레서판다, 비단잉어, 잠자리, 바다토끼, 딱정벌레, 달팽이 등 16종이 원작의 바이옴 스폰 가중치와 무리 크기로 등장합니다. 클라이언트 전용.",
     "duckMobsDesc": "주변을 배회하고, 헤엄치고, 다가가면 놀라 도망치고, 빤히 보면 앉는 오리를 스폰합니다. 클라이언트 전용."
   }
 };

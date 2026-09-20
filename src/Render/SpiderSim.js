@@ -2992,7 +2992,7 @@
       }
       const connected = await aiConnect(url);
       if (!connected) {
-        return { ok: false, error: `no se pudo conectar a ${url} — ¿está corriendo ai/server.py?` };
+        return { ok: false, error: `no se pudo conectar a ${url} — el servidor DQN no responde` };
       }
       
       let spawned = 0;

@@ -1,6 +1,7 @@
 (function () {
   'use strict';
 
+
   try {
     globalThis.__MINIFEATHER_CONTENT__?.destroy?.();
   } catch (_) {}
@@ -532,6 +533,7 @@
     shineAmbienceDensity: 1,
     patPat: false,
     duckMobs: false,
+    crittersMobs: false,
     itemPhysics: false,
     noWeather: false,
     fullBright: false,
@@ -3186,7 +3188,6 @@
       { page: 'hud', key: 'dynamicCrosshair', title: t('dynamicCrosshair'), desc: t('dynamicCrosshairDesc'), tags: ['hud', 'pvp', 'new'] },
       { page: 'waypoints', key: 'waypoints', title: t('waypoints'), desc: t('waypointsDesc'), tags: ['new'] },
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc'), tags: [] },
-      { page: 'render', key: 'classicTitle', title: t('classicTitle'), desc: t('classicTitleDesc'), tags: ['new'] },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc'), tags: [] },
       { page: 'render', key: 'betterPlayerLayers', title: t('betterPlayerLayers'), desc: t('betterPlayerLayersDesc'), tags: [] },
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc'), tags: ['pvp'] },
@@ -3196,6 +3197,7 @@
       { page: 'render', key: 'shineAmbience', title: t('shineAmbience'), desc: t('shineAmbienceDesc'), tags: ['new'] },
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc'), tags: [] },
       { page: 'render', key: 'duckMobs', title: t('duckMobs'), desc: t('duckMobsDesc'), tags: ['new'] },
+      { page: 'render', key: 'crittersMobs', title: t('crittersMobs'), desc: t('crittersMobsDesc'), tags: ['new'] },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc'), tags: [] },
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc'), tags: [] },
       { page: 'render', key: 'fullBright', title: t('fullBright'), desc: t('fullBrightDesc'), tags: [] },
@@ -3472,6 +3474,7 @@
     distance: 'distanceNameTags', distancenametags: 'distanceNameTags',
     damage: 'damageParticles', damageparticles: 'damageParticles',
     duck: 'duckMobs', ducks: 'duckMobs', duckmobs: 'duckMobs', patos: 'duckMobs', pato: 'duckMobs',
+    critter: 'crittersMobs', critters: 'crittersMobs', crittersmobs: 'crittersMobs', cac: 'crittersMobs', bichos: 'crittersMobs', bicho: 'crittersMobs', animales: 'crittersMobs',
     gif: 'gifChat', gifs: 'gifChat', gifchat: 'gifChat', klipy: 'gifChat', stickers: 'gifChat',
     fps: 'fpsCounter', fpscounter: 'fpsCounter',
     gui: 'guiPatch', guipatch: 'guiPatch',
@@ -3502,7 +3505,7 @@
     distanceNameTags: 'distanceNameTags', fpsCounter: 'fpsCounter', freelook: 'freelook', freecam: 'freecam',
     guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers',
     healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
-    keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs',
+    keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs', crittersMobs: 'crittersMobs',
     pingCounter: 'pingCounter', titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations',
     waypoints: 'waypoints', zoom: 'zoom'
   });
@@ -3931,6 +3934,29 @@
       },
       destroy() {
         sendDuckMobsConfig(false);
+      }
+    }));
+  }
+
+  function sendCrittersMobsConfig(enabled) {
+    document.dispatchEvent(new CustomEvent('minifeather:critters-toggle', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initCrittersMobsModule() {
+    registerModule('crittersMobs', () => createLifecycle({
+      enable() {
+        sendCrittersMobsConfig(true);
+      },
+      disable() {
+        sendCrittersMobsConfig(false);
+      },
+      refresh() {
+        sendCrittersMobsConfig(MODULES.get('crittersMobs')?.enabled === true);
+      },
+      destroy() {
+        sendCrittersMobsConfig(false);
       }
     }));
   }
@@ -6665,6 +6691,11 @@
               t('duckMobsDesc')
             )}
             ${renderToggle(
+              'crittersMobs',
+              t('crittersMobs'),
+              t('crittersMobsDesc')
+            )}
+            ${renderToggle(
               'itemPhysics',
               t('itemPhysics'),
               t('itemPhysicsDesc')
@@ -8319,7 +8350,7 @@ function renderCreditsPage() {
   const NSB_BOOLEAN_KEYS = [
     'rebrand', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
-    'waterSplash', 'shineAmbience', 'patPat', 'duckMobs', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
+    'waterSplash', 'shineAmbience', 'patPat', 'duckMobs', 'crittersMobs', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
     'safeSneak', 'autoRespawn', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
     'dynamicCrosshair', 'vanillaAnimations', 'leafWind', 'handSway', 'betterPlayerLayers',
     'chatVideos', 'chatLinks', 'chatMemes', 'clientChat', 'rhythmParkour', 'guiPatch',
@@ -11129,7 +11160,7 @@ function renderCreditsPage() {
     setModuleEnabled('shineAmbience', settings.shineAmbience);
     setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('duckMobs', settings.duckMobs);
-    setModuleEnabled('classicTitle', settings.classicTitle);
+    setModuleEnabled('crittersMobs', settings.crittersMobs);
     setModuleEnabled('gifChat', settings.gifChat);
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
@@ -11739,6 +11770,7 @@ function renderCreditsPage() {
     initPatPatModule();
     initItemPhysicsModule();
     initDuckMobsModule();
+    initCrittersMobsModule();
     initGifChatModule();
     initNoWeatherModule();
     initFullBrightModule();

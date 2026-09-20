@@ -59,7 +59,7 @@
         'world_ambience/birds/bird2_flying_right_4.png',
         'world_ambience/birds/bird2_flying_right_5.png'
       ],
-      cap: 16, density: 1.2, spawnRate: 0.8, spawnRange: 80, minDist: 30,
+      cap: 8, density: 1, spawnRate: 0.8, spawnRange: 80, minDist: 30,
       height: 18, speed: 0.9, lifetime: 22, size: 0.7,
       glideEvery: 1.25
     },

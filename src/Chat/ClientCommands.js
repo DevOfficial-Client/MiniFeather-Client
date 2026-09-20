@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
 
   function parseDetail(event) {
     try {
@@ -73,6 +73,8 @@
       '\\yellow\\/mf diag\\reset\\ - Dump scene diag to console (F12)',
       '\\yellow\\/caballo spawn [stay]\\reset\\ - Spawn the Minecraft horse (follows you)',
       '\\yellow\\/caballo despawn\\reset\\ - Remove the horse',
+      '\\yellow\\/critter spawn <species> [n]\\reset\\ - Spawn critters & companions (otters, ferrets, red pandas...)',
+      '\\yellow\\/critter random | list | count | clear\\reset\\ - Random spawn, list species, count, remove all',
       '\\yellow\\/maternal spawn [stay]\\reset\\ - Spawn the Maternal Wraith (floating, always watching)',
       '\\yellow\\/stalker spawn\\reset\\ - Spawn the Stalker (freezes when you look at it!)',
       '\\yellow\\/model spawn <file.glb> [height] [anim] [stay]\\reset\\ - Load any GLB from models/entities/',
@@ -818,7 +820,7 @@
           '\\yellow\\/spider list\\reset\\ - Spiders + simulator status',
           '\\yellow\\/spider status\\reset\\ - Debug info',
           '\\yellow\\/spider log [0-3]\\reset\\ - Debug logging (or dump last entries)',
-          '\\yellow\\/spider ai [url] [n] | off\\reset\\ - Deep learning: DQN brain in ai/server.py (Python)',
+          '\\yellow\\/spider ai [url] [n] | off\\reset\\ - Deep learning: DQN brain via WebSocket (external)',
           '\\yellow\\/spider aistats\\reset\\ - Neural net status (steps, epsilon, loss, thoughts)',
           '\\yellow\\/spider predators [n] | off\\reset\\ - THREATS: hunters that patrol and kill spiders',
           'Simulator is embedded in the extension — no external process needed'
@@ -872,7 +874,7 @@
           addChat(`  ${m.name} · edad ${m.age}t · viajó ${m.travel}m · swing ${m.legs ?? '—'} lift ${m.lift ?? '—'}`, 'info');
         }
         if (r.evolve) addChat(`  economy: births=${r.evolve.births} deaths=${r.evolve.deaths} gen=${r.evolve.generation}`, 'info');
-        if (!c.connected) addChat('  1) python ai/ecoserver.py (evolve champion)  2) python ai/server.py  3) /spider ai', 'info');
+        if (!c.connected) addChat('  Connect a DQN brain: /spider ai wss://<tu-servidor>', 'info');
         return;
       }
       })();
@@ -1035,6 +1037,54 @@
         return;
       }
       addChat('Usage: /film record | stop | save | play | pause | resume | list | export | delete | despawn | status', 'error');
+      return;
+    }
+
+    if (command === 'critter' || command === 'critters' || command === 'cac' || command === 'bicho' || command === 'bichos' || command === 'animal' || command === 'animales') {
+      const api = globalThis.MF_CrittersMobs;
+      if (!api?.spawnOne) {
+        addChat('CrittersMobs is not loaded yet.', 'error');
+        return;
+      }
+      const action = (args[0] || 'spawn').toLowerCase();
+      if (action === 'list' || action === 'lista') {
+        const list = api.species();
+        addChat(`Species (${list.length}):`);
+        for (let i = 0; i < list.length; i += 6) {
+          addChat('\\yellow\\' + list.slice(i, i + 6).join(', ') + '\\reset\\');
+        }
+        return;
+      }
+      if (action === 'count' || action === 'contador') {
+        const c = api.counts();
+        const keys = Object.keys(c);
+        if (!keys.length) { addChat('No critters alive. Spawn some with /critter spawn <species>.'); return; }
+        addChat('Alive: ' + keys.map(k => `${k} x${c[k]}`).join(', '), 'success');
+        return;
+      }
+      if (action === 'clear' || action === 'despawn' || action === 'limpiar') {
+        api.clear();
+        addChat('All critters despawned.', 'success');
+        return;
+      }
+      if (action === 'random' || action === 'aleatorio') {
+        const list = api.species();
+        const pick = list[(Math.random() * list.length) | 0];
+        const r = api.spawnOne(pick, 1 + ((Math.random() * 3) | 0));
+        if (r.ok) addChat(`Spawned ${r.spawned} ${r.species} near you.`, 'success');
+        else addChat(r.error, 'error');
+        return;
+      }
+      if (action === 'spawn' || action === 'spawnear') {
+        const key = (args[1] || '').toLowerCase();
+        if (!key) { addChat('Usage: /critter spawn <species> [count]  — /critter list to see species', 'error'); return; }
+        const n = Math.max(1, Math.min(Number(args[2]) || 1, 12));
+        const r = api.spawnOne(key, n);
+        if (r.ok) addChat(`Spawned ${r.spawned} ${r.species} near you.`, 'success');
+        else addChat(r.error, 'error');
+        return;
+      }
+      addChat('Usage: /critter spawn <species> [n] | random | list | count | clear', 'error');
       return;
     }
 
