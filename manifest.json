@@ -117,6 +117,8 @@
         "src/Experimental/AnimatedItems/AnimatedItems.js",
         "src/Experimental/BetterAnimationCape/BetterAnimationCape.js",
         "src/World/AutoRespawn.js",
+        "src/Libraries/brocha.min.js",
+        "src/World/IdlePlayerBot.js",
         "src/Movement/MovementAPI.js",
         "src/Movement/AntiAFK.js",
         "src/Movement/MovementAssist.js",

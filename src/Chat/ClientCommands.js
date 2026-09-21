@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
 
   function parseDetail(event) {
     try {
@@ -81,6 +81,8 @@
       '\\yellow\\/room [file.glb] [scale]\\reset\\ - Build a room around you (Backrooms! centered, floor-aligned)',
       '\\yellow\\/model list | despawn <id> | stay <id> | follow <id>\\reset\\ - Manage spawned models',
       '\\yellow\\/model anim <id> <name|stop> | anims <id> | move <id> <x y z>\\reset\\ - Anims & teleport',
+      '\\yellow\\/idlebot join [invite|server]\\reset\\ - Connect one server-visible guest that stands still',
+      '\\yellow\\/idlebot leave | status\\reset\\ - Disconnect or inspect the idle guest',
       '\\yellow\\/baritone goto <x y z|waypoint>\\reset\\ - Walk to coords or waypoint',
       '\\yellow\\/baritone follow <player>\\reset\\ - Follow a player',
       '\\yellow\\/baritone mine <x y z> | place <x y z> [slot]\\reset\\ - Mine or place a block',
@@ -1327,6 +1329,49 @@
         return;
       }
       addChat('Usage: /stalker spawn | stay | follow | despawn', 'error');
+      return;
+    }
+
+    if (command === 'idlebot' || command === 'idleplayer') {
+      const api = globalThis.MF_IDLE_PLAYER_BOT;
+      if (!api?.connect || !api?.disconnect || !api?.status) {
+        addChat('Idle Player is not ready yet.', 'error');
+        return;
+      }
+
+      const action = (args[0] || 'status').toLowerCase();
+      if (action === 'join' || action === 'connect' || action === 'start') {
+        const target = args.slice(1).join(' ').trim() || 'current';
+        addChat('Connecting one idle guest...');
+        Promise.resolve(api.connect(target)).then(() => {
+          const current = api.status();
+          if (current.phase !== 'error') addChat('Idle Player connection started.', 'success');
+        }).catch(error => {
+          addChat('Idle Player failed: ' + (error?.message || error), 'error');
+        });
+        return;
+      }
+
+      if (action === 'leave' || action === 'disconnect' || action === 'stop') {
+        api.disconnect();
+        addChat('Idle Player disconnected.', 'success');
+        return;
+      }
+
+      if (action === 'status') {
+        const current = api.status();
+        const identity = current.playerName || 'guest';
+        const server = current.serverId || 'unknown';
+        const suffix = current.error ? ' (' + current.error + ')' : '';
+        if (current.connected) {
+          addChat('Idle Player connected as ' + identity + ' on ' + server + '.', 'success');
+        } else {
+          addChat('Idle Player status: ' + (current.phase || 'idle') + suffix + '.');
+        }
+        return;
+      }
+
+      addChat('Usage: /idlebot join [invite|server] | leave | status', 'error');
       return;
     }
 

@@ -542,6 +542,8 @@
     autoSprint: false,
     safeSneak: false,
     autoRespawn: false,
+    idlePlayerBot: false,
+    idlePlayerTarget: '',
     patPatPreset: 'normal',
     patPatValues: clonePatPatValues(),
     zoom: false,
@@ -716,6 +718,7 @@
   let freecamAccess = { known: false, allowed: false, permissionLevel: 0 };
   let lastFreecamDeniedAt = 0;
   let waypointStatus = '';
+  let idlePlayerBotState = { phase: 'idle', connected: false, error: '', serverId: '', playerName: '' };
   let clientChatState = null;
   let destroyed = false;
 
@@ -3211,6 +3214,7 @@
       { page: 'movement', key: 'safeSneak', title: t('safeSneak'), desc: t('safeSneakDesc'), tags: ['pvp'] },
       { page: 'movement', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc'), tags: [] },
       { page: 'world', key: 'autoRespawn', title: t('autoRespawn'), desc: t('autoRespawnDesc'), tags: ['pvp'] },
+      { page: 'world', key: 'idlePlayerBot', title: t('idlePlayerBot'), desc: t('idlePlayerBotDesc'), tags: ['new'] },
       { page: 'world', key: 'rhythmParkour', title: t('rhythmParkour'), desc: t('rhythmParkourDescShort'), tags: ['new'] },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc'), tags: [] },
       { page: 'chat', key: 'chatLinks', title: t('chatLinks'), desc: t('chatLinksDesc'), tags: [] },
@@ -3260,6 +3264,7 @@
     freecam:'<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
     blockHighlight:'<path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>',
     antiAfk:'<circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/>',
+    idlePlayerBot:'<circle cx="12" cy="8" r="3"/><path d="M6 21v-3a6 6 0 0 1 12 0v3M4 12h3M17 12h3"/>',
     rhythmParkour:'<path d="M5 17V7h4l3 10 3-10h4v10"/>',
     chatVideos:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3V9Z"/>',
     chatLinks:'<path d="M10 13a5 5 0 0 0 7.1.1l1.8-1.8a5 5 0 0 0-7.1-7.1L10.7 5.3"/><path d="M14 11a5 5 0 0 0-7.1-.1l-1.8 1.8a5 5 0 0 0 7.1 7.1l1.1-1.1"/>',
@@ -4290,6 +4295,83 @@
         sendAutoRespawnConfig(false);
       }
     }));
+  }
+
+  function sendIdlePlayerBotCommand(action, target = settings.idlePlayerTarget) {
+    document.dispatchEvent(new CustomEvent('minifeather:idle-player-command', {
+      detail: JSON.stringify({ action, target: String(target || '').trim() || 'current' })
+    }));
+  }
+
+  function idlePlayerBotStatusText() {
+    const phaseKeys = {
+      idle: 'idlePlayerStatusIdle',
+      resolving: 'idlePlayerStatusResolving',
+      protocol: 'idlePlayerStatusProtocol',
+      connecting: 'idlePlayerStatusConnecting',
+      authenticating: 'idlePlayerStatusAuthenticating',
+      joining: 'idlePlayerStatusJoining',
+      connected: 'idlePlayerStatusConnected',
+      error: 'idlePlayerStatusError'
+    };
+    const base = t(phaseKeys[idlePlayerBotState?.phase] || 'idlePlayerStatusIdle');
+    if (idlePlayerBotState?.phase === 'connected') {
+      const identity = idlePlayerBotState.playerName || t('idlePlayerGuest');
+      const server = idlePlayerBotState.serverId ? ` · ${idlePlayerBotState.serverId}` : '';
+      return `${base}: ${identity}${server}`;
+    }
+    return idlePlayerBotState?.error ? `${base}: ${idlePlayerBotState.error}` : base;
+  }
+
+  function refreshIdlePlayerBotView() {
+    if (!panel) return;
+    const status = panel.querySelector('#mf-idle-player-status');
+    if (!status) return;
+    status.textContent = idlePlayerBotStatusText();
+    status.dataset.state = idlePlayerBotState?.phase || 'idle';
+    const connect = panel.querySelector('#mf-idle-player-connect');
+    const disconnect = panel.querySelector('#mf-idle-player-disconnect');
+    if (connect) connect.textContent = idlePlayerBotState?.phase === 'error'
+      ? t('idlePlayerRetry')
+      : t('idlePlayerConnect');
+    if (disconnect) disconnect.disabled = idlePlayerBotState?.phase === 'idle';
+  }
+
+  function initIdlePlayerBotModule() {
+    document.addEventListener('minifeather:idle-player-state', event => {
+      try {
+        idlePlayerBotState = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+      } catch (_) {
+        return;
+      }
+      refreshIdlePlayerBotView();
+    }, { signal: runtimeController?.signal });
+
+    registerModule('idlePlayerBot', () => {
+      let active = false;
+      return {
+        get enabled() { return active; },
+        enable() {
+          if (active) return;
+          active = true;
+          const phase = idlePlayerBotState?.phase || 'idle';
+          if (phase === 'idle' || phase === 'error') sendIdlePlayerBotCommand('connect');
+          else sendIdlePlayerBotCommand('status');
+        },
+        disable() {
+          if (!active) return;
+          active = false;
+          sendIdlePlayerBotCommand('disconnect');
+        },
+        refresh() {
+          if (active) sendIdlePlayerBotCommand('status');
+        },
+        // Reinyectar o reconstruir el panel no equivale a pulsar Desconectar.
+        // La conexión pertenece al módulo MAIN y debe sobrevivir a la UI.
+        destroy() { active = false; }
+      };
+    });
+    sendIdlePlayerBotCommand('status');
   }
 
   function sendAntiAfkConfig(enabled = settings.antiAfk) {
@@ -7704,8 +7786,22 @@
           <div class="mf-card-title">${t('sectionWorldUtilities')}</div>
           <div class="mf-toggle-grid">
             ${renderToggle('autoRespawn', t('autoRespawn'), t('autoRespawnDesc'))}
+            ${renderToggle('idlePlayerBot', t('idlePlayerBot'), t('idlePlayerBotDesc'))}
             ${renderToggle('rhythmParkour', t('rhythmParkour'), t('rhythmParkourDescShort'))}
           </div>
+        </div>
+        <div class="mf-card">
+          <div class="mf-card-title">${t('idlePlayerControls')}</div>
+          <div class="mf-muted">${t('idlePlayerTargetHelp')}</div>
+          <div class="mf-grid-2" style="margin-top:10px;">
+            <input id="mf-idle-player-target" class="mf-input" maxlength="160" value="${escapeHtml(settings.idlePlayerTarget || '')}" placeholder="${t('idlePlayerTargetPlaceholder')}">
+            <div style="display:flex;gap:7px;">
+              <button id="mf-idle-player-connect" class="mf-btn primary" type="button">${t('idlePlayerConnect')}</button>
+              <button id="mf-idle-player-disconnect" class="mf-btn danger" type="button">${t('idlePlayerDisconnect')}</button>
+            </div>
+          </div>
+          <div id="mf-idle-player-status" class="mf-muted" data-state="${escapeHtml(idlePlayerBotState?.phase || 'idle')}" style="margin-top:10px;">${escapeHtml(idlePlayerBotStatusText())}</div>
+          <div class="mf-tt-hint">${t('idlePlayerSafetyHint')}</div>
         </div>
         <div class="mf-card">
           <div class="mf-card-title">${t('localGamesTitle')}</div>
@@ -8351,7 +8447,7 @@ function renderCreditsPage() {
     'rebrand', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
     'waterSplash', 'shineAmbience', 'patPat', 'duckMobs', 'crittersMobs', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
-    'safeSneak', 'autoRespawn', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
+    'safeSneak', 'autoRespawn', 'idlePlayerBot', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
     'dynamicCrosshair', 'vanillaAnimations', 'leafWind', 'handSway', 'betterPlayerLayers',
     'chatVideos', 'chatLinks', 'chatMemes', 'clientChat', 'rhythmParkour', 'guiPatch',
     'customShader', 'freelook', 'blockHighlight', 'discord', 'supportAds',
@@ -10308,6 +10404,37 @@ function renderCreditsPage() {
       });
     });
 
+    const idlePlayerTarget = panel.querySelector('#mf-idle-player-target');
+    idlePlayerTarget?.addEventListener('change', () => {
+      settings.idlePlayerTarget = idlePlayerTarget.value.trim();
+      guiSettings.idlePlayerTarget = settings.idlePlayerTarget;
+      saveSettings(true);
+    });
+
+    panel.querySelector('#mf-idle-player-connect')?.addEventListener('click', event => {
+      event.preventDefault();
+      const target = idlePlayerTarget?.value?.trim() || '';
+      settings.idlePlayerTarget = target;
+      guiSettings.idlePlayerTarget = target;
+      settings.idlePlayerBot = true;
+      guiSettings.idlePlayerBot = true;
+      saveSettings(true);
+      if (MODULES.get('idlePlayerBot')?.enabled) sendIdlePlayerBotCommand('connect', target);
+      else applyGuiSettings();
+      const input = panel.querySelector('.mf-toggle[data-key="idlePlayerBot"] input');
+      if (input) input.checked = true;
+    });
+
+    panel.querySelector('#mf-idle-player-disconnect')?.addEventListener('click', event => {
+      event.preventDefault();
+      settings.idlePlayerBot = false;
+      guiSettings.idlePlayerBot = false;
+      saveSettings(true);
+      applyGuiSettings();
+      const input = panel.querySelector('.mf-toggle[data-key="idlePlayerBot"] input');
+      if (input) input.checked = false;
+    });
+
     panel.querySelectorAll('.mf-toggle[data-key]').forEach(label => {
       const key = label.dataset.key;
       const input = label.querySelector('input');
@@ -11166,6 +11293,7 @@ function renderCreditsPage() {
     setModuleEnabled('noWeather', settings.noWeather);
     setModuleEnabled('fullBright', settings.fullBright);
     setModuleEnabled('autoRespawn', settings.autoRespawn);
+    setModuleEnabled('idlePlayerBot', settings.idlePlayerBot);
     setModuleEnabled('antiAfk', settings.antiAfk);
     setModuleEnabled('autoSprint', settings.autoSprint);
     setModuleEnabled('safeSneak', settings.safeSneak);
@@ -11779,6 +11907,7 @@ function renderCreditsPage() {
     initHandSwayModule();
     initBetterPlayerLayersModule();
     initAutoRespawnModule();
+    initIdlePlayerBotModule();
     initAntiAfkModule();
     initMovementAssistModules();
     initRhythmParkourModule();
