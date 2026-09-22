@@ -3206,6 +3206,7 @@
       { page: 'render', key: 'fullBright', title: t('fullBright'), desc: t('fullBrightDesc'), tags: [] },
       { page: 'render', key: 'vanillaAnimations', title: t('vanillaAnimations'), desc: t('vanillaAnimationsDesc'), tags: [] },
       { page: 'render', key: 'handSway', title: t('handSway'), desc: t('handSwayDesc'), tags: [] },
+      { page: 'render', key: 'playerAnims', title: t('playerAnims'), desc: t('playerAnimsDesc'), tags: ['new'] },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc'), tags: ['pvp'] },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc'), tags: [] },
       { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc'), tags: [] },
@@ -3259,6 +3260,7 @@
     noWeather:'<path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6 11.5 3.5 3.5 0 0 0 7 18Z"/><path d="M4 4l16 16"/>',
     fullBright:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>',
     vanillaAnimations:'<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>',
+      playerAnims:'<circle cx="12" cy="12" r="3"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>',
     zoom:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5M10.5 7v7M7 10.5h7"/>',
     cameraOverhaul:'<path d="M4 7h3l1.5-2h7L17 7h3v12H4V7Z"/><circle cx="12" cy="13" r="4"/>',
     elytraFlight:'<path d="M3 17c3-1 6-4 9-9 3 5 6 8 9 9-4 1-7 1-9-1-2 2-5 2-9 1Z"/>',
@@ -3349,6 +3351,7 @@
     noWeather:   ['...b....','.b.b.b..','..bbb...','.bb#bb..','..bbb...','.b.b.b..','...b....','........'],
     fullBright:  ['...y....','y..y..y.','..yyy...','.yyyyy..','..yyy...','y..y..y.','...y....','........'],
     vanillaAnimations: ['..####..','..####..','..++++..','.######.','#.#aa#.#','..####..','..+..+..','.+..+...'],
+    playerAnims: ['..#+#...','..##+...','.#.+#...','..#+#...','..++++..','..####..','..+..+..','.+..+...'],
     zoom:     ['..+++...','.+...+..','+..+..+.','+.....+.','.+...+a.','..+++a..','.....aa.','......a.'],
     cameraOverhaul: ['...++...','.++++++.','+#+##+#+','+......+','+.#+#.++','+......+','.++++++.','........'],
     elytraFlight: ['++....++','+++..+++','.++..++.','.++++++.','..+##+..','..+##+..','..+..+..','........'],
@@ -3597,6 +3600,9 @@
       }));
     }
   });
+
+  // Puente del pack de animaciones (FA+): el pack va embebido en EMFPack.js,
+  // no se necesita fetch.
 
   // Puente de emotes: el mundo MAIN pide un .emotecraft de emotes/,
   // aqui (ISOLATED) lo fetch-eamos como blob y devolvemos la URL.
@@ -4084,6 +4090,29 @@
       },
       destroy() {
         sendVanillaAnimationsConfig(false);
+      }
+    }));
+  }
+
+  function sendPlayerAnimsConfig(enabled = settings.playerAnims) {
+    document.dispatchEvent(new CustomEvent('minifeather:playeranims-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initPlayerAnimsModule() {
+    registerModule('playerAnims', () => createLifecycle({
+      enable() {
+        sendPlayerAnimsConfig(true);
+      },
+      disable() {
+        sendPlayerAnimsConfig(false);
+      },
+      refresh() {
+        sendPlayerAnimsConfig(MODULES.get('playerAnims')?.enabled === true);
+      },
+      destroy() {
+        sendPlayerAnimsConfig(false);
       }
     }));
   }
@@ -11955,6 +11984,7 @@ function renderCreditsPage() {
     initNoWeatherModule();
     initFullBrightModule();
     initVanillaAnimationsModule();
+    initPlayerAnimsModule();
     initLeafWindModule();
     initHandSwayModule();
     initBetterPlayerLayersModule();

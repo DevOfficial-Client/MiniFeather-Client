@@ -2920,6 +2920,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "dynamicCrosshairDesc": "Cambia il mirino in base alla situazione attuale.",
     "vanillaAnimations": "Animazioni Vanilla",
     "vanillaAnimationsDesc": "Mantiene rigidi gomiti e ginocchia per un aspetto più vanilla.",
+    "playerAnims": "Fresh Animations",
+    "playerAnimsDesc": "Animazioni giocatore vivaci (stile Fresh Animations): respirazione in idle, camminata, corsa, salto, caduta, nuoto e planata. Gomiti e ginocchia rigidi.",
     "modMenu": "MENU MOD",
     "close": "Chiudi",
     "filterAll": "Tutti",
