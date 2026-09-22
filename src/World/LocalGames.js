@@ -60,6 +60,10 @@
   const LOCAL_PASSIVE_MOBS = ['pig', 'cow', 'chicken', 'sheep', 'wolf', 'cat'];
   const LOCAL_HOSTILE_MOBS = ['zombie', 'skeleton', 'creeper', 'spider'];
   const LOCAL_MOB_LIMIT = 14;
+  const LOCAL_PASSIVE_MOB_LIMIT = 8;
+  const LOCAL_HOSTILE_MOB_LIMIT = 6;
+  const LOCAL_MOB_ANIMATION_DISTANCE = 28;
+  const LOCAL_MOB_ANIMATION_INTERVAL_MS = 1000 / 30;
   const GLOBAL_REGISTRY_TOPIC = 'mf-local-globalregistryv1a1b2c3d4e5f6';
   const SAVED_SERVERS_KEY = 'minifeather.localgames.savedServers.v2';
   const SERVER_STALE_AFTER_MS = 330000;
@@ -70,7 +74,6 @@
   const INCOMING_ALLOW = new Set(['CPacketPong']);
 
   const LOCAL_TERRAIN_RADIUS_CHUNKS = 7;
-  const LOCAL_VISUAL_RADIUS_CHUNKS = 4;
   const LOCAL_LOOP_INTERVAL_MS = 50;
 
   const LOG_PREFIX = '[MiniFeather LocalGames]';
@@ -180,6 +183,7 @@
     localMobLastTick: 0,
     localMobLastSpawn: 0,
     localMobLastSync: 0,
+    lastLocalMobAnimationAt: 0,
     lastPeerMarkerUpdate: 0,
     signalBridgeReady: false,
     dropStats: { spawned: 0, pickedUp: 0, fallback: 0, failed: 0, lastError: '' },
@@ -209,9 +213,6 @@
     worldAssetManager: null,
     localRenderFixAt: 0,
     localRenderStats: null,
-    lastChunkVisibilityAt: 0,
-    localVisibleChunkMeshes: 0,
-    localTotalChunkMeshes: 0,
     nativeRenderRecovery: null,
     globalPollTimer: 0,
     registryCursor: '',
@@ -656,9 +657,6 @@
               : '',
           protocol: PROTOCOL,
           renderStats: state.localRenderStats || null,
-          visualChunkRadius: LOCAL_VISUAL_RADIUS_CHUNKS,
-          visibleChunkMeshes: Number(state.localVisibleChunkMeshes) || 0,
-          totalChunkMeshes: Number(state.localTotalChunkMeshes) || 0,
           ...extra
         })
       })
@@ -1868,6 +1866,20 @@
 
     try {
       if (
+        recovery.master &&
+        recovery.patchedFluidVisibility &&
+        recovery.master.anyFluidMeshOnScreen === recovery.patchedFluidVisibility
+      ) {
+        if (recovery.hadOwnFluidVisibility) {
+          recovery.master.anyFluidMeshOnScreen = recovery.originalFluidVisibility;
+        } else {
+          delete recovery.master.anyFluidMeshOnScreen;
+        }
+      }
+    } catch (_) {}
+
+    try {
+      if (
         recovery.composer &&
         recovery.patchedComposerRender &&
         recovery.composer.render === recovery.patchedComposerRender
@@ -2092,8 +2104,12 @@
             Math.max(1, Number(renderer.domElement?.height) || 1)
           );
 
-          liveScene.updateMatrixWorld?.(true);
-          liveCamera.updateMatrixWorld?.(true);
+          if (liveScene.matrixWorldAutoUpdate === false) {
+            liveScene.updateMatrixWorld?.(true);
+          }
+          if (liveCamera.matrixWorldAutoUpdate === false) {
+            liveCamera.updateMatrixWorld?.(true);
+          }
 
           return renderer.render(liveScene, liveCamera);
         } catch (error) {
@@ -2110,6 +2126,29 @@
       }
     }
 
+    const originalFluidVisibility =
+      typeof master?.anyFluidMeshOnScreen === 'function'
+        ? master.anyFluidMeshOnScreen
+        : null;
+    const hadOwnFluidVisibility =
+      !!master && Object.prototype.hasOwnProperty.call(master, 'anyFluidMeshOnScreen');
+    let patchedFluidVisibility = null;
+
+    if (patchedComposerRender && originalFluidVisibility) {
+      patchedFluidVisibility = function (...args) {
+        // The direct local-world draw cannot use the native reflection targets.
+        // Skip their two scene captures while keeping the native terrain draw.
+        if (state.active && state.directLocal) return false;
+        return originalFluidVisibility.apply(this, args);
+      };
+
+      try {
+        master.anyFluidMeshOnScreen = patchedFluidVisibility;
+      } catch (_) {
+        patchedFluidVisibility = null;
+      }
+    }
+
     state.nativeRenderRecovery = {
       master,
       renderer,
@@ -2117,6 +2156,9 @@
       world,
       originalComposerRender,
       patchedComposerRender,
+      originalFluidVisibility,
+      patchedFluidVisibility,
+      hadOwnFluidVisibility,
       originalRenderDistance,
       patchedRenderDistance,
       hadOwnRenderDistance,
@@ -2392,63 +2434,6 @@
     } catch (_) {}
   }
 
-  function updateLocalChunkVisibility(force = false) {
-    if (!state.active || !state.directLocal) return null;
-
-    const now = performance.now();
-    if (!force && now - Number(state.lastChunkVisibilityAt || 0) < 250) {
-      return {
-        visible: Number(state.localVisibleChunkMeshes) || 0,
-        total: Number(state.localTotalChunkMeshes) || 0
-      };
-    }
-
-    const root = state.game?.gameScene?.chunkMeshes;
-    const pos = state.game?.player?.pos;
-    if (!root?.children || !pos) return null;
-
-    const playerChunkX = Math.floor(Number(pos.x) / 16);
-    const playerChunkZ = Math.floor(Number(pos.z) / 16);
-    if (!Number.isFinite(playerChunkX) || !Number.isFinite(playerChunkZ)) return null;
-
-    let visible = 0;
-    let total = 0;
-
-    for (const object of root.children) {
-      if (!object?.isMesh || !object.geometry || !object.position) continue;
-      const chunkX = Math.round(Number(object.position.x) / 16);
-      const chunkZ = Math.round(Number(object.position.z) / 16);
-      if (!Number.isFinite(chunkX) || !Number.isFinite(chunkZ)) continue;
-
-      const inRange = Math.max(
-        Math.abs(chunkX - playerChunkX),
-        Math.abs(chunkZ - playerChunkZ)
-      ) <= LOCAL_VISUAL_RADIUS_CHUNKS;
-
-      object.visible = inRange;
-      object.frustumCulled = true;
-      object.__mfLocalDistanceCulled = !inRange;
-      total++;
-      if (inRange) visible++;
-    }
-
-    state.lastChunkVisibilityAt = now;
-    state.localVisibleChunkMeshes = visible;
-    state.localTotalChunkMeshes = total;
-    return { visible, total };
-  }
-
-  function restoreLocalChunkVisibility() {
-    const root = state.game?.gameScene?.chunkMeshes;
-    for (const object of root?.children || []) {
-      if (object?.__mfLocalDistanceCulled === true) object.visible = true;
-      if (object) delete object.__mfLocalDistanceCulled;
-    }
-    state.lastChunkVisibilityAt = 0;
-    state.localVisibleChunkMeshes = 0;
-    state.localTotalChunkMeshes = 0;
-  }
-
   function repairLocalRender(force = false) {
     if (!state.active || !state.directLocal) return null;
 
@@ -2456,7 +2441,7 @@
 
     const now = performance.now();
 
-    if (!force && now - state.localRenderFixAt < 5000) {
+    if (!force && now - state.localRenderFixAt < 10000) {
       return state.localRenderStats;
     }
 
@@ -2473,8 +2458,6 @@
       root.visible = true;
     } catch (_) {}
 
-    updateLocalChunkVisibility(force);
-
     const stats = {
       meshes: 0,
       visible: 0,
@@ -2488,6 +2471,11 @@
     try {
       root.traverse(object => {
         if (!object?.isMesh || !object.geometry) return;
+
+        if (object.__mfLocalDistanceCulled === true) object.visible = true;
+        if (object.__mfLocalDistanceCulled !== undefined) {
+          delete object.__mfLocalDistanceCulled;
+        }
 
         stats.meshes++;
 
@@ -4375,6 +4363,115 @@
     return null;
   }
 
+  function findLocalMobLodResolver(mesh) {
+    let target = mesh;
+
+    for (let depth = 0; target && depth < 8; depth++, target = Object.getPrototypeOf(target)) {
+      for (const name of Object.getOwnPropertyNames(target)) {
+        if (name === 'constructor') continue;
+        const descriptor = Object.getOwnPropertyDescriptor(target, name);
+        const fn = descriptor?.value;
+        if (typeof fn !== 'function') continue;
+
+        let source = '';
+        try { source = Function.prototype.toString.call(fn); } catch (_) {}
+        if (
+          source.includes('fastLOD') &&
+          (source.includes('distanceToSquared') || source.includes('entities'))
+        ) {
+          return name;
+        }
+      }
+    }
+
+    return '';
+  }
+
+  function restoreLocalMobAnimation(mob) {
+    const patch = mob?.animationPatch;
+    if (!patch?.mesh || !patch.key) return;
+
+    try {
+      if (patch.mesh[patch.key] === patch.forced) {
+        if (patch.ownDescriptor) {
+          Object.defineProperty(patch.mesh, patch.key, patch.ownDescriptor);
+        } else {
+          delete patch.mesh[patch.key];
+        }
+      }
+    } catch (_) {}
+
+    mob.animationPatch = null;
+  }
+
+  function ensureLocalMobAnimation(mob) {
+    const mesh = mob?.entity?.mesh;
+    if (!mesh || typeof mesh.render !== 'function') return null;
+    if (mob.animationPatch?.mesh === mesh) return mesh;
+
+    restoreLocalMobAnimation(mob);
+
+    const key = findLocalMobLodResolver(mesh);
+    if (key) {
+      const ownDescriptor = Object.getOwnPropertyDescriptor(mesh, key) || null;
+      const forced = function () {
+        this.fastLOD = false;
+        return false;
+      };
+
+      try {
+        Object.defineProperty(mesh, key, {
+          configurable: true,
+          enumerable: ownDescriptor?.enumerable === true,
+          writable: true,
+          value: forced
+        });
+        mob.animationPatch = { mesh, key, ownDescriptor, forced };
+      } catch (_) {}
+    }
+
+    return mesh;
+  }
+
+  function renderLocalMobAnimations(now = performance.now()) {
+    if (!state.active || !state.directLocal || document.hidden) return 0;
+    if (now - Number(state.lastLocalMobAnimationAt || 0) < LOCAL_MOB_ANIMATION_INTERVAL_MS) return 0;
+    state.lastLocalMobAnimationAt = now;
+
+    const playerPos = state.game?.player?.pos;
+    if (!playerPos) return 0;
+
+    const maxDistanceSq = LOCAL_MOB_ANIMATION_DISTANCE * LOCAL_MOB_ANIMATION_DISTANCE;
+    let rendered = 0;
+
+    for (const mob of state.localMobs.values()) {
+      const entity = mob?.entity;
+      const pos = entity?.pos;
+      if (!pos) continue;
+
+      const dx = Number(pos.x) - Number(playerPos.x);
+      const dy = Number(pos.y) - Number(playerPos.y);
+      const dz = Number(pos.z) - Number(playerPos.z);
+      if (![dx, dy, dz].every(Number.isFinite)) continue;
+
+      if (dx * dx + dy * dy + dz * dz > maxDistanceSq) {
+        restoreLocalMobAnimation(mob);
+        continue;
+      }
+
+      const mesh = ensureLocalMobAnimation(mob);
+      if (!mesh) continue;
+
+      try {
+        mesh.visible = true;
+        mesh.render();
+        rendered++;
+      } catch (_) {}
+    }
+
+    return rendered;
+  }
+
   function spawnLocalMob(typeName, position = null, requestedId = null) {
     if (!state.active || !state.directLocal || Number(state.game?.state) !== 6) return null;
 
@@ -4419,7 +4516,8 @@
         targetZ: pos.z,
         nextTargetAt: 0,
         lastPositionAt: performance.now(),
-        remoteUpdatedAt: 0
+        remoteUpdatedAt: 0,
+        animationPatch: null
       });
 
       if (state.mode === 'host' && !hasRequestedId) {
@@ -4438,14 +4536,16 @@
 
   function clearLocalMobs() {
     const world = state.world;
-    for (const id of state.localMobs.keys()) {
-      try { world?.removeEntityFromWorld?.(id); } catch (_) {}
+    for (const mob of state.localMobs.values()) {
+      restoreLocalMobAnimation(mob);
+      try { world?.removeEntityFromWorld?.(mob.id); } catch (_) {}
     }
     state.localMobs.clear();
     state.localMobStartedAt = 0;
     state.localMobLastTick = 0;
     state.localMobLastSpawn = 0;
     state.localMobLastSync = 0;
+    state.lastLocalMobAnimationAt = 0;
   }
 
   function localMobNight() {
@@ -4481,6 +4581,7 @@
   function updateLocalMob(mob, now) {
     const entity = mob.entity;
     if (!entity || entity.dead || !entity.pos) {
+      restoreLocalMobAnimation(mob);
       state.localMobs.delete(mob.id);
       return;
     }
@@ -4496,7 +4597,7 @@
     }
 
     const elapsed = Math.max(0.025, Math.min(0.2, (now - Number(mob.lastPositionAt || now - 100)) / 1000));
-    const blocksPerSecond = mob.hostile ? 1.3 : 0.8;
+    const blocksPerSecond = mob.hostile ? 1.8 : 1.25;
     const step = Math.min(distance, blocksPerSecond * elapsed);
     const x = Number(entity.pos.x) + dx / distance * step;
     const z = Number(entity.pos.z) + dz / distance * step;
@@ -4517,8 +4618,6 @@
       0,
       interpolationTicks
     );
-    entity.yaw = yaw;
-    entity.prevYaw = yaw;
     entity.pitch = 0;
     entity.onGround = true;
     mob.lastPositionAt = now;
@@ -4543,8 +4642,8 @@
     const passiveCount = state.localMobs.size - hostileCount;
     let pool = null;
 
-    if (passiveCount < 8) pool = LOCAL_PASSIVE_MOBS;
-    else if (localMobNight() && hostileCount < 6) pool = LOCAL_HOSTILE_MOBS;
+    if (passiveCount < LOCAL_PASSIVE_MOB_LIMIT) pool = LOCAL_PASSIVE_MOBS;
+    else if (localMobNight() && hostileCount < LOCAL_HOSTILE_MOB_LIMIT) pool = LOCAL_HOSTILE_MOBS;
 
     if (!pool) return;
     spawnLocalMob(pool[Math.floor(Math.random() * pool.length)]);
@@ -4596,8 +4695,6 @@
       const interpolationTicks = Math.max(2, Math.min(6, Math.round(elapsed / 50)));
       entity.serverPos?.set?.(x * 32, y * 32, z * 32);
       entity.setPositionAndRotation2?.(x, y, z, yaw, 0, interpolationTicks);
-      entity.yaw = yaw;
-      entity.prevYaw = yaw;
       entity.onGround = true;
       mob.remoteUpdatedAt = now;
     }
@@ -9420,7 +9517,6 @@
     closeP2P(notifyGuests);
     restoreWorldBlockBroadcast();
     restoreWorldItemDrops();
-    restoreLocalChunkVisibility();
     restoreNativeRenderRecovery();
     restoreGameSceneUpdate();
     clearPendingUploadDrain();
@@ -10404,6 +10500,7 @@
     if (!state.active) return;
 
     const now = Number(frameTime) || performance.now();
+    renderLocalMobAnimations(now);
     if (now - Number(state.lastPeerMarkerUpdate || 0) < 100) {
       state.peerFrame = requestAnimationFrame(updatePeerMarker);
       return;
@@ -10528,7 +10625,6 @@
 
         refreshLocalVisualMode();
         repairLocalRender();
-        updateLocalChunkVisibility();
         syncLocalPlayerProxyAnimation();
 
         if (now - state.lastPlayerEntityRepair >= 500) {

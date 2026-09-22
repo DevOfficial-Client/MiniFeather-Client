@@ -184,7 +184,7 @@
         "src/World/LocalGamesNetworkBridge.js"
       ],
       "run_at": "document_start",
-      "all_frames": false
+      "all_frames": true
     },
     {
       "matches": [
