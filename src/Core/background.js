@@ -1247,18 +1247,28 @@ function ntfyWsUrl(topic, since = "30s") {
 async function ntfyPublish(topic, message, signal) {
   const safe = ntfySafeTopic(topic);
   if (!safe) throw new Error("INVALID_TOPIC");
-  const response = await fetch(`${NTFY_HTTP_BASE}/${safe}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/plain;charset=UTF-8",
-      "Cache": "no",
-      "Firebase": "no"
-    },
-    body: String(message || ""),
-    cache: "no-store",
-    signal
-  });
-  if (!response.ok) throw new Error(`HTTP_${response.status}`);
+  const requestController = new AbortController();
+  const forwardAbort = () => requestController.abort(signal?.reason);
+  const timeout = setTimeout(() => requestController.abort("PUBLISH_TIMEOUT"), 9000);
+  signal?.addEventListener?.("abort", forwardAbort, { once: true });
+
+  try {
+    const response = await fetch(`${NTFY_HTTP_BASE}/${safe}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain;charset=UTF-8",
+        "Cache": "no",
+        "Firebase": "no"
+      },
+      body: String(message || ""),
+      cache: "no-store",
+      signal: requestController.signal
+    });
+    if (!response.ok) throw new Error(`HTTP_${response.status}`);
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener?.("abort", forwardAbort);
+  }
 }
 
 function openNtfySocket(topic, since, handlers) {

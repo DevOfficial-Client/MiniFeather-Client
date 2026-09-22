@@ -570,7 +570,7 @@
     vanillaAnimations: false,
     leafWind: false,
     leafWindStrength: 0.085,
-    handSway: false,
+    handSway: true,
     betterPlayerLayers: false,
     dynamicCrosshairMap: {
       air: 'empty.png', block: 'crosshair.png', entity: 'cross-open.png',
@@ -3205,6 +3205,7 @@
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc'), tags: [] },
       { page: 'render', key: 'fullBright', title: t('fullBright'), desc: t('fullBrightDesc'), tags: [] },
       { page: 'render', key: 'vanillaAnimations', title: t('vanillaAnimations'), desc: t('vanillaAnimationsDesc'), tags: [] },
+      { page: 'render', key: 'handSway', title: t('handSway'), desc: t('handSwayDesc'), tags: [] },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc'), tags: ['pvp'] },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc'), tags: [] },
       { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc'), tags: [] },
@@ -4451,6 +4452,35 @@
     }));
   }
 
+  async function transferImportedLocalWorld(world, onProgress = null) {
+    if (!world?.ok || !Array.isArray(world.palette) || !Array.isArray(world.blocks)) {
+      throw new Error('invalid imported world');
+    }
+
+    const expectedValues = world.blocks.length;
+    sendLocalGamesCommand('import-world-begin', {
+      expectedValues,
+      world: {
+        ok: true,
+        bounds: world.bounds || null,
+        spawn: world.spawn || null,
+        count: Number(world.count) || expectedValues / 4,
+        palette: world.palette
+      }
+    });
+
+    const chunkSize = 32768;
+    for (let offset = 0; offset < expectedValues; offset += chunkSize) {
+      sendLocalGamesCommand('import-world-chunk', {
+        values: world.blocks.slice(offset, Math.min(expectedValues, offset + chunkSize))
+      });
+      onProgress?.(Math.min(expectedValues, offset + chunkSize), expectedValues);
+      await new Promise(resolve => window.setTimeout(resolve, 0));
+    }
+
+    sendLocalGamesCommand('import-world-finish');
+  }
+
   function initLocalGamesModule() {
     document.addEventListener('minifeather:localgames-state', (e) => {
       try { localGamesState = JSON.parse(e.detail || '{}'); } catch (_) {}
@@ -4641,8 +4671,9 @@
         const world = await globalThis.MF_WorldImport.importFromFile(file, (done, total, blocks) => {
           if (button) button.textContent = `⏳ ${done}/${total} (${blocks})`;
         });
-        globalThis.__MF_IMPORTED_WORLD__ = world;
-        sendLocalGamesCommand('import-world');
+        await transferImportedLocalWorld(world, (sent, total) => {
+          if (button) button.textContent = `⏳ ${Math.floor(sent / 4)}/${Math.floor(total / 4)}`;
+        });
         if (button) {
           button.textContent = `✓ ${world.count} blocks`;
           window.setTimeout(() => { if (button.isConnected) button.textContent = original; }, 3500);
@@ -6809,8 +6840,13 @@
             )}
             ${renderToggle(
               'vanillaAnimations',
-              'Vanilla Animations',
-              'Freezes elbow and knee joints rigid for all players'
+              t('vanillaAnimations'),
+              t('vanillaAnimationsDesc')
+            )}
+            ${renderToggle(
+              'handSway',
+              t('handSway'),
+              t('handSwayDesc')
             )}
             ${renderToggle(
               'zoom',

@@ -27,15 +27,19 @@
     window.MF_HandSway = {
         get enabled() { return state.enabled; },
         set enabled(v) {
-            state.enabled = !!v;
-            try {
-                localStorage.setItem(
-                    'miniblox_handsway',
-                    String(state.enabled)
-                );
-            } catch {}
+            setEnabled(!!v);
         }
     };
+
+    function setEnabled(enabled) {
+        state.enabled = enabled === true;
+        try {
+            localStorage.setItem('miniblox_handsway', String(state.enabled));
+        } catch {}
+        document.dispatchEvent(new CustomEvent('minifeather:handsway-state', {
+            detail: JSON.stringify({ enabled: state.enabled })
+        }));
+    }
 
     function getGame(force = false) {
         if (globalThis.miniblox?.player) {
@@ -191,14 +195,26 @@
         return true;
     }
 
-    const interval = setInterval(() => {
+    document.addEventListener('minifeather:handsway-config', event => {
+        try {
+            const config = typeof event.detail === 'string'
+                ? JSON.parse(event.detail)
+                : event.detail;
+            if (config && 'enabled' in config) setEnabled(config.enabled === true);
+        } catch {}
+    }, true);
+
+    globalThis.HandSway = {
+        setEnabled,
+        get enabled() { return state.enabled; },
+        get state() { return state; }
+    };
+
+    setInterval(() => {
         const game = getGame(true);
         if (!game?.gameScene) return;
         const lf = findHandRenderer(game);
         if (!lf) return;
-        if (hookHandRenderer(lf)) {
-            clearInterval(interval);
-            void 0;
-        }
+        hookHandRenderer(lf);
     }, 600);
 })();

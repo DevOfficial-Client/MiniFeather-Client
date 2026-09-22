@@ -3,6 +3,8 @@
 
   const REQUEST_EVENT = 'minifeather:localgames-signal-request';
   const RESPONSE_EVENT = 'minifeather:localgames-signal-response';
+  const READY_EVENT = 'minifeather:localgames-signal-ready';
+  const PROBE_EVENT = 'minifeather:localgames-signal-probe';
   const PORT_NAME = 'minifeather-localgames-network';
   const PREFIX = 'mflg';
 
@@ -26,6 +28,10 @@
     document.dispatchEvent(new CustomEvent(RESPONSE_EVENT, {
       detail: JSON.stringify({ requestId, ok, ...payload })
     }));
+  }
+
+  function announceReady() {
+    if (!destroyed) document.dispatchEvent(new CustomEvent(READY_EVENT));
   }
 
   function ensureTopic(rawTopic, since = '30s') {
@@ -136,6 +142,10 @@
       port = null;
       clearInterval(heartbeat);
       heartbeat = 0;
+      for (const requestId of pendingPublishes.keys()) {
+        dispatchResponse(requestId, false, { error: 'SIGNAL_BRIDGE_OFFLINE' });
+      }
+      pendingPublishes.clear();
       for (const entry of topics.values()) {
         entry.subscribed = false;
         entry.requested = false;
@@ -220,6 +230,7 @@
     if (destroyed) return;
     destroyed = true;
     document.removeEventListener(REQUEST_EVENT, onRequest);
+    document.removeEventListener(PROBE_EVENT, announceReady);
     clearTimeout(reconnectTimer);
     clearInterval(heartbeat);
     for (const entry of topics.values()) {
@@ -233,7 +244,9 @@
   }
 
   document.addEventListener(REQUEST_EVENT, onRequest);
+  document.addEventListener(PROBE_EVENT, announceReady);
   globalThis.__MINIFEATHER_LOCALGAMES_NETWORK_BRIDGE__?.destroy?.();
   globalThis.__MINIFEATHER_LOCALGAMES_NETWORK_BRIDGE__ = { destroy };
+  announceReady();
   connect();
 })();

@@ -136,8 +136,6 @@
         "src/World/WorldMap.js",
         "src/World/RhythmParkour.js",
         "src/World/LocalGames.js",
-        "src/World/LocalGamesNetworkBridge.js",
-        "src/World/MF_WorldImport.js",
         "src/Render/VanillaAnimations.js",
         "src/Render/HandSway.js",
         "src/Render/BetterPlayerLayers.js",
@@ -183,9 +181,21 @@
         "https://miniblox.online/*"
       ],
       "js": [
+        "src/World/LocalGamesNetworkBridge.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
+      ],
+      "js": [
         "src/Chat/ClientChat.js",
         "src/I18n/Translations.js",
         "src/Libraries/jszip.min.js",
+        "src/World/MF_WorldImport.js",
         "src/Render/TexturePackManager.js",
         "src/Core/AutoUpdater.js",
         "src/Experimental/ExperimentalRegistry.js",

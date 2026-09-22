@@ -24,6 +24,8 @@
   const MAX_PLAYERS = 8;
   const SIGNAL_REQUEST_EVENT = 'minifeather:localgames-signal-request';
   const SIGNAL_RESPONSE_EVENT = 'minifeather:localgames-signal-response';
+  const SIGNAL_READY_EVENT = 'minifeather:localgames-signal-ready';
+  const SIGNAL_PROBE_EVENT = 'minifeather:localgames-signal-probe';
   const STUN_URL = 'stun:stun.cloudflare.com:3478';
   
   const ICE_SERVERS = [
@@ -145,12 +147,14 @@
     roomTopic: '',
     worldSeedOverride: null,
     importedWorld: null,
+    importTransfer: null,
     localRole: 'player',
     localGameMode: 'survival',
     localHardcore: false,
     peers: new Map(),
     hostPeer: null,
     remotePlayers: new Map(),
+    remoteEntityProxies: new Map(),
     signalPollTimer: 0,
     signalLastId: '',
     signalRequests: new Map(),
@@ -164,6 +168,7 @@
     lastPickupScan: 0,
     lastPlayerEntityRepair: 0,
     localPlayerEntityReady: false,
+    localPlayerProxy: null,
     entityManager: null,
     localMobs: new Map(),
     localMobNextId: -2147482000,
@@ -171,6 +176,8 @@
     localMobLastTick: 0,
     localMobLastSpawn: 0,
     localMobLastSync: 0,
+    lastPeerMarkerUpdate: 0,
+    signalBridgeReady: false,
     dropStats: { spawned: 0, pickedUp: 0, fallback: 0, failed: 0, lastError: '' },
     banList: new Map(),
     connectedOnce: false,
@@ -4088,6 +4095,7 @@
 
   function removePeerFromPlayerList(peerId = null) {
     if (peerId != null) {
+      removeRemotePlayerProxy(String(peerId));
       state.remotePlayers.delete(String(peerId));
     }
 
@@ -4110,122 +4118,87 @@
       player.dimension = Number(world.dimensionId) || 0;
     } catch (_) {}
 
-    let registered = false;
+    const manager = resolveEntityManager();
+    let proxy = null;
 
     try {
-      registered = world.players?.get?.(id) === player;
+      const registered = world.players?.get?.(id);
+      if (registered && registered !== player) proxy = registered;
     } catch (_) {}
 
-    if (!registered && typeof world.addPlayer === 'function') {
-      try { world.addPlayer(player); } catch (_) {}
+    if (!proxy && state.localPlayerProxy?.world === world && state.localPlayerProxy !== player) {
+      proxy = state.localPlayerProxy;
     }
 
+    // The current MiniBlox client keeps a separate render proxy for the local
+    // player. Registering the controller itself makes fixedUpdate feed network
+    // interpolation back into its own physics once per tick.
     try {
-      if (world.players?.get?.(id) !== player) world.players?.set?.(id, player);
-      registered = world.players?.get?.(id) === player;
-    } catch (_) {}
-
-    let entityRegistered = false;
-    try { entityRegistered = world.entities?.get?.(id) === player; } catch (_) {}
-
-    if (!entityRegistered && typeof world.spawnEntityInWorld === 'function') {
-      try { world.spawnEntityInWorld(player); } catch (_) {}
-    }
-
-    try {
-      if (world.entities?.get?.(id) !== player) world.entities?.set?.(id, player);
-      entityRegistered = world.entities?.get?.(id) === player;
-    } catch (_) {}
-
-    try {
+      if (world.players?.get?.(id) === player) world.players.delete(id);
+      if (world.entities?.get?.(id) === player) world.entities.delete(id);
       if (Array.isArray(world.loadedEntityList)) {
         for (let index = world.loadedEntityList.length - 1; index >= 0; index--) {
-          if (world.loadedEntityList[index] === player) {
-            world.loadedEntityList.splice(index, 1);
-          }
+          if (world.loadedEntityList[index] === player) world.loadedEntityList.splice(index, 1);
         }
       }
     } catch (_) {}
 
-    const entityRoot = game.gameScene?.entityMeshes;
+    if (!proxy && typeof manager?.spawnPlayer === 'function') {
+      const profile = profileSnapshot();
+      const pos = player.pos || { x: 0, y: 80, z: 0 };
 
-    try {
-      if ((!player.mesh || player.mesh.parent !== entityRoot) && typeof world.attachEntityMesh === 'function') {
-        world.attachEntityMesh(player);
+      try {
+        manager.spawnPlayer({
+          socketId: profile.uuid || `minifeather-local-${id}`,
+          id,
+          name: profile.name,
+          pos: {
+            x: Number(pos.x) || 0,
+            y: Number(pos.y) || 80,
+            z: Number(pos.z) || 0
+          },
+          yaw: Number(player.yaw) || 0,
+          pitch: Number(player.pitch) || 0,
+          gamemode: currentGamemodeId(),
+          cosmetics: {
+            skin: profile.skin || 'bob',
+            cape: profile.cosmetics?.cape || 'none',
+            hat: profile.cosmetics?.hat || 'none',
+            trail: profile.cosmetics?.trail || 'none',
+            aura: profile.cosmetics?.aura || 'none'
+          },
+          rank: profile.rank || '',
+          discordBoosting: profile.discordBoosting === true
+        });
+        proxy = world.players?.get?.(id) || null;
+      } catch (error) {
+        logWarn('local player render proxy failed:', error?.message || error);
       }
-    } catch (_) {}
-
-    try {
-      const model = player.mesh?.model;
-      const parts = model?.parts;
-      const pending =
-        model?.skinLoaded &&
-        typeof model.skinLoaded.then === 'function';
-
-      if (
-        model &&
-        parts &&
-        Object.keys(parts).length < 8 &&
-        pending
-      ) {
-        const ModelCtor = model.constructor;
-        const mesh = player.mesh;
-
-        if (!mesh.entity?.profile?.cosmetics?.skin) {
-          try {
-            mesh.entity = mesh.entity || {};
-            mesh.entity.profile = mesh.entity.profile || {};
-            mesh.entity.profile.cosmetics = mesh.entity.profile.cosmetics || {};
-            mesh.entity.profile.cosmetics.skin =
-              mesh.entity.profile.cosmetics.skin || 'bob';
-            mesh.entity.profile.cosmetics.cape =
-              mesh.entity.profile.cosmetics.cape || 'none';
-            mesh.entity.profile.cosmetics.hat =
-              mesh.entity.profile.cosmetics.hat || 'none';
-          } catch (_) {}
-        }
-
-        if (typeof ModelCtor === 'function' && mesh.entity?.profile?.cosmetics) {
-          const rebuilt = new ModelCtor(mesh);
-
-          if (rebuilt && rebuilt.parts && Object.keys(rebuilt.parts).length >= 8) {
-            try { mesh.clear(); } catch (_) {}
-
-            mesh.model = rebuilt;
-
-            try {
-              mesh.add(rebuilt);
-            } catch (_) {}
-
-            log('player model reconstruido (build() colgado por downloadSkin)');
-          }
-        }
-      }
-    } catch (error) {
-      logWarn('player model repair falló (no crítico):', error?.message || error);
     }
 
-    try {
-      if (forceRecreate && player.mesh) {
-        if (typeof player.mesh.recreate === 'function') player.mesh.recreate();
-        else player.mesh.bXbFHkqbGNBEv?.();
-      }
-    } catch (_) {}
+    if (proxy && proxy !== player) {
+      state.localPlayerProxy = proxy;
+      try {
+        proxy.world = world;
+        proxy.serverPos?.set?.(
+          Number(player.pos?.x || 0) * 32,
+          Number(player.pos?.y || 0) * 32,
+          Number(player.pos?.z || 0) * 32
+        );
+        if (forceRecreate) proxy.mesh?.recreate?.();
+        if (proxy.mesh) proxy.mesh.visible = true;
+      } catch (_) {}
 
-    try {
-      if (player.mesh) {
-        if (entityRoot && player.mesh.parent !== entityRoot && typeof entityRoot.add === 'function') {
-          entityRoot.add(player.mesh);
-        }
-        player.mesh.visible = true;
-      }
-    } catch (_) {}
+      state.localPlayerEntityReady = !!(
+        world.players?.get?.(id) === proxy &&
+        world.entities?.get?.(id) === proxy &&
+        proxy.mesh
+      );
+      return state.localPlayerEntityReady;
+    }
 
-    state.localPlayerEntityReady = !!(
-      registered &&
-      entityRegistered &&
-      player.mesh
-    );
+    state.localPlayerProxy = null;
+    state.localPlayerEntityReady = false;
 
     return state.localPlayerEntityReady;
   }
@@ -4235,13 +4208,40 @@
 
     try {
       if (player.abilities) {
-        player.abilities.walkSpeed = LOCAL_WALK_SPEED;
-        player.abilities.flySpeed = LOCAL_ABILITY_FLY_SPEED;
+        const walkSpeed = Number(player.abilities.walkSpeed);
+        const flySpeed = Number(player.abilities.flySpeed);
+        if (!Number.isFinite(walkSpeed) || walkSpeed <= 0 || walkSpeed > 0.5) {
+          player.abilities.walkSpeed = LOCAL_WALK_SPEED;
+        }
+        if (!Number.isFinite(flySpeed) || flySpeed <= 0 || flySpeed > 0.5) {
+          player.abilities.flySpeed = LOCAL_ABILITY_FLY_SPEED;
+        }
       }
     } catch (_) {}
 
-    try { player.speedInAir = LOCAL_AIR_SPEED; } catch (_) {}
-    try { player.flySpeed = LOCAL_PLAYER_FLY_SPEED; } catch (_) {}
+    try {
+      const speedInAir = Number(player.speedInAir);
+      if (!Number.isFinite(speedInAir) || speedInAir <= 0 || speedInAir > 0.25) {
+        player.speedInAir = LOCAL_AIR_SPEED;
+      }
+    } catch (_) {}
+    try {
+      const flySpeed = Number(player.flySpeed);
+      if (!Number.isFinite(flySpeed) || flySpeed <= 0 || flySpeed > 0.5) {
+        player.flySpeed = LOCAL_PLAYER_FLY_SPEED;
+      }
+    } catch (_) {}
+  }
+
+  function syncLocalPlayerProxyAnimation() {
+    const player = state.game?.player;
+    const proxy = state.localPlayerProxy;
+    if (!player || !proxy || proxy === player) return;
+
+    try { proxy.onGround = player.onGround === true; } catch (_) {}
+    try { proxy.sneak = player.sneak === true; } catch (_) {}
+    try { proxy.punching = player.punching === true; } catch (_) {}
+    try { proxy.setSprinting?.(player.isSprinting?.() === true); } catch (_) {}
   }
 
   function looksLikeEntityManager(value) {
@@ -4348,7 +4348,8 @@
         targetX: pos.x,
         targetZ: pos.z,
         nextTargetAt: 0,
-        lastPositionAt: performance.now()
+        lastPositionAt: performance.now(),
+        remoteUpdatedAt: 0
       });
 
       if (state.mode === 'host' && !hasRequestedId) {
@@ -4371,7 +4372,6 @@
       try { world?.removeEntityFromWorld?.(id); } catch (_) {}
     }
     state.localMobs.clear();
-    state.localMobNextId = -2147482000;
     state.localMobStartedAt = 0;
     state.localMobLastTick = 0;
     state.localMobLastSpawn = 0;
@@ -4425,7 +4425,9 @@
       return;
     }
 
-    const step = Math.min(distance, mob.hostile ? 0.13 : 0.08);
+    const elapsed = Math.max(0.025, Math.min(0.2, (now - Number(mob.lastPositionAt || now - 100)) / 1000));
+    const blocksPerSecond = mob.hostile ? 1.3 : 0.8;
+    const step = Math.min(distance, blocksPerSecond * elapsed);
     const x = Number(entity.pos.x) + dx / distance * step;
     const z = Number(entity.pos.z) + dz / distance * step;
     const surface = localMobSurface(x, z);
@@ -4435,9 +4437,18 @@
     }
 
     const yaw = Math.atan2(-dx, dz);
+    const interpolationTicks = Math.max(1, Math.min(4, Math.round(elapsed / 0.05)));
     entity.serverPos?.set?.(surface.x * 32, surface.y * 32, surface.z * 32);
-    entity.setPositionAndRotation2?.(surface.x, surface.y, surface.z, yaw, 0, 3);
+    entity.setPositionAndRotation2?.(
+      surface.x,
+      surface.y,
+      surface.z,
+      yaw,
+      0,
+      interpolationTicks
+    );
     entity.yaw = yaw;
+    entity.prevYaw = yaw;
     entity.pitch = 0;
     entity.onGround = true;
     mob.lastPositionAt = now;
@@ -4510,10 +4521,15 @@
       const z = Number(data?.z);
       const yaw = Number(data?.yaw) || 0;
       if (!entity || ![x, y, z].every(Number.isFinite)) continue;
+      const now = performance.now();
+      const elapsed = Math.max(50, Math.min(300, now - Number(mob.remoteUpdatedAt || now - 150)));
+      const interpolationTicks = Math.max(2, Math.min(6, Math.round(elapsed / 50)));
       entity.serverPos?.set?.(x * 32, y * 32, z * 32);
-      entity.setPositionAndRotation2?.(x, y, z, yaw, 0, 3);
+      entity.setPositionAndRotation2?.(x, y, z, yaw, 0, interpolationTicks);
       entity.yaw = yaw;
+      entity.prevYaw = yaw;
       entity.onGround = true;
+      mob.remoteUpdatedAt = now;
     }
   }
 
@@ -7404,6 +7420,7 @@
     if (forceDirect || !hasLiveWorld) {
       state.active = true;
       state.start = null;
+      state.localPlayerProxy = null;
 
       const ok = await initializeDirectLocalGame(game, state.map);
 
@@ -7724,7 +7741,29 @@
     throw new Error('INVALID_SIGNAL');
   }
 
-  function signalRequest(action, payload = {}) {
+  function waitForSignalBridge(timeoutMs = 5000) {
+    if (state.signalBridgeReady) return Promise.resolve();
+
+    return new Promise((resolve, reject) => {
+      const onReady = () => {
+        clearTimeout(timer);
+        state.signalBridgeReady = true;
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        document.removeEventListener(SIGNAL_READY_EVENT, onReady);
+        reject(new Error('SIGNAL_BRIDGE_OFFLINE'));
+      }, timeoutMs);
+      document.addEventListener(SIGNAL_READY_EVENT, onReady, { once: true });
+      // The isolated bridge may have announced readiness before this MAIN-world
+      // script installed its listener. A probe makes startup independent of the
+      // browser's ordering of document_start content-script worlds.
+      document.dispatchEvent(new CustomEvent(SIGNAL_PROBE_EVENT));
+    });
+  }
+
+  async function signalRequest(action, payload = {}) {
+    await waitForSignalBridge();
     const requestId = `lg_sig_${Date.now()}_${++state.signalRequestCounter}`;
 
     return new Promise((resolve, reject) => {
@@ -7749,6 +7788,10 @@
         })
       );
     });
+  }
+
+  function onSignalReady() {
+    state.signalBridgeReady = true;
   }
 
   function onSignalResponse(event) {
@@ -7776,6 +7819,7 @@
   }
 
   document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
+  document.addEventListener(SIGNAL_READY_EVENT, onSignalReady);
 
   async function publishSignal(topic, payload) {
     const message = await packSignal(payload);
@@ -7960,23 +8004,156 @@
     return players;
   }
 
+  function removeRemotePlayerProxy(peerId) {
+    const key = String(peerId || '');
+    const proxy = state.remoteEntityProxies.get(key);
+    state.remoteEntityProxies.delete(key);
+    if (!proxy || !state.world) return;
+
+    try {
+      if (state.world.players?.get?.(proxy.id) === proxy) {
+        state.world.removeEntityFromWorld?.(proxy.id);
+      } else if (state.world.entities?.get?.(proxy.id) === proxy) {
+        state.world.removeEntity?.(proxy);
+      }
+    } catch (_) {}
+  }
+
+  function clearRemotePlayerProxies() {
+    for (const peerId of Array.from(state.remoteEntityProxies.keys())) {
+      removeRemotePlayerProxy(peerId);
+    }
+    state.remoteEntityProxies.clear();
+  }
+
+  function ensureRemotePlayerProxy(peerId, entry) {
+    const key = String(peerId || '');
+    if (
+      !key ||
+      key === String(state.localPeerId || '') ||
+      !state.active ||
+      !state.directLocal ||
+      !state.world ||
+      Number(state.game?.state) !== 6
+    ) {
+      return null;
+    }
+
+    const playerId = Number(entry?.playerId) || numericPeerId(key);
+    if (playerId === Number(state.localPlayerId)) return null;
+
+    let proxy = state.remoteEntityProxies.get(key) || null;
+    if (proxy && state.world.entities?.get?.(playerId) !== proxy) {
+      state.remoteEntityProxies.delete(key);
+      proxy = null;
+    }
+
+    if (!proxy) {
+      const existing = state.world.players?.get?.(playerId);
+      if (existing && existing !== state.game?.player && existing !== state.localPlayerProxy) {
+        proxy = existing;
+      }
+    }
+
+    if (!proxy) {
+      const manager = resolveEntityManager();
+      if (typeof manager?.spawnPlayer !== 'function') return null;
+
+      const profile = entry?.profile || {};
+      const relative = entry?.target || entry?.position || { x: 0, y: 0, z: 0 };
+      const origin = state.origin || { x: 0, y: 80, z: 0 };
+
+      try {
+        manager.spawnPlayer({
+          socketId: String(profile.uuid || `minifeather-peer-${key}`),
+          id: playerId,
+          name: cleanText(profile.name || entry?.name || 'Player', 24),
+          pos: {
+            x: Number(origin.x) + Number(relative.x || 0),
+            y: Number(origin.y) + Number(relative.y || 0),
+            z: Number(origin.z) + Number(relative.z || 0)
+          },
+          yaw: Number(relative.yaw) || 0,
+          pitch: Number(relative.pitch) || 0,
+          gamemode: String(entry?.mode || profile.mode || 'survival'),
+          cosmetics: {
+            skin: profile.skin || profile.cosmetics?.skin || 'bob',
+            cape: profile.cape || profile.cosmetics?.cape || 'none',
+            hat: profile.hat || profile.cosmetics?.hat || 'none',
+            trail: profile.trail || profile.cosmetics?.trail || 'none',
+            aura: profile.aura || profile.cosmetics?.aura || 'none'
+          },
+          rank: profile.rank || '',
+          discordBoosting: profile.discordBoosting === true
+        });
+        proxy = state.world.players?.get?.(playerId) || null;
+      } catch (error) {
+        logWarn('remote player proxy failed:', error?.message || error);
+        return null;
+      }
+    }
+
+    if (proxy) {
+      entry.playerId = playerId;
+      entry.nativeProxy = proxy;
+      state.remoteEntityProxies.set(key, proxy);
+    }
+
+    return proxy;
+  }
+
+  function updateRemotePlayerProxy(peerId, entry) {
+    const proxy = ensureRemotePlayerProxy(peerId, entry);
+    const relative = entry?.target;
+    const origin = state.origin;
+    if (!proxy || !relative || !origin) return false;
+
+    const x = Number(origin.x) + Number(relative.x);
+    const y = Number(origin.y) + Number(relative.y);
+    const z = Number(origin.z) + Number(relative.z);
+    const yaw = Number(relative.yaw) || 0;
+    const pitch = Number(relative.pitch) || 0;
+    if (![x, y, z].every(Number.isFinite)) return false;
+
+    const now = performance.now();
+    const elapsed = Math.max(50, Math.min(200, now - Number(entry.lastNativeUpdate || now - 75)));
+    const interpolationTicks = Math.max(1, Math.min(4, Math.round(elapsed / 50)));
+
+    try {
+      proxy.serverPos?.set?.(x * 32, y * 32, z * 32);
+      proxy.setPositionAndRotation2?.(x, y, z, yaw, pitch, interpolationTicks);
+      proxy.yaw = yaw;
+      proxy.pitch = pitch;
+      if (typeof relative.grounded === 'boolean') proxy.onGround = relative.grounded;
+      if (typeof relative.sneaking === 'boolean') proxy.sneak = relative.sneaking;
+      if (typeof relative.sprinting === 'boolean') proxy.setSprinting?.(relative.sprinting);
+      if (proxy.mesh) proxy.mesh.visible = true;
+      entry.lastNativeUpdate = now;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function applyRoster(players) {
     if (!Array.isArray(players)) return;
 
-    state.remotePlayers.clear();
+    const previous = new Map(state.remotePlayers);
+    const next = new Map();
 
     for (const entry of players) {
       if (!entry?.peerId) continue;
       if (entry.peerId === state.localPeerId) continue;
 
       const normalized = {
+        ...(previous.get(String(entry.peerId)) || {}),
         ...entry,
         profile: {
           ...(entry.profile || {})
         }
       };
 
-      state.remotePlayers.set(String(entry.peerId), normalized);
+      next.set(String(entry.peerId), normalized);
 
       if (entry.peerId === 'host' && state.hostPeer) {
         state.hostPeer.profile = {
@@ -7986,6 +8163,16 @@
         state.hostPeer.role = entry.role || 'owner';
         state.hostPeer.mode = entry.mode || state.hostPeer.mode || 'survival';
       }
+    }
+
+    for (const peerId of previous.keys()) {
+      if (!next.has(peerId)) removeRemotePlayerProxy(peerId);
+    }
+
+    state.remotePlayers.clear();
+    for (const [peerId, entry] of next) {
+      state.remotePlayers.set(peerId, entry);
+      ensureRemotePlayerProxy(peerId, entry);
     }
 
     syncNativePlayerList();
@@ -8682,6 +8869,7 @@
     }, 120);
 
     state.peers.delete(peerId);
+    removeRemotePlayerProxy(peerId);
     state.remotePlayers.delete(peerId);
     broadcastRoster();
     return true;
@@ -9115,6 +9303,7 @@
     state.peers.clear();
     closePeerConnection(state.hostPeer);
     state.hostPeer = null;
+    clearRemotePlayerProxies();
     state.remotePlayers.clear();
     state.roomTopic = '';
     state.signalLastId = '';
@@ -9172,6 +9361,7 @@
     state.lastPickupScan = 0;
     state.lastPlayerEntityRepair = 0;
     state.localPlayerEntityReady = false;
+    state.localPlayerProxy = null;
     state.dropStats = { spawned: 0, pickedUp: 0, fallback: 0, failed: 0, lastError: '' };
     state.start = null;
     state.worldName = '';
@@ -9200,7 +9390,10 @@
       y: Number(pos.y) - origin.y,
       z: Number(pos.z) - origin.z,
       yaw: Number(state.game.player.yaw) || 0,
-      pitch: Number(state.game.player.pitch) || 0
+      pitch: Number(state.game.player.pitch) || 0,
+      grounded: state.game.player.onGround === true,
+      sprinting: state.game.player.isSprinting?.() === true,
+      sneaking: state.game.player.sneak === true
     };
   }
 
@@ -9479,7 +9672,16 @@
       y: values[1],
       z: values[2],
       yaw: values[3],
-      pitch: values[4]
+      pitch: values[4],
+      grounded: typeof payload.grounded === 'boolean'
+        ? payload.grounded
+        : (entry.target?.grounded ?? true),
+      sprinting: typeof payload.sprinting === 'boolean'
+        ? payload.sprinting
+        : (entry.target?.sprinting ?? false),
+      sneaking: typeof payload.sneaking === 'boolean'
+        ? payload.sneaking
+        : (entry.target?.sneaking ?? false)
     };
 
     if (!entry.position) {
@@ -9487,6 +9689,7 @@
     }
 
     state.remotePlayers.set(peerId, entry);
+    updateRemotePlayerProxy(peerId, entry);
   }
 
   function onHostMoveMessage(peerId, event) {
@@ -9524,6 +9727,7 @@
 
     const name = peer.profile?.name || 'Player';
     state.peers.delete(peerId);
+    removeRemotePlayerProxy(peerId);
     state.remotePlayers.delete(peerId);
     announceSystem(`${name} has left.`);
     broadcastRoster();
@@ -9689,6 +9893,7 @@
       const existing = state.peers.get(peerId);
       if (existing && !existing.joinAnnounced) {
         state.peers.delete(peerId);
+        removeRemotePlayerProxy(peerId);
         state.remotePlayers.delete(peerId);
         closePeerConnection(existing);
       }
@@ -9720,6 +9925,7 @@
         existingPeer.pc?.connectionState === 'closed'
       ) {
         state.peers.delete(peerId);
+        removeRemotePlayerProxy(peerId);
         state.remotePlayers.delete(peerId);
         closePeerConnection(existingPeer);
       } else if (existingPeer.pc?.localDescription) {
@@ -9986,7 +10192,7 @@
       patchWorldBlockBroadcast();
       syncNativePlayerList();
       flushDeferredGuestData();
-      setStatus(`Joining "${state.worldName}"...`);
+      setStatus(`Connected to "${state.worldName}".`);
       emitState();
       return true;
     } catch (error) {
@@ -10073,8 +10279,15 @@
     return marker;
   }
 
-  function updatePeerMarker() {
+  function updatePeerMarker(frameTime = performance.now()) {
     if (!state.active) return;
+
+    const now = Number(frameTime) || performance.now();
+    if (now - Number(state.lastPeerMarkerUpdate || 0) < 100) {
+      state.peerFrame = requestAnimationFrame(updatePeerMarker);
+      return;
+    }
+    state.lastPeerMarkerUpdate = now;
 
     ensurePeerLayer();
 
@@ -10130,7 +10343,8 @@
       marker.style.display = 'block';
       marker.style.left = `${screen.x}px`;
       marker.style.top = `${screen.y}px`;
-      marker.textContent = `${role ? `[${role}] ` : ''}${name} · ${distance.toFixed(1)}m`;
+      const label = `${role ? `[${role}] ` : ''}${name} · ${distance.toFixed(1)}m`;
+      if (marker.textContent !== label) marker.textContent = label;
     }
 
     for (const marker of state.peerLayer?.querySelectorAll('.mf-localgames-peer-marker') || []) {
@@ -10144,7 +10358,8 @@
         : state.mode === 'join'
           ? 1 + (state.hostPeer?.pc?.connectionState === 'connected' ? 1 : 0)
           : 1;
-      badge.textContent = `${state.worldName || 'MiniFeather Local'} · ${count}/${MAX_PLAYERS}`;
+      const label = `${state.worldName || 'MiniFeather Local'} · ${count}/${MAX_PLAYERS}`;
+      if (badge.textContent !== label) badge.textContent = label;
     }
 
     state.peerFrame = requestAnimationFrame(updatePeerMarker);
@@ -10152,6 +10367,7 @@
 
   function startLoops() {
     stopLoops();
+    state.lastPeerMarkerUpdate = 0;
 
     state.interval = setInterval(() => {
       if (!state.active) return;
@@ -10191,6 +10407,7 @@
 
         refreshLocalVisualMode();
         repairLocalRender();
+        syncLocalPlayerProxyAnimation();
 
         if (now - state.lastPlayerEntityRepair >= 500) {
           ensureLocalPlayerEntity(false);
@@ -10295,6 +10512,94 @@
         worldName: 'Spider Garden',
         role: 'owner'
       });
+      return;
+    }
+
+    if (action === 'import-world-begin') {
+      const meta = command?.world;
+      const expectedValues = Math.floor(Number(command?.expectedValues));
+
+      if (
+        !meta?.ok ||
+        !Array.isArray(meta.palette) ||
+        meta.palette.length < 1 ||
+        meta.palette.length > 65536 ||
+        !Number.isFinite(expectedValues) ||
+        expectedValues < 4 ||
+        expectedValues > 12000000 ||
+        expectedValues % 4 !== 0
+      ) {
+        state.importTransfer = null;
+        setStatus('Invalid imported world metadata.', 'IMPORT_FAILED');
+        return;
+      }
+
+      state.importTransfer = {
+        meta: {
+          ok: true,
+          bounds: meta.bounds || null,
+          spawn: meta.spawn || null,
+          count: expectedValues / 4,
+          palette: meta.palette.map(value => String(value || '').slice(0, 160))
+        },
+        expectedValues,
+        blocks: []
+      };
+      setStatus(`Receiving imported world: ${expectedValues / 4} blocks...`, '');
+      return;
+    }
+
+    if (action === 'import-world-chunk') {
+      const transfer = state.importTransfer;
+      const values = command?.values;
+      if (!transfer || !Array.isArray(values) || values.length > 65536) {
+        state.importTransfer = null;
+        setStatus('Invalid imported world chunk.', 'IMPORT_FAILED');
+        return;
+      }
+
+      if (transfer.blocks.length + values.length > transfer.expectedValues) {
+        state.importTransfer = null;
+        setStatus('Imported world exceeded its declared size.', 'IMPORT_FAILED');
+        return;
+      }
+
+      for (const value of values) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+          state.importTransfer = null;
+          setStatus('Imported world contains invalid block data.', 'IMPORT_FAILED');
+          return;
+        }
+        transfer.blocks.push(number);
+      }
+      return;
+    }
+
+    if (action === 'import-world-finish') {
+      const transfer = state.importTransfer;
+      state.importTransfer = null;
+      if (!transfer || transfer.blocks.length !== transfer.expectedValues) {
+        setStatus('Imported world transfer was incomplete.', 'IMPORT_FAILED');
+        return;
+      }
+
+      for (let index = 3; index < transfer.blocks.length; index += 4) {
+        const paletteIndex = transfer.blocks[index];
+        if (!Number.isInteger(paletteIndex) || paletteIndex < 0 || paletteIndex >= transfer.meta.palette.length) {
+          setStatus('Imported world contains an invalid palette index.', 'IMPORT_FAILED');
+          return;
+        }
+      }
+
+      state.importedWorld = {
+        ...transfer.meta,
+        blocks: transfer.blocks
+      };
+      setStatus(
+        `World imported: ${state.importedWorld.count} blocks, ${state.importedWorld.palette.length} block types.`,
+        ''
+      );
       return;
     }
 
