@@ -224,6 +224,7 @@
 
         const ent = mesh.entity;
         if (!ent) return;
+        if (ent !== game?.player && ent.type !== 'player' && game?.world?.players?.get?.(ent.id) !== ent) return;
 
         const entId = ent.id ?? (mesh.uuid ?? (mesh.uuid = Symbol()));
         let ctx = state.contexts.get(entId);
@@ -347,7 +348,9 @@
                 if (ents && typeof ents.values === 'function') {
                     for (const ent of ents.values()) {
                         if (!ent?.mesh || ent.mesh === game.player?.mesh) continue;
-                        // Solo players (clase LF — el rig con skeleton/shoulders)
+                        // Los mobs comparten partes del rig de jugador; el rig por
+                        // sí solo no prueba que esta entidad sea un jugador.
+                        if (ent.type !== 'player' && game.world?.players?.get?.(ent.id) !== ent) continue;
                         if (!ent.mesh.skeleton || !ent.mesh.leftShoulder) continue;
                         registerMesh(ent.mesh, game);
                         state.tickStats.remote++;

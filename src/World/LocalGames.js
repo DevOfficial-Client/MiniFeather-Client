@@ -118,6 +118,9 @@
     interval: 0,
     diffInterval: 0,
     peerFrame: 0,
+    perfFrameWindowStartedAt: 0,
+    perfFrameCount: 0,
+    perfFps: 0,
     peerLayer: null,
     status: 'Idle',
     error: '',
@@ -131,6 +134,7 @@
     lastItemDespawnScan: 0,
     lastMasterRendererResolve: 0,
     autoJoinEnabled: loadAutoJoinPreference(),
+    acceptAutoJoinEnabled: loadAcceptAutoJoinPreference(),
     globalWorldCursor: '',
     chatBridgeCursor: '',
     globalWorldTimer: null,
@@ -214,6 +218,7 @@
     localRenderFixAt: 0,
     localRenderStats: null,
     nativeRenderRecovery: null,
+    localAudioRecovery: null,
     globalPollTimer: 0,
     registryCursor: '',
     savedServers: [],
@@ -381,13 +386,15 @@
     }
   }
 
-  function loadGlobalWorldPreference() {
+  function persistAcceptAutoJoinPreference(enabled) {
     try {
-      // Solo manual: el mundo global nunca se auto-une, hay que entrar con el botón
-      return localStorage.getItem('mf_global_world') === 'on';
-    } catch (_) {
-      return false;
-    }
+      localStorage.setItem('mf_localgames_accept_autojoin', enabled ? 'on' : 'off');
+    } catch (_) {}
+  }
+
+  function loadAcceptAutoJoinPreference() {
+    try { return localStorage.getItem('mf_localgames_accept_autojoin') === 'on'; }
+    catch (_) { return false; }
   }
 
   async function globalWorldHeartbeat() {
@@ -407,8 +414,7 @@
     });
   }
 
-  async function tryJoinGlobalWorld(manual = false) {
-    if (!manual && !loadGlobalWorldPreference()) return;
+  async function tryJoinGlobalWorld() {
     if (state.active || state.destroyed) return;
     if (state.serverAddress === GLOBAL_WORLD_ADDRESS) return;
 
@@ -453,26 +459,14 @@
 
   function startGlobalWorldLoop() {
     if (state.globalWorldTimer) clearInterval(state.globalWorldTimer);
-    let busy = false;
 
-    state.globalWorldTimer = setInterval(async () => {
-      if (state.destroyed || busy) return;
-      if (!loadGlobalWorldPreference()) return;
+    state.globalWorldTimer = setInterval(() => {
+      if (state.destroyed) return;
 
       const isGlobalHost = state.active && state.mode === 'host' && state.serverAddress === GLOBAL_WORLD_ADDRESS;
 
       if (isGlobalHost) {
         globalWorldHeartbeat().catch(() => {});
-        return;
-      }
-
-      if (!state.active) {
-        busy = true;
-        try {
-          await tryJoinGlobalWorld();
-        } finally {
-          busy = false;
-        }
       }
     }, 20000);
   }
@@ -550,6 +544,7 @@
         });
 
         if (
+          state.acceptAutoJoinEnabled === true &&
           message.autoJoin === true &&
           !state.active &&
           Number(message.players) < Number(message.maxPlayers)
@@ -650,6 +645,7 @@
           gameMode: state.localGameMode,
           hardcore: state.localHardcore,
           autoJoinEnabled: state.autoJoinEnabled === true,
+          acceptAutoJoinEnabled: state.acceptAutoJoinEnabled === true,
           savedServers: state.savedServers.slice(0, 30).map(entry => ({ ...entry })),
           peerName:
             state.mode === 'join'
@@ -1478,6 +1474,8 @@
     const worker = manager?.chunkRenderWorkerManager;
     const root = gs?.chunkMeshes;
     const scene = gs?.scene;
+    const renderer = state.nativeRenderRecovery?.renderer;
+    const audioContext = window.Howler?.ctx;
     const tickClass = resolveGameSceneClass(game);
 
     let tick = null;
@@ -1551,6 +1549,24 @@
         pendingUploads: Number(manager?.pendingUploads?.size) || 0,
         workerSeeded: Number(state.chunkLoadDiagnostics?.rendererSeeded) || 0,
         workerQueued: Number(state.chunkLoadDiagnostics?.rendererQueued) || 0
+      },
+      performance: {
+        fps: Math.round((Number(state.perfFps) || 0) * 10) / 10,
+        audioState: String(audioContext?.state || 'unavailable'),
+        audioGuardInstalled: !!state.localAudioRecovery,
+        freshAnimations: window.MF_PlayerAnims?.enabled === true,
+        freshAnimationContexts: Number(window.MF_PlayerAnims?.stats?.contexts) || 0,
+        heapMB: Number.isFinite(Number(performance.memory?.usedJSHeapSize))
+          ? Math.round(Number(performance.memory.usedJSHeapSize) / 1048576)
+          : null,
+        geometries: Number(renderer?.info?.memory?.geometries) || 0,
+        textures: Number(renderer?.info?.memory?.textures) || 0,
+        drawCalls: Number(renderer?.info?.render?.calls) || 0,
+        triangles: Number(renderer?.info?.render?.triangles) || 0,
+        mobs: state.localMobs.size,
+        connectedPeers: state.mode === 'host'
+          ? connectedHostPeers().length
+          : Number(state.hostPeer?.pc?.connectionState === 'connected')
       },
       scene: {
         present: !!scene,
@@ -1905,6 +1921,107 @@
     state.nativeRenderRecovery = null;
   }
 
+  function restoreLocalAudioRecovery() {
+    const recovery = state.localAudioRecovery;
+    if (!recovery) return;
+
+    try {
+      if (recovery.howler.pos === recovery.patchedPos) {
+        recovery.howler.pos = recovery.originalPos;
+      }
+    } catch (_) {}
+    try {
+      if (recovery.howler.orientation === recovery.patchedOrientation) {
+        recovery.howler.orientation = recovery.originalOrientation;
+      }
+    } catch (_) {}
+
+    state.localAudioRecovery = null;
+  }
+
+  function installLocalAudioRecovery() {
+    if (!state.active || !state.directLocal) return false;
+
+    const howler = window.Howler;
+    if (
+      !howler?.ctx?.listener ||
+      typeof howler.pos !== 'function' ||
+      typeof howler.orientation !== 'function'
+    ) return false;
+
+    if (state.localAudioRecovery?.howler === howler) return true;
+    restoreLocalAudioRecovery();
+
+    const originalPos = howler.pos;
+    const originalOrientation = howler.orientation;
+
+    const suspendedLocally = function () {
+      const audioState = this.ctx?.state;
+      return this === howler && state.active && state.directLocal &&
+        (audioState === 'suspended' || audioState === 'interrupted');
+    };
+
+    const patchedPos = function (x, y, z) {
+      if (typeof x !== 'number' || !suspendedLocally.call(this)) {
+        return originalPos.apply(this, arguments);
+      }
+
+      const previous = this._pos || [0, 0, 0];
+      this._pos = [
+        x,
+        typeof y === 'number' ? y : previous[1],
+        typeof z === 'number' ? z : previous[2]
+      ];
+      return this;
+    };
+
+    const patchedOrientation = function (...values) {
+      if (typeof values[0] !== 'number' || !suspendedLocally.call(this)) {
+        return originalOrientation.apply(this, values);
+      }
+
+      const previous = this._orientation || [0, 0, -1, 0, 1, 0];
+      this._orientation = previous.map((value, index) =>
+        typeof values[index] === 'number' ? values[index] : value
+      );
+      return this;
+    };
+
+    try {
+      howler.pos = patchedPos;
+      howler.orientation = patchedOrientation;
+      if (howler.pos !== patchedPos || howler.orientation !== patchedOrientation) {
+        throw new Error('Howler listener methods are not writable');
+      }
+    } catch (_) {
+      try { if (howler.pos === patchedPos) howler.pos = originalPos; } catch (_) {}
+      try { if (howler.orientation === patchedOrientation) howler.orientation = originalOrientation; } catch (_) {}
+      return false;
+    }
+
+    state.localAudioRecovery = {
+      howler,
+      originalPos,
+      originalOrientation,
+      patchedPos,
+      patchedOrientation
+    };
+
+    if (howler.ctx.state === 'suspended' || howler.ctx.state === 'interrupted') {
+      // A suspended AudioContext has a frozen clock. Howler otherwise queues
+      // nine listener automations every frame at that same timestamp.
+      for (const name of [
+        'positionX', 'positionY', 'positionZ',
+        'forwardX', 'forwardY', 'forwardZ',
+        'upX', 'upY', 'upZ'
+      ]) {
+        try { howler.ctx.listener[name]?.cancelScheduledValues?.(0); } catch (_) {}
+      }
+    }
+
+    return true;
+  }
+
   function installNativeRenderRecovery() {
     if (!state.active || !state.directLocal) return false;
 
@@ -2166,12 +2283,15 @@
       bypassComposer: !!patchedComposerRender
     };
 
+    installLocalAudioRecovery();
     ensureSize();
     return true;
   }
 
   function refreshNativeRenderRecovery() {
     if (!state.active || !state.directLocal) return;
+
+    if (!state.localAudioRecovery) installLocalAudioRecovery();
 
     const now = performance.now();
     if (now - state.lastMasterRendererResolve < 500) {
@@ -7593,6 +7713,7 @@
 
       if (!ok) {
         logError('startWorld: initializeDirectLocalGame failed');
+        restoreLocalAudioRecovery();
         restoreNativeRenderRecovery();
         exitLocalVisualMode();
         state.active = false;
@@ -9517,6 +9638,7 @@
     closeP2P(notifyGuests);
     restoreWorldBlockBroadcast();
     restoreWorldItemDrops();
+    restoreLocalAudioRecovery();
     restoreNativeRenderRecovery();
     restoreGameSceneUpdate();
     clearPendingUploadDrain();
@@ -10500,6 +10622,14 @@
     if (!state.active) return;
 
     const now = Number(frameTime) || performance.now();
+    if (!state.perfFrameWindowStartedAt) state.perfFrameWindowStartedAt = now;
+    state.perfFrameCount++;
+    const perfElapsed = now - state.perfFrameWindowStartedAt;
+    if (perfElapsed >= 1000) {
+      state.perfFps = state.perfFrameCount * 1000 / perfElapsed;
+      state.perfFrameWindowStartedAt = now;
+      state.perfFrameCount = 0;
+    }
     renderLocalMobAnimations(now);
     if (now - Number(state.lastPeerMarkerUpdate || 0) < 100) {
       state.peerFrame = requestAnimationFrame(updatePeerMarker);
@@ -10586,6 +10716,9 @@
   function startLoops() {
     stopLoops();
     state.lastPeerMarkerUpdate = 0;
+    state.perfFrameWindowStartedAt = 0;
+    state.perfFrameCount = 0;
+    state.perfFps = 0;
 
     state.interval = setInterval(() => {
       if (!state.active) return;
@@ -10888,11 +11021,16 @@
       return;
     }
 
+    if (action === 'set-accept-autojoin') {
+      const enabled = command?.enabled === true;
+      state.acceptAutoJoinEnabled = enabled;
+      persistAcceptAutoJoinPreference(enabled);
+      emitState();
+      return;
+    }
+
     if (action === 'join-global') {
       const enabled = command?.enabled !== false;
-      try {
-        localStorage.setItem('mf_global_world', enabled ? 'on' : 'off');
-      } catch (_) {}
       if (enabled) {
         if (state.active && state.serverAddress === GLOBAL_WORLD_ADDRESS) {
           emitState();
@@ -10903,7 +11041,7 @@
           emitState();
           return;
         }
-        await tryJoinGlobalWorld(true);
+        await tryJoinGlobalWorld();
       }
       emitState();
       return;
@@ -10942,6 +11080,11 @@
   (function autoJoinFromShareLink() {
     const invite = parseShareLink();
     if (!invite) return;
+    // A shared link is an explicit one-time join, not a saved startup choice.
+    try {
+      const nextPath = /^\/local\.P2P\//i.test(location.pathname) ? '/' : location.pathname;
+      history.replaceState(history.state, '', nextPath + location.search);
+    } catch (_) {}
     setStatus(`🔗 P2P invite detected — joining ${invite.username}'s world...`);
     log(`autoJoin: link ${invite.address} user=${invite.username}`);
     state.shareLinkJoinPending = true;

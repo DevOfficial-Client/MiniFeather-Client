@@ -4576,7 +4576,7 @@
         ${lg.mode === 'host' ? `
         <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:8px;cursor:pointer;user-select:none;">
           <input type="checkbox" id="mf-lg-autojoin" ${lg.autoJoinEnabled ? 'checked' : ''} style="cursor:pointer;">
-          <span>🌐 <b>Auto-connect everyone</b> <span class="mf-muted">· All MiniFeather clients in the menu join this world automatically</span></span>
+          <span>🌐 ${t('localGamesOfferAutoJoin')}</span>
         </label>` : ''}
         <div class="mf-card-title" style="margin-top:6px;">${t('localGamesChatTitle')}</div>
         <div style="display:flex;gap:4px;margin-bottom:8px;">
@@ -4596,6 +4596,10 @@
         </div>
         <button id="mf-lg-garden" class="mf-btn secondary" style="width:100%;margin-top:6px;padding:6px;font-size:12px;">🕷️ Spider Garden</button>
         <button id="mf-lg-global" class="mf-btn primary" style="width:100%;margin-top:6px;padding:6px;font-size:12px;">🌍 Global World</button>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;cursor:pointer;user-select:none;">
+          <input type="checkbox" id="mf-lg-accept-autojoin" ${lg.acceptAutoJoinEnabled ? 'checked' : ''} style="cursor:pointer;">
+          <span>${t('localGamesAcceptAutoJoin')}</span>
+        </label>
         <div style="display:flex;gap:6px;margin-top:6px;">
           <button id="mf-lg-import" class="mf-btn secondary" style="flex:1;padding:6px;font-size:12px;">📦 Import World</button>
           <button id="mf-lg-play-imported" class="mf-btn secondary" style="flex:1;padding:6px;font-size:12px;" title="Load the imported world">▶ Imported</button>
@@ -4748,6 +4752,10 @@
 
     container.querySelector('#mf-lg-autojoin')?.addEventListener('change', (e) => {
       sendLocalGamesCommand('set-autojoin', { enabled: !!e.target.checked });
+    });
+
+    container.querySelector('#mf-lg-accept-autojoin')?.addEventListener('change', (e) => {
+      sendLocalGamesCommand('set-accept-autojoin', { enabled: !!e.target.checked });
     });
 
     const sendChat = () => {
