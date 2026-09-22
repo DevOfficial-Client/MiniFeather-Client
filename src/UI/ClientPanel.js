@@ -4445,6 +4445,7 @@
 
   // ─── Local Games (mundos locales / LAN via ntfy+WebRTC) ───────────
   let localGamesState = null;
+  let localGamesJoinAddress = '';
 
   function sendLocalGamesCommand(action, extra = {}) {
     document.dispatchEvent(new CustomEvent('minifeather:localgames-command', {
@@ -4501,6 +4502,7 @@
     if (!container) return;
 
     const lg = localGamesState || {};
+    const joining = lg.joining === true || (lg.mode === 'join' && lg.active !== true);
     const allServers = Array.isArray(lg.savedServers) ? lg.savedServers : [];
     const onlineServers = allServers.filter(s => s?.online);
     const offlineServers = allServers.filter(s => !s?.online);
@@ -4509,13 +4511,14 @@
       return `
       <div class="mf-shader-strength" style="margin-bottom:6px;${online ? '' : 'opacity:0.45;'}">
         <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(server.worldName || '')} · ${escapeHtml(server.hostName || '')}">${online ? '🟢' : '🔴'} ${escapeHtml(server.worldName || 'World')} <span class="mf-muted" style="font-size:10px;">· ${escapeHtml(server.hostName || '')} · ${Number(server.players || 1)}/${Number(server.maxPlayers || 8)}</span></span>
-        <button class="mf-btn primary" style="padding:2px 8px;font-size:11px;" ${online ? '' : 'disabled'} data-lg-join="${escapeHtml(String(server.address || ''))}">${t('localGamesJoin')}</button>
+        <button class="mf-btn primary" style="padding:2px 8px;font-size:11px;" ${online && !joining ? '' : 'disabled'} data-lg-join="${escapeHtml(String(server.address || ''))}">${t('localGamesJoin')}</button>
       </div>`;
     }).join('');
 
     container.innerHTML = `
       <div class="mf-card-title">${t('localGamesServers')} <button id="mf-lg-refresh" class="mf-btn secondary" style="padding:2px 8px;font-size:11px;">⟳</button></div>
       <div id="mf-lg-status" class="mf-muted" style="font-size:11px;margin:6px 0;">${escapeHtml(lg.status || 'Idle')}</div>
+      ${lg.error ? `<div style="font-size:10px;color:#ff7a7a;margin:-2px 0 7px;word-break:break-word;">${escapeHtml(String(lg.error))}</div>` : ''}
       ${lg.active ? `
         <div style="background:rgba(124,92,255,0.15);border-radius:6px;padding:8px;margin-bottom:8px;font-size:11px;">
           <div>🎮 <b>${escapeHtml(lg.worldName || 'Local')}</b> · ${escapeHtml(lg.mode || '')} · 👥 ${Number(lg.playerCount || 1)}/${Number(lg.maxPlayers || 8)}</div>
@@ -4559,8 +4562,8 @@
             style="flex:1;padding:4px 8px;border-radius:4px;border:1px solid var(--mf-border,#444);background:var(--mf-bg2,rgba(0,0,0,0.3));color:inherit;font-size:12px;">
         </div>
         <div class="mf-shader-grid">
-          <button id="mf-lg-create" class="mf-btn primary">${t('localGamesCreate')}</button>
-          <button id="mf-lg-sandbox" class="mf-btn secondary">${t('localGamesSandbox')}</button>
+          <button id="mf-lg-create" class="mf-btn primary" ${joining ? 'disabled' : ''}>${t('localGamesCreate')}</button>
+          <button id="mf-lg-sandbox" class="mf-btn secondary" ${joining ? 'disabled' : ''}>${t('localGamesSandbox')}</button>
         </div>
         <button id="mf-lg-garden" class="mf-btn secondary" style="width:100%;margin-top:6px;padding:6px;font-size:12px;">🕷️ Spider Garden</button>
         <button id="mf-lg-global" class="mf-btn primary" style="width:100%;margin-top:6px;padding:6px;font-size:12px;">🌍 Global World</button>
@@ -4572,8 +4575,8 @@
         <div class="mf-muted" style="font-size:10px;margin-top:4px;">Java world .zip or .mca region file</div>
         <div class="mf-card-title" style="margin-top:12px;">${t('localGamesJoinByAddress')}</div>
         <div style="display:flex;gap:6px;margin-top:6px;">
-          <input id="mf-lg-address-input" class="mf-input" type="text" placeholder="${t('localGamesAddressPlaceholder')}" autocomplete="off" spellcheck="false">
-          <button id="mf-lg-join-address" class="mf-btn primary" type="button" style="width:auto;min-width:90px;">${t('localGamesJoin')}</button>
+          <input id="mf-lg-address-input" class="mf-input" type="text" value="${escapeHtml(localGamesJoinAddress || String(lg.serverAddress || ''))}" placeholder="${t('localGamesAddressPlaceholder')}" autocomplete="off" spellcheck="false" ${joining ? 'disabled' : ''}>
+          <button id="mf-lg-join-address" class="mf-btn primary" type="button" style="width:auto;min-width:90px;" ${joining ? 'disabled' : ''}>${joining ? `⏳ ${t('clientChatConnecting')}` : t('localGamesJoin')}</button>
         </div>
         <div class="mf-muted" style="font-size:10px;margin-top:5px;">${t('localGamesAddressHint')}</div>
         <div style="margin-top:10px;">${serverRows || `<div class="mf-muted" style="font-size:11px;">${t('localGamesNoServers')}</div>`}</div>
@@ -4617,11 +4620,21 @@
     const joinByAddress = () => {
       const input = container.querySelector('#mf-lg-address-input');
       const address = String(input?.value || '').trim();
-      if (!address) return;
+      if (!address || joining) return;
+      localGamesJoinAddress = address;
+      if (input) input.value = address;
+      const button = container.querySelector('#mf-lg-join-address');
+      if (button) {
+        button.disabled = true;
+        button.textContent = `⏳ ${t('clientChatConnecting')}`;
+      }
       sendLocalGamesCommand('join-server', { address });
     };
 
     container.querySelector('#mf-lg-join-address')?.addEventListener('click', joinByAddress);
+    container.querySelector('#mf-lg-address-input')?.addEventListener('input', event => {
+      localGamesJoinAddress = String(event.currentTarget?.value || '');
+    });
     container.querySelector('#mf-lg-address-input')?.addEventListener('keydown', event => {
       if (event.key !== 'Enter') return;
       event.preventDefault();
@@ -4728,7 +4741,10 @@
 
     container.querySelectorAll('[data-lg-join]').forEach(btn => {
       btn.addEventListener('click', () => {
-        sendLocalGamesCommand('join-server', { address: btn.getAttribute('data-lg-join') });
+        const address = String(btn.getAttribute('data-lg-join') || '').trim();
+        if (!address || joining) return;
+        localGamesJoinAddress = address;
+        sendLocalGamesCommand('join-server', { address });
       });
     });
   }

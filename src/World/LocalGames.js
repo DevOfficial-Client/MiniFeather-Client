@@ -64,10 +64,14 @@
   const SAVED_SERVERS_KEY = 'minifeather.localgames.savedServers.v2';
   const SERVER_STALE_AFTER_MS = 330000;
   const SIGNAL_POLL_INTERVAL_MS = 350;
+  const ICE_GATHER_SETTLE_MS = 550;
+  const ICE_GATHER_MAX_MS = 3500;
   const OUTGOING_ALLOW = new Set(['SPacketPing']);
   const INCOMING_ALLOW = new Set(['CPacketPong']);
 
   const LOCAL_TERRAIN_RADIUS_CHUNKS = 7;
+  const LOCAL_VISUAL_RADIUS_CHUNKS = 4;
+  const LOCAL_LOOP_INTERVAL_MS = 50;
 
   const LOG_PREFIX = '[MiniFeather LocalGames]';
   const LOG_LEVEL = (() => {
@@ -205,6 +209,9 @@
     worldAssetManager: null,
     localRenderFixAt: 0,
     localRenderStats: null,
+    lastChunkVisibilityAt: 0,
+    localVisibleChunkMeshes: 0,
+    localTotalChunkMeshes: 0,
     nativeRenderRecovery: null,
     globalPollTimer: 0,
     registryCursor: '',
@@ -632,6 +639,7 @@
           status: state.status,
           error: state.error,
           connected,
+          joining: state.mode === 'join' && state.active !== true,
           playerCount,
           maxPlayers: MAX_PLAYERS,
           worldName: state.worldName,
@@ -648,6 +656,9 @@
               : '',
           protocol: PROTOCOL,
           renderStats: state.localRenderStats || null,
+          visualChunkRadius: LOCAL_VISUAL_RADIUS_CHUNKS,
+          visibleChunkMeshes: Number(state.localVisibleChunkMeshes) || 0,
+          totalChunkMeshes: Number(state.localTotalChunkMeshes) || 0,
           ...extra
         })
       })
@@ -2381,6 +2392,63 @@
     } catch (_) {}
   }
 
+  function updateLocalChunkVisibility(force = false) {
+    if (!state.active || !state.directLocal) return null;
+
+    const now = performance.now();
+    if (!force && now - Number(state.lastChunkVisibilityAt || 0) < 250) {
+      return {
+        visible: Number(state.localVisibleChunkMeshes) || 0,
+        total: Number(state.localTotalChunkMeshes) || 0
+      };
+    }
+
+    const root = state.game?.gameScene?.chunkMeshes;
+    const pos = state.game?.player?.pos;
+    if (!root?.children || !pos) return null;
+
+    const playerChunkX = Math.floor(Number(pos.x) / 16);
+    const playerChunkZ = Math.floor(Number(pos.z) / 16);
+    if (!Number.isFinite(playerChunkX) || !Number.isFinite(playerChunkZ)) return null;
+
+    let visible = 0;
+    let total = 0;
+
+    for (const object of root.children) {
+      if (!object?.isMesh || !object.geometry || !object.position) continue;
+      const chunkX = Math.round(Number(object.position.x) / 16);
+      const chunkZ = Math.round(Number(object.position.z) / 16);
+      if (!Number.isFinite(chunkX) || !Number.isFinite(chunkZ)) continue;
+
+      const inRange = Math.max(
+        Math.abs(chunkX - playerChunkX),
+        Math.abs(chunkZ - playerChunkZ)
+      ) <= LOCAL_VISUAL_RADIUS_CHUNKS;
+
+      object.visible = inRange;
+      object.frustumCulled = true;
+      object.__mfLocalDistanceCulled = !inRange;
+      total++;
+      if (inRange) visible++;
+    }
+
+    state.lastChunkVisibilityAt = now;
+    state.localVisibleChunkMeshes = visible;
+    state.localTotalChunkMeshes = total;
+    return { visible, total };
+  }
+
+  function restoreLocalChunkVisibility() {
+    const root = state.game?.gameScene?.chunkMeshes;
+    for (const object of root?.children || []) {
+      if (object?.__mfLocalDistanceCulled === true) object.visible = true;
+      if (object) delete object.__mfLocalDistanceCulled;
+    }
+    state.lastChunkVisibilityAt = 0;
+    state.localVisibleChunkMeshes = 0;
+    state.localTotalChunkMeshes = 0;
+  }
+
   function repairLocalRender(force = false) {
     if (!state.active || !state.directLocal) return null;
 
@@ -2388,7 +2456,7 @@
 
     const now = performance.now();
 
-    if (!force && now - state.localRenderFixAt < 2000) {
+    if (!force && now - state.localRenderFixAt < 5000) {
       return state.localRenderStats;
     }
 
@@ -2404,6 +2472,8 @@
       if (root.parent !== scene) scene.add(root);
       root.visible = true;
     } catch (_) {}
+
+    updateLocalChunkVisibility(force);
 
     const stats = {
       meshes: 0,
@@ -8789,11 +8859,30 @@
     if (pc.iceGatheringState === 'complete') return Promise.resolve();
 
     return new Promise(resolve => {
-      const timer = setTimeout(done, timeout);
+      let finished = false;
+      let settleTimer = 0;
+      const hardTimeout = Math.min(
+        Math.max(1000, Number(timeout) || ICE_GATHER_MAX_MS),
+        ICE_GATHER_MAX_MS
+      );
+      const timer = setTimeout(done, hardTimeout);
+
+      function hasCandidate() {
+        return /^a=candidate:/m.test(String(pc.localDescription?.sdp || ''));
+      }
+
+      function scheduleSettled() {
+        clearTimeout(settleTimer);
+        settleTimer = setTimeout(done, ICE_GATHER_SETTLE_MS);
+      }
 
       function done() {
+        if (finished) return;
+        finished = true;
         clearTimeout(timer);
+        clearTimeout(settleTimer);
         pc.removeEventListener('icegatheringstatechange', onChange);
+        pc.removeEventListener('icecandidate', onCandidate);
         resolve();
       }
 
@@ -8801,7 +8890,17 @@
         if (pc.iceGatheringState === 'complete') done();
       }
 
+      function onCandidate(event) {
+        if (!event.candidate) {
+          done();
+          return;
+        }
+        scheduleSettled();
+      }
+
       pc.addEventListener('icegatheringstatechange', onChange);
+      pc.addEventListener('icecandidate', onCandidate);
+      if (hasCandidate()) scheduleSettled();
     });
   }
 
@@ -9321,6 +9420,7 @@
     closeP2P(notifyGuests);
     restoreWorldBlockBroadcast();
     restoreWorldItemDrops();
+    restoreLocalChunkVisibility();
     restoreNativeRenderRecovery();
     restoreGameSceneUpdate();
     clearPendingUploadDrain();
@@ -10093,10 +10193,23 @@
     state.roomTopic = topicFromAddress(normalized);
     state.signalLastId = '';
 
-    setStatus('Contacting the world host...');
+    const resetFailedJoin = () => {
+      closePeerConnection(state.hostPeer);
+      state.hostPeer = null;
+      state.mode = 'idle';
+      state.localRole = 'player';
+      state.serverAddress = '';
+      state.roomTopic = '';
+      state.signalLastId = '';
+      state.localPeerId = '';
+      state.connectedOnce = false;
+    };
+
+    setStatus('Preparing the P2P connection...');
 
     const game = await resolveGameSingleton();
     if (!game) {
+      resetFailedJoin();
       setStatus('Could not find the Miniblox engine.', 'NO_GAME_ENGINE');
       return false;
     }
@@ -10115,6 +10228,9 @@
         let peerId = '';
 
         try {
+          setStatus(attempt === 0
+            ? 'Creating a secure P2P offer...'
+            : 'Retrying the P2P connection...');
           peerId = randomHex(12);
           state.localPeerId = peerId;
           state.localPlayerId = numericPeerId(peerId);
@@ -10134,8 +10250,10 @@
 
           const publishJoin = () => publishSignal(state.roomTopic, buildJoinSignal());
           await publishJoin();
+          setStatus('Waiting for the world host...');
           answer = await waitForGuestAnswer(peerId, publishJoin, 30000);
           await peer.pc.setRemoteDescription(answer.sdp);
+          setStatus('Opening the direct connection...');
           await waitForPeerConnected(peer.pc, RTC_CONNECT_TIMEOUT_MS);
           lastError = null;
           break;
@@ -10170,6 +10288,7 @@
       state.worldName = cleanText(answer.worldName, 30) || 'MiniFeather World';
       state.worldSeedOverride = Number(answer.seed);
       state.localRole = answer.role || 'player';
+      setStatus(`Loading "${state.worldName}"...`);
 
       const ok = await startWorld('sandbox', 'join', 3, {
         forceDirect: true,
@@ -10181,7 +10300,10 @@
 
       if (!ok) {
         closePeerConnection(peer);
-        state.hostPeer = null;
+        const failedStatus = state.status || 'Could not load the world.';
+        const failedError = state.error || 'WORLD_START_FAILED';
+        resetFailedJoin();
+        setStatus(failedStatus, failedError);
         return false;
       }
 
@@ -10198,8 +10320,7 @@
     } catch (error) {
       logError('joinWorldServer: fallo:', error);
       closePeerConnection(peer);
-      state.hostPeer = null;
-      state.mode = 'idle';
+      resetFailedJoin();
       setStatus('Could not join the world.', cleanText(error?.message || error, 200));
       return false;
     }
@@ -10407,6 +10528,7 @@
 
         refreshLocalVisualMode();
         repairLocalRender();
+        updateLocalChunkVisibility();
         syncLocalPlayerProxyAnimation();
 
         if (now - state.lastPlayerEntityRepair >= 500) {
@@ -10460,7 +10582,7 @@
 
         state.lastMoveSend = now;
       }
-    }, 25);
+    }, LOCAL_LOOP_INTERVAL_MS);
 
     state.diffInterval = setInterval(() => {
       flushPendingBlockChanges();
@@ -10703,7 +10825,20 @@
       }
     }
 
-    handleCommand(command || {});
+    void handleCommand(command || {}).catch(error => {
+      logError('command failed:', error);
+      if (String(command?.action || '') === 'join-server') {
+        closePeerConnection(state.hostPeer);
+        state.hostPeer = null;
+        state.mode = 'idle';
+        state.localRole = 'player';
+        state.serverAddress = '';
+        state.roomTopic = '';
+        state.localPeerId = '';
+        state.connectedOnce = false;
+        setStatus('Could not join the world.', cleanText(error?.message || error, 200));
+      }
+    });
   }
 
   document.addEventListener(COMMAND_EVENT, onCommand);
