@@ -74,7 +74,8 @@
         "src/Chat/FriendNicknames.js"
       ],
       "run_at": "document_start",
-      "world": "MAIN"
+      "world": "MAIN",
+      "all_frames": true
     },
     {
       "matches": [
@@ -84,6 +85,7 @@
       "js": [
         "src/I18n/MainWorldI18n.js",
         "src/I18n/MainTranslations.js",
+        "src/I18n/VoiceTranslations.js",
         "src/I18n/CommandTranslations.js",
         "src/Render/TextureInterceptor.js",
         "src/Render/PBRTextures.js",
@@ -92,6 +94,7 @@
         "src/Cosmetics/MF_Accounts.js",
         "src/Cosmetics/CustomSkinAPI.js",
         "src/P2P/MF_Mesh.js",
+        "src/P2P/MF_VoiceChat.js",
         "src/Core/inject.js",
         "src/UI/NativeSettingsBridge.js",
         "src/Render/FreeCam.js",
@@ -179,6 +182,17 @@
       ],
       "run_at": "document_start",
       "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
+      ],
+      "js": [
+        "src/P2P/MF_VoiceSignalBridge.js"
+      ],
+      "run_at": "document_start",
       "all_frames": true
     },
     {

@@ -1663,7 +1663,7 @@
 
     function removeInjectedNicknameActions() {
         try {
-            for (const element of document.querySelectorAll('[data-mfn-nickname-action="1"]')) {
+            for (const element of document.querySelectorAll('[data-mfn-nickname-action="1"], [data-mfn-voice-action="1"]')) {
                 element.remove();
             }
         } catch {}
@@ -1694,7 +1694,7 @@
 
         const parent = removeAction.parentElement;
         if (!menuMatchesRightClick(parent)) return false;
-        if (parent.querySelector?.('[data-mfn-nickname-action="1"]')) return true;
+        if (parent.querySelector?.('[data-mfn-nickname-action="1"]') && parent.querySelector?.('[data-mfn-voice-action="1"]')) return true;
 
         let template = null;
         let templateLabel = '';
@@ -1713,23 +1713,64 @@
         if (!template) template = removeAction;
         if (!templateLabel) templateLabel = 'Remove friend';
 
-        const action = template.cloneNode(true);
-        action.setAttribute('data-mfn-nickname-action', '1');
-        action.removeAttribute('id');
+        if (!parent.querySelector?.('[data-mfn-nickname-action="1"]')) {
+            const action = template.cloneNode(true);
+            action.setAttribute('data-mfn-nickname-action', '1');
+            action.removeAttribute('id');
 
-        const current = state.nicknames.get(friend.uuid)?.nickname || '';
-        const label = current ? 'Edit nickname' : 'Set nickname';
-        replaceActionLabel(action, templateLabel, label);
-        setNicknameIcon(action);
+            const current = state.nicknames.get(friend.uuid)?.nickname || '';
+            const label = current ? 'Edit nickname' : 'Set nickname';
+            replaceActionLabel(action, templateLabel, label);
+            setNicknameIcon(action);
 
-        action.addEventListener('click', event => {
-            event.preventDefault();
-            event.stopPropagation();
-            closeNativeContextMenu();
-            openNicknameModal(friend);
-        }, true);
+            action.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeNativeContextMenu();
+                openNicknameModal(friend);
+            }, true);
 
-        parent.insertBefore(action, removeAction);
+            parent.insertBefore(action, removeAction);
+        }
+
+        if (!parent.querySelector?.('[data-mfn-voice-action="1"]')) {
+            const action = template.cloneNode(true);
+            action.setAttribute('data-mfn-voice-action', '1');
+            action.removeAttribute('id');
+            const voiceLanguage = W.MiniFeatherI18n?.getLanguage?.() || String(navigator.language || 'en').slice(0, 2);
+            const callLabel = W.MiniFeatherI18n?.translate?.('Call') || (voiceLanguage === 'es' ? 'Llamar' : 'Call');
+            replaceActionLabel(action, templateLabel, callLabel);
+            const svg = action.querySelector?.('svg');
+            if (svg) {
+                svg.setAttribute('viewBox', '0 0 24 24');
+                svg.setAttribute('fill', 'none');
+                svg.setAttribute('stroke', 'currentColor');
+                svg.setAttribute('stroke-width', '1.8');
+                svg.innerHTML = '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 2.8a2 2 0 0 1-.6 1.8L7.1 9.8a16 16 0 0 0 7.1 7.1l1.5-1.9a2 2 0 0 1 1.8-.6l2.8.5a2 2 0 0 1 1.7 2Z"/>';
+            }
+            const voice = W.MF_VoiceChat;
+            const ready = voice?.available?.(friend);
+            if (!ready) {
+                action.style.opacity = '0.5';
+                action.setAttribute('aria-disabled', 'true');
+                action.title = voice?.status?.().enabled
+                    ? (W.MiniFeatherI18n?.translate?.('Friend is not available on MiniFeather Voice.') || 'Friend is not available on MiniFeather Voice.')
+                    : (W.MiniFeatherI18n?.translate?.('Enable calls first: /call on') || 'Enable calls first: /call on');
+            }
+            action.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (!ready) {
+                    showNicknameToast(action.title || 'Friend is not available on MiniFeather Voice');
+                    return;
+                }
+                closeNativeContextMenu();
+                voice.call(friend).then(result => {
+                    if (!result.ok) showNicknameToast(result.error || 'Call failed');
+                });
+            }, true);
+            parent.insertBefore(action, removeAction);
+        }
         return true;
     }
 
@@ -1942,7 +1983,7 @@
         if (event.button !== 0) return;
 
         const target = event.target instanceof Element ? event.target : event.target?.parentElement;
-        if (target?.closest?.('[data-mfn-nickname-action="1"],#mfn-nickname-overlay')) return;
+        if (target?.closest?.('[data-mfn-nickname-action="1"],[data-mfn-voice-action="1"],#mfn-nickname-overlay')) return;
 
         stopMenuObserver();
         removeInjectedNicknameActions();

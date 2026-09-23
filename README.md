@@ -28,6 +28,7 @@ MiniFeather is a custom Miniblox client focused on adding new visuals, gameplay 
 * Anti-AFK
 * Texture Pack Manager
 * Friend Nicknames
+* MiniFeather Voice (experimental one-to-one calls)
 * Rhythm Parkour
 * VerityAI
 * Client Commands
@@ -49,6 +50,12 @@ MiniFeather is a custom Miniblox client focused on adding new visuals, gameplay 
 MiniFeather is actively developed, with new features, improvements, fixes, and translations being added regularly.
 
 The client is built using separate feature modules, allowing individual systems to be developed and updated independently.
+
+## MiniFeather Voice (experimental)
+
+Both friends need this version of MiniFeather, must be signed in, and must run `/call on`. After their presence appears (usually within 20 seconds), right-click a friend and choose **Call**, or use `/call <username>`. The recipient can answer or decline in the compact call card. Use `/call status`, `/call mute`, `/call end`, and `/call off` as needed.
+
+The microphone is requested only when answering or after the recipient accepts. The signaling channel only advertises an account hash and a temporary peer ID, but it does not cryptographically verify a game account; confirm the caller's identity out of band. Audio uses PeerJS/WebRTC, so restrictive networks or iframe microphone permissions (such as on CrazyGames) can still prevent a call. Voice availability is opt-in and `/call off` stops it.
 
 ## Credits
 

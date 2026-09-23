@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
 
   function parseDetail(event) {
     try {
@@ -96,6 +96,7 @@
       '\\yellow\\/p2p off\\reset\\ - End the shared session',
       '\\yellow\\/p2p auto [on|off]\\reset\\ - Auto-share room code to chat + auto-join',
       '\\yellow\\/mesh on | announce | connect <code>\\reset\\ - Sync Titan & Tiny with MiniFeather peers',
+      '\\yellow\\/call on|off|status|<friend>|answer|decline|end|mute\\reset\\ - MiniFeather voice calls',
       '\\yellow\\/emote <name>\\reset\\ - Play a custom emote (from emotes/)',
       '\\yellow\\/emote stop|list|reload\\reset\\ - Manage emotes',
       '\\yellow\\/mf help\\reset\\ - Show this help'
@@ -1601,6 +1602,39 @@
       const st = api.status;
       const role = api.role ? ` (${api.role})` : '';
       addChat(st === 'off' ? 'P2P: off — use /p2p host or /p2p join <code>' : `P2P: ${st}${role}`);
+      return;
+    }
+
+    if (command === 'call' || command === 'llamar') {
+      const api = globalThis.MF_VoiceChat;
+      if (!api) { addChat('Voice module is not ready yet.', 'error'); return; }
+      const action = String(args[0] || 'status').toLowerCase();
+      if (action === 'on' || action === 'activar') {
+        api.enable().then(result => addChat(result.ok ? 'Voice enabled. Friends using MiniFeather Voice will appear as available shortly.' : result.error, result.ok ? 'success' : 'error'));
+        return;
+      }
+      if (action === 'off' || action === 'desactivar') {
+        api.disable();
+        addChat('Voice disabled.', 'success');
+        return;
+      }
+      if (action === 'answer' || action === 'contestar') {
+        api.answer().then(ok => { if (!ok) addChat('No incoming call or microphone unavailable.', 'error'); });
+        return;
+      }
+      if (action === 'decline' || action === 'rechazar') { api.decline(); return; }
+      if (action === 'end' || action === 'hangup' || action === 'colgar') { api.end(); return; }
+      if (action === 'mute' || action === 'silenciar') {
+        const muted = api.mute();
+        addChat(muted ? 'Microphone muted.' : 'Microphone unmuted or no active call.');
+        return;
+      }
+      if (action === 'status' || action === 'estado') {
+        const info = api.status();
+        addChat(`Voice: ${info.enabled ? 'ON' : 'OFF'} | signal ${info.signal ? 'ready' : 'offline'} | peer ${info.peer ? 'ready' : 'offline'} | identity ${info.identity ? 'ready' : 'missing'} | known ${info.knownFriends} | presence ${info.receivedPresence} | friends: ${info.availableFriends.join(', ') || 'none'}${info.lastError ? ` | error: ${info.lastError}` : ''}`);
+        return;
+      }
+      api.call(args[0]).then(result => addChat(result.ok ? `Calling ${result.name}...` : result.error, result.ok ? 'success' : 'error'));
       return;
     }
 

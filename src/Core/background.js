@@ -1232,6 +1232,8 @@ applyMenuUi();
 const NTFY_HTTP_BASE = "https://ntfy.sh";
 const CLIENT_CHAT_TOPIC = "mfcc-7f41c6d8b92e4a63b5f1-global-v2";
 const CLIENT_CHAT_SIGNAL_PORT = "minifeather-client-chat-signal";
+const VOICE_SIGNAL_TOPIC = "mfvoice-v1-37b1d90a6e4c";
+const VOICE_SIGNAL_PORT = "minifeather-voice-signal";
 const LOCAL_GAMES_NETWORK_PORT = "minifeather-localgames-network";
 
 function ntfySafeTopic(value) {
@@ -1288,7 +1290,8 @@ function openNtfySocket(topic, since, handlers) {
 }
 
 chrome.runtime.onConnect.addListener(port => {
-  if (port.name === CLIENT_CHAT_SIGNAL_PORT) {
+  if (port.name === CLIENT_CHAT_SIGNAL_PORT || port.name === VOICE_SIGNAL_PORT) {
+    const topic = port.name === VOICE_SIGNAL_PORT ? VOICE_SIGNAL_TOPIC : CLIENT_CHAT_TOPIC;
     const controller = new AbortController();
     let stopped = false;
     let socket = null;
@@ -1302,7 +1305,7 @@ chrome.runtime.onConnect.addListener(port => {
       if (stopped) return;
       try {
         socket?.close();
-        socket = openNtfySocket(CLIENT_CHAT_TOPIC, "45s", {
+        socket = openNtfySocket(topic, port.name === VOICE_SIGNAL_PORT ? "5s" : "45s", {
           open() {
             notify({ type: "ready" });
           },
@@ -1331,7 +1334,7 @@ chrome.runtime.onConnect.addListener(port => {
     port.onMessage.addListener(message => {
       if (message?.type === "ping") return;
       if (message?.type !== "publish" || !message.payload) return;
-      void ntfyPublish(CLIENT_CHAT_TOPIC, JSON.stringify(message.payload), controller.signal)
+      void ntfyPublish(topic, JSON.stringify(message.payload), controller.signal)
         .catch(() => notify({ type: "offline", error: "PUBLISH_FAILED" }));
     });
 
