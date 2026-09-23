@@ -28,8 +28,10 @@
     const lerpN = (a, b, t) => a + (b - a) * t;
 
     // Nodos del rig que el pack anima (los 4 joints van aparte, congelados)
+    // Requisito de diseño: codos y rodillas TIESOS (rotación 0 siempre).
+    // El freeze re-escribe rotation=0 en cada updateMatrixWorld, anulando la
+    // animación de rodillas que el bundle BfBcwb2y añadió al juego vanilla.
     const POSE_NODES = ['skeleton', 'body', 'headPivot', 'rightShoulder', 'leftShoulder', 'rightHip', 'leftHip'];
-    // Joints congelados a 0 (requisito: como VanillaAnimations.js)
     const JOINT_NAMES = ['leftElbowJoint', 'rightElbowJoint', 'leftKneeJoint', 'rightKneeJoint'];
 
     function loadPack() {
@@ -169,10 +171,24 @@
                 if (pose.sx !== undefined) sc.x = Math.max(0.01, pose.sx);
                 if (pose.sy !== undefined) sc.y = Math.max(0.01, pose.sy);
                 if (pose.sz !== undefined) sc.z = Math.max(0.01, pose.sz);
-                // Traducciones EMF = ABSOLUTAS en unidades MC (1/16) → delta three
-                if (pose.pdx !== undefined) pos.x = ox + pose.pdx;
-                if (pose.pdy !== undefined) pos.y = oy + pose.pdy;
-                if (pose.pdz !== undefined) pos.z = oz + pose.pdz;
+                // Traducciones EMF = ABSOLUTAS en unidades MC (1/16) → delta three.
+                // Para el body (quatTwist): su PADRE no rota — el yaw del jugador
+                // vive en el propio quaternion del body/neck (renderPositionAndRotation
+                // del bundle: neck.quaternion.copy(rotYaw), la raíz solo recibe
+                // posición) → un delta directo a position queda fijo en el ESPACIO
+                // MUNDO y el offset lateral parece mayor/menor según el yaw del
+                // jugador. Rotar el delta por el quaternion vanilla (oq) lo aplica
+                // en espacio MODELO: relativo al cuerpo, consistente a cualquier
+                // rotación. (Yaw puro: la componente Y del delta se conserva.)
+                let effPdx = pose.pdx, effPdy = pose.pdy, effPdz = pose.pdz;
+                if (oq && (effPdx !== undefined || effPdy !== undefined || effPdz !== undefined)) {
+                    const VC = this.position.constructor;
+                    const v = new VC(effPdx || 0, effPdy || 0, effPdz || 0).applyQuaternion(oq);
+                    effPdx = v.x; effPdy = v.y; effPdz = v.z;
+                }
+                if (effPdx !== undefined) pos.x = ox + effPdx;
+                if (effPdy !== undefined) pos.y = oy + effPdy;
+                if (effPdz !== undefined) pos.z = oz + effPdz;
                 try {
                     return this._mfPAOrigUMW.apply(this, arguments);
                 } finally {
@@ -239,6 +255,36 @@
         const writes = [];
         RT.evaluate(state.pack.lines, ctx, s2, writes);
 
+        // Diagnóstico embebido (window.MF_PAdiag): captura en el MISMO frame
+        // la pose vanilla (rotaciones crudas del rig) vs la pose del pack
+        // (__mfPAPose) + estado de fase. Solo graba si hay captura activa y
+        // el jugador se está moviendo (limbSpeed>0.3), máx 300 muestras.
+        try {
+            const D = globalThis.MF_PAdiag;
+            if (D?.rec && D.buf.length < 300 && s2.limbSpeed > 0.3 && mesh === game?.player?.mesh) {
+                const deg = (r) => (r == null ? null : +(r * 57.2958).toFixed(1));
+                const P = (n) => {
+                    const p = n?.__mfPAPose;
+                    return p ? [deg(p.rx), deg(p.ry), deg(p.rz)] : null;
+                };
+                D.buf.push({
+                    t: Math.round(performance.now() % 100000),
+                    spr: !!s2.sprinting, lsa: +s2.limbSpeed.toFixed(2),
+                    ls: +(s2.limbSwing || 0).toFixed(2),
+                    van: {
+                        lh: deg(mesh.leftHip?.rotation.x), rh: deg(mesh.rightHip?.rotation.x),
+                        lk: deg(mesh.leftKneeJoint?.rotation.x), rk: deg(mesh.rightKneeJoint?.rotation.x),
+                        la: deg(mesh.leftShoulder?.rotation.x), ra: deg(mesh.rightShoulder?.rotation.x)
+                    },
+                    pack: {
+                        lh: P(mesh.leftHip), rh: P(mesh.rightHip),
+                        la: P(mesh.leftShoulder), ra: P(mesh.rightShoulder),
+                        body: P(mesh.body)
+                    }
+                });
+            }
+        } catch {}
+
         // PORT FIEL (EMF Java): el pack SIEMPRE se aplica a brazos y piernas —
         // sus fórmulas ya manejan swing_progress, is_using_item e is_blocking
         // internamente (poses de ataque/uso/blocking del pack). La exclusión
@@ -261,14 +307,15 @@
             const elytra = s2.gliding;
             const swimming = s2.swimming;
             const levitating = s2.flying; // vuelo creativo (abilities.flying)
-            if (elytra || swimming || levitating || mesh.__mfFlySwimActive) {
+            const inWater = !!s2.inWater; // agua pasiva → WaterPose DAR
+            if (elytra || swimming || levitating || inWater || mesh.__mfFlySwimActive) {
                 const dt = Math.max(0.001, Math.min(0.1, s2.frameTime || 0.05));
                 FS.setFrameState(s2);
                 const fs = FS.animate(mesh, dt, swimming ? 1 : 0, elytra ? 1 : 0, levitating ? 1 : 0);
-                mesh.__mfFlySwimActive = (fs.swim > 0.005 || fs.fly > 0.005 || fs.lev > 0.005);
+                mesh.__mfFlySwimActive = (fs.swim > 0.005 || fs.fly > 0.005 || fs.lev > 0.005 || (fs.water || 0) > 0.01);
                 const res = FS.buildPose(fs, s2);
                 if (res) {
-                    const w = Math.max(res.weight.swim, res.weight.fly, res.weight.lev);
+                    const w = Math.max(res.weight.swim, res.weight.fly, res.weight.lev, res.weight.water || 0);
                     for (const part in res.poses) {
                         const fp = res.poses[part];
                         const pp = poses[part];
@@ -285,6 +332,28 @@
                 }
             }
         }
+
+        // LEAN DE SPRINT: todo el cuerpo se inclina suave hacia adelante al
+        // correr. Gestión propia (quitada del pack para no duplicar):
+        // objetivo 18° con sprint activo, lerp exponencial τ=0.12s (~95% en
+        // 0.35s → entrada/salida suave). Se SUMA a la pose body del pack
+        // (buildPose pasa body sin flip: rx+ = adelante, convención MC).
+        try {
+            const dtL = Math.max(0.001, Math.min(0.1, s2.frameTime || 0.05));
+            const leanTarget = s2.sprinting ? -(18 * Math.PI / 180) : 0;
+            const leanPrev = mesh.__mfSprintLean ?? 0;
+            mesh.__mfSprintLean = leanPrev + (leanTarget - leanPrev) * (1 - Math.exp(-dtL / 0.12));
+            if (Math.abs(mesh.__mfSprintLean) > 0.0005) {
+                const b = poses.body ?? (poses.body = {});
+                b.rx = (b.rx ?? 0) + mesh.__mfSprintLean;
+                // Retroceso del tronco mientras corre: compensa el lean con un
+                // desplazamiento hacia atrás (+Z = atrás en espacio modelo).
+                // Escala con el mismo fade del lean (k = 0..1) y se rota por oq
+                // en wrapNode → consistente a cualquier yaw. 0.5 px EMF.
+                const k = mesh.__mfSprintLean / -(18 * Math.PI / 180);
+                b.pdz = (b.pdz ?? 0) + (0.5 / 16) * k;
+            }
+        } catch {}
 
         // Publicar pose en los nodos + instalar wraps.
         // poses está indexado por parte EMF → traducir a nombre de nodo del mesh.
@@ -403,7 +472,7 @@
                             body: pose('body'), right_arm: pose('rightShoulder'),
                             left_arm: pose('leftShoulder'), right_leg: pose('rightHip'),
                             left_leg: pose('leftHip'),
-                            kneeFrozen: !!m.leftKneeJoint?._mfPAFrozen,
+                            kneeVanillaAnim: m.leftKneeJoint ? +(m.leftKneeJoint.rotation.x * 57.3).toFixed(1) : null,
                             contexts: state.contexts.size, wrapped: state.wrapped.size
                         }));
                     } catch (e) {
@@ -458,6 +527,23 @@
             if (cfg.enabled !== undefined) setEnabled(cfg.enabled);
         } catch {}
     });
+
+    // Diagnóstico en vivo: MF_PAdiag.start() → moverse → MF_PAdiag.dump()
+    // imprime tabla compacta vanilla-vs-pack para pegar en logs.
+    globalThis.MF_PAdiag = {
+        buf: [], rec: false,
+        start() { this.buf.length = 0; this.rec = true; console.log(TAG, 'diag: grabando (muévete 5s)'); },
+        stop() { this.rec = false; return this.buf.length; },
+        dump() {
+            this.rec = false;
+            const n = this.buf.length;
+            if (!n) { console.log(TAG, 'diag: buffer vacío'); return; }
+            const rows = this.buf.filter((_, i) => i % Math.max(1, Math.floor(n / 40)) === 0);
+            console.log(TAG, 'diag — ' + n + ' muestras (spr=' + this.buf.filter(x => x.spr).length + ' sprint):');
+            console.table(rows);
+            console.log(TAG, 'diag JSON:', JSON.stringify(rows));
+        }
+    };
 
     globalThis.MF_PlayerAnims = {
         setEnabled,

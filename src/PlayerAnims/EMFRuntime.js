@@ -213,13 +213,13 @@
         // interpolar: dt = limbSwing - limbSwingAmount*(1-partial). Si interpolamos
         // la fase, DAR cancela el cos() vanilla con un desfase → residuo cos() doble
         // frecuencia → caminar que "parece vanilla" + piernas desbalanceadas.
-        // FASE: el juego (decompilado, render()) usa EXACTAMENTE la fórmula MC:
+        // FASE: el juego (decompilado bundle BfBcwb2y, render()) usa:
         //   dt = limbSwing - limbSwingAmount*(1-partial)
-        //   legs/arms = cos(dt*0.6662 [+π]) * limbRotation
-        // y el pack computa var.ls = limb_swing*0.6662 + pi/2 → misma base,
-        // IN-PHASE natural SIN escala. (Un intento anterior de escalar por
-        // h=0.4/0.5 — tomado de un preview desactualizado — dejó el pack a
-        // 0.6x del vanilla real → batido → torso "volteado".)
+        //   legs/arms = cos(dt*h [+π]) con h = sprint?0.5:0.4
+        // El pack se alinea parcheando var.ls a la misma frecuencia (ver
+        // EMFPack.js) — con la frecuencia vieja (0.6662 del bundle 9c634339)
+        // las piernas ciclaban 1.67× más rápido que la zancada real (batido
+        // → efecto "moonwalk").
         const ls = (ent.limbSwing || 0) - lsa * (1 - partial);
 
         // Velocidad por TICK, no por frame de render (semántica MC).
@@ -270,7 +270,12 @@
         let ipy = pp ? pp.y + (ent.pos.y - pp.y) * partial : ent.pos.y;
         let ipz = pp ? pp.z + (ent.pos.z - pp.z) * partial : ent.pos.z;
 
-        const sprinting = safeCall(() => ent.isSprinting(), false);
+        const sprinting = safeCall(() => ent.isSprinting(), false)
+            // Fallback jugador LOCAL: la entity del mesh puede ser la dummy
+            // (ticksExisted=0) o la réplica sin el flag aún sincronizado.
+            // El game.player (cliente) siempre conoce el estado real del
+            // sprint (lo envía por input cada tick: sprint: this.isSprinting()).
+            || !!(localEnt && localEnt.id === ent.id && localEnt.isSprinting && safeCall(() => localEnt.isSprinting(), false));
         const gliding = safeCall(() => ent.isElytraFlying(), false);
         const inWater = !!ent.inWater;
         // Vuelo creativo/espectador: el pack no tiene variable de vuelo —

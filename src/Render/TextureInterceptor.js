@@ -85,18 +85,90 @@
         return new Blob([arr], { type: 'image/png' });
     }
 
+    // ---- Circuit breaker de red para hosts de assets caídos ----
+    // El juego re-fetcha TODOS los sprites dinámicos de un resource pack
+    // (CPacketModContent -> refreshDynamicSprites -> eFe -> $Pe) cada vez que
+    // el servidor reenvía el paquete. Si el host del pack está caído
+    // (ERR_EMPTY_RESPONSE), eso genera cientos de fetches fallidos y su spam
+    // de consola. Aquí recordamos URLs/origins que fallaron a nivel de red y
+    // cortamos el fetch de inmediato (mismo TypeError que el navegador, pero
+    // sin request real) durante un TTL. Solo aplica a URLs de assets
+    // (imágenes / packs / textures / skins), nunca a APIs de sesión o login.
+    var NET = window.__MF_NET_BREAKER__ || (window.__MF_NET_BREAKER__ = {
+        urls: new Map(),      // url -> ts del último fallo de red
+        origins: new Map(),   // origin -> { fails, openUntil }
+        URL_TTL: 120000,      // 2 min sin reintentar la misma URL fallida
+        THRESHOLD: 10,        // fallos de red seguidos que abren el breaker
+        OPEN_MS: 60000        // breaker abierto 1 min por origin
+    });
+
+    function mfNetTrackableUrl(u) {
+        return typeof u === 'string'
+            && u.indexOf('http') === 0
+            && (/\.(?:png|jpe?g|webp|gif|bmp)(?:\?|#|$)/i.test(u)
+                || /\/(?:packs|assets|textures|skins)\//i.test(u));
+    }
+
+    function mfNetOriginOf(u) {
+        try { return new URL(u, location.href).origin; } catch (_) { return null; }
+    }
+
+    function mfNetBlocked(u) {
+        if (!mfNetTrackableUrl(u)) return false;
+        var now = Date.now();
+        var f = NET.urls.get(u);
+        if (f && now - f < NET.URL_TTL) return true;
+        var o = mfNetOriginOf(u);
+        if (!o) return false;
+        var st = NET.origins.get(o);
+        return !!(st && st.openUntil > now);
+    }
+
+    function mfNetRecordFail(u) {
+        if (!mfNetTrackableUrl(u)) return;
+        var now = Date.now();
+        NET.urls.set(u, now);
+        var o = mfNetOriginOf(u);
+        if (!o) return;
+        var st = NET.origins.get(o) || { fails: 0, openUntil: 0 };
+        st.fails++;
+        if (st.fails >= NET.THRESHOLD) {
+            st.openUntil = now + NET.OPEN_MS;
+            st.fails = 0;
+            console.warn('[MiniFeather] host de assets caído (' + o + '); fetches cortados por ' + (NET.OPEN_MS / 1000) + 's');
+        }
+        NET.origins.set(o, st);
+    }
+
+    function mfNetRecordOk(u) {
+        if (!mfNetTrackableUrl(u)) return;
+        NET.urls.delete(u);
+        var o = mfNetOriginOf(u);
+        if (o) NET.origins.delete(o);
+    }
+
     var origFetch = window.fetch;
     window.fetch = function (input, init) {
+        var url = '';
+        try {
+            url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+        } catch (_) {}
         var dataUrl = getDataUrl();
-        if (dataUrl) {
-            var url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
-            if (url && matches(url)) {
-                return Promise.resolve(new Response(dataUrlToBlob(dataUrl), {
-                    headers: { 'Content-Type': 'image/png' }
-                }));
-            }
+        if (dataUrl && url && matches(url)) {
+            return Promise.resolve(new Response(dataUrlToBlob(dataUrl), {
+                headers: { 'Content-Type': 'image/png' }
+            }));
         }
-        return origFetch.apply(this, arguments);
+        if (url && mfNetBlocked(url)) {
+            return Promise.reject(new TypeError('Failed to fetch'));
+        }
+        var p = origFetch.apply(this, arguments);
+        if (url && mfNetTrackableUrl(url)) {
+            // Registrar resultado sin alterar la promesa que ve el juego
+            // (los handlers devuelven undefined para no crear rejection huérfana)
+            p.then(function () { mfNetRecordOk(url); }, function () { mfNetRecordFail(url); });
+        }
+        return p;
     };
 
     var desc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');

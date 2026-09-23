@@ -55,6 +55,33 @@
         return out;
     }
 
+    // Armadura del rig (bundle BfBcwb2y, setArmorSkinned): vive en los
+    // registros mesh.skinnedArmor / mesh.armorMesh ({helmet, chestplate,
+    // leggings, boots}) con texturas 64x32 propias — misma proporción que
+    // una skin → sin excluirla, el filtro de abajo la matchea como skin.
+    function armorMeshesOf(mesh) {
+        const out = [];
+        try {
+            const regs = [mesh?.skinnedArmor, mesh?.armorMesh, mesh?.lodArmor];
+            for (const reg of regs) {
+                if (reg && typeof reg === 'object') {
+                    for (const k in reg) if (reg[k]) out.push(reg[k]);
+                }
+            }
+            // ruta vieja (no-skinned): claves de armadura dentro de mesh.meshes
+            const mreg = mesh && mesh.meshes;
+            if (mreg && typeof mreg === 'object') {
+                for (const k in mreg) {
+                    if (/helmet|chestplate|leggings|boots|armor/i.test(k) && mreg[k]) out.push(mreg[k]);
+                }
+            }
+            mesh?.traverse?.(o => {
+                if (o && o !== mesh && o.name && /helmet|chestplate|leggings|boots|armor/i.test(o.name) && !out.includes(o)) out.push(o);
+            });
+        } catch {}
+        return out;
+    }
+
     function findSkinMaterials(mesh) {
         const out = [];
         if (!mesh) return out;
@@ -71,6 +98,11 @@
             if (!o?.material) return;
             const list = Array.isArray(o.material) ? o.material : [o.material];
             for (const m of list) if (m?.map) capeMats.add(m);
+        }));
+        armorMeshesOf(mesh).forEach(am => am.traverse(o => {
+            if (!o?.material) return;
+            const list = Array.isArray(o.material) ? o.material : [o.material];
+            for (const m of list) if (m?.map) capeMats.add(m); // mismo set de exclusión
         }));
         const body = out.filter(m => !capeMats.has(m));
         const skins = body.filter(m => {
@@ -898,23 +930,39 @@
         if (!src?.image) throw new Error('skin texture not readable');
 
         const skinIdNow = currentSkinId();
-        
+
+        // Textura AUTÉNTICA (no facial): de ella salen baseHead y el espejo
+        // periódico del watchdog. Si src es nuestro propio canvas facial NO es
+        // fuente válida (su contenido queda stale tras re-montajes del engine
+        // o eventos skin-repainted perdidos) → preferir la última authTex.
+        const srcIsOurs = !!(src.__mfLocalCanvas || src.__mfOtherKey || src.__mfPeerCanvas);
+        if (!srcIsOurs) state.authTex = src;
+
         if ((!state.baseHead || state.baseHeadSkin !== skinIdNow) && !auto._blinkUntil) {
+            // Nunca capturar la base desde nuestro propio canvas facial:
+            // congelaría la cara animada como "base" y perpetuaría basura.
+            const baseSrc = (srcIsOurs && state.authTex?.image) ? state.authTex : src;
             try {
-                const k = Math.max(1, Math.round(src.image.width / 64));
+                const k = Math.max(1, Math.round(baseSrc.image.width / 64));
                 const c = document.createElement('canvas');
                 c.width = 64 * k; c.height = 16 * k;
-                c.getContext('2d').drawImage(src.image, 0, 0, 64 * k, 16 * k, 0, 0, 64 * k, 16 * k);
+                c.getContext('2d').drawImage(baseSrc.image, 0, 0, 64 * k, 16 * k, 0, 0, 64 * k, 16 * k);
                 state.baseHead = c; state.baseHeadK = k;
                 state.baseHeadSkin = skinIdNow;
-                
+                // Referencia para el seguro anti-carrera: qué textura de
+                // CustomSkins (__mfPainted) estaba montada al capturar esta base.
+                state.baseSkinPainted = baseSrc.__mfPainted || null;
+
                 state.frameCache.clear();
                 auto._blinkCache = null;
                 auto._blinkCacheZone = null;
             } catch {}
         }
 
-        if (src.image instanceof HTMLCanvasElement) {
+        // Solo adoptar un canvas YA existente si es NUESTRO (sesión facial
+        // previa). Antes adoptaba cualquier canvas — p.ej. el de CustomSkins
+        // (__mfPainted) — y ambos sistemas pintaban sobre la misma textura.
+        if (src.image instanceof HTMLCanvasElement && (src.__mfLocalCanvas || src.__mfOtherKey || src.__mfPeerCanvas)) {
             state.tex = src;
             return src.image;
         }
@@ -944,16 +992,27 @@
         
         const k = Math.max(1, Math.round(canvas.width / 64));
         if (frame.kind === 'head') {
-            ctx.clearRect(0, 0, 64 * k, 16 * k);
-            
-            ctx.drawImage(frame.canvas, 0, 0, frame.canvas.width, frame.canvas.height, 0, 0, 64 * k, 16 * k);
+            // El hat/overlay del jugador (región u 32..56, geometría inflada
+            // +0.4px del mismo mesh) es INTOCABLE para los frames: pintarlo
+            // con píxeles de cara lo vuelve sólido y parece "casco con la
+            // textura de la skin". Estrategia:
+            //  1) Restaurar SIEMPRE la franja completa desde baseHead (usa
+            //     sus propias dimensiones → seguro ante k distinto). Esto
+            //     además auto-limpia basura dejada en sesiones anteriores.
+            //  2) Componer el frame SOLO en la región de caras base
+            //     (u 0..32): mitad izquierda del frame, escalada. NUNCA a
+            //     ancho completo.
+            if (state.baseHead) {
+                ctx.drawImage(state.baseHead, 0, 0, state.baseHead.width, state.baseHead.height, 0, 0, 64 * k, 16 * k);
+            } else {
+                ctx.clearRect(0, 0, 32 * k, 16 * k);
+            }
+            ctx.drawImage(frame.canvas, 0, 0, frame.canvas.width / 2, frame.canvas.height, 0, 0, 32 * k, 16 * k);
         } else {
             ctx.clearRect(FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
             ctx.drawImage(frame.canvas, 0, 0, 8,  8, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
-        }
-        
-        if (frame.kind !== 'head') {
-            ctx.clearRect(FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
+            // NO borrar FACE_OV: el overlay de la cara (flequillo/gorra de la
+            // skin) debe seguir visible encima de la cara animada.
         }
         state.tex.needsUpdate = true;
     }
@@ -1518,8 +1577,16 @@
         try {
             const k = s.k || 1, cx = s.canvas.getContext('2d');
             cx.imageSmoothingEnabled = false;
-            cx.clearRect(0, 0, 64 * k, 16 * k);
-            cx.drawImage(img, 0, 0, img.width, img.height, 0, 0, 64 * k, 16 * k);
+            // Igual que paintFace local: restaurar la franja de la skin (con
+            // su hat, región INTOCABLE — pintarla con cara la vuelve un
+            // "casco" sólido con textura de skin) y componer el sprite
+            // (half-strip, base 32x16) SOLO en la región de caras base.
+            if (s.baseHead) {
+                cx.drawImage(s.baseHead, 0, 0, s.baseHead.width, s.baseHead.height, 0, 0, 64 * k, 16 * k);
+            } else {
+                cx.clearRect(0, 0, 32 * k, 16 * k);
+            }
+            cx.drawImage(img, 0, 0, img.width, img.height, 0, 0, 32 * k, 16 * k);
             s.tex.needsUpdate = true;
         } catch {}
     }
@@ -1742,7 +1809,6 @@
                             const k = s.k || 1, cx = s.canvas.getContext('2d');
                             cx.imageSmoothingEnabled = false;
                             cx.drawImage(cv, 0, 0, 8, 8, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
-                            cx.clearRect(FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k); 
                             s.tex.needsUpdate = true;
                         } catch {}
                     }
@@ -1760,7 +1826,6 @@
                         cx.imageSmoothingEnabled = false;
                         if (cv) {
                             cx.drawImage(cv, 0, 0, 8, 8, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
-                            cx.clearRect(FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
                         } else {
                             cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
                             cx.drawImage(s.baseHead, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
@@ -2569,6 +2634,50 @@
             installPackImgHook();
             packSkinReg[MF_NAME_PREFIX + name] = pngUrl;
             return true;
+        },
+
+        // Diagnóstico en vivo: ¿encuentra el mesh, la skin material correcta
+        // (sin armadura/capa) y está la textura montada? Imprime un resumen.
+        diag(deep = false) {
+            const mesh = getMesh();
+            const rows = ['mesh: ' + (mesh ? mesh.constructor?.name || 'ok' : 'NO (¿dentro de un mundo?)')];
+            if (mesh) {
+                if (deep) {
+                    // TODOS los materiales del mesh: dimensiones + ruta de nodos
+                    const seen = new Set();
+                    mesh.traverse(o => {
+                        if (!o?.material) return;
+                        const list = Array.isArray(o.material) ? o.material : [o.material];
+                        list.forEach((m, i) => {
+                            if (!m?.map || seen.has(m)) return;
+                            seen.add(m);
+                            const im = m.map.image;
+                            rows.push('  mat<' + seen.size + '> ' + (im ? im.width + 'x' + im.height : 'sin imagen') +
+                                ' @ ' + (o.name || o.type || '?') +
+                                (o.parent ? ' ← ' + (o.parent.name || o.parent.type || '?') : '') +
+                                ' src=' + String(m.map.source?.data?.src || m.map.userData?.src || '').slice(0, 60));
+                        });
+                    });
+                    rows.push('--- fin materiales (' + seen.size + ') ---');
+                    const reg = mesh.meshes;
+                    if (reg && typeof reg === 'object') rows.push('mesh.meshes keys: ' + Object.keys(reg).join(', '));
+                }
+                const mats = findSkinMaterials(mesh);
+                rows.push('skinMaterials: ' + mats.length);
+                mats.forEach((m, i) => {
+                    const im = m.map?.image;
+                    rows.push('  [' + i + '] ' + (im ? im.width + 'x' + im.height : 'sin imagen') +
+                        (m.map && (m.map.__mfLocalCanvas || m.map.__mfOtherKey || m.map.__mfPeerCanvas) ? ' (facial ✓ montada)' : '') +
+                        (m.map === state.tex ? ' (activa)' : ''));
+                });
+            }
+            rows.push('state.tex: ' + (state.tex ? 'viva' : 'null') +
+                ' · baseHead: ' + (state.baseHead ? 'sí' : 'no') +
+                ' · auto: ' + (auto.on ? 'ON (zona ' + (auto._zone || '?') + ')' : 'off') +
+                ' · playing: ' + (state.playing || 'nada'));
+            const txt = rows.join('\n');
+            console.log(TAG + '\n' + txt);
+            return txt;
         }
     };
     window.__MF_Facial = true;
@@ -2723,22 +2832,117 @@
     }, 1000);
     setTimeout(() => clearInterval(autoBoot), 120000);
 
+    // Cooperación con CustomSkins: cuando repinta la skin (accounts.json),
+    // monta SU textura nueva de bajo de nuestra sesión. Re-capturar la base
+    // (la franja de cabeza ahora tiene la custom skin) y re-montar la
+    // textura facial encima — conservando la cara animada Y la custom skin.
+    window.addEventListener('minifeather:skin-repainted', (e) => {
+        try {
+            if (!auto.on && !state.playing) return;
+            const paintedMesh = e.detail?.mesh;
+            const mesh = getMesh();
+            if (!mesh) return;
+            // Comparar por ENTITY ID, no por identidad de objeto: el facial y
+            // CustomSkins pueden resolver meshes distintos del mismo jugador
+            // (world.players vs player.mesh) según el timing de arranque — la
+            // comparación estricta hacía return silencioso y la textura facial
+            // vieja (skin del server) quedaba tapando la custom skin.
+            const pid = paintedMesh?.entity?.id ?? paintedMesh?.entity?.entityId;
+            const mid = mesh.entity?.id ?? mesh.entity?.entityId;
+            if (paintedMesh !== mesh && !(pid != null && pid === mid)) return;
+            // Guardar la textura auténtica nueva ANTES de invalidar: el mesh
+            // del evento ya la tiene montada; si getMesh() resuelve otro mesh
+            // del mismo jugador que aún no, ensureSession no la vería y el
+            // espejo del watchdog seguiría copiando la vieja.
+            try {
+                const newAuth = [];
+                paintedMesh.traverse(o => {
+                    const list = o?.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+                    for (const m of list) if (m?.map?.__mfPainted) newAuth.push(m.map);
+                });
+                if (newAuth[0]) {
+                    state.authTex = newAuth[0];
+                    state.lastMirror = 0;
+                }
+            } catch {}
+            // Re-capturar: invalidar sesión/base y reconstruir desde la
+            // textura nueva (custom skin) en el próximo ensureSession.
+            state.tex = null;
+            state.baseHead = null;
+            state.frameCache.clear();
+            auto._blinkCache = null; auto._blinkCacheZone = null;
+            ensureSession();
+            paintZone(auto._zone || 'front', true);
+        } catch {}
+    });
+
     // Re-montaje automatico: el engine regenera materiales al cambiar de mundo,
-    // reaparecer o recrear el mesh; la textura facial queda desmontada. Vigilar
-    // y recapturar la sesion para que la cara nunca se pierda.
+    // reaparecer, equipar armadura o recrear el mesh; la textura facial queda
+    // desmontada de ALGUNOS materiales (p.ej. solo la cabeza) mientras otros
+    // la conservan. Con .some() el check pasaba aunque el material de la
+    // CABEZA ya no la tuviera → la cara dejaba de animarse. Vigilar por
+    // material: re-montar en los que falten; recapturar sesión solo si
+    // NINGUNO la conserva (textura muerta/baseHead obsoleta).
+    // SEGURO ANTI-CARRERA: si algún material del cuerpo muestra una textura
+    // de CustomSkins DISTINTA de la que capturamos como base (__mfPainted
+    // difiere de state.baseSkinPainted), la custom skin cambió por debajo →
+    // recapturar aunque la facial siga montada (cubre eventos perdidos).
     setInterval(() => {
         if (!auto.on || !auto.front) return;
         const mesh = getMesh();
         if (!mesh) return;
         try {
             const mats = findSkinMaterials(mesh);
-            if (mats.length && !mats.some(m => m.map === state.tex)) {
+            if (!mats.length) return;
+            // ¿CustomSkins pintó algo nuevo por debajo? (material con __mfPainted)
+            const paintedUnder = mats
+                .map(m => m.map?.__mfPainted)
+                .find(u => typeof u === 'string');
+            if (paintedUnder && paintedUnder !== state.baseSkinPainted) {
+                state.baseSkinPainted = paintedUnder;
                 state.tex = null;
+                state.baseHead = null;
+                state.frameCache.clear();
+                auto._blinkCache = null; auto._blinkCacheZone = null;
                 ensureSession();
                 paintZone(auto._zone || 'front', true);
+                return;
+            }
+            const anyMounted = mats.some(m => m.map === state.tex);
+            if (!anyMounted) {
+                state.tex = null;
+                state.baseHead = null;
+                ensureSession();
+                paintZone(auto._zone || 'front', true);
+            } else {
+                for (const m of mats) {
+                    if (m.map !== state.tex) { m.map = state.tex; m.needsUpdate = true; }
+                }
+                // ESPEJO LOCAL (mismo mecanismo que otherSession): re-copiar
+                // la textura auténtica al canvas facial cada 400ms y re-pintar
+                // la cara encima. Sin esto, un re-montaje de materiales del
+                // engine con el evento skin-repainted perdido dejaba el canvas
+                // facial con la skin VIEJA (stale) tapando la custom skin
+                // nueva — y como la facial seguía "montada", el watchdog no
+                // recapturaba: solo un F5 lo arreglaba.
+                const nowMs = performance.now();
+                if (state.authTex?.image && state.tex?.image instanceof HTMLCanvasElement
+                    && nowMs - (state.lastMirror || 0) > 400) {
+                    state.lastMirror = nowMs;
+                    try {
+                        const cx = state.tex.image.getContext('2d');
+                        cx.imageSmoothingEnabled = false;
+                        const ai = state.authTex.image, ti = state.tex.image;
+                        cx.drawImage(ai, 0, 0, ai.width, ai.height, 0, 0, ti.width, ti.height);
+                        state.tex.needsUpdate = true;
+                        // Re-aplicar la cara animada sobre el espejo fresco
+                        // (drawImage pisó la franja de la cabeza completa).
+                        paintZone(auto._zone || 'front', true);
+                    } catch {}
+                }
             }
         } catch {}
-    }, 2000);
+    }, 500);
     
     const packsReady = Promise.all([
         loadBuiltinPacks().catch(() => {}),

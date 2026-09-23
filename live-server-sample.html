@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Server Lite - Sample</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .status { background: #4CAF50; color: white; padding: 10px; border-radius: 5px; text-align: center; }
+        .instructions { background: #f5f5f5; padding: 20px; border-left: 4px solid #2196F3; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Live Server Lite Sample</h1>
+    <div class="status">✅ Live Server is working!</div>
+    <div class="instructions">
+        <h3>Try This:</h3>
+        <ol>
+            <li>Right-click this file and select "Open with Live Server"</li>
+            <li>Edit this text and save the file</li>
+            <li>Watch the browser auto-reload! ✨</li>
+        </ol>
+    </div>
+    <p><strong>Timestamp:</strong> <span id="time"></span></p>
+    <script>document.getElementById('time').textContent = new Date().toLocaleString();</script>
+</body>
+</html>

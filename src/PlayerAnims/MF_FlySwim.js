@@ -34,7 +34,8 @@
             s = {
                 swim: 0, fly: 0, lev: 0,
                 levTimer: 0, levSide: 1, levFB: 0, levLR: 0,
-                levOnGroundOld: true
+                levOnGroundOld: true,
+                water: 0 // var.WaterPoseIntensity DAR
             };
             swimmers.set(mesh, s);
         }
@@ -64,16 +65,19 @@
         const dts = Math.max(0.001, Math.min(0.1, dt));
         // Suavizado exponencial independiente del framerate:
         //  - swim/fly: convergencia ~0.15/tick a 20tps (rotLerp MC)
-        //  - lev: DAR converge /4 por frame_time (más lento, flotante)
         const k = 1 - Math.pow(0.85, dts * 20);
-        const kLev = 1 - Math.pow(1 - 1 / 4 * (dts * 20 / 60), dts * 60);
         s.swim += (clamp(swimTarget, 0, 1) - s.swim) * k;
         s.fly += (clamp(flyTarget, 0, 1) - s.fly) * k;
-        s.lev += (clamp(levTarget || 0, 0, 1) - s.lev) * clamp(kLev, 0, 1);
 
-        // --- Vars DAR del levitate (port exacto) ---
-        // var.LevitateTimer = LevitateTimer + frame_time * 0.05
-        s.levTimer += dts * 0.05;
+        // --- Vars DAR del levitate (port exacto, unidades DAR) ---
+        // frame_time de DAR ≈ 1.0 por frame a 60fps ((player_time −
+        // LastPlayerTime)·3 con ticks de 20/s) — NO segundos. Usar dts
+        // crudo hacía el timer 60× más lento y el fade-in eterno.
+        const ft = dts * 60;
+        // var.LevitateIntensity = I + (target − I)/4·frame_time (τ≈4 frames)
+        s.lev += (clamp(levTarget || 0, 0, 1) - s.lev) * clamp(0.25 * ft, 0, 0.9);
+        // var.LevitateTimer = LevitateTimer + frame_time * 0.05 (~3 rad/s)
+        s.levTimer += ft * 0.05;
         // var.LevitateSide = if(Side == 0, 1, Side) * if(is_on_ground, -1, 1)
         const side0 = s.levSide === 0 ? 1 : s.levSide;
         const onG = !!st_onGround;
@@ -82,16 +86,30 @@
         // var.LevitateLR = move_strafing * limb_speed * -LevitateIntensity
         s.levFB = (st_moveF || 0) * (st_limbSpeed || 0) * s.lev;
         s.levLR = (st_moveS || 0) * (st_limbSpeed || 0) * -s.lev;
+
+        // var.WaterPoseIntensity = if(!is_swimming, W + (if(is_in_water,
+        //   1 - HeightVelocity*20, 0) - W)/14·frame_time, 0)
+        // Pose relajada en agua SIN nado activo (DAR: brazos sueltos ±60°).
+        // HeightVelocity ≈ 0 en agua calmada → target ≈ 1.
+        if (!st_swimming) {
+            const wTarget = st_inWater ? 1 : 0;
+            s.water += (wTarget - s.water) * clamp((1 / 14) * ft, 0, 0.9);
+        } else {
+            s.water = 0;
+        }
         return s;
     }
 
     // Estado del frame inyectado antes de animate (evita acoplamiento)
     let st_onGround = true, st_moveF = 0, st_moveS = 0, st_limbSpeed = 0;
+    let st_inWater = false, st_swimming = false;
     function setFrameState(st) {
         st_onGround = !!(st && st.onGround);
         st_moveF = (st && st.moveForward) || 0;
         st_moveS = (st && st.moveStrafe) || 0;
         st_limbSpeed = (st && st.limbSpeed) || 0;
+        st_inWater = !!(st && st.inWater);
+        st_swimming = !!(st && st.swimming);
     }
 
     /**
@@ -103,9 +121,10 @@
      * orquestador adapta a Miniblox (negación de head, twist del body).
      */
     function buildPose(s, st) {
-        const swim = s.swim, fly = s.fly, lev = s.lev;
+        const swim = s.swim, fly = s.fly, lev = s.lev, water = s.water || 0;
         const anySwim = swim > 0.005, anyFly = fly > 0.005, anyLev = lev > 0.005;
-        if (!anySwim && !anyFly && !anyLev) return null;
+        const anyWater = water > 0.01 && !anySwim && !anyFly && !anyLev;
+        if (!anySwim && !anyFly && !anyLev && !anyWater) return null;
 
         const poses = Object.create(null);
         const pitchDeg = st.headPitchDeg || 0;
@@ -118,7 +137,10 @@
             const target = st.inWater ? (-90 - pitchDeg) : -90;
             const bodyPitch = lerp(0, target, swim);
 
-            const f1 = st.limbSwing || 0;
+            // Fase de brazos: MC asume limbSwing ≈ 1.0/tick (ciclo de brazo
+            // = 26 unidades ≈ 1.3s). Miniblox avanza a ~0.5/tick (medido en
+            // vivo) → ×2 restaura el ritmo real de brazada.
+            const f1 = (st.limbSwing || 0) * 2;
             const f7 = ((f1 % 26) + 26) % 26;
 
             // brazos crawl (3 fases, quadraticArmUpdate)
@@ -138,7 +160,7 @@
             }
             l.y = r.y = PI;
 
-            // piernas: 0.3 * cos(f1/3 ± π)
+            // piernas: 0.3 * cos(f1/3 ± π) (patadeo, misma fase escalada)
             const legL = 0.3 * Math.cos(f1 * 0.33333334 + PI);
             const legR = 0.3 * Math.cos(f1 * 0.33333334);
 
@@ -152,16 +174,32 @@
         }
 
         // ============ ELYTRA (vanilla MC — PlayerRenderer + superman) ============
+        // NOTA: el pitch corporal de -90° YA lo aplica el propio juego en
+        // Miniblox (bundle BfBcwb2y) durante el elytra fly — si esta pose
+        // también lo escribía en body.rx, se SUMABAN dos inclinaciones
+        // (jugador volteado 180°). El cuerpo queda en manos del juego;
+        // la pose solo aporta brazos superman + cabeza.
         if (anyFly) {
-            const bodyPitch = fly * (-90 - pitchDeg);
             const flyArmX = -PI * 0.9, flyArmZ = 0.1;
+            // Cabeza: compensar para que mire al frente pese al pitch del
+            // cuerpo (relativa, el juego aplica su propia corrección).
             poses.head = { rx: lerp(0, -PI / 4 - pitchRad, fly) };
-            poses.body = { rx: torad(bodyPitch) };
             poses.left_arm = { rx: lerp(0, flyArmX, fly), rz: lerp(0, -flyArmZ, fly) };
             poses.right_arm = { rx: lerp(0, flyArmX, fly), rz: lerp(0, flyArmZ, fly) };
             poses.left_leg = { rx: 0 };
             poses.right_leg = { rx: 0 };
             return { poses, weight: { swim: 0, fly, lev: 0 } };
+        }
+
+        // ============ AGUA PASIVA — WaterPose (port DAR v1.15) ============
+        // var.left_arm_rz: ... + WaterPoseIntensity * torad(-60)
+        // var.right_arm_rz: ... + WaterPoseIntensity * torad(60)
+        // Brazos sueltos hacia los lados al flotar/estar sumergido sin
+        // nadar activo. Se mezcla con lerp por el orquestador.
+        if (anyWater) {
+            poses.left_arm = { rz: water * torad(-60) };
+            poses.right_arm = { rz: water * torad(60) };
+            return { poses, weight: { swim: 0, fly: 0, lev: 0, water } };
         }
 
         // ============ VUELO CREATIVO — LEVITATE (port EXACTO DAR v1.15) ============

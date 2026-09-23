@@ -757,17 +757,50 @@
         return !!(t && (t.__mfLocalCanvas || t.__mfPeerCanvas || t.__mfOtherKey));
     }
 
+    // Armadura del rig (bundle BfBcwb2y, setArmorSkinned): vive en los
+    // registros mesh.skinnedArmor / mesh.armorMesh ({helmet, chestplate,
+    // leggings, boots}) con texturas 64x32 propias — MISMA proporción que
+    // una skin → el filtro 64xN las matcheaba y el repintado les pintaba
+    // la skin ENCIMA a la armadura equipada. Excluir la rama.
+    function armorMeshesOf(mesh) {
+        var out = [];
+        try {
+            var regs = [mesh && mesh.skinnedArmor, mesh && mesh.armorMesh, mesh && mesh.lodArmor];
+            for (var ri = 0; ri < regs.length; ri++) {
+                var reg = regs[ri];
+                if (reg && typeof reg === 'object') {
+                    for (var k in reg) if (reg[k]) out.push(reg[k]);
+                }
+            }
+            // ruta vieja (no-skinned): claves de armadura dentro de mesh.meshes
+            var mreg = mesh && mesh.meshes;
+            if (mreg && typeof mreg === 'object') {
+                for (var k2 in mreg) {
+                    if (/helmet|chestplate|leggings|boots|armor/i.test(k2) && mreg[k2]) out.push(mreg[k2]);
+                }
+            }
+            mesh?.traverse?.(function (o) {
+                if (o && o !== mesh && o.name && /helmet|chestplate|leggings|boots|armor/i.test(o.name) &&
+                    out.indexOf(o) === -1) out.push(o);
+            });
+        } catch (_) {}
+        return out;
+    }
+
     function skinMaterialsOf(mesh) {
         // Excluir la rama de la capa: antes el filtro 64xN dejaba pasar la
         // textura de capa (64x32) como "skin" y el repintado le pintaba la
         // skin ENCIMA a la capa del jugador.
-        var capeMats = new Set();
+        var exclude = new Set();
         capeMeshesOf(mesh).forEach(function (c) {
-            collectMaterialsOf(c).forEach(function (m) { capeMats.add(m); });
+            collectMaterialsOf(c).forEach(function (m) { exclude.add(m); });
+        });
+        armorMeshesOf(mesh).forEach(function (c) {
+            collectMaterialsOf(c).forEach(function (m) { exclude.add(m); });
         });
 
         var all = collectMaterialsOf(mesh);
-        var bodyMats = all.filter(function (m) { return !capeMats.has(m); });
+        var bodyMats = all.filter(function (m) { return !exclude.has(m); });
 
         var skins = bodyMats.filter(function (m) {
             if (isFacialTex(m.map)) return false; // MF_Facial controla esta textura
@@ -828,7 +861,7 @@
                             if (t.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = t.colorSpace;
                             nt.flipY = t.flipY; nt.wrapS = t.wrapS; nt.wrapT = t.wrapT;
                         } catch (_) {}
-                        nt.__mfPainted = url; 
+                        nt.__mfPainted = url;
                         nt.__mfEpoch = paintEpoch;
                         mats[i].map = nt;
                         mats[i].needsUpdate = true;
@@ -838,6 +871,15 @@
                     }
                 }
                 if (done > 0) {
+                    // Cooperación con MF_Facial: la textura cambió DE BAJO de su
+                    // sesión (él tenía su propio canvas montado). Notificar para
+                    // que re-capture la base (ahora con la custom skin) y
+                    // re-monte SU textura encima, conservando la cara animada.
+                    try {
+                        window.dispatchEvent(new CustomEvent('minifeather:skin-repainted', {
+                            detail: { player: who, mesh: mesh }
+                        }));
+                    } catch (_) {}
                 } else {
                     warn('✘ imagen cargó pero 0 materiales repintados para', pendingName);
                     paintedPlayers.delete(player);
@@ -1039,6 +1081,11 @@
             try {
                 var mm = skinMaterialsOf(player.mesh);
                 stillPainted = mm.length > 0 && mm.every(function (m) {
+                    // Textura facial de MF_Facial: la custom skin vive DENTRO
+                    // de ella (re-capturada tras nuestro repintado vía evento
+                    // minifeather:skin-repainted). Contarla como válida — si
+                    // no, el watcher repintaría en bucle y mataría la cara.
+                    if (isFacialTex(m.map)) return true;
                     return m.map && m.map.__mfPainted === url && m.map.__mfEpoch === paintEpoch;
                 });
             } catch (_) { stillPainted = false; }
