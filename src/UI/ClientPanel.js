@@ -3810,7 +3810,7 @@
   function sendTitanTinyConfig(enabled = settings.titanTiny) {
     const detail = JSON.stringify({
       enabled: !!enabled,
-      scale: Math.max(0.20, Math.min(5.00, Number(settings.titanTinyScale) || 1)),
+      scale: Math.max(0.01, Math.min(5.00, Number(settings.titanTinyScale) || 1)),
       width: Math.max(0.30, Math.min(3.00, Number(settings.titanTinyWidth) || 1)),
       groundOffset: Math.max(-1.50, Math.min(1.50, Number(settings.titanTinyGroundOffset) || 0)),
       bind: String(settings.titanTinyBind || '')
@@ -5127,7 +5127,7 @@
         changed = true;
       }
       if (Number.isFinite(Number(state.scale))) {
-        const scale = Math.max(0.20, Math.min(5.00, Number(state.scale)));
+        const scale = Math.max(0.01, Math.min(5.00, Number(state.scale)));
         if (Math.abs((Number(settings.titanTinyScale) || 1) - scale) > 0.0001) {
           settings.titanTinyScale = scale;
           guiSettings.titanTinyScale = scale;
@@ -5179,7 +5179,7 @@
 
     const backdrop = document.createElement('div');
     backdrop.className = 'mf-tt-backdrop';
-    const scale = Math.max(0.20, Math.min(5.00, Number(settings.titanTinyScale) || 1));
+    const scale = Math.max(0.01, Math.min(5.00, Number(settings.titanTinyScale) || 1));
     const width = Math.max(0.30, Math.min(3.00, Number(settings.titanTinyWidth) || 1));
     const bind = String(settings.titanTinyBind || '');
 
@@ -5191,11 +5191,12 @@
         </div>
         <div class="mf-tt-row">
           <span>${t('titanTinyScale')}</span>
-          <span class="mf-tt-scale-value" data-tt-scale-value>${scale.toFixed(2)}×</span>
+          <span class="mf-tt-scale-value" data-tt-scale-value>${scale.toFixed(3)}×</span>
         </div>
-        <input class="mf-tt-range" data-tt-scale type="range" min="0.20" max="5.00" step="0.01" value="${scale}">
-        <input class="mf-input" data-tt-scale-number type="number" min="0.20" max="5.00" step="0.01" value="${scale.toFixed(2)}">
+        <input class="mf-tt-range" data-tt-scale type="range" min="0.01" max="5.00" step="0.01" value="${scale}">
+        <input class="mf-input" data-tt-scale-number type="number" min="0.01" max="5.00" step="0.001" value="${scale.toFixed(3)}">
         <div class="mf-tt-presets">
+          <button type="button" class="mf-btn secondary" data-tt-preset="0.02">${t('titanTinyMicro')}</button>
           <button type="button" class="mf-btn secondary" data-tt-preset="0.35">${t('titanTinyTiny')}</button>
           <button type="button" class="mf-btn secondary" data-tt-preset="1">${t('titanTinyNormal')}</button>
           <button type="button" class="mf-btn secondary" data-tt-preset="3">${t('titanTinyTitan')}</button>
@@ -5235,12 +5236,12 @@
     let binding = false;
 
     const applyScale = value => {
-      const next = Math.max(0.20, Math.min(5.00, Number(value) || 1));
+      const next = Math.max(0.01, Math.min(5.00, Number(value) || 1));
       settings.titanTinyScale = next;
       guiSettings.titanTinyScale = next;
       if (slider) slider.value = String(next);
-      if (scaleNumber) scaleNumber.value = next.toFixed(2);
-      if (scaleValue) scaleValue.textContent = `${next.toFixed(2)}×`;
+      if (scaleNumber) scaleNumber.value = next.toFixed(3);
+      if (scaleValue) scaleValue.textContent = `${next.toFixed(3)}×`;
       saveSettings();
       sendTitanTinyConfig(settings.titanTiny);
     };

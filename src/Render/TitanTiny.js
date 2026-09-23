@@ -2,7 +2,8 @@
     'use strict';
 
     const CONFIG = {
-        minScale: 0.20,
+        // A 0.01x, a two-block-tall player is 0.02 blocks high (< 1 texture pixel).
+        minScale: 0.01,
         maxScale: 5.00,
         defaultScale: 1.00,
         minWidth: 0.30,
@@ -41,6 +42,9 @@
         hitboxEnabled: true,
         hitboxTargets: [],
         hitboxSignature: null,
+        hitboxPlayer: null,
+        hitboxRenderEntity: null,
+        lastHitboxScan: 0,
 
         cameraHeightEnabled: true,
         camera: null,
@@ -630,8 +634,7 @@
 
         if (
             !Number.isFinite(eyeHeight) ||
-            eyeHeight <= 0 ||
-            performance.now() - (state.lastCameraScan || 0) > 2000
+            eyeHeight <= 0
         ) {
             eyeHeight =
                 getNativeEyeHeight(player);
@@ -1726,6 +1729,9 @@
 
         state.hitboxSignature =
             null;
+        state.hitboxPlayer = null;
+        state.hitboxRenderEntity = null;
+        state.lastHitboxScan = 0;
     }
 
     function discoverHitboxTargets() {
@@ -1735,13 +1741,11 @@
         const renderEntity =
             state.renderEntity;
 
-        const signature =
-            `${player ? 'p' : '-'}:${renderEntity ? 'e' : '-'}:${player === renderEntity ? 'same' : 'diff'}`;
-
         if (
-            state.hitboxTargets.length &&
-            state.hitboxSignature ===
-                signature
+            state.hitboxSignature &&
+            state.hitboxPlayer === player &&
+            state.hitboxRenderEntity === renderEntity &&
+            (state.hitboxTargets.length || performance.now() - state.lastHitboxScan < 2000)
         ) {
             return;
         }
@@ -1774,8 +1778,10 @@
         state.hitboxTargets =
             targets;
 
-        state.hitboxSignature =
-            signature;
+        state.hitboxSignature = true;
+        state.hitboxPlayer = player;
+        state.hitboxRenderEntity = renderEntity;
+        state.lastHitboxScan = performance.now();
     }
 
     function applyLocalHitboxScale() {
@@ -2270,6 +2276,9 @@
 
         resolveRenderTarget(true);
         applyCurrentScale();
+        if (!Number.isFinite(state.cameraBaseEyeHeight) || state.cameraBaseEyeHeight <= 0) {
+            state.cameraBaseEyeHeight = getNativeEyeHeight(state.player);
+        }
         applyLocalHitboxScale();
         applyCameraHeight();
         resolveNameTag(true);
@@ -2334,6 +2343,9 @@
         state.nameTagEnabled = true;
 
         applyCurrentScale();
+        if (!Number.isFinite(state.cameraBaseEyeHeight) || state.cameraBaseEyeHeight <= 0) {
+            state.cameraBaseEyeHeight = getNativeEyeHeight(state.player);
+        }
         applyLocalHitboxScale();
         applyCameraHeight();
         resolveNameTag(force);

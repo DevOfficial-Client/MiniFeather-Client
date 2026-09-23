@@ -138,6 +138,7 @@ state.guestPos = null;
 
 function startBroadcast() {
     stopBroadcast();
+    state._lastSentScale = null;
     
     state.sendTimer = setInterval(() => {
         if (state.role !== 'host') return;
@@ -162,7 +163,7 @@ function startBroadcast() {
     state.scaleTimer = setInterval(() => {
         try {
             const tt = globalThis.TitanTiny;
-            const sc = tt?.enabled ? +(Number(tt.scale) || 1).toFixed(2) : 1;
+            const sc = tt?.enabled ? +(Number(tt.scale) || 1).toFixed(3) : 1;
             if (sc !== state._lastSentScale) {
                 state._lastSentScale = sc;
                 send({ t: 'scale', scale: sc, name: myName() });
@@ -511,6 +512,7 @@ function handleMsg(msg) {
     switch (msg.t) {
         case 'hello':
             state.peerName = msg.name || null;
+            try { globalThis.MF_Mesh?.releaseScaleFor?.(state.peerName); } catch {}
             log('handshake con', msg.name, '(rol remoto: ' + msg.role + ')');
             
             if (!state.sendTimer) startBroadcast();
@@ -1177,6 +1179,7 @@ window.MF_Peer = {
     get role() { return state.role; },
     get code() { return state.peerId; },
     get connected() { return !!state.conn; },
+    get scalePeerName() { return state.conn?.open ? state.peerName : null; },
     _chatHook: null,
     host, join, off,
     

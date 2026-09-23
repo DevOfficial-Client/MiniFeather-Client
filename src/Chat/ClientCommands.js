@@ -53,7 +53,7 @@
       '\\yellow\\/bind <module> <key>\\reset\\ - Bind a module toggle',
       '\\yellow\\/unbind <module>\\reset\\ - Remove a module bind',
       '\\yellow\\/binds\\reset\\ - Show your module binds',
-      '\\yellow\\/pscale <0.2-5>\\reset\\ - Player size (tiny/normal/titan)',
+      '\\yellow\\/pscale <0.01-5>\\reset\\ - Player size (micro/tiny/normal/titan)',
       '\\yellow\\/plarge <0.3-3>\\reset\\ - Player width (slim/normal/fat)',
       '\\yellow\\/panchor <-1.5-1.5>\\reset\\ - Fix feet to ground (0 = reset)',
       '\\yellow\\/afk <5-150>\\reset\\ - Set Anti-AFK delay',
@@ -95,6 +95,7 @@
       '\\yellow\\/p2p join <code>\\reset\\ - See friend\\\'s Verity',
       '\\yellow\\/p2p off\\reset\\ - End the shared session',
       '\\yellow\\/p2p auto [on|off]\\reset\\ - Auto-share room code to chat + auto-join',
+      '\\yellow\\/mesh on | announce | connect <code>\\reset\\ - Sync Titan & Tiny with MiniFeather peers',
       '\\yellow\\/emote <name>\\reset\\ - Play a custom emote (from emotes/)',
       '\\yellow\\/emote stop|list|reload\\reset\\ - Manage emotes',
       '\\yellow\\/mf help\\reset\\ - Show this help'
@@ -1610,13 +1611,24 @@
       if (action === 'on' || action === 'start') {
         api.start().then(code => {
           if (!code) { addChat('Could not start the mesh (check console).', 'error'); return; }
-          addChat(`Mesh node ${code} — announcing to chat, auto-connecting to others.`, 'success');
+          addChat(`Mesh node ${code} ready. Use /mesh announce or share this code with /mesh connect.`, 'success');
         });
         return;
       }
       if (action === 'announce' || action === 'anunciar') {
-        api.announceNow();
-        addChat('Mesh code re-announced to chat.', 'success');
+        api.start().then(code => {
+          if (!code) { addChat('Could not start the mesh.', 'error'); return; }
+          api.announceNow();
+          addChat(`Mesh code ${code} announced to chat.`, 'success');
+        });
+        return;
+      }
+      if (action === 'connect' || action === 'join' || action === 'conectar') {
+        const code = String(args[1] || '').trim();
+        if (!code) { addChat('Usage: /mesh connect <code>', 'error'); return; }
+        api.connect(code).then(ok => {
+          addChat(ok ? `Connecting to mesh node ${code}...` : `Could not connect to ${code}. Check the code and retry.`, ok ? 'normal' : 'error');
+        });
         return;
       }
       if (action === 'share' || action === 'compartir') {
@@ -1635,7 +1647,7 @@
       const names = Object.values(api.names || {}).join(', ') || '—';
       addChat(st === 'off'
         ? 'Mesh: off — use /mesh on'
-        : `Mesh: ${st} — ${n} node(s): ${names}`);
+        : `Mesh: ${st} (${api.code || 'no code'}) — ${n} node(s): ${names}`);
       return;
     }
 
@@ -1645,7 +1657,7 @@
 
       const raw = String(args[0] || '').toLowerCase();
       const keywords = {
-        tiny: 0.35, small: 0.35, chico: 0.35, pequeno: 0.35,
+        micro: 0.02, tiny: 0.35, small: 0.35, chico: 0.35, pequeno: 0.35,
         normal: 1, normalWidth: 1,
         titan: 3, big: 3, giant: 3, grande: 3, gigante: 3,
         slim: 0.55, skinny: 0.55, delgado: 0.55,
@@ -1656,13 +1668,13 @@
 
       if (command === 'pscale') {
         if (!Number.isFinite(num)) {
-          addChat(`Size: ${api.scale.toFixed(2)}x | ${api.enabled ? 'enabled' : 'disabled'} — /pscale <0.20-5.00> | tiny | normal | titan`, 'normal');
+          addChat(`Size: ${api.scale.toFixed(3)}x | ${api.enabled ? 'enabled' : 'disabled'} — /pscale <0.01-5.00> | micro | tiny | normal | titan`, 'normal');
           return;
         }
-        const v = Math.max(0.20, Math.min(5.00, num));
+        const v = Math.max(0.01, Math.min(5.00, num));
         api.setScale(v);
         if (!api.enabled) api.setEnabled(true);
-        addChat(`Player size set to ${v.toFixed(2)}x.`, 'success');
+        addChat(`Player size set to ${v.toFixed(3)}x.`, 'success');
         return;
       }
 
