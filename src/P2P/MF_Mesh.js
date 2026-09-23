@@ -135,7 +135,6 @@ async function startFresh() {
     const code = 'mfm-' + Math.random().toString(36).slice(2, 8);
     state.myCode = code;
     const peer = new globalThis.Peer(code, { debug: 0 });
-    esc: null,
     state.peer = peer;
     peer.on('open', (pid) => {
         state.status = 'listening';
@@ -147,6 +146,20 @@ async function startFresh() {
     peer.on('disconnected', () => {
         state.status = 'reconnecting';
         try { peer.reconnect(); } catch {}
+    });
+    peer.on('close', () => {
+        // Señalización muerta del todo (ID perdido / servidor caído):
+        // limpiar conns y reiniciar la mesh con código nuevo.
+        if (state.peer !== peer) return;
+        warn('peer cerrado — reiniciando mesh');
+        for (const c of state.conns.values()) { try { c.close(); } catch {} }
+        state.conns.clear();
+        state.peer = null; state.status = 'off';
+        const roster = [...state.names.keys()];
+        state.names.clear();
+        start().then(() => {
+            for (const code of roster) scheduleReconnect(code);
+        }).catch(() => {});
     });
     peer.on('error', (e) => {
         const type = e?.type || '';
@@ -201,14 +214,17 @@ function wire(conn) {
     const id = conn.peer;
     const previous = state.conns.get(id);
     if (previous && previous !== conn) {
-        // Both peers can dial simultaneously. Pick the same DataConnection on
-        // each side instead of closing each other's surviving connection.
+        // Dial simultáneo: ambos lados comparan los MISMOS dos connectionIds,
+        // así que "gana" el menor SIEMPRE de forma determinista y simétrica.
+        // (Antes: con previous.open en ambos lados cada uno cerraba la conn
+        // entrante del otro → morían las dos → la mesh se partía.)
         const previousId = String(previous.connectionId || '');
         const nextId = String(conn.connectionId || '');
-        if (previous.open || !nextId || (previousId && previousId < nextId)) {
-            try { conn.close(); } catch {}
-            return;
-        }
+        let keepPrevious;
+        if (!nextId) keepPrevious = true;
+        else if (!previousId) keepPrevious = false;
+        else keepPrevious = previousId < nextId;
+        if (keepPrevious) { try { conn.close(); } catch {} return; }
         try { previous.close(); } catch {}
     }
     state.conns.set(id, conn);
@@ -220,6 +236,8 @@ function wire(conn) {
         }
     }, 12000);
     conn.on('open', () => {
+        conn.__mfOpen = true;
+        cancelReconnect(id);
         clearTimeout(to);
         state.conns.set(id, conn);
         const my = myTitanScale();
@@ -240,6 +258,27 @@ function wire(conn) {
     conn.on('error', () => dropConn(conn));
 }
 
+// Re-dial automático: si un link que llegó a abrirse muere (NAT que rebinda,
+// WiFi, suspensión de pestaña), reintentar tras el cooldown con jitter.
+const pendingReconnects = new Map(); // peerCode -> timeout id
+
+function scheduleReconnect(code) {
+    if (!code || code === state.myCode) return;
+    if (state.conns.has(code) || pendingReconnects.has(code)) return;
+    const t = setTimeout(() => {
+        pendingReconnects.delete(code);
+        if (state.status === 'off' || state.status === 'error') return;
+        if (state.conns.has(code)) return;
+        connect(code);
+    }, RECONNECT_MS + Math.random() * 5000);
+    pendingReconnects.set(code, t);
+}
+
+function cancelReconnect(code) {
+    const t = pendingReconnects.get(code);
+    if (t) { clearTimeout(t); pendingReconnects.delete(code); }
+}
+
 function dropConn(conn) {
     if (state.conns.get(conn.peer) !== conn) return;
     state.conns.delete(conn.peer);
@@ -249,6 +288,9 @@ function dropConn(conn) {
     state.skinTold.delete(conn.peer);
     revertMeshSkin(name);
     forgetPeerScale(conn.peer);
+    // Solo re-dial si el link había llegado a abrirse (evita bucle contra
+    // peers caídos que nunca contestaron el dial original).
+    if (conn.__mfOpen) scheduleReconnect(conn.peer);
 }
 
 function knownCodes() {
@@ -773,6 +815,8 @@ globalThis.MF_Mesh = {
         clearInterval(chatTimer);
         clearInterval(scaleTimer);
         if (state.announceTimer) clearInterval(state.announceTimer);
+        for (const t of pendingReconnects.values()) clearTimeout(t);
+        pendingReconnects.clear();
         for (const name of [...scaleMeshes.keys()]) clearScaleRecord(name);
         for (const c of state.conns.values()) { try { c.close(); } catch {} }
         state.conns.clear();
