@@ -223,6 +223,7 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "defaults.json",
         "assets/accounts.json",
         "assets/icon.png",
         "assets/background.png",

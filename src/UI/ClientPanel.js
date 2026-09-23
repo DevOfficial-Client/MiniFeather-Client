@@ -568,6 +568,7 @@
     dynamicCrosshair: false,
     dynamicCrosshairSize: 28,
     vanillaAnimations: false,
+    playerAnims: true,
     leafWind: false,
     leafWindStrength: 0.085,
     handSway: true,
@@ -11394,6 +11395,7 @@ function renderCreditsPage() {
     setModuleEnabled('freecam', settings.freecam);
     setModuleEnabled('dynamicCrosshair', settings.dynamicCrosshair);
     setModuleEnabled('vanillaAnimations', settings.vanillaAnimations);
+    setModuleEnabled('playerAnims', settings.playerAnims);
     setModuleEnabled('leafWind', settings.leafWind);
     setModuleEnabled('handSway', settings.handSway);
     setModuleEnabled('betterPlayerLayers', settings.betterPlayerLayers);
@@ -12114,10 +12116,37 @@ function renderCreditsPage() {
     }
   }
 
+  // defaults.json (raíz del paquete): config default editable sin recompilar.
+  // Aplana grupos un nivel (render.playerAnims → playerAnims) y se aplica como
+  // base intermedia: usuario guardado > defaults.json > DEFAULT_SETTINGS.
+  function loadFileDefaults() {
+    return new Promise(resolve => {
+      const flatten = (obj) => {
+        const out = {};
+        for (const k in obj) {
+          if (k.startsWith('_')) continue;
+          const v = obj[k];
+          if (v && typeof v === 'object' && !Array.isArray(v)) Object.assign(out, v);
+          else out[k] = v;
+        }
+        return out;
+      };
+      const fallback = () => resolve({});
+      try {
+        fetch(chrome.runtime.getURL('defaults.json'), { cache: 'no-store' })
+          .then(res => (res.ok ? res.json() : null))
+          .then(json => resolve(json && typeof json === 'object' && !Array.isArray(json) ? flatten(json) : {}))
+          .catch(fallback);
+      } catch (_) { fallback(); }
+    });
+  }
+
   function boot() {
-    chrome.storage.local.get(['settings', 'customLogo', 'favoriteModules'], data => {
-      if (destroyed) return;
-      settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+    loadFileDefaults().then(fileDefaults => {
+      const BASE = { ...DEFAULT_SETTINGS, ...fileDefaults };
+      chrome.storage.local.get(['settings', 'customLogo', 'favoriteModules'], data => {
+        if (destroyed) return;
+        settings = { ...BASE, ...(data.settings || {}) };
       settings.antiAfkDelay = clampAntiAfkDelay(settings.antiAfkDelay);
       settings.patPatValues = clampPatPatValues(settings.patPatValues);
       settings.patPatPreset = detectPatPatPreset(settings.patPatValues);
@@ -12153,6 +12182,7 @@ function renderCreditsPage() {
       } else {
         init();
       }
+      });
     });
   }
 

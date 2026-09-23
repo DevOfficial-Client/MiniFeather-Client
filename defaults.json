@@ -1,0 +1,113 @@
+{
+  "_note": "Config default de MiniFeather Client. Este archivo sobreescribe los defaults de fábrica (DEFAULT_SETTINGS en src/UI/ClientPanel.js). La config guardada por el usuario SIEMPRE gana sobre este archivo. Solo usar claves conocidas; los objetos anidados (patPatValues, cameraOverhaulValues, elytraFlightValues, experimentalRealisticCustom, moduleBinds, dynamicCrosshairMap) no se listan aquí: para esos usa el panel y se guardan como settings del usuario.",
+  "general": {
+    "rebrand": true,
+    "supportAds": false,
+    "startupAnimation": true,
+    "discord": true,
+    "language": "en"
+  },
+  "hud": {
+    "keystrokes": true,
+    "fpsCounter": true,
+    "cpsCounter": true,
+    "pingCounter": true,
+    "armorHud": false,
+    "coordinates": false,
+    "waypoints": true
+  },
+  "chat": {
+    "chatVideos": true,
+    "chatLinks": true,
+    "chatMemes": true,
+    "gifChat": true,
+    "klipyApiKey": "",
+    "clientChat": false,
+    "clientChatMentions": true
+  },
+  "render": {
+    "vanillaAnimations": false,
+    "playerAnims": true,
+    "leafWind": false,
+    "leafWindStrength": 0.085,
+    "handSway": true,
+    "betterPlayerLayers": false,
+    "titanTiny": false,
+    "titanTinyScale": 1.0,
+    "titanTinyWidth": 1.0,
+    "titanTinyGroundOffset": 0,
+    "healthNameTags": false,
+    "distanceNameTags": false,
+    "damageParticles": false,
+    "waterSplash": true,
+    "shineAmbience": false,
+    "shineAmbienceDensity": 1,
+    "patPat": false,
+    "duckMobs": false,
+    "crittersMobs": false,
+    "itemPhysics": false,
+    "noWeather": false,
+    "fullBright": false,
+    "guiPatch": false,
+    "blockHighlight": true,
+    "blockHighlightColor": "#ffffff",
+    "blockHighlightThickness": 1
+  },
+  "movement": {
+    "zoom": false,
+    "zoomBind": "KeyX",
+    "freelook": false,
+    "freelookBind": "KeyZ",
+    "freelookMode": "hold",
+    "freecam": false,
+    "freecamSpeed": 7.0,
+    "freecamSensitivity": 1.0,
+    "freecamFastMultiplier": 3.0,
+    "elytraFlight": false,
+    "elytraFlightPreset": "normal",
+    "cameraOverhaul": false,
+    "cameraOverhaulPreset": "normal",
+    "antiAfk": false,
+    "antiAfkDelay": 120,
+    "autoSprint": false,
+    "safeSneak": false,
+    "autoRespawn": false,
+    "idlePlayerBot": false,
+    "idlePlayerTarget": ""
+  },
+  "crosshair": {
+    "dynamicCrosshair": false,
+    "dynamicCrosshairSize": 28
+  },
+  "shaders": {
+    "customShader": false,
+    "customShaderPreset": "spooklementary",
+    "customShaderStrength": 0.5,
+    "customShaderRenderScale": 1.0
+  },
+  "panel": {
+    "panelAccentColor": "#ef3b3b",
+    "panelBackgroundColor": "#0e1115",
+    "panelScale": 68,
+    "pageZoomEnabled": true
+  },
+  "experimental": {
+    "experimentalRealistic": false,
+    "experimentalRealisticLevel": "medium",
+    "experimentalWetDrySeconds": 180,
+    "experimentalAurora": false,
+    "experimentalAuroraLevel": "medium",
+    "experimentalGrassFlowers": false,
+    "experimentalInteractiveVegetation": false,
+    "experimentalInteractiveVegetationLevel": "medium",
+    "experimentalFallenLeaves": false,
+    "experimentalTinyTakeover": false,
+    "experimentalAnimatedItems": false,
+    "experimentalBetterAnimationCape": false,
+    "experimentalPbr": false
+  },
+  "world": {
+    "rhythmParkour": false,
+    "localGamesWorldName": ""
+  }
+}
