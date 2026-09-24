@@ -115,6 +115,7 @@
         "src/Render/TinyTakeover.js",
         "src/Experimental/InteractiveVegetation/InteractiveVegetation.js",
         "src/Experimental/Aurora/Aurora.js",
+        "src/Experimental/Constellations/Constellations.js",
         "src/Experimental/GrassFlowers/GrassFlowers.js",
         "src/Experimental/FallenLeaves/FallenLeaves.js",
         "src/Experimental/AnimatedItems/AnimatedItems.js",

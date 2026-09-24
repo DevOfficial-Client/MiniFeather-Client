@@ -97,6 +97,24 @@ api.register({
 });
 
 api.register({
+  id: 'constellations',
+  settingsKey: 'experimentalConstellations',
+  levelKey: 'experimentalConstellationsLevel',
+  levelLabelKey: 'experimentalConstellationsQuality',
+  levels: [
+    { value: 'low', labelKey: 'experimentalConstellationsLow', label: 'Low' },
+    { value: 'medium', labelKey: 'experimentalConstellationsMedium', label: 'Medium' },
+    { value: 'high', labelKey: 'experimentalConstellationsHigh', label: 'High' }
+  ],
+  title: 'Night Constellations',
+  titleKey: 'experimentalConstellationsTitle',
+  descriptionKey: 'experimentalConstellationsDesc',
+  icon: '⭐',
+  badge: 'EXPERIMENTAL',
+  order: 12
+});
+
+api.register({
   id: 'interactive-vegetation',
   settingsKey: 'experimentalInteractiveVegetation',
   levelKey: 'experimentalInteractiveVegetationLevel',

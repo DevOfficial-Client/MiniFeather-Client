@@ -2,6 +2,11 @@
 (function () {
     'use strict';
 
+    // Guard de re-inyección: al recargar la extensión sin recargar la
+    // página, el script se inyecta otra vez. Sin esto se acumulan el
+    // listener de fetch, el rAF y los emotes activos (leak).
+    try { window.__MF_EMOTES_SCOPE__?.destroy?.(); } catch {}
+
     const TAG = '[MF Emotes]';
     const DIR = 'emotes/';
 
@@ -824,16 +829,18 @@
     }
 
     let rafActive = false;
+    let rafId = 0;
+    let emoteScopeDead = false;
     function rafTick() {
-        if (!state.current) { rafActive = false; return; }
+        if (emoteScopeDead || !state.current) { rafActive = false; return; }
         try { applyPose(hookState.mesh); }
         catch (e) { console.error(TAG, 'pose error (rAF):', e); finishStop(); }
-        requestAnimationFrame(rafTick);
+        if (!emoteScopeDead) rafId = requestAnimationFrame(rafTick);
     }
     function ensureRafLoop() {
         if (rafActive) return;
         rafActive = true;
-        requestAnimationFrame(rafTick);
+        rafId = requestAnimationFrame(rafTick);
     }
 
     function enterCamera(player) {
@@ -936,7 +943,7 @@
     const pendingEmoteFetches = new Map();
     let emoteReqSeq = 0;
 
-    document.addEventListener('minifeather:emote-fetch-response', (e) => {
+    function onEmoteFetchResponse(e) {
         try {
             const { nonce, url, ok, status } = JSON.parse(e.detail);
             const p = pendingEmoteFetches.get(nonce);
@@ -945,7 +952,8 @@
             if (ok) p.resolve(url);
             else p.reject(new Error('HTTP ' + status));
         } catch {}
-    });
+    }
+    document.addEventListener('minifeather:emote-fetch-response', onEmoteFetchResponse);
 
     function bridgeFetchUrl(file) {
         return new Promise((resolve, reject) => {
@@ -1108,11 +1116,25 @@
         stop,
         list,
         load,
-        loadFromBuffer, 
+        loadFromBuffer,
         dumpSkeleton,
         get playing() { return state.current?.name || null; },
-        
+
         PARTS
+    };
+
+    // Para el guard de re-inyección: apaga todo lo vivo de ESTE scope.
+    window.__MF_EMOTES_SCOPE__ = {
+        destroy() {
+            emoteScopeDead = true;
+            if (rafId) cancelAnimationFrame(rafId);
+            try { if (state.current) stop(); } catch {}
+            document.removeEventListener('minifeather:emote-fetch-response', onEmoteFetchResponse);
+            for (const p of pendingEmoteFetches.values()) {
+                try { p.reject(new Error('scope destroyed')); } catch {}
+            }
+            pendingEmoteFetches.clear();
+        }
     };
 
     log('cargado. /emote <nombre> | /emote stop | /emote list | /emote reload');
