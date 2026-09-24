@@ -55,6 +55,28 @@
             || null;
     }
 
+    // Atlas vanilla como BASE: el juego construye los íconos del inventario
+    // leyendo el canal alpha del spritesheet (alpha 0 = ícono vacío). Sin
+    // esta base, todo tile sin textura custom quedaba transparente y los
+    // ítems perdían su icono. Con la base, solo los tiles custom cambian.
+    function fetchImage(src) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
+            img.src = src;
+        });
+    }
+
+    let vanillaAtlasCache = null;
+    async function loadVanillaAtlas() {
+        if (vanillaAtlasCache !== null) return vanillaAtlasCache;
+        const img = await fetchImage(chrome.runtime.getURL('classic/textures/spritesheet.png'));
+        vanillaAtlasCache = img; // null si falló (se reintentará la próxima)
+        if (!img) console.warn(`${TAG} No se pudo cargar el atlas vanilla como base`);
+        return vanillaAtlasCache;
+    }
+
     async function generateSpritesheet(customFiles) {
         const frames = await loadFramesData();
         if (!frames) {
@@ -77,7 +99,16 @@
         ctx.imageSmoothingEnabled = false;
         ctx.clearRect(0, 0, atlasSize, atlasSize);
 
-        const stats = { total: entries.length, placed: 0, custom: 0, original: 0, placeholder: 0, resolution };
+        // Base: atlas vanilla escalado (16px → resolución del pack). Si el
+        // fetch falla, seguimos sin base (comportamiento anterior) para no
+        // bloquear al usuario, pero los placeholders quedarán transparentes.
+        const vanilla = await loadVanillaAtlas();
+        if (vanilla) {
+            ctx.drawImage(vanilla, 0, 0, vanilla.width, vanilla.height, 0, 0, atlasSize, atlasSize);
+        }
+
+        const stats = { total: entries.length, placed: 0, custom: 0, original: vanilla ? entries.length : 0, placeholder: vanilla ? 0 : 0, resolution };
+
         const textureNames = [];
 
         for (const [fileName, data] of entries) {

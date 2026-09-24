@@ -190,8 +190,15 @@
   }
 
   function update(game, profile = state.profile) {
-    if (!attach(game, profile)) return false;
-    return tuneDynamic(game, profile);
+    // attach() solo si cambió algo; tuneDynamic ya corre cada frame vía
+    // el hook de sun.update del juego (antes: doble trabajo por frame).
+    if (state.renderer !== rendererOf(game) || state.sun !== game?.gameScene?.sun || state.profile !== profile) {
+      if (!attach(game, profile)) return false;
+    } else {
+      state.profile = profile;
+      state.game = game;
+    }
+    return true;
   }
 
   function restoreLight(light, snap) {

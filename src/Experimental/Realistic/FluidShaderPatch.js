@@ -130,7 +130,9 @@ uniform float uMFLavaEmission;
 
       const normalAnchor = 'vec3 normal = normalize(vWorldNormal);';
       if (shader.fragmentShader.includes(normalAnchor)) {
+        // Gate uniforme: con microNormal en 0 las 4 funciones trig no corren
         shader.fragmentShader = shader.fragmentShader.replace(normalAnchor, `${normalAnchor}
+          if (uMFWaterMicroNormal > 0.001) {
           vec2 mfWp = vWorldPosition.xz;
           float mfT = time * 0.12 * uMFWaterWaveSpeed;
           vec2 mfGrad = vec2(
@@ -138,12 +140,15 @@ uniform float uMFLavaEmission;
             cos(mfWp.y * 3.4 - mfWp.x * 1.5 - mfT * 1.6) * 0.55 + cos(mfWp.y * 5.8 + mfWp.x * 2.0 + mfT * 1.1) * 0.30
           );
           vec3 mfMicroN = normalize(vec3(-mfGrad.x, 2.8, -mfGrad.y));
-          normal = normalize(mix(normal, mfMicroN, uMFWaterMicroNormal * smoothstep(0.35, 0.95, abs(normal.y))));`);
+          normal = normalize(mix(normal, mfMicroN, uMFWaterMicroNormal * smoothstep(0.35, 0.95, abs(normal.y))));
+          }`);
       }
 
       const lavaAnchor = 'if (vColor.r >= 0.5 && waterShadersEnabled > 0.5) {';
       if (shader.fragmentShader.includes(lavaAnchor)) {
+        // Gate uniforme: sin burbujas ni emisión, nada del bloque corre
         shader.fragmentShader = shader.fragmentShader.replace(lavaAnchor, `${lavaAnchor}
+          if (uMFLavaBubbles > 0.001 || uMFLavaEmission > 0.001) {
           vec2 mfLp = vWorldPosition.xz;
           float mfLavaTime = time * uMFLavaWaveSpeed;
           float mfBubbleField = sin(mfLp.x * 2.15 + mfLavaTime * 0.11) * sin(mfLp.y * 2.65 - mfLavaTime * 0.085);
@@ -151,7 +156,8 @@ uniform float uMFLavaEmission;
           float mfBubble = smoothstep(0.58, 0.96, mfBubbleField * 0.5 + 0.5) * smoothstep(0.40, 0.95, abs(vWorldNormal.y));
           float mfPulse = 0.5 + 0.5 * sin(mfLavaTime * 0.075 + mfLp.x * 0.24 + mfLp.y * 0.19);
           gl_FragColor.rgb += vec3(1.00, 0.24, 0.025) * mfBubble * uMFLavaBubbles;
-          gl_FragColor.rgb *= 1.0 + mfPulse * uMFLavaEmission;`);
+          gl_FragColor.rgb *= 1.0 + mfPulse * uMFLavaEmission;
+          }`);
       }
 
       shader.fragmentShader = beforeMainEnd(shader.fragmentShader, `

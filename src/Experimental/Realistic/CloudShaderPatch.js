@@ -108,10 +108,9 @@
     try { thunder = Math.max(0, Math.min(1, Number(game?.world?.getThunderStrength?.(1)) || 0)); } catch (_) {}
     const storm = Math.max(rain, thunder * 0.9);
     const materials = new Set();
-    for (const root of [game?.gameScene?.clouds, game?.gameScene?.scene, game?.gameScene?.ambientMeshes].filter(Boolean)) {
-      for (const o of collect(root)) {
-        for (const m of (Array.isArray(o.material) ? o.material : [o.material])) if (isCloudMaterial(m)) materials.add(m);
-      }
+    // Solo scene: clouds/ambientMeshes viven dentro de scene → doble pasada
+    for (const o of collect(game?.gameScene?.scene)) {
+      for (const m of (Array.isArray(o.material) ? o.material : [o.material])) if (isCloudMaterial(m)) materials.add(m);
     }
     for (const m of materials) tune(m, storm);
     return materials.size;

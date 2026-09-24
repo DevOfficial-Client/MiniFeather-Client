@@ -20,6 +20,7 @@
     profileCacheScale: -1,
     wetDrySeconds: 180,
     game: null,
+    lastGameMiss: 0,
     stars: new Map(),
     raf: 0,
     timer: 0,
@@ -59,6 +60,11 @@
 
   function findGame() {
     if (state.game?.player && state.game?.world) return state.game;
+    // Caché negativo con TTL: sin esto, en menú/carga el BFS de React
+    // corría CADA FRAME (querySelectors + 1400 fibers + allocations).
+    const now = performance.now();
+    if (now - state.lastGameMiss < 1500) return null;
+    state.lastGameMiss = now;
     for (const candidate of [W.__MINIBLOX_GAME__, W.miniblox, W.__MB?.game, W.game]) {
       if (candidate?.player && candidate?.world) return (state.game = candidate);
     }
@@ -69,9 +75,9 @@
       for (const key of keys) {
         if (!key.startsWith('__react')) continue;
         const queue = [root[key]], seen = new Set();
-        let visited = 0;
-        while (queue.length && visited++ < 1400) {
-          const fiber = queue.shift();
+        let visited = 0, head = 0;
+        while (head < queue.length && visited++ < 1400) {
+          const fiber = queue[head++]; // índice en vez de shift() (O(1))
           if (!fiber || seen.has(fiber)) continue;
           seen.add(fiber);
           for (const c of [fiber.stateNode, fiber.stateNode?.game, fiber.memoizedProps?.game, fiber.pendingProps?.game, fiber.memoizedState?.game]) {
@@ -91,8 +97,9 @@
 
   function collect(root, limit = 5000) {
     const out = [], queue = root ? [root] : [], seen = new WeakSet();
-    while (queue.length && out.length < limit) {
-      const o = queue.shift();
+    let head = 0;
+    while (head < queue.length && out.length < limit) {
+      const o = queue[head++]; // shift() era O(n) por nodo → spikes
       if (!o || typeof o !== 'object' || seen.has(o)) continue;
       seen.add(o); out.push(o);
       if (Array.isArray(o.children)) for (const c of o.children) queue.push(c);
@@ -102,11 +109,10 @@
 
   function scanFluids(game) {
     let count = 0;
-    for (const root of [game?.gameScene?.scene, game?.gameScene?.ambientMeshes].filter(Boolean)) {
-      for (const o of collect(root)) {
-        const list = Array.isArray(o.material) ? o.material : [o.material];
-        for (const m of list) if (W.MF_RealisticFluid?.isFluidMaterial?.(m) && W.MF_RealisticFluid.patch(m)) count++;
-      }
+    // Solo scene: ambientMeshes vive dentro de scene → se recorrería 2x
+    for (const o of collect(game?.gameScene?.scene)) {
+      const list = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of list) if (W.MF_RealisticFluid?.isFluidMaterial?.(m) && W.MF_RealisticFluid.patch(m)) count++;
     }
     state.fluidCount = count;
   }
@@ -291,9 +297,12 @@
       state.lastFrameAt = 0;
       applyProfile(); scan(true); applyCompanions(true);
       if (!state.raf) state.raf = requestAnimationFrame(tick);
+      // Interval de escaneo solo con el módulo activo (antes always-on)
+      if (!state.timer) state.timer = setInterval(scan, 2200);
     } else {
       if (state.raf) cancelAnimationFrame(state.raf);
       state.raf = 0;
+      if (state.timer) { clearInterval(state.timer); state.timer = 0; }
       W.MF_RealisticFluid?.restore?.();
       W.MF_RealisticClouds?.restore?.();
       W.MF_RealisticWetness?.restore?.();
@@ -343,7 +352,6 @@
 
   function onConfig(e) { configure(e.detail); }
   document.addEventListener(EVENT_NAME, onConfig, true);
-  state.timer = setInterval(scan, 2200);
 
   W.MF_RealisticMode = Object.freeze({
     configure, setEnabled, destroy,

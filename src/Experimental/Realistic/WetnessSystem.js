@@ -92,8 +92,9 @@
 
   function collect(root, limit = 6000) {
     const out = [], queue = root ? [root] : [], seen = new WeakSet();
-    while (queue.length && out.length < limit) {
-      const o = queue.shift();
+    let head = 0;
+    while (head < queue.length && out.length < limit) {
+      const o = queue[head++]; // shift() era O(n) por nodo → spikes
       if (!o || typeof o !== 'object' || seen.has(o)) continue;
       seen.add(o);
       out.push(o);
@@ -256,15 +257,25 @@ float mfWetnessAtFragment() {
     return count;
   }
 
+  // Memoizado: sin esto se caminaban hasta 7 prototipos por CADA lectura
+  // de bloque (cientos por scan de lluvia).
+  const worldProtoCache = new WeakMap();
   function worldProto(world) {
+    if (!world) return null;
+    if (worldProtoCache.has(world)) return worldProtoCache.get(world);
+    let found = null;
     try {
-      let proto = world && Object.getPrototypeOf(world);
+      let proto = Object.getPrototypeOf(world);
       for (let i = 0; i < 7 && proto; i++, proto = Object.getPrototypeOf(proto)) {
-        if (typeof proto.getChunk === 'function' || typeof proto.getBlockState === 'function') return proto;
+        if (typeof proto.getChunk === 'function' || typeof proto.getBlockState === 'function') { found = proto; break; }
       }
     } catch (_) {}
-    return null;
+    try { worldProtoCache.set(world, found); } catch (_) {}
+    return found;
   }
+
+  // Objeto scratch reutilizado (antes: un literal {x,y,z} por lectura)
+  const scratchPos = { x: 0, y: 0, z: 0 };
 
   function getState(world, x, y, z) {
     if (!world || y < 0 || y > 255) return null;
@@ -272,12 +283,13 @@ float mfWetnessAtFragment() {
     if (!proto) return null;
     try {
       const bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
+      scratchPos.x = bx; scratchPos.y = by; scratchPos.z = bz;
       if (typeof proto.getChunk === 'function') {
-        const chunk = proto.getChunk.call(world, { x: bx, y: by, z: bz });
+        const chunk = proto.getChunk.call(world, scratchPos);
         if (!chunk || chunk.isDummyChunk || typeof chunk.getBlockState !== 'function') return null;
-        return chunk.getBlockState({ x: bx, y: by, z: bz });
+        return chunk.getBlockState(scratchPos);
       }
-      return proto.getBlockState.call(world, { x: bx, y: by, z: bz });
+      return proto.getBlockState.call(world, scratchPos);
     } catch (_) { return null; }
   }
 
@@ -492,6 +504,8 @@ float mfWetnessAtFragment() {
     for (const [key, cell] of puddles) {
       if (now - cell.lastWet > ttl || cell.amount <= 0.001) puddles.delete(key);
     }
+    // El sort de desborde solo cuando de verdad se desborda (antes: cada
+    // 120ms se evaluaban spreads de 2048+ entradas aunque hiciera falta)
     if (wetBlocks.size > 2048) {
       const sorted = [...wetBlocks.entries()].sort((a, b) => a[1].lastWet - b[1].lastWet);
       for (let i = 0; i < sorted.length - 2048; i++) wetBlocks.delete(sorted[i][0]);
@@ -502,26 +516,46 @@ float mfWetnessAtFragment() {
     }
   }
 
+  // Buffer reutilizado: antes se alocaba un objeto spread por celda viva
+  // (~2048) + sort completo cada 120ms → presión de GC constante.
+  const packScratch = [];
+
   function packCells(game, now) {
     const cfg = currentWetProfile(), p = playerPos(game);
-    if (!cfg || !p || now - lastPack < 120) return;
+    if (!cfg || !p || now - lastPack < 250) return;
     lastPack = now;
     prune(now);
     const ttl = dryMs();
-    const live = [];
+    let liveCount = 0;
     for (const cell of wetBlocks.values()) {
       const age = now - cell.lastWet;
       const moisture = Math.max(0, 1 - age / ttl) * cell.strength;
       if (moisture <= 0.001) continue;
       const dx = cell.x + 0.5 - p.x, dy = cell.y + 0.5 - p.y, dz = cell.z + 0.5 - p.z;
-      live.push({ ...cell, moisture, dist2: dx * dx + dy * dy + dz * dz });
+      const entry = packScratch[liveCount] || (packScratch[liveCount] = {});
+      entry.x = cell.x; entry.y = cell.y; entry.z = cell.z;
+      entry.strength = cell.strength; entry.moisture = moisture;
+      entry.dist2 = dx * dx + dy * dy + dz * dz;
+      liveCount++;
     }
-    live.sort((a, b) => a.dist2 - b.dist2);
-    const count = Math.min(cfg.maxCells, MAX_GPU_CELLS, live.length);
+    // Selección top-K por umbral + selección lineal del mínimo (evita el
+    // sort O(n log n) de ~2048 items para K=48)
+    const maxK = Math.min(cfg.maxCells, MAX_GPU_CELLS);
+    const count = Math.min(maxK, liveCount);
     const arr = shared.uMFWetCells.value;
     arr.fill(0);
-    for (let i = 0; i < count; i++) {
-      const cell = live[i], o = i * 4;
+    const used = usedIdxScratch;
+    used.fill(false);
+    for (let k = 0; k < count; k++) {
+      let best = -1, bestD = Infinity;
+      for (let i = 0; i < liveCount; i++) {
+        if (used[i]) continue;
+        const d = packScratch[i].dist2;
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      if (best < 0) break;
+      used[best] = true;
+      const cell = packScratch[best], o = k * 4;
       arr[o] = cell.x;
       arr[o + 1] = cell.y;
       arr[o + 2] = cell.z;
@@ -529,6 +563,7 @@ float mfWetnessAtFragment() {
     }
     shared.uMFWetCellCount.value = count;
   }
+  const usedIdxScratch = new Array(2048);
 
   function updateRain(game, now, dt) {
     let rain = 0;
@@ -938,6 +973,17 @@ varying float vMFPuddleSeed;
     lastUpdate = now;
     shared.uMFWetTime.value = now / 1000;
     puddleUniforms.uMFPuddleTime.value = now / 1000;
+    // Gate de actividad: sin humedad, sin charcos y sin lluvia no hay
+    // nada que hacer cada frame (antes: scans + lighting siempre).
+    const active = wetBlocks.size > 0 || puddles.size > 0 || rainPeak > 0.001;
+    if (!active) {
+      // Aún así arrastrar la lluvia por si empieza a llover
+      updateRain(game, now, dt);
+      if (rainPeak <= 0.001 && shared.uMFWetCellCount.value !== 0) {
+        shared.uMFWetCellCount.value = 0;
+      }
+      return;
+    }
     updateRain(game, now, dt);
     updateLighting(game);
     scanWater(game, now);
