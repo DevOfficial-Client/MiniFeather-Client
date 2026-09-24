@@ -80,6 +80,7 @@ test('voice invites require a friend with live MiniFeather presence, and media w
     const listeners = new Map();
     const intervals = new Map();
     const stored = new Map();
+    const elements = [];
     if (initialOptIn) stored.set('mf:voice:enabled', '1');
     let nextTimer = 1;
     let denyMicrophone = false;
@@ -99,9 +100,9 @@ test('voice invites require a friend with live MiniFeather presence, and media w
         listeners.get(event.type)?.(event);
       },
       querySelector() { return null; },
+      querySelectorAll(selector) { return selector === 'img[data-mf-voice-icon]' ? elements.filter(element => element.dataset.mfVoiceIcon) : []; },
       getElementById() { return null; },
-      createElement() { return { style: {}, play: () => Promise.resolve(), pause() {}, remove() {} }; },
-      createElementNS(namespace, tag) { return { tag, style: {}, children: [], setAttribute() {}, appendChild(child) { this.children.push(child); } }; }
+      createElement(tag) { const element = { tag, style: {}, dataset: {}, setAttribute() {}, play: () => Promise.resolve(), pause() {}, remove() {} }; elements.push(element); return element; }
     };
     const emit = detail => document.dispatchEvent(new FakeEvent(EVENT, { detail: JSON.stringify(detail) }));
     const sandbox = {
@@ -138,11 +139,19 @@ test('voice invites require a friend with live MiniFeather presence, and media w
 
   const alice = client('Alice', 'uuid-alice', 'Bob', 'uuid-bob');
   const bob = client('Bob', 'uuid-bob', 'Alice', 'uuid-alice');
+  const icons = Object.fromEntries(['phone', 'mic', 'muted', 'close'].map(name => [name, `chrome-extension://${'a'.repeat(32)}/assets/voice/${name}.png`]));
+  const lateIcon = alice.api.pixelIcon('phone');
+  assert.equal(lateIcon.style.visibility, 'hidden');
+  alice.emit({ type: 'assets', icons });
+  assert.equal(lateIcon.src, icons.phone);
+  assert.equal(lateIcon.style.visibility, '');
   const micIcon = alice.api.pixelIcon('mic');
-  assert.equal(micIcon.tag, 'svg');
-  assert.ok(micIcon.children.length > 20, 'voice icon is code-drawn pixel art rather than an emoji or PNG');
-  assert.ok(alice.api.pixelIcon('phone').children.length > 20);
-  assert.ok(alice.api.pixelIcon('muted').children.length > micIcon.children.length);
+  assert.equal(micIcon.tag, 'img');
+  assert.equal(micIcon.src, icons.mic);
+  assert.equal(alice.api.pixelIcon('phone').src, icons.phone);
+  assert.equal(alice.api.pixelIcon('muted').src, icons.muted);
+  assert.equal(alice.api.pixelIcon('dismiss').src, icons.close);
+  for (const name of Object.keys(icons)) assert.ok(fs.existsSync(path.join(__dirname, '../assets/voice', `${name}.png`)));
   assert.equal((await alice.api.call('Bob')).ok, false, 'calls are opt-in');
   await Promise.all([alice.api.enable(), bob.api.enable()]);
   await new Promise(resolve => setTimeout(resolve, 30));

@@ -22,7 +22,8 @@
     presence: new Map(), seenInvites: new Map(), pendingInvites: new Set(), call: null, dialing: false, localStream: null, mediaCall: null,
     audio: null, card: null, tone: null, toneTimer: 0, callTimer: 0,
     refreshTimer: 0, announceTimer: 0, bridgeProbe: 0, retryTimer: 0, message: '', messageTimer: 0,
-    muted: false, lastError: '', wanted: false, preferenceLoaded: false, preferenceChanged: false, lastQueryResponseAt: 0
+    muted: false, lastError: '', wanted: false, preferenceLoaded: false, preferenceChanged: false, lastQueryResponseAt: 0,
+    iconUrls: {}
   };
 
   const label = (english, spanish) => {
@@ -39,53 +40,22 @@
   };
   const validId = value => /^[a-f0-9]{24}$/.test(String(value || ''));
   const validHash = value => /^[a-f0-9]{64}$/.test(String(value || ''));
-  const PIXEL_PHONE = [
-    '###.........', '####........', '####........', '.##.........',
-    '..##........', '...##.......', '....##......', '.....##.....',
-    '......##....', '.......####.', '........####', '.........###'
-  ];
-  const PIXEL_MIC = [
-    '.....##.....', '....####....', '....####....', '....####....',
-    '....####....', '....####....', '...#....#...', '...#....#...',
-    '....####....', '.....##.....', '.....##.....', '...######...'
-  ];
-  const PIXEL_CLOSE = [
-    '##........##', '.##......##.', '..##....##..', '...##..##...',
-    '....####....', '.....##.....', '.....##.....', '....####....',
-    '...##..##...', '..##....##..', '.##......##.', '##........##'
-  ];
-
   function pixelIcon(kind) {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 12 12');
-    svg.setAttribute('width', '16');
-    svg.setAttribute('height', '16');
-    svg.setAttribute('aria-hidden', 'true');
-    svg.setAttribute('focusable', 'false');
-    svg.style.shapeRendering = 'crispEdges';
-    svg.style.flex = 'none';
-    if (kind === 'end' || kind === 'reject') svg.style.transform = 'rotate(135deg)';
-    const rows = kind === 'mic' || kind === 'muted' ? PIXEL_MIC : kind === 'dismiss' ? PIXEL_CLOSE : PIXEL_PHONE;
-    for (let y = 0; y < rows.length; y++) for (let x = 0; x < rows[y].length; x++) {
-      if (rows[y][x] !== '#') continue;
-      const pixel = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      pixel.setAttribute('x', String(x));
-      pixel.setAttribute('y', String(y));
-      pixel.setAttribute('width', '1');
-      pixel.setAttribute('height', '1');
-      pixel.setAttribute('fill', 'currentColor');
-      svg.appendChild(pixel);
-    }
-    if (kind === 'muted') for (let index = 1; index < 11; index++) {
-      const pixel = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      pixel.setAttribute('x', String(index));
-      pixel.setAttribute('y', String(11 - index));
-      pixel.setAttribute('width', '1');
-      pixel.setAttribute('height', '1');
-      pixel.setAttribute('fill', '#ff6073');
-      svg.appendChild(pixel);
-    }
-    return svg;
+    const name = kind === 'mic' || kind === 'muted' ? kind : kind === 'dismiss' ? 'close' : 'phone';
+    const icon = document.createElement('img');
+    icon.dataset.mfVoiceIcon = name;
+    icon.alt = '';
+    icon.width = 20;
+    icon.height = 20;
+    icon.setAttribute('aria-hidden', 'true');
+    icon.style.imageRendering = 'pixelated';
+    icon.style.objectFit = 'contain';
+    icon.style.flex = 'none';
+    if (kind === 'end' || kind === 'reject') icon.style.transform = 'rotate(135deg)';
+    if (!state.iconUrls[name]) signal({ type: 'assets-request' });
+    if (state.iconUrls[name]) icon.src = state.iconUrls[name];
+    else icon.style.visibility = 'hidden';
+    return icon;
   }
 
   function ensureFriendHash(uuid) {
@@ -522,6 +492,17 @@
     let detail;
     try { detail = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail; } catch (_) { return; }
     if (!detail) return;
+    if (detail.type === 'assets') {
+      for (const name of ['phone', 'mic', 'muted', 'close']) {
+        const url = detail.icons?.[name];
+        if (typeof url === 'string' && new RegExp(`^chrome-extension://[a-p]{32}/assets/voice/${name}\\.png$`).test(url)) state.iconUrls[name] = url;
+      }
+      for (const icon of document.querySelectorAll?.('img[data-mf-voice-icon]') || []) {
+        const url = state.iconUrls[icon.dataset.mfVoiceIcon];
+        if (url) { icon.src = url; icon.style.visibility = ''; }
+      }
+      return;
+    }
     if (detail.type === 'preference' || detail.type === 'preference-update') {
       state.preferenceLoaded = true;
       if (detail.type === 'preference' && state.preferenceChanged) return;
@@ -673,6 +654,7 @@
 
   document.addEventListener(EVENT, onSignalEvent);
   globalThis.MF_VoiceChat = { enable, disable, call: callFriend, answer, decline, end, mute: toggleMute, available, status, pixelIcon, dispose };
+  signal({ type: 'assets-request' });
   try { if (previousOptIn || localStorage.getItem(STORAGE) === '1') { state.wanted = true; setTimeout(() => { if (state.wanted && !state.disposed) void enable(false); }, 800); } } catch (_) {}
   state.retryTimer = setInterval(() => {
     if (state.disposed) return;

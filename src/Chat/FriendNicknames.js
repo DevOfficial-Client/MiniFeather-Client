@@ -1741,12 +1741,11 @@
             const callLabel = W.MiniFeatherI18n?.translate?.('Call') || (voiceLanguage === 'es' ? 'Llamar' : 'Call');
             replaceActionLabel(action, templateLabel, callLabel);
             const voice = W.MF_VoiceChat;
-            const svg = action.querySelector?.('svg');
-            if (svg) {
-                const icon = voice?.pixelIcon?.('phone');
-                if (icon) svg.replaceWith(icon);
-                else svg.remove();
-            }
+            const existingIcon = action.querySelector?.('svg, img');
+            const icon = voice?.pixelIcon?.('phone');
+            if (existingIcon && icon) existingIcon.replaceWith(icon);
+            else if (existingIcon) existingIcon.remove();
+            else if (icon) action.prepend(icon);
             const canTry = !!voice?.call && !!voice.status?.().wanted;
             if (!canTry) {
                 action.style.opacity = '0.5';

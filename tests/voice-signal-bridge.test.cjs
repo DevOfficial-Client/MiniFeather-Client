@@ -31,7 +31,7 @@ test('voice bridge uses its own background port and forwards only voice packets'
   };
   const sandbox = {
     document, CustomEvent: FakeEvent,
-    chrome: { runtime: { connect({ name }) { portName = name; return port; } }, storage: { onChanged: {
+    chrome: { runtime: { connect({ name }) { portName = name; return port; }, getURL(path) { return `chrome-extension://${'a'.repeat(32)}/${path}`; } }, storage: { onChanged: {
       addListener(fn) { onPreferenceChanged = fn; }, removeListener() {}
     }, local: {
       get(key, callback) { callback({ [key]: true }); },
@@ -42,6 +42,8 @@ test('voice bridge uses its own background port and forwards only voice packets'
   sandbox.globalThis = sandbox;
   vm.runInNewContext(source, sandbox, { filename: 'MF_VoiceSignalBridge.js' });
   assert.ok(outputs.some(value => value.type === 'preference' && value.known && value.enabled));
+  const assets = outputs.find(value => value.type === 'assets');
+  assert.equal(assets.icons.mic, `chrome-extension://${'a'.repeat(32)}/assets/voice/mic.png`);
   const request = payload => document.dispatchEvent(new FakeEvent('minifeather:voice-signal-request', { detail: JSON.stringify(payload) }));
   request({ type: 'preference-set', enabled: false });
   assert.equal(preferences.at(-1)['mf:voice:enabled'], false);
