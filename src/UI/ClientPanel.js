@@ -128,6 +128,139 @@
     })
   });
 
+  // ── Perfiles globales de rendimiento ──
+  // Cada perfil ajusta de golpe las funciones visuales/pesadas del client
+  // (HUD, movimiento y utilidades no se tocan). Cambiar manualmente
+  // cualquiera de estas claves marca el perfil como "custom".
+  const PERFORMANCE_PROFILES = Object.freeze({
+    low: Object.freeze({
+      // Máximos FPS: todo lo decorativo fuera
+      experimentalRealistic: false,
+      experimentalAurora: false,
+      experimentalConstellations: false,
+      experimentalGrassFlowers: false,
+      experimentalInteractiveVegetation: false,
+      experimentalFallenLeaves: false,
+      experimentalAnimatedItems: false,
+      experimentalBetterAnimationCape: false,
+      experimentalTinyTakeover: false,
+      experimentalPbr: false,
+      shineAmbience: false,
+      waterSplash: false,
+      itemPhysics: false,
+      leafWind: false,
+      duckMobs: false,
+      crittersMobs: false,
+      titanTiny: false,
+      damageParticles: false,
+      patPat: false
+    }),
+    medium: Object.freeze({
+      // Base ligera: detalles naturales + cielo vivo
+      experimentalRealistic: false,
+      experimentalAurora: false,
+      experimentalConstellations: true,
+      experimentalConstellationsLevel: 'medium',
+      experimentalGrassFlowers: true,
+      experimentalInteractiveVegetation: false,
+      experimentalFallenLeaves: true,
+      experimentalAnimatedItems: false,
+      experimentalBetterAnimationCape: true,
+      experimentalTinyTakeover: false,
+      experimentalPbr: false,
+      shineAmbience: false,
+      waterSplash: false,
+      itemPhysics: false,
+      leafWind: true,
+      duckMobs: false,
+      crittersMobs: false,
+      titanTiny: false,
+      damageParticles: true,
+      patPat: false
+    }),
+    high: Object.freeze({
+      // + packs de agua/física y mobs decorativos
+      experimentalRealistic: false,
+      experimentalAurora: false,
+      experimentalConstellations: true,
+      experimentalConstellationsLevel: 'medium',
+      experimentalGrassFlowers: true,
+      experimentalInteractiveVegetation: false,
+      experimentalFallenLeaves: true,
+      experimentalAnimatedItems: true,
+      experimentalBetterAnimationCape: true,
+      experimentalTinyTakeover: false,
+      experimentalPbr: false,
+      shineAmbience: true,
+      waterSplash: true,
+      itemPhysics: true,
+      leafWind: true,
+      duckMobs: true,
+      crittersMobs: true,
+      titanTiny: true,
+      damageParticles: true,
+      patPat: true
+    }),
+    ultra: Object.freeze({
+      // + shaders experimentales (realista, aurora, vegetación 3D)
+      experimentalRealistic: true,
+      experimentalRealisticLevel: 'high',
+      experimentalAurora: true,
+      experimentalAuroraLevel: 'high',
+      experimentalConstellations: true,
+      experimentalConstellationsLevel: 'high',
+      experimentalGrassFlowers: true,
+      experimentalInteractiveVegetation: true,
+      experimentalInteractiveVegetationLevel: 'high',
+      experimentalFallenLeaves: true,
+      experimentalAnimatedItems: true,
+      experimentalBetterAnimationCape: true,
+      experimentalTinyTakeover: true,
+      experimentalPbr: false,
+      shineAmbience: true,
+      waterSplash: true,
+      itemPhysics: true,
+      leafWind: true,
+      duckMobs: true,
+      crittersMobs: true,
+      titanTiny: true,
+      damageParticles: true,
+      patPat: true
+    }),
+    extreme: Object.freeze({
+      // Todo al máximo
+      experimentalRealistic: true,
+      experimentalRealisticLevel: 'ultra',
+      experimentalAurora: true,
+      experimentalAuroraLevel: 'high',
+      experimentalConstellations: true,
+      experimentalConstellationsLevel: 'high',
+      experimentalGrassFlowers: true,
+      experimentalInteractiveVegetation: true,
+      experimentalInteractiveVegetationLevel: 'extreme',
+      experimentalFallenLeaves: true,
+      experimentalAnimatedItems: true,
+      experimentalBetterAnimationCape: true,
+      experimentalTinyTakeover: true,
+      experimentalPbr: true,
+      shineAmbience: true,
+      waterSplash: true,
+      itemPhysics: true,
+      leafWind: true,
+      duckMobs: true,
+      crittersMobs: true,
+      titanTiny: true,
+      damageParticles: true,
+      patPat: true
+    })
+  });
+
+  const PROFILE_KEYS = new Set(
+    Object.values(PERFORMANCE_PROFILES).flatMap(preset => Object.keys(preset))
+  );
+
+  const PROFILE_ORDER = Object.freeze(['low', 'medium', 'high', 'ultra', 'extreme']);
+
   const ELYTRA_FLIGHT_LIMITS = Object.freeze({
     rollSensitivity: Object.freeze({ min: 0.0005, max: 0.006, step: 0.00005, label: 'elytraFlightRollSensitivity', digits: 5 }),
     pitchSensitivity: Object.freeze({ min: 0.4, max: 1.6, step: 0.01, label: 'elytraFlightPitchSensitivity', digits: 2 }),
@@ -625,6 +758,9 @@
     experimentalRealisticCustom: { ...REALISTIC_CUSTOM_DEFAULTS },
     experimentalAurora: false,
     experimentalAuroraLevel: 'medium',
+    experimentalConstellations: false,
+    experimentalConstellationsLevel: 'medium',
+    performanceProfile: 'custom',
     experimentalGrassFlowers: false,
     experimentalInteractiveVegetation: false,
     experimentalInteractiveVegetationLevel: 'medium',
@@ -6730,17 +6866,57 @@
     featureSettingsCleanup = () => backdrop.remove();
   }
 
+  function renderPerformanceProfileCard() {
+    const current = String(settings.performanceProfile || 'custom');
+    const labels = {
+      low: t('profileLow'),
+      medium: t('profileMedium'),
+      high: t('profileHigh'),
+      ultra: t('profileUltra'),
+      extreme: t('profileExtreme')
+    };
+    return `
+      <div class="mf-card" id="mf-perf-profiles">
+        <div class="mf-card-title">⚡ ${t('performanceProfilesTitle')}</div>
+        <div style="font-size:11px;color:#aaa;margin-bottom:10px;line-height:1.5;">
+          ${t('performanceProfilesDesc')}
+        </div>
+        <div class="mf-grid-2" style="gap:10px;">
+          ${PROFILE_ORDER.map(value => `
+            <button
+              type="button"
+              class="mf-btn ${current === value ? 'primary' : 'secondary'}"
+              data-mf-profile="${value}"
+              style="padding:14px 10px;font-size:15px;font-weight:700;letter-spacing:.3px;"
+            >
+              ${labels[value]}
+            </button>
+          `).join('')}
+        </div>
+        ${current === 'custom' ? `
+          <div class="mf-muted" style="margin-top:8px;font-size:10px;">
+            ${t('performanceProfilesCustom')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
   function renderDashboardPage() {
+    const profileCard = renderPerformanceProfileCard();
     let modules = getModuleIndex();
     if (activeCategory !== 'all') {
       modules = modules.filter(entry => (entry.tags || []).includes(activeCategory));
     }
     if (!modules.length) {
-      return `<div class="mf-page-stack"><div class="mf-card"><div class="mf-muted">${t('searchNoResults')}</div></div></div>`;
+      return `<div class="mf-page-stack">${profileCard}<div class="mf-card"><div class="mf-muted">${t('searchNoResults')}</div></div></div>`;
     }
     return `
-      <div class="mf-feather-module-grid">
-        ${modules.map(entry => renderToggle(entry.key, entry.title, entry.desc, entry)).join('')}
+      <div class="mf-page-stack">
+        ${profileCard}
+        <div class="mf-feather-module-grid">
+          ${modules.map(entry => renderToggle(entry.key, entry.title, entry.desc, entry)).join('')}
+        </div>
       </div>
     `;
   }
@@ -8544,6 +8720,7 @@ function renderCreditsPage() {
     'chatVideos', 'chatLinks', 'chatMemes', 'clientChat', 'rhythmParkour', 'guiPatch',
     'customShader', 'freelook', 'blockHighlight', 'discord', 'supportAds',
     'experimentalRealistic', 'experimentalAurora', 'experimentalGrassFlowers',
+    'experimentalConstellations',
     'experimentalInteractiveVegetation', 'experimentalFallenLeaves',
     'experimentalTinyTakeover', 'experimentalAnimatedItems',
     'experimentalBetterAnimationCape', 'experimentalPbr'
@@ -8583,6 +8760,10 @@ function renderCreditsPage() {
 
       guiSettings[key] = enabled;
       settings[key] = enabled;
+      if (PROFILE_KEYS.has(key) && settings.performanceProfile !== 'custom') {
+        settings.performanceProfile = 'custom';
+        guiSettings.performanceProfile = 'custom';
+      }
       saveSettings(true);
       applyGuiSettings();
       update();
@@ -9164,40 +9345,54 @@ function renderCreditsPage() {
           data-bh-thickness
           type="range"
           min="1"
-          max="4"
+          max="6"
           step="1"
           value="${thickness}"
-        >   
-        <div class="mf-grid-2" style="margin-top:12px;">    
+        >
+        <div class="mf-grid-2" style="margin-top:12px;">
           <button
             type="button"
             class="mf-btn secondary"
             data-bh-preset="1"
           >
             Thin
-          </button>   
+          </button>
           <button
             type="button"
             class="mf-btn secondary"
             data-bh-preset="2"
           >
             Medium
-          </button>   
+          </button>
           <button
             type="button"
             class="mf-btn secondary"
             data-bh-preset="3"
           >
             Thick
-          </button>   
+          </button>
           <button
             type="button"
             class="mf-btn secondary"
             data-bh-preset="4"
           >
             Extra Thick
-          </button>   
-        </div>    
+          </button>
+          <button
+            type="button"
+            class="mf-btn secondary"
+            data-bh-preset="5"
+          >
+            Ultra
+          </button>
+          <button
+            type="button"
+            class="mf-btn secondary"
+            data-bh-preset="6"
+          >
+            Max
+          </button>
+        </div>
         <div class="mf-tt-hint">
           Changes are applied immediately while this window is open.
         </div>    
@@ -9226,7 +9421,7 @@ function renderCreditsPage() {
         Math.max(
           1,
           Math.min(
-            4,
+            6,
             Number(thicknessInput?.value) || 1
           )
         );    
@@ -10410,6 +10605,13 @@ function renderCreditsPage() {
       }
     );
 
+    // Perfiles globales de rendimiento (dashboard)
+    panel.querySelectorAll('[data-mf-profile]').forEach(button => {
+      button.addEventListener('click', () => {
+        applyPerformanceProfile(button.dataset.mfProfile);
+      });
+    });
+
     panel.querySelector('#mf-waypoint-add')?.addEventListener('click', () => {
       const input = panel.querySelector('#mf-waypoint-name');
       const color = panel.querySelector('#mf-waypoint-color')?.value || '#8b5cf6';
@@ -10581,6 +10783,13 @@ function renderCreditsPage() {
         guiSettings[key] = input.checked;
         settings[key] = input.checked;
 
+        // Si el usuario toca una clave gestionada por perfiles, salir
+        // del perfil activo (queda como "custom" hasta que elija otro).
+        if (PROFILE_KEYS.has(key) && settings.performanceProfile !== 'custom') {
+          settings.performanceProfile = 'custom';
+          guiSettings.performanceProfile = 'custom';
+        }
+
         // Update the visible module state immediately. The old UI only reflected
         // the new value after the whole GUI was closed and reopened.
         const state = label.querySelector('.mf-feature-state');
@@ -10608,6 +10817,10 @@ function renderCreditsPage() {
         const value = String(select.value || 'medium');
         guiSettings[key] = value;
         settings[key] = value;
+        if (PROFILE_KEYS.has(key) && settings.performanceProfile !== 'custom') {
+          settings.performanceProfile = 'custom';
+          guiSettings.performanceProfile = 'custom';
+        }
         if (key === 'experimentalRealisticLevel') {
           const customSection = panel.querySelector('#mf-realistic-custom-section');
           if (customSection) customSection.style.display = value === 'custom' ? 'block' : 'none';
@@ -11384,6 +11597,18 @@ function renderCreditsPage() {
     }
   }
 
+  function applyPerformanceProfile(name) {
+    const preset = PERFORMANCE_PROFILES[name];
+    if (!preset) return;
+    Object.assign(settings, preset);
+    settings.performanceProfile = name;
+    Object.assign(guiSettings, preset);
+    guiSettings.performanceProfile = name;
+    saveSettings(true);
+    applyGuiSettings();
+    update();
+  }
+
   function applyGuiSettings() {
     sendLanguageConfig();
     setModuleEnabled('rebrand', settings.rebrand);
@@ -11438,6 +11663,16 @@ function renderCreditsPage() {
           enabled: !!settings.experimentalAurora,
           level: ['low', 'medium', 'high'].includes(String(settings.experimentalAuroraLevel))
             ? String(settings.experimentalAuroraLevel)
+            : 'medium'
+        })
+      })
+    );
+    document.dispatchEvent(
+      new CustomEvent('minifeather:constellations-config', {
+        detail: JSON.stringify({
+          enabled: !!settings.experimentalConstellations,
+          level: ['low', 'medium', 'high'].includes(String(settings.experimentalConstellationsLevel))
+            ? String(settings.experimentalConstellationsLevel)
             : 'medium'
         })
       })

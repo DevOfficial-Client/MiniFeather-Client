@@ -251,6 +251,72 @@
                     );
                 }
 
+                if (level >= 5) {
+                    const d9 = localD * 3.7;
+
+                    offsets.push(
+                        [d9, 0, 0],
+                        [-d9, 0, 0],
+                        [0, d9, 0],
+                        [0, -d9, 0],
+                        [0, 0, d9],
+                        [0, 0, -d9],
+
+                        [d9, d9, 0],
+                        [-d9, d9, 0],
+                        [d9, -d9, 0],
+                        [-d9, -d9, 0],
+
+                        [0, d9, d9],
+                        [0, -d9, d9],
+                        [0, d9, -d9],
+                        [0, -d9, -d9],
+
+                        [d9, 0, d9],
+                        [-d9, 0, d9],
+                        [d9, 0, -d9],
+                        [-d9, 0, -d9]
+                    );
+                }
+
+                if (level >= 6) {
+                    const d10 = localD * 4.4;
+
+                    offsets.push(
+                        [d10, 0, 0],
+                        [-d10, 0, 0],
+                        [0, d10, 0],
+                        [0, -d10, 0],
+                        [0, 0, d10],
+                        [0, 0, -d10],
+
+                        [d10, d10, 0],
+                        [-d10, d10, 0],
+                        [d10, -d10, 0],
+                        [-d10, -d10, 0],
+
+                        [0, d10, d10],
+                        [0, -d10, d10],
+                        [0, d10, -d10],
+                        [0, -d10, -d10],
+
+                        [d10, 0, d10],
+                        [-d10, 0, d10],
+                        [d10, 0, -d10],
+                        [-d10, 0, -d10],
+
+                        [d10, d10, d10],
+                        [-d10, d10, d10],
+                        [d10, -d10, d10],
+                        [-d10, -d10, d10],
+
+                        [d10, d10, -d10],
+                        [-d10, d10, -d10],
+                        [d10, -d10, -d10],
+                        [-d10, -d10, -d10]
+                    );
+                }
+
                 offsets.forEach(offset => {
                     const material =
                         new LineBasicMaterialClass({
@@ -286,6 +352,158 @@
     window.minibloxApplySelectBoxThickness =
         applySelectBoxThickness;
 
+    // HSV→RGB (componentes 0..1) para el degradado por vértice.
+    function hsvToRgb(h) {
+        const i = Math.floor(h * 6);
+        const f = h * 6 - i;
+        const q = 1 - f;
+        switch (i % 6) {
+            case 0: return [1, f, 0];
+            case 1: return [q, 1, 0];
+            case 2: return [0, 1, f];
+            case 3: return [0, q, 1];
+            case 4: return [f, 0, 1];
+            default: return [1, 0, q];
+        }
+    }
+
+    // ── Arcoíris "rotando" alrededor del cuadrado ──
+    // El hue de cada vértice deriva de su ángulo alrededor del eje Y
+    // (más un leve término espiral vertical). Con el offset temporal los
+    // colores recorren el perímetro como si el contorno estuviera girando
+    // (ciclo 2.5s). Los hijos de thickness comparten geometría → heredan
+    // el efecto solos.
+    function applyRainbowBox(selectBox, now) {
+        const geo = selectBox.geometry;
+        const pos = geo?.attributes?.position;
+        if (!pos) return;
+
+        const count = pos.count;
+
+        // Hue base por vértice (cacheado; la geometría es estática):
+        // ángulo alrededor del eje Y → los colores recorren el perímetro.
+        // Término espiral suave para que las aristas verticales fluyan.
+        let param = geo.__mfRainbowParam;
+        if (!param || param.length !== count) {
+            param = new Float32Array(count);
+            const pa = pos.array;
+            let minY = Infinity;
+            let maxY = -Infinity;
+            for (let i = 0; i < count; i++) {
+                const y = pa[i * 3 + 1];
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+            const spanY = maxY - minY || 1;
+            for (let i = 0; i < count; i++) {
+                const angle =
+                    Math.atan2(pa[i * 3 + 2], pa[i * 3]) /
+                        (Math.PI * 2) +
+                    0.5;
+                const h =
+                    (pa[i * 3 + 1] - minY) / spanY;
+                param[i] = angle + h * 0.125;
+            }
+            geo.__mfRainbowParam = param;
+        }
+
+        // Atributo de color por vértice
+        let colAttr = geo.attributes.color;
+        if (!colAttr || colAttr.count !== count) {
+            colAttr = new pos.constructor(
+                new Float32Array(count * 3),
+                3
+            );
+            geo.setAttribute('color', colAttr);
+        }
+
+        const offset = (now / 2500) % 1; // "giro" temporal
+        const ca = colAttr.array;
+        const norm = h => ((h % 1) + 1) % 1;
+        for (let i = 0; i < count; i += 2) {
+            const h1 = param[i] + offset;
+            let h2 = i + 1 < count
+                ? param[i + 1] + offset
+                : h1;
+            // Camino más corto en el círculo de hue: evita el salto de
+            // color en la arista que cierra el ciclo del perímetro.
+            while (h2 - h1 > 0.5) h2 -= 1;
+            while (h2 - h1 < -0.5) h2 += 1;
+            const [r, g, b] = hsvToRgb(norm(h1));
+            ca[i * 3] = r;
+            ca[i * 3 + 1] = g;
+            ca[i * 3 + 2] = b;
+            if (i + 1 < count) {
+                const [r2, g2, b2] = hsvToRgb(norm(h2));
+                ca[i * 3 + 3] = r2;
+                ca[i * 3 + 4] = g2;
+                ca[i * 3 + 5] = b2;
+            }
+        }
+        colAttr.needsUpdate = true;
+
+        // vertexColors ON + color base blanco (la multiplicación del
+        // shader no debe teñir el degradado) en el material y los hijos.
+        const mats = [selectBox.material];
+        if (selectBox._thickChildren) {
+            for (const child of selectBox._thickChildren) {
+                if (child?.material) mats.push(child.material);
+            }
+        }
+        for (const m of mats) {
+            if (!m) continue;
+            m.vertexColors = true;
+            if (m.color) m.color.set('#ffffff');
+            m.needsUpdate = true;
+        }
+        selectBox.__mfRainbowOn = true;
+    }
+
+    // Apaga vertexColors al desactivar rainbow (guard: solo si estaba ON).
+    function clearRainbowBox(selectBox) {
+        if (!selectBox.__mfRainbowOn) return;
+        selectBox.__mfRainbowOn = false;
+        const mats = [selectBox.material];
+        if (selectBox._thickChildren) {
+            for (const child of selectBox._thickChildren) {
+                if (child?.material) mats.push(child.material);
+            }
+        }
+        for (const m of mats) {
+            if (!m) continue;
+            m.vertexColors = false;
+            m.needsUpdate = true;
+        }
+    }
+
+    function rainbowActive() {
+        try {
+            return (
+                localStorage.getItem(
+                    'miniblox_blockhighlight_rainbow'
+                ) === 'true'
+            );
+        } catch (_) {
+            return false;
+        }
+    }
+
+    // Aplica el color al material del selectBox Y a los hijos de thickness
+    // (cada nivel >1 crea LineSegments con material propio horneado —
+    // recolorear solo el padre no cambia nada visible).
+    function recolorBox(selectBox, color) {
+        if (selectBox.material?.color) {
+            selectBox.material.color.set(color);
+        }
+        if (selectBox._thickChildren) {
+            for (const child of selectBox._thickChildren) {
+                if (child?.material?.color) {
+                    child.material.color.set(color);
+                }
+            }
+        }
+    }
+
     function refreshBlockHighlight() {
         try {
             const game = getGame();
@@ -304,25 +522,37 @@
 
             selectBox.visible = true;
 
-            const color =
-                localStorage.getItem(
-                    'miniblox_blockhighlight_color'
-                ) || '#ffffff';
+            const rainbow = rainbowActive();
 
-            if (selectBox.material?.color) {
-                selectBox.material.color.set(color);
-            }
+            const color = rainbow
+                ? '#ffffff' // neutro: el degradado vive en los vértices
+                : localStorage.getItem(
+                      'miniblox_blockhighlight_color'
+                  ) || '#ffffff';
 
             const thickness =
                 localStorage.getItem(
                     'miniblox_blockhighlight_thickness'
                 ) || '1';
 
+            // Primero thickness (crea/recolorea hijos con el color dado),
+            // luego el arcoíris sobre todo (así los hijos nuevos ya entran
+            // con vertexColors en el mismo frame).
             applySelectBoxThickness(
                 selectBox,
                 thickness,
                 color
             );
+
+            if (rainbow) {
+                applyRainbowBox(
+                    selectBox,
+                    performance.now()
+                );
+            } else {
+                clearRainbowBox(selectBox);
+                recolorBox(selectBox, color);
+            }
 
             return true;
         } catch (err) {
@@ -449,15 +679,17 @@
 
     window.addEventListener(
         'message',
-        event => {
-            if (
-                event.data?.type ===
-                'MINIBLOX_REFRESH_BLOCK_HIGHLIGHT'
-            ) {
-                refreshBlockHighlight();
-            }
-        }
+        onHighlightMessage
     );
+
+    function onHighlightMessage(event) {
+        if (
+            event.data?.type ===
+            'MINIBLOX_REFRESH_BLOCK_HIGHLIGHT'
+        ) {
+            refreshBlockHighlight();
+        }
+    }
 
     let bundleStarted = false;
     let intervalTicks = 0;
@@ -489,114 +721,98 @@
     }, 500);
 
     // ── Modo arcoíris del block highlight ──
-    // Cicla el hue del material del selectBox (~20 fps, suficiente para un
-    // ciclo de color suave). El color fijo guardado no se toca: al apagar
-    // rainbow, refreshBlockHighlight() restaura el del setting.
-    let rainbowTimer = null;
-    let rainbowHue = Math.random();
-
-    function rainbowTick() {
-        try {
-            const selectBox = getGame()?.player?.selectBox;
-            if (!selectBox?.material?.color) return;
-            if (typeof selectBox.material.color.setHSL === 'function') {
-                rainbowHue = (rainbowHue + 0.004) % 1;
-                selectBox.material.color.setHSL(rainbowHue, 1, 0.5);
-            }
-        } catch (_) {}
-    }
-
+    // El color lo calcula refreshBlockHighlight() en cada refresh (corre
+    // tras cada select() del juego), leyendo localStorage. Aquí solo
+    // persistimos la preferencia y forzamos un refresh inmediato.
     function setRainbow(on) {
         localStorage.setItem(
             'miniblox_blockhighlight_rainbow',
             on ? 'true' : 'false'
         );
-        if (on && !rainbowTimer) {
-            rainbowTimer = setInterval(rainbowTick, 50);
-        } else if (!on && rainbowTimer) {
-            clearInterval(rainbowTimer);
-            rainbowTimer = null;
-            refreshBlockHighlight(); // volver al color fijo
-        }
+        refreshBlockHighlight();
     }
 
-    // Arranque: restaurar el modo si quedó activo de la sesión anterior
-    try {
-        if (
-            localStorage.getItem(
-                'miniblox_blockhighlight_rainbow'
-            ) === 'true'
-        ) {
-            rainbowTimer = setInterval(rainbowTick, 50);
+    function onHighlightConfig(event) {
+        let config;
+        try {
+            config =
+                typeof event.detail === 'string'
+                    ? JSON.parse(event.detail)
+                    : event.detail;
+        } catch (_) {
+            console.warn(
+                `${TAG} Invalid Block Highlight config.`
+            );
+            return;
         }
-    } catch (_) {}
-
-    document.addEventListener(
-        'minifeather:block-highlight-config',
-        event => {
-            let config;
-            try {
-                config =
-                    typeof event.detail === 'string'
-                        ? JSON.parse(event.detail)
-                        : event.detail;
-            } catch (_) {
-                console.warn(
-                    `${TAG} Invalid Block Highlight config.`
-                );
-                return;
-            }
-            if (
-                !config ||
-                typeof config !== 'object'
-            ) {
-                return;
-            }
-            if (typeof config.rainbow === 'boolean') {
-                setRainbow(config.rainbow);
-            }
-            if (
-                typeof config.enabled === 'boolean'
-            ) {
-                localStorage.setItem(
-                    'miniblox_blockhighlight',
-                    config.enabled
-                        ? 'true'
-                        : 'false'
-                );
-            }   
-            if (
-                typeof config.color === 'string' &&
-                /^#[0-9a-fA-F]{6}$/.test(
-                    config.color
-                )
-            ) {
-                localStorage.setItem(
-                    'miniblox_blockhighlight_color',
-                    config.color
-                );
-            }   
-            if (
-                Number.isFinite(
+        if (
+            !config ||
+            typeof config !== 'object'
+        ) {
+            return;
+        }
+        if (typeof config.rainbow === 'boolean') {
+            setRainbow(config.rainbow);
+        }
+        if (
+            typeof config.enabled === 'boolean'
+        ) {
+            localStorage.setItem(
+                'miniblox_blockhighlight',
+                config.enabled
+                    ? 'true'
+                    : 'false'
+            );
+        }
+        if (
+            typeof config.color === 'string' &&
+            /^#[0-9a-fA-F]{6}$/.test(
+                config.color
+            )
+        ) {
+            localStorage.setItem(
+                'miniblox_blockhighlight_color',
+                config.color
+            );
+        }
+        if (
+            Number.isFinite(
+                Number(config.thickness)
+            )
+        ) {
+            const thickness = Math.max(
+                1,
+                Math.min(
+                    6,
                     Number(config.thickness)
                 )
-            ) {
-                const thickness = Math.max(
-                    1,
-                    Math.min(
-                        4,
-                        Number(config.thickness)
-                    )
-                );  
-                localStorage.setItem(
-                    'miniblox_blockhighlight_thickness',
-                    String(thickness)
-                );
-            }   
-            refreshBlockHighlight();    
-            void 0;
+            );
+            localStorage.setItem(
+                'miniblox_blockhighlight_thickness',
+                String(thickness)
+            );
         }
+        refreshBlockHighlight();
+        void 0;
+    }
+    document.addEventListener(
+        'minifeather:block-highlight-config',
+        onHighlightConfig
     );
+
+    // Guard de re-inyección: destruye interval y listeners del scope
+    // anterior antes de que este re-registre los suyos.
+    try { window.__MF_FEATURES_SCOPE__?.destroy?.(); } catch (_) {}
+    window.__MF_FEATURES_SCOPE__ = {
+        destroy() {
+            clearInterval(interval);
+            window.removeEventListener('message', onHighlightMessage);
+            document.removeEventListener(
+                'minifeather:block-highlight-config',
+                onHighlightConfig
+            );
+        }
+    };
 
     window.MF_FEATURES = {
         refreshBlockHighlight,

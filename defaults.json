@@ -5,7 +5,8 @@
     "supportAds": false,
     "startupAnimation": true,
     "discord": true,
-    "language": "en"
+    "language": "en",
+    "performanceProfile": "low"
   },
   "hud": {
     "keystrokes": true,
@@ -52,7 +53,7 @@
     "blockHighlight": true,
     "blockHighlightColor": "#ffffff",
     "blockHighlightRainbow": true,
-    "blockHighlightThickness": 1
+    "blockHighlightThickness": 6
   },
   "movement": {
     "zoom": true,
@@ -81,7 +82,7 @@
     "dynamicCrosshairSize": 28
   },
   "shaders": {
-    "customShader": true,
+    "customShader": false
     "customShaderPreset": "photon",
     "customShaderStrength": 0.5,
     "customShaderRenderScale": 1.0
@@ -98,6 +99,8 @@
     "experimentalWetDrySeconds": 180,
     "experimentalAurora": false,
     "experimentalAuroraLevel": "medium",
+    "experimentalConstellations": false,
+    "experimentalConstellationsLevel": "medium",
     "experimentalGrassFlowers": true,
     "experimentalInteractiveVegetation": false,
     "experimentalInteractiveVegetationLevel": "medium",

@@ -8,6 +8,12 @@
 (function () {
     'use strict';
 
+    // Guard de re-inyección: sin esto, cada recarga de la extensión vuelve
+    // a wrappear updateMatrixWorld de meshes YA wrappeados (capas apiladas
+    // que multiplican el trabajo de render y nunca se deshacen) y duplica
+    // el listener de config.
+    try { window.__MF_PA_SCOPE__?.destroy?.(); } catch {}
+
     const TAG = '[MF_PlayerAnims]';
 
     const state = {
@@ -550,12 +556,23 @@
         return state.debug;
     }
 
-    document.addEventListener('minifeather:playeranims-config', (e) => {
+    function onPlayerAnimsConfig(e) {
         try {
             const cfg = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail;
             if (cfg.enabled !== undefined) setEnabled(cfg.enabled);
         } catch {}
-    });
+    }
+    document.addEventListener('minifeather:playeranims-config', onPlayerAnimsConfig);
+
+    // Para el guard de re-inyección: apaga y des-wrappea TODO lo de ESTE
+    // scope (setEnabled(false) restaura cada updateMatrixWorld original).
+    window.__MF_PA_SCOPE__ = {
+        destroy() {
+            try { if (state.enabled) setEnabled(false); } catch {}
+            if (state.rafId) { cancelAnimationFrame(state.rafId); state.rafId = null; }
+            document.removeEventListener('minifeather:playeranims-config', onPlayerAnimsConfig);
+        }
+    };
 
     // Diagnóstico en vivo: MF_PAdiag.start() → moverse → MF_PAdiag.dump()
     // imprime tabla compacta vanilla-vs-pack para pegar en logs.
