@@ -132,7 +132,37 @@
   // Cada perfil ajusta de golpe las funciones visuales/pesadas del client
   // (HUD, movimiento y utilidades no se tocan). Cambiar manualmente
   // cualquiera de estas claves marca el perfil como "custom".
+  // Potato = low + lo barato en CPU que hace al juego sentirse vivo
+  // (HUD clásico, nametags, animaciones); los gráficos NATIVOS del juego
+  // (resolución, chunks, sombras...) los maneja MF_FpsBoost.
   const PERFORMANCE_PROFILES = Object.freeze({
+    potato: Object.freeze({
+      // Máximos FPS sin dejar el mundo muerto
+      experimentalRealistic: false,
+      experimentalAurora: false,
+      experimentalConstellations: false,
+      experimentalGrassFlowers: false,
+      experimentalInteractiveVegetation: false,
+      experimentalFallenLeaves: false,
+      experimentalAnimatedItems: false,
+      experimentalBetterAnimationCape: false,
+      experimentalTinyTakeover: false,
+      experimentalPbr: false,
+      shineAmbience: false,
+      waterSplash: false,
+      itemPhysics: false,
+      leafWind: false,
+      duckMobs: false,
+      crittersMobs: false,
+      titanTiny: false,
+      damageParticles: false,
+      patPat: false,
+      // Lo barato que va ON explícito
+      guiPatch: true,
+      healthNameTags: true,
+      distanceNameTags: true,
+      playerAnims: true
+    }),
     low: Object.freeze({
       // Máximos FPS: todo lo decorativo fuera
       experimentalRealistic: false,
@@ -260,19 +290,6 @@
   );
 
   const PROFILE_ORDER = Object.freeze(['potato', 'low', 'medium', 'high', 'ultra', 'extreme']);
-
-  // Potato = low en features decorativas; los gráficos NATIVOS del juego
-  // (resolución, chunks, sombras...) los maneja MF_FpsBoost. Pero no todo
-  // fuera: el HUD clásico, los nametags con vida/distancia y las
-  // animaciones de jugador son baratísimos en CPU y hacen que el juego
-  // no se sienta roto — van ON explícitos.
-  PERFORMANCE_PROFILES.potato = Object.freeze({
-    ...PERFORMANCE_PROFILES.low,
-    guiPatch: true,
-    healthNameTags: true,
-    distanceNameTags: true,
-    playerAnims: true
-  });
 
   const ELYTRA_FLIGHT_LIMITS = Object.freeze({
     rollSensitivity: Object.freeze({ min: 0.0005, max: 0.006, step: 0.00005, label: 'elytraFlightRollSensitivity', digits: 5 }),
@@ -985,23 +1002,34 @@
   }
 
   function injectFont() {
+    // La fuente se registra con la FontFace API desde un ArrayBuffer:
+    // no pasa por red ni por CSS, así que el CSP font-src de la página
+    // no puede bloquearla y no queda colgada de una URL de extensión
+    // vieja tras re-inyectar. La regla CSS solo declara la familia.
     let style = document.getElementById('minifeather-font');
     if (!style) {
       style = document.createElement('style');
       style.id = 'minifeather-font';
-      style.textContent = `
-        @font-face {
-          font-family:'Faithful';
-          src:url('${CONFIG.fontUrl}') format('truetype');
-          font-weight:100 900;
-          font-style:normal;
-          font-display:swap;
-        }
-        *,*::before,*::after {
-          font-family:'Faithful','Inter','Arial',sans-serif !important;
-        }
-      `;
       document.head.appendChild(style);
+    }
+    style.textContent = `
+      *,*::before,*::after {
+        font-family:'Faithful','Inter','Arial',sans-serif !important;
+      }
+    `;
+
+    if (!window.__mfFaithfulFontLoading) {
+      window.__mfFaithfulFontLoading = true;
+      try {
+        fetch(CONFIG.fontUrl)
+          .then(resp => {
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            return resp.arrayBuffer();
+          })
+          .then(buf => new FontFace('Faithful', buf, { weight: '100 900' }))
+          .then(face => document.fonts.add(face))
+          .catch(err => console.warn('MiniFeather font load failed:', err?.message || err));
+      } catch (_) {}
     }
 
     const descriptor = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'font');
