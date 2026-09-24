@@ -439,9 +439,27 @@
     // Cruza 0.25-0.55 rad en su vida (~0.8-1.5s): rápido como las reales
     const speed = radius * (0.35 + Math.random() * 0.4);
 
+    // La posición/rumbo se generaron en espacio MUNDO (elevación real
+    // sobre el horizonte), pero las coords viven en el frame LOCAL del
+    // starfield, que rota alrededor de (1,1,1) durante la noche. Sin
+    // esta transformación, a media noche los spawns caerían bajo el
+    // horizonte y morirían al instante (invisibles).
+    let px = nx * radius, py = ny * radius, pz = nz * radius;
+    const sf = state.starfield;
+    const VC = sf?.position?.constructor;
+    if (VC && sf?.quaternion) {
+      try {
+        const q = sf.quaternion.clone().invert();
+        const v = new VC(px, py, pz).applyQuaternion(q);
+        const d = new VC(dx, dy, dz).applyQuaternion(q);
+        px = v.x; py = v.y; pz = v.z;
+        dx = d.x; dy = d.y; dz = d.z;
+      } catch (_) {}
+    }
+
     Object.assign(m, {
       active: true,
-      px: nx * radius, py: ny * radius, pz: nz * radius,
+      px, py, pz,
       dx, dy, dz,
       speed,
       life: 0.8 + Math.random() * 0.7,
@@ -475,7 +493,16 @@
     for (const m of meteors) {
       if (!m.active) continue;
       m.t += dt;
-      if (m.t >= m.life || m.py < 0.03 * state.radius) { killMeteor(m); continue; }
+
+      // Kill bajo el horizonte en espacio MUNDO (m.py es local y el
+      // frame rota: local alto ≠ mundo alto). m.line.quaternion ya tiene
+      // la rotación del starfield copiada este frame.
+      let worldY = m.py;
+      try {
+        const VC2 = m.line.position.constructor;
+        worldY = new VC2(m.px, m.py, m.pz).applyQuaternion(m.line.quaternion).y;
+      } catch (_) {}
+      if (m.t >= m.life || worldY < 0.04 * state.radius) { killMeteor(m); continue; }
 
       m.px += m.dx * m.speed * dt;
       m.py += m.dy * m.speed * dt;

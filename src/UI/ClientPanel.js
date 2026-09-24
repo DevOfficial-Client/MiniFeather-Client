@@ -259,7 +259,20 @@
     Object.values(PERFORMANCE_PROFILES).flatMap(preset => Object.keys(preset))
   );
 
-  const PROFILE_ORDER = Object.freeze(['low', 'medium', 'high', 'ultra', 'extreme']);
+  const PROFILE_ORDER = Object.freeze(['potato', 'low', 'medium', 'high', 'ultra', 'extreme']);
+
+  // Potato = low en features decorativas; los gráficos NATIVOS del juego
+  // (resolución, chunks, sombras...) los maneja MF_FpsBoost. Pero no todo
+  // fuera: el HUD clásico, los nametags con vida/distancia y las
+  // animaciones de jugador son baratísimos en CPU y hacen que el juego
+  // no se sienta roto — van ON explícitos.
+  PERFORMANCE_PROFILES.potato = Object.freeze({
+    ...PERFORMANCE_PROFILES.low,
+    guiPatch: true,
+    healthNameTags: true,
+    distanceNameTags: true,
+    playerAnims: true
+  });
 
   const ELYTRA_FLIGHT_LIMITS = Object.freeze({
     rollSensitivity: Object.freeze({ min: 0.0005, max: 0.006, step: 0.00005, label: 'elytraFlightRollSensitivity', digits: 5 }),
@@ -6869,6 +6882,7 @@
   function renderPerformanceProfileCard() {
     const current = String(settings.performanceProfile || 'custom');
     const labels = {
+      potato: t('profilePotato'),
       low: t('profileLow'),
       medium: t('profileMedium'),
       high: t('profileHigh'),
@@ -11605,6 +11619,11 @@ function renderCreditsPage() {
     Object.assign(guiSettings, preset);
     guiSettings.performanceProfile = name;
     saveSettings(true);
+    // Potato además hunde los gráficos NATIVOS del juego (MF_FpsBoost);
+    // cualquier otro perfil restaura el snapshot del usuario.
+    document.dispatchEvent(new CustomEvent('minifeather:fpsboost-config', {
+      detail: JSON.stringify({ enabled: name === 'potato', level: 'potato' })
+    }));
     applyGuiSettings();
     update();
   }

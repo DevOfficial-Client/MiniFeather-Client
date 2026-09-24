@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.15.5",
+  "version": "4.17.5",
   "description": "MiniFeather Client for MiniBlox — movement API resolver for resilient Auto Sprint, Safe Sneak and Anti-AFK, plus Titan & Tiny camera/nametag fixes, FullBright and Realistic V4 Custom.",
   "permissions": [
     "storage",
@@ -131,6 +131,7 @@
         "src/Chat/GifChat.js",
         "src/Chat/ClientCommands.js",
         "src/Render/Zoom.js",
+        "src/Render/FpsBoost.js",
         "src/Render/CameraOverhaul.js",
         "src/HUD/DynamicCrosshair.js",
         "src/Movement/Baritone.js",
