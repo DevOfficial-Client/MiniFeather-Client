@@ -132,6 +132,7 @@
         "src/Chat/ClientCommands.js",
         "src/Render/Zoom.js",
         "src/Render/FpsBoost.js",
+        "src/Render/SmartCulling.js",
         "src/Render/CameraOverhaul.js",
         "src/HUD/DynamicCrosshair.js",
         "src/Movement/Baritone.js",

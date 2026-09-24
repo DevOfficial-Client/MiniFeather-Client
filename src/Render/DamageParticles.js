@@ -5,7 +5,7 @@
   const GLOBAL_KEY = '__MINIFEATHER_DAMAGE_PARTICLES__';
   const PARTICLE_LIFE_MS = 1250;
   const DAMAGE_WAIT_MS = 900;
-  const DAMAGE_SCAN_MS = 10;
+  const DAMAGE_SCAN_MS = 30; // antes 10 (100 Hz de polling; 30ms es imperceptible)
   const REHOOK_MS = 400;
 
   try {

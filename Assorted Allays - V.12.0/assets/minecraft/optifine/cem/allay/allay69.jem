@@ -1,0 +1,168 @@
+{
+	"credit": "Made with Blockbench",
+	"textureSize": [32, 32],
+	"texture": "optifine/random/entity/allay/blaze_allay.png",
+	"models": [
+		{
+			"part": "head",
+			"id": "head",
+			"invertAxis": "xy",
+			"translate": [0, -6, 0],
+			"boxes": [
+				{"coordinates": [-2.5, 6, -2.5, 5, 5, 5], "textureOffset": [0, 0]}
+			],
+			"submodels": [
+				{
+					"id": "rods",
+					"invertAxis": "xy",
+					"translate": [0, 6, 0],
+					"submodels": [
+						{
+							"id": "rod1",
+							"invertAxis": "xy",
+							"translate": [4, -1, -3.5],
+							"boxes": [
+								{"coordinates": [-0.5, 0, -0.5, 1, 4, 1], "textureOffset": [24, 1]}
+							]
+						},
+						{
+							"id": "rod2",
+							"invertAxis": "xy",
+							"translate": [-4, -1, -3.5],
+							"boxes": [
+								{"coordinates": [-0.5, 0, -0.5, 1, 4, 1], "textureOffset": [24, 1]}
+							]
+						},
+						{
+							"id": "rod3",
+							"invertAxis": "xy",
+							"translate": [-4, -1, 3.5],
+							"boxes": [
+								{"coordinates": [-0.5, 0, -0.5, 1, 4, 1], "textureOffset": [24, 1]}
+							]
+						},
+						{
+							"id": "rod4",
+							"invertAxis": "xy",
+							"translate": [4, -1, 3.5],
+							"boxes": [
+								{"coordinates": [-0.5, 0, -0.5, 1, 4, 1], "textureOffset": [24, 1]}
+							]
+						}
+					]
+				},
+				{
+					"id": "minus",
+					"invertAxis": "xy",
+					"translate": [0, 6, 0],
+					"submodels": [
+						{
+							"id": "rods2",
+							"invertAxis": "xy",
+							"translate": [0, 0, 0],
+							"submodels": [
+								{
+									"id": "rod5",
+									"invertAxis": "xy",
+									"translate": [3, -5, -2.5],
+									"boxes": [
+										{"coordinates": [-0.5, 0, -0.5, 1, 4, 1], "textureOffset": [24, 1]}
+									]
+								},
+								{
+									"id": "rod6",
+									"invertAxis": "xy",
+									"translate": [-3, -5, -2.5],
+									"boxes": [
+										{"coordinates": [-0.5, 0, -0.5, 1, 4, 1], "textureOffset": [24, 1]}
+									]
+								},
+								{
+									"id": "rod7",
+									"invertAxis": "xy",
+									"translate": [-3, -5, 2.5],
+									"boxes": [
+										{"coordinates": [-0.5, 0, -0.5, 1, 4, 1], "textureOffset": [24, 1]}
+									]
+								},
+								{
+									"id": "rod8",
+									"invertAxis": "xy",
+									"translate": [3, -5, 2.5],
+									"boxes": [
+										{"coordinates": [-0.5, 0, -0.5, 1, 4, 1], "textureOffset": [24, 1]}
+									]
+								}
+							]
+						}
+					]
+				}
+			],
+			"animations": [
+				{
+					"rods.ry": "time/4",
+					"rod1.ry": "-(time/4)",
+					"rod1.ty": "sin(time / 4 + 1)*0.5+ cos(time / 4 + 1)*0.5",
+					"rod2.ry": "-(time/4)",
+					"rod2.ty": "sin(time / 4 + 1)*0.5+ cos(time / 4 + 1)*0.5",
+					"rod3.ry": "-(time/4)",
+					"rod3.ty": "sin(time / 4 + 1)*0.5+ cos(time / 4 + 1)*0.5",
+					"rod4.ry": "-(time/4)",
+					"rod4.ty": "sin(time / 4 + 1)*0.5+ cos(time / 4 + 1)*0.5",
+					"minus.rx": "-head.rx",
+					"minus.ry": "-head.ry",
+					"minus.rz": "-head.rz",
+					"rods2.ry": "-time/5",
+					"rod5.ry": "(time/5)",
+					"rod5.ty": "4 + cos(time / 4 + 1)*0.5+ cos(time / 4 + 1)*0.5",
+					"rod6.ry": "(time/5)",
+					"rod6.ty": "4 + cos(time / 4 + 1)*0.5+ cos(time / 4 + 1)*0.5",
+					"rod7.ry": "(time/5)",
+					"rod7.ty": "4 + cos(time / 4 + 1)*0.5+ cos(time / 4 + 1)*0.5",
+					"rod8.ry": "(time/5)",
+					"rod8.ty": "4 + cos(time / 4 + 1)*0.5+ cos(time / 4 + 1)*0.5"
+				}
+			]
+		},
+		{
+			"part": "body",
+			"id": "body",
+			"invertAxis": "xy",
+			"translate": [0, -6, 0],
+			"boxes": [
+				{"coordinates": [-1.5, 2, -1, 3, 4, 2], "textureOffset": [0, 10]},
+				{"coordinates": [-1.5, 1, -1, 3, 5, 2], "textureOffset": [0, 16], "sizeAdd": -0.2}
+			]
+		},
+		{
+			"part": "right_arm",
+			"id": "right_arm",
+			"invertAxis": "xy",
+			"translate": [-1.75, -5.5, 0],
+			"boxes": [
+				{"coordinates": [1.5, 2, -1, 1, 4, 2], "textureOffset": [23, 0]}
+			]
+		},
+		{
+			"part": "left_arm",
+			"id": "left_arm",
+			"invertAxis": "xy",
+			"translate": [1.75, -5.5, 0],
+			"boxes": [
+				{"coordinates": [-2.5, 2, -1, 1, 4, 2], "textureOffset": [23, 0]}
+			]
+		},
+		{
+			"part": "left_wing",
+			"id": "left_wing",
+			"invertAxis": "xy",
+			"translate": [0.5, -6, -1]
+		},
+		{
+			"part": "right_wing",
+			"id": "right_wing",
+			"invertAxis": "xy",
+			"translate": [-0.5, -6, -1]
+		}
+	]
+}

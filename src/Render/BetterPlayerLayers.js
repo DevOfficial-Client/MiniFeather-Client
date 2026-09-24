@@ -107,10 +107,17 @@
         return null;
     }
 
+    // Caché negativa: el fiber-walk de #react es caro y synchronize corre
+    // cada 250ms — sin juego (menús) no hay razón para re-escanear tan seguido
+    let _lastReactScan = 0;
     function findGame() {
         for (const candidate of [W.Game, W.game, W.__MINIBLOX_GAME__, state.game]) {
             if (isGame(candidate)) return candidate;
         }
+
+        const now = performance.now();
+        if (now - _lastReactScan < 1000) return null;
+        _lastReactScan = now;
 
         const game = findGameInReact(document.querySelector('#react'));
         if (game) W.__MINIBLOX_GAME__ = game;

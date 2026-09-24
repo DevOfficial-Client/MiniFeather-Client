@@ -63,6 +63,8 @@
   function findGame(force = false) {
     const now = performance.now();
     if (!force && state.game?.player && state.game?.world && now - state.lastGameScan < 1200) return state.game;
+    // Caché negativa: sin partida antes se escaneaba el DOM cada frame
+    if (!force && now - state.lastGameScan < 800) return state.game;
     state.lastGameScan = now;
 
     for (const candidate of [globalThis.miniblox, globalThis.__MINIBLOX_GAME__, state.game]) {

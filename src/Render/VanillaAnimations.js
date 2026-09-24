@@ -4,10 +4,10 @@
     const state = {
         enabled: false,
         game: null,
-        trackedJoints: [],   
+        trackedJoints: [],
         lastGameScan: 0,
         lastScan: 0,
-        rafId: null
+        scanTimer: null
     };
 
     function getGame(force = false) {
@@ -185,24 +185,13 @@
         });
     }
 
-    function loop() {
+    // El reset de rotaciones lo hace el wrap de freezeJoint DENTRO de
+    // updateMatrixWorld (que el juego llama cada frame), así que el loop
+    // rAF que además las ponía a cero era trabajo duplicado. Solo queda el
+    // scan periódico de entidades.
+    function scanTick() {
         if (!state.enabled) return;
-
-        const now = performance.now();
-        if (now - state.lastScan > 500) {
-            state.lastScan = now;
-            try { scanEntities(); } catch {}
-        }
-
-        for (const joint of state.trackedJoints) {
-            if (joint && joint.rotation) {
-                joint.rotation.x = 0;
-                joint.rotation.y = 0;
-                joint.rotation.z = 0;
-            }
-        }
-
-        state.rafId = requestAnimationFrame(loop);
+        try { scanEntities(); } catch {}
     }
 
     function setEnabled(enabled) {
@@ -215,13 +204,13 @@
             state.enabled = true;
             state.lastScan = 0;
             getGame(true);
-            try { scanEntities(); } catch {}
-            state.rafId = requestAnimationFrame(loop);
+            scanTick();
+            if (!state.scanTimer) state.scanTimer = setInterval(scanTick, 500);
         } else {
             state.enabled = false;
-            if (state.rafId) {
-                cancelAnimationFrame(state.rafId);
-                state.rafId = null;
+            if (state.scanTimer) {
+                clearInterval(state.scanTimer);
+                state.scanTimer = null;
             }
             unfreezeAll();
         }

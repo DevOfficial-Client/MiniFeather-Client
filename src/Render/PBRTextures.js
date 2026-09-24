@@ -519,6 +519,12 @@
     }
 
     function hookMaterial(material) {
+        // El agua/lava del modo Realista ya tiene sus propias normales
+        // animadas (FluidShaderPatch) — el PBR encima es costo doble por
+        // fragmento sin ganancia visual (el atlas ni calza con UVs scroll)
+        try {
+            if (globalThis.MF_RealisticFluid?.isFluidMaterial?.(material)) return false;
+        } catch (_) {}
         if (state.hooked.has(material)) {
             
             let chainHasPbr = false;
@@ -766,13 +772,20 @@
         const scene = getScene(findGame());
         if (!scene) return 0;
         let added = 0;
+        // El engine regenera materiales vanilla en bucle; sin tope, un solo
+        // scan recompila decenas de shaders WebGL de golpe (10-100ms c/u =
+        // hitch visible). Con el cap, el lote se reparte entre scans.
+        const MAX_NEW_PER_SCAN = 10;
         for (const mesh of collectMeshes(scene)) {
             const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
             for (const m of mats) {
-                if (m && hookMaterial(m)) added++;
+                if (m && hookMaterial(m)) {
+                    added++;
+                    if (added >= MAX_NEW_PER_SCAN) return added;
+                }
             }
         }
-        
+
         if (added > 0) {
             void 0;
         }

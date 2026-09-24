@@ -227,6 +227,7 @@
       leafWind: true,
       duckMobs: true,
       crittersMobs: true,
+      allayPets: false,
       titanTiny: true,
       damageParticles: true,
       patPat: true
@@ -253,12 +254,16 @@
       leafWind: true,
       duckMobs: true,
       crittersMobs: true,
+      allayPets: false,
       titanTiny: true,
       damageParticles: true,
       patPat: true
     }),
     extreme: Object.freeze({
-      // Todo al máximo
+      // Todo al máximo, PERO sin combos patológicos: vegetación a 'high'
+      // porque 'extreme' duplica vértices (73k) por poca ganancia visual,
+      // y apilada con PBR+Realistic se comía hasta una RTX 5050.
+      // El nivel 'extreme' de vegetación sigue disponible a mano.
       experimentalRealistic: true,
       experimentalRealisticLevel: 'ultra',
       experimentalAurora: true,
@@ -267,7 +272,7 @@
       experimentalConstellationsLevel: 'high',
       experimentalGrassFlowers: true,
       experimentalInteractiveVegetation: true,
-      experimentalInteractiveVegetationLevel: 'extreme',
+      experimentalInteractiveVegetationLevel: 'high',
       experimentalFallenLeaves: true,
       experimentalAnimatedItems: true,
       experimentalBetterAnimationCape: true,
@@ -697,6 +702,7 @@
     patPat: false,
     duckMobs: false,
     crittersMobs: false,
+    allayPets: false,
     itemPhysics: false,
     noWeather: false,
     fullBright: false,
@@ -855,6 +861,7 @@
   let guiSettings = { ...DEFAULT_SETTINGS };
   let currentLogo = CONFIG.defaultLogo;
   let updateTimer = 0;
+  let pbrKindsTimer = 0;
   let activePage = 'dashboard';
   let searchQuery = '';
   let activeCategory = 'all';
@@ -962,8 +969,12 @@
     return value.replace(/\{(\w+)\}/g, (_, token) => token in vars ? vars[token] : '');
   }
 
-  function sendLanguageConfig() {
-    
+  // El payload de traducciones (10 idiomas serializados) es idéntico
+  // entre toggles: se construye UNA vez y se reutiliza (antes se
+  // re-serializaba entero en cada interacción de settings).
+  let languageStringsJson = '';
+  function buildLanguageStringsJson() {
+    if (languageStringsJson) return languageStringsJson;
     const languages = ['en', 'es', 'ja', 'it', 'zh', 'fr', 'de', 'pt', 'ru', 'ko'];
     const strings = {};
     for (const lang of languages) {
@@ -973,8 +984,13 @@
         strings[key][lang] = table[key];
       }
     }
+    languageStringsJson = JSON.stringify(strings);
+    return languageStringsJson;
+  }
+
+  function sendLanguageConfig() {
     document.dispatchEvent(new CustomEvent('minifeather:language-config', {
-      detail: JSON.stringify({ language: settings.language || 'en', strings })
+      detail: `{"language":${JSON.stringify(settings.language || 'en')},"strings":${buildLanguageStringsJson()}}`
     }));
   }
 
@@ -1181,7 +1197,8 @@
 
   function changeDiscordButton() {
     document.querySelectorAll('button').forEach(btn => {
-      const text = btn.innerText || '';
+      // textContent: innerText fuerza re-layout de TODO el documento por botón
+      const text = btn.textContent || '';
       if (!text.includes('Join the Discord') && btn.dataset.mfJoin !== '1') return;
 
       if (!btn.hasAttribute('data-mf-original-html')) btn.dataset.mfOriginalHtml = btn.innerHTML;
@@ -1204,9 +1221,9 @@
     const replacements = getDiscordReplacementMap();
     Object.entries(replacements).forEach(([original, replacement]) => {
       document.querySelectorAll('p').forEach(p => {
-        if (p.innerText !== original && p.dataset.mfDiscordKey !== original) return;
-        if (!p.hasAttribute('data-mf-original-text')) p.dataset.mfOriginalText = p.innerText;
-        p.innerText = replacement;
+        if (p.textContent !== original && p.dataset.mfDiscordKey !== original) return;
+        if (!p.hasAttribute('data-mf-original-text')) p.dataset.mfOriginalText = p.textContent;
+        p.textContent = replacement;
         p.dataset.mfDiscordKey = original;
       });
       replaceTextNodes(original, replacement);
@@ -1215,7 +1232,7 @@
 
   function changeWelcomeText() {
     document.querySelectorAll('p.css-1dxm2zz').forEach(p => {
-      if (!p.innerText.toLowerCase().startsWith('welcome back') && p.dataset.mfWelcome !== '1') return;
+      if (!p.textContent.toLowerCase().startsWith('welcome back') && p.dataset.mfWelcome !== '1') return;
 
       if (!p.hasAttribute('data-mf-original-html')) p.dataset.mfOriginalHtml = p.innerHTML;
       p.innerHTML = t('welcomeHtml');
@@ -3381,6 +3398,7 @@
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc'), tags: [] },
       { page: 'render', key: 'duckMobs', title: t('duckMobs'), desc: t('duckMobsDesc'), tags: ['new'] },
       { page: 'render', key: 'crittersMobs', title: t('crittersMobs'), desc: t('crittersMobsDesc'), tags: ['new'] },
+      { page: 'render', key: 'allayPets', title: t('allayPets'), desc: t('allayPetsDesc'), tags: ['new'] },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc'), tags: [] },
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc'), tags: [] },
       { page: 'render', key: 'fullBright', title: t('fullBright'), desc: t('fullBrightDesc'), tags: [] },
@@ -3649,6 +3667,7 @@
     damage: 'damageParticles', damageparticles: 'damageParticles',
     duck: 'duckMobs', ducks: 'duckMobs', duckmobs: 'duckMobs', patos: 'duckMobs', pato: 'duckMobs',
     critter: 'crittersMobs', critters: 'crittersMobs', crittersmobs: 'crittersMobs', cac: 'crittersMobs', bichos: 'crittersMobs', bicho: 'crittersMobs', animales: 'crittersMobs',
+    allay: 'allayPets', allays: 'allayPets', allaypet: 'allayPets', mascota: 'allayPets', mascotas: 'allayPets', pet: 'allayPets', pets: 'allayPets',
     gif: 'gifChat', gifs: 'gifChat', gifchat: 'gifChat', klipy: 'gifChat', stickers: 'gifChat',
     fps: 'fpsCounter', fpscounter: 'fpsCounter',
     gui: 'guiPatch', guipatch: 'guiPatch',
@@ -3679,7 +3698,7 @@
     distanceNameTags: 'distanceNameTags', fpsCounter: 'fpsCounter', freelook: 'freelook', freecam: 'freecam',
     guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers',
     healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
-    keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs', crittersMobs: 'crittersMobs',
+    keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs', crittersMobs: 'crittersMobs', allayPets: 'allayPets',
     pingCounter: 'pingCounter', titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations',
     waypoints: 'waypoints', zoom: 'zoom'
   });
@@ -4134,6 +4153,29 @@
       },
       destroy() {
         sendCrittersMobsConfig(false);
+      }
+    }));
+  }
+
+  function sendAllayPetsConfig(enabled) {
+    document.dispatchEvent(new CustomEvent('minifeather:allaypets-toggle', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initAllayPetsModule() {
+    registerModule('allayPets', () => createLifecycle({
+      enable() {
+        sendAllayPetsConfig(true);
+      },
+      disable() {
+        sendAllayPetsConfig(false);
+      },
+      refresh() {
+        sendAllayPetsConfig(MODULES.get('allayPets')?.enabled === true);
+      },
+      destroy() {
+        sendAllayPetsConfig(false);
       }
     }));
   }
@@ -7069,6 +7111,11 @@
               t('crittersMobsDesc')
             )}
             ${renderToggle(
+              'allayPets',
+              t('allayPets'),
+              t('allayPetsDesc')
+            )}
+            ${renderToggle(
               'itemPhysics',
               t('itemPhysics'),
               t('itemPhysicsDesc')
@@ -8664,12 +8711,7 @@ function renderCreditsPage() {
     const gen = ++saveGeneration;
     const doSave = () => {
       if (!extAlive()) return;
-      chrome.storage.local.set({ settings: { ...settings } }, () => {
-        // Solo actualizamos si no hay un guardado más nuevo pendiente
-        if (gen === saveGeneration && extAlive()) {
-          chrome.storage.local.get('settings', () => {});
-        }
-      });
+      chrome.storage.local.set({ settings: { ...settings } });
     };
     if (immediate) doSave();
     else saveTimer = setTimeout(doSave, 150);
@@ -8742,7 +8784,7 @@ function renderCreditsPage() {
   const NSB_BOOLEAN_KEYS = [
     'rebrand', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
-    'waterSplash', 'shineAmbience', 'patPat', 'duckMobs', 'crittersMobs', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
+    'waterSplash', 'shineAmbience', 'patPat', 'duckMobs', 'crittersMobs', 'allayPets', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
     'safeSneak', 'autoRespawn', 'idlePlayerBot', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
     'dynamicCrosshair', 'vanillaAnimations', 'leafWind', 'handSway', 'betterPlayerLayers',
     'chatVideos', 'chatLinks', 'chatMemes', 'clientChat', 'rhythmParkour', 'guiPatch',
@@ -11257,7 +11299,11 @@ function renderCreditsPage() {
       }
 
       const refreshPbrKinds = () => {
-        if (!pbrKinds) return;
+        if (!pbrKinds || !pbrKinds.isConnected) {
+          // La página se re-renderizó: este interval quedó huérfano → morir
+          if (pbrKindsTimer) { clearInterval(pbrKindsTimer); pbrKindsTimer = 0; }
+          return;
+        }
         const avail = localStorage.getItem('mf_pbr_available') === 'true';
         pbrKinds.textContent = avail
           ? ' · PBR maps loaded ✓'
@@ -11265,7 +11311,10 @@ function renderCreditsPage() {
         pbrKinds.style.color = avail ? '#4caf50' : '#7c828a';
       };
       refreshPbrKinds();
-      setInterval(refreshPbrKinds, 3000);
+      // Anti-leak: cada render de la página Experimental re-creaba este
+      // interval sin limpiar el anterior → timers zombis acumulándose
+      if (pbrKindsTimer) clearInterval(pbrKindsTimer);
+      pbrKindsTimer = setInterval(refreshPbrKinds, 3000);
 
       pbrClearBtn?.addEventListener('click', () => {
         if (window.MF_TEXTURE_PACK?.clearPbr) {
@@ -11669,6 +11718,7 @@ function renderCreditsPage() {
     setModuleEnabled('patPat', settings.patPat);
     setModuleEnabled('duckMobs', settings.duckMobs);
     setModuleEnabled('crittersMobs', settings.crittersMobs);
+    setModuleEnabled('allayPets', settings.allayPets);
     setModuleEnabled('gifChat', settings.gifChat);
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
@@ -12235,7 +12285,31 @@ function renderCreditsPage() {
     registerModule('chatMemes', createChatLifecycle);
   }
 
+  // Firma del DOM externo: si nada cambió desde el último update(), nos
+  // saltamos TODO el pipeline de rebrand/discord (15+ querySelectorAll +
+  // lecturas innerText que fuerzan layout). El juego muta el DOM
+  // constantemente y antes esto corría ~8 veces/seg para siempre.
+  let lastRebrandSignature = '';
+
+  function computeRebrandSignature() {
+    // Barato: 3 números + contadores de nodos clave (sin layout thrash)
+    return [
+      document.title,
+      document.querySelectorAll('img').length,
+      document.querySelectorAll('button').length,
+      document.querySelectorAll('p').length
+    ].join('|');
+  }
+
   function update() {
+    const sig = computeRebrandSignature();
+    if (sig === lastRebrandSignature) {
+      // Solo refrescar lo barato (logo controls no toca el DOM del juego)
+      refreshLogoControls();
+      return;
+    }
+    lastRebrandSignature = sig;
+
     MODULES.get('rebrand')?.refresh();
     MODULES.get('discord')?.refresh();
 
@@ -12248,13 +12322,26 @@ function renderCreditsPage() {
   function initRootObserver() {
     if (rootObserver) return;
 
+    let pendingMutations = 0;
     rootObserver = new MutationObserver(mutations => {
       const relevant = mutations.some(mutation => {
         if (isMiniFeatherNode(mutation.target)) return false;
         if (mutation.type !== 'childList') return true;
         return [...mutation.addedNodes, ...mutation.removedNodes].some(node => !isMiniFeatherNode(node));
       });
-      if (relevant) scheduleUpdate();
+      if (!relevant) return;
+      // Coalescing: el juego dispara cientos de lotes/seg; procesamos
+      // como mucho 1 update cada 400ms (antes: debounce de 120ms que se
+      // realimentaba con nuestras propias mutaciones)
+      pendingMutations++;
+      if (updateTimer) return;
+      updateTimer = window.setTimeout(() => {
+        updateTimer = 0;
+        if (pendingMutations) {
+          pendingMutations = 0;
+          update();
+        }
+      }, 400);
     });
 
     rootObserver.observe(document.body, { childList: true, subtree: true });
@@ -12294,6 +12381,7 @@ function renderCreditsPage() {
     initItemPhysicsModule();
     initDuckMobsModule();
     initCrittersMobsModule();
+    initAllayPetsModule();
     initGifChatModule();
     initNoWeatherModule();
     initFullBrightModule();

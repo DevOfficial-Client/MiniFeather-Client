@@ -2512,12 +2512,18 @@
                 if (scene && root.parent !== scene) {
                     scene.add(root);
                     disableCullingDeep(root);
+                    forceVisibleDeep(root); // asegurar visibilidad al montar
                     if (!rec.reattachWarned) {
                         rec.reattachWarned = true;
                         console.warn(TAG + ' "' + rec.id + '" desmontada de la escena; re-adjuntada.');
                     }
                 }
-                forceVisibleDeep(root);
+                // Barrido de visibilidad cada 500ms (antes: TODO el árbol del
+                // modelo por custom POR FRAME — miles de nodos GLTF a 60fps)
+                if (!rec._visAt || t - rec._visAt > 500) {
+                    rec._visAt = t;
+                    forceVisibleDeep(root);
+                }
                 if (rec.followPlayer) {
                     if (rec.autoAnim && rec.inst) {
                         if (!rec.lastPos) rec.lastPos = root.position.clone();
@@ -2656,7 +2662,14 @@
                 }
             } catch {}
         }
-        requestAnimationFrame(() => { if (myStamp.alive) tickCustoms(); });
+        // Sin customs registrados no hay nada que animar ni re-adjuntar:
+        // dormir el loop a un chequeo cada 400ms en vez de rAF perpetuo
+        if (state.customs.size === 0) {
+            state.lastTickT = t;
+            setTimeout(() => { if (myStamp.alive) tickCustoms(); }, 400);
+        } else {
+            requestAnimationFrame(() => { if (myStamp.alive) tickCustoms(); });
+        }
     })();
 
     void 0;

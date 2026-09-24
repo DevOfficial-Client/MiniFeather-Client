@@ -106,19 +106,33 @@
       };
   }
 
-  const gameCaptureInterval = setInterval(() => {
-    if (window.miniblox) {
-        clearInterval(gameCaptureInterval);
-        return;
-    }
-    const game = findGameInstance();
-    if (game) {
-        window.miniblox = game;
-
-        void 0;
-        clearInterval(gameCaptureInterval);
-    }
-  }, 500);
+  // Captura del juego con backoff: el querySelectorAll("#root *") + walk de
+  // fibers es CARO; si no hay juego (menús), espaciarse progresivamente en
+  // vez de golpear el DOM cada 500ms para siempre
+  function startCapture(delay) {
+      const id = setInterval(() => {
+          if (window.miniblox) {
+              clearInterval(id);
+              return;
+          }
+          // Atajo: otro módulo ya resolvió el juego
+          if (globalThis.__MINIBLOX_GAME__?.player) {
+              window.miniblox = globalThis.__MINIBLOX_GAME__;
+              clearInterval(id);
+              return;
+          }
+          const game = findGameInstance();
+          if (game) {
+              window.miniblox = game;
+              void 0;
+              clearInterval(id);
+          } else if (delay < 4000) {
+              clearInterval(id);
+              startCapture(Math.min(4000, Math.round(delay * 1.5)));
+          }
+      }, delay);
+  }
+  startCapture(500);
 
   if (!window.__MF_FRELOOK_EVENT_HOOK__) {
       window.__MF_FRELOOK_EVENT_HOOK__ = true;

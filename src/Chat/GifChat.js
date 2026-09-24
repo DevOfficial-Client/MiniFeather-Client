@@ -236,15 +236,39 @@
     `;
     document.head.appendChild(style);
 
+    // Coalescing: el juego muta el body decenas de veces por frame (HUD,
+    // chat, scoreboard); agrupar en un solo lote por rAF y prefiltar con un
+    // indexOf barato antes de crear TreeWalkers/regex por mutación
+    let pendingNodes = null;
     chatObserver.obs = new MutationObserver(mutations => {
       for (const mutation of mutations) {
         if (mutation.type === 'childList') {
-          mutation.addedNodes.forEach(n => scanNode(n));
+          mutation.addedNodes.forEach(n => queueScan(n));
         } else if (mutation.type === 'characterData') {
-          scanNode(mutation.target);
+          queueScan(mutation.target);
         }
       }
     });
+
+    function queueScan(node) {
+      if (!node) return;
+      // Prefiltro: sin "static.klipy.com" en el texto no hay nada que hacer —
+      // evita el TreeWalker completo para el 99% de las mutaciones del juego
+      const text = node.nodeValue || node.textContent || '';
+      if (typeof text === 'string' && !text.includes('static.klipy.com')) return;
+      if (!pendingNodes) {
+        pendingNodes = [node];
+        requestAnimationFrame(() => {
+          const batch = pendingNodes;
+          pendingNodes = null;
+          if (!chatObserver.obs) return; // se detuvo entre frames
+          for (const n of batch) scanNode(n);
+        });
+      } else {
+        pendingNodes.push(node);
+      }
+    }
+
     chatObserver.obs.observe(document.body, { childList: true, subtree: true, characterData: true });
     scanNode(document.body);
   }

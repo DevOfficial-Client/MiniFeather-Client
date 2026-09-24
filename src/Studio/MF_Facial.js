@@ -1448,8 +1448,11 @@
 
     async function autoStart() {
         try { ensureSession(); } catch (e) { return { ok: false, error: e.message }; }
-        stop(false); 
+        stop(false);
         auto.on = true;
+        // Encendido explícito: limpiar preferencia de OFF del usuario
+        try { localStorage.removeItem(LS_KEY + '_autoUserOff'); } catch {}
+        skinWatch.userOff = false;
         auto._zone = null; 
         auto._refYaw = null; auto._refPitch = null; auto._lastT = 0; 
         scheduleBlink(performance.now());
@@ -1743,21 +1746,32 @@
         return c;
     }
 
-    function otherZone(p) {
+    function otherZone(p, s) {
         try {
             const m = p.mesh;
             if (!m) return null;
-            
-            const queue = [m];
-            const seen = new WeakSet();
-            let head = null, body = null, visited = 0;
-            while (queue.length && visited < 500 && !(head && body)) {
-                const obj = queue.shift();
-                if (!obj || typeof obj !== 'object' || seen.has(obj)) continue;
-                seen.add(obj); visited++;
-                if (!head && obj.headPivot?.rotation) head = obj.headPivot;
-                if (!body && obj.body?.rotation) body = obj.body;
-                if (Array.isArray(obj.children)) for (const c of obj.children) queue.push(c);
+
+            // Referencias head/body cacheadas en la sesión: evita un BFS
+            // completo del mesh por jugador en cada tick. Se invalidan si el
+            // nodo se descolgó del root (respawn / cambio de skin).
+            let head = s?._head || null, body = s?._body || null;
+            const attached = ref => { for (let o = ref; o; o = o.parent) if (o === m) return true; return false; };
+            if (head && !attached(head)) { head = null; if (s) s._head = null; }
+            if (body && !attached(body)) { body = null; if (s) s._body = null; }
+
+            if (!head || !body) {
+                const queue = [m];
+                const seen = new WeakSet();
+                let visited = 0;
+                while (queue.length && visited < 500 && !(head && body)) {
+                    const obj = queue.shift();
+                    if (!obj || typeof obj !== 'object' || seen.has(obj)) continue;
+                    seen.add(obj); visited++;
+                    if (!head && obj.headPivot?.rotation) head = obj.headPivot;
+                    if (!body && obj.body?.rotation) body = obj.body;
+                    if (Array.isArray(obj.children)) for (const c of obj.children) queue.push(c);
+                }
+                if (s) { s._head = head || null; s._body = body || null; }
             }
             if (!head) return null;
             const yaw = wrapPi((Number(head.rotation.y) || 0) - (Number(body?.rotation.y) || 0));
@@ -1771,9 +1785,13 @@
         } catch { return null; }
     }
 
+    let _lastOtherTick = 0;
     function otherTick() {
         if (!others.on) { others._raf = null; return; }
         const now = performance.now();
+        // Throttle a ~20 Hz: blinks (45-90ms) y zonas de mirada no necesitan 60fps
+        if (now - _lastOtherTick < 48) { others._raf = requestAnimationFrame(otherTick); return; }
+        _lastOtherTick = now;
         const live = new Set();
         for (const p of otherPlayers()) {
             live.add(p.key);
@@ -1790,7 +1808,7 @@
             
             preloadOtherPack(s, pack);
             
-            const z = otherZone(p) || 'front';
+            const z = otherZone(p, s) || 'front';
             if (s.zone !== z) { s.zone = z; s.zoneDirty = true; }
             if (!s.nextBlink) s.nextBlink = now + 800 + Math.random() * others.intervalMinMs; 
             if (s.blinkUntil && now >= s.blinkUntil) {
@@ -2482,9 +2500,13 @@
         
         const at = root.querySelector('#mff-autotoggle');
         if (at) at.onclick = async () => {
-            if (auto.on) { autoStop(); skinWatch.userOff = true; }
+            if (auto.on) {
+                autoStop(); skinWatch.userOff = true;
+                // El usuario lo apagó a mano: el autoBoot no debe re-encenderlo
+                try { localStorage.setItem(LS_KEY + '_autoUserOff', '1'); } catch {}
+            }
             else { const r = await autoStart(); if (!r.ok) alert(r.error); }
-            saveAuto(); 
+            saveAuto();
             updateAutoToggle();
         };
         root.querySelector('#mff-new').onclick = () => {
@@ -2823,12 +2845,14 @@
     setTimeout(() => clearInterval(packBoot), 120000);
 
     // Siempre activo: con solo que exista config guardada (auto.front), arrancar
-    // el modo auto al mesh disponible — aunque la skin actual no tenga pack
-    // asociado y aunque el usuario lo dejara apagado en la sesion anterior.
+    // el modo auto al mesh disponible — salvo que el usuario lo haya apagado
+    // manualmente (preferencia persistida).
     const autoBoot = setInterval(() => {
         if (!getMesh()) return;
         clearInterval(autoBoot);
-        if (auto.front) autoStart();
+        let userOff = false;
+        try { userOff = localStorage.getItem(LS_KEY + '_autoUserOff') === '1'; } catch {}
+        if (auto.front && !userOff) autoStart();
     }, 1000);
     setTimeout(() => clearInterval(autoBoot), 120000);
 
