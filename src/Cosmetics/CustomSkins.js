@@ -360,7 +360,10 @@
 
             // Servir texturas custom:mf_* localmente — el server responde 404 para
             // ids que no conoce y el engine regenera materiales vanilla en bucle.
-            if (reqUrl && typeof reqUrl === 'string') {
+            // Gate barato primero: las regex de resolveCustomTextureUrl solo
+            // matchean auth-api/... o textures/entity/... → el resto de fetches
+            // del juego saltan sin coste de regex.
+            if (reqUrl && (reqUrl.indexOf('auth-api') !== -1 || reqUrl.indexOf('textures/entity') !== -1)) {
                 var localSkin = resolveCustomTextureUrl(reqUrl);
                 if (localSkin) {
                     // fetch() recursivo seguro: la URL local (chrome-extension:/data:)
@@ -1524,9 +1527,17 @@
 
         // rep estirada a w×h (cacheada por época)
         var scaleCache = new Map(); // "w×h" -> canvas
+        var scaleCacheEpoch = paintEpoch;
         function scaleTo(rep, w, h) {
             if (!w || !h) return null;
             if (w === rep.naturalWidth && h === rep.naturalHeight) return rep;
+            // Las claves llevan @época: al cambiar de época las entradas viejas
+            // jamás se re-consultan → vaciar para no acumular canvases por
+            // cada repintado (leak).
+            if (paintEpoch !== scaleCacheEpoch) {
+                scaleCacheEpoch = paintEpoch;
+                scaleCache.clear();
+            }
             var key = w + 'x' + h + '@' + paintEpoch;
             var c = scaleCache.get(key);
             if (c) return c;

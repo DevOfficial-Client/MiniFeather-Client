@@ -183,15 +183,20 @@
 
     // ---------- utilidades del juego (mismo acceso que DuckMobs) ----------
 
+    // Caché de escaneo: blockIdAt() llama getGame() por cada bloque consultado
+    // en los loops de spawn — sin caché, un querySelector('#react') por bloque.
+    let _gameCache = { game: null, at: 0 };
     function getGame() {
         const direct = [globalThis.miniblox, globalThis.__MINIBLOX_GAME__, globalThis.__MB?.game, globalThis.game];
         for (const g of direct) if (g?.player?.pos) return g;
+        const now = performance.now();
+        if (_gameCache.game?.player?.pos && now - _gameCache.at < 1000) return _gameCache.game;
         try {
             const react = document.querySelector('#react');
             if (react) {
                 for (const root of Object.values(react)) {
                     const g = root?.updateQueue?.baseState?.element?.props?.game;
-                    if (g?.player?.pos) return g;
+                    if (g?.player?.pos) { _gameCache = { game: g, at: now }; return g; }
                 }
             }
         } catch {}

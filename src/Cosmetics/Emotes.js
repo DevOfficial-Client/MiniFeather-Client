@@ -565,14 +565,20 @@
         }
     }
 
-    function vanillaOf(joint) {
-        const d = state.defaults.get(joint);
+    function vanillaOf(joint, freshRoot) {
         const w = lastWritten.get(joint);
+        // freshRoot=true → la posición ACTUAL ya es vanilla limpia: el juego
+        // RESETEA skeleton.position en cada render (prueba en el bundle: el
+        // emote nativo DANCE hace `skeleton.position.y -= ...` sin restaurar,
+        // que solo funciona con reset por-frame). En ese caso NO hay que
+        // restar el offset del frame anterior. Para el resto de joints
+        // (posiciones persistentes del rig) sí se resta lo que escribimos.
+        const s = freshRoot ? 0 : 1;
         return {
             rx: joint.rotation.x, ry: joint.rotation.y, rz: joint.rotation.z,
-            px: d ? d.px : joint.position.x - (w ? w.px : 0),
-            py: d ? d.py : joint.position.y - (w ? w.py : 0),
-            pz: d ? d.pz : joint.position.z - (w ? w.pz : 0)
+            px: joint.position.x - (s && w ? w.px : 0),
+            py: joint.position.y - (s && w ? w.py : 0),
+            pz: joint.position.z - (s && w ? w.pz : 0)
         };
     }
 
@@ -580,9 +586,15 @@
         const d = state.defaults.get(joint);
         const w = lastWritten.get(joint);
         if (w) {
-            joint.position.set(
-                joint.position.x - w.px, joint.position.y - w.py, joint.position.z - w.pz
-            );
+            // El root (skeleton): el juego lo resetea en el próximo render —
+            // restar aquí movería al jugador un frame de más. El resto
+            // (posiciones persistentes del rig) sí se restauran restando.
+            const isRoot = state.current?.rootJoint === joint;
+            if (!isRoot) {
+                joint.position.set(
+                    joint.position.x - w.px, joint.position.y - w.py, joint.position.z - w.pz
+                );
+            }
             lastWritten.delete(joint);
         }
         if (d) {
@@ -600,16 +612,30 @@
     }
 
     function finishStop() {
-        state.current = null;
+        const cur = state.current;
+        // Restaurar ANTES de nullear current: restoreJoint consulta
+        // current.rootJoint para no mover la raíz (el juego la resetea solo).
         if (state.defaults.size) restoreAll();
+        state.current = null;
+        if (cur) {
+            // Devolver el control a MF_PlayerAnims (poses del pack de nuevo).
+            if (hookState.mesh) hookState.mesh.__mfPASuppress = false;
+            for (const joint of cur.jointList) joint.__mfPASuppress = false;
+        }
         leaveCamera(state.player);
         log('emote terminado');
     }
 
-    function applyPose(mesh) {
+    function applyPose(mesh, fromRenderHook) {
         const cur = state.current;
         if (!cur || !mesh) return;
-        cur.framesSeen = (cur.framesSeen || 0) + 1; 
+        cur.framesSeen = (cur.framesSeen || 0) + 1;
+        // fromRenderHook: el render del juego acaba de RESETEAR skeleton.position
+        // (y de reescribir la pose vanilla) → la raíz se lee como vanilla limpio.
+        // Cada invocación de original.render() re-resetea (varios render() por
+        // frame p.ej. sombras), así que TODO llamado del hook es "fresh".
+        // El fallback de rAF (fuera del render) ve NUESTRO write previo → resta.
+        const freshRoot = fromRenderHook === true;
 
         const now = performance.now();
         
@@ -632,7 +658,8 @@
         }
 
         for (const joint of cur.jointList) {
-            const v = vanillaOf(joint);
+            const isRoot = joint === cur.rootJoint;
+            const v = vanillaOf(joint, freshRoot && isRoot);
             const d = state.defaults.get(joint);
             const w = lastWritten.get(joint);
             if (d && w) {
@@ -715,11 +742,29 @@
             
             if (part.hasPos) {
                 const pj = part.rootJoint || j;
-                const pd = state.defaults.get(pj) || { px: pj.position.x, py: pj.position.y, pz: pj.position.z };
+                const isRootWrite = part.rootJoint && pj === part.rootJoint;
+                // Base del root: con fresh (post-render) la posición actual YA
+                // es vanilla limpia → usarla directo; si no, restar nuestro
+                // write previo (el default cacheado ya lo hizo en el loop).
+                const pd = isRootWrite && freshRoot
+                    ? { px: pj.position.x, py: pj.position.y, pz: pj.position.z }
+                    : (state.defaults.get(pj) || { px: pj.position.x, py: pj.position.y, pz: pj.position.z });
                 const k = cur.posScale * blend;
-                const ox = k * sampleLoop(part.pos.x, tt, emote),
-                      oy = k * sampleLoop(part.pos.y, tt, emote),
-                      oz = k * sampleLoop(part.pos.z, tt, emote);
+                let ox = k * sampleLoop(part.pos.x, tt, emote),
+                    oy = k * sampleLoop(part.pos.y, tt, emote),
+                    oz = k * sampleLoop(part.pos.z, tt, emote);
+                // La raíz (skeleton) vive en espacio MUNDO: el yaw del jugador
+                // está en el quaternion del body y la raíz NO rota → un offset
+                // directo apunta según el mundo, no según el cuerpo (mismo bug
+                // que el desface del sneak del pack). Rotarlo por el yaw
+                // vanilla lo hace relativo al jugador a cualquier rotación.
+                if (part.rootJoint && pj === part.rootJoint && cur.bodyQ) {
+                    try {
+                        const VC = pj.position.constructor;
+                        const rv = new VC(ox, oy, oz).applyQuaternion(cur.bodyQ);
+                        ox = rv.x; oy = rv.y; oz = rv.z;
+                    } catch {}
+                }
                 pj.position.set(pd.px + ox, pd.py + oy, pd.pz + oz);
                 const w = lastWritten.get(pj) || { rx: 0, ry: 0, rz: 0 };
                 lastWritten.set(pj, { ...w, px: ox, py: oy, pz: oz });
@@ -754,7 +799,15 @@
         const wrapper = function (...args) {
             const result = original.apply(this, args);
             if (state.current) {
-                try { applyPose(target); }
+                try {
+                    // El render del juego acaba de escribir el yaw vanilla en
+                    // body.quaternion — capturarlo ANTES de que applyPose lo
+                    // pise con la pose del emote (lo usa para rotar los
+                    // offsets del root, espacio modelo → mundo).
+                    const bq = target.body?.quaternion;
+                    if (bq) state.current.bodyQ = bq.clone();
+                    applyPose(target, true);
+                }
                 catch (e) { console.error(TAG, 'pose error:', e); finishStop(); }
             }
             return result;
@@ -849,13 +902,23 @@
         }
         if (!parts.length) return { ok: false, error: 'no-joints' };
 
+        // Sistema de animaciones (MF_PlayerAnims): aplica sus poses DENTRO de
+        // updateMatrixWorld y congela codos/rodillas — pisaría las rotaciones
+        // del emote. Pedirle que se aparte mientras dura el emote.
+        ent.mesh.__mfPASuppress = true;
+        for (const joint of jointList) joint.__mfPASuppress = true;
+
         const posScale = measurePosScale(ent.mesh);
         for (const joint of jointList) captureDefaults(joint);
         state.player = game.player;
         state.current = {
             name, emote, parts, jointList: [...jointList],
+            rootJoint: parts.find(p => p.rootJoint)?.rootJoint || null,
             startTime: performance.now(), lastFrame: performance.now(),
-            posScale, blend: 0, framesSeen: 0
+            posScale, blend: 0, framesSeen: 0,
+            // Yaw vanilla del body (lo refresca el render-hook cada frame):
+            // rota los offsets del root de espacio modelo a mundo.
+            bodyQ: ent.mesh.body?.quaternion?.clone?.() || null
         };
         state.fadeTarget = 1;
         enterCamera(game.player);

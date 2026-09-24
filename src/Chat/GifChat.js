@@ -155,6 +155,14 @@
           if (thumb && full) mapped.push({ thumb, full });
         }
         console.log('[GifChat] klipyRequest OK:', list.length, 'items crudos →', mapped.length, 'mapeados');
+        // Expulsar expiradas al insertar: la TTL solo invalidaba lecturas,
+        // pero las entradas viejas quedaban retenidas para siempre.
+        if (state.cache.size > 40) {
+          const now = Date.now();
+          for (const [k, v] of state.cache) {
+            if (now - v.ts >= KLIPY_CACHE_TTL) state.cache.delete(k);
+          }
+        }
         state.cache.set(cacheKey, { ts: Date.now(), items: mapped });
         return mapped;
       })

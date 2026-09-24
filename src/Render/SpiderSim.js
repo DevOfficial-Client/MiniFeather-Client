@@ -3218,7 +3218,19 @@
   function tick() {
     const t0 = performance.now();
     try {
-      
+      // Sin arañas no hay nada que simular: el spawn llega por eventos
+      // (comandos/P2P), nunca desde el update físico. EXCEPCIÓN: con el
+      // reemplazo de nativos activo, el scan que spawnéa la primera araña
+      // puppet vive en un onTick de app.update() → mantenerlo vivo.
+      if (sim.spiders.length === 0) {
+        if (sim.replace.on) {
+          sim.world.clearCache();
+          sim.app.update();
+          sim.tickCount++;
+        }
+        return;
+      }
+
       const p = sim.lastPlayerPos;
       if (p && !(p.x === 0 && p.y === 0 && p.z === 0)) anchorSpidersToPlayer();
 

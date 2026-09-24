@@ -1,6 +1,7 @@
 (function () {
    'use strict';       
-   const TAG = '[MiniFeather Armor HUD]';       
+   const TAG = '[MiniFeather Armor HUD]';
+   let warnedNativeRenderer = false; // el warn de renderer faltante solo 1 vez       
    
    const CONFIG = {       
        right: 18,
@@ -659,12 +660,13 @@
                 CONFIG.iconSize,
                 false
             );
-        } else {
+        } else if (!warnedNativeRenderer) {
+            warnedNativeRenderer = true;
             console.warn(
                 TAG,
                 'Native item renderer is not available'
             );
-        }       
+        }
         const maxDurability =
             Number(item.maxDurability);     
         const damage =

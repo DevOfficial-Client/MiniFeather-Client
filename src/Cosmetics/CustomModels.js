@@ -712,14 +712,19 @@
         }
     }
 
+    // Caché de escaneo: getGame() se llama desde ~30 sitios (algunos en loops
+    // por entidad) — sin caché era un querySelector('#react') por llamada.
+    let _gameCache = { game: null, at: 0 };
     function getGame() {
         if (globalThis.miniblox?.player) return globalThis.miniblox;
+        const now = performance.now();
+        if (_gameCache.game?.player && now - _gameCache.at < 1000) return _gameCache.game;
         try {
             const react = document.querySelector('#react');
             if (!react) return null;
             for (const root of Object.values(react)) {
                 const game = root?.updateQueue?.baseState?.element?.props?.game;
-                if (game?.player) return game;
+                if (game?.player) { _gameCache = { game, at: now }; return game; }
             }
         } catch {}
         return null;

@@ -211,6 +211,10 @@
     };
 
     setInterval(() => {
+        // Con el módulo OFF no hace falta hookear nada: el guard del patch
+        // ignoraría el sway igualmente y el hook se instala en el primer
+        // tick tras activarlo (≤600ms, imperceptible con el fade).
+        if (!state.enabled) return;
         const game = getGame(true);
         if (!game?.gameScene) return;
         const lf = findHandRenderer(game);

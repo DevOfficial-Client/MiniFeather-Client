@@ -1426,9 +1426,11 @@ function stop(status = 'idle', reason = '') {
 }
 
 function loop() {
-    
-    try { updatePlayerPositions(performance.now()); } catch (_) {}
+
     if (state.enabled) {
+        // Solo rastrear posiciones con Baritone activo: la doble iteración
+        // del mapa de entidades cada 250ms con el módulo OFF era puro coste.
+        try { updatePlayerPositions(performance.now()); } catch (_) {}
         try {
             const game = getGame();
             const player = game?.player;

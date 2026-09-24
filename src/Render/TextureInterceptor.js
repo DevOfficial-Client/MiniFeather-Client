@@ -109,8 +109,16 @@
                 || /\/(?:packs|assets|textures|skins)\//i.test(u));
     }
 
+    // Cache de origins parseados: los fetches de assets comparten host, así
+    // evitamos un new URL() (parse + alocación) por cada fetch del juego.
+    var originCache = new Map(); // url -> origin|null
     function mfNetOriginOf(u) {
-        try { return new URL(u, location.href).origin; } catch (_) { return null; }
+        var o = originCache.get(u);
+        if (o !== undefined) return o;
+        try { o = new URL(u, location.href).origin; } catch (_) { o = null; }
+        if (originCache.size > 600) originCache.clear(); // tope defensivo
+        originCache.set(u, o);
+        return o;
     }
 
     function mfNetBlocked(u) {
@@ -153,7 +161,11 @@
         try {
             url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
         } catch (_) {}
-        var dataUrl = getDataUrl();
+        // Gate barato: matches() solo puede matchear spritesheet/texturepacks
+        // → el resto de fetches salta sin leer localStorage (que materializa
+        // el dataURL completo del pack en memoria por lectura).
+        var dataUrl = (url.indexOf('spritesheet') !== -1 || url.indexOf('texturepacks/default') !== -1)
+            ? getDataUrl() : null;
         if (dataUrl && url && matches(url)) {
             return Promise.resolve(new Response(dataUrlToBlob(dataUrl), {
                 headers: { 'Content-Type': 'image/png' }

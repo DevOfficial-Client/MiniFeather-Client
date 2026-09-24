@@ -503,8 +503,24 @@
     function getOrCreateCache() {
         let serverCache = state.serverCaches.get(state.currentServerKey);
         if (!serverCache) {
+            // LRU de servidores: cada cache retiene hasta 500 chunks × dims
+            // (~0.5-1 MB por servidor); sin tope, saltar entre servidores en
+            // una sesión larga acumulaba memoria sin límite.
+            if (state.serverCaches.size >= 8) {
+                let oldestKey = null, oldestAt = Infinity;
+                for (const [k, v] of state.serverCaches) {
+                    const at = v.__mfAt || 0;
+                    if (at < oldestAt) { oldestAt = at; oldestKey = k; }
+                }
+                if (oldestKey !== null && oldestKey !== state.currentServerKey) {
+                    state.serverCaches.delete(oldestKey);
+                }
+            }
             serverCache = new Map();
+            serverCache.__mfAt = Date.now();
             state.serverCaches.set(state.currentServerKey, serverCache);
+        } else {
+            serverCache.__mfAt = Date.now();
         }
         let dimCache = serverCache.get(state.currentDimensionId);
         if (!dimCache) {

@@ -266,7 +266,11 @@ function applyPeerScale(mesh) {
     const f = Number(state.peerScale) || 1;
     if (!mesh?.scale || !b || !Number.isFinite(f)) return;
     try {
-        mesh.scale.set(b.x * f, b.y * f, b.z * f);
+        const x = b.x * f, y = b.y * f, z = b.z * f;
+        // Sin cambio real → no escribir (evita marcar la matriz como sucia
+        // en cada render aunque la escala ya esté aplicada).
+        if (mesh.scale.x === x && mesh.scale.y === y && mesh.scale.z === z) return;
+        mesh.scale.set(x, y, z);
         if (mesh.matrixAutoUpdate === false && typeof mesh.updateMatrix === 'function') mesh.updateMatrix();
     } catch {}
 }

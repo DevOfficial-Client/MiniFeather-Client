@@ -62,6 +62,17 @@
         return state.game?.player ? state.game : null;
     }
 
+    // Retira las poses publicadas del pack de un mesh. Se usa cuando un emote
+    // (Emotes.js) toma el control: escribe rotaciones directo en los joints y
+    // nuestro wrap de updateMatrixWorld las pisaría al computar matrices.
+    function clearPublishedPoses(mesh) {
+        if (mesh.skeleton?.__mfPARootPose) mesh.skeleton.__mfPARootPose = undefined;
+        for (const name of POSE_NODES) {
+            const node = mesh[name];
+            if (node?.__mfPAPose) node.__mfPAPose = undefined;
+        }
+    }
+
     // ---------- Wraps de updateMatrixWorld ----------
     // Evaluación DENTRO del pipeline de render del juego (equivalente al
     // MixinLivingEntityRenderer de EMF Java, que corre tras setupAnim vanilla):
@@ -81,7 +92,10 @@
                 // updateMatrixWorld varias veces por render (sombras, nametags,
                 // raycasts) — cada evaluación avanzaría los drags/frame_counter
                 // del pack → animación N× más rápida.
-                if (state.enabled) {
+                if (mesh.__mfPASuppress) {
+                    // Emote activo: retirar poses del pack (el emote manda).
+                    clearPublishedPoses(mesh);
+                } else if (state.enabled) {
                     const now = performance.now();
                     if (now !== mesh._mfPALastEval) {
                         mesh._mfPALastEval = now;
@@ -208,7 +222,11 @@
         joint._mfPAFrozen = true;
         joint._mfPAOrigUMW = joint.updateMatrixWorld.bind(joint);
         joint.updateMatrixWorld = function () {
-            this.rotation.x = 0; this.rotation.y = 0; this.rotation.z = 0;
+            // Durante un emote el joint puede animarse (bend de codos/rodillas):
+            // no congelar.
+            if (!this.__mfPASuppress) {
+                this.rotation.x = 0; this.rotation.y = 0; this.rotation.z = 0;
+            }
             return this._mfPAOrigUMW.apply(this, arguments);
         };
         state.wrapped.add(joint);
@@ -247,7 +265,17 @@
         if (!ctx) {
             ctx = new RT.FrameContext(entId);
             state.contexts.set(entId, ctx);
+            // Purga de contexts huérfanos: los entityIds se reinician al
+            // cambiar de servidor/dimensión y las claves viejas quedaban
+            // retenidas para siempre (leak en sesiones largas).
+            if (state.contexts.size > 64) {
+                const cut = performance.now() - 60000;
+                for (const [k, c] of state.contexts) {
+                    if (c.lastSeen !== undefined && c.lastSeen < cut) state.contexts.delete(k);
+                }
+            }
         }
+        ctx.lastSeen = performance.now();
 
         const s2 = RT.buildFrameState(mesh, game, game?.player);
         if (!s2) return;
@@ -397,6 +425,7 @@
     function registerMesh(mesh, game) {
         if (!mesh?.skeleton || !mesh.entity) return;
         makeSkeletonHook(mesh, game);
+        if (mesh.__mfPASuppress) return; // emote activo: no re-zeroear joints
         for (const name of JOINT_NAMES) {
             const j = mesh[name];
             if (j) { j.rotation.x = 0; j.rotation.y = 0; j.rotation.z = 0; freezeJoint(j); }
