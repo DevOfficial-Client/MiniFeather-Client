@@ -1246,9 +1246,18 @@ function ntfyWsUrl(topic, since = "30s") {
   return `wss://ntfy.sh/${safe}/ws?${query}`;
 }
 
+function ntfyNetworkOnline() {
+  return typeof navigator === "undefined" || navigator.onLine !== false;
+}
+
+function ntfyRetryDelay(failures) {
+  return Math.min(60000, 1500 * (2 ** Math.min(Math.max(0, failures), 6)));
+}
+
 async function ntfyPublish(topic, message, signal) {
   const safe = ntfySafeTopic(topic);
   if (!safe) throw new Error("INVALID_TOPIC");
+  if (!ntfyNetworkOnline()) throw new Error("NETWORK_OFFLINE");
   const requestController = new AbortController();
   const forwardAbort = () => requestController.abort(signal?.reason);
   const timeout = setTimeout(() => requestController.abort("PUBLISH_TIMEOUT"), 9000);
@@ -1296,40 +1305,64 @@ chrome.runtime.onConnect.addListener(port => {
     let stopped = false;
     let socket = null;
     let reconnectTimer = 0;
+    let failures = 0;
 
     const notify = message => {
       try { port.postMessage(message); } catch (_) {}
     };
 
+    const scheduleReconnect = () => {
+      if (stopped) return;
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connect, ntfyNetworkOnline()
+        ? ntfyRetryDelay(failures++) : 15000);
+    };
+
     const connect = () => {
       if (stopped) return;
+      if (socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)) return;
+      if (!ntfyNetworkOnline()) {
+        notify({ type: "offline", error: "NETWORK_OFFLINE" });
+        scheduleReconnect();
+        return;
+      }
       try {
-        socket?.close();
-        socket = openNtfySocket(topic, port.name === VOICE_SIGNAL_PORT ? "5s" : "45s", {
+        const current = openNtfySocket(topic, port.name === VOICE_SIGNAL_PORT ? "5s" : "45s", {
           open() {
+            if (socket !== current) return;
+            failures = 0;
             notify({ type: "ready" });
           },
           message(packet) {
+            if (socket !== current) return;
             let signal;
             try { signal = JSON.parse(String(packet.message || "")); } catch (_) { return; }
             notify({ type: "signal", signal });
           },
           error() {
+            if (socket !== current) return;
             notify({ type: "offline", error: "WEBSOCKET_ERROR" });
           },
           close() {
-            if (stopped) return;
+            if (stopped || socket !== current) return;
+            socket = null;
             notify({ type: "offline", error: "WEBSOCKET_CLOSED" });
-            clearTimeout(reconnectTimer);
-            reconnectTimer = setTimeout(connect, 1500);
+            scheduleReconnect();
           }
         });
+        socket = current;
       } catch (_) {
         notify({ type: "offline", error: "WEBSOCKET_UNAVAILABLE" });
-        clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connect, 2000);
+        scheduleReconnect();
       }
     };
+
+    const onOnline = () => {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = 0;
+      connect();
+    };
+    globalThis.addEventListener?.("online", onOnline);
 
     port.onMessage.addListener(message => {
       if (message?.type === "ping") return;
@@ -1341,6 +1374,7 @@ chrome.runtime.onConnect.addListener(port => {
     port.onDisconnect.addListener(() => {
       stopped = true;
       clearTimeout(reconnectTimer);
+      globalThis.removeEventListener?.("online", onOnline);
       controller.abort();
       try { socket?.close(); } catch (_) {}
       socket = null;
@@ -1383,19 +1417,36 @@ chrome.runtime.onConnect.addListener(port => {
     const entry = {
       socket: null,
       reconnectTimer: 0,
+      failures: 0,
       since: String(since || "30s")
     };
     subscriptions.set(safe, entry);
 
+    const scheduleReconnect = () => {
+      if (stopped || subscriptions.get(safe) !== entry) return;
+      clearTimeout(entry.reconnectTimer);
+      entry.reconnectTimer = setTimeout(connect, ntfyNetworkOnline()
+        ? ntfyRetryDelay(entry.failures++) : 15000);
+    };
+
     const connect = () => {
-      if (stopped || !subscriptions.has(safe)) return;
+      if (stopped || subscriptions.get(safe) !== entry) return;
+      if (entry.socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(entry.socket.readyState)) return;
+      if (!ntfyNetworkOnline()) {
+        notify({ type: "topic-offline", topic: safe });
+        scheduleReconnect();
+        return;
+      }
       try {
-        entry.socket = openNtfySocket(safe, entry.since, {
+        const current = openNtfySocket(safe, entry.since, {
           open() {
+            if (subscriptions.get(safe) !== entry || entry.socket !== current) return;
+            entry.failures = 0;
             entry.since = "30s";
             notify({ type: "subscribed", topic: safe });
           },
           message(packet) {
+            if (subscriptions.get(safe) !== entry || entry.socket !== current) return;
             notify({
               type: "event",
               topic: safe,
@@ -1404,22 +1455,34 @@ chrome.runtime.onConnect.addListener(port => {
             });
           },
           error() {
+            if (subscriptions.get(safe) !== entry || entry.socket !== current) return;
             notify({ type: "topic-offline", topic: safe });
           },
           close() {
-            if (stopped || !subscriptions.has(safe)) return;
-            clearTimeout(entry.reconnectTimer);
-            entry.reconnectTimer = setTimeout(connect, 1500);
+            if (stopped || subscriptions.get(safe) !== entry || entry.socket !== current) return;
+            entry.socket = null;
+            scheduleReconnect();
           }
         });
+        entry.socket = current;
       } catch (_) {
-        clearTimeout(entry.reconnectTimer);
-        entry.reconnectTimer = setTimeout(connect, 2000);
+        scheduleReconnect();
       }
     };
 
     connect();
   };
+
+  const onOnline = () => {
+    for (const [topic, entry] of [...subscriptions]) {
+      clearTimeout(entry.reconnectTimer);
+      entry.reconnectTimer = 0;
+      if (!entry.socket || entry.socket.readyState === WebSocket.CLOSED) {
+        startSubscription(topic, entry.since);
+      }
+    }
+  };
+  globalThis.addEventListener?.("online", onOnline);
 
   port.onMessage.addListener(message => {
     if (!message || typeof message !== "object") return;
@@ -1450,6 +1513,7 @@ chrome.runtime.onConnect.addListener(port => {
 
   port.onDisconnect.addListener(() => {
     stopped = true;
+    globalThis.removeEventListener?.("online", onOnline);
     controller.abort();
     for (const topic of [...subscriptions.keys()]) stopSubscription(topic);
   });

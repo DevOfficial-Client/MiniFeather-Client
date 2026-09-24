@@ -90,9 +90,11 @@
     function makeSkeletonHook(mesh, game) {
         if (mesh.skeleton._mfPASkelHook) return;
         mesh.skeleton._mfPASkelHook = true;
-        mesh.skeleton._mfPASkelOrig = mesh.skeleton.updateMatrixWorld.bind(mesh.skeleton);
+        const original = mesh.skeleton.updateMatrixWorld.bind(mesh.skeleton);
+        mesh.skeleton._mfPASkelOrig = original;
         mesh._mfPASkelGame = game;
-        mesh.skeleton.updateMatrixWorld = function () {
+        const wrapper = function () {
+            if (mesh.skeleton.updateMatrixWorld !== wrapper) return original.apply(this, arguments);
             try {
                 // Evaluar UNA vez por frame: el juego puede llamar
                 // updateMatrixWorld varias veces por render (sombras, nametags,
@@ -128,15 +130,16 @@
                 if (rootPose.pdx !== undefined) pos.x = ox + rootPose.pdx;
                 if (rootPose.pdy !== undefined) pos.y = oy + rootPose.pdy;
                 if (rootPose.pdz !== undefined) pos.z = oz + rootPose.pdz;
-                try { return mesh.skeleton._mfPASkelOrig.apply(this, arguments); }
+                try { return original.apply(this, arguments); }
                 finally {
                     r.x = px; r.y = py; r.z = pz;
                     pos.x = ox; pos.y = oy; pos.z = oz;
                     sc.x = osx; sc.y = osy; sc.z = osz;
                 }
             }
-            return mesh.skeleton._mfPASkelOrig.apply(this, arguments);
+            return original.apply(this, arguments);
         };
+        mesh.skeleton.updateMatrixWorld = wrapper;
         state.wrapped.add(mesh.skeleton);
     }
 
@@ -153,8 +156,10 @@
     function wrapNode(node) {
         if (node._mfPAWrapped) return;
         node._mfPAWrapped = true;
-        node._mfPAOrigUMW = node.updateMatrixWorld.bind(node);
-        node.updateMatrixWorld = function () {
+        const original = node.updateMatrixWorld.bind(node);
+        node._mfPAOrigUMW = original;
+        const wrapper = function () {
+            if (this.updateMatrixWorld !== wrapper) return original.apply(this, arguments);
             const pose = this.__mfPAPose;
             if (pose) {
                 // Guardar estado vanilla → aplicar pose → computar matriz → restaurar.
@@ -210,7 +215,7 @@
                 if (effPdy !== undefined) pos.y = oy + effPdy;
                 if (effPdz !== undefined) pos.z = oz + effPdz;
                 try {
-                    return this._mfPAOrigUMW.apply(this, arguments);
+                    return original.apply(this, arguments);
                 } finally {
                     r.x = px; r.y = py; r.z = pz;
                     if (oq) this.quaternion.copy(oq);
@@ -218,23 +223,27 @@
                     sc.x = osx; sc.y = osy; sc.z = osz;
                 }
             }
-            return this._mfPAOrigUMW.apply(this, arguments);
+            return original.apply(this, arguments);
         };
+        node.updateMatrixWorld = wrapper;
         state.wrapped.add(node);
     }
 
     function freezeJoint(joint) {
         if (joint._mfPAFrozen) return;
         joint._mfPAFrozen = true;
-        joint._mfPAOrigUMW = joint.updateMatrixWorld.bind(joint);
-        joint.updateMatrixWorld = function () {
+        const original = joint.updateMatrixWorld.bind(joint);
+        joint._mfPAOrigUMW = original;
+        const wrapper = function () {
+            if (this.updateMatrixWorld !== wrapper) return original.apply(this, arguments);
             // Durante un emote el joint puede animarse (bend de codos/rodillas):
             // no congelar.
             if (!this.__mfPASuppress) {
                 this.rotation.x = 0; this.rotation.y = 0; this.rotation.z = 0;
             }
-            return this._mfPAOrigUMW.apply(this, arguments);
+            return original.apply(this, arguments);
         };
+        joint.updateMatrixWorld = wrapper;
         state.wrapped.add(joint);
     }
 

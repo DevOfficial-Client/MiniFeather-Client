@@ -124,13 +124,16 @@
     function freezeJoint(joint) {
         if (joint._mfFrozen) return;
         joint._mfFrozen = true;
-        joint._mfOrigUpdateMatrixWorld = joint.updateMatrixWorld.bind(joint);
-        joint.updateMatrixWorld = function () {
+        const original = joint.updateMatrixWorld.bind(joint);
+        joint._mfOrigUpdateMatrixWorld = original;
+        const wrapper = function () {
+            if (this.updateMatrixWorld !== wrapper) return original.apply(this, arguments);
             this.rotation.x = 0;
             this.rotation.y = 0;
             this.rotation.z = 0;
-            return this._mfOrigUpdateMatrixWorld.apply(this, arguments);
+            return original.apply(this, arguments);
         };
+        joint.updateMatrixWorld = wrapper;
     }
 
     function unfreezeJoint(joint) {
