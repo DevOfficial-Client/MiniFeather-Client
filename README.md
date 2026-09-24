@@ -70,7 +70,7 @@ Developed by:
 * **botless**
 * **AngryWolfX**
 
-Made for the Miniblox community.
+Made by Miniblox community for the Miniblox community.
 
 ---
 
