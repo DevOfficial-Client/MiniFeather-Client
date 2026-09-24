@@ -1,0 +1,9 @@
+{
+    "sources": [
+        {
+            "type": "directory",
+            "source": "optifine/random/entity/allay",
+            "prefix": "optifine/random/entity/allay"
+        }
+    ]
+}

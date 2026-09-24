@@ -1,0 +1,8 @@
+{
+	"id": "foliageplus",
+	"version": 7,
+	"capabilities": ["FileFilter", "DirFilter", "DirAdditive"],
+	"conf": {
+        "pixelperfectbill": true,
+	}
+}

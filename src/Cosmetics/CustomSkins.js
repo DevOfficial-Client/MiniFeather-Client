@@ -439,17 +439,26 @@
         }
         return null;
     }
+    var gameCacheRef = null;
+    var gameCacheAt = 0;
     function findGame() {
+        // Cache con TTL: sin esto el watcher (1 Hz) hacía querySelector +
+        // Object.values de React DOS veces por tick para siempre
+        var now = performance.now();
+        if (gameCacheRef && gameCacheRef.player && now - gameCacheAt < 1500) return gameCacheRef;
+        if (now - gameCacheAt < 500) return gameCacheRef; // caché negativa
+        gameCacheAt = now;
         try {
-            if (window.miniblox?.player) return window.miniblox;
+            if (window.miniblox?.player) { gameCacheRef = window.miniblox; return gameCacheRef; }
             var react = document.querySelector('#react');
             if (react) {
                 for (var key in react) {
                     var game = react[key]?.updateQueue?.baseState?.element?.props?.game;
-                    if (game?.player) return game;
+                    if (game?.player) { gameCacheRef = game; window.__MINIBLOX_GAME__ = game; return game; }
                 }
             }
         } catch (e) {}
+        gameCacheRef = null;
         return null;
     }
 
@@ -534,7 +543,12 @@
                         if (!o || !o.material) return;
                         var list = Array.isArray(o.material) ? o.material : [o.material];
                         for (var q = 0; q < list.length; q++) {
-                            if (list[q] && list[q].map &&
+                            if (!list[q]) continue;
+                            // Registrar TODOS los materiales del item de la
+                            // mano en la blacklist (comparten el singleton
+                            // con el inventario) — no solo los ya dañados.
+                            ITEM_MATS.add(list[q]);
+                            if (list[q].map &&
                                 (list[q].map.__mfPainted || list[q].map.__mfEpoch)) {
                                 itemMats.push(list[q]);
                             }
@@ -790,7 +804,44 @@
         return out;
     }
 
+    // Renderers de items del engine (bundle: clase con needsRendering() y
+    // renderDistanceSq(), con addBox estático de UVs). Su material es el
+    // SINGLETON compartido por TODOS los items del juego: sostenidos en
+    // 3ª persona, tirados en el suelo y los ÍCONOS DEL INVENTARIO
+    // (buildItemGeometry + material compartido). Si el repintado de skins
+    // lo toca, la textura de la skin aparece en los bloques del inventario
+    // y los items cuyos UVs caen en zonas transparentes desaparecen.
+    var ITEM_MATS = new WeakSet();
+
+    function collectItemMaterials(mesh) {
+        try {
+            mesh.traverse(function (o) {
+                if (!o || typeof o.needsRendering !== 'function'
+                    || typeof o.renderDistanceSq !== 'function') return;
+                var list = Array.isArray(o.material) ? o.material : [o.material];
+                for (var i = 0; i < list.length; i++) {
+                    var m = list[i];
+                    if (!m) continue;
+                    ITEM_MATS.add(m);
+                    // Reparar daño previo: si el singleton ya quedó pintado
+                    // con una skin, restaurar el original guardado.
+                    if (m.map && m.map.__mfPainted && m.__mfOrigMap) {
+                        m.map = m.__mfOrigMap;
+                        m.needsUpdate = true;
+                        delete m.__mfOrigMap;
+                    }
+                }
+            });
+        } catch (_) {}
+    }
+
     function skinMaterialsOf(mesh) {
+        // Registrar/reparar el singleton de items ANTES de filtrar: su
+        // atlas cuadrado grande puede pasar el filtro de skin (o el
+        // fallback cuando la skin es HD y no matchea) y recibir la skin
+        // encima — así nació el bug de la skin en el inventario.
+        collectItemMaterials(mesh);
+
         // Excluir la rama de la capa: antes el filtro 64xN dejaba pasar la
         // textura de capa (64x32) como "skin" y el repintado le pintaba la
         // skin ENCIMA a la capa del jugador.
@@ -803,7 +854,7 @@
         });
 
         var all = collectMaterialsOf(mesh);
-        var bodyMats = all.filter(function (m) { return !exclude.has(m); });
+        var bodyMats = all.filter(function (m) { return !exclude.has(m) && !ITEM_MATS.has(m); });
 
         var skins = bodyMats.filter(function (m) {
             if (isFacialTex(m.map)) return false; // MF_Facial controla esta textura
@@ -1105,11 +1156,8 @@
 
     function startLiveWatcher() {
         setInterval(function () {
-            var now = performance.now();
-            if (now - lastLiveScan < 500) return;
-            lastLiveScan = now;
             applyLiveOverrides();
-        }, 500);
+        }, 1000);
     }
 
     // ── Watcher del repo: skins vivas sin reiniciar ────────────
@@ -1823,7 +1871,11 @@
                     var m = mats[i];
                     var t = m.map;
                     if (!t) continue;
+                    if (ITEM_MATS.has(m)) continue; // jamás el singleton de items
                     if (t.__mfPainted === url) continue;
+                    // Guardar el PRIMER original para poder reparar si algún
+                    // pase futuro volviera a dañar el material.
+                    if (!m.__mfOrigMap) m.__mfOrigMap = t;
                     try {
                         var c = document.createElement('canvas');
                         c.width = img.naturalWidth || img.width;

@@ -1,0 +1,86 @@
+{
+	"credit": "Made by Aurora using Blockbench",
+	"textureSize": [32, 32],
+	"texture": "optifine/random/entity/allay/dune_kek.png",
+	"models": [
+		{
+			"part": "head",
+			"id": "head",
+			"invertAxis": "xy",
+			"translate": [0, -6, 0],
+			"boxes": [
+				{"coordinates": [-2.5, 6, -2.5, 5, 4, 5], "textureOffset": [0, 0]},
+				{"coordinates": [-3.5, 12, 0.5, 7, 4, 0], "textureOffset": [16, 16]},
+				{"coordinates": [-3.5, 6, 0.5, 7, 6, 3], "textureOffset": [0, 21], "sizeAdd": 0.1}
+			],
+			"submodels": [
+				{
+					"id": "eyes",
+					"invertAxis": "xy",
+					"translate": [0.5, 8, 6.5],
+					"submodels": [
+						{
+							"invertAxis": "xy",
+							"mirrorTexture": "u",
+							"boxes": [
+								{"coordinates": [0, 2, -8, 2, 2, 2], "textureOffset": [15, 0]}
+							]
+						}
+					],
+					"boxes": [
+						{"coordinates": [-3, 2, -8, 2, 2, 2], "textureOffset": [15, 0]}
+					]
+				}
+			]
+		},
+		{
+			"part": "body",
+			"id": "body",
+			"invertAxis": "xy",
+			"translate": [0, -6, 0],
+			"boxes": [
+				{"coordinates": [-1.5, 2, -1, 3, 4, 2], "textureOffset": [0, 9]},
+				{"coordinates": [-1.5, 1, -1, 3, 5, 2], "textureOffset": [10, 9], "sizeAdd": -0.2}
+			]
+		},
+		{
+			"part": "right_arm",
+			"id": "right_arm",
+			"invertAxis": "xy",
+			"mirrorTexture": "u",
+			"translate": [-1.75, -5.5, 0],
+			"boxes": [
+				{"coordinates": [1.5, 2, -1, 1, 4, 2], "textureOffset": [23, 0]},
+				{"coordinates": [1.5, 2, -1, 1, 3, 2], "textureOffset": [21, 7], "sizeAdd": 0.1}
+			]
+		},
+		{
+			"part": "left_arm",
+			"id": "left_arm",
+			"invertAxis": "xy",
+			"translate": [1.75, -5.5, 0],
+			"boxes": [
+				{"coordinates": [-2.5, 2, -1, 1, 4, 2], "textureOffset": [23, 0]},
+				{"coordinates": [-2.5, 2, -1, 1, 3, 2], "textureOffset": [21, 7], "sizeAdd": 0.1}
+			]
+		},
+		{
+			"part": "left_wing",
+			"id": "left_wing",
+			"invertAxis": "xy",
+			"translate": [0.5, -6, -1],
+			"boxes": [
+				{"coordinates": [-0.5, 0, 1, 0, 5, 8], "textureOffset": [0, 8]}
+			]
+		},
+		{
+			"part": "right_wing",
+			"id": "right_wing",
+			"invertAxis": "xy",
+			"translate": [-0.5, -6, -1],
+			"boxes": [
+				{"coordinates": [0.5, 0, 1, 0, 5, 8], "textureOffset": [0, 8]}
+			]
+		}
+	]
+}

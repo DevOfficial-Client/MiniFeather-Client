@@ -1,0 +1,322 @@
+Hello!
+This text sheet is for anyone looking to rename a mob into a specific skin variant! 
+The first name will be the original texture of the mob followed by the names of the variants! 
+
+- If any of the names has a "|" in it, the variant can be named in more then one way.
+- If the text has *INSERT*, any generic colored Allay or texture can be used on top of the variant i.e. Red Lush Allay
+    - All colored Allays with a * can be used for the *INSERT COLOR NAME* options
+
+
+# V.1.0 - Standard Release Allays
+
+(Allay|Blue Allay)*
+(Yellow Allay)*
+(Red Allay|Nether Allay)*
+(Orange Allay)*
+(Green Allay)*
+(Purple Allay)*
+(White Allay)*
+(Muddy Allay)*
+(Amethyst Allay)
+(Sculk Allay)
+(*INSERT COLOR NAME* Lush Allay)
+(Dripstone Allay)
+(Vex Allay)
+(Soul Wizard)								            	Collab with: Kekman
+(Guardian Vex)
+(Yearnshroom|Mushroom)
+(Brown Yearnshroom|Brown Mushroom)
+(Crimson Yearnshroom|Crimson Fungus|Crimson Yearngus)
+(Warped Yearnshroom|Warped Fungus|Warped Yearngus)
+(Pink Pikmin|Wing Pikmin)
+(Queen Sectonia)							           	Collab with: Bumbee
+(Ribbon)
+(Elfilin)
+(V1)									                By: Fishstacks
+(Grogu|Baby Yoda|The Child)						        	Collab with: Creepermax123
+(Toad Golem|ShinyDragon)						        	By: ShinyDragon
+(Toxin Allay|creepermax)								By: Creepermax123							
+(Gills|GillsBills)
+
+
+# V.2.0 - Flowers and Powers Update
+
+(Red Tulip Allay)
+(Orange Tulip Allay)
+(Pink Tulip Allay)
+(White Tulip Allay)
+(Poppy Allay)
+(Dandelion Allay)
+(Blue Orchid Allay)
+(Cornflower Allay)
+(Allium Allay)
+(Lily of the Valley Allay)
+(Oxeye Daisy Allay)
+(Azure Bluet Allay)
+(Sunflower Allay)
+(Wither Rose Allay)
+(Torchflower Allay)
+(Cactus Allay)
+(Bamboo Allay)
+(Chorus Flower Allay)
+(Dummy Allay)
+(Scarecrow Allay)
+(Pitcher Plant Allay)
+(Rose Bush Allay|Rose Allay)
+(Lilac Allay)
+(Peony Allay)
+(Wheat Allay)
+(Carrot Allay)
+(Potato Allay)
+(Cocoa Beans Allay)
+(Beetroot Allay)
+(Magolor)								                Collab with: Creepermax123
+(Ewan|ewanhowell)							            	Collab with: Ewanhowell5195
+(MickeyJoeAlpha|MJA)							        	Collab with: MickeyJoeAlpha
+
+
+# V.3.0 - Knights and Frights Update
+
+(Meta Knight)								            	Collab with: Creepermax123
+(Galacta Knight)							            	Collab with: Creepermax123
+(Dark Meta Knight)							            	Collab with: Creepermax123
+(Morpho Knight)								            	Collab with: Creepermax123
+(Dark Matter|Dark Matter Blade)
+(Hollow Knight|The Knight)
+(Sibling|Vessel)
+(Broken Vessel)
+(Shovel Knight)
+(Black Knight)
+(Glow Pikmin)
+(Link)
+(Ganon|Ganondorf)
+(Necromancer)
+(Dark Knight|Batman)
+(Butter|Butterallay)							        	By: Butterd
+(Mortarion)								                By: Cloaker
+
+
+# V.4.0 - Wisps and Crisps Update
+
+(Dark Allay)*
+(Thistle Allay)*
+(Neon Allay)*
+(Red Wisp)
+(Orange Wisp)
+(Yellow Wisp)
+(Green Wisp)
+(Blue Wisp)
+(Purple Wisp)
+(White Wisp)
+(Muddy Wisp)
+(Dark Wisp)
+(Thistle Wisp)
+(Neon Wisp)
+(Wisp)
+(FA_pew)								                By: FA_pew
+(Scribblez)								                By: Scribblez
+
+
+# V.5.0 - Aquatic and Chaotic Update
+
+(Seagrass Allay)
+(Sea Pickle Allay)
+(Tube Coral Allay)
+(Brain Coral Allay)
+(Bubble Coral Allay)
+(Fire Coral Allay)
+(Horn Coral Allay)
+(Dead Coral Allay)
+(Kelp Allay)
+(Dried Kelp Allay)
+(Sponge Allay)*
+(Heart of Allay)
+(Drowned Allay)
+(Sephiroth)
+(Shiver)
+(Frye)
+(Big Man)
+(V2)									                Collab with: Fishstacks
+(Isfet'llay)								           	By: Butterd
+
+
+# V.5.1 - Side Order and Fresh Reorder Update
+
+(Gray Allay|Grey Allay)*
+(Parallel Allay)*
+(Vanilla Wisp)
+(Sponge Wisp)
+(Gray Wisp)
+(FreshLX)								                Collab with: FreshLX
+
+
+# V.5.1.1 - 1.21 Patch
+(Adora)
+
+
+# V.6.0 - Nether and Whatever Update
+
+(Bill Cipher|Bill|Bill Codex|One Eyed Demon|The Triangle Guy)
+(Peepaw Willy|Springtrap|Burntrap|Afton|William Afton|Vanny|Vanessa)
+(Metroid)
+(Lamb|The Lamb)
+(Goat|The Goat)
+(*INSERT COLOR NAME* *INSERT FIRE OVERLAY* Skeleton Allay)
+    -*INSERT FIRE OVERLAY*
+        - () No Fire
+        - (Fire)
+        - (Soul Fire)
+        - (End Fire)
+(*INSERT COLOR NAME* *INSERT FIRE OVERLAY* Wither Skeleton Allay)
+    -*INSERT FIRE OVERLAY*
+        - () No Fire
+        - (Fire)
+        - (Soul Fire)
+        - (End Fire)
+(*INSERT COLOR NAME* Bogged Allay)
+(*INSERT COLOR NAME* Stray Allay)
+(Piglin)
+(Balloon Zombie)
+(Blaze)
+(Breeze)
+(Nether Jockey|Baby Ghast|Baby Strider)
+(Por'al)								                By: Butterd
+(Soul Wisp)
+(Soul Sand Wisp)
+(Crimson Root Allay)
+(Warped Root Allay)
+
+
+# V.6.1 - Halloween 2024 Update
+
+(Soul Blaze)
+(Splatoween Shiver)
+(Splatoween Frye)
+(Splatoween Big Man)
+
+
+# V.7.0 - Frosty and Pale Mossy Update
+
+(Seeping)
+(Open Eyeblossom Allay|Closed Eyeblossom Allay)
+(Snow Golem Allay|Sheared Snow Golem Allay)
+(Red Present Allay|Green Present Allay)
+(Frosty Fest Shiver)
+(Frosty Fest Frye)
+(Frosty Fest Big Man)
+(*INSERT COLOR NAME* *INSERT OVERLAY NAME* Allay)
+    -*INSERT OVERLAY NAME*
+        - () No Overlay, defaults to model 1 if not in appropriate biome
+        - (Jungle)
+        - (Snowy) 
+        - (Mossy)
+        - (Pale Mossy)
+(mint_oreo)								                Collab with: mint_oreo
+
+
+# V.8.0 - Mortals and Immortals Update
+
+(Omni Man)
+(Homelander)
+(Peacemaker)
+(Ghostface)
+(Zelda)
+(Sylux)
+(Optimus Prime)
+(Frieza)								                Collab with: Cloaker
+(Megamind)
+(Dr. Eggman|Doctor Eggman)
+(Aang)
+(Porky Minch)
+
+
+# V.9.0 - Dunes and Ruins Update
+
+(Grapes)								                By: Grapes
+(Anubis)								                Collab with: Aurora
+(Horus)									                Collab with: Aurora
+(Bastet)								                Collab with: Aurora
+(Sobek)									                Collab with: Aurora
+(Wadjet)								                Collab with: Aurora
+(Kek)									                Collab with: Aurora
+(Mummy)									                Collab with: Aurora
+(Baron Harkonnen|Baron|Harkonnen)
+(Penitent One)
+(Child of Moonlight)
+(Coffin)
+
+
+# V.10.0 - Flowers and Powers: Part II Update
+
+(Miku) 									                Collab with: ALtheGatorMC
+(Teto) 									                Collab with: ALtheGatorMC
+(Neru) 									                Collab with: ALtheGatorMC
+(Doki) 									                Collab with: ALtheGatorMC
+(Mint) 									                Collab with: ALtheGatorMC
+(Flower Cactus Allay)
+(.*Spore Blossom.*|Spore Blossom.*)
+(.*Flowering Azalea.*|Flowering Azalea.*)
+(Pink Petals Allay)
+(Wild Flowers Allay)
+(Gabriel)
+(Taranza)
+(Dimensional Mirror|Sectonia)
+(Ophanim)
+
+
+# V.10.1 - Assorted Allays x A Minecraft Movie
+
+(Steve)
+(Garett)
+(Henry)
+(Natalie)
+(Dawn)
+
+
+# V.10.2 - Assorted Allays x Hollow Knight: Silksong
+
+(Hornet)
+(Lace)
+
+
+# V.11.0 - Space and Waste Update
+
+(UFO Allay)
+(Brain Allay|Mindset)
+(Employee)
+(Crewmate)
+(Samus)
+(Ridley)
+(Olimar)
+(Louie)
+(Megatron)
+(Mr. Grizz)
+(The Visitor)
+(Aurora)									        By: Aurora
+
+
+# V.12.0 - Plentiful Colors and Many Others Update
+
+(ALtheGatorMC)										Collab with: AltheGatorMC
+(Madeline)
+(Badeline)
+(Summer Nights Shiver)
+(Summer Nights Frye)
+(Summer Nights Big Man)
+(Blue Crewmate)
+(Green Crewmate)
+(Pink Crewmate)
+(Orange Crewmate)
+(Yellow Crewmate)
+(Grey Crewmate)
+(White Crewmate)
+(Purple Crewmate)
+(Brown Crewmate)
+(Cyan Crewmate)
+(Lime Crewmate)
+(Maroon Crewmate)
+(Rose Crewmate)
+(Banana Crewmate)
+(Gray Crewmate)
+(Tan Crewmate)
+(Coral Crewmate)

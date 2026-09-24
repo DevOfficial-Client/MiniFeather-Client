@@ -169,6 +169,8 @@
   function findGame(force = false) {
     const now = performance.now();
     if (!force && state.game?.player && state.game?.world && now - state.lastGameScan < 1200) return state.game;
+    // Caché negativa: sin partida (menú) antes se escaneaba el DOM cada frame
+    if (!force && now - state.lastGameScan < 800) return state.game;
     state.lastGameScan = now;
     for (const candidate of [W.miniblox, W.__MINIBLOX_GAME__, state.game]) {
       if (candidate?.player && candidate?.world) { state.game = candidate; return candidate; }
@@ -676,9 +678,10 @@
       const opacity = fadeT > 0.75 ? 1 - (fadeT - 0.75) / 0.25 : 1;
       try { star.material.opacity = opacity; } catch (_) {}
       try {
+        // matrixAutoUpdate=true: el renderer del juego ya recalcula la
+        // matrixWorld en su propio updateMatrixWorld — nada de computarla
+        // también a mano cada frame
         star.mesh.position.set(star.x, star.y, star.z);
-        star.mesh.updateMatrix();
-        star.mesh.updateMatrixWorld(true);
       } catch (_) {}
     }
   }
@@ -733,8 +736,7 @@
           state.scratchVec3.set(el[12], el[13], el[14]);
           d.mesh.lookAt(state.scratchVec3);
         }
-        d.mesh.updateMatrix();
-        d.mesh.updateMatrixWorld(true);
+        // el renderer actualiza la matriz (matrixAutoUpdate=true)
       } catch (_) {}
     }
   }
@@ -878,7 +880,13 @@
         const sp = def.speed * 0.35;
         p.x += Math.cos(p.dir) * sp * dt;
         p.z += Math.sin(p.dir) * sp * 0.7 * dt;
-        const ground = groundHeightAt(p.x, p.z, p.y - def.height);
+        // Altura del suelo re-muestreada cada 150ms: antes era un escaneo
+        // lineal de TODOS los emitters por mariposa por frame
+        if (!p.groundAt || now - p.groundAt > 150) {
+          p.groundAt = now;
+          p.groundY = groundHeightAt(p.x, p.z, p.y - def.height);
+        }
+        const ground = p.groundY;
         const targetY = ground + def.height * (0.5 + 0.5 * Math.sin(age * 0.7 + p.phase));
         p.y += (targetY - p.y) * Math.min(1, dt * 1.5);
         const flap = 1 - def.squishAmp * (0.5 + 0.5 * Math.sin(age * def.squishFreq * Math.PI * 2 + p.phase));
@@ -954,8 +962,8 @@
       if (p.kind !== 'waterPollen' && p.kind !== 'lilyPad') {
         p.mesh.position.set(p.x, p.y, p.z);
       }
-      p.mesh.updateMatrix();
-      p.mesh.updateMatrixWorld(true);
+      // matrixAutoUpdate=true: el renderer del juego ya hace updateMatrixWorld
+      // de la escena cada frame — el cómputo manual era triple trabajo
     } catch (_) {}
     return true;
   }

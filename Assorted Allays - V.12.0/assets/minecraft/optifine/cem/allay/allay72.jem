@@ -1,0 +1,111 @@
+{
+	"credit": "Made with Blockbench",
+	"textureSize": [32, 32],
+	"texture": "optifine/random/entity/allay/butter_portal.png",
+	"models": [
+		{
+			"part": "head",
+			"id": "head",
+			"invertAxis": "xy",
+			"translate": [0, -6, 0],
+			"boxes": [
+				{"coordinates": [0, 4, -2.5, 0, 7, 2], "textureOffset": [8, 19]}
+			]
+		},
+		{
+			"part": "body",
+			"id": "body",
+			"invertAxis": "xy",
+			"translate": [0, -6, 0],
+			"boxes": [
+				{"coordinates": [-2.5, 1, -1, 5, 7, 2], "textureOffset": [16, 18]}
+			],
+			"submodels": [
+				{
+					"id": "left_wing_2",
+					"invertAxis": "xy",
+					"translate": [-1, 5, 2],
+					"rotate": [-12.5, -7.5, 0],
+					"boxes": [
+						{"coordinates": [0, -4.5, -1, 0, 5, 8], "textureOffset": [0, 10]}
+					]
+				},
+				{
+					"id": "left_wing_3",
+					"invertAxis": "xy",
+					"translate": [-1.5, 5.5, 1],
+					"rotate": [15, -22.5, 0],
+					"boxes": [
+						{"coordinates": [0, -4.5, 0, 0, 5, 8], "textureOffset": [0, 5]}
+					]
+				},
+				{
+					"id": "right_wing_2",
+					"invertAxis": "xy",
+					"translate": [1, 5, 1],
+					"rotate": [-12.5, 7.5, 0],
+					"boxes": [
+						{"coordinates": [0, -4.5, 0, 0, 5, 8], "textureOffset": [16, 0]}
+					]
+				},
+				{
+					"id": "right_wing_3",
+					"invertAxis": "xy",
+					"translate": [1.5, 5.5, 1],
+					"rotate": [15, 22.5, 0],
+					"boxes": [
+						{"coordinates": [0, -4.5, 0, 0, 5, 8], "textureOffset": [16, -5]}
+					]
+				}
+			],
+			"animations": [
+				{
+					"left_wing_2.ry": "left_wing.ry*1.4",
+					"left_wing_2.rx": "left_wing.rx*2",
+					"left_wing_3.ry": "left_wing.ry*1.5",
+					"left_wing_3.rx": "left_wing.rx*2",
+					"right_wing_2.ry": "right_wing.ry*1.4",
+					"right_wing_2.rx": "right_wing.rx*2",
+					"right_wing_3.ry": "right_wing.ry*1.5",
+					"right_wing_3.rx": "right_wing.rx*2"
+				}
+			]
+		},
+		{
+			"part": "right_arm",
+			"id": "right_arm",
+			"invertAxis": "xy",
+			"translate": [-1.75, -5.5, 0],
+			"boxes": [
+				{"coordinates": [3.5, 2, -1, 1, 4, 1], "textureOffset": [4, 0]}
+			]
+		},
+		{
+			"part": "left_arm",
+			"id": "left_arm",
+			"invertAxis": "xy",
+			"translate": [1.75, -5.5, 0],
+			"boxes": [
+				{"coordinates": [-4.5, 2, -1, 1, 4, 1], "textureOffset": [0, 0]}
+			]
+		},
+		{
+			"part": "left_wing",
+			"id": "left_wing",
+			"invertAxis": "xy",
+			"translate": [0.5, -6, -1],
+			"boxes": [
+				{"coordinates": [-0.5, 0, 1, 0, 5, 8], "textureOffset": [0, 0]}
+			]
+		},
+		{
+			"part": "right_wing",
+			"id": "right_wing",
+			"invertAxis": "xy",
+			"translate": [-0.5, -6, -1],
+			"boxes": [
+				{"coordinates": [0.5, 0, 1, 0, 5, 8], "textureOffset": [16, 5]}
+			]
+		}
+	]
+}

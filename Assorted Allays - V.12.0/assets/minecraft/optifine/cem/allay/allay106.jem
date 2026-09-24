@@ -1,0 +1,172 @@
+{
+	"credit": "Made with Blockbench",
+	"textureSize": [32, 32],
+	"texture": "textures/entity/allay/ophanim.png",
+	"models": [
+		{
+			"part": "head",
+			"id": "head",
+			"invertAxis": "xy",
+			"translate": [0, -6, 0],
+			"submodels": [
+				{
+					"id": "eye",
+					"invertAxis": "xy",
+					"translate": [0, 6, 0],
+					"submodels": [
+						{
+							"id": "inner_eye",
+							"invertAxis": "xy",
+							"translate": [0, -1.5, -1],
+							"boxes": [
+								{"coordinates": [-1.5, -1.5, -1.5, 3, 3, 3], "textureOffset": [0, 0]}
+							]
+						},
+						{
+							"id": "ring1",
+							"invertAxis": "xy",
+							"translate": [0, -1.5, -1],
+							"boxes": [
+								{"coordinates": [-1, -3.5, -3.5, 2, 7, 7], "textureOffset": [12, 0]}
+							]
+						},
+						{
+							"id": "ring2",
+							"invertAxis": "xy",
+							"translate": [0, -1.5, -1],
+							"rotate": [0, -90, 0],
+							"boxes": [
+								{"coordinates": [-1, -3.5, -3.5, 2, 7, 7], "textureOffset": [12, 0]}
+							]
+						},
+						{
+							"id": "ring3",
+							"invertAxis": "xy",
+							"translate": [0, -1.5, -1],
+							"rotate": [0, 0, 90],
+							"boxes": [
+								{"coordinates": [-1, -3.5, -3.5, 2, 7, 7], "textureOffset": [12, 0]}
+							]
+						}
+					]
+				}
+			],
+			"animations": [
+				{
+					"eye.ty": "-9",
+					"left_wing.ty": "-3",
+					"right_wing.ty": "-3",
+					"eye.rx": "head.rx-head.rx",
+					"eye.ry": "head.ry-head.ry",
+					"eye.rz": "head.rz-head.rz",
+					"inner_eye.sx": "1+right_arm.rx",
+					"inner_eye.sy": "1+right_arm.rx",
+					"inner_eye.sz": "1+right_arm.rx",
+					"ring1.rx": "time/10",
+					"ring1.ry": "time/10",
+					"ring2.rx": "time/10",
+					"ring2.ry": "torad(90)+time/10",
+					"ring3.rx": "time/10",
+					"ring3.ry": "time/10",
+					"ring2.sx": "1.15",
+					"ring2.sy": "1.15",
+					"ring2.sz": "1.15",
+					"ring3.sx": "1.25",
+					"ring3.sy": "1.25",
+					"ring3.sz": "1.25",
+					"body.rx": "body.rx-body.rx",
+					"body.ry": "body.ry-body.ry",
+					"body.rz": "body.rz-body.rz",
+					"body.sx": "0.90",
+					"body.sy": "0.90",
+					"body.sz": "0.90",
+					"right_arm.tx": "right_arm.tx-right_arm.tx",
+					"right_arm.ty": "right_arm.ty-right_arm.ty",
+					"right_arm.tz": "right_arm.tz-right_arm.tz",
+					"right_arm.rx": "right_arm.rx-right_arm.rx+torad(-90)",
+					"right_arm.ry": "right_arm.ry-right_arm.ry",
+					"right_arm.rz": "right_arm.rz-right_arm.rz",
+					"body.ty": "-3",
+					"body.tz": "3.5"
+				}
+			]
+		},
+		{
+			"part": "body",
+			"id": "body",
+			"invertAxis": "xy",
+			"translate": [0, -6, 0]
+		},
+		{
+			"part": "right_arm",
+			"id": "right_arm",
+			"invertAxis": "xy",
+			"translate": [-1.75, -5.5, 0]
+		},
+		{
+			"part": "left_arm",
+			"id": "left_arm",
+			"invertAxis": "xy",
+			"translate": [1.75, -5.5, 0]
+		},
+		{
+			"part": "left_wing",
+			"id": "left_wing",
+			"invertAxis": "xy",
+			"translate": [0.5, -6, -1],
+			"boxes": [
+				{"coordinates": [-0.5, 0, 1, 0, 5, 8], "textureOffset": [16, 19]}
+			],
+			"submodels": [
+				{
+					"id": "left_top_wing",
+					"invertAxis": "xy",
+					"translate": [-1.5, 6, 1],
+					"rotate": [-25, 0, 0],
+					"boxes": [
+						{"coordinates": [0, -5, 0, 0, 5, 8], "textureOffset": [16, 19]}
+					]
+				},
+				{
+					"id": "left_bottom_wing",
+					"invertAxis": "xy",
+					"translate": [-0.5, 4, 1],
+					"rotate": [20, 0, 0],
+					"boxes": [
+						{"coordinates": [0.25, -5, 0, 0, 5, 8], "textureOffset": [16, 19]}
+					]
+				}
+			]
+		},
+		{
+			"part": "right_wing",
+			"id": "right_wing",
+			"invertAxis": "xy",
+			"translate": [-0.5, -6, -1],
+			"boxes": [
+				{"coordinates": [0.5, 0, 1, 0, 5, 8], "textureOffset": [16, 19]}
+			],
+			"submodels": [
+				{
+					"id": "right_top_wing",
+					"invertAxis": "xy",
+					"translate": [1.5, 6, 1],
+					"rotate": [-25, 0, 0],
+					"boxes": [
+						{"coordinates": [0, -5, 0, 0, 5, 8], "textureOffset": [16, 19]}
+					]
+				},
+				{
+					"id": "right_bottom_wing",
+					"invertAxis": "xy",
+					"mirrorTexture": "u",
+					"translate": [0.5, 4, 1],
+					"rotate": [20, 0, 0],
+					"boxes": [
+						{"coordinates": [-0.25, -5, 0, 0, 5, 8], "textureOffset": [16, 19]}
+					]
+				}
+			]
+		}
+	]
+}

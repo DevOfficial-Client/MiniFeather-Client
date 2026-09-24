@@ -62,6 +62,10 @@ function getGame(force = false) {
     if (!force && state.game?.player && now - state.lastGameScan < 500) {
         return state.game;
     }
+    // Caché negativa: en menús antes se escaneaba el DOM cada frame
+    if (!force && now - state.lastGameScan < 500) {
+        return state.game?.player ? state.game : null;
+    }
 
     state.lastGameScan = now;
 

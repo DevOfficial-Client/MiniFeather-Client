@@ -1362,6 +1362,10 @@
     }
 
     function applyAll(force = false) {
+        // Early-out: sin nicknames NI amigos cargados no hay nada que
+        // aplicar — antes esto corría todo el pipeline 5.5 veces/seg
+        // para siempre aunque el usuario no usara la feature.
+        if (!state.nicknames.size && !state.friendsByUuid.size) return;
         const game = findGame();
         if (game) hookGame(game);
         if (!state.game) return;
@@ -2044,14 +2048,17 @@
     installNetworkObservers();
     initUiWhenReady();
 
+    // Sin force: la caché interna de findGame ya evita el BFS de React
+    // cada 700ms (antes findGame(true) lo ignoraba y escaneaba fibers
+    // perpetuamente aunque el game ya estuviera hookeado)
     state.finderTimer = setInterval(() => {
-        const game = findGame(true);
+        const game = state.game || findGame();
         if (game) hookGame(game);
-    }, 700);
+    }, 1500);
 
     state.applyTimer = setInterval(() => {
         applyAll(false);
-    }, 180);
+    }, 500);
 
     void 0;
 })();

@@ -409,6 +409,7 @@
 
     const state = {
         open: false,
+        everOpened: false,
         overlay: null,
         canvas: null,
         ctx: null,
@@ -421,7 +422,13 @@
         scanInterval: null,
         serverCaches: new Map(),
         currentServerKey: null,
-        currentDimensionId: 0
+        currentDimensionId: 0,
+        // Snapshot del fondo (chunks + grid): repintar solo cuando algo cambia,
+        // no 60 veces por segundo
+        snapshot: null,
+        snapshotDirty: true,
+        wpCache: null,
+        wpCacheAt: 0
     };
 
     function getGame() {
@@ -607,6 +614,7 @@
             state.currentDimensionId = newDimId;
             state.lastPlayerChunkX = null;
             state.lastPlayerChunkZ = null;
+            state.snapshotDirty = true;
             void 0;
         }
 
@@ -649,6 +657,7 @@
         }
 
         if (scanned > 0) {
+            state.snapshotDirty = true;
             void 0;
         }
 
@@ -669,14 +678,66 @@
         const w = canvas.width;
         const h = canvas.height;
 
-        ctx.fillStyle = '#0a0a0a';
-        ctx.fillRect(0, 0, w, h);
-
         const blockPx = CONFIG.blockPixelSize * state.zoom;
         const centerX = state.centerX;
         const centerZ = state.centerZ;
         const offsetX = w / 2;
         const offsetY = h / 2;
+
+        // Fondo pesado (miles de fillRect) SOLO cuando algo cambió: zoom,
+        // centrado, chunks nuevos o mundo distinto. Entre cambios, blitear
+        // el snapshot cacheado.
+        if (state.snapshotDirty || !state.snapshot ||
+            state.snapshot.width !== w || state.snapshot.height !== h) {
+            if (!state.snapshot) state.snapshot = document.createElement('canvas');
+            if (state.snapshot.width !== w) state.snapshot.width = w;
+            if (state.snapshot.height !== h) state.snapshot.height = h;
+            const sctx = state.snapshot.getContext('2d');
+            paintMapBase(sctx, w, h, blockPx, centerX, centerZ, offsetX, offsetY);
+            state.snapshotDirty = false;
+        }
+        ctx.drawImage(state.snapshot, 0, 0);
+
+        const game = getGame();
+
+        if (game?.player?.pos) {
+            const ppx = game.player.pos.x;
+            const ppz = game.player.pos.z;
+            const psx = offsetX + (ppx - centerX) * blockPx;
+            const psy = offsetY + (ppz - centerZ) * blockPx;
+
+            const yaw = Number(game.player.yaw) || 0;
+            ctx.save();
+            ctx.translate(psx, psy);
+            ctx.rotate(-yaw);
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, -8);
+            ctx.lineTo(-5, 5);
+            ctx.lineTo(0, 2);
+            ctx.lineTo(5, 5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        drawWaypoints(ctx, offsetX, offsetY, centerX, centerZ, blockPx);
+
+        if (state.coordsLabel && game?.player?.pos) {
+            const chunkCount = getCurrentCache()?.size || 0;
+            state.coordsLabel.textContent =
+                `XYZ: ${Math.floor(game.player.pos.x)} / ${Math.floor(game.player.pos.y)} / ${Math.floor(game.player.pos.z)} | ` +
+                `Chunks: ${chunkCount} | Zoom: ${state.zoom.toFixed(1)}x | ` +
+                `Server: ${state.currentServerKey || '?'} | Dim: ${state.currentDimensionId}`;
+        }
+    }
+
+    function paintMapBase(ctx, w, h, blockPx, centerX, centerZ, offsetX, offsetY) {
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, w, h);
 
         const chunkCache = getCurrentCache();
         const game = getGame();
@@ -740,46 +801,26 @@
                 ctx.stroke();
             }
         }
+    }
 
-        if (game?.player?.pos) {
-            const ppx = game.player.pos.x;
-            const ppz = game.player.pos.z;
-            const psx = offsetX + (ppx - centerX) * blockPx;
-            const psy = offsetY + (ppz - centerZ) * blockPx;
-
-            const yaw = Number(game.player.yaw) || 0;
-            ctx.save();
-            ctx.translate(psx, psy);
-            ctx.rotate(-yaw);
-            ctx.fillStyle = '#ffffff';
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(0, -8);
-            ctx.lineTo(-5, 5);
-            ctx.lineTo(0, 2);
-            ctx.lineTo(5, 5);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        drawWaypoints(ctx, offsetX, offsetY, centerX, centerZ, blockPx);
-
-        if (state.coordsLabel && game?.player?.pos) {
-            const chunkCount = getCurrentCache()?.size || 0;
-            state.coordsLabel.textContent =
-                `XYZ: ${Math.floor(game.player.pos.x)} / ${Math.floor(game.player.pos.y)} / ${Math.floor(game.player.pos.z)} | ` +
-                `Chunks: ${chunkCount} | Zoom: ${state.zoom.toFixed(1)}x | ` +
-                `Server: ${state.currentServerKey || '?'} | Dim: ${state.currentDimensionId}`;
-        }
+    // Waypoints parseados a lo sumo 1 vez por segundo (antes: 2 JSON.parse
+    // de localStorage POR FRAME)
+    function getWaypointData() {
+        const now = performance.now();
+        if (state.wpCache && now - state.wpCacheAt < 1000) return state.wpCache;
+        let active = null, store = null;
+        try {
+            active = JSON.parse(localStorage.getItem('minifeather_waypoints_v2_active') || 'null');
+            store = JSON.parse(localStorage.getItem('minifeather_waypoints_v2') || '{"version":2,"worlds":{}}');
+        } catch {}
+        state.wpCache = { active, store };
+        state.wpCacheAt = now;
+        return state.wpCache;
     }
 
     function drawWaypoints(ctx, offsetX, offsetY, centerX, centerZ, blockPx) {
         try {
-            const active = JSON.parse(localStorage.getItem('minifeather_waypoints_v2_active') || 'null');
-            const store = JSON.parse(localStorage.getItem('minifeather_waypoints_v2') || '{"version":2,"worlds":{}}');
+            const { active, store } = getWaypointData();
             if (!active?.key || store?.version !== 2 || !store.worlds) return;
             const entry = store.worlds[active.key];
             if (!entry || !Array.isArray(entry.waypoints)) return;
@@ -920,6 +961,7 @@
             const scale = canvas.width / canvasRect.width;
             state.centerX -= (dx * scale) / blockPx;
             state.centerZ -= (dy * scale) / blockPx;
+            state.snapshotDirty = true;
         });
 
         window.addEventListener('mouseup', () => {
@@ -931,6 +973,7 @@
             e.preventDefault();
             const delta = e.deltaY < 0 ? 1.2 : 1 / 1.2;
             state.zoom = Math.max(0.5, Math.min(8, state.zoom * delta));
+            state.snapshotDirty = true;
         }, { passive: false });
     }
 
@@ -947,14 +990,22 @@
         state.centerZ = Math.floor(game.player.pos.z);
         state.zoom = 1;
         state.open = true;
+        state.everOpened = true;
+        state.snapshotDirty = true;
 
         createOverlay();
         scanChunksAroundPlayer();
 
-        const renderLoop = () => {
+        // El mapa es UI de ayuda, no gameplay: ~20 Hz sobra (antes 60 Hz
+        // repintando miles de fillRect por frame)
+        let lastRender = 0;
+        const renderLoop = (ts) => {
             if (!state.open) return;
-            scanChunksAroundPlayer();
-            renderMap();
+            if (ts - lastRender >= 48) {
+                lastRender = ts;
+                scanChunksAroundPlayer();
+                renderMap();
+            }
             requestAnimationFrame(renderLoop);
         };
         renderLoop();
@@ -996,10 +1047,12 @@
         }
     }, true);
 
+    // Escaneo en background solo si el usuario usa el mapa en esta sesión:
+    // si nunca lo abre, no hay razón para generar heightmaps constantemente
     function startBackgroundScan() {
         if (state.scanInterval) clearInterval(state.scanInterval);
         state.scanInterval = setInterval(() => {
-            if (state.open) return;
+            if (state.open || !state.everOpened) return;
             scanChunksAroundPlayer();
         }, 3000);
     }
@@ -1023,6 +1076,7 @@
         },
         setZoom(z) {
             state.zoom = Math.max(0.5, Math.min(8, Number(z) || 1));
+            state.snapshotDirty = true;
             return state.zoom;
         },
         centerOnPlayer() {
@@ -1030,6 +1084,7 @@
             if (game?.player?.pos) {
                 state.centerX = Math.floor(game.player.pos.x);
                 state.centerZ = Math.floor(game.player.pos.z);
+                state.snapshotDirty = true;
             }
         }
     };

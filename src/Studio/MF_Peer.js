@@ -496,20 +496,23 @@ function sweepOrphanPuppets() {
 
 let puppetRafId = 0;
 let lastSweep = 0;
-(function puppetLoop() {
-    if (state.role === 'guest' || state.role === 'host') {
-        try { puppetTick(); } catch {}
-        try { peerScaleTick(); } catch {}
-        try { entsTick(); } catch {}
-        try { lookTick(); } catch {}
-        const now = performance.now();
-        if (now - lastSweep > 10000) {
-            lastSweep = now;
-            try { sweepOrphanPuppets(); } catch {}
-        }
+function puppetLoop() {
+    if (state.role !== 'guest' && state.role !== 'host') { puppetRafId = 0; return; }
+    try { puppetTick(); } catch {}
+    try { peerScaleTick(); } catch {}
+    try { entsTick(); } catch {}
+    try { lookTick(); } catch {}
+    const now = performance.now();
+    if (now - lastSweep > 10000) {
+        lastSweep = now;
+        try { sweepOrphanPuppets(); } catch {}
     }
     puppetRafId = requestAnimationFrame(puppetLoop);
-})();
+}
+// El loop solo corre mientras haya sesion P2P activa
+function ensurePuppetLoop() {
+    if (!puppetRafId) puppetRafId = requestAnimationFrame(puppetLoop);
+}
 
 function handleMsg(msg) {
     if (!msg || typeof msg !== 'object') return;
@@ -1121,12 +1124,13 @@ function chatWatchTick() {
         return;
     }
 }
-setInterval(chatWatchTick, 1500);
+let chatWatchTimer = setInterval(chatWatchTick, 1500);
 
 async function host(code) {
     if (state.conn || state.peer) { warn('ya hay sesion activa — /p2p off primero'); return null; }
     if (!(await loadPeerJS())) { warn('no se pudo cargar PeerJS (CSP?)'); return null; }
     state.role = 'host';
+    ensurePuppetLoop();
     state.status = 'connecting';
     const id = 'mf-' + String(code || Math.random().toString(36).slice(2, 8));
     state.peerId = id;
@@ -1154,6 +1158,7 @@ async function join(code) {
     if (!code) { warn('usa: /p2p join <codigo>'); return false; }
     if (!(await loadPeerJS())) { warn('no se pudo cargar PeerJS (CSP?)'); return false; }
     state.role = 'guest';
+    ensurePuppetLoop();
     state.status = 'connecting';
     const peer = new globalThis.Peer({ debug: 0 });
     state.peer = peer;

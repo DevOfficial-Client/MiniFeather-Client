@@ -1,0 +1,4 @@
+{
+    condition: "pixelperfectbill",
+    fallback: "assets/minecraft/optifine/random/entity/allay/bill_cipher.png"
+}

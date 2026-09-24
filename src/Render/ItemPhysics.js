@@ -39,6 +39,7 @@ const state = {
     lastGameScan: 0,
     lastScan: 0,
     lastFrame: performance.now(),
+    rafId: 0,
     items: new Map()
 };
 
@@ -844,7 +845,14 @@ function setEnabled(enabled) {
     const next = !!enabled;
     if (state.enabled === next) return;
     state.enabled = next;
-    if (!next) resetAll();
+    if (next) {
+        // Re-agendar el loop solo cuando el módulo está activo
+        state.lastFrame = 0;
+        if (!state.rafId) state.rafId = requestAnimationFrame(loop);
+    } else {
+        if (state.rafId) { cancelAnimationFrame(state.rafId); state.rafId = 0; }
+        resetAll();
+    }
 }
 
 document.addEventListener(EVENT_CONFIG, event => {
@@ -875,7 +883,7 @@ function loop(timestamp) {
         }
     }
 
-    requestAnimationFrame(loop);
+    state.rafId = requestAnimationFrame(loop);
 }
 
 globalThis.MiniFeatherItemPhysics = {
@@ -893,5 +901,6 @@ globalThis.MiniFeatherItemPhysics = {
     }
 };
 
-requestAnimationFrame(loop);
+// El loop se agenda desde setEnabled(true) — nada de rAF perpetuo con el módulo apagado
+if (state.enabled) state.rafId = requestAnimationFrame(loop);
 })();

@@ -349,11 +349,38 @@
     return patchedUniforms.size;
   }
 
+  // Escaneo con backoff: traverse de toda la escena cada 900ms para siempre
+  // es caro; si varios scans seguidos no encuentran uniforms nuevos, duplicar
+  // el intervalo (tope 6s). Cualquier hallazgo nuevo resetea al ritmo rápido.
+  let _scanDelay = SCAN_INTERVAL_MS;
+  let _staleScans = 0;
+  function scheduleScan() {
+    if (state.destroyed) return;
+    state.timer = window.setTimeout(() => {
+      if (state.enabled) {
+        const before = patchedUniforms.size;
+        scan(false);
+        if (patchedUniforms.size === before) {
+          _staleScans++;
+          if (_staleScans >= 3) {
+            _staleScans = 0;
+            _scanDelay = Math.min(6000, _scanDelay * 2);
+          }
+        } else {
+          _staleScans = 0;
+          _scanDelay = SCAN_INTERVAL_MS;
+        }
+      } else {
+        // Apagado: chequeo barato cada 2s por si se re-activa
+        _scanDelay = 2000;
+      }
+      scheduleScan();
+    }, _scanDelay);
+  }
+
   function ensureTimer() {
     if (state.timer || state.destroyed) return;
-    state.timer = window.setInterval(() => {
-      if (state.enabled) scan(false);
-    }, SCAN_INTERVAL_MS);
+    scheduleScan();
   }
 
   function setEnabled(enabled) {
@@ -362,6 +389,7 @@
     if (state.enabled) {
       patchWorkerLighting();
       ensureTimer();
+      _scanDelay = SCAN_INTERVAL_MS; // re-activado: ritmo rápido de nuevo
       scan(true);
     }
   }
@@ -415,7 +443,7 @@
     controller.abort();
 
     if (state.timer) {
-      clearInterval(state.timer);
+      clearTimeout(state.timer);
       state.timer = 0;
     }
 

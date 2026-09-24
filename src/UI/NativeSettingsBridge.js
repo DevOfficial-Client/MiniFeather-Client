@@ -659,12 +659,29 @@
     state.modalObserver.observe(dialog, { childList: true, subtree: true });
   }
 
+  // El juego muta el body decenas de veces por segundo: en vez de un
+  // querySelectorAll full-document POR lote de mutaciones, acumular y
+  // escanear a lo sumo cada 400ms
+  let nsbScanTimer = 0;
+  function scheduleDialogScan() {
+    if (nsbScanTimer || state.destroyed) return;
+    nsbScanTimer = window.setTimeout(() => {
+      nsbScanTimer = 0;
+      scanForDialogs();
+    }, 400);
+  }
+
   function scanForDialogs(mutations) {
     if (state.destroyed) return;
-    if (mutations && mutations.some(m =>
-      m.target.id === 'mf-native-settings-panel' || m.target.closest?.('#mf-native-settings-panel') ||
-      [...m.addedNodes, ...m.removedNodes].some(n => n.id === 'mf-native-settings-panel' || (n.nodeType === 1 && n.hasAttribute?.('data-mf-native-tab')))
-    )) return;
+    if (mutations) {
+      if (mutations.some(m =>
+        m.target.id === 'mf-native-settings-panel' || m.target.closest?.('#mf-native-settings-panel') ||
+        [...m.addedNodes, ...m.removedNodes].some(n => n.id === 'mf-native-settings-panel' || (n.nodeType === 1 && n.hasAttribute?.('data-mf-native-tab')))
+      )) return;
+      // Diferir el escaneo pesado: coalescing con el resto de mutaciones
+      scheduleDialogScan();
+      return;
+    }
     for (const dialog of document.querySelectorAll('[role=dialog]')) {
       injectTabsIntoDialog(dialog);
     }
@@ -693,6 +710,7 @@
     state.destroyed = true;
     state.bodyObserver?.disconnect();
     state.modalObserver?.disconnect();
+    if (nsbScanTimer) { clearTimeout(nsbScanTimer); nsbScanTimer = 0; }
     if (state.requestTimer) clearInterval(state.requestTimer);
     document.removeEventListener('minifeather:nsb-state-data', onStateData);
     document.querySelectorAll('#mf-native-settings-panel').forEach(el => el.remove());
