@@ -1,5 +1,7 @@
 (() => {
   'use strict';
+  let previousOptIn = false;
+  try { previousOptIn = localStorage.getItem('mf:voice:enabled') === '1'; } catch (_) {}
   globalThis.MF_VoiceChat?.dispose?.();
 
   const REQUEST = 'minifeather:voice-signal-request';
@@ -10,15 +12,17 @@
   const PRESENCE_MS = 20000;
   const EXPIRE_MS = 57000;
   const INVITE_MS = 35000;
-  const session = Array.from(crypto.getRandomValues(new Uint8Array(12)), n => n.toString(16).padStart(2, '0')).join('');
+  const LOOKUP_MS = 4000;
+  const createSession = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), n => n.toString(16).padStart(2, '0')).join('');
+  let session = createSession();
   const state = {
-    enabled: false, disposed: false, signalReady: false, peerReady: false,
+    enabled: false, disposed: false, signalReady: false, peerReady: false, activationCount: 0,
     peer: null, selfUuid: '', selfHash: '', selfName: '', identitySeenAt: 0,
-    friends: new Map(), friendHashes: new Map(), friendsByHash: new Map(),
-    presence: new Map(), seenInvites: new Map(), call: null, localStream: null, mediaCall: null,
+    friends: new Map(), friendHashes: new Map(), friendHashJobs: new Map(), friendsByHash: new Map(),
+    presence: new Map(), seenInvites: new Map(), pendingInvites: new Set(), call: null, dialing: false, localStream: null, mediaCall: null,
     audio: null, card: null, tone: null, toneTimer: 0, callTimer: 0,
-    refreshTimer: 0, announceTimer: 0, bridgeProbe: 0, message: '', messageTimer: 0,
-    muted: false, lastError: ''
+    refreshTimer: 0, announceTimer: 0, bridgeProbe: 0, retryTimer: 0, message: '', messageTimer: 0,
+    muted: false, lastError: '', wanted: false, preferenceLoaded: false, preferenceChanged: false, lastQueryResponseAt: 0
   };
 
   const label = (english, spanish) => {
@@ -35,6 +39,67 @@
   };
   const validId = value => /^[a-f0-9]{24}$/.test(String(value || ''));
   const validHash = value => /^[a-f0-9]{64}$/.test(String(value || ''));
+  const PIXEL_PHONE = [
+    '###.........', '####........', '####........', '.##.........',
+    '..##........', '...##.......', '....##......', '.....##.....',
+    '......##....', '.......####.', '........####', '.........###'
+  ];
+  const PIXEL_MIC = [
+    '.....##.....', '....####....', '....####....', '....####....',
+    '....####....', '....####....', '...#....#...', '...#....#...',
+    '....####....', '.....##.....', '.....##.....', '...######...'
+  ];
+  const PIXEL_CLOSE = [
+    '##........##', '.##......##.', '..##....##..', '...##..##...',
+    '....####....', '.....##.....', '.....##.....', '....####....',
+    '...##..##...', '..##....##..', '.##......##.', '##........##'
+  ];
+
+  function pixelIcon(kind) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 12 12');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.style.shapeRendering = 'crispEdges';
+    svg.style.flex = 'none';
+    if (kind === 'end' || kind === 'reject') svg.style.transform = 'rotate(135deg)';
+    const rows = kind === 'mic' || kind === 'muted' ? PIXEL_MIC : kind === 'dismiss' ? PIXEL_CLOSE : PIXEL_PHONE;
+    for (let y = 0; y < rows.length; y++) for (let x = 0; x < rows[y].length; x++) {
+      if (rows[y][x] !== '#') continue;
+      const pixel = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      pixel.setAttribute('x', String(x));
+      pixel.setAttribute('y', String(y));
+      pixel.setAttribute('width', '1');
+      pixel.setAttribute('height', '1');
+      pixel.setAttribute('fill', 'currentColor');
+      svg.appendChild(pixel);
+    }
+    if (kind === 'muted') for (let index = 1; index < 11; index++) {
+      const pixel = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      pixel.setAttribute('x', String(index));
+      pixel.setAttribute('y', String(11 - index));
+      pixel.setAttribute('width', '1');
+      pixel.setAttribute('height', '1');
+      pixel.setAttribute('fill', '#ff6073');
+      svg.appendChild(pixel);
+    }
+    return svg;
+  }
+
+  function ensureFriendHash(uuid) {
+    if (state.friendHashes.has(uuid)) return Promise.resolve(state.friendHashes.get(uuid));
+    if (state.friendHashJobs.has(uuid)) return state.friendHashJobs.get(uuid);
+    const job = hashUuid(uuid).then(hash => {
+      if (state.disposed || !state.friends.has(uuid)) return '';
+      state.friendHashes.set(uuid, hash);
+      state.friendsByHash.set(hash, uuid);
+      return hash;
+    }).finally(() => state.friendHashJobs.delete(uuid));
+    state.friendHashJobs.set(uuid, job);
+    return job;
+  }
 
   function getGame() {
     const direct = [globalThis.miniblox, globalThis.minibloxGame, globalThis.__MINIBLOX_GAME__, globalThis.__MB?.game, globalThis.game];
@@ -74,13 +139,7 @@
       const id = String(friend.uuid || '');
       if (!id || !friend.username || id === state.selfUuid) continue;
       state.friends.set(id, { uuid: id, username: String(friend.username), nickname: String(friend.nickname || '') });
-      if (!state.friendHashes.has(id)) {
-        hashUuid(id).then(hash => {
-          if (state.disposed) return;
-          state.friendHashes.set(id, hash);
-          state.friendsByHash.set(hash, id);
-        }).catch(() => {});
-      }
+      if (!state.friendHashes.has(id)) void ensureFriendHash(id).catch(() => {});
     }
     for (const [id, friend] of state.friends) {
       if (!list.some(item => String(item.uuid) === id)) {
@@ -117,6 +176,24 @@
   function announce() {
     if (!state.enabled || !state.peerReady || !state.selfHash || Date.now() - state.identitySeenAt > 15000) return;
     publish({ t: 'presence', key: state.selfHash, peer: state.peer.id });
+  }
+
+  async function waitForConnection(timeout = 10000) {
+    const deadline = Date.now() + timeout;
+    while (state.wanted && !state.disposed && Date.now() < deadline) {
+      if (state.enabled && state.signalReady && state.peerReady && state.selfHash) return true;
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    return false;
+  }
+
+  function currentCall() {
+    const call = state.call;
+    if (call && call.phase !== 'active' && Date.now() - call.startedAt > INVITE_MS) {
+      end(true, label('Call timed out.', 'La llamada expiró.'));
+      return null;
+    }
+    return state.call;
   }
 
   function showMessage(message, error = false) {
@@ -165,7 +242,7 @@
     if (state.card?.isConnected) return state.card;
     const style = document.createElement('style');
     style.id = 'mf-voice-style';
-    style.textContent = '#mf-voice-card{position:fixed;right:18px;bottom:18px;z-index:2147483646;width:min(300px,calc(100vw - 36px));box-sizing:border-box;padding:14px 16px;border:1px solid rgba(139,177,255,.43);border-radius:15px;background:rgba(16,21,36,.96);box-shadow:0 10px 35px #0009;color:#f5f7ff;font:13px system-ui,sans-serif;pointer-events:auto}#mf-voice-card[hidden]{display:none}#mf-voice-card .mfv-title{font-weight:700;font-size:15px;margin-bottom:5px}#mf-voice-card .mfv-status{opacity:.78;margin-bottom:11px}#mf-voice-card .mfv-actions{display:flex;gap:8px}#mf-voice-card button{border:0;border-radius:8px;padding:7px 11px;color:#fff;background:#38445e;cursor:pointer;font:inherit}#mf-voice-card button[data-kind=accept]{background:#278654}#mf-voice-card button[data-kind=reject],#mf-voice-card button[data-kind=end]{background:#aa3449}';
+    style.textContent = '#mf-voice-card{position:fixed;right:18px;bottom:18px;z-index:2147483646;width:min(300px,calc(100vw - 36px));box-sizing:border-box;padding:14px 16px;border:1px solid rgba(139,177,255,.43);border-radius:15px;background:rgba(16,21,36,.96);box-shadow:0 10px 35px #0009;color:#f5f7ff;font:13px system-ui,sans-serif;pointer-events:auto}#mf-voice-card[hidden]{display:none}#mf-voice-card .mfv-title{font-weight:700;font-size:15px;margin-bottom:5px}#mf-voice-card .mfv-status{opacity:.78;margin-bottom:11px}#mf-voice-card .mfv-actions{display:flex;gap:8px}#mf-voice-card button{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:8px;padding:7px 11px;color:#fff;background:#38445e;cursor:pointer;font:inherit}#mf-voice-card button[data-kind=accept]{background:#278654}#mf-voice-card button[data-kind=reject],#mf-voice-card button[data-kind=end]{background:#aa3449}';
     document.head?.appendChild(style);
     const card = document.createElement('div');
     card.id = 'mf-voice-card';
@@ -198,7 +275,7 @@
     const button = (kind, caption, callback) => {
       const el = document.createElement('button');
       el.dataset.kind = kind;
-      el.textContent = caption;
+      el.append(pixelIcon(kind === 'mute' ? (state.muted ? 'muted' : 'mic') : kind), document.createTextNode(caption));
       el.addEventListener('click', callback);
       actions.appendChild(el);
     };
@@ -272,21 +349,43 @@
   }
 
   async function callFriend(identity) {
-    if (!state.enabled) return { ok: false, error: label('Enable calls first: /call on', 'Activa las llamadas: /call on') };
-    if (state.call) return { ok: false, error: label('A call is already in progress.', 'Ya hay una llamada en curso.') };
-    await refreshIdentity();
-    const friend = friendFromIdentity(identity);
-    if (!friend) return { ok: false, error: label('Friend not found.', 'Amigo no encontrado.') };
-    const remote = presenceFor(friend);
-    if (!remote) return { ok: false, error: label('Friend is not available on MiniFeather Voice.', 'Ese amigo no está disponible en MiniFeather Voice.') };
-    state.message = '';
-    const id = crypto.randomUUID();
-    const call = { id, remote: remote.from, peer: remote.peer, name: friend.username, phase: 'ringing', incoming: false };
-    state.call = call;
-    render();
-    startTimeout(call);
-    publish({ t: 'invite', to: remote.from, id, key: state.friendHashes.get(friend.uuid), peer: state.peer.id });
-    return { ok: true, name: friend.username };
+    if (!state.wanted && !state.preferenceLoaded) {
+      const deadline = Date.now() + 1200;
+      while (!state.wanted && !state.preferenceLoaded && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    if (!state.wanted) return { ok: false, error: label('Enable calls first: /call on', 'Activa las llamadas: /call on') };
+    if (currentCall() || state.dialing) return { ok: false, error: label('A call is already in progress.', 'Ya hay una llamada en curso.') };
+    state.dialing = true;
+    try {
+      await refreshIdentity();
+      const friend = friendFromIdentity(identity);
+      if (!friend) return { ok: false, error: label('Friend not found.', 'Amigo no encontrado.') };
+      const hash = await ensureFriendHash(friend.uuid);
+      if (!hash || !(await waitForConnection())) return { ok: false, error: label('Voice is still connecting. Try again shortly.', 'La voz aún se está conectando. Inténtalo de nuevo en un momento.') };
+      let remote = presenceFor(friend);
+      if (!remote) {
+        publish({ t: 'presence-query', key: hash });
+        const deadline = Date.now() + LOOKUP_MS;
+        while (!remote && Date.now() < deadline && state.enabled && !state.disposed) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          remote = presenceFor(friend);
+        }
+      }
+      if (!remote) return { ok: false, error: label('Friend is not available on MiniFeather Voice.', 'Ese amigo no está disponible en MiniFeather Voice.') };
+      if (currentCall() || !state.enabled || !state.signalReady || !state.peerReady) return { ok: false, error: label('Voice is still connecting. Try again shortly.', 'La voz aún se está conectando. Inténtalo de nuevo en un momento.') };
+      state.message = '';
+      const id = crypto.randomUUID();
+      const call = { id, remote: remote.from, peer: remote.peer, name: friend.username, phase: 'ringing', incoming: false, startedAt: Date.now() };
+      state.call = call;
+      render();
+      startTimeout(call);
+      announce();
+      if (!publish({ t: 'invite', to: remote.from, id, key: hash, callerKey: state.selfHash, peer: state.peer.id })) {
+        end(false);
+        return { ok: false, error: label('Voice is still connecting. Try again shortly.', 'La voz aún se está conectando. Inténtalo de nuevo en un momento.') };
+      }
+      return { ok: true, name: friend.username };
+    } finally { state.dialing = false; }
   }
 
   function attachMedia(media) {
@@ -304,6 +403,18 @@
       }
       state.audio.srcObject = stream;
       state.audio.play().catch(() => showMessage(label('Click the call card to enable audio.', 'Haz clic en la tarjeta para activar el audio.')));
+      for (const track of stream.getAudioTracks?.() || []) {
+        track.addEventListener?.('ended', () => { if (state.mediaCall === media) end(false, label('Call ended.', 'Llamada terminada.')); }, { once: true });
+      }
+      const connection = media.peerConnection;
+      connection?.addEventListener?.('connectionstatechange', () => {
+        if (state.mediaCall === media && ['failed', 'closed'].includes(connection.connectionState)) end(false, label('Audio connection failed.', 'Falló la conexión de audio.'));
+        else if (state.mediaCall === media && connection.connectionState === 'disconnected') {
+          setTimeout(() => {
+            if (state.mediaCall === media && connection.connectionState === 'disconnected') end(false, label('Audio connection failed.', 'Falló la conexión de audio.'));
+          }, 8000);
+        }
+      });
       render();
     });
     media.on('close', () => { if (state.mediaCall === media) end(false, label('Call ended.', 'Llamada terminada.')); });
@@ -380,15 +491,59 @@
     catch (_) { end(true, label('Could not answer the call.', 'No se pudo contestar.')); }
   }
 
+  async function incomingInvite(packet) {
+    if (state.seenInvites.has(packet.id) || state.pendingInvites.has(packet.id)) return;
+    state.pendingInvites.add(packet.id);
+    try {
+      await refreshIdentity();
+      const senderPresence = [...state.presence].find(([, entry]) => entry.from === packet.from && entry.peer === packet.peer);
+      if (senderPresence && validHash(packet.callerKey) && senderPresence[0] !== packet.callerKey) return;
+      const callerHash = validHash(packet.callerKey) ? packet.callerKey : senderPresence?.[0];
+      if (!callerHash) return;
+      let friendUuid = state.friendsByHash.get(callerHash);
+      if (!friendUuid) {
+        await Promise.all([...state.friends.keys()].map(id => ensureFriendHash(id).catch(() => '')));
+        friendUuid = state.friendsByHash.get(callerHash);
+      }
+      const friend = friendUuid && state.friends.get(friendUuid);
+      if (!friend || !state.enabled || state.disposed) return;
+      state.seenInvites.set(packet.id, Date.now());
+      if (currentCall()) { publish({ t: 'busy', to: packet.from, id: packet.id }); return; }
+      state.message = '';
+      const call = { id: packet.id, remote: packet.from, peer: packet.peer, name: friend.username, phase: 'incoming', incoming: true, startedAt: Date.now() };
+      state.call = call;
+      render();
+      ring();
+      startTimeout(call);
+    } finally { state.pendingInvites.delete(packet.id); }
+  }
+
   function onSignalEvent(event) {
     let detail;
     try { detail = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail; } catch (_) { return; }
-    if (!detail || !state.enabled) return;
+    if (!detail) return;
+    if (detail.type === 'preference' || detail.type === 'preference-update') {
+      state.preferenceLoaded = true;
+      if (detail.type === 'preference' && state.preferenceChanged) return;
+      if (detail.type === 'preference' && !detail.known) {
+        if (state.wanted) signal({ type: 'preference-set', enabled: true });
+        return;
+      }
+      state.wanted = !!detail.enabled;
+      try { localStorage.setItem(STORAGE, state.wanted ? '1' : '0'); } catch (_) {}
+      if (state.wanted && !state.enabled) void enable(false);
+      else if (!state.wanted && state.enabled) disable(false);
+      return;
+    }
+    if (!state.enabled) return;
     if (detail.type === 'bridge-ready') { signal({ type: 'start' }); return; }
-    if (detail.type === 'ready') { state.signalReady = true; announce(); return; }
+    if (detail.type === 'ready') { state.signalReady = true; state.lastError = ''; announce(); return; }
     if (detail.type === 'offline' || detail.type === 'error') {
       state.signalReady = false;
       if (detail.type === 'error') state.lastError = detail.error || 'SIGNAL_OFFLINE';
+      if (detail.error === 'PUBLISH_FAILED' && state.call?.phase !== 'active' && state.call) {
+        end(false, label('Voice is still connecting. Try again shortly.', 'La voz aún se está conectando. Inténtalo de nuevo en un momento.'));
+      }
       return;
     }
     if (detail.type !== 'signal') return;
@@ -396,26 +551,23 @@
     try { packet = JSON.parse(detail.message); } catch (_) { return; }
     if (packet?.v !== VERSION || !validId(packet.from) || packet.from === session || Math.abs(Date.now() - Number(packet.ts)) > 65000) return;
     if (packet.t === 'presence') {
-      if (!validHash(packet.key) || !state.friendsByHash.has(packet.key) || !/^mfvoice-[a-f0-9]{24}$/.test(String(packet.peer || ''))) return;
+      if (!validHash(packet.key) || !/^mfvoice-[a-f0-9]{24}$/.test(String(packet.peer || ''))) return;
+      state.presence.delete(packet.key);
       state.presence.set(packet.key, { from: packet.from, peer: packet.peer, seen: Date.now() });
+      if (state.presence.size > 512) state.presence.delete(state.presence.keys().next().value);
+      return;
+    }
+    if (packet.t === 'presence-query') {
+      if (validHash(packet.key) && packet.key === state.selfHash && Date.now() - state.lastQueryResponseAt > 1500) {
+        state.lastQueryResponseAt = Date.now();
+        announce();
+      }
       return;
     }
     if (packet.to !== session || typeof packet.id !== 'string' || packet.id.length > 64) return;
     if (packet.t === 'invite') {
       if (!validHash(packet.key) || packet.key !== state.selfHash || !/^mfvoice-[a-f0-9]{24}$/.test(String(packet.peer || ''))) return;
-      if (state.seenInvites.has(packet.id)) return;
-      state.seenInvites.set(packet.id, Date.now());
-      const friendHash = [...state.presence].find(([, entry]) => entry.from === packet.from)?.[0];
-      const friendUuid = friendHash && state.friendsByHash.get(friendHash);
-      const friend = friendUuid && state.friends.get(friendUuid);
-      if (!friend) return;
-      if (state.call) { publish({ t: 'busy', to: packet.from, id: packet.id }); return; }
-      state.message = '';
-      const call = { id: packet.id, remote: packet.from, peer: packet.peer, name: friend.username, phase: 'incoming', incoming: true };
-      state.call = call;
-      render();
-      ring();
-      startTimeout(call);
+      void incomingInvite(packet).catch(() => {});
       return;
     }
     const call = state.call;
@@ -439,26 +591,39 @@
     });
   }
 
-  async function enable() {
+  async function enable(persist = true) {
+    state.wanted = true;
+    if (persist) {
+      state.preferenceChanged = true;
+      try { localStorage.setItem(STORAGE, '1'); } catch (_) {}
+      signal({ type: 'preference-set', enabled: true });
+    }
     if (state.enabled) return { ok: true };
+    if (state.activationCount++) {
+      session = createSession();
+      state.presence.clear();
+      state.seenInvites.clear();
+    }
     state.enabled = true;
-    try { localStorage.setItem(STORAGE, '1'); } catch (_) {}
     signal({ type: 'start' });
     await refreshIdentity();
     if (!(await loadPeer())) {
-      disable();
-      return { ok: false, error: label('Could not load PeerJS.', 'No se pudo cargar PeerJS.') };
+      disable(false);
+      state.lastError = label('Could not load PeerJS.', 'No se pudo cargar PeerJS.');
+      return { ok: false, error: state.lastError };
     }
     if (!state.enabled || state.disposed) return { ok: false, error: 'STOPPED' };
     try {
-      state.peer = new globalThis.Peer(`mfvoice-${session}`, { debug: 0 });
-      state.peer.on('open', () => { state.peerReady = true; announce(); });
-      state.peer.on('call', onMedia);
-      state.peer.on('disconnected', () => { state.peerReady = false; try { state.peer?.reconnect(); } catch (_) {} });
-      state.peer.on('error', error => { state.lastError = String(error?.message || error?.type || error); });
+      const peer = new globalThis.Peer(`mfvoice-${session}`, { debug: 0 });
+      state.peer = peer;
+      peer.on('open', () => { if (state.peer !== peer || !state.enabled) return; state.peerReady = true; state.lastError = ''; announce(); });
+      peer.on('call', media => { if (state.peer === peer && state.enabled) onMedia(media); else try { media.close(); } catch (_) {} });
+      peer.on('disconnected', () => { if (state.peer !== peer || !state.enabled) return; state.peerReady = false; try { peer.reconnect(); } catch (_) {} });
+      peer.on('error', error => { if (state.peer === peer && state.enabled) state.lastError = String(error?.message || error?.type || error); });
     } catch (error) {
-      disable();
-      return { ok: false, error: String(error?.message || error) };
+      disable(false);
+      state.lastError = String(error?.message || error);
+      return { ok: false, error: state.lastError };
     }
     state.refreshTimer = setInterval(() => { void refreshIdentity(); }, 5000);
     state.announceTimer = setInterval(announce, PRESENCE_MS);
@@ -466,32 +631,40 @@
     return { ok: true };
   }
 
-  function disable() {
+  function disable(persist = true) {
+    if (persist) {
+      state.wanted = false;
+      state.preferenceChanged = true;
+      try { localStorage.setItem(STORAGE, '0'); } catch (_) {}
+      signal({ type: 'preference-set', enabled: false });
+    }
     end(true);
     state.enabled = false;
     state.signalReady = false;
     state.peerReady = false;
     state.presence.clear();
+    state.pendingInvites.clear();
     clearInterval(state.refreshTimer);
     clearInterval(state.announceTimer);
     clearInterval(state.bridgeProbe);
     try { state.peer?.destroy(); } catch (_) {}
     state.peer = null;
     signal({ type: 'stop' });
-    try { localStorage.setItem(STORAGE, '0'); } catch (_) {}
   }
 
   function status() {
-    return { enabled: state.enabled, signal: state.signalReady, peer: state.peerReady,
+    return { enabled: state.enabled, wanted: state.wanted, signal: state.signalReady, peer: state.peerReady,
       identity: !!state.selfHash, knownFriends: state.friends.size, hashedFriends: state.friendHashes.size,
-      receivedPresence: state.presence.size, availableFriends: [...state.friends.values()].filter(available).map(friend => friend.username),
+      receivedPresence: [...state.friendHashes.values()].filter(hash => state.presence.has(hash)).length,
+      availableFriends: [...state.friends.values()].filter(available).map(friend => friend.username),
       call: state.call ? { name: state.call.name, phase: state.call.phase } : null, lastError: state.lastError };
   }
 
   function dispose() {
     if (state.disposed) return;
-    disable();
+    disable(false);
     state.disposed = true;
+    clearInterval(state.retryTimer);
     document.removeEventListener(EVENT, onSignalEvent);
     clearTimeout(state.messageTimer);
     state.card?.remove();
@@ -499,6 +672,11 @@
   }
 
   document.addEventListener(EVENT, onSignalEvent);
-  globalThis.MF_VoiceChat = { enable, disable, call: callFriend, answer, decline, end, mute: toggleMute, available, status, dispose };
-  try { if (localStorage.getItem(STORAGE) === '1') setTimeout(() => { void enable(); }, 800); } catch (_) {}
+  globalThis.MF_VoiceChat = { enable, disable, call: callFriend, answer, decline, end, mute: toggleMute, available, status, pixelIcon, dispose };
+  try { if (previousOptIn || localStorage.getItem(STORAGE) === '1') { state.wanted = true; setTimeout(() => { if (state.wanted && !state.disposed) void enable(false); }, 800); } } catch (_) {}
+  state.retryTimer = setInterval(() => {
+    if (state.disposed) return;
+    if (state.wanted && !state.enabled) void enable(false);
+    else if (state.enabled && !state.peerReady) { try { state.peer?.reconnect(); } catch (_) {} }
+  }, 5000);
 })();

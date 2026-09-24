@@ -27,11 +27,17 @@ test('voice invites require a friend with live MiniFeather presence, and media w
   const clients = [];
   const streams = [];
   const published = [];
+  const mediaPairs = [];
   class FakeEvent {
     constructor(type, init) { this.type = type; this.detail = init?.detail; }
   }
   class MediaCall {
-    constructor(peer, metadata) { this.peer = peer; this.metadata = metadata; this.handlers = new Map(); this.closed = false; }
+    constructor(peer, metadata) {
+      this.peer = peer; this.metadata = metadata; this.handlers = new Map(); this.closed = false;
+      const listeners = new Map();
+      this.peerConnection = { connectionState: 'connected', addEventListener(type, fn) { listeners.set(type, fn); },
+        setState(value) { this.connectionState = value; listeners.get('connectionstatechange')?.(); } };
+    }
     on(type, callback) { this.handlers.set(type, callback); }
     emit(type, value) { this.handlers.get(type)?.(value); }
     answer(stream) {
@@ -62,6 +68,7 @@ test('voice invites require a friend with live MiniFeather presence, and media w
       outgoing.other = incoming;
       incoming.other = outgoing;
       outgoing.stream = stream;
+      mediaPairs.push({ outgoing, incoming });
       queueMicrotask(() => remote.emit('call', incoming));
       return outgoing;
     }
@@ -69,11 +76,14 @@ test('voice invites require a friend with live MiniFeather presence, and media w
     reconnect() {}
   }
 
-  function client(name, uuid, friendName, friendUuid) {
+  function client(name, uuid, friendName, friendUuid, initialOptIn = false) {
     const listeners = new Map();
     const intervals = new Map();
+    const stored = new Map();
+    if (initialOptIn) stored.set('mf:voice:enabled', '1');
     let nextTimer = 1;
     let denyMicrophone = false;
+    let clockOffset = 0;
     const document = {
       body: null,
       addEventListener(type, callback) { listeners.set(type, callback); },
@@ -90,7 +100,8 @@ test('voice invites require a friend with live MiniFeather presence, and media w
       },
       querySelector() { return null; },
       getElementById() { return null; },
-      createElement() { return { style: {}, play: () => Promise.resolve(), pause() {}, remove() {} }; }
+      createElement() { return { style: {}, play: () => Promise.resolve(), pause() {}, remove() {} }; },
+      createElementNS(namespace, tag) { return { tag, style: {}, children: [], setAttribute() {}, appendChild(child) { this.children.push(child); } }; }
     };
     const emit = detail => document.dispatchEvent(new FakeEvent(EVENT, { detail: JSON.stringify(detail) }));
     const sandbox = {
@@ -108,21 +119,30 @@ test('voice invites require a friend with live MiniFeather presence, and media w
       } } },
       miniblox: { player: { profile: { username: name, uuid } } },
       __FRIEND_NICKNAMES__: { list: () => [{ username: friendName, uuid: friendUuid }] },
-      localStorage: { getItem: () => null, setItem() {} },
+      localStorage: { getItem: key => stored.get(key) ?? null, setItem(key, value) { stored.set(key, String(value)); } },
+      Date: class extends Date { static now() { return Date.now() + clockOffset; } },
       setInterval(fn, ms) { const id = nextTimer++; intervals.set(id, { fn, ms }); return id; },
       clearInterval(id) { intervals.delete(id); },
-      setTimeout() { return nextTimer++; }, clearTimeout() {},
+      setTimeout(fn, ms) { return ms === 200 ? setTimeout(fn, ms) : nextTimer++; }, clearTimeout() {},
       console
     };
     sandbox.globalThis = sandbox;
     vm.runInNewContext(source, sandbox, { filename: 'MF_VoiceChat.js' });
-    const instance = { api: sandbox.MF_VoiceChat, emit, setDeny(value) { denyMicrophone = value; }, tick(ms) { for (const timer of intervals.values()) if (timer.ms === ms) timer.fn(); } };
+    const instance = { api: sandbox.MF_VoiceChat, emit, stored, setDeny(value) { denyMicrophone = value; },
+      advanceTime(ms) { clockOffset += ms; }, tick(ms) { for (const timer of intervals.values()) if (timer.ms === ms) timer.fn(); },
+      reload() { vm.runInNewContext(source, sandbox, { filename: 'MF_VoiceChat.js' }); this.api = sandbox.MF_VoiceChat; } };
     clients.push(instance);
+    emit({ type: 'preference', known: false, enabled: false });
     return instance;
   }
 
   const alice = client('Alice', 'uuid-alice', 'Bob', 'uuid-bob');
   const bob = client('Bob', 'uuid-bob', 'Alice', 'uuid-alice');
+  const micIcon = alice.api.pixelIcon('mic');
+  assert.equal(micIcon.tag, 'svg');
+  assert.ok(micIcon.children.length > 20, 'voice icon is code-drawn pixel art rather than an emoji or PNG');
+  assert.ok(alice.api.pixelIcon('phone').children.length > 20);
+  assert.ok(alice.api.pixelIcon('muted').children.length > micIcon.children.length);
   assert.equal((await alice.api.call('Bob')).ok, false, 'calls are opt-in');
   await Promise.all([alice.api.enable(), bob.api.enable()]);
   await new Promise(resolve => setTimeout(resolve, 30));
@@ -132,7 +152,11 @@ test('voice invites require a friend with live MiniFeather presence, and media w
   assert.deepEqual(Array.from(alice.api.status().availableFriends), ['Bob'], JSON.stringify({ alice: alice.api.status(), bob: bob.api.status(), published }));
   assert.deepEqual(Array.from(bob.api.status().availableFriends), ['Alice']);
   assert.equal((await alice.api.call('Unknown')).ok, false);
+  alice.advanceTime(60000);
+  const beforeLookup = published.length;
   assert.equal((await alice.api.call('Bob')).ok, true);
+  assert.ok(published.slice(beforeLookup).some(packet => packet.t === 'presence-query'), 'stale presence is refreshed before reporting unavailable');
+  alice.advanceTime(-60000);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(bob.api.status().call.phase, 'incoming');
   assert.equal(streams.length, 0, 'ringing did not touch the microphone');
@@ -140,6 +164,16 @@ test('voice invites require a friend with live MiniFeather presence, and media w
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(alice.api.status().call, null, 'decline notifies the caller');
   assert.equal(streams.length, 0, 'decline never touches the microphone');
+  assert.equal((await alice.api.call('Bob')).ok, true);
+  await new Promise(resolve => setImmediate(resolve));
+  alice.advanceTime(36000);
+  bob.tick(20000);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal((await alice.api.call('Bob')).ok, true, 'expired ringing does not create a false busy state');
+  alice.advanceTime(-36000);
+  await new Promise(resolve => setImmediate(resolve));
+  bob.api.decline();
+  await new Promise(resolve => setImmediate(resolve));
   bob.setDeny(true);
   assert.equal((await alice.api.call('Bob')).ok, true);
   await new Promise(resolve => setImmediate(resolve));
@@ -160,6 +194,56 @@ test('voice invites require a friend with live MiniFeather presence, and media w
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(bob.api.status().call, null);
   assert.ok(streams.every(item => item.track.stopped), 'hangup releases both microphones');
+  assert.equal((await alice.api.call('Bob')).ok, true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(await bob.api.answer(), true);
+  await new Promise(resolve => setImmediate(resolve));
+  mediaPairs.at(-1).outgoing.peerConnection.setState('failed');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(alice.api.status().call, null, 'failed WebRTC link clears the caller busy state');
+  assert.equal(bob.api.status().call, null, 'failed WebRTC link clears the recipient busy state');
+  assert.equal((await alice.api.call('Bob')).ok, true);
+  await new Promise(resolve => setImmediate(resolve));
+  alice.emit({ type: 'error', error: 'PUBLISH_FAILED' });
+  assert.equal(alice.api.status().call, null, 'failed signaling publish clears ringing instead of leaving a false busy state');
+  bob.api.decline();
+  alice.tick(4000);
+  await new Promise(resolve => setImmediate(resolve));
+  const alicePresence = published.find(packet => packet.t === 'presence' && packet.peer?.startsWith('mfvoice-') && packet.key && packet.from === published.find(item => item.t === 'invite')?.from);
+  const bobPresence = published.find(packet => packet.t === 'presence' && packet.from !== alicePresence?.from);
+  assert.ok(alicePresence && bobPresence);
+  alice.emit({ type: 'signal', message: JSON.stringify({ v: 'MFVOICE1', t: 'invite', from: 'f'.repeat(24), to: alicePresence.from,
+    ts: Date.now(), id: 'fresh-invite-without-presence', key: alicePresence.key, callerKey: bobPresence.key, peer: 'mfvoice-' + 'f'.repeat(24) }) });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(alice.api.status().call?.phase, 'incoming', 'known friend invite is not lost when presence arrives out of order');
+  alice.api.decline();
+  await new Promise(resolve => setImmediate(resolve));
+  const oldPeer = peers.get('mfvoice-' + alicePresence.from);
+  alice.api.disable();
+  await alice.api.enable();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(!peers.has(oldPeer.id), 'a new PeerJS identity is used after reconnecting');
+  oldPeer.emit('disconnected');
+  assert.equal(alice.api.status().peer, true, 'events from an old PeerJS connection cannot mark the new one offline');
+  alice.reload();
+  assert.equal(alice.api.status().wanted, true, 'hot reload keeps the opt-in state');
   alice.api.dispose();
+  assert.equal(alice.stored.get('mf:voice:enabled'), '1', 'reload cleanup preserves opt-in');
   bob.api.dispose();
+  const charlie = client('Charlie', 'uuid-charlie', 'Alice', 'uuid-alice');
+  charlie.emit({ type: 'preference', known: true, enabled: true });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(charlie.api.status().enabled, true, 'opt-in from another site starts voice');
+  assert.equal(charlie.stored.get('mf:voice:enabled'), '1');
+  charlie.emit({ type: 'preference-update', enabled: false });
+  assert.equal(charlie.api.status().enabled, false, 'turning voice off in another tab stops this connection');
+  await charlie.api.enable();
+  charlie.api.disable();
+  assert.equal(charlie.stored.get('mf:voice:enabled'), '0', 'explicit off still persists');
+  charlie.api.dispose();
+  const dana = client('Dana', 'uuid-dana', 'Alice', 'uuid-alice', true);
+  dana.emit({ type: 'preference', known: true, enabled: false });
+  assert.equal(dana.api.status().wanted, false, 'global off overrides stale site preference');
+  assert.equal(dana.stored.get('mf:voice:enabled'), '0');
+  dana.api.dispose();
 });

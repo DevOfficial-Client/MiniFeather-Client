@@ -1740,28 +1740,24 @@
             const voiceLanguage = W.MiniFeatherI18n?.getLanguage?.() || String(navigator.language || 'en').slice(0, 2);
             const callLabel = W.MiniFeatherI18n?.translate?.('Call') || (voiceLanguage === 'es' ? 'Llamar' : 'Call');
             replaceActionLabel(action, templateLabel, callLabel);
+            const voice = W.MF_VoiceChat;
             const svg = action.querySelector?.('svg');
             if (svg) {
-                svg.setAttribute('viewBox', '0 0 24 24');
-                svg.setAttribute('fill', 'none');
-                svg.setAttribute('stroke', 'currentColor');
-                svg.setAttribute('stroke-width', '1.8');
-                svg.innerHTML = '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 2.8a2 2 0 0 1-.6 1.8L7.1 9.8a16 16 0 0 0 7.1 7.1l1.5-1.9a2 2 0 0 1 1.8-.6l2.8.5a2 2 0 0 1 1.7 2Z"/>';
+                const icon = voice?.pixelIcon?.('phone');
+                if (icon) svg.replaceWith(icon);
+                else svg.remove();
             }
-            const voice = W.MF_VoiceChat;
-            const ready = voice?.available?.(friend);
-            if (!ready) {
+            const canTry = !!voice?.call && !!voice.status?.().wanted;
+            if (!canTry) {
                 action.style.opacity = '0.5';
                 action.setAttribute('aria-disabled', 'true');
-                action.title = voice?.status?.().enabled
-                    ? (W.MiniFeatherI18n?.translate?.('Friend is not available on MiniFeather Voice.') || 'Friend is not available on MiniFeather Voice.')
-                    : (W.MiniFeatherI18n?.translate?.('Enable calls first: /call on') || 'Enable calls first: /call on');
+                action.title = W.MiniFeatherI18n?.translate?.('Enable calls first: /call on') || 'Enable calls first: /call on';
             }
             action.addEventListener('click', event => {
                 event.preventDefault();
                 event.stopPropagation();
-                if (!ready) {
-                    showNicknameToast(action.title || 'Friend is not available on MiniFeather Voice');
+                if (!voice?.call || !voice.status?.().wanted) {
+                    showNicknameToast(action.title || 'Enable calls first: /call on');
                     return;
                 }
                 closeNativeContextMenu();

@@ -10,7 +10,9 @@ test('voice bridge uses its own background port and forwards only voice packets'
   const listeners = new Map();
   const outputs = [];
   const posts = [];
+  const preferences = [];
   let onMessage;
+  let onPreferenceChanged;
   let portName;
   const port = {
     onMessage: { addListener(fn) { onMessage = fn; } },
@@ -29,12 +31,22 @@ test('voice bridge uses its own background port and forwards only voice packets'
   };
   const sandbox = {
     document, CustomEvent: FakeEvent,
-    chrome: { runtime: { connect({ name }) { portName = name; return port; } } },
+    chrome: { runtime: { connect({ name }) { portName = name; return port; } }, storage: { onChanged: {
+      addListener(fn) { onPreferenceChanged = fn; }, removeListener() {}
+    }, local: {
+      get(key, callback) { callback({ [key]: true }); },
+      set(value) { preferences.push(value); }
+    } } },
     setInterval() { return 1; }, clearInterval() {}, setTimeout() { return 1; }, clearTimeout() {}, Date
   };
   sandbox.globalThis = sandbox;
   vm.runInNewContext(source, sandbox, { filename: 'MF_VoiceSignalBridge.js' });
+  assert.ok(outputs.some(value => value.type === 'preference' && value.known && value.enabled));
   const request = payload => document.dispatchEvent(new FakeEvent('minifeather:voice-signal-request', { detail: JSON.stringify(payload) }));
+  request({ type: 'preference-set', enabled: false });
+  assert.equal(preferences.at(-1)['mf:voice:enabled'], false);
+  onPreferenceChanged({ 'mf:voice:enabled': { newValue: false } }, 'local');
+  assert.ok(outputs.some(value => value.type === 'preference-update' && value.enabled === false));
   request({ type: 'start' });
   assert.equal(portName, 'minifeather-voice-signal');
   onMessage({ type: 'ready' });
@@ -45,6 +57,8 @@ test('voice bridge uses its own background port and forwards only voice packets'
   request({ type: 'publish', payload: packet });
   assert.equal(posts.length, 1);
   assert.equal(posts[0].payload.t, 'presence');
+  request({ type: 'publish', payload: { v: 'MFVOICE1', t: 'presence-query', from: 'a'.repeat(24), ts: Date.now(), key: 'b'.repeat(64) } });
+  assert.equal(posts.at(-1).payload.t, 'presence-query');
   onMessage({ type: 'signal', signal: packet });
   assert.ok(outputs.some(value => value.type === 'signal' && JSON.parse(value.message).t === 'presence'));
   sandbox.__MF_VOICE_SIGNAL_BRIDGE__.destroy();

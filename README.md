@@ -53,7 +53,7 @@ The client is built using separate feature modules, allowing individual systems 
 
 ## MiniFeather Voice (experimental)
 
-Both friends need this version of MiniFeather, must be signed in, and must run `/call on`. After their presence appears (usually within 20 seconds), right-click a friend and choose **Call**, or use `/call <username>`. The recipient can answer or decline in the compact call card. Use `/call status`, `/call mute`, `/call end`, and `/call off` as needed.
+Both friends need this version of MiniFeather and must be signed in. Run `/call on` once to opt in; that preference is shared between MiniBlox sites and survives a client reload. Right-click a friend and choose **Call**, or use `/call <username>`. If their presence has not arrived yet, Voice checks again briefly before reporting them unavailable. The recipient can answer or decline in the compact call card. Use `/call status`, `/call mute`, `/call end`, and `/call off` as needed.
 
 The microphone is requested only when answering or after the recipient accepts. The signaling channel only advertises an account hash and a temporary peer ID, but it does not cryptographically verify a game account; confirm the caller's identity out of band. Audio uses PeerJS/WebRTC, so restrictive networks or iframe microphone permissions (such as on CrazyGames) can still prevent a call. Voice availability is opt-in and `/call off` stops it.
 

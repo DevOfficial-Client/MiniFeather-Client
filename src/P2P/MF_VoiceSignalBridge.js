@@ -3,6 +3,7 @@
   const REQUEST = 'minifeather:voice-signal-request';
   const EVENT = 'minifeather:voice-signal-event';
   const PORT_NAME = 'minifeather-voice-signal';
+  const PREFERENCE_KEY = 'mf:voice:enabled';
   let port = null;
   let reconnectTimer = 0;
   let heartbeat = 0;
@@ -10,6 +11,11 @@
   let wanted = false;
   let destroyed = false;
   let recentPublishes = [];
+
+  function onPreferenceChanged(changes, area) {
+    if (destroyed || area !== 'local' || !changes?.[PREFERENCE_KEY]) return;
+    emit({ type: 'preference-update', enabled: changes[PREFERENCE_KEY].newValue === true });
+  }
 
   function emit(detail) {
     document.dispatchEvent(new CustomEvent(EVENT, { detail: JSON.stringify(detail) }));
@@ -57,7 +63,9 @@
     try { request = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail; }
     catch (_) { return; }
     if (!request || typeof request !== 'object') return;
-    if (request.type === 'start') {
+    if (request.type === 'preference-set' && typeof request.enabled === 'boolean') {
+      try { chrome.storage?.local?.set?.({ [PREFERENCE_KEY]: request.enabled }); } catch (_) {}
+    } else if (request.type === 'start') {
       wanted = true;
       if (subscribed) emit({ type: 'ready' });
       else connect();
@@ -73,7 +81,7 @@
     } else if (request.type === 'publish' && wanted && subscribed && request.payload) {
       try {
         const payload = request.payload;
-        if (payload.v !== 'MFVOICE1' || !['presence', 'invite', 'accept', 'decline', 'busy', 'end'].includes(payload.t)) return;
+        if (payload.v !== 'MFVOICE1' || !['presence', 'presence-query', 'invite', 'accept', 'decline', 'busy', 'end'].includes(payload.t)) return;
         if (!/^[a-f0-9]{24}$/.test(String(payload.from || '')) || Math.abs(Date.now() - Number(payload.ts)) > 10000) return;
         const now = Date.now();
         recentPublishes = recentPublishes.filter(time => now - time < 10000);
@@ -87,11 +95,13 @@
   }
 
   document.addEventListener(REQUEST, onRequest);
+  try { chrome.storage?.onChanged?.addListener?.(onPreferenceChanged); } catch (_) {}
   globalThis.__MF_VOICE_SIGNAL_BRIDGE__?.destroy?.();
   globalThis.__MF_VOICE_SIGNAL_BRIDGE__ = {
     destroy() {
       destroyed = true;
       document.removeEventListener(REQUEST, onRequest);
+      try { chrome.storage?.onChanged?.removeListener?.(onPreferenceChanged); } catch (_) {}
       clearTimeout(reconnectTimer);
       clearInterval(heartbeat);
       try { port?.disconnect(); } catch (_) {}
@@ -99,4 +109,11 @@
     }
   };
   emit({ type: 'bridge-ready' });
+  try {
+    chrome.storage?.local?.get?.(PREFERENCE_KEY, data => {
+      if (destroyed) return;
+      const value = data?.[PREFERENCE_KEY];
+      emit({ type: 'preference', known: typeof value === 'boolean', enabled: value === true });
+    });
+  } catch (_) {}
 })();
