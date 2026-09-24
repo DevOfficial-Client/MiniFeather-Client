@@ -3098,6 +3098,7 @@
         flex:0 0 auto; user-select:none; pointer-events:none;
       }
       img.mf-pixel-icon { object-fit:contain; }
+      .mf-profile-icon { width:18px; height:18px; object-fit:contain; image-rendering:pixelated; vertical-align:middle; }
       .mf-nav-icon .mf-svg-icon { width:18px; height:18px; }
       .mf-nav-icon .mf-pixel-icon { width:18px; height:18px; }
       .mf-feather-grid-icon .mf-svg-icon { width:21px; height:21px; }
@@ -3459,105 +3460,98 @@
   };
 
   function iconSvg(name, className = '') {
-    if (HAND_DRAWN_ICONS.has(name)) return handDrawnIconImg(name, className);
-    if (MF_PIXEL_ICONS[name]) return pixelIconSvg(name, className);
+    if (MF_PIXEL_ICONS[name]) return pixelIconPng(name, className);
     const key = MF_SVG_ICONS[name] ? name : 'grid';
     return `<svg class="mf-svg-icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${MF_SVG_ICONS[key]}</svg>`;
   }
 
-  // ── Pixel-art icons (8×8, Minecraft-style) ─────────────────────
-  // Cada icono = 8 filas de 8 chars. La paleta mapea char → color.
+  // Source pixels for assets/generate-ui-pixel-icons.cjs. The ClickGUI loads
+  // actual PNGs from assets/ui; these grids are not rendered or encoded at runtime.
   const PIXEL_PALETTE = {
-    '.': null,          // transparente
-    '#': '#f2f3f7',     // blanco highlight
-    '+': '#aab0bd',     // outline gris claro
-    '-': '#565d6b',     // gris oscuro
-    'a': 'var(--mf-ui-accent,#ef3b3b)', // acento del panel
-    'b': '#6ee7f5',     // cian
-    'g': '#5ade80',     // verde
-    'r': '#f0575b',     // rojo
-    'y': '#f3c53d',     // amarillo
-    'o': '#f08c3a',     // naranja
-    'p': '#f48fb8',     // rosa
-    'k': '#22252c'      // casi negro
+    '.': null,
+    'k': '#1c2430', '-': '#536174', '+': '#b4c4d1', '#': '#f2e9d0',
+    'b': '#61d8f5', 'B': '#317ca4', 'g': '#81d985', 'G': '#367c59',
+    'r': '#f17678', 'R': '#a43e51', 'y': '#f6d36c', 'Y': '#ae7d36',
+    'o': '#f0a05a', 'O': '#a76139', 'p': '#f49fbe', 'P': '#9f5599',
+    'v': '#b999f4', 'V': '#66509a', 't': '#64d9c3', 'T': '#32877f',
+    'n': '#e7bd91', 'N': '#8c6448',
+    'd': '#382a2a', 'D': '#674435', 'm': '#ad7652',
+    'M': '#d5a071', 'f': '#f0caa1', 's': '#85553c',
+    'a': 'var(--mf-ui-accent,#ef3b3b)'
   };
-
-  // Iconos dibujados a mano por el equipo (assets/ui/*.png). Tienen prioridad
-  // sobre los pixel generados: se resuelven de forma síncrona con getURL y el
-  // <img> se monta dentro del mismo wrapper que los SVG/pixel.
-  const HAND_DRAWN_ICONS = new Set([
-    'armorHud', 'betterPlayerLayers', 'coordinates', 'cpsCounter', 'dynamicCrosshair',
-    'experimental', 'fpsCounter', 'guiPatch', 'keystrokes', 'pingCounter',
-    'rebrand', 'titanTiny', 'waypoints'
-  ]);
-
-  function handDrawnIconImg(name, className = '') {
-    const url = chrome.runtime.getURL(`assets/ui/${name}.png`);
-    return `<img class="mf-pixel-icon ${className}" src="${url}" alt="" aria-hidden="true"/>`;
-  }
 
   const MF_PIXEL_ICONS = {
-    home:      ['...++...','..+..+..','.+....+.','.+....+.','+......+','+.+..+.+','+......+','.++++++.'],
-    grid:      ['++..++..','++..++..','........','++..++..','++..++..','........','++..++..','++..++..'],
-    close:     ['.+....+.','..+..+..','...++...','...++...','..+..+..','.+....+.','........','........'],
-    search:    ['..+++...','.+...+..','+.....+.','+.....+.','.+...+..','..+++a+.','.....aa.','......a.'],
-    heart:     ['.pp..pp.','p#pppppp','pppppppp','pppppppp','.pppppp.','..pppp..','...pp...','........'],
-    settings:  ['..+..+..','.++++++.','++....++','+..++..+','+..++..+','++....++','.++++++.','..+..+..'],
-    hud:       ['++++++++','+......+','+.++++.+','+......+','+.++.+.+','+......+','++++++++','........'],
-    render:    ['...++...','..+bb+..','.+b##b+.','+b####b+','.+b##b+.','..+bb+..','...++...','........'],
-    cosmetics: ['.++++++.','.+####+.','.++++++.','+.+#y#.+','+.+##+.+','+.####.+','.++++++.','........'],
-    chat:      ['.++++++.','+......+','+.+.+.+.','+......+','.++++++.','..+.....','.+......','........'],
-    waypoints: ['...++...','...+....','.+aaa+..','.+a#a+..','.+aaa+..','...+....','...+....','........'],
-    movement:  ['..++....','..++....','..++....','..++.+..','..+++...','.+++++..','.++++++.','........'],
-    world:     ['..++++..','.+ggggg+','+gg#+gg+','+g++++g+','+gg+ggg+','.+gggg.+','..++++..','........'],
-    about:     ['..++++..','.+....+.','+..++..+','+......+','+..++..+','+..++..+','.+....+.','..++++..'],
-    shaders:   ['........','.++++++.','++++++++','+#+bb+#+','++++++++','.++++++.','........','........'],
-    experimental: ['...++...','...++...','..+..+..','..+..+..','+.+gg.+.','+..gg..+','+.gggg.+','.++++++.'],
-    keystrokes: ['++++++++','+.+.+.+.','++++++++','+.+.+.+.','++++++++','+.aaa..+','++++++++','........'],
-    fpsCounter:  ['........','......bb','.....bbb','....bb..','...bb...','..bb....','.bb.....','bbbb....'],
-    cpsCounter:  ['+##.....','+.+#..a.','+..#..a.','+...a.a.','+...#...','+...#...','.+++.+..','........'],
-    pingCounter: ['.....bb.','.....bb.','..b..bb.','..b..bb.','b.b.b.b.','b.b.b.b.','bbb.bbb.','........'],
-    guiPatch:    ['.rr..rr.','r#rrrrrr','rrrrrrrr','rrrrrrrr','.rrrrrr.','..rrrr..','...rr...','........'],
-    armorHud:    ['+.+..+.+','++++++++','+##++##+','+######+','+.####.+','+.####.+','++++++++','........'],
-    coordinates: ['...++...','+..++..+','.+....+.','..+aa+..','..+aa+..','.+....+.','+..++..+','...++...'],
-    dynamicCrosshair: ['...++...','...++...','...++...','+++..+++','...++...','...++...','...++...','........'],
-    rebrand:  ['...bb...','...bb...','.bbbbbb.','bbb##bbb','.bb##bb.','.bb..bb.','+b....b+','........'],
-    titanTiny:   ['.++++.+.','.+##+.++','+++++++#','.+##+#+.','.+..+.++','........','........','........'],
-    healthNameTags: ['.rr..rr.','rrrrrrrr','.rrrrrr.','..rrrr..','........','.++++++.','+#aaaa#+','.++++++.'],
-    distanceNameTags: ['.++++++.','+.aa..+.','.++++++.','........','+.....+.','.+...+..','..+.+...','...+....'],
-    patPat:   ['.+.+.+..','.+.+.+..','.+.+.+..','.+++++..','+.....+.','+.....+.','.+++++..','........'],
-    itemPhysics: ['.++++++.','.+####+.','.++++++.','........','...++...','..+..+..','...++...','........'],
-    noWeather:   ['...b....','.b.b.b..','..bbb...','.bb#bb..','..bbb...','.b.b.b..','...b....','........'],
-    fullBright:  ['...y....','y..y..y.','..yyy...','.yyyyy..','..yyy...','y..y..y.','...y....','........'],
-    vanillaAnimations: ['..####..','..####..','..++++..','.######.','#.#aa#.#','..####..','..+..+..','.+..+...'],
-    playerAnims: ['..#+#...','..##+...','.#.+#...','..#+#...','..++++..','..####..','..+..+..','.+..+...'],
-    zoom:     ['..+++...','.+...+..','+..+..+.','+.....+.','.+...+a.','..+++a..','.....aa.','......a.'],
-    cameraOverhaul: ['...++...','.++++++.','+#+##+#+','+......+','+.#+#.++','+......+','.++++++.','........'],
-    elytraFlight: ['++....++','+++..+++','.++..++.','.++++++.','..+##+..','..+##+..','..+..+..','........'],
-    freecam:  ['........','..++++..','.+....+.','+.+aa+.+','+.+aa+.+','.+....+.','..++++..','........'],
-    freelook: ['..++++..','.+####+.','+a#..#a+','+......+','+..aa..+','.+####+.','..++++..','........'],
-    blockHighlight: ['.++++++.','.+....+.','+.++.+.+','+.++.+.+','.+....+.','.+....+.','.++++++.','........'],
-    antiAfk:  ['..++++..','.+....+.','+..#+..+','+..#+..+','+...+..+','.+....+.','..++++..','........'],
-    rhythmParkour: ['.....##.','.....##.','.....#..','.....#..','.....#..','..##.#..','.####...','..##....'],
-    chatVideos: ['++++++++','+......+','+.##...+','+.###..+','+.##...+','+......+','++++++++','........'],
-    chatLinks: ['.+++++..','.+...+..','+.+++++.','.+...+..','.+++++..','...+....','...++++.','...+....'],
-    chatMemes: ['..++++..','.+....+.','+.+..+.+','+......+','+.+..+.+','+..##..+','.+....+.','..++++..'],
-    clientChat: ['.++++++.','+.aaaa.+','+.a##a.+','+.aaaa.+','.+++++..','..+.....','.+......','........'],
-    discord:  ['..+..+..','.+....+.','+......+','+.+..+.+','+.+..+.+','+......+','.+....+.','........'],
-    supportAds: ['..++++..','.+yyyy+.','+y...y.+','+.yyy..+','+..y...+','+y...y.+','.+yyyy+.','..++++..']
+    home: ['...yy...','..y##y..','.y####y.','y######y','y##kk##y','y##kk##y','yyyyyyyy','........'],
+    grid: ['bb..gg..','BB..GG..','........','yy..pp..','YY..PP..','........','........','........'],
+    close: ['r......r','.r....r.','..r..r..','...rr...','...rr...','..r..r..','.r....r.','r......r'],
+    search: ['..BBBB..','.BbbbbB.','Bb....bB','Bb....bB','.BbbbbB.','..BBBBB.','.....BB.','......BB'],
+    heart: ['.RR..RR.','RppRRppR','RppppppR','.RppppR.','..RppR..','...RR...','........','........'],
+    settings: ['..+kk+..','.+----+.','+-YyyY-+','k-YkkY-k','k-YkkY-k','+-YyyY-+','.+----+.','..+kk+..'],
+    hud: ['BBBBBBBB','BbbbbbbB','BbkkkbbB','BbbbbbbB','BbggbybB','BbbbbbbB','BBBBBBBB','........'],
+    classicTitle: ['..YYYY..','.YyyyyY.','Yy##y#yY','Yy##y#yY','Yy#yy#yY','Yy##y#yY','.YyyyyY.','..YYYY..'],
+    render: ['...vv...','..v##v..','.v#yy#v.','vvyyyyvv','.v#yy#v.','..v##v..','...vv...','........'],
+    cosmetics: ['..pppp..','.p#kk#p.','pPp##pPp','pPp##pPp','.Pp##pP.','.Pp##pP.','..PPPP..','........'],
+    chat: ['.BBBBBB.','BbbbbbbB','BbkbbkbB','BbbbbbbB','BbbbbbbB','.BBBBBB.','..BB....','.BB.....'],
+    waypoints: ['..OOOO..','.OooooO.','OooyyooO','Ooy##yoO','.OoyyoO.','..OooO..','...OO...','........'],
+    movement: ['...gg...','..g##g..','.g####g.','gg#gg#gg','..g##g..','..g##g..','.GG..GG.','........'],
+    world: ['..BBBB..','.BbbggB.','BbggggbB','BggBBggB','BgggBbbB','.BggbbB.','..BBBB..','........'],
+    about: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yyyy#yyY','Yyyy#yyY','Yyy###yY','.YyyyyY.','..YYYY..'],
+    shaders: ['........','..VVVV..','.VvvvvV.','VvbbbbvV','.VvvvvV.','..VVVV..','..tttt..','........'],
+    experimental: ['...++...','...++...','..+kk+..','..+kk+..','.kggggk.','kgtvgggk','kggggggk','.kkkkkk.'],
+    keystrokes: ['...BB...','..ByyB..','..BBBB..','.BB.BB..','B##BB##B','BBBBBBBB','........','........'],
+    fpsCounter: ['........','......gg','....g.gg','..g.g.gg','..g.g.gg','ggg.g.gg','GGGGGGGG','........'],
+    cpsCounter: ['..kkkk..','.kbbbbk.','kb#bbbk.','kb#bbbk.','kbBbbBk.','kbbkbbbk','kbbbbbbk','.kkkkkk.'],
+    pingCounter: ['.BBBBBB.','BB....BB','...BB...','..BBBB..','..B..B..','...bb...','...##...','........'],
+    guiPatch: ['.kkkkkk.','krrrrrrk','kr####rk','krbbrbrk','krbbbbrk','kr####rk','krrrrrrk','.kkkkkk.'],
+    armorHud: ['..kk..kk','.k++++k.','k+b##b+k','k+b##b+k','k+b##b+k','.k+bb+k.','..k++k..','...kk...'],
+    coordinates: ['..BBBB..','.BbbbbB.','Bb..o.bB','Bb.ooo.B','Bb..o.bB','.BbbbbB.','..BBBB..','........'],
+    dynamicCrosshair: ['...gg...','...gg...','........','gggRRggg','gggRRggg','........','...gg...','...gg...'],
+    rebrand: ['...bb...','..bb....','.bbbyy..','bbb#yy..','.bb#y...','..bb....','..BB....','........'],
+    titanTiny: ['.BBB.oo.','.B#B.oo.','.BBB.oo.','.Bbb.oo.','BBbbBoOo','BBbbBoOo','B.BB.o.o','........'],
+    betterPlayerLayers: ['..nNNn..','.pbbbbp.','pPbbbbPp','pPbttbPp','pPbttbPp','.pbbbbp.','..BBBB..','........'],
+    healthNameTags: ['.RR..RR.','RrrrrrrR','RrrrrrrR','.RrrrrR.','..RrrR..','...RR...','.kkkkkk.','krrrrrrk'],
+    distanceNameTags: ['..BBBB..','.BbbbbB.','Bbbb##bB','BbbbbbbB','.BbbbbB.','..BBBB..','yy....yy','YYYYYYYY'],
+    damageParticles: ['r..r..r.','.rr.rr..','..Rrr...','rrr#rrr.','..rrR...','.rr.rr..','r..r..r.','........'],
+    waterSplash: ['...bb...','...bb...','b..bb..b','.bbbbbb.','..BBBB..','b.BBB.b.','.BBBBB..','........'],
+    shineAmbience: ['...yy...','...yy...','.y.##.y.','yy####yy','yy####yy','.y.##.y.','...yy...','...yy...'],
+    leafWind: ['....gg..','...gGg..','..gGGg..','.gGGg...','..gg..g.','...ggg..','.g....g.','..gggg..'],
+    patPat: ['...nn...','..nnnn..','.nNnNnn.','nnnnnnnn','nppppppn','.nppppn.','..NNNN..','........'],
+    duckMobs: ['..yyyy..','.y####y.','y#k##k#y','y######y','.yoooooo','..yyyyy.','..O..O..','........'],
+    crittersMobs: ['.NN..NN.','NnnNNnnN','NnnnnnnN','NnkNNknN','NnnnnnnN','.Nn##nN.','..NNNN..','........'],
+    itemPhysics: ['..yyyy..','.yYYyYy.','yYy##yYy','yYy##yYy','.yYYyYy.','..yyyy..','...oo...','....o...'],
+    noWeather: ['..BBBB..','.BbbbbB.','BbbbbbbB','BBBBBBBB','...bb...','..bb....','.bb.....','RRRRRRRR'],
+    fullBright: ['...yy...','y..yy..y','..yyyy..','.yy##yy.','.yy##yy.','..yyyy..','y..yy..y','...yy...'],
+    vanillaAnimations: ['..nnnn..','.nNNNNn.','..n##n..','.nnnnnn.','n.nrrn.n','..nNNn..','..N..N..','.N....N.'],
+    handSway: ['...n....','..nn.n..','..nn.nn.','.nnnnnn.','nnnnnnnn','.nnNNNn.','..NNNN..','...NN...'],
+    playerAnims: ['..nnnn..','.nN##Nn.','..nnnn..','.bbnnrr.','bbbnrrr.','..bnnr..','..N..N..','.N....N.'],
+    zoom: ['..BBBB..','.BbbbbB.','Bb....bB','Bb.##.bB','.BbbbbB.','..BBBBB.','.....BB.','......BB'],
+    cameraOverhaul: ['..kkkk..','.k++++k.','k+BBBB+k','k+B##B+k','k+B##B+k','k+BBBB+k','.k++++k.','..kkkk..'],
+    elytraFlight: ['bb....bb','Bbb..bbB','BBbb.bbB','.BBbbBB.','..B##B..','..B##B..','..B..B..','........'],
+    freecam: ['..VVVV..','.VvvvvV.','Vv.bb.vV','VvbbbbvV','Vv.bb.vV','.VvvvvV.','..VVVV..','........'],
+    freelook: ['..BBBB..','.BbbbbB.','Bb....bB','Bb.##.bB','Bb.##.bB','.BbbbbB.','..BBBB..','........'],
+    blockHighlight: ['.tttttt.','tT....Tt','t.TttT.t','t.T..T.t','t.TttT.t','tT....Tt','.tttttt.','........'],
+    autoSprint: ['gg......','gGG.....','..gggg..','...gggg.','..gggGG.','.GG..GG.','GG....GG','........'],
+    safeSneak: ['........','..gg....','.gGGg...','..gGGg..','.gggggg.','gggggggg','GGGGGGGG','........'],
+    antiAfk: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yyyy#yyY','Yyyy#yyY','YyyyyyyY','.YyyyyY.','..YYYY..'],
+    autoRespawn: ['..gggg..','.g....g.','g..rr..g','g.rrrr.g','g..rr..g','.g....g.','..ggggg.','......gg'],
+    idlePlayerBot: ['..BBBB..','.BbbbbB.','Bb#bb#bB','BbbbbbbB','.BbyybB.','..BbbB..','.BB..BB.','........'],
+    rhythmParkour: ['....yy..','....yy..','....y...','..yyY...','.yYYY...','..GGG...','.GGGGG..','GGGGGGGG'],
+    cloudsPackNoise: ['..BBBB..','.BbbbbB.','BbbBbbbB','BbbbbbBB','BBBBBBBB','..b..b..','.b....b.','........'],
+    chatVideos: ['.kkkkkk.','kBbbbbBk','kBb##bBk','kBb###Bk','kBb##bBk','kBbbbbBk','kBBBBBBk','.kkkkkk.'],
+    chatLinks: ['.tttt...','tT..Tt..','tT...Tt.','..ttttt.','.tT...Tt','..tT..Tt','...tttt.','........'],
+    chatMemes: ['..YYYY..','.YyyyyY.','Yyk..kyY','YyyyyyyY','Yy#yy#yY','Yyy##yyY','.YyyyyY.','..YYYY..'],
+    gifChat: ['.pppppp.','pPbbbbPp','pPbkbbPp','pPbkkbPp','pPbkbbPp','pPbbbbPp','.pppppp.','..p..p..'],
+    clientChat: ['.BBBBBB.','BbbbbbbB','BbyyyybB','BbbbbbbB','Bbbb##bB','.BBBBBB.','..BB....','.BB.....'],
+    clientChatMentions: ['.BBBBBB.','BbbbbbbB','Bbyyyybb','BbyBBybb','BbyyBybb','.ByyyyB.','..BB....','.BB.....'],
+    discord: ['.vvvvvv.','vV....Vv','vVv..vVv','vV#vv#Vv','vVvvvvVv','.VvvvvV.','..VVVV..','........'],
+    startupAnimation: ['...rr...','..r##r..','.r#yy#r.','rryyyyrr','.r#yy#r.','..r##r..','...rr...','........'],
+    supportAds: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yy#y#yyY','Yyy##yyY','YyyyyyyY','.YyyyyY.','..YYYY..']
   };
 
-  function pixelIconSvg(name, className = '') {
-    const grid = MF_PIXEL_ICONS[name];
-    let rects = '';
-    for (let y = 0; y < grid.length; y++) {
-      const row = grid[y];
-      for (let x = 0; x < row.length; x++) {
-        const color = PIXEL_PALETTE[row[x]];
-        if (color) rects += `<rect x="${x}" y="${y}" width="1" height="1" fill="${color}"/>`;
-      }
-    }
-    return `<svg class="mf-pixel-icon ${className}" viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true">${rects}</svg>`;
+  function pixelIconPng(name, className = '') {
+    const filename = name === 'patPat' ? 'patpat.png' : `${name}.png`;
+    const url = chrome.runtime.getURL(`assets/ui/${filename}`);
+    return `<img class="mf-pixel-icon ${className}" src="${url}" alt="" aria-hidden="true"/>`;
   }
 
   function renderNavList() {
@@ -3578,15 +3572,7 @@
   }
 
   function moduleIcon(key) {
-    const icons = {
-      keystrokes:'keystrokes', fpsCounter:'fpsCounter', cpsCounter:'cpsCounter', pingCounter:'pingCounter', guiPatch:'guiPatch', armorHud:'armorHud',
-      coordinates:'coordinates', dynamicCrosshair:'dynamicCrosshair', rebrand:'rebrand', titanTiny:'titanTiny', healthNameTags:'healthNameTags',
-      distanceNameTags:'distanceNameTags', patPat:'patPat', duckMobs:'duckMobs', itemPhysics:'itemPhysics', noWeather:'noWeather', fullBright:'fullBright', vanillaAnimations:'vanillaAnimations',
-      zoom:'zoom', cameraOverhaul:'cameraOverhaul', elytraFlight:'elytraFlight', freelook:'freelook', freecam:'freecam', blockHighlight:'blockHighlight',
-      waypoints:'waypoints', customShader:'shaders', autoSprint:'movement', safeSneak:'movement', antiAfk:'antiAfk', rhythmParkour:'rhythmParkour', chatVideos:'chatVideos', chatLinks:'chatLinks', chatMemes:'chatMemes', clientChat:'clientChat',
-      discord:'discord', supportAds:'supportAds'
-    };
-    return iconSvg(icons[key] || 'grid');
+    return iconSvg(key === 'customShader' ? 'shaders' : key);
   }
 
   function getPanelTemplate() {
@@ -6931,7 +6917,7 @@
               data-mf-profile="${value}"
               style="padding:14px 10px;font-size:15px;font-weight:700;letter-spacing:.3px;"
             >
-              ${labels[value]}
+              ${labels[value]}${value === 'potato' ? ` <img class="mf-profile-icon" src="${chrome.runtime.getURL('assets/ui/potato.png')}" alt="" aria-hidden="true">` : ''}
             </button>
           `).join('')}
         </div>
