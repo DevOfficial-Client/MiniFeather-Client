@@ -557,6 +557,7 @@
     freecamFastMultiplier: 3.0,
     blockHighlight: true,
     blockHighlightColor: '#ffffff',
+    blockHighlightRainbow: false,
     blockHighlightThickness: 1,
     cameraOverhaul: false,
     cameraOverhaulBind: '',
@@ -9139,8 +9140,18 @@ function renderCreditsPage() {
             placeholder="#ffffff"
           >   
         </div>    
+        <div class="mf-tt-row" style="margin-top:12px;">
+          <span>Rainbow Mode</span>
+          <button
+            type="button"
+            class="mf-btn secondary"
+            data-bh-rainbow
+          >
+            ${settings.blockHighlightRainbow ? 'On' : 'Off'}
+          </button>
+        </div>
         <div class="mf-tt-row">
-          <span>Thickness</span>    
+          <span>Thickness</span>
           <span
             class="mf-tt-scale-value"
             data-bh-thickness-value
@@ -9240,16 +9251,37 @@ function renderCreditsPage() {
               {
                   detail: JSON.stringify({
                       enabled:
-                          !!settings.blockHighlight,    
+                          !!settings.blockHighlight,
                       color:
-                          selectedColor,    
+                          selectedColor,
                       thickness:
-                          selectedThickness
+                          selectedThickness,
+                      rainbow:
+                          !!settings.blockHighlightRainbow
                   })
               }
           )
       );
-    };    
+    };
+    const rainbowBtn =
+      backdrop.querySelector('[data-bh-rainbow]');
+    rainbowBtn?.addEventListener(
+      'click',
+      () => {
+        settings.blockHighlightRainbow =
+          !settings.blockHighlightRainbow;
+        guiSettings.blockHighlightRainbow =
+          settings.blockHighlightRainbow;
+        if (rainbowBtn) {
+          rainbowBtn.textContent =
+            settings.blockHighlightRainbow
+              ? 'On'
+              : 'Off';
+        }
+        saveSettings(true);
+        apply();
+      }
+    );    
     colorInput?.addEventListener(
       'input',
       apply
@@ -11532,15 +11564,18 @@ function renderCreditsPage() {
                 detail: JSON.stringify({
                     enabled:
                         !!settings.blockHighlight,
-                
+
                     color:
                         settings.blockHighlightColor ||
                         '#ffffff',
-                
+
                     thickness:
                         Number(
                             settings.blockHighlightThickness
-                        ) || 1
+                        ) || 1,
+
+                    rainbow:
+                        !!settings.blockHighlightRainbow
                 })
             }
         )

@@ -488,10 +488,53 @@
         }
     }, 500);
 
+    // ── Modo arcoíris del block highlight ──
+    // Cicla el hue del material del selectBox (~20 fps, suficiente para un
+    // ciclo de color suave). El color fijo guardado no se toca: al apagar
+    // rainbow, refreshBlockHighlight() restaura el del setting.
+    let rainbowTimer = null;
+    let rainbowHue = Math.random();
+
+    function rainbowTick() {
+        try {
+            const selectBox = getGame()?.player?.selectBox;
+            if (!selectBox?.material?.color) return;
+            if (typeof selectBox.material.color.setHSL === 'function') {
+                rainbowHue = (rainbowHue + 0.004) % 1;
+                selectBox.material.color.setHSL(rainbowHue, 1, 0.5);
+            }
+        } catch (_) {}
+    }
+
+    function setRainbow(on) {
+        localStorage.setItem(
+            'miniblox_blockhighlight_rainbow',
+            on ? 'true' : 'false'
+        );
+        if (on && !rainbowTimer) {
+            rainbowTimer = setInterval(rainbowTick, 50);
+        } else if (!on && rainbowTimer) {
+            clearInterval(rainbowTimer);
+            rainbowTimer = null;
+            refreshBlockHighlight(); // volver al color fijo
+        }
+    }
+
+    // Arranque: restaurar el modo si quedó activo de la sesión anterior
+    try {
+        if (
+            localStorage.getItem(
+                'miniblox_blockhighlight_rainbow'
+            ) === 'true'
+        ) {
+            rainbowTimer = setInterval(rainbowTick, 50);
+        }
+    } catch (_) {}
+
     document.addEventListener(
         'minifeather:block-highlight-config',
         event => {
-            let config; 
+            let config;
             try {
                 config =
                     typeof event.detail === 'string'
@@ -500,15 +543,18 @@
             } catch (_) {
                 console.warn(
                     `${TAG} Invalid Block Highlight config.`
-                );  
+                );
                 return;
-            }   
+            }
             if (
                 !config ||
                 typeof config !== 'object'
             ) {
                 return;
-            }   
+            }
+            if (typeof config.rainbow === 'boolean') {
+                setRainbow(config.rainbow);
+            }
             if (
                 typeof config.enabled === 'boolean'
             ) {
