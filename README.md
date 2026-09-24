@@ -36,7 +36,8 @@ MiniFeather is a custom Miniblox client focused on adding new visuals, gameplay 
 
 ## Screenshots
 
-*Coming soon.*
+<img width="1536" height="568" alt="image" src="https://github.com/user-attachments/assets/091e3597-61d6-46bf-871f-f1b08af00260" />
+<img width="984" height="741" alt="image" src="https://github.com/user-attachments/assets/7d90a121-d0bc-4f49-a753-80eaf1439d25" />
 
 ## Built With
 
