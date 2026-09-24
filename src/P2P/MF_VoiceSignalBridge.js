@@ -21,6 +21,13 @@
     document.dispatchEvent(new CustomEvent(EVENT, { detail: JSON.stringify(detail) }));
   }
 
+  function emitAssets() {
+    if (typeof chrome.runtime?.getURL !== 'function') return;
+    const icons = {};
+    for (const name of ['phone', 'mic', 'muted', 'close']) icons[name] = chrome.runtime.getURL(`assets/voice/${name}.png`);
+    emit({ type: 'assets', icons });
+  }
+
   function reconnect() {
     if (destroyed || !wanted || port || reconnectTimer) return;
     reconnectTimer = setTimeout(() => { reconnectTimer = 0; connect(); }, 1500);
@@ -63,7 +70,9 @@
     try { request = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail; }
     catch (_) { return; }
     if (!request || typeof request !== 'object') return;
-    if (request.type === 'preference-set' && typeof request.enabled === 'boolean') {
+    if (request.type === 'assets-request') {
+      emitAssets();
+    } else if (request.type === 'preference-set' && typeof request.enabled === 'boolean') {
       try { chrome.storage?.local?.set?.({ [PREFERENCE_KEY]: request.enabled }); } catch (_) {}
     } else if (request.type === 'start') {
       wanted = true;
@@ -109,6 +118,7 @@
     }
   };
   emit({ type: 'bridge-ready' });
+  emitAssets();
   try {
     chrome.storage?.local?.get?.(PREFERENCE_KEY, data => {
       if (destroyed) return;
