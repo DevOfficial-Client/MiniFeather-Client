@@ -33,6 +33,16 @@
     const RT = () => globalThis.MF_EMFRuntime;
     const lerpN = (a, b, t) => a + (b - a) * t;
 
+    function isMeshSneaking(mesh, game) {
+        const entity = mesh?.entity;
+        if (!entity) return false;
+        const live = (game?.player?.id === entity.id ? game.player : null)
+            || game?.world?.entities?.get?.(entity.id)
+            || game?.world?.players?.get?.(entity.id)
+            || entity;
+        return live.sneak === true || live.sneaking === true || live.crouching === true;
+    }
+
     // Nodos del rig que el pack anima (los 4 joints van aparte, congelados)
     // Requisito de diseño: codos y rodillas TIESOS (rotación 0 siempre).
     // El freeze re-escribe rotation=0 en cada updateMatrixWorld, anulando la
@@ -100,7 +110,7 @@
                 // updateMatrixWorld varias veces por render (sombras, nametags,
                 // raycasts) — cada evaluación avanzaría los drags/frame_counter
                 // del pack → animación N× más rápida.
-                if (mesh.__mfPASuppress) {
+                if (mesh.__mfPASuppress || isMeshSneaking(mesh, mesh._mfPASkelGame)) {
                     // Emote activo: retirar poses del pack (el emote manda).
                     clearPublishedPoses(mesh);
                 } else if (state.enabled) {
@@ -229,7 +239,7 @@
         state.wrapped.add(node);
     }
 
-    function freezeJoint(joint) {
+    function freezeJoint(joint, mesh) {
         if (joint._mfPAFrozen) return;
         joint._mfPAFrozen = true;
         const original = joint.updateMatrixWorld.bind(joint);
@@ -238,7 +248,7 @@
             if (this.updateMatrixWorld !== wrapper) return original.apply(this, arguments);
             // Durante un emote el joint puede animarse (bend de codos/rodillas):
             // no congelar.
-            if (!this.__mfPASuppress) {
+            if (!this.__mfPASuppress && !isMeshSneaking(mesh, mesh._mfPASkelGame)) {
                 this.rotation.x = 0; this.rotation.y = 0; this.rotation.z = 0;
             }
             return original.apply(this, arguments);
@@ -430,9 +440,13 @@
             if (node && node.__mfPAPose && !poses[NODE_BY_PART_INV[name]]) node.__mfPAPose = undefined;
         }
         if (!poses.root) mesh.skeleton.__mfPARootPose = undefined;
+        const sneaking = isMeshSneaking(mesh, game);
         for (const name of JOINT_NAMES) {
             const j = mesh[name];
-            if (j) { j.rotation.x = 0; j.rotation.y = 0; j.rotation.z = 0; freezeJoint(j); }
+            if (j) {
+                if (!sneaking) { j.rotation.x = 0; j.rotation.y = 0; j.rotation.z = 0; }
+                freezeJoint(j, mesh);
+            }
         }
     }
 
@@ -441,9 +455,13 @@
         if (!mesh?.skeleton || !mesh.entity) return;
         makeSkeletonHook(mesh, game);
         if (mesh.__mfPASuppress) return; // emote activo: no re-zeroear joints
+        const sneaking = isMeshSneaking(mesh, game);
         for (const name of JOINT_NAMES) {
             const j = mesh[name];
-            if (j) { j.rotation.x = 0; j.rotation.y = 0; j.rotation.z = 0; freezeJoint(j); }
+            if (j) {
+                if (!sneaking) { j.rotation.x = 0; j.rotation.y = 0; j.rotation.z = 0; }
+                freezeJoint(j, mesh);
+            }
         }
     }
 
@@ -497,32 +515,9 @@
         if (enabled) {
             state.packError = null;
             try {
-                const t0 = performance.now();
                 loadPack();
                 state.rafId = requestAnimationFrame(tick);
-                console.log(TAG, 'activado —', state.pack.lines.length, 'líneas, pack en', (performance.now() - t0).toFixed(1), 'ms');
                 RT().pushLog?.({ t: 'enabled', lines: state.pack.lines.length });
-                // Tras 2 ticks, loguear la pose calculada del local como verificación
-                setTimeout(() => {
-                    try {
-                        const game = getGame();
-                        const m = game?.player?.mesh;
-                        if (!m?.body) return;
-                        const pose = (name) => {
-                            const p = m[name]?.__mfPAPose;
-                            return p ? { rx: p.rx?.toFixed(3), ry: p.ry?.toFixed(3), rz: p.rz?.toFixed(3) } : null;
-                        };
-                        console.log(TAG, 'pose local tras 2s —', JSON.stringify({
-                            body: pose('body'), right_arm: pose('rightShoulder'),
-                            left_arm: pose('leftShoulder'), right_leg: pose('rightHip'),
-                            left_leg: pose('leftHip'),
-                            kneeVanillaAnim: m.leftKneeJoint ? +(m.leftKneeJoint.rotation.x * 57.3).toFixed(1) : null,
-                            contexts: state.contexts.size, wrapped: state.wrapped.size
-                        }));
-                    } catch (e) {
-                        console.warn(TAG, 'no se pudo loguear pose:', e?.message);
-                    }
-                }, 2000);
             } catch (e) {
                 state.packError = String(e?.message || e);
                 console.warn(TAG, 'error cargando pack:', e?.message || e);
@@ -554,7 +549,6 @@
             state.wrapped.clear();
             state.contexts.clear();
             state.pack = null;
-            console.log(TAG, 'desactivado —', 'wraps restaurados');
             RT().pushLog?.({ t: 'disabled' });
         }
     }

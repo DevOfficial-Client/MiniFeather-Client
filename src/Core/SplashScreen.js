@@ -25,7 +25,7 @@ const ROOT_ID='mf-startup-splash';
 const STYLE_ID='mf-startup-splash-style';
 const TOTAL_MS=3720;
 const MIN_VISIBLE_MS=220;
-const FRAME_MS=1000/45;
+const FRAME_MS=1000/75;
 const LOGO_URL=chrome.runtime.getURL('assets/icon.png');
 let root=null;
 let style=null;
@@ -46,7 +46,8 @@ function makeStyle(){
 const el=document.createElement('style');
 el.id=STYLE_ID;
 el.textContent=`
-#${ROOT_ID}{position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at 50% 48%,rgba(14,43,69,.48) 0%,rgba(3,14,27,.88) 39%,rgba(1,6,14,.99) 76%),#020812;opacity:0;color:#f6fbff;user-select:none;-webkit-user-select:none;pointer-events:none;contain:layout paint style;will-change:opacity;font-family:'Segoe UI',Inter,system-ui,sans-serif}
+#${ROOT_ID}{position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at 50% 48%,rgba(14,43,69,.48) 0%,rgba(3,14,27,.88) 39%,rgba(1,6,14,.99) 76%),#020812;opacity:0;animation:mfSplashVisibility ${TOTAL_MS}ms linear both;color:#f6fbff;user-select:none;-webkit-user-select:none;pointer-events:none;contain:layout paint style;will-change:opacity;font-family:'Segoe UI',Inter,system-ui,sans-serif}
+@keyframes mfSplashVisibility{0%{opacity:0}6.5%{opacity:1}86.8%{opacity:1}100%{opacity:0}}
 #${ROOT_ID}:before{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 29% 44%,rgba(74,188,255,.09),transparent 25%),radial-gradient(circle at 72% 52%,rgba(116,210,255,.06),transparent 23%)}
 #${ROOT_ID} .mf-splash-stage{position:relative;width:min(1120px,94vw);height:min(510px,72vh);display:grid;place-items:center;contain:layout paint}
 #${ROOT_ID} .mf-splash-stage:after{content:'';position:absolute;left:17%;right:17%;bottom:16%;height:1px;background:linear-gradient(90deg,transparent,rgba(122,211,255,.11),rgba(222,247,255,.38),rgba(122,211,255,.11),transparent);opacity:.6}
@@ -72,7 +73,7 @@ return el
 function cacheNodes(){
 nodes={feather:root.querySelector('#mf-splash-feather'),logo:root.querySelector('#mf-splash-logo'),logoRing:root.querySelector('#mf-splash-logo-ring'),logoSwoop:root.querySelector('#mf-splash-logo-swoop'),wordClip:root.querySelector('#mf-splash-word-clip'),wordTrail:root.querySelector('#mf-splash-word-trail'),wordTrailGlow:root.querySelector('#mf-splash-word-trail-glow'),signature:root.querySelector('#mf-splash-signature'),flare:root.querySelector('#mf-splash-flare'),stars:root.querySelector('#mf-splash-stars')}
 }
-function samplePath(path,count=160){
+function samplePath(path,count=64){
 const len=path.getTotalLength();
 const arr=new Array(count+1);
 for(let i=0;i<=count;i++){
@@ -111,7 +112,8 @@ if(performance.now()-startedAt<MIN_VISIBLE_MS)return;
 playToken++;
 cancelAnimationFrame(raf);
 raf=0;
-const current=Number(root.style.opacity||1);
+const current=Number(getComputedStyle(root).opacity)||0;
+root.style.animation='none';
 const animation=root.animate([{opacity:current},{opacity:0}],{duration:140,easing:'ease-out',fill:'forwards'});
 animation.finished.catch(()=>{}).finally(removeRoot)
 }
@@ -120,43 +122,50 @@ if(!root||token!==playToken||destroyed)return;
 if(now-lastFrameAt<FRAME_MS){raf=requestAnimationFrame(next=>renderFrame(next,token));return}
 lastFrameAt=now;
 const elapsed=now-startedAt;
-const rootIn=segment(elapsed,0,240,easeOutCubic);
-const rootOut=1-segment(elapsed,3230,TOTAL_MS,easeInOutCubic);
-root.style.opacity=String(Math.min(rootIn,rootOut));
-nodes.stars.setAttribute('opacity',String(.15+segment(elapsed,100,780,easeOutCubic)*.58));
+if(elapsed<800)nodes.stars.setAttribute('opacity',String(.15+segment(elapsed,100,780,easeOutCubic)*.58));
 const enterP=segment(elapsed,100,900,easeInOutCubic);
 if(elapsed<930){
 setFeather(lerp(88,394,enterP),lerp(310,194,enterP)-Math.sin(enterP*Math.PI)*88,lerp(-19,-7,enterP)-Math.sin(enterP*Math.PI)*19,lerp(.73,.86,enterP),segment(elapsed,80,300,easeOutCubic))
 }
 const swoopP=segment(elapsed,420,1120,easeInOutCubic);
+if(elapsed<1760){
 nodes.logoSwoop.setAttribute('stroke-dashoffset',String(1-swoopP));
 nodes.logoSwoop.setAttribute('opacity',String(swoopP*.72*(1-segment(elapsed,1280,1740,easeOutCubic))));
+}
 const logoP=segment(elapsed,610,1260,easeOutCubic);
 const logoScale=lerp(.72,1,logoP);
+if(elapsed<1280){
 nodes.logo.setAttribute('opacity',String(logoP));
 nodes.logo.setAttribute('transform',`translate(316 195) scale(${logoScale}) translate(-316 -195)`);
 nodes.logoRing.setAttribute('stroke-opacity',String(.2+.34*logoP));
+}
 const wordP=segment(elapsed,1040,2290,easeInOutCubic);
+if(elapsed>=1040&&elapsed<2310){
 nodes.wordClip.setAttribute('width',String(500*wordP));
 const wordOffset=1-wordP;
 nodes.wordTrail.setAttribute('stroke-dashoffset',String(wordOffset));
 nodes.wordTrailGlow.setAttribute('stroke-dashoffset',String(wordOffset));
 nodes.wordTrail.setAttribute('opacity',wordP>0?'.82':'0');
 nodes.wordTrailGlow.setAttribute('stroke-opacity',String(wordP>0?.12:0));
+}
 if(elapsed>=930&&elapsed<2460){
 const p=sampleAt(trailSamples,Math.max(.01,wordP));
 setFeather(p.x,p.y-Math.sin(wordP*Math.PI)*8,p.angle-10,lerp(.84,.65,wordP),1)
 }
 const signP=segment(elapsed,2220,2600,easeOutCubic);
+if(elapsed>=2220&&elapsed<2620){
 nodes.signature.setAttribute('opacity',String(signP));
-if(signP>0)nodes.signature.setAttribute('transform',`translate(860 154) rotate(${lerp(-34,-19,signP)}) scale(${lerp(.2,.52,signP)})`);
-if(elapsed>=2440){
+nodes.signature.setAttribute('transform',`translate(860 154) rotate(${lerp(-34,-19,signP)}) scale(${lerp(.2,.52,signP)})`);
+}
+if(elapsed>=2440&&elapsed<2880){
 const exitP=segment(elapsed,2440,2820,easeInOutCubic);
 setFeather(lerp(844,956,exitP),lerp(228,116,exitP),-44,lerp(.65,.47,exitP),1-segment(elapsed,2660,2860,easeOutCubic))
 }
 const flareP=segment(elapsed,2350,2520,easeOutCubic)*(1-segment(elapsed,2520,2780,easeOutCubic));
+if(elapsed>=2350&&elapsed<2800){
 nodes.flare.setAttribute('opacity',String(flareP));
 nodes.flare.setAttribute('r',String(lerp(2,18,flareP)));
+}
 if(elapsed>=TOTAL_MS){removeRoot();raf=0;return}
 raf=requestAnimationFrame(next=>renderFrame(next,token))
 }
@@ -172,7 +181,7 @@ const parent=document.documentElement||document;
 parent.appendChild(style);
 parent.appendChild(root);
 cacheNodes();
-trailSamples=samplePath(nodes.wordTrail,140);
+trailSamples=samplePath(nodes.wordTrail);
 startedAt=performance.now();
 lastFrameAt=0;
 raf=requestAnimationFrame(now=>renderFrame(now,token))

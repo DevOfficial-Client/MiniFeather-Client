@@ -875,6 +875,10 @@
   let featureSettingsCleanup = null;
   let dashboardStats = { fps: 0, ping: null };
   let dashboardTimer = 0;
+  let pixelIconAnimationTimer = 0;
+  let pixelIconAnimationTick = 0;
+  let pixelIconObserver = null;
+  const visiblePixelIcons = new Set();
   let guiCloseTimer = 0;
   let overlay = null;
   let panel = null;
@@ -3541,6 +3545,7 @@
     patPat: ['...nn...','..nnnn..','.nNnNnn.','nnnnnnnn','nppppppn','.nppppn.','..NNNN..','........'],
     duckMobs: ['..yyyy..','.y####y.','y#k##k#y','y######y','.yoooooo','..yyyyy.','..O..O..','........'],
     crittersMobs: ['.NN..NN.','NnnNNnnN','NnnnnnnN','NnkNNknN','NnnnnnnN','.Nn##nN.','..NNNN..','........'],
+    allayPets: ['..bbbb..','.bBBBBb.','bB#BB#Bb','bBBBBBBb','.bB##Bb.','..bBBb..','.bb..bb.','........'],
     itemPhysics: ['..yyyy..','.yYYyYy.','yYy##yYy','yYy##yYy','.yYYyYy.','..yyyy..','...oo...','....o...'],
     noWeather: ['..BBBB..','.BbbbbB.','BbbbbbbB','BBBBBBBB','...bb...','..bb....','.bb.....','RRRRRRRR'],
     fullBright: ['...yy...','y..yy..y','..yyyy..','.yy##yy.','.yy##yy.','..yyyy..','y..yy..y','...yy...'],
@@ -3571,10 +3576,70 @@
     supportAds: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yy#y#yyY','Yyy##yyY','YyyyyyyY','.YyyyyY.','..YYYY..']
   };
 
+  const MF_ANIMATED_PIXEL_ICONS = Object.freeze([
+    'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'guiPatch', 'armorHud',
+    'coordinates', 'dynamicCrosshair', 'rebrand', 'titanTiny', 'betterPlayerLayers',
+    'healthNameTags', 'distanceNameTags', 'damageParticles', 'waterSplash',
+    'shineAmbience', 'leafWind', 'duckMobs', 'crittersMobs', 'allayPets',
+    'itemPhysics', 'noWeather', 'fullBright', 'vanillaAnimations', 'handSway',
+    'playerAnims', 'zoom', 'cameraOverhaul', 'elytraFlight', 'freecam',
+    'freelook', 'blockHighlight', 'autoSprint', 'safeSneak', 'antiAfk',
+    'autoRespawn', 'idlePlayerBot', 'rhythmParkour', 'chatVideos', 'chatLinks',
+    'chatMemes', 'gifChat', 'clientChat', 'clientChatMentions', 'discord', 'shaders'
+  ]);
+  const MF_ANIMATED_PIXEL_ICON_SET = new Set(MF_ANIMATED_PIXEL_ICONS);
+  const MF_PIXEL_FRAME_COUNT = 6;
+
   function pixelIconPng(name, className = '') {
     const filename = name === 'patPat' ? 'patpat.png' : `${name}.png`;
-    const url = chrome.runtime.getURL(`assets/ui/${filename}`);
-    return `<img class="mf-pixel-icon ${className}" src="${url}" alt="" aria-hidden="true"/>`;
+    const animated = MF_ANIMATED_PIXEL_ICON_SET.has(name);
+    const url = animated
+      ? chrome.runtime.getURL(`assets/ui/${name}/00.png`)
+      : chrome.runtime.getURL(`assets/ui/${filename}`);
+    const animationData = animated ? ` data-mf-animated-icon="${name}" data-mf-frame="0"` : '';
+    return `<img class="mf-pixel-icon ${className}" src="${url}"${animationData} alt="" aria-hidden="true"/>`;
+  }
+
+  function updateAnimatedPixelIcons() {
+    if (!panel || panel.style.display !== 'block' || document.hidden) return;
+    pixelIconAnimationTick++;
+    visiblePixelIcons.forEach(icon => {
+      if (!icon.isConnected) {
+        visiblePixelIcons.delete(icon);
+        return;
+      }
+      const name = icon.dataset.mfAnimatedIcon;
+      const phase = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0) % MF_PIXEL_FRAME_COUNT;
+      const frame = (pixelIconAnimationTick + phase) % MF_PIXEL_FRAME_COUNT;
+      if (icon.dataset.mfFrame === String(frame)) return;
+      icon.dataset.mfFrame = String(frame);
+      icon.src = chrome.runtime.getURL(`assets/ui/${name}/${String(frame).padStart(2, '0')}.png`);
+    });
+  }
+
+  function startPixelIconAnimation() {
+    if (pixelIconAnimationTimer || !panel?.querySelector('img[data-mf-animated-icon]') || document.hidden || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    pixelIconAnimationTick = 0;
+    visiblePixelIcons.clear();
+    const icons = panel.querySelectorAll('img[data-mf-animated-icon]');
+    if (typeof IntersectionObserver === 'function') {
+      pixelIconObserver = new IntersectionObserver(entries => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) visiblePixelIcons.add(entry.target);
+          else visiblePixelIcons.delete(entry.target);
+        }
+      });
+      icons.forEach(icon => pixelIconObserver.observe(icon));
+    } else icons.forEach(icon => visiblePixelIcons.add(icon));
+    pixelIconAnimationTimer = window.setInterval(updateAnimatedPixelIcons, 320);
+  }
+
+  function stopPixelIconAnimation() {
+    clearInterval(pixelIconAnimationTimer);
+    pixelIconAnimationTimer = 0;
+    pixelIconObserver?.disconnect();
+    pixelIconObserver = null;
+    visiblePixelIcons.clear();
   }
 
   function renderNavList() {
@@ -8670,6 +8735,10 @@ function renderCreditsPage() {
     }
 
     bindPageControls();
+    if (panel.style.display === 'block') {
+      stopPixelIconAnimation();
+      startPixelIconAnimation();
+    }
     if (activePage === 'dashboard' && !searchQuery.trim()) updateDashboardStats();
   }
 
@@ -8727,6 +8796,7 @@ function renderCreditsPage() {
       if (panel) panel.style.opacity = '1';
     });
     startDashboardUpdater();
+    startPixelIconAnimation();
     if (activePage === 'dashboard') updateDashboardStats();
   }
 
@@ -8745,6 +8815,7 @@ function renderCreditsPage() {
     closingPanel.style.opacity = '0';
     closingPanel.style.pointerEvents = 'none';
     stopDashboardUpdater();
+    stopPixelIconAnimation();
 
     clearTimeout(guiCloseTimer);
     guiCloseTimer = window.setTimeout(() => {
@@ -12450,6 +12521,10 @@ function renderCreditsPage() {
     if (destroyed || runtimeController) return;
 
     runtimeController = new AbortController();
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopPixelIconAnimation();
+      else if (panel?.style.display === 'block') startPixelIconAnimation();
+    }, { signal: runtimeController.signal });
     initLifecycleModules();
     injectFont();
     initFPSCounter();
@@ -12540,6 +12615,7 @@ function renderCreditsPage() {
     sidebarObserverTimer = 0;
     clearInterval(dashboardTimer);
     dashboardTimer = 0;
+    stopPixelIconAnimation();
     clearTimeout(guiCloseTimer);
     guiCloseTimer = 0;
 
