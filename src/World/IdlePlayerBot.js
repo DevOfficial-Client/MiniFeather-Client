@@ -4,7 +4,7 @@
   const GLOBAL_KEY = 'MF_IDLE_PLAYER_BOT';
   const COMMAND_EVENT = 'minifeather:idle-player-command';
   const STATE_EVENT = 'minifeather:idle-player-state';
-  const MAX_BOTS = 10;
+  const MAX_BOTS = 16;
   const MAX_RETRIES = 2;
   const API_PATH = '/auth-api/launch/invite_code';
   const SERVER_DOMAIN = 'coolmathblox.ca';
@@ -84,7 +84,7 @@
     const previous = globalThis[GLOBAL_KEY];
     const snapshot = previous?.status?.();
     const isLive = snapshot && !['idle', 'error'].includes(snapshot.phase);
-    if (isLive && previous?.multiBotVersion === 3) {
+    if (isLive && previous?.multiBotVersion === 4) {
       document.dispatchEvent(new CustomEvent(STATE_EVENT, { detail: JSON.stringify(snapshot) }));
       return;
     }
@@ -1369,7 +1369,7 @@
     syncCount,
     disconnect,
     status: publicState,
-    multiBotVersion: 3,
+    multiBotVersion: 4,
     get connected() { return publicState().connected; },
     destroy() {
       document.removeEventListener(COMMAND_EVENT, handleCommand);

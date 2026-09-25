@@ -9,10 +9,10 @@ const source = fs.readFileSync(path.join(__dirname, '../src/World/IdlePlayerBot.
 const panelSource = fs.readFileSync(path.join(__dirname, '../src/UI/ClientPanel.js'), 'utf8');
 const translationsSource = fs.readFileSync(path.join(__dirname, '../src/I18n/Translations.js'), 'utf8');
 
-test('right-click settings expose a saved 1–10 bot count in every language', () => {
+test('right-click settings expose a saved 1–16 bot count in every language', () => {
   assert.match(panelSource, /idlePlayerCount: 1/);
   assert.match(panelSource, /idlePlayerBotToggle\?\.addEventListener\('contextmenu'/);
-  assert.match(panelSource, /data-idlebot-count type="range" min="1" max="10"/);
+  assert.match(panelSource, /data-idlebot-count type="range" min="1" max="16"/);
   assert.match(panelSource, /sendIdlePlayerBotCommand\('sync'\)/);
   assert.equal([...translationsSource.matchAll(/"idlePlayerCount":/g)].length, 10);
   assert.equal([...translationsSource.matchAll(/"idlePlayerCountHint":/g)].length, 10);
@@ -64,35 +64,35 @@ test('idle player creates independent server-visible sessions with unique guest 
   };
   vm.runInNewContext(source, sandbox);
   const api = sandbox.MF_IDLE_PLAYER_BOT;
-  assert.equal(api.multiBotVersion, 3);
+  assert.equal(api.multiBotVersion, 4);
 
-  for (let i = 0; i < 10; i++) await api.connect('current');
+  for (let i = 0; i < 16; i++) await api.connect('current');
   const status = api.status();
-  assert.equal(status.bots.length, 10);
-  assert.equal(sockets.length, 10);
-  assert.equal(new Set(status.bots.map(bot => bot.requestedUuid)).size, 10);
+  assert.equal(status.bots.length, 16);
+  assert.equal(sockets.length, 16);
+  assert.equal(new Set(status.bots.map(bot => bot.requestedUuid)).size, 16);
   assert.ok(status.bots.every(bot => bot.requestedUuid.startsWith('ShyLeopard.')));
   assert.ok(sockets.every(socket => socket.url.includes('test-server.servers.')));
 
   await api.connect('current');
-  assert.equal(api.status().bots.length, 10);
-  assert.equal(sockets.length, 10);
-  assert.match(api.status().error, /Maximum 10 bots/);
+  assert.equal(api.status().bots.length, 16);
+  assert.equal(sockets.length, 16);
+  assert.match(api.status().error, /Maximum 16 bots/);
 
   api.disconnect(status.bots[1].id);
-  assert.equal(api.status().bots.length, 9);
+  assert.equal(api.status().bots.length, 15);
   assert.equal(sockets[1].readyState, 3);
   await api.connect('current');
-  assert.equal(api.status().bots.length, 10);
-  assert.equal(sockets.length, 11);
-  assert.equal(new Set(api.status().bots.map(bot => bot.requestedUuid)).size, 10);
+  assert.equal(api.status().bots.length, 16);
+  assert.equal(sockets.length, 17);
+  assert.equal(new Set(api.status().bots.map(bot => bot.requestedUuid)).size, 16);
 
   await api.syncCount(3, 'current');
   assert.equal(api.status().bots.length, 3);
   await api.syncCount(6, 'current');
   assert.equal(api.status().bots.length, 6);
   await api.syncCount(20, 'current');
-  assert.equal(api.status().bots.length, 10);
+  assert.equal(api.status().bots.length, 16);
 
   api.disconnect();
   assert.equal(api.status().bots.length, 0);

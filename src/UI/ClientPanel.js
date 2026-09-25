@@ -894,7 +894,7 @@
   let freecamAccess = { known: false, allowed: false, permissionLevel: 0 };
   let lastFreecamDeniedAt = 0;
   let waypointStatus = '';
-  let idlePlayerBotState = { phase: 'idle', connected: false, error: '', serverId: '', playerName: '', bots: [], connectedCount: 0, maxBots: 10 };
+  let idlePlayerBotState = { phase: 'idle', connected: false, error: '', serverId: '', playerName: '', bots: [], connectedCount: 0, maxBots: 16 };
   let clientChatState = null;
   let destroyed = false;
 
@@ -4536,7 +4536,7 @@
   }
 
   function clampIdlePlayerCount(value) {
-    return Math.max(1, Math.min(10, Math.round(Number(value) || 1)));
+    return Math.max(1, Math.min(16, Math.round(Number(value) || 1)));
   }
 
   function sendIdlePlayerBotCommand(action, target = settings.idlePlayerTarget, id = '', count = settings.idlePlayerCount) {
@@ -4594,7 +4594,7 @@
     const disconnect = panel.querySelector('#mf-idle-player-disconnect');
     if (connect) {
       connect.textContent = t('idlePlayerConnect');
-      connect.disabled = bots.length >= (idlePlayerBotState.maxBots || 10) &&
+      connect.disabled = bots.length >= (idlePlayerBotState.maxBots || 16) &&
         !bots.some(bot => bot.phase === 'idle' || bot.phase === 'error');
     }
     if (disconnect) disconnect.disabled = bots.length === 0;
@@ -5040,7 +5040,7 @@
           <span>${t('idlePlayerCount')}</span>
           <span class="mf-tt-scale-value" data-idlebot-count-value>${clampIdlePlayerCount(settings.idlePlayerCount)}</span>
         </div>
-        <input class="mf-tt-range" data-idlebot-count type="range" min="1" max="10" step="1" value="${clampIdlePlayerCount(settings.idlePlayerCount)}">
+        <input class="mf-tt-range" data-idlebot-count type="range" min="1" max="16" step="1" value="${clampIdlePlayerCount(settings.idlePlayerCount)}">
         <div class="mf-tt-hint">${t('idlePlayerCountHint')}</div>
         <button type="button" class="mf-btn primary mf-tt-save" data-idlebot-save>${t('antiAfkSave')}</button>
       </div>
