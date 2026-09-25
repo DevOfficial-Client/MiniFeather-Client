@@ -154,6 +154,7 @@
       leafWind: false,
       duckMobs: false,
       crittersMobs: false,
+      allayPets: false,
       titanTiny: false,
       damageParticles: false,
       patPat: false,
@@ -181,6 +182,7 @@
       leafWind: false,
       duckMobs: false,
       crittersMobs: false,
+      allayPets: false,
       titanTiny: false,
       damageParticles: false,
       patPat: false
@@ -204,6 +206,7 @@
       leafWind: true,
       duckMobs: false,
       crittersMobs: false,
+      allayPets: false,
       titanTiny: false,
       damageParticles: true,
       patPat: false
@@ -284,6 +287,7 @@
       leafWind: true,
       duckMobs: true,
       crittersMobs: true,
+      allayPets: true,
       titanTiny: true,
       damageParticles: true,
       patPat: true

@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "tgt:custom/nightmare_lamp_particle"
+    },
+    "facing=east": {
+      "model": "tgt:custom/nightmare_lamp_particle",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "tgt:custom/nightmare_lamp_particle",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "tgt:custom/nightmare_lamp_particle",
+      "y": 270
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "accordion": {
+    "subtitle": "subtitles.accordion",
+    "sounds": [
+      {
+        "name": "tgt:hollow_knight_-_accordion_brumm_1",
+        "stream": false
+      }
+    ]
+  }
+}

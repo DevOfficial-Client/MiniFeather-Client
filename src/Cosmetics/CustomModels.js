@@ -209,6 +209,7 @@
                 catchAnim: opts.catchAnim || null,   
                 despawnAnim: opts.despawnAnim || null, 
                 caught: false,
+                tint: opts.tint || null,       // color base (prueba/debug: '#101014')
                 root: null, inst: null, animStart: 0
             };
             state.customs.set(id, rec);
@@ -280,6 +281,20 @@
                 }
                 
                 if (!rec.room) inst.root.position.set(rec.pos.x, rec.pos.y, rec.pos.z);
+                // tint: pisa el color base de TODOS los materiales (con map se
+                // multiplica: un gris oscuro oscurece la textura sin taparla)
+                if (rec.tint) {
+                    try {
+                        inst.root.traverse((o) => {
+                            const m = o.material;
+                            if (!m) return;
+                            for (const mm of Array.isArray(m) ? m : [m]) {
+                                if (mm.color?.set) mm.color.set(rec.tint);
+                                mm.needsUpdate = true;
+                            }
+                        });
+                    } catch {}
+                }
                 disableCullingDeep(inst.root);
                 inst.root.matrixAutoUpdate = true;
                 scene.add(inst.root);
@@ -403,6 +418,31 @@
                 get puppet() { return rec.puppet === true; },
                 id: rec.id
             };
+        },
+
+        // nombres de animaciones del custom (para que módulos ofrezcan selector)
+        animsOf(id) {
+            const rec = state.customs.get(id);
+            if (!rec || rec.dead || !rec.inst) return null;
+            return rec.inst.anims.map((a) => a.name);
+        },
+
+        // bone animable por nombre (solo los que restoreRest resetea cada
+        // frame — rotarlo fuera de ese set acumularía para siempre)
+        boneOf(id, name) {
+            const rec = state.customs.get(id);
+            if (!rec || rec.dead || !rec.inst) return null;
+            for (const r of rec.inst.rest) if (r.g?.name === name) return r.g;
+            return null;
+        },
+
+        // callback procedural sobre el rec INTERNO: corre tras sampleAnim en
+        // tickCustoms (no sirve asignarlo sobre el wrapper de getRecord)
+        setProcAnim(id, fn) {
+            const rec = state.customs.get(id);
+            if (!rec || rec.dead) return false;
+            rec.procAnim = typeof fn === 'function' ? fn : null;
+            return true;
         },
         
         setPeerTarget(tag, pos) {
@@ -766,7 +806,7 @@
             const arm = lf?.rightArm;
             if (!arm?.geometry?.attributes?.position) return null;
             const armMat = arm.material;
-            
+
             state.ctors = {
                 Mesh: arm.constructor,
                 Group: lf.constructor,
@@ -779,6 +819,53 @@
         } catch {
             return null;
         }
+    }
+
+    // Clases de skinning REALES del three del juego: el propio jugador es un
+    // SkinnedMesh, así que las sacamos de SU mesh (vía entidad, patrón Emotes;
+    // el mesh local no siempre cuelga de gameScene.scene). Con esto los GLB
+    // skinned se montan con skinning de verdad — nada de fragmentos rígidos.
+    function grabSkinCtors() {
+        if (state.skinCtors) return state.skinCtors;
+        const collect = (sm) => {
+            if (!sm || sm.isSkinnedMesh !== true || !sm.skeleton?.bones?.length) return null;
+            const c = {
+                SkinnedMesh: sm.constructor,
+                Bone: sm.skeleton.bones[0]?.constructor,
+                Skeleton: sm.skeleton.constructor
+            };
+            if (!c.Bone || !c.Skeleton) return null;
+            // el TIPO de array de skinIndex que el shader del juego espera —
+            // clavarlo evita GL_INVALID_OPERATION (attrib entero vs float).
+            // También log del hallazgo para diagnóstico.
+            try {
+                const si = sm.geometry?.attributes?.skinIndex;
+                c.skinIndexCtor = si?.array?.constructor || null;
+                c.skinIndexNorm = !!si?.normalized;
+                console.log(TAG + ' skinIndex del jugador: ' + (c.skinIndexCtor?.name || '?') +
+                    ' normalized=' + c.skinIndexNorm + ' (morph=' + !!sm.morphTargetInfluences + ')');
+            } catch { c.skinIndexCtor = null; c.skinIndexNorm = false; }
+            state.skinCtors = c;
+            return c;
+        };
+        try {
+            const game = getGame();
+            const me = game?.player;
+            if (me) {
+                try { const c = collect(game.world?.getPlayerById?.(me.id)?.mesh); if (c) return c; } catch {}
+                try { const c = collect(game.world?.players?.get?.(me.id)?.mesh); if (c) return c; } catch {}
+                try { const c = collect(game.world?.entities?.get?.(me.id)?.mesh); if (c) return c; } catch {}
+            }
+            // fallback: cualquier SkinnedMesh con bones de la escena
+            const scene = game?.gameScene?.scene;
+            if (scene) {
+                let found = null;
+                scene.traverse((o) => { if (!found && o?.isSkinnedMesh === true && o.skeleton?.bones?.length) found = o; });
+                const c = collect(found);
+                if (c) return c;
+            }
+        } catch {}
+        return null;
     }
 
     function parseGLB(buffer) {
@@ -955,12 +1042,17 @@
         return m;
     }
 
+    let texModelSeq = 0;
     async function getTextureFor(parsed, texIndex, ctors) {
         const { json: gltf, bin } = parsed;
         const texDef = gltf.textures?.[texIndex];
         const imgDef = texDef && gltf.images?.[texDef.source];
         if (!imgDef) return null;
-        const key = texDef.source;
+        // clave POR MODELO: el índice de imagen se repite entre GLBs (0..n de
+        // cada uno) y un caché global mezclaba texturas de modelos distintos
+        // (el leviathan salía con la piel del caballo, etc.)
+        if (parsed.__mfTexId == null) parsed.__mfTexId = ++texModelSeq;
+        const key = parsed.__mfTexId + ':' + texDef.source;
         if (state.textureCache.has(key)) return state.textureCache.get(key);
 
         let bytes = null;
@@ -978,14 +1070,38 @@
         const promise = (async () => {
             let bitmap = null;
             try {
-                bitmap = await createImageBitmap(new Blob([bytes], { type: imgDef.mimeType || 'image/png' }));
+                // colorSpaceConversion:'none' — sin esto el navegador aplica el
+                // perfil ICC/gamma del PNG y los colores salen desviados
+                bitmap = await createImageBitmap(new Blob([bytes], { type: imgDef.mimeType || 'image/png' }), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
             } catch {
-                return null;
+                try {
+                    bitmap = await createImageBitmap(new Blob([bytes], { type: imgDef.mimeType || 'image/png' }));
+                } catch {
+                    return null;
+                }
             }
             const tex = new ctors.Texture();
             tex.image = bitmap;
             tex.needsUpdate = true;
             if ('flipY' in tex) tex.flipY = false;
+            // sampler del glTF — CRÍTICO: los rips de juego (leviathan FF7)
+            // usan UV tiling (50-68% de UVs fuera de [0,1], negativas); el
+            // sampler declara wrap=REPEAT(10497) y sin aplicarlo queda el
+            // ClampToEdge default de three → medio cuerpo muestrea el píxel
+            // del borde estirado ("lado sin textura")
+            try {
+                const samp = gltf.samplers?.[texDef.sampler ?? 0];
+                if (samp) {
+                    const WRAP = { 10497: 1000, 33071: 1001, 33648: 1002 }; // glTF → three
+                    if (WRAP[samp.wrapS] != null) tex.wrapS = WRAP[samp.wrapS];
+                    if (WRAP[samp.wrapT] != null) tex.wrapT = WRAP[samp.wrapT];
+                    if (samp.minFilter === 9987) tex.minFilter = 1008;      // LinearMipmapLinear
+                    if (samp.magFilter === 9729) tex.magFilter = 1006;      // Linear
+                    if (tex.wrapS === 1000 || tex.wrapT === 1000) {
+                        if ('generateMipmaps' in tex) tex.generateMipmaps = true;  // POT: ok
+                    }
+                }
+            } catch {}
             // Bedrock = pixel-art: nearest mantiene los pixeles nitidos.
             // Linear (default de THREE) los difumina. Mipmaps nearest evita
             // el ruido a distancia.
@@ -1000,13 +1116,15 @@
             }
             const SRGB = 'srgb';
             try { if ('colorSpace' in tex) tex.colorSpace = SRGB; } catch {}
+            // three < r152 usa encoding (sRGBEncoding = 3001), no colorSpace:
+            // sin esto la textura se ve blanquecina/lavada en clientes viejos
+            try { if (!('colorSpace' in tex) && 'encoding' in tex) tex.encoding = 3001; } catch {}
             state.textureCache.set(key, tex);
             return tex;
         })();
         state.textureCache.set(key, promise);
         return promise;
     }
-
     async function buildMaterial(parsed, prim, ctors, fallbackMat) {
         const { json: gltf } = parsed;
         const matDef = gltf.materials?.[prim.material] || {};
@@ -1035,6 +1153,7 @@
             if (pbr.baseColorTexture != null) {
                 const tex = await getTextureFor(parsed, pbr.baseColorTexture.index, ctors);
                 if (tex) mat.map = tex;
+                else console.warn(TAG + ' textura base #' + pbr.baseColorTexture.index + ' del material "' + (matDef.name || '?') + '" no se pudo decodificar (queda blanco)');
             }
             if (pbr.baseColorFactor && 'color' in mat && mat.color?.setRGB) {
                 const [r, g, b, a] = pbr.baseColorFactor;
@@ -1053,6 +1172,7 @@
         const { json: gltf } = parsed;
         const Attr = ctors.BufferAttribute;
         const geo = new ctors.BufferGeometry();
+        let skinned = false;
         const pos = readAccessor(parsed, gltf.accessors[prim.attributes.POSITION]);
         geo.setAttribute('position', new Attr(pos, 3));
         if (prim.attributes.NORMAL != null) {
@@ -1067,6 +1187,33 @@
             const nComp = gltf.accessors[prim.attributes.COLOR_0].type === 'VEC4' ? 4 : 3;
             geo.setAttribute('color', new Attr(readAccessor(parsed, gltf.accessors[prim.attributes.COLOR_0]), nComp));
         }
+        // pesos de skin (skinned GLB): el TIPO del array de skinIndex debe
+        // calzar con lo que el shader del juego espera — se copia el tipo que
+        // usa el mesh del propio jugador (capturado en grabSkinCtors); si no
+        // está disponible se normaliza a Float32Array (vec4 float estándar
+        // de three). Uint16 crudo dispara GL_INVALID_OPERATION.
+        if (prim.attributes.JOINTS_0 != null && prim.attributes.WEIGHTS_0 != null) {
+            try {
+                const rawJ = readAccessor(parsed, gltf.accessors[prim.attributes.JOINTS_0]);
+                const rawW = readAccessor(parsed, gltf.accessors[prim.attributes.WEIGHTS_0]);
+                const wantC = state.skinCtors?.skinIndexCtor;
+                const wantN = state.skinCtors?.skinIndexNorm === true;
+                let jArr = rawJ;
+                if (wantC === Float32Array) jArr = new Float32Array(rawJ);
+                else if (wantC === Uint8Array) {
+                    let mx = 0;
+                    for (let i = 0; i < rawJ.length; i++) if (rawJ[i] > mx) mx = rawJ[i];
+                    if (mx <= 255) jArr = new Uint8Array(rawJ);   // >255 joints: queda Uint16
+                } else if (wantC !== Uint16Array) {
+                    jArr = new Float32Array(rawJ);
+                }
+                const jAttr = new Attr(jArr, 4);
+                if (wantN && 'normalized' in jAttr) jAttr.normalized = true;   // flag exacto del jugador
+                geo.setAttribute('skinIndex', jAttr);
+                geo.setAttribute('skinWeight', new Attr(rawW, 4));
+                skinned = true;
+            } catch {}
+        }
         if (prim.indices != null) {
             const idxAcc = gltf.accessors[prim.indices];
             const idx = readAccessor(parsed, idxAcc);
@@ -1077,7 +1224,444 @@
         if (!mat) return null;
         const mesh = new ctors.Mesh(geo, mat);
         try { (mesh.userData = mesh.userData || {}).__mfCM = true; } catch {}
+        if (skinned) mesh.userData.__mfRawSkin = true;
         return mesh;
+    }
+
+    // ── Skinning rígido (GLB skinned: leviathan FF7 y similares) ──────────
+    // three.SkinnedMesh no es alcanzable vía grabCtors, así que convertimos:
+    // cada triángulo se asigna al joint de mayor peso y su geometría (expresada
+    // en espacio LOCAL del joint vía inversa de su matrixWorld en bind pose)
+    // se cuelga del Group de ese joint — que las animaciones ya rotan. Para
+    // bestias de segmentos el resultado es prácticamente indistinguible.
+    function mat4Invert(e) {
+        const m = Array.from(e), inv = mat4Identity();
+        for (let col = 0; col < 4; col++) {
+            let piv = col, maxV = Math.abs(m[col * 4 + col]);
+            for (let r = col + 1; r < 4; r++) {
+                const v = Math.abs(m[col * 4 + r]);
+                if (v > maxV) { maxV = v; piv = r; }
+            }
+            if (maxV < 1e-12) return mat4Identity();
+            if (piv !== col) {
+                for (let c = 0; c < 4; c++) {
+                    let tmp = m[c * 4 + col]; m[c * 4 + col] = m[c * 4 + piv]; m[c * 4 + piv] = tmp;
+                    tmp = inv[c * 4 + col]; inv[c * 4 + col] = inv[c * 4 + piv]; inv[c * 4 + piv] = tmp;
+                }
+            }
+            const d = m[col * 4 + col];
+            for (let c = 0; c < 4; c++) { m[c * 4 + col] /= d; inv[c * 4 + col] /= d; }   // FILA col (índices col-major)
+            for (let r2 = 0; r2 < 4; r2++) {
+                if (r2 === col) continue;
+                const f = m[col * 4 + r2];
+                if (f === 0) continue;
+                for (let c = 0; c < 4; c++) { m[c * 4 + r2] -= f * m[c * 4 + col]; inv[c * 4 + r2] -= f * inv[c * 4 + col]; }
+            }
+        }
+        return inv;
+    }
+
+    // ── CPU skinning suave ─────────────────────────────────────────────────
+    // Pesos reales por vértice calculados en JS cada frame (fórmula estándar
+    // Σ w·(Mjoint·IBM·v)), escribiendo a un Mesh común. Cero shader, cero GL
+    // — imposible que el bone-texture del juego lo rompa. Viabilidad: solo
+    // hay UNA bestia skinned a la vez (~62k verts, y la mayoría de vértices
+    // tiene 2 influencias activas). Costuras del rígido: eliminadas.
+    // datos de cpu-skin por mesh. OJO: vive en WeakMap y NO en userData —
+    // Object3D.clone() hace JSON.parse(JSON.stringify(userData)) y eso
+    // aplasta Float32Array/refs a joints (dejaba los meshes "tiesos")
+    const cpuSkinData = new WeakMap();
+
+    function attachCpuSkin(parsed, gltf, sp, groups, ctors) {
+        const skinDef = gltf.skins?.[sp.skinIdx];
+        if (!skinDef?.joints?.length || skinDef.inverseBindMatrices == null) return false;
+        const joints = skinDef.joints.map((jn) => groups.get(jn));
+        if (joints.some((b) => !b)) return false;
+        const ibm = readAccessor(parsed, gltf.accessors[skinDef.inverseBindMatrices]);
+        if (!ibm || ibm.length < joints.length * 16) return false;
+        const geo = sp.mesh.geometry;
+        const posA = geo.attributes.position, norA = geo.attributes.normal, uvA = geo.attributes.uv;
+        const siA = geo.attributes.skinIndex, swA = geo.attributes.skinWeight;
+        if (!posA || !siA || !swA || !geo.index) return false;
+        const parent = sp.mesh.parent;
+        if (!parent) return false;
+        // geometría destino: copias PROPIAS de pos/nor (uv/índice compartidos,
+        // son de solo lectura)
+        const GeoC = geo.constructor, AttrC = posA.constructor;
+        const dGeo = new GeoC();
+        dGeo.setAttribute('position', new AttrC(new posA.array.constructor(posA.array), 3));
+        if (norA) dGeo.setAttribute('normal', new AttrC(new norA.array.constructor(norA.array), 3));
+        if (uvA) dGeo.setAttribute('uv', uvA);
+        dGeo.setIndex(geo.index);
+        const m2 = new ctors.Mesh(dGeo, sp.mesh.material);
+        m2.name = sp.mesh.name || 'cpuskinned';
+        try { (m2.userData = m2.userData || {}).__mfCM = true; } catch {}
+        // El rest del archivo ≠ bind de los IBM (verificado: error máx 32.9)
+        // → skinear con DELTA respecto al rest: en reposo delta=I y la malla
+        // queda EXACTA al buffer (modo palo); las anims suman rotación pura.
+        //   K_j = inv(P_actual) · worldCurrent_j · restIb_j
+        //   restIb_j = inv(worldRest_j) · P_rest   ← CONSTANTE, precalculado
+        // La inversa izquierda es del parent ACTUAL (se recalcula en cada
+        // frame) → el RootCur del spawn y el movimiento de la mascota se
+        // cancelan solos y quedan fuera de la delta.
+        const P_rest = parent.matrixWorld.elements;
+        const restIb = new Float64Array(joints.length * 16);
+        for (let j = 0; j < joints.length; j++) {
+            const ir = mat4Invert(joints[j].matrixWorld.elements);
+            const o = j * 16;
+            for (let c = 0; c < 4; c++) {
+                const a0 = ir[c * 4], a1 = ir[c * 4 + 1], a2 = ir[c * 4 + 2], a3 = ir[c * 4 + 3];
+                restIb[o + c * 4 + 0] = a0 * P_rest[0] + a1 * P_rest[4] + a2 * P_rest[8] + a3 * P_rest[12];
+                restIb[o + c * 4 + 1] = a0 * P_rest[1] + a1 * P_rest[5] + a2 * P_rest[9] + a3 * P_rest[13];
+                restIb[o + c * 4 + 2] = a0 * P_rest[2] + a1 * P_rest[6] + a2 * P_rest[10] + a3 * P_rest[14];
+                restIb[o + c * 4 + 3] = a0 * P_rest[3] + a1 * P_rest[7] + a2 * P_rest[11] + a3 * P_rest[15];
+            }
+        }
+        cpuSkinData.set(m2, {
+            joints, restIb,
+            srcPos: posA.array, srcNor: norA ? norA.array : null,
+            si: siA.array, sw: swA.array
+        });
+        // AUTOTEST en reposo (logs): K_j debe salir IDENTIDAD y una muestra
+        // de vértices skinneados debe caer sobre el buffer original. Verde →
+        // activar mf:cpuskin no toca el modo palo; rojo → deformación.
+        try {
+            const invP = mat4Invert(P_rest);
+            const Ks = new Float64Array(joints.length * 16);
+            const tmp = new Float64Array(16);
+            let kErr = 0;
+            for (let j = 0; j < joints.length; j++) {
+                const wj = joints[j].matrixWorld.elements, jo = j * 16;
+                for (let c = 0; c < 4; c++) {
+                    const b0 = invP[c * 4], b1 = invP[c * 4 + 1], b2 = invP[c * 4 + 2], b3 = invP[c * 4 + 3];
+                    tmp[c * 4] = b0 * wj[0] + b1 * wj[4] + b2 * wj[8] + b3 * wj[12];
+                    tmp[c * 4 + 1] = b0 * wj[1] + b1 * wj[5] + b2 * wj[9] + b3 * wj[13];
+                    tmp[c * 4 + 2] = b0 * wj[2] + b1 * wj[6] + b2 * wj[10] + b3 * wj[14];
+                    tmp[c * 4 + 3] = b0 * wj[3] + b1 * wj[7] + b2 * wj[11] + b3 * wj[15];
+                }
+                for (let c = 0; c < 4; c++) {
+                    const a0 = tmp[c * 4], a1 = tmp[c * 4 + 1], a2 = tmp[c * 4 + 2], a3 = tmp[c * 4 + 3];
+                    for (let r = 0; r < 4; r++) Ks[jo + c * 4 + r] = a0 * restIb[jo + r] + a1 * restIb[jo + 4 + r] + a2 * restIb[jo + 8 + r] + a3 * restIb[jo + 12 + r];
+                }
+                for (let e = 0; e < 16; e++) { const d = Math.abs(Ks[jo + e] - (e % 5 === 0 ? 1 : 0)); if (d > kErr) kErr = d; }
+            }
+            const nv = posA.array.length / 3;
+            let vErr = 0;
+            const step = Math.max(1, Math.floor(nv / 96));
+            for (let v = 0; v < nv; v += step) {
+                const px = posA.array[v * 3], py = posA.array[v * 3 + 1], pz = posA.array[v * 3 + 2];
+                let x = 0, y = 0, z = 0, wsum = 0;
+                for (let k = 0; k < 4; k++) {
+                    const w = swA.array[v * 4 + k];
+                    if (w <= 1e-4) continue;
+                    const o = siA.array[v * 4 + k] * 16;
+                    x += w * (Ks[o] * px + Ks[o + 4] * py + Ks[o + 8] * pz + Ks[o + 12]);
+                    y += w * (Ks[o + 1] * px + Ks[o + 5] * py + Ks[o + 9] * pz + Ks[o + 13]);
+                    z += w * (Ks[o + 2] * px + Ks[o + 6] * py + Ks[o + 10] * pz + Ks[o + 14]);
+                    wsum += w;
+                }
+                const e = Math.hypot(x - px, y - py, z - pz) / (wsum || 1);
+                if (e > vErr) vErr = e;
+            }
+            console.info(TAG + ' cpu-skin "' + (m2.name || '?') + '": ' + joints.length + ' joints, ' + nv + ' verts'
+                + ' — autotest reposo: K−I máx ' + kErr.toExponential(1) + ', verts máx ' + vErr.toFixed(4)
+                + (kErr < 1e-6 && vErr < 0.01 ? ' ✔ palo intacto' : ' ✘ DEFORMA EN REPOSO'));
+        } catch (e) { console.warn(TAG + ' autotest cpu-skin falló: ' + (e?.message || e)); }
+        m2.userData.__mfCpu = true;   // flag simple — sobrevive al JSON del clone
+        try { m2.frustumCulled = false; } catch {}
+        parent.add(m2);
+        parent.remove(sp.mesh);
+        return true;
+    }
+
+    // CPU skin dinámico opt-in: por defecto APAGADO (la bestia queda en bind
+    // pose estática — "modo palo", como pidió el usuario). Activar con
+    // localStorage['mf:cpuskin']='1'
+    let _cpuSkinOn = null;
+    function cpuSkinEnabled() {
+        if (_cpuSkinOn == null) {
+            try { _cpuSkinOn = /1|true/i.test(localStorage.getItem('mf:cpuskin') || ''); } catch { _cpuSkinOn = false; }
+        }
+        return _cpuSkinOn;
+    }
+
+    // scratch: M_j = invParentWorld(actual) · jointWorld(actual) · restIb_j
+    // (= delta de la animación respecto al rest; identidad en reposo)
+    const _csA = new Float64Array(16);
+    let _paloHintShown = false;
+    function updateCpuSkins(rec, force) {
+        if (!cpuSkinEnabled()) {
+            // modo palo: bind pose congelada. Aviso UNA vez para que quede
+            // claro en consola por qué no se anima (logs de diagnóstico)
+            if (!_paloHintShown) {
+                _paloHintShown = true;
+                console.info(TAG + ' CPU skin APAGADO (modo palo). Para animar: localStorage.setItem("mf:cpuskin","1") y recargar');
+            }
+            return;
+        }
+        const inst = rec.inst;
+        if (!inst?.cpuMeshes?.length || !inst.root) return;
+        // 30Hz: media resolución es imperceptible en una bestia gigante y
+        // deja la otra mitad de frames libres para el juego
+        rec._cpuTick = (rec._cpuTick || 0) + 1;
+        if (!force && rec._cpuTick % 2) return;
+        if (!rec._cpuOnLogged) {
+            rec._cpuOnLogged = true;
+            let verts = 0, jt = 0;
+            for (const m of inst.cpuMeshes) {
+                const cs = cpuSkinData.get(m);
+                verts += m.geometry.attributes.position?.count || 0;
+                if (cs) jt = Math.max(jt, cs.joints.length);
+            }
+            console.info(TAG + ' "' + rec.id + '" CPU skin ON: ' + inst.cpuMeshes.length + ' mesh(es), ' + jt + ' joints, ' + verts + ' verts — anim: "' + (rec.animOverride?.name || rec.anim || rec.curAnim || '—') + '"');
+        }
+        try { inst.root.updateMatrixWorld(true); } catch {}
+        for (const mesh of inst.cpuMeshes) {
+            if (!mesh.parent) continue;
+            const cs = cpuSkinData.get(mesh);
+            if (!cs) continue;
+            const pw = mesh.parent.matrixWorld.elements || mesh.parent.matrixWorld;
+            const invP = mat4Invert(pw);
+            const nj = cs.joints.length;
+            if (!cs._mj || cs._mj.length !== nj * 16) cs._mj = new Float64Array(nj * 16);
+            const mj = cs._mj, ib = cs.restIb;
+            for (let j = 0; j < nj; j++) {
+                const jt = cs.joints[j];
+                if (!jt) continue;
+                const wj = jt.matrixWorld.elements || jt.matrixWorld;
+                // _csA = invP · jointWorld
+                for (let c = 0; c < 4; c++) {
+                    const b0 = invP[c * 4], b1 = invP[c * 4 + 1], b2 = invP[c * 4 + 2], b3 = invP[c * 4 + 3];
+                    _csA[c * 4 + 0] = b0 * wj[0] + b1 * wj[4] + b2 * wj[8] + b3 * wj[12];
+                    _csA[c * 4 + 1] = b0 * wj[1] + b1 * wj[5] + b2 * wj[9] + b3 * wj[13];
+                    _csA[c * 4 + 2] = b0 * wj[2] + b1 * wj[6] + b2 * wj[10] + b3 * wj[14];
+                    _csA[c * 4 + 3] = b0 * wj[3] + b1 * wj[7] + b2 * wj[11] + b3 * wj[15];
+                }
+                // mj = _csA · restIb_j  (delta de la animación)
+                const jo = j * 16;
+                for (let c = 0; c < 4; c++) {
+                    const a0 = _csA[c * 4], a1 = _csA[c * 4 + 1], a2 = _csA[c * 4 + 2], a3 = _csA[c * 4 + 3];
+                    mj[jo + c * 4 + 0] = a0 * ib[jo + 0] + a1 * ib[jo + 4] + a2 * ib[jo + 8] + a3 * ib[jo + 12];
+                    mj[jo + c * 4 + 1] = a0 * ib[jo + 1] + a1 * ib[jo + 5] + a2 * ib[jo + 9] + a3 * ib[jo + 13];
+                    mj[jo + c * 4 + 2] = a0 * ib[jo + 2] + a1 * ib[jo + 6] + a2 * ib[jo + 10] + a3 * ib[jo + 14];
+                    mj[jo + c * 4 + 3] = a0 * ib[jo + 3] + a1 * ib[jo + 7] + a2 * ib[jo + 11] + a3 * ib[jo + 15];
+                }
+            }
+            const posA = mesh.geometry.attributes.position;
+            const norA = mesh.geometry.attributes.normal;
+            const dst = posA.array, src = cs.srcPos, si = cs.si, sw = cs.sw;
+            const nor = norA ? norA.array : null, srcN = cs.srcNor;
+            const n = dst.length / 3;
+            for (let v = 0; v < n; v++) {
+                const w0 = sw[v * 4], w1 = sw[v * 4 + 1], w2 = sw[v * 4 + 2], w3 = sw[v * 4 + 3];
+                const o0 = si[v * 4] * 16, o1 = si[v * 4 + 1] * 16, o2 = si[v * 4 + 2] * 16, o3 = si[v * 4 + 3] * 16;
+                const px = src[v * 3], py = src[v * 3 + 1], pz = src[v * 3 + 2];
+                let x = 0, y = 0, z = 0;
+                if (w0 > 1e-4) { x += w0 * (mj[o0] * px + mj[o0 + 4] * py + mj[o0 + 8] * pz + mj[o0 + 12]); y += w0 * (mj[o0 + 1] * px + mj[o0 + 5] * py + mj[o0 + 9] * pz + mj[o0 + 13]); z += w0 * (mj[o0 + 2] * px + mj[o0 + 6] * py + mj[o0 + 10] * pz + mj[o0 + 14]); }
+                if (w1 > 1e-4) { x += w1 * (mj[o1] * px + mj[o1 + 4] * py + mj[o1 + 8] * pz + mj[o1 + 12]); y += w1 * (mj[o1 + 1] * px + mj[o1 + 5] * py + mj[o1 + 9] * pz + mj[o1 + 13]); z += w1 * (mj[o1 + 2] * px + mj[o1 + 6] * py + mj[o1 + 10] * pz + mj[o1 + 14]); }
+                if (w2 > 1e-4) { x += w2 * (mj[o2] * px + mj[o2 + 4] * py + mj[o2 + 8] * pz + mj[o2 + 12]); y += w2 * (mj[o2 + 1] * px + mj[o2 + 5] * py + mj[o2 + 9] * pz + mj[o2 + 13]); z += w2 * (mj[o2 + 2] * px + mj[o2 + 6] * py + mj[o2 + 10] * pz + mj[o2 + 14]); }
+                if (w3 > 1e-4) { x += w3 * (mj[o3] * px + mj[o3 + 4] * py + mj[o3 + 8] * pz + mj[o3 + 12]); y += w3 * (mj[o3 + 1] * px + mj[o3 + 5] * py + mj[o3 + 9] * pz + mj[o3 + 13]); z += w3 * (mj[o3 + 2] * px + mj[o3 + 6] * py + mj[o3 + 10] * pz + mj[o3 + 14]); }
+                dst[v * 3] = x; dst[v * 3 + 1] = y; dst[v * 3 + 2] = z;
+                if (nor && srcN) {
+                    const nx0 = srcN[v * 3], ny0 = srcN[v * 3 + 1], nz0 = srcN[v * 3 + 2];
+                    let nx = 0, ny = 0, nz = 0;
+                    if (w0 > 1e-4) { nx += w0 * (mj[o0] * nx0 + mj[o0 + 4] * ny0 + mj[o0 + 8] * nz0); ny += w0 * (mj[o0 + 1] * nx0 + mj[o0 + 5] * ny0 + mj[o0 + 9] * nz0); nz += w0 * (mj[o0 + 2] * nx0 + mj[o0 + 6] * ny0 + mj[o0 + 10] * nz0); }
+                    if (w1 > 1e-4) { nx += w1 * (mj[o1] * nx0 + mj[o1 + 4] * ny0 + mj[o1 + 8] * nz0); ny += w1 * (mj[o1 + 1] * nx0 + mj[o1 + 5] * ny0 + mj[o1 + 9] * nz0); nz += w1 * (mj[o1 + 2] * nx0 + mj[o1 + 6] * ny0 + mj[o1 + 10] * nz0); }
+                    if (w2 > 1e-4) { nx += w2 * (mj[o2] * nx0 + mj[o2 + 4] * ny0 + mj[o2 + 8] * nz0); ny += w2 * (mj[o2 + 1] * nx0 + mj[o2 + 5] * ny0 + mj[o2 + 9] * nz0); nz += w2 * (mj[o2 + 2] * nx0 + mj[o2 + 6] * ny0 + mj[o2 + 10] * nz0); }
+                    if (w3 > 1e-4) { nx += w3 * (mj[o3] * nx0 + mj[o3 + 4] * ny0 + mj[o3 + 8] * nz0); ny += w3 * (mj[o3 + 1] * nx0 + mj[o3 + 5] * ny0 + mj[o3 + 9] * nz0); nz += w3 * (mj[o3 + 2] * nx0 + mj[o3 + 6] * ny0 + mj[o3 + 10] * nz0); }
+                    const l = Math.hypot(nx, ny, nz) || 1;
+                    nor[v * 3] = nx / l; nor[v * 3 + 1] = ny / l; nor[v * 3 + 2] = nz / l;
+                }
+            }
+            posA.needsUpdate = true;
+            if (norA) norA.needsUpdate = true;
+        }
+        // heartbeat de diagnóstico (cada 2s): métrica VISUAL — desplazamiento
+        // de vértices vs el buffer del palo (unidades de modelo) y el peor
+        // joint CON pesos. Un delta enorme en un joint SIN pesos es
+        // inofensivo; el nombre + |K_t| vs la posición del root delata si
+        // algo del runtime está metiendo coords de mundo en la skin matrix.
+        const nowMs = performance.now();
+        if (nowMs - (rec._cpuLogAt || 0) > 2000) {
+            rec._cpuLogAt = nowMs;
+            let vMax = 0, jMax = 0, jName = '—', usedMoving = 0, usedTotal = 0;
+            let anyMax = 0, anyName = '—', anyT = 0;
+            for (const m of inst.cpuMeshes) {
+                const cs = cpuSkinData.get(m);
+                if (!cs?._mj) continue;
+                const mj = cs._mj, nj = cs.joints.length;
+                if (!cs._used || cs._used.length !== nj) {   // joints con ≥1 peso
+                    cs._used = new Uint8Array(nj);
+                    for (let i = 0; i < cs.si.length; i++) {
+                        if (cs.sw[i] > 1e-4) cs._used[cs.si[i]] = 1;
+                    }
+                }
+                for (let j = 0; j < nj; j++) {
+                    const jo = j * 16;
+                    let dj = 0;
+                    for (let e = 0; e < 16; e++) {
+                        const d = Math.abs(mj[jo + e] - (e % 5 === 0 ? 1 : 0));
+                        if (d > dj) dj = d;
+                    }
+                    if (dj > anyMax) {
+                        anyMax = dj;
+                        anyName = cs.joints[j]?.name || ('#' + j);
+                        anyT = Math.hypot(mj[jo + 12], mj[jo + 13], mj[jo + 14]);
+                    }
+                    if (!cs._used[j]) continue;
+                    usedTotal++;
+                    if (dj > 0.001) usedMoving++;
+                    if (dj > jMax) { jMax = dj; jName = cs.joints[j]?.name || ('#' + j); }
+                }
+                // desplazamiento visual: muestreo vs el buffer del palo
+                const dst = m.geometry.attributes.position.array, src = cs.srcPos;
+                const nv = dst.length / 3;
+                const step = Math.max(1, Math.floor(nv / 96));
+                for (let v = 0; v < nv; v += step) {
+                    const d = Math.hypot(dst[v * 3] - src[v * 3], dst[v * 3 + 1] - src[v * 3 + 1], dst[v * 3 + 2] - src[v * 3 + 2]);
+                    if (d > vMax) vMax = d;
+                }
+            }
+            const an = rec.animOverride?.name || rec.anim || rec.curAnim || '—';
+            const rp = inst.root.position;
+            console.info(TAG + ' "' + rec.id + '" anim "' + an + '": ponderados ' + usedMoving + '/' + usedTotal
+                + ' peor "' + jName + '" ' + jMax.toFixed(2)
+                + ' | absoluto "' + anyName + '" ' + anyMax.toFixed(1) + ' |Kt| ' + anyT.toFixed(1)
+                + ' | verts máx ' + vMax.toFixed(2) + 'u | root (' + rp.x.toFixed(0) + ',' + rp.y.toFixed(0) + ',' + rp.z.toFixed(0) + ')'
+                + (vMax < 0.01 ? ' — NADA VISIBLE' : (vMax < 30 ? ' — animando ✔' : ' — ¡EXPLOTA!')));
+        }
+    }
+
+    // Skinning REAL (experimental, flag mf:realskin): bind() sin bindMatrix
+    // explícito llama skeleton.calculateInverses() que RECALCULA las
+    // boneInverses desde el rest pose — destruiría los IBM del glTF. Por eso
+    // pasamos bindMatrix explícito. Construye todo ANTES de tocar la
+    // jerarquía: si algo explota, el mesh original queda intacto para el
+    // fallback CPU/rígido.
+    function attachRealSkin(parsed, gltf, sp, groups, skinCtors) {
+        const skinDef = gltf.skins?.[sp.skinIdx];
+        if (!skinDef?.joints?.length) return false;
+        const bones = skinDef.joints.map((jn) => groups.get(jn));
+        if (bones.some((b) => !b)) return false;
+        if (skinDef.inverseBindMatrices == null) return false;   // sin IBM → rigid
+        const ibm = readAccessor(parsed, gltf.accessors[skinDef.inverseBindMatrices]);
+        if (!ibm || ibm.length < bones.length * 16) return false;
+        const M4 = bones[0].matrix.constructor;
+        const boneInverses = [];
+        for (let i = 0; i < bones.length; i++) boneInverses.push(new M4().fromArray(ibm, i * 16));
+        const skel = new skinCtors.Skeleton(bones, boneInverses);
+        const parent = sp.mesh.parent;
+        if (!parent) return false;
+        const sm = new skinCtors.SkinnedMesh(sp.mesh.geometry, sp.mesh.material);
+        sm.name = sp.mesh.name || 'skinned';
+        try { (sm.userData = sm.userData || {}).__mfCM = true; } catch {}
+        try { sm.normalizeSkinWeights(); } catch {}
+        try { sm.frustumCulled = false; } catch {}   // el bounding no sigue a los huesos
+        try {
+            const m = sm.material;
+            for (const mm of Array.isArray(m) ? m : [m]) {
+                if (!mm) continue;
+                try { mm.skinning = true; } catch {}   // three < r131
+                mm.needsUpdate = true;
+            }
+        } catch {}
+        try { sm.updateMatrixWorld(true); } catch {}
+        try { sm.bind(skel, sm.matrixWorld); } catch (e) {
+            console.warn(TAG + ' skinning real falló en bind(): ' + (e?.message || e));
+            return false;
+        }
+        // recién ahora, con todo listo, se swapea en la jerarquía
+        parent.add(sm);
+        parent.remove(sp.mesh);
+        console.log(TAG + ' skinning REAL: ' + bones.length + ' bones, IBM del GLB ✔');
+        return true;
+    }
+
+    function attachRigidSkin(parsed, gltf, sp, groups, ctors) {
+        const skinDef = gltf.skins?.[sp.skinIdx];
+        if (!skinDef?.joints?.length) return false;
+        const jgs = skinDef.joints.map((jn) => groups.get(jn));
+        if (jgs.some((g) => !g)) return false;
+        const geo = sp.mesh.geometry;
+        const posA = geo.attributes.position, norA = geo.attributes.normal, uvA = geo.attributes.uv;
+        const siA = geo.attributes.skinIndex, swA = geo.attributes.skinWeight;
+        if (!posA || !siA || !swA || !geo.index) return false;
+        const pos = posA.array, nor = norA?.array || null, uv = uvA?.array || null;
+        const si = siA.array, sw = swA.array, idx = geo.index.array;
+        // inverseBindMatrices del skin = bind pose REAL del exportador. La
+        // inversa de matrixWorld solo coincide si el rest pose del GLB es la
+        // bind pose — en GLBs de Sketchfab/FF7 no lo es y la geometría salía
+        // triturada. Fallback a matrixWorld solo si el accessor no existe.
+        let invs = null;
+        if (skinDef.inverseBindMatrices != null) {
+            try {
+                const ibm = readAccessor(parsed, gltf.accessors[skinDef.inverseBindMatrices]);
+                if (ibm && ibm.length >= jgs.length * 16) {
+                    invs = [];
+                    for (let j = 0; j < jgs.length; j++) invs.push(Array.from(ibm.slice(j * 16, j * 16 + 16)));
+                }
+            } catch {}
+        }
+        if (!invs) invs = jgs.map((g) => mat4Invert(g.matrixWorld.elements));
+        const buckets = jgs.map(() => ({ pos: [], nor: [], uv: [], idx: [], map: new Map() }));
+        for (let t = 0; t < idx.length; t += 3) {
+            // joint del PESO INDIVIDUAL máximo del triángulo (no la suma: la
+            // suma favorece al joint padre presente con peso medio en los 3
+            // vértices y manda triángulos de costura al segmento equivocado)
+            let bj = -1, bw = 0;
+            for (let k = 0; k < 3; k++) {
+                const v = idx[t + k];
+                for (let c = 0; c < 4; c++) {
+                    const w = sw[v * 4 + c];
+                    if (w > bw) { bw = w; bj = si[v * 4 + c]; }
+                }
+            }
+            if (bj < 0 || !buckets[bj]) continue;
+            const bk = buckets[bj], M = invs[bj];
+            for (let k = 0; k < 3; k++) {
+                const v = idx[t + k];
+                let li = bk.map.get(v);
+                if (li == null) {
+                    const x = pos[v * 3], y = pos[v * 3 + 1], z = pos[v * 3 + 2];
+                    li = bk.pos.length / 3;
+                    bk.pos.push(M[0] * x + M[4] * y + M[8] * z + M[12],
+                                M[1] * x + M[5] * y + M[9] * z + M[13],
+                                M[2] * x + M[6] * y + M[10] * z + M[14]);
+                    if (nor) {
+                        const nx = nor[v * 3], ny = nor[v * 3 + 1], nz = nor[v * 3 + 2];
+                        const ox = M[0] * nx + M[4] * ny + M[8] * nz;
+                        const oy = M[1] * nx + M[5] * ny + M[9] * nz;
+                        const oz = M[2] * nx + M[6] * ny + M[10] * nz;
+                        const l = Math.hypot(ox, oy, oz) || 1;
+                        bk.nor.push(ox / l, oy / l, oz / l);
+                    }
+                    if (uv) bk.uv.push(uv[v * 2], uv[v * 2 + 1]);
+                    bk.map.set(v, li);
+                }
+                bk.idx.push(li);
+            }
+        }
+        const GeoC = geo.constructor, AttrC = posA.constructor, MeshC = sp.mesh.constructor;
+        let added = 0;
+        const matHasMap = !!(sp.mesh.material && sp.mesh.material.map);
+        for (let j = 0; j < buckets.length; j++) {
+            const bk = buckets[j];
+            if (!bk.idx.length) continue;
+            const g2 = new GeoC();
+            g2.setAttribute('position', new AttrC(new Float32Array(bk.pos), 3));
+            if (bk.nor.length) g2.setAttribute('normal', new AttrC(new Float32Array(bk.nor), 3));
+            if (bk.uv.length) g2.setAttribute('uv', new AttrC(new Float32Array(bk.uv), 2));
+            g2.setIndex(new AttrC(new Uint32Array(bk.idx), 1));
+            const m2 = new MeshC(g2, sp.mesh.material);
+            try { (m2.userData = m2.userData || {}).__mfCM = true; } catch {}
+            jgs[j].add(m2);
+            added++;
+        }
+        if (added) sp.mesh.parent?.remove(sp.mesh);   // el skinned original fuera
+        // diagnóstico: la consola cuenta fragmentos y si el material quedó sin map
+        console.log(TAG + ' rigid skin mesh[' + sp.skinIdx + '] tris=' + (idx.length / 3 | 0) +
+            ' → ' + added + ' fragmentos' + (matHasMap ? '' : ' ⚠ MATERIAL SIN TEXTURA'));
+        return added > 0;
     }
 
     async function buildScene(parsed, ctors, fallbackMat) {
@@ -1086,6 +1670,7 @@
         
         try { (root.userData = root.userData || {}).__mfCM = true; } catch {}
         const groups = new Map();
+        const skinPending = [];   // meshes skinned → partirlos tras el walk
         const min = [Infinity, Infinity, Infinity];
         const max = [-Infinity, -Infinity, -Infinity];
 
@@ -1093,8 +1678,10 @@
             const node = gltf.nodes?.[idx];
             if (!node) return;
             const worldMat = mat4Mul(parentMat, nodeMatrix(node));
-            const g = new ctors.Group();
+            // joints de skins → Bone real (para SkinnedMesh); el resto Group
+            const g = (skinCtors && jointIdx.has(idx)) ? new skinCtors.Bone() : new ctors.Group();
             try { (g.userData = g.userData || {}).__mfCM = true; } catch {}
+            if (node.name) g.name = node.name;   // nombre del bone (boneOf/procAnim)
             groups.set(idx, g);
             if (node.matrix) {
                 const m = node.matrix;
@@ -1116,7 +1703,10 @@
                 for (const prim of meshDef.primitives || []) {
                     if (prim.mode != null && prim.mode !== 4) continue;
                     const built = await buildPrimitive(parsed, prim, ctors, fallbackMat);
-                    if (built) g.add(built);
+                    if (built) {
+                        g.add(built);
+                        if (node.skin != null && built.userData?.__mfRawSkin) skinPending.push({ mesh: built, skinIdx: node.skin });
+                    }
                     const posAcc = gltf.accessors[prim.attributes.POSITION];
                     if (posAcc) {
                         const pos = readAccessor(parsed, posAcc);
@@ -1136,7 +1726,36 @@
         }
 
         const sceneIdx = gltf.scene ?? 0;
+
+        // set de joints (antes del walk: los nodos joint se crean como Bone).
+        // Skinning REAL experimental: el shader del juego usa bone-texture
+        // (r151+) y tira GL_INVALID_OPERATION con atributos — solo activarlo
+        // a mano con localStorage['mf:realskin']='1'. Por defecto: rígido
+        // (que con los IBM reales + peso máximo ya calza bien).
+        const skinCtors = (() => {
+            try { return /1|true/i.test(localStorage.getItem('mf:realskin') || '') ? grabSkinCtors() : null; }
+            catch { return null; }
+        })();
+        const jointIdx = new Set();
+        for (const n of gltf.nodes || []) {
+            if (n.skin != null) for (const jn of gltf.skins?.[n.skin]?.joints || []) jointIdx.add(jn);
+        }
+
         for (const n of gltf.scenes?.[sceneIdx]?.nodes || []) await addNode(n, root, mat4Identity());
+
+        // Skinning post-walk: los joints existen como Groups/Bones con su
+        // matrixWorld de reposo. Orden: real (flag experimental) → CPU suave
+        // (default: pesos reales, imposible de romper por el shader) → rígido
+        // (último recurso sin IBM)
+        if (skinPending.length) {
+            try { root.updateMatrixWorld(true); } catch {}
+            for (const sp of skinPending) {
+                let ok = false;
+                if (skinCtors) { try { ok = attachRealSkin(parsed, gltf, sp, groups, skinCtors); } catch (e) { console.warn(TAG + ' skinning real explotó: ' + (e?.message || e)); } }
+                if (!ok) { try { ok = attachCpuSkin(parsed, gltf, sp, groups, ctors); } catch (e) { console.warn(TAG + ' cpu skin explotó: ' + (e?.message || e)); } }
+                if (!ok) { try { attachRigidSkin(parsed, gltf, sp, groups, ctors); } catch {} }
+            }
+        }
 
         const height = max[1] - min[1];
         const anims = buildAnimTracks(parsed);
@@ -1168,20 +1787,23 @@
                     pendingFetches.delete(nonce);
                     reject(new Error('timeout esperando al puente de modelos'));
                 }
-            }, 8000);
+            }, /\.glb$/i.test(file) ? 45000 : 8000);   // GLB pesado (leviathan 94MB): 45s
         });
     }
 
     async function fetchModelArrayBuffer(file) {
         if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
-            
             const url = chrome.runtime.getURL('models/entities/' + file);
             let resp;
             try {
                 resp = await fetch(url, { cache: 'reload' });
             } catch (e) {
-                
-                throw new Error('no se encontro "' + file + '" en models/entities/ (fetch ' + (e?.message || e) + ')');
+                const msg = String(e?.message || e);
+                if (/Extension context invalidated/i.test(msg)) {
+                    console.warn(TAG + ' la extensión se recargó pero la página no: hacé F5 en miniblox.io para que los modelos vuelvan a cargar.');
+                    throw new Error('contexto de extensión invalidado — recargá la página (F5)');
+                }
+                throw new Error('no se encontro "' + file + '" en models/entities/ (fetch ' + msg + ')');
             }
             if (!resp.ok) throw new Error('HTTP ' + resp.status + ' para ' + file);
             return resp.arrayBuffer();
@@ -1266,14 +1888,37 @@
         function buildCube(cube, pivot) {
             const pos = [], nor = [], uvs = [], idx = [];
             let vi = 0;
+            // Rotación del cube alrededor de su propio pivot (misma convención
+            // Bedrock→three que bones/animaciones) — la cabeza del grimmchild
+            // son 9 cubes girados a ±45°/±90°, sin esto queda un desorden
+            let rm = null, rp = null;
+            if (Array.isArray(cube.rotation) && cube.rotation.some((r) => r)) {
+                const q = deg2quat(cube.rotation[0], cube.rotation[1], cube.rotation[2]);
+                const qx = q[0], qy = q[1], qz = q[2], qw = q[3];
+                rm = [
+                    1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy + qw * qz), 2 * (qx * qz - qw * qy),
+                    2 * (qx * qy - qw * qz), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz + qw * qx),
+                    2 * (qx * qz + qw * qy), 2 * (qy * qz - qw * qx), 1 - 2 * (qx * qx + qy * qy)
+                ];
+                rp = cube.pivot || [0, 0, 0];
+            }
             for (const q of faceQuads(cube)) {
                 const [ru, rv, rw, rh] = q.reg;
                 const corners = [q.tl, q.bl, q.br, q.tr];
                 const uvc = [[ru, rv], [ru, rv + rh], [ru + rw, rv + rh], [ru + rw, rv]];
                 for (let i = 0; i < 4; i++) {
-                    const c = corners[i];
+                    let c = corners[i], n = q.n;
+                    if (rm) {
+                        const dx = c[0] - rp[0], dy = c[1] - rp[1], dz = c[2] - rp[2];
+                        c = [rp[0] + rm[0] * dx + rm[1] * dy + rm[2] * dz,
+                             rp[1] + rm[3] * dx + rm[4] * dy + rm[5] * dz,
+                             rp[2] + rm[6] * dx + rm[7] * dy + rm[8] * dz];
+                        n = [rm[0] * n[0] + rm[1] * n[1] + rm[2] * n[2],
+                             rm[3] * n[0] + rm[4] * n[1] + rm[5] * n[2],
+                             rm[6] * n[0] + rm[7] * n[1] + rm[8] * n[2]];
+                    }
                     pos.push((c[0] - pivot[0]) * S, (c[1] - pivot[1]) * S, (c[2] - pivot[2]) * S);
-                    nor.push(q.n[0], q.n[1], q.n[2]);
+                    nor.push(n[0], n[1], n[2]);
                     uvs.push(uvc[i][0] / TW, uvc[i][1] / TH);
                 }
                 idx.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
@@ -1764,6 +2409,7 @@
             }
             if (tracks.length) anims.push({ name: a.name || ('anim' + anims.length), duration, tracks });
         }
+        if (anims.length) console.info(TAG + ' anims: ' + anims.map((a) => '"' + a.name + '" ' + a.tracks.length + 'tr/' + a.duration.toFixed(2) + 's').join(', '));
         return anims;
     }
 
@@ -1786,6 +2432,53 @@
             const n = map.get(g);
             if (n) groups.set(idx, n);
         }
+
+        // SkinnedMesh clonados: Object3D.copy comparte el skeleton ORIGINAL
+        // (apunta a los bones del prototipo), pero las anims rotan los bones
+        // de ESTE clon → re-bindear con los bones mapeados por el clon
+        try {
+            root2.traverse((o) => {
+                if (o.isSkinnedMesh !== true || !o.skeleton) return;
+                const src = o.skeleton;
+                if (src.bones.some((b) => !map.has(b))) return;   // skeleton ya mapeado
+                const mapped = src.bones.map((b) => map.get(b));
+                const ns = new (src.constructor)(mapped, src.boneInverses);
+                o.bind(ns, o.bindMatrix);
+            });
+        } catch {}
+
+        // CPU skin clonados: cada clon necesita SU geometría destino (el
+        // clone comparte la del prototipo) y sus joints remapeados a los
+        // bones del clon. Los datos pesados vienen del WeakMap del prototipo
+        // (userData no sobrevive al JSON del clone — solo el flag)
+        const cpuMeshes = [];
+        try {
+            const rev = new Map();                       // clon → prototipo
+            for (const [k, v] of map) rev.set(v, k);
+            root2.traverse((o) => {
+                if (o.isMesh !== true || o.userData?.__mfCpu !== true) return;
+                const orig = rev.get(o);
+                const cs = orig ? cpuSkinData.get(orig) : null;
+                if (!cs) return;
+                const geo = o.geometry;
+                const nGeo = new (geo.constructor)();
+                const AttrC = geo.attributes.position.constructor;
+                const P = geo.attributes.position.array.constructor;
+                nGeo.setAttribute('position', new AttrC(new P(geo.attributes.position.array), 3));
+                if (geo.attributes.normal) {
+                    nGeo.setAttribute('normal', new AttrC(new P(geo.attributes.normal.array), 3));
+                }
+                if (geo.attributes.uv) nGeo.setAttribute('uv', geo.attributes.uv);   // solo lectura
+                if (geo.index) nGeo.setIndex(geo.index);                             // solo lectura
+                o.geometry = nGeo;
+                cpuSkinData.set(o, {
+                    joints: cs.joints.map((b) => map.get(b) || b),
+                    restIb: cs.restIb, srcPos: cs.srcPos, srcNor: cs.srcNor,
+                    si: cs.si, sw: cs.sw
+                });
+                cpuMeshes.push(o);
+            });
+        } catch (e) { console.warn(TAG + ' cpu-skin clone falló: ' + (e?.message || e)); }
         
         let headNode = null;
         try {
@@ -1801,7 +2494,7 @@
             rest.push({ g, p: g.position.clone(), q: g.quaternion.clone(), s: g.scale.clone() });
             restScale.set(g, g.scale.clone());
         }
-        return { root: root2, height: built.height, minY: built.minY, groups, anims: built.anims, rest, restScale, headNode, dbg: new Set() };
+        return { root: root2, height: built.height, minY: built.minY, groups, anims: built.anims, rest, restScale, headNode, dbg: new Set(), cpuMeshes };
     }
 
     function restoreRest(inst) {
@@ -1820,9 +2513,10 @@
             if (anim.holdOnLast && t > anim.duration) t = anim.duration - 0.0001;
             else t = t % anim.duration;
         } else t = 0;
+        let missing = 0;
         for (const tr of anim.tracks) {
             const g = inst.groups.get(tr.nodeIdx);
-            if (!g) continue;
+            if (!g) { missing++; continue; }
             const { times, values, comps } = tr;
             let i = 0;
             while (i < times.length - 1 && times[i + 1] <= t) i++;
@@ -1867,6 +2561,10 @@
                     }
                 }
             }
+        }
+        if (missing && !inst.dbg.has('animmiss' + animName)) {
+            inst.dbg.add('animmiss' + animName);
+            console.warn(TAG + ' anim "' + animName + '": ' + missing + '/' + anim.tracks.length + ' tracks sin nodo destino (esos huesos no se animan)');
         }
         return true;
     }
@@ -2649,6 +3347,10 @@
                                 }
                             } catch {}
                         }
+                        // esta rama hace `continue` y se salta el cpu-skin de
+                        // abajo → skinnear aquí también (no-op sin cpu meshes)
+                        if (rec.inst?.cpuMeshes?.length) updateCpuSkins(rec);
+                        if (rec.procAnim) { try { rec.procAnim(t, dt); } catch {} }
                         continue;
                     }
                 }
@@ -2659,6 +3361,15 @@
                 if (rec.anim && rec.inst) {
                     restoreRest(rec.inst);
                     sampleAnim(rec.inst, rec.anim, (t - rec.animStart) / 1000 * rec.animSpeed);
+                }
+                // CPU skinning: tras sampleAnim los joints ya tienen la pose
+                // del frame → recalcular vértices suavemente en JS
+                if (rec.inst?.cpuMeshes?.length) updateCpuSkins(rec);
+                // hook procedural: corre DESPUÉS de sampleAnim para que módulos
+                // externos (p.ej. columna serpenteante de AllayPets) puedan
+                // sobreescribir bones con dinámica reactiva al movimiento real
+                if (rec.procAnim) {
+                    try { rec.procAnim(t, dt); } catch {}
                 }
             } catch {}
         }

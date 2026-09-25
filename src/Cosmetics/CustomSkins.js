@@ -1430,6 +1430,11 @@
         function atlasSwap(atlas, rep) {
             if (!atlas || !rep) return null;
             if (!rep.complete || !rep.naturalWidth) return null;
+            // Atlas a 0x0: el engine redimensiona su canvas al reconstruirlo —
+            // un canvas swap de 0x0 hace que WebGL tire INVALID_VALUE (bad
+            // image data) al subirlo. Pasar de largo y esperar el próximo
+            // upload con el atlas ya dimensionado.
+            if (!atlas.width || !atlas.height) return null;
             var cached = atlasSwapCache.get(atlas);
             if (cached && cached.__mfEpoch === paintEpoch) return cached;
             try {
@@ -1545,6 +1550,26 @@
         // la custom aún no cargó. mode: 'img' (texImage2D 6-arg) o 'sub'
         // (texSubImage2D — WebGL2/three.js usa texStorage2D + texSubImage2D
         // para texturas inmutables: la subida con fuente va por ACÁ).
+        // Dimensiones "de datos" de un TexImageSource (canvas: width/height,
+        // imagen: naturalWidth/naturalHeight). null si no se puede leer.
+        function srcSizeOf(s) {
+            if (!s) return null;
+            if (s instanceof HTMLCanvasElement) {
+                return (s.width > 0 && s.height > 0) ? [s.width, s.height] : null;
+            }
+            var w = s.videoWidth || s.naturalWidth || s.width;
+            var h = s.videoHeight || s.naturalHeight || s.height;
+            return (w > 0 && h > 0) ? [w, h] : null;
+        }
+
+        // true solo si ambos tienen dimensiones válidas e IDÉNTICAS —
+        // requisito para subir swap sobre una textura alocada al tamaño
+        // del source (texStorage2D inmutable no se re-alloc).
+        function srcSizeEquals(a, b) {
+            var sa = srcSizeOf(a), sb = srcSizeOf(b);
+            return !!(sa && sb && sa[0] === sb[0] && sa[1] === sb[1]);
+        }
+
         function swapSourceFor(glCtx, src) {
             var entry = entryForLocalPlayer();
             var url = entry && resolveSkinImageUrl(entry);
@@ -1673,7 +1698,11 @@
                                 (src instanceof HTMLCanvasElement && skinAtlasInfo.has(src)));
                             if (inDoll && isSkin) {
                                 var swap = swapSourceFor(this, src);
-                                if (swap) {
+                                // El swap debe calzar EXACTO con el tamaño del
+                                // source original: textura alocada por texStorage2D
+                                // al tamaño del source — un swap de otro tamaño
+                                // dispara INVALID_VALUE en el upload.
+                                if (swap && srcSizeEquals(swap, src)) {
                                     dollLog('doll: swap texImage2D', cvs.width + 'x' + cvs.height,
                                             src instanceof HTMLCanvasElement ? 'atlas' : 'img');
                                     args[5] = swap;
@@ -1702,7 +1731,10 @@
                                 (src instanceof HTMLCanvasElement && skinAtlasInfo.has(src)));
                             if (inDoll && isSkin) {
                                 var swap = swapSourceFor(this, src);
-                                if (swap) {
+                                // Mismo guard que texImage2D: dimensiones del
+                                // swap == dimensiones del source. Un canvas 0x0
+                                // o de otro tamaño = "bad image data".
+                                if (swap && srcSizeEquals(swap, src)) {
                                     dollLog('doll: swap texSubImage2D', cvs.width + 'x' + cvs.height,
                                             src instanceof HTMLCanvasElement ? 'atlas' : 'img');
                                     args[6] = swap;

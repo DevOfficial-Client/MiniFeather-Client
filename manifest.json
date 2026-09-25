@@ -155,6 +155,7 @@
         "src/Cosmetics/CustomModels.js",
         "src/Render/DuckMobs.js",
         "src/Render/CrittersMobs.js",
+        "src/Render/AllayPets.js",
         "src/AI/VerityAI.js",
         "src/Studio/MF_Peer.js",
         "src/Shaders/CustomShader.js",

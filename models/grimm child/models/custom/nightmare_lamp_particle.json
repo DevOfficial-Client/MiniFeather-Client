@@ -1,0 +1,7 @@
+
+{
+  "parent": "tgt:displaysettings/nightmarelamp",
+  "textures": {
+    "particle": "tgt:block/nlamp"
+  }
+}
