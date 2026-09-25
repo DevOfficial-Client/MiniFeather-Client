@@ -4,6 +4,8 @@
   const GLOBAL_KEY = 'MF_IDLE_PLAYER_BOT';
   const COMMAND_EVENT = 'minifeather:idle-player-command';
   const STATE_EVENT = 'minifeather:idle-player-state';
+  const MAX_BOTS = 10;
+  const MAX_RETRIES = 2;
   const API_PATH = '/auth-api/launch/invite_code';
   const SERVER_DOMAIN = 'coolmathblox.ca';
   const FALLBACK_VERSION = '3.46.229';
@@ -82,13 +84,16 @@
     const previous = globalThis[GLOBAL_KEY];
     const snapshot = previous?.status?.();
     const isLive = snapshot && !['idle', 'error'].includes(snapshot.phase);
-    if (isLive) {
+    if (isLive && previous?.multiBotVersion === 3) {
       document.dispatchEvent(new CustomEvent(STATE_EVENT, { detail: JSON.stringify(snapshot) }));
       return;
     }
     previous?.destroy?.();
   } catch (_) {}
 
+  const usedGuestNames = new Set();
+
+  function createBotSession(botId, notifyManager) {
   const textEncoder = new TextEncoder();
   const textDecoder = new TextDecoder();
   const state = {
@@ -119,6 +124,9 @@
     analyticsTimer: 0,
     respawnTimer: 0,
     lastConnectAt: 0,
+    retryCount: 0,
+    retryTarget: 'current',
+    retryTimer: 0,
     compressedIgnored: 0,
     brotliBackend: ''
   };
@@ -666,11 +674,15 @@
 
   function publicState() {
     return {
+      id: botId,
       phase: state.phase,
       message: state.message,
       error: state.error,
       connected: state.joined,
       serverId: state.serverId,
+      requestedUuid: state.requestedUuid,
+      retryCount: state.retryCount,
+      maxRetries: MAX_RETRIES,
       playerUuid: state.playerUuid,
       playerName: state.playerName,
       clientVersion: state.protocol?.version || '',
@@ -680,7 +692,7 @@
   }
 
   function emitState() {
-    document.dispatchEvent(new CustomEvent(STATE_EVENT, { detail: JSON.stringify(publicState()) }));
+    notifyManager();
   }
 
   function setPhase(phase, message = '', error = '') {
@@ -704,15 +716,22 @@
     // This pair is part of Miniblox's current public guest-name vocabulary.
     // The four random letters keep each ephemeral connection distinct while
     // preserving the format validated by the game server.
-    let suffix = '';
     const letters = 'abcdefghijklmnopqrstuvwxyz';
-    const bytes = new Uint8Array(4);
-    crypto.getRandomValues(bytes);
-    for (const byte of bytes) {
-      const letter = letters[byte % letters.length];
-      suffix += byte & 1 ? letter.toUpperCase() : letter;
+    for (let attempt = 0; attempt < 32; attempt++) {
+      let suffix = '';
+      const bytes = new Uint8Array(4);
+      crypto.getRandomValues(bytes);
+      for (const byte of bytes) {
+        const letter = letters[byte % letters.length];
+        suffix += byte & 1 ? letter.toUpperCase() : letter;
+      }
+      const name = `ShyLeopard.${suffix}`;
+      if (!usedGuestNames.has(name)) {
+        usedGuestNames.add(name);
+        return name;
+      }
     }
-    return `ShyLeopard.${suffix}`;
+    throw new Error('Could not reserve a unique guest name.');
   }
 
   function isGame(value) {
@@ -948,11 +967,13 @@
     clearInterval(state.pingTimer);
     clearInterval(state.analyticsTimer);
     clearTimeout(state.respawnTimer);
+    clearTimeout(state.retryTimer);
     state.joinTimeout = 0;
     state.movementTimer = 0;
     state.pingTimer = 0;
     state.analyticsTimer = 0;
     state.respawnTimer = 0;
+    state.retryTimer = 0;
   }
 
   function handleJoinGame(fields) {
@@ -974,6 +995,7 @@
     }
     clearTimeout(state.joinTimeout);
     state.joinTimeout = 0;
+    state.retryCount = 0;
     startTimers();
     setPhase('connected');
   }
@@ -1152,11 +1174,22 @@
   }
 
   function fail(error) {
+    if (state.manualStop || state.phase === 'retrying' || state.phase === 'error') return;
     const message = String(error?.message || error || 'Unknown connection error.');
     console.warn('[MiniFeather Idle Player]', message);
     state.operation += 1;
     resetConnectionState();
-    setPhase('error', '', message);
+    if (!state.manualStop && state.retryCount < MAX_RETRIES) {
+      const attempt = ++state.retryCount;
+      const target = state.serverId || state.retryTarget;
+      setPhase('retrying', '', message);
+      state.retryTimer = window.setTimeout(() => {
+        state.retryTimer = 0;
+        if (!state.manualStop) return connect(target, { retry: true }).catch(() => {});
+      }, attempt * 1000);
+    } else {
+      setPhase('error', '', message);
+    }
   }
 
   async function connect(target = 'current', options = {}) {
@@ -1170,13 +1203,18 @@
       }
     }
     const now = Date.now();
-    if (!options.transfer && now - state.lastConnectAt < 1500) {
+    if (!options.transfer && !options.retry && now - state.lastConnectAt < 1500) {
       throw new Error('Wait a moment before reconnecting.');
     }
     state.lastConnectAt = now;
+    if (!options.retry) {
+      state.retryCount = 0;
+      state.retryTarget = target;
+    }
     const operation = ++state.operation;
     state.manualStop = false;
     resetConnectionState();
+    state.serverId = '';
     setPhase('resolving');
     try {
       const serverId = await resolveTarget(target);
@@ -1206,7 +1244,7 @@
         stopTimers();
         state.joined = false;
         if (state.manualStop || event.code === 1000) setPhase('idle');
-        else setPhase('error', '', `Connection closed (${event.code || 'unknown'}).`);
+        else fail(`Connection closed (${event.code || 'unknown'}).`);
       });
       state.joinTimeout = window.setTimeout(() => {
         if (operation === state.operation && !state.joined) fail('Timed out while joining the server.');
@@ -1227,6 +1265,80 @@
     return publicState();
   }
 
+  return { connect, disconnect, status: publicState };
+  }
+
+  const bots = new Map();
+  let nextBotId = 1;
+  let managerError = '';
+
+  function publicState() {
+    const sessions = [...bots.values()].map(bot => bot.status());
+    const connectedCount = sessions.filter(bot => bot.connected).length;
+    const pending = sessions.find(bot => !['idle', 'error', 'connected'].includes(bot.phase));
+    const latest = sessions[sessions.length - 1];
+    return {
+      phase: connectedCount ? 'connected' : pending?.phase || latest?.phase || 'idle',
+      connected: connectedCount > 0,
+      connectedCount,
+      maxBots: MAX_BOTS,
+      bots: sessions,
+      playerName: latest?.playerName || '',
+      serverId: latest?.serverId || '',
+      error: managerError || latest?.error || ''
+    };
+  }
+
+  function emitState() {
+    document.dispatchEvent(new CustomEvent(STATE_EVENT, { detail: JSON.stringify(publicState()) }));
+  }
+
+  async function connect(target = 'current') {
+    if (bots.size >= MAX_BOTS) {
+      const retired = [...bots].find(([, bot]) => ['idle', 'error'].includes(bot.status().phase));
+      if (retired) disconnect(retired[0]);
+    }
+    if (bots.size >= MAX_BOTS) {
+      managerError = `Maximum ${MAX_BOTS} bots. Disconnect one before adding another.`;
+      emitState();
+      return publicState();
+    }
+    managerError = '';
+    const id = `bot-${nextBotId++}`;
+    const bot = createBotSession(id, emitState);
+    bots.set(id, bot);
+    emitState();
+    await bot.connect(target);
+    return publicState();
+  }
+
+  async function syncCount(count, target = 'current') {
+    const desired = Math.max(1, Math.min(MAX_BOTS, Math.round(Number(count) || 1)));
+    for (const [id, bot] of [...bots]) {
+      if (['idle', 'error'].includes(bot.status().phase)) disconnect(id);
+    }
+    while (bots.size > desired) disconnect([...bots.keys()].at(-1));
+    const pending = [];
+    while (bots.size < desired) pending.push(connect(target));
+    await Promise.allSettled(pending);
+    return publicState();
+  }
+
+  function disconnect(botId) {
+    if (botId) {
+      const bot = bots.get(String(botId));
+      if (!bot) return publicState();
+      bots.delete(String(botId));
+      bot.disconnect();
+    } else {
+      for (const bot of bots.values()) bot.disconnect();
+      bots.clear();
+    }
+    managerError = '';
+    emitState();
+    return publicState();
+  }
+
   function parseEventDetail(event) {
     try {
       return typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
@@ -1240,8 +1352,10 @@
     try {
       if (detail.action === 'connect' || detail.action === 'join') {
         await connect(detail.target || 'current');
+      } else if (detail.action === 'sync') {
+        await syncCount(detail.count, detail.target || 'current');
       } else if (detail.action === 'disconnect' || detail.action === 'leave' || detail.action === 'stop') {
-        disconnect();
+        disconnect(detail.id);
       } else if (detail.action === 'status') {
         emitState();
       }
@@ -1252,9 +1366,11 @@
 
   const api = {
     connect,
+    syncCount,
     disconnect,
     status: publicState,
-    get connected() { return state.joined; },
+    multiBotVersion: 3,
+    get connected() { return publicState().connected; },
     destroy() {
       document.removeEventListener(COMMAND_EVENT, handleCommand);
       disconnect();
