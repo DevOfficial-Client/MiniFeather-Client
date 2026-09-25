@@ -716,6 +716,7 @@
     safeSneak: false,
     autoRespawn: false,
     idlePlayerBot: false,
+    idlePlayerCount: 1,
     idlePlayerTarget: '',
     patPatPreset: 'normal',
     patPatValues: clonePatPatValues(),
@@ -897,7 +898,7 @@
   let freecamAccess = { known: false, allowed: false, permissionLevel: 0 };
   let lastFreecamDeniedAt = 0;
   let waypointStatus = '';
-  let idlePlayerBotState = { phase: 'idle', connected: false, error: '', serverId: '', playerName: '' };
+  let idlePlayerBotState = { phase: 'idle', connected: false, error: '', serverId: '', playerName: '', bots: [], connectedCount: 0, maxBots: 16 };
   let clientChatState = null;
   let destroyed = false;
 
@@ -4538,24 +4539,36 @@
     }));
   }
 
-  function sendIdlePlayerBotCommand(action, target = settings.idlePlayerTarget) {
+  function clampIdlePlayerCount(value) {
+    return Math.max(1, Math.min(16, Math.round(Number(value) || 1)));
+  }
+
+  function sendIdlePlayerBotCommand(action, target = settings.idlePlayerTarget, id = '', count = settings.idlePlayerCount) {
     document.dispatchEvent(new CustomEvent('minifeather:idle-player-command', {
-      detail: JSON.stringify({ action, target: String(target || '').trim() || 'current' })
+      detail: JSON.stringify({ action, target: String(target || '').trim() || 'current', id: String(id || ''), count: clampIdlePlayerCount(count) })
     }));
   }
 
+  const IDLE_PLAYER_PHASE_KEYS = {
+    idle: 'idlePlayerStatusIdle',
+    resolving: 'idlePlayerStatusResolving',
+    protocol: 'idlePlayerStatusProtocol',
+    connecting: 'idlePlayerStatusConnecting',
+    retrying: 'idlePlayerStatusRetrying',
+    authenticating: 'idlePlayerStatusAuthenticating',
+    joining: 'idlePlayerStatusJoining',
+    connected: 'idlePlayerStatusConnected',
+    error: 'idlePlayerStatusError'
+  };
+
   function idlePlayerBotStatusText() {
-    const phaseKeys = {
-      idle: 'idlePlayerStatusIdle',
-      resolving: 'idlePlayerStatusResolving',
-      protocol: 'idlePlayerStatusProtocol',
-      connecting: 'idlePlayerStatusConnecting',
-      authenticating: 'idlePlayerStatusAuthenticating',
-      joining: 'idlePlayerStatusJoining',
-      connected: 'idlePlayerStatusConnected',
-      error: 'idlePlayerStatusError'
-    };
-    const base = t(phaseKeys[idlePlayerBotState?.phase] || 'idlePlayerStatusIdle');
+    const base = t(IDLE_PLAYER_PHASE_KEYS[idlePlayerBotState?.phase] || 'idlePlayerStatusIdle');
+    const bots = Array.isArray(idlePlayerBotState?.bots) ? idlePlayerBotState.bots : [];
+    if (bots.length > 1) {
+      const count = Number(idlePlayerBotState.connectedCount) || 0;
+      const expected = Math.max(clampIdlePlayerCount(settings.idlePlayerCount), bots.length);
+      return `${base}: ${count}/${expected}${idlePlayerBotState.error ? ` · ${idlePlayerBotState.error}` : ''}`;
+    }
     if (idlePlayerBotState?.phase === 'connected') {
       const identity = idlePlayerBotState.playerName || t('idlePlayerGuest');
       const server = idlePlayerBotState.serverId ? ` · ${idlePlayerBotState.serverId}` : '';
@@ -4570,12 +4583,25 @@
     if (!status) return;
     status.textContent = idlePlayerBotStatusText();
     status.dataset.state = idlePlayerBotState?.phase || 'idle';
+    const bots = Array.isArray(idlePlayerBotState?.bots) ? idlePlayerBotState.bots : [];
+    const list = panel.querySelector('#mf-idle-player-list');
+    if (list) list.innerHTML = bots.map((bot, index) => `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border:1px solid rgba(255,255,255,.12);border-radius:7px;">
+        <div style="min-width:0;display:flex;flex-direction:column;gap:2px;">
+          <strong style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(bot.playerName || bot.requestedUuid || `${t('idlePlayerGuest')} ${index + 1}`)}</strong>
+          <span class="mf-muted" style="font-size:10px;">${escapeHtml(t(IDLE_PLAYER_PHASE_KEYS[bot.phase] || 'idlePlayerStatusIdle'))}${bot.phase === 'retrying' ? ` (${Number(bot.retryCount) || 0}/${Number(bot.maxRetries) || 2})` : ''}${bot.serverId ? ` · ${escapeHtml(bot.serverId)}` : ''}${bot.error ? ` · ${escapeHtml(bot.error)}` : ''}</span>
+        </div>
+        <button type="button" class="mf-btn danger" data-mf-idle-bot-remove="${escapeHtml(bot.id)}" title="${escapeHtml(t('idlePlayerDisconnect'))}" style="min-width:28px;padding:4px 7px;">×</button>
+      </div>
+    `).join('');
     const connect = panel.querySelector('#mf-idle-player-connect');
     const disconnect = panel.querySelector('#mf-idle-player-disconnect');
-    if (connect) connect.textContent = idlePlayerBotState?.phase === 'error'
-      ? t('idlePlayerRetry')
-      : t('idlePlayerConnect');
-    if (disconnect) disconnect.disabled = idlePlayerBotState?.phase === 'idle';
+    if (connect) {
+      connect.textContent = t('idlePlayerConnect');
+      connect.disabled = bots.length >= (idlePlayerBotState.maxBots || 16) &&
+        !bots.some(bot => bot.phase === 'idle' || bot.phase === 'error');
+    }
+    if (disconnect) disconnect.disabled = bots.length === 0;
   }
 
   function initIdlePlayerBotModule() {
@@ -4595,9 +4621,7 @@
         enable() {
           if (active) return;
           active = true;
-          const phase = idlePlayerBotState?.phase || 'idle';
-          if (phase === 'idle' || phase === 'error') sendIdlePlayerBotCommand('connect');
-          else sendIdlePlayerBotCommand('status');
+          sendIdlePlayerBotCommand('sync');
         },
         disable() {
           if (!active) return;
@@ -4999,6 +5023,48 @@
 
   function sendLocalGamesConfig(enabled) {
     sendLocalGamesCommand(enabled ? 'status' : 'stop');
+  }
+
+  function closeIdlePlayerBotSettings() {
+    panel?.querySelector('.mf-idlebot-backdrop')?.remove();
+  }
+
+  function openIdlePlayerBotSettings() {
+    if (!panel) return;
+    closeIdlePlayerBotSettings();
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop mf-idlebot-backdrop';
+    backdrop.innerHTML = `
+      <div class="mf-tt-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(t('idlePlayerBot'))}">
+        <div class="mf-tt-head">
+          <div class="mf-tt-title">${t('idlePlayerBot')}</div>
+          <button type="button" class="mf-close" data-idlebot-close aria-label="${escapeHtml(t('close'))}">×</button>
+        </div>
+        <div class="mf-tt-row">
+          <span>${t('idlePlayerCount')}</span>
+          <span class="mf-tt-scale-value" data-idlebot-count-value>${clampIdlePlayerCount(settings.idlePlayerCount)}</span>
+        </div>
+        <input class="mf-tt-range" data-idlebot-count type="range" min="1" max="16" step="1" value="${clampIdlePlayerCount(settings.idlePlayerCount)}">
+        <div class="mf-tt-hint">${t('idlePlayerCountHint')}</div>
+        <button type="button" class="mf-btn primary mf-tt-save" data-idlebot-save>${t('antiAfkSave')}</button>
+      </div>
+    `;
+    panel.appendChild(backdrop);
+    const slider = backdrop.querySelector('[data-idlebot-count]');
+    slider?.addEventListener('input', () => {
+      backdrop.querySelector('[data-idlebot-count-value]').textContent = String(clampIdlePlayerCount(slider.value));
+    });
+    backdrop.querySelector('[data-idlebot-close]')?.addEventListener('click', closeIdlePlayerBotSettings);
+    backdrop.querySelector('[data-idlebot-save]')?.addEventListener('click', () => {
+      settings.idlePlayerCount = clampIdlePlayerCount(slider?.value);
+      guiSettings.idlePlayerCount = settings.idlePlayerCount;
+      saveSettings(true);
+      if (MODULES.get('idlePlayerBot')?.enabled) sendIdlePlayerBotCommand('sync');
+      closeIdlePlayerBotSettings();
+    });
+    backdrop.addEventListener('mousedown', event => {
+      if (event.target === backdrop) closeIdlePlayerBotSettings();
+    });
   }
 
   function closeAntiAfkSettings() {
@@ -6633,7 +6699,7 @@
   }
 
   const FEATURE_ADVANCED_SETTINGS = new Set([
-    'titanTiny','patPat','antiAfk','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight'
+    'titanTiny','patPat','antiAfk','idlePlayerBot','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight'
   ]);
 
   function closeFeatureSettings() {
@@ -6927,7 +6993,7 @@
     backdrop.querySelector('[data-feature-advanced]')?.addEventListener('click', () => {
       closeFeatureSettings();
       const advanced = {
-        titanTiny: openTitanTinySettings, patPat: openPatPatSettings, antiAfk: openAntiAfkSettings, zoom: openZoomSettings,
+        titanTiny: openTitanTinySettings, patPat: openPatPatSettings, antiAfk: openAntiAfkSettings, idlePlayerBot: openIdlePlayerBotSettings, zoom: openZoomSettings,
         cameraOverhaul: openCameraOverhaulSettings, elytraFlight: openElytraFlightSettings, dynamicCrosshair: openDynamicCrosshairSettings,
         freelook: openFreelookSettings, freecam: openFreecamSettings, blockHighlight: openBlockHighlightSettings, armorHud: openArmorHudSettings
       };
@@ -8148,6 +8214,7 @@
             </div>
           </div>
           <div id="mf-idle-player-status" class="mf-muted" data-state="${escapeHtml(idlePlayerBotState?.phase || 'idle')}" style="margin-top:10px;">${escapeHtml(idlePlayerBotStatusText())}</div>
+          <div id="mf-idle-player-list" style="display:flex;flex-direction:column;gap:6px;margin-top:9px;"></div>
           <div class="mf-tt-hint">${t('idlePlayerSafetyHint')}</div>
         </div>
         <div class="mf-card">
@@ -8744,6 +8811,8 @@ function renderCreditsPage() {
       if (saveTimer) return;
       Object.assign(settings, incoming);
       Object.assign(guiSettings, incoming);
+      settings.idlePlayerCount = clampIdlePlayerCount(settings.idlePlayerCount);
+      guiSettings.idlePlayerCount = settings.idlePlayerCount;
       settings.panelAccentColor = normalizePanelColor(settings.panelAccentColor, DEFAULT_SETTINGS.panelAccentColor);
       settings.panelBackgroundColor = normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor);
       settings.panelScale = clampPanelScale(settings.panelScale);
@@ -10604,6 +10673,13 @@ function renderCreditsPage() {
       openAntiAfkSettings();
     });
 
+    const idlePlayerBotToggle = panel.querySelector('.mf-toggle[data-key="idlePlayerBot"]');
+    idlePlayerBotToggle?.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openIdlePlayerBotSettings();
+    });
+
     const zoomToggle = panel.querySelector('.mf-toggle[data-key="zoom"]');
     zoomToggle?.addEventListener('contextmenu', event => {
       event.preventDefault();
@@ -10818,7 +10894,7 @@ function renderCreditsPage() {
       settings.idlePlayerBot = true;
       guiSettings.idlePlayerBot = true;
       saveSettings(true);
-      if (MODULES.get('idlePlayerBot')?.enabled) sendIdlePlayerBotCommand('connect', target);
+      if (MODULES.get('idlePlayerBot')?.enabled) sendIdlePlayerBotCommand('sync', target);
       else applyGuiSettings();
       const input = panel.querySelector('.mf-toggle[data-key="idlePlayerBot"] input');
       if (input) input.checked = true;
@@ -10833,6 +10909,12 @@ function renderCreditsPage() {
       const input = panel.querySelector('.mf-toggle[data-key="idlePlayerBot"] input');
       if (input) input.checked = false;
     });
+
+    panel.querySelector('#mf-idle-player-list')?.addEventListener('click', event => {
+      const remove = event.target.closest('[data-mf-idle-bot-remove]');
+      if (remove) sendIdlePlayerBotCommand('disconnect', settings.idlePlayerTarget, remove.dataset.mfIdleBotRemove);
+    });
+    refreshIdlePlayerBotView();
 
     panel.querySelectorAll('.mf-toggle[data-key]').forEach(label => {
       const key = label.dataset.key;
@@ -12542,6 +12624,7 @@ function renderCreditsPage() {
       chrome.storage.local.get(['settings', 'customLogo', 'favoriteModules'], data => {
         if (destroyed) return;
         settings = { ...BASE, ...(data.settings || {}) };
+      settings.idlePlayerCount = clampIdlePlayerCount(settings.idlePlayerCount);
       settings.antiAfkDelay = clampAntiAfkDelay(settings.antiAfkDelay);
       settings.patPatValues = clampPatPatValues(settings.patPatValues);
       settings.patPatPreset = detectPatPatPreset(settings.patPatValues);

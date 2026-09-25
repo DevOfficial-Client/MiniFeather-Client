@@ -1646,6 +1646,12 @@
             var retry = false;
             pendingSwaps.forEach(function (p, glCtx) {
                 try {
+                    if (glCtx.isContextLost && glCtx.isContextLost()) {
+                        pendingSwaps.delete(glCtx); return;
+                    }
+                    if (glCtx.isTexture && !glCtx.isTexture(p.tex)) {
+                        pendingSwaps.delete(glCtx); return;
+                    }
                     var entry = entryForLocalPlayer();
                     var url = entry && resolveSkinImageUrl(entry);
                     if (!url) { pendingSwaps.delete(glCtx); return; }
@@ -1653,17 +1659,32 @@
                         ? repImages[url] : getReplacement(url, function () {});
                     var swap = rep && atlasSwap(p.src, rep);
                     if (!swap) { retry = true; return; }
+                    if (!swap.width || !swap.height ||
+                        swap.width !== p.src.width || swap.height !== p.src.height) {
+                        pendingSwaps.delete(glCtx); return;
+                    }
+                    // A CORS-tainted canvas cannot be used as a WebGL source.
+                    // Test one pixel before touching the bound game texture.
+                    try { swap.getContext('2d').getImageData(0, 0, 1, 1); }
+                    catch (_) { pendingSwaps.delete(glCtx); return; }
                     // re-subir sobre la textura original del atlas. La textura
                     // es inmutable (texStorage2D): re-subir con texSubImage2D.
                     // three.js alterna UNPACK_FLIP_Y por upload: fijarlo acá
                     // (true = flipY de CanvasTexture) y restaurar después.
+                    var prevUnit = glCtx.getParameter(glCtx.ACTIVE_TEXTURE);
                     glCtx.activeTexture(p.unit);
-                    glCtx.bindTexture(glCtx.TEXTURE_2D, p.tex);
+                    var prevTexture = glCtx.getParameter(glCtx.TEXTURE_BINDING_2D);
                     var prevFlip = glCtx.getParameter(glCtx.UNPACK_FLIP_Y_WEBGL);
-                    glCtx.pixelStorei(glCtx.UNPACK_FLIP_Y_WEBGL, true);
-                    glCtx.texSubImage2D(glCtx.TEXTURE_2D, 0, 0, 0,
-                                        glCtx.RGBA, glCtx.UNSIGNED_BYTE, swap);
-                    glCtx.pixelStorei(glCtx.UNPACK_FLIP_Y_WEBGL, prevFlip);
+                    try {
+                        glCtx.bindTexture(glCtx.TEXTURE_2D, p.tex);
+                        glCtx.pixelStorei(glCtx.UNPACK_FLIP_Y_WEBGL, true);
+                        glCtx.texSubImage2D(glCtx.TEXTURE_2D, 0, 0, 0,
+                                            glCtx.RGBA, glCtx.UNSIGNED_BYTE, swap);
+                    } finally {
+                        glCtx.pixelStorei(glCtx.UNPACK_FLIP_Y_WEBGL, prevFlip);
+                        glCtx.bindTexture(glCtx.TEXTURE_2D, prevTexture);
+                        glCtx.activeTexture(prevUnit);
+                    }
                     pendingSwaps.delete(glCtx);
                     dollLog('doll: re-subida aplicada (custom llegó tarde)');
                 } catch (e) {

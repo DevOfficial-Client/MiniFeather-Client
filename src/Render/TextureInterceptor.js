@@ -5,19 +5,43 @@
     window.__MF_TEXTURE_INTERCEPTOR__ = true;
 
     window.__MF_GL_CANVASES__ = [];
+    // Keep the context returned at creation time. Calling getContext() during
+    // cleanup can resurrect or touch a context that is already being retired.
+    function reapDetachedGLContexts() {
+        var list = window.__MF_GL_CANVASES__;
+        if (!list || list.length < 10) return;
+        var now = Date.now();
+        for (var i = list.length - 1; i >= 0; i--) {
+            var cv = list[i];
+            if (!cv) { list.splice(i, 1); continue; }
+            var gl = cv.__mfTrackedGLContext;
+            if (cv.__mfGLLost || (gl && gl.isContextLost && gl.isContextLost())) {
+                list.splice(i, 1);
+                continue;
+            }
+            // A newly-created offscreen canvas may still be in use by the game.
+            if (cv.isConnected || now - (cv.__mfGLTrackedAt || now) < 20000) continue;
+            try {
+                var ext = gl && gl.getExtension('WEBGL_lose_context');
+                if (!ext) continue;
+                ext.loseContext();
+                cv.__mfGLLost = true;
+                list.splice(i, 1);
+            } catch (_) {}
+        }
+    }
     try {
         var origGetContext = HTMLCanvasElement.prototype.getContext;
         HTMLCanvasElement.prototype.getContext = function (type) {
+            if (type === 'webgl' || type === 'webgl2') reapDetachedGLContexts();
             var ctx = origGetContext.apply(this, arguments);
             if ((type === 'webgl' || type === 'webgl2') && ctx) {
                 try {
+                    this.__mfTrackedGLContext = ctx;
                     if (this.__mfIsGL !== true) {
                         this.__mfIsGL = true;
+                        this.__mfGLTrackedAt = Date.now();
                         window.__MF_GL_CANVASES__.push(this);
-
-                        if (window.__MF_GL_CANVASES__.length > 16) {
-                            window.__MF_GL_CANVASES__.shift();
-                        }
                     }
                 } catch (_) {}
             }
@@ -25,29 +49,11 @@
         };
     } catch (_) {}
 
-    // Recolector: el juego crea un canvas WebGL por cada mundo/servidor al que
-    // entras; los viejos quedan referenciados y el navegador solo admite ~16
-    // vivos. Al superar ~10, se liberan con WEBGL_lose_context los canvases
-    // que ya no están en el DOM para no matar el contexto del juego actual.
+    // Reap old detached canvases before the next context is allocated and
+    // periodically. Never lose a connected game canvas or a fresh offscreen one.
     try {
         if (!window.__MF_GL_REAPER__) {
-            window.__MF_GL_REAPER__ = setInterval(function () {
-                var list = window.__MF_GL_CANVASES__;
-                if (!list || list.length < 10) return;
-                for (var i = list.length - 1; i >= 0; i--) {
-                    var cv = list[i];
-                    if (!cv || !cv.isConnected) {
-                        if (cv && !cv.__mfGLLost) {
-                            cv.__mfGLLost = true;
-                            try {
-                                var gl = cv.getContext('webgl2') || cv.getContext('webgl');
-                                gl && gl.getExtension('WEBGL_lose_context') && gl.getExtension('WEBGL_lose_context').loseContext();
-                            } catch (_) {}
-                        }
-                        list.splice(i, 1);
-                    }
-                }
-            }, 30000);
+            window.__MF_GL_REAPER__ = setInterval(reapDetachedGLContexts, 10000);
         }
     } catch (_) {}
 

@@ -1345,9 +1345,9 @@
       if (action === 'join' || action === 'connect' || action === 'start') {
         const target = args.slice(1).join(' ').trim() || 'current';
         addChat('Connecting one idle guest...');
-        Promise.resolve(api.connect(target)).then(() => {
-          const current = api.status();
-          if (current.phase !== 'error') addChat('Idle Player connection started.', 'success');
+        Promise.resolve(api.connect(target)).then(current => {
+          if (current.error) addChat('Idle Player failed: ' + current.error, 'error');
+          else addChat('Idle Player connection started. Guests: ' + current.bots.length + '/' + current.maxBots + '.', 'success');
         }).catch(error => {
           addChat('Idle Player failed: ' + (error?.message || error), 'error');
         });
@@ -1355,25 +1355,26 @@
       }
 
       if (action === 'leave' || action === 'disconnect' || action === 'stop') {
-        api.disconnect();
-        addChat('Idle Player disconnected.', 'success');
+        const id = args[1] || '';
+        api.disconnect(id);
+        addChat(id ? 'Idle Player ' + id + ' disconnected.' : 'All Idle Players disconnected.', 'success');
         return;
       }
 
       if (action === 'status') {
         const current = api.status();
-        const identity = current.playerName || 'guest';
         const server = current.serverId || 'unknown';
         const suffix = current.error ? ' (' + current.error + ')' : '';
         if (current.connected) {
-          addChat('Idle Player connected as ' + identity + ' on ' + server + '.', 'success');
+          const roster = current.bots.map(bot => bot.id + ': ' + (bot.playerName || bot.requestedUuid || 'guest') + ' [' + bot.phase + ']').join(', ');
+          addChat('Idle Players: ' + current.connectedCount + '/' + current.maxBots + ' connected on ' + server + '. ' + roster, 'success');
         } else {
-          addChat('Idle Player status: ' + (current.phase || 'idle') + suffix + '.');
+          addChat('Idle Player status: ' + (current.phase || 'idle') + suffix + '. Guests: ' + current.bots.length + '/' + current.maxBots + '.');
         }
         return;
       }
 
-      addChat('Usage: /idlebot join [invite|server] | leave | status', 'error');
+      addChat('Usage: /idlebot join [invite|server] | leave [bot-id] | status', 'error');
       return;
     }
 
