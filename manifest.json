@@ -273,6 +273,7 @@
         "assets/classic/*",
         "assets/garden/*",
         "assets/ui/*",
+        "assets/ui/*/*",
         "assets/voice/*",
         "classic/*",
         "classic/*/*",

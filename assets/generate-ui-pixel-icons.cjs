@@ -17,6 +17,9 @@ function readLiteral(name) {
 
 const palette = readLiteral('PIXEL_PALETTE');
 const icons = readLiteral('MF_PIXEL_ICONS');
+const animationMatch = panelSource.match(/const MF_ANIMATED_PIXEL_ICONS = Object\.freeze\((\[[\s\S]*?\])\);/);
+if (!animationMatch) throw new Error('MF_ANIMATED_PIXEL_ICONS was not found');
+const animatedIcons = new Set(vm.runInNewContext(animationMatch[1]));
 
 function crc32(bytes) {
   let value = 0xffffffff;
@@ -106,6 +109,16 @@ function makeArt(name, rows) {
   // replace the most ambiguous 8x8 silhouettes with recognizable pixel art.
   const clear = () => rect(0, 0, 16, 16, '.');
   switch (name) {
+    case 'allayPets':
+      clear();
+      rect(1, 5, 3, 5, 'B'); rect(2, 6, 2, 3, 'b');
+      rect(12, 5, 3, 5, 'B'); rect(12, 6, 2, 3, 'b');
+      rect(4, 3, 8, 9, 'B'); rect(5, 4, 6, 7, 'b');
+      rect(6, 1, 4, 2, '#'); rect(7, 0, 2, 1, 'y');
+      rect(5, 6, 2, 2, 'k'); rect(9, 6, 2, 2, 'k');
+      rect(6, 9, 4, 1, '#'); rect(7, 11, 2, 3, 'B');
+      rect(4, 13, 3, 1, 'b'); rect(9, 13, 3, 1, 'b');
+      break;
     case 'armorHud':
       clear();
       rect(3, 2, 10, 2, 'k'); rect(1, 4, 14, 3, 'k');
@@ -619,8 +632,7 @@ function makePotatoArt() {
   return art;
 }
 
-function encodeIcon(name, rows) {
-  const art = name === 'potato' ? makePotatoArt() : makeArt(name, rows);
+function encodeArt(name, art) {
   const pixelScale = name === 'potato' ? 1 : scale;
   const width = art.length * pixelScale;
   const height = width;
@@ -646,11 +658,15 @@ function encodeIcon(name, rows) {
         const below = symbolAt(x, y + 1);
         const left = symbolAt(x - 1, y);
         const right = symbolAt(x + 1, y);
-        // Hard one-pixel facets like the Voice Chat assets; no antialiasing.
-        const offset = above !== symbol ? 18 : left !== symbol ? 10
-          : below !== symbol ? -16 : right !== symbol ? -8 : 0;
+        const detailed = animatedIcons.has(name);
+        const offset = above !== symbol ? (detailed ? 29 : 18)
+          : left !== symbol ? (detailed ? 18 : 10)
+          : below !== symbol ? (detailed ? -27 : -16)
+          : right !== symbol ? (detailed ? -17 : -8)
+          : detailed && symbol !== 'k' && symbol !== '-' && (x + y * 3) % 11 === 0 ? 7 : 0;
         for (let channel = 0; channel < 3; channel++) {
-          pixel[channel] = Math.max(0, Math.min(255, pixel[channel] + offset));
+          const shaded = detailed ? pixel[channel] * (1 + offset / 190) : pixel[channel] + offset;
+          pixel[channel] = Math.max(0, Math.min(255, Math.round(shaded)));
         }
       }
       for (let channel = 0; channel < 4; channel++) {
@@ -672,23 +688,23 @@ function encodeIcon(name, rows) {
   ]);
 }
 
-for (const [name, rows] of Object.entries(icons)) {
-  if (!/^[A-Za-z][A-Za-z0-9]*$/.test(name)) throw new Error(`Unsafe icon name: ${name}`);
-  // PatPat is a custom drawing, not a generic module icon. Keep its original PNG.
-  if (name === 'patPat') continue;
-  const target = path.resolve(outputDir, `${name}.png`);
-  if (!target.startsWith(outputDir + path.sep)) throw new Error(`Unsafe icon target: ${target}`);
-  fs.writeFileSync(target, encodeIcon(name, rows));
-}
-const potatoTarget = path.resolve(outputDir, 'potato.png');
-if (!potatoTarget.startsWith(outputDir + path.sep)) throw new Error(`Unsafe icon target: ${potatoTarget}`);
-fs.writeFileSync(potatoTarget, encodeIcon('potato'));
+module.exports = { icons, makeArt, encodeArt };
 
-// Remove only duplicates created by the previous version of this generator.
-for (const name of Object.keys(icons)) {
-  const stale = path.resolve(outputDir, `${name}-pixel.png`);
-  if (!stale.startsWith(outputDir + path.sep)) throw new Error(`Unsafe icon target: ${stale}`);
-  if (fs.existsSync(stale)) fs.unlinkSync(stale);
+if (require.main === module) {
+  for (const [name, rows] of Object.entries(icons)) {
+    if (!/^[A-Za-z][A-Za-z0-9]*$/.test(name)) throw new Error(`Unsafe icon name: ${name}`);
+    if (name === 'patPat') continue;
+    const target = path.resolve(outputDir, `${name}.png`);
+    if (!target.startsWith(outputDir + path.sep)) throw new Error(`Unsafe icon target: ${target}`);
+    fs.writeFileSync(target, encodeArt(name, makeArt(name, rows)));
+  }
+  const potatoTarget = path.resolve(outputDir, 'potato.png');
+  if (!potatoTarget.startsWith(outputDir + path.sep)) throw new Error(`Unsafe icon target: ${potatoTarget}`);
+  fs.writeFileSync(potatoTarget, encodeArt('potato', makePotatoArt()));
+  for (const name of Object.keys(icons)) {
+    const stale = path.resolve(outputDir, `${name}-pixel.png`);
+    if (!stale.startsWith(outputDir + path.sep)) throw new Error(`Unsafe icon target: ${stale}`);
+    if (fs.existsSync(stale)) fs.unlinkSync(stale);
+  }
+  require('./generate-ui-animations.cjs');
 }
-
-console.log(`Generated ${Object.keys(icons).length} PNG icons in ${outputDir}; PatPat unchanged`);
