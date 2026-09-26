@@ -131,7 +131,10 @@ function myName() {
 }
 
 function send(obj) {
-    try { state.conn?.send?.(obj); } catch {}
+    // conn.open: enviar por una conexión cerrada hace que PeerJS emita
+    // "Connection is not open..." aunque el throw se trague aquí
+    if (!state.conn?.open) return;
+    try { state.conn.send(obj); } catch {}
 }
 
 state.guestPos = null;
@@ -1126,8 +1129,27 @@ function chatWatchTick() {
 }
 let chatWatchTimer = setInterval(chatWatchTick, 1500);
 
+// sesión "activa" pero muerta (peer destruido / conn cerrada que nunca
+// disparó close): limpiarla en vez de trabar host/join para siempre
+function staleSession() {
+    if (state.conn && state.conn.open) return false;   // viva de verdad
+    if (state.peer && !state.peer.destroyed && state.conn === null) return false;   // host esperando conexión
+    if (state.conn && !state.conn.open) {
+        warn('sesion muerta detectada — limpiando');
+        try { state.conn.close?.(); } catch {}
+        state.conn = null;
+        stopBroadcast();
+        if (!state.peer?.destroyed) return true;   // peer reusable (host)
+        try { state.peer.destroy?.(); } catch {}
+        state.peer = null;
+        return true;
+    }
+    if (state.peer?.destroyed) { state.peer = null; state.status = 'off'; return true; }
+    return false;
+}
+
 async function host(code) {
-    if (state.conn || state.peer) { warn('ya hay sesion activa — /p2p off primero'); return null; }
+    if ((state.conn || state.peer) && !staleSession()) { warn('ya hay sesion activa — /p2p off primero'); return null; }
     if (!(await loadPeerJS())) { warn('no se pudo cargar PeerJS (CSP?)'); return null; }
     state.role = 'host';
     ensurePuppetLoop();
@@ -1154,7 +1176,7 @@ async function host(code) {
 }
 
 async function join(code) {
-    if (state.conn || state.peer) { warn('ya hay sesion activa — /p2p off primero'); return false; }
+    if ((state.conn || state.peer) && !staleSession()) { warn('ya hay sesion activa — /p2p off primero'); return false; }
     if (!code) { warn('usa: /p2p join <codigo>'); return false; }
     if (!(await loadPeerJS())) { warn('no se pudo cargar PeerJS (CSP?)'); return false; }
     state.role = 'guest';

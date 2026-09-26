@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>ProcanimLab — MiniFeather</title>
+<style>
+  :root {
+    --bg: #101418; --panel: #171d24; --panel2: #1d252e; --line: #2a3441;
+    --tx: #cfd8e3; --dim: #7d8a99; --ac: #4fd1a5; --ac2: #6cb2ff; --warn: #e8b45a;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--tx);
+    font: 13px/1.45 "Cascadia Code", Consolas, monospace;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  }
+  header h1 { font-size: 14px; margin: 0 8px 0 0; color: var(--ac); }
+  header h1 small { color: var(--dim); font-weight: normal; }
+  select, button, input[type=text], input[type=number] {
+    background: var(--panel2); color: var(--tx); border: 1px solid var(--line);
+    border-radius: 4px; padding: 4px 8px; font: inherit;
+  }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--ac); }
+  button.pri { background: var(--ac); color: #06251b; border-color: var(--ac); font-weight: bold; }
+  button.mini { padding: 2px 7px; font-size: 12px; }
+  main { flex: 1; display: flex; min-height: 0; }
+  aside {
+    width: 380px; min-width: 330px; overflow-y: auto; padding: 10px;
+    background: var(--panel); border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  section { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+  section h2 { font-size: 12px; margin: 0 0 8px; color: var(--ac2); text-transform: uppercase; letter-spacing: .08em; }
+  label { display: block; color: var(--dim); margin: 6px 0 2px; font-size: 12px; }
+  label b { color: var(--tx); font-weight: normal; }
+  input[type=range] { width: 100%; accent-color: var(--ac); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { flex: 1; }
+  .val { color: var(--ac); min-width: 52px; text-align: right; font-size: 12px; }
+  #rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  #rules li {
+    display: flex; gap: 6px; align-items: center; padding: 5px 8px;
+    border: 1px solid var(--line); border-radius: 4px; cursor: pointer; background: var(--bg);
+  }
+  #rules li.sel { border-color: var(--ac); background: #12241e; }
+  #rules li .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #rules li .cnt { color: var(--dim); font-size: 11px; }
+  #rules li .del { color: var(--warn); cursor: pointer; padding: 0 4px; }
+  #view { flex: 1; position: relative; min-width: 0; }
+  canvas { display: block; }
+  #hud {
+    position: absolute; top: 8px; left: 10px; color: var(--dim); font-size: 11px;
+    pointer-events: none; white-space: pre;
+  }
+  #drop {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(6,10,14,.82); color: var(--ac); font-size: 16px; border: 2px dashed var(--ac);
+  }
+  dialog {
+    background: var(--panel); color: var(--tx); border: 1px solid var(--line);
+    border-radius: 8px; width: min(860px, 92vw); max-height: 86vh;
+  }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  dialog textarea {
+    width: 100%; height: 46vh; background: var(--bg); color: var(--tx);
+    border: 1px solid var(--line); border-radius: 4px; font: 12px/1.5 Consolas, monospace;
+    white-space: pre; resize: vertical;
+  }
+  .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  .tabs button.on { border-color: var(--ac); color: var(--ac); }
+  .hint { color: var(--dim); font-size: 11px; margin-top: 6px; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; }
+  #pick { color: var(--dim); font-size: 11px; text-decoration: underline; cursor: pointer; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header>
+  <h1>ProcanimLab <small>— animaciones pseudo-procedurales para MiniFeather</small></h1>
+  <select id="animSel"><option value="">— sin anim base (palo) —</option></select>
+  <label style="margin:0 4px;white-space:nowrap"><input type="checkbox" id="cPalo100" checked> 100 palo (bind)</label>
+  <label style="margin:0 4px;white-space:nowrap">⏱ <span id="vSpeed" style="color:var(--ac)">1.00×</span></label>
+  <input type="range" id="sSpeed" min="0.05" max="2" step="0.05" value="1" style="width:90px" title="velocidad de tiempo (cámara lenta para detalle)">
+  <button id="btnSave" title="Guardar configuración en localStorage">💾 guardar</button>
+  <button id="btnLoadCfg" title="Cargar configuración guardada">📂 cargar</button>
+  <button id="btnExport" class="pri">⬇ exportar JS</button>
+  <span id="pick" title="Si no se sirve por http, haz click o arrastra el .gltf/.glb aquí">cargar otro modelo…</span>
+  <input id="fileIn" type="file" multiple accept=".gltf,.glb,.bin,.png,.jpg,.jpeg,.webp" style="display:none">
+</header>
+<main>
+  <aside>
+    <section>
+      <h2>Entorno simulado</h2>
+      <label>giro (turn) <span class="val" id="vTurn">0.00</span></label>
+      <input type="range" id="sTurn" min="-1" max="1" step="0.01" value="0">
+      <label>velocidad vertical (vy) <span class="val" id="vVy">0.00</span></label>
+      <input type="range" id="sVy" min="-1" max="1" step="0.01" value="0">
+      <label>velocidad (speed) <span class="val" id="vSpd">0.00</span></label>
+      <input type="range" id="sSpd" min="0" max="1" step="0.01" value="0">
+      <label><input type="checkbox" id="cAuto" checked> auto-piloto (serpenteo + oleaje — así ves las reacciones sin tocar nada)</label>
+      <div class="presets">
+        <button class="mini" data-env="calm">calma</button>
+        <button class="mini" data-env="serpent">serpenteo</button>
+        <button class="mini" data-env="storm">tormenta</button>
+        <button class="mini" data-env="dive">picada</button>
+      </div>
+      <div class="hint">Las reglas tipo <b>reacción</b> leen estos valores (con retardo por lag). En el cliente real se alimentan de pet.procTurn / pet.vy / pet.speedNow.</div>
+    </section>
+
+    <section>
+      <h2>Rig — huesos nuevos</h2>
+      <div class="row">
+        <button id="btnRigMode" class="mini">🖱 modo rig</button>
+        <select id="rigParent"><option value="">— hueso padre —</option></select>
+      </div>
+      <div class="row" style="font-size:11px;color:var(--dim)">
+        <label style="margin:0"><input type="radio" name="rigTool" value="add" checked> crear hueso</label>
+        <label style="margin:0"><input type="radio" name="rigTool" value="sel"> seleccionar existente</label>
+      </div>
+      <label>nombre <input type="text" id="rigName" value="bone_nuevo" style="width:100%"></label>
+      <label>tamaño visible <span class="val" id="vRigSize">1.0</span></label>
+      <input type="range" id="rigSize" min="0.2" max="6" step="0.1" value="1">
+      <label id="lBoneLen" style="display:none">largo del hueso <b id="boneName"></b> <span class="val" id="vBoneLen">1.0</span></label>
+      <input type="range" id="boneLen" min="0.2" max="20" step="0.1" value="1.6" style="display:none">
+      <div class="row" style="margin-top:6px">
+        <button id="btnSpine" class="mini" title="Crea una cadena de huesos encadenados a lo largo del eje del cuerpo — columna base para animar">🦴 columna base</button>
+      </div>
+      <div id="spineCfg" style="display:none;margin-top:6px">
+        <label>nº de vértebras <span class="val" id="vSpN">12</span></label>
+        <input type="range" id="spN" min="2" max="40" step="1" value="12">
+        <label>largo por vértebra <span class="val" id="vSpLen">1.6</span></label>
+        <input type="range" id="spLen" min="0.2" max="8" step="0.1" value="1.6">
+        <label>curvatura inicial (arco/segmento) <span class="val" id="vSpCurve">0.0</span></label>
+        <input type="range" id="spCurve" min="-30" max="30" step="1" value="0">
+        <label>eje de la columna</label>
+        <select id="spAxis">
+          <option value="x" selected>+X (cola del leviathan)</option>
+          <option value="-x">−X</option>
+          <option value="y">+Y (vertical)</option>
+          <option value="z">+Z</option>
+          <option value="-z">−Z</option>
+        </select>
+        <label>colgar de (vacío = raíz del modelo)</label>
+        <input type="text" id="spRoot" placeholder="nombre del hueso raíz" style="width:100%">
+        <button id="btnSpineGen" class="pri mini" style="margin-top:6px">generar columna</button>
+      </div>
+      <label>imán: al acercar un hueso nuevo a otro, se enlazan</label>
+      <div class="hint">En modo rig: clic sobre el modelo = añade hueso hijo del padre elegido (o del hueso más cercano al clic). Arrastra un hueso para moverlo (queda a su altura). Doble clic sobre un hueso = set como padre. Rueda sobre hueso + Shift = tamaño.</div>
+      <ul id="rigList" style="list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:2px;max-height:140px;overflow-y:auto"></ul>
+      <div class="row">
+        <button id="btnRigDel" class="mini">borrar hueso</button>
+        <button id="btnRigClear" class="mini">borrar todos</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Reglas</h2>
+      <ul id="rules"></ul>
+      <div class="row" style="margin-top:8px">
+        <button id="btnAdd" class="mini">+ nueva regla</button>
+        <div class="presets">
+          <button class="mini" data-pre="tailModel">🦴 cola procedural</button>
+          <button class="mini" data-pre="tail">cola viva</button>
+          <button class="mini" data-pre="turn">reacción giro</button>
+          <button class="mini" data-pre="pitch">cabeceo vy</button>
+          <button class="mini" data-pre="fins">aletas</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="ruleEd">
+      <h2>Editor de regla</h2>
+      <div id="edBody"><div class="hint">Selecciona o crea una regla.</div></div>
+    </section>
+  </aside>
+  <div id="view">
+    <div id="hud"></div>
+    <div id="drop">suelta aquí el .gltf + .bin + texturas (o un .glb)</div>
+  </div>
+</main>
+
+<dialog id="dlg">
+  <div class="tabs">
+    <button id="tabJs" class="on">JS para el cliente</button>
+    <button id="tabJson">JSON (respaldo)</button>
+  </div>
+  <textarea id="expTxt" spellcheck="false"></textarea>
+  <div class="row" style="margin-top:8px">
+    <button id="btnCopy" class="pri">copiar al portapapeles</button>
+    <button id="btnClose" style="flex:0">cerrar</button>
+  </div>
+  <div class="hint" id="expHint"></div>
+</dialog>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+// ═══════════════════ estado ═══════════════════
+const $ = (id) => document.getElementById(id);
+const state = {
+  rules: [], sel: -1,
+  env: { turn: 0, vy: 0, speed: 0 },
+  hist: [],                       // {t, turn, vy, speed} — igual que el cliente
+  auto: true,
+  model: null, mixer: null, clips: [], clipName: '',
+  restPose: new Map(), bindPose: new Map(), nodes: [], // todos los Object3D con nombre
+  hl: [],                         // axes helpers de resaltado
+  t: 0,                           // ms "de animación" (afectado por speed), como el cliente
+  speed: 1, palo100: true,        // 100 palo = bind pose congelada (como el cliente sin cpuskin)
+};
+const LS_KEY = 'mf:procanim:v1';
+
+// ═══════════════════ escena three ═══════════════════
+const view = $('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x101418);
+scene.fog = new THREE.Fog(0x101418, 60, 220);
+const cam = new THREE.PerspectiveCamera(50, 1, 0.1, 500);
+cam.position.set(28, 14, 34);
+const controls = new OrbitControls(cam, renderer.domElement);
+controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xbfd7ff, 0x30281e, 2.2));
+const dir = new THREE.DirectionalLight(0xffffff, 2.6);
+dir.position.set(20, 30, 12);
+scene.add(dir);
+const dir2 = new THREE.DirectionalLight(0x9fc4ff, 1.2);   // relleno frío trasero
+dir2.position.set(-24, 8, -18);
+scene.add(dir2);
+const grid = new THREE.GridHelper(200, 40, 0x2a3441, 0x1a222c);
+grid.position.y = -0.01;
+scene.add(grid);
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h);
+  cam.aspect = w / h;
+  cam.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(view);
+
+// ═══════════════════ carga de modelo ═══════════════════
+function afterLoad(gltf) {
+  if (state.model) { scene.remove(state.model); state.mixer?.stopAllAction(); }
+  clearHighlight();
+  state.model = gltf.scene;
+  state.mixer = null;
+  state.clips = gltf.animations || [];
+  state.restPose = new Map();
+  state.nodes = [];
+  state.model.traverse((o) => {
+    if (o.name && !o.isMesh) {
+      state.nodes.push(o);
+      state.restPose.set(o, {
+        p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone()
+      });
+    }
+  });
+  state.nodes.sort((a, b) => (a.name < b.name ? -1 : 1));
+  // bind pose: local de cada joint en la pose en que el skin coincide con
+  // el buffer (W_bind_j = inv(IBM_j)). Recorremos desde la raíz:
+  // local = inv(W_parent_bind) · inv(IBM_j)
+  state.bindPose = new Map();
+  const ibmByName = new Map();
+  state.model.traverse((o) => {
+    if (o.isSkinnedMesh && o.skeleton?.bones && o.skeleton.boneInverses) {
+      for (let i = 0; i < o.skeleton.bones.length; i++) {
+        ibmByName.set(o.skeleton.bones[i], o.skeleton.boneInverses[i]);
+      }
+    }
+  });
+  const inv = (m) => new THREE.Matrix4().copy(m).invert();
+  const worldBind = new Map();
+  const root = state.model;
+  const solve = (node, parentW) => {
+    const ibm = ibmByName.get(node);
+    let w;
+    if (ibm) w = inv(ibm);                                    // joint: W_bind = inv(IBM)
+    else {
+      // nodo sin IBM (armature/EMPTY): su local actual, acumulado
+      w = parentW.clone().multiply(new THREE.Matrix4().compose(node.position, node.quaternion, node.scale));
+    }
+    worldBind.set(node, w);
+    const local = inv(parentW).multiply(w);
+    state.bindPose.set(node, { p: new THREE.Vector3().setFromMatrixPosition(local), q: new THREE.Quaternion().setFromRotationMatrix(local), s: new THREE.Vector3().setFromMatrixScale(local) });
+    node.children.forEach((c) => { if (!c.isMesh) solve(c, w); });
+  };
+  solve(root, new THREE.Matrix4());
+  // si quedaron meshes renderizados con bind matrices de la carga, alinear
+  // los SkinnedMesh al esquema palo (igual que el cliente en modo sin cpuskin)
+  scene.add(state.model);
+  // el leviathan viene con metalness=1/roughness=1 (para HDR viewers):
+  // sin environment map eso se ve NEGRO puro. Suavizamos para preview.
+  state.model.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (m.isMeshStandardMaterial) {
+        m.metalness = Math.min(m.metalness ?? 0, 0.35);
+        m.roughness = Math.max(m.roughness ?? 1, 0.55);
+      }
+    }
+  });
+  // encuadre sobre la esfera envolvente (a prueba de NaN: si el buffer
+  // fallara y la geometría quedara vacía, cae a un encuadre por defecto)
+  const box = new THREE.Box3().setFromObject(state.model);
+  const sp = box.getBoundingSphere(new THREE.Sphere());
+  if (!isFinite(sp.center.x + sp.center.y + sp.center.z + sp.radius) || sp.radius <= 0) {
+    sp.center.set(0, 0, 0); sp.radius = 24;
+    console.warn('encuadre: boundingSphere inválida — usando default');
+  }
+  cam.position.set(sp.center.x + sp.radius * 0.9, sp.center.y + sp.radius * 0.45, sp.center.z + sp.radius * 1.1);
+  controls.target.copy(sp.center);
+  const sel = $('animSel');
+  sel.innerHTML = '<option value="">— sin anim base (palo) —</option>'
+    + state.clips.map((c) => `<option value="${c.name}">${c.name}</option>`).join('');
+  // default: idle como base de TODO (el cuerpo sigue el clip; la cola la
+  // toman las reglas override). 100 palo OFF para que se vea la anim base.
+  const idle = state.clips.find((c) => /idle/i.test(c.name)) || state.clips[0];
+  if (idle) {
+    sel.value = idle.name; setClip(idle.name);
+    state.palo100 = false; $('cPalo100').checked = false;
+  }
+  $('hud').dataset.model = gltf.userData?.name || '';
+  fillDatalist();
+  refreshRigUI();   // poblar el dropdown de padre con los huesos del modelo
+  refreshRuleList();
+}
+function setClip(name) {
+  state.clipName = name;
+  if (state.mixer) { state.mixer.stopAllAction(); state.mixer = null; }
+  if (!name) return;
+  const clip = state.clips.find((c) => c.name === name);
+  if (!clip) return;
+  state.mixer = new THREE.AnimationMixer(state.model);
+  state.mixer.clipAction(clip).play();
+}
+async function loadDefault() {
+  // gltf por URL (el loader resuelve los URIs del .bin/texturas contra esta ruta)
+  new GLTFLoader().load('models/entities/leviathan.gltf', afterLoad, undefined, () => pickFiles());
+}
+function pickFiles() { $('fileIn').click(); }
+$('pick').onclick = pickFiles;
+$('fileIn').onchange = async (e) => {
+  const files = [...e.target.files];
+  if (!files.length) return;
+  const main = files.find((f) => /\.(gltf|glb)$/i.test(f.name));
+  if (!main) return alert('necesito el .gltf o .glb principal');
+  const blobMap = new Map(files.map((f) => [f.name, URL.createObjectURL(f)]));
+  const mgr = new THREE.LoadingManager();
+  mgr.setURLModifier((url) => blobMap.get(decodeURIComponent(url).split(/[\\/]/).pop()) || url);
+  const loader = new GLTFLoader(mgr);
+  if (/\.glb$/i.test(main.name)) {
+    loader.parse(await main.arrayBuffer(), '', afterLoad, (err) => alert('error: ' + err));
+  } else {
+    loader.parse(await main.text(), '', afterLoad, (err) => alert('error: ' + err));
+  }
+};
+// drag & drop
+const drop = $('drop');
+addEventListener('dragover', (e) => { e.preventDefault(); drop.style.display = 'flex'; });
+drop.addEventListener('dragleave', () => drop.style.display = 'none');
+addEventListener('drop', async (e) => {
+  e.preventDefault(); drop.style.display = 'none';
+  const dt = new DataTransfer();
+  for (const f of e.dataTransfer.files) dt.items.add(f);
+  $('fileIn').files = dt.files;
+  $('fileIn').onchange({ target: $('fileIn') });
+});
+
+// ═══════════════════ modo rig: huesos nuevos ═══════════════════
+const rig = { on: false, sel: null, drag: null, bones: new Map(), size: 1 };
+// visual estilo Blender: octaedro alargado a lo largo de +X del hueso
+// (el leviathan tiene la cola por +X). Largo por hueso.
+const BONE_GEO = new THREE.BufferGeometry();
+BONE_GEO.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+  0, 0, 0,  1, 0.14, 0,  1, 0, 0.14,  1, -0.14, 0,  1, 0, -0.14,
+  0, 0, 0,  1, 0, 0.14,  1, -0.14, 0,  1, 0, -0.14,  1, 0.14, 0,
+]), 3));
+BONE_GEO.computeVertexNormals();
+const BONE_MAT = new THREE.MeshBasicMaterial({ color: 0x4fd1a5, wireframe: true, transparent: true, opacity: 0.85 });
+function makeBoneVisual(len) {
+  const m = new THREE.Mesh(BONE_GEO, BONE_MAT);
+  m.scale.set(len, 1, 1);
+  m.raycast = () => {};   // no interceptar picks del modelo
+m.userData.isBoneVis = true;
+  return m;
+}
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+function rigToggled() {
+  rig.on = !rig.on;
+  $('btnRigMode').textContent = rig.on ? '🖱 rig ON (clic p/ hueso)' : '🖱 modo rig';
+  $('btnRigMode').style.borderColor = rig.on ? 'var(--ac)' : '';
+  controls.enabled = true;   // órbita siempre activa; rig usa clic/arrastre corto
+  renderer.domElement.style.cursor = rig.on ? 'crosshair' : '';
+  refreshRigUI();   // repoblar el dropdown (incluye huesos del modelo si ya cargó)
+}
+$('btnRigMode').onclick = rigToggled;
+$('boneLen').oninput = () => {
+  const rb = rig.bones.get(rig.sel);
+  const len = +$('boneLen').value;
+  $('vBoneLen').textContent = len.toFixed(1);
+  if (rb) { rb.len = len; rb.vis.scale.set(len, 1, 1); refreshRigUI(); }
+};
+function rigMeshes() {
+  const arr = [];
+  state.model?.traverse((o) => { if (o.isMesh) arr.push(o); });
+  return arr;
+}
+function pickModel(ev) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, cam);
+  const hit = ray.intersectObjects(rigMeshes(), false)[0];
+  return hit ? { point: hit.point.clone(), face: hit.face?.normal } : null;
+}
+function nearestBoneTo(point, exclude) {
+  let best = null, bd = Infinity;
+  for (const n of state.nodes) {
+    if (rig.bones.has(n)) continue;
+    const p = n.getWorldPosition(_v3);
+    const d = p.distanceTo(point);
+    if (d < bd) { bd = d; best = n; }
+  }
+  return { bone: best, dist: bd };
+}
+const _v3 = new THREE.Vector3();
+function addRigBone(at, parentGuess) {
+  const name = ($('rigName').value || 'bone').replace(/\s+/g, '_');
+  const parentName = $('rigParent').value;
+  let parent = null;
+  if (parentName) parent = state.nodes.find((n) => n.name === parentName && !rig.bones.has(n));
+  if (!parent && parentGuess) parent = parentGuess;
+  if (!parent) parent = state.model;   // raíz del modelo
+  // nombre único
+  let nm = name, k = 1;
+  while ([...rig.bones.values()].some((b) => b.node.name === nm) || state.nodes.some((n) => n.name === nm)) nm = name + '_' + (k++);
+  const node = new THREE.Object3D();
+  node.name = nm;
+  // posición: local al padre (convertir el punto mundo → local)
+  parent.updateWorldMatrix(true, false);
+  node.position.copy(parent.worldToLocal(at.clone()));
+  parent.add(node);
+  state.nodes.push(node);
+  state.restPose.set(node, { p: node.position.clone(), q: node.quaternion.clone(), s: node.scale.clone() });
+  state.bindPose.set(node, { p: node.position.clone(), q: node.quaternion.clone(), s: node.scale.clone() });
+  const vis = makeBoneVisual(+$('boneLen').value || 1.6);
+  node.add(vis);
+  const link = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, 0)]),
+    new THREE.LineBasicMaterial({ color: 0x4fd1a5 })
+  );
+  parent.add(link);   // línea padre→hijo (se actualiza cada frame)
+  const rb = { node, vis, link, parent, len: vis.scale.x };
+  rig.bones.set(node, rb);
+  // imán: si cayó cerca de otro hueso, reparentar al más cercano
+  const near = nearestBoneTo(at, node);
+  if (near.bone && near.dist < 2.5 && near.bone !== node.parent) magnetReparent(node, near.bone);
+  rig.sel = node;
+  refreshRigUI();
+}
+function magnetReparent(child, newParent) {
+  const rb = rig.bones.get(child);
+  const wp = child.getWorldPosition(new THREE.Vector3());
+  const wq = child.getWorldQuaternion(new THREE.Quaternion());
+  child.parent?.remove(child);
+  rb?.link && rb.link.parent?.remove(rb.link);
+  newParent.add(child);
+  newParent.updateWorldMatrix(true, false);
+  child.position.copy(newParent.worldToLocal(wp.clone()));
+  child.quaternion.copy(newParent.quaternion.clone().invert().multiply(wq));
+  if (rb) {
+    const link = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+      new THREE.LineBasicMaterial({ color: 0x4fd1a5 })
+    );
+    newParent.add(link);
+    rb.link = link;
+    rb.parent = newParent;
+  }
+  state.restPose.set(child, { p: child.position.clone(), q: child.quaternion.clone(), s: child.scale.clone() });
+}
+function refreshRigUI() {
+  const ul = $('rigList');
+  ul.innerHTML = '';
+  const opts = ['<option value="">— hueso padre —</option>'];
+  for (const rb of rig.bones.values()) {
+    const li = document.createElement('li');
+    li.style.cssText = 'display:flex;gap:6px;font-size:11px;padding:2px 4px;cursor:pointer;' + (rb.node === rig.sel ? 'color:var(--ac)' : '');
+    li.innerHTML = `<span>${esc(rb.node.name)}</span><span style="color:var(--dim);flex:1">← ${esc(rb.parent?.name || '?')} · L${(+rb.len).toFixed(1)}</span>`;
+    li.onclick = () => { rig.sel = rb.node; refreshRigUI(); };
+    ul.appendChild(li);
+    opts.push(`<option value="${esc(rb.node.name)}" ${rb.node === rig.sel ? 'selected' : ''}>${esc(rb.node.name)}</option>`);
+  }
+  $('rigParent').innerHTML = opts.join('');
+  // añadir huesos del MODELO como opciones de padre (usables como cualquier
+  // hueso del rig: colgar huesos nuevos, columnas, etc). Sólo los 40 más
+  // profundos/representativos no — TODOS, en un optgroup aparte.
+  const modelOpts = state.nodes
+    .filter((n) => !rig.bones.has(n))
+    .map((n) => `<option value="${esc(n.name)}">${esc(n.name)}</option>`)
+    .join('');
+  $('rigParent').insertAdjacentHTML('beforeend', `<optgroup label="— huesos del modelo —">${modelOpts}</optgroup>`);
+  // editor de largo del hueso seleccionado
+  const rb = rig.bones.get(rig.sel);
+  const show = !!rb;
+  $('lBoneLen').style.display = show ? 'block' : 'none';
+  $('boneLen').style.display = show ? 'block' : 'none';
+  if (rb) {
+    $('boneName').textContent = rb.node.name;
+    $('boneLen').value = rb.len;
+    $('vBoneLen').textContent = (+rb.len).toFixed(1);
+  }
+}
+function updateRigLinks() {
+  for (const rb of rig.bones.values()) {
+    if (!rb.link) continue;
+    const childPos = rb.node.getWorldPosition(_v3);
+    const parentPos = rb.parent.getWorldPosition(_v4);
+    // línea vive en el espacio del padre: destino = world→local
+    rb.link.geometry.setFromPoints([new THREE.Vector3(), rb.parent.worldToLocal(childPos.clone())]);
+  }
+}
+const _v4 = new THREE.Vector3();
+function deleteRigBone(node) {
+  const rb = rig.bones.get(node);
+  if (!rb) return;
+  // reparentar hijos del hueso borrado a su abuelo
+  for (const other of [...rig.bones.values()]) {
+    if (other.parent === node) magnetReparent(other.node, rb.parent);
+  }
+  rb.link?.parent?.remove(rb.link);
+  node.parent?.remove(node);
+  rig.bones.delete(node);
+  state.nodes = state.nodes.filter((n) => n !== node);
+  state.restPose.delete(node);
+  if (rig.sel === node) rig.sel = null;
+  refreshRigUI();
+}
+$('btnRigDel').onclick = () => rig.sel && deleteRigBone(rig.sel);
+$('btnRigClear').onclick = () => { for (const rb of [...rig.bones.values()]) deleteRigBone(rb.node); };
+// hueso del MODELO seleccionado con la herramienta "seleccionar existente":
+// resaltado persistente + queda como padre elegido. Los huesos del modelo
+// se pueden usar igual que los del rig (padre, zona de→a, listas, etc).
+let modelBoneSel = null;        // THREE.Object3D del hueso del modelo
+let modelBoneMark = null;       // mesh de resaltado
+function selectModelBone(bone) {
+  if (modelBoneMark) { modelBoneMark.parent?.remove(modelBoneMark); modelBoneMark = null; }
+  modelBoneSel = bone;
+  if (bone) {
+    modelBoneMark = makeBoneVisual(2.2);
+    modelBoneMark.material = new THREE.MeshBasicMaterial({ color: 0xffb454, wireframe: true, transparent: true, opacity: 0.95 });
+    bone.add(modelBoneMark);
+  }
+  refreshRigUI();   // reconstruye el dropdown (resetea .value)…
+  if (bone) $('rigParent').value = bone.name;   // …así que se setea DESPUÉS
+}
+// interacción con el canvas
+let downAt = null;
+const rigTool = () => document.querySelector('input[name=rigTool]:checked')?.value || 'add';
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (!rig.on) return;
+  downAt = { x: e.clientX, y: e.clientY };
+});
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!rig.on || !downAt || pickMode) return;
+  const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
+  downAt = null;
+  if (moved > 6) return;   // fue arrastre de órbita — ignorar
+  if (e.button !== 0) return;
+  const hit = pickModel(e);
+  if (!hit) return;
+  const near = nearestBoneTo(hit.point);
+  if (rigTool() === 'sel') {
+    // herramienta "seleccionar existente": marca el hueso del modelo clicado
+    if (near.bone) selectModelBone(near.bone);
+    return;
+  }
+  addRigBone(hit.point, (near.dist < 4 ? near.bone : null));
+});
+renderer.domElement.addEventListener('dblclick', (e) => {
+  if (!rig.on) return;
+  const near = nearestBoneTo(pickModel(e)?.point || new THREE.Vector3());
+  if (near.bone) { $('rigParent').value = near.bone.name; }
+});
+
+// ═══════════════════ reglas ═══════════════════
+const AXES = [
+  ['rx', 'rotación X (cabeceo)'], ['ry', 'rotación Y (guiñada)'], ['rz', 'rotación Z (alabeo)'],
+  ['px', 'posición X'], ['py', 'posición Y'], ['pz', 'posición Z'],
+];
+function newRule(preset) {
+  const r = {
+    id: Math.random().toString(36).slice(2, 8),
+    name: 'regla', mode: 'regex', pattern: '.*', axis: 'rz', type: 'wave',
+    from: '', to: '', dir: 'down', list: [],
+    amp: 8, freq: 0.6, phase: 0, phaseStep: 30, lag: 90, falloff: 0.97,
+    src: 'turn', gain: 0.6, clamp: 25, w: 1,
+    override: false,   // true = ANULA la anim base en sus huesos (reset a rest antes de la capa)
+  };
+  if (preset === 'tail') Object.assign(r, { name: 'cola ondeante', pattern: 'tail|fin.*end', axis: 'rz', type: 'wave', amp: 10, freq: 0.7, phaseStep: 40, lag: 70, falloff: 1.0 });
+  // cola PROCEDURAL del modelo: toma la zona que el clip base anima como cola
+  // (C_Tail_*, aletas, barba, lengua) y la ANULA (override) — la animación de
+  // cola del idle se descarta y solo manda la onda procedural
+  if (preset === 'tailModel') Object.assign(r, {
+    name: 'cola procedural (del modelo)', pattern: 'C_Tail|Tailfin|Tfin|Beard|Tongue',
+    mode: 'regex', axis: 'rz', type: 'wave', amp: 10, freq: 0.7, phaseStep: 40, lag: 70,
+    falloff: 1.0, override: true,
+  });
+  if (preset === 'turn') Object.assign(r, { name: 'giro → cuerpo', pattern: '^(?!.*(?:Tail|Tfin|Beard|Tongue|Fin)).*', axis: 'ry', type: 'react', src: 'turn', gain: 0.5, clamp: 18, lag: 60, falloff: 0.985 });
+  if (preset === 'pitch') Object.assign(r, { name: 'vy → cabeceo', pattern: '.*', axis: 'rx', type: 'react', src: 'vy', gain: 0.4, clamp: 15, lag: 80, falloff: 0.99 });
+  if (preset === 'fins') Object.assign(r, { name: 'aletas vivas', pattern: 'fin|beard|horn', axis: 'ry', type: 'noise', amp: 6, freq: 0.5, phaseStep: 55, lag: 50, falloff: 0.95 });
+  return r;
+}
+function matchNodes(r) {
+  if (!state.nodes.length) return [];
+  if (r.mode === 'chain') return chainBetween(r.from, r.to, r.dir);
+  if (r.mode === 'list') {
+    const set = new Set(r.list || []);
+    return state.nodes.filter((n) => set.has(n.name));
+  }
+  let re; try { re = new RegExp(r.pattern, 'i'); } catch { return []; }
+  const depth = (n) => { let d = 0, x = n; while (x.parent) { d++; x = x.parent; } return d; };
+  return state.nodes.filter((n) => re.test(n.name)).sort((a, b) => depth(a) - depth(b));
+}
+// zona de→a: camino entre dos huesos siguiendo la jerarquía.
+// down: parte de A y baja por los hijos hasta encontrar B (rama A→B).
+// up:   parte de A y sube por los padres hasta B (A es hijo, B ancestro).
+function chainBetween(from, to, dir) {
+  const byName = new Map(state.nodes.map((n) => [n.name, n]));
+  const A = byName.get(from), B = byName.get(to);
+  if (!A || !B) return [];
+  if (A === B) return [A];
+  const path = [A];
+  if (dir === 'up') {
+    let x = A;
+    while (x.parent) {
+      x = x.parent;
+      path.push(x);
+      if (x === B) return path;
+    }
+    return [];   // B no es ancestro de A
+  }
+  // down: DFS de A buscando B; el camino es la rama exacta A→B
+  const dfs = (node, trail) => {
+    for (const c of node.children) {
+      if (c.isMesh) continue;
+      const t = [...trail, c];
+      if (c === B) return t;
+      const r = dfs(c, t);
+      if (r) return r;
+    }
+    return null;
+  };
+  const found = dfs(A, path);
+  return found || [];
+}
+// pseudo-ruido: senos de periodos inconmensurables (determinista, sin lib)
+function noise1(x) {
+  return Math.sin(x) * 0.55 + Math.sin(x * 2.13 + 1.7) * 0.3 + Math.sin(x * 4.71 + 0.4) * 0.15;
+}
+function envAt(ms) {
+  const H = state.hist, want = state.t - ms;
+  let s = H[0];
+  for (let i = H.length - 1; i >= 0; i--) if (H[i].t <= want) { s = H[i]; break; }
+  return s || { turn: 0, vy: 0, speed: 0 };
+}
+// runtime del editor — MISMA semántica que el cliente: aditivo tras el
+// sampleo (mixer o restoreRest), se resetea al frame siguiente
+function applyRules() {
+  for (const r of state.rules) {
+    const nodes = matchNodes(r);
+    // override: resetear sus huesos a la pose base ANTES de la capa — así la
+    // anim base (idle) no mezcla su cola con la procedural: solo manda la regla
+    if (r.override && nodes.length) {
+      const src = state.palo100 && state.bindPose.size ? state.bindPose : state.restPose;
+      for (const n of nodes) {
+        const rp = src.get(n) || state.restPose.get(n);
+        if (rp) { n.position.copy(rp.p); n.quaternion.copy(rp.q); n.scale.copy(rp.s); }
+      }
+    }
+    const isPos = r.axis[0] === 'p';
+    const ampBase = (isPos ? r.amp * 0.02 : r.amp) * Math.PI / 180 * r.w;
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      let v = 0;
+      if (r.type === 'wave') v = Math.sin(state.t / 1000 * r.freq * Math.PI * 2 + r.phase * Math.PI / 180 + i * r.phaseStep * Math.PI / 180);
+      else if (r.type === 'noise') v = noise1(state.t / 1000 * r.freq * 2.2 + i * r.phaseStep * 0.12);
+      else { // react
+        const e = envAt(r.lag * i);
+        v = Math.max(-r.clamp, Math.min(r.clamp, r.gain * (e[r.src] || 0) * 60));
+        v = v / 60; // normalizado
+      }
+      v *= ampBase * Math.pow(r.falloff, i);
+      if (r.axis === 'rx') n.rotateX(v);
+      else if (r.axis === 'ry') n.rotateY(v);
+      else if (r.axis === 'rz') n.rotateZ(v);
+      else if (r.axis === 'px') n.position.x += v;
+      else if (r.axis === 'py') n.position.y += v;
+      else if (r.axis === 'pz') n.position.z += v;
+    }
+  }
+}
+function restoreRest() {
+  // palo100: bind pose real (la del buffer, igual que el cliente sin cpuskin)
+  // si no: rest pose del archivo (la que trae el glTF de fábrica)
+  const src = state.palo100 && state.bindPose.size ? state.bindPose : state.restPose;
+  for (const [n, rp] of src) {
+    n.position.copy(rp.p); n.quaternion.copy(rp.q); n.scale.copy(rp.s);
+  }
+}
+
+// datalist de nombres de huesos para los inputs de zona (rellenado tras
+// cargar el modelo) + pick 3D para el modo lista
+let pickMode = false;
+function fillDatalist() {
+  let dl = document.getElementById('boneNames');
+  if (!dl) {
+    dl = document.createElement('datalist');
+    dl.id = 'boneNames';
+    document.body.appendChild(dl);
+  }
+  dl.innerHTML = state.nodes.map((n) => `<option value="${esc(n.name)}">`).join('');
+}
+// pick 3D: clic sobre el modelo añade/quita el hueso MÁS CERCANO al punto
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!pickMode || !state.model || rig.on) return;
+  const hit = pickModel(e);
+  if (!hit) return;
+  const near = nearestBoneTo(hit.point);
+  if (!near.bone || near.dist > 3) return;   // demasiado lejos del clic
+  const r = state.rules[state.sel];
+  if (!r) return;
+  r.list = r.list || [];
+  const i = r.list.indexOf(near.bone.name);
+  if (i >= 0) r.list.splice(i, 1); else r.list.push(near.bone.name);
+  $('fBones').value = r.list.join('\n');
+  $('listCnt').textContent = r.list.length;
+  refreshRuleList(); highlight(matchNodes(r));
+});
+
+// ═══════════════════ UI: lista y editor de reglas ═══════════════════
+function refreshRuleList() {
+  const ul = $('rules');
+  ul.innerHTML = '';
+  state.rules.forEach((r, i) => {
+    const li = document.createElement('li');
+    if (i === state.sel) li.className = 'sel';
+    const cnt = matchNodes(r).length;
+    li.innerHTML = `<span class="nm">${esc(r.name)}${r.override ? ' <span style="color:var(--warn)" title="anula la anim base en sus huesos">🔒</span>' : ''} <span style="color:var(--dim)">[${r.axis}/${r.type}]</span></span>
+      <span class="cnt">${cnt}🦴</span><span class="del" title="borrar">✕</span>`;
+    li.onclick = (e) => {
+      if (e.target.className === 'del') { state.rules.splice(i, 1); state.sel = -1; refreshRuleList(); renderEditor(); return; }
+      state.sel = i; refreshRuleList(); renderEditor();
+    };
+    ul.appendChild(li);
+  });
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function renderEditor() {
+  const r = state.rules[state.sel];
+  const box = $('edBody');
+  clearHighlight();
+  if (!r) { box.innerHTML = '<div class="hint">Selecciona o crea una regla.</div>'; return; }
+  const cnt = matchNodes(r).length;
+  box.innerHTML = `
+    <label>nombre</label><input type="text" id="fName" value="${esc(r.name)}">
+    <label>selección de huesos</label>
+    <select id="fMode">
+      <option value="regex">regex por nombre</option>
+      <option value="chain">zona: de → a (siguiendo la cadena)</option>
+      <option value="list">lista manual (elegir en 3D)</option>
+    </select>
+    <div id="fRegex">
+      <label>patrón (regex, case-insensitive) — ${cnt} huesos matchean</label>
+      <input type="text" id="fPat" value="${esc(r.pattern)}">
+    </div>
+    <div id="fChain" style="display:none">
+      <label>desde (hueso inicial de la zona)</label>
+      <input type="text" id="fFrom" value="${esc(r.from || '')}" placeholder="ej: R_TailA_a_180" list="boneNames">
+      <label>hasta (hueso final, incluido)</label>
+      <input type="text" id="fTo" value="${esc(r.to || '')}" placeholder="ej: R_TailA_End_166" list="boneNames">
+      <label>dirección de la cadena</label>
+      <select id="fDir">
+        <option value="down">hacia los hijos (A … B por la rama)</option>
+        <option value="up">hacia el padre (B … A subiendo)</option>
+      </select>
+      <div class="hint" id="chainInfo"></div>
+    </div>
+    <div id="fList" style="display:none">
+      <label>huesos elegidos: <span id="listCnt">0</span> — <span id="pick3d" style="color:var(--ac);text-decoration:underline;cursor:pointer">elegir en 3D</span> y clic sobre el modelo (clic de nuevo = quitar)</label>
+      <textarea id="fBones" rows="3" style="width:100%;background:var(--bg);color:var(--tx);border:1px solid var(--line);border-radius:4px;font:11px Consolas,monospace" placeholder="un nombre por línea (o usa elegir en 3D)">${esc((r.list || []).join('\n'))}</textarea>
+    </div>
+    <label>tipo</label>
+    <select id="fType">
+      <option value="wave">onda (seno puro)</option>
+      <option value="noise">ruido orgánico</option>
+      <option value="react">reacción al entorno</option>
+    </select>
+    <label title="Anula la anim base en los huesos de esta regla: se resetean a la pose base y solo manda la capa procedural (para que la cola del clip no se mezcle con la procedural)">
+      <input type="checkbox" id="fOverride" style="accent-color:var(--warn)"> 🔒 override — anular anim base en estos huesos
+    </label>
+    <label>eje</label>
+    <select id="fAxis">${AXES.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>
+    <div id="fWave">
+      <label>amplitud <span class="val" id="vAmp"></span></label><input type="range" id="fAmp" min="0" max="40" step="0.5">
+      <label>frecuencia <span class="val" id="vFreq"></span> Hz</label><input type="range" id="fFreq" min="0.05" max="3" step="0.05">
+      <label>fase inicial <span class="val" id="vPhase"></span>°</label><input type="range" id="fPhase" min="0" max="360" step="5">
+      <label>avance de fase por hueso <span class="val" id="vPhSt"></span>° (ola que recorre la cadena)</label><input type="range" id="fPhSt" min="0" max="120" step="1">
+    </div>
+    <div id="fReact" style="display:none">
+      <label>fuente</label>
+      <select id="fSrc">
+        <option value="turn">giro (pet.procTurn)</option>
+        <option value="vy">velocidad vertical (pet.vy)</option>
+        <option value="speed">velocidad (pet.speedNow)</option>
+      </select>
+      <label>ganancia <span class="val" id="vGain"></span></label><input type="range" id="fGain" min="0" max="2" step="0.05">
+      <label>límite <span class="val" id="vClamp"></span>°</label><input type="range" id="fClamp" min="1" max="45" step="1">
+    </div>
+    <label>retardo por hueso (lag) <span class="val" id="vLag"></span> ms — reacción que se propaga</label><input type="range" id="fLag" min="0" max="300" step="5">
+    <label>decaimiento por hueso <span class="val" id="vFall"></span></label><input type="range" id="fFall" min="0.8" max="1.05" step="0.005">
+    <label>peso global <span class="val" id="vW"></span></label><input type="range" id="fW" min="0" max="1" step="0.05">
+    <div class="hint">Los cambios se aplican en vivo. Los huesos matcheados se resaltan con ejes en el visor.</div>
+  `;
+  const bind = (id, key, fmt, after) => {
+    const el = $(id);
+    el.value = r[key];
+    const lab = el.previousElementSibling?.querySelector('.val');
+    if (lab) lab.textContent = fmt(r[key]);
+    el.oninput = () => {
+      r[key] = parseFloat(el.value);
+      if (lab) lab.textContent = fmt(r[key]);
+      after?.();
+    };
+  };
+  $('fType').value = r.type; $('fAxis').value = r.axis;
+  $('fType').onchange = () => { r.type = $('fType').value; renderEditor(); };
+  $('fAxis').onchange = () => { r.axis = $('fAxis').value; refreshRuleList(); };
+  $('fOverride').checked = !!r.override;
+  $('fOverride').onchange = () => { r.override = $('fOverride').checked; refreshRuleList(); };
+  $('fName').oninput = () => { r.name = $('fName').value; refreshRuleList(); };
+  $('fPat').oninput = () => { r.pattern = $('fPat').value; refreshRuleList(); };
+  // selección de huesos: modo regex / zona de→a / lista manual
+  $('fMode').value = r.mode || 'regex';
+  const showMode = () => {
+    $('fRegex').style.display = $('fMode').value === 'regex' ? 'block' : 'none';
+    $('fChain').style.display = $('fMode').value === 'chain' ? 'block' : 'none';
+    $('fList').style.display = $('fMode').value === 'list' ? 'block' : 'none';
+    const info = $('chainInfo');
+    if ($('fMode').value === 'chain') {
+      const nodes = chainBetween(r.from, r.to, r.dir);
+      info.textContent = nodes.length
+        ? `${nodes.length} huesos: ${nodes[0].name} → … → ${nodes[nodes.length - 1].name}`
+        : 'sin camino — revisa los nombres o la dirección';
+      info.style.color = nodes.length ? 'var(--ac)' : 'var(--warn)';
+    }
+    refreshRuleList();
+    highlight(matchNodes(r));
+  };
+  $('fMode').onchange = () => { r.mode = $('fMode').value; showMode(); };
+  $('fFrom').oninput = () => { r.from = $('fFrom').value; showMode(); };
+  $('fTo').oninput = () => { r.to = $('fTo').value; showMode(); };
+  $('fDir').onchange = () => { r.dir = $('fDir').value; showMode(); };
+  $('fBones').oninput = () => {
+    r.list = $('fBones').value.split('\n').map((s) => s.trim()).filter(Boolean);
+    $('listCnt').textContent = r.list.length;
+    refreshRuleList(); highlight(matchNodes(r));
+  };
+  $('listCnt').textContent = (r.list || []).length;
+  $('pick3d').onclick = () => {
+    pickMode = !pickMode;
+    $('pick3d').textContent = pickMode ? ' picking 3D ON — clic hueso (clic = quitar)' : 'elegir en 3D';
+    $('pick3d').style.color = pickMode ? 'var(--warn)' : 'var(--ac)';
+  };
+  showMode();
+  $('fReact').style.display = r.type === 'react' ? 'block' : 'none';
+  $('fWave').style.display = r.type === 'wave' || r.type === 'noise' ? 'block' : 'none';
+  const f2 = (v) => (+v).toFixed(2), f1 = (v) => (+v).toFixed(1);
+  bind('fAmp', 'amp', f1); bind('fFreq', 'freq', f2); bind('fPhase', 'phase', f1); bind('fPhSt', 'phaseStep', f1);
+  bind('fGain', 'gain', f2); bind('fClamp', 'clamp', f1);
+  bind('fLag', 'lag', v => v + ''); bind('fFall', 'falloff', (v) => Math.pow(v, 12).toFixed(2)); bind('fW', 'w', f2);
+  if (r.type === 'react') { $('fSrc').value = r.src; $('fSrc').onchange = () => { r.src = $('fSrc').value; }; }
+  highlight(matchNodes(r));
+}
+function clearHighlight() {
+  for (const h of state.hl) { h.parent?.remove(h); h.dispose?.(); }
+  state.hl = [];
+}
+function highlight(nodes) {
+  clearHighlight();
+  const cap = Math.min(nodes.length, 300);
+  for (let i = 0; i < cap; i++) {
+    const h = new THREE.AxesHelper(1.4);
+    nodes[i].add(h);
+    state.hl.push(h);
+  }
+}
+$('btnAdd').onclick = () => { state.rules.push(newRule()); state.sel = state.rules.length - 1; refreshRuleList(); renderEditor(); };
+document.querySelectorAll('[data-pre]').forEach((b) => b.onclick = () => {
+  state.rules.push(newRule(b.dataset.pre)); state.sel = state.rules.length - 1; refreshRuleList(); renderEditor();
+});
+document.querySelectorAll('[data-env]').forEach((b) => b.onclick = () => {
+  const e = { calm: [0, 0, 0.15], serpent: [0, 0, 0.6], storm: [0, 0, 0.9], dive: [0, -0.85, 0.8] }[b.dataset.env];
+  $('sTurn').value = e[0]; $('sVy').value = e[1]; $('sSpd').value = e[2];
+  $('cAuto').checked = b.dataset.env !== 'calm';
+  state.auto = $('cAuto').checked;
+});
+$('animSel').onchange = () => setClip($('animSel').value);
+
+// ═══════════════════ entorno ═══════════════════
+$('cPalo100').onchange = () => state.palo100 = $('cPalo100').checked;
+$('sSpeed').oninput = () => {
+  state.speed = +$('sSpeed').value;
+  $('vSpeed').textContent = state.speed.toFixed(2) + '×';
+};
+$('cAuto').onchange = () => state.auto = $('cAuto').checked;
+['Turn', 'Vy', 'Spd'].forEach((k) => {
+  const s = $('s' + k), v = $('v' + k);
+  s.oninput = () => { v.textContent = (+s.value).toFixed(2); };
+});
+function readEnvSliders() {
+  state.env.turn = +$('sTurn').value; state.env.vy = +$('sVy').value; state.env.speed = +$('sSpd').value;
+}
+function updateEnv(t) {
+  if (state.auto) {
+    // serpenteo compuesto como el del cliente (dos periodos inconmensurables)
+    state.env.turn = Math.sin(t / 1000 * 0.42) * 0.75 + Math.sin(t / 1000 * 0.19) * 0.25;
+    state.env.vy = Math.sin(t / 1000 * 0.31) * 0.55;
+    state.env.speed = 0.55 + Math.sin(t / 1000 * 0.13) * 0.25;
+  } else readEnvSliders();
+  state.hist.push({ t, turn: state.env.turn, vy: state.env.vy, speed: state.env.speed });
+  while (state.hist.length > 2 && t - state.hist[0].t > 1800) state.hist.shift();
+  $('vTurn').textContent = state.env.turn.toFixed(2);
+  $('vVy').textContent = state.env.vy.toFixed(2);
+  $('vSpd').textContent = state.env.speed.toFixed(2);
+}
+
+// ═══════════════════ bucle ═══════════════════
+let last = performance.now(), fps = 60, hudT = 0;
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  state.t += dt * 1000 * state.speed;   // tiempo de animación (slow-mo con speed<1)
+  const t = state.t;
+  fps = fps * 0.95 + (1 / Math.max(dt, 1e-4)) * 0.05;
+  updateEnv(t);
+  // MISMA semántica que el cliente: primero restoreRest (siempre), luego el
+  // sampleo de la anim base encima, luego las capas procedurales aditivas.
+  // Sin el restore antes del mixer, las rotaciones aditivas acumularían.
+  restoreRest();
+  if (state.mixer && !state.palo100) state.mixer.update(dt * state.speed);
+  applyRules();
+  updateRigLinks();
+  controls.update();
+  renderer.render(scene, cam);
+  if (now - hudT > 500) {
+    hudT = now;
+    const sel = state.rules[state.sel];
+    $('hud').textContent =
+      (state.clipName ? 'anim base: ' + state.clipName : 'modo palo (sin anim base)')
+      + `\nfps ${fps.toFixed(0)} · modelo ${state.nodes.length} huesos`
+      + (sel ? ` · regla "${sel.name}" → ${matchNodes(sel).length} huesos` : '');
+  }
+}
+
+// ═══════════════════ exportación ═══════════════════
+function exportJS() {
+  // resuelve los nombres YA matcheados (el regex muere en el export —
+  // el cliente recibe listas explícitas de bones)
+  const out = state.rules.map((r) => ({
+    name: r.name, axis: r.axis, type: r.type,
+    amp: r.amp, freq: r.freq, phase: r.phase, phaseStep: r.phaseStep,
+    lag: r.lag, falloff: r.falloff, src: r.src, gain: r.gain, clamp: r.clamp, w: r.w,
+    override: !!r.override,
+    bones: matchNodes(r).map((n) => n.name).slice(0, 400),
+  })).filter((r) => r.bones.length);
+  // huesos creados en el rig: el cliente los crea con CM.addBone antes de
+  // resolver las reglas (offset local respecto a su padre)
+  const newBones = [...rig.bones.values()].map((rb) => ({
+    name: rb.node.name,
+    parent: rb.parent?.name || null,
+    len: rb.len || 1.6,
+    offset: [+rb.node.position.x.toFixed(3), +rb.node.position.y.toFixed(3), +rb.node.position.z.toFixed(3)],
+    // quat solo si no es identidad (columnas curvadas)
+    quat: (Math.abs(rb.node.quaternion.x) + Math.abs(rb.node.quaternion.y) + Math.abs(rb.node.quaternion.z)) > 1e-6
+      ? [rb.node.quaternion.x, rb.node.quaternion.y, rb.node.quaternion.z, rb.node.quaternion.w]
+      : null,
+  }));
+  const data = JSON.stringify(out, null, 1);
+  return `// ═══════════════════════════════════════════════════════════════
+// ProcanimLab — animación pseudo-procedural generada ${new Date().toLocaleString()}
+// PEGAR en AllayPets.js y llamar setupProcanim(pet, CM) tras el spawn
+// (donde hoy vive setupSpine). Semántica idéntica al editor: capas
+// ADITIVAS sobre la anim base; restoreRest del cliente las resetea
+// cada frame, así que nunca acumulan.
+// ═══════════════════════════════════════════════════════════════
+const PROC_RULES = ${data};
+${newBones.length ? `// huesos creados en el rig del editor (CM.addBone)
+const PROC_BONES = ${JSON.stringify(newBones, null, 1)};
+` : ''}
+function setupProcanim(pet, CM) {
+    if (!CM?.boneOf || !CM?.setProcAnim) return;
+${newBones.length ? `    for (const nb of PROC_BONES) CM.addBone(pet.id, nb.name, nb.parent, nb.offset, nb.quat);
+` : ''}    const layers = [];
+    for (const r of PROC_RULES) {
+        const bones = [];
+        for (const nm of r.bones) {
+            const g = CM.boneOf(pet.id, nm);   // solo bones que restoreRest resetea
+            if (g) bones.push(g);
+        }
+        if (bones.length) layers.push({ r, bones });
+    }
+    if (!layers.length) return;
+    // rest local de cada bone (para las capas override: anular la anim base)
+    const restOf = new Map();
+    for (const { bones } of layers) for (const g of bones) {
+        if (!restOf.has(g)) restOf.set(g, { p: g.position.clone(), q: g.quaternion.clone(), s: g.scale.clone() });
+    }
+    const H = [];                              // historia del entorno (para los lags)
+    const noise1 = (x) => Math.sin(x) * 0.55 + Math.sin(x * 2.13 + 1.7) * 0.3 + Math.sin(x * 4.71 + 0.4) * 0.15;
+    CM.setProcAnim(pet.id, (t) => {
+        H.push({ t, turn: pet.procTurn || 0, vy: pet.vy || 0, speed: pet.speedNow || 0 });
+        while (H.length > 2 && t - H[0].t > 1800) H.shift();
+        const envAt = (ms) => {
+            const want = t - ms; let s = H[0];
+            for (let i = H.length - 1; i >= 0; i--) if (H[i].t <= want) { s = H[i]; break; }
+            return s;
+        };
+        for (const { r, bones } of layers) {
+            // override: reset a rest ANTES de la capa — la anim base (idle)
+            // no mezcla su cola con la procedural: solo manda esta regla
+            if (r.override) {
+                for (const g of bones) {
+                    const rp = restOf.get(g);
+                    if (rp) { g.position.copy(rp.p); g.quaternion.copy(rp.q); g.scale.copy(rp.s); }
+                }
+            }
+            const isPos = r.axis[0] === 'p';
+            const amp = (isPos ? r.amp * 0.02 : r.amp) * Math.PI / 180 * r.w;
+            for (let i = 0; i < bones.length; i++) {
+                const g = bones[i];
+                let v = 0;
+                if (r.type === 'wave') v = Math.sin(t / 1000 * r.freq * Math.PI * 2 + r.phase * Math.PI / 180 + i * r.phaseStep * Math.PI / 180);
+                else if (r.type === 'noise') v = noise1(t / 1000 * r.freq * 2.2 + i * r.phaseStep * 0.12);
+                else {
+                    const e = envAt(r.lag * i);
+                    v = Math.max(-r.clamp, Math.min(r.clamp, r.gain * (e[r.src] || 0) * 60)) / 60;
+                }
+                v *= amp * Math.pow(r.falloff, i);
+                if (r.axis === 'rx') g.rotateX(v);
+                else if (r.axis === 'ry') g.rotateY(v);
+                else if (r.axis === 'rz') g.rotateZ(v);
+                else if (r.axis === 'px') g.position.x += v;
+                else if (r.axis === 'py') g.position.y += v;
+                else if (r.axis === 'pz') g.position.z += v;
+            }
+        }
+    });
+}`;
+}
+$('btnExport').onclick = () => {
+  $('tabJs').classList.add('on'); $('tabJson').classList.remove('on');
+  $('expTxt').value = exportJS();
+  $('expHint').textContent = 'En AllayPets.js: pega este bloque junto a spineTick y llama setupProcanim(pet, CM) después del spawn del leviathan (puedes convivir con setupSpine o reemplazarlo).';
+  $('dlg').showModal();
+};
+$('tabJs').onclick = () => { $('tabJs').classList.add('on'); $('tabJson').classList.remove('on'); $('expTxt').value = exportJS(); };
+$('tabJson').onclick = () => {
+  $('tabJson').classList.add('on'); $('tabJs').classList.remove('on');
+  $('expTxt').value = JSON.stringify({ rules: state.rules }, null, 2);
+  $('expHint').textContent = 'Respaldo de la configuración — impórtalo copiándolo al mismo campo y pulsando cargar.';
+};
+$('btnCopy').onclick = async () => {
+  await navigator.clipboard.writeText($('expTxt').value);
+  $('btnCopy').textContent = '¡copiado!';
+  setTimeout(() => $('btnCopy').textContent = 'copiar al portapapeles', 1200);
+};
+$('btnClose').onclick = () => $('dlg').close();
+
+// guardar / cargar config (reglas + rig)
+$('btnSave').onclick = () => {
+  localStorage.setItem(LS_KEY, JSON.stringify({
+    rules: state.rules,
+    bones: [...rig.bones.values()].map((rb) => ({
+      name: rb.node.name, parent: rb.parent?.name || null, len: rb.len || 1.6,
+      offset: [rb.node.position.x, rb.node.position.y, rb.node.position.z],
+    })),
+  }));
+  $('btnSave').textContent = '💾 guardado';
+  setTimeout(() => $('btnSave').textContent = '💾 guardar', 1200);
+};
+$('btnLoadCfg').onclick = () => {
+  const raw = localStorage.getItem(LS_KEY);
+  if (!raw) return alert('nada guardado todavía');
+  try {
+    const { rules, bones } = JSON.parse(raw);
+    for (const rb of [...rig.bones.values()]) deleteRigBone(rb.node);
+    state.rules = rules || []; state.sel = -1;
+    // recrear huesos: primero los de padre original, luego encadenados
+    for (let pass = 0; pass < 3; pass++) {
+      for (const nb of bones || []) {
+        if (rig.bones.size >= (bones || []).length) break;
+        const exists = [...rig.bones.values()].some((x) => x.node.name === nb.name);
+        if (exists) continue;
+        const parent = state.nodes.find((n) => n.name === nb.parent);
+        if (!parent && nb.parent) continue;   // padre aún no creado — siguiente pasada
+        const wp = parent ? parent.localToWorld(new THREE.Vector3(...nb.offset)) : new THREE.Vector3();
+        addRigBoneNamed(nb.name, wp, parent);
+        const created = [...rig.bones.values()].find((x) => x.node.name === nb.name);
+        if (created && nb.len) { created.len = nb.len; created.vis.scale.set(nb.len, 1, 1); }
+      }
+    }
+    refreshRuleList(); renderEditor(); refreshRigUI();
+  } catch (e) { alert('config corrupta: ' + e.message); }
+};
+// ═══════════════════ columna base ═══════════════════
+$('btnSpine').onclick = () => {
+  const c = $('spineCfg');
+  c.style.display = c.style.display === 'none' ? 'block' : 'none';
+};
+[['spN', 'vSpN'], ['spLen', 'vSpLen'], ['spCurve', 'vSpCurve']].forEach(([s, v]) => {
+  $(s).oninput = () => $(v).textContent = (+$(s).value).toFixed(s === 'spN' ? 0 : 1);
+});
+$('btnSpineGen').onclick = () => {
+  if (!state.model) return;
+  const n = +$('spN').value, len = +$('spLen').value;
+  const curveDeg = +$('spCurve').value;
+  const rootName = $('spRoot').value.trim();
+  const { base, dir } = computeSpineBase();
+  const root = rootName ? (state.nodes.find((x) => x.name === rootName && !rig.bones.has(x)) || state.model) : state.model;
+  root.updateWorldMatrix(true, false);
+  // q0: alinea el +X del primer hueso con el eje elegido (en el frame local del root)
+  const invRootQ = root.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const localDir = dir.clone().applyQuaternion(invRootQ).normalize();
+  const q0 = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), localDir);
+  // curvatura: cada vértebra suma curveDeg alrededor del Z local (el arco se
+  // propaga solo: el hijo vive en el frame ya rotado del padre)
+  const curveQ = curveDeg ? new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), curveDeg * Math.PI / 180) : null;
+  let prev = root;
+  for (let i = 0; i < n; i++) {
+    const nm = 'spine_' + (i + 1);
+    // 1º: en el punto base elegido. resto: en el extremo (+X·len) del padre
+    const localPos = i === 0 ? root.worldToLocal(base.clone()) : new THREE.Vector3(len, 0, 0);
+    const q = i === 0 ? q0 : curveQ;
+    const node = new THREE.Object3D();
+    node.name = nm;
+    node.position.copy(localPos);
+    if (q) node.quaternion.copy(q);
+    prev.add(node);
+    state.nodes.push(node);
+    state.restPose.set(node, { p: node.position.clone(), q: node.quaternion.clone(), s: node.scale.clone() });
+    state.bindPose.set(node, { p: node.position.clone(), q: node.quaternion.clone(), s: node.scale.clone() });
+    const vis = makeBoneVisual(len);
+    node.add(vis);
+    const link = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+      new THREE.LineBasicMaterial({ color: 0x6cb2ff })
+    );
+    prev.add(link);
+    rig.bones.set(node, { node, vis, link, parent: prev, len });
+    prev = node;
+  }
+  rig.sel = prev;
+  refreshRigUI();
+};
+// inicio y dirección de la columna: borde del modelo en el eje elegido
+function computeSpineBase() {
+  state.model.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(state.model);
+  const c = box.getCenter(new THREE.Vector3());
+  const mn = box.min, mx = box.max;
+  const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
+  switch ($('spAxis').value) {
+    case '-x': return { base: new THREE.Vector3(mx.x, c.y, c.z), dir: X.clone().negate() };
+    case 'y': return { base: new THREE.Vector3(c.x, mn.y, c.z), dir: Y };
+    case 'z': return { base: new THREE.Vector3(c.x, c.y, mn.z), dir: Z };
+    case '-z': return { base: new THREE.Vector3(c.x, c.y, mx.z), dir: Z.clone().negate() };
+    default: return { base: new THREE.Vector3(mn.x, c.y, c.z), dir: X };   // +X (cola del leviathan)
+  }
+}
+function addRigBoneNamed(name, at, parentOverride) {
+  let parent = parentOverride || state.model;
+  const node = new THREE.Object3D();
+  node.name = name;
+  parent.updateWorldMatrix(true, false);
+  node.position.copy(parent.worldToLocal(at.clone()));
+  parent.add(node);
+  state.nodes.push(node);
+  state.restPose.set(node, { p: node.position.clone(), q: node.quaternion.clone(), s: node.scale.clone() });
+  state.bindPose.set(node, { p: node.position.clone(), q: node.quaternion.clone(), s: node.scale.clone() });
+  const vis = makeBoneVisual(1.6);
+  node.add(vis);
+  const link = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+    new THREE.LineBasicMaterial({ color: 0x4fd1a5 })
+  );
+  parent.add(link);
+  rig.bones.set(node, { node, vis, link, parent, len: 1.6 });
+  refreshRigUI();
+}
+
+// ═══════════════════ arranque ═══════════════════
+window.__lab = { state, rig, cam, controls, scene, renderer, THREE, matchNodes, chainBetween, selectModelBone };   // debug
+// reglas de ejemplo para arrancar con algo visible:
+// cola PROCEDURAL del modelo (anula la cola del idle) + reacciones del cuerpo
+state.rules.push(newRule('tailModel'), newRule('turn'), newRule('pitch'));
+state.sel = 0;
+resize();
+refreshRuleList();
+renderEditor();
+requestAnimationFrame(loop);
+loadDefault();
+</script>
+</body>
+</html>

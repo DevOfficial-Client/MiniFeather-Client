@@ -436,6 +436,30 @@
             return null;
         },
 
+        // hueso NUEVO para procanim (editor de huesos del lab): cuelga de un
+        // bone existente por nombre, entra a inst.rest → restoreRest lo
+        // resetea cada frame y boneOf/procAnim lo encuentran como a cualquier
+        // otro. offset/quat en espacio LOCAL del padre.
+        addBone(id, name, parentName, offset, quat) {
+            const rec = state.customs.get(id);
+            if (!rec || rec.dead || !rec.inst) return false;
+            let parent = null;
+            for (const r of rec.inst.rest) {
+                if (r.g?.name === parentName) { parent = r.g; break; }
+                if (r.g?.name === name) return false;   // ya existe
+            }
+            if (!parent && parentName) return false;
+            if (!parent) parent = rec.inst.root || rec.inst.g;   // raíz del custom
+            const B = parent.constructor;
+            const b = new B();
+            b.name = name;
+            b.position.set(offset?.[0] || 0, offset?.[1] || 0, offset?.[2] || 0);
+            if (quat) b.quaternion.set(quat[0], quat[1], quat[2], quat[3]);
+            parent.add(b);
+            rec.inst.rest.push({ g: b, p: b.position.clone(), q: b.quaternion.clone(), s: b.scale.clone() });
+            return true;
+        },
+
         // callback procedural sobre el rec INTERNO: corre tras sampleAnim en
         // tickCustoms (no sirve asignarlo sobre el wrapper de getRecord)
         setProcAnim(id, fn) {
@@ -1296,76 +1320,88 @@
         const m2 = new ctors.Mesh(dGeo, sp.mesh.material);
         m2.name = sp.mesh.name || 'cpuskinned';
         try { (m2.userData = m2.userData || {}).__mfCM = true; } catch {}
-        // El rest del archivo ≠ bind de los IBM (verificado: error máx 32.9)
-        // → skinear con DELTA respecto al rest: en reposo delta=I y la malla
-        // queda EXACTA al buffer (modo palo); las anims suman rotación pura.
-        //   K_j = inv(P_actual) · worldCurrent_j · restIb_j
-        //   restIb_j = inv(worldRest_j) · P_rest   ← CONSTANTE, precalculado
-        // La inversa izquierda es del parent ACTUAL (se recalcula en cada
-        // frame) → el RootCur del spawn y el movimiento de la mascota se
-        // cancelan solos y quedan fuera de la delta.
-        const P_rest = parent.matrixWorld.elements;
-        const restIb = new Float64Array(joints.length * 16);
+        // FIDELIDAD: la bind pose real del exportador son los IBM del archivo.
+        // El modo delta (restIb = inv(worldRest)·P_rest) mantenía el palo
+        // perfecto pero sesgaba las anims (la corrección rest→bind quedaba
+        // aplicada al revés en cada joint → "no se parece al original").
+        // → skinear con IBM: K_j = inv(P_actual) · worldCurrent_j · IBM_j
+        // (en reposo K ≠ I: la malla "salta" a la bind pose real, que es lo
+        // que muestra cualquier visor glTF; el modo palo default no se toca)
+        // OJO índices columna-major: out[c*4+r] = Σ_k A[k*4+r]·B[c*4+k]
+        const ibmF = new Float64Array(joints.length * 16);
         for (let j = 0; j < joints.length; j++) {
-            const ir = mat4Invert(joints[j].matrixWorld.elements);
-            const o = j * 16;
-            for (let c = 0; c < 4; c++) {
-                const a0 = ir[c * 4], a1 = ir[c * 4 + 1], a2 = ir[c * 4 + 2], a3 = ir[c * 4 + 3];
-                restIb[o + c * 4 + 0] = a0 * P_rest[0] + a1 * P_rest[4] + a2 * P_rest[8] + a3 * P_rest[12];
-                restIb[o + c * 4 + 1] = a0 * P_rest[1] + a1 * P_rest[5] + a2 * P_rest[9] + a3 * P_rest[13];
-                restIb[o + c * 4 + 2] = a0 * P_rest[2] + a1 * P_rest[6] + a2 * P_rest[10] + a3 * P_rest[14];
-                restIb[o + c * 4 + 3] = a0 * P_rest[3] + a1 * P_rest[7] + a2 * P_rest[11] + a3 * P_rest[15];
-            }
+            for (let e = 0; e < 16; e++) ibmF[j * 16 + e] = ibm[j * 16 + e];
         }
         cpuSkinData.set(m2, {
-            joints, restIb,
+            joints, ibm: ibmF,
             srcPos: posA.array, srcNor: norA ? norA.array : null,
             si: siA.array, sw: swA.array
         });
-        // AUTOTEST en reposo (logs): K_j debe salir IDENTIDAD y una muestra
-        // de vértices skinneados debe caer sobre el buffer original. Verde →
-        // activar mf:cpuskin no toca el modo palo; rojo → deformación.
+        // AUTOTEST en reposo (logs): con IBM, K ≠ I es LO ESPERADO (la malla
+        // salta a la bind pose real del exportador). Validamos la propiedad
+        // que sí debe cumplirse: skinneando en reposo con K = inv(P)·W_rest·IBM
+        // debe dar lo MISMO que skinnear con IBM puro (W_rest·IBM), i.e. la
+        // posición mundial de cada vértice coincide (solo cambia el espacio).
         try {
-            const invP = mat4Invert(P_rest);
+            const invP = mat4Invert(parent.matrixWorld.elements);
             const Ks = new Float64Array(joints.length * 16);
             const tmp = new Float64Array(16);
-            let kErr = 0;
             for (let j = 0; j < joints.length; j++) {
                 const wj = joints[j].matrixWorld.elements, jo = j * 16;
                 for (let c = 0; c < 4; c++) {
-                    const b0 = invP[c * 4], b1 = invP[c * 4 + 1], b2 = invP[c * 4 + 2], b3 = invP[c * 4 + 3];
-                    tmp[c * 4] = b0 * wj[0] + b1 * wj[4] + b2 * wj[8] + b3 * wj[12];
-                    tmp[c * 4 + 1] = b0 * wj[1] + b1 * wj[5] + b2 * wj[9] + b3 * wj[13];
-                    tmp[c * 4 + 2] = b0 * wj[2] + b1 * wj[6] + b2 * wj[10] + b3 * wj[14];
-                    tmp[c * 4 + 3] = b0 * wj[3] + b1 * wj[7] + b2 * wj[11] + b3 * wj[15];
+                    const w0 = wj[c * 4], w1 = wj[c * 4 + 1], w2 = wj[c * 4 + 2], w3 = wj[c * 4 + 3];
+                    tmp[c * 4] = invP[0] * w0 + invP[4] * w1 + invP[8] * w2 + invP[12] * w3;
+                    tmp[c * 4 + 1] = invP[1] * w0 + invP[5] * w1 + invP[9] * w2 + invP[13] * w3;
+                    tmp[c * 4 + 2] = invP[2] * w0 + invP[6] * w1 + invP[10] * w2 + invP[14] * w3;
+                    tmp[c * 4 + 3] = invP[3] * w0 + invP[7] * w1 + invP[11] * w2 + invP[15] * w3;
                 }
                 for (let c = 0; c < 4; c++) {
-                    const a0 = tmp[c * 4], a1 = tmp[c * 4 + 1], a2 = tmp[c * 4 + 2], a3 = tmp[c * 4 + 3];
-                    for (let r = 0; r < 4; r++) Ks[jo + c * 4 + r] = a0 * restIb[jo + r] + a1 * restIb[jo + 4 + r] + a2 * restIb[jo + 8 + r] + a3 * restIb[jo + 12 + r];
+                    const b0 = ibmF[jo + c * 4], b1 = ibmF[jo + c * 4 + 1], b2 = ibmF[jo + c * 4 + 2], b3 = ibmF[jo + c * 4 + 3];
+                    Ks[jo + c * 4] = tmp[0] * b0 + tmp[4] * b1 + tmp[8] * b2 + tmp[12] * b3;
+                    Ks[jo + c * 4 + 1] = tmp[1] * b0 + tmp[5] * b1 + tmp[9] * b2 + tmp[13] * b3;
+                    Ks[jo + c * 4 + 2] = tmp[2] * b0 + tmp[6] * b1 + tmp[10] * b2 + tmp[14] * b3;
+                    Ks[jo + c * 4 + 3] = tmp[3] * b0 + tmp[7] * b1 + tmp[11] * b2 + tmp[15] * b3;
                 }
-                for (let e = 0; e < 16; e++) { const d = Math.abs(Ks[jo + e] - (e % 5 === 0 ? 1 : 0)); if (d > kErr) kErr = d; }
             }
             const nv = posA.array.length / 3;
             let vErr = 0;
             const step = Math.max(1, Math.floor(nv / 96));
+            // helpers: producto matriz·matriz y matriz·vector (columna-major)
+            const mm = (A, B) => {
+                const O = new Float64Array(16);
+                for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++)
+                    O[c * 4 + r] = A[r] * B[c * 4] + A[4 + r] * B[c * 4 + 1] + A[8 + r] * B[c * 4 + 2] + A[12 + r] * B[c * 4 + 3];
+                return O;
+            };
+            const mv = (M, x, y, z) => [
+                M[0] * x + M[4] * y + M[8] * z + M[12],
+                M[1] * x + M[5] * y + M[9] * z + M[13],
+                M[2] * x + M[6] * y + M[10] * z + M[14]
+            ];
+            // precalcula W_j·IBM_j por joint (referencia mundo, como un visor)
+            const wIbm = joints.map((b, jj) => mm(b.matrixWorld.elements, ibmF.subarray(jj * 16, jj * 16 + 16)));
+            const P = parent.matrixWorld.elements;
             for (let v = 0; v < nv; v += step) {
                 const px = posA.array[v * 3], py = posA.array[v * 3 + 1], pz = posA.array[v * 3 + 2];
-                let x = 0, y = 0, z = 0, wsum = 0;
+                let lx = 0, ly = 0, lz = 0, gwx = 0, gwy = 0, gwz = 0, wsum = 0;
                 for (let k = 0; k < 4; k++) {
                     const w = swA.array[v * 4 + k];
                     if (w <= 1e-4) continue;
-                    const o = siA.array[v * 4 + k] * 16;
-                    x += w * (Ks[o] * px + Ks[o + 4] * py + Ks[o + 8] * pz + Ks[o + 12]);
-                    y += w * (Ks[o + 1] * px + Ks[o + 5] * py + Ks[o + 9] * pz + Ks[o + 13]);
-                    z += w * (Ks[o + 2] * px + Ks[o + 6] * py + Ks[o + 10] * pz + Ks[o + 14]);
+                    const ji = siA.array[v * 4 + k], o = ji * 16;
+                    const lp = mv(Ks.subarray(o, o + 16), px, py, pz);          // K → espacio del parent
+                    const gp = mv(wIbm[ji], px, py, pz);                        // W·IBM → mundo
+                    lx += w * lp[0]; ly += w * lp[1]; lz += w * lp[2];
+                    gwx += w * gp[0]; gwy += w * gp[1]; gwz += w * gp[2];
                     wsum += w;
                 }
-                const e = Math.hypot(x - px, y - py, z - pz) / (wsum || 1);
+                // el local debe reproducir el mundo al aplicarle P del parent
+                const world = mv(P, lx, ly, lz);
+                const e = Math.hypot(world[0] - gwx, world[1] - gwy, world[2] - gwz) / (wsum || 1);
                 if (e > vErr) vErr = e;
             }
             console.info(TAG + ' cpu-skin "' + (m2.name || '?') + '": ' + joints.length + ' joints, ' + nv + ' verts'
-                + ' — autotest reposo: K−I máx ' + kErr.toExponential(1) + ', verts máx ' + vErr.toFixed(4)
-                + (kErr < 1e-6 && vErr < 0.01 ? ' ✔ palo intacto' : ' ✘ DEFORMA EN REPOSO'));
+                + ' — autotest reposo (IBM): verts vs W·IBM máx ' + vErr.toFixed(4)
+                + (vErr < 0.01 ? ' ✔ bind pose correcta' : ' ✘ REVISAR IBM'));
         } catch (e) { console.warn(TAG + ' autotest cpu-skin falló: ' + (e?.message || e)); }
         m2.userData.__mfCpu = true;   // flag simple — sobrevive al JSON del clone
         try { m2.frustumCulled = false; } catch {}
@@ -1385,8 +1421,8 @@
         return _cpuSkinOn;
     }
 
-    // scratch: M_j = invParentWorld(actual) · jointWorld(actual) · restIb_j
-    // (= delta de la animación respecto al rest; identidad en reposo)
+    // scratch: M_j = invParentWorld(actual) · jointWorld(actual) · IBM_j
+    // (= W·IBM del visor, re-expresado en el espacio del parent del mesh)
     const _csA = new Float64Array(16);
     let _paloHintShown = false;
     function updateCpuSkins(rec, force) {
@@ -1424,27 +1460,29 @@
             const invP = mat4Invert(pw);
             const nj = cs.joints.length;
             if (!cs._mj || cs._mj.length !== nj * 16) cs._mj = new Float64Array(nj * 16);
-            const mj = cs._mj, ib = cs.restIb;
+            const mj = cs._mj, ib = cs.ibm;
             for (let j = 0; j < nj; j++) {
                 const jt = cs.joints[j];
                 if (!jt) continue;
                 const wj = jt.matrixWorld.elements || jt.matrixWorld;
-                // _csA = invP · jointWorld
+                // _csA = invP · jointWorld — canónico: out[c*4+r] = Σ_k izq[k*4+r]·der[c*4+k]
+                // (fila de invP × columna de wj; leer filas donde van columnas
+                // transpone el producto y mete la T del mundo sin cancelar)
                 for (let c = 0; c < 4; c++) {
-                    const b0 = invP[c * 4], b1 = invP[c * 4 + 1], b2 = invP[c * 4 + 2], b3 = invP[c * 4 + 3];
-                    _csA[c * 4 + 0] = b0 * wj[0] + b1 * wj[4] + b2 * wj[8] + b3 * wj[12];
-                    _csA[c * 4 + 1] = b0 * wj[1] + b1 * wj[5] + b2 * wj[9] + b3 * wj[13];
-                    _csA[c * 4 + 2] = b0 * wj[2] + b1 * wj[6] + b2 * wj[10] + b3 * wj[14];
-                    _csA[c * 4 + 3] = b0 * wj[3] + b1 * wj[7] + b2 * wj[11] + b3 * wj[15];
+                    const w0 = wj[c * 4], w1 = wj[c * 4 + 1], w2 = wj[c * 4 + 2], w3 = wj[c * 4 + 3];
+                    _csA[c * 4] = invP[0] * w0 + invP[4] * w1 + invP[8] * w2 + invP[12] * w3;
+                    _csA[c * 4 + 1] = invP[1] * w0 + invP[5] * w1 + invP[9] * w2 + invP[13] * w3;
+                    _csA[c * 4 + 2] = invP[2] * w0 + invP[6] * w1 + invP[10] * w2 + invP[14] * w3;
+                    _csA[c * 4 + 3] = invP[3] * w0 + invP[7] * w1 + invP[11] * w2 + invP[15] * w3;
                 }
-                // mj = _csA · restIb_j  (delta de la animación)
+                // mj = _csA · IBM_j  (bind pose real del exportador)
                 const jo = j * 16;
                 for (let c = 0; c < 4; c++) {
-                    const a0 = _csA[c * 4], a1 = _csA[c * 4 + 1], a2 = _csA[c * 4 + 2], a3 = _csA[c * 4 + 3];
-                    mj[jo + c * 4 + 0] = a0 * ib[jo + 0] + a1 * ib[jo + 4] + a2 * ib[jo + 8] + a3 * ib[jo + 12];
-                    mj[jo + c * 4 + 1] = a0 * ib[jo + 1] + a1 * ib[jo + 5] + a2 * ib[jo + 9] + a3 * ib[jo + 13];
-                    mj[jo + c * 4 + 2] = a0 * ib[jo + 2] + a1 * ib[jo + 6] + a2 * ib[jo + 10] + a3 * ib[jo + 14];
-                    mj[jo + c * 4 + 3] = a0 * ib[jo + 3] + a1 * ib[jo + 7] + a2 * ib[jo + 11] + a3 * ib[jo + 15];
+                    const b0 = ib[jo + c * 4], b1 = ib[jo + c * 4 + 1], b2 = ib[jo + c * 4 + 2], b3 = ib[jo + c * 4 + 3];
+                    mj[jo + c * 4] = _csA[0] * b0 + _csA[4] * b1 + _csA[8] * b2 + _csA[12] * b3;
+                    mj[jo + c * 4 + 1] = _csA[1] * b0 + _csA[5] * b1 + _csA[9] * b2 + _csA[13] * b3;
+                    mj[jo + c * 4 + 2] = _csA[2] * b0 + _csA[6] * b1 + _csA[10] * b2 + _csA[14] * b3;
+                    mj[jo + c * 4 + 3] = _csA[3] * b0 + _csA[7] * b1 + _csA[11] * b2 + _csA[15] * b3;
                 }
             }
             const posA = mesh.geometry.attributes.position;
@@ -1485,7 +1523,7 @@
         if (nowMs - (rec._cpuLogAt || 0) > 2000) {
             rec._cpuLogAt = nowMs;
             let vMax = 0, jMax = 0, jName = '—', usedMoving = 0, usedTotal = 0;
-            let anyMax = 0, anyName = '—', anyT = 0;
+            let anyMax = 0, anyName = '—', anyT = 0, _dbg = null;
             for (const m of inst.cpuMeshes) {
                 const cs = cpuSkinData.get(m);
                 if (!cs?._mj) continue;
@@ -1507,6 +1545,7 @@
                         anyMax = dj;
                         anyName = cs.joints[j]?.name || ('#' + j);
                         anyT = Math.hypot(mj[jo + 12], mj[jo + 13], mj[jo + 14]);
+                        _dbg = { m, jt: cs.joints[j], mj, jo };
                     }
                     if (!cs._used[j]) continue;
                     usedTotal++;
@@ -1529,6 +1568,53 @@
                 + ' | absoluto "' + anyName + '" ' + anyMax.toFixed(1) + ' |Kt| ' + anyT.toFixed(1)
                 + ' | verts máx ' + vMax.toFixed(2) + 'u | root (' + rp.x.toFixed(0) + ',' + rp.y.toFixed(0) + ',' + rp.z.toFixed(0) + ')'
                 + (vMax < 0.01 ? ' — NADA VISIBLE' : (vMax < 30 ? ' — animando ✔' : ' — ¡EXPLOTA!')));
+            // AUTOPSIA (solo si explota): las 4 matrices de la fórmula en
+            // juego + test de ancestro. Si mismoÁrbol=false → los joints
+            // cuelgan de otro árbol (p.ej. el prototipo) y no comparten la
+            // transform del parent del mesh → la T del mundo no se cancela.
+            if (vMax >= 30 && _dbg) {
+                try {
+                    const { m, jt, mj, jo } = _dbg;
+                    const par = m.parent;
+                    const isDesc = (n, top) => { let x = n, h = 0; while (x && h++ < 300) { if (x === top) return true; x = x.parent; } return false; };
+                    let same = isDesc(jt, par);
+                    const inRootJt = isDesc(jt, inst.root), inRootPar = isDesc(par, inst.root);
+                    const pw = par.matrixWorld.elements || par.matrixWorld;
+                    const wj = jt.matrixWorld.elements || jt.matrixWorld;
+                    const rw = inst.root.matrixWorld.elements || inst.root.matrixWorld;
+                    const f = (a) => a[12].toFixed(1) + ',' + a[13].toFixed(1) + ',' + a[14].toFixed(1);
+                    // recomputar K en vivo con las mismísimas matrices y comparar
+                    const invP2 = mat4Invert(pw);
+                    const _a = new Float64Array(16), _k = new Float64Array(16);
+                    for (let c = 0; c < 4; c++) {
+                        const w0 = wj[c * 4], w1 = wj[c * 4 + 1], w2 = wj[c * 4 + 2], w3 = wj[c * 4 + 3];
+                        _a[c * 4] = invP2[0] * w0 + invP2[4] * w1 + invP2[8] * w2 + invP2[12] * w3;
+                        _a[c * 4 + 1] = invP2[1] * w0 + invP2[5] * w1 + invP2[9] * w2 + invP2[13] * w3;
+                        _a[c * 4 + 2] = invP2[2] * w0 + invP2[6] * w1 + invP2[10] * w2 + invP2[14] * w3;
+                        _a[c * 4 + 3] = invP2[3] * w0 + invP2[7] * w1 + invP2[11] * w2 + invP2[15] * w3;
+                    }
+                    const cs2 = cpuSkinData.get(m);
+                    const rib = cs2.ibm;
+                    for (let c = 0; c < 4; c++) {
+                        const b0 = rib[jo + c * 4], b1 = rib[jo + c * 4 + 1], b2 = rib[jo + c * 4 + 2], b3 = rib[jo + c * 4 + 3];
+                        _k[c * 4] = _a[0] * b0 + _a[4] * b1 + _a[8] * b2 + _a[12] * b3;
+                        _k[c * 4 + 1] = _a[1] * b0 + _a[5] * b1 + _a[9] * b2 + _a[13] * b3;
+                        _k[c * 4 + 2] = _a[2] * b0 + _a[6] * b1 + _a[10] * b2 + _a[14] * b3;
+                        _k[c * 4 + 3] = _a[3] * b0 + _a[7] * b1 + _a[11] * b2 + _a[15] * b3;
+                    }
+                    const kRecT = Math.hypot(_k[12], _k[13], _k[14]);
+                    // compose manual del joint: posición/quaternion del propio jt
+                    const jp = jt.position, jq = jt.quaternion;
+                    console.warn(TAG + ' AUTOPSIA2 "' + rec.id + '" joint "' + anyName + '":'
+                        + ' jt∈root=' + inRootJt + ' par∈root=' + inRootPar + ' jt∈par=' + same
+                        + ' | invP_t=[' + f(invP2) + ']'
+                        + ' | K_live_t=[' + _k[12].toFixed(1) + ',' + _k[13].toFixed(1) + ',' + _k[14].toFixed(1) + '] |K_live|=' + kRecT.toFixed(1)
+                        + ' |K_guardado|=' + anyT.toFixed(1)
+                        + ' | jt.pos=[' + jp.x.toFixed(2) + ',' + jp.y.toFixed(2) + ',' + jp.z.toFixed(2) + '] jt.q=(' + jq.x.toFixed(2) + ',' + jq.y.toFixed(2) + ',' + jq.z.toFixed(2) + ',' + jq.w.toFixed(2) + ')'
+                        + ' | jtW_t=[' + f(wj) + '] rootW_t=[' + f(rw) + ']'
+                        + (Math.abs(kRecT - anyT) < 1 ? ' — K ok: inputs raros' : ' — ¡K GUARDADO ≠ K RECALCULADO!'));
+                } catch (e) { console.warn(TAG + ' autopsia falló: ' + (e?.message || e)); }
+            }
         }
     }
 
@@ -2473,7 +2559,7 @@
                 o.geometry = nGeo;
                 cpuSkinData.set(o, {
                     joints: cs.joints.map((b) => map.get(b) || b),
-                    restIb: cs.restIb, srcPos: cs.srcPos, srcNor: cs.srcNor,
+                    ibm: cs.ibm, srcPos: cs.srcPos, srcNor: cs.srcNor,
                     si: cs.si, sw: cs.sw
                 });
                 cpuMeshes.push(o);
@@ -3347,10 +3433,11 @@
                                 }
                             } catch {}
                         }
-                        // esta rama hace `continue` y se salta el cpu-skin de
-                        // abajo → skinnear aquí también (no-op sin cpu meshes)
-                        if (rec.inst?.cpuMeshes?.length) updateCpuSkins(rec);
+                        // esta rama hace `continue` y se salta el bloque de
+                        // abajo → procAnim + cpu-skin aquí también. procAnim
+                        // ANTES del skin (mismo criterio que la rama normal)
                         if (rec.procAnim) { try { rec.procAnim(t, dt); } catch {} }
+                        if (rec.inst?.cpuMeshes?.length) updateCpuSkins(rec);
                         continue;
                     }
                 }
@@ -3362,15 +3449,16 @@
                     restoreRest(rec.inst);
                     sampleAnim(rec.inst, rec.anim, (t - rec.animStart) / 1000 * rec.animSpeed);
                 }
-                // CPU skinning: tras sampleAnim los joints ya tienen la pose
-                // del frame → recalcular vértices suavemente en JS
-                if (rec.inst?.cpuMeshes?.length) updateCpuSkins(rec);
-                // hook procedural: corre DESPUÉS de sampleAnim para que módulos
-                // externos (p.ej. columna serpenteante de AllayPets) puedan
-                // sobreescribir bones con dinámica reactiva al movimiento real
+                // hook procedural: tras sampleAnim y ANTES del cpu-skin —
+                // si corriera después, restoreRest del próximo frame limpiaría
+                // sus rotaciones sin que nunca lleguen a la malla skinneada
+                // (con bones-grupos da igual, con cpu-skin el orden importa)
                 if (rec.procAnim) {
                     try { rec.procAnim(t, dt); } catch {}
                 }
+                // CPU skinning: joints ya tienen la pose final del frame
+                // (anim + procAnim) → recalcular vértices suavemente en JS
+                if (rec.inst?.cpuMeshes?.length) updateCpuSkins(rec);
             } catch {}
         }
         // Sin customs registrados no hay nada que animar ni re-adjuntar:
