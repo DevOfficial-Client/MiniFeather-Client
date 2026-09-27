@@ -1,5 +1,3 @@
-// Build the ClickGUI's source grids into real, transparent 32x32 pixel-art PNGs.
-// Run from the repository root: node assets/generate-ui-pixel-icons.cjs
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -59,7 +57,6 @@ function makeArt(name, rows) {
     }
   };
 
-  // A few small silhouettes need more pixels than the original 8x8 grid can carry.
   if (name === 'keystrokes') {
     rect(0, 0, 16, 16, '.');
     rect(5, 1, 6, 6, 'k'); rect(6, 2, 4, 4, 'B'); rect(7, 3, 2, 2, '#');
@@ -102,8 +99,6 @@ function makeArt(name, rows) {
     rect(4, 12, 8, 1, 'O'); rect(3, 15, 10, 1, '-');
   }
 
-  // The named designs below are drawn at a genuine 16x16 resolution. They
-  // replace the most ambiguous 8x8 silhouettes with recognizable pixel art.
   const clear = () => rect(0, 0, 16, 16, '.');
   switch (name) {
     case 'allayPets':
@@ -333,12 +328,14 @@ function makeArt(name, rows) {
       break;
     case 'zoom':
       clear();
-      rect(5, 2, 6, 1, 'B'); rect(3, 3, 10, 2, 'B');
-      rect(2, 5, 12, 5, 'B'); rect(3, 10, 10, 2, 'B');
-      rect(5, 12, 6, 1, 'B'); rect(4, 5, 8, 5, 'b');
-      rect(5, 5, 3, 2, '#'); rect(7, 6, 2, 4, 'k');
-      rect(6, 7, 4, 2, 'k'); rect(11, 11, 3, 3, 'B');
-      rect(13, 13, 2, 2, 'b');
+      rect(4, 1, 6, 1, '+'); rect(2, 2, 10, 1, 'k');
+      rect(1, 3, 12, 6, 'k'); rect(2, 9, 10, 2, 'k');
+      rect(4, 11, 6, 1, 'k'); rect(3, 3, 7, 7, 'B');
+      rect(4, 4, 5, 5, 'b'); rect(4, 4, 2, 2, '#');
+      rect(6, 7, 1, 2, 'r'); rect(7, 6, 1, 3, 'g');
+      rect(8, 5, 1, 4, 'B'); rect(10, 9, 2, 2, '-');
+      rect(11, 10, 2, 2, 'k'); rect(12, 11, 2, 2, '-');
+      rect(13, 12, 2, 2, 'k'); rect(14, 13, 1, 2, '-');
       break;
     case 'elytraFlight':
       clear();
@@ -618,33 +615,28 @@ function makeArt(name, rows) {
 }
 
 function makePotatoArt() {
-  const art = Array.from({ length: 32 }, () => Array(32).fill('.'));
-  const spans = [
-    [11, 19], [8, 21], [6, 23], [5, 25], [4, 26], [3, 27],
-    [3, 28], [2, 28], [2, 29], [2, 29], [3, 29], [3, 28],
-    [2, 28], [3, 28], [3, 27], [4, 27], [4, 26], [5, 25],
-    [6, 24], [7, 23], [9, 21], [11, 19]
-  ];
-  for (let row = 0; row < spans.length; row++) {
-    const y = row + 5;
-    const [left, right] = spans[row];
-    for (let x = left; x <= right; x++) {
-      art[y][x] = x === left || x === right || row === 0 || row === spans.length - 1
-        ? 'd' : y >= 22 || x >= right - 3 ? 'D' : x <= left + 4 || y <= 9 ? 'M' : 'm';
-    }
-  }
-  const mark = (x, y, symbol) => { art[y][x] = symbol; };
-  for (const [x, y] of [[12, 8], [14, 7], [15, 8], [17, 9], [9, 11], [11, 12],
-    [7, 15], [9, 17], [12, 14], [13, 11], [16, 12], [18, 11]]) mark(x, y, 'f');
-  for (const [x, y] of [[8, 10], [20, 11], [24, 13], [10, 18], [17, 16],
-    [22, 19], [7, 22], [14, 23], [19, 24], [25, 21]]) mark(x, y, 's');
-  for (const [x, y] of [[9, 10], [21, 11], [18, 16], [23, 19], [15, 23]]) mark(x, y, 'D');
-  art[6][10] = 'f'; art[8][7] = 'M'; art[10][5] = 'f';
-  return art;
+  return [
+    '................',
+    '......dddd......',
+    '....ddMMMMdd....',
+    '...dMfMMMMMmd...',
+    '..dMfMMMMMmDmd..',
+    '.dMMMfMMMMmDmDd.',
+    '.dMfMMMMMmMmDdd.',
+    'dMMMMmMMmMMmDDd.',
+    'dMMmMMmMMmMMDDd.',
+    'dMMMMMMmMMmMDDd.',
+    '.dMMMMMmMmMMDDd.',
+    '.dMMMMMMmMDDDDd.',
+    '..dMMMMmDDDDDd..',
+    '...ddMMDDDDDd...',
+    '.....dddddd.....',
+    '................'
+  ].map(row => [...row]);
 }
 
 function encodeArt(name, art) {
-  const pixelScale = name === 'potato' ? 1 : scale;
+  const pixelScale = scale;
   const width = art.length * pixelScale;
   const height = width;
   const scanlines = Buffer.alloc(height * (1 + width * 4));
@@ -664,14 +656,19 @@ function encodeArt(name, art) {
           const outline = rgba(name === 'potato' ? 'd' : 'k');
           for (let channel = 0; channel < 4; channel++) pixel[channel] = outline[channel];
         }
-      } else if (name !== 'potato') {
+      } else {
         const above = symbolAt(x, y - 1);
         const below = symbolAt(x, y + 1);
         const left = symbolAt(x - 1, y);
         const right = symbolAt(x + 1, y);
         const edgeLight = (above !== symbol ? 31 : 0) + (left !== symbol ? 17 : 0);
         const edgeShadow = (below !== symbol ? 27 : 0) + (right !== symbol ? 15 : 0);
-        const offset = Math.max(-38, Math.min(38, edgeLight - edgeShadow));
+        const materialSeed = (Math.floor(x / 2) * 11 + Math.floor(y / 2) * 17) % 7;
+        const fineHighlight = x % 2 === 0 && y % 2 === 0 ? 11 : 0;
+        const fineShadow = x % 2 === 1 && y % 2 === 1 ? 9 : 0;
+        const texture = /[bBgGnNmM]/.test(symbol) && materialSeed === 0 && x % 2 === 0 ? 9 : 0;
+        const offset = Math.max(-48, Math.min(48,
+          edgeLight - edgeShadow + fineHighlight - fineShadow + texture));
         const material = symbol === 'k' ? .55 : symbol === '#' ? .4
           : symbol === '-' || symbol === '+' ? 1.25 : 1;
         for (let channel = 0; channel < 3; channel++) {
@@ -688,7 +685,7 @@ function encodeArt(name, art) {
   const header = Buffer.alloc(13);
   header.writeUInt32BE(width, 0);
   header.writeUInt32BE(height, 4);
-  header[8] = 8; // RGBA, 8 bits per channel
+  header[8] = 8;
   header[9] = 6;
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
@@ -704,11 +701,15 @@ if (require.main === module) {
   for (const [name, rows] of Object.entries(icons)) {
     if (!/^[A-Za-z][A-Za-z0-9]*$/.test(name)) throw new Error(`Unsafe icon name: ${name}`);
     if (name === 'patPat') continue;
-    const target = path.resolve(outputDir, `${name}.png`);
+    const folder = path.resolve(outputDir, name);
+    fs.mkdirSync(folder, { recursive: true });
+    const target = path.resolve(folder, '00.png');
     if (!target.startsWith(outputDir + path.sep)) throw new Error(`Unsafe icon target: ${target}`);
     fs.writeFileSync(target, encodeArt(name, makeArt(name, rows)));
   }
-  const potatoTarget = path.resolve(outputDir, 'potato.png');
+  const potatoFolder = path.resolve(outputDir, 'potato');
+  fs.mkdirSync(potatoFolder, { recursive: true });
+  const potatoTarget = path.resolve(potatoFolder, '00.png');
   if (!potatoTarget.startsWith(outputDir + path.sep)) throw new Error(`Unsafe icon target: ${potatoTarget}`);
   fs.writeFileSync(potatoTarget, encodeArt('potato', makePotatoArt()));
   for (const name of Object.keys(icons)) {
