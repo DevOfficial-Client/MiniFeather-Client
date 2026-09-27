@@ -12,6 +12,7 @@
         game: null,
         lastGameScan: 0,
         lastHandshake: 0,
+        hsFails: 0,
         linked: false,
         linkedWorld: '',
         caps: {},
@@ -383,6 +384,7 @@
         switch (obj.t) {
             case 'hello': {
                 state.linked = true;
+                state.hsFails = 0;
                 state.linkedWorld = String(obj.world || '');
                 send({
                     t: 'sync',
@@ -529,14 +531,18 @@
 
     function handshake() {
         if (state.destroyed) return;
+        if (state.hsFails >= 3) return;
         send({ t: 'hello', name: myIdentity().name, perm: permissionLevel() });
         state.lastHandshake = Date.now();
+        state.hsFails++;
     }
 
     function onWorldChange() {
         const key = serverKey();
         if (key && key !== state.linkedWorld) {
             state.linked = false;
+            state.hsFails = 0;
+            state.lastHandshake = 0;
             applyCap(null);
             clearServerEntities();
             clearServerConfig();
@@ -583,7 +589,11 @@
         sendTo,
         onMessage,
         applyCap,
-        handshake,
+        handshake: function () {
+            state.hsFails = 0;
+            state.lastHandshake = 0;
+            handshake();
+        },
         configMenu,
         destroy
     };
