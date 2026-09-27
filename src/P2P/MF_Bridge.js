@@ -4,8 +4,7 @@
     const GLOBAL_KEY = '__MINIFEATHER_BRIDGE__';
     const PREFIX = '[MF:';
     const CHAT_CMD = '/mf ';
-    const HANDSHAKE_INTERVAL = 15000;
-    const POLL_INTERVAL = 700;
+    const POLL_INTERVAL = 180000;
 
     const state = {
         destroyed: false,
@@ -115,20 +114,6 @@
         for (const fn of [...msgHandlers]) {
             try { fn(from, data); } catch (_) {}
         }
-    }
-
-    function listMods() {
-        const out = [];
-        const names = {
-            TitanTiny: 'titan',
-            __MINIFEATHER_WAYPOINTS__: 'waypoints',
-            __MINIFEATHER_CLIENT_COMMANDS__: 'commands',
-            __MINIFEATHER_LOCAL_GAMES__: 'localgames'
-        };
-        for (const [key, tag] of Object.entries(names)) {
-            if (globalThis[key]) out.push(tag);
-        }
-        return out;
     }
 
     function applyCap(cap, world) {
@@ -386,13 +371,6 @@
                 state.linked = true;
                 state.hsFails = 0;
                 state.linkedWorld = String(obj.world || '');
-                send({
-                    t: 'sync',
-                    name: myIdentity().name,
-                    uuid: myIdentity().uuid,
-                    perm: permissionLevel(),
-                    mods: listMods()
-                });
                 if (obj.cap) applyCap(obj.cap, obj.world);
                 break;
             }
@@ -531,7 +509,7 @@
 
     function handshake() {
         if (state.destroyed) return;
-        if (state.hsFails >= 3) return;
+        if (state.hsFails >= 1) return;
         send({ t: 'hello', name: myIdentity().name, perm: permissionLevel() });
         state.lastHandshake = Date.now();
         state.hsFails++;
@@ -546,6 +524,7 @@
             applyCap(null);
             clearServerEntities();
             clearServerConfig();
+            handshake();
         }
         if (!key) {
             applyCap(null);
@@ -564,7 +543,6 @@
             onWorldChange();
         }
         pollChat();
-        if (Date.now() - state.lastHandshake > HANDSHAKE_INTERVAL) handshake();
     }
 
     state.timer = (globalThis.setInterval || setInterval)(tick, POLL_INTERVAL);
