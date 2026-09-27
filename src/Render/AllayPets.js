@@ -23,8 +23,8 @@
         { key: 'vex', name: 'Vex', geo: 'allaypet_6.geo.json' },
         { key: 'redmush', name: 'Red Mushroom', geo: 'allaypet_7.geo.json' },
         { key: 'brownmush', name: 'Brown Mushroom', geo: 'allaypet_8.geo.json' },
-        { key: 'gyarados', name: 'Gyarados', geo: 'gyarados.geo.json', tex: 'gyarados.png', scale: 2.5, speedMul: 0.7, keepR: 2.6, hardR: 4.5, snapR: 14, wander: 1.1, waveY: 1.2, waveT: 4200, spine: true, terrain: true, loiter: true, terrR: 1.5 },
-        { key: 'gyarados_shiny', name: 'Shiny Gyarados', geo: 'gyarados.geo.json', tex: 'gyarados_shiny.png', scale: 2.5, speedMul: 0.7, keepR: 2.6, hardR: 4.5, snapR: 14, wander: 1.1, waveY: 1.2, waveT: 4200, spine: true, terrain: true, loiter: true, terrR: 1.5 }
+        { key: 'gyarados', name: 'Gyarados', geo: 'gyarados.geo.json', tex: 'gyarados.png', scale: 0.4, speedMul: 0.7, keepR: 2.6, hardR: 4.5, snapR: 14, wander: 1.1, waveY: 1.2, waveT: 4200, spine: true, terrain: true, loiter: true, terrR: 1.5 },
+        { key: 'gyarados_shiny', name: 'Shiny Gyarados', geo: 'gyarados.geo.json', tex: 'gyarados_shiny.png', scale: 0.4, speedMul: 0.7, keepR: 2.6, hardR: 4.5, snapR: 14, wander: 1.1, waveY: 1.2, waveT: 4200, spine: true, terrain: true, loiter: true, terrR: 1.5 }
     ];
 
     const state = {
