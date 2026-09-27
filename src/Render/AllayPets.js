@@ -98,36 +98,66 @@
         return null;
     }
     const PET_REMOTE_URL = 'https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/accounts.json';
-    const petRemote = { pet: null, fetchedAt: 0, timer: 0 };
+    const PET_PUSH_TOPIC = 'mf-skins-updates-v1';
+    const petRemote = { pet: null, fetchedAt: 0, timer: 0, esRetry: 0 };
+    let petPushTimer = 0;
 
-    function petRemoteTick() {
-        fetch(PET_REMOTE_URL, { cache: 'no-store' })
+    function applyRemotePet(newPet) {
+        if (newPet === petRemote.pet) return;
+        const hadPet = petRemote.pet;
+        petRemote.pet = newPet;
+        if ((hadPet !== null || newPet !== null) && state.variant === 'random' && state.enabled) {
+            for (const pet of [...state.pets]) removePet(pet);
+            const player = playerPos();
+            if (player) ensurePets(player);
+        }
+    }
+
+    function petRemoteTick(bust) {
+        fetch(PET_REMOTE_URL + (bust ? '?t=' + Date.now() : ''), { cache: 'no-store' })
             .then((r) => (r.ok ? r.json() : null))
             .then((j) => {
                 if (!j?.players) return;
                 petRemote.fetchedAt = Date.now();
-                const g = getGame();
-                const name = (g?.player?.profile?.username || '').toLowerCase();
-                const uuid = (g?.player?.profile?.uuid || '').toLowerCase();
+                const prof = getGame()?.player?.profile;
+                const name = String(prof?.username || prof?.name || '').toLowerCase();
+                const uuid = String(prof?.uuid || '').toLowerCase();
                 const e = j.players[uuid] || j.players[name];
-                const newPet = (e && typeof e.pet === 'string' && e.pet) || null;
-                if (newPet !== petRemote.pet) {
-                    const hadPet = petRemote.pet;
-                    petRemote.pet = newPet;
-                    if ((hadPet !== null || newPet !== null) && state.variant === 'random' && state.enabled) {
-                        for (const pet of [...state.pets]) removePet(pet);
-                        const player = playerPos();
-                        if (player) ensurePets(player);
-                    }
-                }
+                applyRemotePet((e && typeof e.pet === 'string' && e.pet) || null);
             })
             .catch(() => {});
+    }
+
+    function startPetPushListener() {
+        let es;
+        try {
+            es = new EventSource('https://ntfy.sh/' + PET_PUSH_TOPIC + '/sse');
+        } catch { return; }
+        es.onmessage = (e) => {
+            try {
+                const m = JSON.parse(e.data);
+                if (m && m.event === 'message' && !petPushTimer) {
+                    petPushTimer = setTimeout(() => {
+                        petPushTimer = 0;
+                        petRemoteTick(true);
+                    }, 600);
+                }
+            } catch {}
+        };
+        es.onerror = () => {
+            try { es.close(); } catch {}
+            const wait = Math.min(120000, 5000 * Math.pow(2, petRemote.esRetry++));
+            setTimeout(startPetPushListener, wait);
+            if (petRemote.esRetry > 1) petRemote.esRetry--;
+        };
+        es.onopen = () => { petRemote.esRetry = 0; };
     }
 
     function fetchPetRemote() {
         if (petRemote.timer) return;
         petRemoteTick();
-        petRemote.timer = setInterval(petRemoteTick, 60_000);
+        petRemote.timer = setInterval(() => petRemoteTick(true), 60_000);
+        startPetPushListener();
     }
 
     function pickVariant() {

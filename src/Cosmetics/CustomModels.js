@@ -227,6 +227,7 @@
                 const inst = cloneInstance(built);
                 rec.inst = inst;
                 rec.root = inst.root;
+                rec.baseScale = inst.root.scale.x || 1;
                 if (rec.room) {
 
                     let s = (rec.scale && rec.scale !== 1) ? rec.scale : 1;
@@ -387,6 +388,24 @@
             rec.pos.x = +x || 0; rec.pos.y = +y || 0; rec.pos.z = +z || 0;
             if (yaw != null) rec.yaw = +yaw;
             if (rec.root) rec.root.position.set(rec.pos.x, rec.pos.y, rec.pos.z);
+            return true;
+        },
+
+        setScale(id, scale) {
+            const rec = state.customs.get(id);
+            if (!rec || !rec.inst) return false;
+            const s = Math.max(0.01, Math.min(30, +(Number(scale) || 1)));
+            const prev = rec.baseScale || 1;
+            try { rec.inst.root.scale.multiplyScalar(s / prev); } catch {}
+            rec.scale = s;
+            rec.baseScale = s;
+            return true;
+        },
+
+        setYaw(id, yaw) {
+            const rec = state.customs.get(id);
+            if (!rec) return false;
+            rec.yaw = +yaw || 0;
             return true;
         },
 

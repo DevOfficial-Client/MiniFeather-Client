@@ -94,6 +94,7 @@
         "src/Cosmetics/MF_Accounts.js",
         "src/Cosmetics/CustomSkinAPI.js",
         "src/P2P/MF_Mesh.js",
+        "src/P2P/MF_Bridge.js",
         "src/P2P/MF_VoiceChat.js",
         "src/Core/inject.js",
         "src/UI/NativeSettingsBridge.js",

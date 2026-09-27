@@ -31,6 +31,7 @@
         width: CONFIG.defaultWidth,
         groundOffset: CONFIG.defaultGroundOffset,
         baseScale: null,
+        serverCap: null,
 
         panelOpen: false,
         lastGameScan: 0,
@@ -70,6 +71,44 @@
 
     const clamp = (value, min, max) =>
         Math.min(max, Math.max(min, value));
+
+    function scaleMin() {
+        return state.serverCap ? Math.max(CONFIG.minScale, state.serverCap.min) : CONFIG.minScale;
+    }
+
+    function scaleMax() {
+        return state.serverCap ? Math.min(CONFIG.maxScale, state.serverCap.max) : CONFIG.maxScale;
+    }
+
+    function applyServerCap(notify = false) {
+        if (!state.serverCap) return false;
+        const min = scaleMin();
+        const max = scaleMax();
+        const before = state.scale;
+        state.scale = clamp(state.scale, min, max);
+        if (state.scale !== before) {
+            applyEnabledState(true);
+            emitState('cap');
+            if (notify) try {
+                console.info('[TitanTiny] server cap applied: ' + state.scale.toFixed(2) + 'x');
+            } catch (_) {}
+            return true;
+        }
+        return false;
+    }
+
+    function setServerCap(cap, notify = true) {
+        const clean = cap && Number.isFinite(Number(cap.min)) && Number.isFinite(Number(cap.max))
+            ? { min: clamp(Number(cap.min), CONFIG.minScale, CONFIG.maxScale), max: clamp(Number(cap.max), CONFIG.minScale, CONFIG.maxScale) }
+            : null;
+        if (clean && clean.min > clean.max) {
+            const t = clean.min;
+            clean.min = clean.max;
+            clean.max = t;
+        }
+        state.serverCap = clean;
+        return applyServerCap(notify);
+    }
 
     function getEffectiveScale() {
         return state.enabled ? state.scale : 1;
@@ -2253,8 +2292,8 @@
         state.scale =
             clamp(
                 Number(value) || 1,
-                CONFIG.minScale,
-                CONFIG.maxScale
+                scaleMin(),
+                scaleMax()
             );
 
         resolveRenderTarget(true);
@@ -2363,8 +2402,8 @@
         if ('scale' in config) {
             state.scale = clamp(
                 Number(config.scale) || CONFIG.defaultScale,
-                CONFIG.minScale,
-                CONFIG.maxScale
+                scaleMin(),
+                scaleMax()
             );
         }
         if ('width' in config) {
@@ -2427,8 +2466,8 @@
         setScale(value) {
             state.scale = clamp(
                 Number(value) || CONFIG.defaultScale,
-                CONFIG.minScale,
-                CONFIG.maxScale
+                scaleMin(),
+                scaleMax()
             );
             applyEnabledState(true);
             emitState('scale');
@@ -2475,6 +2514,14 @@
             clearRenderTarget();
             applyEnabledState(true);
             emitState('refresh');
+        },
+        setServerCap(cap) {
+            setServerCap(cap, true);
+        },
+        get serverCap() {
+            return state.serverCap
+                ? { min: state.serverCap.min, max: state.serverCap.max }
+                : null;
         },
         get enabled() {
             return state.enabled;

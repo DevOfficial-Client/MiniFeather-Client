@@ -25,7 +25,6 @@
 
     var packSkinReg = (globalThis.__MF_PACK_SKINS__ ||= {});
     var CUSTOM_URL_RE = /(?:^|\/)auth-api\/(?:skins|capes)\/custom\/([^\/?#]+)\.png(?:[?#]|$)/;
-    var MF_DEV_SKINS = ['eve', 'gab', 'itzesteban', 'nightrise', 'notsenpai'];
 
     function installCustomUrlHook() {
         if (globalThis.__MF_PACK_IMG_HOOK__) return;
@@ -84,10 +83,6 @@
         if (!base) return;
 
         base = String(base).replace(/\/*$/, '/');
-        for (var i = 0; i < MF_DEV_SKINS.length; i++) {
-            var n = MF_DEV_SKINS[i];
-            packSkinReg['mf_dev_' + n] = base + 'devs/' + n + '.png';
-        }
 
         var packs = {
             estebangxe: 'EstebanExG__1_1.png',
@@ -112,10 +107,6 @@
             '6eb7369a-551e-406a-9a63-6db7a358e1e5': { skin: 'custom:mf_estebangxe' },
             'c4201f43-2de9-4275-930a-301fae4cce6c': { skin: 'custom:mf_angrywolfx' },
 
-            'itzesteban': { skin: 'custom:mf_dev_itzesteban' },
-            'nightrise': { skin: 'custom:mf_dev_nightrise' },
-            'notsenpai': { skin: 'custom:mf_dev_notsenpai' },
-            'gab': { skin: 'custom:mf_dev_gab' },
             'eve': { skin: 'custom:mf_eve' }
         }
     };

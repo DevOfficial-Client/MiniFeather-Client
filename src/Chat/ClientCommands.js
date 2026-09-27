@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
 
   function parseDetail(event) {
     try {
@@ -1703,10 +1703,20 @@
 
       if (command === 'pscale') {
         if (!Number.isFinite(num)) {
-          addChat(`Size: ${api.scale.toFixed(3)}x | ${api.enabled ? 'enabled' : 'disabled'} — /pscale <0.01-5.00> | micro | tiny | normal | titan`, 'normal');
+          const cap = api.serverCap;
+          const range = cap ? `${cap.min.toFixed(2)}-${cap.max.toFixed(2)} (server cap)` : '0.01-5.00';
+          addChat(`Size: ${api.scale.toFixed(3)}x | ${api.enabled ? 'enabled' : 'disabled'}${cap ? ' | CAPPED' : ''} — /pscale <${range}> | micro | tiny | normal | titan`, 'normal');
           return;
         }
-        const v = Math.max(0.01, Math.min(5.00, num));
+        let v = Math.max(0.01, Math.min(5.00, num));
+        if (api.serverCap) {
+          const cap = api.serverCap;
+          const capped = Math.max(cap.min, Math.min(cap.max, v));
+          if (capped !== v) {
+            addChat(`Server cap active: ${cap.min.toFixed(2)}x - ${cap.max.toFixed(2)}x.`, 'error');
+            v = capped;
+          }
+        }
         api.setScale(v);
         if (!api.enabled) api.setEnabled(true);
         addChat(`Player size set to ${v.toFixed(3)}x.`, 'success');
@@ -1732,6 +1742,39 @@
       api.setGroundOffset(v);
       if (!api.enabled) api.setEnabled(true);
       addChat(`Ground anchor set to ${v.toFixed(2)}${v === 0 ? ' (reset)' : ''}.`, 'success');
+      return;
+    }
+
+    if (command === 'bridge' || command === 'puente') {
+      const api = globalThis.__MINIFEATHER_BRIDGE__;
+      if (!api) { addChat('MF Bridge is not ready yet.', 'error'); return; }
+      const sub = (args[0] || 'status').toLowerCase();
+      if (sub === 'status') {
+        const st = api.stats;
+        addChat(`Bridge: ${api.linked ? `\\green\\linked\\reset\\ (${api.world || 'unknown'})` : '\\yellow\\not linked\\reset\\'} | perm ${api.permissionLevel} | rx/tx ${st.rx}/${st.tx}`, 'normal');
+        return;
+      }
+      if (sub === 'cap') {
+        const tt = globalThis.TitanTiny;
+        if (!tt) { addChat('Titan & Tiny not ready.', 'error'); return; }
+        const cap = tt.serverCap;
+        addChat(cap ? `Server cap: ${cap.min.toFixed(2)}x - ${cap.max.toFixed(2)}x` : 'No server cap active (full 0.01-5.00 range).', cap ? 'success' : 'normal');
+        return;
+      }
+      if (sub === 'link' || sub === 'hello') {
+        if (typeof api.handshake === 'function') api.handshake();
+        else api.send({ t: 'hello' });
+        addChat('Handshake sent. Waiting for planet script...', 'success');
+        return;
+      }
+      if (sub === 'gui' || sub === 'config' || sub === 'menu') {
+        if (api.permissionLevel < 100) { addChat('Admin required to manage server config.', 'error'); return; }
+        if (typeof api.configMenu !== 'function') { addChat('Config menu not available in this bridge version.', 'error'); return; }
+        api.configMenu();
+        addChat('Server config menu toggled.', 'normal');
+        return;
+      }
+      addChat('/bridge status | cap | link | gui', 'normal');
       return;
     }
 
