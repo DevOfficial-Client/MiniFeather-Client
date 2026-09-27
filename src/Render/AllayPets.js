@@ -25,8 +25,8 @@
         { key: 'brownmush', name: 'Brown Mushroom', geo: 'allaypet_8.geo.json' },
         { key: 'gyarados', name: 'Gyarados', geo: 'gyarados.geo.json', tex: 'gyarados.png', scale: 0.4, speedMul: 0.7, keepR: 2.6, hardR: 4.5, snapR: 14, wander: 1.1, waveY: 1.2, waveT: 4200, spine: true, terrain: true, loiter: true, terrR: 1.5 },
         { key: 'gyarados_shiny', name: 'Shiny Gyarados', geo: 'gyarados.geo.json', tex: 'gyarados_shiny.png', scale: 0.4, speedMul: 0.7, keepR: 2.6, hardR: 4.5, snapR: 14, wander: 1.1, waveY: 1.2, waveT: 4200, spine: true, terrain: true, loiter: true, terrR: 1.5 },
-        { key: 'knight', name: 'Hollow Knight', geo: 'knight.geo.json', tex: 'knight.png', scale: 0.55, speedMul: 0.85, keepR: 2.2, hardR: 4.0, snapR: 12, wander: 0.9, waveY: 0.8, waveT: 5200 },
-        { key: 'pichu', name: 'Pichu', geo: 'pichu.geo.json', tex: 'pichu.png', scale: 0.6, speedMul: 0.95, keepR: 2.0, hardR: 3.6, snapR: 12, wander: 1.0, waveY: 0.7, waveT: 4800 },
+        { key: 'knight', name: 'Hollow Knight', geo: 'knight.geo.json', tex: 'knight.png', scale: 0.55, speedMul: 0.85, keepR: 2.2, hardR: 4.0, snapR: 12, wander: 0.9, waveY: 0.8, waveT: 5200, ground: true },
+        { key: 'pichu', name: 'Pichu', geo: 'pichu.geo.json', tex: 'pichu.png', scale: 0.6, speedMul: 0.95, keepR: 2.0, hardR: 3.6, snapR: 12, wander: 1.0, waveY: 0.7, waveT: 4800, ground: true },
         { key: 'otter', name: 'Otter', geo: 'otter.geo.json', tex: 'otter.png', scale: 0.8, speedMul: 0.8, keepR: 2.0, hardR: 3.6, animMap: { fly: 'walk', idle: 'idle', dance: 'standing_eat', wave: 'sit', glide: 'swim' } },
                 { key: 'ferret', name: 'Ferret', geo: 'ferret.geo.json', tex: 'ferret_1.png', scale: 0.8, speedMul: 0.85, keepR: 1.8, hardR: 3.4, animMap: { fly: 'run', idle: 'idle', dance: 'dance', wave: 'sit', glide: 'sleep' } },
         { key: 'koi', name: 'Koi Fish', geo: 'koi_fish.geo.json', tex: 'koi_fish_1.png', scale: 0.9, speedMul: 0.7, keepR: 2, hardR: 3.8, animMap: { fly: 'koi_fish_swim', idle: 'koi_fish_swim', dance: 'koi_fish_on_land', wave: 'koi_fish_swim', glide: 'koi_fish_swim' } },
@@ -247,11 +247,12 @@
         if (v.tex) opts.texture = v.tex;
         if (v.tint) opts.tint = v.tint;
         if (v.animMap) opts.anim = v.animMap.fly || v.animMap.idle || 'idle';
+        if (v.ground) opts.anim = 'idle';
         const a = Math.random() * Math.PI * 2;
         const r0 = v.solo ? 7 : 1.5;
         const x = player.x + Math.cos(a) * r0;
         const z = player.z + Math.sin(a) * r0;
-        const id = CM.spawn(v.geo, x, player.y + (v.solo ? 5 : 1.6), z, opts);
+        const id = CM.spawn(v.geo, x, v.ground ? player.y : (player.y + (v.solo ? 5 : 1.6)), z, opts);
         if (!id) return null;
         return {
             id, rec: null, variant: v,
@@ -396,7 +397,17 @@
         p.x += Math.sin(heading) * speed * dt;
         p.z += Math.cos(heading) * speed * dt;
         const relY = p.y - player.y;
-        if (pet.waveAmp) {
+        if (pet.variant.ground) {
+            if (t - (pet.groundAt || 0) > 100) {
+                pet.groundAt = t;
+                pet.groundY = groundTopAt(p.x, p.z, p.y) ?? player.y;
+            }
+            const gY = pet.groundY != null ? pet.groundY : player.y;
+            const dy = (gY - p.y) * Math.min(1, dt * 10);
+            pet.vy = 0;
+            p.y += Math.abs(dy) > 1.2 ? 1.2 * Math.sign(dy) : dy;
+            if (Math.abs(gY - p.y) > 6) p.y = gY;
+        } else if (pet.waveAmp) {
             let targetY = player.y + pet.waveBase + Math.sin(t / pet.waveT + pet.phase) * pet.waveAmp;
             if (pet.terrain) {
                 const tR = pet.variant.terrR || 0;
@@ -452,12 +463,19 @@
         pet.bank += (wantBank - pet.bank) * Math.min(1, dt * 2.5);
         const rr = root.rotation;
         if (rr.order !== 'YXZ') rr.order = 'YXZ';
-        rr.z = pet.bank;
-        rr.x = Math.max(-0.45, Math.min(0.45, pet.vy * 0.22));
+        if (pet.variant.ground) {
+            rr.z = 0;
+            rr.x = 0;
+        } else {
+            rr.z = pet.bank;
+            rr.x = Math.max(-0.45, Math.min(0.45, pet.vy * 0.22));
+        }
         pet.stillFor = (movedX * movedX + movedZ * movedZ > 1e-8) ? 0 : pet.stillFor + dt;
         const celebrating = t < pet.celebrateUntil;
         if (celebrating) {
             setPetAnim(pet, 'dance');
+        } else if (pet.variant.ground) {
+            setPetAnim(pet, pet.stillFor > 1.2 ? 'idle' : 'fly');
         } else if (pet.stillFor > 1.2) {
             setPetAnim(pet, 'idle');
             if (t >= pet.nextCelebrate) {
