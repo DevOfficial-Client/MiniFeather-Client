@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const GLOBAL_KEY = '__MINIFEATHER_TITLE_SCREEN__';
+  const KEY = '__MINIFEATHER_TITLE_SCREEN__';
   const CONFIG_EVENT = 'minifeather:titlescreen-config';
   const ROOT_CLASS = 'mf-classic-title';
   const FALLBACK_CLASS = 'mf-classic-title-fallback';
