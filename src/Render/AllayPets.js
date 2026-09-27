@@ -106,7 +106,7 @@
         if (newPet === petRemote.pet) return;
         const hadPet = petRemote.pet;
         petRemote.pet = newPet;
-        if ((hadPet !== null || newPet !== null) && state.variant === 'random' && state.enabled) {
+        if ((hadPet !== null || newPet !== null) && state.enabled) {
             for (const pet of [...state.pets]) removePet(pet);
             const player = playerPos();
             if (player) ensurePets(player);
@@ -161,12 +161,12 @@
     }
 
     function pickVariant() {
+        if (petRemote.pet && VARIANTS.some((x) => x.key === petRemote.pet)) {
+            return VARIANTS.find((x) => x.key === petRemote.pet);
+        }
         if (state.variant !== 'random') {
             const v = VARIANTS.find((x) => x.key === state.variant);
             if (v) return v;
-        }
-        if (petRemote.pet && VARIANTS.some((x) => x.key === petRemote.pet)) {
-            return VARIANTS.find((x) => x.key === petRemote.pet);
         }
         return VARIANTS[(Math.random() * VARIANTS.length) | 0];
     }
@@ -268,7 +268,7 @@
     }
 
     function ensurePets(player) {
-        const vKey = state.variant !== 'random' ? state.variant : petRemote.pet;
+        const vKey = petRemote.pet || (state.variant !== 'random' ? state.variant : null);
         const soloV = vKey ? VARIANTS.find((x) => x.key === vKey) : null;
         const want = state.enabled ? (soloV?.solo ? 1 : CFG.MAX) : 0;
         while (state.pets.length > want) removePet(state.pets[state.pets.length - 1]);
