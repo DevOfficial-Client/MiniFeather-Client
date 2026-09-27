@@ -1,0 +1,8 @@
+{
+  "parent": "block/template_glass_pane_noside_alt",
+  "textures": {
+    "particle": "hollow_knight_map:block/bones",
+    "pane": "hollow_knight_map:block/bones"
+  },
+  "render_type": "solid"
+}

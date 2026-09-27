@@ -1,0 +1,13 @@
+{
+  "parent": "block/cube",
+  "textures": {
+    "down": "hollow_knight_map:block/hollowknighticon",
+    "up": "hollow_knight_map:block/hollowknighticon",
+    "north": "hollow_knight_map:block/hollowknighticon",
+    "east": "hollow_knight_map:block/hollowknighticon",
+    "south": "hollow_knight_map:block/hollowknighticon",
+    "west": "hollow_knight_map:block/hollowknighticon",
+    "particle": "hollow_knight_map:block/hollowknighticon"
+  },
+  "render_type": "solid"
+}

@@ -1,0 +1,95 @@
+{
+	"format_version": "1.12.0",
+	"minecraft:geometry": [
+		{
+			"description": {
+				"identifier": "geometry.pichu_pet",
+				"texture_width": 64,
+				"texture_height": 64,
+				"visible_bounds_width": 3,
+				"visible_bounds_height": 3,
+				"visible_bounds_offset": [0, 1, 0]
+			},
+			"bones": [
+				{
+					"name": "pichu",
+					"pivot": [0, 0, 0]
+				},
+				{
+					"name": "body",
+					"parent": "pichu",
+					"pivot": [0, 3.5, 0],
+					"cubes": [
+						{"origin": [-2.5, 1.5, -2.5], "size": [5, 4, 5], "uv": [16, 16]}
+					]
+				},
+				{
+					"name": "head",
+					"parent": "body",
+					"pivot": [0, 5.5, 0],
+					"cubes": [
+						{"origin": [-4, 5.5, -4], "size": [8, 8, 8], "uv": [0, 0]}
+					]
+				},
+				{
+					"name": "ear_l",
+					"parent": "head",
+					"pivot": [2.5, 13.5, 0],
+					"cubes": [
+						{"origin": [1.5, 13.5, -1], "size": [2, 6, 2], "uv": [0, 16]}
+					],
+					"rotation": [-20, 0, -25]
+				},
+				{
+					"name": "ear_r",
+					"parent": "head",
+					"pivot": [-2.5, 13.5, 0],
+					"cubes": [
+						{"origin": [-3.5, 13.5, -1], "size": [2, 6, 2], "uv": [6, 16], "mirror": true}
+					],
+					"rotation": [-20, 0, 25]
+				},
+				{
+					"name": "arm_l",
+					"parent": "body",
+					"pivot": [3, 4, 0],
+					"cubes": [
+						{"origin": [2.5, 2.5, -1], "size": [2, 2, 2], "uv": [40, 0]}
+					]
+				},
+				{
+					"name": "arm_r",
+					"parent": "body",
+					"pivot": [-3, 4, 0],
+					"cubes": [
+						{"origin": [-4.5, 2.5, -1], "size": [2, 2, 2], "uv": [40, 4], "mirror": true}
+					]
+				},
+				{
+					"name": "foot_l",
+					"parent": "body",
+					"pivot": [1.5, 1.5, 0],
+					"cubes": [
+						{"origin": [0.5, 0, -2], "size": [2, 2, 3], "uv": [40, 8]}
+					]
+				},
+				{
+					"name": "foot_r",
+					"parent": "body",
+					"pivot": [-1.5, 1.5, 0],
+					"cubes": [
+						{"origin": [-2.5, 0, -2], "size": [2, 2, 3], "uv": [40, 14], "mirror": true}
+					]
+				},
+				{
+					"name": "tail",
+					"parent": "body",
+					"pivot": [0, 3, 2.5],
+					"cubes": [
+						{"origin": [-1, 2, 2.5], "size": [2, 2, 3], "uv": [32, 26]}
+					]
+				}
+			]
+		}
+	]
+}

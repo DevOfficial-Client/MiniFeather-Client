@@ -1,0 +1,12 @@
+{
+  "species": "cobblemon:pikachu",
+  "order": 1,
+  "variations": [
+    {
+      "aspects": [
+        "female"
+      ],
+      "model": "cobblemon:pikachu_female.geo"
+    }
+  ]
+}

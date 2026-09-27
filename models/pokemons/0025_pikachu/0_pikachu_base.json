@@ -1,0 +1,19 @@
+{
+  "species": "cobblemon:pikachu",
+  "order": 0,
+  "variations": [
+    {
+      "aspects": [],
+      "poser": "cobblemon:pikachu",
+      "model": "cobblemon:pikachu_male.geo",
+      "texture": "cobblemon:textures/pokemon/0025_pikachu/pikachu.png",
+      "layers": []
+    },
+    {
+      "aspects": [
+        "shiny"
+      ],
+      "texture": "cobblemon:textures/pokemon/0025_pikachu/pikachu_shiny.png"
+    }
+  ]
+}

@@ -4,7 +4,7 @@
     const TAG = '[MiniFeather AllayPets]';
 
     const CFG = {
-        MAX: 3,
+        MAX: 1,
         KEEP_R: 3.0,
         HARD_R: 4.5,
         MIN_H: 0.9,
@@ -24,7 +24,27 @@
         { key: 'redmush', name: 'Red Mushroom', geo: 'allaypet_7.geo.json' },
         { key: 'brownmush', name: 'Brown Mushroom', geo: 'allaypet_8.geo.json' },
         { key: 'gyarados', name: 'Gyarados', geo: 'gyarados.geo.json', tex: 'gyarados.png', scale: 0.4, speedMul: 0.7, keepR: 2.6, hardR: 4.5, snapR: 14, wander: 1.1, waveY: 1.2, waveT: 4200, spine: true, terrain: true, loiter: true, terrR: 1.5 },
-        { key: 'gyarados_shiny', name: 'Shiny Gyarados', geo: 'gyarados.geo.json', tex: 'gyarados_shiny.png', scale: 0.4, speedMul: 0.7, keepR: 2.6, hardR: 4.5, snapR: 14, wander: 1.1, waveY: 1.2, waveT: 4200, spine: true, terrain: true, loiter: true, terrR: 1.5 }
+        { key: 'gyarados_shiny', name: 'Shiny Gyarados', geo: 'gyarados.geo.json', tex: 'gyarados_shiny.png', scale: 0.4, speedMul: 0.7, keepR: 2.6, hardR: 4.5, snapR: 14, wander: 1.1, waveY: 1.2, waveT: 4200, spine: true, terrain: true, loiter: true, terrR: 1.5 },
+        { key: 'knight', name: 'Hollow Knight', geo: 'knight.geo.json', tex: 'knight.png', scale: 0.55, speedMul: 0.85, keepR: 2.2, hardR: 4.0, snapR: 12, wander: 0.9, waveY: 0.8, waveT: 5200 },
+        { key: 'pichu', name: 'Pichu', geo: 'pichu.geo.json', tex: 'pichu.png', scale: 0.6, speedMul: 0.95, keepR: 2.0, hardR: 3.6, snapR: 12, wander: 1.0, waveY: 0.7, waveT: 4800 },
+        { key: 'otter', name: 'Otter', geo: 'otter.geo.json', tex: 'otter.png', scale: 0.8, speedMul: 0.8, keepR: 2.0, hardR: 3.6, animMap: { fly: 'walk', idle: 'idle', dance: 'standing_eat', wave: 'sit', glide: 'swim' } },
+                { key: 'ferret', name: 'Ferret', geo: 'ferret.geo.json', tex: 'ferret_1.png', scale: 0.8, speedMul: 0.85, keepR: 1.8, hardR: 3.4, animMap: { fly: 'run', idle: 'idle', dance: 'dance', wave: 'sit', glide: 'sleep' } },
+        { key: 'koi', name: 'Koi Fish', geo: 'koi_fish.geo.json', tex: 'koi_fish_1.png', scale: 0.9, speedMul: 0.7, keepR: 2, hardR: 3.8, animMap: { fly: 'koi_fish_swim', idle: 'koi_fish_swim', dance: 'koi_fish_on_land', wave: 'koi_fish_swim', glide: 'koi_fish_swim' } },
+        { key: 'dragonfly', name: 'Dragonfly', geo: 'dragonfly.geo.json', tex: 'dragonfly.png', scale: 0.6, speedMul: 1.1, keepR: 1.6, hardR: 3, animMap: { fly: 'dragonfly_fly', idle: 'dragonfly_sit', dance: 'dragonfly_fly', wave: 'dragonfly_sit', glide: 'dragonfly_fly' } },
+        { key: 'octopus', name: 'Dumbo Octopus', geo: 'dumbo_octopus.geo.json', tex: 'dumbo_octopus_1.png', scale: 0.7, speedMul: 0.7, keepR: 2, hardR: 3.6, animMap: { fly: 'dumbo_octopus_swim', idle: 'dumbo_octopus_swim', dance: 'dumbo_octopus_on_land', wave: 'dumbo_octopus_swim', glide: 'dumbo_octopus_swim' } },
+        { key: 'seabunny', name: 'Sea Bunny', geo: 'sea_bunny.geo.json', tex: 'sea_bunny_1.png', scale: 0.7, speedMul: 0.6, keepR: 1.8, hardR: 3.2, animMap: { fly: 'sea_bunny_move', idle: 'sea_bunny', dance: 'sea_bunny_move', wave: 'sea_bunny_move', glide: 'sea_bunny_move' } },
+        { key: 'leafinsect', name: 'Leaf Insect', geo: 'leaf_insect.geo.json', tex: 'leaf_insect_1.png', scale: 0.7, speedMul: 0.7, keepR: 1.8, hardR: 3.2, animMap: { fly: 'walk', idle: 'idle', dance: 'dance', wave: 'sit' } },
+        { key: 'redpanda', name: 'Red Panda', geo: 'red_panda.geo.json', tex: 'red_panda.png', scale: 0.75, speedMul: 0.8, keepR: 2.2, hardR: 4, animMap: { fly: 'walk', idle: 'idle', dance: 'sit', wave: 'sit', glide: 'run' } },
+        { key: 'spider', name: 'Jumping Spider', geo: 'jumping_spider.geo.json', tex: 'jumping_spider_1.png', scale: 0.7, speedMul: 0.8, keepR: 1.6, hardR: 3, animMap: { fly: 'walk', idle: 'idle', dance: 'sit', wave: 'sit' } },
+        { key: 'ladybug', name: 'Ladybug', geo: 'ladybug.geo.json', tex: 'ladybug.png', scale: 0.7, speedMul: 0.9, keepR: 1.6, hardR: 3, animMap: { fly: 'walk', idle: 'idle', dance: 'sit', wave: 'sit', glide: 'fly' } },
+        { key: 'rolypoly', name: 'Roly Poly', geo: 'roly_poly.geo.json', tex: 'roly_poly_1.png', scale: 0.7, speedMul: 0.6, keepR: 1.8, hardR: 3.2, animMap: { fly: 'walk', idle: 'idle', dance: 'dance', wave: 'sit' } },
+        { key: 'snail', name: 'Snail', geo: 'snail.geo.json', tex: 'snail_1.png', scale: 0.7, speedMul: 0.5, keepR: 1.8, hardR: 3.2, animMap: { fly: 'walk', idle: 'idle', dance: 'dance', wave: 'hide' } },
+        { key: 'stagbeetle', name: 'Stag Beetle', geo: 'stag_beetle.geo.json', tex: 'stag_beetle_1.png', scale: 0.7, speedMul: 0.7, keepR: 1.8, hardR: 3.2, animMap: { fly: 'walk', idle: 'idle', dance: 'dance', wave: 'sit' } },
+        { key: 'stickbug', name: 'Stick Bug', geo: 'stick_bug.geo.json', tex: 'stick_bug_1.png', scale: 0.7, speedMul: 0.7, keepR: 1.8, hardR: 3.2, animMap: { fly: 'walk', idle: 'idle', dance: 'dance', wave: 'sit' } },
+        { key: 'weevil', name: 'Weevil', geo: 'weevil.geo.json', tex: 'weevil.png', scale: 0.7, speedMul: 0.7, keepR: 1.8, hardR: 3.2, animMap: { fly: 'walk', idle: 'idle', dance: 'dance', wave: 'sit' } },
+        { key: 'shima', name: 'Shima Enaga', geo: 'shima_enaga.geo.json', tex: 'shima_enaga.png', scale: 0.55, speedMul: 1.1, keepR: 1.6, hardR: 3, animMap: { fly: 'fly', idle: 'sit', dance: 'fly', wave: 'sit', glide: 'fly' } },
+        { key: 'duck', name: 'Duck', geo: 'duck.geo.json', tex: 'duck.png', scale: 0.8, speedMul: 0.8, keepR: 2, hardR: 3.6, animMap: { fly: 'walk', idle: 'idle', dance: 'dance', wave: 'sit' } },
+        { key: 'goose', name: 'Goose', geo: 'goose.geo.json', tex: 'goose.png', scale: 0.8, speedMul: 0.8, keepR: 2, hardR: 3.6, animMap: { fly: 'walk', idle: 'idle', dance: 'dance', wave: 'sit' } }
     ];
 
     const state = {
@@ -226,6 +246,7 @@
         };
         if (v.tex) opts.texture = v.tex;
         if (v.tint) opts.tint = v.tint;
+        if (v.animMap) opts.anim = v.animMap.fly || v.animMap.idle || 'idle';
         const a = Math.random() * Math.PI * 2;
         const r0 = v.solo ? 7 : 1.5;
         const x = player.x + Math.cos(a) * r0;
@@ -286,6 +307,11 @@
     function setPetAnim(pet, name) {
         if (state.forcedAnim) {
             name = state.forcedAnim;
+        }
+        if (pet.variant.animMap) {
+            const mapped = pet.variant.animMap[name];
+            if (!mapped) return;
+            name = mapped;
         }
         if (pet.animMode === name) return;
         pet.animMode = name;

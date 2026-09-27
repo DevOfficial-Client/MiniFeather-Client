@@ -1,0 +1,17 @@
+newmtl Material
+illum 2
+Ns 13.72549
+Ni 1.0
+d 1.0
+Ka 0.0 0.0 0.0
+Kd 0.64 0.64 0.64
+Ks 0.007937 0.007937 0.007937
+map_Kd null
+newmtl Material.001
+illum 2
+Ns 96.07843
+Ni 1.0
+d 1.0
+Ka 0.0 0.0 0.0
+Kd 1.0 1.0 1.0
+Ks 0.5 0.5 0.5

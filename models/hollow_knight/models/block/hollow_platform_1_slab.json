@@ -1,0 +1,10 @@
+{
+  "parent": "block/slab",
+  "textures": {
+    "particle": "hollow_knight_map:block/hollowplatform1",
+    "bottom": "hollow_knight_map:block/hollowplatform1",
+    "top": "hollow_knight_map:block/hollowplatform1",
+    "side": "hollow_knight_map:block/hollowplatform1"
+  },
+  "render_type": "solid"
+}

@@ -1,0 +1,7 @@
+{
+  "parent": "item/generated",
+  "textures": {
+    "layer0": "hollow_knight_map:item/foliage"
+  },
+  "render_type": "translucent"
+}

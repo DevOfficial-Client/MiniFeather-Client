@@ -1,0 +1,46 @@
+{
+  "credit": "Made by @C1OUS3R on Youtube",
+  "elements": [
+    {
+      "from": [
+        6.5,
+        0,
+        10
+      ],
+      "to": [
+        13.5,
+        16,
+        10
+      ],
+      "rotation": {
+        "angle": -22.5,
+        "axis": "y",
+        "origin": [
+          8,
+          8,
+          8
+        ]
+      },
+      "faces": {
+        "north": {
+          "uv": [
+            9,
+            0,
+            16,
+            16
+          ],
+          "texture": "#0"
+        },
+        "south": {
+          "uv": [
+            16,
+            0,
+            9,
+            16
+          ],
+          "texture": "#0"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "parent": "hollow_knight_map:custom/spikemid",
+  "textures": {
+    "all": "hollow_knight_map:block/spike",
+    "particle": "hollow_knight_map:block/blank",
+    "0": "hollow_knight_map:block/spike"
+  },
+  "render_type": "cutout"
+}
