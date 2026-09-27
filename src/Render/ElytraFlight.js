@@ -40,18 +40,18 @@ const PRESETS = Object.freeze({
         autoLevel: true,
         showHorizon: true
     })
-});
+    });
 
-const LIMITS = Object.freeze({
+    const LIMITS = Object.freeze({
     rollSensitivity: Object.freeze([0.0005, 0.006]),
     pitchSensitivity: Object.freeze([0.4, 1.6]),
     yawSpeed: Object.freeze([15, 150]),
     bankingStrength: Object.freeze([0, 1.5]),
     smoothing: Object.freeze([3, 22]),
     autoLevelStrength: Object.freeze([0.5, 10])
-});
+    });
 
-const state = {
+    const state = {
     enabled: false,
     preset: 'normal',
     values: { ...PRESETS.normal },
@@ -78,24 +78,24 @@ const state = {
     horizon: null,
     horizonLine: null,
     horizonPitch: null
-};
+        };
 
-function clamp(value, min, max) {
+        function clamp(value, min, max) {
     return Math.min(max, Math.max(min, Number(value) || 0));
-}
+    }
 
-function normalizeAngle(value) {
+    function normalizeAngle(value) {
     let angle = Number(value) || 0;
     while (angle > Math.PI) angle -= TAU;
     while (angle < -Math.PI) angle += TAU;
     return angle;
-}
+    }
 
-function shortestAngle(from, to) {
+    function shortestAngle(from, to) {
     return normalizeAngle(to - from);
-}
+    }
 
-function normalizeValues(source) {
+    function normalizeValues(source) {
     const out = { ...PRESETS.normal };
     if (!source || typeof source !== 'object') return out;
     for (const [key, range] of Object.entries(LIMITS)) {
@@ -106,9 +106,9 @@ function normalizeValues(source) {
     out.autoLevel = source.autoLevel !== false;
     out.showHorizon = source.showHorizon === true;
     return out;
-}
+    }
 
-function detectPreset(values) {
+    function detectPreset(values) {
     const current = normalizeValues(values);
     for (const [name, preset] of Object.entries(PRESETS)) {
         const sameNumbers = Object.keys(LIMITS).every(key => {
@@ -125,17 +125,17 @@ function detectPreset(values) {
         }
     }
     return 'custom';
-}
+    }
 
-function parseDetail(event) {
+    function parseDetail(event) {
     try {
         return typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
     } catch (_) {
         return null;
     }
-}
+    }
 
-function findGameFromFiber(element) {
+    function findGameFromFiber(element) {
     if (!element) return null;
     const key = Object.keys(element).find(name =>
         name.startsWith('__reactFiber$') ||
@@ -159,9 +159,9 @@ function findGameFromFiber(element) {
         fiber = fiber.return;
     }
     return null;
-}
+    }
 
-function getGame(force = false) {
+    function getGame(force = false) {
     const now = performance.now();
     if (window.miniblox?.player) {
         state.game = window.miniblox;
@@ -204,17 +204,17 @@ function getGame(force = false) {
         return game;
     }
     return state.game?.player ? state.game : null;
-}
+    }
 
-function validCamera(camera) {
+    function validCamera(camera) {
     return !!(
         camera &&
         camera.position &&
         (camera.rotation || camera.quaternion)
     );
-}
+    }
 
-function resolveCamera(force = false) {
+    function resolveCamera(force = false) {
     const game = getGame(force);
     if (!game) return null;
     const now = performance.now();
@@ -239,9 +239,9 @@ function resolveCamera(force = false) {
         state.yawObject = camera.parent?.parent || state.yawObject;
     }
     return camera;
-}
+    }
 
-function isElytraFlying(player = state.player) {
+    function isElytraFlying(player = state.player) {
     if (!player) return false;
     try {
         if (typeof player.isElytraFlying === 'function') return !!player.isElytraFlying();
@@ -250,17 +250,17 @@ function isElytraFlying(player = state.player) {
         if (typeof player.zklLiWt === 'function') return !!player.zklLiWt(7);
     } catch (_) {}
     return false;
-}
+    }
 
-function shouldControl() {
+    function shouldControl() {
     if (!state.enabled || !document.pointerLockElement) return false;
     if (globalThis.__MINIFEATHER_FREECAM_ACTIVE__ || globalThis._mfFreelookActive) return false;
     const player = getGame()?.player;
     if (!player || player.inWater === true || player.abilities?.flying === true) return false;
     return isElytraFlying(player);
-}
+    }
 
-function springRoll(target, dt) {
+    function springRoll(target, dt) {
     const frequency = clamp(state.values.smoothing, 3, 22);
     const omega = frequency * 2.2;
     const step = clamp(dt, 0.001, 0.05);
@@ -272,9 +272,9 @@ function springRoll(target, dt) {
         state.roll = target;
         state.rollVelocity = 0;
     }
-}
+    }
 
-function applyViewEffect(camera, original, thisArg, args) {
+    function applyViewEffect(camera, original, thisArg, args) {
     if (
         state.viewHookDepth > 0 ||
         state.flightBlend <= 0.0001 ||
@@ -295,9 +295,9 @@ function applyViewEffect(camera, original, thisArg, args) {
         } catch (_) {}
         state.viewHookDepth--;
     }
-}
+    }
 
-function installViewHook(camera) {
+    function installViewHook(camera) {
     if (state.viewHook?.camera === camera) return;
     const hook = {
         camera,
@@ -323,9 +323,9 @@ function installViewHook(camera) {
         } catch (_) {}
     }
     state.viewHook = hook;
-}
+    }
 
-function ensureHorizon() {
+    function ensureHorizon() {
     if (state.horizon?.isConnected) return;
     const root = document.createElement('div');
     root.id = 'mf-elytra-horizon';
@@ -389,9 +389,9 @@ function ensureHorizon() {
     state.horizon = root;
     state.horizonLine = line;
     state.horizonPitch = pitch;
-}
+    }
 
-function updateHorizon() {
+    function updateHorizon() {
     if (!state.values.showHorizon) {
         if (state.horizon) state.horizon.style.opacity = '0';
         return;
@@ -404,18 +404,18 @@ function updateHorizon() {
     const pitch = Number(state.pitchObject?.rotation?.x) || 0;
     const translateY = clamp(pitch * 34, -28, 28);
     state.horizonPitch.style.transform = `translateY(${translateY}px) rotate(${-state.roll}rad)`;
-}
+    }
 
-function removeHorizon() {
+    function removeHorizon() {
     try {
         state.horizon?.remove();
     } catch (_) {}
     state.horizon = null;
     state.horizonLine = null;
     state.horizonPitch = null;
-}
+    }
 
-function applySyntheticYaw(deltaRadians) {
+    function applySyntheticYaw(deltaRadians) {
     if (!Number.isFinite(deltaRadians) || Math.abs(deltaRadians) < 0.000001) return;
     if (typeof state.gameMouseHandler === 'function' && Math.abs(state.radPerPixel) > 0.00000001) {
         const movementX = deltaRadians / state.radPerPixel;
@@ -446,9 +446,9 @@ function applySyntheticYaw(deltaRadians) {
         const sign = negativeError < positiveError ? -1 : 1;
         yawObject.rotation.y = current + deltaRadians * sign;
     }
-}
+    }
 
-function updateFlight(dt, now) {
+    function updateFlight(dt, now) {
     resolveCamera();
     const flying = shouldControl();
     state.flying = flying;
@@ -487,9 +487,9 @@ function updateFlight(dt, now) {
     const yawDegrees = (keyYaw * clamp(state.values.yawSpeed, 15, 150) + bankYaw) * dt;
     applySyntheticYaw(-yawDegrees * RAD);
     updateHorizon();
-}
+    }
 
-function emitState(reason = 'state') {
+    function emitState(reason = 'state') {
     try {
         document.dispatchEvent(new CustomEvent(EVENT_STATE, {
             detail: JSON.stringify({
@@ -502,9 +502,9 @@ function emitState(reason = 'state') {
             })
         }));
     } catch (_) {}
-}
+    }
 
-function setEnabled(enabled, notify = true) {
+    function setEnabled(enabled, notify = true) {
     state.enabled = !!enabled;
     if (!state.enabled) {
         state.keys.left = false;
@@ -512,18 +512,18 @@ function setEnabled(enabled, notify = true) {
         state.targetRoll = 0;
     }
     if (notify) emitState('enabled');
-}
+    }
 
-function setValues(values, notify = true) {
+    function setValues(values, notify = true) {
     state.values = normalizeValues(values);
     state.preset = detectPreset(state.values);
     if (!state.values.showHorizon) updateHorizon();
     if (notify) emitState('values');
-}
+    }
 
-const previousAddEventListener = EventTarget.prototype.addEventListener;
+    const previousAddEventListener = EventTarget.prototype.addEventListener;
 
-if (!globalThis.__MINIFEATHER_ELYTRA_MOUSE_HOOK__) {
+    if (!globalThis.__MINIFEATHER_ELYTRA_MOUSE_HOOK__) {
     globalThis.__MINIFEATHER_ELYTRA_MOUSE_HOOK__ = true;
     EventTarget.prototype.addEventListener = function (type, handler, options) {
         if (type === 'mousemove' && this === document && typeof handler === 'function') {
@@ -550,13 +550,13 @@ if (!globalThis.__MINIFEATHER_ELYTRA_MOUSE_HOOK__) {
             };
             return previousAddEventListener.call(this, type, wrappedHandler, options);
         }
-        
+
         if (type === 'unload') type = 'pagehide';
         return previousAddEventListener.call(this, type, handler, options);
     };
-}
+    }
 
-window.addEventListener('mousemove', event => {
+    window.addEventListener('mousemove', event => {
     const dx = Number(event.movementX || 0);
     if (shouldControl() && dx) {
         state.targetRoll -= dx * clamp(state.values.rollSensitivity, 0.0005, 0.006);
@@ -582,35 +582,35 @@ window.addEventListener('mousemove', event => {
                 : measured;
         }
     }, 0);
-}, true);
+    }, true);
 
-window.addEventListener('keydown', event => {
+    window.addEventListener('keydown', event => {
     const target = event.target;
     const tag = String(target?.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable) return;
     if (event.code === 'KeyA') state.keys.left = true;
     if (event.code === 'KeyD') state.keys.right = true;
-}, true);
+    }, true);
 
-window.addEventListener('keyup', event => {
+    window.addEventListener('keyup', event => {
     if (event.code === 'KeyA') state.keys.left = false;
     if (event.code === 'KeyD') state.keys.right = false;
-}, true);
+    }, true);
 
-window.addEventListener('blur', () => {
+    window.addEventListener('blur', () => {
     state.keys.left = false;
     state.keys.right = false;
-}, true);
+    }, true);
 
-document.addEventListener('pointerlockchange', () => {
+    document.addEventListener('pointerlockchange', () => {
     if (!document.pointerLockElement) {
         state.keys.left = false;
         state.keys.right = false;
         state.targetRoll = 0;
     }
-}, true);
+    }, true);
 
-document.addEventListener(EVENT_CONFIG, event => {
+    document.addEventListener(EVENT_CONFIG, event => {
     const config = parseDetail(event);
     if (!config || typeof config !== 'object') return;
     if (typeof config.enabled === 'boolean') setEnabled(config.enabled, false);
@@ -622,9 +622,9 @@ document.addEventListener(EVENT_CONFIG, event => {
         state.preset = detectPreset(state.values);
     }
     emitState('config');
-}, true);
+    }, true);
 
-globalThis.ElytraFlight = {
+    globalThis.ElytraFlight = {
     enable() {
         setEnabled(true, true);
     },
@@ -661,14 +661,14 @@ globalThis.ElytraFlight = {
     get values() {
         return { ...state.values };
     }
-};
+    };
 
-function loop(timestamp) {
+    function loop(timestamp) {
     const dt = clamp((timestamp - state.lastFrame) / 1000, 0.001, 0.05);
     state.lastFrame = timestamp;
     updateFlight(dt, timestamp);
     requestAnimationFrame(loop);
-}
+    }
 
 requestAnimationFrame(loop);
 })();

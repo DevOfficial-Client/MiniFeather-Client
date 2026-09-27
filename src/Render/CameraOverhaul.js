@@ -45,9 +45,9 @@ const PRESETS = Object.freeze({
         fovBoost: 5.2,
         mouseStrength: 0.00022
     })
-});
+    });
 
-const LIMITS = Object.freeze({
+    const LIMITS = Object.freeze({
     masterStrength: Object.freeze([0.25, 2.00]),
     strafeRoll: Object.freeze([0, 0.10]),
     turnRoll: Object.freeze([0, 0.08]),
@@ -59,9 +59,9 @@ const LIMITS = Object.freeze({
     swayStrength: Object.freeze([0, 0.005]),
     fovBoost: Object.freeze([0, 7]),
     mouseStrength: Object.freeze([0, 0.00035])
-});
+    });
 
-const state = {
+    const state = {
     enabled: false,
     bind: '',
     preset: 'normal',
@@ -98,9 +98,9 @@ const state = {
         yaw: 0,
         fov: 0
     }
-};
+    };
 
-const CHANNEL_NAMES = [
+    const CHANNEL_NAMES = [
     'strafeRoll',
     'turnRoll',
     'movePitch',
@@ -115,34 +115,34 @@ const CHANNEL_NAMES = [
     'fov',
     'yawRateInput',
     'accelerationInput'
-];
+        ];
 
-function clamp(value, min, max) {
+        function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
-}
+    }
 
-function smooth01(value) {
+    function smooth01(value) {
     const x = clamp(value, 0, 1);
     return x * x * (3 - 2 * x);
-}
+    }
 
-function normalizeAngle(value) {
+    function normalizeAngle(value) {
     let angle = value;
     while (angle > Math.PI) angle -= Math.PI * 2;
     while (angle < -Math.PI) angle += Math.PI * 2;
     return angle;
-}
+    }
 
-function cloneValues(source) {
+    function cloneValues(source) {
     const out = {};
     const fallback = PRESETS.normal;
     for (const key of Object.keys(LIMITS)) {
         out[key] = Number(source?.[key] ?? fallback[key]);
     }
     return out;
-}
+    }
 
-function normalizeValues(source) {
+    function normalizeValues(source) {
     const out = cloneValues(PRESETS.normal);
     if (!source || typeof source !== 'object') return out;
 
@@ -152,9 +152,9 @@ function normalizeValues(source) {
     }
 
     return out;
-}
+    }
 
-function detectPreset(values) {
+    function detectPreset(values) {
     const current = normalizeValues(values);
 
     for (const [name, preset] of Object.entries(PRESETS)) {
@@ -167,15 +167,15 @@ function detectPreset(values) {
     }
 
     return 'custom';
-}
+    }
 
-state.values = cloneValues(PRESETS.normal);
+    state.values = cloneValues(PRESETS.normal);
 
-for (const name of CHANNEL_NAMES) {
+    for (const name of CHANNEL_NAMES) {
     state.channels[name] = { value: 0, velocity: 0 };
-}
+    }
 
-const noise = (() => {
+    const noise = (() => {
     const gradients = [
         [1,1],[-1,1],[1,-1],[-1,-1],
         [1,0],[-1,0],[0,1],[0,-1]
@@ -223,9 +223,9 @@ const noise = (() => {
         const x2 = grad(ab, xf, yf - 1) + u * (grad(bb, xf - 1, yf - 1) - grad(ab, xf, yf - 1));
         return x1 + v * (x2 - x1);
     };
-})();
+    })();
 
-function spring(channel, target, frequency, damping, dt) {
+    function spring(channel, target, frequency, damping, dt) {
     const f = Math.max(0.01, Number(frequency) || 1);
     const d = clamp(Number(damping) || 1, 0.45, 1.5);
     const step = clamp(dt, 0.001, 0.05);
@@ -248,14 +248,14 @@ function spring(channel, target, frequency, damping, dt) {
     }
 
     return channel.value;
-}
+    }
 
-function impulse(channel, value, velocity = 0) {
+    function impulse(channel, value, velocity = 0) {
     channel.value += Number(value) || 0;
     channel.velocity += Number(velocity) || 0;
-}
+    }
 
-function findGameFromFiber(element) {
+    function findGameFromFiber(element) {
     if (!element) return null;
     const key = Object.keys(element).find(name =>
         name.startsWith('__reactFiber$') ||
@@ -286,9 +286,9 @@ function findGameFromFiber(element) {
     }
 
     return null;
-}
+    }
 
-function getGame(force = false) {
+    function getGame(force = false) {
     const now = performance.now();
 
     if (window.miniblox?.player) {
@@ -341,9 +341,9 @@ function getGame(force = false) {
     }
 
     return state.game?.player ? state.game : null;
-}
+    }
 
-function validCamera(camera) {
+    function validCamera(camera) {
     return !!(
         camera &&
         camera.position &&
@@ -352,9 +352,9 @@ function validCamera(camera) {
         Number.isFinite(Number(camera.position.z)) &&
         (camera.rotation || camera.quaternion)
     );
-}
+    }
 
-function resolveCamera(force = false) {
+    function resolveCamera(force = false) {
     const game = getGame(force);
     if (!game) return null;
 
@@ -391,9 +391,9 @@ function resolveCamera(force = false) {
     }
 
     return camera;
-}
+    }
 
-function applyViewEffect(camera, original, thisArg, args) {
+    function applyViewEffect(camera, original, thisArg, args) {
     if (
         !state.enabled ||
         globalThis.__MINIFEATHER_FREECAM_ACTIVE__ ||
@@ -438,9 +438,9 @@ function applyViewEffect(camera, original, thisArg, args) {
         } catch (_) {}
         state.viewHookDepth--;
     }
-}
+    }
 
-function installViewHooks(camera) {
+    function installViewHooks(camera) {
     if (state.viewHook?.camera === camera) return;
 
     const hook = {
@@ -470,9 +470,9 @@ function installViewHooks(camera) {
     }
 
     state.viewHook = hook;
-}
+    }
 
-function installProjectionHook(camera) {
+    function installProjectionHook(camera) {
     if (state.projectionHook?.camera === camera) return;
     if (typeof camera.updateProjectionMatrix !== 'function') return;
 
@@ -504,9 +504,9 @@ function installProjectionHook(camera) {
         camera.updateProjectionMatrix = hook;
         state.projectionHook = { camera, original, hook };
     } catch (_) {}
-}
+    }
 
-function motionData(player) {
+    function motionData(player) {
     const source = player?.motion || player?.velocity || player?.vel || {};
     const x = Number(source.x);
     const y = Number(source.y);
@@ -517,9 +517,9 @@ function motionData(player) {
         y: Number.isFinite(y) ? y : 0,
         z: Number.isFinite(z) ? z : 0
     };
-}
+    }
 
-function relativeMotion(player, motion) {
+    function relativeMotion(player, motion) {
     let yaw = Number(player?.yaw);
 
     if (!Number.isFinite(yaw)) {
@@ -535,18 +535,18 @@ function relativeMotion(player, motion) {
         forward: -sin * motion.x + cos * motion.z,
         strafe: cos * motion.x + sin * motion.z
     };
-}
+    }
 
-function perspectiveFactors(player) {
+    function perspectiveFactors(player) {
     const perspective = Number(player?.perspective);
     const firstPerson = !Number.isFinite(perspective) || perspective === 0;
 
     return firstPerson
         ? { position: 1, rotation: 1, fov: 1 }
         : { position: 0.48, rotation: 0.78, fov: 0.82 };
-}
+        }
 
-function clearChannels() {
+        function clearChannels() {
     for (const channel of Object.values(state.channels)) {
         channel.value = 0;
         channel.velocity = 0;
@@ -568,9 +568,9 @@ function clearChannels() {
     state.mouseDX = 0;
     state.mouseDY = 0;
     state.projectionDirty = true;
-}
+    }
 
-function updateEffects(timestamp, dt) {
+    function updateEffects(timestamp, dt) {
     if (globalThis.__MINIFEATHER_FREECAM_ACTIVE__) {
         clearChannels();
         return;
@@ -786,9 +786,9 @@ function updateEffects(timestamp, dt) {
             camera.updateProjectionMatrix();
         } catch (_) {}
     }
-}
+    }
 
-function resetEffects() {
+    function resetEffects() {
     clearChannels();
     const camera = state.camera;
     if (camera && typeof camera.updateProjectionMatrix === 'function') {
@@ -796,14 +796,14 @@ function resetEffects() {
             camera.updateProjectionMatrix();
         } catch (_) {}
     }
-}
+    }
 
-function normalizeBind(value) {
+    function normalizeBind(value) {
     const bind = String(value || '').trim();
     return bind === 'None' ? '' : bind;
-}
+    }
 
-function emitState(reason = 'state') {
+    function emitState(reason = 'state') {
     try {
         document.dispatchEvent(new CustomEvent(EVENT_STATE, {
             detail: JSON.stringify({
@@ -815,9 +815,9 @@ function emitState(reason = 'state') {
             })
         }));
     } catch (_) {}
-}
+    }
 
-function setEnabled(enabled, notify = false) {
+    function setEnabled(enabled, notify = false) {
     const next = !!enabled;
 
     if (state.enabled === next) {
@@ -836,24 +836,24 @@ function setEnabled(enabled, notify = false) {
     }
 
     if (notify) emitState('enabled');
-}
+    }
 
-function setValues(values, notify = false) {
+    function setValues(values, notify = false) {
     state.values = normalizeValues(values);
     state.preset = detectPreset(state.values);
     clearChannels();
     if (notify) emitState('values');
-}
+    }
 
-function setPreset(name, notify = false) {
+    function setPreset(name, notify = false) {
     if (!PRESETS[name]) return;
     state.values = cloneValues(PRESETS[name]);
     state.preset = name;
     clearChannels();
     if (notify) emitState('preset');
-}
+    }
 
-function applyConfig(detail) {
+    function applyConfig(detail) {
     let config = detail;
 
     if (typeof config === 'string') {
@@ -877,13 +877,13 @@ function applyConfig(detail) {
     }
 
     if ('enabled' in config) setEnabled(!!config.enabled, false);
-}
+    }
 
-document.addEventListener(EVENT_CONFIG, event => {
+    document.addEventListener(EVENT_CONFIG, event => {
     applyConfig(event.detail);
-}, true);
+    }, true);
 
-document.addEventListener(EVENT_BINDING, event => {
+    document.addEventListener(EVENT_BINDING, event => {
     let value = event.detail;
 
     if (typeof value === 'string') {
@@ -893,16 +893,16 @@ document.addEventListener(EVENT_BINDING, event => {
     }
 
     state.bindingCaptureActive = value === true || value?.active === true;
-}, true);
+    }, true);
 
-window.addEventListener('mousemove', event => {
+    window.addEventListener('mousemove', event => {
     if (!state.enabled || !document.pointerLockElement) return;
 
     state.mouseDX = clamp(state.mouseDX + Number(event.movementX || 0), -80, 80);
     state.mouseDY = clamp(state.mouseDY + Number(event.movementY || 0), -80, 80);
-}, true);
+    }, true);
 
-window.addEventListener('keydown', event => {
+    window.addEventListener('keydown', event => {
     if (
         state.bindingCaptureActive ||
         event.repeat ||
@@ -928,9 +928,9 @@ window.addEventListener('keydown', event => {
     event.stopPropagation();
     event.stopImmediatePropagation();
     setEnabled(!state.enabled, true);
-}, true);
+    }, true);
 
-document.addEventListener('pointerlockchange', () => {
+    document.addEventListener('pointerlockchange', () => {
     if (!document.pointerLockElement) {
         clearChannels();
         if (state.camera && typeof state.camera.updateProjectionMatrix === 'function') {
@@ -939,9 +939,9 @@ document.addEventListener('pointerlockchange', () => {
             } catch (_) {}
         }
     }
-}, true);
+    }, true);
 
-function loop(timestamp) {
+    function loop(timestamp) {
     const dt = clamp((timestamp - state.lastFrame) / 1000, 0.001, 0.05);
     state.lastFrame = timestamp;
 
@@ -950,9 +950,9 @@ function loop(timestamp) {
     }
 
     requestAnimationFrame(loop);
-}
+    }
 
-globalThis.CameraOverhaul = {
+    globalThis.CameraOverhaul = {
     enable() {
         setEnabled(true, true);
     },
@@ -1006,7 +1006,7 @@ globalThis.CameraOverhaul = {
             strong: cloneValues(PRESETS.strong)
         };
     }
-};
+    };
 
 requestAnimationFrame(loop);
 })();

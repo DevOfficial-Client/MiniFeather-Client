@@ -5,11 +5,6 @@
   globalThis.__MF_HOTLOADER__ = true;
 
   const KEY = 'mf:hot:v1';
-
-  // Este archivo se registra dos veces: ISOLATED (puente con chrome.*) y MAIN
-  // (motor de inyeccion). Los scripts inline insertados desde el mundo
-  // aislado los bloquea la CSP minima MV3 de la extension (sin unsafe-inline);
-  // desde MAIN se evaluan contra la CSP de la pagina.
   const IS_EXT = !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
 
   function readPlan() {
@@ -20,8 +15,7 @@
   }
 
   if (IS_EXT) {
-    // ── puente (ISOLATED): recursos de la extension + sync del plan ──
-    window.addEventListener('mf-hot-fetch', (e) => {
+      window.addEventListener('mf-hot-fetch', (e) => {
       const d = e.detail || {};
       const id = d.id, path = d.path;
       if (!id || typeof path !== 'string' || path.indexOf('..') !== -1) return;
@@ -52,9 +46,6 @@
         });
       } catch (_) {}
     });
-
-    // puente de fetch a otros origenes (MAIN -> background, CORS-free).
-    // CustomEvent.detail no cruza mundos como objeto: viaja como JSON string.
     window.addEventListener('mf-bg-fetch', (e) => {
       let d = e.detail || {};
       if (typeof d === 'string') {
@@ -79,16 +70,12 @@
     return;
   }
 
-  // ── motor (MAIN world) ──
-
   function injectInline(code) {
     const s = document.createElement('script');
     s.textContent = code;
     (document.head || document.documentElement).appendChild(s);
     s.remove();
   }
-
-  // pedir un recurso de la extension al puente (CustomEvent, con timeout)
   function fetchViaBridge(path) {
     return new Promise((resolve, reject) => {
       const id = 'mf' + Math.random().toString(36).slice(2);
@@ -204,9 +191,6 @@
       run();
     }
   }
-
-  // pedir plan fresco al background via el puente (pequeno delay para que
-  // el listener del puente este registrado)
   setTimeout(() => {
     try { window.dispatchEvent(new Event('mf-hot-sync')); } catch (_) {}
   }, 300);

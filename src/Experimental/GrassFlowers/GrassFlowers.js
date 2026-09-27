@@ -4,9 +4,9 @@
   const W = globalThis;
   const EVENT_NAME = 'minifeather:grass-flowers-config';
   const TAG = '[MiniFeather Grass Flowers]';
-  const REGION_RADIUS = 2; 
+  const REGION_RADIUS = 2;
   const REFRESH_MS = 9000;
-  const SURFACE_EPSILON = 0.0047; 
+  const SURFACE_EPSILON = 0.0047;
 
   const DECALS = [
     { id: 'flower-small', data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAsTAAALEwEAmpwYAAAGamlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNy4xLWMwMDAgNzkuYTg3MzFiOSwgMjAyMS8wOS8wOS0wMDozNzozOCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczpkYz0iaHR0cDovL3B1cmwub3JnL2RjL2VsZW1lbnRzLzEuMS8iIHhtbG5zOnBob3Rvc2hvcD0iaHR0cDovL25zLmFkb2JlLmNvbS9waG90b3Nob3AvMS4wLyIgeG1sbnM6eG1wTU09Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9tbS8iIHhtbG5zOnN0RXZ0PSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvc1R5cGUvUmVzb3VyY2VFdmVudCMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIDIzLjAgKFdpbmRvd3MpIiB4bXA6Q3JlYXRlRGF0ZT0iMjAyMS0xMS0xNVQxNToxNDowNFoiIHhtcDpNb2RpZnlEYXRlPSIyMDIxLTExLTE2VDE2OjE5OjQ1WiIgeG1wOk1ldGFkYXRhRGF0ZT0iMjAyMS0xMS0xNlQxNjoxOTo0NVoiIGRjOmZvcm1hdD0iaW1hZ2UvcG5nIiBwaG90b3Nob3A6Q29sb3JNb2RlPSIzIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOjQ0ZjI0YzUxLWU3ZWMtYmM0My05MWEzLWZiODM0OWQwYzcwZiIgeG1wTU06RG9jdW1lbnRJRD0ieG1wLmRpZDo1Njk4NWZiOS1jNWY5LTk4NDEtYTEwNC0wODg4YmY1YmYwYzciIHhtcE1NOk9yaWdpbmFsRG9jdW1lbnRJRD0ieG1wLmRpZDo1Njk4NWZiOS1jNWY5LTk4NDEtYTEwNC0wODg4YmY1YmYwYzciPiA8eG1wTU06SGlzdG9yeT4gPHJkZjpTZXE+IDxyZGY6bGkgc3RFdnQ6YWN0aW9uPSJjcmVhdGVkIiBzdEV2dDppbnN0YW5jZUlEPSJ4bXAuaWlkOjU2OTg1ZmI5LWM1ZjktOTg0MS1hMTA0LTA4ODhiZjViZjBjNyIgc3RFdnQ6d2hlbj0iMjAyMS0xMS0xNVQxNToxNDowNFoiIHN0RXZ0OnNvZnR3YXJlQWdlbnQ9IkFkb2JlIFBob3Rvc2hvcCAyMy4wIChXaW5kb3dzKSIvPiA8cmRmOmxpIHN0RXZ0OmFjdGlvbj0ic2F2ZWQiIHN0RXZ0Omluc3RhbmNlSUQ9InhtcC5paWQ6OWQ4YWVmOWYtZDQzNi05MzQ5LWE0NzktMmZmMjUyM2E3OTc0IiBzdEV2dDp3aGVuPSIyMDIxLTExLTE1VDE1OjE0OjIyWiIgc3RFdnQ6c29mdHdhcmVBZ2VudD0iQWRvYmUgUGhvdG9zaG9wIDIzLjAgKFdpbmRvd3MpIiBzdEV2dDpjaGFuZ2VkPSIvIi8+IDxyZGY6bGkgc3RFdnQ6YWN0aW9uPSJzYXZlZCIgc3RFdnQ6aW5zdGFuY2VJRD0ieG1wLmlpZDo0NGYyNGM1MS1lN2VjLWJjNDMtOTFhMy1mYjgzNDlkMGM3MGYiIHN0RXZ0OndoZW49IjIwMjEtMTEtMTZUMTY6MTk6NDVaIiBzdEV2dDpzb2Z0d2FyZUFnZW50PSJBZG9iZSBQaG90b3Nob3AgMjMuMCAoV2luZG93cykiIHN0RXZ0OmNoYW5nZWQ9Ii8iLz4gPC9yZGY6U2VxPiA8L3htcE1NOkhpc3Rvcnk+IDwvcmRmOkRlc2NyaXB0aW9uPiA8L3JkZjpSREY+IDwveDp4bXBtZXRhPiA8P3hwYWNrZXQgZW5kPSJyIj8+XhKuQQAAAHdJREFUOBFj+P//PwMlmIGuBlx78YLh+/fv/0E0XgOAilAwkvj/3wccQAb8J2gAzEZk26EYvwuQbUU3ANkgrAYgOxvJRnQX4DcAXSE2jDMWSNWMNQyQFeJyEV4XIMczPi/hCgN4PGMLTIIGIMczsWHBMLQyEzYMABAL639PsjzmAAAAAElFTkSuQmCC' },
@@ -144,7 +144,7 @@
   }
 
   async function loadImage(src) {
-    
+
     try {
       if (typeof createImageBitmap === 'function') {
         const b64 = String(src).split(',')[1] || '';
@@ -207,7 +207,7 @@
       if ('metalness' in material) material.metalness = 0;
       material.color?.set?.(0xffffff);
       material.emissive?.set?.(0x000000);
-      
+
       material.onBeforeCompile = function() {};
       material.customProgramCacheKey = () => 'mf-grass-flowers-v1';
       material.needsUpdate = true;
@@ -400,7 +400,7 @@
     for (let dz = -REGION_RADIUS; dz <= REGION_RADIUS; dz++) {
       for (let dx = -REGION_RADIUS; dx <= REGION_RADIUS; dx++) chunks.push([centerCx + dx, centerCz + dz]);
     }
-    
+
     chunks.sort((a, b) => ((a[0]-centerCx)**2 + (a[1]-centerCz)**2) - ((b[0]-centerCx)**2 + (b[1]-centerCz)**2));
 
     const buckets = [[], [], []];
@@ -411,7 +411,7 @@
       if (token !== state.buildToken || !state.enabled || state.destroyed) { state.building = false; return; }
       idle(() => {
         if (token !== state.buildToken || !state.enabled || state.destroyed) { state.building = false; return; }
-        
+
         if (index < chunks.length) {
           const [cx, cz] = chunks[index++];
           scanChunk(world, proto, cx, cz, buckets);

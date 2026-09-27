@@ -1,6 +1,3 @@
-// CrittersMobs: porte client-side del mod Critters and Companions (2.7.0).
-// 16 especies con biomas, pesos y tamanos de grupo del mod original.
-// Los patos/gansos siguen en DuckMobs.js; este modulo cubre el resto del bestiario.
 
 (function () {
     'use strict';
@@ -8,22 +5,20 @@
     if (globalThis.MF_CrittersMobs) return;
 
     const CFG = {
-        CAP: 16,                 // tope de mobs vivos a la vez (rendimiento)
-        MIN_MS: 8000,            // minimo entre intentos de grupo
-        MAX_MS: 30000,           // maximo entre intentos de grupo
-        RETRY_MS: 6000,          // reintento si no hallo lugar
-        RESET_DIST: 44,          // reciclar mob si se aleja
+        CAP: 16,
+        MIN_MS: 8000,
+        MAX_MS: 30000,
+        RETRY_MS: 6000,
+        RESET_DIST: 44,
         WANDER_RADIUS: 12,
-        SPAWN_MIN_R: 10,         // radio minimo de spawn alrededor del jugador
-        SPAWN_MAX_R: 30          // radio maximo
+        SPAWN_MIN_R: 10,
+        SPAWN_MAX_R: 30
     };
-
-    // ---------- especies (weights/grupos del CACCommonConfig original) ----------
     const SPECIES = {
         otter: {
             key: 'otter', model: 'otter.geo.json', textures: [null],
             kind: 'swimmer',
-            waterDepth: 0.25,        // nada a flor de agua (lomo afuera)
+            waterDepth: 0.25,
             biomes: { river: 1 }, flock: [2, 4],
             walkSpeed: 1.6, swimSpeed: 1.9, panicDist: 6,
             callMinMs: 6000, callMaxMs: 16000, callDist: 22,
@@ -43,7 +38,7 @@
             key: 'koi_fish', model: 'koi_fish.geo.json',
             textures: ['koi_fish_1.png', 'koi_fish_2.png', 'koi_fish_3.png', 'koi_fish_4.png', 'koi_fish_5.png', 'koi_fish_6.png', 'koi_fish_7.png', 'koi_fish_8.png', 'koi_fish_9.png', 'koi_fish_10.png', 'koi_fish_11.png', 'koi_fish_12.png', 'koi_fish_13.png', 'koi_fish_14.png', 'koi_fish_15.png', 'koi_fish_16.png', 'koi_fish_17.png', 'koi_fish_18.png', 'koi_fish_19.png', 'koi_fish_20.png', 'koi_fish_21.png'],
             kind: 'fish',
-            waterDepth: 1.1,        // bien sumergido: la aleta no rompe la superficie
+            waterDepth: 1.1,
             biomes: { river: 2 }, flock: [2, 5],
             swimSpeed: 1.1, panicDist: 4,
             callMinMs: 9000, callMaxMs: 24000, callDist: 16,
@@ -180,11 +175,6 @@
         stamp: { alive: true },
         playerTrack: { onGround: true, landedAt: 0, sprinting: false }
     };
-
-    // ---------- utilidades del juego (mismo acceso que DuckMobs) ----------
-
-    // Caché de escaneo: blockIdAt() llama getGame() por cada bloque consultado
-    // en los loops de spawn — sin caché, un querySelector('#react') por bloque.
     let _gameCache = { game: null, at: 0 };
     function getGame() {
         const direct = [globalThis.miniblox, globalThis.__MINIBLOX_GAME__, globalThis.__MB?.game, globalThis.game];
@@ -284,8 +274,6 @@
         return fy + 0.9;
     }
 
-    // ---------- biomas ----------
-
     function biomeAt(x, y, z) {
         const game = getGame();
         for (const call of [
@@ -327,8 +315,6 @@
         return biomeKey(biomeAt(p.x, p.y, p.z));
     }
 
-    // ---------- audio ----------
-
     function audioCtx() {
         return getGame()?.gameScene?.audio?.context
             || getGame()?.audio?.context
@@ -340,8 +326,6 @@
                 } catch { return null; }
             })();
     }
-
-    // sonidos copiados a models/entities/ sin subdirectorios
     const SOUNDS = {
         otter: ['otter/ambient_1.ogg', 'otter/ambient_2.ogg'],
         ferret: ['ferret/ambient_1.ogg', 'ferret/ambient_2.ogg', 'ferret/ambient_3.ogg'],
@@ -374,8 +358,6 @@
             } catch {}
         }).catch(() => soundCache.delete(file));
     }
-
-    // ---------- spawn ----------
 
     function pickSpeciesForBiome(bk) {
         const pool = [];
@@ -464,7 +446,6 @@
     }
 
     function fallbackSpecies() {
-        // bioma desconocido: pool terrestre/volador para que siempre haya vida
         const pool = Object.values(SPECIES).filter(s => s.kind === 'ground' || s.kind === 'bug' || s.kind === 'flyer');
         return pool[(Math.random() * pool.length) | 0] || null;
     }
@@ -494,8 +475,6 @@
         try { globalThis.MF_CustomModels?.despawn(mob.id, true); } catch {}
     }
 
-    // ---------- IA ----------
-
     function setAnim(mob, name) {
         try { globalThis.MF_CustomModels?.setAnim(mob.id, name, 1); } catch {}
     }
@@ -508,8 +487,6 @@
             return (t % 24000) < 12000;
         } catch { return true; }
     }
-
-    // ruido del jugador: salto-aterrizaje y sprint -> evento para especies timid as
     function updatePlayerNoise(t) {
         const game = getGame();
         const player = game?.player;
@@ -518,7 +495,6 @@
         const grounded = player.onGround === true || player.grounded === true;
         let noise = null;
         if (tr.onGround === false && grounded) {
-            // acaba de aterrizar
             const fallVy = Number(player.motion?.y ?? player.velocity?.y ?? 0);
             if (fallVy >= -0.2) { noise = { type: 'land', power: 1 }; tr.landedAt = t; }
         }
@@ -531,7 +507,7 @@
     }
 
     function noiseRadius(power) {
-        return 14 * power;   // aterrizar: 14 bloques, sprint: ~8
+        return 14 * power;
     }
 
     function aiTick(mob, dt, t, playerNoise) {
@@ -556,8 +532,6 @@
         }
 
         const inWater = isWaterAt(p.x, p.y - 0.2, p.z);
-
-        // panico al acercarse el jugador (los pasivos huyen)
         if (ai.mode !== 'panic' && ai.mode !== 'sleep' && player && sp.panicDist > 0 && dPlayer < sp.panicDist) {
             ai.mode = 'panic';
             ai.until = t + 2000 + Math.random() * 1500;
@@ -569,8 +543,6 @@
                 : (inWater ? (sp.swimSpeed || 1) * 1.8 : (sp.groundAnims.run ? 2.6 : (sp.walkSpeed || 1) * 2));
             if (ai.panicDir != null) ai.dir = ai.panicDir;
         }
-
-        // ruido (aterrizar de salto / sprint): huye el panda rojo y especies timidas
         if (playerNoise && sp.noiseShy && ai.mode !== 'panic' && dPlayer < noiseRadius(playerNoise.power)) {
             ai.mode = 'panic';
             ai.until = t + 2500 + Math.random() * 2000;
@@ -582,8 +554,6 @@
         if (t >= ai.until) chooseNext(mob, t, inWater);
 
         moveMob(mob, dt, t, inWater);
-
-        // sonidos ambientales
         if (player && sp.callDist && t >= ai.nextCall) {
             const d = Math.hypot(player.x - p.x, player.z - p.z);
             if (d < sp.callDist) {
@@ -604,7 +574,6 @@
             return;
         }
         if (sp.kind === 'flyer') {
-            // especies con flyProb alto (mariquita) pasan casi todo el tiempo volando
             const flyProb = sp.flyProb ?? 0.55;
             if (r < flyProb) {
                 ai.mode = 'fly';
@@ -625,7 +594,6 @@
             ai.until = t + 2000 + Math.random() * 4000;
             return;
         }
-        // ground / bug / swimmer
         if (sp.sleepDay && isDayTime() && r < 0.6) {
             ai.mode = 'sleep';
             setAnim(mob, 'sleep');
@@ -651,8 +619,6 @@
         else if (ai.mode === 'fly') speed = sp.flySpeed;
         else if (ai.mode === 'swim') speed = sp.swimSpeed;
         else if (ai.mode === 'panic') speed = ai.panicSpeed || (sp.walkSpeed || 1) * 2;
-
-        // terrestres/bichos: el agua es barrera
         const hatesWater = (sp.kind === 'ground' || sp.kind === 'bug') && !sp.bottom;
 
         if (speed > 0) {
@@ -680,7 +646,6 @@
                     p.y += (targetY - p.y) * Math.min(1, dt * 2);
                 } else if (inWater) {
                     const wy = waterSurfaceY(p.x, p.y, p.z);
-                    // profundidad objetivo: fondo (bottom) o sumergido (waterDepth = bloques bajo la superficie)
                     const depth = sp.bottom ? null : (sp.waterDepth ?? 0.5);
                     if (sp.bottom) {
                         const gy = groundYAt(p.x, p.y, p.z);
@@ -704,8 +669,6 @@
             mob.rec.yaw += dy * Math.min(1, dt * 6);
         }
     }
-
-    // ---------- loop ----------
 
     function tick() {
         if (!state.enabled) return;
@@ -731,8 +694,6 @@
     function schedule() {
         requestAnimationFrame(() => { if (state.stamp.alive) tick(); });
     }
-
-    // ---------- API publica ----------
 
     globalThis.MF_CrittersMobs = {
         start() {
@@ -763,7 +724,6 @@
             return out;
         },
         species() { return Object.keys(SPECIES); },
-        // spawn manual: 1..n de una especie, alrededor del jugador
         spawnOne(key, n = 1) {
             const sp = SPECIES[key];
             if (!sp) return { ok: false, error: 'unknown species "' + key + '"' };
@@ -778,7 +738,7 @@
                 if (spawnMob(sp, spot, Math.random() * Math.PI * 2)) spawned++;
             }
             if (!spawned) return { ok: false, error: 'no valid spot found (try open ground / near water for aquatic species)' };
-            if (!state.enabled) this.start();   // asegura el loop de IA corriendo
+            if (!state.enabled) this.start();
             return { ok: true, spawned, species: sp.key };
         },
         clear() {
@@ -786,14 +746,10 @@
             return true;
         }
     };
-
-    // auto-arranque si ya esta habilitado en settings
     try {
         const saved = localStorage.getItem('mf:critters');
         if (saved && JSON.parse(saved)?.enabled) globalThis.MF_CrittersMobs.start();
     } catch {}
-
-    // escucha de settings desde el panel
     document.addEventListener('minifeather:critters-toggle', (ev) => {
         const on = !!(ev?.detail && (() => { try { return JSON.parse(ev.detail).enabled; } catch { return false; } })());
         try { localStorage.setItem('mf:critters', JSON.stringify({ enabled: on })); } catch {}

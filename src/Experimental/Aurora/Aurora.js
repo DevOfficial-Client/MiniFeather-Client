@@ -216,7 +216,7 @@
     return colorA * total * region * night * shimmer;
   }
 
-`;
+  `;
 
     shader = shader.replace('  void main() {', `${helpers}\n  void main() {`);
 
@@ -277,7 +277,7 @@
       return `${base}|mf-aurora-v4-world-anchored`;
     };
 
-    material.needsUpdate = true; 
+    material.needsUpdate = true;
     state.patchApplied = true;
     return true;
   }

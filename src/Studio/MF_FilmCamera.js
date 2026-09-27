@@ -11,10 +11,11 @@
     const state = {
         clips: [],
         selectedId: null,
-        
-        audioEls: new Map(),   
-        
-        subtitle: null,        
+
+        audioEls: new Map(),
+
+        subtitle: null,
+
     };
 
     function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -33,10 +34,10 @@
             case 'step': return t < 1 ? 0 : 1;
             case 'easeIn': return t * t;
             case 'easeOut': return 1 - (1 - t) * (1 - t);
-            default: return hermite(t); 
+            default: return hermite(t);
         }
     }
-    
+
     function envelope(c, local) {
         const fi = Number(c.env?.fi) || 0, fo = Number(c.env?.fo) || 0;
         if (fi > 0 && local < fi) return clamp(local / fi, 0, 1);
@@ -160,7 +161,7 @@
     const byLayer = () => [...state.clips].sort((a, b) => (a.layer - b.layer) || (a.start - b.start));
 
     function studioPose() {
-        
+
         const S = window.MF_Studio;
         const pose = S?.getStudioCamPose?.();
         if (pose) return pose;
@@ -187,7 +188,7 @@
             c.props.points = [{ t: 0, ...pose },
                               { t: c.duration, x: pose.x + 4, y: pose.y, z: pose.z, yaw: pose.yaw, pitch: pose.pitch, fov: pose.fov }];
         } else if (type === 'orbit' || type === 'look') {
-            
+
             const fx = pose.x - Math.sin(pose.yaw) * 4, fz = pose.z - Math.cos(pose.yaw) * 4;
             if (type === 'orbit') c.props.target = { x: fx, y: pose.y - 1, z: fz };
             else c.props.target = { x: fx, y: pose.y, z: fz };
@@ -224,7 +225,7 @@
                 const t = ease(p.ease, clamp(local / Math.max(1, c.duration), 0, 1));
                 const d = Number(p.distance) || 0;
                 out.x = p.pose.x - Math.sin(p.pose.yaw) * d * t;
-                out.y = p.pose.y - Math.tan(p.pose.pitch || 0) * d * t * 0 + p.pose.y * 0; 
+                out.y = p.pose.y - Math.tan(p.pose.pitch || 0) * d * t * 0 + p.pose.y * 0;
                 out.z = p.pose.z - Math.cos(p.pose.yaw) * d * t;
                 out.yaw = p.pose.yaw; out.pitch = p.pose.pitch;
                 if (p.pose.fov) out.fov = p.pose.fov;
@@ -248,7 +249,7 @@
                 out.x = p.target.x + Math.sin(ang) * d;
                 out.z = p.target.z + Math.cos(ang) * d;
                 out.y = p.target.y + h;
-                
+
                 const dx = p.target.x - out.x, dz = p.target.z - out.z, dy = p.target.y - out.y;
                 out.yaw = Math.atan2(-dx, -dz);
                 out.pitch = Math.atan2(dy, Math.hypot(dx, dz));
@@ -256,7 +257,7 @@
                 break;
             }
             case 'look': {
-                if (!out.hasPos) break; 
+                if (!out.hasPos) break;
                 const dx = p.target.x - out.x, dy = p.target.y - out.y, dz = p.target.z - out.z;
                 out.yaw = Math.atan2(-dx, -dz);
                 out.pitch = Math.atan2(dy, Math.hypot(dx, dz));
@@ -290,7 +291,7 @@
     function sampleKeys(keys, local, interp) {
         const out = {};
         if (!keys?.length) return out;
-        const ks = keys; 
+        const ks = keys;
         if (local <= ks[0].t) return { ...ks[0] };
         const last = ks[ks.length - 1];
         if (local >= last.t) {
@@ -329,17 +330,17 @@
             if (!c.enabled) continue;
             const local = tick - c.start;
             if (local < 0 || local >= c.duration) continue;
-            if (c.type === 'subtitle' || c.type === 'audio') continue; 
+            if (c.type === 'subtitle' || c.type === 'audio') continue;
             if (TYPES[c.type]?.overwrite) {
-                
+
                 if (!out) out = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, fov: 0, hasPos: true };
                 const cur = { ...out };
                 evalClip(c, local, cur);
-                
+
                 const e = envelope(c, local);
                 if (e >= 1) Object.assign(out, cur);
                 else {
-                    
+
                     for (const k of ['x', 'y', 'z', 'yaw', 'pitch', 'roll', 'fov']) {
                         out[k] = lerp(out[k] || 0, cur[k] || 0, e);
                     }
@@ -400,7 +401,7 @@
         evalAudio(tick, playing);
         return pose;
     }
-    
+
     function evalClipOnly(c, local) {
         if (!c || !TYPES[c.type]) return null;
         const cur = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, fov: 0, hasPos: false };
@@ -414,21 +415,28 @@
 
     window.MF_FilmCamera = {
         TPS,
-        TYPES,          
+        TYPES,
+
         add: addClip,
-        addFromStudio,  
-        addKeyAt,       
+        addFromStudio,
+        addKeyAt,
+
         remove: removeClip,
         update: updateClip,
         get: getClip,
         clear: clearAll,
         byLayer,
-        studioPose,     
-        evalLayered,    
-        evalClipOnly,   
+        studioPose,
+
+        evalLayered,
+
+        evalClipOnly,
+
         evalSubtitles,
-        onTick,         
-        reset,          
+        onTick,
+
+        reset,
+
         save: saveClips,
         select(id) { state.selectedId = id || null; },
         get clips() { return state.clips; },

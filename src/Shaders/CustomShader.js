@@ -22,23 +22,33 @@
     };
 
     const PRESETS = {
-        
+
         spooklementary: {
             uniforms: {
                 uCsTime: { value: 0 },
-                uCsStrength: { value: 0.8 },   
-                uCsVhs: { value: 0.6 },        
-                uCsCrt: { value: 0.6 },        
-                uCsCel: { value: 0.6 },        
-                uCsFog: { value: 0.7 },        
-                uCsGrain: { value: 0.5 },      
-                uCsGlitch: { value: 0.4 },     
-                uCsFlash: { value: 0.5 },      
-                uCsLightOn: { value: 0 },      
+                uCsStrength: { value: 0.8 },
+
+                uCsVhs: { value: 0.6 },
+
+                uCsCrt: { value: 0.6 },
+
+                uCsCel: { value: 0.6 },
+
+                uCsFog: { value: 0.7 },
+
+                uCsGrain: { value: 0.5 },
+
+                uCsGlitch: { value: 0.4 },
+
+                uCsFlash: { value: 0.5 },
+
+                uCsLightOn: { value: 0 },
+
                 uCsLightRadius: { value: 20.0 },
                 uCsConeAngle: { value: 0.35 },
-                uCsSharp: { value: 0.5 },      
-                uCsResolution: { value: [1600.0, 900.0] } 
+                uCsSharp: { value: 0.5 },
+
+                uCsResolution: { value: [1600.0, 900.0] }
             },
             vertexCode: `
                 uniform float uCsTime;
@@ -244,10 +254,13 @@
         ultrafast: {
             version: 2,
             uniforms: {
-                uUfStrength: { value: 0.8 },   
-                uUfSat: { value: 1.35 },       
-                uUfContrast: { value: 0.45 },  
-                uUfTone: { value: 0.35 }       
+                uUfStrength: { value: 0.8 },
+
+                uUfSat: { value: 1.35 },
+
+                uUfContrast: { value: 0.45 },
+                uUfTone: { value: 0.35 }
+
             },
             fragmentCode: `
                 uniform float uUfStrength;
@@ -282,14 +295,21 @@
         photon: {
             uniforms: {
                 uPhTime: { value: 0 },
-                uPhStrength: { value: 0.6 },   
-                uPhAgx: { value: 0.8 },        
-                uPhFog: { value: 0.5 },        
-                uPhEnd: { value: 0.0 },        
-                uPhBH: { value: 0.0 },         
-                uPhBHSize: { value: 0.35 },    
-                uPhBHSpin: { value: 1.0 },     
-                uPhCamPos: { value: [0.0, 0.0, 0.0] }, 
+                uPhStrength: { value: 0.6 },
+
+                uPhAgx: { value: 0.8 },
+
+                uPhFog: { value: 0.5 },
+
+                uPhEnd: { value: 0.0 },
+
+                uPhBH: { value: 0.0 },
+
+                uPhBHSize: { value: 0.35 },
+
+                uPhBHSpin: { value: 1.0 },
+
+                uPhCamPos: { value: [0.0, 0.0, 0.0] },
                 uPhResolution: { value: [1600.0, 900.0] }
             },
             vertexCode: `
@@ -480,13 +500,20 @@
             version: 2,
             uniforms: {
                 uGvTime: { value: 0 },
-                uGvStrength: { value: 0.7 },   
-                uGvFog: { value: 0.8 },        
-                uGvFogDist: { value: 30.0 },   
-                uGvDesat: { value: 0.55 },     
-                uGvBlue: { value: 0.35 },      
-                uGvGrain: { value: 0.3 },      
-                uGvLight: { value: 0.3 }       
+                uGvStrength: { value: 0.7 },
+
+                uGvFog: { value: 0.8 },
+
+                uGvFogDist: { value: 30.0 },
+
+                uGvDesat: { value: 0.55 },
+
+                uGvBlue: { value: 0.35 },
+
+                uGvGrain: { value: 0.3 },
+
+                uGvLight: { value: 0.3 }
+
             },
             vertexCode: `
                 varying vec3 mfGvWorldPos;
@@ -577,16 +604,25 @@
 
         complementaryInspired: {
             uniforms: {
-                uCrStrength: { value: 0.8 },    
-                uCrTonemap: { value: 0.8 },     
-                uCrExposure: { value: 1.0 },    
-                uCrContrast: { value: 1.05 },   
-                uCrSaturation: { value: 1.0 },  
-                uCrVibrance: { value: 1.0 },    
-                uCrVignette: { value: 0.5 },    
-                uCrFog: { value: 0.4 },         
-                uCrDayFactor: { value: 1.0 },   
-                uCrDither: { value: 1.0 },      
+                uCrStrength: { value: 0.8 },
+
+                uCrTonemap: { value: 0.8 },
+
+                uCrExposure: { value: 1.0 },
+
+                uCrContrast: { value: 1.05 },
+
+                uCrSaturation: { value: 1.0 },
+                uCrVibrance: { value: 1.0 },
+
+                uCrVignette: { value: 0.5 },
+
+                uCrFog: { value: 0.4 },
+
+                uCrDayFactor: { value: 1.0 },
+
+                uCrDither: { value: 1.0 },
+
                 uCrTime: { value: 0 },
                 uCrResolution: { value: [1600.0, 900.0] }
             },
@@ -781,10 +817,10 @@
             update: (u, dt) => {
                 u.uCrTime.value += dt;
                 u.uCrStrength.value = state.strength;
-                
+
                 try {
                     const wt = Number(state.game?.world?.worldTime ?? 12000);
-                    
+
                     const dayF = 0.5 + 0.5 * Math.cos((wt - 6000) / 24000 * Math.PI * 2);
                     u.uCrDayFactor.value = dayF;
                 } catch (_) {}
@@ -793,37 +829,60 @@
     };
 
     const EFFECT_DEFS = {
-        vhs:        { key: 'uCsVhs',      max: 1 },
-        crt:        { key: 'uCsCrt',      max: 1 },
-        cel:        { key: 'uCsCel',      max: 1 },
-        fog:        { key: 'uCsFog',      max: 1 },
-        grain:      { key: 'uCsGrain',    max: 1 },
-        glitch:     { key: 'uCsGlitch',   max: 1 },
-        flash:      { key: 'uCsFlash',    max: 1 },
-        sharp:      { key: 'uCsSharp',    max: 1 },
-        ufsat:      { key: 'uUfSat',      max: 2 },
+        vhs:        { key: 'uCsVhs',
+        max: 1 },
+        crt:        { key: 'uCsCrt',
+        max: 1 },
+        cel:        { key: 'uCsCel',
+        max: 1 },
+        fog:        { key: 'uCsFog',
+        max: 1 },
+        grain:      { key: 'uCsGrain',
+        max: 1 },
+        glitch:     { key: 'uCsGlitch',
+        max: 1 },
+        flash:      { key: 'uCsFlash',
+        max: 1 },
+        sharp:      { key: 'uCsSharp',
+        max: 1 },
+        ufsat:      { key: 'uUfSat',
+        max: 2 },
         ufcontrast: { key: 'uUfContrast', max: 1 },
-        uftone:     { key: 'uUfTone',     max: 1 },
-        phagx:      { key: 'uPhAgx',      max: 1 },
-        phfog:      { key: 'uPhFog',      max: 1 },
-        phend:      { key: 'uPhEnd',      max: 1 },
-        phbh:       { key: 'uPhBH',       max: 1 },
-        phbhsize:   { key: 'uPhBHSize',   max: 1 },
-        phbhspin:   { key: 'uPhBHSpin',   max: 3 },
+        uftone:     { key: 'uUfTone',
+        max: 1 },
+        phagx:      { key: 'uPhAgx',
+        max: 1 },
+        phfog:      { key: 'uPhFog',
+        max: 1 },
+        phend:      { key: 'uPhEnd',
+        max: 1 },
+        phbh:       { key: 'uPhBH',
+        max: 1 },
+        phbhsize:   { key: 'uPhBHSize',
+        max: 1 },
+        phbhspin:   { key: 'uPhBHSpin',
+        max: 3 },
         crtm:       { key: 'uCrTonemap',  max: 1 },
         crexp:      { key: 'uCrExposure', max: 2.8 },
         crc:        { key: 'uCrContrast', max: 2 },
         crsat:      { key: 'uCrSaturation', max: 2 },
         crvib:      { key: 'uCrVibrance', max: 2 },
         crvig:      { key: 'uCrVignette', max: 1 },
-        crfog:      { key: 'uCrFog',      max: 1 },
-        crdith:     { key: 'uCrDither',   max: 1 },
-        gvfog:      { key: 'uGvFog',      max: 1 },
+        crfog:      { key: 'uCrFog',
+        max: 1 },
+        crdith:     { key: 'uCrDither',
+        max: 1 },
+        gvfog:      { key: 'uGvFog',
+        max: 1 },
         gvdist:     { key: 'uGvFogDist',  max: 120 },
-        gvdesat:    { key: 'uGvDesat',    max: 1 },
-        gvblue:     { key: 'uGvBlue',     max: 1 },
-        gvgrain:    { key: 'uGvGrain',    max: 1 },
-        gvlight:    { key: 'uGvLight',    max: 1 }
+        gvdesat:    { key: 'uGvDesat',
+        max: 1 },
+        gvblue:     { key: 'uGvBlue',
+        max: 1 },
+        gvgrain:    { key: 'uGvGrain',
+        max: 1 },
+        gvlight:    { key: 'uGvLight',
+        max: 1 }
     };
 
     if (!window.__MF_FLASHLIGHT_KEYS__) {
@@ -946,7 +1005,7 @@
         const clamped = Math.max(0.5, Math.min(1.0, parseFloat(scale) || 1.0));
 
         if (clamped >= 1.0) {
-            
+
             const g = state.game || findGame();
             const r = g ? resolveRenderer(g) : null;
             if (r && r.__mfScaleHook) {
@@ -984,7 +1043,7 @@
 
         if (clamped >= 1.0) {
             hook.factor = 1.0;
-            
+
             hook.originalSetPixelRatio(window.devicePixelRatio || 1);
             void 0;
         } else {
@@ -1126,17 +1185,17 @@
     }
 
     function findMainGameCanvas() {
-        
+
         const registry = window.__MF_GL_CANVASES__;
         if (Array.isArray(registry) && registry.length) {
             const live = registry.filter(c =>
                 c.isConnected && !c.__mfIsHUD &&
                 c.width >= 300 && c.height >= 200);
-            
+
             live.sort((a, b) => b.width * b.height - a.width * a.height);
             if (live[0]) return live[0];
         }
-        
+
         const canvases = [...document.querySelectorAll('canvas')];
         return canvases
             .filter(c => c.width >= 300 && c.height >= 200)
@@ -1253,7 +1312,7 @@
         });
 
         try {
-            
+
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.viewport(0, 0, w, h);
 
@@ -1295,7 +1354,7 @@
 
             if (postfx.vao) gl.bindVertexArray(null);
         } finally {
-            
+
             gl.bindFramebuffer(gl.FRAMEBUFFER, lastFbo);
             gl.bindBuffer(gl.ARRAY_BUFFER, lastArrayBuf);
             if (lastVao !== null && gl.bindVertexArray) gl.bindVertexArray(lastVao);
@@ -1305,7 +1364,7 @@
                 if (!lastEnabled.includes(cap)) gl.disable(cap);
             });
             gl.viewport(lastViewport[0], lastViewport[1], lastViewport[2], lastViewport[3]);
-            
+
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, lastTex0);
             gl.activeTexture(lastActiveTex);
@@ -1323,7 +1382,7 @@
         postfx.enabled = !!(postfx.params.bloom > 0 || postfx.params.ca > 0 ||
             postfx.params.dof > 0 || postfx.params.dirt > 0 || postfx.params.vignette > 0);
         if (postfx.enabled && !postfx.active) {
-            
+
             const retry = setInterval(() => {
                 if (installPostFx() || !postfx.enabled) clearInterval(retry);
             }, 1000);
@@ -1380,7 +1439,7 @@
     float mfMask = texture(uMfShapeTex, vec3(mfUv, 0.5)).r;
     return mix(mfBase, mfMask, uMfShapeMix);
   }
-`;
+  `;
 
     function makeShapeTexture(data, size) {
         const noiseTex = state.cloudsMesh?.material?.uniforms?.uNoiseTex?.value;
@@ -1418,14 +1477,14 @@
 
         let frag = orig;
         frag = frag.replace(anchor, MF_SHAPE_GLSL + '\n' + anchor);
-        
+
         frag = frag.replace('return cloudFbm(q);', 'return mfMixShape(cloudFbm(q), xz);');
-        
+
         frag = frag.replace(
             'smoothstep(uCoverage, uCoverage + 0.25, cloudFbm(q))',
             'smoothstep(uCoverage, uCoverage + 0.25, mfMixShape(cloudFbm(q), p.xz))'
         );
-        
+
         frag = frag.replace(
             'smoothstep(uCoverage, uCoverage + 0.25, n)',
             'smoothstep(uCoverage, uCoverage + 0.25, mfMixShape(n, p.xz))'
@@ -1531,10 +1590,11 @@
         const bytesPerVoxel = bytes.length / voxels;
         let format, type;
         if (bytesPerVoxel === 4) {
-            format = 1023;  
-            type = 1009;    
+            format = 1023;
+            type = 1009;
+
         } else if (bytesPerVoxel === 3) {
-            
+
             const rgba = new Uint8Array(voxels * 4);
             for (let i = 0; i < voxels; i++) {
                 const s = i * 3, t = i * 4;
@@ -1547,7 +1607,7 @@
             format = 1023;
             type = 1009;
         } else if (bytesPerVoxel === 1) {
-            format = 1022;  
+            format = 1022;
             type = 1009;
         } else {
             console.warn(`${TAG} Bytes por vóxel inesperados: ${bytesPerVoxel}`);
@@ -1607,7 +1667,7 @@
         } else if (packNoise.enabled && packNoise.texture) {
             applyPackNoiseToMesh();
         } else if (!packNoise.enabled && packNoise.texture) {
-            
+
             const mesh = resolveClouds();
             const u = mesh?.material?.uniforms;
             if (u?.uNoiseTex) u.uNoiseTex.value.needsUpdate = true;
@@ -1682,7 +1742,7 @@
     }
 
     function injectBeforeMainEnd(src, code) {
-        
+
         const lastBrace = src.lastIndexOf('}');
         if (lastBrace < 0) return src;
 
@@ -1726,14 +1786,14 @@
         let csAlive = true;
 
         const liveUniforms = {};
-        
+
         const lsNameByUniform = {};
         for (const [fxName, def] of Object.entries(EFFECT_DEFS)) {
             if (preset.uniforms[def.key]) lsNameByUniform[def.key] = fxName;
         }
         for (const key in preset.uniforms) {
             let initial = preset.uniforms[key].value;
-            
+
             const fxName = lsNameByUniform[key];
             if (fxName) {
                 const saved = parseFloat(localStorage.getItem('miniblox_customshader_fx_' + fxName));
@@ -1743,9 +1803,9 @@
         }
 
         const wrapper = function (shader) {
-            
+
             originalOnBeforeCompile(shader);
-            if (!csAlive) return; 
+            if (!csAlive) return;
 
             for (const key in liveUniforms) {
                 shader.uniforms[key] = liveUniforms[key];
@@ -1795,7 +1855,7 @@
 
         material.customProgramCacheKey = function () {
             const base = originalCacheKey ? originalCacheKey.call(material) : '';
-            
+
             return 'mfcs_' + state.preset + '_v' + (preset.version || 1) + '_' + base;
         };
 
@@ -1833,7 +1893,7 @@
         }
         material.needsUpdate = true;
         state.hooked.delete(material);
-        delete material.__mfHooked;  
+        delete material.__mfHooked;
     }
 
     let lastTime = performance.now();
@@ -1964,7 +2024,7 @@
             state.strength = Math.max(0, Math.min(1, parseFloat(val) || 0));
             localStorage.setItem('miniblox_customshader_strength', String(state.strength));
         },
-        
+
         setEffect(name, val) {
             const def = EFFECT_DEFS[name];
             if (!def) {
@@ -1979,9 +2039,9 @@
                     applied = true;
                 }
             }
-            
+
             if (!applied) return;
-            
+
             localStorage.setItem('miniblox_customshader_fx_' + name, String(value));
         },
         getEffect(name) {
@@ -1998,11 +2058,11 @@
             localStorage.setItem('miniblox_customshader_renderscale', String(clamped));
             applyRenderScale(clamped);
         },
-        
+
         setClouds(cfg) {
             return applyClouds(cfg || {});
         },
-        
+
         setCloudsShape(cfg) {
             handleCloudsShape(cfg || {});
         },
@@ -2061,7 +2121,7 @@
         if (cfg.preset && PRESETS[cfg.preset] && cfg.preset !== state.preset) {
             state.preset = cfg.preset;
             localStorage.setItem('miniblox_customshader_preset', cfg.preset);
-            
+
             if (state.hooked.size > 0) {
                 disable();
                 needsRescan = true;
@@ -2071,7 +2131,7 @@
         if (cfg.strength !== undefined) {
             state.strength = Math.max(0, Math.min(1, parseFloat(cfg.strength) || 0));
             localStorage.setItem('miniblox_customshader_strength', String(state.strength));
-            
+
         }
 
         if (cfg.renderScale !== undefined) {
@@ -2089,7 +2149,7 @@
         if (cfg.clouds && typeof cfg.clouds === 'object') {
             const pending = () => applyClouds(cfg.clouds);
             if (!pending()) {
-                
+
                 const retry = setInterval(() => {
                     if (applyClouds(cfg.clouds) || !state.enabled) clearInterval(retry);
                 }, 2000);
@@ -2114,12 +2174,12 @@
                 state.enabled = true;
                 localStorage.setItem('miniblox_customshader', 'true');
                 scan();
-                
+
                 if (state.renderScale < 1.0) {
                     setTimeout(() => applyRenderScale(state.renderScale), 500);
                 }
             } else {
-                
+
                 if (state.renderScale < 1.0) applyRenderScale(1.0);
                 postfx.enabled = false;
                 window.MF_CustomShader.disable();
@@ -2133,7 +2193,7 @@
     });
 
     state.scanTimer = setInterval(() => {
-        if (!state.enabled) return; 
+        if (!state.enabled) return;
 
         if (state.hooked.size > 0) {
             if (performance.now() - state.lastScan > 10000) {
@@ -2167,7 +2227,7 @@
             try {
                 const log = this.getShaderInfoLog(shader) || 'sin log';
                 const src = shaderSources.get(shader) || '';
-                
+
                 const numbered = src.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n');
                 console.error('[MiniFeather] Shader falló al COMPILAR. Log:', log,
                     '\n— Fuente numerada —\n', numbered.slice(0, 4000));
@@ -2188,7 +2248,7 @@
 
     if (state.enabled) {
         setTimeout(scan, 3000);
-        
+
         if (localStorage.getItem(LS_SHAPE)) {
             setTimeout(() => handleCloudsShape({}), 4000);
         }

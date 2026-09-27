@@ -94,7 +94,7 @@
     const out = [], q = root ? [root] : [], seen = new WeakSet();
     let head = 0;
     while (head < q.length && out.length < limit) {
-      const o = q[head++]; // shift() era O(n) por nodo → spikes cada scan
+      const o = q[head++];
       if (!o || typeof o !== 'object' || seen.has(o)) continue;
       seen.add(o); out.push(o);
       if (Array.isArray(o.children)) for (const c of o.children) q.push(c);
@@ -104,8 +104,6 @@
 
   function scan(game) {
     let count = 0;
-    // Solo scene: chunkMeshes/entityMeshes/ambientMeshes viven dentro de
-    // scene → se recorrían 2-4 veces por scan.
     for (const o of collect(game?.gameScene?.scene)) {
       const list = Array.isArray(o.material) ? o.material : [o.material];
       for (const m of list) if (patch(m)) count++;

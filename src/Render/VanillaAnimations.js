@@ -184,11 +184,6 @@
             return false;
         });
     }
-
-    // El reset de rotaciones lo hace el wrap de freezeJoint DENTRO de
-    // updateMatrixWorld (que el juego llama cada frame), así que el loop
-    // rAF que además las ponía a cero era trabajo duplicado. Solo queda el
-    // scan periódico de entidades.
     function scanTick() {
         if (!state.enabled) return;
         try { scanEntities(); } catch {}

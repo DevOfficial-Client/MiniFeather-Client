@@ -1,20 +1,10 @@
 (function () {
   'use strict';
 
-  // GIF picker for the vanilla game chat, powered by KLIPY.
-  // - typing ":gif" in the game chat input (or the tiny GIF button inside it)
-  //   opens a preview BAR anchored right above the chat input
-  // - the chat input text itself drives the search (type "cats" to search cats)
-  // - Tab / Shift+Tab cycles the previews, Enter sends the selected GIF,
-  //   Escape closes the bar; clicking a preview also sends it
-  // - picking one sends the static.klipy.com URL as a normal chat message
-  // - every client with MiniFeather renders those URLs as inline GIFs
-  // - API requests go MAIN -> ISOLATED bridge -> extension background (no CORS)
-
   const GLOBAL_KEY = '__MINIFEATHER_GIF_CHAT__';
   const CONFIG_EVENT = 'minifeather:gifchat-config';
   const KLIPY_DEFAULT_KEY = 'TooX4OMhCyQ6UexMQ7wD9zraorJP0FJZcohUhs49XzygxcokDVWcNYD2Y3j4gEMP';
-  const KLIPY_CACHE_TTL = 5 * 60 * 1000; // testing mode: 100 req/h — cache hard
+  const KLIPY_CACHE_TTL = 5 * 60 * 1000;
   const TRIGGER_RE = /(^|\s):gif\b\s*$/i;
   const TRIGGER_TOKEN_RE = /(^|\s):gif\b\s*/i;
   const KLIPY_URL_RE = /https:\/\/static\.klipy\.com\/[\w./-]+\.(?:gif|webp)(?=\s|$)/gi;
@@ -35,12 +25,10 @@
     bar: null,
     button: null,
     chatInputEl: null,
-    cache: new Map(), // query -> { ts, items }
+    cache: new Map(),
     reqId: 0,
     destroyed: false
   };
-
-  // ─── i18n (light; falls back to English) ─────────────────────
   const STRINGS = {
     en: { loading: 'Loading…', none: 'No GIFs found.', error: 'Could not load GIFs.', hint: 'Tab to browse · Enter to send · Esc to close' },
     es: { loading: 'Cargando…', none: 'No se encontraron GIFs.', error: 'No se pudieron cargar los GIFs.', hint: 'Tab para navegar · Enter para enviar · Esc para cerrar' },
@@ -65,8 +53,6 @@
   function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
   }
-
-  // ─── Game / chat discovery (same pattern as ClientCommands) ──
   function isGame(value) {
     return !!(value?.chat && typeof value.chat.submit === 'function' && value?.player?.pos);
   }
@@ -95,8 +81,6 @@
     }
     return state.chat;
   }
-
-  // ─── Klipy API (via bridge: MAIN world -> ISOLATED -> background) ──
   function apiKey() {
     return String(state.apiKey || KLIPY_DEFAULT_KEY).trim() || KLIPY_DEFAULT_KEY;
   }
@@ -144,7 +128,6 @@
         if (myReq !== state.reqId) return [];
         let json = null;
         try { json = JSON.parse(text); } catch (_) {}
-        // response shape: { result, data: { data: [...items] } }
         const list = Array.isArray(json?.data?.data)
           ? json.data.data
           : (Array.isArray(json?.data) ? json.data : []);
@@ -155,8 +138,6 @@
           if (thumb && full) mapped.push({ thumb, full });
         }
         console.log('[GifChat] klipyRequest OK:', list.length, 'items crudos →', mapped.length, 'mapeados');
-        // Expulsar expiradas al insertar: la TTL solo invalidaba lecturas,
-        // pero las entradas viejas quedaban retenidas para siempre.
         if (state.cache.size > 40) {
           const now = Date.now();
           for (const [k, v] of state.cache) {
@@ -171,8 +152,6 @@
         throw err;
       });
   }
-
-  // ─── Rendering klipy URLs in chat (DOM pipeline, like chatMemes) ──
   const chatObserver = { obs: null };
 
   function scanNode(node) {
@@ -235,10 +214,6 @@
       .mf-gifchat-processed { display:inline; }
     `;
     document.head.appendChild(style);
-
-    // Coalescing: el juego muta el body decenas de veces por frame (HUD,
-    // chat, scoreboard); agrupar en un solo lote por rAF y prefiltar con un
-    // indexOf barato antes de crear TreeWalkers/regex por mutación
     let pendingNodes = null;
     chatObserver.obs = new MutationObserver(mutations => {
       for (const mutation of mutations) {
@@ -252,8 +227,6 @@
 
     function queueScan(node) {
       if (!node) return;
-      // Prefiltro: sin "static.klipy.com" en el texto no hay nada que hacer —
-      // evita el TreeWalker completo para el 99% de las mutaciones del juego
       const text = node.nodeValue || node.textContent || '';
       if (typeof text === 'string' && !text.includes('static.klipy.com')) return;
       if (!pendingNodes) {
@@ -261,7 +234,7 @@
         requestAnimationFrame(() => {
           const batch = pendingNodes;
           pendingNodes = null;
-          if (!chatObserver.obs) return; // se detuvo entre frames
+          if (!chatObserver.obs) return;
           for (const n of batch) scanNode(n);
         });
       } else {
@@ -283,8 +256,6 @@
       try { el.replaceWith(document.createTextNode(el.dataset.mfOriginalText || '')); } catch (_) {}
     });
   }
-
-  // ─── GIF preview bar (inline strip above the chat input) ─────
   function injectBarStyle() {
     if (document.getElementById('mf-gifchat-bar-style')) return;
     const css = document.createElement('style');
@@ -346,7 +317,7 @@
     `;
     document.body.appendChild(bar);
     bar.querySelector('.mf-gifc-hint').textContent = L('hint');
-    bar.addEventListener('mousedown', event => event.preventDefault()); // keep chat input focused
+    bar.addEventListener('mousedown', event => event.preventDefault());
     bar.addEventListener('click', event => {
       const cell = event.target.closest('.mf-gifc-cell');
       if (!cell) return;
@@ -407,8 +378,6 @@
     bar.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)) + 'px';
     bar.style.top = Math.max(8, rect.top - 8) + 'px';
     bar.style.width = width + 'px';
-    // with transform:translateY(-100%), top = input top means the bar sits
-    // just above the input; clamp so it never leaves the viewport
     const h = bar.offsetHeight || 0;
     if (rect.top - 8 - h < 0) bar.style.top = (rect.bottom + 8) + 'px';
   }
@@ -452,11 +421,7 @@
     try { chat.closeInput?.(); } catch (_) {}
     closeBar();
   }
-
-  // ─── Tiny GIF button inside the chat bar ─────────────────────
   function findChatInput() {
-    // the game chat input is a real <input>; while the chat is open it is
-    // the visible/focused one at the bottom of the HUD
     if (state.chatInputEl && document.body.contains(state.chatInputEl) && state.chatInputEl.offsetParent !== null) {
       return state.chatInputEl;
     }
@@ -464,9 +429,9 @@
     const candidates = document.querySelectorAll('input[type="text"], input:not([type])');
     for (const input of candidates) {
       if (input.closest('#mf-gifchat-bar')) continue;
-      if (input.closest('#mf-gui, #mf-gui-overlay')) continue; // our panel
-      if (input.offsetParent === null) continue; // hidden
-      state.chatInputEl = input; // keep the last visible one (chat bar)
+      if (input.closest('#mf-gui, #mf-gui-overlay')) continue;
+      if (input.offsetParent === null) continue;
+      state.chatInputEl = input;
     }
     return state.chatInputEl;
   }
@@ -474,15 +439,13 @@
   function ensureButton() {
     const input = findChatInput();
     if (!input) {
-      // chat closed → drop the bar too
-      if (state.barOpen) closeBar();
+        if (state.barOpen) closeBar();
       return;
     }
     const wrapper = input.parentElement;
     if (!wrapper) return;
     if (state.button && state.button.parentElement === wrapper) {
-      // React may have re-rendered: re-attach the bar if it vanished while open
-      if (state.barOpen && (!state.bar || !state.bar.isConnected)) openBar();
+        if (state.barOpen && (!state.bar || !state.bar.isConnected)) openBar();
       return;
     }
     state.button?.remove();
@@ -496,7 +459,7 @@
     if (getComputedStyle(wrapper).position === 'static') wrapper.style.position = 'relative';
     wrapper.classList.add('mf-gifchat-host');
     wrapper.appendChild(btn);
-    btn.addEventListener('mousedown', event => event.preventDefault()); // keep chat input focused
+    btn.addEventListener('mousedown', event => event.preventDefault());
     btn.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
@@ -505,8 +468,6 @@
     state.button = btn;
     if (state.barOpen) openBar();
   }
-
-  // ─── ':gif' trigger + live search + Tab/Enter/Esc handling ───
   let searchDebounce = 0;
 
   function hookTyping() {
@@ -516,19 +477,16 @@
       if (!target || target.tagName !== 'INPUT') return;
       if (target.closest('#mf-gifchat-bar')) return;
       const chat = ensureChat();
-      // only when the game chat input is open — that's the chat bar
       if (!chat?.showInput && !chat?.inputOpen) return;
       const value = String(target.value || '');
 
       if (state.barOpen) {
-        // live search: the chat input text is the query
-        clearTimeout(searchDebounce);
+          clearTimeout(searchDebounce);
         searchDebounce = setTimeout(() => loadBar(value.replace(TRIGGER_TOKEN_RE, ' ').trim()), 350);
         return;
       }
 
       if (!TRIGGER_RE.test(value)) return;
-      // clear the trigger and open the bar
       console.log('[GifChat] trigger :gif detectado — abriendo barra');
       try { chat.setInputValue?.(''); } catch (_) {}
       if (target.value) target.value = '';
@@ -568,8 +526,6 @@
       }
     }, true);
   }
-
-  // ─── Config from panel ───────────────────────────────────────
   function onConfig(event) {
     let detail = event.detail;
     try { detail = typeof detail === 'string' ? JSON.parse(detail) : detail; } catch (_) { return; }

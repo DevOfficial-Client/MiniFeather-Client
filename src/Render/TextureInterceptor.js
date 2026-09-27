@@ -5,8 +5,6 @@
     window.__MF_TEXTURE_INTERCEPTOR__ = true;
 
     window.__MF_GL_CANVASES__ = [];
-    // Keep the context returned at creation time. Calling getContext() during
-    // cleanup can resurrect or touch a context that is already being retired.
     function reapDetachedGLContexts() {
         var list = window.__MF_GL_CANVASES__;
         if (!list || list.length < 10) return;
@@ -19,7 +17,6 @@
                 list.splice(i, 1);
                 continue;
             }
-            // A newly-created offscreen canvas may still be in use by the game.
             if (cv.isConnected || now - (cv.__mfGLTrackedAt || now) < 20000) continue;
             try {
                 var ext = gl && gl.getExtension('WEBGL_lose_context');
@@ -48,9 +45,6 @@
             return ctx;
         };
     } catch (_) {}
-
-    // Reap old detached canvases before the next context is allocated and
-    // periodically. Never lose a connected game canvas or a fresh offscreen one.
     try {
         if (!window.__MF_GL_REAPER__) {
             window.__MF_GL_REAPER__ = setInterval(reapDetachedGLContexts, 10000);
@@ -90,22 +84,12 @@
         for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
         return new Blob([arr], { type: 'image/png' });
     }
-
-    // ---- Circuit breaker de red para hosts de assets caídos ----
-    // El juego re-fetcha TODOS los sprites dinámicos de un resource pack
-    // (CPacketModContent -> refreshDynamicSprites -> eFe -> $Pe) cada vez que
-    // el servidor reenvía el paquete. Si el host del pack está caído
-    // (ERR_EMPTY_RESPONSE), eso genera cientos de fetches fallidos y su spam
-    // de consola. Aquí recordamos URLs/origins que fallaron a nivel de red y
-    // cortamos el fetch de inmediato (mismo TypeError que el navegador, pero
-    // sin request real) durante un TTL. Solo aplica a URLs de assets
-    // (imágenes / packs / textures / skins), nunca a APIs de sesión o login.
     var NET = window.__MF_NET_BREAKER__ || (window.__MF_NET_BREAKER__ = {
-        urls: new Map(),      // url -> ts del último fallo de red
-        origins: new Map(),   // origin -> { fails, openUntil }
-        URL_TTL: 120000,      // 2 min sin reintentar la misma URL fallida
-        THRESHOLD: 10,        // fallos de red seguidos que abren el breaker
-        OPEN_MS: 60000        // breaker abierto 1 min por origin
+        urls: new Map(),
+        origins: new Map(),
+        URL_TTL: 120000,
+        THRESHOLD: 10,
+        OPEN_MS: 60000
     });
 
     function mfNetTrackableUrl(u) {
@@ -114,15 +98,12 @@
             && (/\.(?:png|jpe?g|webp|gif|bmp)(?:\?|#|$)/i.test(u)
                 || /\/(?:packs|assets|textures|skins)\//i.test(u));
     }
-
-    // Cache de origins parseados: los fetches de assets comparten host, así
-    // evitamos un new URL() (parse + alocación) por cada fetch del juego.
-    var originCache = new Map(); // url -> origin|null
+    var originCache = new Map();
     function mfNetOriginOf(u) {
         var o = originCache.get(u);
         if (o !== undefined) return o;
         try { o = new URL(u, location.href).origin; } catch (_) { o = null; }
-        if (originCache.size > 600) originCache.clear(); // tope defensivo
+        if (originCache.size > 600) originCache.clear();
         originCache.set(u, o);
         return o;
     }
@@ -167,9 +148,6 @@
         try {
             url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
         } catch (_) {}
-        // Gate barato: matches() solo puede matchear spritesheet/texturepacks
-        // → el resto de fetches salta sin leer localStorage (que materializa
-        // el dataURL completo del pack en memoria por lectura).
         var dataUrl = (url.indexOf('spritesheet') !== -1 || url.indexOf('texturepacks/default') !== -1)
             ? getDataUrl() : null;
         if (dataUrl && url && matches(url)) {
@@ -182,8 +160,6 @@
         }
         var p = origFetch.apply(this, arguments);
         if (url && mfNetTrackableUrl(url)) {
-            // Registrar resultado sin alterar la promesa que ve el juego
-            // (los handlers devuelven undefined para no crear rejection huérfana)
             p.then(function () { mfNetRecordOk(url); }, function () { mfNetRecordFail(url); });
         }
         return p;
@@ -254,14 +230,14 @@
         if (!base) return null;
         var m = githubUrl.match(/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/(?:refs\/heads\/)?(?:main|master)\/(.+)$/);
         if (!m) return null;
-        
+
         var path = m[1].replace(/[?#].*$/, '').replace(/^\/+/, '');
         if (!MFPACK_MANIFESTS[path]) return null;
         return base + path;
     }
 
     function patchGithubRaw() {
-        
+
         var origFetch = window.fetch;
         window.fetch = function (input, init) {
             var url = '';
@@ -321,9 +297,9 @@
             tries++;
             if (mfPackBaseUrl()) {
                 clearInterval(waitMeta);
-                MFPACK_READY = null; 
+                MFPACK_READY = null;
                 mfPackBoot();
-            } else if (tries >= 20) { 
+            } else if (tries >= 20) {
                 clearInterval(waitMeta);
                 console.warn('[MiniFeather mfpack] meta mf-mirror-base no apareció; espejo desactivado');
             }

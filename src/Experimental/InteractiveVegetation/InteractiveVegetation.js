@@ -10,12 +10,12 @@ const VEGETATION_PASS_THROUGH = new Set([
   'grass', 'fern', 'tall_grass', 'large_fern', 'deadbush',
   'poppy', 'dandelion', 'blue_orchid', 'allium', 'azure_bluet',
   'red_tulip', 'orange_tulip', 'white_tulip', 'pink_tulip', 'oxeye_daisy'
-]);
-const FLOWER_NAMES = new Set([
+      ]);
+      const FLOWER_NAMES = new Set([
   'poppy', 'dandelion', 'blue_orchid', 'allium', 'azure_bluet',
   'red_tulip', 'orange_tulip', 'white_tulip', 'pink_tulip', 'oxeye_daisy'
-]);
-const PROFILES = Object.freeze({
+      ]);
+      const PROFILES = Object.freeze({
   low: Object.freeze({
     radius: 7.5,
     maxBlades: 780,
@@ -71,7 +71,7 @@ const PROFILES = Object.freeze({
     flowerDensity: 0.78
   }),
   extreme: Object.freeze({
-    
+
     radius: 14.5,
     maxBlades: 5200,
     segments: 6,
@@ -89,11 +89,11 @@ const PROFILES = Object.freeze({
     widthRange: 0.032,
     flowerDensity: 0.84
   })
-});
+  });
 
-try { W.MF_InteractiveVegetationExperimental?.destroy?.(); } catch (_) {}
+  try { W.MF_InteractiveVegetationExperimental?.destroy?.(); } catch (_) {}
 
-const state = {
+  const state = {
   enabled: false,
   level: 'medium',
   profile: PROFILES.medium,
@@ -129,13 +129,13 @@ const state = {
   nativePatched: new WeakSet(),
   lastNativeScan: 0,
   lastWeatherCheck: 0
-};
+      };
 
-function v2(x = 0, y = 0) { return { x, y }; }
-function v3(x = 0, y = 0, z = 0) { return { x, y, z }; }
-function v4(x = 0, y = 0, z = 0, w = -9999) { return { x, y, z, w }; }
+      function v2(x = 0, y = 0) { return { x, y }; }
+      function v3(x = 0, y = 0, z = 0) { return { x, y, z }; }
+      function v4(x = 0, y = 0, z = 0, w = -9999) { return { x, y, z, w }; }
 
-const uniforms = {
+      const uniforms = {
   time: { value: 0 },
   playerPos: { value: v3(1e6, 1e6, 1e6) },
   playerVelocity: { value: v2() },
@@ -147,10 +147,10 @@ const uniforms = {
   trail1: { value: v4() },
   trail2: { value: v4() },
   trail3: { value: v4() }
-};
-const trails = [uniforms.trail0.value, uniforms.trail1.value, uniforms.trail2.value, uniforms.trail3.value];
+  };
+  const trails = [uniforms.trail0.value, uniforms.trail1.value, uniforms.trail2.value, uniforms.trail3.value];
 
-function getGame(force = false) {
+  function getGame(force = false) {
   const now = performance.now();
   if (!force && state.game?.player && state.game?.world && now - state.lastGameScan < 900) return state.game;
   state.lastGameScan = now;
@@ -176,21 +176,21 @@ function getGame(force = false) {
     }
   } catch (_) {}
   return null;
-}
+  }
 
-function getScene(game) {
+  function getScene(game) {
   return game?.gameScene?.scene || game?.scene?.scene || game?.gameScene || game?.scene || null;
-}
+  }
 
-function getWorldProto(world) {
+  function getWorldProto(world) {
   let proto = Object.getPrototypeOf(world);
   for (let i = 0; i < 7 && proto; i++, proto = Object.getPrototypeOf(proto)) {
     if (typeof proto.getChunkByID === 'function') return proto;
   }
   return null;
-}
+  }
 
-function hashString(text) {
+  function hashString(text) {
   let h = 2166136261 >>> 0;
   const s = String(text || '');
   for (let i = 0; i < s.length; i++) {
@@ -198,16 +198,16 @@ function hashString(text) {
     h = Math.imul(h, 16777619) >>> 0;
   }
   return h >>> 0;
-}
+  }
 
-function computeServerSalt(game) {
+  function computeServerSalt(game) {
   let key = '';
   try { key = game?.serverInfo?.serverId || game?.serverInfo?.serverName || game?.serverInfo?.worldType || ''; } catch (_) {}
   try { key += `|${game?.world?.dimensionId ?? 0}`; } catch (_) {}
   return hashString(key || 'miniblox');
-}
+  }
 
-function hash32(x, z, k = 0) {
+  function hash32(x, z, k = 0) {
   let h = state.serverSalt ^ Math.imul((x | 0) + k * 1013, 0x45d9f3b) ^ Math.imul((z | 0) - k * 9176, 0x119de1f3);
   h ^= h >>> 16;
   h = Math.imul(h, 0x7feb352d);
@@ -215,15 +215,15 @@ function hash32(x, z, k = 0) {
   h = Math.imul(h, 0x846ca68b);
   h ^= h >>> 16;
   return h >>> 0;
-}
+  }
 
-function rand01(x, z, k = 0) { return hash32(x, z, k) / 4294967296; }
+  function rand01(x, z, k = 0) { return hash32(x, z, k) / 4294967296; }
 
-function getWaveAttribute(geometry) {
+  function getWaveAttribute(geometry) {
   try { return geometry?.getAttribute?.('wave') || geometry?.attributes?.wave || null; } catch (_) { return null; }
-}
+  }
 
-function findReferenceMesh(scene) {
+  function findReferenceMesh(scene) {
   if (state.referenceMesh?.geometry?.attributes?.position && state.referenceMaterial) return state.referenceMesh;
   if (!scene?.traverse) return null;
 
@@ -252,9 +252,9 @@ function findReferenceMesh(scene) {
   state.referenceMesh = best?.mesh || null;
   state.referenceMaterial = best?.material || null;
   return state.referenceMesh;
-}
+  }
 
-function blockNameAt(chunk, stateId, wx, y, wz) {
+  function blockNameAt(chunk, stateId, wx, y, wz) {
   if (state.stateNameCache.has(stateId)) return state.stateNameCache.get(stateId);
   let name = '';
   try {
@@ -263,9 +263,9 @@ function blockNameAt(chunk, stateId, wx, y, wz) {
   } catch (_) {}
   if (state.stateNameCache.size < 2048) state.stateNameCache.set(stateId, name);
   return name;
-}
+  }
 
-function topGrassInColumn(chunk, lx, lz, cx, cz) {
+  function topGrassInColumn(chunk, lx, lz, cx, cz) {
   if (!chunk?.cells) return null;
   let cover = '';
   let skippedVegetation = 0;
@@ -294,9 +294,9 @@ function topGrassInColumn(chunk, lx, lz, cx, cz) {
     }
   }
   return null;
-}
+  }
 
-function collectGrassSurfaces(game, centerX, centerZ) {
+  function collectGrassSurfaces(game, centerX, centerZ) {
   const world = game?.world;
   const proto = world && getWorldProto(world);
   if (!world || !proto) return [];
@@ -331,9 +331,9 @@ function collectGrassSurfaces(game, centerX, centerZ) {
     }
   }
   return out;
-}
+  }
 
-function bladeCountForDistance(d, surface) {
+  function bladeCountForDistance(d, surface) {
   const p = state.profile;
   let count = d < p.nearDistance ? p.near : d < p.midDistance ? p.mid : p.far;
 
@@ -344,9 +344,9 @@ function bladeCountForDistance(d, surface) {
 
   if (surface?.cover && FLOWER_NAMES.has(surface.cover)) count = Math.max(1, Math.round(count * p.flowerDensity));
   return count;
-}
+  }
 
-function makeBladeGeometry(referenceGeometry, surfaces, centerX, centerZ) {
+  function makeBladeGeometry(referenceGeometry, surfaces, centerX, centerZ) {
   if (!referenceGeometry?.attributes?.position || !surfaces?.length) return null;
   const Geometry = referenceGeometry.constructor;
   const Attr = referenceGeometry.attributes.position.constructor;
@@ -391,14 +391,14 @@ function makeBladeGeometry(referenceGeometry, surfaces, centerX, centerZ) {
       const margin = extreme ? 0.018 : state.level === 'high' ? 0.045 : 0.07;
       let rootX, rootZ;
       if (extreme) {
-        
+
         const countGrid = Math.max(2, Math.ceil(Math.sqrt(count)));
         const gx = j % countGrid;
         const gz = Math.floor(j / countGrid) % countGrid;
         const span = 1 - margin * 2;
         rootX = surface.x + margin + ((gx + 0.12 + r0 * 0.76) / countGrid) * span;
         rootZ = surface.z + margin + ((gz + 0.12 + r1 * 0.76) / countGrid) * span;
-        
+
         rootX += (r6 - 0.5) * 0.035;
         rootZ += (r5 - 0.5) * 0.035;
       } else {
@@ -413,17 +413,17 @@ function makeBladeGeometry(referenceGeometry, surfaces, centerX, centerZ) {
       let height;
       let flex = 1.0;
       if (extreme) {
-        
+
         const patchBias = rand01(surface.x, surface.z, 991) - 0.5;
         const type = Math.max(0, Math.min(0.999, r7 + patchBias * 0.12));
         if (type < 0.30) {
-          height = 0.22 + r3 * 0.22;      
+          height = 0.22 + r3 * 0.22;
           flex = 0.72 + r8 * 0.16;
         } else if (type < 0.76) {
-          height = 0.43 + r3 * 0.31;      
+          height = 0.43 + r3 * 0.31;
           flex = 0.90 + r8 * 0.20;
         } else {
-          height = 0.74 + r3 * 0.34;      
+          height = 0.74 + r3 * 0.34;
           flex = 1.08 + r8 * 0.24;
         }
       } else {
@@ -452,7 +452,7 @@ function makeBladeGeometry(referenceGeometry, surfaces, centerX, centerZ) {
           positions[p] = cx + ribbonX * halfW * sign;
           positions[p + 1] = y;
           positions[p + 2] = cz + ribbonZ * halfW * sign;
-          
+
           normals[p] = ribbonX * sign;
           normals[p + 1] = 0.18 + t * 0.42;
           normals[p + 2] = ribbonZ * sign;
@@ -496,9 +496,9 @@ function makeBladeGeometry(referenceGeometry, surfaces, centerX, centerZ) {
   geometry.setIndex(Array.from(indices.subarray(0, usedIndices)));
   try { geometry.computeBoundingBox?.(); geometry.computeBoundingSphere?.(); } catch (_) {}
   return { geometry, bladeCount: blade, segments };
-}
+  }
 
-function injectBladeShader(material) {
+  function injectBladeShader(material) {
   const previousCompile = material.onBeforeCompile;
   const previousKey = typeof material.customProgramCacheKey === 'function' ? material.customProgramCacheKey.bind(material) : null;
 
@@ -517,26 +517,26 @@ function injectBladeShader(material) {
 
     let vertex = shader.vertexShader;
     const declarations = `
-attribute float mfBladeTip;
-attribute float mfBladeSeed;
-attribute vec2 mfBladeRoot;
-attribute float mfBladeBaseY;
-attribute float mfBladeFlex;
-uniform float mfGrassTime;
-uniform vec3 mfGrassPlayerPos;
-uniform vec2 mfGrassPlayerVelocity;
-uniform float mfGrassRain;
-uniform float mfGrassWind;
-uniform float mfGrassQuality;
-uniform vec4 mfGrassTrail0;
-uniform vec4 mfGrassTrail1;
-uniform vec4 mfGrassTrail2;
-uniform vec4 mfGrassTrail3;
-varying float mfGrassTip;
-varying float mfGrassSeed;
-varying float mfGrassContact;
-varying float mfGrassFlex;
-`;
+        attribute float mfBladeTip;
+        attribute float mfBladeSeed;
+        attribute vec2 mfBladeRoot;
+        attribute float mfBladeBaseY;
+        attribute float mfBladeFlex;
+        uniform float mfGrassTime;
+        uniform vec3 mfGrassPlayerPos;
+        uniform vec2 mfGrassPlayerVelocity;
+        uniform float mfGrassRain;
+        uniform float mfGrassWind;
+        uniform float mfGrassQuality;
+        uniform vec4 mfGrassTrail0;
+        uniform vec4 mfGrassTrail1;
+        uniform vec4 mfGrassTrail2;
+        uniform vec4 mfGrassTrail3;
+        varying float mfGrassTip;
+        varying float mfGrassSeed;
+        varying float mfGrassContact;
+        varying float mfGrassFlex;
+        `;
     if (!vertex.includes('attribute float mfBladeTip;')) vertex = vertex.replace('#include <common>', '#include <common>\n' + declarations);
 
     const bend = `
@@ -633,11 +633,11 @@ varying float mfGrassFlex;
 
     let fragment = shader.fragmentShader;
     const fdecl = `
-varying float mfGrassTip;
-varying float mfGrassSeed;
-varying float mfGrassContact;
-varying float mfGrassFlex;
-`;
+        varying float mfGrassTip;
+        varying float mfGrassSeed;
+        varying float mfGrassContact;
+        varying float mfGrassFlex;
+        `;
     if (!fragment.includes('varying float mfGrassTip;')) fragment = fragment.replace('#include <common>', '#include <common>\n' + fdecl);
     const colorCode = `
       vec3 mfBase = vec3(0.060, 0.190, 0.040);
@@ -661,9 +661,9 @@ varying float mfGrassFlex;
   material.customProgramCacheKey = function () {
     return `${previousKey ? previousKey() : ''}|minifeather-3d-grass-v5`;
   };
-}
+  }
 
-function makeBladeMaterial() {
+  function makeBladeMaterial() {
   const ref = state.referenceMaterial;
   if (!ref) return null;
   let mat = null;
@@ -682,17 +682,17 @@ function makeBladeMaterial() {
   injectBladeShader(mat);
   try { mat.needsUpdate = true; } catch (_) {}
   return mat;
-}
+  }
 
-function clear3DGrass() {
+  function clear3DGrass() {
   uniforms.replaceNativeGrass.value = 0;
   try { state.mesh?.removeFromParent?.(); } catch (_) {}
   try { state.geometry?.dispose?.(); } catch (_) {}
   try { state.material?.dispose?.(); } catch (_) {}
   state.mesh = state.geometry = state.material = null;
-}
+  }
 
-function makeGrassMesh(geometry) {
+  function makeGrassMesh(geometry) {
   const ref = state.referenceMesh;
   if (!ref?.constructor || !geometry) return null;
   const material = makeBladeMaterial();
@@ -709,14 +709,14 @@ function makeGrassMesh(geometry) {
     try { material.dispose?.(); } catch (_) {}
     return null;
   }
-}
+  }
 
-function idle(fn) {
+  function idle(fn) {
   if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 80 });
   else setTimeout(() => fn({ timeRemaining: () => 4 }), 0);
-}
+  }
 
-function rebuild3DGrass(force = false) {
+  function rebuild3DGrass(force = false) {
   if (!state.enabled || state.destroyed || state.building) return;
   const game = getGame(force);
   const scene = getScene(game);
@@ -775,9 +775,9 @@ function rebuild3DGrass(force = false) {
       try { oldMaterial?.dispose?.(); } catch (_) {}
     }
   });
-}
+  }
 
-function patchNativeMaterial(material) {
+  function patchNativeMaterial(material) {
   if (!material || state.nativePatched.has(material)) return;
   const previousCompile = material.onBeforeCompile;
   const previousKey = typeof material.customProgramCacheKey === 'function' ? material.customProgramCacheKey.bind(material) : null;
@@ -836,9 +836,9 @@ function patchNativeMaterial(material) {
   try { material.needsUpdate = true; } catch (_) {}
   state.nativeRecords.add(record);
   state.nativePatched.add(material);
-}
+  }
 
-function scanNativeVegetation(force = false) {
+  function scanNativeVegetation(force = false) {
   const now = performance.now();
   if (!force && now - state.lastNativeScan < 3500) return;
   state.lastNativeScan = now;
@@ -856,9 +856,9 @@ function scanNativeVegetation(force = false) {
       }
     });
   } catch (_) {}
-}
+  }
 
-function restoreNativeMaterials() {
+  function restoreNativeMaterials() {
   for (const r of state.nativeRecords) {
     try { r.material.onBeforeCompile = r.previousCompile; } catch (_) {}
     try {
@@ -869,15 +869,15 @@ function restoreNativeMaterials() {
   }
   state.nativeRecords.clear();
   state.nativePatched = new WeakSet();
-}
+  }
 
-function addTrail(x, z, speed, nowSec) {
+  function addTrail(x, z, speed, nowSec) {
   const t = trails[state.trailCursor % TRAIL_COUNT];
   state.trailCursor = (state.trailCursor + 1) % TRAIL_COUNT;
   t.x = x; t.y = z; t.z = Math.max(0.62, Math.min(1.0, 0.68 + speed * 0.055)); t.w = nowSec;
-}
+  }
 
-function updateWeather(now) {
+  function updateWeather(now) {
   if (now - state.lastWeatherCheck < 500) return;
   state.lastWeatherCheck = now;
   let rain = 0;
@@ -885,9 +885,9 @@ function updateWeather(now) {
   if (!Number.isFinite(rain)) rain = 0;
   uniforms.rainStrength.value = Math.max(0, Math.min(1, rain));
   uniforms.windStrength.value = 1.0 + uniforms.rainStrength.value * 0.22;
-}
+  }
 
-function updatePlayer(now) {
+  function updatePlayer(now) {
   const game = getGame(false);
   const pos = game?.player?.pos;
   const x = Number(pos?.x), y = Number(pos?.y), z = Number(pos?.z);
@@ -921,27 +921,27 @@ function updatePlayer(now) {
   }
   state.lastPlayerX = x; state.lastPlayerY = y; state.lastPlayerZ = z; state.lastPlayerTime = now;
   updateWeather(now);
-}
+  }
 
-function animate(now) {
+  function animate(now) {
   if (!state.enabled || state.destroyed) { state.frame = 0; return; }
   uniforms.time.value = now * 0.001;
   updatePlayer(now);
   rebuild3DGrass(false);
   scanNativeVegetation(false);
   state.frame = requestAnimationFrame(animate);
-}
+  }
 
-function resetMotion() {
+  function resetMotion() {
   state.lastPlayerX = state.lastPlayerY = state.lastPlayerZ = Number.NaN;
   state.lastPlayerTime = 0;
   state.velX = state.velZ = 0;
   state.lastTrailX = state.lastTrailZ = Number.NaN;
   state.trailCursor = 0;
   for (const t of trails) { t.x = 0; t.y = 0; t.z = 0; t.w = -9999; }
-}
+  }
 
-function start() {
+  function start() {
   if (state.destroyed) return;
   uniforms.quality.value = state.profile.quality;
   resetMotion();
@@ -950,9 +950,9 @@ function start() {
   rebuild3DGrass(true);
   if (!state.timer) state.timer = setInterval(() => rebuild3DGrass(false), state.profile.rebuildInterval);
   if (!state.frame) state.frame = requestAnimationFrame(animate);
-}
+  }
 
-function stop() {
+  function stop() {
   if (state.timer) clearInterval(state.timer);
   state.timer = 0;
   if (state.frame) cancelAnimationFrame(state.frame);
@@ -966,14 +966,14 @@ function stop() {
   state.stateNameCache.clear();
   state.lastBuildX = state.lastBuildZ = Number.NaN;
   resetMotion();
-}
+  }
 
-function normalizeLevel(value) {
+  function normalizeLevel(value) {
   const level = String(value || '').toLowerCase();
   return Object.prototype.hasOwnProperty.call(PROFILES, level) ? level : 'medium';
-}
+  }
 
-function setLevel(value) {
+  function setLevel(value) {
   const level = normalizeLevel(value);
   if (state.level === level) return;
   state.level = level;
@@ -987,9 +987,9 @@ function setLevel(value) {
   state.building = false;
   state.lastBuildX = state.lastBuildZ = Number.NaN;
   rebuild3DGrass(true);
-}
+  }
 
-function setEnabled(value) {
+  function setEnabled(value) {
   const enabled = !!value;
   if (state.enabled === enabled) {
     if (enabled) rebuild3DGrass(true);
@@ -997,21 +997,21 @@ function setEnabled(value) {
   }
   state.enabled = enabled;
   if (enabled) start(); else stop();
-}
+  }
 
-function applyConfig(detail) {
+  function applyConfig(detail) {
   let cfg = detail;
   if (typeof cfg === 'string') { try { cfg = JSON.parse(cfg); } catch (_) { return; } }
   if (!cfg || typeof cfg !== 'object') return;
   if ('level' in cfg) setLevel(cfg.level);
   if ('enabled' in cfg) setEnabled(cfg.enabled);
-}
+  }
 
-const configHandler = event => applyConfig(event.detail);
-document.addEventListener(EVENT_CONFIG, configHandler, true);
-window.addEventListener('beforeunload', () => stop(), { once: true });
+  const configHandler = event => applyConfig(event.detail);
+  document.addEventListener(EVENT_CONFIG, configHandler, true);
+  window.addEventListener('beforeunload', () => stop(), { once: true });
 
-W.MF_InteractiveVegetationExperimental = {
+  W.MF_InteractiveVegetationExperimental = {
   version: VERSION,
   setEnabled,
   setLevel,
@@ -1028,6 +1028,6 @@ W.MF_InteractiveVegetationExperimental = {
     document.removeEventListener(EVENT_CONFIG, configHandler, true);
     try { delete W.MF_InteractiveVegetationExperimental; } catch (_) {}
   }
-};
+  };
 
 })();

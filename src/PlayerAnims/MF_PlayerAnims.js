@@ -1,29 +1,18 @@
-// MF_PlayerAnims.js - Orquestador de animaciones de jugador estilo Fresh Animations (EMF).
-// v1.1: pack embebido (sin fetch/puente) + aplicación vía wrap de updateMatrixWorld
-// (patrón VanillaAnimations.js): el wrap corre DURANTE el dibujado del juego, siempre
-// después de que render() del juego setee la pose vanilla → nuestras rotaciones
-// ganan sin importar el orden de RAFs. El jugador local (1ª persona no pasa por
-// render()) también queda cubierto.
 
 (function () {
     'use strict';
-
-    // Guard de re-inyección: sin esto, cada recarga de la extensión vuelve
-    // a wrappear updateMatrixWorld de meshes YA wrappeados (capas apiladas
-    // que multiplican el trabajo de render y nunca se deshacen) y duplica
-    // el listener de config.
     try { window.__MF_PA_SCOPE__?.destroy?.(); } catch {}
 
     const TAG = '[MF_PlayerAnims]';
 
     const state = {
         enabled: false,
-        pack: null,          // { lines: [...] } del pack FA+
+        pack: null,
         packError: null,
-        contexts: new Map(), // entityId → FrameContext
+        contexts: new Map(),
         game: null,
         lastGameScan: 0,
-        wrapped: new Set(),  // Object3D con wrap instalado
+        wrapped: new Set(),
         rafId: null,
         debug: false,
         tickStats: { ticks: 0, local: 0, remote: 0, errors: 0 },
@@ -42,11 +31,6 @@
             || entity;
         return live.sneak === true || live.sneaking === true || live.crouching === true;
     }
-
-    // Nodos del rig que el pack anima (los 4 joints van aparte, congelados)
-    // Requisito de diseño: codos y rodillas TIESOS (rotación 0 siempre).
-    // El freeze re-escribe rotation=0 en cada updateMatrixWorld, anulando la
-    // animación de rodillas que el bundle BfBcwb2y añadió al juego vanilla.
     const POSE_NODES = ['skeleton', 'body', 'headPivot', 'rightShoulder', 'leftShoulder', 'rightHip', 'leftHip'];
     const JOINT_NAMES = ['leftElbowJoint', 'rightElbowJoint', 'leftKneeJoint', 'rightKneeJoint'];
 
@@ -54,14 +38,9 @@
         const Parser = globalThis.MF_EMFParser;
         const files = globalThis.MF_EMF_PACK_FILES;
         if (!Parser || !files) throw new Error('EMFPack/EMFParser no cargados');
-        // Pack DAR v1.15: un solo player.jem con TODAS las animaciones inline
-        // (walk/sprint/sneak/jump/fall/hoprun/swim/glide/levitate/climb/
-        //  flaming/boiling/sneaky-dance + capas cloak/ear). Sin .jpm externos.
         state.pack = Parser.loadPack(files['player.jem'], files);
         if (!state.pack?.lines?.length) throw new Error('pack sin líneas');
     }
-
-    // ---------- Game finder ----------
     function getGame(force = false) {
         const now = performance.now();
         if (!force && state.game?.player && now - state.lastGameScan < 1000) return state.game;
@@ -77,10 +56,6 @@
         } catch {}
         return state.game?.player ? state.game : null;
     }
-
-    // Retira las poses publicadas del pack de un mesh. Se usa cuando un emote
-    // (Emotes.js) toma el control: escribe rotaciones directo en los joints y
-    // nuestro wrap de updateMatrixWorld las pisaría al computar matrices.
     function clearPublishedPoses(mesh) {
         if (mesh.skeleton?.__mfPARootPose) mesh.skeleton.__mfPARootPose = undefined;
         for (const name of POSE_NODES) {
@@ -88,15 +63,6 @@
             if (node?.__mfPAPose) node.__mfPAPose = undefined;
         }
     }
-
-    // ---------- Wraps de updateMatrixWorld ----------
-    // Evaluación DENTRO del pipeline de render del juego (equivalente al
-    // MixinLivingEntityRenderer de EMF Java, que corre tras setupAnim vanilla):
-    // el wrap del SKELETON evalúa la pose con el estado exacto que el juego va
-    // a dibujar (pose vanilla recién seteada por render(), partial correcto)
-    // y la aplica ANTES de que las matrices se propaguen a los hijos.
-    // Esto elimina el desfase de medio frame del RAF paralelo — causa del
-    // temblor "autocorrector" (pose leída de un frame, aplicada al siguiente).
     function makeSkeletonHook(mesh, game) {
         if (mesh.skeleton._mfPASkelHook) return;
         mesh.skeleton._mfPASkelHook = true;
@@ -106,12 +72,7 @@
         const wrapper = function () {
             if (mesh.skeleton.updateMatrixWorld !== wrapper) return original.apply(this, arguments);
             try {
-                // Evaluar UNA vez por frame: el juego puede llamar
-                // updateMatrixWorld varias veces por render (sombras, nametags,
-                // raycasts) — cada evaluación avanzaría los drags/frame_counter
-                // del pack → animación N× más rápida.
                 if (mesh.__mfPASuppress || isMeshSneaking(mesh, mesh._mfPASkelGame)) {
-                    // Emote activo: retirar poses del pack (el emote manda).
                     clearPublishedPoses(mesh);
                 } else if (state.enabled) {
                     const now = performance.now();
@@ -123,8 +84,6 @@
             } catch (e) {
                 state.tickStats.errors++;
             }
-            // Pose root (skeleton): el pack escribe root.rx/rz — aplicarla aquí
-            // mismo (save→apply→orig→restore), NO con wrapNode (pisaría este hook).
             const rootPose = mesh.skeleton.__mfPARootPose;
             if (rootPose) {
                 const r = this.rotation, pos = this.position, sc = this.scale;
@@ -172,9 +131,6 @@
             if (this.updateMatrixWorld !== wrapper) return original.apply(this, arguments);
             const pose = this.__mfPAPose;
             if (pose) {
-                // Guardar estado vanilla → aplicar pose → computar matriz → restaurar.
-                // Así no contaminamos node.rotation/position y el juego siempre ve
-                // valores limpios (las lecturas del pack ven la pose vanilla, como EMF).
                 const r = this.rotation;
                 const px = r.x, py = r.y, pz = r.z;
                 const pos = this.position;
@@ -183,13 +139,6 @@
                 const osx = sc.x, osy = sc.y, osz = sc.z;
                 let oq = null;
                 if (pose.quatTwist) {
-                    // body: en Miniblox el yaw del cuerpo vive en el QUATERNION
-                    // (slerp del juego), no en rotation.y. Escribir euler absoluto
-                    // dispara el onChange del euler → REESCRIBE el quaternion →
-                    // destruye el yaw → cuerpo girado ~70° ("correr al lado
-                    // contrario"). El pack espera semántica MC: body.ry es un
-                    // twist RELATIVO al yaw del root → aplicar como rotación
-                    // local ENCIMA del quaternion vanilla (YXZ: yaw·pitch·roll).
                     oq = this.quaternion.clone();
                     const QC = this.quaternion.constructor;
                     const hz = (v) => v / 2;
@@ -202,19 +151,9 @@
                     if (pose.ry !== undefined) r.y = pose.ry;
                     if (pose.rz !== undefined) r.z = pose.rz;
                 }
-                // Escala EMF absoluta (1 = normal; FA+ la usa en legs para saltos)
                 if (pose.sx !== undefined) sc.x = Math.max(0.01, pose.sx);
                 if (pose.sy !== undefined) sc.y = Math.max(0.01, pose.sy);
                 if (pose.sz !== undefined) sc.z = Math.max(0.01, pose.sz);
-                // Traducciones EMF = ABSOLUTAS en unidades MC (1/16) → delta three.
-                // Para el body (quatTwist): su PADRE no rota — el yaw del jugador
-                // vive en el propio quaternion del body/neck (renderPositionAndRotation
-                // del bundle: neck.quaternion.copy(rotYaw), la raíz solo recibe
-                // posición) → un delta directo a position queda fijo en el ESPACIO
-                // MUNDO y el offset lateral parece mayor/menor según el yaw del
-                // jugador. Rotar el delta por el quaternion vanilla (oq) lo aplica
-                // en espacio MODELO: relativo al cuerpo, consistente a cualquier
-                // rotación. (Yaw puro: la componente Y del delta se conserva.)
                 let effPdx = pose.pdx, effPdy = pose.pdy, effPdz = pose.pdz;
                 if (oq && (effPdx !== undefined || effPdy !== undefined || effPdz !== undefined)) {
                     const VC = this.position.constructor;
@@ -246,8 +185,6 @@
         joint._mfPAOrigUMW = original;
         const wrapper = function () {
             if (this.updateMatrixWorld !== wrapper) return original.apply(this, arguments);
-            // Durante un emote el joint puede animarse (bend de codos/rodillas):
-            // no congelar.
             if (!this.__mfPASuppress && !isMeshSneaking(mesh, mesh._mfPASkelGame)) {
                 this.rotation.x = 0; this.rotation.y = 0; this.rotation.z = 0;
             }
@@ -275,8 +212,6 @@
     function unwrapAll() {
         for (const node of [...state.wrapped]) unwrapNode(node);
     }
-
-    // ---------- Evaluación dentro del render (llamado por el skeleton hook) ----------
     function evalAndPublish(mesh, game) {
         const RT = globalThis.MF_EMFRuntime;
         if (!RT || !state.pack) return;
@@ -290,9 +225,6 @@
         if (!ctx) {
             ctx = new RT.FrameContext(entId);
             state.contexts.set(entId, ctx);
-            // Purga de contexts huérfanos: los entityIds se reinician al
-            // cambiar de servidor/dimensión y las claves viejas quedaban
-            // retenidas para siempre (leak en sesiones largas).
             if (state.contexts.size > 64) {
                 const cut = performance.now() - 60000;
                 for (const [k, c] of state.contexts) {
@@ -307,11 +239,6 @@
 
         const writes = [];
         RT.evaluate(state.pack.lines, ctx, s2, writes);
-
-        // Diagnóstico embebido (window.MF_PAdiag): captura en el MISMO frame
-        // la pose vanilla (rotaciones crudas del rig) vs la pose del pack
-        // (__mfPAPose) + estado de fase. Solo graba si hay captura activa y
-        // el jugador se está moviendo (limbSpeed>0.3), máx 300 muestras.
         try {
             const D = globalThis.MF_PAdiag;
             if (D?.rec && D.buf.length < 300 && s2.limbSpeed > 0.3 && mesh === game?.player?.mesh) {
@@ -337,30 +264,14 @@
                 });
             }
         } catch {}
-
-        // PORT FIEL (EMF Java): el pack SIEMPRE se aplica a brazos y piernas —
-        // sus fórmulas ya manejan swing_progress, is_using_item e is_blocking
-        // internamente (poses de ataque/uso/blocking del pack). La exclusión
-        // previa (skipArms) dejaba brazos vanilla cuando hay arma/uso — una
-        // desviación del original que hacía ver el resultado "buggeado".
-        // Única excepción conservada: emote del cliente en curso (el emote
-        // manda; EMF también lo hace vía EMFAnimationApi hooks).
         const skipArms = (mesh.emoteAmount ?? 0) > 0.01;
-
-        // Pose adaptada (flip de ejes + contra-rotación + head delta) — misma
-        // lógica que el playground: EMFRuntime.buildPose
         const poses = RT.buildPose(writes, { skipArms });
-
-        // Poses de NADO, ELYTRA y VUELO CREATIVO (MF_FlySwim — port del
-        // vanilla MC para nado/elytra y de las fórmulas DAR v1.15 para
-        // levitate): el pack solo atenúa al nadar/volar; esta pose mezcla
-        // por canal con suavizado exponencial → transiciones muy fluidas.
         const FS = globalThis.MF_FlySwim;
         if (FS && !skipArms) {
             const elytra = s2.gliding;
             const swimming = s2.swimming;
-            const levitating = s2.flying; // vuelo creativo (abilities.flying)
-            const inWater = !!s2.inWater; // agua pasiva → WaterPose DAR
+            const levitating = s2.flying;
+            const inWater = !!s2.inWater;
             if (elytra || swimming || levitating || inWater || mesh.__mfFlySwimActive) {
                 const dt = Math.max(0.001, Math.min(0.1, s2.frameTime || 0.05));
                 FS.setFrameState(s2);
@@ -376,21 +287,12 @@
                         for (const ch of ['rx', 'ry', 'rz']) {
                             if (fp[ch] !== undefined) out[ch] = lerpN(out[ch] ?? 0, fp[ch], w);
                         }
-                        // Traducciones DAR (unidades MC 1/16): el runtime las
-                        // computa como pdx/pdy/pdz (delta three con flip de
-                        // ejes x/y). ty crece hacia ABAJO en MC → pdy = -ty/16.
                         if (fp.ty !== undefined) out.pdy = (out.pdy ?? 0) + (-fp.ty / 16) * w;
                         if (fp.tz !== undefined) out.pdz = (out.pdz ?? 0) + (fp.tz / 16) * w;
                     }
                 }
             }
         }
-
-        // LEAN DE SPRINT: todo el cuerpo se inclina suave hacia adelante al
-        // correr. Gestión propia (quitada del pack para no duplicar):
-        // objetivo 18° con sprint activo, lerp exponencial τ=0.12s (~95% en
-        // 0.35s → entrada/salida suave). Se SUMA a la pose body del pack
-        // (buildPose pasa body sin flip: rx+ = adelante, convención MC).
         try {
             const dtL = Math.max(0.001, Math.min(0.1, s2.frameTime || 0.05));
             const leanTarget = s2.sprinting ? -(18 * Math.PI / 180) : 0;
@@ -399,17 +301,10 @@
             if (Math.abs(mesh.__mfSprintLean) > 0.0005) {
                 const b = poses.body ?? (poses.body = {});
                 b.rx = (b.rx ?? 0) + mesh.__mfSprintLean;
-                // Retroceso del tronco mientras corre: compensa el lean con un
-                // desplazamiento hacia atrás (+Z = atrás en espacio modelo).
-                // Escala con el mismo fade del lean (k = 0..1) y se rota por oq
-                // en wrapNode → consistente a cualquier yaw. 0.5 px EMF.
                 const k = mesh.__mfSprintLean / -(18 * Math.PI / 180);
                 b.pdz = (b.pdz ?? 0) + (0.5 / 16) * k;
             }
         } catch {}
-
-        // Publicar pose en los nodos + instalar wraps.
-        // poses está indexado por parte EMF → traducir a nombre de nodo del mesh.
         const NODE_BY_PART = {
             root: 'skeleton', body: 'body', head: 'headPivot',
             right_arm: 'rightShoulder', left_arm: 'leftShoulder',
@@ -419,14 +314,12 @@
         for (const p in NODE_BY_PART) NODE_BY_PART_INV[NODE_BY_PART[p]] = p;
         for (const part in poses) {
             if (part === 'root') {
-                // root = skeleton: la aplica el skeleton hook (ya instalado)
                 mesh.skeleton.__mfPARootPose = poses[part];
                 continue;
             }
             const nodeName = NODE_BY_PART[part];
             const node = nodeName && mesh[nodeName];
             if (!node) continue;
-            // body → twist quaternion (preserva el yaw vanilla del juego)
             if (part === 'body' && (poses[part].rx !== undefined ||
                 poses[part].ry !== undefined || poses[part].rz !== undefined)) {
                 poses[part].quatTwist = true;
@@ -434,7 +327,6 @@
             node.__mfPAPose = poses[part];
             wrapNode(node);
         }
-        // Nodos sin pose este frame → limpiar pose vieja para no congelarlos
         for (const name of POSE_NODES) {
             const node = mesh[name];
             if (node && node.__mfPAPose && !poses[NODE_BY_PART_INV[name]]) node.__mfPAPose = undefined;
@@ -449,12 +341,10 @@
             }
         }
     }
-
-    // ---------- Registro de meshes (instala hooks; ya no evalúa en RAF) ----------
     function registerMesh(mesh, game) {
         if (!mesh?.skeleton || !mesh.entity) return;
         makeSkeletonHook(mesh, game);
-        if (mesh.__mfPASuppress) return; // emote activo: no re-zeroear joints
+        if (mesh.__mfPASuppress) return;
         const sneaking = isMeshSneaking(mesh, game);
         for (const name of JOINT_NAMES) {
             const j = mesh[name];
@@ -464,8 +354,6 @@
             }
         }
     }
-
-    // ---------- Loop principal ----------
     function tick() {
         if (!state.enabled) return;
         const game = getGame();
@@ -479,8 +367,6 @@
                 if (ents && typeof ents.values === 'function') {
                     for (const ent of ents.values()) {
                         if (!ent?.mesh || ent.mesh === game.player?.mesh) continue;
-                        // Los mobs comparten partes del rig de jugador; el rig por
-                        // sí solo no prueba que esta entidad sea un jugador.
                         if (ent.type !== 'player' && game.world?.players?.get?.(ent.id) !== ent) continue;
                         if (!ent.mesh.skeleton || !ent.mesh.leftShoulder) continue;
                         registerMesh(ent.mesh, game);
@@ -493,7 +379,6 @@
                 if (state.debug) console.warn(TAG, 'tick error:', e);
             }
         }
-        // Resumen periódico en consola (cada 5s) si debug está activo
         if (state.debug) {
             state.tickStats.ticks++;
             const now = performance.now();
@@ -506,8 +391,6 @@
         }
         state.rafId = requestAnimationFrame(tick);
     }
-
-    // ---------- API pública ----------
     function setEnabled(enabled) {
         enabled = enabled === true || enabled === 'true';
         if (enabled === state.enabled) return;
@@ -525,7 +408,6 @@
             }
         } else {
             if (state.rafId) { cancelAnimationFrame(state.rafId); state.rafId = null; }
-            // Remover hooks de skeleton + poses + joints congelados
             for (const node of [...state.wrapped]) {
                 if (node._mfPASkelHook) {
                     const sk = node;
@@ -566,9 +448,6 @@
         } catch {}
     }
     document.addEventListener('minifeather:playeranims-config', onPlayerAnimsConfig);
-
-    // Para el guard de re-inyección: apaga y des-wrappea TODO lo de ESTE
-    // scope (setEnabled(false) restaura cada updateMatrixWorld original).
     window.__MF_PA_SCOPE__ = {
         destroy() {
             try { if (state.enabled) setEnabled(false); } catch {}
@@ -576,9 +455,6 @@
             document.removeEventListener('minifeather:playeranims-config', onPlayerAnimsConfig);
         }
     };
-
-    // Diagnóstico en vivo: MF_PAdiag.start() → moverse → MF_PAdiag.dump()
-    // imprime tabla compacta vanilla-vs-pack para pegar en logs.
     globalThis.MF_PAdiag = {
         buf: [], rec: false,
         start() { this.buf.length = 0; this.rec = true; console.log(TAG, 'diag: grabando (muévete 5s)'); },
@@ -611,8 +487,6 @@
             };
         }
     };
-
-    // Boot log: confirma carga + dependencias (si falta algo, se ve aquí)
     const deps = {
         expr: !!globalThis.MF_EMFExpr,
         parser: !!globalThis.MF_EMFParser,

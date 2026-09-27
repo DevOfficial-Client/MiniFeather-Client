@@ -6,8 +6,9 @@
     const ID = 'mf-pbreditor';
     const LS_MANUAL = 'mf_pbr_manual';
 
-    const TILE = 16;   
-    const ZOOM = 14;   
+    const TILE = 16;
+
+    const ZOOM = 14;
 
     const KINDS = [
         { id: 'n', label: '⛰ Relieve', hint: 'blanco = alto' },
@@ -18,18 +19,27 @@
     const state = {
         open: false,
         grid: true,
-        frames: null,          
-        tiles: [],             
+        frames: null,
+
+        tiles: [],
+
         filtered: [],
-        sel: null,             
+        sel: null,
+
         kind: 'n',
-        work: null,            
-        stampN: new Map(),     
-        stampS: new Map(),     
+        work: null,
+
+        stampN: new Map(),
+
+        stampS: new Map(),
+
         stampE: new Map(),
-        tool: 'height',        
-        strength: 1.0,         
-        brush: 2,              
+        tool: 'height',
+
+        strength: 1.0,
+
+        brush: 2,
+
         painting: false, lastCell: null,
         undo: [], redo: []
     };
@@ -96,7 +106,7 @@
         try {
             const frames = JSON.parse(ev.detail);
             if (!frames || typeof frames !== 'object') return;
-            if (state.frames) return;  
+            if (state.frames) return;
             state.frames = frames;
             buildTiles();
             const q = el(ID + '-search')?.value || '';
@@ -111,13 +121,13 @@
         try {
             const d = JSON.parse(ev.detail);
             if (d.strings && typeof d.strings === 'object') {
-                
+
                 const i18n = globalThis.MiniFeatherI18n;
                 if (i18n) {
                     i18n.register(d.strings);
                     if (d.language) i18n.setLanguage(d.language);
                 } else {
-                    
+
                     state.i18n = state.i18n || { lang: d.language || 'en', strings: {} };
                     Object.assign(state.i18n.strings, d.strings);
                     if (d.language) state.i18n.lang = d.language;
@@ -126,7 +136,7 @@
             if (d.language && globalThis.MiniFeatherI18n) {
                 globalThis.MiniFeatherI18n.setLanguage(d.language);
             }
-            
+
             if (state.open) {
                 refreshTexts();
             }
@@ -153,7 +163,8 @@
         for (const [fileName, data] of Object.entries(state.frames)) {
             const f = data.frame || {};
             const w = f.w || 16, h = f.h || 16;
-            if (w !== 16 || h !== 16) continue;   
+            if (w !== 16 || h !== 16) continue;
+
             state.tiles.push({
                 name: fileName.replace(/\.png$/, ''),
                 x: f.x || 0, y: f.y || 0, w, h
@@ -216,7 +227,8 @@
             let acc = 0;
             for (let x = 0; x < w; x++) {
                 const i = y * w + x;
-                if (x > 0) acc += -nx[i] * 3;   
+                if (x > 0) acc += -nx[i] * 3;
+
                 height[i] = acc;
             }
         }
@@ -287,7 +299,7 @@
     }
 
     function smoothAt(ctx, x, y, r) {
-        
+
         if (r === 0) return;
         const W = state.work.width, H = state.work.height;
         const src = ctx.getImageData(0, 0, W, H);
@@ -399,7 +411,7 @@
             ctx.fillText('← elige una textura de la lista', 14, h / 2);
             return;
         }
-        
+
         ctx.drawImage(state.work, 0, 0, w, h);
         if (state.grid) {
             ctx.strokeStyle = 'rgba(255,255,255,.07)';
@@ -408,7 +420,7 @@
             for (let y = 0; y <= t.h; y++) { ctx.moveTo(0, y * ZOOM + .5); ctx.lineTo(w, y * ZOOM + .5); }
             ctx.stroke();
         }
-        
+
         ctx.font = '9px system-ui';
         ctx.fillStyle = 'rgba(0,0,0,.6)';
         ctx.fillRect(2, 2, t.name.length * 5.5 + 4, 11);
@@ -520,7 +532,7 @@
     }
 
     function makeZip(files) {
-        
+
         const enc = new TextEncoder();
         const parts = [];
         const central = [];
@@ -623,57 +635,57 @@
         const style = document.createElement('style');
         style.id = ID + '-style';
         style.textContent = `
-#${ID} { position:fixed; top:70px; right:16px; z-index:2147483000;
+            #${ID} { position:fixed; top:70px; right:16px; z-index:2147483000;
   background:#14141a; border:1px solid #32323a; border-radius:8px;
   box-shadow:0 8px 32px rgba(0,0,0,.6); color:#e8e8ee;
   font:12px/1.4 system-ui,sans-serif; user-select:none;
   width:660px; max-width:calc(100vw - 32px); max-height:calc(100vh - 100px);
   display:flex; flex-direction:column; }
-#${ID} .mfpe-head { display:flex; align-items:center; gap:8px; padding:8px 10px;
+  #${ID} .mfpe-head { display:flex; align-items:center; gap:8px; padding:8px 10px;
   border-bottom:1px solid #26262e; font-weight:700; letter-spacing:.5px; }
-#${ID} .mfpe-head .dot { width:8px; height:8px; border-radius:50%;
+  #${ID} .mfpe-head .dot { width:8px; height:8px; border-radius:50%;
   background:#4dff88; animation:mfpe-pulse 1.5s infinite; }
-@keyframes mfpe-pulse { 50% { opacity:.35; } }
-#${ID} .mfpe-head button { margin-left:auto; }
-#${ID} .mfpe-body { display:flex; flex:1; min-height:0; }
-#${ID} .mfpe-side { width:225px; border-right:1px solid #202028; display:flex;
+  @keyframes mfpe-pulse { 50% { opacity:.35; } }
+  #${ID} .mfpe-head button { margin-left:auto; }
+  #${ID} .mfpe-body { display:flex; flex:1; min-height:0; }
+  #${ID} .mfpe-side { width:225px; border-right:1px solid #202028; display:flex;
   flex-direction:column; min-height:0; }
-#${ID} .mfpe-side input { margin:8px; padding:4px 8px; background:#1c1c24;
+  #${ID} .mfpe-side input { margin:8px; padding:4px 8px; background:#1c1c24;
   color:#e8e8ee; border:1px solid #3a3a44; border-radius:4px; font:inherit; }
-#${ID} .mfpe-list { flex:1; overflow-y:auto; padding:0 8px 8px; }
-#${ID} .mfpe-item { display:flex; align-items:center; gap:6px; padding:3px 4px;
+  #${ID} .mfpe-list { flex:1; overflow-y:auto; padding:0 8px 8px; }
+  #${ID} .mfpe-item { display:flex; align-items:center; gap:6px; padding:3px 4px;
   border-radius:4px; cursor:pointer; }
-#${ID} .mfpe-item:hover { background:#1e1e26; }
-#${ID} .mfpe-item.sel { background:#2a2a34; outline:1px solid #ff6b2b; }
-#${ID} .mfpe-item canvas { width:20px; height:20px; flex:none;
+  #${ID} .mfpe-item:hover { background:#1e1e26; }
+  #${ID} .mfpe-item.sel { background:#2a2a34; outline:1px solid #ff6b2b; }
+  #${ID} .mfpe-item canvas { width:20px; height:20px; flex:none;
   image-rendering:pixelated; border:1px solid #2a2a32; border-radius:2px; }
-#${ID} .mfpe-item span { font-size:11px; overflow:hidden; text-overflow:ellipsis;
+  #${ID} .mfpe-item span { font-size:11px; overflow:hidden; text-overflow:ellipsis;
   white-space:nowrap; }
-#${ID} .mfpe-more { padding:6px; color:#6a6a76; font-size:10px; }
-#${ID} .mfpe-main { flex:1; padding:8px 10px; display:flex; flex-direction:column;
+  #${ID} .mfpe-more { padding:6px; color:#6a6a76; font-size:10px; }
+  #${ID} .mfpe-main { flex:1; padding:8px 10px; display:flex; flex-direction:column;
   min-height:0; overflow-y:auto; }
-#${ID} canvas.mfpe-cv { display:block; border:1px solid #32323a;
+  #${ID} canvas.mfpe-cv { display:block; border:1px solid #32323a;
   image-rendering:pixelated; cursor:crosshair; background:#0c0c10; }
-#${ID} .mfpe-row { display:flex; align-items:center; gap:6px; padding:6px 0;
+  #${ID} .mfpe-row { display:flex; align-items:center; gap:6px; padding:6px 0;
   flex-wrap:wrap; }
-#${ID} .mfpe-row + .mfpe-row { border-top:1px solid #202028; }
-#${ID} button { background:#23232c; color:#e8e8ee; border:1px solid #3a3a44;
+  #${ID} .mfpe-row + .mfpe-row { border-top:1px solid #202028; }
+  #${ID} button { background:#23232c; color:#e8e8ee; border:1px solid #3a3a44;
   border-radius:4px; padding:3px 8px; cursor:pointer; font:inherit; }
-#${ID} button:hover { background:#2e2e3a; }
-#${ID} button.on { background:#ff6b2b; color:#14141a; border-color:#ff6b2b;
+  #${ID} button:hover { background:#2e2e3a; }
+  #${ID} button.on { background:#ff6b2b; color:#14141a; border-color:#ff6b2b;
   font-weight:700; }
-#${ID} button.warn { background:#5a2020; color:#ff8080; border-color:#804040; }
-#${ID} input[type=range] { accent-color:#ff6b2b; width:100px; }
-#${ID} label { color:#9a9aa6; }
-#${ID} .mfpe-err { color:#8adf8a; padding:4px 10px; display:none;
+  #${ID} button.warn { background:#5a2020; color:#ff8080; border-color:#804040; }
+  #${ID} input[type=range] { accent-color:#ff6b2b; width:100px; }
+  #${ID} label { color:#9a9aa6; }
+  #${ID} .mfpe-err { color:#8adf8a; padding:4px 10px; display:none;
   border-top:1px solid #202028; }
         `;
         const root = document.createElement('div');
         root.id = ID;
         root.innerHTML = `
-<div class="mfpe-head"><span class="dot"></span><span data-i18n="pbrEditorTitle">⛰ EDITOR PBR — relieve en vivo</span>
+            <div class="mfpe-head"><span class="dot"></span><span data-i18n="pbrEditorTitle">⛰ EDITOR PBR — relieve en vivo</span>
     <button data-act="close" data-i18n-title="pbrEditorClose" title="Cerrar">✕</button></div>
-<div class="mfpe-body">
+        <div class="mfpe-body">
     <div class="mfpe-side">
         <input type="text" id="${ID}-search" data-i18n-placeholder="pbrEditorSearch" placeholder="buscar (stone, dirt…)" autocomplete="off">
         <div class="mfpe-list" id="${ID}-list"></div>
@@ -713,8 +725,8 @@
             <button data-act="reset-tile" class="warn" data-i18n-title="pbrEditorResetTile" title="Restaurar este tile a neutro">↺ <span data-i18n="pbrEditorResetTileLabel">tile</span></button>
         </div>
     </div>
-</div>
-<div class="mfpe-err" id="${ID}-err"></div>
+        </div>
+            <div class="mfpe-err" id="${ID}-err"></div>
         `;
         document.body.appendChild(style);
         document.body.appendChild(root);
@@ -725,16 +737,16 @@
     function refreshTexts() {
         const root = el(ID);
         if (!root) return;
-        
+
         root.querySelectorAll('[data-i18n]').forEach(node => {
             const k = node.getAttribute('data-i18n');
             if (!k) return;
-            
+
             const childEls = [...node.childNodes].filter(n => n.nodeType === 1);
             if (childEls.length === 0) {
                 node.textContent = t(k);
             } else {
-                
+
                 const txt = t(k);
                 let placed = false;
                 childEls.forEach((c, i) => {
@@ -744,18 +756,18 @@
                             placed = true;
                         }
                     } else if (c.hasAttribute && c.hasAttribute('data-i18n')) {
-                        
+
                     } else {
                         c.textContent = '';
                     }
                 });
                 if (!placed) {
-                    
+
                     node.insertBefore(document.createTextNode(txt), node.firstChild);
                 }
             }
         });
-        
+
         root.querySelectorAll('[data-i18n-title]').forEach(node => {
             const k = node.getAttribute('data-i18n-title');
             if (k) node.setAttribute('title', t(k));
@@ -764,10 +776,10 @@
             const k = node.getAttribute('data-i18n-placeholder');
             if (k) node.setAttribute('placeholder', t(k));
         });
-        
+
         const hint = root.querySelector('[data-kind-hint]');
         if (hint) hint.textContent = t('pbrEditorKind_' + state.kind) || hint.textContent;
-        
+
         const e = el(ID + '-err');
         if (e && e.textContent && state.errKey) e.textContent = t(state.errKey, state.errVars);
     }
@@ -788,7 +800,7 @@
         root.querySelector('[data-str]').oninput = (e) => {
             state.strength = +e.target.value;
             if (state.sel && state.stampN.has(state.sel.name)) {
-                
+
                 const t = state.sel;
                 const cv = atlasCanvas('n');
                 if (cv) {

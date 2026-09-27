@@ -50,9 +50,9 @@ class MinHeap {
         }
         this.data[idx] = item;
     }
-}
+    }
 
-const state = {
+    const state = {
     enabled: false,
     game: null,
     lastGameScan: 0,
@@ -64,18 +64,20 @@ const state = {
     maxPathTime: 5000,
     chunkCache: new Map(),
     cacheVersion: 0,
-    
+
     player: null,
     readerName: null,
     originalReader: null,
     nativeApply: null,
     _lastPos: null,
-    
-    followTarget: null,      
-    followEntity: null,      
+
+    followTarget: null,
+
+    followEntity: null,
+
     lastFollowScan: 0,
     followRepathAt: 0,
-    
+
     action: null,
     actionPhase: 'idle',
     actionStartedAt: 0,
@@ -89,27 +91,29 @@ const state = {
     playerPositions: new Map(),
     nextPlayerScanAt: 0,
     autoMine: true
-};
+        };
 
-function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+        function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
 
-const desiredInput = {
-    strafe: 0,      
-    forward: 0,     
+        const desiredInput = {
+    strafe: 0,
+
+    forward: 0,
+
     jump: false,
     sneak: false,
     sprint: false,
-    yaw: null       
-};
+    yaw: null
+        };
 
-let inputHooked = false;
+        let inputHooked = false;
 
-let injectedTicks = 0;
-let lastInjectAt = 0;
+        let injectedTicks = 0;
+        let lastInjectAt = 0;
 
-let probeState = null;
+        let probeState = null;
 
-function startProbe(ms = 1000) {
+        function startProbe(ms = 1000) {
     const game = getGame(true);
     const player = game?.player;
     if (!player?.pos) { console.warn(`${TAG} probe: no player`); return false; }
@@ -123,26 +127,29 @@ function startProbe(ms = 1000) {
         prevEnabled: state.enabled,
         prevDesired: { ...desiredInput }
     };
-    
+
     state.enabled = true;
-    state.status = 'moving';       
-    state.path = [];               
-    state.followTarget = null;     
+    state.status = 'moving';
+
+    state.path = [];
+
+    state.followTarget = null;
+
     desiredInput.strafe = 0;
     desiredInput.forward = 1;
     desiredInput.jump = false;
     desiredInput.sneak = false;
     desiredInput.yaw = Number(player.yaw) || 0;
-    
+
     if (!inputHooked || state.player !== player) {
         restorePlayerHook();
         hookPlayerInput();
     }
     void 0;
     return true;
-}
+    }
 
-function finishProbe() {
+    function finishProbe() {
     const pr = probeState;
     probeState = null;
     if (!pr) return null;
@@ -167,15 +174,15 @@ function finishProbe() {
                 : 'OK: input inyectado y el player se mueve')
     };
     void 0;
-    
+
     Object.assign(desiredInput, pr.prevDesired);
     if (!state.followTarget && state.path.length === 0) {
         stop('idle', 'probe done');
     }
     return report;
-}
+    }
 
-function getMethods(obj) {
+    function getMethods(obj) {
     const methods = [];
     const seenFns = new Set();
     let proto = obj;
@@ -187,7 +194,7 @@ function getMethods(obj) {
             let fn = null;
             try { fn = obj[name]; } catch (_) { fn = null; }
             if (typeof fn !== 'function' || seenFns.has(fn)) {
-                
+
                 try { fn = proto[name]; } catch (_) { fn = null; }
                 if (typeof fn !== 'function' || seenFns.has(fn)) continue;
             }
@@ -199,9 +206,9 @@ function getMethods(obj) {
         proto = Object.getPrototypeOf(proto);
     }
     return methods;
-}
+    }
 
-function resolveNativeInput(player) {
+    function resolveNativeInput(player) {
     const methods = getMethods(player);
 
     const readerBySig = m =>
@@ -256,7 +263,7 @@ function resolveNativeInput(player) {
     }
 
     if (!reader || !apply) {
-        
+
         const candidates = methods
             .filter(m => m.source.includes('inputSequenceNumber') ||
                          m.source.includes('this.jumping') ||
@@ -279,10 +286,10 @@ function resolveNativeInput(player) {
         nativeApply: player[apply.name],
         applyWrites
     };
-}
+    }
 
-let fallbackSeq = 0;
-function nextSequenceNumber(player) {
+    let fallbackSeq = 0;
+    function nextSequenceNumber(player) {
     try {
         const n = player.inputSequenceNumber;
         if (typeof n === 'number' && Number.isFinite(n)) {
@@ -293,10 +300,10 @@ function nextSequenceNumber(player) {
     } catch (_) {}
     fallbackSeq = Math.max(fallbackSeq + 1, (player.currentInput?.sequenceNumber ?? 0) + 1);
     return fallbackSeq;
-}
+    }
 
-function createNativeInput(player, controls) {
-    
+    function createNativeInput(player, controls) {
+
     let data;
     try {
         data = { ...player.currentInput } || {};
@@ -319,18 +326,18 @@ function createNativeInput(player, controls) {
     });
 
     return data;
-}
+    }
 
-function neutralMovement(player) {
+    function neutralMovement(player) {
     if (!player) return;
     try {
         player.wWQmwuDLqA = 0;
         player.YApHmhhGagG = 0;
         player.jumping = false;
     } catch (_) {}
-}
+    }
 
-function restorePlayerHook() {
+    function restorePlayerHook() {
     const player = state.player;
     if (player && state.readerName && typeof state.originalReader === 'function') {
         try {
@@ -345,9 +352,9 @@ function restorePlayerHook() {
     state.originalReader = null;
     state.nativeApply = null;
     inputHooked = false;
-}
+    }
 
-function hookPlayerInput() {
+    function hookPlayerInput() {
     if (inputHooked) return true;
     const game = getGame();
     if (!game?.player) return false;
@@ -355,7 +362,7 @@ function hookPlayerInput() {
 
     const native = resolveNativeInput(player);
     if (!native) {
-        
+
         if (state._lastHookFail !== player) {
             state._lastHookFail = player;
             console.warn(`${TAG} Could not resolve native input methods (patron AntiAFK)`);
@@ -395,11 +402,11 @@ function hookPlayerInput() {
 
         try {
             const result = nativeApply.call(this, input);
-            
+
             if (desiredInput.jump) this.jumping = true;
             return result;
         } finally {
-            
+
             if (injectedTicks === 1 && applyWrites.length) {
                 try {
                     const after = {};
@@ -413,9 +420,9 @@ function hookPlayerInput() {
     inputHooked = true;
     void 0;
     return true;
-}
+    }
 
-function getGame(force = false) {
+    function getGame(force = false) {
     const now = performance.now();
     if (!force && state.game?.player && now - state.lastGameScan < 500) return state.game;
     state.lastGameScan = now;
@@ -424,16 +431,16 @@ function getGame(force = false) {
         if (!react) return state.game?.player ? state.game : null;
         for (const root of Object.values(react)) {
             const game = root?.updateQueue?.baseState?.element?.props?.game;
-            
+
             if (game?.player?.pos && game?.world) { state.game = game; return game; }
         }
     } catch (_) {}
     return state.game?.player ? state.game : null;
-}
+    }
 
-function getWorld() { return state.game?.world || null; }
+    function getWorld() { return state.game?.world || null; }
 
-function looksLikeEntityMap(value) {
+    function looksLikeEntityMap(value) {
     if (!value || typeof value !== 'object') return false;
     try {
         if (typeof value.values !== 'function') return false;
@@ -444,11 +451,11 @@ function looksLikeEntityMap(value) {
         }
         return checked > 0 && found > 0;
     } catch (_) { return false; }
-}
+    }
 
-let entityMapCache = null;
-let entityMapOwner = null;
-function resolveEntityMap(game) {
+    let entityMapCache = null;
+    let entityMapOwner = null;
+    function resolveEntityMap(game) {
     if (entityMapOwner === game && entityMapCache && looksLikeEntityMap(entityMapCache)) return entityMapCache;
     const direct = [
         game?.world?.entitiesDump,
@@ -463,9 +470,9 @@ function resolveEntityMap(game) {
         return candidate;
     }
     return null;
-}
+    }
 
-function findPlayerEntity(username) {
+    function findPlayerEntity(username) {
     const game = getGame();
     if (!game) return null;
     const entities = resolveEntityMap(game);
@@ -480,9 +487,9 @@ function findPlayerEntity(username) {
         }
     } catch (_) {}
     return null;
-}
+    }
 
-function updatePlayerPositions(now = performance.now(), force = false) {
+    function updatePlayerPositions(now = performance.now(), force = false) {
     if (!force && now < state.nextPlayerScanAt) return;
     state.nextPlayerScanAt = now + 250;
     const entities = resolveEntityMap(getGame());
@@ -506,9 +513,9 @@ function updatePlayerPositions(now = performance.now(), force = false) {
             }
         }
     } catch (_) {}
-}
+    }
 
-function locatePlayer(username) {
+    function locatePlayer(username) {
     updatePlayerPositions(performance.now(), true);
     const entity = findPlayerEntity(username);
     if (entity?.pos) {
@@ -516,9 +523,9 @@ function locatePlayer(username) {
     }
     const cached = state.playerPositions.get(String(username).toLowerCase());
     return cached ? { ...cached } : null;
-}
+    }
 
-function isChunkLoaded(x, z) {
+    function isChunkLoaded(x, z) {
     const world = getWorld();
     if (!world) return false;
     const pos = { x: Math.floor(x), z: Math.floor(z) };
@@ -531,11 +538,11 @@ function isChunkLoaded(x, z) {
             return proto.isBlockLoaded.call(world, pos);
         }
     } catch (_) {}
-    
-    return true;
-}
 
-function getBlockState(x, y, z) {
+    return true;
+    }
+
+    function getBlockState(x, y, z) {
     if (y < 0 || y > 255) return null;
     if (!isChunkLoaded(x, z)) return null;
     const world = getWorld();
@@ -543,7 +550,7 @@ function getBlockState(x, y, z) {
     try {
         const fx = Math.floor(x), fy = Math.floor(y), fz = Math.floor(z);
         const proto = Object.getPrototypeOf(world);
-        
+
         if (typeof proto.getChunk === 'function') {
             const chunk = proto.getChunk.call(world, { x: fx, y: fy, z: fz });
             if (chunk != null && !chunk.isDummyChunk &&
@@ -555,52 +562,57 @@ function getBlockState(x, y, z) {
         if (typeof proto.getBlockState !== 'function') return null;
         return proto.getBlockState.call(world, { x: fx, y: fy, z: fz });
     } catch (_) { return null; }
-}
+    }
 
-function blockSolidity(x, y, z) {
+    function blockSolidity(x, y, z) {
     const bs = getBlockState(x, y, z);
     if (!bs) return null;
     return bs.id !== 0;
-}
+    }
 
-function isSolid(x, y, z) {
+    function isSolid(x, y, z) {
     return blockSolidity(x, y, z) === true;
-}
+    }
 
-function isSafe(x, y, z) {
+    function isSafe(x, y, z) {
     const bs = getBlockState(x, y, z);
     if (!bs) return true;
     const id = bs.id;
     if (id === 8 || id === 9 || id === 10 || id === 11) return false;
     return true;
-}
+    }
 
-function isWalkable(x, y, z) {
+    function isWalkable(x, y, z) {
     if (isSolid(x, y + 1, z) || isSolid(x, y + 2, z)) return false;
     if (!isSolid(x, y, z)) return false;
     if (!isSafe(x, y + 1, z) || !isSafe(x, y + 2, z)) return false;
     return true;
-}
+    }
 
-function canStand(x, y, z) {
-    const feet = blockSolidity(x, y, z);        
-    const head = blockSolidity(x, y + 1, z);    
-    const floor = blockSolidity(x, y - 1, z);   
+    function canStand(x, y, z) {
+    const feet = blockSolidity(x, y, z);
+
+    const head = blockSolidity(x, y + 1, z);
+
+    const floor = blockSolidity(x, y - 1, z);
 
     if (feet === null && floor === null) return true;
 
-    if (feet === true) return false;       
-    if (head === true) return false;       
-    if (floor === false) return false;     
-    return isSafe(x, y, z) && isSafe(x, y + 1, z);
-}
+    if (feet === true) return false;
 
-function findStandableNear(x, y, z) {
+    if (head === true) return false;
+
+    if (floor === false) return false;
+
+    return isSafe(x, y, z) && isSafe(x, y + 1, z);
+    }
+
+    function findStandableNear(x, y, z) {
     for (let r = 0; r <= 12; r++) {
         for (let dy = 0; dy >= -12; dy--) {
             for (let dx = -r; dx <= r; dx++) {
                 for (let dz = -r; dz <= r; dz++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue; 
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
                     const ny = y + dy;
                     if (ny < 1 || ny > 254) continue;
                     if (canStand(x + dx, ny, z + dz)) return { x: x + dx, y: ny, z: z + dz };
@@ -609,20 +621,21 @@ function findStandableNear(x, y, z) {
         }
     }
     return null;
-}
+    }
 
-function heuristic(x1, y1, z1, x2, y2, z2) {
+    function heuristic(x1, y1, z1, x2, y2, z2) {
     const dx = Math.abs(x1 - x2);
     const dy = Math.abs(y1 - y2);
     const dz = Math.abs(z1 - z2);
-    
-    return Math.max(dx, dz) + (Math.SQRT2 - 1) * Math.min(dx, dz);
-}
 
-function getNeighbors(x, y, z) {
+    return Math.max(dx, dz) + (Math.SQRT2 - 1) * Math.min(dx, dz);
+    }
+
+    function getNeighbors(x, y, z) {
     const dirs = [
-        [1, 0], [-1, 0], [0, 1], [0, -1],   
-        [1, 1], [1, -1], [-1, 1], [-1, -1]  
+        [1, 0], [-1, 0], [0, 1], [0, -1],
+
+        [1, 1], [1, -1], [-1, 1], [-1, -1]
     ];
     const result = [];
 
@@ -659,9 +672,9 @@ function getNeighbors(x, y, z) {
     }
 
     return result;
-}
+    }
 
-function findPath(startX, startY, startZ, goalX, goalY, goalZ, maxIterOverride) {
+    function findPath(startX, startY, startZ, goalX, goalY, goalZ, maxIterOverride) {
     startX = Math.floor(startX); startY = Math.floor(startY); startZ = Math.floor(startZ);
     goalX = Math.floor(goalX); goalY = Math.floor(goalY); goalZ = Math.floor(goalZ);
 
@@ -686,7 +699,7 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ, maxIterOverride) 
 
     const startTime = performance.now();
     let iterations = 0;
-    
+
     const H_WEIGHT = 1;
     const MAX_ITER = maxIterOverride || 30000;
 
@@ -702,7 +715,7 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ, maxIterOverride) 
             if (ck === startKey) break;
             ck = cameFrom.get(ck);
         }
-        
+
         if (path.length > 1) path.shift();
         return path;
     };
@@ -754,9 +767,9 @@ function findPath(startX, startY, startZ, goalX, goalY, goalZ, maxIterOverride) 
 
     console.warn(`${TAG} No path found after ${iterations} iterations`);
     return null;
-}
+    }
 
-function getLookVector(player) {
+    function getLookVector(player) {
     try {
         let proto = Object.getPrototypeOf(player);
         for (let i = 0; i < 4; i++) proto = Object.getPrototypeOf(proto);
@@ -766,21 +779,21 @@ function getLookVector(player) {
     const pitch = Number(player.pitch) || 0;
     const cp = Math.cos(pitch);
     return { x: -Math.sin(yaw) * cp, y: -Math.sin(pitch), z: Math.cos(yaw) * cp };
-}
+    }
 
-function getCameraRig(player) {
+    function getCameraRig(player) {
     const camera = state.game?.gameScene?.camera || state.game?.camera || state.game?.renderer?.camera ||
         player?.game?.gameScene?.camera || player?.game?.player?.game?.gameScene?.camera;
     if (!camera) return null;
     return { camera, pitchObject: camera.parent || null, yawObject: camera.parent?.parent || null };
-}
+    }
 
-function getViewYaw(player) {
+    function getViewYaw(player) {
     const yaw = Number(getCameraRig(player)?.yawObject?.rotation?.y);
     return Number.isFinite(yaw) ? yaw : (Number(player?.yaw) || 0);
-}
+    }
 
-function turnCamera(player, yaw, pitch, speed = 0.35) {
+    function turnCamera(player, yaw, pitch, speed = 0.35) {
     try {
         const rig = getCameraRig(player);
         if (!rig?.yawObject) return false;
@@ -799,11 +812,11 @@ function turnCamera(player, yaw, pitch, speed = 0.35) {
         }
         return true;
     } catch (_) { return false; }
-}
+    }
 
-function aimCameraAt(player, tx, ty, tz, speed = 0.35) {
+    function aimCameraAt(player, tx, ty, tz, speed = 0.35) {
     const ex = player.pos.x;
-    const ey = player.pos.y + 1.62; 
+    const ey = player.pos.y + 1.62;
     const ez = player.pos.z;
     const dx = tx - ex;
     const dy = ty - ey;
@@ -812,23 +825,23 @@ function aimCameraAt(player, tx, ty, tz, speed = 0.35) {
     const yaw = Math.atan2(-dx, dz);
     const pitch = Math.atan2(dy, distH || 1e-6);
     return turnCamera(player, yaw, pitch, speed);
-}
+    }
 
-function applyMovementInput(player, strafe, forward, jump, sneak, yaw, pitch, sprint = false) {
-    
+    function applyMovementInput(player, strafe, forward, jump, sneak, yaw, pitch, sprint = false) {
+
     desiredInput.strafe = strafe;
     desiredInput.forward = forward;
     desiredInput.jump = jump;
     desiredInput.sneak = sneak;
     desiredInput.sprint = sprint;
     try { player.jumping = !!jump; } catch (_) {}
-    
-    desiredInput.yaw = yaw != null ? yaw : Number(player.yaw) || 0;
-    
-    if (yaw != null && !state.followTarget) turnCamera(player, yaw, pitch);
-}
 
-function movementTowardWorldYaw(player, targetYaw) {
+    desiredInput.yaw = yaw != null ? yaw : Number(player.yaw) || 0;
+
+    if (yaw != null && !state.followTarget) turnCamera(player, yaw, pitch);
+    }
+
+    function movementTowardWorldYaw(player, targetYaw) {
     let diff = targetYaw - getViewYaw(player);
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
@@ -837,18 +850,18 @@ function movementTowardWorldYaw(player, targetYaw) {
     if (Math.abs(forward) < 0.22) forward = 0;
     if (Math.abs(strafe) < 0.22) strafe = 0;
     return { forward, strafe };
-}
+    }
 
-function obstacleNeedsJump(player, dx, dz) {
+    function obstacleNeedsJump(player, dx, dz) {
     const len = Math.hypot(dx, dz);
     if (len < 0.05) return false;
     const x = Math.floor(player.pos.x + (dx / len) * 0.8);
     const y = Math.floor(player.pos.y);
     const z = Math.floor(player.pos.z + (dz / len) * 0.8);
     return isSolid(x, y, z) && !isSolid(x, y + 1, z);
-}
+    }
 
-function blockingBlockAhead(player, dx, dz) {
+    function blockingBlockAhead(player, dx, dz) {
     const len = Math.hypot(dx, dz);
     if (len < 0.05) return null;
     const x = Math.floor(player.pos.x + (dx / len) * 0.78);
@@ -859,9 +872,9 @@ function blockingBlockAhead(player, dx, dz) {
         if (bs && bs.id !== 0 && ![8, 9, 10, 11].includes(bs.id)) return { x, y, z };
     }
     return null;
-}
+    }
 
-function updatePathJump(player, target, distSq, dx, dz, now) {
+    function updatePathJump(player, target, distSq, dx, dz, now) {
     const feetLevel = Math.floor(player.pos.y + 0.12);
     const stepUp = target.y > feetLevel;
     const obstacle = obstacleNeedsJump(player, dx, dz);
@@ -891,12 +904,12 @@ function updatePathJump(player, target, distSq, dx, dz, now) {
         }
     }
     return false;
-}
+    }
 
-function executePath(player, keepAlive = false) {
+    function executePath(player, keepAlive = false) {
     if (state.path.length === 0 || state.pathIndex >= state.path.length) {
         if (!keepAlive) {
-            
+
             const g = state.goal;
             if (g && Math.hypot(g.x + 0.5 - player.pos.x, g.y - player.pos.y, g.z + 0.5 - player.pos.z) > 0.85) {
                 void 0;
@@ -917,7 +930,7 @@ function executePath(player, keepAlive = false) {
     const dz = target.z + 0.5 - pz;
     const distSq = dx * dx + dz * dz;
 
-    if (distSq < 0.36 && Math.abs(target.y - py) < 0.7) { 
+    if (distSq < 0.36 && Math.abs(target.y - py) < 0.7) {
         state.pathIndex++;
         if (state.pathIndex >= state.path.length) {
             if (!keepAlive) {
@@ -944,7 +957,7 @@ function executePath(player, keepAlive = false) {
     applyMovementInput(player, move.strafe, move.forward, needJump, false, null, undefined, move.forward > 0.55);
 
     state.repathTimer++;
-    if (state.repathTimer > 200) { 
+    if (state.repathTimer > 200) {
         const lastPos = state._lastPos;
         if (lastPos) {
             const moved = Math.hypot(px - lastPos.x, pz - lastPos.z);
@@ -958,7 +971,7 @@ function executePath(player, keepAlive = false) {
                     startBlockAction('mine', obstacle.x, obstacle.y, obstacle.z, null, resumeGoal);
                     return false;
                 }
-                
+
                 if (state._stuckCount === 2 && injectedTicks === 0) {
                     console.warn(`${TAG} 0 inyecciones desde el start — corriendo probe...`);
                     startProbe(1000);
@@ -973,9 +986,9 @@ function executePath(player, keepAlive = false) {
     }
 
     return true;
-}
+    }
 
-function follow(username) {
+    function follow(username) {
     const game = getGame(true);
     if (!game?.player) { console.warn(`${TAG} No player`); return false; }
 
@@ -1000,15 +1013,15 @@ function follow(username) {
     void 0;
     emitState();
     return true;
-}
+    }
 
-function stopFollow(silent = false) {
+    function stopFollow(silent = false) {
     state.followTarget = null;
     state.followEntity = null;
     if (!silent) void 0;
-}
+    }
 
-function directChase(player, dx, dz, forceJump = false) {
+    function directChase(player, dx, dz, forceJump = false) {
     const targetYaw = Math.atan2(-dx, dz);
     const move = movementTowardWorldYaw(player, targetYaw);
     const now = performance.now();
@@ -1017,9 +1030,9 @@ function directChase(player, dx, dz, forceJump = false) {
     }
     const jump = now < state.jumpHoldUntil;
     applyMovementInput(player, move.strafe, move.forward, jump, false, null, undefined, move.forward > 0.55);
-}
+    }
 
-function followTick(player, now) {
+    function followTick(player, now) {
     const username = state.followTarget;
     if (!username) return false;
 
@@ -1030,7 +1043,7 @@ function followTick(player, now) {
         state.followEntity = entity;
     }
     if (!entity?.pos) {
-        
+
         applyMovementInput(player, 0, 0, false, false);
         return true;
     }
@@ -1041,7 +1054,7 @@ function followTick(player, now) {
 
     aimCameraAt(player,
         entity.pos.x,
-        entity.pos.y + 1.5, 
+        entity.pos.y + 1.5,
         entity.pos.z,
         0.45);
 
@@ -1062,32 +1075,32 @@ function followTick(player, now) {
         const path = findPath(player.pos.x, player.pos.y, player.pos.z,
                               entity.pos.x, entity.pos.y, entity.pos.z, 3000);
         if (path && path.length > 0) {
-            
+
             state.path = path.slice(0, 10);
             state.pathIndex = 0;
         } else {
-            
+
             state.path = [];
         }
     }
 
     if (state.path.length > 0 && state.pathIndex < state.path.length) {
         const ok = executePath(player, true);
-        if (!ok && state.status !== 'moving') return true; 
+        if (!ok && state.status !== 'moving') return true;
     } else {
-        
+
         directChase(player, dx, dz);
     }
     return true;
-}
+    }
 
-function getInputSurface() {
+    function getInputSurface() {
     const renderer = state.game?.gameScene?.renderer || state.game?.renderer;
     return renderer?.domElement || renderer?.canvas ||
         document.querySelector('#react canvas') || document.querySelector('canvas') || document.body;
-}
+        }
 
-function dispatchMouse(button, down) {
+        function dispatchMouse(button, down) {
     const target = getInputSurface();
     if (!target) return false;
     const rect = target.getBoundingClientRect?.() || { left: 0, top: 0, width: innerWidth, height: innerHeight };
@@ -1103,9 +1116,9 @@ function dispatchMouse(button, down) {
         target.dispatchEvent(new MouseEvent(down ? 'mousedown' : 'mouseup', init));
         return true;
     } catch (_) { return false; }
-}
+    }
 
-function releaseMouse() {
+    function releaseMouse() {
     try {
         if (state.player) {
             state.player.punching = false;
@@ -1115,14 +1128,14 @@ function releaseMouse() {
     if (state.heldMouseButton == null) return;
     dispatchMouse(state.heldMouseButton, false);
     state.heldMouseButton = null;
-}
+    }
 
-function clickMouse(button) {
+    function clickMouse(button) {
     dispatchMouse(button, true);
     setTimeout(() => dispatchMouse(button, false), 45);
-}
+    }
 
-function selectHotbarSlot(slot) {
+    function selectHotbarSlot(slot) {
     const n = Math.floor(Number(slot));
     if (n < 1 || n > 9) return;
     const target = getInputSurface();
@@ -1131,13 +1144,13 @@ function selectHotbarSlot(slot) {
         target.dispatchEvent(new KeyboardEvent('keydown', init));
         target.dispatchEvent(new KeyboardEvent('keyup', init));
     } catch (_) {}
-}
+    }
 
-function eyeDistance(player, x, y, z) {
+    function eyeDistance(player, x, y, z) {
     return Math.hypot(x - player.pos.x, y - (player.pos.y + 1.62), z - player.pos.z);
-}
+    }
 
-function findActionStand(player, target, reach = 4.4) {
+    function findActionStand(player, target, reach = 4.4) {
     const candidates = [];
     for (let dy = -3; dy <= 3; dy++) {
         for (let dx = -4; dx <= 4; dx++) {
@@ -1152,9 +1165,9 @@ function findActionStand(player, target, reach = 4.4) {
     }
     candidates.sort((a, b) => a.score - b.score);
     return candidates[0] || null;
-}
+    }
 
-function findPlaceAnchor(target, player) {
+    function findPlaceAnchor(target, player) {
     const faces = [
         [0, -1, 0], [0, 1, 0], [-1, 0, 0], [1, 0, 0], [0, 0, -1], [0, 0, 1]
     ];
@@ -1171,16 +1184,16 @@ function findPlaceAnchor(target, player) {
     }
     anchors.sort((a, b) => a.score - b.score);
     return anchors[0] || null;
-}
+    }
 
-function setActionStatus(status, phase) {
+    function setActionStatus(status, phase) {
     const changed = state.status !== status || state.actionPhase !== phase;
     state.status = status;
     state.actionPhase = phase;
     if (changed) emitState();
-}
+    }
 
-function planActionApproach(player) {
+    function planActionApproach(player) {
     const action = state.action;
     if (!action || action.type === 'attack') return false;
     const stand = findActionStand(player, action);
@@ -1193,9 +1206,9 @@ function planActionApproach(player) {
     state._lastPos = null;
     action.repathAt = performance.now() + 1200;
     return !!path;
-}
+    }
 
-function startBlockAction(type, x, y, z, slot, resumeGoal = null) {
+    function startBlockAction(type, x, y, z, slot, resumeGoal = null) {
     const game = getGame(true);
     const player = game?.player;
     if (!player?.pos) return false;
@@ -1213,9 +1226,9 @@ function startBlockAction(type, x, y, z, slot, resumeGoal = null) {
     setActionStatus('moving', 'approaching');
     void 0;
     return true;
-}
+    }
 
-function attackPlayer(username) {
+    function attackPlayer(username) {
     const game = getGame(true);
     if (!game?.player) return false;
     const entity = findPlayerEntity(username);
@@ -1232,9 +1245,9 @@ function attackPlayer(username) {
     setActionStatus('moving', 'chasing');
     void 0;
     return true;
-}
+    }
 
-function finishAction(reason, failed = false) {
+    function finishAction(reason, failed = false) {
     releaseMouse();
     const resumeGoal = !failed ? state.action?.resumeGoal : null;
     state.action = null;
@@ -1245,9 +1258,9 @@ function finishAction(reason, failed = false) {
         return;
     }
     stop(failed ? 'failed' : 'idle', reason);
-}
+    }
 
-function blockActionTick(player, now, action) {
+    function blockActionTick(player, now, action) {
     const solid = blockSolidity(action.x, action.y, action.z);
     if (action.type === 'mine' && solid === false) {
         finishAction('Block mined');
@@ -1275,7 +1288,7 @@ function blockActionTick(player, now, action) {
     if (action.type === 'mine') {
         aimCameraAt(player, tx, ty, tz, 0.42);
         setActionStatus('mining', 'acting');
-        
+
         try {
             player.punching = true;
             if ('attacking' in player) player.attacking = true;
@@ -1298,9 +1311,9 @@ function blockActionTick(player, now, action) {
         clickMouse(2);
         state.actionNextAt = now + 480;
     }
-}
+    }
 
-function combatTick(player, now, action) {
+    function combatTick(player, now, action) {
     let entity = action.entity;
     if (!entity?.pos || now - (action.lastScan || 0) > 800) {
         action.lastScan = now;
@@ -1329,17 +1342,17 @@ function combatTick(player, now, action) {
         clickMouse(0);
         state.actionNextAt = now + 520;
     }
-}
+    }
 
-function actionTick(player, now) {
+    function actionTick(player, now) {
     const action = state.action;
     if (!action) return false;
     if (action.type === 'attack') combatTick(player, now, action);
     else blockActionTick(player, now, action);
     return true;
-}
+    }
 
-function jumpOnce(ms = 420) {
+    function jumpOnce(ms = 420) {
     const game = getGame(true);
     if (!game?.player) return false;
     state.enabled = true;
@@ -1348,9 +1361,9 @@ function jumpOnce(ms = 420) {
     state.actionPhase = 'jumping';
     emitState();
     return true;
-}
+    }
 
-function goto(x, y, z) {
+    function goto(x, y, z) {
     const game = getGame(true);
     if (!game?.player) { console.warn(`${TAG} No player`); return false; }
 
@@ -1379,9 +1392,9 @@ function goto(x, y, z) {
     console.warn(`${TAG} No path found to destination`);
     stop('failed', 'No path found');
     return false;
-}
+    }
 
-function repath() {
+    function repath() {
     if (!state.goal) return;
     const game = getGame(true);
     if (!game?.player) return;
@@ -1397,9 +1410,9 @@ function repath() {
         stop('failed', 'Re-path failed');
     }
     emitState();
-}
+    }
 
-function stop(status = 'idle', reason = '') {
+    function stop(status = 'idle', reason = '') {
     releaseMouse();
     state.path = [];
     state.pathIndex = 0;
@@ -1412,24 +1425,22 @@ function stop(status = 'idle', reason = '') {
     state.manualJumpUntil = 0;
     state.jumpHoldUntil = 0;
     state._loopErr = false;
-    
+
     desiredInput.strafe = 0;
     desiredInput.forward = 0;
     desiredInput.jump = false;
     desiredInput.sneak = false;
     desiredInput.sprint = false;
     desiredInput.yaw = null;
-    
+
     neutralMovement(state.player);
     void 0;
     emitState();
-}
+    }
 
-function loop() {
+    function loop() {
 
     if (state.enabled) {
-        // Solo rastrear posiciones con Baritone activo: la doble iteración
-        // del mapa de entidades cada 250ms con el módulo OFF era puro coste.
         try { updatePlayerPositions(performance.now()); } catch (_) {}
         try {
             const game = getGame();
@@ -1437,12 +1448,12 @@ function loop() {
 
             if (game && player) {
                 const now = performance.now();
-                
+
                 if (!inputHooked || state.player !== player) {
                     restorePlayerHook();
                     hookPlayerInput();
                 }
-                
+
                 if (probeState) {
                     if (now >= probeState.until) finishProbe();
                 } else if (state.manualJumpUntil > now) {
@@ -1458,7 +1469,7 @@ function loop() {
                 }
             }
         } catch (err) {
-            
+
             if (!state._loopErr) {
                 state._loopErr = true;
                 console.warn(`${TAG} Loop error (suprimidos los siguientes):`, err);
@@ -1467,9 +1478,9 @@ function loop() {
     }
 
     requestAnimationFrame(loop);
-}
+    }
 
-document.addEventListener(EVENT_CONFIG, event => {
+    document.addEventListener(EVENT_CONFIG, event => {
     let cfg;
     try { cfg = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail; }
     catch (_) { return; }
@@ -1483,9 +1494,9 @@ document.addEventListener(EVENT_CONFIG, event => {
         restorePlayerHook();
     }
     emitState();
-}, true);
+    }, true);
 
-document.addEventListener(EVENT_COMMAND, event => {
+    document.addEventListener(EVENT_COMMAND, event => {
     let cmd;
     try { cmd = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail; }
     catch (_) { return; }
@@ -1522,9 +1533,9 @@ document.addEventListener(EVENT_COMMAND, event => {
             stop('idle', 'Disabled');
             break;
     }
-}, true);
+    }, true);
 
-function emitState() {
+    function emitState() {
     try {
         document.dispatchEvent(new CustomEvent(EVENT_STATE, {
             detail: JSON.stringify({
@@ -1540,12 +1551,12 @@ function emitState() {
             })
         }));
     } catch (_) {}
-}
+    }
 
-globalThis.Baritone = {
+    globalThis.Baritone = {
     goto(x, y, z) {
         if (y === undefined) {
-            
+
             const game = getGame(true);
             if (game?.player) y = Math.floor(game.player.pos.y);
             else y = 64;
@@ -1596,9 +1607,9 @@ globalThis.Baritone = {
             pathIndex: state.pathIndex
         };
     }
-};
+    };
 
-void 0;
+    void 0;
 
 requestAnimationFrame(loop);
 })();

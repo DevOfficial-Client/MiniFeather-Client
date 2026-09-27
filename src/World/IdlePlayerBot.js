@@ -28,15 +28,7 @@
     'CPacketDisconnect', 'CPacketJoinGame', 'CPacketPlayerPosLook',
     'CPacketPlayerPosition', 'CPacketPlayerReconciliation', 'CPacketUpdateHealth'
   ]);
-
-  // MiniFeather is injected with all_frames because other modules need it, but
-  // the idle player must have a single owner. Without this guard an iframe can
-  // create a second guest and later tear it down when that frame disappears.
   if (window.top && window.top !== window) return;
-
-  // Packet order from the official client. At connection time the module also
-  // reads the current public bundle and refreshes this list when Miniblox moves
-  // packet ids without changing the packet schemas used below.
   const FALLBACK_PACKET_NAMES = Object.freeze([
     'CPacketAnimation', 'CPacketBlockAction', 'CPacketBlockUpdate',
     'CPacketChangeServers', 'CPacketChunkData', 'CPacketCloseWindow',
@@ -713,10 +705,7 @@
   }
 
   function randomGuestName() {
-    // This pair is part of Miniblox's current public guest-name vocabulary.
-    // The four random letters keep each ephemeral connection distinct while
-    // preserving the format validated by the game server.
-    const letters = 'abcdefghijklmnopqrstuvwxyz';
+      const letters = 'abcdefghijklmnopqrstuvwxyz';
     for (let attempt = 0; attempt < 32; attempt++) {
       let suffix = '';
       const bytes = new Uint8Array(4);
@@ -1091,8 +1080,6 @@
         state.brotliBackend = 'native';
         return result;
       } catch (_) {
-        // Chromium exposes DecompressionStream but currently rejects "brotli".
-        // Fall through to MiniFeather's bundled browser decoder.
         state.brotliBackend = 'javascript';
       }
     }

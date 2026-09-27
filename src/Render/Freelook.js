@@ -3,9 +3,9 @@
     const TAG = '[MiniFeather Freelook]';
 
     let FREELOOK_KEY = 'KeyZ';
-    let FREELOOK_MODE = 'hold'; 
+    let FREELOOK_MODE = 'hold';
     const PITCH_LIMIT = Math.PI / 2 - 0.02;
-    
+
     let active = false;
     let sensitivity = 0.002;
     let calibrated = false;
@@ -74,7 +74,7 @@
         }
     }
     return null;
-}
+    }
 
   function getCameraChain() {
       let game = window.miniblox;
@@ -105,17 +105,12 @@
           yawObject: camera.parent.parent
       };
   }
-
-  // Captura del juego con backoff: el querySelectorAll("#root *") + walk de
-  // fibers es CARO; si no hay juego (menús), espaciarse progresivamente en
-  // vez de golpear el DOM cada 500ms para siempre
   function startCapture(delay) {
       const id = setInterval(() => {
           if (window.miniblox) {
               clearInterval(id);
               return;
           }
-          // Atajo: otro módulo ya resolvió el juego
           if (globalThis.__MINIBLOX_GAME__?.player) {
               window.miniblox = globalThis.__MINIBLOX_GAME__;
               clearInterval(id);
@@ -187,7 +182,7 @@
                   options
               );
           }
-          
+
           if (type === 'unload') type = 'pagehide';
           return originalAddEventListener.call(
               this,
@@ -209,7 +204,7 @@
   function enterFreelookPerspective(player) {
       if (!player) return;
       savedPerspective = player.perspective;
-      perspectiveForced = false;  
+      perspectiveForced = false;
       if (savedPerspective !== 0) {
           return;
       }
@@ -229,9 +224,11 @@
           player.perspective = savedPerspective;
           if (typeof player.toggleCameraPerspective === 'function') {
               player.toggleCameraPerspective();
-          }        
+          }
+
           void 0;
-      }   
+      }
+
       savedPerspective = null;
       perspectiveForced = false;
   }
@@ -397,13 +394,17 @@
                   e.code !== 'Backspace' &&
                   e.code !== 'Delete'
               ) {
-                  FREELOOK_KEY = e.code;           
-                  window.MF_FREELOOK._binding = false;             
+                  FREELOOK_KEY = e.code;
+
+                  window.MF_FREELOOK._binding = false;
+
                   window.MF_FREELOOK.onKeyChanged?.(
                       FREELOOK_KEY
-                  );           
+                  );
+
                   void 0;
-              }            
+              }
+
               return;
           }
           if (
@@ -450,7 +451,8 @@
   document.addEventListener(
       'minifeather:freelook-config',
       event => {
-          let config;      
+          let config;
+
           try {
               config =
                   typeof event.detail === 'string'
@@ -458,23 +460,27 @@
                       : event.detail;
           } catch (_) {
               return;
-          }        
+          }
+
           if (!config || typeof config !== 'object') {
               return;
-          }        
+          }
+
           if (
               typeof config.bind === 'string'
           ) {
               FREELOOK_KEY =
                   config.bind || 'KeyZ';
-          }        
+          }
+
           if (
               config.mode === 'hold' ||
               config.mode === 'toggle'
           ) {
               FREELOOK_MODE =
                   config.mode;
-          }        
+          }
+
           if (
               typeof config.enabled === 'boolean'
           ) {
@@ -485,15 +491,17 @@
               } else if (!config.enabled) {
                   setFL(false);
               }
-          }        
+          }
+
           void 0;
       }
-  );       
+  );
 
   document.addEventListener(
       'minifeather:freelook-binding',
       event => {
-          let data;        
+          let data;
+
           try {
               data =
                   typeof event.detail === 'string'
@@ -501,10 +509,13 @@
                       : event.detail;
           } catch (_) {
               return;
-          }        
-          if (!data) return;       
+          }
+
+          if (!data) return;
+
           window.MF_FREELOOK._binding =
-              !!data.active;       
+              !!data.active;
+
           void 0;
       }
   );

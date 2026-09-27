@@ -26,18 +26,18 @@ const DEFAULT_MAP = Object.freeze({
     bottom_target: 'line-bottom.png',
     multiple_targets: 'lines.png',
     default: 'crosshair.png'
-});
+        });
 
-const AVAILABLE = Object.freeze([
+        const AVAILABLE = Object.freeze([
     'brackets-bottom.png', 'brackets-round.png', 'brackets-top.png',
     'brackets.png', 'caret.png', 'circle-large.png', 'circle.png',
     'cross-diagonal-small.png', 'cross-open-diagonal.png', 'cross-open.png',
     'crosshair.png', 'diamond-large.png', 'diamond.png', 'dot.png',
     'empty.png', 'line-bottom.png', 'lines.png', 'square-large.png',
     'square.png'
-]);
+        ]);
 
-const state = {
+        const state = {
     enabled: false,
     game: null,
     lastGameScan: 0,
@@ -50,19 +50,18 @@ const state = {
     crosshairSize: 28,
     lastRaycastScan: 0,
     assetBaseUrl: ''
-};
+        };
 
-function clamp(value, min, max) {
+        function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
-}
+    }
 
-function getGame(force = false) {
+    function getGame(force = false) {
     const now = performance.now();
 
     if (!force && state.game?.player && now - state.lastGameScan < 500) {
         return state.game;
     }
-    // Caché negativa: en menús antes se escaneaba el DOM cada frame
     if (!force && now - state.lastGameScan < 500) {
         return state.game?.player ? state.game : null;
     }
@@ -83,9 +82,9 @@ function getGame(force = false) {
     } catch (_) {}
 
     return state.game?.player ? state.game : null;
-}
+    }
 
-function getLookVector(player) {
+    function getLookVector(player) {
     try {
         let proto = Object.getPrototypeOf(player);
         for (let i = 0; i < 4; i++) proto = Object.getPrototypeOf(proto);
@@ -102,9 +101,9 @@ function getLookVector(player) {
         y: -Math.sin(pitch),
         z: Math.cos(yaw) * cosPitch
     };
-}
+    }
 
-function rayBoxIntersect(origin, dir, box, maxDist) {
+    function rayBoxIntersect(origin, dir, box, maxDist) {
     let tmin = 0;
     let tmax = maxDist;
 
@@ -129,9 +128,9 @@ function rayBoxIntersect(origin, dir, box, maxDist) {
     }
 
     return tmin;
-}
+    }
 
-function raycastVoxel(world, origin, dir, maxDist) {
+    function raycastVoxel(world, origin, dir, maxDist) {
     if (!world) return null;
 
     const proto = Object.getPrototypeOf(world);
@@ -183,9 +182,9 @@ function raycastVoxel(world, origin, dir, maxDist) {
     }
 
     return null;
-}
+    }
 
-function detectTarget(game, player) {
+    function detectTarget(game, player) {
     const now = performance.now();
 
     if (now - state.lastRaycastScan < 100) {
@@ -264,14 +263,14 @@ function detectTarget(game, player) {
     if (targetingBlock) return setSituation('block');
 
     return setSituation('default');
-}
+    }
 
-function setSituation(name) {
+    function setSituation(name) {
     state.currentSituation = name;
     return name;
-}
+    }
 
-function findOriginalCrosshair() {
+    function findOriginalCrosshair() {
     const svgs = document.querySelectorAll('svg');
     const viewW = window.innerWidth;
     const viewH = window.innerHeight;
@@ -290,21 +289,21 @@ function findOriginalCrosshair() {
         }
     }
     return null;
-}
+    }
 
-function getCrosshairUrl(filename) {
+    function getCrosshairUrl(filename) {
     const file = AVAILABLE.includes(filename) ? filename : 'crosshair.png';
     if (state.assetBaseUrl) {
         return state.assetBaseUrl + file;
     }
-    
+
     try {
         return chrome.runtime.getURL('assets/crosshair/' + file);
     } catch (_) {}
     return '';
-}
+    }
 
-function ensureCustomCrosshair() {
+    function ensureCustomCrosshair() {
     if (state.customContainer?.isConnected) return state.customContainer;
 
     const container = document.createElement('div');
@@ -335,9 +334,9 @@ function ensureCustomCrosshair() {
     state.customImg = img;
 
     return container;
-}
+    }
 
-function hideOriginalCrosshair() {
+    function hideOriginalCrosshair() {
     if (!state.originalSvg || !state.originalSvg.isConnected) {
         state.originalSvg = findOriginalCrosshair();
     }
@@ -345,23 +344,23 @@ function hideOriginalCrosshair() {
     if (state.originalSvg?.isConnected) {
         state.originalSvg.style.display = 'none';
     }
-}
+    }
 
-function showOriginalCrosshair() {
+    function showOriginalCrosshair() {
     if (state.originalSvg?.isConnected) {
         state.originalSvg.style.display = '';
     }
-}
+    }
 
-function removeCustomCrosshair() {
+    function removeCustomCrosshair() {
     if (state.customContainer?.isConnected) {
         state.customContainer.remove();
     }
     state.customContainer = null;
     state.customImg = null;
-}
+    }
 
-function updateCrosshair(situation) {
+    function updateCrosshair(situation) {
     if (situation === state.lastSituation) return;
     state.lastSituation = situation;
 
@@ -378,9 +377,9 @@ function updateCrosshair(situation) {
         img.style.width = state.crosshairSize + 'px';
         img.style.height = state.crosshairSize + 'px';
     }
-}
+    }
 
-function applyConfig(detail) {
+    function applyConfig(detail) {
     let config = detail;
     if (typeof config === 'string') {
         try {
@@ -417,9 +416,9 @@ function applyConfig(detail) {
             state.customImg.style.height = state.crosshairSize + 'px';
         }
     }
-}
+    }
 
-function emitState() {
+    function emitState() {
     try {
         document.dispatchEvent(new CustomEvent(EVENT_STATE, {
             detail: JSON.stringify({
@@ -430,9 +429,9 @@ function emitState() {
             })
         }));
     } catch (_) {}
-}
+    }
 
-function setEnabled(enabled) {
+    function setEnabled(enabled) {
     const next = !!enabled;
     if (state.enabled === next) return;
 
@@ -450,9 +449,9 @@ function setEnabled(enabled) {
     }
 
     emitState();
-}
+    }
 
-function loop() {
+    function loop() {
     if (state.enabled) {
         const game = getGame();
         const player = game?.player;
@@ -471,13 +470,13 @@ function loop() {
     }
 
     requestAnimationFrame(loop);
-}
+    }
 
-document.addEventListener(EVENT_CONFIG, event => {
+    document.addEventListener(EVENT_CONFIG, event => {
     applyConfig(event.detail);
-}, true);
+    }, true);
 
-globalThis.DynamicCrosshair = {
+    globalThis.DynamicCrosshair = {
     enable() {
         setEnabled(true);
         return state.enabled;
@@ -525,9 +524,9 @@ globalThis.DynamicCrosshair = {
     get size() { return state.crosshairSize; },
     get defaults() { return { ...DEFAULT_MAP }; },
     get available() { return [...AVAILABLE]; }
-};
+    };
 
-void 0;
+    void 0;
 
 requestAnimationFrame(loop);
 })();

@@ -94,7 +94,7 @@
     const out = [], queue = root ? [root] : [], seen = new WeakSet();
     let head = 0;
     while (head < queue.length && out.length < limit) {
-      const o = queue[head++]; // shift() era O(n) por nodo → spikes
+      const o = queue[head++];
       if (!o || typeof o !== 'object' || seen.has(o)) continue;
       seen.add(o);
       out.push(o);
@@ -112,26 +112,26 @@
 
   function fragmentDecl() {
     return `
-// ${MARKER}
-#define MF_WET_MAX_CELLS ${MAX_GPU_CELLS}
-uniform vec4 uMFWetCells[MF_WET_MAX_CELLS];
-uniform int uMFWetCellCount;
-uniform float uMFWetRain;
-uniform float uMFWetDarken;
-uniform float uMFWetSaturation;
-uniform float uMFWetSheen;
-uniform float uMFWetGloss;
-uniform float uMFWetDetail;
-uniform float uMFWetRainSide;
-uniform float uMFWetTime;
-uniform vec3 uMFWetCameraPos;
-uniform vec3 uMFWetLightDir;
-uniform vec3 uMFWetLightColor;
-uniform float uMFWetLightStrength;
-varying vec3 vMFWetWorldPos;
-varying vec3 vMFWetWorldNormal;
+        // ${MARKER}
+        #define MF_WET_MAX_CELLS ${MAX_GPU_CELLS}
+        uniform vec4 uMFWetCells[MF_WET_MAX_CELLS];
+        uniform int uMFWetCellCount;
+        uniform float uMFWetRain;
+        uniform float uMFWetDarken;
+        uniform float uMFWetSaturation;
+        uniform float uMFWetSheen;
+        uniform float uMFWetGloss;
+        uniform float uMFWetDetail;
+        uniform float uMFWetRainSide;
+        uniform float uMFWetTime;
+        uniform vec3 uMFWetCameraPos;
+        uniform vec3 uMFWetLightDir;
+        uniform vec3 uMFWetLightColor;
+        uniform float uMFWetLightStrength;
+        varying vec3 vMFWetWorldPos;
+        varying vec3 vMFWetWorldNormal;
 
-float mfWetnessAtFragment() {
+        float mfWetnessAtFragment() {
   vec3 n = normalize(vMFWetWorldNormal);
   vec3 blockPos = floor(vMFWetWorldPos - n * 0.025);
   float localWet = 0.0;
@@ -144,8 +144,8 @@ float mfWetnessAtFragment() {
   }
   float rainFacing = mix(uMFWetRainSide, 1.0, smoothstep(0.12, 0.82, n.y));
   return clamp(max(localWet, uMFWetRain * rainFacing), 0.0, 1.0);
-}
-`;
+  }
+  `;
   }
 
   function wetColorCode() {
@@ -169,7 +169,7 @@ float mfWetnessAtFragment() {
     gl_FragColor.rgb *= 1.0 - uMFWetDarken * mfWetValue;
     gl_FragColor.rgb += uMFWetLightColor * mfSheen * uMFWetSheen * mfWetValue * uMFWetLightStrength;
   }
-`;
+  `;
   }
 
   function patch(material) {
@@ -256,9 +256,6 @@ float mfWetnessAtFragment() {
     for (const m of materials) if (patch(m)) count++;
     return count;
   }
-
-  // Memoizado: sin esto se caminaban hasta 7 prototipos por CADA lectura
-  // de bloque (cientos por scan de lluvia).
   const worldProtoCache = new WeakMap();
   function worldProto(world) {
     if (!world) return null;
@@ -273,8 +270,6 @@ float mfWetnessAtFragment() {
     try { worldProtoCache.set(world, found); } catch (_) {}
     return found;
   }
-
-  // Objeto scratch reutilizado (antes: un literal {x,y,z} por lectura)
   const scratchPos = { x: 0, y: 0, z: 0 };
 
   function getState(world, x, y, z) {
@@ -504,8 +499,6 @@ float mfWetnessAtFragment() {
     for (const [key, cell] of puddles) {
       if (now - cell.lastWet > ttl || cell.amount <= 0.001) puddles.delete(key);
     }
-    // El sort de desborde solo cuando de verdad se desborda (antes: cada
-    // 120ms se evaluaban spreads de 2048+ entradas aunque hiciera falta)
     if (wetBlocks.size > 2048) {
       const sorted = [...wetBlocks.entries()].sort((a, b) => a[1].lastWet - b[1].lastWet);
       for (let i = 0; i < sorted.length - 2048; i++) wetBlocks.delete(sorted[i][0]);
@@ -515,9 +508,6 @@ float mfWetnessAtFragment() {
       for (let i = 0; i < sorted.length - 256; i++) puddles.delete(sorted[i][0]);
     }
   }
-
-  // Buffer reutilizado: antes se alocaba un objeto spread por celda viva
-  // (~2048) + sort completo cada 120ms → presión de GC constante.
   const packScratch = [];
 
   function packCells(game, now) {
@@ -538,8 +528,6 @@ float mfWetnessAtFragment() {
       entry.dist2 = dx * dx + dy * dy + dz * dz;
       liveCount++;
     }
-    // Selección top-K por umbral + selección lineal del mínimo (evita el
-    // sort O(n log n) de ~2048 items para K=48)
     const maxK = Math.min(cfg.maxCells, MAX_GPU_CELLS);
     const count = Math.min(maxK, liveCount);
     const arr = shared.uMFWetCells.value;
@@ -638,24 +626,24 @@ float mfWetnessAtFragment() {
 
   function puddleShaderDecl() {
     return `
-// ${PUDDLE_MARKER}
-uniform float uMFPuddleTime;
-uniform vec3 uMFPuddleCameraPos;
-uniform vec3 uMFPuddleLightDir;
-uniform vec3 uMFPuddleLightColor;
-uniform float uMFPuddleLightStrength;
-uniform float uMFPuddleOpacity;
-uniform float uMFPuddleReflection;
-uniform float uMFPuddleRipple;
-uniform float uMFPuddleDetail;
-uniform vec3 uMFPuddleTint;
-uniform vec3 uMFPuddleImpactPos;
-uniform float uMFPuddleImpactTime;
-varying vec3 vMFPuddleWorldPos;
-varying vec2 vMFPuddleUv;
-varying float vMFPuddleWet;
-varying float vMFPuddleSeed;
-`;
+        // ${PUDDLE_MARKER}
+        uniform float uMFPuddleTime;
+        uniform vec3 uMFPuddleCameraPos;
+        uniform vec3 uMFPuddleLightDir;
+        uniform vec3 uMFPuddleLightColor;
+        uniform float uMFPuddleLightStrength;
+        uniform float uMFPuddleOpacity;
+        uniform float uMFPuddleReflection;
+        uniform float uMFPuddleRipple;
+        uniform float uMFPuddleDetail;
+        uniform vec3 uMFPuddleTint;
+        uniform vec3 uMFPuddleImpactPos;
+        uniform float uMFPuddleImpactTime;
+        varying vec3 vMFPuddleWorldPos;
+        varying vec2 vMFPuddleUv;
+        varying float vMFPuddleWet;
+        varying float vMFPuddleSeed;
+        `;
   }
 
   function puddleShadeCode() {
@@ -689,7 +677,7 @@ varying float vMFPuddleSeed;
     gl_FragColor.rgb += mfReflect * uMFPuddleReflection * uMFPuddleLightStrength;
     gl_FragColor.a *= mfMask * uMFPuddleOpacity * mix(0.58, 1.0, vMFPuddleWet);
   }
-`;
+  `;
   }
 
   function createPuddleMaterial(game) {
@@ -973,12 +961,9 @@ varying float vMFPuddleSeed;
     lastUpdate = now;
     shared.uMFWetTime.value = now / 1000;
     puddleUniforms.uMFPuddleTime.value = now / 1000;
-    // Gate de actividad: sin humedad, sin charcos y sin lluvia no hay
-    // nada que hacer cada frame (antes: scans + lighting siempre).
     const active = wetBlocks.size > 0 || puddles.size > 0 || rainPeak > 0.001;
     if (!active) {
-      // Aún así arrastrar la lluvia por si empieza a llover
-      updateRain(game, now, dt);
+        updateRain(game, now, dt);
       if (rainPeak <= 0.001 && shared.uMFWetCellCount.value !== 0) {
         shared.uMFWetCellCount.value = 0;
       }

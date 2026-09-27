@@ -11,9 +11,9 @@ const DEFAULT_OPTIONS = Object.freeze({
     soundVolume: 36,
     randomSounds: true,
     nameTagFollow: true
-});
+        });
 
-const state = {
+        const state = {
     enabled: false,
     textureUrl: '',
     soundUrls: [],
@@ -26,23 +26,23 @@ const state = {
     lastCameraScan: 0,
     activeHands: new Set(),
     squishes: new Map()
-};
+    };
 
-function sameId(a, b) {
+    function sameId(a, b) {
     if (a === undefined || a === null || b === undefined || b === null) return false;
     return String(a) === String(b);
-}
+    }
 
-function validVec3(value) {
+    function validVec3(value) {
     return !!(
         value &&
         Number.isFinite(Number(value.x)) &&
         Number.isFinite(Number(value.y)) &&
         Number.isFinite(Number(value.z))
     );
-}
+    }
 
-function getPos(source) {
+    function getPos(source) {
     const pos = source?.pos || source?.position || source?.mesh?.position;
     if (!validVec3(pos)) return null;
     return {
@@ -50,9 +50,9 @@ function getPos(source) {
         y: Number(pos.y),
         z: Number(pos.z)
     };
-}
+    }
 
-function getGame(force = false) {
+    function getGame(force = false) {
     const now = performance.now();
     if (globalThis.miniblox?.player) {
         if (state.game !== globalThis.miniblox) {
@@ -79,13 +79,13 @@ function getGame(force = false) {
         }
     } catch {}
     return state.game?.player ? state.game : null;
-}
+    }
 
-function isMapLike(value) {
+    function isMapLike(value) {
     return !!(value && typeof value.get === 'function' && typeof value.values === 'function');
-}
+    }
 
-function looksLikeEntityMap(value) {
+    function looksLikeEntityMap(value) {
     if (!isMapLike(value)) return false;
     let checked = 0;
     let found = 0;
@@ -99,9 +99,9 @@ function looksLikeEntityMap(value) {
         return false;
     }
     return checked > 0 && found > 0;
-}
+    }
 
-function resolveEntityMap(game) {
+    function resolveEntityMap(game) {
     if (state.entityMap && isMapLike(state.entityMap)) return state.entityMap;
     const direct = [
         game?.world?.entitiesDump,
@@ -147,9 +147,9 @@ function resolveEntityMap(game) {
         }
     }
     return null;
-}
+    }
 
-function resolveCamera(game) {
+    function resolveCamera(game) {
     const now = performance.now();
     if (state.camera?.projectionMatrix?.elements?.length >= 16 && state.camera?.matrixWorldInverse?.elements?.length >= 16 && now - state.lastCameraScan < 900) return state.camera;
     state.lastCameraScan = now;
@@ -168,9 +168,9 @@ function resolveCamera(game) {
         }
     }
     return state.camera;
-}
+    }
 
-function matrixVec(matrix, x, y, z, w) {
+    function matrixVec(matrix, x, y, z, w) {
     const e = matrix;
     return {
         x: e[0] * x + e[4] * y + e[8] * z + e[12] * w,
@@ -178,9 +178,9 @@ function matrixVec(matrix, x, y, z, w) {
         z: e[2] * x + e[6] * y + e[10] * z + e[14] * w,
         w: e[3] * x + e[7] * y + e[11] * z + e[15] * w
     };
-}
+    }
 
-function project(camera, x, y, z) {
+    function project(camera, x, y, z) {
     const view = camera?.matrixWorldInverse?.elements;
     const projection = camera?.projectionMatrix?.elements;
     if (!view || !projection) return null;
@@ -197,9 +197,9 @@ function project(camera, x, y, z) {
         y: (-ny * 0.5 + 0.5) * innerHeight,
         inside: nx >= -1.08 && nx <= 1.08 && ny >= -1.08 && ny <= 1.08
     };
-}
+    }
 
-function getLookDirection(player) {
+    function getLookDirection(player) {
     const direct = player?.lookDirection || player?.look || player?.direction;
     if (validVec3(direct)) {
         const length = Math.hypot(Number(direct.x), Number(direct.y), Number(direct.z)) || 1;
@@ -218,9 +218,9 @@ function getLookDirection(player) {
     const z = Math.cos(yaw) * cp;
     const length = Math.hypot(x, y, z) || 1;
     return { x: x / length, y: y / length, z: z / length };
-}
+    }
 
-function entityHeight(entity) {
+    function entityHeight(entity) {
     const values = [
         entity?.height,
         entity?.mesh?.oxQYQXZabys,
@@ -231,9 +231,9 @@ function entityHeight(entity) {
         if (Number.isFinite(n) && n > 0.2 && n < 10) return n;
     }
     return entity?.profile?.username ? 1.8 : 1.4;
-}
+    }
 
-function entityWidth(entity) {
+    function entityWidth(entity) {
     const values = [
         entity?.width,
         entity?.mesh?.FARxsHzXsH,
@@ -244,9 +244,9 @@ function entityWidth(entity) {
         if (Number.isFinite(n) && n > 0.1 && n < 10) return n;
     }
     return entity?.profile?.username ? 0.65 : 0.9;
-}
+    }
 
-function isLivingTarget(entity, player) {
+    function isLivingTarget(entity, player) {
     if (!entity || entity === player || sameId(entity?.id, player?.id)) return false;
     if (!entity?.mesh || !getPos(entity)) return false;
     if (typeof entity?.profile?.username === 'string') return true;
@@ -257,16 +257,16 @@ function isLivingTarget(entity, player) {
     const maxHealth = Number(entity?.maxHealth ?? entity?.healthMax ?? entity?.maxHp);
     if (Number.isFinite(health) || Number.isFinite(maxHealth)) return !Number.isFinite(health) || health > 0;
     return false;
-}
+    }
 
-function canSee(player, entity) {
+    function canSee(player, entity) {
     try {
         if (typeof player?.canEntityBeSeen === 'function') return !!player.canEntityBeSeen(entity);
     } catch {}
     return true;
-}
+    }
 
-function getNativeMouseEntity(game, player) {
+    function getNativeMouseEntity(game, player) {
     const sources = [
         game?.controller?.objectMouseOver,
         game?.playerController?.objectMouseOver,
@@ -281,9 +281,9 @@ function getNativeMouseEntity(game, player) {
         if (isLivingTarget(entity, player) && canSee(player, entity)) return entity;
     }
     return null;
-}
+    }
 
-function findTarget(game) {
+    function findTarget(game) {
     const player = game?.player;
     const origin = getPos(player);
     const direction = getLookDirection(player);
@@ -328,9 +328,9 @@ function findTarget(game) {
         }
     } catch {}
     return best;
-}
+    }
 
-function swing(game) {
+    function swing(game) {
     const candidates = [
         game?.hud3D,
         game?.gameScene?.hud3D,
@@ -347,9 +347,9 @@ function swing(game) {
     try {
         game?.player?.swingItem?.();
     } catch {}
-}
+    }
 
-function playSound() {
+    function playSound() {
     if (!state.soundUrls.length) return;
     try {
         const random = state.options.randomSounds === true;
@@ -361,9 +361,9 @@ function playSound() {
         audio.playbackRate = random ? 0.94 + Math.random() * 0.12 : 1;
         audio.play().catch(() => {});
     } catch {}
-}
+    }
 
-function setScale(scale, x, y, z) {
+    function setScale(scale, x, y, z) {
     if (!scale) return;
     try {
         if (typeof scale.set === 'function') {
@@ -374,9 +374,9 @@ function setScale(scale, x, y, z) {
             scale.z = z;
         }
     } catch {}
-}
+    }
 
-function collectRenderables(root) {
+    function collectRenderables(root) {
     if (!root) return [];
     const result = [];
     const queue = [root];
@@ -399,9 +399,9 @@ function collectRenderables(root) {
         }
     }
     return result;
-}
+    }
 
-function restoreSquishScale(record) {
+    function restoreSquishScale(record) {
     const mesh = record?.mesh;
     const base = record?.base;
     if (!mesh?.scale || !base) return;
@@ -410,9 +410,9 @@ function restoreSquishScale(record) {
         if (mesh.matrixAutoUpdate === false) mesh.updateMatrix?.();
         mesh.updateMatrixWorld?.(true);
     } catch {}
-}
+    }
 
-function captureSquishBase(record) {
+    function captureSquishBase(record) {
     const scale = record?.mesh?.scale;
     if (!scale) return;
     const x = Number(scale.x);
@@ -422,9 +422,9 @@ function captureSquishBase(record) {
     record.base.x = x;
     record.base.y = y;
     record.base.z = z;
-}
+    }
 
-function applySquishScale(record) {
+    function applySquishScale(record) {
     const mesh = record?.mesh;
     const base = record?.base;
     if (!mesh?.scale || !base) return;
@@ -434,9 +434,9 @@ function applySquishScale(record) {
         if (mesh.matrixAutoUpdate === false) mesh.updateMatrix?.();
         mesh.updateMatrixWorld?.(true);
     } catch {}
-}
+    }
 
-function capturePushBase(record) {
+    function capturePushBase(record) {
     const position = record?.mesh?.position;
     if (!position) return;
     const x = Number(position.x);
@@ -446,9 +446,9 @@ function capturePushBase(record) {
     record.basePosition.x = x;
     record.basePosition.y = y;
     record.basePosition.z = z;
-}
+    }
 
-function restorePushPosition(record) {
+    function restorePushPosition(record) {
     const position = record?.mesh?.position;
     const base = record?.basePosition;
     if (!position || !base) return;
@@ -460,9 +460,9 @@ function restorePushPosition(record) {
             position.z = base.z;
         }
     } catch {}
-}
+    }
 
-function applyPushPosition(record) {
+    function applyPushPosition(record) {
     const position = record?.mesh?.position;
     const base = record?.basePosition;
     const direction = record?.pushDirection;
@@ -481,9 +481,9 @@ function applyPushPosition(record) {
             position.z = base.z + direction.z * amount;
         }
     } catch {}
-}
+    }
 
-function installSquishHooks(record) {
+    function installSquishHooks(record) {
     const renderables = collectRenderables(record.mesh);
     for (const object of renderables) {
         const previousBefore = object.onBeforeRender;
@@ -534,9 +534,9 @@ function installSquishHooks(record) {
             record.nameTagHook = { previous: previousNameTagHeight, hook };
         } catch {}
     }
-}
+    }
 
-function uninstallSquishHooks(record) {
+    function uninstallSquishHooks(record) {
     for (const entry of record?.hooks || []) {
         try {
             if (entry.object.onBeforeRender === entry.beforeHook) {
@@ -559,20 +559,20 @@ function uninstallSquishHooks(record) {
         } catch {}
         record.nameTagHook = null;
     }
-}
+    }
 
-function squishCurve(progress) {
+    function squishCurve(progress) {
     const t = Math.max(0, Math.min(1, progress));
     const eased = 1 - Math.pow(1 - t, 2);
     return Math.sin(Math.PI * eased);
-}
+    }
 
-function squishFactor(progress) {
+    function squishFactor(progress) {
     const strength = Math.max(0, Math.min(100, Number(state.options.squishStrength))) / 100;
     return 1 - 0.58 * strength * squishCurve(progress);
-}
+    }
 
-function squish(entity) {
+    function squish(entity) {
     const mesh = entity?.mesh;
     if (!mesh?.scale) return;
     const existing = state.squishes.get(entity);
@@ -637,9 +637,9 @@ function squish(entity) {
         state.squishes.delete(entity);
     };
     requestAnimationFrame(frame);
-}
+    }
 
-function createHand(entity, game) {
+    function createHand(entity, game) {
     if (!state.textureUrl || !document.body) return;
     const element = document.createElement('div');
     element.className = 'minifeather-patpat-hand';
@@ -700,9 +700,9 @@ function createHand(entity, game) {
         element.remove();
     };
     requestAnimationFrame(frame);
-}
+    }
 
-function pat() {
+    function pat() {
     if (!state.enabled) return false;
     const game = getGame(true);
     if (!game?.player) return false;
@@ -712,7 +712,7 @@ function pat() {
     squish(target);
     createHand(target, game);
     playSound();
-    
+
     try {
         const P2P = globalThis.MF_Peer;
         if (P2P?.status === 'host' || P2P?.status === 'guest') {
@@ -722,17 +722,17 @@ function pat() {
             if (pos) P2P.sendPat({ target: { x: pos.x, y: pos.y, z: pos.z, name }, from: from ? { x: from.x, y: from.y, z: from.z } : null });
         }
     } catch {}
-    
-    return true;
-}
 
-function remotePat(msg) {
+    return true;
+    }
+
+    function remotePat(msg) {
     if (!state.enabled) return;
     const game = getGame(false);
     if (!game?.player) return;
     const tp = msg?.target;
     if (!tp) return;
-    
+
     const me = getPos(game.player);
     if (me) {
         const dh = Math.hypot(tp.x - me.x, tp.z - me.z);
@@ -742,7 +742,7 @@ function remotePat(msg) {
             duckCamera(game);
         }
     }
-    
+
     const entities = resolveEntityMap(game);
     if (!entities) return;
     let target = null;
@@ -756,26 +756,26 @@ function remotePat(msg) {
         }
     } catch {}
     if (!target) return;
-    
+
     squish(target);
     createHand(target, game);
     playSound();
-}
+    }
 
-const duck = { active: false, baseY: 0, camera: null };
+    const duck = { active: false, baseY: 0, camera: null };
 
-function duckCamera(game) {
+    function duckCamera(game) {
     try {
         const camera = resolveCamera(game);
         if (!camera?.position) return;
-        
+
         if (duck.active) return;
-        
+
         if (duck.camera && duck.camera !== camera && duck.camera.position) {
             try { duck.camera.position.y = duck.baseY; } catch {}
             duck.camera = null;
         }
-        
+
         if (Math.abs(camera.position.y) > 0.001) {
             try { camera.position.y = 0; } catch {}
         }
@@ -784,11 +784,11 @@ function duckCamera(game) {
         duck.baseY = camera.position.y;
         const start = performance.now();
         const DURATION = 460;
-        const DROP = 0.34; 
+        const DROP = 0.34;
         const frame = () => {
-            if (!duck.active || duck.camera !== camera) return; 
+            if (!duck.active || duck.camera !== camera) return;
             const t = Math.min(1, (performance.now() - start) / DURATION);
-            
+
             let dip;
             if (t < 0.3) dip = (t / 0.3) * DROP;
             else if (t < 0.45) dip = DROP;
@@ -798,7 +798,7 @@ function duckCamera(game) {
                 requestAnimationFrame(frame);
                 return;
             }
-            
+
             camera.position.y = duck.baseY;
             duck.active = false;
             duck.camera = null;
@@ -806,9 +806,9 @@ function duckCamera(game) {
         requestAnimationFrame(frame);
         playSound();
     } catch {}
-}
+    }
 
-function clearVisuals() {
+    function clearVisuals() {
     for (const record of Array.from(state.activeHands)) {
         state.activeHands.delete(record);
         try {
@@ -821,14 +821,14 @@ function clearVisuals() {
         uninstallSquishHooks(record);
         state.squishes.delete(entity);
     }
-}
+    }
 
-function setEnabled(value) {
+    function setEnabled(value) {
     state.enabled = !!value;
     if (!state.enabled) clearVisuals();
-}
+    }
 
-function applyConfig(detail) {
+    function applyConfig(detail) {
     let config = detail;
     if (typeof config === 'string') {
         try {
@@ -856,34 +856,34 @@ function applyConfig(detail) {
         if (typeof next.nameTagFollow === 'boolean') state.options.nameTagFollow = next.nameTagFollow;
     }
     if ('enabled' in config) setEnabled(config.enabled);
-}
+    }
 
-function editableTarget(target) {
+    function editableTarget(target) {
     const tag = target?.tagName?.toLowerCase();
     return tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable;
-}
+    }
 
-function onMouseDown(event) {
+    function onMouseDown(event) {
     if (!state.enabled || event.button !== 2 || !event.shiftKey || editableTarget(event.target)) return;
     if (!pat()) return;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation?.();
-}
+    }
 
-function onContextMenu(event) {
+    function onContextMenu(event) {
     if (!state.enabled || !event.shiftKey || editableTarget(event.target)) return;
     const game = getGame(false);
     if (!game?.player || !findTarget(game)) return;
     event.preventDefault();
     event.stopPropagation();
-}
+    }
 
-document.addEventListener(EVENT_CONFIG, event => applyConfig(event.detail), true);
-document.addEventListener('mousedown', onMouseDown, true);
-document.addEventListener('contextmenu', onContextMenu, true);
+    document.addEventListener(EVENT_CONFIG, event => applyConfig(event.detail), true);
+    document.addEventListener('mousedown', onMouseDown, true);
+    document.addEventListener('contextmenu', onContextMenu, true);
 
-globalThis.MiniFeatherPatPat = {
+    globalThis.MiniFeatherPatPat = {
     setEnabled,
     pat,
     remotePat,

@@ -9,7 +9,6 @@
         var args = [TAG].concat(Array.prototype.slice.call(arguments));
         console.warn.apply(console, args);
     }
-    // log de diagnóstico del doll (solo una vez por mensaje)
     var dollLogged = {};
     function dollLog() {
         var key = Array.prototype.join.call(arguments, '|');
@@ -18,7 +17,6 @@
         var args = [TAG].concat(Array.prototype.slice.call(arguments));
         console.log.apply(console, args);
     }
-
 
     function skinsBaseUrl() {
         var meta = document.querySelector('meta[name="mf-skins-base"]');
@@ -48,8 +46,6 @@
 
                         var m2 = v.match(/(?:^|\/)textures\/entity\/(skins|capes)\/(.+?)\.png(?:[?#]|$)/);
                         if (m2) {
-                            // custom:<id> llega como parte del nombre de archivo:
-                            // probar con y sin el prefijo (skins y capas).
                             var stripped = m2[2].replace(/^custom:/i, '');
                             var k2 = reg[m2[2]] ? m2[2] : (reg[stripped] ? stripped : m2[2]);
                             if (reg[k2]) { origSet.call(this, reg[k2]); return; }
@@ -61,9 +57,6 @@
         });
         globalThis.__MF_PACK_IMG_HOOK__ = true;
     }
-
-    // Resuelve una URL pedida por el engine (auth-api/skins|capes/custom/<id>.png
-    // o textures/entity/skins|capes/<id>.png) a una textura local cuando exista.
     function resolveCustomTextureUrl(url) {
         if (!url || typeof url !== 'string') return null;
         var m = url.match(CUSTOM_URL_RE);
@@ -76,8 +69,6 @@
 
         var reg = globalThis.__MF_PACK_SKINS__;
         if (reg && reg[skinId]) return reg[skinId];
-
-        // Entrada de la DB con asset remoto: servir desde la caché dataURL
         var entry = getCustomSkinForId(skinId);
         if (entry) {
             var u = entrySkinUrl(entry) || entryCapeUrl(entry);
@@ -91,13 +82,13 @@
         if (devSkinsRegistered) return;
         var base = skinsBaseUrl();
         if (!base) return;
-        
+
         base = String(base).replace(/\/*$/, '/');
         for (var i = 0; i < MF_DEV_SKINS.length; i++) {
             var n = MF_DEV_SKINS[i];
             packSkinReg['mf_dev_' + n] = base + 'devs/' + n + '.png';
         }
-        
+
         var packs = {
             estebangxe: 'EstebanExG__1_1.png',
             angrywolfx: 'angrywolfx.png',
@@ -117,10 +108,10 @@
 
     var BUILTIN_DB = {
         players: {
-            
-            '6eb7369a-551e-406a-9a63-6db7a358e1e5': { skin: 'custom:mf_estebangxe' }, 
-            'c4201f43-2de9-4275-930a-301fae4cce6c': { skin: 'custom:mf_angrywolfx' }, 
-            
+
+            '6eb7369a-551e-406a-9a63-6db7a358e1e5': { skin: 'custom:mf_estebangxe' },
+            'c4201f43-2de9-4275-930a-301fae4cce6c': { skin: 'custom:mf_angrywolfx' },
+
             'itzesteban': { skin: 'custom:mf_dev_itzesteban' },
             'nightrise': { skin: 'custom:mf_dev_nightrise' },
             'notsenpai': { skin: 'custom:mf_dev_notsenpai' },
@@ -129,9 +120,12 @@
         }
     };
 
-    var db = null;            
-    var dbByUuid = null;      
-    var dbByName = null;      
+    var db = null;
+
+    var dbByUuid = null;
+
+    var dbByName = null;
+
     var dbLoading = null;
 
     function normalizeSkinValue(value) {
@@ -140,7 +134,6 @@
         if (value.indexOf('custom:') === 0) return value;
         var v = value.trim().replace(/\\/g, '/');
         if (!v) return null;
-        // URLs absolutas (http/https/data) se guardan tal cual; se limpian backticks de más
         if (/^`?(https?:|data:image)/i.test(v)) return v.replace(/^`+|`+$/g, '');
         v = v.replace(/^\/+/, '');
         var m = v.match(/^skins\/(.+)$/i);
@@ -203,8 +196,6 @@
             parseDb(data, false);
             db = data || {};
             dbLoading = null;
-            // DB viva: la del repo de GitHub se aplica ENCIMA de la local,
-            // así editarla ahí actualiza el client sin publicar extensión.
             fetch('https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/accounts.json', { cache: 'no-store' })
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (live) {
@@ -225,8 +216,6 @@
                 done = true;
                 resolve(json);
             };
-            // En MAIN world no existe chrome.runtime: se llega a accounts.json
-            // vía el meta mf-skins-base que inyecta SplashScreen (ISOLATED).
             var tryMetaUrl = function (attempt) {
                 attempt = attempt || 0;
                 var base = null;
@@ -357,17 +346,9 @@
             try {
                 reqUrl = typeof input === 'string' ? input : (input && input.url ? input.url : '');
             } catch (e) {}
-
-            // Servir texturas custom:mf_* localmente — el server responde 404 para
-            // ids que no conoce y el engine regenera materiales vanilla en bucle.
-            // Gate barato primero: las regex de resolveCustomTextureUrl solo
-            // matchean auth-api/... o textures/entity/... → el resto de fetches
-            // del juego saltan sin coste de regex.
             if (reqUrl && (reqUrl.indexOf('auth-api') !== -1 || reqUrl.indexOf('textures/entity') !== -1)) {
                 var localSkin = resolveCustomTextureUrl(reqUrl);
                 if (localSkin) {
-                    // fetch() recursivo seguro: la URL local (chrome-extension:/data:)
-                    // no matchea CUSTOM_URL_RE ni isProfileResponse → pasa directo.
                     return originalFetch.call(this, localSkin, { cache: 'force-cache' })
                         .catch(function () { return originalFetch.apply(this, args); });
                 }
@@ -410,19 +391,9 @@
         window.__customSkinsFetchPatched = true;
         return true;
     }
-
-    // Aceptan ruta relativa, con slash inicial o URL completa (el preview del
-    // menú carga la skin con URL absoluta y el anclaje anterior no la veía).
     var SKIN_PATH_REGEX = /^(?:[a-z][a-z0-9+.-]*:\/\/[^\/]+)?\/?textures\/entity\/skins\/([^\/?#]+)\.png(?:[?#].*)?$/i;
 
     var SKIN_PATH_REGEX_DEEP = /^(?:[a-z][a-z0-9+.-]*:\/\/[^\/]+)?\/?textures\/entity\/skins\/(.+?)\.png(?:[?#].*)?$/i;
-
-    // Skins del catálogo equipadas: el engine las referencia como custom:<id>
-    // y las pide a la API de sesión (<origin>/auth-api/skins/custom/<id>.png
-    // o https://session.<host>/skins/custom/<id>.png). El paperdoll y el
-    // preview las suben igual (texImage2D/drawImage con HTMLImageElement),
-    // pero con esta URL que las regex de textures/ de arriba no ven — por eso
-    // el reemplazo solo funcionaba con bob/alice (ids planos).
     var SKIN_API_URL_RE = /(?:^|\/)skins\/custom\/([^\/?#]+)\.png(?:[?#].*)?$/i;
     var patched = false;
 
@@ -442,11 +413,9 @@
     var gameCacheRef = null;
     var gameCacheAt = 0;
     function findGame() {
-        // Cache con TTL: sin esto el watcher (1 Hz) hacía querySelector +
-        // Object.values de React DOS veces por tick para siempre
         var now = performance.now();
         if (gameCacheRef && gameCacheRef.player && now - gameCacheAt < 1500) return gameCacheRef;
-        if (now - gameCacheAt < 500) return gameCacheRef; // caché negativa
+        if (now - gameCacheAt < 500) return gameCacheRef;
         gameCacheAt = now;
         try {
             if (window.miniblox?.player) { gameCacheRef = window.miniblox; return gameCacheRef; }
@@ -465,7 +434,7 @@
     var lastLiveScan = 0;
 
     function applyLiveOverrides() {
-        registerDevSkins(); 
+        registerDevSkins();
         if (dbByUuid === null && dbByName === null) return;
 
         var game = findGame();
@@ -473,7 +442,6 @@
         if (!world || !world.players) return;
 
         try {
-            // El jugador local no siempre está en world.players — incluirlo explícito
             if (game?.player?.profile) overridePlayer(game.player);
 
             var players = world.players;
@@ -485,17 +453,8 @@
                 while (!(entry = it.next()).done) overridePlayer(entry.value);
             }
         } catch (e) {}
-
-        // La mano FP vive fuera de player.mesh (colgada de la cámara):
-        // necesita su propio pase cada scan.
         repaintFirstPersonHand();
     }
-    // El renderer de la mano FP es un objeto SEPARADO colgado de la cámara
-    // (gameScene.axesHelper.parent → hijo con updateArmAnimation/rightArm),
-    // no forma parte de player.mesh → overridePlayer nunca lo pintó y la
-    // mano quedaba con el atlas vanilla. Este pase pinta sus materiales de
-    // skin por jerarquía. Filtro de tamaño SIN fallback: la textura de un
-    // item sostenido (16x16) no es múltiplo de 64 → nunca se toca.
     function repaintFirstPersonHand() {
         try {
             var game = findGame();
@@ -515,27 +474,8 @@
                 }
             }
             if (!lf || typeof lf.traverse !== 'function') return;
-
-            // materiales de skin del brazo. SOLO lf.rightArm mismo, sin
-            // traverse: el renderer completo incluye lf.item (mesh del item
-            // sostenido, atlas 256/512 múltiplo de 64 cuadrado que este
-            // filtro confundiría con skin → el item desaparecería), y los
-            // hijos del brazo pueden ser overlays de armor (64x32 también
-            // pasa el filtro). El brazo es un mesh con el atlasMat de skin.
             var arm = lf.rightArm;
             if (!arm || !arm.material) return;
-
-            // ── REPARACIÓN de daños de versiones viejas ──
-            // La versión con traverse completo (bfc03e7) pintó también el
-            // material ESTÁTICO de items del engine (J.material, singleton
-            // compartido por todos los items FP). Ese material no se recrea:
-            // una vez pintado con la skin, TODO item sostenido quedaba
-            // invisible (UVs de item caen en zonas transparentes de la skin).
-            // Si el material del item tiene nuestra marca → restaurar el
-            // original guardado. Si no hay stash (primera corrida tras el
-            // bug), clonar del atlas del brazo: los items NO comparten
-            // material con el brazo, así que un material marcado en lf.item
-            // solo puede ser daño nuestro.
             try {
                 var itemMats = [];
                 if (lf.item && typeof lf.item.traverse === 'function') {
@@ -544,9 +484,6 @@
                         var list = Array.isArray(o.material) ? o.material : [o.material];
                         for (var q = 0; q < list.length; q++) {
                             if (!list[q]) continue;
-                            // Registrar TODOS los materiales del item de la
-                            // mano en la blacklist (comparten el singleton
-                            // con el inventario) — no solo los ya dañados.
                             ITEM_MATS.add(list[q]);
                             if (list[q].map &&
                                 (list[q].map.__mfPainted || list[q].map.__mfEpoch)) {
@@ -560,7 +497,6 @@
                     if (im.__mfOrigMap) {
                         im.map = im.__mfOrigMap;
                     } else {
-                        // sin stash: crear material limpio sin textura de skin
                         im.map = null;
                     }
                     im.needsUpdate = true;
@@ -615,20 +551,10 @@
             img.src = url;
         } catch (_) {}
     }
-
-    // Época actual de pintado (ver bumpEpoch): fuerza repintados cuando el
-    // repo actualiza un PNG aunque la URL sea la misma.
-
     var paintedPlayers = new WeakSet();
-
-    // Época de pintado: bump al invalidar caches → los materiales pintados con
-    // una época vieja se repintan aunque la URL sea la misma (PNG reemplazado).
     var paintEpoch = 1;
     globalThis.__MF_SKIN_EPOCH__ = paintEpoch;
     function bumpEpoch() { paintEpoch++; globalThis.__MF_SKIN_EPOCH__ = paintEpoch; }
-
-    // Caché persistente de skins remotas: se descargan solas al primer uso y
-    // de ahí en adelante se pintan desde dataURLs locales (sin red ni CORS).
     var REMOTE_CACHE_KEY = 'mf:remoteskins:v1';
     var remoteCache = null;
     var remoteFailed = {};
@@ -650,7 +576,6 @@
         try {
             localStorage.setItem(REMOTE_CACHE_KEY, JSON.stringify(remoteCache));
         } catch (_) {
-            // quota: tira la mitad más vieja y reintenta una vez
             try {
                 var keys = Object.keys(remoteCache);
                 for (var i = 0; i < Math.ceil(keys.length / 2); i++) delete remoteCache[keys[i]];
@@ -678,8 +603,6 @@
                     var had = !!remoteCache[url];
                     remoteCache[url] = dataUrl;
                     saveRemoteCache();
-                    // Imagen re-descargada (repo actualizado): nueva época para
-                    // que el watcher en vivo repinte con el contenido fresco.
                     if (had) bumpEpoch();
                 } else throw new Error('no image');
             })
@@ -693,9 +616,7 @@
     function cachedRemoteOrKick(url) {
         if (remoteCache[url]) return remoteCache[url];
         scheduleRemoteDownload(url);
-        // Si ya no se puede cachear (3 fallos), usa la URL directa como antes
         if ((remoteFailed[url] || 0) >= 3) return url;
-        // Aún descargando: null fuerza al watcher a reintentar en su próximo tick
         return null;
     }
 
@@ -735,15 +656,11 @@
 
     function resolveSkinImageUrl(entry) { return resolveAssetImageUrl(entry, 'skin'); }
     function resolveCapeImageUrl(entry) { return resolveAssetImageUrl(entry, 'cape'); }
-
-    // La capa vive en mesh.capeMesh (rama separada del body). Este helper la
-    // junta para que el pase de skin la EXCLUYA y el pase de capa la encuentre.
     function capeMeshesOf(mesh) {
         var out = [];
         try {
             var direct = mesh?.capeMesh;
             if (direct) out.push(direct);
-            // la capa puede estar como hija del body en builds del engine
             mesh?.traverse?.(function (o) {
                 if (o && o !== mesh && o.capeMesh && out.indexOf(o.capeMesh) === -1) {
                     out.push(o.capeMesh);
@@ -767,18 +684,9 @@
         } catch (_) {}
         return out;
     }
-
-    // Texturas montadas por MF_Facial (sesion local o de otros jugadores):
-    // ya llevan la skin + cara pintadas; repintarlas destruiria la cara.
     function isFacialTex(t) {
         return !!(t && (t.__mfLocalCanvas || t.__mfPeerCanvas || t.__mfOtherKey));
     }
-
-    // Armadura del rig (bundle BfBcwb2y, setArmorSkinned): vive en los
-    // registros mesh.skinnedArmor / mesh.armorMesh ({helmet, chestplate,
-    // leggings, boots}) con texturas 64x32 propias — MISMA proporción que
-    // una skin → el filtro 64xN las matcheaba y el repintado les pintaba
-    // la skin ENCIMA a la armadura equipada. Excluir la rama.
     function armorMeshesOf(mesh) {
         var out = [];
         try {
@@ -789,7 +697,6 @@
                     for (var k in reg) if (reg[k]) out.push(reg[k]);
                 }
             }
-            // ruta vieja (no-skinned): claves de armadura dentro de mesh.meshes
             var mreg = mesh && mesh.meshes;
             if (mreg && typeof mreg === 'object') {
                 for (var k2 in mreg) {
@@ -803,14 +710,6 @@
         } catch (_) {}
         return out;
     }
-
-    // Renderers de items del engine (bundle: clase con needsRendering() y
-    // renderDistanceSq(), con addBox estático de UVs). Su material es el
-    // SINGLETON compartido por TODOS los items del juego: sostenidos en
-    // 3ª persona, tirados en el suelo y los ÍCONOS DEL INVENTARIO
-    // (buildItemGeometry + material compartido). Si el repintado de skins
-    // lo toca, la textura de la skin aparece en los bloques del inventario
-    // y los items cuyos UVs caen en zonas transparentes desaparecen.
     var ITEM_MATS = new WeakSet();
 
     function collectItemMaterials(mesh) {
@@ -823,8 +722,6 @@
                     var m = list[i];
                     if (!m) continue;
                     ITEM_MATS.add(m);
-                    // Reparar daño previo: si el singleton ya quedó pintado
-                    // con una skin, restaurar el original guardado.
                     if (m.map && m.map.__mfPainted && m.__mfOrigMap) {
                         m.map = m.__mfOrigMap;
                         m.needsUpdate = true;
@@ -836,15 +733,7 @@
     }
 
     function skinMaterialsOf(mesh) {
-        // Registrar/reparar el singleton de items ANTES de filtrar: su
-        // atlas cuadrado grande puede pasar el filtro de skin (o el
-        // fallback cuando la skin es HD y no matchea) y recibir la skin
-        // encima — así nació el bug de la skin en el inventario.
         collectItemMaterials(mesh);
-
-        // Excluir la rama de la capa: antes el filtro 64xN dejaba pasar la
-        // textura de capa (64x32) como "skin" y el repintado le pintaba la
-        // skin ENCIMA a la capa del jugador.
         var exclude = new Set();
         capeMeshesOf(mesh).forEach(function (c) {
             collectMaterialsOf(c).forEach(function (m) { exclude.add(m); });
@@ -857,19 +746,15 @@
         var bodyMats = all.filter(function (m) { return !exclude.has(m) && !ITEM_MATS.has(m); });
 
         var skins = bodyMats.filter(function (m) {
-            if (isFacialTex(m.map)) return false; // MF_Facial controla esta textura
+            if (isFacialTex(m.map)) return false;
             var w = m.map?.image?.width, h = m.map?.image?.height;
             if (!w || !h) return false;
-            // solo proporciones de skin reales (64x32/64x64/128x64/128x128/...):
-            // un cuadrado generico (atlas de items 256x256 en la mano) no es skin
             var k64 = w / 64;
             return Number.isInteger(k64) && (h === w || h === w / 2) && k64 <= 4;
         });
         if (skins.length) return skins;
         var nonFacial = bodyMats.filter(function (m) { return !isFacialTex(m.map); });
         if (nonFacial.length) return nonFacial;
-        // todos los materiales del cuerpo son texturas faciales: MF_Facial
-        // tiene el control del mesh; lista vacia = no repintar
         return [];
     }
 
@@ -925,10 +810,6 @@
                     }
                 }
                 if (done > 0) {
-                    // Cooperación con MF_Facial: la textura cambió DE BAJO de su
-                    // sesión (él tenía su propio canvas montado). Notificar para
-                    // que re-capture la base (ahora con la custom skin) y
-                    // re-monte SU textura encima, conservando la cara animada.
                     try {
                         window.dispatchEvent(new CustomEvent('minifeather:skin-repainted', {
                             detail: { player: who, mesh: mesh }
@@ -941,7 +822,7 @@
             };
             img.onerror = function () {
                 warn('no se pudo pintar la skin custom:', url);
-                paintedPlayers.delete(player); 
+                paintedPlayers.delete(player);
             };
             img.src = url;
             return true;
@@ -952,19 +833,13 @@
     var engineApplied = new WeakSet();
     var engineAppliedCapes = new WeakSet();
     var paintedCapes = new WeakSet();
-
-    // Override de CAPA: mismo patrón de 3 casos que la skin, pero sobre
-    // cosmetics.cape y los materiales de la rama mesh.capeMesh.
     function applyCapeOverride(player, entry, cosmetics) {
         var target = entry.__cape;
         if (!target) return;
-
-        // 1) custom:<id> con textura local → engine-nativa: cosmetics.cape
-        //    + recreate(); el hook de Image sirve el PNG desde el registro.
         if (target.indexOf('custom:') === 0) {
             var cid = target.slice(7);
             var reg = globalThis.__MF_PACK_SKINS__ || {};
-            if (!reg[cid]) return; // sin textura local, no insistir
+            if (!reg[cid]) return;
             if (cosmetics.cape === target && engineAppliedCapes.has(player)) return;
             try {
                 cosmetics.cape = target;
@@ -978,8 +853,6 @@
             }
             return;
         }
-
-        // 2) id vanilla (nombres de CAPES en background.js) → engine-nativa.
         if (isVanillaSkinId(target)) {
             if (cosmetics.cape === target) return;
             try {
@@ -994,8 +867,6 @@
             }
             return;
         }
-
-        // 3) URL remota → repintar solo los materiales de la capa.
         var url = resolveCapeImageUrl(entry);
         if (!url) return;
         var stillPainted = false;
@@ -1074,8 +945,6 @@
         if (!cosmetics || typeof cosmetics !== 'object') return;
 
         var entry = lookupEntry(profile);
-
-        // Diagnóstico único por jugador: username/uuid detectados y si matcheó
         if (!seenProfileIds.has(player)) {
             seenProfileIds.add(player);
             var pn = profile.username || profile.name || '(sin username)';
@@ -1087,15 +956,11 @@
         applyCapeOverride(player, entry, cosmetics);
 
         var target = entry.__skin;
-
-        // 1) custom:<id> con textura local disponible → vía engine-nativa:
-        //    setear cosmetics.skin y recrear; el hook de fetch/Image sirve la
-        //    textura local, el engine la conserva y no hay guerra de repintados.
         if (target.indexOf('custom:') === 0) {
             var cid = target.slice(7);
             var reg = globalThis.__MF_PACK_SKINS__ || {};
             var avail = reg[cid];
-            if (!avail) return; // sin textura local: el server daría 404, no insistir
+            if (!avail) return;
             if (cosmetics.skin === target && engineApplied.has(player)) return;
             try {
                 cosmetics.skin = target;
@@ -1109,8 +974,6 @@
             }
             return;
         }
-
-        // 2) id vanilla
         if (isVanillaSkinId(target)) {
 
             if (cosmetics.skin === target) return;
@@ -1124,10 +987,6 @@
             }
             return;
         }
-
-        // 3) URL directa (pack remoto/extension): pintar materiales del mesh.
-        //    Re-pintar solo si el engine regeneró los materiales (pintó y lo pisó),
-        //    o si la época cambió (PNG del repo reemplazado con la misma URL).
         var url = resolveSkinImageUrl(entry);
         if (!url) return;
         var stillPainted = false;
@@ -1135,10 +994,6 @@
             try {
                 var mm = skinMaterialsOf(player.mesh);
                 stillPainted = mm.length > 0 && mm.every(function (m) {
-                    // Textura facial de MF_Facial: la custom skin vive DENTRO
-                    // de ella (re-capturada tras nuestro repintado vía evento
-                    // minifeather:skin-repainted). Contarla como válida — si
-                    // no, el watcher repintaría en bucle y mataría la cara.
                     if (isFacialTex(m.map)) return true;
                     return m.map && m.map.__mfPainted === url && m.map.__mfEpoch === paintEpoch;
                 });
@@ -1159,23 +1014,16 @@
             applyLiveOverrides();
         }, 1000);
     }
-
-    // ── Watcher del repo: skins vivas sin reiniciar ────────────
-    // Vigila el repo mfaccs cada 60s: si el último commit cambió, baja la DB
-    // y repinta en vivo (nuevas entradas y PNGs reemplazados incluidos).
     var LIVE_REPO_API = 'https://api.github.com/repos/EstebanGrp/mfaccs';
     var LIVE_DB_URL = 'https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/accounts.json';
     var liveLastSha = null;
     var liveBusy = false;
 
     function liveApplyDb(live) {
-        // Reconstruir índices con BUILTIN + local + viva (mismo orden de capas)
         parseDb(BUILTIN_DB, true);
         db = db || {};
         parseDb(db, false);
         parseDb(live, false);
-        // Invalidar PNGs remotos: bump de época para forzar repintado aunque
-        // la URL no cambió (reemplazo de imagen en el repo).
         bumpEpoch();
         loadRemoteCache();
         var seen = {};
@@ -1189,8 +1037,6 @@
         }
         scan(dbByUuid);
         scan(dbByName);
-        // La descarga es async: cuando termine, las URLs ya tendrán el dataURL
-        // nuevo y el repintado por época se llevará la versión fresca.
         setTimeout(function () { forceRepaintAll(); }, 1200);
         setTimeout(function () { forceRepaintAll(); }, 4000);
     }
@@ -1203,8 +1049,6 @@
             .then(function (commits) {
                 var sha = commits && commits[0] && commits[0].sha;
                 if (sha && liveLastSha === null) {
-                    // primera vista: registrar y aplicar silenciosamente si la
-                    // DB viva ya cargada difiere (descarga inicial post-arranque)
                     liveLastSha = sha;
                     return;
                 }
@@ -1220,17 +1064,9 @@
             .catch(function () {})
             .then(function () { liveBusy = false; });
     }
-
-    // ── Push en vivo via ntfy (SSE): el bot avisa al cambiar la DB ──
-    // Actualización ~instantánea sin esperar el polling de GitHub. Con
-    // debounce: varios commits seguidos → una sola recarga. El polling
-    // queda como respaldo si ntfy no está disponible.
     var PUSH_TOPIC = 'mf-skins-updates-v1';
     var livePushRetry = 0;
     var pushReloadTimer = null;
-
-    // Recarga directa de la DB viva (sin chequear SHA): la usa el push
-    // porque el aviso de ntfy YA confirma que hubo commit nuevo.
     function reloadLiveDbNow() {
         return fetch(LIVE_DB_URL, { cache: 'reload' })
             .then(function (r) { return r.ok ? r.json() : null; })
@@ -1261,10 +1097,9 @@
                 };
                 es.onerror = function () {
                     es.close();
-                    // backoff: 5s → 10s → … → 2min máx
                     var wait = Math.min(120000, 5000 * Math.pow(2, livePushRetry++));
                     setTimeout(startPushListener, wait);
-                    if (livePushRetry > 1) livePushRetry--; // recuperación gradual
+                    if (livePushRetry > 1) livePushRetry--;
                 };
                 es.onopen = function () { livePushRetry = 0; };
             } catch (_) {}
@@ -1272,10 +1107,8 @@
     }
 
     function startLiveRepoWatcher() {
-        // Esperar a que la DB inicial cargue para no pisar estados
         loadDb().then(function () {
             try { checkLiveRepo(); } catch (_) {}
-            // Respaldo del push ntfy: si el SSE murió, esto detecta igual
             setInterval(function () {
                 try { checkLiveRepo(); } catch (_) {}
             }, 120000);
@@ -1311,12 +1144,12 @@
                 }
 
                 var skinId = match[1];
-                
+
                 if (skinId.indexOf('custom:') === 0) skinId = skinId.slice(7);
                 var custom = getCustomSkinForId(skinId);
 
                 if (!custom) {
-                    originalSet.call(this, value); 
+                    originalSet.call(this, value);
                     return;
                 }
 
@@ -1349,13 +1182,6 @@
         patched = true;
         return true;
     }
-
-    // ── Preview del menú (canvas 2D) ───────────────────────────
-    // El menú dibuja el modelo del jugador en un canvas chico (109x185, el
-    // avatar del sidebar de cosméticos) con drawImage por partes de la skin.
-    // Si la imagen que usa no pasó por nuestro hook de Image.src (cacheada o
-    // con otra URL), se sustituye la fuente de esos drawImage por la textura
-    // custom de la cuenta, conservando la geometría del dibujo.
     function patchMenuPreviewCanvas() {
         if (window.__MF_MenuPreviewPatched) return;
         window.__MF_MenuPreviewPatched = true;
@@ -1368,7 +1194,6 @@
                     var e = lookupEntry(prof);
                     if (e) return e;
                 }
-                // fallback: sesión del panel (username logueado)
                 var st = globalThis.__MF_ACCOUNT_STATE__;
                 if (st && st.username) return lookupEntry({ username: st.username });
             } catch (_) {}
@@ -1386,23 +1211,14 @@
             return false;
         }
 
-        var repImages = {};   // url -> HTMLImageElement
-        var drawnCalls = new WeakMap(); // canvas -> [{ctx, args}]
+        var repImages = {};
+        var drawnCalls = new WeakMap();
         var replaying = false;
-
-        // Canvases-atlas de skin: el engine dibuja la skin (IMG) sobre un
-        // canvas offscreen cuadrado (yIwkPEvphTDgWU) y crea la textura desde
-        // ese CANVAS. El paperdoll/preview suben ese canvas por texImage2D —
-        // se registran aquí para reemplazar la subida solo en el contexto del
-        // muñeco (el atlas es compartido con el mundo: no se muta).
-        var skinAtlasInfo = new WeakMap(); // canvas -> {w,h} de la IMG original
+        var skinAtlasInfo = new WeakMap();
 
         function skinSrcMatch(img) {
             if (!img || !(img instanceof HTMLImageElement)) return null;
             var src = img.src || '';
-            // bob/alice (ids planos) suben con URL textures/entity/skins/;
-            // el resto del catálogo equipado va como custom:<id> → URL de la
-            // API de sesión (auth-api/skins/custom/ o session.<host>/skins/custom/).
             return src.match(SKIN_PATH_REGEX) || src.match(SKIN_PATH_REGEX_DEEP)
                 || src.match(SKIN_API_URL_RE) || null;
         }
@@ -1418,22 +1234,10 @@
             repImages[url] = im;
             return null;
         }
-
-        // Copia privada del atlas de skin con la custom pintada encima.
-        // El atlas del engine es SIEMPRE cuadrado (w×w) y el modelo lee el
-        // layout 64×64 clásico de MC (parts: brazo izq en (32,48), pierna
-        // izq en (16,48) — decodificado de addBox/generateGeometry del
-        // bundle). Las vanilla son cuadradas; una custom 2:1 legacy debe
-        // CONVERTIRSE: copiar su contenido tal cual y espejar brazo/pierna
-        // derechos a las regiones izquierdas (que en 2:1 no existen).
-        var atlasSwapCache = new WeakMap(); // orig canvas -> swap canvas
+        var atlasSwapCache = new WeakMap();
         function atlasSwap(atlas, rep) {
             if (!atlas || !rep) return null;
             if (!rep.complete || !rep.naturalWidth) return null;
-            // Atlas a 0x0: el engine redimensiona su canvas al reconstruirlo —
-            // un canvas swap de 0x0 hace que WebGL tire INVALID_VALUE (bad
-            // image data) al subirlo. Pasar de largo y esperar el próximo
-            // upload con el atlas ya dimensionado.
             if (!atlas.width || !atlas.height) return null;
             var cached = atlasSwapCache.get(atlas);
             if (cached && cached.__mfEpoch === paintEpoch) return cached;
@@ -1444,13 +1248,12 @@
                 var ctx = c.getContext('2d');
                 ctx.imageSmoothingEnabled = false;
                 var rw = rep.naturalWidth, rh = rep.naturalHeight;
-                var legacy = rh * 2 <= rw;   // 2:1 (64x32 / 128x64): sin capas izq.
+                var legacy = rh * 2 <= rw;
                 if (!legacy) {
-                    // cuadrada: mismo layout del engine, estirar directo
                     ctx.drawImage(rep, 0, 0, rw, rh, 0, 0, atlas.width, atlas.height);
                 } else {
-                    var s = atlas.width / 64;   // px de atlas por px-MC
-                    var u = rw / 64;            // px de la custom por px-MC
+                    var s = atlas.width / 64;
+                    var u = rw / 64;
                     var box = function (sx, sy, w, h, dx, dy, flip) {
                         try {
                             if (flip) {
@@ -1466,12 +1269,12 @@
                             }
                         } catch (_) {}
                     };
-                    box(0, 0, 32, 16, 0, 0);            // cabeza
-                    box(16, 16, 24, 16, 16, 16);        // torso
-                    box(40, 16, 16, 16, 40, 16);        // brazo derecho
-                    box(0, 16, 16, 16, 0, 16);          // pierna derecha
-                    box(40, 16, 16, 16, 32, 48, true);  // brazo izq (espejo)
-                    box(0, 16, 16, 16, 16, 48, true);   // pierna izq (espejo)
+                    box(0, 0, 32, 16, 0, 0);
+                    box(16, 16, 24, 16, 16, 16);
+                    box(40, 16, 16, 16, 40, 16);
+                    box(0, 16, 16, 16, 0, 16);
+                    box(40, 16, 16, 16, 32, 48, true);
+                    box(0, 16, 16, 16, 16, 48, true);
                 }
                 c.__mfEpoch = paintEpoch;
                 atlasSwapCache.set(atlas, c);
@@ -1484,10 +1287,6 @@
         CanvasRenderingContext2D.prototype.drawImage = function () {
             var args = arguments;
             var cvs = this.canvas;
-            // registro del atlas de skin: el builder del engine dibuja la IMG
-            // de la skin COMPLETA sobre un canvas offscreen cuadrado (forma
-            // drawImage(img,0,0) — ≤5 args). Los head-icons (I3e) remapean con
-            // 9 args: NO registrarlos (pintarles un body encima deforma).
             if (!replaying) {
                 var m0 = skinSrcMatch(args[0]);
                 if (m0 && cvs && !document.body.contains(cvs) &&
@@ -1508,7 +1307,6 @@
                         a[0] = rep;
                         return origDrawImage.apply(this, a);
                     }
-                    // sin reemplazo listo aún: dibujar vanilla y grabar para replay
                     var list = drawnCalls.get(cvs) || [];
                     if (list.length < 200) {
                         list.push({ ctx: this, args: Array.prototype.slice.call(args) });
@@ -1518,40 +1316,20 @@
             }
             return origDrawImage.apply(this, args);
         };
-
-        // WebGL: si el preview sube la skin como textura directamente
-        // (texImage2D con HTMLImageElement o canvas-atlas), sustituir la
-        // fuente. Cubre:
-        //  - preview del menú de cosméticos (canvas visible 109x185)
-        //  - paperdoll offscreen (~95x161) y avatar de cuenta (52x52)
-        // El engine sube la textura UNA VEZ: si la custom aún no estaba
-        // lista, se agenda re-subida (pendingSwaps) para cuando lo esté.
         function isOffscreenDollCanvas(c) {
             if (!c) return false;
             var inDom;
             try { inDom = document.body && document.body.contains(c); } catch (_) { inDom = false; }
             if (inDom) {
-                // avatar de cuenta visible (52x52): rect chico. El canvas del
-                // mundo/HUD es visible pero ocupa toda la ventana → fuera.
                 try {
                     var r = c.getBoundingClientRect();
                     return r.width > 0 && r.width <= 300 && r.height <= 400;
                 } catch (_) { return false; }
             }
-            // paperdoll offscreen (no en DOM): tamaño de muñeco, nunca ventana
             var w = c.width, h = c.height;
             return w >= 40 && w <= 700 && h >= 40 && h <= 700;
         }
-
-        // contextos GL con textura de skin pendiente de re-subir con la custom
         var pendingSwaps = new Map();
-
-        // fuente skin → canvas/IMG de reemplazo (o null). Agenda re-subida si
-        // la custom aún no cargó. mode: 'img' (texImage2D 6-arg) o 'sub'
-        // (texSubImage2D — WebGL2/three.js usa texStorage2D + texSubImage2D
-        // para texturas inmutables: la subida con fuente va por ACÁ).
-        // Dimensiones "de datos" de un TexImageSource (canvas: width/height,
-        // imagen: naturalWidth/naturalHeight). null si no se puede leer.
         function srcSizeOf(s) {
             if (!s) return null;
             if (s instanceof HTMLCanvasElement) {
@@ -1561,10 +1339,6 @@
             var h = s.videoHeight || s.naturalHeight || s.height;
             return (w > 0 && h > 0) ? [w, h] : null;
         }
-
-        // true solo si ambos tienen dimensiones válidas e IDÉNTICAS —
-        // requisito para subir swap sobre una textura alocada al tamaño
-        // del source (texStorage2D inmutable no se re-alloc).
         function srcSizeEquals(a, b) {
             var sa = srcSizeOf(a), sb = srcSizeOf(b);
             return !!(sa && sb && sa[0] === sb[0] && sa[1] === sb[1]);
@@ -1585,28 +1359,19 @@
                 return null;
             }
             if (skinSrcMatch(src)) {
-                // IMG directa: la textura se alocó al tamaño de ESA imagen
-                // (bob/alice 128x128). Escalar la custom al mismo tamaño —
-                // subir una 64x64 a una textura 128x128 inmutable llena solo
-                // un cuarto y deforma.
                 return scaleTo(rep, src.naturalWidth || src.width,
                                src.naturalHeight || src.height);
             }
             if (src instanceof HTMLCanvasElement && skinAtlasInfo.has(src)) {
-                return atlasSwap(src, rep); // atlas-canvas
+                return atlasSwap(src, rep);
             }
             return null;
         }
-
-        // rep estirada a w×h (cacheada por época)
-        var scaleCache = new Map(); // "w×h" -> canvas
+        var scaleCache = new Map();
         var scaleCacheEpoch = paintEpoch;
         function scaleTo(rep, w, h) {
             if (!w || !h) return null;
             if (w === rep.naturalWidth && h === rep.naturalHeight) return rep;
-            // Las claves llevan @época: al cambiar de época las entradas viejas
-            // jamás se re-consultan → vaciar para no acumular canvases por
-            // cada repintado (leak).
             if (paintEpoch !== scaleCacheEpoch) {
                 scaleCacheEpoch = paintEpoch;
                 scaleCache.clear();
@@ -1663,14 +1428,8 @@
                         swap.width !== p.src.width || swap.height !== p.src.height) {
                         pendingSwaps.delete(glCtx); return;
                     }
-                    // A CORS-tainted canvas cannot be used as a WebGL source.
-                    // Test one pixel before touching the bound game texture.
                     try { swap.getContext('2d').getImageData(0, 0, 1, 1); }
                     catch (_) { pendingSwaps.delete(glCtx); return; }
-                    // re-subir sobre la textura original del atlas. La textura
-                    // es inmutable (texStorage2D): re-subir con texSubImage2D.
-                    // three.js alterna UNPACK_FLIP_Y por upload: fijarlo acá
-                    // (true = flipY de CanvasTexture) y restaurar después.
                     var prevUnit = glCtx.getParameter(glCtx.ACTIVE_TEXTURE);
                     glCtx.activeTexture(p.unit);
                     var prevTexture = glCtx.getParameter(glCtx.TEXTURE_BINDING_2D);
@@ -1704,8 +1463,6 @@
             protos.forEach(function (P) {
                 if (!P || !P.prototype || P.prototype.__mfPreviewHook) return;
                 P.prototype.__mfPreviewHook = true;
-
-                // --- texImage2D (forma 6-arg con fuente en args[5]) ---
                 var origTex = P.prototype.texImage2D;
                 if (typeof origTex === 'function') {
                     P.prototype.texImage2D = function () {
@@ -1719,10 +1476,6 @@
                                 (src instanceof HTMLCanvasElement && skinAtlasInfo.has(src)));
                             if (inDoll && isSkin) {
                                 var swap = swapSourceFor(this, src);
-                                // El swap debe calzar EXACTO con el tamaño del
-                                // source original: textura alocada por texStorage2D
-                                // al tamaño del source — un swap de otro tamaño
-                                // dispara INVALID_VALUE en el upload.
                                 if (swap && srcSizeEquals(swap, src)) {
                                     dollLog('doll: swap texImage2D', cvs.width + 'x' + cvs.height,
                                             src instanceof HTMLCanvasElement ? 'atlas' : 'img');
@@ -1734,11 +1487,6 @@
                         return origTex.apply(this, arguments);
                     };
                 }
-
-                // --- texSubImage2D (forma 7-arg con fuente en args[6]) ---
-                // WebGL2: three.js sube las texturas por acá (texStorage2D +
-                // texSubImage2D inmutable) — texImage2D con fuente nunca se
-                // llama. Sin este hook el doll queda vanilla.
                 var origSub = P.prototype.texSubImage2D;
                 if (typeof origSub === 'function') {
                     P.prototype.texSubImage2D = function () {
@@ -1752,9 +1500,6 @@
                                 (src instanceof HTMLCanvasElement && skinAtlasInfo.has(src)));
                             if (inDoll && isSkin) {
                                 var swap = swapSourceFor(this, src);
-                                // Mismo guard que texImage2D: dimensiones del
-                                // swap == dimensiones del source. Un canvas 0x0
-                                // o de otro tamaño = "bad image data".
                                 if (swap && srcSizeEquals(swap, src)) {
                                     dollLog('doll: swap texSubImage2D', cvs.width + 'x' + cvs.height,
                                             src instanceof HTMLCanvasElement ? 'atlas' : 'img');
@@ -1807,7 +1552,7 @@
         var pollTicks = 0;
         var setupInterval = setInterval(function () {
             pollTicks++;
-            registerDevSkins(); 
+            registerDevSkins();
             if (tryPatch()) {
                 clearInterval(setupInterval);
             }
@@ -1822,11 +1567,6 @@
             }));
         } catch (_) {}
     });
-
-    // Skins/capes custom aplicadas desde el panel (data: URLs). Chrome ya no permite
-    // redirects DNR a data:, así que los pasa ClientPanel (ISOLATED) via CustomEvent.
-    // Se registran por nombre crudo: el juego pide textures/entity/{skins|capes}/{name}.png
-    // y el hook de Image.src busca reg['{name}'].
     function handlePanelAssets(detail) {
         if (!detail || typeof detail !== 'object') return;
         registerPanelAssets('skin', detail.skins);
@@ -1838,9 +1578,6 @@
         panelAssetsReceived = true;
         try { handlePanelAssets(typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail); } catch (_) {}
     });
-
-    // Pedir los assets al panel con reintentos: el panel (ISOLATED) carga después
-    // que este script, así que el primer request se perdería sin esto.
     document.dispatchEvent(new CustomEvent('minifeather:panel-assets-request', { detail: '{}' }));
     var panelReqAttempts = 0;
     var panelReqTimer = setInterval(function () {
@@ -1861,14 +1598,8 @@
             if (packSkinReg[name] !== url) changed = true;
             packSkinReg[name] = url;
         }
-        // Repintar entidades vivas: el hook de Image.src solo cubre cargas nuevas
         if (changed) forceRepaintAll(kind === 'cape' ? 'cape' : 'skin');
     }
-
-    // Repinta entidades vivas con las skins/capes del panel (data: URLs en packSkinReg).
-    // Cubre al jugador local aunque no esté en la DB de overrides. Usa el patrón
-    // editable-canvas de MF_Mesh: una sola textura nueva reemplazada en todos los materiales.
-    // kind: 'skin' pinta el body (excluye capa), 'cape' pinta solo la rama capeMesh.
     function forceRepaintAll(kind) {
         var game = findGame();
         var world = game?.world;
@@ -1901,7 +1632,6 @@
                 paintPlayerUrl(player, packSkinReg[id.replace(/^custom:/i, '')], wantCape);
             }
             if (!wantCape) {
-                // pase de skin: asegurar que la capa no quede pintada con la skin
                 var cid = player?.profile?.cosmetics?.cape;
                 if (typeof cid === 'string') {
                     paintPlayerUrl(player, packSkinReg[cid.replace(/^custom:/i, '')], true);
@@ -1924,10 +1654,8 @@
                     var m = mats[i];
                     var t = m.map;
                     if (!t) continue;
-                    if (ITEM_MATS.has(m)) continue; // jamás el singleton de items
+                    if (ITEM_MATS.has(m)) continue;
                     if (t.__mfPainted === url) continue;
-                    // Guardar el PRIMER original para poder reparar si algún
-                    // pase futuro volviera a dañar el material.
                     if (!m.__mfOrigMap) m.__mfOrigMap = t;
                     try {
                         var c = document.createElement('canvas');

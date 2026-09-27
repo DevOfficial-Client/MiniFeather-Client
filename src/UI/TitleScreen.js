@@ -1,16 +1,6 @@
 (function () {
   'use strict';
 
-  // Classic Miniblox title screen — full port of the old miniblox.io web
-  // client (GitHub Pages build). The entire old site (index.html, bundle,
-  // textures, menu music) is bundled under classic/ as web-accessible
-  // resources and mounted in a same-origin-free iframe, so the original
-  // GUI runs verbatim: its React menus, animations, sizes and music.
-  // Toggle restores the vanilla GUI. The old sound sprite is intentionally
-  // stubbed (boot-tolerant); the user will hand-craft it later.
-  //
-  // Layers: #react z:4 · #canvas-hud z:10 · overlay z:2147483000
-
   const GLOBAL_KEY = '__MINIFEATHER_TITLE_SCREEN__';
   const CONFIG_EVENT = 'minifeather:titlescreen-config';
   const CLASSIC_URL = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
@@ -82,8 +72,6 @@
     const restoreBtn = document.getElementById('mf-classic-restore');
     if (restoreBtn) restoreBtn.style.display = state.enabled ? '' : 'none';
   }
-
-  // ─── Config sources: panel event + direct storage (ISOLATED world) ──
   function onConfig(event) {
     let detail = event.detail;
     try { detail = typeof detail === 'string' ? JSON.parse(detail) : detail; } catch (_) { return; }

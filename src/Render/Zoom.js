@@ -461,9 +461,6 @@
         if (state.enabled) {
             resolveCamera();
             const cam = state.camera;
-            // Solo reaplicar si la cámara cambió de identidad o el juego
-            // reseteó el zoom — updateProjectionMatrix por frame "por si acaso"
-            // es trabajo regalado
             if (cam && (cam !== _appliedCam || cam.zoom !== _appliedZoom)) {
                 if (applyZoom()) {
                     _appliedCam = cam;

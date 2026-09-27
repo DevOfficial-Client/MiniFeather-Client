@@ -40,9 +40,9 @@
         provider: 'puter',
         apiKey: '',
         model: '',
-        autoReply: false, 
-        busy: false,      
-        
+        autoReply: false,
+        busy: false,
+
     };
 
     try {
@@ -104,7 +104,7 @@
         const headers = { 'Content-Type': 'application/json' };
         headers[prov.keyHeader] = prov.keyPrefix + state.apiKey;
         log('chatViaApi:', state.provider, 'model=' + model, 'keyLen=' + (state.apiKey || '').length, 'header=' + prov.keyHeader + ': ' + prov.keyPrefix + (state.apiKey || '').slice(0, 4) + '...');
-        
+
         let maxTokens = 150;
         for (let attempt = 0; attempt < 2; attempt++) {
             const ac = new AbortController();
@@ -125,7 +125,7 @@
                 return out;
             }
             const errText = await resp.text().catch(() => '');
-            
+
             if (resp.status === 402 && attempt === 0) {
                 maxTokens = 64;
                 log('402 creditos bajos, reintentando con max_tokens=' + maxTokens);
@@ -156,7 +156,7 @@
     function startTalk(ms) {
         try { MF_CustomModels?.playAnim?.('verity', 'talk', ms || 2000); } catch {}
     }
-    
+
     function keepTalkWhileAudio(audio) {
         if (!audio || typeof audio.addEventListener !== 'function') return;
         stopTalkKeeper();
@@ -177,11 +177,11 @@
             try {
                 const synth = globalThis.speechSynthesis;
                 if (!synth) throw new Error('speechSynthesis no disponible');
-                
+
                 try { synth.cancel(); } catch {}
                 let voices = [];
                 try { voices = synth.getVoices() || []; } catch {}
-                
+
                 const pick = () => {
                     if (state.voiceName) {
                         const chosen = voices.find((v) => v.name === state.voiceName)
@@ -207,7 +207,7 @@
                     if (voice) { u.voice = voice; u.lang = voice.lang; }
                     u.onend = () => { fake.ended = true; };
                     u.onerror = (e) => {
-                        
+
                         if (tries++ === 0 && voice) {
                             warn('voz "' + voice.name + '" fallo (' + (e?.error || '?') + '), reintentando con voz default');
                             try { synth.cancel(); } catch {}
@@ -230,7 +230,7 @@
 
     async function speak(text) {
         if (!state.enabled) return null;
-        
+
         try {
             const ok = await loadPuter();
             if (!ok) throw new Error('puter.js no disponible');
@@ -238,13 +238,13 @@
             try {
                 const opts = { rate: state.rate };
                 if (state.voice) opts.voice = state.voice;
-                
+
                 const audio = await Promise.race([
                     Promise.resolve(globalThis.puter.ai.txt2speech(text, opts)),
                     new Promise((_, rej) => setTimeout(() => rej(new Error('puter timeout 8s')), 8000))
                 ]);
                 log('TTS via puter OK');
-                
+
                 startTalk(Math.max(1500, Math.min(8000, text.length * 65)));
                 keepTalkWhileAudio(audio);
                 if (audio && typeof audio.play === 'function') {
@@ -288,7 +288,7 @@
             log('auto-reply a:', clean.slice(0, 60));
             const reply = await ask(clean);
             if (reply) {
-                
+
                 try { state.chatHook?.(reply); } catch {}
             }
             return !!reply;
@@ -309,7 +309,7 @@
         set voice(v) {
             if (v && typeof v === 'object' && v.name) {
                 state.voiceName = v.name;
-                state.voice = null; 
+                state.voice = null;
                 log('voice=' + v.name);
             } else {
                 state.voiceName = String(v || '');
@@ -317,7 +317,7 @@
                 log('voice=' + state.voiceName);
             }
         },
-        
+
         listVoices() {
             const synth = globalThis.speechSynthesis;
             const voices = synth?.getVoices?.() || [];
@@ -326,7 +326,7 @@
             return list;
         },
         set rate(r) { state.rate = Math.max(0.5, Math.min(2, +r || 1)); },
-        
+
         get provider() { return state.provider; },
         get model() { return state.model || (PROVIDERS[state.provider]?.defaultModel || ''); },
         get providers() { return Object.fromEntries(Object.entries(PROVIDERS).map(([k, p]) => [k, { label: p.label, needsKey: p.needsKey, defaultModel: p.defaultModel || null }])); },
@@ -338,7 +338,7 @@
                 const prevDefault = prevProv?.defaultModel || '';
                 state.provider = p;
                 const newDefault = PROVIDERS[p].defaultModel || '';
-                
+
                 if (!state.model || state.model === prevDefault) {
                     state.model = newDefault;
                 }
@@ -353,7 +353,7 @@
         say,
         chat,
         speak,
-        
+
         get autoReply() { return state.autoReply; },
         set autoReply(v) {
             state.autoReply = !!v;
@@ -361,7 +361,7 @@
             log('autoReply=' + state.autoReply + (state.autoReply ? ' — verity respondera a todo lo que escribas (menos comandos /)' : ''));
         },
         autoReplyChat,
-        
+
         setChatHook(fn) { state.chatHook = typeof fn === 'function' ? fn : null; },
         spawn() { return MF_CustomModels?.followVerity?.(); },
         despawn() { return MF_CustomModels?.despawn?.('verity'); },

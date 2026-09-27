@@ -3,7 +3,7 @@
   'use strict';
 
   const MODELS = {
-    
+
     wolf: {
       texW: 32, texH: 32, texName: 'wolf_baby', texDir: 'wolf',
       texVariants: { tame: 'wolf_tame_baby', angry: 'wolf_angry_baby' },

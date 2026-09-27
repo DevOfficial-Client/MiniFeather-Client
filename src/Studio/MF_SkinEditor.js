@@ -4,9 +4,9 @@
     if (window.__MF_SkinEditor) return;
     const TAG = '[MF SkinEditor]';
 
-    const HEAD = { x: 0, y: 0, w: 64, h: 16 }; 
-    const OVERLAY_X = 32;                      
-    
+    const HEAD = { x: 0, y: 0, w: 64, h: 16 };
+    const OVERLAY_X = 32;
+
     const BODY_PARTS = [
         { n: 'cabeza', base: { x: 0, y: 0, w: 32, h: 16 } },
         { n: 'cuerpo', base: { x: 16, y: 16, w: 24, h: 16 } },
@@ -26,20 +26,27 @@
 
     const state = {
         open: false,
-        mode: 'head',        
-        zoom: 10,            
-        tool: 'pencil',      
+        mode: 'head',
+
+        zoom: 10,
+
+        tool: 'pencil',
+
         color: '#1a1a1a',
         brush: 1,
         grid: true,
-        layer: 'both',       
-        mats: [],            
-        orig: new Map(),     
+        layer: 'both',
+
+        mats: [],
+
+        orig: new Map(),
+
         tex: null, texCanvas: null,
         watchdog: null,
         undo: [], redo: [],
         painting: false, lastCell: null,
-        p2pCells: []            
+        p2pCells: []
+
     };
 
     function zone() {
@@ -105,7 +112,7 @@
                 if (m?.map && !seen.has(m)) { seen.add(m); out.push(m); }
             }
         });
-        
+
         const skins = out.filter(m => {
             const w = m.map?.image?.width, h = m.map?.image?.height;
             return w === 64 && (h === 64 || h === 32);
@@ -121,7 +128,7 @@
             const mats = findSkinMaterials(mesh);
             const alive = mats.some(m => m.map === state.tex);
             if (alive) { state.mats = mats; return true; }
-            
+
             for (const m of mats) { state.orig.set(m, m.map); m.map = state.tex; m.needsUpdate = true; }
             state.mats = mats;
             startWatchdog();
@@ -156,7 +163,7 @@
             tex.offset?.copy?.(src.offset);
         } catch {}
         tex.userData = { __mfSkinEditor: true };
-        tex.__mfLocalCanvas = true; 
+        tex.__mfLocalCanvas = true;
         tex.needsUpdate = true;
 
         state.orig.clear();
@@ -183,7 +190,7 @@
                 }
             }
             state.mats = mats;
-            if (rebind) renderUI(); 
+            if (rebind) renderUI();
         }, 250);
     }
 
@@ -192,7 +199,7 @@
     }
 
     function layerAllows(sx) {
-        if (state.mode === 'full') return true; 
+        if (state.mode === 'full') return true;
         if (state.layer === 'both') return true;
         return state.layer === 'base' ? sx < OVERLAY_X : sx >= OVERLAY_X;
     }
@@ -212,11 +219,11 @@
                 if (!inZone(x, y) || !layerAllows(x)) continue;
                 if (erase) ctx.clearRect(x, y, 1, 1);
                 else { ctx.fillStyle = state.color; ctx.fillRect(x, y, 1, 1); }
-                
+
                 state.p2pCells.push([x, y, erase ? null : state.color]);
             }
         }
-        state.tex.needsUpdate = true; 
+        state.tex.needsUpdate = true;
     }
 
     function floodFill(sx, sy) {
@@ -230,10 +237,10 @@
         const lx = sx - Z.x, ly = sy - Z.y;
         const t = idx(lx, ly);
         const tr = d[t], tg = d[t + 1], tb = d[t + 2], ta = d[t + 3];
-        
+
         const hex = state.color.replace('#', '');
         const fr = parseInt(hex.substr(0, 2), 16), fg = parseInt(hex.substr(2, 2), 16), fb = parseInt(hex.substr(4, 2), 16);
-        if (tr === fr && tg === fg && tb === fb && ta === 255) return; 
+        if (tr === fr && tg === fg && tb === fb && ta === 255) return;
         const stack = [[lx, ly]];
         while (stack.length) {
             const [x, y] = stack.pop();
@@ -247,7 +254,7 @@
         }
         ctx.putImageData(img, Z.x, Z.y);
         state.tex.needsUpdate = true;
-        
+
         emitZoneRect();
     }
 
@@ -274,7 +281,7 @@
         stackB.push(ctx.getImageData(Z.x, Z.y, Z.w, Z.h));
         ctx.putImageData(stackA.pop(), Z.x, Z.y);
         state.tex.needsUpdate = true;
-        
+
         emitZoneRect();
     }
 
@@ -312,7 +319,7 @@
         const cv = document.querySelector('#' + ID + ' canvas.mfse-cv');
         if (!cv) return;
         cv.width = W(); cv.height = H();
-        
+
         cv.style.maxHeight = '60vh';
         cv.style.width = 'auto';
         renderUI();
@@ -321,7 +328,7 @@
     function setMode(m) {
         if (state.mode === m) return;
         state.mode = m;
-        state.undo.length = 0; state.redo.length = 0; 
+        state.undo.length = 0; state.redo.length = 0;
         document.querySelectorAll('#' + ID + ' [data-mode]').forEach(b =>
             b.classList.toggle('on', b.dataset.mode === m));
         const lay = document.querySelector('#' + ID + ' [data-row="layers"]');
@@ -334,43 +341,43 @@
         const style = document.createElement('style');
         style.id = ID + '-style';
         style.textContent = `
-#${ID} { position:fixed; top:70px; right:16px; z-index:2147483000;
+            #${ID} { position:fixed; top:70px; right:16px; z-index:2147483000;
   background:#14141a; border:1px solid #32323a; border-radius:8px;
   box-shadow:0 8px 32px rgba(0,0,0,.6); color:#e8e8ee;
   font:12px/1.4 system-ui,sans-serif; user-select:none; }
-#${ID} .mfse-head { display:flex; align-items:center; gap:8px; padding:8px 10px;
+  #${ID} .mfse-head { display:flex; align-items:center; gap:8px; padding:8px 10px;
   border-bottom:1px solid #26262e; font-weight:700; letter-spacing:.5px; }
-#${ID} .mfse-head .dot { width:8px; height:8px; border-radius:50%;
+  #${ID} .mfse-head .dot { width:8px; height:8px; border-radius:50%;
   background:#4dff88; animation:mfse-pulse 1.5s infinite; }
-@keyframes mfse-pulse { 50% { opacity:.35; } }
-#${ID} .mfse-head button { margin-left:auto; }
-#${ID} .mfse-row { display:flex; align-items:center; gap:6px; padding:6px 10px; flex-wrap:wrap; }
-#${ID} .mfse-row + .mfse-row { border-top:1px solid #202028; }
-#${ID} canvas.mfse-cv { display:block; margin:6px 10px; border:1px solid #32323a;
+  @keyframes mfse-pulse { 50% { opacity:.35; } }
+  #${ID} .mfse-head button { margin-left:auto; }
+  #${ID} .mfse-row { display:flex; align-items:center; gap:6px; padding:6px 10px; flex-wrap:wrap; }
+  #${ID} .mfse-row + .mfse-row { border-top:1px solid #202028; }
+  #${ID} canvas.mfse-cv { display:block; margin:6px 10px; border:1px solid #32323a;
   image-rendering:pixelated; cursor:crosshair; background:#0c0c10; }
-#${ID} button { background:#23232c; color:#e8e8ee; border:1px solid #3a3a44;
+  #${ID} button { background:#23232c; color:#e8e8ee; border:1px solid #3a3a44;
   border-radius:4px; padding:3px 8px; cursor:pointer; font:inherit; }
-#${ID} button:hover { background:#2e2e3a; }
-#${ID} button.on { background:#ff6b2b; color:#14141a; border-color:#ff6b2b; font-weight:700; }
-#${ID} input[type=color] { width:34px; height:24px; padding:0; border:1px solid #3a3a44;
+  #${ID} button:hover { background:#2e2e3a; }
+  #${ID} button.on { background:#ff6b2b; color:#14141a; border-color:#ff6b2b; font-weight:700; }
+  #${ID} input[type=color] { width:34px; height:24px; padding:0; border:1px solid #3a3a44;
   border-radius:4px; background:none; cursor:pointer; }
-#${ID} select { background:#23232c; color:#e8e8ee; border:1px solid #3a3a44;
+  #${ID} select { background:#23232c; color:#e8e8ee; border:1px solid #3a3a44;
   border-radius:4px; padding:3px; font:inherit; max-width:130px; }
-#${ID} label { color:#9a9aa6; }
-#${ID} .mfse-err { color:#ff7d7d; padding:4px 10px; display:none; }
+  #${ID} label { color:#9a9aa6; }
+  #${ID} .mfse-err { color:#ff7d7d; padding:4px 10px; display:none; }
         `;
         const root = document.createElement('div');
         root.id = ID;
         root.innerHTML = `
-<div class="mfse-head"><span class="dot"></span>🎨 EDITOR DE SKIN — en vivo
+            <div class="mfse-head"><span class="dot"></span>🎨 EDITOR DE SKIN — en vivo
     <button data-act="close" title="Cerrar (el dibujo se mantiene)">✕</button></div>
-<canvas class="mfse-cv" width="${W()}" height="${H()}" style="max-height:60vh;width:auto;"></canvas>
-<div class="mfse-row" data-row="mode">
+        <canvas class="mfse-cv" width="${W()}" height="${H()}" style="max-height:60vh;width:auto;"></canvas>
+            <div class="mfse-row" data-row="mode">
     <label>Modo:</label>
     <button data-mode="head" class="on" title="Editar solo la cabeza (64x16), con filtro de capa">Cabeza</button>
     <button data-mode="full" title="Editar la skin completa: cuerpo, brazos, piernas">Skin completa</button>
-</div>
-<div class="mfse-row" data-row="tools">
+        </div>
+            <div class="mfse-row" data-row="tools">
     <button data-tool="pencil" class="on" title="Lápiz">✏️</button>
     <button data-tool="eraser" title="Borrador (transparente)">🧽</button>
     <button data-tool="picker" title="Cuentagotas">💧</button>
@@ -383,28 +390,28 @@
     </span>
     <button data-act="undo" title="Deshacer">↩</button>
     <button data-act="redo" title="Rehacer">↪</button>
-</div>
-<div class="mfse-row" data-row="layers">
+        </div>
+            <div class="mfse-row" data-row="layers">
     <label>Capa:</label>
     <button data-layer="both" class="on">Ambas</button>
     <button data-layer="base" title="La de abajo del overlay">Base</button>
     <button data-layer="overlay" title="Hat layer">Overlay</button>
     <button data-act="grid" class="on" title="Rejilla">▦</button>
-</div>
-<div class="mfse-row" data-row="files">
+        </div>
+            <div class="mfse-row" data-row="files">
     <button data-act="revert" title="Volver a la skin original (sin ediciones)">↺ Skin original</button>
     <button data-act="save" title="Guardar el dibujo de cabeza como preset">💾 Guardar</button>
     <select id="mfse-preset"><option value="">— presets —</option></select>
     <button data-act="apply" title="Aplicar preset">Aplicar</button>
     <button data-act="delete" title="Borrar preset">🗑</button>
     <button data-act="export" title="Descargar PNG de la cabeza">⬇ PNG</button>
-</div>
-<div class="mfse-row" data-row="live">
+        </div>
+            <div class="mfse-row" data-row="live">
     <span style="font-size:10px;color:#8a8a96;">Arrastra al timeline (V2):</span>
     <img id="mfse-live-thumb" draggable="true" title="Cabeza ACTUAL (con tus ediciones) — arrástrala al timeline como clip"
          style="height:26px;image-rendering:pixelated;cursor:grab;border:1px solid #32323a;border-radius:3px;background:#0c0c10;">
-</div>
-<div class="mfse-err" id="mfse-err"></div>
+             </div>
+                 <div class="mfse-err" id="mfse-err"></div>
         `;
         document.body.appendChild(style);
         document.body.appendChild(root);
@@ -419,7 +426,7 @@
     }
 
     function bindUI(root) {
-        
+
         const setActive = (sel, btn) => {
             root.querySelectorAll(sel).forEach(b => b.classList.toggle('on', b === btn));
         };
@@ -458,7 +465,7 @@
             thumb.addEventListener('dragstart', (ev) => {
                 if (!state.texCanvas) return;
                 thumb.dataset.dragging = '1';
-                
+
                 const c = document.createElement('canvas');
                 c.width = HEAD.w; c.height = HEAD.h;
                 const cx = c.getContext('2d');
@@ -473,7 +480,7 @@
                 ev.dataTransfer.setData('text/mf-head', name);
                 ev.dataTransfer.setData('text/plain', name);
                 ev.dataTransfer.effectAllowed = 'copy';
-                
+
                 try { ev.dataTransfer.setDragImage(thumb, 13, 13); } catch {}
             });
             thumb.addEventListener('dragend', () => { delete thumb.dataset.dragging; });
@@ -518,7 +525,7 @@
         const stop = () => {
             state.painting = false;
             state.lastCell = null;
-            
+
             if (state.p2pCells.length) {
                 try {
                     window.MF_Peer?.sendLook?.({
@@ -547,7 +554,7 @@
                 ctx.fillRect(x, y, 8, 8);
             }
         }
-        
+
         ctx.drawImage(state.texCanvas, Z.x, Z.y, Z.w, Z.h, 0, 0, w, h);
 
         if (state.grid) {
@@ -559,12 +566,12 @@
         }
 
         if (state.mode === 'full') {
-            
+
             ctx.font = '9px system-ui';
             for (const p of BODY_PARTS) {
                 for (const ox of [0, 32]) {
                     const r = p.base;
-                    if (r.x + ox + r.w > Z.w) continue; 
+                    if (r.x + ox + r.w > Z.w) continue;
                     ctx.strokeStyle = 'rgba(255,255,255,.28)';
                     ctx.strokeRect(r.x * z + .5, r.y * z + .5, r.w * z - 1, r.h * z - 1);
                     ctx.fillStyle = 'rgba(0,0,0,.55)';
@@ -574,13 +581,13 @@
                 }
             }
         } else {
-            
+
             ctx.strokeStyle = 'rgba(255,255,255,.28)';
             ctx.beginPath();
             for (const gx of [0, 8, 16, 24, 40, 48, 56, 64]) { ctx.moveTo(gx * z + .5, 0); ctx.lineTo(gx * z + .5, h); }
             for (const gy of [0, 8, 16]) { ctx.moveTo(0, gy * z + .5); ctx.lineTo(w, gy * z + .5); }
             ctx.stroke();
-            
+
             ctx.strokeStyle = '#ff6b2b';
             ctx.setLineDash([4, 3]);
             ctx.beginPath();
@@ -606,7 +613,7 @@
     function updateLiveThumb() {
         const thumb = document.getElementById('mfse-live-thumb');
         if (!thumb || !state.texCanvas) return;
-        
+
         if (thumb.dataset.dragging === '1') return;
         const c = document.createElement('canvas');
         c.width = HEAD.w; c.height = HEAD.h;
@@ -633,7 +640,7 @@
         if (!state.texCanvas) return;
         const name = prompt('Nombre del preset de cabeza:', 'cabeza-' + (Object.keys(loadPresets()).length + 1));
         if (!name) return;
-        
+
         const c = document.createElement('canvas');
         c.width = HEAD.w; c.height = HEAD.h;
         c.getContext('2d').drawImage(state.texCanvas, HEAD.x, HEAD.y, HEAD.w, HEAD.h, 0, 0, HEAD.w, HEAD.h);
@@ -641,7 +648,7 @@
         p[name] = c.toDataURL('image/png');
         storePresets(p);
         refreshPresetList();
-        
+
         window.dispatchEvent(new CustomEvent('mf:skineditor-presets'));
         err('');
     }
@@ -660,7 +667,7 @@
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(img, 0, 0, img.width, img.height, HEAD.x, HEAD.y, HEAD.w, HEAD.h);
             state.tex.needsUpdate = true;
-            emitZoneRect(); 
+            emitZoneRect();
             renderUI();
         };
         img.src = data;
@@ -705,7 +712,7 @@
                     ctx.imageSmoothingEnabled = false;
                     ctx.drawImage(img, 0, 0, img.width, img.height, HEAD.x, HEAD.y, HEAD.w, HEAD.h);
                     state.tex.needsUpdate = true;
-                    emitZoneRect(); 
+                    emitZoneRect();
                     resolve({ ok: true, name });
                 } catch (e) { resolve({ ok: false, error: e.message }); }
             };
@@ -720,7 +727,7 @@
             ensureWorkCanvas();
         } catch (e) {
             console.warn(TAG, e.message);
-            
+
             state.open = true;
             buildUI();
             err(e.message);
@@ -735,7 +742,7 @@
     }
 
     function close() {
-        
+
         document.getElementById(ID)?.remove();
         document.getElementById(ID + '-style')?.remove();
         state.open = false;
@@ -757,15 +764,17 @@
         state.undo.length = 0; state.redo.length = 0;
         renderUI();
         err('');
-        
+
         try { window.MF_Peer?.sendLook?.({ a: 'revert', what: 'head' }); } catch {}
     }
 
     window.MF_SkinEditor = {
         open, close, revert,
-        presets: listPresets,          
+        presets: listPresets,
+
         applyPreset: applyPresetByName,
-        __tex: () => state.tex,        
+        __tex: () => state.tex,
+
         get isOpen() { return state.open; }
     };
     window.__MF_SkinEditor = true;

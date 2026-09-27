@@ -1,11 +1,3 @@
-// EMFExpr.js - Intérprete de fórmulas EMF (Entity Model Features) portado a JS.
-// Fidelidad al MathExpressionParser de EMF (Java):
-//  - Booleanos: true = +Infinity, false = -Infinity
-//  - && y || con la MISMA precedencia, asociativos a izquierda
-//  - Sin operador ^ (usar pow(a,b))
-//  - Menos unario y "!" prefijo
-//  - if(cond, a, b[, c, d, ...]) evalúa pares condición/valor
-//  - Variables de parte legibles (part.rx) y var.*/varb.*/global_var.*
 
 (function () {
     'use strict';
@@ -16,8 +8,6 @@
     const isBool = (v) => v === TRUE || v === FALSE;
     const toBool = (v) => (isBool(v) ? v === TRUE : v > 0);
     const fromBool = (b) => (b ? TRUE : FALSE);
-
-    // ---------- Tokenizer ----------
     const TWO_CHAR_OPS = ['==', '!=', '<=', '>=', '&&', '||'];
 
     function tokenize(src) {
@@ -47,10 +37,6 @@
         return tokens;
     }
 
-    // ---------- Parser a AST ----------
-    // Precedencia (EMF): && y || igual precedencia; luego == != < > <= >=; luego + -; luego * / %
-    // Menos unario y ! más ligados que * /.
-
     function parseExpression(tokens) {
         let pos = 0;
 
@@ -68,7 +54,7 @@
             if (tk.t === 'num') return { k: 'num', v: tk.v };
             if (tk.t === 'id') {
                 if (peek() && peek().t === 'op' && peek().v === '(') {
-                    next(); // (
+                    next();
                     const args = [];
                     if (peek() && !(peek().t === 'op' && peek().v === ')')) {
                         args.push(parseLogic());
@@ -116,7 +102,6 @@
         }
 
         function parseLogic() {
-            // && y || misma precedencia, asociativos a izquierda (fidelidad EMF)
             let e = parseCompare();
             while (peek() && peek().t === 'op' && (peek().v === '&&' || peek().v === '||')) {
                 const op = next().v;
@@ -129,8 +114,6 @@
         if (pos !== tokens.length) throw new Error('EMF parser: tokens sobrantes');
         return ast;
     }
-
-    // ---------- Compilación a closure (evaluación nativa) ----------
     function compile(src) {
         const clean = String(src).replace(/\s+/g, '');
         const ast = parseExpression(tokenize(clean));
@@ -145,10 +128,6 @@
             case 'not': { const e = buildClosure(ast.e); return (c) => fromBool(!toBool(e(c))); }
             case 'bin': {
                 const a = buildClosure(ast.a), b = buildClosure(ast.b);
-                // Booleanos EMF son ±Infinity SOLO para condiciones. En
-                // aritmética el pack usa "is_on_ground * 1" esperando 1/0
-                // (como EMF Java) → normalizar antes de operar, si no el
-                // resultado es Infinity y la escritura se dropea.
                 const na = (v) => (v === TRUE ? 1 : v === FALSE ? 0 : v);
                 switch (ast.op) {
                     case '+': return (c) => na(a(c)) + na(b(c));
@@ -173,7 +152,6 @@
                 break;
             }
             case 'log': {
-                // EMF: a && b = if bool(a) then b else a; igual para ||
                 const a = buildClosure(ast.a), b = buildClosure(ast.b);
                 if (ast.op === '&&') {
                     return (c) => {
@@ -195,7 +173,6 @@
     function safeMod(a, b) { return b === 0 ? 0 : a % b; }
 
     function makeVarReader(name) {
-        // Resolución diferida: el contexto define cómo leer variables.
         if (name === 'true') return () => TRUE;
         if (name === 'false') return () => FALSE;
         if (name === 'pi') return () => Math.PI;
@@ -204,11 +181,8 @@
             const key = name;
             return (c) => c.readVar(key, 0);
         }
-        // Variable de entorno (limb_swing, head_pitch, is_gliding, ...) o de parte (head.rx)
         return (c) => c.readEnv(name);
     }
-
-    // ---------- Funciones EMF ----------
     function torad(d) { return d * Math.PI / 180; }
     function todeg(r) { return r * 180 / Math.PI; }
     function frac(v) { return v - Math.floor(v); }
@@ -221,7 +195,6 @@
     function between(v, a, b) { return fromBool(v >= a && v <= b); }
     function equals(a, b, eps) { return fromBool(Math.abs(a - b) <= (eps === undefined ? 1e-4 : eps)); }
     function ifFn(...args) {
-        // if(c1, v1, c2, v2, ..., [else]) — devuelve -Infinity si no hay match y no hay else
         let i = 0;
         while (i + 1 < args.length) {
             if (toBool(args[i])) return args[i + 1];
@@ -242,7 +215,6 @@
         pow: Math.pow, fmod: safeMod, frac, signum, torad, todeg,
         max: Math.max, min: Math.min, clamp, lerp,
         random: (seed) => {
-            // random determinista por seed (como EMF usa hash del seed)
             if (seed === undefined) return Math.random();
             let h = 1779033703 ^ Math.floor(seed * 1000);
             for (let j = 0; j < 8; j++) { h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); }
@@ -259,10 +231,7 @@
         raddiff: (a, b) => wraprad(a - b),
         print: (v) => v,
         catch: (v, fallback) => (Number.isFinite(v) ? v : fallback),
-        // nbt: en Miniblox no hay NBT — siempre sin match (false).
-        // Mantiene vivas las líneas de var.laying / var.is_flying etc.
         nbt: () => FALSE,
-        // Curvas y easings (los usados por FA+)
         catmullrom: (p0, p1, p2, p3, t) => {
             const t2 = t * t, t3 = t2 * t;
             return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);

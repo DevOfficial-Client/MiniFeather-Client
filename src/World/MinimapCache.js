@@ -8,17 +8,17 @@
     window.__MF_MINIMAP_CACHE__ = true;
 
     const CONFIG = {
-        
+
         minimapSize: 160,
         minimapMarginRight: 12,
         minimapMarginTop: 12,
-        
+
         moveThreshold: 0.1,
-        
+
         yawThreshold: 0.01,
-        
+
         maxCacheFrames: 60,
-        
+
         requireInGame: true
     };
 
@@ -26,10 +26,10 @@
         enabled: false,
         canvasHud: null,
         ctx: null,
-        
+
         cacheCanvas: null,
         cacheCtx: null,
-        
+
         lastPlayerX: null,
         lastPlayerY: null,
         lastPlayerZ: null,
@@ -37,21 +37,21 @@
         lastDimension: null,
         cacheFrameCount: 0,
         cacheValid: false,
-        
+
         minimapX: 0,
         minimapY: 0,
         minimapW: 0,
         minimapH: 0,
-        
+
         originalFillRect: null,
         originalClearRect: null,
-        
+
         hooked: false,
         suppressingMinimap: false,
-        
+
         cacheHits: 0,
         cacheMisses: 0,
-        
+
         game: null,
         lastGameScan: 0
     };
@@ -88,7 +88,7 @@
     function getSettings() {
         try {
             const obj = window.miniblox || state.game;
-            
+
             if (obj) {
                 let target = obj;
                 for (let i = 0; i < 5; i++) {
@@ -228,14 +228,14 @@
 
         ctx.fillRect = function (x, y, w, h) {
             if (state.enabled && state.cacheValid && state.suppressingMinimap) {
-                
+
                 if (
                     x >= state.minimapX - 2 &&
                     y >= state.minimapY - 2 &&
                     x + w <= state.minimapX + state.minimapW + 2 &&
                     y + h <= state.minimapY + state.minimapH + 2
                 ) {
-                    
+
                     return;
                 }
             }
@@ -292,12 +292,12 @@
         const valid = isCacheValid(game);
 
         if (valid) {
-            
+
             state.suppressingMinimap = true;
             state.cacheFrameCount++;
             state.cacheHits++;
         } else {
-            
+
             state.suppressingMinimap = false;
 
             requestAnimationFrame(() => {
@@ -316,7 +316,7 @@
         state.enabled = next;
 
         if (next) {
-            
+
             state.canvasHud = document.getElementById('canvas-hud');
             if (!state.canvasHud) {
                 console.warn(`${TAG} canvas-hud not found.`);
@@ -346,12 +346,12 @@
     }
 
     function init() {
-        
+
         const stored = localStorage.getItem('miniblox_minimap_cache');
         const shouldEnable = stored !== 'false';
 
         if (shouldEnable) {
-            
+
             const checkInterval = setInterval(() => {
                 const canvas = document.getElementById('canvas-hud');
                 if (canvas) {

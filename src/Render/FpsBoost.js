@@ -1,20 +1,9 @@
-// FpsBoost.js — Ajusta los gráficos NATIVOS del juego para PCs muy
-// limitadas. El bundle (index-BfBcwb2y.js) expone un store reactivo con
-// .value/.onChange por setting (resolution, renderDistance, particles,
-// clouds, shadows, entities...). Sus presets nativos son low/medium/high/
-// ultra/epic; "potato" es un low aún más agresivo (resolución 60%, 2
-// chunks) + snapshot para restaurar exactamente lo que tenías.
 (() => {
   'use strict';
 
   const W = globalThis;
   const EVENT_NAME = 'minifeather:fpsboost-config';
-
-  // Guard de re-inyección: sin esto se acumulan listeners por recarga.
   try { W.__MF_FPSBOOST_SCOPE__?.destroy?.(); } catch (_) {}
-
-  // Claves del store gráfico del juego (bundle: cX/lX) + extras vistos
-  // en el bundle (footstepParticles, acrylicEffect).
   const STORE_KEYS = [
     'resolution', 'renderDistance', 'particles', 'inventoryParticles',
     'lighting', 'dynamicLighting', 'globalIllumination', 'clouds',
@@ -23,11 +12,6 @@
     'volumetricFog', 'emissiveFogGlow', 'motionBlur',
     'footstepParticles', 'acrylicEffect'
   ];
-
-  // Presets nativos del juego (dX en el bundle), con "potato" propio:
-  // low nativo un poco más hundido en resolución (60% vs 75) pero sin
-  // dejar el mundo muerto — se conservan estrellas (coste ~0, son un
-  // solo Points) y unas pocas partículas para feedback de acciones.
   const PRESETS = {
     potato: {
       resolution: 60, renderDistance: 3, particles: 10,
@@ -46,7 +30,7 @@
     level: 'potato',
     game: null,
     store: null,
-    snapshot: null,   // {key: value} original del usuario
+    snapshot: null,
     retryTimer: 0,
     lastGameScan: 0,
     destroyed: false
@@ -81,9 +65,6 @@
 
     return null;
   }
-
-  // BFS acotado (patrón RenderDistanceSystem): busca un objeto que
-  // tenga ≥8 de las claves conocidas del store con reactive .value.
   function findGraphicsStore(game) {
     const roots = [
       game, game?.gameScene, game?.chunkRenderManager,
@@ -144,9 +125,6 @@
       }
     }
   }
-
-  // Aplica (o restaura con null). Reintenta cada 800ms mientras el
-  // juego no exponga el store (menú de carga, cambio de mundo...).
   function apply(levelOrNull) {
     const game = findGame();
     const store = state.store || findGraphicsStore(game);
@@ -162,8 +140,7 @@
     }
 
     if (levelOrNull) {
-      // Snapshot solo la primera vez (para no guardar el propio potato)
-      if (!state.snapshot) state.snapshot = takeSnapshot(store);
+        if (!state.snapshot) state.snapshot = takeSnapshot(store);
       applyToStore(store, PRESETS[levelOrNull] || PRESETS.potato);
     } else if (state.snapshot) {
       applyToStore(store, state.snapshot);
@@ -176,7 +153,7 @@
     if (state.enabled === next) return;
     state.enabled = next;
     if (next) {
-      state.store = null; // re-resolver (el mundo pudo cambiar)
+      state.store = null;
       apply(state.level);
     } else {
       if (state.retryTimer) { clearTimeout(state.retryTimer); state.retryTimer = 0; }
@@ -191,7 +168,7 @@
     }
     if (typeof detail?.level === 'string' && PRESETS[detail.level]) {
       state.level = detail.level;
-      if (state.enabled) apply(state.level); // cambia de preset al vuelo
+      if (state.enabled) apply(state.level);
     }
     setEnabled(!!detail?.enabled);
   }

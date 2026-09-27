@@ -30,15 +30,21 @@
         scanTimer: null,
         loading: null,
         webgl2: null,
-        texFlipY: null,      
-        builtFlipY: null,    
-        texSettings: null,   
+        texFlipY: null,
+
+        builtFlipY: null,
+
+        texSettings: null,
+
         atlasRetryDone: false,
-        reinstallCount: 0,   
+        reinstallCount: 0,
+
         diagLogged: false,
-        lastFrag: null,      
-        lastVert: null,      
-        lastGameUv: null     
+        lastFrag: null,
+
+        lastVert: null,
+
+        lastGameUv: null
     };
 
     function findGame() {
@@ -74,7 +80,7 @@
             visited++;
             if (!obj || seen.has(obj)) continue;
             seen.add(obj);
-            
+
             const mats = Array.isArray(obj.material) ? obj.material : (obj.material ? [obj.material] : null);
             if (mats && mats.some(m => m && m.map)) out.push(obj);
             if (Array.isArray(obj.children)) {
@@ -131,7 +137,7 @@
                     break;
                 }
             }
-            
+
             if (!(window.__MF_GL_CANVASES__ || []).length) state.webgl2 = true;
         } catch (_) {
             state.webgl2 = true;
@@ -185,10 +191,10 @@
             const cv = document.createElement('canvas');
             cv.width = w; cv.height = h;
             const ctx = cv.getContext('2d', { willReadFrequently: true });
-            ctx.drawImage(img, 0, 0);  
+            ctx.drawImage(img, 0, 0);
             let data;
             try { data = ctx.getImageData(0, 0, w, h).data; }
-            catch (_) { return false; }  
+            catch (_) { return false; }
             let other = 0, total = 0;
             const stride = Math.max(1, Math.floor((w * h) / 50000));
             for (let p = 0; p < data.length; p += 4 * stride) {
@@ -200,7 +206,7 @@
                     if (r > 10 || g > 10 || b > 10) other++;
                 }
             }
-            
+
             return total > 0 && (other / total) < 0.0005;
         });
     }
@@ -216,7 +222,7 @@
 
     function grabTexCtor() {
         if (state.TexCtor) return state.TexCtor;
-        
+
         const game = findGame();
         for (const mesh of collectMeshes(getScene(game))) {
             const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -236,7 +242,7 @@
         if (!TexCtor) return null;
         try {
             const tex = new TexCtor(img);
-            
+
             const ts = state.texSettings;
             if (ts) {
                 if (ts.magFilter !== null && ts.magFilter !== undefined) tex.magFilter = ts.magFilter;
@@ -246,8 +252,8 @@
                 tex.generateMipmaps = !!ts.generateMipmaps;
                 if (ts.anisotropy) tex.anisotropy = ts.anisotropy;
             }
-            if (srgb) tex.colorSpace = 'srgb';  
-            
+            if (srgb) tex.colorSpace = 'srgb';
+
             if (state.texFlipY !== null) tex.flipY = state.texFlipY;
             tex.needsUpdate = true;
             state.builtFlipY = tex.flipY;
@@ -261,7 +267,7 @@
         const c = document.createElement('canvas');
         c.width = 1; c.height = 1;
         const ctx = c.getContext('2d');
-        
+
         ctx.fillStyle = kind === 'n' ? 'rgb(128,128,255)' : '#000000';
         ctx.fillRect(0, 0, 1, 1);
         return makeTexture(c, false);
@@ -269,7 +275,7 @@
 
     async function loadAtlases() {
         if (state.loading) return state.loading;
-        
+
         const stale = state.builtFlipY !== null
             && state.texFlipY !== null
             && state.builtFlipY !== state.texFlipY;
@@ -288,7 +294,7 @@
                 state.kinds[kind] = false;
                 const rec = await idbGet('atlas_' + kind);
                 if (rec && rec.dataUrl) {
-                    
+
                     let empty;
                     if (typeof rec.placed === 'number' && rec.placed <= 0) {
                         empty = true;
@@ -312,7 +318,7 @@
                     }
                 }
             }
-            
+
             const missing = ['n', 's', 'e'].filter(k => !state.kinds[k]);
             const reinstallKinds = [...new Set([...emptiedKinds, ...missing])];
             let manual = false;
@@ -347,7 +353,7 @@
     function ensureUniforms() {
         if (state.uniforms) return state.uniforms;
         const dN = makeDummy('n');
-        if (!dN) return null;  
+        if (!dN) return null;
         state.uniforms = {
             uMfPbrN: { value: dN },
             uMfPbrS: { value: makeDummy('s') },
@@ -519,21 +525,18 @@
     }
 
     function hookMaterial(material) {
-        // El agua/lava del modo Realista ya tiene sus propias normales
-        // animadas (FluidShaderPatch) — el PBR encima es costo doble por
-        // fragmento sin ganancia visual (el atlas ni calza con UVs scroll)
         try {
             if (globalThis.MF_RealisticFluid?.isFluidMaterial?.(material)) return false;
         } catch (_) {}
         if (state.hooked.has(material)) {
-            
+
             let chainHasPbr = false;
             try {
                 chainHasPbr = String(material.onBeforeCompile).includes('uMfPbrN');
             } catch (_) { chainHasPbr = false; }
             if (chainHasPbr) return false;
-            state.hooked.delete(material);  
-            
+            state.hooked.delete(material);
+
             delete material.__mfPbrHooked;
             delete material.__mfPbrOriginalOnBeforeCompile;
             delete material.__mfPbrOriginalCacheKey;
@@ -557,14 +560,14 @@
             if (fy !== state.texFlipY) {
                 const hadTextures = state.builtFlipY !== null;
                 state.texFlipY = fy;
-                
+
                 if (hadTextures && state.builtFlipY !== fy) rebuildTextures();
             }
             const tsChanged = JSON.stringify(ts) !== JSON.stringify(state.texSettings);
             if (tsChanged) {
                 const hadTextures = state.builtFlipY !== null;
                 state.texSettings = ts;
-                
+
                 if (hadTextures) rebuildTextures();
             }
         } catch (_) {}
@@ -589,8 +592,8 @@
 
         const wrapper = function (shader) {
             originalOnBeforeCompile(shader);
-            if (!pbrAlive) return; 
-            if (shader.fragmentShader.includes('uMfPbrN')) return; 
+            if (!pbrAlive) return;
+            if (shader.fragmentShader.includes('uMfPbrN')) return;
 
             const u = ensureUniforms();
             if (!u) return;
@@ -609,7 +612,7 @@
                 void 0;
                 state.lastGameUv = gameUvExpr;
             }
-            
+
             const decl = FRAG_UNIFORMS_DECL + VERT_DECL
                 + (gameUvExpr ? '#define MF_PBR_UV ' + gameUvExpr + '\n'
                               : '#define MF_PBR_UV vMfPbrUv\n')
@@ -630,7 +633,7 @@
             );
 
             const okE = frag.includes('uMfPbrE, MF_PBR_UV');
-            
+
             const hasHeldLights = /varying\s+(centroid\s+)?vec3\s+vWorldPos\s*;/.test(frag)
                 && frag.includes('uHeldLightPos')
                 && frag.includes('uHeldLightLevel')
@@ -639,7 +642,7 @@
             if (useNormal) {
                 fb += FRAG_FALLBACK_NORMAL + FRAG_FALLBACK_SPEC_MFN;
             } else {
-                
+
                 fb += FRAG_FALLBACK_SPEC_FLAT;
             }
             if (!okE) fb += FRAG_FALLBACK_EMISSIVE;
@@ -678,13 +681,13 @@
             }
         }
     }
-`;
+    `;
             }
-            
+
             fb += 'gl_FragColor.rgb += vec3(uMfPbrTint, 0.0, 0.0);\n';
-            
+
             fb += 'if (uMfPbrDebug > 0.5) { gl_FragColor.rgb = texture2D(uMfPbrN, MF_PBR_UV).rgb; }\n';
-            
+
             fb += 'if (uMfPbrDebug > 1.5) {\n';
             fb += '  vec3 mfDbgN = texture2D(uMfPbrN, MF_PBR_UV).rgb;\n';
             fb += '  vec2 mfDbgXY = mfDbgN.xy * 2.0 - 1.0;\n';
@@ -694,12 +697,12 @@
             fb += '  float mfDbgLine = (mfDbgGrid.x < 0.03 || mfDbgGrid.y < 0.03) ? 1.0 : 0.0;\n';
             fb += '  gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 0.0, 1.0), mfDbgLine * 0.35);\n';
             fb += '}\n';
-            
+
             fb += 'if (uMfPbrDebug > 2.5) {\n';
             fb += '  float mfDbgRatio = clamp(mfDiffN / max(mfDiffG, 0.05), 0.5, 1.8);\n';
             fb += '  gl_FragColor.rgb = vec3((mfDbgRatio - 0.5) / 1.3);\n';
             fb += '}\n';
-            
+
             fb += 'if (uMfPbrDebug > 3.5) {\n';
             fb += '  vec3 mfDbgN4 = texture2D(uMfPbrN, MF_PBR_UV).rgb;\n';
             fb += '  float mfIsNeutral = (abs(mfDbgN4.x - 0.5) < 0.02 && abs(mfDbgN4.y - 0.5) < 0.02) ? 1.0 : 0.0;\n';
@@ -707,7 +710,7 @@
             fb += '  gl_FragColor.rgb = vec3(1.0 - mfIsNeutral, mfDiff4, floor(MF_PBR_UV.y * 64.0) / 64.0);\n';
             fb += '}\n';
             if (fb) {
-                
+
                 const anchorFog = '#include <fog_fragment>';
                 const anchorTm = '#include <tonemapping_fragment>';
                 let at = -1;
@@ -744,12 +747,12 @@
 
         material.customProgramCacheKey = function () {
             const base = originalCacheKey ? originalCacheKey.call(material) : '';
-            
+
             return 'mfpbr_v18_' + (useNormal ? 'n' : '-') + base;
         };
 
         material.needsUpdate = true;
-        
+
         material.__mfPbrHooked = true;
         material.__mfPbrOriginalOnBeforeCompile = originalOnBeforeCompile;
         material.__mfPbrOriginalCacheKey = originalCacheKey;
@@ -759,7 +762,7 @@
 
     function unhookAll() {
         for (const [material, entry] of state.hooked) {
-            
+
             if (entry.wrapper?.__mfPbrKill) entry.wrapper.__mfPbrKill();
             material.customProgramCacheKey = entry.originalCacheKey;
             material.needsUpdate = true;
@@ -772,9 +775,6 @@
         const scene = getScene(findGame());
         if (!scene) return 0;
         let added = 0;
-        // El engine regenera materiales vanilla en bucle; sin tope, un solo
-        // scan recompila decenas de shaders WebGL de golpe (10-100ms c/u =
-        // hitch visible). Con el cap, el lote se reparte entre scans.
         const MAX_NEW_PER_SCAN = 10;
         for (const mesh of collectMeshes(scene)) {
             const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -797,7 +797,7 @@
         state.scanTimer = setInterval(() => {
             if (state.enabled) {
                 scan();
-                diagScene();  
+                diagScene();
             }
         }, 4000);
     }
@@ -816,7 +816,7 @@
             if (anyKind) {
                 const u = state.uniforms;
                 void 0;
-                
+
                 if (u && u.uMfPbrNormalStr.value <= 0) {
                     console.warn(TAG, 'Fuerza normal=0 — el relieve está',
                         'APAGADO. Ejecuta MF_PBR.resetStrength() para',
@@ -942,7 +942,7 @@
             builtFlipY: state.builtFlipY,
             webgl2: isWebGL2()
         };
-        
+
         if (state.lastFrag) {
             out.lastFragHas = {
                 decl: state.lastFrag.includes('uMfPbrN'),
@@ -951,13 +951,13 @@
                 fallback: state.lastFrag.includes('mfDiffN'),
                 emissive: state.lastFrag.includes('uMfPbrE, MF_PBR_UV'),
                 vertVarying: (state.lastVert || '').includes('vMfPbrUv = uv'),
-                
+
                 gameUv: (state.lastFrag.match(/#define MF_PBR_UV (\w+)/) || [])[1] || null
             };
         } else {
             out.lastFrag = '¡NUNCA se compiló ningún material hookeado — el hook NO corre!';
         }
-        
+
         try {
             const game = findGame();
             const scene = getScene(game);
@@ -983,7 +983,7 @@
             out.gpu = 'error: ' + e.message;
         }
         void 0;
-        
+
         const lf = out.lastFragHas;
         void 0;
         return out;
@@ -998,12 +998,12 @@
             t: u.uMfPbrTint.value
         };
         void 0;
-        u.uMfPbrTint.value = 1.0;  
+        u.uMfPbrTint.value = 1.0;
         u.uMfPbrEmiStr.value = 2.0;
         u.uMfPbrSpecStr.value = 3.0;
         u.uMfPbrNormalStr.value = 3.0;
         u.uMfPbrShiny.value = 4.0;
-        
+
         setTimeout(() => {
             u.uMfPbrTint.value = prev.t;
             u.uMfPbrNormalStr.value = prev.n;
@@ -1015,7 +1015,7 @@
     }
 
     async function atlasStats() {
-        
+
         if (!state.uniforms) {
             await loadAtlases();
             ensureUniforms();
@@ -1043,7 +1043,7 @@
             ctx.drawImage(img, 0, 0);
             const data = ctx.getImageData(0, 0, w, h).data;
             let neutral = 0, colorful = 0, black = 0;
-            const step = Math.max(1, Math.floor(w * h / 20000));  
+            const step = Math.max(1, Math.floor(w * h / 20000));
             let total = 0;
             for (let i = 0; i < data.length; i += 4 * step) {
                 const r = data[i], g = data[i + 1], b = data[i + 2];
@@ -1056,7 +1056,7 @@
                 ...out,
                 size: w + 'x' + h,
                 sampled: total,
-                
+
                 estTiles: Math.round(colorful / 256),
                 neutralPct: Math.round(neutral / total * 100),
                 colorfulPct: Math.round(colorful / total * 100),
@@ -1073,11 +1073,11 @@
             return r;
         }
     }
-    
+
     function showAtlas() {
         const u = ensureUniforms();
         if (!u) return false;
-        
+
         const cur = u.uMfPbrDebug.value;
         const next = cur <= 0.5 ? 1 : (cur <= 1.5 ? 2 : (cur <= 2.5 ? 3 : (cur <= 3.5 ? 4 : 0)));
         u.uMfPbrDebug.value = next;
@@ -1112,7 +1112,7 @@
             const d = ctx.getImageData(col * size, row * size, size, size).data;
             let sum = 0;
             for (let i = 0; i < d.length; i += 4) sum += Math.abs(d[i] - 128) + Math.abs(d[i + 1] - 128) + Math.abs(d[i + 2] - 255);
-            return sum / (size * size);  
+            return sum / (size * size);
         };
         const load = (img) => {
             const cv = document.createElement('canvas');
@@ -1127,7 +1127,7 @@
             const pCtx = load(pbrTex.image);
             const cols = Math.min(gameMap.width, pbrTex.image.width) / size;
             const rows = Math.min(gameMap.height, pbrTex.image.height) / size;
-            
+
             const gameHas = [], pbrHas = [];
             let gameTiles = 0, pbrTiles = 0;
             for (let r = 0; r < rows; r++) {
@@ -1146,7 +1146,7 @@
                     if (pbrHas[r][c]) pbrTiles++;
                 }
             }
-            
+
             const orient = {
                 identidad: (c, r) => [c, r],
                 flipV: (c, r) => [c, rows - 1 - r],
@@ -1214,7 +1214,7 @@
             pbrHooked: !!mat?.__mfPbrHooked,
             csHooked: !!mat?.__mfHooked
         };
-        
+
         try {
             const renderer = game?.renderer || gs?.renderer || game?.scene?.renderer;
             const progs = renderer?.info?.programs;
@@ -1238,7 +1238,7 @@
         } catch (e) {
             res.gpuErr = String(e.message);
         }
-        
+
         const origOBC = mat.onBeforeCompile;
         const origKey = mat.customProgramCacheKey;
         window.__mfTerrainShader = null;
@@ -1257,14 +1257,14 @@
                 window.__mfTerrainFrag = fs;
                 const varys = [...fs.matchAll(/varying\s+vec2\s+(\w+)/g)].map(m => m[1]);
                 const sampler = ((fs.match(/texture2D\(\s*map\s*,\s*([^)]+)\)/) || [])[1] || '?').trim();
-                
+
                 const allMapSamplers = [...fs.matchAll(/texture2D\s*\(\s*map\s*,\s*([A-Za-z_][A-Za-z0-9_]*)/g)].map(m => m[1]);
                 void 0;
-                
+
                 const shFull = window.__mfTerrainShaderFull;
                 if (shFull) {
                     window.__mfTerrainVert = shFull.vertexShader;
-                    
+
                     const lines = shFull.vertexShader.split('\n')
                         .filter(l => /vMapUv|vOverlayUV|vCentroidMapUv|atlasUv|tileUv|uvTransform/.test(l))
                         .map(l => l.trim()).slice(0, 20);
@@ -1273,7 +1273,7 @@
             } else {
                 console.warn(TAG, 'TERRENO ▸ no recompiló en 3s — render pausado');
             }
-            
+
             const fsDump = window.__mfTerrainFrag || window.__mfTerrainShader;
             if (fsDump) {
                 const lightUniforms = [...new Set([...fsDump.matchAll(/uniform\s+(int|float|vec[234]|vec[234]\[\w+\]|mat[34])\s+(\w*[Ll]ight\w*|\w*[Tt]orch\w*|\w*[Gg]low\w*|\w*[Pp]oint\w*)\s*(\[[^\]]*\])?\s*;/g)].map(m => m[0]))];
@@ -1333,7 +1333,7 @@
             const onDone = (ev) => {
                 let detail = null;
                 try { detail = JSON.parse(ev.detail); } catch (_) { detail = ev.detail; }
-                if (detail?.presetId !== id) return;  
+                if (detail?.presetId !== id) return;
                 clearTimeout(timer);
                 document.removeEventListener('minifeather:pbr-preset-result', onDone);
                 resolve(detail);

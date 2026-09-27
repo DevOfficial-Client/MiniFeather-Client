@@ -7,19 +7,19 @@
 
     const FACE = { x: 8, y: 8, w: 8, h: 8 };
     const FACE_OVERLAY = { x: 40, y: 8, w: 8, h: 8 };
-    const TPS = 20; 
+    const TPS = 20;
 
     const FACES_DIR = 'assets/content/minifeather-pack/entity/';
 
     const state = {
         enabled: true,
-        
+
         faceCache: new Map(),
-        
+
         originals: new Map(),
-        
+
         tickTriggers: [],
-        
+
         previewTimer: null
     };
 
@@ -41,7 +41,7 @@
         if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
             return chrome.runtime.getURL(relPath);
         }
-        
+
         const meta = document.querySelector('meta[name="mf-asset-base"]');
         const base = meta?.content;
         if (base) return base.replace(/\/$/, '') + '/' + relPath;
@@ -55,7 +55,7 @@
             ? new Promise((resolve, reject) => {
                 const img = new Image();
                 img.onload = () => {
-                    
+
                     const c = document.createElement('canvas');
                     c.width = FACE.w; c.height = FACE.h;
                     const ctx = c.getContext('2d');
@@ -76,7 +76,7 @@
         if (!tex) return null;
         const img = tex.image;
         if (!img) return null;
-        
+
         if (img instanceof HTMLCanvasElement) return img;
         if ((img instanceof HTMLImageElement) && img.complete && img.naturalWidth) {
             const c = document.createElement('canvas');
@@ -98,12 +98,12 @@
         const cands = [];
         if (Array.isArray(mesh.material)) cands.push(...mesh.material);
         else if (mesh.material) cands.push(mesh.material);
-        
+
         for (const c of (mesh.children || [])) {
             if (Array.isArray(c.material)) cands.push(...c.material);
             else if (c.material) cands.push(c.material);
         }
-        
+
         for (const m of cands) {
             const w = m?.map?.image?.width, h = m?.map?.image?.height;
             if (w === 64 && (h === 64 || h === 32)) return m;
@@ -117,9 +117,9 @@
         const ctx = out.getContext('2d');
         ctx.drawImage(baseCanvas, 0, 0);
         ctx.imageSmoothingEnabled = false;
-        
+
         ctx.drawImage(faceCanvas, FACE.x, FACE.y, FACE.w, FACE.h);
-        
+
         if (opts?.overlay !== false) {
             ctx.drawImage(faceCanvas, FACE_OVERLAY.x, FACE_OVERLAY.y, FACE_OVERLAY.w, FACE_OVERLAY.h);
         }
@@ -163,7 +163,7 @@
                 ctx.drawImage(faceCanvas, FACE_OVERLAY.x, FACE_OVERLAY.y, FACE_OVERLAY.w, FACE_OVERLAY.h);
             }
             tex.needsUpdate = true;
-            emitLookFace(faceName); 
+            emitLookFace(faceName);
             return { ok: true, face: faceName, mode: 'direct' };
         }
 
@@ -179,13 +179,13 @@
 
         mat.map = newTex;
         mat.needsUpdate = true;
-        emitLookFace(faceName); 
+        emitLookFace(faceName);
         return { ok: true, face: faceName, mode: 'newtex' };
     }
 
     function emitLookFace(faceName) {
         try {
-            
+
             Promise.resolve(loadExternalFace(faceName) || loadFaceImage(faceName)).then(c => {
                 if (!c) return;
                 window.MF_Peer?.sendLook?.({ a: 'face', name: faceName, dataURL: c.toDataURL() });
@@ -202,7 +202,7 @@
         const mat = findSkinMaterial(mesh);
         if (mat) {
             if (saved.canvas && mat.map?.image instanceof HTMLCanvasElement) {
-                
+
                 const ctx = mat.map.image.getContext('2d');
                 ctx.clearRect(0, 0, mat.map.image.width, mat.map.image.height);
                 ctx.imageSmoothingEnabled = false;
@@ -214,7 +214,7 @@
             }
         }
         state.originals.delete(mesh);
-        
+
         try { window.MF_Peer?.sendLook?.({ a: 'revert', what: 'face' }); } catch {}
         return { ok: true };
     }
@@ -228,7 +228,7 @@
     }
 
     function applyAtTick(tick, name, type, durationTicks) {
-        const dur = Math.max(1, Math.round(durationTicks || TPS)); 
+        const dur = Math.max(1, Math.round(durationTicks || TPS));
         state.tickTriggers.push({
             tick: Math.max(0, Math.round(tick)),
             face: name,
@@ -238,7 +238,7 @@
             expired: false
         });
         state.tickTriggers.sort((a, b) => a.tick - b.tick);
-        
+
         resolveOverlaps();
         return { ok: true, total: state.tickTriggers.length };
     }
@@ -255,17 +255,17 @@
     }
     function onTick(tick) {
         for (const t of state.tickTriggers) {
-            
+
             if (!t.done && tick >= t.tick) {
                 t.done = true;
                 if (t.type === 'head') {
                     window.MF_SkinEditor?.applyPreset?.(t.face);
                 } else if (t.type === 'skin') {
-                    
+
                     window.MF_SkinChanger?.apply?.(t.face.replace(/^skin_/, ''))
                         .catch(e => console.warn(TAG + ' trigger skin tick ' + t.tick + ' fallo: ' + e.message));
                 } else if (t.type === 'morph') {
-                    
+
                     try {
                         window.MF_Morph?.apply?.(t.face.replace(/^morph_/, ''));
                     } catch (e) {
@@ -275,7 +275,7 @@
                     applyFace(t.face).catch(e => console.warn(TAG + ' trigger tick ' + t.tick + ' fallo: ' + e.message));
                 }
             }
-            
+
             if (t.done && t.expired == null && t.durationTicks != null && tick > t.tick + t.durationTicks) {
                 t.expired = true;
                 if (t.type === 'head') {
@@ -351,7 +351,7 @@
         for (const id in SOURCES_DIR) {
             for (const f of SOURCES_DIR[id]) {
                 if (f.name === name) {
-                    
+
                     return loadImageFromURL(f.dataURL).then(img => {
                         const r = f.region || FACE;
                         const c = document.createElement('canvas');
@@ -396,10 +396,10 @@
         clearTickTriggers,
         registerSource,
         listSources,
-        
+
         loadFaceCanvas(name) { return loadExternalFace(name) || loadFaceImage(name); },
         get triggers() { return state.tickTriggers; },
-        
+
         FACE_REGION: FACE,
         FACE_OVERLAY_REGION: FACE_OVERLAY,
         FACES_DIR

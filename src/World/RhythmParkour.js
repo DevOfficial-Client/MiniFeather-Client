@@ -14,10 +14,10 @@ function onLanguageConfig(event) {
     if (data?.strings && typeof data.strings === 'object') mfStrings = data.strings;
     if (state?.enabled && state.ui) createUI();
   } catch (_) {}
-}
-document.addEventListener(EVENT_LANGUAGE, onLanguageConfig);
+  }
+  document.addEventListener(EVENT_LANGUAGE, onLanguageConfig);
 
-const state = {
+  const state = {
   enabled: false,
   game: null,
   world: null,
@@ -28,7 +28,8 @@ const state = {
   beats: [],
   beatCount: 0,
   currentBeat: 0,
-  obstacles: [],      
+  obstacles: [],
+
   nextObstacleId: 0,
   isPlaying: false,
   score: 0,
@@ -47,19 +48,20 @@ const state = {
   lastStateSync: 0,
   lastCollisionCheck: 0,
   chatHooked: false
-};
+      };
 
-const config = {
+      const config = {
   spawnArea: {
     minX: -400, minY: 11, minZ: -441,
     maxX: -348, maxY: 14, maxZ: -425
   },
   playerX: -353,
   travelTime: 4.0
-};
+      };
 
-const blockStateCache = new Map();   
-const blockNameCache = {
+      const blockStateCache = new Map();
+
+      const blockNameCache = {
   stone: 'stone', dirt: 'dirt', cobblestone: 'cobblestone',
   oak_planks: 'oak_planks', bricks: 'bricks',
   white_wool: 'white_wool', orange_wool: 'orange_wool', magenta_wool: 'magenta_wool',
@@ -67,9 +69,9 @@ const blockNameCache = {
   pink_wool: 'pink_wool', gray_wool: 'gray_wool', light_gray_wool: 'light_gray_wool',
   cyan_wool: 'cyan_wool', purple_wool: 'purple_wool', blue_wool: 'blue_wool',
   brown_wool: 'brown_wool', green_wool: 'green_wool', red_wool: 'red_wool', black_wool: 'black_wool'
-};
+      };
 
-class MFBlockPos {
+      class MFBlockPos {
   constructor(x, y, z) {
     this.x = Math.floor(x);
     this.y = Math.floor(y);
@@ -78,9 +80,9 @@ class MFBlockPos {
   getX() { return this.x; }
   getY() { return this.y; }
   getZ() { return this.z; }
-}
+  }
 
-function getGame(force = false) {
+  function getGame(force = false) {
   if (globalThis.miniblox?.player && globalThis.miniblox?.world) {
     return globalThis.miniblox;
   }
@@ -99,9 +101,9 @@ function getGame(force = false) {
     }
   } catch {}
   return state.game?.player && state.game?.world ? state.game : null;
-}
+  }
 
-function getBlockState(blockName) {
+  function getBlockState(blockName) {
   const cached = blockStateCache.get(blockName);
   if (cached) return cached;
   const B = window.Blocks || globalThis.Blocks;
@@ -114,18 +116,18 @@ function getBlockState(blockName) {
       blk = k ? B[k] : null;
     } catch { blk = null; }
   }
-  
+
   if (!blk && blockName === 'air') return null;
   if (!blk) blk = B?.stone || null;
   if (!blk) return null;
   const blockState = blk.defaultState || (typeof blk.getDefaultState === 'function' ? blk.getDefaultState() : null);
   if (blockState) blockStateCache.set(blockName, blockState);
   return blockState;
-}
+  }
 
-function setBlockRaw(x, y, z, blockState) {
+  function setBlockRaw(x, y, z, blockState) {
   if (!blockState) return;
-  
+
   let w = state.world;
   if (!w || typeof w.setBlockState !== 'function') {
     const g = getGame();
@@ -136,17 +138,17 @@ function setBlockRaw(x, y, z, blockState) {
   try {
     w.setBlockState(new MFBlockPos(x, y, z), blockState, 3);
   } catch (e) {
-    
+
     if (!setBlockRaw.__warned) {
       setBlockRaw.__warned = true;
       console.warn('[MiniFeather RhythmParkour] setBlockState falló:', e);
     }
   }
-}
+  }
 
-function clearBlock(x, y, z) { setBlockRaw(x, y, z, getBlockState('air')); }
+  function clearBlock(x, y, z) { setBlockRaw(x, y, z, getBlockState('air')); }
 
-async function loadAudioFile(file) {
+  async function loadAudioFile(file) {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const ab = await file.arrayBuffer();
@@ -234,9 +236,9 @@ async function loadAudioFile(file) {
     showNotification(tr('rhythmAudioLoadError', '❌ Error loading audio'), 'error');
     return false;
   }
-}
+  }
 
-function generateObstacle(beat) {
+  function generateObstacle(beat) {
   const id = state.nextObstacleId++;
   const spawnX = config.spawnArea.minX;
   const endX = config.spawnArea.maxX;
@@ -265,7 +267,7 @@ function generateObstacle(beat) {
 
   switch (pattern) {
     case 'duck_with_jump_base': {
-      
+
       const gapOnLeft = Math.random() < 0.5;
       const gapStart = gapOnLeft ? zStart : zEnd - 2;
       const gapEnd = gapOnLeft ? zStart + 2 : zEnd;
@@ -281,7 +283,7 @@ function generateObstacle(beat) {
       for (let z = zStart; z <= zEnd; z++) cells.push([0, 0, z - zStart]);
       break;
     case 'jump_high_wall': {
-      
+
       const totalWidth = zEnd - zStart;
       for (let dy = 0; dy < 2; dy++) {
         for (let z = zStart; z <= zEnd; z++) {
@@ -293,7 +295,7 @@ function generateObstacle(beat) {
       break;
     }
     case 'double_wall': {
-      
+
       const zRange = zEnd - zStart;
       const gapSize = Math.floor(zRange / 3);
       const gapStart = zStart + Math.floor(gapSize);
@@ -312,7 +314,7 @@ function generateObstacle(beat) {
           cells.push([dx, 0, z - zStart]);
       break;
     case 'platform_with_base': {
-      
+
       const platformIsLeft = Math.random() < 0.5;
       const pzc = Math.floor(platformIsLeft ? (zStart + centerZ) / 2 : (centerZ + zEnd) / 2);
       const baseDz = pzc - zStart;
@@ -324,11 +326,11 @@ function generateObstacle(beat) {
           cells.push([dx, 0, baseDz + dz, blockType]);
       break;
     }
-    case 'gap': break; 
+    case 'gap': break;
     default: cells.push([0, 0, Math.floor(centerZ - zStart)]);
   }
 
-  if (!cells.length) return; 
+  if (!cells.length) return;
 
   const obstacle = {
     id,
@@ -352,9 +354,9 @@ function generateObstacle(beat) {
 
   state.obstacles.push(obstacle);
   placeObstacle(obstacle);
-}
+  }
 
-function placeObstacle(obs) {
+  function placeObstacle(obs) {
   const baseState = getBlockState(obs.type);
   if (!baseState) return;
   for (const [dx, dy, dz, typeOverride] of obs.cells) {
@@ -362,24 +364,24 @@ function placeObstacle(obs) {
     if (st) setBlockRaw(obs.x + dx, obs.y + dy, obs.z + dz, st);
   }
   obs.prevCellX = obs.x;
-}
+  }
 
-function clearObstacleAt(obs, cellX) {
+  function clearObstacleAt(obs, cellX) {
   for (const [dx, dy, dz] of obs.cells) {
     clearBlock(cellX + dx, obs.y + dy, obs.z + dz);
   }
-}
+  }
 
-function gameLoop(timestamp) {
+  function gameLoop(timestamp) {
   if (!state.isPlaying) return;
   const now = timestamp || performance.now();
   const deltaTime = state.lastFrameTime ? (now - state.lastFrameTime) / 1000 : 0.016;
   state.lastFrameTime = now;
   updateRhythmGame(deltaTime, now);
   state.gameLoopId = requestAnimationFrame(gameLoop);
-}
+  }
 
-function updateRhythmGame(deltaTime, now) {
+  function updateRhythmGame(deltaTime, now) {
   if (!state.obstacles.length) return;
 
   let hasFinished = false;
@@ -424,9 +426,9 @@ function updateRhythmGame(deltaTime, now) {
   }
 
   if (p2pManager?.connections?.length > 0) p2pManager.syncGameState();
-}
+  }
 
-function obstacleHasCellNear(obs, px, py, pz, yTol = 1, zTol = 1) {
+  function obstacleHasCellNear(obs, px, py, pz, yTol = 1, zTol = 1) {
   for (const [dx, dy, dz] of obs.cells) {
     const cx = obs.x + dx;
     if (Math.abs(px - cx) > 1) continue;
@@ -436,9 +438,9 @@ function obstacleHasCellNear(obs, px, py, pz, yTol = 1, zTol = 1) {
     if (Math.abs(pz - cz) <= zTol) return true;
   }
   return false;
-}
+  }
 
-function checkIfPlayerPassed(obs) {
+  function checkIfPlayerPassed(obs) {
   const p = state.game?.player;
   if (!p) return true;
   const pX = Math.floor(p.position?.x ?? 0);
@@ -449,13 +451,13 @@ function checkIfPlayerPassed(obs) {
   const oX = obs.x;
 
   if (obs.type === 'cyan_wool') return (pY - oY) >= 2 || Math.abs(pZ - oZ) > 5 || pX > oX;
-  
+
   if (obs.type === 'yellow_wool' || obs.type === 'oak_slab')
     return (pY - oY) <= 0 || Math.abs(pZ - oZ) > 5 || pX > oX;
   return true;
-}
+  }
 
-function checkPlayerCollisions() {
+  function checkPlayerCollisions() {
   const p = state.game?.player;
   if (!p) return;
   const pX = Math.floor(p.position?.x ?? 0);
@@ -471,13 +473,13 @@ function checkPlayerCollisions() {
       state.combo = 0;
       showNotification(tr('rhythmOuchHeart', '💥 Ouch! -1 heart'), 'error');
       showHitMessage('miss');
-      
+
       if (p2pManager?.gameMode === 'cooperative') p2pManager.notifyHit(2);
     }
   }
-}
+  }
 
-function applyDamage(damage) {
+  function applyDamage(damage) {
   try {
     const p = state.game?.player;
     if (!p) return;
@@ -489,13 +491,14 @@ function applyDamage(damage) {
     } else if (typeof p.hurt === 'function') {
       p.hurt(damage);
     } else if (typeof p.damage === 'function') {
-      p.damage(damage);   
+      p.damage(damage);
+
     }
     state.health = Math.max(0, state.health - 1);
   } catch {}
-}
+  }
 
-function startGame() {
+  function startGame() {
   if (!state.currentSong || !state.beats.length) { showNotification(tr('rhythmLoadSongFirst', '❌ Load a song first (/rp load)'), 'error'); return false; }
   if (state.isPlaying) { showNotification(tr('rhythmAlreadyRunning', '⚠ Game already in progress'), 'info'); return false; }
 
@@ -540,9 +543,9 @@ function startGame() {
   showNotification(tr('rhythmGameStartedCount', '🎮 Game started! {count} obstacles').replace('{count}', state.beats.length), 'success');
   dispatchState();
   return true;
-}
+  }
 
-function stopGame() {
+  function stopGame() {
   if (state.audioSource) { try { state.audioSource.stop(); } catch {} state.audioSource = null; }
   if (state.beatInterval) { clearInterval(state.beatInterval); state.beatInterval = null; }
   if (state.gameLoopId) { cancelAnimationFrame(state.gameLoopId); state.gameLoopId = null; }
@@ -552,20 +555,20 @@ function stopGame() {
   state.lastFrameTime = null;
   if (p2pManager?.gameState?.isPlaying) p2pManager.endGame();
   dispatchState();
-}
+  }
 
-function removeAllObstacles() {
+  function removeAllObstacles() {
   for (const obs of state.obstacles) {
     clearObstacleAt(obs, obs.prevCellX);
   }
   state.obstacles = [];
-}
+  }
 
-function statusText() {
+  function statusText() {
   return `Jugando: ${state.isPlaying} | Score: ${state.score} | Combo: ${state.combo} | Vidas: ${state.health} | Beat: ${state.currentBeat}/${state.beatCount} | BPM: ${state.detectedBPM}`;
-}
+  }
 
-function debugInfo() {
+  function debugInfo() {
   const g = state.game;
   void 0;
   void 0;
@@ -575,10 +578,10 @@ function debugInfo() {
   void 0;
   void 0;
   showNotification(tr('rhythmDebugDone', 'Debug complete — check console (F12)'), 'info');
-}
+  }
 
-function triggerSongPicker() {
-  
+  function triggerSongPicker() {
+
   const existing = document.getElementById('mf-rhythm-file');
   if (existing) { existing.click(); return; }
   const input = document.createElement('input');
@@ -592,9 +595,9 @@ function triggerSongPicker() {
     input.remove();
   };
   input.click();
-}
+  }
 
-function executeCommand(raw) {
+  function executeCommand(raw) {
   const cmd = String(raw || '').trim();
   if (cmd === '/rp start' || cmd === '/rp play') { startGame(); return true; }
   if (cmd === '/rp stop') { stopGame(); showNotification(tr('rhythmGameStopped', '⏹ Game stopped'), 'info'); return true; }
@@ -606,9 +609,9 @@ function executeCommand(raw) {
     return true;
   }
   return false;
-}
+  }
 
-function installChatCommands() {
+  function installChatCommands() {
   if (state.chatHooked) return;
   state.chatHooked = true;
   document.addEventListener('keydown', (e) => {
@@ -627,9 +630,9 @@ function installChatCommands() {
       if (el.isContentEditable) el.textContent = '';
     }
   }, true);
-}
+  }
 
-class P2PManager {
+  class P2PManager {
   constructor() {
     this.connections = [];
     this.isHost = false;
@@ -1017,15 +1020,15 @@ class P2PManager {
     showNotification(tr('rhythmDisconnectedNotice', '👋 Disconnected'), 'info');
     updateP2PRoomUI();
   }
-}
+  }
 
-let p2pManager = null;
-function ensureP2P() {
+  let p2pManager = null;
+  function ensureP2P() {
   if (!p2pManager) p2pManager = new P2PManager();
   return p2pManager;
-}
+  }
 
-function getP2PPanelHtml() {
+  function getP2PPanelHtml() {
   const m = p2pManager;
   return `
     <div id="mf-rhythm-p2p" style="display:none;margin-top:10px;border-top:1px solid #7c5cff;padding-top:8px;">
@@ -1056,9 +1059,9 @@ function getP2PPanelHtml() {
       </div>
     </div>
   `;
-}
+  }
 
-function updateP2PRoomUI() {
+  function updateP2PRoomUI() {
   const ui = state.ui;
   if (!ui) return;
   const m = p2pManager;
@@ -1104,9 +1107,9 @@ function updateP2PRoomUI() {
     if (listEl) listEl.innerHTML = '';
     if (countEl) countEl.textContent = '';
   }
-}
+  }
 
-function bindP2PControls(container) {
+  function bindP2PControls(container) {
   const m = ensureP2P();
 
   container.querySelector('#mf-rhythm-p2p-name')?.addEventListener('change', (e) => {
@@ -1138,9 +1141,9 @@ function bindP2PControls(container) {
       }).catch(() => {});
     }
   });
-}
+  }
 
-function dispatchState() {
+  function dispatchState() {
   updateHud();
   document.dispatchEvent(new CustomEvent(EVENT_STATE, {
     detail: JSON.stringify({
@@ -1155,9 +1158,9 @@ function dispatchState() {
       hasSong: !!state.currentSong
     })
   }));
-}
+  }
 
-function createUI() {
+  function createUI() {
   removeUI();
   ensureP2P();
   const container = document.createElement('div');
@@ -1200,9 +1203,9 @@ function createUI() {
   bindP2PControls(container);
   updateHud();
   updateP2PRoomUI();
-}
+  }
 
-function updateHud() {
+  function updateHud() {
   if (!state.ui) return;
   const hud = state.ui.querySelector('#mf-rhythm-hud');
   if (!hud) return;
@@ -1216,23 +1219,23 @@ function updateHud() {
     <div>${tr('rhythmLives', 'Lives')}: ${'❤️'.repeat(state.health)}${'🖤'.repeat(Math.max(0, 5 - state.health))}</div>
     <div>${tr('rhythmBeat', 'Beat')}: ${state.currentBeat}/${state.beatCount} | BPM: ${state.detectedBPM}</div>
   `;
-}
+  }
 
-function removeUI() {
+  function removeUI() {
   document.getElementById('mf-rhythm-ui')?.remove();
   state.ui = null;
-}
+  }
 
-function showNotification(msg, type = 'info') {
+  function showNotification(msg, type = 'info') {
   const colors = { success: '#4ade80', error: '#ef4444', info: '#7c5cff' };
   const n = document.createElement('div');
   n.style.cssText = `position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;background:rgba(15,15,20,0.95);border:2px solid ${colors[type] || colors.info};border-radius:8px;padding:12px 20px;font-family:monospace;font-size:14px;color:${colors[type] || colors.info};white-space:pre-line;text-align:center;pointer-events:none;`;
   n.textContent = msg;
   document.body.appendChild(n);
   setTimeout(() => n.remove(), 3000);
-}
+  }
 
-function showHitMessage(kind) {
+  function showHitMessage(kind) {
   const isGood = kind === 'good';
   const msg = document.createElement('div');
   msg.textContent = isGood ? tr('rhythmGood', '✔ Good!') : tr('rhythmMiss', '✘ Miss!');
@@ -1243,16 +1246,16 @@ function showHitMessage(kind) {
     msg.style.transform = 'translateX(-50%) translateY(-40px)';
   });
   setTimeout(() => msg.remove(), 650);
-}
+  }
 
-function enable() {
+  function enable() {
   state.enabled = true;
   const g = getGame(true);
   state.game = g || null;
   state.world = g?.world || null;
   installChatCommands();
   createUI();
-  
+
   if (!state.world) {
     const finder = setInterval(() => {
       if (!state.enabled) { clearInterval(finder); return; }
@@ -1266,31 +1269,31 @@ function enable() {
     setTimeout(() => clearInterval(finder), 120000);
   }
   dispatchState();
-}
+  }
 
-function disable() {
+  function disable() {
   if (state.isPlaying) stopGame();
   state.enabled = false;
   p2pManager?.disconnect?.();
   removeUI();
-}
+  }
 
-document.addEventListener(EVENT_CONFIG, (e) => {
+  document.addEventListener(EVENT_CONFIG, (e) => {
   try {
     const cfg = JSON.parse(e.detail || '{}');
     if (cfg.enabled === true) enable();
     else if (cfg.enabled === false) disable();
   } catch {}
-});
+  });
 
-window.MF_RhythmParkour = {
+  window.MF_RhythmParkour = {
   enable, disable,
   start: startGame, stop: stopGame,
   loadFile: (f) => loadAudioFile(f),
   status: statusText,
   command: executeCommand,
   p2p: () => ensureP2P()
-};
+  };
 
 void 0;
 })();

@@ -29,13 +29,13 @@ function normalize(entry) {
     statusKey: entry.statusKey == null ? '' : String(entry.statusKey),
     order: Number.isFinite(Number(entry.order)) ? Number(entry.order) : 100
   });
-}
+  }
 
-function emitChanged() {
+  function emitChanged() {
   try { window.dispatchEvent(new CustomEvent('minifeather:experimental-registry-changed')); } catch (_) {}
-}
+  }
 
-const api = Object.freeze({
+  const api = Object.freeze({
   register(entry) {
     const normalized = normalize(entry);
     if (!normalized) return false;
@@ -54,11 +54,11 @@ const api = Object.freeze({
   list() {
     return Array.from(experiments.values()).sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
   }
-});
+  });
 
-globalThis.MF_ExperimentalRegistry = api;
+  globalThis.MF_ExperimentalRegistry = api;
 
-api.register({
+  api.register({
   id: 'realistic-mode',
   settingsKey: 'experimentalRealistic',
   levelKey: 'experimentalRealisticLevel',
@@ -76,9 +76,9 @@ api.register({
   icon: '🌤️',
   badge: 'EXPERIMENTAL',
   order: 5
-});
+      });
 
-api.register({
+      api.register({
   id: 'aurora-borealis',
   settingsKey: 'experimentalAurora',
   levelKey: 'experimentalAuroraLevel',
@@ -94,9 +94,9 @@ api.register({
   icon: '🌌',
   badge: 'EXPERIMENTAL',
   order: 10
-});
+      });
 
-api.register({
+      api.register({
   id: 'constellations',
   settingsKey: 'experimentalConstellations',
   levelKey: 'experimentalConstellationsLevel',
@@ -112,9 +112,9 @@ api.register({
   icon: '⭐',
   badge: 'EXPERIMENTAL',
   order: 12
-});
+      });
 
-api.register({
+      api.register({
   id: 'interactive-vegetation',
   settingsKey: 'experimentalInteractiveVegetation',
   levelKey: 'experimentalInteractiveVegetationLevel',
@@ -131,9 +131,9 @@ api.register({
   icon: '🌾',
   badge: 'EXPERIMENTAL',
   order: 18
-});
+      });
 
-api.register({
+      api.register({
   id: 'natural-grass-details',
   settingsKey: 'experimentalGrassFlowers',
   title: 'Natural Grass Details',
@@ -142,9 +142,9 @@ api.register({
   icon: '🌼',
   badge: 'EXPERIMENTAL',
   order: 20
-});
+      });
 
-api.register({
+      api.register({
   id: 'fallen-leaves',
   settingsKey: 'experimentalFallenLeaves',
   title: 'Fallen Leaves',
@@ -153,9 +153,9 @@ api.register({
   icon: '🍂',
   badge: 'EXPERIMENTAL',
   order: 20
-});
+      });
 
-api.register({
+      api.register({
   id: 'better-animation-cape',
   settingsKey: 'experimentalBetterAnimationCape',
   title: 'Better Animation Cape',
@@ -164,9 +164,9 @@ api.register({
   icon: '🧥',
   badge: 'EXPERIMENTAL',
   order: 25
-});
+      });
 
-api.register({
+      api.register({
   id: 'tiny-takeover',
   settingsKey: 'experimentalTinyTakeover',
   title: 'Tiny Takeover Babies',
@@ -175,9 +175,9 @@ api.register({
   icon: '🐺',
   badge: 'EXPERIMENTAL',
   order: 27
-});
+      });
 
-api.register({
+      api.register({
   id: 'animated-items',
   settingsKey: 'experimentalAnimatedItems',
   title: 'Animated Items',
@@ -186,9 +186,9 @@ api.register({
   icon: '✨',
   badge: 'EXPERIMENTAL',
   order: 30
-});
+      });
 
-api.register({
+      api.register({
   id: 'pbr-textures',
   settingsKey: 'experimentalPbr',
   title: 'PBR Textures',

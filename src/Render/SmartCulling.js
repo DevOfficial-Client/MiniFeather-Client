@@ -1,19 +1,3 @@
-// SmartCulling.js — Elimina el trabajo de matrices de chunks estáticos.
-//
-// Qué ya hace el juego (verificado en el bundle BfBcwb2y):
-//  - Chunks: frustum culling nativo (computeBoundingSphere + default) →
-//    lo que no está en cámara NO se dibuja.
-//  - Entidades: LOD en 2 niveles (fastLOD por distancia; lodFar oculta
-//    el cuerpo y deja solo nametag).
-//  - Nubes/atmósfera/estrellas: frustumCulled=false intencional (son
-//    shells centrados en el jugador; cullarlas haría desaparecer el cielo).
-//
-// Lo que queda desperdiciado: cada mesh de chunk (miles con render
-// distance alto) paga compose+multiply de matrix cada frame en
-// updateMatrixWorld, aunque NUNCA se mueva. Aquí los congelamos
-// (matrixAutoUpdate=false) y vigilamos defensivamente: si el juego
-// reposiciona o re-parenta un mesh congelado, se descongela, se deja
-// recomponer 1 frame y se vuelve a congelar.
 (() => {
   'use strict';
 
@@ -25,7 +9,7 @@
 
   const state = {
     timer: 0,
-    frozen: new WeakMap(), // mesh → {x, y, z, parent}
+    frozen: new WeakMap(),
     frozenCount: 0,
     destroyed: false
   };
@@ -50,7 +34,6 @@
 
   function freeze(mesh) {
     mesh.matrixAutoUpdate = false;
-    // matrix ya compuesta por el juego en el frame anterior: se conserva
     state.frozen.set(mesh, {
       x: mesh.position.x,
       y: mesh.position.y,
@@ -78,15 +61,9 @@
 
       const snap = state.frozen.get(mesh);
       if (!snap) {
-        // Solo meshes quietos: congelar en el segundo sweep tras verlos
-        // estables (el primer sighting registra candidato implícitamente
-        // al congelar directo: los chunks se posicionan al crearse y no
-        // se mueven; el check defensivo cubre cualquier excepción).
         freeze(mesh);
         continue;
       }
-
-      // Defensa: ¿el juego movió o re-parentó el mesh? → descongelar
       if (
         snap.parent !== mesh.parent ||
         snap.x !== mesh.position.x ||
@@ -111,7 +88,6 @@
     destroy() {
       state.destroyed = true;
       clearInterval(state.timer);
-      // Descongelar todo lo vivo que siga en la escena
       try {
         const gs = findGameScene();
         for (const mesh of gs?.chunkMeshes?.children || []) {

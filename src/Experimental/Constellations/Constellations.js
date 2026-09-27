@@ -9,13 +9,13 @@
   const state = {
     enabled: false,
     game: null,
-    starfield: null,   // Points nativo del juego: fuente de pos/rotación/noche
-    points: null,      // estrellas de las constelaciones (brillantes, tintadas)
-    lines: null,       // LineSegments que conectan las figuras
-    meteors: [],       // pool de estrellas fugaces
-    radius: 0,         // radio del shell celeste (sunDist+1)
-    nextMeteorAt: 0,   // timestamp del próximo spawn
-    lastTickAt: 0,     // para dt de los meteoros
+    starfield: null,
+    points: null,
+    lines: null,
+    meteors: [],
+    radius: 0,
+    nextMeteorAt: 0,
+    lastTickAt: 0,
     raf: 0,
     lastGameScan: 0,
     lastWeatherScan: 0,
@@ -23,19 +23,11 @@
     level: 'medium',
     destroyed: false
   };
-
-  // Brillo/grosor por nivel (low = sutil, high = bien marcado).
-  // px = tamaño en píxeles de pantalla (sizeAttenuation OFF): con FOV
-  // alto las estrellas no se deforman ni engordan en los bordes.
-  // meteorMax/meteorGap = máx. fugaces simultáneas y segundos entre spawns.
   const LEVELS = {
     low: { line: 0.20, star: 0.85, px: 4.0, meteorMax: 1, meteorGap: [10, 22] },
     medium: { line: 0.32, star: 1.00, px: 5.5, meteorMax: 2, meteorGap: [5, 14] },
     high: { line: 0.46, star: 1.00, px: 7.0, meteorMax: 3, meteorGap: [3, 10] }
   };
-
-  // ── Datos reales (J2000): [RA en horas, Dec en grados, tinte] ──
-  // Tintes: 0 azul-blanco · 1 blanco · 2 amarillo · 3 naranja · 4 rojo
   const TINTS = [
     [0.68, 0.78, 1.00],
     [1.00, 1.00, 1.00],
@@ -45,117 +37,106 @@
   ];
 
   const DATA = {
-    // El cazador: hombros (Betelgeuse/Bellatrix), cinturón, pies (Saiph/Rigel)
-    orion: {
+      orion: {
       stars: [
-        [5.919, 7.407, 4],   // Betelgeuse (roja)
-        [5.418, 6.350, 0],   // Bellatrix
-        [5.679, -1.943, 0],  // Alnitak
-        [5.604, -1.202, 0],  // Alnilam
-        [5.533, -0.299, 0],  // Mintaka
-        [5.796, -9.670, 0],  // Saiph
-        [5.242, -8.202, 0]   // Rigel (azul)
+        [5.919, 7.407, 4],
+        [5.418, 6.350, 0],
+        [5.679, -1.943, 0],
+        [5.604, -1.202, 0],
+        [5.533, -0.299, 0],
+        [5.796, -9.670, 0],
+        [5.242, -8.202, 0]
       ],
       lines: [[0, 1], [0, 2], [1, 4], [2, 3], [3, 4], [2, 5], [4, 6]]
     },
-    // El carro (Big Dipper): bol + mango
     ursaMajor: {
       stars: [
-        [11.062, 61.751, 2], // Dubhe
-        [11.031, 56.382, 1], // Merak
-        [11.897, 53.695, 1], // Phecda
-        [12.257, 57.033, 1], // Megrez
-        [12.900, 55.960, 1], // Alioth
-        [13.399, 54.925, 1], // Mizar
-        [13.792, 49.313, 0]  // Alkaid
+        [11.062, 61.751, 2],
+        [11.031, 56.382, 1],
+        [11.897, 53.695, 1],
+        [12.257, 57.033, 1],
+        [12.900, 55.960, 1],
+        [13.399, 54.925, 1],
+        [13.792, 49.313, 0]
       ],
       lines: [[0, 1], [1, 2], [2, 3], [3, 0], [3, 4], [4, 5], [5, 6]]
     },
-    // La W de casiopea
     cassiopeia: {
       stars: [
-        [0.153, 59.150, 2],  // Caph
-        [0.675, 56.537, 2],  // Schedar
-        [0.945, 60.717, 0],  // Gamma Cas
-        [1.430, 60.235, 0],  // Ruchbah
-        [1.907, 63.670, 1]   // Segin
+        [0.153, 59.150, 2],
+        [0.675, 56.537, 2],
+        [0.945, 60.717, 0],
+        [1.430, 60.235, 0],
+        [1.907, 63.670, 1]
       ],
       lines: [[0, 1], [1, 2], [2, 3], [3, 4]]
     },
-    // La cruz del norte
     cygnus: {
       stars: [
-        [20.690, 45.280, 1], // Deneb
-        [20.370, 40.257, 2], // Sadr
-        [20.770, 33.970, 0], // Gienah
-        [19.749, 45.131, 0], // Delta Cyg
-        [19.512, 27.960, 3]  // Albireo (ámbar)
+        [20.690, 45.280, 1],
+        [20.370, 40.257, 2],
+        [20.770, 33.970, 0],
+        [19.749, 45.131, 0],
+        [19.512, 27.960, 3]
       ],
       lines: [[0, 1], [1, 2], [1, 3], [1, 4]]
     },
-    // El escorpión: cabeza + cola curvada con Antares al centro
     scorpius: {
       stars: [
-        [16.090, -19.805, 0], // Graffias
-        [16.005, -22.622, 0], // Dschubba
-        [15.981, -26.114, 0], // Pi Sco
-        [16.353, -25.593, 0], // Sigma Sco
-        [16.490, -26.432, 4], // Antares (roja)
-        [16.598, -28.216, 0], // Tau Sco
-        [16.836, -34.293, 0], // Epsilon Sco
-        [16.865, -38.017, 0], // Mu Sco
-        [16.911, -42.361, 0], // Zeta Sco
-        [17.202, -43.239, 0], // Eta Sco
-        [17.622, -42.998, 0], // Sargas
-        [17.708, -39.030, 0], // Kappa Sco
-        [17.560, -37.104, 0]  // Shaula (aguijón)
+        [16.090, -19.805, 0],
+        [16.005, -22.622, 0],
+        [15.981, -26.114, 0],
+        [16.353, -25.593, 0],
+        [16.490, -26.432, 4],
+        [16.598, -28.216, 0],
+        [16.836, -34.293, 0],
+        [16.865, -38.017, 0],
+        [16.911, -42.361, 0],
+        [17.202, -43.239, 0],
+        [17.622, -42.998, 0],
+        [17.708, -39.030, 0],
+        [17.560, -37.104, 0]
       ],
       lines: [[0, 1], [1, 2], [1, 3], [3, 4], [4, 5], [5, 6], [6, 7],
               [7, 8], [8, 9], [9, 10], [10, 11], [11, 12]]
     },
-    // La lira de Vega
     lyra: {
       stars: [
-        [18.616, 38.784, 0], // Vega
-        [18.746, 37.605, 1], // Zeta Lyr
-        [18.834, 33.363, 0], // Sheliak
-        [18.982, 32.690, 0], // Sulafat
-        [18.908, 36.899, 4]  // Delta Lyr (roja)
+        [18.616, 38.784, 0],
+        [18.746, 37.605, 1],
+        [18.834, 33.363, 0],
+        [18.982, 32.690, 0],
+        [18.908, 36.899, 4]
       ],
       lines: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 1]]
     },
-    // El león: hoz + cuerpo
     leo: {
       stars: [
-        [10.139, 11.967, 0],  // Regulus
-        [10.122, 16.763, 1],  // Eta Leo
-        [10.333, 19.841, 2],  // Algieba
-        [10.278, 23.417, 1],  // Zeta Leo
-        [9.879, 26.007, 2],   // Mu Leo
-        [9.764, 23.774, 2],   // Epsilon Leo
-        [11.235, 20.524, 1],  // Zosma
-        [11.237, 15.430, 1],  // Chertan
-        [11.818, 14.572, 0]   // Denebola
+        [10.139, 11.967, 0],
+        [10.122, 16.763, 1],
+        [10.333, 19.841, 2],
+        [10.278, 23.417, 1],
+        [9.879, 26.007, 2],
+        [9.764, 23.774, 2],
+        [11.235, 20.524, 1],
+        [11.237, 15.430, 1],
+        [11.818, 14.572, 0]
       ],
       lines: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5],
               [2, 6], [6, 8], [8, 7], [7, 0], [7, 6]]
     },
-    // Cruz del Sur + los punteros de Centaurus
     crux: {
       stars: [
-        [12.443, -63.099, 0],  // Acrux
-        [12.795, -59.689, 0],  // Mimosa
-        [12.519, -57.113, 2],  // Gacrux
-        [12.253, -58.749, 0],  // Delta Cru
-        [14.660, -60.834, 2],  // Rigil Kentaurus
-        [14.064, -60.373, 0]   // Hadar
+        [12.443, -63.099, 0],
+        [12.795, -59.689, 0],
+        [12.519, -57.113, 2],
+        [12.253, -58.749, 0],
+        [14.660, -60.834, 2],
+        [14.064, -60.373, 0]
       ],
       lines: [[0, 2], [1, 3], [4, 5]]
     }
   };
-
-  // RA/Dec → posición en la esfera celeste (vista desde dentro, como
-  // se ve el cielo real parado en la Tierra mirando hacia arriba).
   function raDecToVec(raHours, decDeg, radius) {
     const ra = (raHours * 15) * Math.PI / 180;
     const dec = decDeg * Math.PI / 180;
@@ -204,10 +185,6 @@
   function resolveGameScene(game) {
     return game?.gameScene || game?.player?.game?.gameScene || null;
   }
-
-  // Busca el starfield nativo (Points de 1000 estrellas, size 300) para
-  // heredar su posición/rotación: así las constelaciones giran ancladas
-  // al mismo fondo estelar a lo largo de la noche.
   function findStarfield(gameScene) {
     const children = gameScene?.ambientMeshes?.children;
     if (!Array.isArray(children)) return null;
@@ -227,9 +204,6 @@
   function build(gameScene) {
     const starfield = state.starfield;
     if (!starfield) return false;
-
-    // Clases THREE derivadas de instancias vivas del juego (patrón del
-    // proyecto: nunca asumir el nombre minificado del bundle).
     const PointsClass = starfield.constructor;
     const GeometryClass = starfield.geometry.constructor;
     const AttributeClass = starfield.geometry.attributes.position.constructor;
@@ -242,8 +216,6 @@
       : null;
     const LineBasicMaterialClass = selectBox?.material?.constructor || null;
     if (!LineSegmentsClass || !LineBasicMaterialClass) return false;
-
-    // Mismo shell que las estrellas nativas (sunDist + 1 ≈ 50001).
     const sun = gameScene?.sky?.sun || gameScene?.sun;
     const radius = (sun?.sunDist || 5e4) + 1;
 
@@ -277,9 +249,6 @@
       color: new ColorClass(1, 1, 1),
       vertexColors: true,
       size: L.px,
-      // Tamaño fijo en píxeles de pantalla: sin attenuation el tamaño NO
-      // depende de la profundidad en view-space, que con FOV muy alto
-      // engorda las estrellas de los bordes (1/Z_view se dispara).
       sizeAttenuation: false,
       fog: false,
       depthWrite: false
@@ -300,10 +269,6 @@
 
     gameScene.ambientMeshes.add(state.points);
     gameScene.ambientMeshes.add(state.lines);
-
-    // Pool de estrellas fugaces: rastro = LineSegments aditivo con color
-    // por vértice (el degradado a negro se desvanece solo con additive
-    // blending), cabeza = Points de 1 vértice con brillo fijo en pantalla.
     state.radius = radius;
     state.meteors = [];
     state.nextMeteorAt = performance.now() + 2500 + Math.random() * 4000;
@@ -315,7 +280,7 @@
       const trail = new LineSegmentsClass(trailGeo, new LineBasicMaterialClass({
         vertexColors: true,
         transparent: true,
-        blending: 2, // AdditiveBlending (constante three.js: negro = invisible)
+        blending: 2,
         fog: false,
         depthWrite: false
       }));
@@ -372,20 +337,13 @@
       state.points.material.size = L.px;
     }
   }
-
-  // ── Normalización del starfield nativo ──
-  // El starfield del juego usa sizeAttenuation: con FOV alto sus puntos
-  // también engordan hacia los bordes (gl_PointSize ∝ 1/Z_view). Mientras
-  // este módulo esté activo lo pasamos a tamaño fijo en pantalla (~3px,
-  // el tamaño aparente que tiene al centro de la vista). Se restaura el
-  // material original al desactivar el módulo.
-  const nativeSaved = new Map(); // material nativo → {size, sizeAttenuation}
+  const nativeSaved = new Map();
 
   function normalizeNative(starfield) {
     const m = starfield?.material;
     if (!m || typeof m.size !== 'number') return;
     if (nativeSaved.has(m)) return;
-    if (nativeSaved.size > 8) restoreNatives(); // purga de materiales huérfanos
+    if (nativeSaved.size > 8) restoreNatives();
     nativeSaved.set(m, {
       size: m.size,
       sizeAttenuation: m.sizeAttenuation
@@ -405,25 +363,17 @@
     }
     nativeSaved.clear();
   }
-
-  // ── Estrellas fugaces ──
-  const METEOR_SEGS = 12; // segmentos del rastro (pares de vértices)
+  const METEOR_SEGS = 12;
 
   function spawnMeteor(radius) {
     const m = state.meteors.find(x => !x.active);
     if (!m) return;
-
-    // Punto inicial en la esfera celeste (entre ~10° y ~65° de altura)
     const az = Math.random() * Math.PI * 2;
     const el = 0.18 + Math.random() * 0.95;
     const cel = Math.max(0.05, Math.cos(el));
     const nx = Math.cos(el) * Math.cos(az);
     const ny = Math.sin(el);
     const nz = -Math.cos(el) * Math.sin(az);
-
-    // Base tangente en ese punto: e1 horizontal, e2 "cuesta abajo" por el
-    // meridiano (cross(e1, n) desciende). El rumbo gira ±46° alrededor de
-    // e2 → la mayoría cae en diagonal, algunas casi horizontales.
     const e1x = nz / cel, e1z = -nx / cel;
     const e2x = -e1z * ny;
     const e2y = e1z * nx - e1x * nz;
@@ -435,15 +385,7 @@
     let dz = e2z * cp + e1z * sp;
     const dl = Math.hypot(dx, dy, dz) || 1;
     dx /= dl; dy /= dl; dz /= dl;
-
-    // Cruza 0.25-0.55 rad en su vida (~0.8-1.5s): rápido como las reales
     const speed = radius * (0.35 + Math.random() * 0.4);
-
-    // La posición/rumbo se generaron en espacio MUNDO (elevación real
-    // sobre el horizonte), pero las coords viven en el frame LOCAL del
-    // starfield, que rota alrededor de (1,1,1) durante la noche. Sin
-    // esta transformación, a media noche los spawns caerían bajo el
-    // horizonte y morirían al instante (invisibles).
     let px = nx * radius, py = ny * radius, pz = nz * radius;
     const sf = state.starfield;
     const VC = sf?.position?.constructor;
@@ -464,7 +406,6 @@
       speed,
       life: 0.8 + Math.random() * 0.7,
       t: 0,
-      // Rastro = el último ~25% del recorrido
       spacing: (speed * (0.22 + Math.random() * 0.12)) / METEOR_SEGS
     });
     m.line.visible = true;
@@ -480,8 +421,6 @@
   function updateMeteors(dt, L, night, rain, now) {
     const meteors = state.meteors;
     if (!meteors.length) return;
-
-    // Spawn: solo de noche bien cerrada y sin lluvia
     if (night > 0.15 && rain > 0.25 && now >= state.nextMeteorAt) {
       let count = 0;
       for (const m of meteors) if (m.active) count++;
@@ -493,10 +432,6 @@
     for (const m of meteors) {
       if (!m.active) continue;
       m.t += dt;
-
-      // Kill bajo el horizonte en espacio MUNDO (m.py es local y el
-      // frame rota: local alto ≠ mundo alto). m.line.quaternion ya tiene
-      // la rotación del starfield copiada este frame.
       let worldY = m.py;
       try {
         const VC2 = m.line.position.constructor;
@@ -507,14 +442,9 @@
       m.px += m.dx * m.speed * dt;
       m.py += m.dy * m.speed * dt;
       m.pz += m.dz * m.speed * dt;
-
-      // Envolvente: aparición rápida, desvanecimiento al final
       const k = m.t / m.life;
       const alpha = Math.min(1, k / 0.12) * Math.min(1, (1 - k) / 0.28) * night * rain;
       if (alpha <= 0.002) { killMeteor(m); continue; }
-
-      // Rastro: pares consecutivos con brillo cuadrático hacia la cola.
-      // Con additive blending el negro del final no se ve: fade gratis.
       const pos = m.line.geometry.attributes.position.array;
       const col = m.line.geometry.attributes.color.array;
       for (let i = 0; i < METEOR_SEGS; i++) {
@@ -538,8 +468,6 @@
       m.line.geometry.attributes.position.needsUpdate = true;
       m.line.geometry.attributes.color.needsUpdate = true;
       m.line.material.opacity = alpha;
-
-      // Cabeza brillante con micro-parpadeo
       const hp = m.head.geometry.attributes.position.array;
       hp[0] = m.px; hp[1] = m.py; hp[2] = m.pz;
       m.head.geometry.attributes.position.needsUpdate = true;
@@ -580,8 +508,6 @@
     const starfield = state.starfield;
 
     if (points && lines && starfield) {
-      // Cambio de mundo: el juego recreó el starfield y el gameScene →
-      // nuestros meshes quedaron huérfanos en el viejo. Rebuild limpio.
       const home = gameScene?.ambientMeshes;
       if (!home || starfield.parent !== home) {
         teardown();
@@ -592,16 +518,10 @@
 
       updateWeather(game, now);
       normalizeNative(starfield);
-
-      // Anclar al fondo estelar: misma posición (sigue al jugador) y
-      // misma rotación (gira con el cielo a lo largo de la noche).
       points.position.copy(starfield.position);
       points.quaternion.copy(starfield.quaternion);
       lines.position.copy(starfield.position);
       lines.quaternion.copy(starfield.quaternion);
-
-      // Noche: misma curva que el starfield nativo
-      // (dayFactor = clamp(sun.y/sunDist*2 + 0.5) → sin(alt) = (dayFactor-0.5)*2).
       let night = 0.85;
       const dayFactor = gameScene?.sky?.uniforms?.dayFactor?.value;
       if (typeof dayFactor === 'number' && Number.isFinite(dayFactor)) {
@@ -617,14 +537,11 @@
 
       if (visible) {
         const L = LEVELS[state.level] || LEVELS.medium;
-        // Titileo suave (fases distintas para estrellas y líneas)
         const twStar = 0.82 + 0.18 * Math.sin(now * 0.0021);
         const twLine = 0.90 + 0.10 * Math.sin(now * 0.0013 + 2.1);
         points.material.opacity = L.star * night * state.rainFactor * twStar;
         lines.material.opacity = L.line * night * state.rainFactor * twLine;
       }
-
-      // ── Estrellas fugaces (mismo marco y mismas condiciones) ──
       if (state.meteors.length) {
         state.lastTickAt = state.lastTickAt || now;
         const dt = Math.min(0.05, Math.max(0.001, (now - state.lastTickAt) / 1000));

@@ -147,9 +147,6 @@
     const sy = Number(offset?.y) || 0;
     const sz = Number(offset?.z) || 0;
     const elevation = Math.max(0, Math.min(1, Math.abs(sy) / dist));
-
-    // Large apparent penumbra near the horizon, crisp shadow at high sun.
-    // This stays on MiniBlox's stabilized 16-tap Vogel PCF path and does not fight its snapped shadow camera.
     const horizon = 1 - smoothstep(0.10, 0.72, elevation);
     const s = sunlight.shadow;
     s.radius = lerp(cfg.noonRadius, cfg.horizonRadius, horizon);
@@ -164,8 +161,6 @@
       const moonEnabled = !!cfg.moon && sy <= 0 && moonlight.visible !== false;
       moonlight.castShadow = moonEnabled;
       if (moonEnabled) {
-        // MiniBlox positions the moon sprite/light at astronomical visual distance. For a shadow camera,
-        // keep the same direction but place the DirectionalLight close to the stabilized shadow target.
         const len = Math.hypot(sx, sy, sz) || 1;
         const dx = -sx / len, dy = -sy / len, dz = -sz / len;
         const target = state.shadowTarget?.position || game?.player?.position || game?.player?.pos;
@@ -190,8 +185,6 @@
   }
 
   function update(game, profile = state.profile) {
-    // attach() solo si cambió algo; tuneDynamic ya corre cada frame vía
-    // el hook de sun.update del juego (antes: doble trabajo por frame).
     if (state.renderer !== rendererOf(game) || state.sun !== game?.gameScene?.sun || state.profile !== profile) {
       if (!attach(game, profile)) return false;
     } else {

@@ -5,21 +5,31 @@
     const TAG = '[MF Gizmo]';
 
     const AXIS_COLORS = { x: 0xff4d4d, y: 0x4dff88, z: 0x4d9fff };
-    const SHAFT_LEN = 0.6;   
-    const SHAFT_R = 0.022;   
-    const HEAD_LEN = 0.16;   
-    const HEAD_R = 0.06;     
-    const RING_R = 0.42;     
-    const RING_TUBE = 0.028; 
+    const SHAFT_LEN = 0.6;
+
+    const SHAFT_R = 0.022;
+
+    const HEAD_LEN = 0.16;
+
+    const HEAD_R = 0.06;
+
+    const RING_R = 0.42;
+
+    const RING_TUBE = 0.028;
 
     const state = {
-        root: null,          
-        arrows: null,        
-        rings: null,         
+        root: null,
+
+        arrows: null,
+
+        rings: null,
+
         joint: null,
         onDelta: null,
-        dragging: null,      
-        dragCtx: null,       
+        dragging: null,
+
+        dragCtx: null,
+
         ctors: null,
         size: 1
     };
@@ -27,19 +37,19 @@
     function grabCtors() {
         if (state.ctors) return state.ctors;
         try {
-            
+
             const probe = window.MF_Pose?.getPose?.();
             const ent = (function () {
                 const g = globalThis.miniblox?.player ? globalThis.miniblox : null;
                 return g;
             })();
-            
+
             const mesh = findPlayerMesh();
             if (!mesh) return null;
             let arm = null;
             mesh.traverse(o => { if (!arm && o?.isMesh && o.geometry) arm = o; });
             if (!arm) return null;
-            
+
             const srcMat = Array.isArray(arm.material) ? arm.material[0] : arm.material;
             if (!srcMat?.constructor) return null;
             state.ctors = {
@@ -49,7 +59,7 @@
                 BufferAttribute: arm.geometry.attributes.position.constructor,
                 Material: srcMat.constructor
             };
-            
+
             let g = arm;
             while (g && !(g.children && !g.geometry && g.isObject3D !== false)) g = g.parent;
             if (g) state.ctors.Group = g.constructor;
@@ -60,7 +70,7 @@
     function findPlayerMesh() {
         try {
             const P = window.MF_Pose;
-            
+
             const game = globalThis.miniblox?.player ? globalThis.miniblox : reactGame();
             const me = game?.player;
             if (!me) return null;
@@ -84,13 +94,14 @@
         const geo = new ctors.BufferGeometry();
         const pos = [];
         const idx = [];
-        const half = 0; 
-        
+        const half = 0;
+
         for (let i = 0; i <= radialSegs; i++) {
             const a = (i / radialSegs) * Math.PI * 2;
             const c = Math.cos(a), s = Math.sin(a);
-            pos.push(c * radius, half, s * radius);           
-            pos.push(c * radius, half + height, s * radius);  
+            pos.push(c * radius, half, s * radius);
+
+            pos.push(c * radius, half + height, s * radius);
         }
         for (let i = 0; i < radialSegs; i++) {
             const b = i * 2;
@@ -104,7 +115,7 @@
 
     function makeCone(ctors, radius, height, segs) {
         const geo = new ctors.BufferGeometry();
-        const pos = [0, height, 0]; 
+        const pos = [0, height, 0];
         const idx = [];
         for (let i = 0; i < segs; i++) {
             const a = (i / segs) * Math.PI * 2;
@@ -114,7 +125,7 @@
             const a0 = 1 + i, a1 = 1 + ((i + 1) % segs);
             idx.push(0, a1, a0);
         }
-        
+
         const center = pos.length / 3;
         pos.push(0, 0, 0);
         for (let i = 0; i < segs; i++) {
@@ -132,10 +143,10 @@
         const pos = [];
         const idx = [];
         for (let i = 0; i <= tubularSegs; i++) {
-            const u = (i / tubularSegs) * Math.PI * 2; 
+            const u = (i / tubularSegs) * Math.PI * 2;
             const cu = Math.cos(u), su = Math.sin(u);
             for (let j = 0; j <= radialSegs; j++) {
-                const v = (j / radialSegs) * Math.PI * 2; 
+                const v = (j / radialSegs) * Math.PI * 2;
                 const cv = Math.cos(v), sv = Math.sin(v);
                 pos.push(
                     (radius + tubeR * cv) * cu,
@@ -160,9 +171,9 @@
     function makeArrowMesh(ctors, color) {
         const shaft = makeCylinder(ctors, SHAFT_R, SHAFT_LEN, 8);
         const head = makeCone(ctors, HEAD_R, HEAD_LEN, 10);
-        
+
         const mat = new ctors.Material();
-        
+
         const matOpts = { transparent: false };
         let m1, m2;
         try {
@@ -173,10 +184,10 @@
         const g = new ctors.Group();
         g.add(m1);
         g.add(m2);
-        
+
         try { if (mat.color?.set) mat.color.set(color); } catch {}
         try {
-            
+
             if ('emissive' in mat && mat.emissive?.set) mat.emissive.set(color);
             if ('emissiveIntensity' in mat) mat.emissiveIntensity = 0.9;
             if ('fog' in mat) mat.fog = false;
@@ -190,7 +201,7 @@
         if (!ctors || !joint) return false;
         detach();
         try {
-            
+
             const scene = findScene(joint) || findPlayerMesh()?.parent;
             if (!scene || !scene.add) return false;
             state.joint = joint;
@@ -201,12 +212,12 @@
             for (const axis of ['x', 'y', 'z']) {
                 const arrow = makeArrowMesh(ctors, AXIS_COLORS[axis]);
                 if (!arrow) continue;
-                
+
                 const [dx, dy, dz] = dirs[axis];
-                
+
                 if (axis === 'x') arrow.group.rotation.z = -Math.PI / 2;
                 else if (axis === 'z') arrow.group.rotation.x = Math.PI / 2;
-                
+
                 arrow.group.userData = arrow.group.userData || {};
                 arrow.group.userData.__mfAxis = axis;
                 state.root.add(arrow.group);
@@ -214,7 +225,7 @@
             }
             state.root.userData = state.root.userData || {};
             state.root.userData.__mfGizmo = true;
-            
+
             state.rings = {};
             const ringDirs = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
             for (const axis of ['x', 'y', 'z']) {
@@ -222,7 +233,7 @@
                 if (!torus) continue;
                 const mat = new ctors.Material();
                 const mesh = new ctors.Mesh(torus, mat);
-                
+
                 if (axis === 'x') mesh.rotation.z = Math.PI / 2;
                 else if (axis === 'z') mesh.rotation.x = Math.PI / 2;
                 mesh.userData = mesh.userData || {};
@@ -240,7 +251,7 @@
                     mat.needsUpdate = true;
                 } catch {}
             }
-            
+
             state.root.traverse(o => {
                 if (o?.isMesh) {
                     o.renderOrder = 999;
@@ -255,7 +266,7 @@
                 }
             });
             scene.add(state.root);
-            update(); 
+            update();
             state.size = 1;
             return true;
         } catch (e) {
@@ -272,7 +283,7 @@
             const p = new V3();
             state.joint.getWorldPosition(p);
             state.root.position.copy(p);
-            state.root.rotation.set(0, 0, 0); 
+            state.root.rotation.set(0, 0, 0);
             state.root.updateMatrixWorld?.(true);
         } catch {}
     }
@@ -300,7 +311,7 @@
     function detach() {
         if (state.root) {
             try { state.root.parent?.remove(state.root); } catch {}
-            
+
             try {
                 state.root.traverse(o => {
                     if (o?.isMesh && o.geometry?.dispose) o.geometry.dispose();
@@ -317,7 +328,7 @@
         if (!state.arrows || !state.joint) return null;
         const cam = camera || getStudioCamera();
         if (!cam) return null;
-        update(); 
+        update();
         try {
             const V3 = cam.position.constructor;
             const rect = effectiveRect();
@@ -336,17 +347,17 @@
             const tmp = new V3(), tip = new V3();
             for (const axis of ['x', 'y', 'z']) {
                 const ar = state.arrows[axis];
-                if (!ar || ar.group.visible === false) continue; 
+                if (!ar || ar.group.visible === false) continue;
                 const d = ar.dir;
                 tip.set(jp.x + d[0] * len, jp.y + d[1] * len, jp.z + d[2] * len);
-                
+
                 tmp.set((jp.x + tip.x) / 2, (jp.y + tip.y) / 2, (jp.z + tip.z) / 2);
                 const toMid = tmp.clone().sub(origin);
                 const t = toMid.dot(dir);
                 if (t < 0.05) continue;
                 const closest = dir.clone().multiplyScalar(t).add(origin);
                 const dist = closest.distanceTo(tmp);
-                
+
                 const worldPerPx = (2 * t * Math.tan(35 * Math.PI / 180)) / Math.max(1, rect.height);
                 if (dist < Math.max(0.06, worldPerPx * 14)) {
                     if (!best || dist < best.dist) best = { axis, dist };
@@ -393,18 +404,18 @@
     function dragDelta(axis, dxPx, dyPx, camera) {
         const cam = camera || getStudioCamera();
         if (!cam) return 0;
-        update(); 
+        update();
         try {
             const V3 = cam.position.constructor;
             const V2 = V3;
-            
+
             state.joint?.updateMatrixWorld?.(true);
             const jp = new V3();
             state.joint.getWorldPosition(jp);
             const camPos = new V3().setFromMatrixPosition(cam.matrixWorld);
             const dist = camPos.distanceTo(jp);
             const rect = effectiveRect();
-            
+
             const d = state.arrows[axis].dir;
             const p0 = projectPoint(jp, cam, rect);
             const p1 = projectPoint(
@@ -414,8 +425,8 @@
             const ax = p1.x - p0.x, ay = p1.y - p0.y;
             const lenSq = ax * ax + ay * ay;
             if (lenSq < 1e-6) return 0;
-            
-            const amount = (dxPx * ax + dyPx * ay) / lenSq; 
+
+            const amount = (dxPx * ax + dyPx * ay) / lenSq;
             return amount;
         } catch { return 0; }
     }
@@ -441,23 +452,23 @@
             let best = null;
             for (const axis of ['x', 'y', 'z']) {
                 const r = state.rings[axis];
-                if (!r || r.mesh.visible === false) continue; 
+                if (!r || r.mesh.visible === false) continue;
                 const d = r.dir;
-                
+
                 const denom = dir.x * d[0] + dir.y * d[1] + dir.z * d[2];
-                if (Math.abs(denom) < 0.08) continue; 
+                if (Math.abs(denom) < 0.08) continue;
                 const toC = jp.clone().sub(origin);
                 const t = toC.dot(d) / denom;
-                if (t < 0.05) continue; 
+                if (t < 0.05) continue;
                 const hit = dir.clone().multiplyScalar(t).add(origin);
                 const dist = hit.distanceTo(jp);
                 const R = RING_R * state.size;
-                
+
                 const camDist = origin.distanceTo(jp);
                 const worldPerPx = (2 * camDist * Math.tan(35 * Math.PI / 180)) / Math.max(1, rect.height);
                 const tol = RING_TUBE + worldPerPx * 10;
                 const band = Math.abs(dist - R);
-                
+
                 const score = band - t * 0.01;
                 if (band < tol && (!best || score < best.score)) {
                     best = { axis, score };
@@ -505,7 +516,7 @@
             const a1 = angleAt(curXY.x, curXY.y);
             if (a0 == null || a1 == null) return 0;
             let delta = a1 - a0;
-            
+
             while (delta > Math.PI) delta -= Math.PI * 2;
             while (delta < -Math.PI) delta += Math.PI * 2;
             return delta;

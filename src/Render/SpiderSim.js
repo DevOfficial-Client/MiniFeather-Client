@@ -7,7 +7,7 @@
     let level = 0;
     try { level = parseInt(localStorage.getItem('mf:spiderlog') || '0', 10) || 0; } catch (_) {}
     const t0 = performance.now();
-    const ring = []; 
+    const ring = [];
     const fmt = (v) => {
       if (typeof v === 'number') return Math.round(v * 100) / 100;
       if (Array.isArray(v)) return v.map(fmt).join(',');
@@ -555,7 +555,7 @@
       this.scale = 1.0;
       this.legs = [];
       this.bodyModel = 'flat';
-      this.gaitTuning = null; 
+      this.gaitTuning = null;
     }
     addLegPair(root, rest, segments) {
       this.legs.push(new LegPlan(new Vec(root.x, root.y, root.z), new Vec(rest.x, rest.y, rest.z), segments));
@@ -590,7 +590,7 @@
       leg.restPosition.mul(factor);
       for (const seg of leg.segments) seg.length *= factor;
     }
-    
+
     const t = plan.gaitTuning || (plan.gaitTuning = {});
     if (!t.stationary) t.stationary = { bodyHeight: 1.1, triggerZoneRadius: 0.25 };
     if (!t.moving) t.moving = { bodyHeight: 1.1, triggerZoneRadius: 0.8 };
@@ -652,7 +652,7 @@
       p.addLegPair(new Vec(0.2, -0.35, -0.3), new Vec(1.3 * 1.1, 0, -1.6), createRobotSegments(sc, 1.3 * 0.7 * sl));
       return p;
     },
-    
+
     spider(sc = 2, sl = 1.0) {
       const p = new BodyPlan();
       p.bodyModel = 'flat';
@@ -662,21 +662,21 @@
       p.addLegPair(new Vec(0, 0, -0.20), new Vec(1.10, 0, -2.50), equalLength(sc, 1.60 * sl));
       return p;
     },
-    
+
     kraken(sc = 3, sl = 1.0) {
       const p = new BodyPlan();
       p.bodyModel = 'flat';
       p.gaitTuning = {
         stationary: { bodyHeight: 5.0, triggerZoneRadius: 0.6 },
         moving: { bodyHeight: 5.0, triggerZoneRadius: 1.4 },
-        
+
         gait: { useLegacyNormalForce: true },
       };
       p.addLegPair(new Vec(0.4, 0, 1.6), new Vec(1.4, 0, 4.2), equalLength(sc, 2.4 * sl));
       p.addLegPair(new Vec(0.4, 0, 1.0), new Vec(2.2, 0, 5.6), equalLength(sc, 2.9 * sl));
       return p;
     },
-    
+
     giant_spider() { return makeGiant(PRESETS.spider(2, 1.0), 3.0); },
     giant_kraken() { return makeGiant(PRESETS.kraken(3, 1.0), 2.0); },
     giant_hexbot() { return makeGiant(PRESETS.hexbot(4, 1.0), 3.0); },
@@ -712,7 +712,7 @@
       const world = this.game?.world;
       if (!world) {
         this.stats.nullChunk++;
-        return null; 
+        return null;
       }
       try {
         const proto = Object.getPrototypeOf(world);
@@ -883,7 +883,7 @@
 
       if (this.spider.motorControlled) {
         if (this.motorSwing) {
-          
+
           const spd = (this.spider.gait.stepMoveSpeed || 0.35) * (this.spider.motorScale || 1);
           const dx = this.motorSwing.wx - this.endEffector.x;
           const dz = this.motorSwing.wz - this.endEffector.z;
@@ -893,10 +893,10 @@
             this.endEffector.x += (dx / d) * step;
             this.endEffector.z += (dz / d) * step;
           }
-          
+
           this.endEffector.y -= 0.25;
         } else {
-          
+
           this.applyBodyMotion(this.endEffector);
         }
         const collision = this.world.resolveCollision(this.endEffector, DOWN_VECTOR());
@@ -1470,7 +1470,7 @@
       const cur = open.pop();
       const ck = cur.x + ',' + cur.z;
       const g = gScore.get(ck);
-      if (g == null || g + octile(cur.x, cur.z) > cur.f + 1e-6) continue; 
+      if (g == null || g + octile(cur.x, cur.z) > cur.f + 1e-6) continue;
       if (cur.x === gx && cur.z === gz) { best = { x: cur.x, z: cur.z, h: 0 }; reached = true; break; }
       if (++iter > maxIter) break;
       const curY = yOf.get(ck);
@@ -1481,7 +1481,7 @@
         const ny = walkable(nx, nz, curY);
         if (ny == null || Math.abs(ny - curY) > maxStep) continue;
         if (dx !== 0 && dz !== 0) {
-          
+
           const o1 = walkable(cur.x + dx, cur.z, curY);
           const o2 = walkable(cur.x, cur.z + dz, curY);
           if (o1 == null || o2 == null || Math.abs(o1 - curY) > maxStep || Math.abs(o2 - curY) > maxStep) continue;
@@ -1526,29 +1526,29 @@
 
   class PathfindBehaviour {
     constructor(opts = {}) {
-      this.distance = opts.distance ?? 3; 
+      this.distance = opts.distance ?? 3;
       this.followPlayer = !!opts.followPlayer;
-      this.target = opts.target || null; 
+      this.target = opts.target || null;
       this.waypoints = null;
       this.wp = 0;
-      this.pathGoal = null; 
-      this.nextCompute = 0; 
-      this.straightUntil = 0; 
+      this.pathGoal = null;
+      this.nextCompute = 0;
+      this.straightUntil = 0;
       this.stuckMs = 0;
     }
   }
 
   class HuntBehaviour {
     constructor(opts = {}) {
-      this.range = opts.range ?? 48; 
-      this.aggression = opts.aggression ?? 1; 
+      this.range = opts.range ?? 48;
+      this.aggression = opts.aggression ?? 1;
       this.state = 'stalk';
-      this.stateT = 0; 
+      this.stateT = 0;
       this.circleDir = Math.random() < 0.5 ? 1 : -1;
-      this.circleT = 2000; 
-      this.nextPounceOk = 0; 
+      this.circleT = 2000;
+      this.nextPounceOk = 0;
       this.bites = 0;
-      
+
       this.waypoints = null;
       this.wp = 0;
       this.pathGoal = null;
@@ -1566,10 +1566,10 @@
 
   class Genome {
     constructor(genes) {
-      
+
       this.genes = genes || Genome.random();
       this.generation = 0;
-      this.lineage = []; 
+      this.lineage = [];
     }
     static random() {
       const g = {};
@@ -1580,7 +1580,7 @@
       const g = { ...parentGenes };
       for (const k of Genome.GENE_LIST) {
         if (Math.random() < rate) {
-          
+
           const noise = (Math.random() + Math.random() + Math.random() - 1.5) / 1.5 * sigma;
           g[k] = Math.max(0, Math.min(1, g[k] + noise));
         }
@@ -1608,24 +1608,27 @@
 
   function applyGenome(spider, genome) {
     const g = genome.genes;
-    
-    const walkSpeed = 0.08 + g.speed * 0.25;        
+
+    const walkSpeed = 0.08 + g.speed * 0.25;
+
     const gallopSpeed = walkSpeed * (1.6 + g.speed * 1.4);
-    
-    const muscleBoost = 0.7 + g.strength * 1.1;     
+
+    const muscleBoost = 0.7 + g.strength * 1.1;
+
     for (const gait of [spider.walkGait, spider.gallopGait]) {
       gait.maxSpeed = walkSpeed;
-      gait.moveAcceleration = (0.02 + g.accel * 0.06) * muscleBoost; 
+      gait.moveAcceleration = (0.02 + g.accel * 0.06) * muscleBoost;
       gait.rotateAcceleration = (0.02 + g.accel * 0.08) * muscleBoost;
-      gait.legMoveSpeed = walkSpeed * (1.8 + g.legMoveSpeed * 2.2); 
-      gait.rotationLerp = 0.15 + g.turnRate * 0.4;   
-      gait.stationary.bodyHeight = 0.7 + g.bodyHeight * 0.9; 
+      gait.legMoveSpeed = walkSpeed * (1.8 + g.legMoveSpeed * 2.2);
+      gait.rotationLerp = 0.15 + g.turnRate * 0.4;
+
+      gait.stationary.bodyHeight = 0.7 + g.bodyHeight * 0.9;
       gait.moving.bodyHeight = 0.7 + g.bodyHeight * 1.1;
-      
-      gait.legLiftHeight = 0.25 + g.strength * 0.3;  
+
+      gait.legLiftHeight = 0.25 + g.strength * 0.3;
     }
     spider.gallopGait.maxSpeed = gallopSpeed;
-    
+
     spider.__mfGenome = genome;
     return spider;
   }
@@ -1633,19 +1636,21 @@
   class EvolutionBehaviour {
     constructor(genome) {
       this.genome = genome;
-      this.energy = 55;       
+      this.energy = 55;
+
       this.maxEnergy = 100;
-      
-      this.maxStamina = 0.6 + genome.genes.endurance * 1.4; 
-      this.stamina = this.maxStamina; 
-      this.staminaDrain = 0;  
-      this.age = 0;           
+
+      this.maxStamina = 0.6 + genome.genes.endurance * 1.4;
+      this.stamina = this.maxStamina;
+      this.staminaDrain = 0;
+      this.age = 0;
+
       this.bites = 0;
       this.foodEaten = 0;
       this.children = 0;
       this.dead = false;
       this.reproCooldown = 0;
-      
+
       this.wanderDir = Math.random() * Math.PI * 2;
       this.wanderT = 0;
       this.targetFood = null;
@@ -1653,16 +1658,17 @@
   }
 
   const evoFood = {
-    items: [], 
+    items: [],
     nextId: 1,
-    spawnEvery: 0, 
-    rate: 4,      
+    spawnEvery: 0,
+    rate: 4,
+
   };
 
   function evoSpawnFood() {
     const p = sim.lastPlayerPos;
     if (!p || (p.x === 0 && p.y === 0 && p.z === 0)) return;
-    if (evoFood.items.length >= 14) return; 
+    if (evoFood.items.length >= 14) return;
     const ang = Math.random() * Math.PI * 2;
     const rad = 4 + Math.random() * 20;
     const x = p.x + Math.cos(ang) * rad;
@@ -1677,7 +1683,8 @@
   let evoStats = { births: 0, deaths: 0, generation: 0, bestFitness: 0, ticks: 0 };
 
   const predators = {
-    items: [],   
+    items: [],
+
     on: false,
     count: 2,
     kills: 0,
@@ -1686,7 +1693,7 @@
   function predatorSpawn() {
     const p = sim.lastPlayerPos;
     if (!p || (p.x === 0 && p.y === 0 && p.z === 0)) return;
-    
+
     for (let tries = 0; tries < 8; tries++) {
       const ang = Math.random() * Math.PI * 2;
       const rad = 26 + Math.random() * 12;
@@ -1708,11 +1715,11 @@
   function setupPredators(app) {
     app.onTick(() => {
       if (!predators.on) return;
-      
+
       while (predators.items.length < predators.count) predatorSpawn();
       const SENSE = 14, EAT = 2, SPD = 0.30, CHASE_DIV = 1.4;
       for (const pr of predators.items) {
-        
+
         let prey = null, pd = Infinity;
         for (const s of sim.spiders) {
           const d = s.body.position.distanceSquared(pr.pos);
@@ -1722,10 +1729,10 @@
         if (prey && dist < SENSE) {
           pr.state = 'chase';
           pr.heading = Math.atan2(prey.body.position.z - pr.pos.z, prey.body.position.x - pr.pos.x);
-          const spd = SPD * (dist > 6 ? 1.25 : 1.0); 
+          const spd = SPD * (dist > 6 ? 1.25 : 1.0);
           pr.pos.x += Math.cos(pr.heading) * spd;
           pr.pos.z += Math.sin(pr.heading) * spd;
-          
+
           if (dist < EAT) {
             const evo = prey.entity.components.get('EvolutionBehaviour');
             const ai = prey.entity.components.get('RemoteAIBehaviour');
@@ -1746,7 +1753,7 @@
           pr.pos.x += Math.cos(pr.heading) * SPD * 0.6;
           pr.pos.z += Math.sin(pr.heading) * SPD * 0.6;
         }
-        
+
         const hit = sim.world.raycastGround(new Vec(pr.pos.x, pr.pos.y + 20, pr.pos.z), DOWN_VECTOR(), 40);
         if (hit) { pr.pos.y = hit.y; }
         void CHASE_DIV;
@@ -1778,16 +1785,16 @@
         const g = evo.genome.genes;
         const speed = Math.hypot(spider.velocity.x, spider.velocity.z);
         const speedFactor = Math.min(1, speed / (spider.gait.maxSpeed || 0.2));
-        const muscleMass = 0.8 + g.strength * 0.7;  
+        const muscleMass = 0.8 + g.strength * 0.7;
         const metabRate = (0.006 + g.metabolism * 0.03) * (0.35 + speedFactor * 0.65) * muscleMass;
         evo.energy -= metabRate;
 
         const drainThreshold = 0.6;
         let drain = 0;
         if (speedFactor > drainThreshold) {
-          drain = (speedFactor - drainThreshold) * (0.025 + g.strength * 0.02); 
+          drain = (speedFactor - drainThreshold) * (0.025 + g.strength * 0.02);
         }
-        
+
         if (drain === 0) {
           const regen = (0.0015 + g.recovery * 0.004) / muscleMass;
           evo.stamina = Math.min(evo.maxStamina, evo.stamina + regen);
@@ -1795,9 +1802,9 @@
           evo.stamina = Math.max(0, evo.stamina - drain);
         }
         evo.staminaDrain = drain;
-        
+
         const fatigued = evo.stamina < evo.maxStamina * 0.15;
-        const speedCap = fatigued ? 0.45 : 1;   
+        const speedCap = fatigued ? 0.45 : 1;
 
         let bestFood = null, bestD = Infinity;
         for (const f of evoFood.items) {
@@ -1807,29 +1814,29 @@
 
         const hungry = evo.energy < 70;
         if (bestFood && hungry && g.foodVsHunt < 0.55) {
-          
+
           const d = Math.sqrt(bestD);
           const dir = new Vec(bestFood.pos.x - spider.position.x, 0, bestFood.pos.z - spider.position.z);
           if (d > 0.8) {
             rotateTowards(spider, dir);
-            const urgency = d > 6 ? 1 : 0.7; 
+            const urgency = d > 6 ? 1 : 0.7;
             walkAt(spider, dir.clone().normalize().mul(spider.gait.maxSpeed * urgency * speedCap));
           } else {
             walkAt(spider, new Vec(0, 0, 0));
           }
           if (d < 1.4 && bestFood) {
-            
+
             const idx = evoFood.items.indexOf(bestFood);
             if (idx >= 0) {
               evoFood.items.splice(idx, 1);
               evo.energy = Math.min(evo.maxEnergy, evo.energy + 32);
-              evo.stamina = Math.min(evo.maxStamina, evo.stamina + 0.15); 
+              evo.stamina = Math.min(evo.maxStamina, evo.stamina + 0.15);
               evo.foodEaten++;
               emit({ type: 'evo', event: 'eat', name: names.get(spider) || '?', at: [round3(bestFood.pos.x), round3(bestFood.pos.y), round3(bestFood.pos.z)], energy: round3(evo.energy) });
             }
           }
         } else if (g.foodVsHunt >= 0.55 && hungry && p) {
-          
+
           const dx = p.x - spider.position.x;
           const dz = p.z - spider.position.z;
           const d = Math.hypot(dx, dz);
@@ -1838,11 +1845,11 @@
             rotateTowards(spider, dir);
             walkAt(spider, dir.clone().normalize().mul(spider.gait.maxSpeed * (0.6 + g.aggression * 0.5) * speedCap));
           } else if (d < 2.2 && now > (evo.nextBiteOk || 0)) {
-            
+
             const biteMult = fatigued ? 0.35 : 1;
             evo.nextBiteOk = now + 4000 / (0.4 + g.aggression * (fatigued ? 0.5 : 1));
             evo.energy = Math.min(evo.maxEnergy, evo.energy + (14 + g.bitePower * 16) * biteMult);
-            evo.stamina = Math.max(0, evo.stamina - 0.12); 
+            evo.stamina = Math.max(0, evo.stamina - 0.12);
             evo.bites++;
             emit({
               type: 'evo', event: 'bite', name: names.get(spider) || '?',
@@ -1852,7 +1859,7 @@
             walkAt(spider, new Vec(0, 0, 0));
           }
         } else {
-          
+
           evo.wanderT -= TICK_MS;
           if (evo.wanderT <= 0) {
             evo.wanderDir = Math.random() * Math.PI * 2;
@@ -1868,7 +1875,7 @@
           const name = names.get(spider) || rec?.name || '?';
           const fitness = evoFitness(evo);
           evoStats.deaths++;
-          
+
           const aiDead = rec ? rec.entity.components.get('RemoteAIBehaviour') : entity.components.get('RemoteAIBehaviour');
           if (aiDead) { aiSendReset(aiDead); aiDead.obs = null; }
           emit({ type: 'evo', event: 'death', name, fitness: round3(fitness), gen: evo.genome.generation, age: evo.age });
@@ -1883,16 +1890,16 @@
           continue;
         }
 
-        const reproAt = 62 + g.reproThreshold * 30; 
+        const reproAt = 62 + g.reproThreshold * 30;
         if (evo.energy >= reproAt && evo.age > 240 && evo.reproCooldown <= 0) {
           const rec = sim.spiders.find((r) => r.body === spider);
           if (rec && sim.spiders.length < 16) {
             const child = evoSpawnChild(rec, evo);
             if (child) newborns.push(child);
           }
-          evo.energy *= 0.45; 
+          evo.energy *= 0.45;
           evo.children++;
-          evo.reproCooldown = 600; 
+          evo.reproCooldown = 600;
         }
       }
 
@@ -1908,7 +1915,7 @@
   }
 
   function evoFitness(evo) {
-    
+
     const staminaBonus = (evo.stamina / Math.max(0.001, evo.maxStamina)) * 2;
     return evo.foodEaten * 3 + evo.bites * 5 + evo.children * 8 + evo.age * 0.002 + staminaBonus;
   }
@@ -1925,7 +1932,7 @@
     const rec = sim.spiders[sim.spiders.length - 1];
     const evo = rec?.body === spider ? new EvolutionBehaviour(genome) : null;
     if (evo) {
-      evo.energy = Math.max(20, parentEvo.energy * 0.4); 
+      evo.energy = Math.max(20, parentEvo.energy * 0.4);
       rec.entity.replace('EvolutionBehaviour', evo);
       evoStats.bestFitness = Math.max(evoStats.bestFitness, evoFitness(parentEvo));
       emit({
@@ -1946,8 +1953,10 @@
 
   class RemoteAIBehaviour {
     constructor() {
-      this.sid = null;         
-      this.motors = null;      
+      this.sid = null;
+
+      this.motors = null;
+
       this.obs = null;
       this.prevFoodDist = null;
       this.prevPredDist = null;
@@ -1956,10 +1965,14 @@
       this.biteCd = 0;
       this.travel = 0;
       this.lastPos = null;
-      this.mindAge = 0;        
-      this.kills = 0;          
-      this.fightTicks = 0;     
-      this.preyHp = 60;        
+      this.mindAge = 0;
+
+      this.kills = 0;
+
+      this.fightTicks = 0;
+
+      this.preyHp = 60;
+
       this.postFight = 0;
     }
   }
@@ -1968,7 +1981,7 @@
     sock: null,
     url: '',
     ready: false,
-    pending: new Map(), 
+    pending: new Map(),
     nextId: 1,
     stats: { connected: false, backend: null, generation: null, device: null, sent: 0, recvd: 0 },
   };
@@ -2036,7 +2049,7 @@
       if (!aiws.ready) { resolve(null); return; }
       if (!ai.sid) ai.sid = aiws.nextId++;
       const sid = ai.sid;
-      
+
       const old = aiws.pending.get(sid);
       if (old) { try { old(null); } catch (_) {} aiws.pending.delete(sid); }
       aiws.pending.set(sid, resolve);
@@ -2044,7 +2057,7 @@
       try {
         aiws.sock.send(JSON.stringify({ t: 'act', id: sid, obs }));
         setTimeout(() => {
-          
+
           if (aiws.pending.get(sid) === resolve) {
             aiws.pending.delete(sid);
             resolve(null);
@@ -2064,7 +2077,7 @@
     const A = 24;
     const SENSE = 14;
     const yaw = spider.orientation.getEulerAnglesYXZ().y;
-    
+
     let fa = 0, fdist = 2;
     if (evoFood.items.length) {
       let best = null, bd = Infinity;
@@ -2077,13 +2090,13 @@
         fdist = Math.min(2, Math.sqrt(bd) / A);
       }
     }
-    
+
     let pa = 0, pdist = 2;
     if (p) {
       pa = relAngleTo(spider.position, p, yaw);
       pdist = Math.min(2, spider.position.distance(p) / A);
     }
-    
+
     let ta = 0, tdist = 2, chasing = 0;
     if (predators.items.length) {
       let best = null, bd = Infinity;
@@ -2101,13 +2114,13 @@
     const maxSp = spider.gait.maxSpeed || 0.2;
     const stMax = evo ? evo.maxStamina : 1.3;
     const st = evo ? evo.stamina : 1;
-    
+
     const grounded = spider.legs.map((l) => (l.isGrounded() ? 1 : 0));
-    
+
     const groundY = typeof spider.getGroundHeight === 'function'
       ? spider.getGroundHeight() : (spider.gait?.bodyHeight ?? 0.9);
     const height = clamp((spider.position.y - groundY) + 0.9, 0.25, 2.5);
-    
+
     const preyHp = clamp(1 - (ai.bites * 12) / 60, 0, 1);
     const inCombat = p && spider.position.distance(p) < 8 ? 1 : 0;
     return [
@@ -2123,8 +2136,10 @@
       ...grounded,
       round3(grounded.reduce((a, b) => a + b, 0) / (spider.legs.length || 8)),
       round3(height),
-      round3(preyHp),      
-      inCombat,            
+      round3(preyHp),
+
+      inCombat,
+
       1,
     ];
   }
@@ -2136,7 +2151,7 @@
 
   function aiApplyMotors(spider, m) {
     if (!m || m.length < 24) {
-      
+
       spider.velocity.y -= 0.06;
       return;
     }
@@ -2156,24 +2171,24 @@
       const lateral = clamp(m[i * 3 + 1], -1, 1);
       const lift = clamp(m[i * 3 + 2], -1, 1);
 
-      const anchor = leg.legPlan.restPosition; 
+      const anchor = leg.legPlan.restPosition;
       const axMin = anchor.x - LEG_REACH, axMax = anchor.x + LEG_REACH;
       const azMin = anchor.z - LEG_REACH, azMax = anchor.z + LEG_REACH;
       const ax = clamp(anchor.x * (1 + lateral * 0.4), axMin, axMax);
       const az = clamp(anchor.z + swing * LEG_REACH, azMin, azMax);
-      
+
       const ext = Math.hypot(ax - anchor.x, az - anchor.z);
 
       const wx = spider.position.x + ax * cos - az * sin;
       const wz = spider.position.z + ax * sin + az * cos;
 
       if (lift > 0.3) {
-        
+
         leg.isMoving = true;
         leg.touchingGround = false;
         leg.motorSwing = { wx, wz };
       } else {
-        
+
         leg.isMoving = false;
         const dx = wx - leg.endEffector.x;
         const dz = wz - leg.endEffector.z;
@@ -2200,7 +2215,7 @@
       for (const s of sim.spiders) names.set(s.body, s.name);
       for (const [entity, spider, ai] of app.query('SpiderBody', 'RemoteAIBehaviour')) {
         void entity;
-        
+
         if (!aiws.ready) { aiApplyMotors(spider, null); continue; }
         const rec = sim.spiders.find((r) => r.body === spider);
         const evo = rec ? rec.entity.components.get('EvolutionBehaviour') : null;
@@ -2208,16 +2223,19 @@
         const pDist = p ? spider.position.distance(p) : Infinity;
         if (p && pDist < 8) ai.fightTicks++;
         else {
-          if (ai.fightTicks > 90) ai.postFight = 240;   
+          if (ai.fightTicks > 90) ai.postFight = 240;
+
           ai.fightTicks = 0;
         }
         if (p && pDist < 1.6 && ai.biteCd <= 0) {
           ai.bites++;
-          ai.biteCd = 80;                       
+          ai.biteCd = 80;
+
           ai.preyHp = Math.max(0, ai.preyHp - 12);
           if (ai.preyHp <= 0) {
             ai.kills++;
-            ai.preyHp = 60;                     
+            ai.preyHp = 60;
+
           }
           if (evo) evo.energy = Math.min(100, evo.energy + 18);
           emit({
@@ -2391,7 +2409,7 @@
     const goalMoved = !behaviour.pathGoal
       || Math.hypot(target.x - behaviour.pathGoal.x, target.z - behaviour.pathGoal.z) > 6;
     if (goalMoved && behaviour.waypoints) {
-      behaviour.waypoints = null; 
+      behaviour.waypoints = null;
       wpPos = null;
     }
 
@@ -2407,12 +2425,12 @@
       const path = findPath(sim.world, spider.position, target, pfOpts);
       if (path && path.waypoints.length > 1) {
         behaviour.waypoints = path.waypoints;
-        behaviour.wp = 1; 
+        behaviour.wp = 1;
         behaviour.pathGoal = target.clone();
         wpPos = behaviour.waypoints[behaviour.wp];
         LOG.d('path:', 'A*', path.waypoints.length, 'waypoints, reached=', path.reached);
       } else {
-        behaviour.pathGoal = target.clone(); 
+        behaviour.pathGoal = target.clone();
       }
     }
 
@@ -2425,7 +2443,7 @@
   }
 
   function setupBehaviours(app) {
-    
+
     app.onTick(() => {
       for (const [entity, spider] of app.query('SpiderBody', 'StayStillBehaviour')) {
         void entity;
@@ -2480,7 +2498,7 @@
         const bodyH = spider.lerpedGait().bodyHeight;
         const pfOpts = {
           clearance: Math.max(2, Math.round(bodyH)),
-          maxStep: 1 + bodyH * 0.4, 
+          maxStep: 1 + bodyH * 0.4,
         };
         const dir = pathfindStep(spider, behaviour, target, pfOpts, now);
         if (!dir) { walkAt(spider, new Vec(0, 0, 0)); continue; }
@@ -2513,7 +2531,7 @@
           const dir = pathfindStep(spider, hunt, target, pfOpts, now);
           if (dir) {
             rotateTowards(spider, dir.clone());
-            walkAt(spider, dir.mul(spider.gait.maxSpeed * 0.8)); 
+            walkAt(spider, dir.mul(spider.gait.maxSpeed * 0.8));
           } else walkAt(spider, new Vec(0, 0, 0));
           if (d < circleR) {
             hunt.state = 'circle';
@@ -2523,20 +2541,20 @@
           }
         } else if (hunt.state === 'circle') {
           if (d > circleR * 2.5 || d > hunt.range * 1.5) { hunt.state = 'stalk'; hunt.stateT = 0; continue; }
-          
+
           let mx = -uz * hunt.circleDir + ux * ((d - circleR) / circleR) * 1.5;
           let mz = ux * hunt.circleDir + uz * ((d - circleR) / circleR) * 1.5;
           const ml = Math.hypot(mx, mz) || 1;
-          rotateTowards(spider, new Vec(ux, 0, uz)); 
+          rotateTowards(spider, new Vec(ux, 0, uz));
           walkAt(spider, new Vec(mx / ml, 0, mz / ml).mul(spider.gait.maxSpeed * 0.55));
           if (hunt.stateT > hunt.circleT) { hunt.state = 'windup'; hunt.stateT = 0; }
         } else if (hunt.state === 'windup') {
-          walkAt(spider, new Vec(0, 0, 0)); 
+          walkAt(spider, new Vec(0, 0, 0));
           rotateTowards(spider, new Vec(ux, 0, uz));
           if (hunt.stateT > 350) {
             hunt.state = 'pounce';
             hunt.stateT = 0;
-            
+
             spider.velocity.x += ux * spider.gait.maxSpeed * 2.2;
             spider.velocity.z += uz * spider.gait.maxSpeed * 2.2;
             spider.velocity.y = Math.max(spider.velocity.y, bodyH * 1.4);
@@ -2554,11 +2572,11 @@
             });
             hunt.state = 'recover';
             hunt.stateT = 0;
-          } else if (hunt.stateT > 1300) { 
+          } else if (hunt.stateT > 1300) {
             hunt.state = 'recover';
             hunt.stateT = 0;
           }
-        } else { 
+        } else {
           rotateTowards(spider, new Vec(ux, 0, uz));
           walkAt(spider, new Vec(-ux, 0, -uz).mul(spider.gait.maxSpeed * 0.45));
           if (hunt.stateT > 1600) {
@@ -2581,7 +2599,7 @@
           if (rec) despawnPuppetRecord(rec, 'araña server desapareció');
           continue;
         }
-        rec.native = native; 
+        rec.native = native;
         if (native.mesh && native.mesh.visible !== false) {
           try { native.mesh.visible = false; } catch (_) {}
         }
@@ -2589,7 +2607,7 @@
         const dz = native.pos.z - spider.position.z;
         const dist = Math.hypot(dx, dz);
         if (dist > 0.05) {
-          
+
           const speed = Math.min(spider.gait.maxSpeed * 3, 1 + dist * 4);
           spider.velocity.x = dx / dist * speed;
           spider.velocity.z = dz / dist * speed;
@@ -2597,7 +2615,7 @@
           spider.velocity.x = 0;
           spider.velocity.z = 0;
         }
-        
+
         const half = (Number(native.height) || 0.9) / 2;
         spider.position.y = native.pos.y - half + spider.lerpedGait().bodyHeight;
         spider.velocity.y = 0;
@@ -2644,14 +2662,14 @@
   const sim = {
     app: new ECS(),
     world: new LiveWorld(),
-    spiders: [], 
+    spiders: [],
     lastPlayerPos: null,
     tickCount: 0,
     interval: 0,
     running: false,
-    initialSpawnsDone: false, 
-    onMessage: null, 
-    replace: { on: false, scale: 100, map: null }, 
+    initialSpawnsDone: false,
+    onMessage: null,
+    replace: { on: false, scale: 100, map: null },
   };
 
   function isMapLike(v) {
@@ -2700,23 +2718,23 @@
   const LEG_STYLE = { length: 1.6, width: 0.6 };
 
   function spawnSpider(name, preset, x, y, z, yaw, gallop, scale) {
-    
+
     const bodyPlan = PRESETS[preset]();
-    
+
     if (Number.isFinite(scale)) {
       const natural = bodyPlan.gaitTuning?.stationary?.bodyHeight ?? 1.1;
       const target = Math.max(1, Math.min(200, scale));
       makeGiant(bodyPlan, target / natural);
       LOG.i('scale: altura objetivo', target, '(natural', natural.toFixed(2) + ')');
     }
-    
+
     for (const leg of bodyPlan.legs) {
       for (const seg of leg.segments) seg.length *= LEG_STYLE.length;
       leg.restPosition.mul(LEG_STYLE.length);
     }
     const walkGait = Gait.defaultWalk();
     const gallopGait = Gait.defaultGallop();
-    
+
     const tuning = bodyPlan.gaitTuning;
     if (tuning) {
       for (const g of [walkGait, gallopGait]) {
@@ -2727,7 +2745,7 @@
     }
     const spider = SpiderBody.fromLocation(x, y, z, yaw, sim.world, bodyPlan, walkGait, gallopGait, name, gallop);
     const entity = sim.app.spawn({ SpiderBody: spider });
-    
+
     if (spider.legs.length === 0 && spider.bodyPlan && spider.bodyPlan.legs.length) {
       try { spider.update(); } catch (_) {}
     }
@@ -2816,7 +2834,7 @@
           const hit = sim.world.raycastGround(new Vec(x, p.y + 30, z), DOWN_VECTOR(), 60);
           y = (hit ? hit.y : p.y) + 2;
         } else {
-          return; 
+          return;
         }
       }
       const name = msg.name || ('spider' + (sim.spiders.length + 1));
@@ -2837,7 +2855,7 @@
       LOG.i('staystill (todas)');
       for (const s of sim.spiders) s.entity.replace('StayStillBehaviour', new StayStillBehaviour());
     } else if (msg.type === 'follow') {
-      
+
       if (!sim.spiders.length) { LOG.i('follow: no hay arañas'); return; }
       const off = (msg.off === true) || String(msg.off ?? '').toLowerCase() === 'off' || String(msg.off ?? '').toLowerCase() === 'false';
       if (off) {
@@ -2858,7 +2876,7 @@
       }
       LOG.i('follow ON (A*), distancia', behaviour.distance);
     } else if (msg.type === 'goto') {
-      
+
       if (!sim.spiders.length) { LOG.i('goto: no hay arañas'); return; }
       const off = (msg.off === true) || String(msg.off ?? '').toLowerCase() === 'off';
       if (off) {
@@ -2880,7 +2898,7 @@
       }
       LOG.i('goto', [x, Number.isFinite(y) ? y : 'auto', z]);
     } else if (msg.type === 'hunt') {
-      
+
       if (!sim.spiders.length) { LOG.i('hunt: no hay arañas'); return; }
       const off = (msg.off === true) || String(msg.off ?? '').toLowerCase() === 'off' || String(msg.off ?? '').toLowerCase() === 'false';
       if (off) {
@@ -2898,20 +2916,20 @@
         s.entity.components.delete('TargetBehaviour');
         s.entity.components.delete('StayStillBehaviour');
         s.entity.components.delete('PathfindBehaviour');
-        
+
         s.entity.replace('HuntBehaviour', new HuntBehaviour(opts));
       }
       LOG.i('hunt ON', opts);
     } else if (msg.type === 'evolve') {
-      
+
       const off = (msg.off === true) || String(msg.off ?? '').toLowerCase() === 'off';
       if (off) {
         for (const s of [...sim.spiders]) {
-          
+
           if (s.entity.has('RemoteAIBehaviour')) continue;
           s.entity.components.delete('EvolutionBehaviour');
         }
-        
+
         evoActive = sim.spiders.some((s) => s.entity.has('EvolutionBehaviour'));
         if (!evoActive) evoFood.items.length = 0;
         LOG.i('evolve OFF');
@@ -2920,13 +2938,13 @@
       }
       const n = Number(msg.count);
       const count = Number.isFinite(n) && n > 0 ? Math.min(24, Math.round(n)) : 6;
-      
+
       const p = sim.lastPlayerPos;
       if (!p || (p.x === 0 && p.y === 0 && p.z === 0)) {
         LOG.i('evolve: esperando posición del jugador…');
         return;
       }
-      
+
       for (const s of sim.spiders) {
         s.entity.components.delete('TargetBehaviour');
         s.entity.components.delete('StayStillBehaviour');
@@ -2952,7 +2970,7 @@
           spawned++;
         }
       }
-      
+
       for (const s of [...sim.spiders]) {
         if (!s.entity.has('EvolutionBehaviour')) {
           const idx = sim.spiders.indexOf(s);
@@ -2966,16 +2984,16 @@
       LOG.i('evolve ON:', spawned, 'arañas gen-0 (selección natural activa)');
       emit({ type: 'evo', event: 'on', count: spawned });
     } else if (msg.type === 'ai') {
-      
+
       if (msg.off === true) {
-        
+
         let removed = 0;
         for (const s of sim.spiders) {
           const ai = s.entity.components.get('RemoteAIBehaviour');
           if (ai) { aiSendReset(ai); s.body.motorControlled = false; }
           if (s.entity.components.delete('RemoteAIBehaviour')) removed++;
         }
-        
+
         evoActive = sim.spiders.some((s) => s.entity.has('EvolutionBehaviour'));
         aiDisconnect();
         LOG.i('IA motor OFF:', removed, 'arañas liberadas (gait normal restaurado)');
@@ -2994,7 +3012,7 @@
       if (!connected) {
         return { ok: false, error: `no se pudo conectar a ${url} — el servidor DQN no responde` };
       }
-      
+
       let spawned = 0;
       const useExisting = msg.useExisting === true;
       if (useExisting) {
@@ -3005,7 +3023,7 @@
             spawned++;
           }
         }
-        if (spawned) evoActive = true; 
+        if (spawned) evoActive = true;
       }
       for (let i = spawned; i < count; i++) {
         const ang = (i / count) * Math.PI * 2;
@@ -3019,7 +3037,7 @@
         const spider = spawnSpiderGenome(name, x, y, z, ang, genome);
         const rec = sim.spiders[sim.spiders.length - 1];
         if (rec?.body === spider) {
-          
+
           spider.motorControlled = true;
           evoActive = true;
           rec.entity.replace('EvolutionBehaviour', new EvolutionBehaviour(genome));
@@ -3028,13 +3046,13 @@
         }
       }
       evoStats = { births: 0, deaths: 0, generation: 0, bestFitness: 0, ticks: 0 };
-      
+
       if (msg.noPredators !== true) { predators.on = true; predators.kills = 0; }
       LOG.i('AI remota ON:', spawned, 'arañas controladas por el DQN en', url,
         predators.on ? `(+${predators.count} depredadores)` : '(sin amenazas)');
       return { ok: true, count: spawned, url, backend: aiws.stats.backend, predators: predators.on ? predators.count : 0 };
     } else if (msg.type === 'predators') {
-      
+
       if (msg.off === true) {
         predators.on = false;
         predators.items.length = 0;
@@ -3047,7 +3065,7 @@
       LOG.i('depredadores ON:', predators.count, '(patrullan y cazan arañas)');
       return { ok: true, count: predators.count, kills: predators.kills };
     } else if (msg.type === 'aistats') {
-      
+
       const minds = [];
       for (const s of sim.spiders) {
         const ai = s.entity.components.get('RemoteAIBehaviour');
@@ -3061,7 +3079,7 @@
             bites: ai.bites,
             kills: ai.kills,
             fight: ai.fightTicks,
-            
+
             legs: m && m.length >= 24
               ? round3(m.slice(0, 24).filter((_, i) => i % 3 === 0).reduce((a, b) => a + Math.abs(b), 0) / 8)
               : null,
@@ -3073,7 +3091,7 @@
       }
       return { ok: true, conn: { ...aiws.stats }, minds, evolve: evoActive ? evoStats : null };
     } else if (msg.type === 'evostats') {
-      
+
       const rows = [];
       for (const s of sim.spiders) {
         const evo = s.entity.components.get('EvolutionBehaviour');
@@ -3082,7 +3100,7 @@
           name: s.name,
           gen: evo.genome.generation,
           energy: round3(evo.energy),
-          stamina: round3(evo.stamina / Math.max(0.001, evo.maxStamina)), 
+          stamina: round3(evo.stamina / Math.max(0.001, evo.maxStamina)),
           tired: evo.stamina < evo.maxStamina * 0.15,
           age: evo.age,
           food: evo.foodEaten,
@@ -3095,7 +3113,7 @@
       rows.sort((a, b) => b.fitness - a.fitness);
       return { ok: true, active: evoActive, stats: evoStats, population: rows };
     } else if (msg.type === 'replace') {
-      
+
       const off = (msg.off === true) || String(msg.off ?? '').toLowerCase() === 'off';
       if (off) { replaceOff(); return; }
       const scale = Number(msg.scale);
@@ -3191,9 +3209,9 @@
   function anchorSpidersToPlayer() {
     const p = sim.lastPlayerPos;
     for (const s of sim.spiders) {
-      if (s.puppet) continue; 
+      if (s.puppet) continue;
       const b = s.body;
-      
+
       const yFor = (spider, z) => {
         const hit = sim.world.raycastGround(new Vec(p.x + 2, 130, z), DOWN_VECTOR(), 200);
         const groundY = hit ? hit.y : p.y;
@@ -3201,7 +3219,7 @@
       };
       const far = !Number.isFinite(b.position.x) || !Number.isFinite(b.position.y) || !Number.isFinite(b.position.z)
         || b.position.distance(new Vec(p.x, p.y, p.z)) > 64;
-      
+
       if (far) teleportSpiderExact(s, p.x + 2, yFor(s, p.z), p.z);
     }
   }
@@ -3218,10 +3236,6 @@
   function tick() {
     const t0 = performance.now();
     try {
-      // Sin arañas no hay nada que simular: el spawn llega por eventos
-      // (comandos/P2P), nunca desde el update físico. EXCEPCIÓN: con el
-      // reemplazo de nativos activo, el scan que spawnéa la primera araña
-      // puppet vive en un onTick de app.update() → mantenerlo vivo.
       if (sim.spiders.length === 0) {
         if (sim.replace.on) {
           sim.world.clearCache();
@@ -3262,7 +3276,7 @@
         }
         const st = sim.world.stats;
         LOG.d('world:', st, 'cache:', sim.world.blockCache.size);
-        Object.keys(st).forEach((k) => { st[k] = 0; }); 
+        Object.keys(st).forEach((k) => { st[k] = 0; });
       }
     } catch (e) {
       console.warn(TAG, 'tick error (recuperado)', e);
@@ -3386,9 +3400,9 @@
     start, stop,
     reportPlayer,
     refreshGame,
-    
+
     evolveStats() { return api.send({ type: 'evostats' }); },
-    
+
     ensureInitialSpiders() {
       if (sim.initialSpawnsDone || sim.spiders.length) return false;
       const p = sim.lastPlayerPos;
@@ -3398,7 +3412,7 @@
         return false;
       }
       const side = 3;
-      
+
       const g0 = spawnSpider('garden-0', 'spider', p.x + side, p.y + 2, p.z, 0, true);
       spawnSpider('garden-1', 'spider', p.x - side - 1, p.y + 2, p.z + side, 90, false);
       emit({ type: 'add', spider: serializeSpider(g0, 'garden-0', 'spider') });
@@ -3417,18 +3431,18 @@
       }));
     },
     clear() {
-      
+
       for (const rec of sim.spiders) {
         if (rec.puppet) { try { if (rec.native?.mesh) rec.native.mesh.visible = true; } catch (_) {} }
       }
-      sim.replace.on = false; 
-      
+      sim.replace.on = false;
+
       for (const s of [...sim.spiders]) {
         emit({ type: 'remove', name: s.name });
         s.entity.remove();
       }
       sim.spiders.length = 0;
-      
+
       sim.initialSpawnsDone = true;
     },
     debug() {
@@ -3444,16 +3458,16 @@
         evolve: evoActive ? { ...evoStats, population: sim.spiders.filter((s) => s.entity.has('EvolutionBehaviour')).length } : null,
       };
     },
-    
+
     log(level) {
       if (level === undefined || level === null) return LOG.level;
       LOG.setLevel(level);
       return LOG.level;
     },
-    
+
     logs(n) { return LOG.dump(n); },
     logsClear() { LOG.clear(); },
-    
+
     dispose() {
       try { api.clear(); } catch (_) {}
       try { stop(); } catch (_) {}

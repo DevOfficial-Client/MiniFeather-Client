@@ -26,7 +26,7 @@
         level = (l | 0);
         try { localStorage.setItem('mf:spiderlog', String(level)); } catch (_) {}
         void 0;
-        
+
         try { globalThis.MF_SPIDER_SIM?.log?.(level); } catch (_) {}
       },
       refresh() { try { level = parseInt(localStorage.getItem('mf:spiderlog') || '0', 10) || 0; } catch (_) {} },
@@ -61,9 +61,9 @@
   function connectSim() {
     const sim = simAPI();
     if (!sim) { LOG.i('connectSim: MF_SPIDER_SIM no existe aún'); return false; }
-    
+
     sim.onMessage(handleSimMessage);
-    
+
     sim.send({ type: 'hello' });
     state.simConnected = true;
     LOG.i('connectSim: conectado al sim embebido');
@@ -86,7 +86,7 @@
       state.lastFrame = msg;
       LOG.v('← frame t=' + msg.t, msg.poses?.length + ' poses');
     } else if (msg.type === 'hunt') {
-      
+
       LOG.i('← hunt:', msg.event, msg.name, { bites: msg.bites, at: msg.at });
       if (msg.event === 'bite') {
         try {
@@ -96,7 +96,7 @@
         } catch (_) {}
       }
     } else if (msg.type === 'evo') {
-      
+
       LOG.i('← evo:', msg.event, msg.name ?? '');
       try {
         if (msg.event === 'bite') {
@@ -112,7 +112,7 @@
             text: `\\green\\🐣 nació ${msg.name} (gen ${msg.gen}, hijo de ${msg.parent})`,
           });
         }
-        
+
       } catch (_) {}
     }
   }
@@ -121,7 +121,7 @@
     const peer = globalThis.MF_Peer;
     if (!peer || typeof peer.sendStudio !== 'function') return;
     if (msg.type === 'frame') {
-      if ((state.frameSendCount++ & 1) !== 0) return; 
+      if ((state.frameSendCount++ & 1) !== 0) return;
       peer.sendStudio({ t: 'spider', m: { type: 'frame', t: msg.t, poses: compressPoses(msg.poses) } });
     } else if (msg.type === 'add' || msg.type === 'remove') {
       peer.sendStudio({ t: 'spider', m: msg });
@@ -188,7 +188,7 @@
         }
       }
     } catch (_) {}
-    
+
     resolveGameFromModule();
     return state.game?.player && state.game?.world ? state.game : null;
   }
@@ -343,7 +343,7 @@
   }
 
   function cubeGeometry(ctors) {
-    
+
     const P = [
       -0.5,-0.5,0.5, 0.5,-0.5,0.5, 0.5,0.5,0.5,  -0.5,-0.5,0.5, 0.5,0.5,0.5, -0.5,0.5,0.5,
       0.5,-0.5,-0.5, -0.5,-0.5,-0.5, -0.5,0.5,-0.5,  0.5,-0.5,-0.5, -0.5,0.5,-0.5, 0.5,0.5,-0.5,
@@ -385,12 +385,17 @@
     const A = [-0.5,-0.5,-0.5], B = [0.5,-0.5,-0.5], C = [0.5,0.5,-0.5], D = [-0.5,0.5,-0.5];
     const T = [0,0,0.5];
     const P = [].concat(
-      A, B, T,   
-      D, T, C,   
-      B, C, T,   
-      A, T, D,   
-      A, D, C,   
-      A, C, B    
+      A, B, T,
+
+      D, T, C,
+
+      B, C, T,
+
+      A, T, D,
+
+      A, D, C,
+
+      A, C, B
     );
     const UV = [];
     for (let f = 0; f < 6; f++) UV.push(0, 0, 1, 0, 1, 1);
@@ -411,20 +416,26 @@
   function torsoGeometry(ctors) {
     const cubo = (cx, cy, cz, sx, sy, sz, out) => {
       const hx = sx / 2, hy = sy / 2, hz = sz / 2;
-      
+
       const x0 = cx - hx, x1 = cx + hx, y0 = cy - hy, y1 = cy + hy, z0 = cz - hz, z1 = cz + hz;
       out.push(
-        x0,y0,z1, x1,y0,z1, x1,y1,z1,  x0,y0,z1, x1,y1,z1, x0,y1,z1,   
-        x1,y0,z0, x0,y0,z0, x0,y1,z0,  x1,y0,z0, x0,y1,z0, x1,y1,z0,   
-        x1,y0,z1, x1,y0,z0, x1,y1,z0,  x1,y0,z1, x1,y1,z0, x1,y1,z1,   
-        x0,y0,z0, x0,y0,z1, x0,y1,z1,  x0,y0,z0, x0,y1,z1, x0,y1,z0,   
-        x0,y1,z1, x1,y1,z1, x1,y1,z0,  x0,y1,z1, x1,y1,z0, x0,y1,z0,   
-        x0,y0,z0, x1,y0,z0, x1,y0,z1,  x0,y0,z0, x1,y0,z1, x0,y0,z1    
+        x0,y0,z1, x1,y0,z1, x1,y1,z1,  x0,y0,z1, x1,y1,z1, x0,y1,z1,
+
+        x1,y0,z0, x0,y0,z0, x0,y1,z0,  x1,y0,z0, x0,y1,z0, x1,y1,z0,
+
+        x1,y0,z1, x1,y0,z0, x1,y1,z0,  x1,y0,z1, x1,y1,z0, x1,y1,z1,
+
+        x0,y0,z0, x0,y0,z1, x0,y1,z1,  x0,y0,z0, x0,y1,z1, x0,y1,z0,
+
+        x0,y1,z1, x1,y1,z1, x1,y1,z0,  x0,y1,z1, x1,y1,z0, x0,y1,z0,
+
+        x0,y0,z0, x1,y0,z0, x1,y0,z1,  x0,y0,z0, x1,y0,z1, x0,y0,z1
       );
     };
     const P = [];
-    cubo(0, 0.02, 0.1, 1.0, 0.55, 0.9, P);    
-    cubo(0, 0.05, -0.55, 0.8, 0.5, 0.75, P);  
+    cubo(0, 0.02, 0.1, 1.0, 0.55, 0.9, P);
+
+    cubo(0, 0.05, -0.55, 0.8, 0.5, 0.75, P);
     const UV = [];
     for (let f = 0; f < 12; f++) UV.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1);
     const geo = new ctors.Geometry();
@@ -438,13 +449,13 @@
 
   function ensureSharedLegAssets(ctors) {
     if (!_sharedLegGeo) {
-      
+
       _sharedLegGeo = cubeGeometry(ctors);
-      
+
       _sharedTipGeo = tipGeometry(ctors);
     }
     if (!_sharedLegMat) {
-      
+
       let mat = null;
       try { mat = new state.refMaterial.constructor(); } catch (_) {
         try { mat = state.refMaterial.clone(); } catch (_2) {}
@@ -455,7 +466,7 @@
         return { geo: _sharedLegGeo, tipGeo: _sharedTipGeo, mat: null };
       }
       try {
-        
+
         mat.map = null;
         mat.alphaMap = null; mat.aoMap = null; mat.lightMap = null;
         mat.normalMap = null; mat.bumpMap = null; mat.displacementMap = null;
@@ -463,17 +474,17 @@
         mat.vertexColors = false;
         mat.transparent = false;
         mat.alphaTest = 0;
-        mat.side = 2; 
+        mat.side = 2;
         mat.fog = true;
         mat.toneMapped = state.refMaterial.toneMapped !== false;
         if ('roughness' in mat) mat.roughness = 1;
         if ('metalness' in mat) mat.metalness = 0;
         mat.color?.set?.(0x6b3a14);
         mat.emissive?.set?.(0x000000);
-        
+
         mat.onBeforeCompile = function () {};
         mat.customProgramCacheKey = () => 'mf-spider-leg-v2';
-        
+
         mat.__mfSkipHook = true;
         mat.needsUpdate = true;
       } catch (_) {}
@@ -493,7 +504,7 @@
   }
 
   function addSimSpider(info) {
-    if (state.spiders.has(info.name)) return true; 
+    if (state.spiders.has(info.name)) return true;
     if (!ensureCtors()) { LOG.d('addSimSpider: sin ctors →', info.name); return false; }
     const ctors = state.ctors;
     const scene = getScene(state.game);
@@ -518,14 +529,14 @@
       const legGroup = new ctors.Group();
       legGroup.userData.__mfSpider = true;
       const segments = [];
-      
+
       const renderCount = legInfo.segments.length;
       for (let si = 0; si < renderCount; si++) {
-        
+
         const isTip = si === renderCount - 1;
         const mesh = new ctors.Mesh(isTip ? sharedTipGeo : sharedGeo, sharedMat);
         mesh.userData.__mfSpider = true;
-        mesh.frustumCulled = false; 
+        mesh.frustumCulled = false;
         legGroup.add(mesh);
         segments.push({ mesh, thickness: legThickness(si), index: si, isTip });
       }
@@ -556,16 +567,17 @@
   function setQuatLookAtZ(node, fx, fy, fz) {
     const q = node.quaternion;
     if (!q || typeof q.set !== 'function') return;
-    const dot = fz; 
+    const dot = fz;
     if (dot > 0.99999) { q.set(0, 0, 0, 1); }
     else if (dot < -0.99999) {
-      q.set(1, 0, 0, 0); 
+      q.set(1, 0, 0, 0);
     } else {
       let ax = -fy, ay = fx;
       const al = Math.hypot(ax, ay) || 1;
       ax /= al; ay /= al;
-      const w = Math.sqrt((1 + dot) / 2); 
-      const s = Math.sqrt(1 - w * w);     
+      const w = Math.sqrt((1 + dot) / 2);
+      const s = Math.sqrt(1 - w * w);
+
       q.set(ax * s, ay * s, 0, w);
     }
     if (node.rotation && typeof node.rotation.setFromQuaternion === 'function') {
@@ -574,7 +586,7 @@
   }
 
   function applyFrame(frame, dedupKey = 'lastAppliedFrameT') {
-    if (!frame || frame.t === state[dedupKey]) return; 
+    if (!frame || frame.t === state[dedupKey]) return;
     state[dedupKey] = frame.t;
     for (const pose of frame.poses) {
       if (!pose?.n) continue;
@@ -620,18 +632,18 @@
         const len = Math.hypot(fx, fy, fz);
         const mesh = seg.mesh;
         if (len < 1e-6) {
-          
+
           mesh.visible = false;
           continue;
         }
         mesh.visible = true;
-        
+
         mesh.position.set(
           (from[0] + to[0]) * 0.5 - lx,
           (from[1] + to[1]) * 0.5 - ly,
           (from[2] + to[2]) * 0.5 - lz
         );
-        
+
         const restLen = leg.segLengths?.[si] || len;
         const sizeF = Math.min(80, Math.max(1, restLen / 1.8));
         const th = seg.thickness * sizeF;
@@ -681,22 +693,22 @@
       if (game) state.game = game;
       const sim = simAPI();
       if (sim) {
-        
+
         if (!state.simConnected) connectSim();
-        
+
         reportPlayer(game, sim);
-        
+
         sim.refreshGame();
         sim.ensureInitialSpiders();
       }
-      
+
       if (state.pendingSpiders.length) {
         const retry = state.pendingSpiders.splice(0);
         for (const info of retry) if (!addSimSpider(info)) state.pendingSpiders.push(info);
       }
       if (state.lastFrame) applyFrame(state.lastFrame);
       if (state.remoteFrame) applyFrame(state.remoteFrame, 'lastAppliedRemoteT');
-      
+
       if (state.spiders.size) {
         const scene = getScene(state.game);
         if (scene) {
@@ -707,7 +719,7 @@
           }
         }
       }
-      
+
       for (const sp of state.spiders.values()) {
         try {
           sp.root.updateMatrix();
@@ -745,7 +757,7 @@
               snap.camDist = Math.round(v.distanceTo(camWorld) * 10) / 10;
               const p = v.clone().project(cam);
               snap.onScreen = Math.abs(p.x) < 1 && Math.abs(p.y) < 1 && p.z < 1;
-              
+
               if (sp.legs[0]?.segments[0]?.mesh) {
                 const leg0 = sp.legs[0].segments[0].mesh;
                 leg0.updateWorldMatrix(true, false);
@@ -791,7 +803,7 @@
   }
 
   window.MF_SPIDER_BOT = {
-    
+
     dispose() {
       state.enabled = false;
       try { clearAll(); } catch (_) {}
@@ -807,7 +819,7 @@
       if (!sim) return { ok: false, error: 'SpiderSim not loaded' };
       return sim.send(obj);
     },
-    
+
     target(x, y, z) { return this.send({ type: 'target', x, y, z }); },
     staystill() { return this.send({ type: 'staystill' }); },
     list() {
@@ -819,7 +831,7 @@
         const p = state.pendingSpiders.find((x) => x.name === name);
         return { name, preset: p?.preset, gallop: p?.gallop, pending: true };
       }).map((entry) => {
-        
+
         const live = sim?.list?.().find((l) => l.name === entry.name);
         return live ? { ...entry, pos: live.pos, grounded: live.grounded } : entry;
       });
@@ -829,7 +841,7 @@
       const sim = simAPI();
       sim?.clear?.();
     },
-    
+
     remoteApply,
     onPeerConnected,
     enable,
@@ -857,13 +869,13 @@
         logLevel: LOG.level,
       };
     },
-    
+
     log(level) {
       if (level === undefined || level === null) return LOG.level;
       LOG.setLevel(level);
       return LOG.level;
     },
-    
+
     logs(n = 25) {
       const botLogs = LOG.dump(n);
       const simLogs = simAPI()?.logs?.(n) || [];

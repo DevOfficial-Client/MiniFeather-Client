@@ -91,7 +91,7 @@
 
     const a = e.anchor;
     u.uCoverage.value = Math.max(0.05, Math.min(0.95, a.coverage + cfg.coverageOffset + storm * 0.035));
-    u.uNoiseScale.value = a.scale; // Preserve MiniFeather custom cloud shape/noise scale.
+    u.uNoiseScale.value = a.scale;
     u.uWind.value = a.wind * cfg.windMul;
     u.uThickness.value = Math.max(8, Math.min(150, a.thickness * cfg.thicknessMul + storm * 24));
     u.uCloudY.value = a.height;
@@ -108,7 +108,6 @@
     try { thunder = Math.max(0, Math.min(1, Number(game?.world?.getThunderStrength?.(1)) || 0)); } catch (_) {}
     const storm = Math.max(rain, thunder * 0.9);
     const materials = new Set();
-    // Solo scene: clouds/ambientMeshes viven dentro de scene → doble pasada
     for (const o of collect(game?.gameScene?.scene)) {
       for (const m of (Array.isArray(o.material) ? o.material : [o.material])) if (isCloudMaterial(m)) materials.add(m);
     }
@@ -132,7 +131,6 @@
         if (u?.uCloudY) u.uCloudY.value = a.height;
         if (u?.uOpacity) u.uOpacity.value = a.opacity;
         if (u?.uVolumetric && a.volumetric !== undefined) u.uVolumetric.value = a.volumetric;
-        // Don't overwrite a cloud shader another MiniFeather module changed after us.
         if (e.original && e.patched && m.fragmentShader === e.patched) {
           m.fragmentShader = e.original;
           m.needsUpdate = true;

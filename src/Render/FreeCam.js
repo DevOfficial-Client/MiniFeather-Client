@@ -6,16 +6,16 @@ const EVENT_STATE = 'minifeather:freecam-state';
 const EVENT_ACCESS_REQUEST = 'minifeather:freecam-access-request';
 
 const FREECAM_UUIDS = new Set([
-    '6eb7369a-551e-406a-9a63-6db7a358e1e5' 
-]);
-const FREECAM_USERS = new Set([
+    '6eb7369a-551e-406a-9a63-6db7a358e1e5'
+        ]);
+        const FREECAM_USERS = new Set([
     'angrywolfx',
     'itznightrise'
-]);
+        ]);
 
-const keys = Object.create(null);
+        const keys = Object.create(null);
 
-const state = {
+        const state = {
     enabled: false,
     configured: false,
     requestedEnabled: false,
@@ -44,30 +44,30 @@ const state = {
     savedPerspective: null,
     forcedPerspective: false,
     lastAccessCheck: 0
-};
+        };
 
-function clamp(value, min, max) {
+        function clamp(value, min, max) {
     return Math.min(max, Math.max(min, Number(value) || 0));
-}
+    }
 
-function parseDetail(event) {
+    function parseDetail(event) {
     try {
         return typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
     } catch (_) {
         return null;
     }
-}
+    }
 
-function cloneXYZ(value) {
+    function cloneXYZ(value) {
     if (!value) return null;
     const x = Number(value.x);
     const y = Number(value.y);
     const z = Number(value.z);
     if (![x, y, z].every(Number.isFinite)) return null;
     return { x, y, z };
-}
+    }
 
-function copyXYZ(target, source) {
+    function copyXYZ(target, source) {
     if (!target || !source) return false;
     try {
         if (typeof target.set === 'function') target.set(source.x, source.y, source.z);
@@ -80,18 +80,18 @@ function copyXYZ(target, source) {
     } catch (_) {
         return false;
     }
-}
+    }
 
-function cloneRotation(value) {
+    function cloneRotation(value) {
     if (!value) return null;
     const x = Number(value.x);
     const y = Number(value.y);
     const z = Number(value.z);
     if (![x, y, z].every(Number.isFinite)) return null;
     return { x, y, z, order: typeof value.order === 'string' ? value.order : 'YXZ' };
-}
+    }
 
-function copyRotation(target, source) {
+    function copyRotation(target, source) {
     if (!target || !source) return false;
     try {
         if (typeof target.set === 'function') target.set(source.x, source.y, source.z, source.order || 'YXZ');
@@ -105,9 +105,9 @@ function copyRotation(target, source) {
     } catch (_) {
         return false;
     }
-}
+    }
 
-function cloneQuaternion(value) {
+    function cloneQuaternion(value) {
     if (!value) return null;
     const x = Number(value.x);
     const y = Number(value.y);
@@ -115,9 +115,9 @@ function cloneQuaternion(value) {
     const w = Number(value.w);
     if (![x, y, z, w].every(Number.isFinite)) return null;
     return { x, y, z, w };
-}
+    }
 
-function copyQuaternion(target, source) {
+    function copyQuaternion(target, source) {
     if (!target || !source) return false;
     try {
         if (typeof target.set === 'function') target.set(source.x, source.y, source.z, source.w);
@@ -131,9 +131,9 @@ function copyQuaternion(target, source) {
     } catch (_) {
         return false;
     }
-}
+    }
 
-function findGameFromFiber(element) {
+    function findGameFromFiber(element) {
     if (!element) return null;
     const key = Object.keys(element).find(name =>
         name.startsWith('__reactFiber$') ||
@@ -163,9 +163,9 @@ function findGameFromFiber(element) {
     }
 
     return null;
-}
+    }
 
-function getGame(force = false) {
+    function getGame(force = false) {
     const now = performance.now();
 
     if (window.miniblox?.player) {
@@ -215,9 +215,9 @@ function getGame(force = false) {
     }
 
     return state.game?.player ? state.game : null;
-}
+    }
 
-function getServerPermissionLevel(game = getGame(true)) {
+    function getServerPermissionLevel(game = getGame(true)) {
     const info = game?.serverInfo;
     const uuid = game?.player?.profile?.uuid;
     let level = Number(info?.permissionLevel);
@@ -228,36 +228,36 @@ function getServerPermissionLevel(game = getGame(true)) {
     } catch (_) {}
 
     return level;
-}
+    }
 
-function hasServerAdminAccess(game = getGame(true)) {
+    function hasServerAdminAccess(game = getGame(true)) {
     return getServerPermissionLevel(game) >= 100;
-}
+    }
 
-function getPlayerUsername(game = getGame(true)) {
+    function getPlayerUsername(game = getGame(true)) {
     return String(
         game?.player?.profile?.username ??
         game?.player?.username ??
         game?.player?.name ??
         ''
     ).trim();
-}
+    }
 
-function getPlayerUuid(game = getGame(true)) {
-    if (!game) game = getGame(true); 
+    function getPlayerUuid(game = getGame(true)) {
+    if (!game) game = getGame(true);
     return String(game?.player?.profile?.uuid ?? '').toLowerCase();
-}
+    }
 
-function hasFreecamAccess(game = getGame(true)) {
-    if (!game) game = getGame(true); 
+    function hasFreecamAccess(game = getGame(true)) {
+    if (!game) game = getGame(true);
     if (hasServerAdminAccess(game)) return true;
-    
+
     const uuid = getPlayerUuid(game);
     if (uuid && FREECAM_UUIDS.has(uuid)) return true;
     return FREECAM_USERS.has(getPlayerUsername(game).toLowerCase());
-}
+    }
 
-function validCamera(camera) {
+    function validCamera(camera) {
     return !!(
         camera &&
         camera.position &&
@@ -266,9 +266,9 @@ function validCamera(camera) {
         Number.isFinite(Number(camera.position.z)) &&
         (camera.rotation || camera.quaternion)
     );
-}
+    }
 
-function findScene(camera) {
+    function findScene(camera) {
     let current = camera;
     let fallback = null;
     for (let i = 0; current && i < 12; i++, current = current.parent) {
@@ -276,9 +276,9 @@ function findScene(camera) {
         if (current.parent) fallback = current.parent;
     }
     return fallback;
-}
+    }
 
-function resolveCamera(force = false) {
+    function resolveCamera(force = false) {
     const game = getGame(force);
     if (!game) return null;
 
@@ -299,9 +299,9 @@ function resolveCamera(force = false) {
     state.camera = camera;
     installCameraHooks(camera);
     return camera;
-}
+    }
 
-function getPlayerCameraOrigin(player) {
+    function getPlayerCameraOrigin(player) {
     const pos = cloneXYZ(player?.pos || player?.position);
     if (!pos) return null;
 
@@ -317,9 +317,9 @@ function getPlayerCameraOrigin(player) {
         y: pos.y + eyeHeight,
         z: pos.z
     };
-}
+    }
 
-function captureWorldPosition(camera) {
+    function captureWorldPosition(camera) {
     try {
         if (typeof camera.getWorldPosition === 'function' && camera.position?.clone) {
             const out = camera.position.clone();
@@ -328,9 +328,9 @@ function captureWorldPosition(camera) {
         }
     } catch (_) {}
     return cloneXYZ(camera?.position);
-}
+    }
 
-function captureWorldQuaternion(camera) {
+    function captureWorldQuaternion(camera) {
     try {
         if (typeof camera.getWorldQuaternion === 'function' && camera.quaternion?.clone) {
             const out = camera.quaternion.clone();
@@ -339,9 +339,9 @@ function captureWorldQuaternion(camera) {
         }
     } catch (_) {}
     return cloneQuaternion(camera?.quaternion);
-}
+    }
 
-function setEulerFromQuaternion(camera, quaternion) {
+    function setEulerFromQuaternion(camera, quaternion) {
     if (!camera?.rotation || !quaternion) return false;
     try {
         if (camera.quaternion && typeof camera.quaternion.set === 'function') {
@@ -353,9 +353,9 @@ function setEulerFromQuaternion(camera, quaternion) {
         }
     } catch (_) {}
     return false;
-}
+    }
 
-function applyPose(camera = state.camera) {
+    function applyPose(camera = state.camera) {
     if (!state.enabled || !camera || !state.freePosition) return;
     copyXYZ(camera.position, state.freePosition);
     try {
@@ -369,9 +369,9 @@ function applyPose(camera = state.camera) {
             }
         }
     } catch (_) {}
-}
+    }
 
-function installCameraHooks(camera) {
+    function installCameraHooks(camera) {
     if (!camera) return;
 
     if (state.matrixHook?.camera !== camera && typeof camera.updateMatrixWorld === 'function') {
@@ -397,14 +397,14 @@ function installCameraHooks(camera) {
             state.worldMatrixHook = { camera, original, hook };
         } catch (_) {}
     }
-}
+    }
 
-function clearKeys() {
+    function clearKeys() {
     for (const key of Object.keys(keys)) keys[key] = false;
-}
+    }
 
-function isTypingOrUiOpen() {
-    
+    function isTypingOrUiOpen() {
+
     if (globalThis.__MF_STUDIO_OPEN__) return true;
 
     const active = document.activeElement;
@@ -414,9 +414,9 @@ function isTypingOrUiOpen() {
     if (game?.chat?.showInput || game?.chat?.inputOpen || game?.chat?.isInputOpen) return true;
 
     return !!document.querySelector('#mf-gui-overlay:not([style*="display: none"])');
-}
+    }
 
-function releaseGameMovementKeys() {
+    function releaseGameMovementKeys() {
     const definitions = {
         KeyW: ['w', 87], KeyA: ['a', 65], KeyS: ['s', 83], KeyD: ['d', 68],
         Space: [' ', 32], ShiftLeft: ['Shift', 16], ShiftRight: ['Shift', 16],
@@ -431,18 +431,18 @@ function releaseGameMovementKeys() {
             window.dispatchEvent(event);
         } catch (_) {}
     }
-}
+    }
 
-function neutralizePlayerInput() {
+    function neutralizePlayerInput() {
     const player = state.player || state.game?.player;
     if (!player) return;
     try { if ('wWQmwuDLqA' in player) player.wWQmwuDLqA = 0; } catch (_) {}
     try { if ('YApHmhhGagG' in player) player.YApHmhhGagG = 0; } catch (_) {}
     try { if ('jumping' in player) player.jumping = false; } catch (_) {}
     try { if ('sneak' in player) player.sneak = false; } catch (_) {}
-}
+    }
 
-function forceThirdPerson(player) {
+    function forceThirdPerson(player) {
     state.savedPerspective = null;
     state.forcedPerspective = false;
     if (!player || !Number.isFinite(Number(player.perspective))) return;
@@ -455,9 +455,9 @@ function forceThirdPerson(player) {
         if (typeof player.toggleCameraPerspective === 'function') player.toggleCameraPerspective();
         state.forcedPerspective = true;
     } catch (_) {}
-}
+    }
 
-function restorePerspective(player) {
+    function restorePerspective(player) {
     const saved = state.savedPerspective;
     if (!player || saved === null) {
         state.savedPerspective = null;
@@ -474,9 +474,9 @@ function restorePerspective(player) {
 
     state.savedPerspective = null;
     state.forcedPerspective = false;
-}
+    }
 
-function detachCamera(camera) {
+    function detachCamera(camera) {
     const parent = camera?.parent || null;
     if (!parent) return false;
 
@@ -499,9 +499,9 @@ function detachCamera(camera) {
     } catch (_) {
         return false;
     }
-}
+    }
 
-function restoreCameraParent(camera) {
+    function restoreCameraParent(camera) {
     const parent = state.originalParent;
     if (!camera || !parent) return;
 
@@ -517,9 +517,9 @@ function restoreCameraParent(camera) {
             parent.children.splice(state.originalIndex, 0, camera);
         }
     } catch (_) {}
-}
+    }
 
-function emitState(extra = {}) {
+    function emitState(extra = {}) {
     const game = getGame(true);
     const permissionLevel = getServerPermissionLevel(game);
     document.dispatchEvent(new CustomEvent(EVENT_STATE, {
@@ -531,9 +531,9 @@ function emitState(extra = {}) {
             ...extra
         })
     }));
-}
+    }
 
-function enable() {
+    function enable() {
     if (state.enabled) return true;
 
     const game = getGame(true);
@@ -606,9 +606,9 @@ function enable() {
     state.lastAccessCheck = performance.now();
     emitState();
     return true;
-}
+    }
 
-function disable(preserveRequest = false) {
+    function disable(preserveRequest = false) {
     if (!preserveRequest) state.requestedEnabled = false;
     if (!state.enabled) return;
 
@@ -640,16 +640,16 @@ function disable(preserveRequest = false) {
     state.freePosition = null;
 
     emitState();
-}
+    }
 
-function setEnabled(value) {
+    function setEnabled(value) {
     state.requestedEnabled = !!value;
     if (state.requestedEnabled) return enable();
     disable(false);
     return true;
-}
+    }
 
-function update(timestamp) {
+    function update(timestamp) {
     if (!state.enabled) return;
 
     const game = getGame();
@@ -714,29 +714,29 @@ function update(timestamp) {
     state.freePosition.y += vertical * distance;
 
     applyPose(camera);
-}
+    }
 
-const movementKeys = new Set([
+    const movementKeys = new Set([
     'KeyW', 'KeyA', 'KeyS', 'KeyD',
     'Space', 'ShiftLeft', 'ShiftRight',
     'ControlLeft', 'ControlRight'
-]);
+        ]);
 
-window.addEventListener('keydown', event => {
+        window.addEventListener('keydown', event => {
     if (!state.enabled || isTypingOrUiOpen()) return;
     if (!movementKeys.has(event.code)) return;
     keys[event.code] = true;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-}, true);
+    }, true);
 
-window.addEventListener('keyup', event => {
+    window.addEventListener('keyup', event => {
     if (!movementKeys.has(event.code)) return;
     keys[event.code] = false;
-}, true);
+    }, true);
 
-window.addEventListener('mousemove', event => {
+    window.addEventListener('mousemove', event => {
     if (!state.enabled || !document.pointerLockElement || isTypingOrUiOpen()) return;
 
     const sensitivity = 0.0022 * clamp(state.sensitivity, 0.1, 3);
@@ -747,9 +747,9 @@ window.addEventListener('mousemove', event => {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-}, true);
+    }, true);
 
-for (const type of ['mousedown', 'mouseup']) {
+    for (const type of ['mousedown', 'mouseup']) {
     window.addEventListener(type, event => {
         if (!state.enabled || isTypingOrUiOpen()) return;
         if (event.button < 0 || event.button > 2) return;
@@ -757,23 +757,23 @@ for (const type of ['mousedown', 'mouseup']) {
         event.stopPropagation();
         event.stopImmediatePropagation();
     }, true);
-}
+    }
 
-window.addEventListener('wheel', event => {
+    window.addEventListener('wheel', event => {
     if (!state.enabled || isTypingOrUiOpen()) return;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-}, { capture: true, passive: false });
+    }, { capture: true, passive: false });
 
-window.addEventListener('blur', clearKeys);
-document.addEventListener('pointerlockchange', clearKeys);
+    window.addEventListener('blur', clearKeys);
+    document.addEventListener('pointerlockchange', clearKeys);
 
-document.addEventListener(EVENT_ACCESS_REQUEST, () => {
+    document.addEventListener(EVENT_ACCESS_REQUEST, () => {
     emitState({ reason: 'ACCESS_CHECK' });
-}, false);
+    }, false);
 
-document.addEventListener(EVENT_CONFIG, event => {
+    document.addEventListener(EVENT_CONFIG, event => {
     const config = parseDetail(event);
     if (!config || typeof config !== 'object') return;
 
@@ -783,18 +783,18 @@ document.addEventListener(EVENT_CONFIG, event => {
 
     state.configured = true;
     if (typeof config.enabled === 'boolean') setEnabled(config.enabled);
-}, false);
+    }, false);
 
-function loop(timestamp) {
+    function loop(timestamp) {
     if (state.requestedEnabled && !state.enabled && timestamp - state.lastEnableAttempt >= 650) {
         state.lastEnableAttempt = timestamp;
         enable();
     }
     update(timestamp);
     requestAnimationFrame(loop);
-}
+    }
 
-window.MF_FREECAM = {
+    window.MF_FREECAM = {
     enable,
     disable,
     toggle() { return setEnabled(!state.enabled); },
@@ -810,7 +810,7 @@ window.MF_FREECAM = {
             fastMultiplier: state.fastMultiplier
         };
     }
-};
+    };
 
 requestAnimationFrame(loop);
 })();

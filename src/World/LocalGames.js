@@ -27,7 +27,7 @@
   const SIGNAL_READY_EVENT = 'minifeather:localgames-signal-ready';
   const SIGNAL_PROBE_EVENT = 'minifeather:localgames-signal-probe';
   const STUN_URL = 'stun:stun.cloudflare.com:3478';
-  
+
   const ICE_SERVERS = [
     { urls: [STUN_URL, 'stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
     { urls: 'turns:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
@@ -592,10 +592,10 @@
       const ok = await pollGlobalRegistry();
 
       if (ok) {
-        
+
         state.registryBackoffMs = 15000;
       } else {
-        
+
         state.registryBackoffMs = Math.min(
           (state.registryBackoffMs || 15000) * 2,
           60000
@@ -2008,8 +2008,6 @@
     };
 
     if (howler.ctx.state === 'suspended' || howler.ctx.state === 'interrupted') {
-      // A suspended AudioContext has a frozen clock. Howler otherwise queues
-      // nine listener automations every frame at that same timestamp.
       for (const name of [
         'positionX', 'positionY', 'positionZ',
         'forwardX', 'forwardY', 'forwardZ',
@@ -2095,7 +2093,7 @@
     let lastInnerHeight = 0;
 
     const ensureSize = (force = false) => {
-      
+
       const now = performance.now();
       const windowResized =
         innerWidth !== lastInnerWidth ||
@@ -2161,7 +2159,7 @@
         height !== lastHeight ||
         ratio !== lastRatio
       ) {
-        
+
         try {
           composer?.setSize?.(width, height);
         } catch (_) {}
@@ -2253,8 +2251,6 @@
 
     if (patchedComposerRender && originalFluidVisibility) {
       patchedFluidVisibility = function (...args) {
-        // The direct local-world draw cannot use the native reflection targets.
-        // Skip their two scene captures while keeping the native terrain draw.
         if (state.active && state.directLocal) return false;
         return originalFluidVisibility.apply(this, args);
       };
@@ -2317,7 +2313,7 @@
   }
 
   function worldTextureAssetsReady(assets) {
-    
+
     return !!(
       assets?.materialWorld?.map &&
       assets?.materialFluidWorld?.map
@@ -2721,7 +2717,7 @@
     };
 
     try {
-      
+
       if (game?.menuLoad && typeof game.menuLoad.then === 'function') {
         await withTimeout(
           game.menuLoad,
@@ -2741,7 +2737,7 @@
         30000,
         'World asset load timed out (ensureWorldAssets).'
       ).catch(assetTimeout => {
-        
+
         console.warn(
           LOG_PREFIX,
           'ensureWorldAssets timeout (continuando):',
@@ -2750,7 +2746,7 @@
       });
 
       if (!await waitForTerrainMaterials(2500)) {
-        
+
         if (typeof assets.loadSpritesheet === 'function') {
           await assets.loadSpritesheet();
         } else if (typeof assets.ensureMenuTextures === 'function') {
@@ -4307,10 +4303,6 @@
     if (!proxy && state.localPlayerProxy?.world === world && state.localPlayerProxy !== player) {
       proxy = state.localPlayerProxy;
     }
-
-    // The current MiniBlox client keeps a separate render proxy for the local
-    // player. Registering the controller itself makes fixedUpdate feed network
-    // interpolation back into its own physics once per tick.
     try {
       if (world.players?.get?.(id) === player) world.players.delete(id);
       if (world.entities?.get?.(id) === player) world.entities.delete(id);
@@ -4932,7 +4924,7 @@
     state.localHardcore = next;
 
     if (next) {
-      
+
       addSystemChat('Hardcore enabled — one life, no flight, no regen.');
       const result = setLocalGamemode('survival');
       return result.ok
@@ -5690,7 +5682,7 @@
     const gravel = stateForAny('gravel', 'stone');
     const water = stateForAny('water');
     const bedrock = stateForAny('bedrock', 'stone');
-    
+
     const oakLog = stateForAny('oak_log', 'log', 'stone');
     const leaves = stateForAny('oak_leaves', 'leaves', 'grass_block');
     const flowerA = stateForAny('dandelion', 'yellow_flower');
@@ -5809,7 +5801,7 @@
         }
       }
     } else if (map === 'garden') {
-      
+
       let gardenData = null;
 
       setStatus('Loading the Spider Garden world...', '');
@@ -5835,7 +5827,7 @@
         }
       }
       if (!gardenData) {
-        
+
         try {
           const response = await fetch('http://127.0.0.1:8765/world.json', { cache: 'no-store' });
           if (response.ok) gardenData = await response.json();
@@ -5857,7 +5849,7 @@
       const paletteStates = gardenData.palette.map((full) => {
         const key = mcName(full);
         if (stateCache.has(key)) return stateCache.get(key);
-        
+
         const base = key.split('[')[0];
         const stem = base.split('_')[0];
         const state = stateForAny(base, `${stem}_block`, stem === 'grass' ? 'grass' : stem, 'stone');
@@ -5919,7 +5911,7 @@
         }
       };
 
-      const columnTop = new Map(); 
+      const columnTop = new Map();
       for (let i = 0; i < flat.length; i += 4) {
         const x = flat[i], y = flat[i + 1], z = flat[i + 2];
         const key = `${x},${z}`;
@@ -5933,7 +5925,7 @@
       for (let x = minX; x <= maxX; x++) {
         for (let z = minZ; z <= maxZ; z++) {
           const top = columnTop.get(`${x},${z}`);
-          
+
           const height = Number.isFinite(top) ? top : defaultHeight;
           state.terrainSurface.set(`${x},${z}`, height);
 
@@ -5970,7 +5962,7 @@
       log(`garden: ${placed} bloques colocados, ${skipped} saltados`);
 
       const sp = gardenData.spawn || { x: 0, y: 66, z: 0 };
-      
+
       let spawnSurface = Number(sp.y) || 66;
       for (let dx = -1; dx <= 1; dx++) {
         for (let dz = -1; dz <= 1; dz++) {
@@ -6740,7 +6732,7 @@
 
     try {
       logTrace('initializeDirectLocalGame: prepareEngine + waitForAccount...');
-      
+
       await withTimeout(
         Promise.all([
           (async () => {
@@ -8043,9 +8035,6 @@
         reject(new Error('SIGNAL_BRIDGE_OFFLINE'));
       }, timeoutMs);
       document.addEventListener(SIGNAL_READY_EVENT, onReady, { once: true });
-      // The isolated bridge may have announced readiness before this MAIN-world
-      // script installed its listener. A probe makes startup independent of the
-      // browser's ordering of document_start content-script worlds.
       document.dispatchEvent(new CustomEvent(SIGNAL_PROBE_EVENT));
     });
   }
@@ -8657,7 +8646,7 @@
       case 'survival':
       case 'adventure':
       case 'spectator': {
-        
+
         const realCmd = cmd === 'gm' ? 'gamemode' : cmd;
         const realArgs = cmd === 'gamemode' || cmd === 'gm' ? args : (args.length ? args : []);
         if (state.mode === 'host' || state.mode === 'single') return !!executeHostCommand('', realCmd, realArgs);
@@ -8672,7 +8661,7 @@
           return true;
         }
         if (state.mode === 'host' || state.mode === 'single') {
-          
+
           if (!isMod) {
             addGameChat('\\red\\You can only toggle your own flight.', '');
             return true;
@@ -9765,7 +9754,7 @@
     }
 
     if (message.t === 'mode') {
-      
+
       const newMode = String(message.mode || 'survival').toLowerCase();
       const newHardcore = !!message.hardcore;
 
@@ -9959,7 +9948,7 @@
     }
 
     if (message.t === 'mode') {
-      
+
       const newMode = String(message.mode || 'survival').toLowerCase();
       const newHardcore = !!message.hardcore;
 
@@ -10123,7 +10112,7 @@
       const current = pc.connectionState;
 
       if (current === 'connected' || current === 'failed' || current === 'closed') {
-        
+
         if (state.mode === 'host' && state.serverAddress) {
           state.lastRegistryPublish = 0;
         }
@@ -10731,7 +10720,7 @@
         state.directLocal && state.map === 'sandbox'
           ? 38
           : state.map === 'garden'
-            ? (state.arena?.floorY ?? 60) - 12 
+            ? (state.arena?.floorY ?? 60) - 12
             : arena.floorY - 4;
 
       if (Number(player.pos.y) < fallThreshold) {
@@ -11080,7 +11069,6 @@
   (function autoJoinFromShareLink() {
     const invite = parseShareLink();
     if (!invite) return;
-    // A shared link is an explicit one-time join, not a saved startup choice.
     try {
       const nextPath = /^\/local\.P2P\//i.test(location.pathname) ? '/' : location.pathname;
       history.replaceState(history.state, '', nextPath + location.search);

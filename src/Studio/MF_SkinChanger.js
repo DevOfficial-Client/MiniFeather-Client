@@ -7,14 +7,18 @@
     const ID = 'mf-skinchanger';
     const DB_NAME = 'minifeather_skins';
     const STORE = 'skins';
-    const SKIN_FACE = { x: 8, y: 8, w: 8, h: 8 }; 
+    const SKIN_FACE = { x: 8, y: 8, w: 8, h: 8 };
 
     const state = {
         open: false,
-        items: [],            
-        current: null,        
-        origCanvas: null,     
-        origMats: [],         
+        items: [],
+
+        current: null,
+
+        origCanvas: null,
+
+        origMats: [],
+
         watchdog: null
     };
 
@@ -54,7 +58,7 @@
         const skins = out.filter(m => {
             const w = m.map?.image?.width, h = m.map?.image?.height;
             if (!w || !h) return false;
-            
+
             const k64 = w / 64;
             return Number.isInteger(k64) && (h === w || h === w / 2);
         });
@@ -128,9 +132,9 @@
         c.width = 32; c.height = 32;
         const ctx = c.getContext('2d');
         ctx.imageSmoothingEnabled = false;
-        
+
         ctx.drawImage(img, 16 * k, 16 * k, 24 * k, 16 * k, 4, 8, 24, 16);
-        ctx.drawImage(img, 40 * k, 0, 24 * k, 16 * k, 4, -8, 24, 16); 
+        ctx.drawImage(img, 40 * k, 0, 24 * k, 16 * k, 4, -8, 24, 16);
         return c.toDataURL();
     }
 
@@ -178,9 +182,9 @@
             } catch {}
         }
         for (const m of mats) { m.map = tex; m.needsUpdate = true; }
-        tex.__mfLocalCanvas = true; 
+        tex.__mfLocalCanvas = true;
         state.origMats = mats;
-        state.ownTex = tex; 
+        state.ownTex = tex;
         return { canvas: c, tex, mats, shared: false };
     }
 
@@ -199,9 +203,9 @@
         const ctx = session.canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
         ctx.clearRect(0, 0, session.canvas.width, session.canvas.height);
-        
+
         const tw = session.canvas.width, th = session.canvas.height;
-        const cs = canvas.width / 64; 
+        const cs = canvas.width / 64;
         if (tw === th * 2) {
             ctx.drawImage(canvas, 0, 0, 64 * cs, 32 * cs, 0, 0, tw, th);
         } else {
@@ -210,7 +214,7 @@
         session.tex.needsUpdate = true;
         state.current = name;
         startWatchdog();
-        
+
         try {
             window.MF_Peer?.sendLook?.({
                 a: 'skin', name,
@@ -222,19 +226,21 @@
 
     function normalizeSkinCanvas(img) {
         const w = img.width, h = img.height;
-        const isModern = w === h;             
-        const isLegacy = w === h * 2;         
+        const isModern = w === h;
+
+        const isLegacy = w === h * 2;
+
         if (!isModern && !isLegacy) return null;
         const scale = w / 64;
         if (!Number.isInteger(scale)) return null;
 
-        if (isModern) return img; 
+        if (isModern) return img;
 
         const out = document.createElement('canvas');
-        out.width = w; out.height = w; 
+        out.width = w; out.height = w;
         const cx = out.getContext('2d');
         cx.imageSmoothingEnabled = false;
-        cx.drawImage(img, 0, 0, w, h, 0, 0, w, h); 
+        cx.drawImage(img, 0, 0, w, h, 0, 0, w, h);
         const mirror = (sx, dx) => {
             cx.save();
             cx.translate((dx + 16) * scale, 48 * scale);
@@ -242,8 +248,8 @@
             cx.drawImage(img, sx * scale, h / 2, 16 * scale, h / 2, 0, 0, 16 * scale, 16 * scale);
             cx.restore();
         };
-        mirror(0, 16);  
-        mirror(40, 32); 
+        mirror(0, 16);
+        mirror(40, 32);
         return out;
     }
 
@@ -251,7 +257,7 @@
         if (!state.origCanvas) {
             const session = tryCurrentCanvas();
             if (session) {
-                
+
                 return { ok: false, error: 'no hay original guardado (¿skin ya restaurada?)' };
             }
             return { ok: false, error: 'no hay original guardado' };
@@ -265,7 +271,7 @@
         session.tex.needsUpdate = true;
         state.current = null;
         stopWatchdog();
-        
+
         try { window.MF_Peer?.sendLook?.({ a: 'revert', what: 'skin' }); } catch {}
         return { ok: true };
     }
@@ -274,7 +280,7 @@
         const mesh = getMesh();
         const mats = findSkinMaterials(mesh);
         if (!mats.length) return null;
-        
+
         for (const m of mats) {
             if (state.ownTex && m.map === state.ownTex) {
                 return { canvas: state.ownTex.image, tex: state.ownTex };
@@ -284,7 +290,7 @@
         if (seTex && mats.some(m => m.map === seTex) && seTex.image instanceof HTMLCanvasElement) {
             return { canvas: seTex.image, tex: seTex };
         }
-        
+
         const t = mats[0].map;
         if (t?.image instanceof HTMLCanvasElement) return { canvas: t.image, tex: t };
         return null;
@@ -302,8 +308,8 @@
             const mounted = mats.some(m => m.map === state.ownTex) ||
                 mats.some(m => m.map === window.MF_SkinEditor?.__tex?.());
             if (!mounted) {
-                
-                state.origCanvas = null; 
+
+                state.origCanvas = null;
                 apply(state.current).catch(() => {});
             }
         }, 500);
@@ -326,7 +332,7 @@
             if (!dataURL) continue;
             try {
                 const img = await loadImage(dataURL);
-                
+
                 if (!normalizeSkinCanvas(img)) {
                     console.warn(TAG + ' "' + file.name + '" proporciones no válidas (' + img.width + 'x' + img.height + ')');
                     continue;
@@ -391,48 +397,48 @@
         const style = document.createElement('style');
         style.id = ID + '-style';
         style.textContent = `
-#${ID} { position:fixed; top:70px; right:16px; z-index:2147483000;
+            #${ID} { position:fixed; top:70px; right:16px; z-index:2147483000;
   background:#14141a; border:1px solid #32323a; border-radius:8px;
   box-shadow:0 8px 32px rgba(0,0,0,.6); color:#e8e8ee;
   font:12px/1.4 system-ui,sans-serif; user-select:none; width:280px; }
-#${ID} .mfsch-head { display:flex; align-items:center; gap:8px; padding:8px 10px;
+  #${ID} .mfsch-head { display:flex; align-items:center; gap:8px; padding:8px 10px;
   border-bottom:1px solid #26262e; font-weight:700; letter-spacing:.5px; }
-#${ID} .mfsch-head .dot { width:8px; height:8px; border-radius:50%;
+  #${ID} .mfsch-head .dot { width:8px; height:8px; border-radius:50%;
   background:#4dff88; animation:mfsch-pulse 1.5s infinite; }
-@keyframes mfsch-pulse { 50% { opacity:.35; } }
-#${ID} .mfsch-drop { margin:8px 10px; padding:12px 8px; text-align:center;
+  @keyframes mfsch-pulse { 50% { opacity:.35; } }
+  #${ID} .mfsch-drop { margin:8px 10px; padding:12px 8px; text-align:center;
   border:1px dashed #3a3a44; border-radius:6px; color:#9a9aa6; cursor:pointer; font-size:11px; }
-#${ID} .mfsch-drop:hover, #${ID} .mfsch-drop.over { border-color:#4dff88; color:#4dff88; }
-#${ID} .mfsch-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px;
+  #${ID} .mfsch-drop:hover, #${ID} .mfsch-drop.over { border-color:#4dff88; color:#4dff88; }
+  #${ID} .mfsch-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px;
   padding:4px 10px 8px; max-height:260px; overflow-y:auto; }
-#${ID} .mfsch-item { position:relative; border:1px solid #32323a; border-radius:6px;
+  #${ID} .mfsch-item { position:relative; border:1px solid #32323a; border-radius:6px;
   padding:4px 2px 2px; cursor:pointer; text-align:center; background:#191921; }
-#${ID} .mfsch-item:hover { border-color:#4dff88; }
-#${ID} .mfsch-item.on { border-color:#ff6b2b; background:#241d16; }
-#${ID} .mfsch-item img { width:40px; height:40px; image-rendering:pixelated; border-radius:4px; }
-#${ID} .mfsch-item .nm { display:block; font-size:9px; color:#9a9aa6;
+  #${ID} .mfsch-item:hover { border-color:#4dff88; }
+  #${ID} .mfsch-item.on { border-color:#ff6b2b; background:#241d16; }
+  #${ID} .mfsch-item img { width:40px; height:40px; image-rendering:pixelated; border-radius:4px; }
+  #${ID} .mfsch-item .nm { display:block; font-size:9px; color:#9a9aa6;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#${ID} .mfsch-item .del { position:absolute; top:2px; right:2px; display:none;
+  #${ID} .mfsch-item .del { position:absolute; top:2px; right:2px; display:none;
   background:#3a1c1c; color:#ff7d7d; border:none; border-radius:3px;
   font-size:9px; padding:1px 4px; cursor:pointer; }
-#${ID} .mfsch-item:hover .del { display:block; }
-#${ID} button { background:#23232c; color:#e8e8ee; border:1px solid #3a3a44;
+  #${ID} .mfsch-item:hover .del { display:block; }
+  #${ID} button { background:#23232c; color:#e8e8ee; border:1px solid #3a3a44;
   border-radius:4px; padding:3px 8px; cursor:pointer; font:inherit; }
-#${ID} button:hover { background:#2e2e3a; }
-#${ID} .mfsch-foot { display:flex; gap:6px; padding:6px 10px 10px; }
+  #${ID} button:hover { background:#2e2e3a; }
+  #${ID} .mfsch-foot { display:flex; gap:6px; padding:6px 10px 10px; }
         `;
         document.body.appendChild(style);
         const root = document.createElement('div');
         root.id = ID;
         root.innerHTML = `
-<div class="mfsch-head"><span class="dot"></span>👕 SKINS — en vivo
+            <div class="mfsch-head"><span class="dot"></span>👕 SKINS — en vivo
     <button data-act="close" style="margin-left:auto" title="Cerrar">✕</button></div>
-<div class="mfsch-drop" title="Importar PNGs de skin (64x64 o 64x32)">📂 Suelta skins .png aquí<br>o haz click para elegir</div>
-<div class="mfsch-grid" id="mfsch-grid"></div>
-<div class="mfsch-foot">
+        <div class="mfsch-drop" title="Importar PNGs de skin (64x64 o 64x32)">📂 Suelta skins .png aquí<br>o haz click para elegir</div>
+            <div class="mfsch-grid" id="mfsch-grid"></div>
+                <div class="mfsch-foot">
     <button data-act="revert" title="Volver a la skin original del juego">↺ Original</button>
     <button data-act="help" title="Cómo usar">?</button>
-</div>
+        </div>
         `;
         document.body.appendChild(root);
         bindUI(root);

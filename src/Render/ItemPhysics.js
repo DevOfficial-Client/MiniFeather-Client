@@ -30,9 +30,9 @@ const CONFIG = Object.freeze({
     flatRatio: 0.2,
     slenderRatio: 0.38,
     groundMargin: 0.012
-});
+        });
 
-const state = {
+        const state = {
     enabled: false,
     game: null,
     entities: null,
@@ -41,27 +41,27 @@ const state = {
     lastFrame: performance.now(),
     rafId: 0,
     items: new Map()
-};
+    };
 
-const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
-const damp = (current, target, rate, dt) => target + (current - target) * Math.exp(-Math.max(0, rate) * Math.max(0, dt));
-const randomRange = (min, max) => min + Math.random() * (max - min);
-const wrapAngle = value => {
+    const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+    const damp = (current, target, rate, dt) => target + (current - target) * Math.exp(-Math.max(0, rate) * Math.max(0, dt));
+    const randomRange = (min, max) => min + Math.random() * (max - min);
+    const wrapAngle = value => {
     const tau = Math.PI * 2;
     value %= tau;
     return value < -Math.PI ? value + tau : value > Math.PI ? value - tau : value;
-};
+    };
 
-function validVec3(value) {
+    function validVec3(value) {
     return !!(
         value &&
         Number.isFinite(Number(value.x)) &&
         Number.isFinite(Number(value.y)) &&
         Number.isFinite(Number(value.z))
     );
-}
+    }
 
-function setEuler(rotation, x, y, z, order) {
+    function setEuler(rotation, x, y, z, order) {
     if (!rotation) return;
     try {
         if (typeof rotation.set === 'function') rotation.set(x, y, z, order || rotation.order || 'XYZ');
@@ -72,9 +72,9 @@ function setEuler(rotation, x, y, z, order) {
             if (order && 'order' in rotation) rotation.order = order;
         }
     } catch {}
-}
+    }
 
-function getGame(force = false) {
+    function getGame(force = false) {
     const now = performance.now();
 
     if (globalThis.miniblox?.player) {
@@ -108,13 +108,13 @@ function getGame(force = false) {
     } catch {}
 
     return state.game?.player ? state.game : null;
-}
+    }
 
-function isMapLike(value) {
+    function isMapLike(value) {
     return !!(value && typeof value.values === 'function' && typeof value.get === 'function');
-}
+    }
 
-function looksLikeEntityMap(value) {
+    function looksLikeEntityMap(value) {
     if (!isMapLike(value)) return false;
     let checked = 0;
     let valid = 0;
@@ -130,9 +130,9 @@ function looksLikeEntityMap(value) {
     }
 
     return checked > 0 && valid > 0;
-}
+    }
 
-function resolveEntities(game) {
+    function resolveEntities(game) {
     if (state.entities && isMapLike(state.entities)) return state.entities;
 
     const direct = [
@@ -189,16 +189,16 @@ function resolveEntities(game) {
     }
 
     return null;
-}
+    }
 
-function isDroppedItem(entity, game) {
+    function isDroppedItem(entity, game) {
     if (!entity?.mesh || !validVec3(entity.pos)) return false;
     if (entity === game?.player || String(entity?.id) === String(game?.player?.id)) return false;
     if (entity.mesh?.constructor?.name === 'Cje') return true;
     return typeof entity.getEntityItem === 'function' && !!entity.mesh?.inner;
-}
+    }
 
-function rawMotion(entity) {
+    function rawMotion(entity) {
     const source = entity?.motion || entity?.velocity;
     if (!validVec3(source)) return { x: 0, y: 0, z: 0 };
     return {
@@ -206,9 +206,9 @@ function rawMotion(entity) {
         y: Number(source.y),
         z: Number(source.z)
     };
-}
+    }
 
-function moveVectors(entity) {
+    function moveVectors(entity) {
     const requested = validVec3(entity?._moveSaved) ? entity._moveSaved : null;
     const actual = validVec3(entity?._moveDelta) ? entity._moveDelta : null;
 
@@ -237,9 +237,9 @@ function moveVectors(entity) {
             z: Number(actual.z)
         }
     };
-}
+    }
 
-function readCollision(entity) {
+    function readCollision(entity) {
     const axes = moveVectors(entity);
     const horizontal = entity?.isCollidedHorizontally === true;
     const vertical = entity?.isCollidedVertically === true;
@@ -254,9 +254,9 @@ function readCollision(entity) {
         requested: axes.requested,
         actual: axes.actual
     };
-}
+    }
 
-function isBlockItem(entity) {
+    function isBlockItem(entity) {
     try {
         const stack = entity.getEntityItem?.();
         const item = stack?.item;
@@ -265,9 +265,9 @@ function isBlockItem(entity) {
         if (typeof item.isItemBlock === 'function' && item.isItemBlock()) return true;
     } catch {}
     return false;
-}
+    }
 
-function measureVisual(inner) {
+    function measureVisual(inner) {
     if (!inner?.matrix || typeof inner.matrix.clone !== 'function') return null;
 
     const min = { x: Infinity, y: Infinity, z: Infinity };
@@ -360,9 +360,9 @@ function measureVisual(inner) {
         midSize: axes[1].size,
         maxSize: axes[2].size
     };
-}
+    }
 
-function getItemProfile(entity, inner) {
+    function getItemProfile(entity, inner) {
     const bounds = measureVisual(inner);
 
     if (isBlockItem(entity)) {
@@ -395,18 +395,18 @@ function getItemProfile(entity, inner) {
         thinAxis: bounds.thinAxis,
         thickness: bounds.minSize
     };
-}
+    }
 
-function nearestQuarter(angle) {
+    function nearestQuarter(angle) {
     const q = Math.PI / 2;
     return Math.round(angle / q) * q;
-}
+    }
 
-function angleDistance(a, b) {
+    function angleDistance(a, b) {
     return Math.abs(wrapAngle(a - b));
-}
+    }
 
-function flatRestCandidates(axis) {
+    function flatRestCandidates(axis) {
     if (axis === 'x') {
         return [
             { x: 0, y: 0, z: Math.PI / 2, side: 1 },
@@ -425,9 +425,9 @@ function flatRestCandidates(axis) {
         { x: Math.PI / 2, y: 0, z: 0, side: 1 },
         { x: -Math.PI / 2, y: 0, z: 0, side: -1 }
     ];
-}
+    }
 
-function flatRestHeight(profile, target) {
+    function flatRestHeight(profile, target) {
     const bounds = profile?.bounds;
     if (!bounds) return Math.max(CONFIG.groundMargin, profile?.thickness * 0.5 + CONFIG.groundMargin || 0.025);
 
@@ -446,9 +446,9 @@ function flatRestHeight(profile, target) {
     return target.side > 0
         ? Math.max(CONFIG.groundMargin, bounds.max.z + CONFIG.groundMargin)
         : Math.max(CONFIG.groundMargin, -bounds.min.z + CONFIG.groundMargin);
-}
+        }
 
-function makeGroundTarget(item) {
+        function makeGroundTarget(item) {
     const kind = item.profile.kind;
 
     if (kind === 'block' || kind === 'solid') {
@@ -475,9 +475,9 @@ function makeGroundTarget(item) {
     item.groundY = 0;
     item.groundZ = target.z;
     item.restY = flatRestHeight(item.profile, target);
-}
+    }
 
-function applyVisual(item) {
+    function applyVisual(item) {
     const inner = item.inner;
     if (!inner) return;
 
@@ -499,9 +499,9 @@ function applyVisual(item) {
         inner.updateMatrix?.();
         inner.updateMatrixWorld?.(true);
     } catch {}
-}
+    }
 
-function installRenderHook(item) {
+    function installRenderHook(item) {
     const root = item.root;
     if (!root || typeof root.render !== 'function') return false;
 
@@ -517,9 +517,9 @@ function installRenderHook(item) {
     item.renderHook = wrapped;
     root.render = wrapped;
     return true;
-}
+    }
 
-function restoreItem(item) {
+    function restoreItem(item) {
     const root = item.root;
 
     try {
@@ -541,9 +541,9 @@ function restoreItem(item) {
             item.inner.position.z = item.nativePosition.z;
         } catch {}
     }
-}
+    }
 
-function createItem(entity) {
+    function createItem(entity) {
     const root = entity?.mesh;
     const inner = root?.inner;
 
@@ -617,9 +617,9 @@ function createItem(entity) {
     }
     if (!installRenderHook(item)) return null;
     return item;
-}
+    }
 
-function registerLanding(item, now, motion) {
+    function registerLanding(item, now, motion) {
     const impact = clamp(Math.max(item.fallPeak, Math.abs(item.previousMotion.y), Math.abs(motion.y)), 0, 1.5);
     const strength = clamp(impact / 0.8, 0.12, 1);
 
@@ -643,9 +643,9 @@ function registerLanding(item, now, motion) {
     item.angularZ *= retainXZ;
     item.fallPeak = 0;
     makeGroundTarget(item);
-}
+    }
 
-function registerWallCollision(item, collision, now) {
+    function registerWallCollision(item, collision, now) {
     if (now - item.lastCollisionAt < 0.045) return;
     item.lastCollisionAt = now;
 
@@ -674,9 +674,9 @@ function registerWallCollision(item, collision, now) {
     item.angularX = clamp(item.angularX, -CONFIG.maxAngularSpeed, CONFIG.maxAngularSpeed);
     item.angularY = clamp(item.angularY, -CONFIG.maxAngularSpeed, CONFIG.maxAngularSpeed);
     item.angularZ = clamp(item.angularZ, -CONFIG.maxAngularSpeed, CONFIG.maxAngularSpeed);
-}
+    }
 
-function updateAir(item, motion, dt) {
+    function updateAir(item, motion, dt) {
     const horizontal = Math.hypot(motion.x, motion.z);
     const flatLike = item.profile.kind === 'flat' || item.profile.kind === 'thin';
     const baseAirDrag = flatLike ? CONFIG.flatAirAngularDrag : CONFIG.airAngularDrag;
@@ -716,9 +716,9 @@ function updateAir(item, motion, dt) {
     item.rotZ = wrapAngle(item.rotZ + item.angularZ * dt);
     item.bounceY = damp(item.bounceY, 0, 12, dt);
     item.visualY = damp(item.visualY, item.basePosition.y, 9.5, dt);
-}
+    }
 
-function updateGround(item, motion, now, dt) {
+    function updateGround(item, motion, now, dt) {
     const horizontal = Math.hypot(motion.x, motion.z);
     const moving = horizontal > CONFIG.restSpeed;
     const flatLike = item.profile.kind === 'flat' || item.profile.kind === 'thin';
@@ -765,9 +765,9 @@ function updateGround(item, motion, now, dt) {
 
     const targetY = item.restY + item.bounceY;
     item.visualY = damp(item.visualY, targetY, flatLike ? 22 : 14, dt);
-}
+    }
 
-function updateItem(item, timestamp, dt) {
+    function updateItem(item, timestamp, dt) {
     const entity = item.entity;
     const root = item.root;
 
@@ -798,14 +798,14 @@ function updateItem(item, timestamp, dt) {
     item.wasVerticalCollision = collision.vertical;
     item.previousMotion = motion;
     return true;
-}
+    }
 
-function unregisterItem(entity, item) {
+    function unregisterItem(entity, item) {
     restoreItem(item);
     state.items.delete(entity);
-}
+    }
 
-function scanItems() {
+    function scanItems() {
     const game = getGame();
     if (!game) return;
 
@@ -834,28 +834,27 @@ function scanItems() {
     for (const [entity, item] of Array.from(state.items.entries())) {
         if (!live.has(entity) || !item.root?.parent) unregisterItem(entity, item);
     }
-}
+    }
 
-function resetAll() {
+    function resetAll() {
     for (const [entity, item] of Array.from(state.items.entries())) unregisterItem(entity, item);
     state.items.clear();
-}
+    }
 
-function setEnabled(enabled) {
+    function setEnabled(enabled) {
     const next = !!enabled;
     if (state.enabled === next) return;
     state.enabled = next;
     if (next) {
-        // Re-agendar el loop solo cuando el módulo está activo
         state.lastFrame = 0;
         if (!state.rafId) state.rafId = requestAnimationFrame(loop);
     } else {
         if (state.rafId) { cancelAnimationFrame(state.rafId); state.rafId = 0; }
         resetAll();
     }
-}
+    }
 
-document.addEventListener(EVENT_CONFIG, event => {
+    document.addEventListener(EVENT_CONFIG, event => {
     let detail = event?.detail;
     if (typeof detail === 'string') {
         try {
@@ -865,9 +864,9 @@ document.addEventListener(EVENT_CONFIG, event => {
         }
     }
     setEnabled(detail?.enabled === true);
-});
+    });
 
-function loop(timestamp) {
+    function loop(timestamp) {
     const rawDt = (timestamp - state.lastFrame) / 1000;
     const dt = clamp(Number.isFinite(rawDt) ? rawDt : 1 / 60, 1 / 240, 0.05);
     state.lastFrame = timestamp;
@@ -884,9 +883,9 @@ function loop(timestamp) {
     }
 
     state.rafId = requestAnimationFrame(loop);
-}
+    }
 
-globalThis.MiniFeatherItemPhysics = {
+    globalThis.MiniFeatherItemPhysics = {
     enable() {
         setEnabled(true);
     },
@@ -899,8 +898,6 @@ globalThis.MiniFeatherItemPhysics = {
     get count() {
         return state.items.size;
     }
-};
-
-// El loop se agenda desde setEnabled(true) — nada de rAF perpetuo con el módulo apagado
+    };
 if (state.enabled) state.rafId = requestAnimationFrame(loop);
 })();

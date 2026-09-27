@@ -6,22 +6,30 @@ const TAG = '[MiniFeather P2P]';
 const PEERJS_CDN = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
 
 const state = {
-    peer: null,          
-    conn: null,          
-    role: null,          
-    peerId: null,        
-    peerName: null,      
-    status: 'off',       
-    sendTimer: null,     
-    lastFrameIn: 0,      
-    puppetTarget: null   
-};
+    peer: null,
 
-function log(...a) { void 0; }
-function warn(...a) { console.warn(TAG, ...a); }
+    conn: null,
 
-let peerjsPromise = null;
-function loadPeerJS() {
+    role: null,
+
+    peerId: null,
+
+    peerName: null,
+
+    status: 'off',
+
+    sendTimer: null,
+
+    lastFrameIn: 0,
+
+    puppetTarget: null
+        };
+
+        function log(...a) { void 0; }
+        function warn(...a) { console.warn(TAG, ...a); }
+
+        let peerjsPromise = null;
+        function loadPeerJS() {
     if (globalThis.Peer) return Promise.resolve(true);
     if (peerjsPromise) return peerjsPromise;
     peerjsPromise = new Promise((resolve) => {
@@ -32,11 +40,11 @@ function loadPeerJS() {
         document.head.appendChild(s);
     });
     return peerjsPromise;
-}
+    }
 
-const scan = { game: null, entityMap: null, lastGameScan: 0 };
+    const scan = { game: null, entityMap: null, lastGameScan: 0 };
 
-function getGame(force = false) {
+    function getGame(force = false) {
     const now = performance.now();
     if (globalThis.miniblox?.player) {
         if (scan.game !== globalThis.miniblox) { scan.game = globalThis.miniblox; scan.entityMap = null; }
@@ -56,17 +64,17 @@ function getGame(force = false) {
         }
     } catch {}
     return scan.game?.player ? scan.game : null;
-}
+    }
 
-function isMapLike(v) {
+    function isMapLike(v) {
     return !!(v && typeof v.get === 'function' && typeof v.values === 'function');
-}
+    }
 
-function validPos(p) {
+    function validPos(p) {
     return !!(p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)) && Number.isFinite(Number(p.z)));
-}
+    }
 
-function looksLikeEntityMap(v) {
+    function looksLikeEntityMap(v) {
     if (!isMapLike(v)) return false;
     let checked = 0, found = 0;
     try {
@@ -77,9 +85,9 @@ function looksLikeEntityMap(v) {
         }
     } catch { return false; }
     return checked > 0 && found > 0;
-}
+    }
 
-function resolveEntityMap(game) {
+    function resolveEntityMap(game) {
     if (scan.entityMap && isMapLike(scan.entityMap)) return scan.entityMap;
     const direct = [
         game?.world?.entitiesDump,
@@ -112,15 +120,15 @@ function resolveEntityMap(game) {
         }
     }
     return null;
-}
+    }
 
-function myName() {
+    function myName() {
     try {
         const game = getGame();
         const p = game?.player;
         if (p?.profile?.username) return p.profile.username;
         if (p?.username) return p.username;
-        
+
         const ents = p ? resolveEntityMap(game) : null;
         if (ents?.get && p?.id !== undefined) {
             const me = ents.get(p.id) || ents.get(String(p.id));
@@ -128,25 +136,23 @@ function myName() {
         }
     } catch { }
     return 'yo';
-}
+    }
 
-function send(obj) {
-    // conn.open: enviar por una conexión cerrada hace que PeerJS emita
-    // "Connection is not open..." aunque el throw se trague aquí
+    function send(obj) {
     if (!state.conn?.open) return;
     try { state.conn.send(obj); } catch {}
-}
+    }
 
-state.guestPos = null;
+    state.guestPos = null;
 
-function startBroadcast() {
+    function startBroadcast() {
     stopBroadcast();
     state._lastSentScale = null;
-    
+
     state.sendTimer = setInterval(() => {
         if (state.role !== 'host') return;
         const rec = window.MF_CustomModels?.getRecord?.('verity');
-        if (!rec?.root) return; 
+        if (!rec?.root) return;
         send({
             t: 'sync',
             p: {
@@ -157,12 +163,12 @@ function startBroadcast() {
                 anim: rec.curAnim || rec.anim || null
             }
         });
-        
+
         if (state.guestPos) {
             try { window.MF_CustomModels?.setPeerTarget?.('verity_peer', state.guestPos); } catch {}
         }
-    }, 50); 
-    
+    }, 50);
+
     state.scaleTimer = setInterval(() => {
         try {
             const tt = globalThis.TitanTiny;
@@ -173,61 +179,61 @@ function startBroadcast() {
             }
         } catch {}
     }, 250);
-    
+
     state.posTimer = setInterval(() => {
         if (state.role !== 'guest') return;
         const p = getPos();
         if (p) send({ t: 'pos', p: { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2) } });
     }, 200);
-}
+    }
 
-function stopBroadcast() {
+    function stopBroadcast() {
     if (state.sendTimer) { clearInterval(state.sendTimer); state.sendTimer = null; }
     if (state.scaleTimer) { clearInterval(state.scaleTimer); state.scaleTimer = null; }
     if (state.posTimer) { clearInterval(state.posTimer); state.posTimer = null; }
-}
+    }
 
-function getPos() {
+    function getPos() {
     try {
         return getGame()?.player?.pos || null;
     } catch { return null; }
-}
+    }
 
-function spawnPuppet(p) {
+    function spawnPuppet(p) {
     const CM = window.MF_CustomModels;
     if (!CM) return;
     try { CM.despawn('verity'); } catch {}
     CM.spawn('verity_full_model.glb', p.x, p.y, p.z, {
         id: 'verity',
         height: 0.85,
-        followPlayer: false, 
+        followPlayer: false,
         puppet: true,
         anim: p.anim || 'idle'
     });
     state.puppetTarget = { x: p.x, y: p.y, z: p.z, yaw: p.yaw || 0 };
     log('puppet de verity spawneada en (' + p.x + ', ' + p.y + ', ' + p.z + ')');
-}
+    }
 
-function killPuppet() {
+    function killPuppet() {
     try { window.MF_CustomModels?.despawn?.('verity'); } catch {}
     state.puppetTarget = null;
-}
+    }
 
-function onSyncGuest(msg) {
+    function onSyncGuest(msg) {
     const p = msg.p;
     if (!p) return;
     state.lastFrameIn = performance.now();
     if (!window.MF_CustomModels?.getRecord?.('verity')) {
-        spawnPuppet(p); 
+        spawnPuppet(p);
         return;
     }
     state.puppetTarget = { x: p.x, y: p.y, z: p.z, yaw: p.yaw };
     if (p.anim) {
         try { window.MF_CustomModels?.setAnim('verity', p.anim); } catch {}
     }
-}
+    }
 
-function puppetTick() {
+    function puppetTick() {
     const rec = window.MF_CustomModels?.getRecord?.('verity');
     if (!rec?.root || !state.puppetTarget || rec.puppet !== true) return;
     const L = 0.25;
@@ -239,9 +245,9 @@ function puppetTick() {
     while (dyaw < -Math.PI) dyaw += Math.PI * 2;
     rec.yaw = (rec.yaw || 0) + dyaw * L;
     rec.root.rotation.y = rec.yaw;
-}
+    }
 
-function installPeerRenderHooks(root) {
+    function installPeerRenderHooks(root) {
     try {
         const queue = [root];
         const seen = new WeakSet();
@@ -262,27 +268,25 @@ function installPeerRenderHooks(root) {
             }
         }
     } catch {}
-}
+    }
 
-function applyPeerScale(mesh) {
+    function applyPeerScale(mesh) {
     const b = state._peerBase;
     const f = Number(state.peerScale) || 1;
     if (!mesh?.scale || !b || !Number.isFinite(f)) return;
     try {
         const x = b.x * f, y = b.y * f, z = b.z * f;
-        // Sin cambio real → no escribir (evita marcar la matriz como sucia
-        // en cada render aunque la escala ya esté aplicada).
         if (mesh.scale.x === x && mesh.scale.y === y && mesh.scale.z === z) return;
         mesh.scale.set(x, y, z);
         if (mesh.matrixAutoUpdate === false && typeof mesh.updateMatrix === 'function') mesh.updateMatrix();
     } catch {}
-}
+    }
 
-function peerScaleTick() {
+    function peerScaleTick() {
     if (!state.peerName || !state.conn) return;
     const factor = Number(state.peerScale) || 1;
     if (!Number.isFinite(factor) || Math.abs(factor - 1) < 0.01) {
-        
+
         if (state._peerMesh && state._peerBase) {
             try {
                 state._peerMesh.scale.set(state._peerBase.x, state._peerBase.y, state._peerBase.z);
@@ -290,11 +294,11 @@ function peerScaleTick() {
         }
         return;
     }
-    
+
     let mesh = state._peerMesh;
     const now = performance.now();
     if (mesh && (!mesh.parent || now - (state._peerMeshAt || 0) > 1500)) {
-        
+
         state._peerMesh = null;
         mesh = null;
     }
@@ -313,7 +317,7 @@ function peerScaleTick() {
             }
         } catch {}
         if (mesh) {
-            
+
             if (state._peerMeshBaseOf !== mesh) {
                 state._peerMeshBaseOf = mesh;
                 state._peerBase = { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z };
@@ -331,37 +335,38 @@ function peerScaleTick() {
         mesh.scale.set(b.x * factor, b.y * factor, b.z * factor);
         if (mesh.matrixAutoUpdate === false && typeof mesh.updateMatrix === 'function') mesh.updateMatrix();
     } catch {}
-}
+    }
 
-const ents = {
-    local: null,        
-    remote: new Map(),  
-    knownFiles: new Set(), 
-    sending: new Set(), 
-    recv: new Map()     
-};
+    const ents = {
+    local: null,
 
-function entsTick() {
+    remote: new Map(),
+    knownFiles: new Set(),
+    sending: new Set(),
+    recv: new Map()
+
+    };
+
+    function entsTick() {
     const CM = window.MF_CustomModels;
     if (!CM?.listLive) return;
-    
+
     const now = performance.now();
-    // 5 Hz fijo (heartbeat): los mobs quietos tambien refrescan su seenAt remoto
     if (now - (ents._lastSend || 0) > 200) {
         const snap = CM.listLive();
         ents._lastSend = now;
         send({ t: 'ents', ents: snap });
     }
-    
+
     for (const [id, r] of ents.remote) {
-        if (now - r.seenAt > 3000) { 
+        if (now - r.seenAt > 3000) {
             try { CM.despawn(id); } catch {}
             ents.remote.delete(id);
             continue;
         }
         const rec = CM.getRecord(id);
         if (!rec?.root) {
-            
+
             if (!r.file || r.spawning) continue;
             r.spawning = true;
             CM.tryLoad(r.file).then((ok) => {
@@ -373,12 +378,11 @@ function entsTick() {
                     spawnPuppetEnt(id, r);
                 }
             }).catch(() => {}).finally(() => {
-                // reintentar en 2s si aun no hay root (carga async o fallo)
                 setTimeout(() => { r.spawning = false; }, 2000);
             });
             continue;
         }
-        
+
         const L = 0.25;
         rec.root.position.x += (r.x - rec.root.position.x) * L;
         rec.root.position.y += (r.y - rec.root.position.y) * L;
@@ -389,10 +393,10 @@ function entsTick() {
         rec.yaw = (rec.yaw || 0) + dyaw * L;
         rec.root.rotation.y = rec.yaw;
     }
-    
-}
 
-function spawnPuppetEnt(id, r) {
+    }
+
+    function spawnPuppetEnt(id, r) {
     const CM = window.MF_CustomModels;
     try { CM.despawn(id, true); } catch {}
     CM.spawn(r.file, r.x, r.y, r.z, {
@@ -406,11 +410,11 @@ function spawnPuppetEnt(id, r) {
         followPlayer: false
     });
     log('puppet "' + id + '" (' + r.file + ') spawneado en (' + r.x + ', ' + r.y + ', ' + r.z + ')');
-}
+    }
 
-const CHUNK = 32 * 1024;
+    const CHUNK = 32 * 1024;
 
-async function sendFile(file) {
+    async function sendFile(file) {
     const CM = window.MF_CustomModels;
     if (ents.sending.has(file)) return;
     ents.sending.add(file);
@@ -420,10 +424,10 @@ async function sendFile(file) {
         const total = Math.ceil(bytes.length / CHUNK);
         send({ t: 'file-h', file, size: bytes.length, chunks: total });
         const b64 = bytesToBase64(bytes);
-        const stride = Math.ceil(b64.length / total); 
+        const stride = Math.ceil(b64.length / total);
         for (let i = 0; i < total; i++) {
             send({ t: 'file-c', file, i, data: b64.substr(i * stride, stride) });
-            if (i % 8 === 7) await new Promise((res) => setTimeout(res, 30)); 
+            if (i % 8 === 7) await new Promise((res) => setTimeout(res, 30));
         }
         send({ t: 'file-e', file });
         log('archivo "' + b64name(file) + '" enviado (' + bytes.length + ' B)');
@@ -432,27 +436,27 @@ async function sendFile(file) {
     } finally {
         ents.sending.delete(file);
     }
-}
+    }
 
-function b64name(f) { return String(f).slice(0, 40); }
+    function b64name(f) { return String(f).slice(0, 40); }
 
-function bytesToBase64(bytes) {
+    function bytesToBase64(bytes) {
     let bin = '';
     const step = 0x8000;
     for (let i = 0; i < bytes.length; i += step) {
         bin += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
     }
     return btoa(bin);
-}
+    }
 
-function base64ToBytes(b64) {
+    function base64ToBytes(b64) {
     const bin = atob(b64);
     const out = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
     return out;
-}
+    }
 
-function handleFileEnd(file) {
+    function handleFileEnd(file) {
     const CM = window.MF_CustomModels;
     const st = ents.recv.get(file);
     if (!st) return;
@@ -470,16 +474,12 @@ function handleFileEnd(file) {
     }
     log('recibido "' + file + '" (' + st.size + ' B) — cacheando modelo');
     CM.registerModelBytes(file, bytes.buffer).then(() => {
-        
+
         for (const [id, r] of ents.remote) {
             if (r.file === file && !CM.getRecord(id)?.root) spawnPuppetEnt(id, r);
         }
     }).catch((e) => warn('no pude parsear "' + file + '": ' + (e?.message || e)));
-}
-
-// Barrida de duplicados: roots __mfCM de la escena que ya no pertenecen a ningun
-// record vivo (quedaron huerfanos de la carrera de spawn) se remueven.
-function sweepOrphanPuppets() {
+    }function sweepOrphanPuppets() {
     const CM = window.MF_CustomModels;
     if (!CM?.liveRoots) return;
     const scene = (() => {
@@ -495,11 +495,11 @@ function sweepOrphanPuppets() {
         }
     }
     if (removed) log('barrido: ' + removed + ' duplicado(s) huerfano(s) removido(s)');
-}
+    }
 
-let puppetRafId = 0;
-let lastSweep = 0;
-function puppetLoop() {
+    let puppetRafId = 0;
+    let lastSweep = 0;
+    function puppetLoop() {
     if (state.role !== 'guest' && state.role !== 'host') { puppetRafId = 0; return; }
     try { puppetTick(); } catch {}
     try { peerScaleTick(); } catch {}
@@ -511,31 +511,29 @@ function puppetLoop() {
         try { sweepOrphanPuppets(); } catch {}
     }
     puppetRafId = requestAnimationFrame(puppetLoop);
-}
-// El loop solo corre mientras haya sesion P2P activa
-function ensurePuppetLoop() {
+    }function ensurePuppetLoop() {
     if (!puppetRafId) puppetRafId = requestAnimationFrame(puppetLoop);
-}
+    }
 
-function handleMsg(msg) {
+    function handleMsg(msg) {
     if (!msg || typeof msg !== 'object') return;
     switch (msg.t) {
         case 'hello':
             state.peerName = msg.name || null;
             try { globalThis.MF_Mesh?.releaseScaleFor?.(state.peerName); } catch {}
             log('handshake con', msg.name, '(rol remoto: ' + msg.role + ')');
-            
+
             if (!state.sendTimer) startBroadcast();
-            
+
             setTimeout(() => { try { window.MF_Peer.resendLook(); } catch {} }, 800);
-            
+
             setTimeout(() => { try { globalThis.MF_SPIDER_BOT?.onPeerConnected?.(); } catch {} }, 600);
             break;
         case 'sync':
             if (state.role === 'guest') onSyncGuest(msg);
             break;
         case 'pos':
-            
+
             if (state.role === 'host' && msg.p) {
                 state.guestPos = { x: msg.p.x, y: msg.p.y, z: msg.p.z };
             }
@@ -547,21 +545,21 @@ function handleMsg(msg) {
             if (state.role === 'guest') showRemoteChat(msg.text);
             break;
         case 'pat':
-            
+
             try { globalThis.MiniFeatherPatPat?.remotePat?.(msg); } catch {}
             break;
         case 'spider':
-            
+
             try { globalThis.MF_SPIDER_BOT?.remoteApply?.(msg.m); } catch {}
             break;
         case 'scale':
-            
+
             if (msg.name && msg.name !== 'yo') state.peerName = msg.name;
             state.peerScale = Number(msg.scale) || 1;
             log('escala remota recibida: ' + msg.name + ' → x' + state.peerScale);
             break;
         case 'ents': {
-            
+
             if (!Array.isArray(msg.ents)) break;
             const now = performance.now();
             const seen = new Set();
@@ -578,19 +576,19 @@ function handleMsg(msg) {
                     scale: +e.scale || 1, height: +e.height || 0,
                     seenAt: now
                 });
-                
+
                 if (prev && prev.anim !== e.anim && e.anim) {
                     try { window.MF_CustomModels?.setAnim?.(pid, e.anim); } catch {}
                 }
             }
-            
+
             for (const id of [...ents.remote.keys()]) {
                 if (!seen.has(id)) ents.remote.delete(id);
             }
             break;
         }
         case 'need-file':
-            
+
             if (msg.file && /\.glb$/i.test(msg.file)) sendFile(msg.file);
             break;
         case 'file-h':
@@ -609,32 +607,32 @@ function handleMsg(msg) {
         case 'file-e':
             if (msg.file) handleFileEnd(msg.file);
             break;
-        
+
         case 'studio-pose':
-            
+
             try { window.MF_Studio?.applyRemotePose?.(msg.pose, msg.reset); } catch {}
             break;
         case 'studio-cam':
-            
+
             try { window.MF_Studio?.applyRemoteCam?.(msg.p); } catch {}
             break;
         case 'studio-cam-on':
         case 'studio-cam-off':
-            
+
             try { window.MF_Studio?.remoteCamActive?.(msg.t === 'studio-cam-on'); } catch {}
             break;
         case 'look':
-            
+
             if (msg.a && typeof msg.a === 'object') applyLook(msg.a);
             break;
         case 'facial':
-            
+
             try { applyRemoteFacial(msg); } catch {}
             break;
     }
-}
+    }
 
-function applyRemoteFacial(msg) {
+    function applyRemoteFacial(msg) {
     if (!msg || typeof msg.a !== 'string') return;
     const entity = peerEntity();
     if (!entity) return;
@@ -649,29 +647,29 @@ function applyRemoteFacial(msg) {
     const FR = { x: FACE_RECT.x * k, y: FACE_RECT.y * k, w: FACE_RECT.w * k, h: FACE_RECT.h * k };
     const FOR = { x: FACE_OVERLAY_RECT.x * k, y: FACE_OVERLAY_RECT.y * k, w: FACE_OVERLAY_RECT.w * k, h: FACE_OVERLAY_RECT.h * k };
     if (msg.a === 'open' || msg.a === 'off' || msg.a === 'front') {
-        
+
         ctx.drawImage(orig, FR.x, FR.y, FR.w, FR.h, FR.x, FR.y, FR.w, FR.h);
         ctx.drawImage(orig, FOR.x, FOR.y, FOR.w, FOR.h, FOR.x, FOR.y, FOR.w, FOR.h);
         s.tex.needsUpdate = true;
         return;
     }
-    
+
     const ok = Math.max(1, Math.round(orig.width / 64));
     const face = document.createElement('canvas');
     face.width = 8 * ok; face.height = 8 * ok;
-    
+
     const fx = face.getContext('2d', { willReadFrequently: true });
     fx.imageSmoothingEnabled = false;
     fx.drawImage(orig, FACE_RECT.x * ok, FACE_RECT.y * ok, FACE_RECT.w * ok, FACE_RECT.h * ok, 0, 0, face.width, face.height);
     try {
         if (msg.a === 'blink') {
-            
+
             const cheek = fx.getImageData(1 * ok, 6 * ok, 1, 1).data;
             fx.fillStyle = `rgb(${cheek[0]},${cheek[1]},${cheek[2]})`;
             fx.fillRect(1 * ok, 4 * ok, 2 * ok, 2 * ok);
             fx.fillRect(5 * ok, 4 * ok, 2 * ok, 2 * ok);
         } else if (msg.a === 'brow') {
-            
+
             const hair = fx.getImageData(4 * ok, 0, 1, 1).data;
             const row3 = fx.getImageData(0, 3 * ok, face.width, ok);
             fx.putImageData(row3, 0, 2 * ok);
@@ -679,11 +677,11 @@ function applyRemoteFacial(msg) {
             fx.fillStyle = `rgb(${Math.round((cheek[0] + hair[0]) / 2)},${Math.round((cheek[1] + hair[1]) / 2)},${Math.round((cheek[2] + hair[2]) / 2)})`;
             fx.fillRect(0, 3 * ok, face.width, ok);
         } else if (msg.a === 'left' || msg.a === 'right' || msg.a === 'up' || msg.a === 'down') {
-            
+
             const cheek = fx.getImageData(1 * ok, 6 * ok, 1, 1).data;
             const skin = [cheek[0], cheek[1], cheek[2]];
             const rgb = a => `rgb(${a[0]},${a[1]},${a[2]})`;
-            
+
             let iris = null, white = [219, 219, 219];
             for (let x = 1; x <= 6; x++) {
                 for (let y = 4; y <= 5; y++) {
@@ -705,7 +703,7 @@ function applyRemoteFacial(msg) {
                     pair(1); pair(5);
                 } else {
                     const dy = msg.a === 'up' ? -1 : 1;
-                    const row = fx.getImageData(0, 4 * ok, 8 * ok, 2 * ok); 
+                    const row = fx.getImageData(0, 4 * ok, 8 * ok, 2 * ok);
                     fx.fillStyle = rgb(skin);
                     fx.fillRect(1 * ok, 4 * ok, 2 * ok, 2 * ok);
                     fx.fillRect(5 * ok, 4 * ok, 2 * ok, 2 * ok);
@@ -715,42 +713,48 @@ function applyRemoteFacial(msg) {
         } else return;
     } catch { return; }
     ctx.drawImage(face, 0, 0, face.width, face.height, FR.x, FR.y, FR.w, FR.h);
-    ctx.clearRect(FOR.x, FOR.y, FOR.w, FOR.h); 
+    ctx.clearRect(FOR.x, FOR.y, FOR.w, FOR.h);
     s.tex.needsUpdate = true;
-}
+    }
 
-function showRemoteChat(text) {
+    function showRemoteChat(text) {
     if (!text) return;
     try {
         if (typeof window.MF_Peer._chatHook === 'function') { window.MF_Peer._chatHook(text); return; }
     } catch {}
     try { document.dispatchEvent(new CustomEvent('minifeather:verity-p2p-chat', { detail: { text } })); } catch {}
-}
+    }
 
-const look = {
-    entity: null,       
-    entityAt: 0,        
-    faceCache: new Map(), 
-    pending: [],        
-    lastApplied: 0,     
-    lastTexAction: null, 
-    mountedTex: null,   
-    morphType: null,    
-    _lastWD: 0          
-};
+    const look = {
+    entity: null,
 
-function peerEntity() {
+    entityAt: 0,
+
+    faceCache: new Map(),
+    pending: [],
+
+    lastApplied: 0,
+
+    lastTexAction: null,
+    mountedTex: null,
+
+    morphType: null,
+
+    _lastWD: 0
+        };
+
+        function peerEntity() {
     const now = performance.now();
     if (look.entity && now - look.entityAt < 2000) return look.entity;
     look.entityAt = now;
     look.entity = null;
     if (!state.peerName) return null;
-    
+
     try {
         const e = window.MF_Morph?.findEntityByName?.(state.peerName);
         if (e?.mesh) { look.entity = e; return e; }
     } catch {}
-    
+
     try {
         const ents = resolveEntityMap(getGame());
         if (ents?.values) {
@@ -762,9 +766,9 @@ function peerEntity() {
         }
     } catch {}
     return null;
-}
+    }
 
-function peerSkinMaterials(entity) {
+    function peerSkinMaterials(entity) {
     const out = [];
     if (!entity?.mesh) return out;
     const seen = new Set();
@@ -778,14 +782,14 @@ function peerSkinMaterials(entity) {
     const skins = out.filter(m => {
         const w = m.map?.image?.width, h = m.map?.image?.height;
         if (!w || !h) return false;
-        
+
         const k64 = w / 64;
         return Number.isInteger(k64) && (h === w || h === w / 2);
     });
     return skins.length ? skins : out;
-}
+    }
 
-function peerEditableCanvas(entity) {
+    function peerEditableCanvas(entity) {
     const mats = peerSkinMaterials(entity);
     if (!mats.length) return null;
     const isCanvas = t => t?.image instanceof HTMLCanvasElement;
@@ -793,18 +797,18 @@ function peerEditableCanvas(entity) {
         m.map?.image && !(isCanvas(m.map) && m.map.__mfLocalCanvas));
     if (!usable.length) return null;
     const tex = usable[0].map;
-    
+
     if (isCanvas(tex) && tex.__mfPeerCanvas) {
         return { canvas: tex.image, tex, mats: usable.filter(m => m.map === tex) };
     }
-    
+
     const c = document.createElement('canvas');
     c.width = tex.image.width; c.height = tex.image.height;
     try { c.getContext('2d').drawImage(tex.image, 0, 0); } catch { return null; }
     let nt = null;
     try { nt = new tex.constructor(c); } catch {}
     if (!nt) return null;
-    nt.__mfPeerCanvas = true; 
+    nt.__mfPeerCanvas = true;
     try {
         nt.magFilter = tex.magFilter; nt.minFilter = tex.minFilter;
         if (tex.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = tex.colorSpace;
@@ -812,9 +816,9 @@ function peerEditableCanvas(entity) {
     } catch {}
     for (const m of usable) { m.map = nt; m.needsUpdate = true; }
     return { canvas: c, tex: nt, mats: usable };
-}
+    }
 
-function loadImg(url) {
+    function loadImg(url) {
     if (!look.faceCache.has(url)) {
         look.faceCache.set(url, new Promise((res, rej) => {
             const img = new Image();
@@ -824,11 +828,11 @@ function loadImg(url) {
         }));
     }
     return look.faceCache.get(url);
-}
+    }
 
-const peerOriginals = new WeakMap(); 
+    const peerOriginals = new WeakMap();
 
-function rememberPeerOriginal(entity, kind) {
+    function rememberPeerOriginal(entity, kind) {
     const s = peerEditableCanvas(entity);
     if (!s) return null;
     let rec = peerOriginals.get(entity);
@@ -836,7 +840,7 @@ function rememberPeerOriginal(entity, kind) {
         rec = { headCanvas: null, skinCanvas: null, headTex: null, skinTex: null };
         peerOriginals.set(entity, rec);
     }
-    
+
     if (!rec[kind + 'Canvas'] || rec[kind + 'Tex'] !== s.tex) {
         const c = document.createElement('canvas');
         c.width = s.canvas.width; c.height = s.canvas.height;
@@ -845,16 +849,16 @@ function rememberPeerOriginal(entity, kind) {
         rec[kind + 'Tex'] = s.tex;
     }
     return s;
-}
+    }
 
-const HEAD_RECT = { x: 0, y: 0, w: 64, h: 16 };
-const FACE_RECT = { x: 8, y: 8, w: 8, h: 8 };
-const FACE_OVERLAY_RECT = { x: 40, y: 8, w: 8, h: 8 };
+    const HEAD_RECT = { x: 0, y: 0, w: 64, h: 16 };
+    const FACE_RECT = { x: 8, y: 8, w: 8, h: 8 };
+    const FACE_OVERLAY_RECT = { x: 40, y: 8, w: 8, h: 8 };
 
-function applyLook(a) {
+    function applyLook(a) {
     const entity = peerEntity();
     if (!entity) {
-        
+
         if (look.pending.length < 20) look.pending.push(a);
         return;
     }
@@ -863,7 +867,7 @@ function applyLook(a) {
     try {
         switch (a.a) {
             case 'stroke': {
-                
+
                 const s = rememberPeerOriginal(entity, 'head');
                 if (!s) return;
                 look.mountedTex = s.tex;
@@ -876,7 +880,7 @@ function applyLook(a) {
                 break;
             }
             case 'head-rect': {
-                
+
                 const s = rememberPeerOriginal(entity, 'head');
                 if (!s) return;
                 look.mountedTex = s.tex;
@@ -892,7 +896,7 @@ function applyLook(a) {
                 break;
             }
             case 'face': {
-                
+
                 const s = rememberPeerOriginal(entity, 'face');
                 if (!s) return;
                 look.mountedTex = s.tex;
@@ -909,7 +913,7 @@ function applyLook(a) {
                 break;
             }
             case 'skin': {
-                
+
                 const s = rememberPeerOriginal(entity, 'skin');
                 if (!s) return;
                 look.mountedTex = s.tex;
@@ -925,14 +929,15 @@ function applyLook(a) {
                 break;
             }
             case 'revert': {
-                
+
                 const rec = peerOriginals.get(entity);
                 const s = peerEditableCanvas(entity);
                 if (!rec || !s) return;
                 const src = rec[a.what + 'Canvas'];
                 if (!src) return;
                 look.mountedTex = s.tex;
-                look.lastTexAction = null;   
+                look.lastTexAction = null;
+
                 look.lastTexImg = null;
                 const ctx = s.canvas.getContext('2d');
                 ctx.imageSmoothingEnabled = false;
@@ -942,7 +947,7 @@ function applyLook(a) {
                 break;
             }
             case 'morph': {
-                
+
                 try {
                     window.MF_Morph?.applyOn?.(entity, a.type);
                     look.morphType = a.type;
@@ -960,27 +965,27 @@ function applyLook(a) {
     } catch (e) {
         warn('look-sync ' + a.a + ' fallo: ' + (e?.message || e));
     }
-}
+    }
 
-function drainLookPending() {
+    function drainLookPending() {
     if (!look.pending.length) return;
     const entity = peerEntity();
     if (!entity) return;
     const q = look.pending.splice(0);
     for (const a of q) applyLook(a);
-}
+    }
 
-function lookTick() {
+    function lookTick() {
     if (!state.conn) return;
     if (look.pending.length) drainLookPending();
-    
+
     if (look.entity && (look.entity.mesh == null || look.entity.removed)) {
         look.entity = null;
     }
     const now = performance.now();
     if (now - look._lastWD < 600) return;
     look._lastWD = now;
-    
+
     if (look.lastTexAction && look.mountedTex) {
         const entity = peerEntity();
         if (entity) {
@@ -992,9 +997,9 @@ function lookTick() {
             }
         }
     }
-}
+    }
 
-function reappliedLastTexAction(entity) {
+    function reappliedLastTexAction(entity) {
     const a = look.lastTexAction;
     if (!a) return;
     const img = look.lastTexImg;
@@ -1015,9 +1020,9 @@ function reappliedLastTexAction(entity) {
         ctx.drawImage(img, r.x, r.y, r.w, r.h, FACE_OVERLAY_RECT.x, FACE_OVERLAY_RECT.y, FACE_OVERLAY_RECT.w, FACE_OVERLAY_RECT.h);
     }
     s.tex.needsUpdate = true;
-}
+    }
 
-function revertPeerLook() {
+    function revertPeerLook() {
     try {
         const entity = (look.entity?.mesh != null && !look.entity.removed) ? look.entity : peerEntity();
         if (!entity) return;
@@ -1032,13 +1037,13 @@ function revertPeerLook() {
             ctx.drawImage(src, 0, 0);
             s.tex.needsUpdate = true;
         }
-        
+
         try { s.tex.__mfPeerCanvas = false; } catch {}
         log('look-sync: peer fuera — skin restaurada, cara liberada');
     } catch (e) { warn('revert look falló: ' + (e?.message || e)); }
-}
+    }
 
-function wireConn(conn) {
+    function wireConn(conn) {
     state.conn = conn;
     conn.on('open', () => {
         state.status = state.role;
@@ -1051,25 +1056,25 @@ function wireConn(conn) {
     conn.on('close', () => {
         log('conexion cerrada');
         if (state.role === 'guest') killPuppet();
-        
+
         try { globalThis.MF_SPIDER_BOT?.remoteApply?.({ type: 'clear' }); } catch {}
-        
+
         for (const id of [...ents.remote.keys()]) {
             try { window.MF_CustomModels?.despawn?.(id, true); } catch {}
             ents.remote.delete(id);
         }
         ents._lastKey = null;
         ents.recv.clear();
-        
+
         if (look.entity && look.morphType) {
             try { window.MF_Morph?.detachFrom?.(look.entity.id); } catch {}
         }
-        
+
         revertPeerLook();
         look.entity = null; look.pending.length = 0;
         look.morphType = null;
         look.lastTexAction = null; look.lastTexImg = null; look.mountedTex = null;
-        
+
         try { window.MF_Studio?.remoteCamActive?.(false); } catch {}
         try { window.MF_Studio?.applyRemotePose?.(null, true); } catch {}
         stopBroadcast();
@@ -1077,16 +1082,18 @@ function wireConn(conn) {
         state.status = 'off';
     });
     conn.on('error', (e) => warn('error de conexion:', e?.message || e));
-}
+    }
 
-const autoShare = {
+    const autoShare = {
     on: (() => { try { return localStorage.getItem('mf:p2p:autoshare') !== '0'; } catch { return true; } })(),
-    myCodes: new Set(),      
-    seenCodes: new Map(),    
-    chatSeen: new WeakSet(), 
-};
+    myCodes: new Set(),
 
-function sendRoomToChat(code) {
+    seenCodes: new Map(),
+
+    chatSeen: new WeakSet(),
+    };
+
+    function sendRoomToChat(code) {
     if (!autoShare.on || !code) return;
     const g = getGame();
     const chat = g?.chat;
@@ -1095,14 +1102,13 @@ function sendRoomToChat(code) {
     autoShare.myCodes.add(code);
     try {
         try { chat.setInputValue?.(text); } catch { try { chat.inputValue = text; } catch {} }
-        // submit(e) del engine llama e.inGame(): pasar el game explícito.
         chat.submit(g);
         log('sala compartida al chat: ' + text);
     } catch (e) { warn('auto-share falló:', e?.message || e); }
     try { chat.closeInput?.(); } catch {}
-}
+    }
 
-function chatWatchTick() {
+    function chatWatchTick() {
     if (!autoShare.on || state.conn || state.peer) return;
     const g = getGame();
     const logArr = g?.chat?.log;
@@ -1116,39 +1122,36 @@ function chatWatchTick() {
         const m = text.match(/mfp2p[:\s]+([A-Za-z0-9-]{4,24})/i);
         if (!m) continue;
         const code = m[1];
-        if (autoShare.myCodes.has(code)) continue; 
+        if (autoShare.myCodes.has(code)) continue;
         const from = entry.from != null ? String(entry.from) : null;
-        if (meUuid && from === meUuid) continue;   
+        if (meUuid && from === meUuid) continue;
+
         const now = Date.now();
-        if (now - (autoShare.seenCodes.get(code) || 0) < 10 * 60 * 1000) continue; 
+        if (now - (autoShare.seenCodes.get(code) || 0) < 10 * 60 * 1000) continue;
         autoShare.seenCodes.set(code, now);
         log('sala P2P detectada en el chat → auto-join ' + code);
         join(code);
         return;
     }
-}
-let chatWatchTimer = setInterval(chatWatchTick, 1500);
-
-// sesión "activa" pero muerta (peer destruido / conn cerrada que nunca
-// disparó close): limpiarla en vez de trabar host/join para siempre
-function staleSession() {
-    if (state.conn && state.conn.open) return false;   // viva de verdad
-    if (state.peer && !state.peer.destroyed && state.conn === null) return false;   // host esperando conexión
+    }
+    let chatWatchTimer = setInterval(chatWatchTick, 1500);function staleSession() {
+    if (state.conn && state.conn.open) return false;
+    if (state.peer && !state.peer.destroyed && state.conn === null) return false;
     if (state.conn && !state.conn.open) {
         warn('sesion muerta detectada — limpiando');
         try { state.conn.close?.(); } catch {}
         state.conn = null;
         stopBroadcast();
-        if (!state.peer?.destroyed) return true;   // peer reusable (host)
+        if (!state.peer?.destroyed) return true;
         try { state.peer.destroy?.(); } catch {}
         state.peer = null;
         return true;
     }
     if (state.peer?.destroyed) { state.peer = null; state.status = 'off'; return true; }
     return false;
-}
+    }
 
-async function host(code) {
+    async function host(code) {
     if ((state.conn || state.peer) && !staleSession()) { warn('ya hay sesion activa — /p2p off primero'); return null; }
     if (!(await loadPeerJS())) { warn('no se pudo cargar PeerJS (CSP?)'); return null; }
     state.role = 'host';
@@ -1161,11 +1164,11 @@ async function host(code) {
     peer.on('open', (pid) => {
         log('sala lista. Tu amigo entra con:  /p2p join ' + pid);
         void 0;
-        
+
         sendRoomToChat(pid);
     });
     peer.on('connection', (c) => {
-        if (state.conn) { try { c.close(); } catch {} return; } 
+        if (state.conn) { try { c.close(); } catch {} return; }
         wireConn(c);
     });
     peer.on('error', (e) => {
@@ -1173,9 +1176,9 @@ async function host(code) {
         state.status = 'error';
     });
     return id;
-}
+    }
 
-async function join(code) {
+    async function join(code) {
     if ((state.conn || state.peer) && !staleSession()) { warn('ya hay sesion activa — /p2p off primero'); return false; }
     if (!code) { warn('usa: /p2p join <codigo>'); return false; }
     if (!(await loadPeerJS())) { warn('no se pudo cargar PeerJS (CSP?)'); return false; }
@@ -1193,9 +1196,9 @@ async function join(code) {
         state.status = 'error';
     });
     return true;
-}
+    }
 
-function off() {
+    function off() {
     stopBroadcast();
     if (state.role === 'guest') killPuppet();
     try { state.conn?.close?.(); } catch {}
@@ -1203,9 +1206,9 @@ function off() {
     state.peer = null; state.conn = null; state.role = null; state.peerId = null;
     state.status = 'off';
     log('P2P apagado');
-}
+    }
 
-window.MF_Peer = {
+    window.MF_Peer = {
     get status() { return state.status; },
     get role() { return state.role; },
     get code() { return state.peerId; },
@@ -1213,7 +1216,7 @@ window.MF_Peer = {
     get scalePeerName() { return state.conn?.open ? state.peerName : null; },
     _chatHook: null,
     host, join, off,
-    
+
     dispose() {
         try { off(); } catch {}
         try { clearInterval(state.sendTimer); } catch {}
@@ -1222,7 +1225,7 @@ window.MF_Peer = {
         try { clearInterval(chatWatchTimer); } catch {}
         try { cancelAnimationFrame(puppetRafId); } catch {}
     },
-    
+
     auto(on) {
         if (on === true || on === false) {
             autoShare.on = on;
@@ -1231,27 +1234,27 @@ window.MF_Peer = {
         }
         return autoShare.on;
     },
-    
+
     sendPat(info) {
         if (!state.conn) return false;
         send({ t: 'pat', target: info?.target || null, from: info?.from || null });
         return true;
     },
-    
+
     sendStudio(obj) {
         if (!state.conn || state.status === 'off') return false;
         send(obj);
         return true;
     },
-    
+
     sendLook(a) {
         if (!state.conn || state.status === 'off') return false;
         send({ t: 'look', a });
         return true;
     },
-    
+
     get lookSynced() { return !!(state.conn && state.peerName); },
-    
+
     lookStatus() {
         const e = look.entity || peerEntity();
         return {
@@ -1267,26 +1270,26 @@ window.MF_Peer = {
             lastAppliedAgoMs: look.lastApplied ? Math.round(performance.now() - look.lastApplied) : null
         };
     },
-    
+
     resendLook() {
         if (!state.conn) return { ok: false, error: 'not connected' };
         let sent = 0;
-        
+
         const sc = window.MF_SkinChanger;
         if (sc?.current) {
             sc.apply(sc.current).catch(() => {});
             sent++;
         }
-        
+
         if (window.MF_Morph?.current) {
             try { window.MF_Peer.sendLook({ a: 'morph', type: window.MF_Morph.current }); sent++; } catch {}
         }
         log('look-sync: re-enviado estado propio (' + sent + ' elemento(s))');
         return { ok: true, sent };
     }
-};
+    };
 
-try {
+    try {
     const V = window.MF_Verity;
     if (V?.say && !V.__p2pPatched) {
         V.__p2pPatched = true;
@@ -1297,7 +1300,7 @@ try {
             return r;
         };
     }
-    
+
     if (V?.setChatHook && !V.__p2pHookPatched) {
         V.__p2pHookPatched = true;
         const origSet = V.setChatHook.bind(V);
@@ -1306,9 +1309,9 @@ try {
             return origSet(fn);
         };
     }
-} catch {}
+    } catch {}
 
-try {
+    try {
     const CM = window.MF_CustomModels;
     if (CM?.despawn && !CM.__p2pPatched) {
         CM.__p2pPatched = true;
@@ -1319,7 +1322,7 @@ try {
             return r;
         };
     }
-} catch {}
+    } catch {}
 
 log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status');
 })();

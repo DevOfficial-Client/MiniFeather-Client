@@ -4,24 +4,38 @@
   const W = globalThis;
   const EVENT_NAME = 'minifeather:fell-leaves-config';
   const TAG = '[MiniFeather Fallen Leaves]';
-  const REGION_RADIUS = 2; 
+  const REGION_RADIUS = 2;
   const REFRESH_MS = 9000;
-  const SURFACE_EPSILON = 0.0047; 
-  const DENSITY = 0.35;           
+  const SURFACE_EPSILON = 0.0047;
+  const DENSITY = 0.35;
+
   const MIN_SIZE = 0.42;
   const MAX_SIZE = 0.78;
 
   const FALLING_MAX = 110;
   const FALL_SPAWN_MS = 90;
-  const FALL_SPEED = 0.22;        
+  const FALL_SPEED = 0.22;
 
   const SPECIES = [
-    { id: 'oak',      tex: 'oak',    color: 0xB4E861, match: ['oak_leaves'],              frames: 6 },
-    { id: 'dark_oak', tex: 'oak',    color: 0x86C94F, match: ['dark_oak_leaves'],         frames: 6 },
-    { id: 'birch',    tex: 'birch',  color: 0xCDEB82, match: ['birch_leaves'],            frames: 6 },
-    { id: 'spruce',   tex: 'spruce', color: 0x96D6A6, match: ['spruce_leaves'],           frames: 2 },
-    { id: 'acacia',   tex: 'acacia', color: 0xB0CF66, match: ['acacia_leaves'],           frames: 2 },
-    { id: 'jungle',   tex: 'jungle', color: 0xA9F072, match: ['jungle_leaves'],           frames: 3 }
+    { id: 'oak',
+    tex: 'oak',
+    color: 0xB4E861, match: ['oak_leaves'],
+    frames: 6 },
+    { id: 'dark_oak', tex: 'oak',
+    color: 0x86C94F, match: ['dark_oak_leaves'],
+    frames: 6 },
+    { id: 'birch',
+    tex: 'birch',  color: 0xCDEB82, match: ['birch_leaves'],
+    frames: 6 },
+    { id: 'spruce',
+    tex: 'spruce', color: 0x96D6A6, match: ['spruce_leaves'],
+    frames: 2 },
+    { id: 'acacia',
+    tex: 'acacia', color: 0xB0CF66, match: ['acacia_leaves'],
+    frames: 2 },
+    { id: 'jungle',
+    tex: 'jungle', color: 0xA9F072, match: ['jungle_leaves'],
+    frames: 3 }
   ];
 
   const GROUND = new Set([
@@ -39,15 +53,20 @@
     world: null,
     scene: null,
     referenceMesh: null,
-    materials: [],      
+    materials: [],
+
     textures: [],
-    buckets: [],        
-    speciesIndex: new Map(), 
-    speciesFrames: new Map(), 
-    bundle: [],         
-    verticalGeometry: null, 
-    falling: [],        
-    canopySpots: [],    
+    buckets: [],
+
+    speciesIndex: new Map(),
+    speciesFrames: new Map(),
+    bundle: [],
+
+    verticalGeometry: null,
+    falling: [],
+
+    canopySpots: [],
+
     stateNameCache: new Map(),
     centerCx: Number.NaN,
     centerCz: Number.NaN,
@@ -262,7 +281,7 @@
       material.polygonOffsetUnits = -1;
       if ('roughness' in material) material.roughness = 1;
       if ('metalness' in material) material.metalness = 0;
-      
+
       material.color?.set?.(tintColor ?? 0xffffff);
       material.emissive?.set?.(0x000000);
       material.onBeforeCompile = function () {};
@@ -346,9 +365,9 @@
       if (!buildVerticalGeometry(ref)) {
         console.warn(TAG, 'sin quad vertical: las hojas no caerán (solo decals)');
       }
-      
+
       try { state.scratchVec3 = ref.position.clone(); } catch (_) {}
-      
+
       for (const species of SPECIES) {
         const frames = materials.filter(m => m.species === species.id);
         state.speciesFrames.set(species.id, frames);
@@ -390,8 +409,10 @@
         const wx = cx * 16 + lx;
         const wz = cz * 16 + lz;
 
-        let species = null;    
-        let lastLeafY = -1;    
+        let species = null;
+
+        let lastLeafY = -1;
+
         let stop = false;
 
         for (let ci = chunk.cells.length - 1; ci >= 0 && !stop; ci--) {
@@ -406,17 +427,17 @@
             let raw = 0;
             try { raw = cell.bitArray.get(blockIndex); } catch (_) { continue; }
             const id = cell.palette?.length ? cell.palette[raw] : raw;
-            if (id === 0) continue; 
+            if (id === 0) continue;
 
             const name = blockNameAt(chunk, id, wx, realY, wz);
             if (!name) { stop = true; break; }
 
             if (state.speciesIndex.has(name)) {
-              lastLeafY = realY; 
-              species = state.speciesIndex.get(name); 
+              lastLeafY = realY;
+              species = state.speciesIndex.get(name);
               continue;
             }
-            
+
             if (name.endsWith('_log') || name.endsWith('_wood')) continue;
             if (name === 'vine' || name === 'cobweb') continue;
 
@@ -436,7 +457,7 @@
                   }
                 }
               }
-              
+
               if (lastLeafY >= 0 && state.canopySpots.length < 800 && (h & 7) === 0) {
                 state.canopySpots.push({
                   x: wx + 0.5,
@@ -447,7 +468,7 @@
                 });
               }
             }
-            stop = true; 
+            stop = true;
           }
         }
       }
@@ -513,7 +534,7 @@
       mesh.receiveShadow = false;
       mesh.frustumCulled = true;
       mesh.renderOrder = 3;
-      
+
       mesh.matrixAutoUpdate = true;
       mesh.updateMatrix();
       mesh.updateMatrixWorld(true);
@@ -555,7 +576,7 @@
     const entry = frames[(Math.random() * frames.length) | 0];
 
     try {
-      
+
       const material = entry.material.clone();
       const MeshCtor = state.referenceMesh.constructor;
       const mesh = new MeshCtor(state.verticalGeometry, material);
@@ -581,9 +602,11 @@
         targetY: spot.targetY,
         start: now,
         phase: Math.random() * Math.PI * 2,
-        swayFreq: 0.15 + Math.random() * 0.10,  
-        swayAmp: 0.9 + Math.random() * 0.8,     
-        spinFreq: 0.25 + Math.random() * 0.2,   
+        swayFreq: 0.15 + Math.random() * 0.10,
+        swayAmp: 0.9 + Math.random() * 0.8,
+
+        spinFreq: 0.25 + Math.random() * 0.2,
+
         fallJitter: 0.8 + Math.random() * 0.4
       });
     } catch (_) {}
@@ -817,7 +840,7 @@
     if (!cfg || typeof cfg !== 'object') return;
     if (isValidAssetsUrl(cfg.assetsBase) && state.assetsBase !== cfg.assetsBase) {
       state.assetsBase = cfg.assetsBase;
-      disposeResources(); 
+      disposeResources();
     }
     setEnabled(cfg.enabled);
   }

@@ -22,16 +22,32 @@
     ]);
 
     const PARTS = Object.freeze([
-        { reference: 'head',           overlay: 'head2',            target: 'headPivot' },
-        { reference: 'torso',          overlay: 'torso2',           target: 'torso' },
-        { reference: 'rightArmTop',    overlay: 'rightArmTop2',     slimOverlay: 'rightArmTopSlim2',    target: 'rightShoulderJoint' },
+        { reference: 'head',
+        overlay: 'head2',
+        target: 'headPivot' },
+        { reference: 'torso',
+        overlay: 'torso2',
+        target: 'torso' },
+        { reference: 'rightArmTop',
+        overlay: 'rightArmTop2',
+        slimOverlay: 'rightArmTopSlim2',
+        target: 'rightShoulderJoint' },
         { reference: 'rightArmBottom', overlay: 'rightArmBottom2',  slimOverlay: 'rightArmBottomSlim2', target: 'rightElbowJoint' },
-        { reference: 'leftArmTop',     overlay: 'leftArmTop2',      slimOverlay: 'leftArmTopSlim2',     target: 'leftShoulderJoint' },
-        { reference: 'leftArmBottom',  overlay: 'leftArmBottom2',   slimOverlay: 'leftArmBottomSlim2',  target: 'leftElbowJoint' },
-        { reference: 'rightLegTop',    overlay: 'rightLegTop2',     target: 'rightHipJoint' },
+        { reference: 'leftArmTop',
+        overlay: 'leftArmTop2',
+        slimOverlay: 'leftArmTopSlim2',
+        target: 'leftShoulderJoint' },
+        { reference: 'leftArmBottom',  overlay: 'leftArmBottom2',
+        slimOverlay: 'leftArmBottomSlim2',  target: 'leftElbowJoint' },
+        { reference: 'rightLegTop',
+        overlay: 'rightLegTop2',
+        target: 'rightHipJoint' },
         { reference: 'rightLegBottom', overlay: 'rightLegBottom2',  target: 'rightKneeJoint' },
-        { reference: 'leftLegTop',     overlay: 'leftLegTop2',      target: 'leftHipJoint' },
-        { reference: 'leftLegBottom',  overlay: 'leftLegBottom2',   target: 'leftKneeJoint' }
+        { reference: 'leftLegTop',
+        overlay: 'leftLegTop2',
+        target: 'leftHipJoint' },
+        { reference: 'leftLegBottom',  overlay: 'leftLegBottom2',
+        target: 'leftKneeJoint' }
     ]);
 
     const state = {
@@ -106,9 +122,6 @@
 
         return null;
     }
-
-    // Caché negativa: el fiber-walk de #react es caro y synchronize corre
-    // cada 250ms — sin juego (menús) no hay razón para re-escanear tan seguido
     let _lastReactScan = 0;
     function findGame() {
         for (const candidate of [W.Game, W.game, W.__MINIBLOX_GAME__, state.game]) {

@@ -1,13 +1,5 @@
 (function () {
   'use strict';
-
-  // ── Rangos definidos en accounts.json (local + DB viva en GitHub) ──
-  // Estructura:
-  //   "ranks": { "dev": { "label": "DEV", "color": "#00FFFF", "bold": true,
-  //                        "glow": true, "shiny": true, "priorityBase": "eternus" } },
-  //   "players": { "shusukegxe_": { "skin": "...", "rank": "dev", "name": "ShusukeGxE_" } }
-  // "name" (opcional) = nombre a mostrar; entradas por uuid lo aprenden del juego.
-  // Fallback offline hardcodeado (mismo comportamiento que siempre):
   const BUILTIN_RANKS = {
     dev: { label: 'DEV', color: '#00FFFF', bold: true, glow: true, shiny: true, priorityBase: 'eternus' }
   };
@@ -36,8 +28,6 @@
     ranksReady: false,
     ranksVersion: 0
   };
-
-  // ── DB de rangos: builtin → local (assets/accounts.json) → viva (GitHub) ──
   const ranks = {
     defs: { ...BUILTIN_RANKS },
     byUuid: new Map(),
@@ -81,7 +71,7 @@
         }
       }
     }
-    if (!byUuid.size && !byName.size) return false;   // nada que aplicar
+    if (!byUuid.size && !byName.size) return false;
     ranks.defs = defs;
     ranks.byUuid = byUuid;
     ranks.byName = byName;
@@ -89,9 +79,6 @@
     state.ranksReady = true;
     return true;
   }
-
-  // accounts.json local desde MAIN world: vía el meta mf-skins-base
-  // (mismo truco que CustomSkins).
   function localDbUrl() {
     try {
       const meta = document.querySelector('meta[name="mf-skins-base"]');
@@ -104,14 +91,11 @@
   }
 
   function loadRanksFromDb() {
-    // 1) builtin ya está aplicado de arranque
-    // 2) local
     const localUrl = localDbUrl();
     const localP = localUrl
       ? fetch(localUrl, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null)
       : Promise.resolve(null);
-    // 3) viva (GitHub)
-    const liveP = fetch(LIVE_DB_URL, { cache: 'reload' }).then(r => r.ok ? r.json() : null).catch(() => null);
+      const liveP = fetch(LIVE_DB_URL, { cache: 'reload' }).then(r => r.ok ? r.json() : null).catch(() => null);
 
     localP.then(local => {
       if (local) applyRanksDb(local);
@@ -120,14 +104,10 @@
       if (live && applyRanksDb(live)) {
         refreshAllTags();
       } else if (live) {
-        // la viva no trae ranks: local manda si definió algo distinto
-        refreshAllTags();
+          refreshAllTags();
       }
     }).catch(() => {});
   }
-
-  // Push en vivo (ntfy SSE): recarga los rangos al instante cuando el bot
-  // escribe accounts.json — mismo topic que las skins.
   var pushRetry = 0;
   var pushTimer = null;
   function startRanksPushListener() {
@@ -156,17 +136,12 @@
       };
       es.onopen = function () { pushRetry = 0; };
     } catch (_) {}
-  }
-
-  // Defs vivas: el proxy de GuiToast lee de aquí, así que se actualiza solo
-  // cuando applyRanksDb() cambia los rangos.
-  globalThis.__MF_NATIVE_CUSTOM_RANKS__ = {
+  }  globalThis.__MF_NATIVE_CUSTOM_RANKS__ = {
     defs: ranks.defs
   };
 
   function rankOf(value) {
-    // uuid directo
-    if (typeof value === 'string' && value) {
+      if (typeof value === 'string' && value) {
       const byUuid = ranks.byUuid.get(value.toLowerCase());
       if (byUuid) return byUuid;
       return ranks.byName.get(value.trim().toLowerCase()) || null;
@@ -186,8 +161,7 @@
   }
 
   function displayTarget(value) {
-    // Nombre a mostrar para el target (mayúsculas como el original)
-    if (!value || typeof value !== 'object') return null;
+      if (!value || typeof value !== 'object') return null;
     const candidates = [value.username, value.name, value.profile?.username, value.profile?.name];
     for (const c of candidates) {
       if (typeof c === 'string' && c.trim()) return c.trim();
@@ -201,8 +175,7 @@
   }
 
   function targetNameFromObject(value) {
-    // ¿Tiene rango asignado en la DB? → es target
-    const rk = rankOf(value);
+      const rk = rankOf(value);
     if (!rk) return null;
     return displayTarget(value) || value?.profile?.username || value?.username || value?.name || null;
   }
@@ -324,7 +297,7 @@
         if (match) guiFile = match[1];
       }
 
-      if (!guiFile) guiFile = 'GuiToast-CS00K5-z.js'; 
+      if (!guiFile) guiFile = 'GuiToast-CS00K5-z.js';
       if (!mainUrl) mainUrl = new URL('/assets/index-placeholder.js', location.origin).href;
 
       const guiUrl = new URL('./' + guiFile, mainUrl).href;
@@ -477,8 +450,6 @@
 
   function rankTag(rankKey) {
     const d = ranks.defs[rankKey] || ranks.defs['dev'];
-    // Formato del chat de miniblox: tokens \code\ separados por \\ dobles.
-    // Byte-exacto con el formato original: \bold\\glow\\#color\\shiny\[TAG]\reset\
     const label = String(d.label || 'DEV');
     const shown = label.startsWith('[') ? label : '[' + label + ']';
     let tag = '';
@@ -491,7 +462,6 @@
 
   function chatLine(name, message, rankKey) {
     const d = ranks.defs[rankKey] || ranks.defs['dev'];
-    // byte-exacto con el original: [tag] \#color\name:\reset\ message
     return `${rankTag(rankKey)} \\${d.color}\\${name}:\\reset\\ ${message}`;
   }
 
@@ -508,12 +478,11 @@
       }
     }
     const plain = stripFormatting(data?.text);
-    // usernames conocidos de la DB (por nombre) + aprendidos del juego
     const names = new Set(ranks.byName.keys());
     for (const [n] of state.nativeRanks) names.add(n);
     for (const rawName of names) {
       if (!rawName || typeof rawName !== 'string') continue;
-      if (ranks.defs[rawName]) continue;   // era un rankKey, no un username
+      if (ranks.defs[rawName]) continue;
       const rank = ranks.byName.get(rawName.toLowerCase()) || null;
       if (plain.includes(rawName)) return { name: rawName, rank };
     }
@@ -571,8 +540,7 @@
   }
 
   function refreshAllTags() {
-    // Reparchear todo lo conocido con la DB nueva de rangos
-    const game = state.game || findGame();
+      const game = state.game || findGame();
     if (!game) return;
     try { patchKnownGameData(game); } catch (_) {}
     try { patchChatLog(game); } catch (_) {}
@@ -597,8 +565,8 @@
     patchKnownGameData(game);
     patchChatLog(game);
   }, 250);
-})();
-(function () {
+  })();
+  (function () {
   function tryPatchSliders() {
     document.querySelectorAll('input[type="range"]').forEach(input => {
       if (input.dataset.mfPatched) return;

@@ -40,11 +40,11 @@
   function isGuiHudBundleActive() {
     if (guiBundleActive) return true;
     try {
-      
+
       for (const s of document.scripts) {
         if (testGuiHudUrl(s.getAttribute('src'))) return (guiBundleActive = true);
       }
-      
+
       for (const e of performance.getEntriesByType('resource')) {
         if (e.initiatorType === 'script' && testGuiHudUrl(e.name)) return (guiBundleActive = true);
       }
@@ -97,7 +97,7 @@
     try {
       if (!game?.info) return false;
       if (game.info.inLoadedChunk === false) return false;
-      
+
       return true;
     } catch (_) {}
     return false;
@@ -142,14 +142,14 @@
     if (!r.width) return false;
     const cx = r.left + r.width / 2;
     const center = window.innerWidth / 2;
-    
+
     return Math.abs(cx - center) < window.innerWidth * 0.25;
   }
 
   function findOriginalBars() {
     const result = { healthBar: null, foodBar: null };
     try {
-      
+
       if (state.healthBarRef && state.healthBarRef.isConnected) {
         if (state.healthBarRef.querySelector('.mf-hearts')) {
           result.healthBar = state.healthBarRef;
@@ -214,18 +214,18 @@
           if (!isCenteredLikeHud(el)) continue;
           try {
             const s = window.getComputedStyle(el);
-            
+
             const hasBorder = s.border && s.border !== 'none' && s.border.includes('px');
             const hasBg = s.backgroundColor && s.backgroundColor !== 'rgba(0, 0, 0, 0)' && s.backgroundColor !== 'transparent';
             if (hasBorder || hasBg) {
-              
+
               if (rect.top > window.innerHeight * 0.4) {
                 bordered.push(el);
               }
             }
           } catch (_) {}
         }
-        
+
         bordered.sort((a, b) => {
           const ra = a.getBoundingClientRect();
           const rb = b.getBoundingClientRect();
@@ -292,7 +292,7 @@
       if (!canPatch()) return;
       const game = getGame();
       if (!game || !game.info) return;
-      
+
       if (!isGameReady(game)) return;
 
       const experience = (game.info?.xp?.experience || 0);
@@ -316,15 +316,15 @@
           if (el.classList.contains('mf-food') || el.closest('.mf-food')) continue;
           if (el.dataset.mfReplaced || el.dataset.mfXpReplaced) continue;
           if (isInChatArea(el)) continue;
-          
+
           if (el.querySelector('.mf-hearts, .mf-food')) continue;
-          
+
           const textContent = el.textContent.trim();
           if (/^\d+\.?\d*\s*\/\s*\d+$/.test(textContent)) continue;
 
           const h = el.offsetHeight;
           const w = el.offsetWidth;
-          
+
           if (h < 3 || h > 25) continue;
           if (w < 60 || w < h * 3) continue;
 
@@ -347,7 +347,7 @@
       }
 
       if (!xpBar) return;
-      
+
       if (xpBar.querySelector('.mf-hearts, .mf-food')) return;
 
       const ghost = isGhostMode(game);
@@ -355,7 +355,7 @@
       const xpKey = filledIcons + ':' + level + ':' + isMobile + ':' + ghost;
       const existing = xpBar.querySelector('.mf-xp-icons');
       if (existing) {
-        
+
         existing.style.opacity = guiOpacity;
         existing.style.transition = 'opacity 0.3s';
         if (lastXpKey === xpKey) return;
@@ -377,13 +377,13 @@
 
       let container = xpBar.querySelector('.mf-xp-icons');
       if (!container) {
-        
+
         xpBar.innerHTML = '';
         container = document.createElement('div');
         container.className = 'mf-xp-icons';
         xpBar.appendChild(container);
       } else {
-        
+
         container.innerHTML = '';
       }
 
@@ -488,17 +488,17 @@
 
       const game = getGame();
       if (!game || !game.info) return;
-      
+
       if (!isGameReady(game)) return;
 
       const health = game.info.health ?? 20;
       const food = game.info.food ?? 20;
       const absorption = game.info.absorption ?? 0;
       const iconSize = 22;
-      
+
       const hardcore = game.serverInfo?.hardcore === true ||
                        game.serverInfo?.metadata?.hardcore === true;
-      
+
       const ghost = isGhostMode(game);
       const guiOpacity = ghost ? 0.35 : 1;
 

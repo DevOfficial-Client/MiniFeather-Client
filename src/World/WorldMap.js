@@ -36,7 +36,7 @@
     };
 
     const BLOCK_NAME_COLORS = {
-        
+
         air: null, barrier: null, aether_portal: null, hell_portal: null, structure_void: null,
 
         grass_block: '#5a8f3a', grass: '#5a8f3a', fern: '#4a7f2a', tall_grass: '#5a8f3a',
@@ -423,8 +423,6 @@
         serverCaches: new Map(),
         currentServerKey: null,
         currentDimensionId: 0,
-        // Snapshot del fondo (chunks + grid): repintar solo cuando algo cambia,
-        // no 60 veces por segundo
         snapshot: null,
         snapshotDirty: true,
         wpCache: null,
@@ -510,9 +508,6 @@
     function getOrCreateCache() {
         let serverCache = state.serverCaches.get(state.currentServerKey);
         if (!serverCache) {
-            // LRU de servidores: cada cache retiene hasta 500 chunks × dims
-            // (~0.5-1 MB por servidor); sin tope, saltar entre servidores en
-            // una sesión larga acumulaba memoria sin límite.
             if (state.serverCaches.size >= 8) {
                 let oldestKey = null, oldestAt = Infinity;
                 for (const [k, v] of state.serverCaches) {
@@ -683,10 +678,6 @@
         const centerZ = state.centerZ;
         const offsetX = w / 2;
         const offsetY = h / 2;
-
-        // Fondo pesado (miles de fillRect) SOLO cuando algo cambió: zoom,
-        // centrado, chunks nuevos o mundo distinto. Entre cambios, blitear
-        // el snapshot cacheado.
         if (state.snapshotDirty || !state.snapshot ||
             state.snapshot.width !== w || state.snapshot.height !== h) {
             if (!state.snapshot) state.snapshot = document.createElement('canvas');
@@ -802,9 +793,6 @@
             }
         }
     }
-
-    // Waypoints parseados a lo sumo 1 vez por segundo (antes: 2 JSON.parse
-    // de localStorage POR FRAME)
     function getWaypointData() {
         const now = performance.now();
         if (state.wpCache && now - state.wpCacheAt < 1000) return state.wpCache;
@@ -995,9 +983,6 @@
 
         createOverlay();
         scanChunksAroundPlayer();
-
-        // El mapa es UI de ayuda, no gameplay: ~20 Hz sobra (antes 60 Hz
-        // repintando miles de fillRect por frame)
         let lastRender = 0;
         const renderLoop = (ts) => {
             if (!state.open) return;
@@ -1046,9 +1031,6 @@
             closeMap();
         }
     }, true);
-
-    // Escaneo en background solo si el usuario usa el mapa en esta sesión:
-    // si nunca lo abre, no hay razón para generar heightmaps constantemente
     function startBackgroundScan() {
         if (state.scanInterval) clearInterval(state.scanInterval);
         state.scanInterval = setInterval(() => {

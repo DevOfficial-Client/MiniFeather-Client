@@ -1,7 +1,3 @@
-// MF_Accounts — puente de sesión/uuid de Miniblox (MAIN world).
-// Expone el uuid real de la cuenta logueada al panel (ISOLATED) via
-// CustomEvent y responde consultas del panel. También deja el uuid
-// disponible para el insertor de la UI de login/signup.
 (() => {
     'use strict';
     if (window.__MF_Accounts) return;
@@ -10,11 +6,9 @@
     const TAG = '[MiniFeather Accounts]';
     const VERBOSE = (() => { try { return localStorage.getItem('mf_accounts_verbose') === '1'; } catch (_) { return false; } })();
     const log = (...a) => { if (VERBOSE) void 0; };
-
-    // ── estado de la cuenta ──────────────────────────────────────
     const state = {
-        session: null,   // token session_v1 (si hay login)
-        uuid: null,      // uuid real de la cuenta (no el socket id)
+        session: null,
+        uuid: null,
         username: null,
         rank: null,
         loadedAt: 0
@@ -73,8 +67,6 @@
         } catch (e) { log('accounts/me falló:', e?.message || e); }
         return null;
     }
-
-    // Observar cambios de sesión (login/logout durante la visita)
     function watchSession() {
         let last = readSession();
         setInterval(() => {
@@ -88,8 +80,6 @@
             }
         }, 1500);
     }
-
-    // ── API para el panel y otros scripts ───────────────────────
     async function getAccount(force) {
         if (!force && state.uuid) return { ...state };
         if (!readSession()) { fromGameProfile(); return { ...state }; }
@@ -98,26 +88,17 @@
         return { ...state };
     }
     window.MF_Accounts = { getAccount, refresh: () => getAccount(true) };
-
-    // Responder requests del panel (ISOLATED) via CustomEvent
     document.addEventListener('minifeather:accounts-request', () => {
         getAccount(true).then(acc => {
             const detail = JSON.stringify({ uuid: acc.uuid, username: acc.username, rank: acc.rank, session: !!acc.session });
             document.dispatchEvent(new CustomEvent('minifeather:accounts-data', { detail }));
         });
     });
-
-    // ── arranque ────────────────────────────────────────────────
     state.session = readSession();
     if (state.session) fetchMe();
     else fromGameProfile();
     watchSession();
     log('puente de cuentas listo');
-
-    // ── insertor de uuid en la UI de login/signup de miniblox.io ──
-    // Añade un botón "Insert UUID" junto al primer input de texto visible
-    // cuando la ruta es /signin o /signup: escribe el uuid de la cuenta
-    // logueada (o lo copia al portapapeles si no hay campo enfocable).
     const AUTH_ROUTES = /^\/(signin|signup|account)/;
     let uuidBtn = null;
 

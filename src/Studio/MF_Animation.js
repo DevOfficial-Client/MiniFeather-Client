@@ -9,20 +9,25 @@
     const MIRROR_PART = { leftArm: 'rightArm', rightArm: 'leftArm', leftLeg: 'rightLeg', rightLeg: 'leftLeg' };
 
     const MIRROR_SIGN = {
-        rotation: [1, -1, -1], 
+        rotation: [1, -1, -1],
         position: [-1, 1, 1],
         scale: [1, 1, 1]
     };
 
     const state = {
-        anims: null,          
-        cur: null,            
+        anims: null,
+
+        cur: null,
+
         playing: false,
-        t: 0,                 
+        t: 0,
+
         raf: 0,
         lastFrame: 0,
-        fps: 60,              
-        fpsClock: 0,          
+        fps: 60,
+
+        fpsClock: 0,
+
         autoKey: true,
         mirror: true
     };
@@ -89,7 +94,7 @@
         if (!CHANNELS.includes(channel)) throw new Error('canal: ' + channel + ' (usa ' + CHANNELS.join(', ') + ')');
         const arr = keysOf(part, channel, true);
         const v = [value[0] || 0, value[1] || 0, value[2] || 0];
-        
+
         const existing = arr.find(k => Math.abs(k.t - t) < 0.001);
         if (existing) existing.v = v;
         else {
@@ -117,13 +122,13 @@
     }
 
     function interp3(a, b, c, d, u, mode) {
-        
+
         const out = [0, 0, 0];
         for (let i = 0; i < 3; i++) {
             if (mode === 'step') out[i] = b[i];
             else if (mode === 'linear') out[i] = b[i] + (c[i] - b[i]) * u;
             else {
-                
+
                 const p0 = a ? a[i] : b[i] * 2 - c[i];
                 const p3 = d ? d[i] : c[i] * 2 - b[i];
                 const u2 = u * u, u3 = u2 * u;
@@ -157,17 +162,17 @@
         const base = P.getPose() || {};
         for (const part in a.keys) {
             const chans = a.keys[part];
-            
+
             const rot = sampleChannel(chans.rotation, t, a.interp);
             if (rot) {
                 try { P.setPart(part, { pitch: rot[0], yaw: rot[1], roll: rot[2] }); } catch {}
             }
-            
+
             const pos = sampleChannel(chans.position, t, a.interp);
             if (pos && P.setOffset) {
                 try { P.setOffset(part, { x: pos[0], y: pos[1], z: pos[2] }); } catch {}
             }
-            
+
             const sc = sampleChannel(chans.scale, t, a.interp);
             if (sc && P.setScale) {
                 try { P.setScale(part, { x: sc[0], y: sc[1], z: sc[2] }); } catch {}
@@ -188,9 +193,9 @@
         state.fpsClock += dt;
         if (state.fpsClock < minStep) {
             state.raf = requestAnimationFrame(loop);
-            return; 
+            return;
         }
-        state.fpsClock = 0; 
+        state.fpsClock = 0;
 
         if (state.t > a.length) {
             if (a.loop) state.t = state.t % a.length;
@@ -304,7 +309,7 @@
     function ALL_PARTS() {
         const P = window.MF_Pose;
         if (P?.PARTS) return P.PARTS;
-        return Object.keys(MIRROR_PART); 
+        return Object.keys(MIRROR_PART);
     }
 
     window.MF_Animation = {

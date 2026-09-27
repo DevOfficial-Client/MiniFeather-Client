@@ -11,7 +11,8 @@
 
     const KEY_SKIN = 'mf:csa:skin';
     const KEY_ID = 'mf:csa:id';
-    const KEY_ACTIVE = 'mf:csa:active';   
+    const KEY_ACTIVE = 'mf:csa:active';
+
     const KEY_SEQ = 'mf:csa:seq';
 
     const packSkinReg = (globalThis.__MF_PACK_SKINS__ ||= {});
@@ -92,9 +93,9 @@
         } catch (e) {
             warn('no se pudo persistir la skin (quota):', e?.message || e);
         }
-        
+
         packSkinReg[id] = dataUrl;
-        
+
         try {
             globalThis.MF_Mesh?.shareSkinUp?.(id, dataUrl);
         } catch {}
@@ -111,13 +112,13 @@
             }
             return { ok: true };
         }
-        
+
         return null;
     }
 
     function patchInventory(data) {
         if (!data || typeof data !== 'object') return false;
-        
+
         if (Array.isArray(data.inventory) && !data.inventory.includes('skin.custom')) {
             data.inventory.push('skin.custom');
             return true;
@@ -128,12 +129,12 @@
     function patchProfile(data) {
         if (!data || typeof data !== 'object') return false;
         let changed = false;
-        
+
         if (Array.isArray(data.inventory) && !data.inventory.includes('skin.custom')) {
             data.inventory.push('skin.custom');
             changed = true;
         }
-        
+
         const active = localStorage.getItem(KEY_ACTIVE) === '1';
         const stored = getStoredSkin();
         if (active && stored?.id && typeof data.cosmetics === 'object' && data.cosmetics !== null) {
@@ -154,7 +155,7 @@
         window.fetch = function (input, init) {
             const url = typeof input === 'string' ? input
                 : (input && input.url) ? input.url : '';
-            
+
             if (!/\/accounts\/me(\?|$)/.test(url)) {
                 return orig.apply(this, arguments);
             }
@@ -197,7 +198,7 @@
             try {
                 if (typeof init?.body === 'string') bodyText = init.body;
                 else if (input instanceof Request) {
-                    
+
                     return input.clone().text().then((txt) => {
                         let body = null;
                         try { body = JSON.parse(txt); } catch {}
@@ -223,7 +224,7 @@
     }
 
     function errorResponse(msg, status = 400) {
-        return jsonResponse(msg, status);  
+        return jsonResponse(msg, status);
     }
 
     async function handleEmulated(url, body, method) {
@@ -239,7 +240,7 @@
             if (/\/accounts\/set_cosmetic(\?|$)/.test(url) && method === 'POST') {
                 const out = await emulateSetCosmetic(body);
                 if (out) return jsonResponse(out);
-                return null;  
+                return null;
             }
         } catch (e) {
             warn('handleEmulated error:', e?.message || e);
@@ -271,7 +272,7 @@
                     try { parsed = typeof body === 'string' ? JSON.parse(body) : body; } catch {}
                     handleEmulated(xhr.__mfCsaUrl, parsed, 'POST').then(async (resp) => {
                         if (!resp) {
-                            
+
                             nativeSend.apply(xhr, [body]);
                             return;
                         }
@@ -299,7 +300,7 @@
             Object.defineProperty(xhr, 'responseText', { value: text, configurable: true });
             Object.defineProperty(xhr, 'response', { value: text, configurable: true });
             Object.defineProperty(xhr, 'responseURL', { value: xhr.__mfCsaUrl, configurable: true });
-            
+
             const native = XMLHttpRequest.prototype.getResponseHeader;
             xhr.getResponseHeader = function (name) {
                 if (String(name || '').toLowerCase() === 'content-type') return 'application/json';
@@ -317,7 +318,7 @@
         patchFetch();
         patchXHR();
         patchAccountsMe();
-        
+
         const stored = getStoredSkin();
         if (stored?.url && stored?.id) {
             packSkinReg[stored.id] = stored.url;

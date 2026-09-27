@@ -109,7 +109,7 @@
     const image = texture?.image;
     const { width, height } = imageSize(image);
     if (!image) return false;
-    
+
     return !!atlasProfile(width, height);
   }
 
@@ -367,7 +367,7 @@
           let r = 235, g = 250, b = 255, a = 0;
 
           if (kind === 'enchant') {
-            
+
             const diagonal = vx + (BASE_ITEM_SIZE - 1 - vy);
             const c1 = -4 + phase * 38;
             const c2 = 25 - phase * 31;
@@ -380,7 +380,7 @@
             g = tint ? 136 : 224;
             b = 255;
           } else if (kind === 'potion') {
-            
+
             const lower = vy >= 5.0 && vy <= 14.5;
             if (lower) {
               const waveCenter = 9.2 + ((frame + Math.floor(vx * 0.7)) % ADAPTIVE_FRAME_COUNT) / ADAPTIVE_FRAME_COUNT * 2.2;
@@ -404,7 +404,7 @@
               }
             }
           } else {
-            
+
             const along = vx + (BASE_ITEM_SIZE - 1 - vy);
             const center = -4 + phase * 38;
             const distance = Math.abs(along - center);
@@ -442,7 +442,7 @@
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(base, rect.dx, rect.dy, rect.dw, rect.dh);
       ctx.save();
-      
+
       ctx.globalCompositeOperation = 'source-atop';
       ctx.globalAlpha = kind === 'potion' ? 0.64 : kind === 'enchant' ? 0.72 : 0.78;
       ctx.drawImage(effect, 0, 0, effect.width, effect.height, rect.dx, rect.dy, rect.dw, rect.dh);
@@ -465,7 +465,7 @@
       for (let i = 0; i < ADAPTIVE_FRAME_COUNT; i++) seq.push({ index: i, ms: 125 });
       return seq;
     }
-    
+
     for (let i = 0; i < ADAPTIVE_FRAME_COUNT; i++) seq.push({ index: i, ms: 90 });
     seq.push({ index: 0, ms: 520 });
     return seq;

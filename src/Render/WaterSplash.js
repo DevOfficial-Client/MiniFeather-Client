@@ -11,8 +11,11 @@
   const HOOK_MS = 900;
 
   const LAYERS = [
-    { dir: 'band',   frames: 10, delay: 0,   yOffset: 0.10, scale: 1.30 },
-    { dir: 'low',    frames: 8,  delay: 40,  yOffset: 0.15, scale: 1.05 },
+    { dir: 'band',
+    frames: 10, delay: 0,
+    yOffset: 0.10, scale: 1.30 },
+    { dir: 'low',
+    frames: 8,  delay: 40,  yOffset: 0.15, scale: 1.05 },
     { dir: 'middle', frames: 13, delay: 90,  yOffset: 0.45, scale: 0.90 },
     { dir: 'outer',  frames: 13, delay: 160, yOffset: 0.90, scale: 0.75 }
   ];
@@ -21,7 +24,8 @@
   const DROPLET_LIFE_MS = 620;
 
   const RAIN_MS = 130;
-  const RAIN_RADIUS = 22;      
+  const RAIN_RADIUS = 22;
+
   const RAIN_MAX_MESHES = 140;
   const RAIN_LIFE_MS = 480;
   const RAIN_FRAMES = 7;
@@ -44,13 +48,15 @@
     game: null,
     entityMap: null,
     lastGameScan: 0,
-    wasInWater: new Map(), 
-    splashes: [],          
-    droplets: [],          
-    
+    wasInWater: new Map(),
+    splashes: [],
+
+    droplets: [],
+
     referenceMesh: null,
-    textures: new Map(),   
-    materials: new Map(),  
+    textures: new Map(),
+
+    materials: new Map(),
     quadGeometry: null,
     dropletGeometry: null,
     assetsBase: '',
@@ -63,7 +69,6 @@
   function findGame(force = false) {
     const now = performance.now();
     if (!force && state.game?.player && state.game?.world && now - state.lastGameScan < 1200) return state.game;
-    // Caché negativa: sin partida antes se escaneaba el DOM cada frame
     if (!force && now - state.lastGameScan < 800) return state.game;
     state.lastGameScan = now;
 
@@ -95,7 +100,7 @@
     const gs = game?.gameScene;
     if (gs?.scene?.isObject3D) return gs.scene;
     if (gs?.isObject3D) return gs;
-    
+
     try {
       for (const key of Object.keys(gs || {})) {
         const value = gs[key];
@@ -160,7 +165,7 @@
     try {
       const proto = getWorldProtoDeep(world);
       if (!proto?.getChunkByID) return null;
-      
+
       const candidates = [];
       const p = state.game?.player?.pos || findGame()?.player?.pos;
       if (p) {
@@ -198,11 +203,11 @@
 
   function isWaterBlock(world, blockState) {
     if (!blockState) return false;
-    
+
     if (knownWaterIds.size && knownWaterIds.has(blockState.id)) return true;
     const name = blockNameOf(world, blockState);
     if (name === 'water' || name === 'water_cauldron' || name === 'flowing_water') {
-      knownWaterIds.add(blockState.id); 
+      knownWaterIds.add(blockState.id);
       return true;
     }
     return false;
@@ -236,7 +241,7 @@
 
       const at = (yy) => {
         try {
-          
+
           if (typeof proto.getChunk === 'function') {
             const chunk = proto.getChunk.call(world, { x: bx, y: yy, z: bz });
             if (chunk != null && !chunk.isDummyChunk && typeof chunk.getBlockState === 'function') {
@@ -252,19 +257,19 @@
 
       for (let d = 24; d >= -4; d--) {
         const s = at(by + d);
-        if (!s || s.id === 0) continue; 
+        if (!s || s.id === 0) continue;
         if (isWaterBlock(world, s)) {
-          
+
           let top = by + d;
           for (let i = 1; i <= 6; i++) {
             const up = at(by + d + i);
             if (up && isWaterBlock(world, up)) top = by + d + i;
             else break;
           }
-          
+
           return top + 0.9;
         }
-        
+
         return null;
       }
       return null;
@@ -319,13 +324,13 @@
     if (isValidAssetsUrl(state.assetsBase)) return state.assetsBase;
     state.assetsBase = '';
     try {
-      
+
       const meta = document.querySelector('meta[name="mf-particles-base"]');
       if (isValidAssetsUrl(meta?.content)) {
         state.assetsBase = meta.content;
         return state.assetsBase;
       }
-      
+
       for (const [name, suffix] of [
         ['mf-mirror-base', 'assets/mfpack/'],
         ['mf-skins-base', 'skins/']
@@ -393,7 +398,7 @@
 
     try {
       scene.traverse(obj => {
-        
+
         if (!obj?.isMesh || obj.isSkinnedMesh || obj.geometry?.attributes?.skinIndex) return;
         if (!obj.geometry?.attributes?.position || !obj.geometry?.attributes?.uv) return;
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
@@ -457,7 +462,8 @@
       material.transparent = true;
       material.opacity = 1;
       material.alphaTest = 0.05;
-      material.depthTest = true;   
+      material.depthTest = true;
+
       material.depthWrite = false;
       material.side = 2;
       material.fog = true;
@@ -466,7 +472,7 @@
       if ('metalness' in material) material.metalness = 0;
       material.color?.set?.(0xffffff);
       material.emissive?.set?.(0x000000);
-      
+
       material.polygonOffset = true;
       material.polygonOffsetFactor = -2;
       material.polygonOffsetUnits = -2;
@@ -482,7 +488,7 @@
     if (state.quadGeometry) return state.quadGeometry;
     const geo = buildQuad(referenceMesh, false);
     state.quadGeometry = geo;
-    
+
     state.dropletGeometry = buildQuad(referenceMesh, true);
     return geo;
   }
@@ -497,9 +503,12 @@
 
       const geometry = new Geometry();
       if (vertical) {
-        
+
         geometry.setAttribute('position', new Attr(new Float32Array([
-          -0.5, 0.0, 0,   0.5, 0.0, 0,   -0.5, 1.0, 0,   0.5, 1.0, 0
+          -0.5, 0.0, 0,
+          0.5, 0.0, 0,
+          -0.5, 1.0, 0,
+          0.5, 1.0, 0
         ]), 3));
         geometry.setAttribute('normal', new Attr(new Float32Array([
           0, 0, 1,  0, 0, 1,  0, 0, 1,  0, 0, 1
@@ -509,9 +518,12 @@
         ]), 2));
         geometry.setIndex([0, 1, 2, 2, 1, 3]);
       } else {
-        
+
         geometry.setAttribute('position', new Attr(new Float32Array([
-          -0.5, 0, -0.5,   0.5, 0, -0.5,   -0.5, 0, 0.5,   0.5, 0, 0.5
+          -0.5, 0, -0.5,
+          0.5, 0, -0.5,
+          -0.5, 0, 0.5,
+          0.5, 0, 0.5
         ]), 3));
         geometry.setAttribute('normal', new Attr(new Float32Array([
           0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0
@@ -600,7 +612,7 @@
       }
 
       try {
-        
+
         const coreUrls = new Set([`${base}water_splash/water_particle_splash.png`]);
         for (const spec of LAYERS) {
           for (let i = 0; i < spec.frames; i++) coreUrls.add(layerFrameUrl(spec.dir, i));
@@ -647,7 +659,7 @@
         }
 
         if (!state.quadGeometry || !state.dropletGeometry) {
-          
+
           if (!buildQuadGeometry(state.referenceMesh)) {
             state.lastError = 'NO_QUAD';
             state.resourcesPromise = null;
@@ -710,12 +722,12 @@
         mesh.receiveShadow = false;
         mesh.frustumCulled = false;
         mesh.renderOrder = 4;
-        
+
         mesh.position.set(x, splashY + spec.yOffset * 0.15 * baseWidth, z);
-        
+
         mesh.rotation.y = Math.random() * Math.PI * 2;
         mesh.scale.set(1, 1, 1);
-        
+
         mesh.matrixAutoUpdate = true;
         mesh.updateMatrix();
         mesh.updateMatrixWorld(true);
@@ -775,7 +787,7 @@
     try {
       const world = game?.world;
       if (world) {
-        
+
         if (typeof world.isRaining === 'function' && world.isRaining()) return true;
         if (typeof world.getRainStrength === 'function' && Number(world.getRainStrength()) > 0.15) return true;
         if (world.isRaining === true) return true;
@@ -804,7 +816,7 @@
 
   function tickRain() {
     if (!state.enabled || state.destroyed || !state.resourcesReady) { state.rainBlocked = 'disabled/recursos'; return; }
-    if (!state.rainFramesReady) { state.rainBlocked = 'sin-frames-ripple'; return; } 
+    if (!state.rainFramesReady) { state.rainBlocked = 'sin-frames-ripple'; return; }
 
     const game = findGame();
     if (!game) { state.rainBlocked = 'sin-game'; return; }
@@ -911,14 +923,14 @@
 
       let material;
       if (splash.rain) {
-        
+
         const frameIndex = splash.frameLoop
           ? Math.floor((age % RAIN_LIFE_MS) / RAIN_LIFE_MS * RAIN_FRAMES)
           : Math.min(RAIN_FRAMES - 1, Math.floor(progress * RAIN_FRAMES));
         material = state.materials.get(rainFrameUrl(frameIndex));
       } else {
         const { spec } = splash;
-        
+
         const frameIndex = splash.life === Infinity
           ? 1
           : Math.min(spec.frames - 1, Math.floor(progress * spec.frames));
@@ -1089,7 +1101,7 @@
       try { config = JSON.parse(detail); } catch (_) { config = null; }
     }
     if (!config || typeof config !== 'object') return;
-    
+
     if (isValidAssetsUrl(config.assetsBase)) {
       if (state.assetsBase && state.assetsBase !== config.assetsBase && state.resourcesReady) {
         disposeResources();
@@ -1106,9 +1118,6 @@
   }
 
   document.addEventListener(EVENT_CONFIG, onConfig);
-
-  // Reintento con backoff: tras varios fallos seguidos se espacia hasta 60s
-  // para no spamear "recursos no listos" cuando el juego aún no expone los meshes.
   let hookAttempts = 0;
   let hookNextAt = 0;
   const hookTimer = window.setInterval(() => {
@@ -1137,11 +1146,11 @@
 
   globalThis[GLOBAL_KEY] = {
     destroy,
-    
+
     debug: {
       get state() { return { enabled: state.enabled, resourcesReady: state.resourcesReady, rainFramesReady: state.rainFramesReady === true, error: state.lastError, errorDetail: state.lastErrorDetail, splashes: state.splashes.length, droplets: state.droplets.length, entities: state.wasInWater.size, materials: state.materials.size, assetsBase: state.assetsBase, scene: inspectScene(), rainBlocked: state.rainBlocked || null, rainTicks: state.rainTicks || 0, rainAttempts: state.rainAttempts || 0, rainHits: state.rainHits || 0, waterIdsAprendidos: [...knownWaterIds], blockRegistry: !!getBlockRegistry(findGame()?.world), llueve: (() => { try { return isRainingNow(findGame()); } catch (_) { return null; } })() }; },
       splash() {
-        
+
         const game = findGame(true);
         const p = game?.player?.pos;
         if (!p) { console.warn(TAG, 'no hay jugador'); return; }
@@ -1156,7 +1165,7 @@
       },
       clear() { clearVisuals(); },
       ripple() {
-        
+
         const game = findGame(true);
         const p = game?.player?.pos;
         if (!p) { console.warn(TAG, 'no hay jugador'); return; }
@@ -1189,7 +1198,7 @@
         else void ensureResources().then(ok => { if (ok) fire(); });
       },
       rain(force = true) {
-        
+
         state.forceRain = force === true ? performance.now() + 10000 : 0;
         void 0;
       },

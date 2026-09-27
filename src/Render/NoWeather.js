@@ -11,9 +11,9 @@ const state = {
     patch: null,
     timer: 0,
     lastScan: 0
-};
+        };
 
-function getGame(force = false) {
+        function getGame(force = false) {
     const now = performance.now();
 
     if (globalThis.miniblox?.player && globalThis.miniblox?.world) {
@@ -37,13 +37,13 @@ function getGame(force = false) {
     } catch {}
 
     return state.game?.player && state.game?.world ? state.game : null;
-}
+    }
 
-function getWeather(game) {
+    function getWeather(game) {
     return game?.gameScene?.weather || game?.player?.game?.gameScene?.weather || null;
-}
+    }
 
-function saveMethod(target, key) {
+    function saveMethod(target, key) {
     return {
         target,
         key,
@@ -51,18 +51,18 @@ function saveMethod(target, key) {
         value: target[key],
         patched: null
     };
-}
+    }
 
-function restoreMethod(record) {
+    function restoreMethod(record) {
     if (!record?.target) return;
     try {
         if (record.target[record.key] !== record.patched) return;
         if (record.own) record.target[record.key] = record.value;
         else delete record.target[record.key];
     } catch {}
-}
+    }
 
-function suppressVisuals(weather) {
+    function suppressVisuals(weather) {
     if (!weather) return;
 
     try {
@@ -86,9 +86,9 @@ function suppressVisuals(weather) {
             weather.bolts.length = 0;
         }
     } catch {}
-}
+    }
 
-function restorePatch() {
+    function restorePatch() {
     const patch = state.patch;
     state.patch = null;
 
@@ -109,9 +109,9 @@ function restorePatch() {
             patch.weather.snow.mesh.visible = patch.snowVisible;
         }
     } catch {}
-}
+    }
 
-function patchMethod(record, fn) {
+    function patchMethod(record, fn) {
     try {
         record.patched = fn;
         record.target[record.key] = fn;
@@ -119,9 +119,9 @@ function patchMethod(record, fn) {
     } catch {
         return false;
     }
-}
+    }
 
-function applyPatch(game, world, weather) {
+    function applyPatch(game, world, weather) {
     if (!game || !world || !weather) return false;
 
     if (
@@ -196,9 +196,9 @@ function applyPatch(game, world, weather) {
 
     suppressVisuals(weather);
     return true;
-}
+    }
 
-function refresh(force = false) {
+    function refresh(force = false) {
     if (!state.enabled) return;
 
     const game = getGame(force);
@@ -217,16 +217,16 @@ function refresh(force = false) {
     state.world = world;
     state.weather = weather;
     applyPatch(game, world, weather);
-}
+    }
 
-function start() {
+    function start() {
     if (state.timer) return;
     state.timer = window.setInterval(() => {
         refresh(false);
     }, 350);
-}
+    }
 
-function stop() {
+    function stop() {
     if (state.timer) {
         clearInterval(state.timer);
         state.timer = 0;
@@ -235,9 +235,9 @@ function stop() {
     state.game = null;
     state.world = null;
     state.weather = null;
-}
+    }
 
-function setEnabled(value) {
+    function setEnabled(value) {
     const enabled = !!value;
     if (state.enabled === enabled) {
         if (enabled) refresh(true);
@@ -252,9 +252,9 @@ function setEnabled(value) {
     } else {
         stop();
     }
-}
+    }
 
-function applyConfig(detail) {
+    function applyConfig(detail) {
     let config = detail;
 
     if (typeof config === 'string') {
@@ -267,17 +267,17 @@ function applyConfig(detail) {
 
     if (!config || typeof config !== 'object') return;
     if ('enabled' in config) setEnabled(config.enabled);
-}
+    }
 
-document.addEventListener(EVENT_CONFIG, event => {
+    document.addEventListener(EVENT_CONFIG, event => {
     applyConfig(event.detail);
-}, true);
+    }, true);
 
-window.addEventListener('beforeunload', () => {
+    window.addEventListener('beforeunload', () => {
     stop();
-}, { once: true });
+    }, { once: true });
 
-globalThis.MiniFeatherNoWeather = {
+    globalThis.MiniFeatherNoWeather = {
     setEnabled,
     refresh() {
         refresh(true);

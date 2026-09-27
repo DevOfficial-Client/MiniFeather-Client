@@ -2,39 +2,44 @@
 (function () {
 'use strict';
 const PREV = globalThis.MF_Mesh;
-if (PREV) { try { PREV.dispose?.(); } catch {} }   
+if (PREV) { try { PREV.dispose?.(); } catch {} }
 
 const TAG = '[MiniFeather Mesh]';
 const PEERJS_CDN = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
 const CODE_RE = /mfm2p[:\s]+([A-Za-z0-9-]{4,24})/i;
 const ANNOUNCE = 'mfm2p:';
-const CAP = 12;                    
-const RECONNECT_MS = 20000;        
+const CAP = 12;
+
+const RECONNECT_MS = 20000;
+
 const MIN_SCALE = 0.01;
 const SCALE_HEARTBEAT_MS = 10000;
 const SCALE_EXPIRE_MS = 35000;
 
 const state = {
     peer: null, myCode: null,
-    conns: new Map(),              
-    names: new Map(),              
-    seenCodes: new Map(),          
-    status: 'off',                 
+    conns: new Map(),
+
+    names: new Map(),
+
+    seenCodes: new Map(),
+
+    status: 'off',
+
     chatSeen: new WeakSet(),
     announceTimer: null,
-    skinTold: new Map(),           
-    // Titan & Tiny: escala propia + escalas conocidas de peers
+    skinTold: new Map(),
     myScale: { s: 1, w: 1 },
     myScaleName: null,
-    peerScales: new Map(),         // peer code -> { name, s, w, seq, at }
+    peerScales: new Map(),
     scaleSeq: 1,
     lastScaleHeartbeat: 0,
-};
+    };
 
-function warn(...a) { console.warn(TAG, ...a); }
+    function warn(...a) { console.warn(TAG, ...a); }
 
-let peerjsPromise = null;
-function loadPeerJS() {
+    let peerjsPromise = null;
+    function loadPeerJS() {
     if (globalThis.Peer) return Promise.resolve(true);
     if (peerjsPromise) return peerjsPromise;
     peerjsPromise = new Promise((resolve) => {
@@ -51,17 +56,17 @@ function loadPeerJS() {
         const timeout = setTimeout(() => finish(false), 15000);
         s.onload = () => finish(!!globalThis.Peer);
         s.onerror = () => finish(false);
-        
+
         const parent = document.head || document.documentElement;
         if (!parent) { finish(false); return; }
         parent.appendChild(s);
     });
     return peerjsPromise;
-}
+    }
 
-const scan = { game: null, lastGameScan: 0 };
+    const scan = { game: null, lastGameScan: 0 };
 
-function getGame(force = false) {
+    function getGame(force = false) {
     const now = performance.now();
     if (globalThis.miniblox?.player) { scan.game = globalThis.miniblox; return scan.game; }
     if (!force && scan.game?.player && now - scan.lastGameScan < 900) return scan.game;
@@ -74,24 +79,24 @@ function getGame(force = false) {
         }
     } catch {}
     return scan.game?.player ? scan.game : null;
-}
+    }
 
-function myName() {
+    function myName() {
     try {
         const p = getGame()?.player;
         if (p?.profile?.username) return p.profile.username;
         if (p?.username) return p.username;
     } catch {}
     return 'nodo';
-}
+    }
 
-function isMapLike(v) { return !!(v && typeof v.get === 'function' && typeof v.values === 'function'); }
+    function isMapLike(v) { return !!(v && typeof v.get === 'function' && typeof v.values === 'function'); }
 
-function validPos(p) {
+    function validPos(p) {
     return !!(p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)) && Number.isFinite(Number(p.z)));
-}
+    }
 
-function looksLikeEntityMap(v) {
+    function looksLikeEntityMap(v) {
     if (!isMapLike(v)) return false;
     let checked = 0, found = 0;
     try {
@@ -102,34 +107,34 @@ function looksLikeEntityMap(v) {
         }
     } catch { return false; }
     return checked > 0 && found > 0;
-}
+    }
 
-function resolveEntityMap(game) {
+    function resolveEntityMap(game) {
     const direct = [game?.world?.entitiesDump, game?.world?.entities, game?.world?.entityMap];
     for (const c of direct) if (looksLikeEntityMap(c)) return c;
     return null;
-}
+    }
 
-const packSkinReg = (globalThis.__MF_PACK_SKINS__ ||= {});
-const skinById = new Map();       
+    const packSkinReg = (globalThis.__MF_PACK_SKINS__ ||= {});
+    const skinById = new Map();
 
-function registerSharedSkin(id, dataURL, name) {
+    function registerSharedSkin(id, dataURL, name) {
     if (!id || typeof dataURL !== 'string' || !dataURL.startsWith('data:image/')) return false;
     packSkinReg[id] = dataURL;
     skinById.set(id, { dataURL, name: name || null, at: Date.now() });
     return true;
-}
+    }
 
-let startingPromise = null;
-async function start() {
+    let startingPromise = null;
+    async function start() {
     if (state.peer) return state.myCode;
     if (startingPromise) return startingPromise;
     startingPromise = startFresh();
     try { return await startingPromise; }
     finally { startingPromise = null; }
-}
+    }
 
-async function startFresh() {
+    async function startFresh() {
     if (!(await loadPeerJS())) { state.status = 'error'; warn('no se pudo cargar PeerJS'); return null; }
     state.status = 'starting';
     const code = 'mfm-' + Math.random().toString(36).slice(2, 8);
@@ -138,8 +143,6 @@ async function startFresh() {
     state.peer = peer;
     peer.on('open', (pid) => {
         state.status = 'listening';
-        // Sin anuncio automático al chat: para publicar el código usar
-        // el comando manual "/mesh announce" (announceNow()).
         if (state.announceTimer) { clearInterval(state.announceTimer); state.announceTimer = null; }
     });
     peer.on('connection', (c) => accept(c));
@@ -148,8 +151,6 @@ async function startFresh() {
         try { peer.reconnect(); } catch {}
     });
     peer.on('close', () => {
-        // Señalización muerta del todo (ID perdido / servidor caído):
-        // limpiar conns y reiniciar la mesh con código nuevo.
         if (state.peer !== peer) return;
         warn('peer cerrado — reiniciando mesh');
         for (const c of state.conns.values()) { try { c.close(); } catch {} }
@@ -163,18 +164,19 @@ async function startFresh() {
     });
     peer.on('error', (e) => {
         const type = e?.type || '';
-        if (type === 'peer-unavailable') return;   
+        if (type === 'peer-unavailable') return;
+
         warn('peer error:', e?.message || type || e);
     });
     return code;
-}
+    }
 
-function accept(conn) {
+    function accept(conn) {
     if (state.conns.size >= CAP) { try { conn.close(); } catch {} return; }
     wire(conn);
-}
+    }
 
-function waitForPeerReady() {
+    function waitForPeerReady() {
     if (state.status === 'listening') return Promise.resolve(true);
     const peer = state.peer;
     if (!peer || state.status === 'error') return Promise.resolve(false);
@@ -191,9 +193,9 @@ function waitForPeerReady() {
         const timeout = setTimeout(() => finish(false), 12000);
         peer.on('open', onOpen);
     });
-}
+    }
 
-async function connect(code) {
+    async function connect(code) {
     if (!state.peer && !(await start())) return false;
     if (!code || code === state.myCode) return false;
     if (state.conns.has(code)) return true;
@@ -208,16 +210,12 @@ async function connect(code) {
         state.seenCodes.delete(code);
         return false;
     }
-}
+    }
 
-function wire(conn) {
+    function wire(conn) {
     const id = conn.peer;
     const previous = state.conns.get(id);
     if (previous && previous !== conn) {
-        // Dial simultáneo: ambos lados comparan los MISMOS dos connectionIds,
-        // así que "gana" el menor SIEMPRE de forma determinista y simétrica.
-        // (Antes: con previous.open en ambos lados cada uno cerraba la conn
-        // entrante del otro → morían las dos → la mesh se partía.)
         const previousId = String(previous.connectionId || '');
         const nextId = String(conn.connectionId || '');
         let keepPrevious;
@@ -256,13 +254,9 @@ function wire(conn) {
     conn.on('data', (m) => handleMsg(conn, m));
     conn.on('close', () => dropConn(conn));
     conn.on('error', () => dropConn(conn));
-}
+    }const pendingReconnects = new Map();
 
-// Re-dial automático: si un link que llegó a abrirse muere (NAT que rebinda,
-// WiFi, suspensión de pestaña), reintentar tras el cooldown con jitter.
-const pendingReconnects = new Map(); // peerCode -> timeout id
-
-function scheduleReconnect(code) {
+    function scheduleReconnect(code) {
     if (!code || code === state.myCode) return;
     if (state.conns.has(code) || pendingReconnects.has(code)) return;
     const t = setTimeout(() => {
@@ -272,14 +266,14 @@ function scheduleReconnect(code) {
         connect(code);
     }, RECONNECT_MS + Math.random() * 5000);
     pendingReconnects.set(code, t);
-}
+    }
 
-function cancelReconnect(code) {
+    function cancelReconnect(code) {
     const t = pendingReconnects.get(code);
     if (t) { clearTimeout(t); pendingReconnects.delete(code); }
-}
+    }
 
-function dropConn(conn) {
+    function dropConn(conn) {
     if (state.conns.get(conn.peer) !== conn) return;
     state.conns.delete(conn.peer);
     state.seenCodes.delete(conn.peer);
@@ -288,37 +282,36 @@ function dropConn(conn) {
     state.skinTold.delete(conn.peer);
     revertMeshSkin(name);
     forgetPeerScale(conn.peer);
-    // Solo re-dial si el link había llegado a abrirse (evita bucle contra
-    // peers caídos que nunca contestaron el dial original).
     if (conn.__mfOpen) scheduleReconnect(conn.peer);
-}
+    }
 
-function knownCodes() {
+    function knownCodes() {
     const out = [state.myCode];
     for (const id of state.conns.keys()) out.push(id);
     return out.filter(Boolean);
-}
+    }
 
-function sendTo(conn, obj) { try { conn?.send?.(obj); } catch {} }
+    function sendTo(conn, obj) { try { conn?.send?.(obj); } catch {} }
 
-function broadcast(obj) { for (const c of state.conns.values()) sendTo(c, obj); }
+    function broadcast(obj) { for (const c of state.conns.values()) sendTo(c, obj); }
 
-function handleMsg(conn, m) {
+    function handleMsg(conn, m) {
     if (!m || typeof m !== 'object') return;
     switch (m.t) {
         case 'hello': {
             state.names.set(conn.peer, m.name || 'nodo');
             receivePeerScale(conn, { ...m, origin: conn.peer }, true);
             sendScaleSnapshot(conn);
-            
+
             if (Array.isArray(m.peers)) {
                 for (const code of m.peers) {
                     if (typeof code === 'string' && code !== state.myCode && !state.conns.has(code)) {
-                        setTimeout(() => connect(code), 500 + Math.random() * 3000);   
+                        setTimeout(() => connect(code), 500 + Math.random() * 3000);
+
                     }
                 }
             }
-            
+
             if (Array.isArray(m.skins)) {
                 const missing = m.skins.filter(id => !skinById.has(id));
                 if (missing.length) sendTo(conn, { t: 'need-skins', ids: missing });
@@ -330,7 +323,7 @@ function handleMsg(conn, m) {
             if (!Array.isArray(m.ids)) break;
             for (const id of m.ids) {
                 const s = skinById.get(id);
-                
+
                 if (s) sendTo(conn, { t: 'skin', id, dataURL: s.dataURL, name: s.name || myName() });
             }
             break;
@@ -341,7 +334,7 @@ function handleMsg(conn, m) {
                 registerSharedSkin(m.id, m.dataURL, m.name);
                 if (isNew) {
                     applySkinToPeer(m.name, m.id, m.dataURL);
-                    
+
                     for (const [pid, c] of state.conns) {
                         if (pid === conn.peer) continue;
                         sendTo(c, { t: 'skin', id: m.id, dataURL: m.dataURL, name: m.name });
@@ -361,9 +354,9 @@ function handleMsg(conn, m) {
             break;
         }
     }
-}
+    }
 
-function mySkinIds() {
+    function mySkinIds() {
     const out = [];
     try {
         const url = localStorage.getItem('mf:csa:skin');
@@ -371,19 +364,19 @@ function mySkinIds() {
         if (url && id) out.push(id);
     } catch {}
     return out;
-}
+    }
 
-function resendMySkin(conn) {
+    function resendMySkin(conn) {
     try {
         const url = localStorage.getItem('mf:csa:skin');
         const id = localStorage.getItem('mf:csa:id');
         if (url && id) sendTo(conn, { t: 'skin', id, dataURL: url, name: myName() });
     } catch {}
-}
+    }
 
-const meshOriginals = new WeakMap();   
+    const meshOriginals = new WeakMap();
 
-function entityByUsername(name) {
+    function entityByUsername(name) {
     if (!name) return null;
     try {
         const e = window.MF_Morph?.findEntityByName?.(name);
@@ -396,9 +389,9 @@ function entityByUsername(name) {
         }
     } catch {}
     return null;
-}
+    }
 
-function skinMaterials(entity) {
+    function skinMaterials(entity) {
     const out = [];
     if (!entity?.mesh) return out;
     const seen = new Set();
@@ -416,9 +409,9 @@ function skinMaterials(entity) {
         return Number.isInteger(k64) && (h === w || h === w / 2);
     });
     return skins.length ? skins : out;
-}
+    }
 
-function editableCanvas(entity) {
+    function editableCanvas(entity) {
     const mats = skinMaterials(entity);
     if (!mats.length) return null;
     const isCanvas = t => t?.image instanceof HTMLCanvasElement;
@@ -442,24 +435,25 @@ function editableCanvas(entity) {
     } catch {}
     for (const m of usable) { m.map = nt; m.needsUpdate = true; }
     return { canvas: c, tex: nt, mats: usable };
-}
+    }
 
-function applySkinToPeer(name, id, dataURL) {
+    function applySkinToPeer(name, id, dataURL) {
     if (!name) return;
-    
+
     pendingSkins.set(name, { id, dataURL });
     drainPending();
-}
+    }
 
-const pendingSkins = new Map();   
+    const pendingSkins = new Map();
 
-function drainPending() {
+    function drainPending() {
     for (const [name, skin] of pendingSkins) {
         const entity = entityByUsername(name);
-        if (!entity) continue;   
+        if (!entity) continue;
+
         const s = editableCanvas(entity);
         if (!s) continue;
-        
+
         let rec = meshOriginals.get(entity);
         if (!rec) {
             const c = document.createElement('canvas');
@@ -481,12 +475,13 @@ function drainPending() {
         };
         img.onerror = () => { pendingSkins.delete(name); };
         img.src = skin.dataURL;
-        return;   
-    }
-}
-setInterval(drainPending, 1500);   
+        return;
 
-function revertMeshSkin(name) {
+    }
+    }
+    setInterval(drainPending, 1500);
+
+    function revertMeshSkin(name) {
     if (!name) return;
     pendingSkins.delete(name);
     const entity = entityByUsername(name);
@@ -501,11 +496,9 @@ function revertMeshSkin(name) {
         ctx.drawImage(rec.skinCanvas, 0, 0);
         s.tex.needsUpdate = true;
     } catch {}
-}
+    }
 
-// ─── Titan & Tiny multiplayer: aplicar la escala reportada al mesh del peer ───
-
-function myTitanScale() {
+    function myTitanScale() {
     try {
         const tt = globalThis.TitanTiny;
         return tt?.enabled ? {
@@ -513,16 +506,16 @@ function myTitanScale() {
             w: Math.min(3, Math.max(0.3, +(Number(tt.width) || 1)))
         } : { s: 1, w: 1 };
     } catch { return { s: 1, w: 1 }; }
-}
+    }
 
-function sendMyScale(conn) {
+    function sendMyScale(conn) {
     if (!conn?.open || !state.myCode) return;
     const sc = myTitanScale();
     sendTo(conn, { t: 'tt', origin: state.myCode, seq: state.scaleSeq,
         scale: sc.s, width: sc.w, name: myName() });
-}
+        }
 
-function sendScaleSnapshot(conn) {
+        function sendScaleSnapshot(conn) {
     if (!conn?.open) return;
     sendMyScale(conn);
     for (const [origin, rec] of state.peerScales) {
@@ -530,9 +523,9 @@ function sendScaleSnapshot(conn) {
         sendTo(conn, { t: 'tt', origin, seq: rec.seq,
             scale: rec.s, width: rec.w, name: rec.name });
     }
-}
+    }
 
-function receivePeerScale(conn, msg, relay) {
+    function receivePeerScale(conn, msg, relay) {
     const scale = Number(msg.scale);
     if (!Number.isFinite(scale) || scale <= 0) return;
     const origin = typeof msg.origin === 'string' && /^[A-Za-z0-9-]{4,24}$/.test(msg.origin)
@@ -545,8 +538,6 @@ function receivePeerScale(conn, msg, relay) {
         return;
     }
     if (seq === null && old?.seq !== null && old?.seq !== undefined) return;
-    // Old clients have no sequence. Apply their direct state but never relay it,
-    // since cyclic mesh paths otherwise amplify the same packet forever.
     if (seq === null && old && old.s === scale && old.w === Number(msg.width) && old.name === msg.name) {
         old.at = Date.now();
         return;
@@ -570,12 +561,12 @@ function receivePeerScale(conn, msg, relay) {
                 scale: rec.s, width: rec.w, name: rec.name });
         }
     }
-}
+    }
 
-const scaleMeshes = new Map();      // username -> { mesh, base:{x,y,z}, at }
-const PEER_SCALE_POLL = 500;
+    const scaleMeshes = new Map();
+    const PEER_SCALE_POLL = 500;
 
-function setMeshScale(mesh, base, factor, widthFactor = 1) {
+    function setMeshScale(mesh, base, factor, widthFactor = 1) {
     try {
         const x = base.x * factor * widthFactor;
         const y = base.y * factor;
@@ -585,9 +576,9 @@ function setMeshScale(mesh, base, factor, widthFactor = 1) {
         if (mesh.matrixAutoUpdate === false && typeof mesh.updateMatrix === 'function') mesh.updateMatrix();
         return true;
     } catch { return false; }
-}
+    }
 
-function clearScaleRecord(name) {
+    function clearScaleRecord(name) {
     const rec = scaleMeshes.get(name);
     if (!rec) return;
     for (const hook of rec.hooks || []) {
@@ -599,28 +590,28 @@ function clearScaleRecord(name) {
     }
     if (rec.mesh?.scale && rec.base) setMeshScale(rec.mesh, rec.base, 1);
     scaleMeshes.delete(name);
-}
+    }
 
-function activeScaleForName(name) {
+    function activeScaleForName(name) {
     let best = null;
     for (const rec of state.peerScales.values()) {
         if (rec.name === name && (!best || rec.at > best.at)) best = rec;
     }
     return best;
-}
+    }
 
-function restoreUnusedName(name) {
+    function restoreUnusedName(name) {
     if (name && !activeScaleForName(name)) clearScaleRecord(name);
-}
+    }
 
-function forgetPeerScale(origin) {
+    function forgetPeerScale(origin) {
     const rec = state.peerScales.get(origin);
     if (!rec) return;
     state.peerScales.delete(origin);
     restoreUnusedName(rec.name);
-}
+    }
 
-function installScaleHooks(name, rec) {
+    function installScaleHooks(name, rec) {
     const queue = [rec.mesh];
     const seen = new Set();
     rec.hooks = [];
@@ -647,11 +638,10 @@ function installScaleHooks(name, rec) {
         }
         if (Array.isArray(object.children)) queue.push(...object.children);
     }
-}
+    }
 
-function peerScaleTick() {
-    // Versioned heartbeat also repairs missed packets and newly joined peers.
-    try {
+    function peerScaleTick() {
+        try {
         const sc = myTitanScale();
         const name = myName();
         const now = Date.now();
@@ -672,8 +662,6 @@ function peerScaleTick() {
             forgetPeerScale(origin);
         }
     }
-
-    // Apply again after the game replaces the remote player's model.
     if (!state.peerScales.size) {
         for (const name of scaleMeshes.keys()) clearScaleRecord(name);
         return;
@@ -684,7 +672,6 @@ function peerScaleTick() {
     for (const name of scaleMeshes.keys()) if (!names.has(name)) clearScaleRecord(name);
     for (const name of names) {
         if (!name || name === myName()) continue;
-        // The dedicated /p2p channel owns this one model while active.
         if (globalThis.MF_Peer?.scalePeerName === name) {
             clearScaleRecord(name);
             continue;
@@ -725,37 +712,30 @@ function peerScaleTick() {
         rec.at = now;
         setMeshScale(rec.mesh, rec.base, factor.s, factor.w);
     }
-}
-const scaleTimer = setInterval(peerScaleTick, PEER_SCALE_POLL);
+    }
+    const scaleTimer = setInterval(peerScaleTick, PEER_SCALE_POLL);
 
-function announce(code) {
+    function announce(code) {
     const g = getGame();
     const chat = g?.chat;
     if (!chat || typeof chat.submit !== 'function') return;
-    // Solo anunciar si hay sesión de chat activa (dentro de una partida).
-    // Fuera de partida el submit del engine lanza "...reading 'inGame'".
     if (!Array.isArray(chat.log) || chat.log.length === 0) return;
     const text = ANNOUNCE + code;
     try {
         try { chat.setInputValue?.(text); } catch { try { chat.inputValue = text; } catch {} }
-        // submit(e) del engine llama e.inGame(): sin el game como arg, lanza
-        // TypeError DENTRO del try del engine (solo lo loguea, no propaga) y
-        // el mensaje nunca se envía. Pasar el game explícito.
         chat.submit(g);
     } catch (e) {
         warn('announce falló:', e?.message || e);
-        // El engine puede tardar en exponer inGame justo al entrar a la
-        // partida: un reintento corto aprovecha esa ventana.
         if (!announceRetrying) {
             announceRetrying = true;
             setTimeout(() => { announceRetrying = false; announce(code); }, 1500);
         }
     }
     try { chat.closeInput?.(); } catch {}
-}
-let announceRetrying = false;
+    }
+    let announceRetrying = false;
 
-function chatWatchTick() {
+    function chatWatchTick() {
     if (state.status === 'off' || state.status === 'error') return;
     const g = getGame();
     const logArr = g?.chat?.log;
@@ -772,27 +752,28 @@ function chatWatchTick() {
         if (code === state.myCode) continue;
         const from = entry.from != null ? String(entry.from) : null;
         if (meUuid && from === meUuid) continue;
-        connect(code);   
+        connect(code);
+
     }
-}
+    }
 
-const chatTimer = setInterval(chatWatchTick, 1500);
+    const chatTimer = setInterval(chatWatchTick, 1500);
 
-async function boot() {
+    async function boot() {
     const saved = (() => { try { return localStorage.getItem('mf:mesh:auto'); } catch { return null; } })();
     if (saved === '0') return;
     await start();
-}
-boot();
+    }
+    boot();
 
-globalThis.MF_Mesh = {
+    globalThis.MF_Mesh = {
     get status() { return state.status; },
     get code() { return state.myCode; },
     get peers() { return [...state.conns.keys()]; },
     get names() { return Object.fromEntries(state.names); },
     get connected() { return state.conns.size; },
     start, connect,
-    
+
     shareSkinUp(id, dataURL) {
         if (!id || typeof dataURL !== 'string') return;
         registerSharedSkin(id, dataURL, myName());
@@ -800,9 +781,9 @@ globalThis.MF_Mesh = {
             sendTo(c, { t: 'skin', id, dataURL, name: myName() });
         }
     },
-    
+
     announceNow() { if (state.myCode) announce(state.myCode); },
-    
+
     shareSkin() { for (const c of state.conns.values()) resendMySkin(c); },
     releaseScaleFor(name) { if (name) clearScaleRecord(String(name)); },
     skinStatus() {

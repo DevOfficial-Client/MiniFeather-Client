@@ -1,21 +1,22 @@
 
 (function () {
     'use strict';
-
-    // Guard de re-inyección: al recargar la extensión sin recargar la
-    // página, el script se inyecta otra vez. Sin esto se acumulan el
-    // listener de fetch, el rAF y los emotes activos (leak).
     try { window.__MF_EMOTES_SCOPE__?.destroy?.(); } catch {}
 
     const TAG = '[MF Emotes]';
     const DIR = 'emotes/';
 
     const state = {
-        loaded: new Map(),      
-        current: null,          
-        fadeTarget: 0,          
-        cameraChanged: false,   
-        defaults: new Map()     
+        loaded: new Map(),
+
+        current: null,
+
+        fadeTarget: 0,
+
+        cameraChanged: false,
+
+        defaults: new Map()
+
     };
 
     function getGame() {
@@ -70,23 +71,33 @@
     }
 
     const VANILLA_PIVOT = {
-        head:     { x: 0,    y: 0,  z: 0 },
-        body:     { x: 0,    y: 0,  z: 0 },
-        torso:    { x: 0,    y: 0,  z: 0 },
-        leftArm:  { x: 5,    y: 2,  z: 0 },
-        rightArm: { x: -5,   y: 2,  z: 0 },
+        head:     { x: 0,
+        y: 0,  z: 0 },
+        body:     { x: 0,
+        y: 0,  z: 0 },
+        torso:    { x: 0,
+        y: 0,  z: 0 },
+        leftArm:  { x: 5,
+        y: 2,  z: 0 },
+        rightArm: { x: -5,
+        y: 2,  z: 0 },
         leftLeg:  { x: 1.9,  y: 12, z: 0.1 },
         rightLeg: { x: -1.9, y: 12, z: 0.1 }
     };
 
     const PARTS = {
-        head:    { joint: 'headPivot',          bend: null },
-        torso:   { joint: 'body',              bend: null, root: 'skeleton', noRotInvert: true },
-        body:    { joint: 'body',              bend: null, root: 'skeleton', isRoot: true, noRotInvert: true },
+        head:    { joint: 'headPivot',
+        bend: null },
+        torso:   { joint: 'body',
+        bend: null, root: 'skeleton', noRotInvert: true },
+        body:    { joint: 'body',
+        bend: null, root: 'skeleton', isRoot: true, noRotInvert: true },
         leftArm: { joint: 'leftShoulderJoint',  bend: 'leftElbowJoint' },
         rightArm:{ joint: 'rightShoulderJoint', bend: 'rightElbowJoint' },
-        leftLeg: { joint: 'leftHipJoint',       bend: 'leftKneeJoint' },
-        rightLeg:{ joint: 'rightHipJoint',      bend: 'rightKneeJoint' }
+        leftLeg: { joint: 'leftHipJoint',
+        bend: 'leftKneeJoint' },
+        rightLeg:{ joint: 'rightHipJoint',
+        bend: 'rightKneeJoint' }
     };
 
     const PART_FLAGS = {
@@ -204,17 +215,27 @@
     }
 
     const EASE_BY_ID = [null, null, null, null, null, null,
-        'insine', 'outsine', 'inoutsine',                                
-        'incubic', 'outcubic', 'inoutcubic',                            
-        'inquad', 'outquad', 'inoutquad',                               
-        'inquart', 'outquart', 'inoutquart',                            
-        'inquint', 'outquint', 'inoutquint',                            
-        'inexpo', 'outexpo', 'inoutexpo',                               
-        'incirc', 'outcirc', 'inoutcirc',                               
-        'inback', 'outback', 'inoutback',                               
-        'inelastic', 'outelastic', 'inoutelastic',                      
-        'inbounce', 'outbounce', 'inoutbounce',                         
-        'catmullrom', 'step'                                            
+        'insine', 'outsine', 'inoutsine',
+
+        'incubic', 'outcubic', 'inoutcubic',
+
+        'inquad', 'outquad', 'inoutquad',
+
+        'inquart', 'outquart', 'inoutquart',
+
+        'inquint', 'outquint', 'inoutquint',
+
+        'inexpo', 'outexpo', 'inoutexpo',
+
+        'incirc', 'outcirc', 'inoutcirc',
+
+        'inback', 'outback', 'inoutback',
+
+        'inelastic', 'outelastic', 'inoutelastic',
+
+        'inbounce', 'outbounce', 'inoutbounce',
+
+        'catmullrom', 'step'
     ];
 
     function BinReader(buf) {
@@ -249,7 +270,7 @@
                 const start = r.pos;
                 const tick = r.i32(), value = r.f32();
                 const easeId = r.u8();
-                if (version >= 4) r.f32(); 
+                if (version >= 4) r.f32();
                 kfs.push({ tick, v: value, ease: getEasing(EASE_BY_ID[easeId] || 'linear') });
                 r.seek(start + keyframeSize);
             }
@@ -268,21 +289,22 @@
     }
 
     function readPartBin(r, slotData, version, keyframeSize) {
-        
+
         const rot = { x: [], y: [], z: [] }, pos = { x: [], y: [], z: [] };
         const bend = { kfs: [], axis: [] };
         readKeyframesBin(r, pos.x, version, keyframeSize);
         readKeyframesBin(r, pos.y, version, keyframeSize);
         readKeyframesBin(r, pos.z, version, keyframeSize);
-        readKeyframesBin(r, rot.x, version, keyframeSize); 
-        readKeyframesBin(r, rot.y, version, keyframeSize); 
-        readKeyframesBin(r, rot.z, version, keyframeSize); 
+        readKeyframesBin(r, rot.x, version, keyframeSize);
+        readKeyframesBin(r, rot.y, version, keyframeSize);
+        readKeyframesBin(r, rot.z, version, keyframeSize);
         if (slotData.bendable) {
-            readKeyframesBin(r, bend.axis, version, keyframeSize);  
-            readKeyframesBin(r, bend.kfs, version, keyframeSize);   
+            readKeyframesBin(r, bend.axis, version, keyframeSize);
+            readKeyframesBin(r, bend.kfs, version, keyframeSize);
+
         }
         if (slotData.scalable && version >= 3) {
-            
+
             for (let i = 0; i < 3; i++) readKeyframesBin(r, [], version, keyframeSize);
         }
         return { rot, pos, bend };
@@ -294,7 +316,7 @@
         const netVersion = r.i32();
         if (netVersion < 0 || netVersion > 100) return null;
         const purpose = r.u8();
-        if (purpose !== 0x10) return null; 
+        if (purpose !== 0x10) return null;
         const nSub = r.u8();
 
         let emote = null, header = { name: null, author: null, description: null };
@@ -306,15 +328,15 @@
             const start = r.pos;
 
             if (subId === 0 && !emote) {
-                
-                r.i32(); 
+
+                r.i32();
                 const beginTick = r.i32();
                 const endTick = r.i32();
                 const stopTick = r.i32();
                 const isLoop = r.boolean();
                 const returnTick = r.i32();
-                const easingBefore = r.boolean(); 
-                r.boolean(); 
+                const easingBefore = r.boolean();
+                r.boolean();
                 const keyframeSize = r.i8();
                 if (!(keyframeSize > 0)) return null;
 
@@ -333,7 +355,7 @@
                         parts[name] = s2;
                     }
                 } else {
-                    
+
                     for (const name of ['head', 'body', 'rightArm', 'leftArm', 'rightLeg', 'leftLeg']) {
                         const flags = PART_FLAGS[name];
                         const s2 = mkSlot(flags.bendable, flags.scalable);
@@ -344,12 +366,12 @@
                         parts[name] = s2;
                     }
                 }
-                r.i64(); 
+                r.i64();
 
                 emote = {
                     beginTick, endTick, stopTick, returnTick, isLoop, easingBefore,
                     parts,
-                    
+
                     degrees: false
                 };
             } else if (subId === 0x11) {
@@ -357,12 +379,12 @@
                 header.description = r.str();
                 header.author = r.str();
                 if (subVer >= 2) {
-                    r.str(); 
+                    r.str();
                     const nBages = r.i32();
                     for (let i = 0; i < nBages; i++) r.str();
                 }
             }
-            r.seek(start + size); 
+            r.seek(start + size);
         }
 
         if (!emote) return null;
@@ -374,26 +396,26 @@
 
     function normalizeEmote(emote) {
         const DEG = Math.PI / 180;
-        const rotScale = emote.degrees === false ? 1 : DEG; 
+        const rotScale = emote.degrees === false ? 1 : DEG;
         for (const [name, s] of Object.entries(emote.parts)) {
             for (const ch of ['x', 'y', 'z']) {
                 for (const kf of s.rot[ch]) kf.v *= rotScale;
             }
             if (s.bend) {
-                for (const kf of s.bend.kfs) kf.v *= rotScale; 
+                for (const kf of s.bend.kfs) kf.v *= rotScale;
             }
-            
+
             const vp = VANILLA_PIVOT[name] || { x: 0, y: 0, z: 0 };
             for (const ch of ['x', 'y', 'z']) {
                 for (const kf of s.pos[ch]) kf.v -= vp[ch];
             }
-            
+
             for (const ch of ['x', 'y', 'z']) {
                 s.rot[ch].sort((a, b) => a.tick - b.tick);
                 s.pos[ch].sort((a, b) => a.tick - b.tick);
             }
             if (s.bend) s.bend.kfs.sort((a, b) => a.tick - b.tick);
-            
+
             const chans = [s.rot.x, s.rot.y, s.rot.z, s.pos.x, s.pos.y, s.pos.z];
             if (s.bend) chans.push(s.bend.kfs);
             for (const kfs of chans) {
@@ -402,7 +424,7 @@
                 }
             }
         }
-        
+
         let maxTick = emote.beginTick;
         for (const s of Object.values(emote.parts)) {
             for (const ch of ['x', 'y', 'z']) {
@@ -438,7 +460,7 @@
             }
             return parts[part];
         }
-        
+
         const ROT_CH = { pitch: 'x', yaw: 'y', roll: 'z' };
 
         for (const move of emote.moves) {
@@ -453,7 +475,7 @@
                 const p = move[part];
                 if (!p || typeof p !== 'object') continue;
                 const s = slot(part);
-                
+
                 for (const [key, ch] of Object.entries(ROT_CH)) {
                     const v = Number(p[key]);
                     if (Number.isFinite(v)) s.rot[ch].push({ tick, v, ease });
@@ -466,7 +488,7 @@
                     const v = Number(p.bend);
                     if (Number.isFinite(v)) s.bend.kfs.push({ tick, v, ease });
                 }
-                
+
                 if (p.axis !== undefined) {
                     const v = Number(p.axis);
                     if (Number.isFinite(v)) {
@@ -500,7 +522,7 @@
             description: json.description || null,
             beginTick, endTick, stopTick, returnTick, isLoop,
             easingBefore: emote.easingBefore === true,
-            degrees: emote.degrees !== false, 
+            degrees: emote.degrees !== false,
             parts
         };
     }
@@ -513,7 +535,7 @@
         let i = 0;
         while (i < n - 1 && kfs[i + 1].tick <= t) i++;
         const a = kfs[i], b = kfs[i + 1];
-        if (b.tick <= a.tick) return b.v; 
+        if (b.tick <= a.tick) return b.v;
         let u = (t - a.tick) / (b.tick - a.tick);
         u = Math.min(1, Math.max(0, u));
         const e = (easingBefore ? a : b).ease(u);
@@ -536,7 +558,7 @@
             const lj = findJoint(mesh, 'leftHipJoint');
             const rj = findJoint(mesh, 'rightHipJoint');
             if (lj && rj) {
-                
+
                 const V3 = lj.position.constructor;
                 const a = new V3(), b = new V3();
                 lj.getWorldPosition(a);
@@ -556,7 +578,7 @@
         return scale;
     }
 
-    const lastWritten = new WeakMap(); 
+    const lastWritten = new WeakMap();
 
     function captureDefaults(joint) {
         if (!state.defaults.has(joint)) {
@@ -572,12 +594,6 @@
 
     function vanillaOf(joint, freshRoot) {
         const w = lastWritten.get(joint);
-        // freshRoot=true → la posición ACTUAL ya es vanilla limpia: el juego
-        // RESETEA skeleton.position en cada render (prueba en el bundle: el
-        // emote nativo DANCE hace `skeleton.position.y -= ...` sin restaurar,
-        // que solo funciona con reset por-frame). En ese caso NO hay que
-        // restar el offset del frame anterior. Para el resto de joints
-        // (posiciones persistentes del rig) sí se resta lo que escribimos.
         const s = freshRoot ? 0 : 1;
         return {
             rx: joint.rotation.x, ry: joint.rotation.y, rz: joint.rotation.z,
@@ -591,9 +607,6 @@
         const d = state.defaults.get(joint);
         const w = lastWritten.get(joint);
         if (w) {
-            // El root (skeleton): el juego lo resetea en el próximo render —
-            // restar aquí movería al jugador un frame de más. El resto
-            // (posiciones persistentes del rig) sí se restauran restando.
             const isRoot = state.current?.rootJoint === joint;
             if (!isRoot) {
                 joint.position.set(
@@ -613,17 +626,14 @@
     }
 
     function stop() {
-        if (state.current) state.fadeTarget = 0; 
+        if (state.current) state.fadeTarget = 0;
     }
 
     function finishStop() {
         const cur = state.current;
-        // Restaurar ANTES de nullear current: restoreJoint consulta
-        // current.rootJoint para no mover la raíz (el juego la resetea solo).
         if (state.defaults.size) restoreAll();
         state.current = null;
         if (cur) {
-            // Devolver el control a MF_PlayerAnims (poses del pack de nuevo).
             if (hookState.mesh) hookState.mesh.__mfPASuppress = false;
             for (const joint of cur.jointList) joint.__mfPASuppress = false;
         }
@@ -635,15 +645,10 @@
         const cur = state.current;
         if (!cur || !mesh) return;
         cur.framesSeen = (cur.framesSeen || 0) + 1;
-        // fromRenderHook: el render del juego acaba de RESETEAR skeleton.position
-        // (y de reescribir la pose vanilla) → la raíz se lee como vanilla limpio.
-        // Cada invocación de original.render() re-resetea (varios render() por
-        // frame p.ej. sombras), así que TODO llamado del hook es "fresh".
-        // El fallback de rAF (fuera del render) ve NUESTRO write previo → resta.
         const freshRoot = fromRenderHook === true;
 
         const now = performance.now();
-        
+
         const dt = Math.min(0.1, (now - cur.lastFrame) / 1000);
         cur.lastFrame = now;
 
@@ -652,14 +657,15 @@
         cur.blend += (state.fadeTarget - cur.blend) * smoothing;
         if (state.fadeTarget === 0 && cur.blend < 0.01) { finishStop(); return; }
 
-        const t = ((now - cur.startTime) / 1000) * 20; 
+        const t = ((now - cur.startTime) / 1000) * 20;
         const emote = cur.emote;
         let blend = cur.blend, tt;
 
         if (!emote.isLoop && t > emote.endTick) {
-            tt = emote.endTick; 
+            tt = emote.endTick;
         } else {
-            tt = t;              
+            tt = t;
+
         }
 
         for (const joint of cur.jointList) {
@@ -680,7 +686,7 @@
             }
         }
 
-        function qMul(a, b) { 
+        function qMul(a, b) {
             return {
                 x: a.x * b.w + a.w * b.x + a.y * b.z - a.z * b.y,
                 y: a.y * b.w + a.w * b.y + a.z * b.x - a.x * b.z,
@@ -696,7 +702,7 @@
             let d = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
             let bx = b.x, by = b.y, bz = b.z, bw = b.w;
             if (d < 0) { bx = -bx; by = -by; bz = -bz; bw = -bw; d = -d; }
-            if (d > 0.9995) { 
+            if (d > 0.9995) {
                 const o = {
                     x: a.x + (bx - a.x) * u, y: a.y + (by - a.y) * u,
                     z: a.z + (bz - a.z) * u, w: a.w + (bw - a.w) * u
@@ -713,12 +719,12 @@
             };
         }
         function qToEulerXYZ(qq) {
-            
+
             const n = Math.hypot(qq.x, qq.y, qq.z, qq.w) || 1;
             const x = qq.x / n, y = qq.y / n, z = qq.z / n, w = qq.w / n;
             const sy = 2 * (w * y + z * x);
             if (Math.abs(sy) >= 1) {
-                
+
                 return { x: 2 * Math.atan2(x, w), y: Math.sign(sy) * Math.PI / 2, z: 0 };
             }
             return {
@@ -736,7 +742,7 @@
             const inv = part.noRotInvert ? 1 : -1;
             if (part.hasRot && d) {
                 const p = inv * sampleLoop(part.rot.x, tt, emote), y = inv * sampleLoop(part.rot.y, tt, emote), r = sampleLoop(part.rot.z, tt, emote);
-                
+
                 let qe = qMul(qMul(qAxis([0, 0, 1], r), qAxis([0, 1, 0], y)), qAxis([1, 0, 0], p));
                 const qv2 = qMul(qMul(qAxis([0, 0, 1], d.rz), qAxis([0, 1, 0], d.ry)), qAxis([1, 0, 0], d.rx));
                 qe = qSlerp(qv2, qe, blend);
@@ -744,13 +750,10 @@
                 j.rotation.set(e.x, e.y, e.z);
                 lastWritten.set(j, { rx: e.x - d.rx, ry: e.y - d.ry, rz: e.z - d.rz, px: 0, py: 0, pz: 0 });
             }
-            
+
             if (part.hasPos) {
                 const pj = part.rootJoint || j;
                 const isRootWrite = part.rootJoint && pj === part.rootJoint;
-                // Base del root: con fresh (post-render) la posición actual YA
-                // es vanilla limpia → usarla directo; si no, restar nuestro
-                // write previo (el default cacheado ya lo hizo en el loop).
                 const pd = isRootWrite && freshRoot
                     ? { px: pj.position.x, py: pj.position.y, pz: pj.position.z }
                     : (state.defaults.get(pj) || { px: pj.position.x, py: pj.position.y, pz: pj.position.z });
@@ -758,12 +761,7 @@
                 let ox = k * sampleLoop(part.pos.x, tt, emote),
                     oy = k * sampleLoop(part.pos.y, tt, emote),
                     oz = k * sampleLoop(part.pos.z, tt, emote);
-                // La raíz (skeleton) vive en espacio MUNDO: el yaw del jugador
-                // está en el quaternion del body y la raíz NO rota → un offset
-                // directo apunta según el mundo, no según el cuerpo (mismo bug
-                // que el desface del sneak del pack). Rotarlo por el yaw
-                // vanilla lo hace relativo al jugador a cualquier rotación.
-                if (part.rootJoint && pj === part.rootJoint && cur.bodyQ) {
+                    if (part.rootJoint && pj === part.rootJoint && cur.bodyQ) {
                     try {
                         const VC = pj.position.constructor;
                         const rv = new VC(ox, oy, oz).applyQuaternion(cur.bodyQ);
@@ -774,7 +772,7 @@
                 const w = lastWritten.get(pj) || { rx: 0, ry: 0, rz: 0 };
                 lastWritten.set(pj, { ...w, px: ox, py: oy, pz: oz });
             }
-            
+
             const bj = part.bendJoint;
             if (bj && part.bend.kfs.length) {
                 const b = sampleLoop(part.bend.kfs, tt, emote);
@@ -805,10 +803,6 @@
             const result = original.apply(this, args);
             if (state.current) {
                 try {
-                    // El render del juego acaba de escribir el yaw vanilla en
-                    // body.quaternion — capturarlo ANTES de que applyPose lo
-                    // pise con la pose del emote (lo usa para rotar los
-                    // offsets del root, espacio modelo → mundo).
                     const bq = target.body?.quaternion;
                     if (bq) state.current.bodyQ = bq.clone();
                     applyPose(target, true);
@@ -889,7 +883,7 @@
             if (!def) continue;
             const joint = findJoint(ent.mesh, def.joint);
             const bendJoint = def.bend ? findJoint(ent.mesh, def.bend) : null;
-            
+
             const rootJoint = def.root ? findJoint(ent.mesh, def.root) : null;
             if (joint || rootJoint) {
                 if (rootJoint) jointList.add(rootJoint);
@@ -908,10 +902,6 @@
             }
         }
         if (!parts.length) return { ok: false, error: 'no-joints' };
-
-        // Sistema de animaciones (MF_PlayerAnims): aplica sus poses DENTRO de
-        // updateMatrixWorld y congela codos/rodillas — pisaría las rotaciones
-        // del emote. Pedirle que se aparte mientras dura el emote.
         ent.mesh.__mfPASuppress = true;
         for (const joint of jointList) joint.__mfPASuppress = true;
 
@@ -923,8 +913,6 @@
             rootJoint: parts.find(p => p.rootJoint)?.rootJoint || null,
             startTime: performance.now(), lastFrame: performance.now(),
             posScale, blend: 0, framesSeen: 0,
-            // Yaw vanilla del body (lo refresca el render-hook cada frame):
-            // rota los offsets del root de espacio modelo a mundo.
             bodyQ: ent.mesh.body?.quaternion?.clone?.() || null
         };
         state.fadeTarget = 1;
@@ -992,7 +980,7 @@
 
     function registerEmoteBytes(buffer) {
         const bytes = new Uint8Array(buffer);
-        
+
         let emote = null;
         if (bytes.length > 6 && bytes[0] === 0x7B ) {
             emote = parseEmotecraft(JSON.parse(new TextDecoder().decode(bytes)));
@@ -1122,8 +1110,6 @@
 
         PARTS
     };
-
-    // Para el guard de re-inyección: apaga todo lo vivo de ESTE scope.
     window.__MF_EMOTES_SCOPE__ = {
         destroy() {
             emoteScopeDead = true;

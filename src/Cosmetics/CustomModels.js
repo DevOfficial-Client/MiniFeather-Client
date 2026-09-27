@@ -11,7 +11,7 @@
         loading: new Set(),
         customs: new Map(),
         customSeq: 0,
-        peerTarget: null   
+        peerTarget: null
     };
 
     try {
@@ -19,7 +19,7 @@
         state.mappings = JSON.parse(localStorage.getItem('miniblox_custommodels_map') || '{}');
         state.entityAnims = JSON.parse(localStorage.getItem('miniblox_custommodels_anims') || '{}');
     } catch {}
-    
+
     if (Object.keys(state.mappings).length) {
         void 0;
     }
@@ -83,7 +83,7 @@
             const cp = wp(cam) || [0, 0, 0];
             void 0;
             void 0;
-            
+
             let appliedCount = 0;
             try {
                 const check = (e) => {
@@ -104,7 +104,7 @@
                 try { for (const p of game?.world?.playersIterator?.() ?? []) check(p); } catch {}
                 if (!appliedCount) void 0;
             } catch (e) { console.warn(TAG + ' applied scan fallo: ' + e); }
-            
+
             for (const rec of state.customs.values()) {
                 rows.push({
                     donde: 'CUSTOM ' + rec.id, tipo: 'root', nombre: rec.file.slice(0, 40),
@@ -113,10 +113,10 @@
                     path: 'parent=' + (rec.root?.parent ? (rec.root.parent.name || rec.root.parent.constructor?.name) : 'NINGUNO')
                 });
             }
-            
+
             if (cam) scanTree(cam, '>>> CAMARA');
             if (game?.gameScene?.scene) scanTree(game.gameScene.scene, 'escena');
-            
+
             const extOrigin = 'chrome-extension://';
             const chain = (o) => {
                 const parts = [];
@@ -176,7 +176,7 @@
             }
             const rec = {
                 id, file: modelFile,
-                texture: opts.texture || null, // png alternativo (variantes)
+                texture: opts.texture || null,
                 pos: { x: +x || 0, y: +y || 0, z: +z || 0 },
                 yaw: +(opts.yaw || 0),
                 scale: +(opts.scale || 1),
@@ -196,20 +196,26 @@
                 lostSince: 0,
                 anim: opts.anim || null,
                 animSpeed: +(opts.animSpeed || 1),
-                hover: !!opts.hover,          
-                room: !!opts.room,            
-                autoSize: !!opts.autoSize,    
-                sink: opts.sink !== false,    
-                weeping: !!opts.weeping,      
+                hover: !!opts.hover,
+
+                room: !!opts.room,
+
+                autoSize: !!opts.autoSize,
+
+                sink: opts.sink !== false,
+
+                weeping: !!opts.weeping,
+
                 lookAtPlayer: opts.lookAtPlayer !== false,
                 stay: !!opts.stay,
                 puppet: !!opts.puppet,
-                noPhysics: !!opts.noPhysics,   // IA externa controla la posicion por completo
+                noPhysics: !!opts.noPhysics,
                 spawnAnim: opts.spawnAnim || null,
-                catchAnim: opts.catchAnim || null,   
-                despawnAnim: opts.despawnAnim || null, 
+                catchAnim: opts.catchAnim || null,
+
+                despawnAnim: opts.despawnAnim || null,
                 caught: false,
-                tint: opts.tint || null,       // color base (prueba/debug: '#101014')
+                tint: opts.tint || null,
                 root: null, inst: null, animStart: 0
             };
             state.customs.set(id, rec);
@@ -217,43 +223,42 @@
                 const game = getGame();
                 const scene = game?.gameScene?.scene;
                 if (!scene) { console.warn(TAG + ' no hay escena para ' + id); return; }
-                // si otro spawn reemplazo este record mientras cargaba, no montar el root (evita duplicados huerfanos)
                 if (state.customs.get(id) !== rec) return;
                 const inst = cloneInstance(built);
                 rec.inst = inst;
                 rec.root = inst.root;
                 if (rec.room) {
-                    
+
                     let s = (rec.scale && rec.scale !== 1) ? rec.scale : 1;
                     if (rec.autoSize) {
-                        
+
                         const maxSide = Math.max(built.max[0] - built.min[0], built.max[2] - built.min[2]);
                         s = 80 / (maxSide || 1);
                     }
                     if (s !== 1) inst.root.scale.multiplyScalar(s);
-                    s = inst.root.scale.x; 
+                    s = inst.root.scale.x;
                     if (rec.puppet) {
                         inst.root.position.set(rec.pos.x, rec.pos.y, rec.pos.z);
                     } else {
-                        
+
                         let floorY = rec.pos.y;
                         try {
                             for (let dy = 0; dy < 8; dy++) {
                                 const solid = blockSolidAt(rec.pos.x, rec.pos.y - dy - 0.5, rec.pos.z);
                                 if (solid === true) { floorY = Math.floor(rec.pos.y - dy - 0.5) + 1; break; }
-                                if (solid === null) break; 
+                                if (solid === null) break;
                             }
                         } catch {}
-                        const sink = rec.sink === false ? 0 : 1; 
+                        const sink = rec.sink === false ? 0 : 1;
                         inst.root.position.set(
                             rec.pos.x - built.center.x * s,
                             floorY - built.min[1] * s - sink,
                             rec.pos.z - built.center.z * s
                         );
                     }
-                    
+
                     rec.terrBox = { min: built.min, max: built.max };
-                    
+
                     if (!rec.puppet) {
                         try { buildRoomColliders(rec, built, s); } catch {}
                     }
@@ -268,7 +273,7 @@
                     rec.anim = null;
                 }
                 rec.animStart = performance.now();
-                
+
                 if (rec.spawnAnim) {
                     const an = findAnim(inst, rec.spawnAnim);
                     if (an) {
@@ -279,10 +284,8 @@
                         void 0;
                     }
                 }
-                
+
                 if (!rec.room) inst.root.position.set(rec.pos.x, rec.pos.y, rec.pos.z);
-                // tint: pisa el color base de TODOS los materiales (con map se
-                // multiplica: un gris oscuro oscurece la textura sin taparla)
                 if (rec.tint) {
                     try {
                         inst.root.traverse((o) => {
@@ -298,13 +301,13 @@
                 disableCullingDeep(inst.root);
                 inst.root.matrixAutoUpdate = true;
                 scene.add(inst.root);
-                
+
                 setTimeout(() => { try { purgeUnderCam(); } catch {} }, 0);
                 setTimeout(() => { try { purgeUnderCam(); } catch {} }, 500);
                 const animInfo = inst.anims.length ? ' anims: ' + inst.anims.map((a) => a.name).join(', ') : '';
                 void 0;
             }).catch((e) => {
-                
+
                 const msg = String(e?.message || e);
                 const hint = /Failed to fetch/.test(msg)
                     ? ' (extension recargada? refresca la pagina de miniblox; o el archivo no existe en models/entities/)'
@@ -347,7 +350,7 @@
             if (!rec.inst.anims.some((a) => a.name === animName)) return false;
             const now = performance.now();
             const prev = rec.animOverride;
-            
+
             if (prev && prev.name === animName && now < prev.until) {
                 prev.until = Math.max(prev.until, now + (+ms || 1500));
                 return true;
@@ -358,14 +361,14 @@
         despawn(id, force) {
             const rec = state.customs.get(id);
             if (!rec) return false;
-            
+
             if (!force && rec.despawnAnim && rec.inst && !rec.dying && !rec.dead) {
                 const an = findAnim(rec.inst, rec.despawnAnim);
                 if (an) {
                     const anim = rec.inst.anims.find((a) => a.name === an);
                     const ms = Math.max(900, (anim?.duration || 1) * 1000);
                     rec.dying = true;
-                    rec.stay = true; 
+                    rec.stay = true;
                     rec.animOverride = { name: an, start: performance.now(), until: performance.now() + ms };
                     void 0;
                     setTimeout(() => { if (state.customs.get(id) === rec) MF_CustomModels.despawn(id); }, ms);
@@ -375,7 +378,7 @@
             rec.dead = true;
             try { rec.root?.parent?.remove(rec.root); } catch {}
             state.customs.delete(id);
-            
+
             return true;
         },
         move(id, x, y, z, yaw) {
@@ -386,7 +389,7 @@
             if (rec.root) rec.root.position.set(rec.pos.x, rec.pos.y, rec.pos.z);
             return true;
         },
-        
+
         stay(id, on = true) {
             const rec = state.customs.get(id);
             if (!rec) return false;
@@ -405,7 +408,7 @@
             void 0;
             return out;
         },
-        
+
         getRecord(id) {
             const rec = state.customs.get(id);
             if (!rec || rec.dead) return null;
@@ -419,37 +422,27 @@
                 id: rec.id
             };
         },
-
-        // nombres de animaciones del custom (para que módulos ofrezcan selector)
         animsOf(id) {
             const rec = state.customs.get(id);
             if (!rec || rec.dead || !rec.inst) return null;
             return rec.inst.anims.map((a) => a.name);
         },
-
-        // bone animable por nombre (solo los que restoreRest resetea cada
-        // frame — rotarlo fuera de ese set acumularía para siempre)
         boneOf(id, name) {
             const rec = state.customs.get(id);
             if (!rec || rec.dead || !rec.inst) return null;
             for (const r of rec.inst.rest) if (r.g?.name === name) return r.g;
             return null;
         },
-
-        // hueso NUEVO para procanim (editor de huesos del lab): cuelga de un
-        // bone existente por nombre, entra a inst.rest → restoreRest lo
-        // resetea cada frame y boneOf/procAnim lo encuentran como a cualquier
-        // otro. offset/quat en espacio LOCAL del padre.
         addBone(id, name, parentName, offset, quat) {
             const rec = state.customs.get(id);
             if (!rec || rec.dead || !rec.inst) return false;
             let parent = null;
             for (const r of rec.inst.rest) {
                 if (r.g?.name === parentName) { parent = r.g; break; }
-                if (r.g?.name === name) return false;   // ya existe
+                if (r.g?.name === name) return false;
             }
             if (!parent && parentName) return false;
-            if (!parent) parent = rec.inst.root || rec.inst.g;   // raíz del custom
+            if (!parent) parent = rec.inst.root || rec.inst.g;
             const B = parent.constructor;
             const b = new B();
             b.name = name;
@@ -459,21 +452,18 @@
             rec.inst.rest.push({ g: b, p: b.position.clone(), q: b.quaternion.clone(), s: b.scale.clone() });
             return true;
         },
-
-        // callback procedural sobre el rec INTERNO: corre tras sampleAnim en
-        // tickCustoms (no sirve asignarlo sobre el wrapper de getRecord)
         setProcAnim(id, fn) {
             const rec = state.customs.get(id);
             if (!rec || rec.dead) return false;
             rec.procAnim = typeof fn === 'function' ? fn : null;
             return true;
         },
-        
+
         setPeerTarget(tag, pos) {
             state.peerTarget = pos ? { ...pos, at: performance.now() } : null;
             return true;
         },
-        
+
         listLive() {
             const out = [];
             for (const rec of state.customs.values()) {
@@ -495,8 +485,6 @@
             }
             return out;
         },
-
-        // todos los roots vivos (puppet incluidos): para detectar duplicados huerfanos en la escena
         liveRoots() {
             const roots = new Set();
             for (const rec of state.customs.values()) {
@@ -509,20 +497,20 @@
         async tryLoad(file) {
             try { await loadModel(file); return true; } catch { return false; }
         },
-        
+
         async getGLBBytes(file) {
             if (!/\.(glb|gltf|obj)$/i.test(file)) throw new Error('solo archivos .glb/.gltf/.obj via P2P');
             return fetchModelArrayBuffer(file);
         },
-        
+
         registerModelBytes(file, arrayBuffer) {
             const p = (async () => {
                 let parsed;
                 if (/\.obj$/i.test(file)) {
-                    
+
                     parsed = parseOBJ(new TextDecoder().decode(arrayBuffer), file, null);
                 } else if (/\.gltf$/i.test(file)) {
-                    
+
                     parsed = await resolveGLTFExternal(JSON.parse(new TextDecoder().decode(arrayBuffer)));
                 } else {
                     parsed = parseGLB(arrayBuffer);
@@ -556,13 +544,13 @@
             if (res) playIntro('verity', res);
             return res;
         },
-        
+
         spawnIaBox(offset = 2, opts = {}) {
             const p = getGame()?.player?.pos;
             if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
             if (state.customs.has('verity')) MF_CustomModels.despawn('verity');
             if (state.customs.has('caja_intro')) MF_CustomModels.despawn('caja_intro');
-            
+
             if (state.iaBoxListener) {
                 document.removeEventListener('mousedown', state.iaBoxListener, true);
                 state.iaBoxListener = null;
@@ -573,14 +561,14 @@
                 id: boxId,
                 height: opts.boxHeight || 1.0,
                 bodyHalf: 0.56
-                
+
             });
             let opened = false;
             const listener = (ev) => {
                 if (ev.button !== 2 || opened) return;
                 const rec = state.customs.get(boxId);
                 if (!rec || !rec.root) { cleanup(); return; }
-                
+
                 const game = getGame();
                 const player = game?.player;
                 const origin = player?.pos;
@@ -591,7 +579,7 @@
                     const cam = game?.gameScene?.camera;
                     const e = cam?.matrixWorld?.elements;
                     if (e && e.length >= 16) {
-                        
+
                         dx = -e[8]; dy = -e[9]; dz = -e[10];
                     } else throw 0;
                 } catch {
@@ -617,8 +605,8 @@
                 const perpSq = Math.max(0, dist * dist - along * along);
                 const r = Math.max(0.9, (rec.height || 1) * 0.8);
                 void 0;
-                if (along <= 0 || along > 5.5 || perpSq > r * r) return; 
-                
+                if (along <= 0 || along > 5.5 || perpSq > r * r) return;
+
                 opened = true;
                 ev.preventDefault?.();
                 cleanup();
@@ -633,7 +621,7 @@
                         id: 'verity',
                         height: opts.height || 0.85,
                         followPlayer: true,
-                        fallingSpawn: true, 
+                        fallingSpawn: true,
                         stopDistance: opts.stopDistance || offset,
                         autoAnim: true,
                         maxSpeed: opts.maxSpeed || 4.3,
@@ -666,25 +654,26 @@
             });
             return res;
         },
-        
+
         spawnHorse(offset = 2, opts = {}) {
             const p = getGame()?.player?.pos;
             if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
             if (state.customs.has('caballo')) MF_CustomModels.despawn('caballo');
             return MF_CustomModels.spawn('minecraft_-_horse.glb', p.x + offset, p.y, p.z, {
                 id: 'caballo',
-                height: opts.height || 1.6,      
+                height: opts.height || 1.6,
+
                 bodyHalf: opts.bodyHalf || 0.7,
                 followPlayer: opts.followPlayer !== false,
                 stopDistance: opts.stopDistance != null ? opts.stopDistance : Math.max(1.5, offset),
-                maxSpeed: opts.maxSpeed || 5.6,  
+                maxSpeed: opts.maxSpeed || 5.6,
                 loseDistance: opts.loseDistance != null ? opts.loseDistance : 12,
                 lostTimeMs: opts.lostTimeMs != null ? opts.lostTimeMs : 5000,
                 lookAtPlayer: true,
                 ...opts
             });
         },
-        
+
         spawnMaternal(offset = 4, opts = {}) {
             const p = getGame()?.player?.pos;
             if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
@@ -695,19 +684,24 @@
                 bodyHalf: opts.bodyHalf || 0.6,
                 followPlayer: opts.followPlayer !== false,
                 stopDistance: opts.stopDistance != null ? opts.stopDistance : 2.5,
-                maxSpeed: opts.maxSpeed || 2.2,   
+                maxSpeed: opts.maxSpeed || 2.2,
+
                 loseDistance: opts.loseDistance != null ? opts.loseDistance : 30,
                 lostTimeMs: opts.lostTimeMs != null ? opts.lostTimeMs : 8000,
                 lookAtPlayer: true,
                 autoAnim: true,
-                hover: true,                      
-                spawnAnim: 'up',                  
-                catchAnim: 'spotted',             
-                despawnAnim: 'despawn',           
+                hover: true,
+
+                spawnAnim: 'up',
+
+                catchAnim: 'spotted',
+
+                despawnAnim: 'despawn',
+
                 ...opts
             });
         },
-        
+
         spawnStalker(offset = 12, opts = {}) {
             const p = getGame()?.player?.pos;
             if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
@@ -723,20 +717,19 @@
                 lostTimeMs: opts.lostTimeMs != null ? opts.lostTimeMs : 10000,
                 lookAtPlayer: true,
                 autoAnim: true,
-                weeping: true,   
+                weeping: true,
+
                 ...opts
             });
             return rec;
         },
         rescan,
-
-        // Expone el registro interno (root, anims) — usado por DuckMobs.
         record(id) {
             const rec = state.customs.get(id);
             return rec || null;
         }
     };
-    
+
     window.MF_CustomModels.playSound = (file, vol = 0.8) => playSoundUrl(file, vol);
     state.yawSign = 1;
 
@@ -745,7 +738,7 @@
             const url = await bridgeFetchUrl('intro.ogg', 'assets');
             const audio = new Audio(url);
             audio.volume = 0.9;
-            
+
             MF_CustomModels.playAnim(recId, 'talk', 10000);
             const keeper = setInterval(() => {
                 const rec = state.customs.get(recId);
@@ -772,12 +765,9 @@
             await audio.play();
             return audio;
         } catch {
-            return null; 
+            return null;
         }
     }
-
-    // Caché de escaneo: getGame() se llama desde ~30 sitios (algunos en loops
-    // por entidad) — sin caché era un querySelector('#react') por llamada.
     let _gameCache = { game: null, at: 0 };
     function getGame() {
         if (globalThis.miniblox?.player) return globalThis.miniblox;
@@ -814,7 +804,7 @@
             for (const c of [...(o.children || [])]) {
                 if (c?.userData?.__mfCM) {
                     try { o.remove(c); purged++; } catch {}
-                    continue; 
+                    continue;
                 }
                 walk(c);
             }
@@ -844,11 +834,6 @@
             return null;
         }
     }
-
-    // Clases de skinning REALES del three del juego: el propio jugador es un
-    // SkinnedMesh, así que las sacamos de SU mesh (vía entidad, patrón Emotes;
-    // el mesh local no siempre cuelga de gameScene.scene). Con esto los GLB
-    // skinned se montan con skinning de verdad — nada de fragmentos rígidos.
     function grabSkinCtors() {
         if (state.skinCtors) return state.skinCtors;
         const collect = (sm) => {
@@ -859,9 +844,6 @@
                 Skeleton: sm.skeleton.constructor
             };
             if (!c.Bone || !c.Skeleton) return null;
-            // el TIPO de array de skinIndex que el shader del juego espera —
-            // clavarlo evita GL_INVALID_OPERATION (attrib entero vs float).
-            // También log del hallazgo para diagnóstico.
             try {
                 const si = sm.geometry?.attributes?.skinIndex;
                 c.skinIndexCtor = si?.array?.constructor || null;
@@ -880,7 +862,6 @@
                 try { const c = collect(game.world?.players?.get?.(me.id)?.mesh); if (c) return c; } catch {}
                 try { const c = collect(game.world?.entities?.get?.(me.id)?.mesh); if (c) return c; } catch {}
             }
-            // fallback: cualquier SkinnedMesh con bones de la escena
             const scene = game?.gameScene?.scene;
             if (scene) {
                 let found = null;
@@ -923,7 +904,7 @@
     }
 
     async function resolveGLTFExternal(json, base) {
-        
+
         const bufs = [];
         let total = 0;
         for (const b of json.buffers || []) {
@@ -931,7 +912,7 @@
             if (typeof b.uri === 'string' && b.uri.startsWith('data:')) {
                 bytes = b64ToBytes(b.uri.slice(b.uri.indexOf(',') + 1));
             } else if (typeof b.uri === 'string' && b.uri) {
-                
+
                 const name = decodeURIComponent(b.uri.split('/').pop());
                 try { bytes = new Uint8Array(await fetchModelArrayBuffer(name)); } catch {}
             }
@@ -1072,9 +1053,6 @@
         const texDef = gltf.textures?.[texIndex];
         const imgDef = texDef && gltf.images?.[texDef.source];
         if (!imgDef) return null;
-        // clave POR MODELO: el índice de imagen se repite entre GLBs (0..n de
-        // cada uno) y un caché global mezclaba texturas de modelos distintos
-        // (el leviathan salía con la piel del caballo, etc.)
         if (parsed.__mfTexId == null) parsed.__mfTexId = ++texModelSeq;
         const key = parsed.__mfTexId + ':' + texDef.source;
         if (state.textureCache.has(key)) return state.textureCache.get(key);
@@ -1094,8 +1072,6 @@
         const promise = (async () => {
             let bitmap = null;
             try {
-                // colorSpaceConversion:'none' — sin esto el navegador aplica el
-                // perfil ICC/gamma del PNG y los colores salen desviados
                 bitmap = await createImageBitmap(new Blob([bytes], { type: imgDef.mimeType || 'image/png' }), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
             } catch {
                 try {
@@ -1108,31 +1084,23 @@
             tex.image = bitmap;
             tex.needsUpdate = true;
             if ('flipY' in tex) tex.flipY = false;
-            // sampler del glTF — CRÍTICO: los rips de juego (leviathan FF7)
-            // usan UV tiling (50-68% de UVs fuera de [0,1], negativas); el
-            // sampler declara wrap=REPEAT(10497) y sin aplicarlo queda el
-            // ClampToEdge default de three → medio cuerpo muestrea el píxel
-            // del borde estirado ("lado sin textura")
             try {
                 const samp = gltf.samplers?.[texDef.sampler ?? 0];
                 if (samp) {
-                    const WRAP = { 10497: 1000, 33071: 1001, 33648: 1002 }; // glTF → three
+                    const WRAP = { 10497: 1000, 33071: 1001, 33648: 1002 };
                     if (WRAP[samp.wrapS] != null) tex.wrapS = WRAP[samp.wrapS];
                     if (WRAP[samp.wrapT] != null) tex.wrapT = WRAP[samp.wrapT];
-                    if (samp.minFilter === 9987) tex.minFilter = 1008;      // LinearMipmapLinear
-                    if (samp.magFilter === 9729) tex.magFilter = 1006;      // Linear
+                    if (samp.minFilter === 9987) tex.minFilter = 1008;
+                    if (samp.magFilter === 9729) tex.magFilter = 1006;
                     if (tex.wrapS === 1000 || tex.wrapT === 1000) {
-                        if ('generateMipmaps' in tex) tex.generateMipmaps = true;  // POT: ok
+                        if ('generateMipmaps' in tex) tex.generateMipmaps = true;
                     }
                 }
             } catch {}
-            // Bedrock = pixel-art: nearest mantiene los pixeles nitidos.
-            // Linear (default de THREE) los difumina. Mipmaps nearest evita
-            // el ruido a distancia.
             if (parsed.bedrock) {
                 try {
-                    const NF = 1003;   // THREE.NearestFilter
-                    const NMF = 1005;  // THREE.NearestMipmapLinearFilter
+                    const NF = 1003;
+                    const NMF = 1005;
                     tex.magFilter = NF;
                     tex.minFilter = NMF;
                     if ('generateMipmaps' in tex) tex.generateMipmaps = true;
@@ -1140,8 +1108,6 @@
             }
             const SRGB = 'srgb';
             try { if ('colorSpace' in tex) tex.colorSpace = SRGB; } catch {}
-            // three < r152 usa encoding (sRGBEncoding = 3001), no colorSpace:
-            // sin esto la textura se ve blanquecina/lavada en clientes viejos
             try { if (!('colorSpace' in tex) && 'encoding' in tex) tex.encoding = 3001; } catch {}
             state.textureCache.set(key, tex);
             return tex;
@@ -1161,7 +1127,7 @@
                 if ('alphaTest' in mat) mat.alphaTest = 0;
                 if ('transparent' in mat) mat.transparent = false;
                 if ('fog' in mat) mat.fog = false;
-                
+
                 if ('depthTest' in mat) mat.depthTest = true;
                 if ('depthWrite' in mat) mat.depthWrite = true;
                 if (mat.color?.set) mat.color.set(0xffffff);
@@ -1211,11 +1177,6 @@
             const nComp = gltf.accessors[prim.attributes.COLOR_0].type === 'VEC4' ? 4 : 3;
             geo.setAttribute('color', new Attr(readAccessor(parsed, gltf.accessors[prim.attributes.COLOR_0]), nComp));
         }
-        // pesos de skin (skinned GLB): el TIPO del array de skinIndex debe
-        // calzar con lo que el shader del juego espera — se copia el tipo que
-        // usa el mesh del propio jugador (capturado en grabSkinCtors); si no
-        // está disponible se normaliza a Float32Array (vec4 float estándar
-        // de three). Uint16 crudo dispara GL_INVALID_OPERATION.
         if (prim.attributes.JOINTS_0 != null && prim.attributes.WEIGHTS_0 != null) {
             try {
                 const rawJ = readAccessor(parsed, gltf.accessors[prim.attributes.JOINTS_0]);
@@ -1227,12 +1188,12 @@
                 else if (wantC === Uint8Array) {
                     let mx = 0;
                     for (let i = 0; i < rawJ.length; i++) if (rawJ[i] > mx) mx = rawJ[i];
-                    if (mx <= 255) jArr = new Uint8Array(rawJ);   // >255 joints: queda Uint16
+                    if (mx <= 255) jArr = new Uint8Array(rawJ);
                 } else if (wantC !== Uint16Array) {
                     jArr = new Float32Array(rawJ);
                 }
                 const jAttr = new Attr(jArr, 4);
-                if (wantN && 'normalized' in jAttr) jAttr.normalized = true;   // flag exacto del jugador
+                if (wantN && 'normalized' in jAttr) jAttr.normalized = true;
                 geo.setAttribute('skinIndex', jAttr);
                 geo.setAttribute('skinWeight', new Attr(rawW, 4));
                 skinned = true;
@@ -1251,13 +1212,6 @@
         if (skinned) mesh.userData.__mfRawSkin = true;
         return mesh;
     }
-
-    // ── Skinning rígido (GLB skinned: leviathan FF7 y similares) ──────────
-    // three.SkinnedMesh no es alcanzable vía grabCtors, así que convertimos:
-    // cada triángulo se asigna al joint de mayor peso y su geometría (expresada
-    // en espacio LOCAL del joint vía inversa de su matrixWorld en bind pose)
-    // se cuelga del Group de ese joint — que las animaciones ya rotan. Para
-    // bestias de segmentos el resultado es prácticamente indistinguible.
     function mat4Invert(e) {
         const m = Array.from(e), inv = mat4Identity();
         for (let col = 0; col < 4; col++) {
@@ -1274,7 +1228,7 @@
                 }
             }
             const d = m[col * 4 + col];
-            for (let c = 0; c < 4; c++) { m[c * 4 + col] /= d; inv[c * 4 + col] /= d; }   // FILA col (índices col-major)
+            for (let c = 0; c < 4; c++) { m[c * 4 + col] /= d; inv[c * 4 + col] /= d; }
             for (let r2 = 0; r2 < 4; r2++) {
                 if (r2 === col) continue;
                 const f = m[col * 4 + r2];
@@ -1284,16 +1238,6 @@
         }
         return inv;
     }
-
-    // ── CPU skinning suave ─────────────────────────────────────────────────
-    // Pesos reales por vértice calculados en JS cada frame (fórmula estándar
-    // Σ w·(Mjoint·IBM·v)), escribiendo a un Mesh común. Cero shader, cero GL
-    // — imposible que el bone-texture del juego lo rompa. Viabilidad: solo
-    // hay UNA bestia skinned a la vez (~62k verts, y la mayoría de vértices
-    // tiene 2 influencias activas). Costuras del rígido: eliminadas.
-    // datos de cpu-skin por mesh. OJO: vive en WeakMap y NO en userData —
-    // Object3D.clone() hace JSON.parse(JSON.stringify(userData)) y eso
-    // aplasta Float32Array/refs a joints (dejaba los meshes "tiesos")
     const cpuSkinData = new WeakMap();
 
     function attachCpuSkin(parsed, gltf, sp, groups, ctors) {
@@ -1309,8 +1253,6 @@
         if (!posA || !siA || !swA || !geo.index) return false;
         const parent = sp.mesh.parent;
         if (!parent) return false;
-        // geometría destino: copias PROPIAS de pos/nor (uv/índice compartidos,
-        // son de solo lectura)
         const GeoC = geo.constructor, AttrC = posA.constructor;
         const dGeo = new GeoC();
         dGeo.setAttribute('position', new AttrC(new posA.array.constructor(posA.array), 3));
@@ -1320,14 +1262,6 @@
         const m2 = new ctors.Mesh(dGeo, sp.mesh.material);
         m2.name = sp.mesh.name || 'cpuskinned';
         try { (m2.userData = m2.userData || {}).__mfCM = true; } catch {}
-        // FIDELIDAD: la bind pose real del exportador son los IBM del archivo.
-        // El modo delta (restIb = inv(worldRest)·P_rest) mantenía el palo
-        // perfecto pero sesgaba las anims (la corrección rest→bind quedaba
-        // aplicada al revés en cada joint → "no se parece al original").
-        // → skinear con IBM: K_j = inv(P_actual) · worldCurrent_j · IBM_j
-        // (en reposo K ≠ I: la malla "salta" a la bind pose real, que es lo
-        // que muestra cualquier visor glTF; el modo palo default no se toca)
-        // OJO índices columna-major: out[c*4+r] = Σ_k A[k*4+r]·B[c*4+k]
         const ibmF = new Float64Array(joints.length * 16);
         for (let j = 0; j < joints.length; j++) {
             for (let e = 0; e < 16; e++) ibmF[j * 16 + e] = ibm[j * 16 + e];
@@ -1337,11 +1271,6 @@
             srcPos: posA.array, srcNor: norA ? norA.array : null,
             si: siA.array, sw: swA.array
         });
-        // AUTOTEST en reposo (logs): con IBM, K ≠ I es LO ESPERADO (la malla
-        // salta a la bind pose real del exportador). Validamos la propiedad
-        // que sí debe cumplirse: skinneando en reposo con K = inv(P)·W_rest·IBM
-        // debe dar lo MISMO que skinnear con IBM puro (W_rest·IBM), i.e. la
-        // posición mundial de cada vértice coincide (solo cambia el espacio).
         try {
             const invP = mat4Invert(parent.matrixWorld.elements);
             const Ks = new Float64Array(joints.length * 16);
@@ -1366,7 +1295,6 @@
             const nv = posA.array.length / 3;
             let vErr = 0;
             const step = Math.max(1, Math.floor(nv / 96));
-            // helpers: producto matriz·matriz y matriz·vector (columna-major)
             const mm = (A, B) => {
                 const O = new Float64Array(16);
                 for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++)
@@ -1378,7 +1306,6 @@
                 M[1] * x + M[5] * y + M[9] * z + M[13],
                 M[2] * x + M[6] * y + M[10] * z + M[14]
             ];
-            // precalcula W_j·IBM_j por joint (referencia mundo, como un visor)
             const wIbm = joints.map((b, jj) => mm(b.matrixWorld.elements, ibmF.subarray(jj * 16, jj * 16 + 16)));
             const P = parent.matrixWorld.elements;
             for (let v = 0; v < nv; v += step) {
@@ -1388,13 +1315,12 @@
                     const w = swA.array[v * 4 + k];
                     if (w <= 1e-4) continue;
                     const ji = siA.array[v * 4 + k], o = ji * 16;
-                    const lp = mv(Ks.subarray(o, o + 16), px, py, pz);          // K → espacio del parent
-                    const gp = mv(wIbm[ji], px, py, pz);                        // W·IBM → mundo
+                    const lp = mv(Ks.subarray(o, o + 16), px, py, pz);
+                    const gp = mv(wIbm[ji], px, py, pz);
                     lx += w * lp[0]; ly += w * lp[1]; lz += w * lp[2];
                     gwx += w * gp[0]; gwy += w * gp[1]; gwz += w * gp[2];
                     wsum += w;
                 }
-                // el local debe reproducir el mundo al aplicarle P del parent
                 const world = mv(P, lx, ly, lz);
                 const e = Math.hypot(world[0] - gwx, world[1] - gwy, world[2] - gwz) / (wsum || 1);
                 if (e > vErr) vErr = e;
@@ -1403,16 +1329,12 @@
                 + ' — autotest reposo (IBM): verts vs W·IBM máx ' + vErr.toFixed(4)
                 + (vErr < 0.01 ? ' ✔ bind pose correcta' : ' ✘ REVISAR IBM'));
         } catch (e) { console.warn(TAG + ' autotest cpu-skin falló: ' + (e?.message || e)); }
-        m2.userData.__mfCpu = true;   // flag simple — sobrevive al JSON del clone
+        m2.userData.__mfCpu = true;
         try { m2.frustumCulled = false; } catch {}
         parent.add(m2);
         parent.remove(sp.mesh);
         return true;
     }
-
-    // CPU skin dinámico opt-in: por defecto APAGADO (la bestia queda en bind
-    // pose estática — "modo palo", como pidió el usuario). Activar con
-    // localStorage['mf:cpuskin']='1'
     let _cpuSkinOn = null;
     function cpuSkinEnabled() {
         if (_cpuSkinOn == null) {
@@ -1420,15 +1342,10 @@
         }
         return _cpuSkinOn;
     }
-
-    // scratch: M_j = invParentWorld(actual) · jointWorld(actual) · IBM_j
-    // (= W·IBM del visor, re-expresado en el espacio del parent del mesh)
     const _csA = new Float64Array(16);
     let _paloHintShown = false;
     function updateCpuSkins(rec, force) {
         if (!cpuSkinEnabled()) {
-            // modo palo: bind pose congelada. Aviso UNA vez para que quede
-            // claro en consola por qué no se anima (logs de diagnóstico)
             if (!_paloHintShown) {
                 _paloHintShown = true;
                 console.info(TAG + ' CPU skin APAGADO (modo palo). Para animar: localStorage.setItem("mf:cpuskin","1") y recargar');
@@ -1437,8 +1354,6 @@
         }
         const inst = rec.inst;
         if (!inst?.cpuMeshes?.length || !inst.root) return;
-        // 30Hz: media resolución es imperceptible en una bestia gigante y
-        // deja la otra mitad de frames libres para el juego
         rec._cpuTick = (rec._cpuTick || 0) + 1;
         if (!force && rec._cpuTick % 2) return;
         if (!rec._cpuOnLogged) {
@@ -1465,9 +1380,6 @@
                 const jt = cs.joints[j];
                 if (!jt) continue;
                 const wj = jt.matrixWorld.elements || jt.matrixWorld;
-                // _csA = invP · jointWorld — canónico: out[c*4+r] = Σ_k izq[k*4+r]·der[c*4+k]
-                // (fila de invP × columna de wj; leer filas donde van columnas
-                // transpone el producto y mete la T del mundo sin cancelar)
                 for (let c = 0; c < 4; c++) {
                     const w0 = wj[c * 4], w1 = wj[c * 4 + 1], w2 = wj[c * 4 + 2], w3 = wj[c * 4 + 3];
                     _csA[c * 4] = invP[0] * w0 + invP[4] * w1 + invP[8] * w2 + invP[12] * w3;
@@ -1475,7 +1387,6 @@
                     _csA[c * 4 + 2] = invP[2] * w0 + invP[6] * w1 + invP[10] * w2 + invP[14] * w3;
                     _csA[c * 4 + 3] = invP[3] * w0 + invP[7] * w1 + invP[11] * w2 + invP[15] * w3;
                 }
-                // mj = _csA · IBM_j  (bind pose real del exportador)
                 const jo = j * 16;
                 for (let c = 0; c < 4; c++) {
                     const b0 = ib[jo + c * 4], b1 = ib[jo + c * 4 + 1], b2 = ib[jo + c * 4 + 2], b3 = ib[jo + c * 4 + 3];
@@ -1514,11 +1425,6 @@
             posA.needsUpdate = true;
             if (norA) norA.needsUpdate = true;
         }
-        // heartbeat de diagnóstico (cada 2s): métrica VISUAL — desplazamiento
-        // de vértices vs el buffer del palo (unidades de modelo) y el peor
-        // joint CON pesos. Un delta enorme en un joint SIN pesos es
-        // inofensivo; el nombre + |K_t| vs la posición del root delata si
-        // algo del runtime está metiendo coords de mundo en la skin matrix.
         const nowMs = performance.now();
         if (nowMs - (rec._cpuLogAt || 0) > 2000) {
             rec._cpuLogAt = nowMs;
@@ -1528,7 +1434,7 @@
                 const cs = cpuSkinData.get(m);
                 if (!cs?._mj) continue;
                 const mj = cs._mj, nj = cs.joints.length;
-                if (!cs._used || cs._used.length !== nj) {   // joints con ≥1 peso
+                if (!cs._used || cs._used.length !== nj) {
                     cs._used = new Uint8Array(nj);
                     for (let i = 0; i < cs.si.length; i++) {
                         if (cs.sw[i] > 1e-4) cs._used[cs.si[i]] = 1;
@@ -1552,7 +1458,6 @@
                     if (dj > 0.001) usedMoving++;
                     if (dj > jMax) { jMax = dj; jName = cs.joints[j]?.name || ('#' + j); }
                 }
-                // desplazamiento visual: muestreo vs el buffer del palo
                 const dst = m.geometry.attributes.position.array, src = cs.srcPos;
                 const nv = dst.length / 3;
                 const step = Math.max(1, Math.floor(nv / 96));
@@ -1568,10 +1473,6 @@
                 + ' | absoluto "' + anyName + '" ' + anyMax.toFixed(1) + ' |Kt| ' + anyT.toFixed(1)
                 + ' | verts máx ' + vMax.toFixed(2) + 'u | root (' + rp.x.toFixed(0) + ',' + rp.y.toFixed(0) + ',' + rp.z.toFixed(0) + ')'
                 + (vMax < 0.01 ? ' — NADA VISIBLE' : (vMax < 30 ? ' — animando ✔' : ' — ¡EXPLOTA!')));
-            // AUTOPSIA (solo si explota): las 4 matrices de la fórmula en
-            // juego + test de ancestro. Si mismoÁrbol=false → los joints
-            // cuelgan de otro árbol (p.ej. el prototipo) y no comparten la
-            // transform del parent del mesh → la T del mundo no se cancela.
             if (vMax >= 30 && _dbg) {
                 try {
                     const { m, jt, mj, jo } = _dbg;
@@ -1583,7 +1484,6 @@
                     const wj = jt.matrixWorld.elements || jt.matrixWorld;
                     const rw = inst.root.matrixWorld.elements || inst.root.matrixWorld;
                     const f = (a) => a[12].toFixed(1) + ',' + a[13].toFixed(1) + ',' + a[14].toFixed(1);
-                    // recomputar K en vivo con las mismísimas matrices y comparar
                     const invP2 = mat4Invert(pw);
                     const _a = new Float64Array(16), _k = new Float64Array(16);
                     for (let c = 0; c < 4; c++) {
@@ -1603,7 +1503,6 @@
                         _k[c * 4 + 3] = _a[3] * b0 + _a[7] * b1 + _a[11] * b2 + _a[15] * b3;
                     }
                     const kRecT = Math.hypot(_k[12], _k[13], _k[14]);
-                    // compose manual del joint: posición/quaternion del propio jt
                     const jp = jt.position, jq = jt.quaternion;
                     console.warn(TAG + ' AUTOPSIA2 "' + rec.id + '" joint "' + anyName + '":'
                         + ' jt∈root=' + inRootJt + ' par∈root=' + inRootPar + ' jt∈par=' + same
@@ -1617,19 +1516,12 @@
             }
         }
     }
-
-    // Skinning REAL (experimental, flag mf:realskin): bind() sin bindMatrix
-    // explícito llama skeleton.calculateInverses() que RECALCULA las
-    // boneInverses desde el rest pose — destruiría los IBM del glTF. Por eso
-    // pasamos bindMatrix explícito. Construye todo ANTES de tocar la
-    // jerarquía: si algo explota, el mesh original queda intacto para el
-    // fallback CPU/rígido.
     function attachRealSkin(parsed, gltf, sp, groups, skinCtors) {
         const skinDef = gltf.skins?.[sp.skinIdx];
         if (!skinDef?.joints?.length) return false;
         const bones = skinDef.joints.map((jn) => groups.get(jn));
         if (bones.some((b) => !b)) return false;
-        if (skinDef.inverseBindMatrices == null) return false;   // sin IBM → rigid
+        if (skinDef.inverseBindMatrices == null) return false;
         const ibm = readAccessor(parsed, gltf.accessors[skinDef.inverseBindMatrices]);
         if (!ibm || ibm.length < bones.length * 16) return false;
         const M4 = bones[0].matrix.constructor;
@@ -1642,12 +1534,12 @@
         sm.name = sp.mesh.name || 'skinned';
         try { (sm.userData = sm.userData || {}).__mfCM = true; } catch {}
         try { sm.normalizeSkinWeights(); } catch {}
-        try { sm.frustumCulled = false; } catch {}   // el bounding no sigue a los huesos
+        try { sm.frustumCulled = false; } catch {}
         try {
             const m = sm.material;
             for (const mm of Array.isArray(m) ? m : [m]) {
                 if (!mm) continue;
-                try { mm.skinning = true; } catch {}   // three < r131
+                try { mm.skinning = true; } catch {}
                 mm.needsUpdate = true;
             }
         } catch {}
@@ -1656,7 +1548,6 @@
             console.warn(TAG + ' skinning real falló en bind(): ' + (e?.message || e));
             return false;
         }
-        // recién ahora, con todo listo, se swapea en la jerarquía
         parent.add(sm);
         parent.remove(sp.mesh);
         console.log(TAG + ' skinning REAL: ' + bones.length + ' bones, IBM del GLB ✔');
@@ -1674,10 +1565,6 @@
         if (!posA || !siA || !swA || !geo.index) return false;
         const pos = posA.array, nor = norA?.array || null, uv = uvA?.array || null;
         const si = siA.array, sw = swA.array, idx = geo.index.array;
-        // inverseBindMatrices del skin = bind pose REAL del exportador. La
-        // inversa de matrixWorld solo coincide si el rest pose del GLB es la
-        // bind pose — en GLBs de Sketchfab/FF7 no lo es y la geometría salía
-        // triturada. Fallback a matrixWorld solo si el accessor no existe.
         let invs = null;
         if (skinDef.inverseBindMatrices != null) {
             try {
@@ -1691,9 +1578,6 @@
         if (!invs) invs = jgs.map((g) => mat4Invert(g.matrixWorld.elements));
         const buckets = jgs.map(() => ({ pos: [], nor: [], uv: [], idx: [], map: new Map() }));
         for (let t = 0; t < idx.length; t += 3) {
-            // joint del PESO INDIVIDUAL máximo del triángulo (no la suma: la
-            // suma favorece al joint padre presente con peso medio en los 3
-            // vértices y manda triángulos de costura al segmento equivocado)
             let bj = -1, bw = 0;
             for (let k = 0; k < 3; k++) {
                 const v = idx[t + k];
@@ -1743,8 +1627,7 @@
             jgs[j].add(m2);
             added++;
         }
-        if (added) sp.mesh.parent?.remove(sp.mesh);   // el skinned original fuera
-        // diagnóstico: la consola cuenta fragmentos y si el material quedó sin map
+        if (added) sp.mesh.parent?.remove(sp.mesh);
         console.log(TAG + ' rigid skin mesh[' + sp.skinIdx + '] tris=' + (idx.length / 3 | 0) +
             ' → ' + added + ' fragmentos' + (matHasMap ? '' : ' ⚠ MATERIAL SIN TEXTURA'));
         return added > 0;
@@ -1753,10 +1636,10 @@
     async function buildScene(parsed, ctors, fallbackMat) {
         const { json: gltf } = parsed;
         const root = new ctors.Group();
-        
+
         try { (root.userData = root.userData || {}).__mfCM = true; } catch {}
         const groups = new Map();
-        const skinPending = [];   // meshes skinned → partirlos tras el walk
+        const skinPending = [];
         const min = [Infinity, Infinity, Infinity];
         const max = [-Infinity, -Infinity, -Infinity];
 
@@ -1764,15 +1647,14 @@
             const node = gltf.nodes?.[idx];
             if (!node) return;
             const worldMat = mat4Mul(parentMat, nodeMatrix(node));
-            // joints de skins → Bone real (para SkinnedMesh); el resto Group
             const g = (skinCtors && jointIdx.has(idx)) ? new skinCtors.Bone() : new ctors.Group();
             try { (g.userData = g.userData || {}).__mfCM = true; } catch {}
-            if (node.name) g.name = node.name;   // nombre del bone (boneOf/procAnim)
+            if (node.name) g.name = node.name;
             groups.set(idx, g);
             if (node.matrix) {
                 const m = node.matrix;
                 try {
-                    
+
                     g.matrix.fromArray(m);
                     g.matrix.decompose(g.position, g.quaternion, g.scale);
                 } catch {
@@ -1812,12 +1694,6 @@
         }
 
         const sceneIdx = gltf.scene ?? 0;
-
-        // set de joints (antes del walk: los nodos joint se crean como Bone).
-        // Skinning REAL experimental: el shader del juego usa bone-texture
-        // (r151+) y tira GL_INVALID_OPERATION con atributos — solo activarlo
-        // a mano con localStorage['mf:realskin']='1'. Por defecto: rígido
-        // (que con los IBM reales + peso máximo ya calza bien).
         const skinCtors = (() => {
             try { return /1|true/i.test(localStorage.getItem('mf:realskin') || '') ? grabSkinCtors() : null; }
             catch { return null; }
@@ -1828,11 +1704,6 @@
         }
 
         for (const n of gltf.scenes?.[sceneIdx]?.nodes || []) await addNode(n, root, mat4Identity());
-
-        // Skinning post-walk: los joints existen como Groups/Bones con su
-        // matrixWorld de reposo. Orden: real (flag experimental) → CPU suave
-        // (default: pesos reales, imposible de romper por el shader) → rígido
-        // (último recurso sin IBM)
         if (skinPending.length) {
             try { root.updateMatrixWorld(true); } catch {}
             for (const sp of skinPending) {
@@ -1873,7 +1744,7 @@
                     pendingFetches.delete(nonce);
                     reject(new Error('timeout esperando al puente de modelos'));
                 }
-            }, /\.glb$/i.test(file) ? 45000 : 8000);   // GLB pesado (leviathan 94MB): 45s
+            }, /\.glb$/i.test(file) ? 45000 : 8000);
         });
     }
 
@@ -1947,7 +1818,6 @@
             const w = sx, h = sy, d = sz;
             const quads = [];
             const F = (tl, bl, br, tr, reg, n) => quads.push({ tl, bl, br, tr, reg, n });
-            // UV por cara (uv: {north:{uv,uv_size},...}) e inflate — usados por el pato
             const PF = cube.uv && !Array.isArray(cube.uv) ? cube.uv : null;
             const R = (f, fb) => (f ? [f.uv[0], f.uv[1], f.uv_size?.[0] || fb[2], f.uv_size?.[1] || fb[3]] : fb);
             if (h === 0) {
@@ -1974,9 +1844,6 @@
         function buildCube(cube, pivot) {
             const pos = [], nor = [], uvs = [], idx = [];
             let vi = 0;
-            // Rotación del cube alrededor de su propio pivot (misma convención
-            // Bedrock→three que bones/animaciones) — la cabeza del grimmchild
-            // son 9 cubes girados a ±45°/±90°, sin esto queda un desorden
             let rm = null, rp = null;
             if (Array.isArray(cube.rotation) && cube.rotation.some((r) => r)) {
                 const q = deg2quat(cube.rotation[0], cube.rotation[1], cube.rotation[2]);
@@ -2025,7 +1892,6 @@
             const pivot = b.pivot || [0, 0, 0];
             const pp = b.parent ? (boneByName.get(b.parent)?.pivot || [0, 0, 0]) : [0, 0, 0];
             node.translation = [(pivot[0] - pp[0]) * S, (pivot[1] - pp[1]) * S, (pivot[2] - pp[2]) * S];
-            // Rotación de reposo del bone (grados Bedrock XYZ → quat glTF)
             if (Array.isArray(b.rotation) && b.rotation.some((r) => r)) {
                 node.rotation = deg2quat(b.rotation[0], b.rotation[1], b.rotation[2]);
             }
@@ -2071,7 +1937,7 @@
 
         return {
             bin,
-            bedrock: true, // pixel-art: filtrado nearest en getTextureFor
+            bedrock: true,
             json: {
                 asset: { version: '2.0' },
                 scene: 0,
@@ -2097,7 +1963,7 @@
         let s = '';
         for (let i = 0; i < texBytes.length; i += 0x8000) s += String.fromCharCode.apply(null, texBytes.subarray(i, i + 0x8000));
         const parsed = parseBedrockGeo(json, 'data:image/png;base64,' + btoa(s));
-        
+
         const animFile = file.replace(/\.geo\.json$/i, '') + '.animation.json';
         try {
             const animJson = JSON.parse(new TextDecoder().decode(await fetchModelArrayBuffer(animFile)));
@@ -2113,7 +1979,8 @@
         const verts = [];
         const uvs = [];
         const norms = [];
-        const groups = [];          
+        const groups = [];
+
         let cur = null;
 
         function newGroup(name) {
@@ -2156,7 +2023,7 @@
                     break;
                 case 'f': {
                     if (!cur) newGroup('default');
-                    
+
                     const corners = rest.split(/\s+/);
                     const base = cur.pos.length / 3;
                     const nv = verts.length / 3, nt = uvs.length / 2, nn = norms.length / 3;
@@ -2171,12 +2038,12 @@
                         if (ni < 0) ni = nn + ni + 1;
                         const vOff = (vi - 1) * 3, tOff = (ti - 1) * 2, nOff = (ni - 1) * 3;
                         cur.pos.push(verts[vOff] || 0, verts[vOff + 1] || 0, verts[vOff + 2] || 0);
-                        if (ti > 0) cur.uv.push(uvs[tOff], 1 - uvs[tOff + 1]); 
+                        if (ti > 0) cur.uv.push(uvs[tOff], 1 - uvs[tOff + 1]);
                         else cur.uv.push(0, 0);
                         if (ni > 0) cur.nor.push(norms[nOff], norms[nOff + 1], norms[nOff + 2]);
                         else cur.nor.push(0, 0, 0);
                     }
-                    
+
                     for (let i = 1; i + 1 < corners.length; i++) {
                         cur.idx.push(base, base + i, base + i + 1);
                     }
@@ -2283,7 +2150,7 @@
                 cur = { map: null, kd: null };
                 map.set(rest, cur);
             } else if (cur && kw === 'map_Kd') {
-                cur.map = rest.split(/\s+/).pop(); 
+                cur.map = rest.split(/\s+/).pop();
             } else if (cur && kw === 'Kd') {
                 const c = rest.split(/\s+/).map(Number);
                 if (c.length >= 3) cur.kd = [c[0], c[1], c[2], 1];
@@ -2295,7 +2162,7 @@
     async function parseOBJModel(file) {
         const text = new TextDecoder().decode(await fetchModelArrayBuffer(file));
         const base = file.replace(/\.obj$/i, '');
-        
+
         let mtlMap = null;
         {
             const mtlName = (text.match(/^\s*mtllib\s+(.+)$/m) || [])[1];
@@ -2310,7 +2177,7 @@
                 } catch {  }
             }
         }
-        
+
         if (mtlMap) {
             for (const m of mtlMap.values()) {
                 if (m.map) {
@@ -2338,7 +2205,7 @@
         const cx = Math.cos(hx), sx = Math.sin(hx);
         const cy = Math.cos(hy), sy = Math.sin(hy);
         const cz = Math.cos(hz), sz = Math.sin(hz);
-        
+
         const w = cx * cy * cz + sx * sy * sz;
         const qx = sx * cy * cz - cx * sy * sz;
         const qy = cx * sy * cz + sx * cy * sz;
@@ -2366,7 +2233,7 @@
                 for (const path of ['position', 'rotation', 'scale']) {
                     const chan = channels[path];
                     if (!chan) continue;
-                    
+
                     const entries = Object.entries(chan)
                         .map(([k, kf]) => ({ ts: +k, kf }))
                         .filter((e) => Number.isFinite(e.ts))
@@ -2378,11 +2245,11 @@
                         eases.push(kf?.easing || 'linear');
                         if (path === 'rotation') values.push(...deg2quat(vec[0], vec[1], vec[2]));
                         else if (path === 'scale') values.push(vec[0], vec[1], vec[2]);
-                        
+
                         else values.push(rest[0] + vec[0] * S, rest[1] + vec[1] * S, rest[2] + vec[2] * S);
                     }
                     if (times.length > 1) {
-                        
+
                         tracks.push({ nodeIdx, path: path === 'position' ? 'translation' : path, times, values, eases, interp: 'LINEAR', comps: path === 'rotation' ? 4 : 3 });
                         if (times[times.length - 1] > duration) duration = times[times.length - 1];
                     }
@@ -2461,7 +2328,7 @@
         const { json: gltf } = parsed;
         const anims = [];
         for (const a of gltf.animations || []) {
-            
+
             if (Array.isArray(a.tracks)) { anims.push(a); continue; }
             const tracks = [];
             let duration = 0;
@@ -2507,7 +2374,7 @@
             for (const k of orig.children) c.add(cp(k));
             return c;
         })(built.root);
-        
+
         try {
             root2.userData = root2.userData || {};
             root2.userData.__mfCM = true;
@@ -2518,28 +2385,19 @@
             const n = map.get(g);
             if (n) groups.set(idx, n);
         }
-
-        // SkinnedMesh clonados: Object3D.copy comparte el skeleton ORIGINAL
-        // (apunta a los bones del prototipo), pero las anims rotan los bones
-        // de ESTE clon → re-bindear con los bones mapeados por el clon
         try {
             root2.traverse((o) => {
                 if (o.isSkinnedMesh !== true || !o.skeleton) return;
                 const src = o.skeleton;
-                if (src.bones.some((b) => !map.has(b))) return;   // skeleton ya mapeado
+                if (src.bones.some((b) => !map.has(b))) return;
                 const mapped = src.bones.map((b) => map.get(b));
                 const ns = new (src.constructor)(mapped, src.boneInverses);
                 o.bind(ns, o.bindMatrix);
             });
         } catch {}
-
-        // CPU skin clonados: cada clon necesita SU geometría destino (el
-        // clone comparte la del prototipo) y sus joints remapeados a los
-        // bones del clon. Los datos pesados vienen del WeakMap del prototipo
-        // (userData no sobrevive al JSON del clone — solo el flag)
         const cpuMeshes = [];
         try {
-            const rev = new Map();                       // clon → prototipo
+            const rev = new Map();
             for (const [k, v] of map) rev.set(v, k);
             root2.traverse((o) => {
                 if (o.isMesh !== true || o.userData?.__mfCpu !== true) return;
@@ -2554,8 +2412,8 @@
                 if (geo.attributes.normal) {
                     nGeo.setAttribute('normal', new AttrC(new P(geo.attributes.normal.array), 3));
                 }
-                if (geo.attributes.uv) nGeo.setAttribute('uv', geo.attributes.uv);   // solo lectura
-                if (geo.index) nGeo.setIndex(geo.index);                             // solo lectura
+                if (geo.attributes.uv) nGeo.setAttribute('uv', geo.attributes.uv);
+                if (geo.index) nGeo.setIndex(geo.index);
                 o.geometry = nGeo;
                 cpuSkinData.set(o, {
                     joints: cs.joints.map((b) => map.get(b) || b),
@@ -2565,7 +2423,7 @@
                 cpuMeshes.push(o);
             });
         } catch (e) { console.warn(TAG + ' cpu-skin clone falló: ' + (e?.message || e)); }
-        
+
         let headNode = null;
         try {
             root2.traverse((o) => {
@@ -2595,7 +2453,7 @@
         const anim = inst.anims.find((a) => a.name === animName);
         if (!anim) return false;
         if (anim.duration > 0) {
-            
+
             if (anim.holdOnLast && t > anim.duration) t = anim.duration - 0.0001;
             else t = t % anim.duration;
         } else t = 0;
@@ -2612,7 +2470,7 @@
             let u = t1 > t0 ? (t - t0) / (t1 - t0) : 0;
             if (u < 0) u = 0; if (u > 1) u = 1;
             if (tr.interp === 'STEP') u = 0;
-            
+
             if (tr.eases && !last) {
                 const fn = EASINGS[tr.eases[i + 2]] || EASINGS.linear;
                 u = fn(u);
@@ -2715,7 +2573,7 @@
             root.scale.multiplyScalar(s);
             root.position.y = -built.minY * root.scale.y;
             mesh.add(root);
-            
+
             setTimeout(() => { try { purgeUnderCam(); } catch {} }, 0);
             setTimeout(() => { try { purgeUnderCam(); } catch {} }, 500);
 
@@ -2761,7 +2619,7 @@
         if (!myStamp.alive) return;
         if (!state.enabled && Object.keys(state.mappings).length === 0) return;
         try { rescan(); } catch {}
-        
+
         try { purgeUnderCam(); } catch {}
     }, 2000);
 
@@ -2820,7 +2678,7 @@
     }
 
     function buildRoomColliders(rec, built, s) {
-        const cells = new Map(); 
+        const cells = new Map();
         const root = rec.root;
         root.updateMatrixWorld(true);
         const v = new (Object.getPrototypeOf(root.position).constructor)();
@@ -2830,12 +2688,12 @@
             const pos = o.geometry.attributes?.position;
             const nor = o.geometry.attributes?.normal;
             if (!pos?.array) return;
-            
+
             const stride = Math.max(3, Math.floor(pos.count / 4000) * 3);
             for (let i = 0; i < pos.array.length; i += stride) {
                 if (nor?.array) {
                     const ny = nor.array[i + 1];
-                    if (ny > 0.5) continue; 
+                    if (ny > 0.5) continue;
                 }
                 v.set(pos.array[i], pos.array[i + 1], pos.array[i + 2]);
                 o.localToWorld(v);
@@ -2852,29 +2710,29 @@
         if (!rec.roomCells?.size) return;
         const p = getGame()?.player?.pos;
         if (!p) return;
-        const HALF = 0.3;  
-        const EYE = 1.62;  
-        const FEET = 0.05; 
-        
+        const HALF = 0.3;
+        const EYE = 1.62;
+        const FEET = 0.05;
+
         const px0 = p.x - HALF, px1 = p.x + HALF;
         const py0 = p.y - EYE + FEET, py1 = p.y + 0.1;
         const pz0 = p.z - HALF, pz1 = p.z + HALF;
-        
+
         let pushX = 0, pushY = 0, pushZ = 0;
         let hit = false;
         const cx = Math.floor(p.x), cy = Math.floor(p.y - EYE / 2), cz = Math.floor(p.z);
         for (let dx = -1; dx <= 1; dx++) for (let dy = -3; dy <= 3; dy++) for (let dz = -1; dz <= 1; dz++) {
             if (!rec.roomCells.has((cx + dx) + ',' + (cy + dy) + ',' + (cz + dz))) continue;
             const bx0 = cx + dx, bx1 = bx0 + 1, by0 = cy + dy, by1 = by0 + 1, bz0 = cz + dz, bz1 = bz0 + 1;
-            
+
             const ox = Math.min(px1, bx1) - Math.max(px0, bx0);
             const oy = Math.min(py1, by1) - Math.max(py0, by0);
             const oz = Math.min(pz1, bz1) - Math.max(pz0, bz0);
             if (ox <= 0 || oy <= 0 || oz <= 0) continue;
             hit = true;
-            
+
             if (oy <= ox && oy <= oz) {
-                pushY = (py0 + py1) / 2 < (by0 + by1) / 2 ? oy : -oy; 
+                pushY = (py0 + py1) / 2 < (by0 + by1) / 2 ? oy : -oy;
             } else if (ox <= oz) {
                 pushX = p.x < (bx0 + bx1) / 2 ? -ox : ox;
             } else {
@@ -2882,10 +2740,10 @@
             }
         }
         if (hit) {
-            
+
             try {
                 p.x += pushX; p.y += pushY; p.z += pushZ;
-                
+
                 const vel = getGame()?.player?.vel;
                 if (vel) {
                     if (pushX) vel.x = 0;
@@ -2904,7 +2762,7 @@
         }
         const chunkRoot = getGame()?.gameScene?.chunkMeshes;
         if (!chunkRoot) return;
-        
+
         const boxes = rooms.map((r) => {
             const p = r.root.position, s = r.root.scale.x || 1;
             const rec2 = r.terrBox;
@@ -2923,7 +2781,7 @@
         try {
             chunkRoot.traverse((o) => {
                 if (!o?.isMesh || !o.geometry) return;
-                
+
                 const bb = o.geometry.boundingBox || (o.geometry.boundingBox = (() => {
                     try { o.geometry.computeBoundingBox(); return o.geometry.boundingBox; } catch { return null; }
                 })());
@@ -2937,12 +2795,12 @@
                         return;
                     }
                 }
-                
+
                 if (hidden.has(o)) { hidden.delete(o); o.visible = true; changed = true; }
             });
         } catch {}
         state.hiddenChunks = [...hidden];
-        
+
     }
 
     function blockSolidAt(x, y, z) {
@@ -2993,12 +2851,12 @@
             const cam = getGame()?.gameScene?.camera;
             if (!cam?.matrixWorld) return false;
             const e = cam.matrixWorld.elements;
-            
+
             const fx = -e[8], fy = -e[9], fz = -e[10];
             const root = rec.root;
             const cx = root.position.x, cy = root.position.y + (rec.height || 1) * 0.6, cz = root.position.z;
             const p = getGame()?.player?.pos;
-            const ox = p.x, oy = p.y + 1.6, oz = p.z; 
+            const ox = p.x, oy = p.y + 1.6, oz = p.z;
             let dx = cx - ox, dy = cy - oy, dz = cz - oz;
             const d = Math.hypot(dx, dy, dz);
             if (d < 1e-4) return true;
@@ -3020,12 +2878,12 @@
                 for (const e of ents.values()) {
                     if (!e?.pos || !e?.profile?.username) continue;
                     const d = Math.hypot(e.pos.x - root.position.x, e.pos.z - root.position.z);
-                    if (d > 8) continue; 
+                    if (d > 8) continue;
                     bodies.push({ x: e.pos.x, y: e.pos.y, z: e.pos.z, half: 0.3, height: 1.8, name: e.profile.username });
                 }
             }
         } catch {}
-        
+
         const pt = state.peerTarget;
         if (pt && performance.now() - pt.at < 3000) {
             bodies.push({ x: pt.x, y: pt.y, z: pt.z, half: 0.3, height: 1.8, name: 'peer' });
@@ -3039,9 +2897,9 @@
         const myY0 = root.position.y, myY1 = root.position.y + (rec.height || 0.85);
         let blockedX = false, blockedZ = false;
         for (const b of getPlayerBodies(rec)) {
-            
+
             if (b.y + b.height <= myY0 + 0.05 || b.y >= myY1 - 0.05) continue;
-            
+
             if (wantX !== 0) {
                 const nx = root.position.x + wantX;
                 const overlapX = Math.abs(nx - b.x) < (myHalf + b.half);
@@ -3060,23 +2918,23 @@
 
     function physicsStep(rec, dt, wantX, wantZ) {
         const root = rec.root;
-        
+
         if (!rec.puppet && (wantX !== 0 || wantZ !== 0)) {
             const { blockedX, blockedZ } = resolvePlayerCollisions(rec, wantX, wantZ);
             if (blockedX) wantX = 0;
             if (blockedZ) wantZ = 0;
         }
-        
+
         if (rec.hover) {
             let moved = false;
             if (Math.abs(wantX) > 1e-9) { root.position.x += wantX; moved = true; }
             if (Math.abs(wantZ) > 1e-9) { root.position.z += wantZ; moved = true; }
-            
+
             const half = rec.bodyHalf || 0.21;
             const targetY = rec.hoverY != null ? rec.hoverY : root.position.y;
             const c = boxCollides(root.position.x, targetY - 0.5, root.position.z, half, 0.5);
             if (c === true) {
-                
+
                 root.position.y += 2 * dt;
             } else {
                 root.position.y += (targetY - root.position.y) * Math.min(1, dt * 2);
@@ -3132,7 +2990,7 @@
 
     function getTargetPos(rec, p) {
         const pt = state.peerTarget;
-        
+
         if (!pt || performance.now() - pt.at > 3000) {
             rec._targetPeer = false;
             return p;
@@ -3140,7 +2998,7 @@
         const root = rec.root;
         const dLocal = Math.hypot(p.x - root.position.x, p.z - root.position.z);
         const dPeer = Math.hypot(pt.x - root.position.x, pt.z - root.position.z);
-        if (dPeer < dLocal * 0.9) { 
+        if (dPeer < dLocal * 0.9) {
             rec._targetPeer = true;
             return pt;
         }
@@ -3150,8 +3008,8 @@
 
     function followTick(rec, dt, t) {
         const root = rec.root;
-        if (rec.room) return; 
-        if (rec.puppet) return; 
+        if (rec.room) return;
+        if (rec.puppet) return;
         if (!rec.followPlayer || rec.stay) {
             if (rec.noPhysics) { rec.actuallyMoving = false; return; }
             physicsStep(rec, dt, 0, 0);
@@ -3162,10 +3020,10 @@
         if (!local) return;
         const p = getTargetPos(rec, local);
         const distToPlayer = Math.hypot(p.x - root.position.x, p.y - root.position.y, p.z - root.position.z);
-        
+
         if (rec.persist !== false && rec.loseDistance > 0 && distToPlayer > rec.loseDistance * 4) {
             if (rec.smooth === false) {
-                
+
                 root.position.set(p.x, p.y, p.z);
                 rec.vy = 0;
                 void 0;
@@ -3174,7 +3032,7 @@
                     rec.waitingFar = true;
                     void 0;
                 }
-                physicsStep(rec, dt, 0, 0); 
+                physicsStep(rec, dt, 0, 0);
                 rec.actuallyMoving = false;
                 return;
             }
@@ -3193,7 +3051,7 @@
                     void 0;
                     return false;
                 }
-                
+
                 return;
             }
         } else if (rec.lost) {
@@ -3202,11 +3060,11 @@
         }
         const stopDist = rec.stopDistance || 1.8;
         let movingThisTick = false;
-        
+
         if (rec.weeping && isPlayerLookingAt(rec, 0.86)) {
             rec.frozen = true;
             rec.actuallyMoving = false;
-            return; 
+            return;
         }
         if (rec.frozen) {
             rec.frozen = false;
@@ -3216,11 +3074,11 @@
             root.position.set(p.x, p.y, p.z);
             movingThisTick = true;
         } else if (rec.fallingSpawn && rec.onGround === false) {
-            
+
             physicsStep(rec, dt, 0, 0);
             movingThisTick = false;
         } else if (rec.fallingSpawn && rec.onGround !== false) {
-            rec.fallingSpawn = false; 
+            rec.fallingSpawn = false;
             physicsStep(rec, dt, 0, 0);
         } else if (distToPlayer > stopDist) {
             const speed = rec.maxSpeed > 0 ? rec.maxSpeed : 4.3;
@@ -3228,17 +3086,19 @@
             let dz = p.z - root.position.z;
             const dy = p.y - root.position.y;
             const distH = Math.hypot(dx, dz);
-            
+
             if (!rec.puppet && distH > 1e-4) {
-                const ux = dx / distH, uz = dz / distH; 
+                const ux = dx / distH, uz = dz / distH;
                 for (const b of getPlayerBodies(rec)) {
                     const bx = b.x - root.position.x, bz = b.z - root.position.z;
-                    const along = bx * ux + bz * uz;          
-                    if (along <= 0 || along > distH) continue; 
-                    const side = bx * -uz + bz * ux;           
+                    const along = bx * ux + bz * uz;
+
+                    if (along <= 0 || along > distH) continue;
+                    const side = bx * -uz + bz * ux;
+
                     const clear = (rec.bodyHalf || 0.21) + b.half + 0.1;
                     if (Math.abs(side) < clear) {
-                        
+
                         const push = (clear - Math.abs(side)) + 0.3;
                         const s = side >= 0 ? 1 : -1;
                         dx = dx + (-uz) * s * push * 2;
@@ -3275,7 +3135,7 @@
         let dt = Math.min(0.1, (t - (state.lastTickT || t)) / 1000);
         state.lastTickT = t;
         try { updateRoomTerrainHiding(); } catch {}
-        
+
         for (const rec of state.customs.values()) {
             if (rec.room && !rec.dead && !rec.puppet && rec.roomCells?.size) {
                 try { roomCollidePlayer(rec); } catch {}
@@ -3296,14 +3156,12 @@
                 if (scene && root.parent !== scene) {
                     scene.add(root);
                     disableCullingDeep(root);
-                    forceVisibleDeep(root); // asegurar visibilidad al montar
+                    forceVisibleDeep(root);
                     if (!rec.reattachWarned) {
                         rec.reattachWarned = true;
                         console.warn(TAG + ' "' + rec.id + '" desmontada de la escena; re-adjuntada.');
                     }
                 }
-                // Barrido de visibilidad cada 500ms (antes: TODO el árbol del
-                // modelo por custom POR FRAME — miles de nodos GLTF a 60fps)
                 if (!rec._visAt || t - rec._visAt > 500) {
                     rec._visAt = t;
                     forceVisibleDeep(root);
@@ -3327,12 +3185,12 @@
                         } else if (moving && stable) {
                             want = findAnim(rec.inst, 'walk') || findAnim(rec.inst, 'run') || rec.anim || findAnim(rec.inst, 'idle');
                         } else if (moving && !stable) {
-                            
+
                             want = (rec.curAnim && findAnim(rec.inst, rec.curAnim) ? rec.curAnim : (findAnim(rec.inst, 'run') || findAnim(rec.inst, 'walk')));
                         } else {
                             want = rec.anim || findAnim(rec.inst, 'idle') || findAnim(rec.inst, 'calm');
                         }
-                        
+
                         if (rec.catchAnim && !rec.caught && !(rec.animOverride && t < rec.animOverride.until)) {
                             const pp2 = getGame()?.player?.pos;
                             const distNow = pp2 ? Math.hypot(pp2.x - root.position.x, pp2.z - root.position.z) : Infinity;
@@ -3365,15 +3223,15 @@
                             while (delta > Math.PI) delta -= 2 * Math.PI;
                             while (delta < -Math.PI) delta += 2 * Math.PI;
                             root.rotation.y += delta * Math.min(1, dt * 8);
-                            
+
                             rec.headPitch = (rec.headPitch || 0) * (1 - Math.min(1, dt * 6));
                         } else if (rec.lookAtPlayer !== false && !rec.frozen) {
-                            
+
                             let look = getGame()?.player?.pos;
                             const pt = state.peerTarget;
                             const peerAlive = pt && performance.now() - pt.at < 3000;
                             if (peerAlive) {
-                                
+
                                 const phase = Math.floor(t / 2200) % 2;
                                 const peerFirst = (rec._lookPhaseSeed || 0) === 0;
                                 const usePeer = phase === 0 ? peerFirst : !peerFirst;
@@ -3387,16 +3245,17 @@
                                     let delta = targetYaw - root.rotation.y;
                                     while (delta > Math.PI) delta -= 2 * Math.PI;
                                     while (delta < -Math.PI) delta += 2 * Math.PI;
-                                    root.rotation.y += delta * Math.min(1, dt * 4); 
+                                    root.rotation.y += delta * Math.min(1, dt * 4);
                                 }
-                                
+
                                 if (rec.lookUp !== false) {
                                     const headY = root.position.y + (rec.headHeight ?? 1.3);
                                     const dy = look.y - headY;
                                     const dHoriz = Math.sqrt(Math.max(dHoriz2, 0.04));
                                     let pitch = Math.atan2(dy, dHoriz);
-                                    if (pitch > 0.75) pitch = 0.75;   
-                                    if (pitch < -0.75) pitch = -0.75; 
+                                    if (pitch > 0.75) pitch = 0.75;
+
+                                    if (pitch < -0.75) pitch = -0.75;
                                     rec.headPitch = (rec.headPitch || 0) + (pitch - (rec.headPitch || 0)) * Math.min(1, dt * 4);
                                 }
                             }
@@ -3408,7 +3267,7 @@
                         if (animToPlay) {
                             restoreRest(rec.inst);
                             const animT0 = (ov && now < ov.until) ? ov.start : rec.animStart;
-                            
+
                             if (rec.frozen) {
                                 if (rec.frozenAnimT == null) rec.frozenAnimT = (now - animT0) / 1000 * rec.animSpeed;
                             } else {
@@ -3417,25 +3276,22 @@
                             const at = rec.frozen ? rec.frozenAnimT : (now - animT0) / 1000 * rec.animSpeed;
                             sampleAnim(rec.inst, animToPlay, at);
                         }
-                        
+
                         if (rec.headPitch && !rec.frozen) {
                             try {
                                 const hn = rec.inst.headNode;
                                 if (hn) {
-                                    
+
                                     const restQ = hn.userData.__mfHeadRestQ;
                                     if (restQ) hn.quaternion.copy(restQ);
                                     hn.rotateX(rec.headPitch);
                                 } else {
-                                    
+
                                     if (typeof rec.rootPitchBase !== 'number') rec.rootPitchBase = root.rotation.x;
                                     root.rotation.x = rec.rootPitchBase + rec.headPitch;
                                 }
                             } catch {}
                         }
-                        // esta rama hace `continue` y se salta el bloque de
-                        // abajo → procAnim + cpu-skin aquí también. procAnim
-                        // ANTES del skin (mismo criterio que la rama normal)
                         if (rec.procAnim) { try { rec.procAnim(t, dt); } catch {} }
                         if (rec.inst?.cpuMeshes?.length) updateCpuSkins(rec);
                         continue;
@@ -3449,20 +3305,12 @@
                     restoreRest(rec.inst);
                     sampleAnim(rec.inst, rec.anim, (t - rec.animStart) / 1000 * rec.animSpeed);
                 }
-                // hook procedural: tras sampleAnim y ANTES del cpu-skin —
-                // si corriera después, restoreRest del próximo frame limpiaría
-                // sus rotaciones sin que nunca lleguen a la malla skinneada
-                // (con bones-grupos da igual, con cpu-skin el orden importa)
                 if (rec.procAnim) {
                     try { rec.procAnim(t, dt); } catch {}
                 }
-                // CPU skinning: joints ya tienen la pose final del frame
-                // (anim + procAnim) → recalcular vértices suavemente en JS
                 if (rec.inst?.cpuMeshes?.length) updateCpuSkins(rec);
             } catch {}
         }
-        // Sin customs registrados no hay nada que animar ni re-adjuntar:
-        // dormir el loop a un chequeo cada 400ms en vez de rAF perpetuo
         if (state.customs.size === 0) {
             state.lastTickT = t;
             setTimeout(() => { if (myStamp.alive) tickCustoms(); }, 400);

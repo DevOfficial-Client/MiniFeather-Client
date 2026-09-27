@@ -6,21 +6,21 @@ const SKINS = [
   "ariel", "aurora", "celeste", "cody", "ember", "finn", "glory", "hunter", "katie",
   "nova", "panda", "raven", "seraphina", "vain", "zane", "tester", "qhyun", "banana",
   "sushi", "ethan", "duck", "cat", "remlin"
-];
+      ];
 
-const CAPES = [
+      const CAPES = [
   "angry-pig", "bao", "cloud", "cow", "creeper", "golden-apple", "grass-block", "heart",
   "pumpkin", "maki", "mushroom", "soul-creeper", "sushi", "salmon", "amethyst", "cheeser",
   "crimson-voyager", "duck", "frie", "galaxy", "migration", "shaded-green", "skulk",
   "withered", "yellow", "yin-yang", "wooden-sword", "stone-sword", "iron-sword",
   "gold-sword", "diamond-sword", "emerald-sword"
-];
+      ];
 
-const GAME_DOMAINS = ["miniblox.io", "miniblox.online"];
+      const GAME_DOMAINS = ["miniblox.io", "miniblox.online"];
 
-let accountsCache = null;
+      let accountsCache = null;
 
-const ASSET_TYPES = {
+      const ASSET_TYPES = {
   skin: {
     names: SKINS,
     basePath: "/textures/entity/skins/",
@@ -33,27 +33,25 @@ const ASSET_TYPES = {
     ruleOffset: 2000,
     storageKey: "currentCapes"
   }
-};
+  };
 
-function getAssetConfig(type) {
+  function getAssetConfig(type) {
   const config = ASSET_TYPES[type];
   if (!config) throw new Error(`Unknown asset type: ${type}`);
   return config;
-}
+  }
 
-function getRuleId(type, name) {
+  function getRuleId(type, name) {
   const config = getAssetConfig(type);
   const index = config.names.indexOf(name);
   if (index === -1) throw new Error(`Unknown ${type}: ${name}`);
   return config.ruleOffset + index;
-}
+  }
 
-async function setAsset(type, name, customUrl) {
+  async function setAsset(type, name, customUrl) {
   const config = getAssetConfig(type);
   const originalPath = `${config.basePath}${name}.png`;
   const isHttpUrl = typeof customUrl === 'string' && /^https?:\/\//i.test(customUrl);
-  // Chrome bloquea redirects DNR a data: URLs (fix de seguridad 2025), así que
-  // los dataURLs solo se guardan en storage y los aplica el hook de Image.src en MAIN.
   const redirectUrl = isHttpUrl ? customUrl : null;
   const ruleId = getRuleId(type, name);
 
@@ -82,9 +80,9 @@ async function setAsset(type, name, customUrl) {
   if (customUrl) activeAssets[name] = customUrl;
   else delete activeAssets[name];
   await chrome.storage.local.set({ [config.storageKey]: activeAssets });
-}
+  }
 
-async function resetAsset(type, name) {
+  async function resetAsset(type, name) {
   const config = getAssetConfig(type);
   const ruleId = getRuleId(type, name);
 
@@ -96,9 +94,9 @@ async function resetAsset(type, name) {
   const activeAssets = stored[config.storageKey] || {};
   delete activeAssets[name];
   await chrome.storage.local.set({ [config.storageKey]: activeAssets });
-}
+  }
 
-async function resetAllAssets(type) {
+  async function resetAllAssets(type) {
   const config = getAssetConfig(type);
   const stored = await chrome.storage.local.get([config.storageKey]);
   const activeAssets = stored[config.storageKey] || {};
@@ -119,17 +117,17 @@ async function resetAllAssets(type) {
   }
 
   await chrome.storage.local.set({ [config.storageKey]: {} });
-}
+  }
 
-function getActiveAssets(type, sendResponse) {
+  function getActiveAssets(type, sendResponse) {
   const config = getAssetConfig(type);
   chrome.storage.local.get([config.storageKey]).then(data => {
     sendResponse({ success: true, assets: data[config.storageKey] || {} });
   });
-}
+  }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+
   if (message?.type === 'mfAccounts:get') {
     const url = chrome.runtime.getURL('assets/accounts.json');
     if (accountsCache && accountsCache.url === url) {
@@ -183,13 +181,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "getCapeList") {
     sendResponse({ success: true, capes: CAPES });
   }
-});
+  });
 
-const SPRITESHEET_URL = "https://raw.githubusercontent.com/EstebanGrp/MiniFeather-Client/refs/heads/main/pvtexpack.png";
-const SPRITESHEET_FALLBACK_URL = chrome.runtime.getURL("assets/pvtexpack.png");
-const SPRITESHEET_RULE_ID = 999;
+  const SPRITESHEET_URL = "https://raw.githubusercontent.com/EstebanGrp/MiniFeather-Client/refs/heads/main/pvtexpack.png";
+  const SPRITESHEET_FALLBACK_URL = chrome.runtime.getURL("assets/pvtexpack.png");
+  const SPRITESHEET_RULE_ID = 999;
 
-async function getActiveSpritesheetUrl() {
+  async function getActiveSpritesheetUrl() {
   const { mfCustomSpritesheetUrl } = await chrome.storage.local.get(["mfCustomSpritesheetUrl"]);
   if (mfCustomSpritesheetUrl) return mfCustomSpritesheetUrl;
   try {
@@ -197,11 +195,11 @@ async function getActiveSpritesheetUrl() {
     if (res.ok) return SPRITESHEET_FALLBACK_URL;
   } catch (_) {}
   return SPRITESHEET_URL;
-}
+  }
 
-const TEXTURE_PACK_REDIRECT_BASE = "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/";
+  const TEXTURE_PACK_REDIRECT_BASE = "https://miniblox.io/auth-api/texturepacks/user/0870278c-abeb-4e7c-825c-a0bfa845704f/minecraft-texture-pack/";
 
-const EXTRA_TEXTURES = [
+  const EXTRA_TEXTURES = [
   { id: 10000, from: "/textures/armor/leather_layer_1.png", to: "armor/leather_layer_1.png" },
   { id: 10001, from: "/textures/armor/leather_layer_2.png", to: "armor/leather_layer_2.png" },
   { id: 10002, from: "/textures/armor/gold_layer_1.png", to: "armor/gold_layer_1.png" },
@@ -222,14 +220,14 @@ const EXTRA_TEXTURES = [
   { id: 10017, from: "/textures/entity/villager/villager.png", to: "entity/villager/villager.png" },
   { id: 10018, from: "/textures/entity/iron_golem/iron_golem.png", to: "entity/iron_golem/iron_golem.png" },
   { id: 10019, from: "/textures/entity/chest/normal_double.png", to: "entity/chest/normal_double.png" }
-];
+  ];
 
-const TEXTURE_PACK_RULE_IDS = [
+  const TEXTURE_PACK_RULE_IDS = [
   SPRITESHEET_RULE_ID,
   ...EXTRA_TEXTURES.map(texture => texture.id)
-];
+  ];
 
-const LOCAL_TEXTURES = [
+  const LOCAL_TEXTURES = [
   "entity/armorstand/wood.png",
   "entity/arrow.png",
   "entity/bed/black.png",
@@ -571,21 +569,21 @@ const LOCAL_TEXTURES = [
   "spear/iron_spear.png",
   "spear/stone_spear.png",
   "spear/wooden_spear.png"
-];
+      ];
 
-const MENU_UI_IMAGES = [
-  
-];
+      const MENU_UI_IMAGES = [
 
-const LOCAL_TEXTURES_BASE_ID = 20000;
-const LOCAL_TEXTURES_MAX_ID = 29999;
-const LOCAL_TEXTURES_RULE_IDS = Array.from(
+          ];
+
+          const LOCAL_TEXTURES_BASE_ID = 20000;
+          const LOCAL_TEXTURES_MAX_ID = 29999;
+          const LOCAL_TEXTURES_RULE_IDS = Array.from(
   { length: LOCAL_TEXTURES_MAX_ID - LOCAL_TEXTURES_BASE_ID + 1 },
   (_, i) => LOCAL_TEXTURES_BASE_ID + i
-);
-const MENU_UI_RULE_ID = 30000;
+      );
+      const MENU_UI_RULE_ID = 30000;
 
-function buildLocalTextureRules(enabled) {
+      function buildLocalTextureRules(enabled) {
   if (!enabled) return [];
   return LOCAL_TEXTURES.map((rel, i) => ({
     id: LOCAL_TEXTURES_BASE_ID + i,
@@ -597,17 +595,17 @@ function buildLocalTextureRules(enabled) {
       resourceTypes: ["image", "other"]
     }
   }));
-}
+  }
 
-async function applyLocalTextures() {
+  async function applyLocalTextures() {
   const { localTexturesEnabled } = await chrome.storage.local.get(["localTexturesEnabled"]);
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: LOCAL_TEXTURES_RULE_IDS,
     addRules: buildLocalTextureRules(localTexturesEnabled !== false)
   });
-}
+  }
 
-async function applyMenuUi() {
+  async function applyMenuUi() {
   const { menuUiOverrideEnabled } = await chrome.storage.local.get(["menuUiOverrideEnabled"]);
   const rules = (menuUiOverrideEnabled !== false && MENU_UI_IMAGES.length)
     ? MENU_UI_IMAGES.map((name, i) => {
@@ -628,9 +626,9 @@ async function applyMenuUi() {
     removeRuleIds: MENU_UI_IMAGES.map((_, i) => MENU_UI_RULE_ID + i),
     addRules: rules
   });
-}
+  }
 
-async function applySpritesheet() {
+  async function applySpritesheet() {
   const { spritesheetEnabled } = await chrome.storage.local.get(["spritesheetEnabled"]);
   const spritesheetUrl = await getActiveSpritesheetUrl();
 
@@ -663,9 +661,9 @@ async function applySpritesheet() {
       }))
     ]
   });
-}
+  }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "MF_KLIPY_FETCH" || message.type === "MF_BRIDGE_FETCH") {
     const KLIPY_API_RE = /^https:\/\/api\.klipy\.com\/api\/v1\/[\w-]+\/gifs\/(search|trending)(\?.*)?$/;
@@ -773,9 +771,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
-});
+  });
 
-chrome.runtime.onInstalled.addListener(async () => {
+  chrome.runtime.onInstalled.addListener(async () => {
   const existing = await chrome.storage.local.get(["settings", "spritesheetEnabled"]);
   await chrome.storage.local.set({
     settings: {
@@ -790,13 +788,13 @@ chrome.runtime.onInstalled.addListener(async () => {
   await applySpritesheet();
   await applyLocalTextures();
   await applyMenuUi();
-});
+  });
 
-applySpritesheet();
-applyLocalTextures();
-applyMenuUi();
+  applySpritesheet();
+  applyLocalTextures();
+  applyMenuUi();
 
-(function () {
+  (function () {
   'use strict';
 
   const OWNER = 'DevOfficial-Client';
@@ -889,27 +887,21 @@ applyMenuUi();
       const isNew = remoteCommit && prev !== remoteCommit;
       if (settings.autoApply && isNew) {
         await chrome.storage.local.set({ [HOT_APPLIED]: remoteCommit });
-        // auto-apply: recargar pestañas para que HotLoader inyecte lo nuevo.
-        // Si el usuario está en partida (título = nombre del server), no
-        // interrumpir: dejar el banner pidiendo recargar manual.
         try {
           const tabs = await chrome.tabs.query({ url: ['https://miniblox.io/*', 'https://miniblox.online/*'] });
           let playing = false;
           for (const tab of tabs) {
-            // en partida el título del tab muestra el server (planet-…)
-            if (/planet-|in game|playing/i.test(tab.title || '')) { playing = true; break; }
+              if (/planet-|in game|playing/i.test(tab.title || '')) { playing = true; break; }
           }
           if (!playing) {
             for (const tab of tabs) { try { chrome.tabs.reload(tab.id); } catch (_) {} }
           } else {
-            // dejar constancia para que el banner pida el reinicio manual
-            const st = (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
+              const st = (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
             await saveState({ ...st, updateAvailable: true, reason: 'hot', hotCommit: remoteCommit });
           }
         } catch (_) {}
       } else if (isNew) {
-        // autoApply off: solo avisar
-        const st = (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
+          const st = (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
         await saveState({ ...st, updateAvailable: true, reason: 'hot', hotCommit: remoteCommit });
       }
     }
@@ -1073,7 +1065,6 @@ applyMenuUi();
       const remoteVersion = remoteManifest.version || '0.0.0';
 
       const comparison = await compareLocalWithTree(localManifest, remoteManifest, remoteTree);
-      // hot-reload: refrescar archivos marcados en hotload.json contra el commit remoto
       let hotCache = null;
       try { hotCache = await updateHotCache(remoteCommit, remoteTree); } catch (_) {}
       const versionNewer = compareVersions(remoteVersion, localVersion) > 0;
@@ -1099,8 +1090,7 @@ applyMenuUi();
         updateAvailable = true;
         reason = 'build';
       } else if (prevReason === 'hot' && hotCache && !Object.keys(hotCache.files || {}).length) {
-        // el aviso 'hot' ya fue aplicado y no quedan archivos pendientes: limpiar
-        reason = 'current';
+          reason = 'current';
       } else {
         reason = 'local_modified';
       }
@@ -1158,7 +1148,7 @@ applyMenuUi();
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    
+
     if (message?.type === 'mfHot:sync') {
       getHotCache()
         .then(cache => sendResponse({
@@ -1227,34 +1217,34 @@ applyMenuUi();
   });
 
   ensureAlarm();
-})();
+  })();
 
-const NTFY_HTTP_BASE = "https://ntfy.sh";
-const CLIENT_CHAT_TOPIC = "mfcc-7f41c6d8b92e4a63b5f1-global-v2";
-const CLIENT_CHAT_SIGNAL_PORT = "minifeather-client-chat-signal";
-const VOICE_SIGNAL_TOPIC = "mfvoice-v1-37b1d90a6e4c";
-const VOICE_SIGNAL_PORT = "minifeather-voice-signal";
-const LOCAL_GAMES_NETWORK_PORT = "minifeather-localgames-network";
+  const NTFY_HTTP_BASE = "https://ntfy.sh";
+  const CLIENT_CHAT_TOPIC = "mfcc-7f41c6d8b92e4a63b5f1-global-v2";
+  const CLIENT_CHAT_SIGNAL_PORT = "minifeather-client-chat-signal";
+  const VOICE_SIGNAL_TOPIC = "mfvoice-v1-37b1d90a6e4c";
+  const VOICE_SIGNAL_PORT = "minifeather-voice-signal";
+  const LOCAL_GAMES_NETWORK_PORT = "minifeather-localgames-network";
 
-function ntfySafeTopic(value) {
+  function ntfySafeTopic(value) {
   return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 120);
-}
+  }
 
-function ntfyWsUrl(topic, since = "30s") {
+  function ntfyWsUrl(topic, since = "30s") {
   const safe = ntfySafeTopic(topic);
   const query = new URLSearchParams({ since: String(since || "30s") });
   return `wss://ntfy.sh/${safe}/ws?${query}`;
-}
+  }
 
-function ntfyNetworkOnline() {
+  function ntfyNetworkOnline() {
   return typeof navigator === "undefined" || navigator.onLine !== false;
-}
+  }
 
-function ntfyRetryDelay(failures) {
+  function ntfyRetryDelay(failures) {
   return Math.min(60000, 1500 * (2 ** Math.min(Math.max(0, failures), 6)));
-}
+  }
 
-async function ntfyPublish(topic, message, signal) {
+  async function ntfyPublish(topic, message, signal) {
   const safe = ntfySafeTopic(topic);
   if (!safe) throw new Error("INVALID_TOPIC");
   if (!ntfyNetworkOnline()) throw new Error("NETWORK_OFFLINE");
@@ -1280,9 +1270,9 @@ async function ntfyPublish(topic, message, signal) {
     clearTimeout(timeout);
     signal?.removeEventListener?.("abort", forwardAbort);
   }
-}
+  }
 
-function openNtfySocket(topic, since, handlers) {
+  function openNtfySocket(topic, since, handlers) {
   const safe = ntfySafeTopic(topic);
   if (!safe) throw new Error("INVALID_TOPIC");
 
@@ -1296,9 +1286,9 @@ function openNtfySocket(topic, since, handlers) {
   socket.addEventListener("error", () => handlers.error?.());
   socket.addEventListener("close", () => handlers.close?.());
   return socket;
-}
+  }
 
-chrome.runtime.onConnect.addListener(port => {
+  chrome.runtime.onConnect.addListener(port => {
   if (port.name === CLIENT_CHAT_SIGNAL_PORT || port.name === VOICE_SIGNAL_PORT) {
     const topic = port.name === VOICE_SIGNAL_PORT ? VOICE_SIGNAL_TOPIC : CLIENT_CHAT_TOPIC;
     const controller = new AbortController();

@@ -88,20 +88,20 @@
       shader.vertexShader = shader.vertexShader.replace('float lavaWaveT = time * 0.04;', 'float lavaWaveT = time * 0.04 * uMFLavaWaveSpeed;');
 
       const fragDecl = `
-// ${MARKER}
-uniform float uMFWaterAlpha;
-uniform float uMFWaterWaveSpeed;
-uniform float uMFWaterMicroNormal;
-uniform float uMFWaterReflection;
-uniform float uMFWaterRefraction;
-uniform int uMFWaterSSRSteps;
-uniform vec3 uMFWaterTint;
-uniform float uMFWaterTintStrength;
-uniform float uMFLavaAlpha;
-uniform float uMFLavaWaveSpeed;
-uniform float uMFLavaBubbles;
-uniform float uMFLavaEmission;
-`;
+          // ${MARKER}
+          uniform float uMFWaterAlpha;
+          uniform float uMFWaterWaveSpeed;
+          uniform float uMFWaterMicroNormal;
+          uniform float uMFWaterReflection;
+          uniform float uMFWaterRefraction;
+          uniform int uMFWaterSSRSteps;
+          uniform vec3 uMFWaterTint;
+          uniform float uMFWaterTintStrength;
+          uniform float uMFLavaAlpha;
+          uniform float uMFLavaWaveSpeed;
+          uniform float uMFLavaBubbles;
+          uniform float uMFLavaEmission;
+          `;
       if (shader.fragmentShader.includes('uniform float uAmbientLight;')) {
         shader.fragmentShader = shader.fragmentShader.replace('uniform float uAmbientLight;', `uniform float uAmbientLight;${fragDecl}`);
       } else shader.fragmentShader = fragDecl + shader.fragmentShader;
@@ -111,8 +111,6 @@ uniform float uMFLavaEmission;
         'vec3 waterTint = mix(vec3(0.30, 0.52, 0.64), uMFWaterTint, uMFWaterTintStrength);'
       );
       shader.fragmentShader = shader.fragmentShader.replace(/float surfaceAlpha\s*=\s*0\.68\s*;/, 'float surfaceAlpha = uMFWaterAlpha;');
-
-      // Custom SSR/sun visibility step count. Max 64, uniform-controlled so Custom can exceed Ultra.
       let loopIndex = 0;
       shader.fragmentShader = shader.fragmentShader.replace(/for \(int i = 0; i < 20; i\+\+\) \{/g, match => {
         loopIndex++;
@@ -130,8 +128,7 @@ uniform float uMFLavaEmission;
 
       const normalAnchor = 'vec3 normal = normalize(vWorldNormal);';
       if (shader.fragmentShader.includes(normalAnchor)) {
-        // Gate uniforme: con microNormal en 0 las 4 funciones trig no corren
-        shader.fragmentShader = shader.fragmentShader.replace(normalAnchor, `${normalAnchor}
+          shader.fragmentShader = shader.fragmentShader.replace(normalAnchor, `${normalAnchor}
           if (uMFWaterMicroNormal > 0.001) {
           vec2 mfWp = vWorldPosition.xz;
           float mfT = time * 0.12 * uMFWaterWaveSpeed;
@@ -146,8 +143,7 @@ uniform float uMFLavaEmission;
 
       const lavaAnchor = 'if (vColor.r >= 0.5 && waterShadersEnabled > 0.5) {';
       if (shader.fragmentShader.includes(lavaAnchor)) {
-        // Gate uniforme: sin burbujas ni emisión, nada del bloque corre
-        shader.fragmentShader = shader.fragmentShader.replace(lavaAnchor, `${lavaAnchor}
+          shader.fragmentShader = shader.fragmentShader.replace(lavaAnchor, `${lavaAnchor}
           if (uMFLavaBubbles > 0.001 || uMFLavaEmission > 0.001) {
           vec2 mfLp = vWorldPosition.xz;
           float mfLavaTime = time * uMFLavaWaveSpeed;
@@ -161,11 +157,11 @@ uniform float uMFLavaEmission;
       }
 
       shader.fragmentShader = beforeMainEnd(shader.fragmentShader, `
-#ifdef USE_COLOR
-if (vColor.r < 0.49) gl_FragColor.a = max(gl_FragColor.a, uMFWaterAlpha);
-else gl_FragColor.a = max(gl_FragColor.a, uMFLavaAlpha);
-#endif
-`);
+          #ifdef USE_COLOR
+              if (vColor.r < 0.49) gl_FragColor.a = max(gl_FragColor.a, uMFWaterAlpha);
+              else gl_FragColor.a = max(gl_FragColor.a, uMFLavaAlpha);
+              #endif
+                  `);
     };
 
     entry.wrapper = wrapper;

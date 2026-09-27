@@ -1,12 +1,3 @@
-// Shine-style world ambience para MiniFeather
-// Port de las partículas del pack Shine 3.1.1 (Java): mariposas, pájaros,
-// polen, polen de agua, luciérnagas, lirios, medusas. Los parámetros
-// (densidad, caps, radios, velocidades, frames) provienen de
-// shine-3.1.1+26.2/assets/shine/defaults/experimental.json.
-//
-// Técnica: misma que FallenLeaves — constructores three.js obtenidos por
-// reflexión desde un mesh de referencia de la escena del juego, quads con
-// lookAt (billboard), escaneo de chunks via palette/bitArray.
 
 (() => {
   'use strict';
@@ -14,8 +5,6 @@
   const W = typeof window !== 'undefined' ? window : globalThis;
   const TAG = '[MiniFeather ShineAmbience]';
   const EVENT_CONFIG = 'minifeather:shine-ambience-config';
-
-  // ── Definiciones (de defaults/experimental.json del pack) ─────────────
   const SPECIES = {
     butterfly: {
       texs: () => {
@@ -30,12 +19,7 @@
       group: { min: 4, max: 9, spread: 2.5, sameColor: false }
     },
     bird: {
-      // orden FIJO de texturas (debe calzar con los PNG del pack en disco):
-      // 0-3   statics: birb1_left, birb1_right, bird2_left, bird2_right
-      // 4-7   checking: birb1_checking_L/R, bird2_checking_L/R
-      // 8-11  birb2 flying: left_1, left_2, right_1, right_2
-      // 12-21 bird2 flying: left_1..5, right_1..5
-      texs: () => [
+        texs: () => [
         'world_ambience/birds/birb1_left.png',
         'world_ambience/birds/birb1_right.png',
         'world_ambience/birds/bird2_left.png',
@@ -97,10 +81,7 @@
       animSpeed: 0.38
     },
     boatWake: {
-      // estela de bote: espuma en V detrás del casco (boat_trail_foam) +
-      // salpicaduras laterales que se alejan (boat_trail_wake).
-      // Parámetros de defaults/experimental.json (boatTrailSplash*).
-      texs: () => {
+        texs: () => {
         const out = [];
         for (let i = 1; i <= 24; i++) out.push(`boat_trail_splash/splash_${String(i).padStart(2, '0')}.png`);
         return out;
@@ -111,35 +92,25 @@
       followStrength: 0.78, outwardSpeed: 1, lift: 1, gravity: 1, drag: 1
     },
     shootingStar: {
-      // Estrellas fugaces nocturnas. En el pack Shine es un efecto de shader
-      // (sin texturas), así que los sprites son procedurales; los parámetros
-      // vienen de defaults/experimental.json (shootingStar*): intervalo
-      // 25-90s, velocidad 1.28, ángulo fijo 34°±8°, tamaño 2.5, hues
-      // 150/210/285, saturación 0.416, colorPunch 2.1.
-      texs: () => [],
+        texs: () => [],
       minSeconds: 25, maxSeconds: 90, firstSeconds: [6, 20],
       travelSpeed: 1.28, curve: 1, size: 2.5,
       hues: [150, 210, 285], saturation: 0.4157, colorPunch: 2.1,
       cap: 2, trailLife: 0.55, trailCap: 260
     }
   };
-  // jellyfish: base de índice por color (blue 0, orange 9, pink 18)
   const JELLY_BASES = [0, 9, 18];
-  // bird: bases de frames de vuelo por dirección según el orden de texs()
-  // bird2 (5 frames): left 12-16, right 17-21 | birb2 (2 frames): left 8-9, right 10-11
   const BIRD_FLY = [
-    { base: 12, frames: 5 }, // bird2_left
-    { base: 17, frames: 5 }, // bird2_right
-    { base: 8, frames: 2 },  // birb2_left
-    { base: 10, frames: 2 }  // birb2_right
+    { base: 12, frames: 5 },
+    { base: 17, frames: 5 },
+    { base: 8, frames: 2 },
+    { base: 10, frames: 2 }
   ];
 
   const GRASS_BLOCKS = new Set(['grass_block', 'tall_grass', 'short_grass', 'fern', 'moss_block', 'moss_carpet']);
   const WATER_BLOCKS = new Set(['water', 'flowing_water']);
   const NIGHT_START = 13000, NIGHT_END = 23000;
   const MAX_EMITTERS = 420;
-
-  // ── Estado ─────────────────────────────────────────────────────────────
   const state = {
     enabled: false,
     destroyed: false,
@@ -169,7 +140,6 @@
   function findGame(force = false) {
     const now = performance.now();
     if (!force && state.game?.player && state.game?.world && now - state.lastGameScan < 1200) return state.game;
-    // Caché negativa: sin partida (menú) antes se escaneaba el DOM cada frame
     if (!force && now - state.lastGameScan < 800) return state.game;
     state.lastGameScan = now;
     for (const candidate of [W.miniblox, W.__MINIBLOX_GAME__, state.game]) {
@@ -309,7 +279,6 @@
       if ('roughness' in material) material.roughness = 1;
       if ('metalness' in material) material.metalness = 0;
       material.color?.set?.(0xffffff);
-      // emisivo para especies que brillan (firefly, jellyfish)
       if (opts.emissive && material.emissive?.set) {
         material.emissive.set(opts.tint ?? 0xffffff);
         if ('emissiveIntensity' in material) material.emissiveIntensity = 1;
@@ -405,8 +374,6 @@
       return false;
     }
   }
-
-  // ── Acceso a bloques ──────────────────────────────────────────────────
   function blockNameAt(chunk, stateId, wx, y, wz) {
     if (state.stateNameCache.has(stateId)) return state.stateNameCache.get(stateId);
     let name = '';
@@ -426,9 +393,6 @@
       return false;
     }
   }
-
-  // Escanea chunks alrededor del jugador buscando pasto (tall/bajo) y
-  // superficies de agua; registra "emitters" de los que viven las partículas.
   function scanChunk(world, proto, cx, cz) {
     let chunk = null;
     try {
@@ -457,7 +421,7 @@
             if (id === 0) continue;
             const name = blockNameAt(chunk, id, wx, realY, wz);
             if (!name) break;
-            done = true; // solo el bloque superior de la columna
+            done = true;
             const h = hashXZ(wx, wz);
             const r = h / 4294967296;
             if (state.emitters.length >= MAX_EMITTERS) return;
@@ -494,11 +458,8 @@
     }
     return best ? best.y : (fallback ?? 64);
   }
-
-  // ── Estrellas fugaces (shader del pack → sprites procedurales) ────────
   function starHueToRgb(hue) {
-    // HSL→RGB rápido (l calculado por quien llama)
-    const s = SPECIES.shootingStar.saturation;
+      const s = SPECIES.shootingStar.saturation;
     const l = 0.75;
     const c = (1 - Math.abs(2 * l - 1)) * s;
     const hp = (((hue % 360) + 360) % 360) / 60;
@@ -521,7 +482,6 @@
       const canvas = document.createElement('canvas');
       canvas.width = size; canvas.height = size;
       const ctx = canvas.getContext('2d');
-      // glow radial blanco-cálido: núcleo sólido + halo con colorPunch
       const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
       grad.addColorStop(0, 'rgba(255,255,255,1)');
       grad.addColorStop(0.18, 'rgba(255,255,255,0.95)');
@@ -544,8 +504,6 @@
     const def = SPECIES.shootingStar;
     const scene = getScene(game);
     if (!scene?.add || !state.referenceMesh) return;
-
-    // sprite de la cabeza
     const tex = buildStarSpriteTexture(null, state.materials.firefly?.[0]?.map);
     if (!tex) return;
     const baseMat = state.materials.firefly?.[0];
@@ -559,7 +517,7 @@
       material.transparent = true;
       material.depthWrite = false;
       material.needsUpdate = true;
-      material.__mfStarColor = null; // se pinta abajo vía color
+      material.__mfStarColor = null;
 
       const MeshCtor = state.referenceMesh.constructor;
       const head = new MeshCtor(state.verticalGeometry, material);
@@ -567,32 +525,24 @@
       head.castShadow = false; head.receiveShadow = false;
       head.frustumCulled = false;
       head.renderOrder = 4;
-
-      // dirección: ángulo fijo 34° ± 8° del pack, azimut aleatorio
       const angleDeg = 34 + (Math.random() * 2 - 1) * 8;
       const angleRad = angleDeg * Math.PI / 180;
       const azim = Math.random() * Math.PI * 2;
-      // cae hacia abajo: x/z horizontal, y descendente según pendiente
       const horiz = Math.cos(angleRad);
       const speed = def.travelSpeed * 26;
       const vx = Math.cos(azim) * horiz * speed;
       const vz = Math.sin(azim) * horiz * speed;
       const vy = -Math.sin(angleRad) * speed;
-
-      // spawn sobre el jugador, a la vista: 60-100 bloques de altura
       const y = pp.y + 60 + Math.random() * 40;
       const dist = 40 + Math.random() * 60;
       const sx = pp.x + Math.cos(azim) * dist;
       const sz = pp.z + Math.sin(azim) * dist;
 
       const hue = def.hues[(Math.random() * def.hues.length) | 0];
-      // tinte del pack: mezcla blanca + hue (teal/azul/morado), colorPunch
-      // aplicado como saturación extra del tinte
       const [r, g, b] = starHueToRgb(hue);
       const tint = ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
       try {
-        // color base más claro (mezcla 50/50 con blanco) para el "punch"
-        const cr = Math.min(255, Math.round((r + 255) / 2 * Math.min(1, 0.6 + 0.2 * (def.colorPunch - 1))));
+          const cr = Math.min(255, Math.round((r + 255) / 2 * Math.min(1, 0.6 + 0.2 * (def.colorPunch - 1))));
         const cg = Math.min(255, Math.round((g + 255) / 2 * Math.min(1, 0.6 + 0.2 * (def.colorPunch - 1))));
         const cb = Math.min(255, Math.round((b + 255) / 2 * Math.min(1, 0.6 + 0.2 * (def.colorPunch - 1))));
         material.color?.set?.((cr << 16) | (cg << 8) | cb);
@@ -620,8 +570,6 @@
     const arr = state.particles.shootingStar;
     const game = state.game;
     const pp = game?.player?.pos;
-
-    // spawn programado (solo de noche, igual que el shader del pack)
     if (pp && isNight(game) && arr.length < Math.ceil(def.cap * state.density)) {
       if (!state.nextStarAt) {
         state.nextStarAt = now + 1000 * (def.firstSeconds[0] +
@@ -648,14 +596,11 @@
         arr.splice(s, 1);
         continue;
       }
-      // curva: el pack usa curve 1 → ligera caída adicional
       const curveF = 1 + t * 0.35 * def.curve;
       const nx = star.x + star.vx * dt * curveF;
       const ny = star.y + star.vy * dt * curveF;
       const nz = star.z + star.vz * dt * curveF;
       star.x = nx; star.y = ny; star.z = nz;
-
-      // estela: spawn de puntos por distancia recorrida
       const seg = Math.hypot(nx - (star.lx ?? nx), ny - (star.ly ?? ny), nz - (star.lz ?? nz));
       star.lx = nx; star.ly = ny; star.lz = nz;
       star.trailAcc += seg;
@@ -665,8 +610,6 @@
         spawnTrailDot(star, now);
       }
       updateTrailDots(star, now, camera);
-
-      // billboard + fade final
       try {
         const el = camera?.matrixWorld?.elements;
         if (el && el.length >= 16 && state.scratchVec3) {
@@ -678,10 +621,7 @@
       const opacity = fadeT > 0.75 ? 1 - (fadeT - 0.75) / 0.25 : 1;
       try { star.material.opacity = opacity; } catch (_) {}
       try {
-        // matrixAutoUpdate=true: el renderer del juego ya recalcula la
-        // matrixWorld en su propio updateMatrixWorld — nada de computarla
-        // también a mano cada frame
-        star.mesh.position.set(star.x, star.y, star.z);
+          star.mesh.position.set(star.x, star.y, star.z);
       } catch (_) {}
     }
   }
@@ -736,14 +676,9 @@
           state.scratchVec3.set(el[12], el[13], el[14]);
           d.mesh.lookAt(state.scratchVec3);
         }
-        // el renderer actualiza la matriz (matrixAutoUpdate=true)
-      } catch (_) {}
+        } catch (_) {}
     }
   }
-
-  // ── Spawn ──────────────────────────────────────────────────────────────
-  // anchor: si viene, la partícula nace junto al líder de su grupo (misma
-  // posición aproximada y, en fireflies, el mismo emitter de pasto).
   function spawnParticle(kind, def, now, anchor) {
     const mats = state.materials[kind];
     if (!mats?.length) return null;
@@ -783,15 +718,12 @@
     }
 
     let matIdx = (Math.random() * mats.length) | 0;
-    // grupo monocolor: hereda la textura del líder
     if (anchor && def.group?.sameColor && typeof anchor.matIdx === 'number') matIdx = anchor.matIdx;
-    // jellyfish: color fijo (base por color, frame 0)
     let jellyBase = 0;
     if (kind === 'jellyfish') {
       jellyBase = JELLY_BASES[(Math.random() * JELLY_BASES.length) | 0];
       matIdx = jellyBase;
     }
-    // bird: variante fija (bird2/birb2) + dirección inicial
     let birdVariant = 0;
     if (kind === 'bird') {
       birdVariant = (Math.random() < 0.6 ? 0 : 2) + (Math.random() < 0.5 ? 0 : 1);
@@ -833,8 +765,6 @@
       return null;
     }
   }
-
-  // cambia el map del material de la partícula (sin clonar en cada frame)
   function setParticleFrame(p, mats, idx) {
     const mat = mats[idx];
     if (!mat || p.curMap === mat.map) return;
@@ -842,16 +772,13 @@
     p.material.needsUpdate = true;
     p.curMap = mat.map;
   }
-
-  // ── Update por especie ────────────────────────────────────────────────
   function updateParticle(p, dt, now, camera) {
     const def = SPECIES[p.kind];
     const age = (now - p.born) / 1000;
     if (age > p.lifetime) return false;
 
     if (p.kind !== 'lilyPad') {
-      // billboard hacia la cámara
-      try {
+        try {
         const el = camera?.matrixWorld?.elements;
         if (el && el.length >= 16 && state.scratchVec3) {
           state.scratchVec3.set(el[12], el[13], el[14]);
@@ -862,8 +789,7 @@
 
     switch (p.kind) {
       case 'butterfly': {
-        // seguidor de grupo: deriva hacia su líder para mantener la bandada
-        if (p.leaderRef) {
+          if (p.leaderRef) {
           const L = p.leaderRef;
           const dx = L.x - p.x, dz = L.z - p.z, dy = L.y - p.y;
           const d2 = dx * dx + dz * dz;
@@ -880,8 +806,6 @@
         const sp = def.speed * 0.35;
         p.x += Math.cos(p.dir) * sp * dt;
         p.z += Math.sin(p.dir) * sp * 0.7 * dt;
-        // Altura del suelo re-muestreada cada 150ms: antes era un escaneo
-        // lineal de TODOS los emitters por mariposa por frame
         if (!p.groundAt || now - p.groundAt > 150) {
           p.groundAt = now;
           p.groundY = groundHeightAt(p.x, p.z, p.y - def.height);
@@ -900,8 +824,6 @@
         p.x += Math.cos(p.dir) * sp * dt;
         p.z += Math.sin(p.dir) * sp * dt;
         p.y += Math.sin(age * 0.4 + p.phase) * 0.35 * dt;
-        // frame: variante (0 bird2-left, 1 bird2-right, 2 birb2-left, 3 birb2-right)
-        // + aleteo. La dirección visual sigue el movimiento horizontal.
         const goingRight = Math.sin(p.dir) >= 0;
         const v = p.birdVariant || 0;
         const dirIdx = v % 2 === 0 ? (goingRight ? v + 1 : v) : (goingRight ? v : v - 1);
@@ -925,8 +847,7 @@
         break;
       }
       case 'firefly': {
-        // órbita alrededor del pasto (tall: radio/altura mayor, low: pegado)
-        const em = p.emitterRef;
+          const em = p.emitterRef;
         const t = age * 0.9 + p.phase;
         if (em) {
           const r = em.kind === 'tall' ? 1.1 : 0.7;
@@ -945,7 +866,7 @@
         break;
       }
       case 'lilyPad': {
-        break; // estático sobre el agua
+        break;
       }
       case 'jellyfish': {
         const swim = Math.sin(age * Math.PI * 2 * 0.28 + p.phase);
@@ -962,13 +883,9 @@
       if (p.kind !== 'waterPollen' && p.kind !== 'lilyPad') {
         p.mesh.position.set(p.x, p.y, p.z);
       }
-      // matrixAutoUpdate=true: el renderer del juego ya hace updateMatrixWorld
-      // de la escena cada frame — el cómputo manual era triple trabajo
     } catch (_) {}
     return true;
   }
-
-  // ── Estela de botes (boat_trail_foam + boat_trail_wake) ───────────────
   function boatTypeKey(entity) {
     const t = entity?.type;
     if (typeof t === 'string' && t) return t.toLowerCase();
@@ -1034,8 +951,6 @@
 
     const entities = resolveEntityMap();
     if (!entities) return;
-
-    // limpiar botes que ya no existen
     const seen = new Set();
     try {
       for (const entity of entities.values()) {
@@ -1069,8 +984,6 @@
         const sternX = Number(entity.pos.x) - dirX * 0.9;
         const sternZ = Number(entity.pos.z) - dirZ * 0.9;
         const waterY = Number(entity.pos.y) + 0.1;
-
-        // espuma en V: partículas que siguen la dirección del bote (foam)
         const foamCount = Math.max(1, Math.round(def.foamDensity * 0.35));
         const foamCap = Math.ceil(def.cap * state.density);
         for (let i = 0; i < foamCount && state.particles.boatWake.length < foamCap; i++) {
@@ -1090,8 +1003,6 @@
           );
           if (p) state.particles.boatWake.push(p);
         }
-
-        // wake: salpicaduras laterales más rápidas que se alejan del casco
         const wakeCount = Math.max(1, Math.round(def.outwardDensity * 0.4));
         for (let i = 0; i < wakeCount && state.particles.boatWake.length < foamCap; i++) {
           const side = Math.random() < 0.5 ? -1 : 1;
@@ -1114,8 +1025,6 @@
     for (const [key, boat] of state.boats) {
       if (!seen.has(key) || now - boat.lostAt > 3000) state.boats.delete(key);
     }
-
-    // update + muerte de partículas de estela
     const arr = state.particles.boatWake;
     for (let i = arr.length - 1; i >= 0; i--) {
       const p = arr[i];
@@ -1137,14 +1046,11 @@
       if (progress < 0.08) opacity = progress / 0.08;
       if (progress > 0.6) opacity = 1 - (progress - 0.6) / 0.4;
       try { p.material.opacity = Math.max(0, Math.min(1, opacity)) * def.alpha; } catch (_) {}
-      // animación de frames 24 (secuencia splash)
       const frame = Math.floor((now - p.born) / 1000 * 24 * def.animSpeed * 0.5) % 24;
       setParticleFrame(p, state.materials.boatWake, frame);
       p.mesh.visible = true;
     }
   }
-
-  // ── Loop principal ────────────────────────────────────────────────────
   function tick(now) {
     if (!state.enabled || state.destroyed) return;
     state.raf = requestAnimationFrame(tick);
@@ -1159,12 +1065,8 @@
 
     updateBoatWakes(dt);
     updateShootingStars(dt, now, camera);
-
-    // spawn escalonado hasta el target por especie (en grupos cuando aplica)
-    // density: multiplicador del slider de Settings (afecta a TODO el pack,
-    // incluidas las estelas de botes; el splash de WaterSplash es aparte)
     for (const kind of Object.keys(SPECIES)) {
-      if (kind === 'boatWake' || kind === 'shootingStar') continue; // sistemas propios
+      if (kind === 'boatWake' || kind === 'shootingStar') continue;
       const def = SPECIES[kind];
       if (kind === 'firefly' && !night) continue;
       const arr = state.particles[kind];
@@ -1183,18 +1085,15 @@
         }
       }
     }
-
-    // update + muerte
     for (const kind of Object.keys(SPECIES)) {
-      if (kind === 'boatWake' || kind === 'shootingStar') continue; // sistemas propios
+      if (kind === 'boatWake' || kind === 'shootingStar') continue;
       const arr = state.particles[kind];
       for (let i = arr.length - 1; i >= 0; i--) {
         const p = arr[i];
         let alive;
         try { alive = updateParticle(p, dt, now, camera); } catch (_) { alive = false; }
         if (alive && kind === 'firefly' && !night) {
-          // de día: fundido de salida
-          try {
+            try {
             p.material.opacity -= dt * 0.8;
             if (p.material.opacity <= 0) alive = false;
           } catch (_) { alive = false; }
@@ -1274,7 +1173,7 @@
     const newDensity = Math.max(0.1, Math.min(3, Number(detail?.density) || 1));
     const densityChanged = newDensity !== state.density;
     state.density = newDensity;
-    if (densityChanged) clearParticles(); // repuebla con los nuevos targets
+    if (densityChanged) clearParticles();
     if (state.enabled) {
       state.destroyed = false;
       start();

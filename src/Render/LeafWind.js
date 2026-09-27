@@ -20,14 +20,14 @@ const state = {
     queue: [],
     queued: new WeakMap(),
     working: false
-};
+        };
 
-const uniforms = {
+        const uniforms = {
     time: { value: 0 },
     strength: { value: 0.085 }
-};
+    };
 
-function getGame(force = false) {
+    function getGame(force = false) {
     if (globalThis.miniblox?.player && globalThis.miniblox?.world) {
         state.game = globalThis.miniblox;
         return state.game;
@@ -55,9 +55,9 @@ function getGame(force = false) {
     } catch {}
 
     return state.game?.player && state.game?.world ? state.game : null;
-}
+    }
 
-function refreshLeafRegistry() {
+    function refreshLeafRegistry() {
     state.leafBlocks.clear();
     state.leafMaterial = globalThis.Materials?.leaves || null;
 
@@ -91,9 +91,9 @@ function refreshLeafRegistry() {
             } catch {}
         }
     }
-}
+    }
 
-function isLeaf(block) {
+    function isLeaf(block) {
     if (!block) return false;
     if (state.leafBlocks.has(block)) return true;
 
@@ -106,9 +106,9 @@ function isLeaf(block) {
     if (state.leafMaterial && material === state.leafMaterial) return true;
 
     return /leaves/i.test(String(block.name || block.registryName || block.idName || block.constructor?.name || ''));
-}
+    }
 
-function makeBlockPos(world) {
+    function makeBlockPos(world) {
     const template = world?.constructor?.mutableblockpos || world?.constructor?.pos1 || world?.constructor?.pos2;
 
     try {
@@ -126,9 +126,9 @@ function makeBlockPos(world) {
     } catch {}
 
     return { x: 0, y: 0, z: 0 };
-}
+    }
 
-function setBlockPos(pos, x, y, z) {
+    function setBlockPos(pos, x, y, z) {
     if (typeof pos.setInt === 'function') {
         pos.setInt(x, y, z);
         return;
@@ -142,18 +142,18 @@ function setBlockPos(pos, x, y, z) {
     pos.x = x;
     pos.y = y;
     pos.z = z;
-}
+    }
 
-function possibleLeafMesh(mesh) {
+    function possibleLeafMesh(mesh) {
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     const text = [mesh.name, ...materials.map(material => material?.name)].filter(Boolean).join(' ');
 
     if (/leaf|leaves|foliage/i.test(text)) return true;
 
     return materials.some(material => material && (material.transparent === true || Number(material.alphaTest) > 0));
-}
+    }
 
-function createPatchedMaterial(source) {
+    function createPatchedMaterial(source) {
     if (!source) return source;
 
     const material = source.clone?.() || source;
@@ -178,16 +178,16 @@ function createPatchedMaterial(source) {
         }
 
         const windCode = `
-vec3 mfLeafWorld = (modelMatrix * vec4(position, 1.0)).xyz;
-float mfLeafA = sin(mfLeafWorld.x * 0.46 + mfLeafWorld.z * 0.31 + mfLeafTime * 1.65);
-float mfLeafB = sin(mfLeafWorld.z * 0.83 - mfLeafWorld.x * 0.19 + mfLeafTime * 2.28);
-float mfLeafC = cos(mfLeafWorld.x * 0.34 - mfLeafWorld.z * 0.41 + mfLeafTime * 1.31);
-float mfLeafGust = 0.72 + 0.28 * sin(mfLeafTime * 0.34 + mfLeafWorld.x * 0.035 + mfLeafWorld.z * 0.028);
-float mfLeafMove = mfLeaf * mfLeafStrength * mfLeafGust;
-transformed.x += (mfLeafA * 0.72 + mfLeafB * 0.28) * mfLeafMove;
-transformed.z += (mfLeafC * 0.62 + mfLeafB * 0.18) * mfLeafMove * 0.58;
-transformed.y += sin(mfLeafWorld.x * 0.23 + mfLeafWorld.z * 0.19 + mfLeafTime * 1.9) * mfLeafMove * 0.14;
-`;
+            vec3 mfLeafWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+            float mfLeafA = sin(mfLeafWorld.x * 0.46 + mfLeafWorld.z * 0.31 + mfLeafTime * 1.65);
+            float mfLeafB = sin(mfLeafWorld.z * 0.83 - mfLeafWorld.x * 0.19 + mfLeafTime * 2.28);
+            float mfLeafC = cos(mfLeafWorld.x * 0.34 - mfLeafWorld.z * 0.41 + mfLeafTime * 1.31);
+            float mfLeafGust = 0.72 + 0.28 * sin(mfLeafTime * 0.34 + mfLeafWorld.x * 0.035 + mfLeafWorld.z * 0.028);
+            float mfLeafMove = mfLeaf * mfLeafStrength * mfLeafGust;
+            transformed.x += (mfLeafA * 0.72 + mfLeafB * 0.28) * mfLeafMove;
+            transformed.z += (mfLeafC * 0.62 + mfLeafB * 0.18) * mfLeafMove * 0.58;
+            transformed.y += sin(mfLeafWorld.x * 0.23 + mfLeafWorld.z * 0.19 + mfLeafTime * 1.9) * mfLeafMove * 0.14;
+            `;
 
         if (shader.vertexShader.includes('#include <begin_vertex>')) {
             shader.vertexShader = shader.vertexShader.replace(
@@ -203,9 +203,9 @@ transformed.y += sin(mfLeafWorld.x * 0.23 + mfLeafWorld.z * 0.19 + mfLeafTime * 
 
     material.needsUpdate = true;
     return material;
-}
+    }
 
-function restoreRecord(record, keepAttribute = false) {
+    function restoreRecord(record, keepAttribute = false) {
     if (!record?.mesh) return;
 
     try {
@@ -234,17 +234,17 @@ function restoreRecord(record, keepAttribute = false) {
 
     state.records.delete(record);
     state.recordByMesh.delete(record.mesh);
-}
+    }
 
-function restoreAll() {
+    function restoreAll() {
     for (const record of [...state.records]) restoreRecord(record);
     state.queue.length = 0;
     state.recordByMesh = new WeakMap();
     state.queued = new WeakMap();
     state.working = false;
-}
+    }
 
-function patchMesh(mesh, geometry, attribute) {
+    function patchMesh(mesh, geometry, attribute) {
     const previousRecord = state.recordByMesh.get(mesh);
     if (previousRecord) restoreRecord(previousRecord, true);
 
@@ -265,9 +265,9 @@ function patchMesh(mesh, geometry, attribute) {
 
     state.records.add(record);
     state.recordByMesh.set(mesh, record);
-}
+    }
 
-function tagMesh(mesh, world) {
+    function tagMesh(mesh, world) {
     const geometry = mesh?.geometry;
     const position = geometry?.attributes?.position;
 
@@ -396,9 +396,9 @@ function tagMesh(mesh, world) {
 
     patchMesh(mesh, geometry, attribute);
     return true;
-}
+    }
 
-function processQueue() {
+    function processQueue() {
     if (state.working || !state.queue.length || !state.enabled) return;
 
     state.working = true;
@@ -436,9 +436,9 @@ function processQueue() {
     } else {
         setTimeout(() => work(null), 0);
     }
-}
+    }
 
-function scan(force = false) {
+    function scan(force = false) {
     if (!state.enabled) return;
 
     const game = getGame(force);
@@ -488,9 +488,9 @@ function scan(force = false) {
     });
 
     processQueue();
-}
+    }
 
-function animate(now) {
+    function animate(now) {
     if (!state.enabled) {
         state.frame = 0;
         return;
@@ -498,9 +498,9 @@ function animate(now) {
 
     uniforms.time.value = now * 0.001;
     state.frame = requestAnimationFrame(animate);
-}
+    }
 
-function start() {
+    function start() {
     if (state.scanTimer) return;
 
     state.startedAt = performance.now();
@@ -509,9 +509,9 @@ function start() {
     state.scanTimer = window.setInterval(() => scan(false), 900);
 
     if (!state.frame) state.frame = requestAnimationFrame(animate);
-}
+    }
 
-function stop() {
+    function stop() {
     if (state.scanTimer) {
         clearInterval(state.scanTimer);
         state.scanTimer = 0;
@@ -528,9 +528,9 @@ function stop() {
     state.chunkRoot = null;
     state.fullScan = false;
     state.startedAt = 0;
-}
+    }
 
-function setEnabled(value) {
+    function setEnabled(value) {
     const enabled = !!value;
 
     if (state.enabled === enabled) {
@@ -542,9 +542,9 @@ function setEnabled(value) {
 
     if (enabled) start();
     else stop();
-}
+    }
 
-function applyConfig(detail) {
+    function applyConfig(detail) {
     let config = detail;
 
     if (typeof config === 'string') {
@@ -563,13 +563,13 @@ function applyConfig(detail) {
         }
     }
     if ('enabled' in config) setEnabled(config.enabled);
-}
+    }
 
-document.addEventListener(EVENT_CONFIG, event => {
+    document.addEventListener(EVENT_CONFIG, event => {
     applyConfig(event.detail);
-}, true);
+    }, true);
 
-window.addEventListener('beforeunload', () => {
+    window.addEventListener('beforeunload', () => {
     stop();
 }, { once: true });
 })();

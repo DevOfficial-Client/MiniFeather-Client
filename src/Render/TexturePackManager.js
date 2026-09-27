@@ -54,11 +54,6 @@
             || lower.get(baseName.toLowerCase())
             || null;
     }
-
-    // Atlas vanilla como BASE: el juego construye los íconos del inventario
-    // leyendo el canal alpha del spritesheet (alpha 0 = ícono vacío). Sin
-    // esta base, todo tile sin textura custom quedaba transparente y los
-    // ítems perdían su icono. Con la base, solo los tiles custom cambian.
     function fetchImage(src) {
         return new Promise((resolve) => {
             const img = new Image();
@@ -72,7 +67,7 @@
     async function loadVanillaAtlas() {
         if (vanillaAtlasCache !== null) return vanillaAtlasCache;
         const img = await fetchImage(chrome.runtime.getURL('classic/textures/spritesheet.png'));
-        vanillaAtlasCache = img; // null si falló (se reintentará la próxima)
+        vanillaAtlasCache = img;
         if (!img) console.warn(`${TAG} No se pudo cargar el atlas vanilla como base`);
         return vanillaAtlasCache;
     }
@@ -98,10 +93,6 @@
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
         ctx.clearRect(0, 0, atlasSize, atlasSize);
-
-        // Base: atlas vanilla escalado (16px → resolución del pack). Si el
-        // fetch falla, seguimos sin base (comportamiento anterior) para no
-        // bloquear al usuario, pero los placeholders quedarán transparentes.
         const vanilla = await loadVanillaAtlas();
         if (vanilla) {
             ctx.drawImage(vanilla, 0, 0, vanilla.width, vanilla.height, 0, 0, atlasSize, atlasSize);
@@ -401,17 +392,17 @@
         const iw = img.naturalWidth || img.width;
         const ih = img.naturalHeight || img.height;
         if (iw === fw && ih === fh) {
-            ctx.drawImage(img, fx, fy, fw, fh);  
+            ctx.drawImage(img, fx, fy, fw, fh);
             return;
         }
-        
+
         const tmp = document.createElement('canvas');
         tmp.width = iw; tmp.height = ih;
         const tctx = tmp.getContext('2d', { willReadFrequently: true });
         tctx.drawImage(img, 0, 0);
         let src;
         try { src = tctx.getImageData(0, 0, iw, ih); }
-        catch (_) { ctx.drawImage(img, fx, fy, fw, fh); return; }  
+        catch (_) { ctx.drawImage(img, fx, fy, fw, fh); return; }
         const dst = ctx.createImageData(fw, fh);
         for (let y = 0; y < fh; y++) {
             const y0 = Math.floor((y * ih) / fh), y1 = Math.max(y0 + 1, Math.floor(((y + 1) * ih) / fh));
@@ -422,7 +413,7 @@
                     let sp = (sy * iw + x0) * 4;
                     for (let sx = x0; sx < x1; sx++, sp += 4) {
                         const al = src.data[sp + 3];
-                        
+
                         r += src.data[sp] * al; g += src.data[sp + 1] * al;
                         b += src.data[sp + 2] * al; a += al; n++;
                     }
@@ -443,7 +434,7 @@
         if (!frames) return null;
         if (!maps || maps.size === 0) return null;
 
-        const scale = 1;  
+        const scale = 1;
         const atlasSize = ATLAS_SIZE * scale;
         const canvas = document.createElement('canvas');
         canvas.width = atlasSize;
@@ -468,7 +459,7 @@
             const fh = (frame.h || TILE_SIZE) * scale;
             const baseName = fileName.replace(/\.png$/, '');
             const img = maps.get(baseName) || lower.get(baseName.toLowerCase());
-            if (!img) continue;  
+            if (!img) continue;
             if (data.rotated) {
                 ctx.save();
                 ctx.translate(fx, fy);
@@ -533,7 +524,7 @@
         }
         const anyOk = Object.values(results).some(v => v > 0);
         void 0;
-        
+
         try {
             document.dispatchEvent(new CustomEvent('minifeather:pbr-update'));
         } catch (_) {}
@@ -609,7 +600,7 @@
         idbDeleteAll().then((ok) => {
             try {
                 localStorage.setItem('mf_pbr_available', 'false');
-                
+
                 localStorage.removeItem('mf_pbr_manual');
                 document.dispatchEvent(new CustomEvent('minifeather:pbr-update'));
             } catch (_) {}
@@ -723,7 +714,7 @@
         for (const { name, img } of extracted) {
             const info = pbrKind(name);
             if (!info) continue;
-            
+
             const prev = pbrMaps[info.kind].get(info.base);
             if (!prev) {
                 img.nameLen = name.length;
@@ -745,7 +736,7 @@
         if (anyOk) {
             try {
                 localStorage.setItem('mf_pbr_preset', preset.id);
-                localStorage.removeItem('mf_pbr_manual');  
+                localStorage.removeItem('mf_pbr_manual');
             } catch (_) {}
             void 0;
         }
@@ -770,7 +761,7 @@
     let bundledPbrInFlight = null;
 
     function installBundledPbr() {
-        
+
         if (bundledPbrInFlight) return bundledPbrInFlight;
         bundledPbrInFlight = doInstallBundledPbr().finally(() => {
             bundledPbrInFlight = null;

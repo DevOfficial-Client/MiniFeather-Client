@@ -38,12 +38,6 @@
   };
 
   globalThis.MF_AutoUpdater = api;
-
-  // ── Aviso en pantalla cuando hay una actualización disponible ──
-  // El background chequea el repo (cada 6h + al iniciar). Cuando detecta
-  // novedad, guardó mfUpdaterState.updateAvailable=true y aquí avisamos:
-  // banner arriba con versión/commit + botón "Update now" que descarga el
-  // ZIP nuevo y pide recargar la extensión.
   function normalizeColor(value, fallback) {
     const raw = String(value || '').trim();
     return /^#[0-9a-f]{6}$/i.test(raw) ? raw.toLowerCase() : fallback;

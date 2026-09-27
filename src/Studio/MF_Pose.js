@@ -17,7 +17,7 @@
     const ALL_JOINTS = Object.values(PARTS).flatMap(p => p.joints);
 
     const state = {
-        
+
         rest: null,
         poses: null
     };
@@ -78,8 +78,8 @@
             const j = findJoint(mesh, name);
             if (j) rest[name] = {
                 x: j.rotation.x, y: j.rotation.y, z: j.rotation.z,
-                sx: j.scale.x, sy: j.scale.y, sz: j.scale.z, 
-                px: j.position.x, py: j.position.y, pz: j.position.z 
+                sx: j.scale.x, sy: j.scale.y, sz: j.scale.z,
+                px: j.position.x, py: j.position.y, pz: j.position.z
             };
         }
         state.rest = rest;
@@ -108,9 +108,9 @@
             y: (angles.yaw || 0) * Math.PI / 180,
             z: (angles.roll || 0) * Math.PI / 180
         };
-        
+
         joints[0].rotation.set(rad.x, rad.y, rad.z);
-        
+
         if (joints[1] && angles.bend != null) {
             joints[1].rotation.set((angles.bend || 0) * Math.PI / 180, 0, 0);
         }
@@ -283,7 +283,7 @@
         mesh.traverse(o => { if (o?.isMesh && o.geometry) meshes.push(o); });
         if (!meshes.length) return null;
 
-        let best = null; 
+        let best = null;
         const vA = new V3(), vB = new V3(), vC = new V3();
         for (const m of meshes) {
             const geo = m.geometry;
@@ -306,7 +306,7 @@
 
             const worldOf = (i, out) => {
                 const x = posAttr.getX(i), y = posAttr.getY(i), z = posAttr.getZ(i);
-                
+
                 out.x = e[0] * x + e[4] * y + e[8] * z + e[12];
                 out.y = e[1] * x + e[5] * y + e[9] * z + e[13];
                 out.z = e[2] * x + e[6] * y + e[10] * z + e[14];
@@ -324,7 +324,7 @@
             }
         }
         if (!best || !best.part) {
-            
+
             return pickByProximity(mesh, origin, dir, V3);
         }
         const point = new V3().copy(dir).multiplyScalar(best.t).add(origin);
@@ -349,7 +349,7 @@
             }
         }
         if (!best) return null;
-        
+
         let obj = null, bestD = Infinity;
         const probe = new V3();
         mesh.traverse(o => {
@@ -485,8 +485,8 @@
             camera.updateMatrixWorld?.();
             const V3 = camera.position.constructor;
             const e = camera.matrixWorld.elements;
-            const right = new V3(e[0], e[1], e[2]).normalize(); 
-            const back = new V3(e[8], e[9], e[10]).normalize(); 
+            const right = new V3(e[0], e[1], e[2]).normalize();
+            const back = new V3(e[8], e[9], e[10]).normalize();
 
             const k = 0.5 * Math.PI / 180;
             let aR = dyTotal * k;
@@ -501,7 +501,7 @@
 
             const qNew = qDelta.clone().multiply(st.qStartWorld);
             const qLocal = st.qParentWorldInv.clone().multiply(qNew);
-            
+
             st.joint.quaternion.copy(qLocal);
 
             const deg = (r) => r * 180 / Math.PI;

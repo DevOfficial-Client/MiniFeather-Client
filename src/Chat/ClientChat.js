@@ -415,7 +415,7 @@
     state.signalHeartbeat = 0;
     state.knownPeers.clear();
     state.senderMessageWindows.clear();
-    state.senderMentionTimes.clear(); // huérfanos de la sesión anterior
+    state.senderMentionTimes.clear();
     emitState();
   }
 

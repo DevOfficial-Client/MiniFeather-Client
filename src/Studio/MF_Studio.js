@@ -8,250 +8,260 @@
     const TPS = 20;
     const ID = 'mf-studio';
     const CSS = `
-#mf-studio * { box-sizing: border-box; margin: 0; padding: 0; }
-/* ═══ Estilo BBS (replicación visual del mod) ═══
+        #mf-studio * { box-sizing: border-box; margin: 0; padding: 0; }
+        /* ═══ Estilo BBS (replicación visual del mod) ═══
    Paleta: ACTIVE #0088FF · CURSOR #57F52A · fondo panel #001B33
    (primaryColor × 0.2) · CONTROL_BAR #141417 · A50 rgba(0,0,0,.53) ·
    A75 rgba(0,0,0,.73) · TODO cuadrado, texto con sombra 1px estilo MC */
-#mf-studio {
+       #mf-studio {
     position: fixed; inset: 0; z-index: 2147483000;
     display: flex; flex-direction: column;
     font-family: 'Consolas', 'Courier New', monospace;
     background: transparent; color: #e8e8ec;
     pointer-events: none;
-}
-#mf-studio * { text-shadow: 1px 1px 0 rgba(0,0,0,.8); }
-#mf-studio .panel {
+    }
+    #mf-studio * { text-shadow: 1px 1px 0 rgba(0,0,0,.8); }
+    #mf-studio .panel {
     background: rgba(0,0,0,.73); pointer-events: auto;
-}
-/* ── editor principal: [main 66% | derecha 34% | iconBar 20px] ──
+    }
+    /* ── editor principal: [main 66% | derecha 34% | iconBar 20px] ──
    Los paneles son OPACOS (como BBS): la escena del juego solo se ve
    a través del hueco del preview (ventana única a la escena) */
-#mf-studio-main { flex: 1; display: flex; min-height: 0; position: relative; }
-#mf-studio-mainzone {
+       #mf-studio-main { flex: 1; display: flex; min-height: 0; position: relative; }
+       #mf-studio-mainzone {
     flex: 0 0 66%; display: flex; flex-direction: column;
     min-width: 0; position: relative; background: #001B33;
     pointer-events: auto; border-right: 1px solid rgba(255,255,255,.13);
-}
-#mf-studio-rightzone {
+    }
+    #mf-studio-rightzone {
     flex: 1; display: flex; flex-direction: column; min-width: 0;
-}
-#mf-studio-preview {
+    }
+    #mf-studio-preview {
     flex: 1; position: relative; min-height: 0;
     background: transparent; /* hueco: ventana al canvas del juego */
     border-bottom: 1px solid rgba(255,255,255,.13);
     pointer-events: auto; /* CRÍTICO: sin esto los clicks atraviesan al
                              canvas del juego y re-atrapan el ratón */
-}
-/* lienzo de trayectoria de cámara (overlay encima del juego) */
-#mf-studio-traj {
+                                 }
+                                 /* lienzo de trayectoria de cámara (overlay encima del juego) */
+                                     #mf-studio-traj {
     position: absolute; inset: 0; width: 100%; height: 100%;
     pointer-events: none; z-index: 5;
-}
-#mf-studio-traj.hint .traj-hint {
+    }
+    #mf-studio-traj.hint .traj-hint {
     display: block;
-}
-#mf-studio-traj .traj-hint {
+    }
+    #mf-studio-traj .traj-hint {
     display: none;
     position: absolute; left: 8px; bottom: 26px;
     font-size: 11px; line-height: 1.5; color: #9ecbff;
     text-shadow: 1px 1px 0 rgba(0,0,0,.9);
     white-space: pre; pointer-events: none;
-}
-#mf-studio-right {
+    }
+    #mf-studio-right {
     height: 50%; padding: 0; overflow-y: auto;
     background: #001B33; border-top: 1px solid rgba(255,255,255,.13);
     pointer-events: auto;
-}
-/* ── iconBar lateral derecha (20px, BBS) ── */
-#mf-studio-iconbar {
+    }
+    /* ── iconBar lateral derecha (20px, BBS) ── */
+        #mf-studio-iconbar {
     width: 20px; flex-shrink: 0; display: flex; flex-direction: column;
     background: #001B33; pointer-events: auto;
     box-shadow: -6px 0 6px -6px rgba(0,0,0,.16) inset;
-}
-#mf-studio-iconbar .ib {
+    }
+    #mf-studio-iconbar .ib {
     width: 20px; height: 20px; flex-shrink: 0; border: 0; cursor: pointer;
     background: transparent; color: #ccc; font-size: 10px; line-height: 20px;
     padding: 0; text-align: center; font-family: inherit;
-}
-#mf-studio-iconbar .ib:hover { color: #fff; background: rgba(255,255,255,.07); }
-#mf-studio-iconbar .ib.on {
+    }
+    #mf-studio-iconbar .ib:hover { color: #fff; background: rgba(255,255,255,.07); }
+    #mf-studio-iconbar .ib.on {
     color: #fff;
     background: linear-gradient(90deg, rgba(0,136,255,.73), #0088FF);
     box-shadow: inset 2px 0 0 #0088FF;
-}
-#mf-studio-iconbar .ib-div { height: 1px; margin: 0 3px; background: rgba(255,255,255,.13); }
-#mf-studio-iconbar .ib-gap { height: 8px; }
-/* ── taskbar inferior (20px, BBS CONTROL_BAR) ── */
-#mf-studio-top {
+    }
+    #mf-studio-iconbar .ib-div { height: 1px; margin: 0 3px; background: rgba(255,255,255,.13); }
+    #mf-studio-iconbar .ib-gap { height: 8px; }
+    /* ── taskbar inferior (20px, BBS CONTROL_BAR) ── */
+        #mf-studio-top {
     height: 20px; display: flex; align-items: center; gap: 8px;
     padding: 0 8px; background: #141417;
     border-top: 1px solid rgba(255,255,255,.27); pointer-events: auto;
     font-size: 10px;
-}
-#mf-studio-top .logo { font-weight: 700; letter-spacing: 1px; color: #0088FF; font-size: 10px; }
-#mf-studio-top .project {
+    }
+    #mf-studio-top .logo { font-weight: 700; letter-spacing: 1px; color: #0088FF; font-size: 10px; }
+    #mf-studio-top .project {
     font-size: 10px; color: #ccc; min-width: 100px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw;
-}
-#mf-studio-top .spacer { flex: 1; }
-#mf-studio-top .btn-group { display: flex; align-items: center; gap: 2px; }
-/* ── botones estilo BBS: cuadrados, 20px, acento #0088FF ── */
-.mfs-btn {
+    }
+    #mf-studio-top .spacer { flex: 1; }
+    #mf-studio-top .btn-group { display: flex; align-items: center; gap: 2px; }
+    /* ── botones estilo BBS: cuadrados, 20px, acento #0088FF ── */
+        .mfs-btn {
     background: transparent; border: 0; color: #ccc;
     height: 20px; padding: 0 6px; font-size: 10px;
     cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
     white-space: nowrap; font-family: inherit; border-radius: 0;
     transition: background .1s, color .1s;
-}
-.mfs-btn:hover { color: #fff; background: rgba(255,255,255,.07); }
-.mfs-btn:disabled { opacity: .35; cursor: default; }
-.mfs-btn.icon { padding: 0; width: 20px; justify-content: center; font-size: 11px; }
-/* toggle activo: franja inferior 2px + gradiente #0088FF (renderHighlight BBS) */
-.mfs-btn.on {
+    }
+    .mfs-btn:hover { color: #fff; background: rgba(255,255,255,.07); }
+    .mfs-btn:disabled { opacity: .35; cursor: default; }
+    .mfs-btn.icon { padding: 0; width: 20px; justify-content: center; font-size: 11px; }
+    /* toggle activo: franja inferior 2px + gradiente #0088FF (renderHighlight BBS) */
+        .mfs-btn.on {
     color: #fff;
     background: linear-gradient(180deg, #0088FF, rgba(0,136,255,.73));
     box-shadow: inset 0 -2px 0 #0088FF;
-}
-.mfs-btn.primary { background: #0088FF; color: #fff; font-weight: 700; }
-.mfs-btn.primary:hover { background: #0077dd; }
-.mfs-btn.rec.active, .mfs-btn.rec-on { background: #FF3333; color: #fff; animation: mfs-blink 1s infinite; }
-@keyframes mfs-blink { 50% { opacity: .65; } }
-@keyframes mfs-fadeout { 0%,70% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
-/* ── fila de botones del preview (centrada abajo, gradiente A50, BBS) ── */
-#mfs-previewbar {
+    }
+    .mfs-btn.primary { background: #0088FF; color: #fff; font-weight: 700; }
+    .mfs-btn.primary:hover { background: #0077dd; }
+    .mfs-btn.rec.active, .mfs-btn.rec-on { background: #FF3333; color: #fff; animation: mfs-blink 1s infinite; }
+    @keyframes mfs-blink { 50% { opacity: .65; } }
+    @keyframes mfs-fadeout { 0%,70% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+    /* ── fila de botones del preview (centrada abajo, gradiente A50, BBS) ── */
+        #mfs-previewbar {
     position: absolute; bottom: 0; left: 0; right: 0; height: 20px;
     display: flex; align-items: center; justify-content: center; gap: 2px;
     background: linear-gradient(180deg, transparent, rgba(0,0,0,.53));
     pointer-events: auto;
-}
-/* scrollbars biseladas estilo BBS (4px, #AAAAAA/#666/#EEE) */
-#mf-studio ::-webkit-scrollbar { width: 4px; height: 4px; }
-#mf-studio ::-webkit-scrollbar-track { background: transparent; }
-#mf-studio ::-webkit-scrollbar-thumb {
+    }
+    /* scrollbars biseladas estilo BBS (4px, #AAAAAA/#666/#EEE) */
+        #mf-studio ::-webkit-scrollbar { width: 4px; height: 4px; }
+        #mf-studio ::-webkit-scrollbar-track { background: transparent; }
+        #mf-studio ::-webkit-scrollbar-thumb {
     background: #aaaaaa; border: 1px solid #666666; outline: 1px solid #eeeeee;
-}
-#mf-studio ::-webkit-scrollbar-thumb:hover { background: #ccc; }
-/* ── timeline (lo pinta MF_Timeline; alto completo de la mainzone) ── */
-#mf-studio-timeline {
+    }
+    #mf-studio ::-webkit-scrollbar-thumb:hover { background: #ccc; }
+    /* ── timeline (lo pinta MF_Timeline; alto completo de la mainzone) ── */
+        #mf-studio-timeline {
     flex: 1; min-height: 0; background: #001B33;
     pointer-events: auto; display: flex; flex-direction: column;
-}
-/* ── overlay del media pool (dropShadow BBS: halo A25) ── */
-#mf-studio-pool {
+    }
+    /* ── overlay del media pool (dropShadow BBS: halo A25) ── */
+        #mf-studio-pool {
     position: absolute; top: 0; bottom: 0; left: 0; width: 236px;
     background: #001B33; pointer-events: auto; z-index: 30;
     display: flex; flex-direction: column;
     box-shadow: 4px 0 12px rgba(0,0,0,.5);
-}
-#mf-studio-pool.hidden { display: none; }
-#mfs-pool-bar {
+    }
+    #mf-studio-pool.hidden { display: none; }
+    #mfs-pool-bar {
     height: 20px; display: flex; align-items: center; gap: 2px; padding: 0 4px;
     background: #141417; border-bottom: 1px solid rgba(255,255,255,.13);
     flex-shrink: 0;
-}
-#mfs-pool-bar .title { font-size: 10px; color: #ccc; margin-right: auto; padding-left: 2px; }
-#mf-studio-left {
+    }
+    #mfs-pool-bar .title { font-size: 10px; color: #ccc; margin-right: auto; padding-left: 2px; }
+    #mf-studio-left {
     flex: 1; overflow-y: auto; padding: 8px;
-}
-/* ── paneles internos ── */
-.mfs-section { margin-bottom: 14px; }
-.mfs-section h3 {
+    }
+    /* ── paneles internos ── */
+        .mfs-section { margin-bottom: 14px; }
+        .mfs-section h3 {
     font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
     color: #aaa; margin-bottom: 6px; font-weight: 700;
     display: flex; align-items: center; justify-content: space-between;
-}
-.mfs-section h3 .mini {
+    }
+    .mfs-section h3 .mini {
     background: #0088FF; border: 0; color: #fff;
     font-size: 10px; padding: 2px 6px; cursor: pointer;
     line-height: 1.3; font-family: inherit; border-radius: 0;
-}
-.mfs-section h3 .mini:hover { background: #0077dd; }
-.mfs-item {
+    }
+    .mfs-section h3 .mini:hover { background: #0077dd; }
+    .mfs-item {
     padding: 3px 6px; font-size: 11px; border-radius: 0;
     cursor: pointer; color: #ccc; display: flex; justify-content: space-between;
     border: 1px solid transparent;
-}
-.mfs-item:hover { background: rgba(0,136,255,.25); color: #fff; }
-.mfs-item.active { background: #0088FF; color: #fff; font-weight: 700; }
-.mfs-item .meta { color: #888; font-size: 10px; }
-.mfs-item.active .meta { color: rgba(255,255,255,.8); }
-/* Media Pool */
-.media-item { display: flex; align-items: center; gap: 8px; justify-content: flex-start; }
-.media-item .thumb { font-size: 16px; opacity: .9; }
-.media-item .mi-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.media-item .mi-name {
+    }
+    .mfs-item:hover { background: rgba(0,136,255,.25); color: #fff; }
+    .mfs-item.active { background: #0088FF; color: #fff; font-weight: 700; }
+    .mfs-item .meta { color: #888; font-size: 10px; }
+    .mfs-item.active .meta { color: rgba(255,255,255,.8); }
+    /* Media Pool */
+        .media-item { display: flex; align-items: center; gap: 8px; justify-content: flex-start; }
+        .media-item .thumb { font-size: 16px; opacity: .9; }
+        .media-item .mi-body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+        .media-item .mi-name {
     font-size: 11px; color: #e8e8ec; overflow: hidden; text-overflow: ellipsis;
     white-space: nowrap; max-width: 150px;
-}
-.media-item .mi-del { opacity: 0; font-size: 11px; cursor: pointer; padding: 2px 4px; }
-.media-item:hover .mi-del { opacity: .7; }
-.media-item .mi-del:hover { opacity: 1; }
-.media-item[draggable] { cursor: grab; }
-.media-head {
+    }
+    .media-item .mi-del { opacity: 0; font-size: 11px; cursor: pointer; padding: 2px 4px; }
+    .media-item:hover .mi-del { opacity: .7; }
+    .media-item .mi-del:hover { opacity: 1; }
+    .media-item[draggable] { cursor: grab; }
+    .media-head {
     height: 34px; border: 1px solid rgba(255,255,255,.27); border-radius: 0; overflow: hidden;
     cursor: grab; background: rgba(0,0,0,.73); display: flex; align-items: center; justify-content: center;
-}
-.media-head:hover { border-color: #0088FF; }
-.media-head img { max-height: 100%; max-width: 100%; image-rendering: pixelated; }
-.mfs-prop { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 11px; }
-.mfs-prop label { color: #aaa; }
-.mfs-prop .val { color: #e8e8ec; font-family: 'Consolas', monospace; font-size: 11px; }
-.mfs-status {
+    }
+    .media-head:hover { border-color: #0088FF; }
+    .media-head img { max-height: 100%; max-width: 100%; image-rendering: pixelated; }
+    .mfs-prop { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 11px; }
+    .mfs-prop label { color: #aaa; }
+    .mfs-prop .val { color: #e8e8ec; font-family: 'Consolas', monospace; font-size: 11px; }
+    .mfs-status {
     padding: 6px 8px; background: rgba(0,0,0,.73); border-radius: 0;
     font-size: 10px; color: #aaa; line-height: 1.6; margin: 8px 6px;
     font-family: 'Consolas', monospace;
-}
-/* ── Modelos 3D (cargador) ── */
-.model-item {
+    }
+    /* ── Modelos 3D (cargador) ── */
+        .model-item {
     display: flex; align-items: center; gap: 6px; padding: 4px 6px;
     border-radius: 0; font-size: 11px; cursor: pointer; color: #ccc;
     border: 1px solid transparent;
-}
-.model-item:hover { background: rgba(0,136,255,.25); }
-.model-item.live { border-color: #33FF3388; background: rgba(51,255,51,.1); }
-.model-item .m-icon { font-size: 13px; flex-shrink: 0; }
-.model-item .m-name {
+    }
+    .model-item:hover { background: rgba(0,136,255,.25); }
+    .model-item.live { border-color: #33FF3388; background: rgba(51,255,51,.1); }
+    .model-item .m-icon { font-size: 13px; flex-shrink: 0; }
+    .model-item .m-name {
     flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     color: #e8e8ec;
-}
-.model-item .m-act {
+    }
+    .model-item .m-act {
     font-size: 11px; opacity: 0; padding: 1px 4px; border-radius: 0;
     flex-shrink: 0; color: #aaa;
-}
-.model-item:hover .m-act { opacity: .85; }
-.model-item .m-act:hover { color: #fff; background: rgba(255,255,255,.13); }
-.model-item .m-tag { font-size: 9px; color: #33FF33; flex-shrink: 0; }
-.model-drop {
+    }
+    .model-item:hover .m-act { opacity: .85; }
+    .model-item .m-act:hover { color: #fff; background: rgba(255,255,255,.13); }
+    .model-item .m-tag { font-size: 9px; color: #33FF33; flex-shrink: 0; }
+    .model-drop {
     border: 1px dashed rgba(255,255,255,.27); border-radius: 0; padding: 10px 8px;
     text-align: center; font-size: 10.5px; color: #888; cursor: pointer;
     line-height: 1.5; margin-bottom: 6px; transition: border-color .15s, color .15s;
-}
-.model-drop:hover, .model-drop.over { border-color: #0088FF; color: #0088FF; }
-/* modo cine: el HUD del juego se oculta desde JS (applyCinema), no por CSS
+    }
+    .model-drop:hover, .model-drop.over { border-color: #0088FF; color: #0088FF; }
+    /* modo cine: el HUD del juego se oculta desde JS (applyCinema), no por CSS
    de hermano — el canvas WebGL debe seguir visible bajo el preview */
-`;
+       `;
 
     const state = {
         open: false,
-        cinema: true,          
-        films: [],             
-        activeFilm: null,      
-        activeTake: null,      
+        cinema: true,
+
+        films: [],
+
+        activeFilm: null,
+
+        activeTake: null,
+
         playheadTick: 0,
         raf: null,
         hiddenHudEls: []
     };
 
     const p2p = {
-        share: false,          
-        camRemote: null,       
-        camLerp: 0.25,         
-        camActive: false,      
-        followRemoteCamera: false, 
-        lastCamOut: 0,         
-        lastPoseOut: 0,        
-        applying: false        
+        share: false,
+
+        camRemote: null,
+
+        camLerp: 0.25,
+
+        camActive: false,
+
+        followRemoteCamera: false,
+        lastCamOut: 0,
+
+        lastPoseOut: 0,
+
+        applying: false
     };
     function sendStudio(obj) {
         try { return window.MF_Peer?.sendStudio?.(obj) === true; } catch { return false; }
@@ -294,8 +304,10 @@
     }
 
     const models = {
-        loaded: new Map(),       
-        picker: null,            
+        loaded: new Map(),
+
+        picker: null,
+
         seq: 0
     };
 
@@ -308,7 +320,7 @@
             inp.style.display = 'none';
             inp.addEventListener('change', () => {
                 if (inp.files?.length) modelLoadFiles([...inp.files]);
-                inp.value = ''; 
+                inp.value = '';
             });
             document.body.appendChild(inp);
             models.picker = inp;
@@ -328,7 +340,7 @@
                 models.loaded.set(file, { name: f.name, size: f.size, at: Date.now(), id: null });
                 updateStatus(`📦 "${f.name}" cargado (${(f.size / 1024).toFixed(0)} KB) — click en la lista para spawnear`);
                 refreshModels();
-                
+
                 modelSpawn(file);
             } catch (e) {
                 updateStatus(`⚠ "${f.name}": ${e?.message || e}`);
@@ -342,7 +354,7 @@
         if (!CM?.spawn) return;
         const p = getGame()?.player?.pos;
         if (!p) { updateStatus('⚠ sin player para spawnear'); return; }
-        
+
         let dx = 1, dz = 0;
         if (cam.active) { dx = -Math.sin(cam.yaw); dz = -Math.cos(cam.yaw); }
         const x = p.x + dx * 2, z = p.z + dz * 2;
@@ -579,7 +591,7 @@
         if (!afk.on) return;
         const player = getGame()?.player;
         if (!player) return;
-        
+
         if (afk.player !== player || (afk.applyName && player[afk.applyName] !== undefined && !player[afk.applyName])) {
             afkHookPlayer(player);
         }
@@ -589,7 +601,7 @@
             afk.lastBeat = Date.now();
             if (afk.sendName) player[afk.sendName]?.call(player);
         } catch {
-            
+
             afk.applyName = null;
         }
     }
@@ -604,11 +616,11 @@
         afk.sendName = send?.name || null;
         afk.originalApply = apply.fn;
         afk.applyHadOwn = Object.prototype.hasOwnProperty.call(player, apply.name);
-        return true; 
+        return true;
     }
 
     function afkRestoreHook() {
-        
+
         afk.player = null;
         afk.applyName = null;
         afk.sendName = null;
@@ -628,8 +640,10 @@
         if (afk.on) {
             afkHookPlayer(getGame()?.player);
             afkBeat();
-            afk.timer = setInterval(afkBeat, 30000);       
-            afk.rescanTimer = setInterval(() => {          
+            afk.timer = setInterval(afkBeat, 30000);
+
+            afk.rescanTimer = setInterval(() => {
+
                 if (!afk.on) return;
                 const p = getGame()?.player;
                 if (p && p !== afk.player) afkHookPlayer(p);
@@ -668,12 +682,12 @@
 
         const preview = el('div');
         preview.id = 'mf-studio-preview';
-        
+
         const status = el('div', 'mfs-status');
         status.id = 'mfs-status';
         status.style.cssText = 'position:absolute;top:10px;left:10px;pointer-events:auto;';
         preview.appendChild(status);
-        
+
         const gtoggle = el('button');
         gtoggle.id = 'mfs-gizmo-mode';
         gtoggle.className = 'mfs-btn';
@@ -682,7 +696,7 @@
         gtoggle.style.cssText = `
             position:absolute;top:10px;right:10px;pointer-events:auto;`;
         preview.appendChild(gtoggle);
-        
+
         const hint = el('div');
         hint.innerHTML = '🖱 Click+drag: rotate camera · WASD/QE: move · Ctrl: fast · 🦴 Posing: right-click a limb';
         hint.style.cssText = `
@@ -691,7 +705,7 @@
             font-size:10px;color:#aaa;pointer-events:none;
             animation:mfs-fadeout 6s forwards;white-space:nowrap;`;
         preview.appendChild(hint);
-        
+
         const pbar = el('div');
         pbar.id = 'mfs-previewbar';
         pbar.innerHTML = `
@@ -705,7 +719,7 @@
             <button class="mfs-btn icon" id="mfs-pv-video"    title="Render to .webm video">⏺</button>
             <button class="mfs-btn icon" id="mfs-pv-traj"     title="Trajectory canvas (T) — draws the camera clips path">🧭</button>`;
         preview.appendChild(pbar);
-        
+
         const trajCv = el('canvas');
         trajCv.id = 'mf-studio-traj';
         preview.appendChild(trajCv);
@@ -718,7 +732,7 @@
         const right = el('div');
         right.id = 'mf-studio-right';
         right.innerHTML = `<div class="mfs-section"><h3>Properties</h3><div id="mfs-props"></div></div>
-<div class="mfs-section"><h3>Pose editor</h3><div id="mfs-pose"></div></div>`;
+            <div class="mfs-section"><h3>Pose editor</h3><div id="mfs-pose"></div></div>`;
         rightzone.appendChild(right);
 
         const pool = el('div');
@@ -729,17 +743,17 @@
                 <button class="mfs-btn icon" id="mfs-pool-close" title="Cerrar (P)">✕</button>
             </div>
             <div id="mf-studio-left">
-<div class="mfs-section"><h3>Media Pool</h3><div id="mfs-mediapool"></div></div>
-<div class="mfs-section"><h3>Modelos 3D <button class="mini" id="mfs-model-add" title="Cargar .glb/.gltf/.obj del disco">+ Cargar</button></h3>
-<div class="model-drop" id="mfs-model-drop" title="Clic para elegir archivo">📦 Suelta un modelo aquí<br>.glb · .gltf · .obj</div>
-<div id="mfs-models-list"></div></div>
-<div class="mfs-section"><h3>Tomas</h3><div id="mfs-takes"></div></div>
-<div class="mfs-section"><h3>Skins PNG <button class="mini" id="mfs-skins-add" title="Importar .png de skin (64x64/64x32)">+ Importar</button></h3>
-<div class="model-drop" id="mfs-skins-drop" title="Clic para elegir PNGs">👕 Suelta skins .png aquí<br>64x64 · 64x32</div>
-<div id="mfs-skins-list"></div></div>
-<div class="mfs-section"><h3>Morph (mobs) <button class="mini" id="mfs-morph-rescan" title="Volver a escanear mobs del mundo">⟳</button></h3><div id="mfs-morph-list"></div></div>
-<div class="mfs-section"><h3>Cámara (clips BBS) <button class="mini" id="mfs-cam-clear" title="Borrar todos los clips de cámara/subtítulo/audio">🗑</button></h3><div id="mfs-cam-list"></div></div>
-<div class="mfs-section"><h3>Caras (face swap)</h3><div id="mfs-faces"></div></div>
+                <div class="mfs-section"><h3>Media Pool</h3><div id="mfs-mediapool"></div></div>
+                    <div class="mfs-section"><h3>Modelos 3D <button class="mini" id="mfs-model-add" title="Cargar .glb/.gltf/.obj del disco">+ Cargar</button></h3>
+                        <div class="model-drop" id="mfs-model-drop" title="Clic para elegir archivo">📦 Suelta un modelo aquí<br>.glb · .gltf · .obj</div>
+                            <div id="mfs-models-list"></div></div>
+                                <div class="mfs-section"><h3>Tomas</h3><div id="mfs-takes"></div></div>
+                                    <div class="mfs-section"><h3>Skins PNG <button class="mini" id="mfs-skins-add" title="Importar .png de skin (64x64/64x32)">+ Importar</button></h3>
+                                        <div class="model-drop" id="mfs-skins-drop" title="Clic para elegir PNGs">👕 Suelta skins .png aquí<br>64x64 · 64x32</div>
+                                            <div id="mfs-skins-list"></div></div>
+                                                <div class="mfs-section"><h3>Morph (mobs) <button class="mini" id="mfs-morph-rescan" title="Volver a escanear mobs del mundo">⟳</button></h3><div id="mfs-morph-list"></div></div>
+                                                    <div class="mfs-section"><h3>Cámara (clips BBS) <button class="mini" id="mfs-cam-clear" title="Borrar todos los clips de cámara/subtítulo/audio">🗑</button></h3><div id="mfs-cam-list"></div></div>
+                                                        <div class="mfs-section"><h3>Caras (face swap)</h3><div id="mfs-faces"></div></div>
             </div>`;
         mainzone.appendChild(pool);
 
@@ -783,7 +797,7 @@
         main.appendChild(rightzone);
         main.appendChild(iconbar);
         root.appendChild(main);
-        root.appendChild(top); 
+        root.appendChild(top);
         document.body.appendChild(root);
 
         bind();
@@ -806,7 +820,7 @@
         };
         $('mfs-rec').onclick = toggleRec;
         $('mfs-model-add').onclick = modelPickFiles;
-        
+
         const dropZone = $('mfs-model-drop');
         if (dropZone) {
             dropZone.onclick = modelPickFiles;
@@ -820,7 +834,7 @@
             });
         }
         $('mfs-afk')?.addEventListener?.('click', () => afkToggle());
-        
+
         $('mfs-cam-clear').onclick = () => {
             if (!confirm('¿Borrar TODOS los clips de cámara, subtítulos y audio?')) return;
             window.MF_FilmCamera?.clear?.();
@@ -828,7 +842,7 @@
             window.MF_Timeline?.render?.();
         };
         refreshCamList();
-        
+
         const skinsInput = el('input');
         skinsInput.type = 'file';
         skinsInput.accept = 'image/png,.png';
@@ -851,22 +865,22 @@
         }
         window.addEventListener('mf:skinchanger-items', () => refreshSkinsList(), { once: false });
         refreshSkinsList();
-        
+
         $('mfs-morph-rescan').onclick = () => {
             window.MF_Morph?.scan?.(true);
             refreshMorphList();
         };
         window.addEventListener('mf:morph-catalog', () => refreshMorphList(), { once: false });
         refreshMorphList();
-        
+
         const gm = document.getElementById('mfs-gizmo-mode');
         if (gm) {
             gm.onclick = () => gizmoSetMode(gizmo.mode === 'move' ? 'rotate' : 'move');
-            gizmoSetMode(gizmo.mode); 
+            gizmoSetMode(gizmo.mode);
         }
-        
+
         const ib = (id, fn) => { const b = $(id); if (b) b.onclick = fn; };
-        
+
         const p = document.getElementById('mf-studio-pool');
         if (p) {
             if (!poolOpen) p.classList.add('hidden');
@@ -890,11 +904,11 @@
         document.getElementById('mfs-ib-cinema')?.classList.toggle('on', state.cinema);
         ib('mfs-ib-afk', () => afkToggle());
         ib('mfs-ib-close', close);
-        
+
         $('mfs-pv-replays').onclick = () => poolToggle(true);
         $('mfs-pv-plause').onclick = togglePlay;
         $('mfs-pv-teleport').onclick = () => {
-            
+
             const g = getGame();
             const p = g?.player;
             if (p && cam.pos) {
@@ -913,14 +927,14 @@
         $('mfs-pv-record').onclick = toggleRec;
         $('mfs-pv-traj').onclick = () => trajToggle();
         $('mfs-pv-video').onclick = renderVideo;
-        
+
         ib('mfs-pool-close', () => poolToggle(false));
 
         if (!state.keysBound) {
             state.keysBound = true;
             window.addEventListener('keydown', (ev) => {
                 if (!state.open) return;
-                
+
                 if (playerCtrl.active) {
                     if (ev.key === 'F1') { ev.preventDefault(); close(); }
                     return;
@@ -940,7 +954,7 @@
                     gizmoSetMode(gizmo.mode === 'move' ? 'rotate' : 'move');
                 }
             });
-            
+
             window.addEventListener('mf:skineditor-presets', () => {
                 if (state.open) refreshMediaPool();
             });
@@ -952,12 +966,12 @@
     function onTimelineChange(kind, payload) {
         switch (kind) {
             case 'scrub':
-                
+
                 state.playheadTick = payload;
                 seek(payload);
                 break;
             case 'clip-open':
-                
+
                 if (payload && payload !== state.activeFilm) {
                     state.activeFilm = payload;
                     state.activeTake = loadFilm(payload);
@@ -985,7 +999,7 @@
         const s = F.status;
         if (s.recording) return;
         if (!s.playing) {
-            
+
             const TL = window.MF_Timeline;
             const clips = TL?.clips || [];
             if (clips.length) {
@@ -1012,7 +1026,7 @@
         if (s.recording) {
             const r = F.stopRecording();
             if (r.ok) {
-                
+
                 F.saveFilm('take-' + new Date().toTimeString().slice(0, 8).replace(/:/g, ''));
                 refreshTakes(); refreshMediaPool();
             }
@@ -1026,7 +1040,7 @@
 
     function seek(tick) {
         state.playheadTick = Math.max(0, tick);
-        
+
         const F = window.MF_Film;
         const s = F?.status;
         if (s?.playing && !s.paused) { F.stopPlayback(); F.playFilm(state.activeFilm || undefined); }
@@ -1046,7 +1060,7 @@
         if (!F) return;
         const cur = F.getPlayRange();
         let from = cur?.from ?? 0;
-        
+
         if (state.playheadTick <= from) from = Math.max(0, state.playheadTick - 1);
         F.setPlayRange(from, Math.max(1, state.playheadTick));
         updateRangeUI();
@@ -1089,19 +1103,19 @@
         for (const f of state.films) {
             const item = el('div', 'mfs-item' + (f.name === state.activeFilm ? ' active' : ''),
                 `<span>${f.name}</span><span class="meta">${(f.ticks / TPS).toFixed(1)}s · ${f.kfs}kf</span>`);
-            
+
             item.onclick = () => {
                 const TL = window.MF_Timeline;
                 const film = loadFilm(f.name);
                 if (!TL || !film) return;
-                TL.addClip(film, TL.seqDuration);   
-                
+                TL.addClip(film, TL.seqDuration);
+
                 state.activeFilm = f.name;
                 state.activeTake = film;
                 document.getElementById('mfs-project').textContent = 'Proyecto: ' + f.name;
                 refreshTakes(); updateProps(); updateStatus(`Clip añadido: ${f.name}`);
             };
-            
+
             item.ondblclick = (ev) => { ev.stopPropagation(); };
             box.appendChild(item);
         }
@@ -1115,7 +1129,7 @@
         box.innerHTML = '';
         const F = window.MF_Film;
         const films = listFilms().filter(f => !pool.bin.includes(f.name));
-        
+
         const bar = el('div');
         bar.style.cssText = 'display:flex;gap:4px;margin-bottom:6px;';
         const impBtn = el('button', 'mfs-btn', '📥 Import');
@@ -1137,7 +1151,7 @@
             bar.appendChild(binBtn);
         }
         box.appendChild(bar);
-        
+
         const SE = window.MF_SkinEditor;
         const headPresets = SE?.presets?.() || [];
         if (headPresets.length) {
@@ -1166,7 +1180,7 @@
                 `<span class="thumb">🎬</span><div class="mi-body"><span class="mi-name">${f.name}</span>` +
                 `<span class="meta">${(f.ticks / TPS).toFixed(1)}s · ${f.kfs}kf</span></div>`);
             item.title = 'Drag to timeline · click = append · 🗑 = to bin';
-            
+
             item.draggable = true;
             item.ondragstart = (ev) => {
                 ev.dataTransfer.setData('text/mf-film', f.name);
@@ -1192,7 +1206,7 @@
             };
             item.appendChild(del);
             box.appendChild(item);
-            if (!F) break; 
+            if (!F) break;
         }
     }
 
@@ -1211,7 +1225,7 @@
                     const res = F.importFilm(name, data);
                     if (res?.ok !== false) {
                         ok++;
-                        
+
                         pool.bin = pool.bin.filter(n => n !== name);
                         updateStatus(`Importado: ${name}`);
                     } else fail++;
@@ -1234,14 +1248,14 @@
         box.innerHTML = '';
         const faces = window.MF_FaceSwap?.list() || [];
         if (!faces.length) { box.appendChild(el('div', 'mfs-item', '<span>FaceSwap not available</span>')); return; }
-        
+
         const grid = el('div');
         grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px;';
         for (const name of faces.slice(0, 16)) {
             const b = el('button', 'mfs-btn', name);
             b.style.cssText = 'height:24px;font-size:10px;padding:0 6px;justify-content:center;';
             b.title = 'Click = trigger at playhead · drag to V2 timeline';
-            
+
             b.draggable = true;
             b.ondragstart = (ev) => {
                 ev.dataTransfer.setData('text/mf-face', name);
@@ -1259,12 +1273,12 @@
     }
 
     function renderTimeline() {
-        
+
         window.MF_Timeline?.render();
     }
 
     function updatePlayhead() {
-        
+
         const TL = window.MF_Timeline;
         const s = window.MF_Film?.status;
         if (TL && s?.playing) TL.playheadTick = s.tick;
@@ -1292,11 +1306,11 @@
     }
 
     function updateStatus(extra) {
-        state.statusExtra = extra || null; 
+        state.statusExtra = extra || null;
         const box = document.getElementById('mfs-status');
         if (!box) return;
         const s = window.MF_Film?.status;
-        const fps = 0; 
+        const fps = 0;
         box.innerHTML =
             `<span style="color:${s?.recording ? '#e33' : '#9a9aa6'}">● ${s?.recording ? 'REC' : s?.playing ? (s.paused ? 'PAUSA' : 'PLAY') : 'LISTO'}</span><br>` +
             `tick ${s?.playing ? s.tick : Math.floor(state.playheadTick)} / ${state.activeTake?.durationTicks || '—'}<br>` +
@@ -1320,7 +1334,7 @@
             { key: 'bend', label: 'B', onlyLimbs: true }
         ];
 
-        const angleState = {}; 
+        const angleState = {};
 
         for (const part of parts) {
             const isLimb = part.includes('Arm') || part.includes('Leg');
@@ -1347,7 +1361,7 @@
                     num.textContent = inp.value;
                     try { P.setPart(part, angleState[part]); } catch (e) { num.textContent = '×'; }
                 };
-                
+
                 inp.ondblclick = () => {
                     inp.value = 0; num.textContent = '0';
                     angleState[part][ax.key] = 0;
@@ -1447,7 +1461,7 @@
                 mkBtn('▶', () => { A.play(); updateStatus('Anim: play'); }, 'Play');
                 mkBtn('⏸', () => { A.pause(); updateStatus('Anim: pause'); }, 'Pause');
                 mkBtn('⏹', () => { A.stop(); refreshPosePanel(); updateStatus('Anim: stop'); }, 'Stop and rewind');
-                
+
                 const kp = mkBtn('◆+', () => {
                     const part = posing.selPart || null;
                     const r = A.snapKey(part);
@@ -1459,21 +1473,21 @@
                     refreshPosePanel();
                 }, 'Add keyframe with current pose at playhead\n(no part selected = whole body)');
                 kp.style.color = '#7bd88f';
-                
+
                 const ak = mkBtn(A.autoKeyEnabled ? '⏺ AutoKey' : '⏹ AutoKey', (e) => {
                     A.setAutoKey(!A.autoKeyEnabled);
                     e.target.textContent = A.autoKeyEnabled ? '⏺ AutoKey' : '⏹ AutoKey';
                     e.target.style.color = A.autoKeyEnabled ? '#ff6b2b' : '';
                 }, 'Posar escribe keyframes en el playhead');
                 ak.style.color = A.autoKeyEnabled ? '#ff6b2b' : '';
-                
+
                 const mb = mkBtn(A.mirrorEnabled ? '🪞 ON' : '🪞 OFF', (e) => {
                     A.setMirror(!A.mirrorEnabled);
                     e.target.textContent = A.mirrorEnabled ? '🪞 ON' : '🪞 OFF';
                     e.target.style.color = A.mirrorEnabled ? '#d4a3ff' : '';
                 }, 'Mirror animating: editar un lado refleja al otro');
                 mb.style.color = A.mirrorEnabled ? '#d4a3ff' : '';
-                
+
                 mkBtn('∿ ' + (curAnimInterp() || 'smooth'), () => {
                     const modes = ['smooth', 'linear', 'step'];
                     const curI = curAnimInterp() || 'smooth';
@@ -1571,7 +1585,7 @@
     function hasGameCanvasInside(node) {
         if (looksLikeGameCanvas(node)) return true;
         return [...node.querySelectorAll?.('canvas') ?? []].some(c => {
-            
+
             const r = c.getBoundingClientRect();
             return r.width > 500 && r.height > 400;
         });
@@ -1584,10 +1598,10 @@
                 hud.style.visibility = 'hidden';
                 state.hiddenHudEls.push(hud);
             }
-            
+
             document.querySelectorAll('body > div, body > section').forEach(d => {
                 if (d.id === ID || d.id?.startsWith('mf-')) return;
-                if (d.id === 'react') return; 
+                if (d.id === 'react') return;
                 if (hasGameCanvasInside(d)) return;
                 const pos = getComputedStyle(d).position;
                 if (pos === 'fixed' || pos === 'absolute') {
@@ -1610,30 +1624,30 @@
 
     let lastUiUpdate = 0;
     let lastCamFrame = 0;
-    const UI_INTERVAL_MS = 200; 
+    const UI_INTERVAL_MS = 200;
 
     function uiLoop(now) {
         if (!state.open) return;
-        
+
         clampGameCanvas();
-        
+
         if (document.pointerLockElement && !playerCtrl.active) releasePointerLock();
-        
+
         if (traj.on) trajDraw();
-        
+
         if (lastCamFrame) {
-            
+
             const dt = Math.min(0.05, Math.max(0, (now - lastCamFrame) / 1000));
             applyCameraMovement(dt);
         }
         lastCamFrame = now;
-        
+
         playbackCamTick();
-        
+
         if (p2p.share) emitLocalPose();
-        
+
         updatePlayhead();
-        
+
         if (now - lastUiUpdate >= UI_INTERVAL_MS) {
             lastUiUpdate = now;
             const s = window.MF_Film?.status;
@@ -1654,7 +1668,7 @@
         pos: null, yaw: 0, pitch: 0,
         origPos: null, origQuat: null
     };
-    
+
     let camMouseBound = false;
 
     function getStudioCamPose() {
@@ -1664,7 +1678,7 @@
         }
         return null;
     }
-    
+
     function applyCamFov(fov) {
         if (!cam.camera || !fov) return;
         try {
@@ -1684,7 +1698,7 @@
     let camPanelOpen = false;
     function camPanelToggle() {
         camPanelOpen = !camPanelOpen;
-        
+
         if (camPanelOpen) poolToggle(true);
         const sec = document.getElementById('mfs-cam-list')?.closest('.mfs-section');
         if (sec) sec.style.display = camPanelOpen ? '' : 'none';
@@ -1698,7 +1712,7 @@
         if (!clips.length) {
             box.innerHTML = '<div class="mfs-empty">No clips.<br>Position the camera and add one:</div>';
         }
-        
+
         const btns = el('div');
         btns.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:6px 0;';
         const types = ['idle', 'keyframe', 'path', 'dolly', 'orbit', 'look', 'shake', 'translate', 'subtitle', 'audio'];
@@ -1733,7 +1747,7 @@
                     <span style="font-size:10px;color:#8a8a96;">${(c.start / 20).toFixed(1)}s</span>`;
                 row.title = `Capa ${c.layer} · ${T.label}\nClick = seleccionar · botones de la derecha para editar`;
                 row.onclick = () => { FC.selectedId = c.id; refreshCamList(); window.MF_Timeline?.render?.(); };
-                
+
                 const acts = el('span');
                 acts.style.cssText = 'display:flex;gap:2px;';
                 const mk = (txt, fn, title) => {
@@ -1769,7 +1783,7 @@
             if (playbackCamActive) {
                 playbackCamActive = false;
                 FC.reset();
-                
+
                 if (cam.origFov != null && cam.camera) {
                     try { cam.camera.fov = cam.origFov; cam.camera.updateProjectionMatrix?.(); } catch {}
                 }
@@ -1784,7 +1798,7 @@
             cam.pos.x = pose.x; cam.pos.y = pose.y; cam.pos.z = pose.z;
             cam.yaw = pose.yaw; cam.pitch = pose.pitch;
             applyCamFov(pose.fov || null);
-            
+
             if (pose.roll && cam.camera?.rotation?.set) {
                 try { cam._roll = pose.roll; } catch {}
             }
@@ -1819,7 +1833,7 @@
 
     const renderer = { rec: null, chunks: [] };
     function renderVideo() {
-        if (renderer.rec) { 
+        if (renderer.rec) {
             try { renderer.rec.stop(); } catch {}
             return;
         }
@@ -1831,7 +1845,7 @@
             .find(m => MediaRecorder.isTypeSupported?.(m));
         if (!mime) return updateStatus('⚠ este navegador no soporta MediaRecorder webm');
         const stream = canvas.captureStream(60);
-        
+
         renderer.chunks = [];
         const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
         rec.ondataavailable = (e) => { if (e.data?.size) renderer.chunks.push(e.data); };
@@ -1851,7 +1865,7 @@
         rec.start(250);
         document.getElementById('mfs-pv-video')?.classList.add('rec-on');
         updateStatus('⏺ recording… click ⏺ again to finish and save');
-        
+
         const startPlayback = window.MF_Timeline?.clips?.length
             ? () => F.playSequence(window.MF_Timeline.clips.map(c => ({ filmName: c.film.name, start: c.start, duration: c.duration })))
             : () => F.playFilm(state.activeFilm || undefined);
@@ -1884,13 +1898,13 @@
         } catch {}
         return out.join('  ·  ') || 'NINGUNO';
     }
-    
+
     function collectGameCanvases() {
         const found = [];
         try {
             for (const cv of document.querySelectorAll('canvas')) {
                 if (!cv.isConnected) continue;
-                if (cv.closest('#mf-studio')) continue; 
+                if (cv.closest('#mf-studio')) continue;
                 const w = cv.offsetWidth || cv.getBoundingClientRect().width;
                 const h = cv.offsetHeight || cv.getBoundingClientRect().height;
                 if (w >= window.innerWidth * 0.9 && h >= window.innerHeight * 0.9) found.push(cv);
@@ -1898,7 +1912,7 @@
         } catch {}
         return found;
     }
-    
+
     function fitTransform() {
         const p = document.getElementById('mf-studio-preview');
         if (!p) return null;
@@ -1910,7 +1924,7 @@
             sy: pr.height / window.innerHeight
         };
     }
-    
+
     function parseTransform(cv) {
         const t = cv.style.transform;
         if (!t || t === 'none') return null;
@@ -1919,7 +1933,7 @@
         return { tx: +nums[0], ty: +nums[1], sx: +nums[2], sy: +nums[3] };
     }
     function clampGameCanvas() {
-        
+
         const want = fitTransform();
         if (!want) return;
         if (!viewport.canvases.length) {
@@ -1947,7 +1961,7 @@
                     }
                 }
             }
-            
+
             const p = document.getElementById('mf-studio-preview');
             const pr = p.getBoundingClientRect();
             const c = cam.camera;
@@ -1963,7 +1977,7 @@
             void 0;
         }
     }
-    
+
     function applyViewportRect() { clampGameCanvas(); }
     function viewportEnable() {
         const cvs = collectGameCanvases();
@@ -1976,7 +1990,7 @@
         viewport.canvases = cvs;
         clampGameCanvas();
         window.addEventListener('resize', applyViewportRect);
-        
+
         setTimeout(() => {
             if (!viewport.canvases.length) return;
             const pr = (document.getElementById('mf-studio-preview') || {}).getBoundingClientRect?.() || { width: 0, height: 0 };
@@ -1997,7 +2011,7 @@
             } catch {}
         }
         if (viewport.canvases.length) void 0;
-        
+
         if (cam.camera && viewport.origAspect != null) {
             try {
                 cam.camera.aspect = viewport.origAspect;
@@ -2013,7 +2027,7 @@
         const scene = game?.gameScene?.scene;
         let camera = game?.gameScene?.camera || game?.camera || null;
         if (!camera) {
-            
+
             camera = scene?.camera || null;
         }
         if (!camera || !scene) return false;
@@ -2028,13 +2042,13 @@
         } catch { cam.origQuat = null; }
 
         cam.pos = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
-        
+
         try {
             camera.updateMatrixWorld?.(true);
             const wp = camera.getWorldPosition?.(new camera.position.constructor());
             if (wp && Number.isFinite(wp.x)) { cam.pos = { x: wp.x, y: wp.y, z: wp.z }; }
         } catch {}
-        
+
         try {
             if (typeof scene.attach === 'function') scene.attach(camera);
             else scene.add(camera);
@@ -2050,14 +2064,14 @@
         bindCameraKeys();
         installCamHooks(camera);
         applyCamPose();
-        
+
         void 0;
         return true;
     }
 
     function cameraDisable() {
         if (!cam.active) return;
-        
+
         cam.active = false;
         cam.dragging = false;
         cam.keys = {};
@@ -2065,7 +2079,7 @@
         const camera = cam.camera;
         if (camera && cam.origParent) {
             try {
-                
+
                 if (cam.origPos) camera.position.set(cam.origPos.x, cam.origPos.y, cam.origPos.z);
                 if (cam.origQuat) camera.quaternion.set(cam.origQuat.x, cam.origQuat.y, cam.origQuat.z, cam.origQuat.w);
                 cam.origParent.add(camera);
@@ -2086,8 +2100,8 @@
     function applyCamPose() {
         const c = cam.camera;
         if (!c) return;
-        
-        if (p2p.applying) return; 
+
+        if (p2p.applying) return;
         if (p2p.followRemoteCamera && p2p.camActive && p2p.camRemote) {
             if (cam.dragging || camKeysActive()) {
                 p2p.camActive = false;
@@ -2110,7 +2124,7 @@
         if (typeof c.rotation?.set === 'function') {
             try { c.rotation.set(cam.pitch, cam.yaw, 0, 'YXZ'); } catch { c.rotation.set(cam.pitch, cam.yaw, 0); }
         }
-        
+
     }
     function installCamHooks(camera) {
         if (!camera) return;
@@ -2154,7 +2168,7 @@
         cam.keysBound = true;
         window.addEventListener('keydown', (ev) => {
             if (!cam.active || !state.open) return;
-            
+
             if (playerCtrl.active) return;
             if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE'].includes(ev.code)) {
                 cam.keys[ev.code] = true;
@@ -2185,11 +2199,11 @@
             cam.pos.z += (-cy * f - sy * s) * dist;
             cam.pos.y += v * dist;
         }
-        applyCamPose(); 
+        applyCamPose();
     }
 
     function applyRemoteCam(p) {
-        
+
         if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) return;
         p2p.camRemote = { x: p.x, y: p.y, z: p.z, yaw: +p.yaw || 0, pitch: +p.pitch || 0 };
     }
@@ -2207,7 +2221,7 @@
             return;
         }
         if (!pose || typeof pose !== 'object') return;
-        
+
         try { p2p._poseKey = JSON.stringify(pose); } catch {}
         p2p._remotePoseAt = performance.now();
         p2p.applying = true;
@@ -2220,14 +2234,14 @@
 
     function emitLocalPose(force) {
         if (!p2p.share || p2p.applying) return;
-        
+
         if (p2p._remotePoseAt && performance.now() - p2p._remotePoseAt < 150) return;
         const now = performance.now();
         if (!force && now - p2p.lastPoseOut < 50) return;
         p2p.lastPoseOut = now;
         const pose = window.MF_Pose?.getPose?.();
         if (!pose) return;
-        
+
         const out = {};
         for (const part in pose) {
             out[part] = [+pose[part][0].toFixed(3), +pose[part][1].toFixed(3), +pose[part][2].toFixed(3)];
@@ -2246,7 +2260,7 @@
 
         preview.addEventListener('mousedown', (ev) => {
             if (!cam.active || ev.button !== 0) return;
-            
+
             if (posing.enabled) return;
             cam.dragging = true;
             cam.lastX = ev.clientX; cam.lastY = ev.clientY;
@@ -2301,7 +2315,7 @@
         if (btn) btn.classList.toggle('on', traj.on);
         if (traj.on) trajDraw();
     }
-    
+
     function matrixVec(m, x, y, z, w) {
         return {
             x: m[0] * x + m[4] * y + m[8] * z + m[12] * w,
@@ -2316,12 +2330,12 @@
         if (!view || !proj) return null;
         const v = matrixVec(view, p.x, p.y, p.z, 1);
         const c = matrixVec(proj, v.x, v.y, v.z, v.w);
-        if (!Number.isFinite(c.w) || c.w <= 0.00001) return null; 
+        if (!Number.isFinite(c.w) || c.w <= 0.00001) return null;
         const nx = c.x / c.w, ny = c.y / c.w, nz = c.z / c.w;
         if (![nx, ny, nz].every(Number.isFinite)) return null;
         return { x: (nx * 0.5 + 0.5) * w, y: (-ny * 0.5 + 0.5) * h };
     }
-    
+
     function trajClipPoints(c) {
         const FC = window.MF_FilmCamera;
         if (!FC || !c) return [];
@@ -2335,14 +2349,14 @@
         }
         return pts;
     }
-    
+
     function trajClipKeys(c) {
         const P = c.props || {};
         if (c.type === 'path') return P.points || [];
         if (c.type === 'keyframe') return P.keys || [];
         if (c.type === 'idle' || c.type === 'dolly') return [P.pose || {}].filter(Boolean);
         if (c.type === 'orbit') {
-            
+
             const t = P.target || { x: 0, y: 0, z: 0 }, out = [];
             const d = P.distance || 8, h = P.height || 2;
             for (let i = 0; i < 8; i++) {
@@ -2356,7 +2370,7 @@
         const a = deg * Math.PI / 180;
         out.push({ x: t.x + Math.cos(a) * d, y: t.y + h, z: t.z + Math.sin(a) * d });
     }
-    
+
     function trajDrawable(c) {
         return !['subtitle', 'audio', 'look', 'shake', 'translate'].includes(c.type);
     }
@@ -2366,7 +2380,7 @@
         const FC = window.MF_FilmCamera;
         const camera = cam.camera;
         if (!FC || !camera) return;
-        
+
         const r = cv.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
         if (cv.width !== Math.round(r.width * dpr) || cv.height !== Math.round(r.height * dpr)) {
@@ -2380,7 +2394,7 @@
         ctx.clearRect(0, 0, w, h);
         const clips = (FC.clips || []).filter(trajDrawable);
         if (!clips.length) return;
-        
+
         clips.forEach((c, ci) => {
             const poses = trajClipPoints(c);
             if (poses.length < 2) return;
@@ -2400,7 +2414,7 @@
             }
             ctx.stroke();
             ctx.setLineDash([]);
-            
+
             const keys = trajClipKeys(c);
             ctx.fillStyle = color;
             ctx.globalAlpha = 1;
@@ -2413,7 +2427,7 @@
                 ctx.arc(pr.x, pr.y, sel ? 4 : 3, 0, Math.PI * 2);
                 ctx.fill();
             }
-            
+
             if (firstLabel) {
                 ctx.font = '10px Consolas, monospace';
                 ctx.fillText(FC.TYPES?.[c.type]?.label || c.type, firstLabel.x + 6, firstLabel.y - 4);
@@ -2421,13 +2435,13 @@
         });
         ctx.globalAlpha = 1;
     }
-    
+
     function trajCycle(dir) {
         const FC = window.MF_FilmCamera;
         const drawable = (FC?.clips || []).filter(trajDrawable);
         if (!drawable.length) return;
         traj.sel = (traj.sel + dir + drawable.length) % drawable.length;
-        
+
         try { FC.select?.(drawable[traj.sel].id); } catch {}
         trajDraw();
     }
@@ -2438,18 +2452,18 @@
         const btn = document.getElementById('mfs-pv-player');
         if (btn) btn.classList.toggle('on', playerCtrl.active);
         if (playerCtrl.active) {
-            
+
             posingToggle(false);
-            
+
             if (!cam.active) try { cameraEnable(); } catch {}
-            
-            lock.forceNext = true; 
+
+            lock.forceNext = true;
             const cv = viewport.canvases[0];
             try { cv?.requestPointerLock?.(); } catch {}
             updateStatus('🎮 Player control ON — WASD=move · mouse=rotate player · static camera · H/ESC=exit');
             void 0;
         } else {
-            if (playerCtrl.recHeld) playerCtrlRecStop(); 
+            if (playerCtrl.recHeld) playerCtrlRecStop();
             releasePointerLock();
             updateStatus('🎮 Control del jugador OFF');
             void 0;
@@ -2462,10 +2476,10 @@
             if (!state.open || !playerCtrl.active) return;
             if (ev.code === 'KeyH' || ev.key === 'Escape') {
                 ev.preventDefault();
-                playerControlToggle(); 
+                playerControlToggle();
             }
         }, true);
-        
+
         window.addEventListener('keydown', (ev) => {
             if (!state.open || !playerCtrl.active) return;
             if (ev.code === 'AltLeft' && !playerCtrl.recHeld && !isTypingTarget(ev.target)) {
@@ -2476,11 +2490,11 @@
         window.addEventListener('keyup', (ev) => {
             if (ev.code === 'AltLeft' && playerCtrl.recHeld) playerCtrlRecStop();
         }, true);
-        
+
         window.addEventListener('blur', () => {
             if (playerCtrl.recHeld) playerCtrlRecStop();
         });
-        
+
         document.addEventListener('pointerlockchange', () => {
             if (playerCtrl.active && !document.pointerLockElement) {
                 if (playerCtrl.recHeld) playerCtrlRecStop();
@@ -2491,7 +2505,7 @@
             }
         });
     }
-    
+
     function playerCtrlRecStart() {
         const F = window.MF_Film;
         if (!F || F.status?.recording) return;
@@ -2500,7 +2514,7 @@
         playerCtrl.recHeld = true;
         updateStatus('⏺ RECORDING movement (release left Alt to cut)');
     }
-    
+
     function playerCtrlRecStop() {
         playerCtrl.recHeld = false;
         const F = window.MF_Film;
@@ -2511,7 +2525,7 @@
         const s = F.saveFilm(name);
         if (s.ok) {
             refreshTakes(); refreshMediaPool();
-            
+
             const film = F.getFilm?.(name) || null;
             if (film && window.MF_Timeline) {
                 try { window.MF_Timeline.addClip(film, Math.floor(state.playheadTick)); } catch {}
@@ -2530,7 +2544,7 @@
             p2p._camKey = null;
             p2p._poseKey = null;
         } else {
-            
+
             emitLocalPose(true);
         }
         const st = window.MF_Peer?.status;
@@ -2545,7 +2559,7 @@
         posing.selected = pick.object;
         posing.selPart = pick.part;
         try {
-            
+
             posing.outline = makeEmissiveHighlight(pick.object, 0x552200);
         } catch {}
         updateStatus('Pose: ' + pick.part + ' — 🖱 izq=rotar · anillos XYZ=rotar eje · flechas XYZ=mover · der=mover · rueda=yaw · Alt+rueda=tamaño · Shift=espejo · Esc=salir');
@@ -2574,15 +2588,15 @@
     function attachGizmoToPart(pick) {
         const G = window.MF_Gizmo;
         if (!G) return;
-        
+
         const joint = pick.joint || getJointOfPart(pick.part);
         if (!joint) return;
         G.attach(joint, null);
-        G.setMode?.(gizmo.mode); 
+        G.setMode?.(gizmo.mode);
     }
 
     function getJointOfPart(part) {
-        
+
         try {
             const g = getGame();
             const me = g?.player;
@@ -2595,7 +2609,7 @@
                 leftLeg: 'leftHipJoint', rightLeg: 'rightHipJoint'
             }[part];
             if (!names) return null;
-            
+
             const queue = [mesh];
             const seen = new WeakSet();
             let visited = 0;
@@ -2624,7 +2638,7 @@
         const P = window.MF_Pose;
         const axis = gizmo.draggingAxis;
         if (!G || !part || !P || !axis) return;
-        
+
         const raw = G.dragDeltaFromStart?.(dxTotal, dyTotal);
         const target = (Number.isFinite(raw) ? raw : 0) * gizmo.axisScale;
         const step = target - gizmo.axisApplied;
@@ -2673,7 +2687,7 @@
     function autoKeyTransform(part, channel, value, mirror) {
         const A = window.MF_Animation;
         if (!A?.autoKeyEnabled || !A.current) return;
-        
+
         A.autoKey(part, channel, value, !!mirror);
     }
 
@@ -2692,7 +2706,7 @@
                 return;
             }
         }
-        
+
         const pose = P.getPose();
         const cur = pose?.[part] || [0, 0, 0];
         const deg = (r) => r * 180 / Math.PI;
@@ -2729,7 +2743,7 @@
         const P = window.MF_Pose;
         if (!part || !P?.setScale) return;
         const cur = P.getScale(part) || { x: 1, y: 1, z: 1 };
-        
+
         let u = cur.x * (deltaY < 0 ? 1.05 : 1 / 1.05);
         try { P.setScale(part, { uniform: u }); } catch {}
         autoKeyTransform(part, 'scale', [u, u, u], mirror);
@@ -2740,7 +2754,7 @@
     }
 
     function bindViewportPosing() {
-        
+
         const bindPreview = () => {
             const preview = document.getElementById('mf-studio-preview');
             if (!preview || preview.dataset.posingBound) return;
@@ -2755,9 +2769,9 @@
         preview.addEventListener('mousemove', (ev) => {
             if (!posing.enabled || posing.dragging) return;
             const now = performance.now();
-            if (now - hoverThrottle < 50) return; 
+            if (now - hoverThrottle < 50) return;
             hoverThrottle = now;
-            
+
             const G = window.MF_Gizmo;
             if (G?.visible() && posing.selPart) {
                 const ring = G.pickRing?.(ev.clientX, ev.clientY, cam.camera);
@@ -2791,7 +2805,7 @@
 
         preview.addEventListener('mousedown', (ev) => {
             if (!posing.enabled || ev.button !== 0) return;
-            
+
             const G = window.MF_Gizmo;
             if (G?.pickRing && posing.selPart) {
                 const ring = G.pickRing(ev.clientX, ev.clientY, cam.camera);
@@ -2811,7 +2825,7 @@
                     return;
                 }
             }
-            
+
             if (G?.visible() && posing.selPart) {
                 const axis = G.pick(ev.clientX, ev.clientY, cam.camera);
                 if (axis) {
@@ -2830,19 +2844,19 @@
                     return;
                 }
             }
-            
+
             const pick = window.MF_Pose?.pickPart?.(ev.clientX, ev.clientY);
-            if (!pick) return; 
+            if (!pick) return;
             posingSelect(pick);
             posing.dragging = true;
             posing.dragMode = 'rotate';
             posing.lastX = ev.clientX; posing.lastY = ev.clientY;
             posing.startX = ev.clientX; posing.startY = ev.clientY;
-            
+
             posing.rotHandle = window.MF_Pose?.beginRotateWorld?.(posing.selPart, cam.camera) ?? null;
             clearHoverHighlight();
             ev.preventDefault();
-            ev.stopImmediatePropagation(); 
+            ev.stopImmediatePropagation();
         });
 
         preview.addEventListener('mousedown', (ev) => {
@@ -2855,14 +2869,14 @@
             posing.lastX = ev.clientX; posing.lastY = ev.clientY;
             ev.preventDefault();
         });
-        
+
         preview.addEventListener('wheel', (ev) => {
             if (!posing.enabled || !posing.selPart) return;
             ev.preventDefault();
             if (ev.altKey) applyScaleFromWheel(ev.deltaY, ev.shiftKey);
             else applyYawFromWheel(ev.deltaY, ev.ctrlKey, ev.shiftKey);
         }, { passive: false });
-        }; 
+        };
 
         if (!posingWinBound) {
             posingWinBound = true;
@@ -2875,7 +2889,7 @@
                     applyGizmoDrag(ev.clientX - posing.startX, ev.clientY - posing.startY);
                 }
                 else if (posing.dragMode === 'ring') {
-                    
+
                     const G = window.MF_Gizmo;
                     const step = G?.ringDragDelta?.(
                         gizmo.draggingRing,
@@ -2889,7 +2903,7 @@
                 }
                 else if (posing.dragMode === 'move') applyMoveFromDrag(dx, dy, ev.ctrlKey, ev.shiftKey);
                 else {
-                    
+
                     const dxTotal = ev.clientX - posing.startX;
                     const dyTotal = ev.clientY - posing.startY;
                     applyRotFromDrag(dxTotal, dyTotal, ev.ctrlKey, ev.shiftKey);
@@ -2910,13 +2924,13 @@
                     }
                 }
             });
-            
+
             window.addEventListener('keydown', (ev) => {
                 if (!posing.enabled) return;
                 if (ev.key === 'Escape') { posingDeselect(); ev.preventDefault(); ev.stopImmediatePropagation(); }
             }, true);
         }
-        bindPreview(); 
+        bindPreview();
     }
 
     function makeEmissiveHighlight(obj, color) {
@@ -2950,7 +2964,7 @@
     function setHoverHighlight(obj) {
         if (hoverHl?.obj === obj) return;
         clearHoverHighlight();
-        
+
         if (posing.outline?.obj === obj) return;
         const hl = makeEmissiveHighlight(obj, 0x113355);
         if (hl) hoverHl = hl;
@@ -3000,7 +3014,7 @@
         try {
             const P = window.MF_Pose;
             if (!P) return null;
-            
+
             const g = getGame();
             const me = g?.player;
             const e = g?.world?.getPlayerById?.(me.id) || g?.world?.players?.get?.(me.id) || g?.world?.entities?.get?.(me.id) || me;
@@ -3031,7 +3045,7 @@
     }
 
     function getPoseMesh() {
-        
+
         try {
             const g = getGame();
             const me = g?.player;
@@ -3053,7 +3067,7 @@
         const orig = lock.orig;
         Element.prototype.requestPointerLock = function (...args) {
             if (state.open) {
-                
+
                 if (lock.forceNext) {
                     lock.forceNext = false;
                     return orig.apply(this, args);
@@ -3073,7 +3087,7 @@
     let lockEventsBound = false;
     function swallowLockEvent(ev) {
         if (!state.open) return;
-        
+
         if (playerCtrl.active && ev.type === 'pointerlockchange' && document.pointerLockElement) return;
         ev.stopImmediatePropagation();
     }
@@ -3089,18 +3103,18 @@
         build();
         state.open = true;
         lastCamFrame = 0;
-        
+
         blockLockEvents();
         releasePointerLock();
         patchPointerLock();
         playerControlBindKeys();
-        globalThis.__MF_STUDIO_OPEN__ = true; 
+        globalThis.__MF_STUDIO_OPEN__ = true;
         refreshTakes(); refreshMediaPool(); refreshModels(); refreshFaces(); refreshPosePanel(); renderTimeline(); updateProps(); updateStatus(); updateButtons();
         applyCinema();
         bindPreviewCamera();
         bindViewportPosing();
         cameraEnable();
-        
+
         if (!viewportEnable()) {
             let tries = 0;
             const retry = () => {
@@ -3110,7 +3124,7 @@
             };
             requestAnimationFrame(retry);
         }
-        afkToggle(true); 
+        afkToggle(true);
         void 0;
     }
 
@@ -3119,14 +3133,14 @@
         state.open = false;
         lastCamFrame = 0;
         cancelAnimationFrame(state.raf);
-        if (playerCtrl.active) playerControlToggle(); 
-        viewportDisable(); 
+        if (playerCtrl.active) playerControlToggle();
+        viewportDisable();
         cameraDisable();
         posingToggle(false);
         afkToggle(false);
-        unpatchPointerLock(); 
+        unpatchPointerLock();
         globalThis.__MF_STUDIO_OPEN__ = false;
-        state.cinema = false; applyCinema(); 
+        state.cinema = false; applyCinema();
         const root = document.getElementById(ID);
         const style = document.getElementById(ID + '-style');
         root?.remove(); style?.remove();
@@ -3142,11 +3156,11 @@
             document.getElementById(ID)?.classList.toggle('cinema', state.cinema);
             applyCinema();
         },
-        
+
         get share() { return p2p.share; },
         set share(v) { shareToggle(!!v); },
         applyRemotePose, applyRemoteCam, remoteCamActive,
-        
+
         getStudioCamPose,
         renderVideo
     };

@@ -1,5 +1,3 @@
-// DuckMobs: patos y gansos client-side desde el mod untitledduckmod (assets Bedrock).
-// Dos especies: patos (wander/nado/panico/sit) y gansos (intimidan/cargan/muerden + honk ogg).
 
 (function () {
     'use strict';
@@ -7,25 +5,23 @@
     if (globalThis.MF_DuckMobs) return;
 
     const CFG = {
-        WANDER_RADIUS: 14,          // radio de patrulla alrededor del spawn del jugador
-        RESET_DIST: 40,             // reciclar mob si se aleja demasiado del jugador
-        LOOK_SIT_MS: 1800,          // mirar fijo para que un pato se siente
-        FLOCK_CAP: 14,              // tope de mobs vivos a la vez
-        FLOCK_MIN_MS: 15000,        // minimo entre parvadas
-        FLOCK_MAX_MS: 60000,        // maximo entre parvadas
-        RETRY_MS: 5000,             // reintento si no hallo agua
-        WATER_SAMPLES: 14           // intentos para hallar una gran masa de agua
+        WANDER_RADIUS: 14,
+        RESET_DIST: 40,
+        LOOK_SIT_MS: 1800,
+        FLOCK_CAP: 14,
+        FLOCK_MIN_MS: 15000,
+        FLOCK_MAX_MS: 60000,
+        RETRY_MS: 5000,
+        WATER_SAMPLES: 14
     };
-
-    // ---------- especies ----------
 
     const SPECIES = {
         duck: {
             key: 'duck',
             model: 'duck.geo.json',
-            textures: [null],                 // null = png por defecto junto al geo
-            weight: 0.7,                      // proporcion de parvadas
-            flock: [5, 9],                    // tamano de parvada
+            textures: [null],
+            weight: 0.7,
+            flock: [5, 9],
             aggressive: false,
             panicDist: 3.2, panicSpeed: 3.4,
             walkSpeed: 1.1, swimSpeed: 1.0,
@@ -40,10 +36,10 @@
             weight: 0.3,
             flock: [2, 3],
             aggressive: true,
-            panicDist: 0, panicSpeed: 0,      // los gansos no huyen
+            panicDist: 0, panicSpeed: 0,
             walkSpeed: 0.9, swimSpeed: 0.85,
-            intimidateDist: 7,                // empieza a intimidar si el jugador entra
-            chargeDist: 4.2,                  // carga si el jugador sigue acercandose
+            intimidateDist: 7,
+            chargeDist: 4.2,
             biteDist: 1.7,
             chargeSpeed: 2.9,
             chargeMaxMs: 3500,
@@ -56,16 +52,11 @@
 
     const state = {
         enabled: false,
-        mobs: [],                   // { id, rec, sp, ai:{...} }
-        nextFlock: 0,               // timestamp de la proxima parvada
-        flockCenters: [],           // centros de parvadas vivas (anti-apilonamiento)
+        mobs: [],
+        nextFlock: 0,
+        flockCenters: [],
         stamp: { alive: true }
     };
-
-    // ---------- utilidades del juego ----------
-
-    // Caché de escaneo: blockIdAt() llama getGame() por cada bloque consultado
-    // en los loops de spawn — sin caché, un querySelector('#react') por bloque.
     let _gameCache = { game: null, at: 0 };
     function getGame() {
         const direct = [globalThis.miniblox, globalThis.__MINIBLOX_GAME__, globalThis.__MB?.game, globalThis.game];
@@ -100,8 +91,6 @@
             return bs || null;
         } catch { return null; }
     }
-
-    // nombres de bloque via cache por id (estilo WetnessSystem)
     const nameCache = new Map();
     function blockName(bs) {
         if (!bs) return '';
@@ -128,15 +117,13 @@
         }
         return false;
     }
-
-    // pasto, flores y similares: no bloquean el paso ni cuentan como suelo
     const PASSABLE_RE = /(^|_)(grass|tall_grass|fern|seagrass|flower|tulip|dandelion|poppy|orchid|allium|bluet|cornflower|lily|sunflower|rose|peony|sapling|wheat|carrot|potato|beetroot|mushroom|snow_layer|dead_bush|sweet_berry|bush|vine|kelp)$/;
 
     function isSolidAt(x, y, z) {
         const bs = blockIdAt(x, y, z);
         if (!bs || !bs.id) return false;
         const n = blockName(bs);
-        if (!n) return true; // sin nombre: asumir solido
+        if (!n) return true;
         if (PASSABLE_RE.test(n) || /(^|_)(air|torch|rail|carpet|web|fire)/.test(n)) return false;
         return true;
     }
@@ -145,7 +132,6 @@
         for (let dy = 0; dy < 6; dy++) {
             const yy = y - dy;
             if (!isSolidAt(x, yy, z)) {
-                // no solido: si es aire/pasto sigue bajando; agua detiene la busqueda
                 if (isWaterAt(x, yy, z)) return null;
                 continue;
             }
@@ -155,7 +141,6 @@
     }
 
     function waterSurfaceY(x, y, z) {
-        // ancla al bloque de agua real: el objetivo no salta al cruzar enteros (evita rebote)
         let fy = Math.floor(y);
         if (!isWaterAt(x, fy, z)) {
             let found = false;
@@ -165,10 +150,10 @@
             for (let dy = 1; dy <= 2 && !found; dy++) {
                 if (isWaterAt(x, fy - dy, z)) { fy -= dy; found = true; }
             }
-            if (!found) return y; // sin agua cerca: mantener altura actual
+            if (!found) return y;
         }
-        while (fy < 255 && isWaterAt(x, fy + 1, z)) fy += 1; // subir a la superficie real
-        return fy + 0.9;                         // flotar apenas sumergido
+        while (fy < 255 && isWaterAt(x, fy + 1, z)) fy += 1;
+        return fy + 0.9;
     }
 
     function playerLookingAt(pos, threshold) {
@@ -187,8 +172,6 @@
             return (fx * dx + fy * dy + fz * dz) >= (threshold ?? 0.9);
         } catch { return false; }
     }
-
-    // ---------- sonido: quack sintetizado (pato) + honk ogg (ganso) ----------
 
     function audioCtx() {
         return getGame()?.gameScene?.audio?.context
@@ -220,8 +203,6 @@
             playBuf(actx, quackBuf, dist, 0.35, 0.92 + Math.random() * 0.18);
         } catch {}
     }
-
-    // honks reales del mod (goose_honk.ogg / _2 / _3), decodificados bajo demanda
     const HONK_FILES = ['goose_honk.ogg', 'goose_honk_2.ogg', 'goose_honk_3.ogg'];
     const honks = { loading: false, bufs: [] };
 
@@ -240,7 +221,6 @@
     }
 
     function synthHonk(actx) {
-        // respaldo si el ogg no decodifica: graznido grave sintetizado
         const dur = 0.42;
         const buf = actx.createBuffer(1, actx.sampleRate * dur, actx.sampleRate);
         const ch = buf.getChannelData(0);
@@ -274,8 +254,6 @@
         } catch {}
     }
 
-    // ---------- spawn en parvadas sobre grandes masas de agua ----------
-
     function pickSpecies() {
         let r = Math.random();
         for (const sp of Object.values(SPECIES)) {
@@ -284,21 +262,18 @@
         }
         return SPECIES.duck;
     }
-
-    // altura del agua en (x,z) cerca del jugador: baja hasta 6 bloques (orillas elevadas)
     function findWaterY(x, z) {
         const py = Math.floor((playerPos()?.y ?? 64) - 1);
         for (let dy = 0; dy >= -6; dy--) {
             if (isWaterAt(x, py + dy, z)) return py + dy;
         }
-        for (let dy = 1; dy <= 3; dy++) { // respaldo: jugador bajo el agua
+        for (let dy = 1; dy <= 3; dy++) {
             if (isWaterAt(x, py + dy, z)) return py + dy;
         }
         return null;
     }
 
     function waterBodyScore(x, z) {
-        // cuenta muestras de agua en una cruz 5x5 centrada en (x, z) a la altura del agua hallada
         const wy = findWaterY(x, z);
         if (wy == null) return 0;
         let n = 0;
@@ -307,12 +282,10 @@
                 if (isWaterAt(x + dx, wy, z + dz)) n++;
             }
         }
-        return n; // 25 = masa grande
+        return n;
     }
 
     function findWaterSpot(center) {
-        // busca en anillos crecientes un punto con mucha agua alrededor,
-        // evitando puntos a menos de FLOCK_SEPARATION de parvadas existentes
         let best = null, bestScore = 0;
         for (let i = 0; i < CFG.WATER_SAMPLES; i++) {
             const a = Math.random() * Math.PI * 2;
@@ -327,7 +300,7 @@
             const score = waterBodyScore(x, z);
             if (score > bestScore) { bestScore = score; best = { x: x + 0.5, z: z + 0.5 }; }
         }
-        return bestScore >= 18 ? best : null; // solo grandes masas (>=72% agua en 5x5)
+        return bestScore >= 18 ? best : null;
     }
 
     function waterSurfaceAt(spot) {
@@ -350,7 +323,7 @@
             noPhysics: true,
             anim: 'swim'
         };
-        if (texture) opts.texture = texture; // variante de skin (CustomModels: loadModel(file, texOverride))
+        if (texture) opts.texture = texture;
         const id = CM.spawn(sp.model, x, y, z, opts);
         if (!id) return null;
         const mob = {
@@ -358,9 +331,9 @@
             rec: null,
             sp,
             flockCenter: { x, z },
-            spawnPhase: Math.random() * Math.PI * 2, // desfase de oleaje entre mobs
+            spawnPhase: Math.random() * Math.PI * 2,
             ai: {
-                mode: 'swim',         // nacen nadando en el agua
+                mode: 'swim',
                 until: performance.now() + 1500 + Math.random() * 3500,
                 dir: dir + (Math.random() - 0.5) * 0.8,
                 speed: 0,
@@ -383,14 +356,13 @@
         if (!spot) return 0;
         const sp = pickSpecies();
         const count = sp.flock[0] + Math.floor(Math.random() * (sp.flock[1] - sp.flock[0] + 1));
-        const dir = Math.random() * Math.PI * 2; // rumbo comun de la parvada
+        const dir = Math.random() * Math.PI * 2;
         const y = waterSurfaceAt(spot);
         let n = 0, leader = null;
         for (let i = 0; i < count && state.mobs.length < CFG.FLOCK_CAP; i++) {
-            // el lider nace en el punto; el resto se reparte detras y a los lados (separados)
             let ox = 0, oz = 0, formation = null;
             if (leader) {
-                const rank = Math.ceil(i / 2);                    // fila de la V
+                const rank = Math.ceil(i / 2);
                 const side = (i % 2 ? 1 : -1) * (1.3 + Math.random() * 0.6);
                 const back = 2.5 + Math.random() * 4 + rank * 1.1;
                 ox = -Math.sin(dir) * back + Math.cos(dir) * side * 2.2;
@@ -420,7 +392,6 @@
         const i = state.mobs.indexOf(mob);
         if (i >= 0) state.mobs.splice(i, 1);
         try { globalThis.MF_CustomModels?.despawn(mob.id, true); } catch {}
-        // promocion: si se fue el lider, el primer seguidor toma su lugar
         if (mob.isLeader) {
             const heir = state.mobs.find(m => m.followId === mob.id);
             if (heir) {
@@ -430,7 +401,6 @@
                 heir.flockDir = mob.flockDir ?? heir.ai.dir;
             }
         }
-        // limpia centros de parvada sin mobs vivos cerca
         state.flockCenters = state.flockCenters.filter(fc =>
             state.mobs.some(m => {
                 const mp = m.rec?.root?.position;
@@ -442,8 +412,6 @@
         for (const m of state.mobs) if (m.id === id) return m;
         return null;
     }
-
-    // ---------- IA ----------
 
     function setAnim(mob, name) {
         try { globalThis.MF_CustomModels?.setAnim(mob.id, name, 1); } catch {}
@@ -460,7 +428,6 @@
             if (sp.key === 'goose') {
                 if (!honks.loading && !honks.bufs.length) loadHonks(actx);
                 playHonk(actx, dPlayer, force);
-                // el ganso estira el cuello al graznar (si no esta ocupado)
                 if (ai.mode === 'idle' || ai.mode === 'swim') {
                     const inWater = mobPos(mob) ? isWaterAt(mobPos(mob).x, mobPos(mob).y - 0.2, mobPos(mob).z) : false;
                     setAnim(mob, inWater ? 'honk_swim' : 'honk');
@@ -472,13 +439,9 @@
             ai.nextCall = t + sp.callMinMs + Math.random() * sp.callMaxMs;
         }
     }
-
-    // IA de agresion del ganso: intimidar -> cargar -> morder
     function gooseAggroTick(mob, ai, t, dPlayer, player, p) {
         const sp = mob.sp;
         if (t < ai.aggroUntil) return false;
-
-        // morder: contacto tras una carga
         if (ai.mode === 'charge' && dPlayer < sp.biteDist) {
             ai.mode = 'bite';
             ai.until = t + 700;
@@ -488,7 +451,6 @@
             ai.nextCall = t + sp.callMinMs;
             return true;
         }
-        // cargar: el jugador sigue dentro tras la intimidacion
         if ((ai.mode === 'intimidate' || ai.mode === 'idle' || ai.mode === 'walk' || ai.mode === 'swim') && dPlayer < sp.chargeDist) {
             ai.mode = 'charge';
             ai.until = t + sp.chargeMaxMs;
@@ -496,12 +458,10 @@
             ai.dir = Math.atan2(player.x - p.x, player.z - p.z);
             return true;
         }
-        // perseguir al jugador mientras carga
         if (ai.mode === 'charge') {
             ai.dir = Math.atan2(player.x - p.x, player.z - p.z);
             return true;
         }
-        // intimidar: el jugador entra en el territorio
         if (ai.mode !== 'intimidate' && ai.mode !== 'bite' && dPlayer < sp.intimidateDist) {
             ai.mode = 'intimidate';
             ai.until = t + 1600 + Math.random() * 1200;
@@ -509,40 +469,33 @@
             callMaybe(mob, t, dPlayer, true);
             return true;
         }
-        // seguir encarando al jugador mientras intimida
         if (ai.mode === 'intimidate') {
             ai.dir = Math.atan2(player.x - p.x, player.z - p.z);
             return true;
         }
         return false;
     }
-
-    // IA de parvada: el lider marca rumbo; los seguidores nadan hacia su hueco de la V
     function flockTick(mob, ai, t, dt, inWater) {
         const leader = mob.followId ? mobById(mob.followId) : null;
         if (leader && leader !== mob && leader.rec?.root) {
             const lp = leader.rec.root.position;
             const ldir = leader.ai.dir;
             const f = mob.formation || { lateral: 1.6, depth: 2.5 };
-            // hueco en formacion: detras y al costado del lider segun su rumbo
             const tx = lp.x - Math.sin(ldir) * f.depth + Math.cos(ldir) * f.lateral;
             const tz = lp.z - Math.cos(ldir) * f.depth - Math.sin(ldir) * f.lateral;
             const p = mob.rec.root.position;
             const dx = tx - p.x, dz = tz - p.z;
             const dist = Math.hypot(dx, dz);
             if (dist > 0.6) {
-                // volver a la formacion mientras el lider nada o se aleja demasiado
                 ai.mode = 'swim';
                 ai.dir = Math.atan2(dx, dz);
                 ai.until = Math.max(ai.until, t + 1200);
-                if (dist > 3) ai.until = t + 800; // apura el alcance
+                if (dist > 3) ai.until = t + 800;
                 setAnim(mob, 'swim');
                 return;
             }
-            // en formacion: copiar rumbo del lider
             ai.dir = ldir;
         } else if (mob.isLeader) {
-            // el lider mantiene el rumbo de la parvada mientras nada
             if (ai.mode === 'swim' && mob.flockDir != null) {
                 ai.dir = mob.flockDir;
             }
@@ -555,7 +508,7 @@
         if (!CM) return;
         if (!mob.rec) {
             const rec = CM.record?.(mob.id);
-            if (!rec?.root) return; // todavia cargando
+            if (!rec?.root) return;
             mob.rec = rec;
         }
         const root = mob.rec.root;
@@ -565,16 +518,12 @@
         const p = root.position;
         const player = playerPos();
         const dPlayer = player ? Math.hypot(player.x - p.x, player.z - p.z) : Infinity;
-
-        // gestionar reciclaje por distancia: despawnear (la parvada se repone sola)
         if (player && dPlayer > CFG.RESET_DIST) {
             removeMob(mob);
             return;
         }
 
         const inWater = isWaterAt(p.x, p.y - 0.2, p.z);
-
-        // al entrar/salir del agua cambia la animacion de locomocion
         if (inWater !== ai.wasWater) {
             ai.wasWater = inWater;
             if (inWater) {
@@ -594,15 +543,12 @@
                 return;
             }
         } else if (ai.mode !== 'panic' && player && dPlayer < sp.panicDist && !ai.sitting) {
-            // el pato huye; los gansos nunca entran aqui (panicDist 0 + aggressive)
             ai.mode = 'panic';
             ai.until = t + 2200 + Math.random() * 1800;
             ai.panicDir = Math.atan2(p.x - player.x, p.z - player.z);
             setAnim(mob, inWater ? 'panic_swim' : 'panic');
             callMaybe(mob, t, dPlayer, true);
         }
-
-        // sentarse si el jugador lo mira fijamente un rato (solo patos)
         if (!sp.aggressive && ai.mode !== 'panic' && player && dPlayer > 5 && dPlayer < 20 && playerLookingAt(p, 0.94)) {
             ai.lookHold = (ai.lookHold || 0) + dt * 1000;
             if (ai.lookHold > CFG.LOOK_SIT_MS && ai.mode !== 'sit') {
@@ -615,7 +561,6 @@
         } else {
             ai.lookHold = 0;
         }
-        // el ganso responde con un graznido si lo miras fijamente
         if (sp.aggressive && player && dPlayer < 18 && playerLookingAt(p, 0.94)) {
             ai.lookHold = (ai.lookHold || 0) + dt * 1000;
             if (ai.lookHold > 1200 && t > ai.nextCall) {
@@ -625,8 +570,6 @@
         } else if (sp.aggressive) {
             ai.lookHold = 0;
         }
-
-        // formacion de parvada (lider delante, resto en V) mientras no haya panico/agresion
         if (ai.mode !== 'panic' && ai.mode !== 'charge' && ai.mode !== 'bite' && ai.mode !== 'intimidate') {
             flockTick(mob, ai, t, dt, inWater);
         }
@@ -661,13 +604,12 @@
             }
             if (blocked) {
                 ai.dir += Math.PI * (0.5 + Math.random() * 0.75);
-                if (mob.isLeader) mob.flockDir = ai.dir; // la parvada adopta el nuevo rumbo
+                if (mob.isLeader) mob.flockDir = ai.dir;
             } else {
                 p.x = nx;
                 p.z = nz;
                 if (inWater) {
                     const wy = waterSurfaceY(p.x, p.y, p.z);
-                    // asentar rapido + oleaje sutil para que se vea flotando, no rebotando
                     const bob = Math.sin((t / 1000) * 1.4 + mob.spawnPhase) * 0.045;
                     p.y += (wy + bob - p.y) * Math.min(1, dt * 6);
                 } else {
@@ -676,14 +618,11 @@
                 }
             }
         }
-        // flotar tambien estando quietos en el agua (idle), no solo al nadar
         if (speed === 0 && inWater) {
             const wy = waterSurfaceY(p.x, p.y, p.z);
             const bob = Math.sin((t / 1000) * 1.4 + mob.spawnPhase) * 0.045;
             p.y += (wy + bob - p.y) * Math.min(1, dt * 4);
         }
-
-        // orientar (rec.yaw: tickCustoms lo aplica cuando no sigue al player)
         if (speed > 0 || ai.mode === 'intimidate') {
             const targetYaw = Math.atan2(-Math.sin(ai.dir), -Math.cos(ai.dir));
             let dy = targetYaw - (mob.rec.yaw || 0);
@@ -707,7 +646,6 @@
             return;
         }
         if (ai.mode === 'bite') {
-            // tras morder: retirarse y enfriar la agresion
             ai.mode = 'walk';
             ai.dir += Math.PI + (Math.random() - 0.5);
             ai.until = t + 2200 + Math.random() * 1200;
@@ -716,7 +654,6 @@
             return;
         }
         if (ai.mode === 'charge') {
-            // se rindio: enfriar y volver a deambular
             ai.mode = 'idle';
             ai.until = t + 1200 + Math.random() * 1500;
             ai.aggroUntil = t + sp.cooldownMs + Math.random() * 4000;
@@ -724,7 +661,6 @@
             return;
         }
         if (ai.mode === 'intimidate') {
-            // la intimidacion no asusto al jugador: cargar
             ai.mode = 'charge';
             ai.until = t + sp.chargeMaxMs;
             setAnim(mob, 'charge');
@@ -733,7 +669,6 @@
 
         const anims = inWater ? sp.waterAnims : sp.idleAnims;
         if (inWater && r < 0.75) {
-            // en el agua casi siempre avanzan rumbo adelante (deriva suave), no quedarse quietos
             ai.mode = 'swim';
             ai.dir = (mob.isLeader && mob.flockDir != null)
                 ? mob.flockDir + (Math.random() - 0.5) * 0.5
@@ -754,8 +689,6 @@
         ai.until = t + 2500 + Math.random() * 4500;
     }
 
-    // ---------- loop ----------
-
     function tick() {
         if (!state.enabled) return;
         const t = performance.now();
@@ -765,10 +698,8 @@
         if (!CM) { schedule(); return; }
 
         const p = playerPos();
-
-        // parvadas: cada 15-60s aparece una (patos 5-9, gansos 2-4) sobre una gran masa de agua
         if (p && t >= state.nextFlock && state.mobs.length < CFG.FLOCK_CAP) {
-            spawnFlock(); // si no hallo agua, reintenta pronto
+            spawnFlock();
             state.nextFlock = t + (state.mobs.length ? CFG.FLOCK_MIN_MS + Math.random() * (CFG.FLOCK_MAX_MS - CFG.FLOCK_MIN_MS) : CFG.RETRY_MS);
         }
 
@@ -783,8 +714,6 @@
         requestAnimationFrame(() => { if (state.stamp.alive) tick(); });
     }
 
-    // ---------- API publica ----------
-
     globalThis.MF_DuckMobs = {
         start() {
             if (state.enabled) return true;
@@ -795,7 +724,7 @@
             state.enabled = true;
             state.stamp = { alive: true };
             state.lastT = performance.now();
-            state.nextFlock = 0; // primera parvada al proximo tick
+            state.nextFlock = 0;
             schedule();
             console.log(TAG + ' activado (parvadas de patos y gansos)');
             return true;
@@ -818,14 +747,10 @@
             return true;
         }
     };
-
-    // auto-arranque si ya esta habilitado en settings
     try {
         const saved = localStorage.getItem('mf:duckmobs');
         if (saved && JSON.parse(saved)?.enabled) globalThis.MF_DuckMobs.start();
     } catch {}
-
-    // escucha de settings desde el panel
     document.addEventListener('minifeather:duckmobs-toggle', (ev) => {
         const on = !!(ev?.detail && (() => { try { return JSON.parse(ev.detail).enabled; } catch { return false; } })());
         try { localStorage.setItem('mf:duckmobs', JSON.stringify({ enabled: on })); } catch {}

@@ -60,8 +60,6 @@
 
   function findGame() {
     if (state.game?.player && state.game?.world) return state.game;
-    // Caché negativo con TTL: sin esto, en menú/carga el BFS de React
-    // corría CADA FRAME (querySelectors + 1400 fibers + allocations).
     const now = performance.now();
     if (now - state.lastGameMiss < 1500) return null;
     state.lastGameMiss = now;
@@ -77,7 +75,7 @@
         const queue = [root[key]], seen = new Set();
         let visited = 0, head = 0;
         while (head < queue.length && visited++ < 1400) {
-          const fiber = queue[head++]; // índice en vez de shift() (O(1))
+          const fiber = queue[head++];
           if (!fiber || seen.has(fiber)) continue;
           seen.add(fiber);
           for (const c of [fiber.stateNode, fiber.stateNode?.game, fiber.memoizedProps?.game, fiber.pendingProps?.game, fiber.memoizedState?.game]) {
@@ -99,7 +97,7 @@
     const out = [], queue = root ? [root] : [], seen = new WeakSet();
     let head = 0;
     while (head < queue.length && out.length < limit) {
-      const o = queue[head++]; // shift() era O(n) por nodo → spikes
+      const o = queue[head++];
       if (!o || typeof o !== 'object' || seen.has(o)) continue;
       seen.add(o); out.push(o);
       if (Array.isArray(o.children)) for (const c of o.children) queue.push(c);
@@ -109,7 +107,6 @@
 
   function scanFluids(game) {
     let count = 0;
-    // Solo scene: ambientMeshes vive dentro de scene → se recorrería 2x
     for (const o of collect(game?.gameScene?.scene)) {
       const list = Array.isArray(o.material) ? o.material : [o.material];
       for (const m of list) if (W.MF_RealisticFluid?.isFluidMaterial?.(m) && W.MF_RealisticFluid.patch(m)) count++;
@@ -297,7 +294,6 @@
       state.lastFrameAt = 0;
       applyProfile(); scan(true); applyCompanions(true);
       if (!state.raf) state.raf = requestAnimationFrame(tick);
-      // Interval de escaneo solo con el módulo activo (antes always-on)
       if (!state.timer) state.timer = setInterval(scan, 2200);
     } else {
       if (state.raf) cancelAnimationFrame(state.raf);

@@ -1,7 +1,6 @@
 (function () {
   'use strict';
 
-
   try {
     globalThis.__MINIFEATHER_CONTENT__?.destroy?.();
   } catch (_) {}
@@ -127,18 +126,9 @@
       showHorizon: true
     })
   });
-
-  // ── Perfiles globales de rendimiento ──
-  // Cada perfil ajusta de golpe las funciones visuales/pesadas del client
-  // (HUD, movimiento y utilidades no se tocan). Cambiar manualmente
-  // cualquiera de estas claves marca el perfil como "custom".
-  // Potato = low + lo barato en CPU que hace al juego sentirse vivo
-  // (HUD clásico, nametags, animaciones); los gráficos NATIVOS del juego
-  // (resolución, chunks, sombras...) los maneja MF_FpsBoost.
   const PERFORMANCE_PROFILES = Object.freeze({
     potato: Object.freeze({
-      // Máximos FPS sin dejar el mundo muerto
-      experimentalRealistic: false,
+        experimentalRealistic: false,
       experimentalAurora: false,
       experimentalConstellations: false,
       experimentalGrassFlowers: false,
@@ -158,15 +148,13 @@
       titanTiny: false,
       damageParticles: false,
       patPat: false,
-      // Lo barato que va ON explícito
       guiPatch: true,
       healthNameTags: true,
       distanceNameTags: true,
       playerAnims: true
     }),
     low: Object.freeze({
-      // Máximos FPS: todo lo decorativo fuera
-      experimentalRealistic: false,
+        experimentalRealistic: false,
       experimentalAurora: false,
       experimentalConstellations: false,
       experimentalGrassFlowers: false,
@@ -188,8 +176,7 @@
       patPat: false
     }),
     medium: Object.freeze({
-      // Base ligera: detalles naturales + cielo vivo
-      experimentalRealistic: false,
+        experimentalRealistic: false,
       experimentalAurora: false,
       experimentalConstellations: true,
       experimentalConstellationsLevel: 'medium',
@@ -212,8 +199,7 @@
       patPat: false
     }),
     high: Object.freeze({
-      // + packs de agua/física y mobs decorativos
-      experimentalRealistic: false,
+        experimentalRealistic: false,
       experimentalAurora: false,
       experimentalConstellations: true,
       experimentalConstellationsLevel: 'medium',
@@ -236,8 +222,7 @@
       patPat: true
     }),
     ultra: Object.freeze({
-      // + shaders experimentales (realista, aurora, vegetación 3D)
-      experimentalRealistic: true,
+        experimentalRealistic: true,
       experimentalRealisticLevel: 'high',
       experimentalAurora: true,
       experimentalAuroraLevel: 'high',
@@ -263,10 +248,6 @@
       patPat: true
     }),
     extreme: Object.freeze({
-      // Todo al máximo, PERO sin combos patológicos: vegetación a 'high'
-      // porque 'extreme' duplica vértices (73k) por poca ganancia visual,
-      // y apilada con PBR+Realistic se comía hasta una RTX 5050.
-      // El nivel 'extreme' de vegetación sigue disponible a mano.
       experimentalRealistic: true,
       experimentalRealisticLevel: 'ultra',
       experimentalAurora: true,
@@ -827,8 +808,6 @@
   function applyPanelTheme() {
     const accent = normalizePanelColor(settings.panelAccentColor, DEFAULT_SETTINGS.panelAccentColor);
     const background = normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor);
-
-    // Keep one global theme source so dialogs/toasts outside #mf-gui can match the panel.
     const root = document.documentElement;
     root?.style.setProperty('--mf-global-accent', accent);
     root?.style.setProperty('--mf-global-panel', background);
@@ -977,10 +956,6 @@
     let value = table[key] || fallback;
     return value.replace(/\{(\w+)\}/g, (_, token) => token in vars ? vars[token] : '');
   }
-
-  // El payload de traducciones (10 idiomas serializados) es idéntico
-  // entre toggles: se construye UNA vez y se reutiliza (antes se
-  // re-serializaba entero en cada interacción de settings).
   let languageStringsJson = '';
   function buildLanguageStringsJson() {
     if (languageStringsJson) return languageStringsJson;
@@ -1027,10 +1002,6 @@
   }
 
   function injectFont() {
-    // La fuente se registra con la FontFace API desde un ArrayBuffer:
-    // no pasa por red ni por CSS, así que el CSP font-src de la página
-    // no puede bloquearla y no queda colgada de una URL de extensión
-    // vieja tras re-inyectar. La regla CSS solo declara la familia.
     let style = document.getElementById('minifeather-font');
     if (!style) {
       style = document.createElement('style');
@@ -1174,7 +1145,7 @@
         const local = `url("${CONFIG.background}")`;
         if (bodyStyle.backgroundImage !== local) bodyStyle.backgroundImage = local;
       } else if (document.body.dataset.mfBgOriginal) {
-        
+
         bodyStyle.backgroundImage = document.body.dataset.mfBgOriginal;
         delete document.body.dataset.mfBgOriginal;
       }
@@ -1206,8 +1177,7 @@
 
   function changeDiscordButton() {
     document.querySelectorAll('button').forEach(btn => {
-      // textContent: innerText fuerza re-layout de TODO el documento por botón
-      const text = btn.textContent || '';
+        const text = btn.textContent || '';
       if (!text.includes('Join the Discord') && btn.dataset.mfJoin !== '1') return;
 
       if (!btn.hasAttribute('data-mf-original-html')) btn.dataset.mfOriginalHtml = btn.innerHTML;
@@ -1705,8 +1675,6 @@
         pingTarget = '';
         return pingTarget;
       }
-
-      // RTT real del websocket del juego: cero requests HTTP, cero 403.
       function socketRtt() {
         try {
           const g = window.miniblox?.player ? window.miniblox : (() => {
@@ -1720,8 +1688,7 @@
           let ws = null;
           try { ws = g?.connection?.socket || g?.socket || g?.network?.socket; } catch {}
           if (!ws) {
-            // último recurso: cualquier websocket vivo del juego
-            for (const k of Object.getOwnPropertyNames(globalThis)) {
+              for (const k of Object.getOwnPropertyNames(globalThis)) {
               try {
                 const v = globalThis[k];
                 if (v instanceof WebSocket) { ws = v; break; }
@@ -1743,16 +1710,12 @@
           render();
           return;
         }
-
-        // 1) RTT del websocket del juego (cero HTTP)
         const rtt = socketRtt();
         if (rtt !== null) {
           ping = rtt;
           render();
           return;
         }
-
-        // 2) respaldo HTTP HEAD — solo si aún no sabemos que está bloqueado
         if (pingTarget === '') { ping = connectionRtt(); render(); return; }
         measuring = true;
         requestController?.abort();
@@ -1770,8 +1733,7 @@
             signal: requestController.signal
           });
           if (res.status === 403 || res.status === 429) {
-            // Cloudflare/servidor bloquea el ping HTTP: no insistir más
-            pingTarget = '';
+              pingTarget = '';
             ping = connectionRtt();
             render();
             return;
@@ -3491,9 +3453,6 @@
     const key = MF_SVG_ICONS[name] ? name : 'grid';
     return `<svg class="mf-svg-icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${MF_SVG_ICONS[key]}</svg>`;
   }
-
-  // Source pixels for assets/generate-ui-pixel-icons.cjs. The ClickGUI loads
-  // actual PNGs from assets/ui; these grids are not rendered or encoded at runtime.
   const PIXEL_PALETTE = {
     '.': null,
     'k': '#1c2430', '-': '#536174', '+': '#b4c4d1', '#': '#f2e9d0',
@@ -3818,19 +3777,13 @@
         coordinatesEnabled: !!settings.coordinates
       })
     }));
-  }
-
-  // Puente de modelos: el mundo MAIN pide un GLB de models/entities/,
-  // aqui (ISOLATED) lo fetch-eamos como blob y devolvemos la URL.
-  document.addEventListener('minifeather:model-fetch-request', async (e) => {
+  }  document.addEventListener('minifeather:model-fetch-request', async (e) => {
     let nonce = null;
     try {
       const req = JSON.parse(e.detail || '{}');
       nonce = req.nonce;
       const file = String(req.file || '').replace(/[\\/]+/g, '');
       if (!file || file.includes('..')) throw new Error('nombre invalido');
-      // dir: carpeta base ("models/entities" por defecto, "assets" o
-      // "assets/sounds" para audio). Se permite UN nivel de subcarpeta.
       const dirRaw = String(req.dir || '') || 'models/entities';
       const parts = dirRaw.replace(/[\\/]+/g, '/').split('/').filter(Boolean).slice(0, 2);
       const dir = parts.join('/');
@@ -3854,12 +3807,6 @@
       }));
     }
   });
-
-  // Puente del pack de animaciones (FA+): el pack va embebido en EMFPack.js,
-  // no se necesita fetch.
-
-  // Puente de emotes: el mundo MAIN pide un .emotecraft de emotes/,
-  // aqui (ISOLATED) lo fetch-eamos como blob y devolvemos la URL.
   document.addEventListener('minifeather:emote-fetch-request', async (e) => {
     let nonce = null;
     try {
@@ -4476,7 +4423,6 @@
   function sendCustomShaderConfig(enabled = settings.customShader) {
     const preset = settings.customShaderPreset || 'spooklementary';
     const fx = {};
-    // Efectos comunes (spooklementary)
     const spookFx = ['vhs', 'crt', 'cel', 'fog', 'grain', 'glitch', 'flash', 'sharp'];
     const ufFx = ['ufsat', 'ufcontrast', 'uftone'];
     const phFx = ['phagx', 'phfog', 'phend', 'phbh', 'phbhsize', 'phbhspin'];
@@ -4538,12 +4484,9 @@
   }
 
   function sendWaterSplashConfig(enabled = settings.waterSplash) {
-    // assetsBase por evento: el MAIN world no tiene chrome.runtime y el
-    // meta de SplashScreen puede no existir en el frame del juego (iframes)
     let assetsBase = '';
     try {
       const url = chrome.runtime.getURL('assets/particles/');
-      // runtime invalidado (extensión recargada sin F5): no mandar basura
       if (url && !url.includes('://invalid/')) assetsBase = url;
     } catch (_) {}
     document.dispatchEvent(new CustomEvent('minifeather:water-splash-config', {
@@ -4696,8 +4639,6 @@
         refresh() {
           if (active) sendIdlePlayerBotCommand('status');
         },
-        // Reinyectar o reconstruir el panel no equivale a pulsar Desconectar.
-        // La conexión pertenece al módulo MAIN y debe sobrevivir a la UI.
         destroy() { active = false; }
       };
     });
@@ -4771,8 +4712,6 @@
       destroy() { sendRhythmParkourConfig(false); }
     }));
   }
-
-  // ─── Local Games (mundos locales / LAN via ntfy+WebRTC) ───────────
   let localGamesState = null;
   let localGamesJoinAddress = '';
 
@@ -6774,10 +6713,6 @@
       cleanup();
     }
   }
-
-  // ─── Configuración global: keybinds + sliders de todos los módulos ───
-
-  // binds "especiales" que viven fuera de settings.moduleBinds
   const GLOBAL_EXTRA_BINDS = Object.freeze([
     { key: 'zoom', prop: 'zoomBind', event: () => sendZoomConfig(settings.zoom) },
     { key: 'freelook', prop: 'freelookBind', event: () => document.dispatchEvent(new CustomEvent('minifeather:freelook-config', { detail: JSON.stringify({ enabled: !!settings.freelook, bind: String(settings.freelookBind || ''), mode: settings.freelookMode }) })) },
@@ -6839,8 +6774,7 @@
   }
 
   function bindableModuleEntries() {
-    // todos los módulos del índice (orden del panel) menos duplicados
-    const seen = new Set();
+      const seen = new Set();
     const entries = [];
     for (const item of getModuleIndex()) {
       if (seen.has(item.key)) continue;
@@ -7130,23 +7064,23 @@
     return `
       <div class="mf-page-stack">
         <div class="mf-card">
-          <div class="mf-card-title">${t('sectionGeneral')}</div>   
+          <div class="mf-card-title">${t('sectionGeneral')}</div>
           <div class="mf-toggle-grid">
             ${renderToggle(
               'keystrokes',
               t('keystrokes'),
               t('keystrokesDesc')
-            )}    
+            )}
             ${renderToggle(
               'fpsCounter',
               t('fpsCounter'),
               t('fpsCounterDesc')
-            )}    
+            )}
             ${renderToggle(
               'cpsCounter',
               t('cpsCounter'),
               t('cpsCounterDesc')
-            )}    
+            )}
             ${renderToggle(
               'pingCounter',
               t('pingCounter'),
@@ -7641,7 +7575,6 @@
     const isComplementary = preset === 'complementaryInspired';
     const isGraveyard = preset === 'graveyard';
 
-    // Sliders de efectos según el preset activo
     const fxSliders = isUltrafast
       ? [
           { id: 'ufsat', label: t('shadersUfSat'), value: Number(settings.customShaderFxUfsat ?? 1.35), min: 0.5, max: 2, step: 0.05, fmt: v => v.toFixed(2) },
@@ -8378,7 +8311,6 @@
     `;
   }
 
-  // ─── Accounts: creador de cuentas MiniFeather + uuid de la cuenta Miniblox ───
   const MF_ACC_TOPIC = 'mf-accounts-req-v1';
 
   function renderAccountsPage() {
@@ -8412,8 +8344,6 @@
       </div>
     `;
   }
-
-  // Pide el uuid de la cuenta a MF_Accounts (MAIN world) via CustomEvent
   let accDataListener = null;
   function requestAccountData(cb) {
     try {
@@ -8467,12 +8397,10 @@
     }
     if (btn) btn.disabled = true;
     if (statusEl) statusEl.textContent = t('accSending');
-    // La petición viaja por ntfy; el bot de Discord (24/7 en GitHub Actions)
-    // la procesa, crea la cuenta y la refleja en accounts.json del repo.
     const payload = {
       type: 'mf_account_create',
       username: user,
-      password: pass, // el SkinBot la hashea (PBKDF2) antes de guardar
+      password: pass,
       skin: skin || undefined,
       client: MODULE_VERSION,
       at: Date.now()
@@ -8625,13 +8553,13 @@
 
     refreshUpdaterCard(false);
   }
-  
+
   window.addEventListener('minifeather:experimental-registry-changed', () => {
     if (!panel || activePage !== 'experimental' || searchQuery) return;
     renderCurrentPageContent();
   });
-  
-function renderCreditsPage() {
+
+  function renderCreditsPage() {
   return `
     <div class="mf-page-stack">
       <div class="mf-card">
@@ -8644,7 +8572,7 @@ function renderCreditsPage() {
       </div>
     </div>
   `;
-}
+  }
 
   function renderSearchResults(query) {
     const needle = query.trim().toLowerCase();
@@ -8716,8 +8644,6 @@ function renderCreditsPage() {
     const pageContainer = panel.querySelector('#mf-gui-page');
     const titleEl = panel.querySelector('#mf-gui-page-title');
     if (!pageContainer) return;
-
-    // la barra de filtros solo tiene sentido en el dashboard
     const filterBar = panel.querySelector('#mf-feather-filterbar');
     if (filterBar) filterBar.style.display = (activePage === 'dashboard' || searchQuery.trim() || favoritesOnly) ? '' : 'none';
 
@@ -8835,10 +8761,6 @@ function renderCreditsPage() {
 
   let saveTimer = null;
   let saveGeneration = 0;
-
-  // Tras recargar/desinstalar la extensión, el content script huérfano pierde
-  // el contexto de chrome.* → cualquier llamada lanza "Extension context
-  // invalidated". Helper centralizado con guarda.
   function extAlive() {
     try {
       return !!(chrome?.runtime?.id);
@@ -8858,8 +8780,6 @@ function renderCreditsPage() {
     if (immediate) doSave();
     else saveTimer = setTimeout(doSave, 150);
   }
-
-  // Flush al cerrar/cambiar de pestaña
   window.addEventListener('beforeunload', () => {
     if (!extAlive()) return;
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
@@ -8871,14 +8791,11 @@ function renderCreditsPage() {
       chrome.storage.local.set({ settings: { ...settings } });
     }
   });
-
-  // Sync entre pestañas: si otra pestaña guardó settings, aplicarlos
   if (chrome.storage.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local' || !changes.settings) return;
       const incoming = changes.settings.newValue;
       if (!incoming) return;
-      // No sobreescribir si tenemos cambios sin guardar pendientes
       if (saveTimer) return;
       Object.assign(settings, incoming);
       Object.assign(guiSettings, incoming);
@@ -8891,7 +8808,6 @@ function renderCreditsPage() {
       applyPanelTheme();
       applyPanelScale();
       applyGuiSettings();
-      // Actualizar UI si está abierta
       const panel = document.getElementById('mf-gui');
       if (panel) {
         panel.querySelectorAll('.mf-toggle[data-key]').forEach(label => {
@@ -8923,8 +8839,6 @@ function renderCreditsPage() {
     if (MODULES.get('rebrand')?.enabled) replaceAllLogos();
     refreshLogoControls();
   }
-
-  // --- Bridge con la GUI nativa de miniblox (tab "MiniFeather" en Ajustes) ---
   const NSB_BOOLEAN_KEYS = [
     'rebrand', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
@@ -8962,8 +8876,6 @@ function renderCreditsPage() {
       const key = String(payload.key);
       if (!NSB_BOOLEAN_KEYS.includes(key)) return;
       const enabled = payload.enabled !== false;
-
-      // Misma lógica que el toggle del panel: freecam requiere permiso
       if (key === 'freecam' && enabled && !requestFreecamAccess()) {
         showFreecamDenied();
         document.dispatchEvent(new CustomEvent('minifeather:nsb-state-data', {
@@ -8981,8 +8893,6 @@ function renderCreditsPage() {
       saveSettings(true);
       applyGuiSettings();
       update();
-
-      // Confirmar el estado final al bridge
       document.dispatchEvent(new CustomEvent('minifeather:nsb-state-data', {
         detail: nsbStatePayload()
       }));
@@ -8997,8 +8907,6 @@ function renderCreditsPage() {
       showGUI();
       setActivePage(page);
     }, { signal: runtimeController?.signal });
-
-    // Estado inicial para el bridge si ya está escuchando
     document.dispatchEvent(new CustomEvent('minifeather:nsb-state-data', {
       detail: nsbStatePayload()
     }));
@@ -9071,9 +8979,6 @@ function renderCreditsPage() {
     element.textContent = message;
     element.style.color = color;
   }
-
-  // Empuja los assets activos (data: URLs de skins/capes) al hook de Image.src en MAIN.
-  // Chrome ya no permite redirects DNR a data:, así que MAIN los aplica interceptando la carga.
   function pushPanelAssetsToMain() {
     chrome.runtime.sendMessage({ type: 'getSkins' }, skinsRes => {
       chrome.runtime.sendMessage({ type: 'getCapes' }, capesRes => {
@@ -9094,8 +8999,6 @@ function renderCreditsPage() {
   }
 
   document.addEventListener('minifeather:panel-assets-request', () => pushPanelAssetsToMain());
-
-  // Push proactivo al cargar: MAIN puede pedir los assets antes de que este script exista
   setTimeout(pushPanelAssetsToMain, 1500);
   setTimeout(pushPanelAssetsToMain, 4000);
 
@@ -9474,27 +9377,34 @@ function renderCreditsPage() {
   }
 
   function openBlockHighlightSettings() {
-    if (!panel) return;   
+    if (!panel) return;
+
     const existing =
-      panel.querySelector('.mf-block-highlight-backdrop');    
-    existing?.remove();   
-    const backdrop = document.createElement('div');   
+      panel.querySelector('.mf-block-highlight-backdrop');
+
+    existing?.remove();
+
+    const backdrop = document.createElement('div');
+
     backdrop.className =
-      'mf-tt-backdrop mf-block-highlight-backdrop';   
+      'mf-tt-backdrop mf-block-highlight-backdrop';
+
     const color =
-      settings.blockHighlightColor || '#ffffff';    
+      settings.blockHighlightColor || '#ffffff';
+
     const thickness =
-      Number(settings.blockHighlightThickness) || 1;    
+      Number(settings.blockHighlightThickness) || 1;
+
     backdrop.innerHTML = `
       <div
         class="mf-tt-dialog"
         role="dialog"
         aria-modal="true"
-      >   
+      >
         <div class="mf-tt-head">
           <div class="mf-tt-title">
             Block Highlight Settings
-          </div>    
+          </div>
           <button
             type="button"
             class="mf-close"
@@ -9502,16 +9412,16 @@ function renderCreditsPage() {
           >
             ×
           </button>
-        </div>    
+        </div>
         <div class="mf-tt-row">
           <span>Highlight Color</span>
-        </div>    
+        </div>
         <div style="
           display:flex;
           align-items:center;
           gap:10px;
           margin-bottom:16px;
-        ">    
+        ">
           <input
             type="color"
             data-bh-color
@@ -9525,7 +9435,7 @@ function renderCreditsPage() {
               background:transparent;
               cursor:pointer;
             "
-          >   
+          >
           <input
             type="text"
             class="mf-input"
@@ -9533,8 +9443,8 @@ function renderCreditsPage() {
             value="${color}"
             maxlength="7"
             placeholder="#ffffff"
-          >   
-        </div>    
+          >
+        </div>
         <div class="mf-tt-row" style="margin-top:12px;">
           <span>Rainbow Mode</span>
           <button
@@ -9553,7 +9463,7 @@ function renderCreditsPage() {
           >
             ${thickness}
           </span>
-        </div>    
+        </div>
         <input
           class="mf-tt-range"
           data-bh-thickness
@@ -9609,28 +9519,35 @@ function renderCreditsPage() {
         </div>
         <div class="mf-tt-hint">
           Changes are applied immediately while this window is open.
-        </div>    
+        </div>
         <button
           type="button"
           class="mf-btn primary mf-tt-save"
           data-bh-save
         >
           Save
-        </button>   
+        </button>
       </div>
-    `;    
-    panel.appendChild(backdrop);    
+    `;
+
+    panel.appendChild(backdrop);
+
     const colorInput =
-      backdrop.querySelector('[data-bh-color]');    
+      backdrop.querySelector('[data-bh-color]');
+
     const colorText =
-      backdrop.querySelector('[data-bh-color-text]');   
+      backdrop.querySelector('[data-bh-color-text]');
+
     const thicknessInput =
-      backdrop.querySelector('[data-bh-thickness]');    
+      backdrop.querySelector('[data-bh-thickness]');
+
     const thicknessValue =
-      backdrop.querySelector('[data-bh-thickness-value]');    
+      backdrop.querySelector('[data-bh-thickness-value]');
+
     const apply = () => {
       const selectedColor =
-        colorInput?.value || '#ffffff';   
+        colorInput?.value || '#ffffff';
+
       const selectedThickness =
         Math.max(
           1,
@@ -9638,22 +9555,29 @@ function renderCreditsPage() {
             6,
             Number(thicknessInput?.value) || 1
           )
-        );    
+        );
+
       settings.blockHighlightColor =
-        selectedColor;    
+        selectedColor;
+
       settings.blockHighlightThickness =
-        selectedThickness;    
+        selectedThickness;
+
       guiSettings.blockHighlightColor =
-        selectedColor;    
+        selectedColor;
+
       guiSettings.blockHighlightThickness =
-        selectedThickness;    
+        selectedThickness;
+
       if (colorText) {
         colorText.value = selectedColor;
-      }   
+      }
+
       if (thicknessValue) {
         thicknessValue.textContent =
           String(selectedThickness);
-      }   
+      }
+
       document.dispatchEvent(
           new CustomEvent(
               'minifeather:block-highlight-config',
@@ -9690,27 +9614,34 @@ function renderCreditsPage() {
         saveSettings(true);
         apply();
       }
-    );    
+    );
+
     colorInput?.addEventListener(
       'input',
       apply
-    );    
+    );
+
     colorText?.addEventListener(
       'change',
       () => {
         let value =
-          colorText.value.trim();   
+          colorText.value.trim();
+
         if (!/^#[0-9a-fA-F]{6}$/.test(value)) {
           value = '#ffffff';
-        }   
-        colorInput.value = value;   
+        }
+
+        colorInput.value = value;
+
         apply();
       }
-    );    
+    );
+
     thicknessInput?.addEventListener(
       'input',
       apply
-    );    
+    );
+
     backdrop
       .querySelectorAll('[data-bh-preset]')
       .forEach(button => {
@@ -9718,27 +9649,32 @@ function renderCreditsPage() {
           'click',
           () => {
             thicknessInput.value =
-              button.dataset.bhPreset;    
+              button.dataset.bhPreset;
+
             apply();
           }
         );
-      });   
+      });
+
     const cleanup = () => {
       saveSettings();
       backdrop.remove();
-    };    
+    };
+
     backdrop
       .querySelector('[data-bh-close]')
       ?.addEventListener(
         'click',
         cleanup
-      );    
+      );
+
     backdrop
       .querySelector('[data-bh-save]')
       ?.addEventListener(
         'click',
         cleanup
-      );    
+      );
+
     backdrop.addEventListener(
       'mousedown',
       event => {
@@ -9757,68 +9693,68 @@ function renderCreditsPage() {
   ];
 
   function openArmorHudSettings() {
-    if (!panel) return; 
-    panel.querySelector('.mf-armorhud-editor-backdrop')?.remove();  
-    const backdrop = document.createElement('div'); 
+    if (!panel) return;
+    panel.querySelector('.mf-armorhud-editor-backdrop')?.remove();
+    const backdrop = document.createElement('div');
     backdrop.className =
-        'mf-armorhud-editor-backdrop';  
+        'mf-armorhud-editor-backdrop';
     Object.assign(backdrop.style, {
         position: 'fixed',
         inset: '0',
-        zIndex: '1000000',  
+        zIndex: '1000000',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center', 
-        background: 'rgba(0, 0, 0, 0.78)',  
+        justifyContent: 'center',
+        background: 'rgba(0, 0, 0, 0.78)',
         padding: '20px',
         boxSizing: 'border-box'
-    }); 
-    const editor = document.createElement('div'); 
+    });
+    const editor = document.createElement('div');
     editor.className =
-        'mf-armorhud-editor'; 
+        'mf-armorhud-editor';
     Object.assign(editor.style, {
         width: 'min(1400px, 96vw)',
-        height: 'min(820px, 92vh)', 
+        height: 'min(820px, 92vh)',
         display: 'flex',
-        flexDirection: 'column',  
+        flexDirection: 'column',
         background: '#111',
         border: '1px solid rgba(255,255,255,0.12)',
-        borderRadius: '12px', 
-        overflow: 'hidden', 
+        borderRadius: '12px',
+        overflow: 'hidden',
         boxShadow:
             '0 20px 70px rgba(0,0,0,0.6)'
-    });  
+    });
     const header =
-        document.createElement('div');  
+        document.createElement('div');
     Object.assign(header.style, {
         height: '54px',
-        minHeight: '54px',  
+        minHeight: '54px',
         display: 'flex',
-        alignItems: 'center', 
-        padding: '0 16px',  
-        boxSizing: 'border-box',  
-        background: '#181818',  
+        alignItems: 'center',
+        padding: '0 16px',
+        boxSizing: 'border-box',
+        background: '#181818',
         borderBottom:
             '1px solid rgba(255,255,255,0.08)'
-    }); 
+    });
     const title =
-        document.createElement('div');  
+        document.createElement('div');
     title.textContent =
-        'Configure Armor HUD';  
+        'Configure Armor HUD';
     Object.assign(title.style, {
         fontSize: '17px',
         fontWeight: '700',
         color: '#fff'
-    }); 
+    });
     const subtitle =
-        document.createElement('div');  
+        document.createElement('div');
     subtitle.textContent =
-        'Drag the armor slots to position them on your screen.';  
+        'Drag the armor slots to position them on your screen.';
     Object.assign(subtitle.style, {
-        marginLeft: '14px', 
+        marginLeft: '14px',
         fontSize: '12px',
         color: 'rgba(255,255,255,0.55)'
-    }); 
+    });
     header.appendChild(title);
     header.appendChild(subtitle);
 
@@ -9855,112 +9791,112 @@ function renderCreditsPage() {
         const savedDisplay = localStorage.getItem('minifeather-armorhud-display');
         if (['off','percentage','durability','both'].includes(savedDisplay)) displaySelect.value = savedDisplay;
     } catch (_) {}
-    displayWrap.appendChild(displayLabel); displayWrap.appendChild(displaySelect); header.appendChild(displayWrap); 
+    displayWrap.appendChild(displayLabel); displayWrap.appendChild(displaySelect); header.appendChild(displayWrap);
     const preview =
-        document.createElement('div');  
+        document.createElement('div');
     Object.assign(preview.style, {
-        position: 'relative', 
-        flex: '1',  
-        overflow: 'hidden', 
+        position: 'relative',
+        flex: '1',
+        overflow: 'hidden',
         background: '#000'
-    }); 
+    });
     const screenshot =
-        document.createElement('img');  
+        document.createElement('img');
     screenshot.src =
         chrome.runtime.getURL(
             'assets/armor-hud-editor.png'
-        );  
+        );
     screenshot.alt =
-        'Armor HUD editor preview'; 
+        'Armor HUD editor preview';
     Object.assign(screenshot.style, {
-        position: 'absolute', 
-        inset: '0', 
+        position: 'absolute',
+        inset: '0',
         width: '100%',
-        height: '100%', 
-        objectFit: 'contain', 
-        userSelect: 'none', 
+        height: '100%',
+        objectFit: 'contain',
+        userSelect: 'none',
         pointerEvents: 'none'
-    }); 
-    preview.appendChild(screenshot);  
+    });
+    preview.appendChild(screenshot);
     const names = [
         'Helmet',
         'Chestplate',
         'Leggings',
         'Boots'
-    ];  
+    ];
     const markerColors = [
         '#ffffff',
         '#ffffff',
         '#ffffff',
         '#ffffff'
-    ];  
-    const markers = []; 
+    ];
+    const markers = [];
     const defaultPositions = [
         { x: 0.88, y: 0.28 },
         { x: 0.88, y: 0.39 },
         { x: 0.88, y: 0.50 },
         { x: 0.88, y: 0.61 }
-    ];  
-    for (let i = 0; i < 4; i++) { 
+    ];
+    for (let i = 0; i < 4; i++) {
         const marker =
-            document.createElement('div');  
+            document.createElement('div');
         marker.className =
-            'mf-armorhud-editor-marker';  
+            'mf-armorhud-editor-marker';
         marker.dataset.slot =
-            ARMOR_HUD_SLOT_NAMES[i];  
+            ARMOR_HUD_SLOT_NAMES[i];
         Object.assign(marker.style, {
-            position: 'absolute', 
+            position: 'absolute',
             left:
-                `${defaultPositions[i].x * 100}%`,  
+                `${defaultPositions[i].x * 100}%`,
             top:
-                `${defaultPositions[i].y * 100}%`,  
+                `${defaultPositions[i].y * 100}%`,
             transform:
-                'translate(-50%, -50%)',  
+                'translate(-50%, -50%)',
             width: '58px',
-            height: '58px', 
+            height: '58px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center', 
-            boxSizing: 'border-box',  
+            justifyContent: 'center',
+            boxSizing: 'border-box',
             border:
-                `2px solid ${markerColors[i]}`, 
-            borderRadius: '8px',  
+                `2px solid ${markerColors[i]}`,
+            borderRadius: '8px',
             background:
-                'rgba(0,0,0,0.35)', 
-            color: '#fff',  
+                'rgba(0,0,0,0.35)',
+            color: '#fff',
             fontSize: '10px',
-            fontWeight: '700',  
-            textAlign: 'center',  
-            cursor: 'grab', 
-            userSelect: 'none', 
-            zIndex: '2',  
+            fontWeight: '700',
+            textAlign: 'center',
+            cursor: 'grab',
+            userSelect: 'none',
+            zIndex: '2',
             textShadow:
                 '0 1px 3px #000'
-        }); 
+        });
         marker.textContent =
-            names[i]; 
-        preview.appendChild(marker);  
+            names[i];
+        preview.appendChild(marker);
         markers.push({
-            element: marker,  
+            element: marker,
             x: defaultPositions[i].x,
             y: defaultPositions[i].y
         });
-    } 
-    for (const markerData of markers) { 
+    }
+    for (const markerData of markers) {
         const marker =
-            markerData.element; 
-        let dragging = false; 
+            markerData.element;
+        let dragging = false;
         marker.addEventListener(
             'pointerdown',
-            event => {  
+            event => {
                 event.preventDefault();
-                event.stopPropagation();  
-                dragging = true;  
+                event.stopPropagation();
+                dragging = true;
                 marker.setPointerCapture(
                     event.pointerId
-                );  
+                );
                 marker.style.cursor =
-                    'grabbing'; 
+                    'grabbing';
                 marker.style.transform =
                     'translate(-50%, -50%) scale(1.05)';
                 marker.style.borderColor =
@@ -9970,40 +9906,40 @@ function renderCreditsPage() {
                 marker.style.boxShadow =
                     '0 4px 14px rgba(0,0,0,0.65)';
             }
-        );  
+        );
         marker.addEventListener(
             'pointermove',
-            event => {  
-                if (!dragging) return;  
+            event => {
+                if (!dragging) return;
                 const rect =
-                    preview.getBoundingClientRect();  
-                let x = (event.clientX - rect.left) / rect.width; 
+                    preview.getBoundingClientRect();
+                let x = (event.clientX - rect.left) / rect.width;
                 let y = (event.clientY - rect.top) / rect.height;
-                // Snap to a grid.
                 const SNAP_X = 0.025;
                 const SNAP_Y = 0.025;
                 x = Math.round(x / SNAP_X) * SNAP_X;
-                y = Math.round(y / SNAP_Y) * SNAP_Y;  
-                x = Math.max(0.02, Math.min(0.98, x));  
-                y = Math.max(0.02, Math.min(0.98, y));  
+                y = Math.round(y / SNAP_Y) * SNAP_Y;
+                x = Math.max(0.02, Math.min(0.98, x));
+                y = Math.max(0.02, Math.min(0.98, y));
                 markerData.x = x;
-                markerData.y = y; 
-                marker.style.left = `${x * 100}%`;  
+                markerData.y = y;
+                marker.style.left = `${x * 100}%`;
                 marker.style.top = `${y * 100}%`;
             }
-        );  
+        );
         const stopDragging =
-            event => {  
-                if (!dragging) return;  
-                dragging = false; 
+            event => {
+                if (!dragging) return;
+                dragging = false;
                 marker.style.cursor =
-                    'grab'; 
+                    'grab';
                 marker.style.transform =
                     'translate(-50%, -50%)';
                 marker.style.borderColor =
                     'rgba(255,255,255,0.45)';
                 marker.style.background =
-                    'rgba(20,20,20,0.72)';                          
+                    'rgba(20,20,20,0.72)';
+
                 marker.style.boxShadow =
                     '0 2px 8px rgba(0,0,0,0.45)';
 
@@ -10020,54 +9956,54 @@ function renderCreditsPage() {
                         { detail: JSON.stringify(positions) }
                     )
                 );
-            };  
+            };
         marker.addEventListener(
             'pointerup',
             stopDragging
-        );  
+        );
         marker.addEventListener(
             'pointercancel',
             stopDragging
         );
-    } 
+    }
     const footer =
-        document.createElement('div');  
+        document.createElement('div');
     Object.assign(footer.style, {
         height: '58px',
-        minHeight: '58px',  
+        minHeight: '58px',
         display: 'flex',
-        alignItems: 'center', 
-        justifyContent: 'flex-end', 
-        gap: '8px', 
-        padding: '0 14px',  
-        boxSizing: 'border-box',  
-        background: '#181818',  
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: '8px',
+        padding: '0 14px',
+        boxSizing: 'border-box',
+        background: '#181818',
         borderTop:
             '1px solid rgba(255,255,255,0.08)',
         position: 'relative',
         zIndex: '10'
-    }); 
+    });
     const reset =
-        document.createElement('button'); 
+        document.createElement('button');
     reset.type =
-        'button'; 
+        'button';
     reset.textContent =
-        'Reset';  
+        'Reset';
     reset.className =
-        'mf-btn secondary'; 
+        'mf-btn secondary';
     reset.addEventListener(
         'click',
-        () => { 
+        () => {
             markers.forEach(
-                (markerData, index) => {  
+                (markerData, index) => {
                     const position =
-                        defaultPositions[index];  
+                        defaultPositions[index];
                     markerData.x =
-                        position.x; 
+                        position.x;
                     markerData.y =
-                        position.y; 
+                        position.y;
                     markerData.element.style.left =
-                        `${position.x * 100}%`; 
+                        `${position.x * 100}%`;
                     markerData.element.style.top =
                         `${position.y * 100}%`;
                 }
@@ -10086,42 +10022,42 @@ function renderCreditsPage() {
                 )
             );
         }
-    );  
+    );
     const cancel =
-        document.createElement('button'); 
+        document.createElement('button');
     cancel.type =
-        'button'; 
+        'button';
     cancel.textContent =
-        'Cancel'; 
+        'Cancel';
     cancel.className =
-        'mf-btn secondary'; 
+        'mf-btn secondary';
     cancel.addEventListener(
         'click',
         () => {
             backdrop.remove();
         }
-    );  
+    );
     const save =
-        document.createElement('button'); 
+        document.createElement('button');
     save.type =
-        'button'; 
+        'button';
     save.textContent =
-        'Save Layout';  
+        'Save Layout';
     save.className =
-        'mf-btn primary'; 
+        'mf-btn primary';
     save.addEventListener(
         'click',
-        () => { 
-            const positions = {}; 
-            for (const markerData of markers) { 
+        () => {
+            const positions = {};
+            for (const markerData of markers) {
                 positions[
                     markerData.element.dataset.slot
                 ] = {
                     x: markerData.x,
                     y: markerData.y
                 };
-            } 
-            
+            }
+
             document.dispatchEvent(
                 new CustomEvent(
                     'minifeather:armorhud-layout',
@@ -10130,32 +10066,28 @@ function renderCreditsPage() {
                     }
                 )
             );
-            
+
             backdrop.remove();
-            
+
         }
-    );  
+    );
     footer.appendChild(reset);
     footer.appendChild(cancel);
-    footer.appendChild(save); 
+    footer.appendChild(save);
     editor.appendChild(header);
     editor.appendChild(preview);
-    editor.appendChild(footer); 
-    backdrop.appendChild(editor); 
-    panel.appendChild(backdrop);  
+    editor.appendChild(footer);
+    backdrop.appendChild(editor);
+    panel.appendChild(backdrop);
     backdrop.addEventListener(
         'mousedown',
-        event => {  
+        event => {
             if (event.target === backdrop) {
                 backdrop.remove();
             }
         }
     );
   }
-
-  // ── Mini reproductor de música persistente ──
-  // Vive en document.body, fuera del ciclo de vida de la GUI:
-  // cerrar la GUI NO corta la música (la GUI se auto-descarga al cerrarse).
   let musicMini = null;
 
   function parseYouTubeMusicUrl(raw) {
@@ -10219,8 +10151,6 @@ function renderCreditsPage() {
     const box = document.getElementById('mf-music-mini');
     if (box) box.style.display = 'none';
   }
-
-  // Devuelve { ok, msg }
   function playMusicMini(url) {
     const { id, list } = parseYouTubeMusicUrl(url);
     if (!id && !list) return { ok: false, msg: t('musicInvalidUrl') };
@@ -10284,8 +10214,6 @@ function renderCreditsPage() {
 
     bindThemeColor('#mf-panel-accent-color', '#mf-panel-accent-text', 'panelAccentColor', DEFAULT_SETTINGS.panelAccentColor);
     bindThemeColor('#mf-panel-background-color', '#mf-panel-background-text', 'panelBackgroundColor', DEFAULT_SETTINGS.panelBackgroundColor);
-
-    // ── Zoom de página (50-120%) ──
     const scaleInput = panel.querySelector('#mf-panel-scale');
     const scaleValue = panel.querySelector('#mf-panel-scale-value');
     scaleInput?.addEventListener('input', () => {
@@ -10301,8 +10229,7 @@ function renderCreditsPage() {
       settings.pageZoomEnabled = event.target.checked;
       guiSettings.pageZoomEnabled = settings.pageZoomEnabled;
       if (!settings.pageZoomEnabled) {
-        // desactivado → devolver la página a 100%
-        try { chrome?.runtime?.sendMessage?.({ type: 'mfSetPageZoom', zoom: 1 }, () => void chrome.runtime.lastError); } catch (_) {}
+          try { chrome?.runtime?.sendMessage?.({ type: 'mfSetPageZoom', zoom: 1 }, () => void chrome.runtime.lastError); } catch (_) {}
       } else {
         applyPanelScale();
       }
@@ -10390,16 +10317,11 @@ function renderCreditsPage() {
         submit();
       });
     }
-
-    // Local Games: render inicial del contenedor (el resto llega por eventos)
     if (panel.querySelector('#mf-localgames-view')) {
       refreshLocalGamesView();
       sendLocalGamesCommand('status');
-      // refrescar el lobby de salas también (push por WS, sin coste)
       sendLocalGamesCommand('refresh-servers');
     }
-
-    // ─── Shaders: slider de intensidad ──────────
     const shaderStrength = panel.querySelector('#mf-shader-strength');
     shaderStrength?.addEventListener('input', () => {
       const value = parseFloat(shaderStrength.value);
@@ -10448,7 +10370,6 @@ function renderCreditsPage() {
       input?.addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
       try { if (input) input.value = localStorage.getItem('minifeather_yt_module_url') || ''; } catch (_) {}
     }
-    // Selector de preset (Spooklementary / UltraFast)
     const presetSelect = panel.querySelector('#mf-shader-preset');
     presetSelect?.addEventListener('change', () => {
       settings.customShaderPreset = presetSelect.value;
@@ -10459,8 +10380,6 @@ function renderCreditsPage() {
       }
       renderCurrentPageContent();
     });
-
-    // Sliders de sub-efectos (según el preset activo)
     const fxMap = {
       vhs: { key: 'customShaderFxVhs', fmt: v => Math.round(v * 100) + '%' },
       crt: { key: 'customShaderFxCrt', fmt: v => Math.round(v * 100) + '%' },
@@ -10497,8 +10416,6 @@ function renderCreditsPage() {
         saveSettings(true);
       });
     }
-
-    // ─── PostFX: sliders del pass full-screen ──────────
     const postfxMap = {
       bloom: { key: 'customShaderPfbloom', fmt: v => Math.round(v * 100) + '%' },
       ca: { key: 'customShaderPfca', fmt: v => Math.round(v * 100) + '%' },
@@ -10523,8 +10440,6 @@ function renderCreditsPage() {
         saveSettings(true);
       });
     }
-
-    // ─── Nubes: presets rápidos y sliders ───────────────────────────
     const CLOUD_PRESETS = {
       default:   { coverage: 0.5, scale: 0.012, wind: 0.02, thickness: 30, height: 128, opacity: 0.9 },
       overcast:  { coverage: 0.75, scale: 0.02, wind: 0.03, thickness: 60, height: 128, opacity: 0.95 },
@@ -10577,8 +10492,6 @@ function renderCreditsPage() {
         saveSettings(true);
       });
     }
-
-    // ─── Nubes: toggle de ruido del pack (CloudNoise 128³) ───────────
     const packNoiseToggle = panel.querySelector('.mf-toggle[data-key="cloudsPackNoise"]');
     if (packNoiseToggle) {
       const syncPackNoiseToggle = () => {
@@ -10594,14 +10507,11 @@ function renderCreditsPage() {
       });
       syncPackNoiseToggle();
     }
-
-    // ─── Nubes: editor de dibujo para forma custom ──────────────────
     const shapeCanvas = panel.querySelector('#mf-cloud-shape-canvas');
     if (shapeCanvas) {
       const ctx = shapeCanvas.getContext('2d');
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, shapeCanvas.width, shapeCanvas.height);
-      // Restaurar dibujo guardado si existe
       try {
         const saved = localStorage.getItem('miniblox_clouds_shape');
         if (saved) {
@@ -10645,7 +10555,6 @@ function renderCreditsPage() {
       shapeCanvas.addEventListener('pointermove', (e) => {
         if (!drawing) return;
         const p = canvasPos(e);
-        // Interpolar para trazos continuos
         const dist = Math.hypot(p.x - lastX, p.y - lastY);
         const steps = Math.max(1, Math.ceil(dist / (brushSize() * 0.3)));
         for (let i = 1; i <= steps; i++) {
@@ -10657,8 +10566,6 @@ function renderCreditsPage() {
       const stopDraw = () => { drawing = false; };
       shapeCanvas.addEventListener('pointerup', stopDraw);
       shapeCanvas.addEventListener('pointercancel', stopDraw);
-
-      // Botones
       const applyBtn = panel.querySelector('#mf-cloud-shape-apply');
       applyBtn?.addEventListener('click', () => {
         if (!settings.customShader) return;
@@ -10681,8 +10588,6 @@ function renderCreditsPage() {
           detail: JSON.stringify({ cloudsShape: { dataUrl: null } })
         }));
       });
-
-      // Sliders: pincel / mezcla / tile
       shapeBrushSlider?.addEventListener('input', () => {
         const v = parseFloat(shapeBrushSlider.value);
         settings.cloudsShapeBrush = v;
@@ -10783,7 +10688,7 @@ function renderCreditsPage() {
       panel.querySelector(
         '.mf-toggle[data-key="freelook"]'
       );
-    
+
     freelookToggle?.addEventListener(
       'contextmenu',
       event => {
@@ -10808,13 +10713,13 @@ function renderCreditsPage() {
       panel.querySelector(
         '.mf-toggle[data-key="blockHighlight"]'
       );
-    
+
     blockHighlightToggle?.addEventListener(
       'contextmenu',
       event => {
         event.preventDefault();
         event.stopPropagation();
-      
+
         openBlockHighlightSettings();
       }
     );
@@ -10825,8 +10730,6 @@ function renderCreditsPage() {
           openArmorHudSettings();
       }
     );
-
-    // Perfiles globales de rendimiento (dashboard)
     panel.querySelectorAll('[data-mf-profile]').forEach(button => {
       button.addEventListener('click', () => {
         applyPerformanceProfile(button.dataset.mfProfile);
@@ -11009,16 +10912,10 @@ function renderCreditsPage() {
         }
         guiSettings[key] = input.checked;
         settings[key] = input.checked;
-
-        // Si el usuario toca una clave gestionada por perfiles, salir
-        // del perfil activo (queda como "custom" hasta que elija otro).
         if (PROFILE_KEYS.has(key) && settings.performanceProfile !== 'custom') {
           settings.performanceProfile = 'custom';
           guiSettings.performanceProfile = 'custom';
         }
-
-        // Update the visible module state immediately. The old UI only reflected
-        // the new value after the whole GUI was closed and reopened.
         const state = label.querySelector('.mf-feature-state');
         if (state) {
           state.textContent = input.checked ? 'Enabled' : 'Disabled';
@@ -11279,8 +11176,6 @@ function renderCreditsPage() {
         refreshActiveCapes();
       });
     });
-
-    // Facial Animations: abre/cierra el editor de MF_Facial (MAIN) via evento
     panel.querySelector('#mf-facial-open')?.addEventListener('click', () => {
       document.dispatchEvent(new CustomEvent('minifeather:facial-open', { detail: '{}' }));
     });
@@ -11425,8 +11320,6 @@ function renderCreditsPage() {
         refreshTextureList();
       });
     }
-
-    // ── PBR Textures (Experimental) — sliders de MF_PBR (MAIN) via CustomEvent ──
     const pbrKinds = panel.querySelector('[data-pbr-kinds]');
     const pbrClearBtn = panel.querySelector('#mf-pbr-clear');
 
@@ -11457,8 +11350,7 @@ function renderCreditsPage() {
 
       const refreshPbrKinds = () => {
         if (!pbrKinds || !pbrKinds.isConnected) {
-          // La página se re-renderizó: este interval quedó huérfano → morir
-          if (pbrKindsTimer) { clearInterval(pbrKindsTimer); pbrKindsTimer = 0; }
+            if (pbrKindsTimer) { clearInterval(pbrKindsTimer); pbrKindsTimer = 0; }
           return;
         }
         const avail = localStorage.getItem('mf_pbr_available') === 'true';
@@ -11468,8 +11360,6 @@ function renderCreditsPage() {
         pbrKinds.style.color = avail ? '#4caf50' : '#7c828a';
       };
       refreshPbrKinds();
-      // Anti-leak: cada render de la página Experimental re-creaba este
-      // interval sin limpiar el anterior → timers zombis acumulándose
       if (pbrKindsTimer) clearInterval(pbrKindsTimer);
       pbrKindsTimer = setInterval(refreshPbrKinds, 3000);
 
@@ -11479,11 +11369,6 @@ function renderCreditsPage() {
           refreshPbrKinds();
         }
       });
-
-      // ── Editor de packs PBR (MAIN world, puente CustomEvent) ──
-      // El editor vive en MAIN donde chrome.runtime.getURL NO está
-      // garantizado → le mandamos frames.json serializado y las
-      // traducciones necesarias para t() en el evento.
       const pbrEditBtn = panel.querySelector('#mf-pbr-edit');
       pbrEditBtn?.addEventListener('click', async () => {
         let frames = null;
@@ -11491,7 +11376,6 @@ function renderCreditsPage() {
           const res = await fetch(chrome.runtime.getURL('assets/frames.json'));
           frames = await res.json();
         } catch (_) {}
-        // mandar traducciones (10 idiomas) y frames al editor
         const editorKeys = [
           'pbrEditorTitle', 'pbrEditorChannel', 'pbrEditorSearch',
           'pbrEditorReliefUp', 'pbrEditorReliefSmooth', 'pbrEditorReliefFlat',
@@ -11524,8 +11408,6 @@ function renderCreditsPage() {
           }));
         }
       });
-
-      // ── Selector de presets PBR (puente CustomEvent hacia TexturePackManager) ──
       const presetSelect = panel.querySelector('#mf-pbr-preset');
       const presetStatus = panel.querySelector('#mf-pbr-preset-status');
       let presetsBusy = false;
@@ -11612,7 +11494,6 @@ function renderCreditsPage() {
     panel.querySelectorAll('.mf-feather-category').forEach(btn => {
       btn.addEventListener('click', () => {
         activeCategory = btn.dataset.category || 'all';
-        // elegir un filtro limpia la búsqueda: los dos a la vez confunden
         if (searchQuery) {
           searchQuery = '';
           const searchInput = panel.querySelector('#mf-gui-search');
@@ -11839,8 +11720,6 @@ function renderCreditsPage() {
     Object.assign(guiSettings, preset);
     guiSettings.performanceProfile = name;
     saveSettings(true);
-    // Potato además hunde los gráficos NATIVOS del juego (MF_FpsBoost);
-    // cualquier otro perfil restaura el snapshot del usuario.
     document.dispatchEvent(new CustomEvent('minifeather:fpsboost-config', {
       detail: JSON.stringify({ enabled: name === 'potato', level: 'potato' })
     }));
@@ -11868,8 +11747,6 @@ function renderCreditsPage() {
     setModuleEnabled('healthNameTags', settings.healthNameTags);
     setModuleEnabled('distanceNameTags', settings.distanceNameTags);
     setModuleEnabled('damageParticles', settings.damageParticles);
-    // Shine Ambience comanda el pack de agua: splash + ondas de lluvia solo
-    // si AMBOS están activados (el toggle propio de waterSplash manda).
     setModuleEnabled('waterSplash', settings.waterSplash && settings.shineAmbience);
     setModuleEnabled('shineAmbience', settings.shineAmbience);
     setModuleEnabled('patPat', settings.patPat);
@@ -11983,8 +11860,6 @@ function renderCreditsPage() {
         detail: JSON.stringify({ enabled: !!settings.experimentalPbr })
       })
     );
-    // Auto-instalar el pack PBR integrado (assets/pbr) la primera vez que
-    // se activa PBR sin atlas en IndexedDB — evita subir el ZIP a mano.
     if (settings.experimentalPbr && localStorage.getItem('mf_pbr_available') !== 'true') {
       if (window.MF_TEXTURE_PACK?.installBundledPbr) {
         MF_TEXTURE_PACK.installBundledPbr().then((r) => {
@@ -11992,15 +11867,10 @@ function renderCreditsPage() {
             localStorage.setItem('mf_pbr_available', 'true');
           }
         }).catch(() => {
-          // "Extension context invalidated" (reload de la extensión con la
-          // página abierta): chrome.runtime.getURL muere. El usuario solo
-          // necesita F5 — avisar sin spamear.
-          console.warn('[MiniFeather] PBR integrado no instalado — recarga la página (F5)');
+            console.warn('[MiniFeather] PBR integrado no instalado — recarga la página (F5)');
         });
       }
     }
-    // Auto-curación: PBRTextures (MAIN) detectó atlas vacíos (relicto de
-    // build vieja) y los borró — regenerar SIN mirar mf_pbr_available.
     if (!window.__mfPbrReinstallBound) {
       window.__mfPbrReinstallBound = true;
       document.addEventListener('minifeather:pbr-reinstall', () => {
@@ -12020,10 +11890,10 @@ function renderCreditsPage() {
           detail: JSON.stringify({
             enabled:
               !!settings.freelook,
-          
+
             bind:
               String(settings.freelookBind || ''),
-          
+
             mode:
               settings.freelookMode === 'toggle'
                 ? 'toggle'
@@ -12441,16 +12311,10 @@ function renderCreditsPage() {
     registerModule('chatLinks', createChatLifecycle);
     registerModule('chatMemes', createChatLifecycle);
   }
-
-  // Firma del DOM externo: si nada cambió desde el último update(), nos
-  // saltamos TODO el pipeline de rebrand/discord (15+ querySelectorAll +
-  // lecturas innerText que fuerzan layout). El juego muta el DOM
-  // constantemente y antes esto corría ~8 veces/seg para siempre.
   let lastRebrandSignature = '';
 
   function computeRebrandSignature() {
-    // Barato: 3 números + contadores de nodos clave (sin layout thrash)
-    return [
+      return [
       document.title,
       document.querySelectorAll('img').length,
       document.querySelectorAll('button').length,
@@ -12461,8 +12325,7 @@ function renderCreditsPage() {
   function update() {
     const sig = computeRebrandSignature();
     if (sig === lastRebrandSignature) {
-      // Solo refrescar lo barato (logo controls no toca el DOM del juego)
-      refreshLogoControls();
+        refreshLogoControls();
       return;
     }
     lastRebrandSignature = sig;
@@ -12487,9 +12350,6 @@ function renderCreditsPage() {
         return [...mutation.addedNodes, ...mutation.removedNodes].some(node => !isMiniFeatherNode(node));
       });
       if (!relevant) return;
-      // Coalescing: el juego dispara cientos de lotes/seg; procesamos
-      // como mucho 1 update cada 400ms (antes: debounce de 120ms que se
-      // realimentaba con nuestras propias mutaciones)
       pendingMutations++;
       if (updateTimer) return;
       updateTimer = window.setTimeout(() => {
@@ -12668,10 +12528,6 @@ function renderCreditsPage() {
       delete globalThis.__MINIFEATHER_CONTENT__;
     }
   }
-
-  // defaults.json (raíz del paquete): config default editable sin recompilar.
-  // Aplana grupos un nivel (render.playerAnims → playerAnims) y se aplica como
-  // base intermedia: usuario guardado > defaults.json > DEFAULT_SETTINGS.
   function loadFileDefaults() {
     return new Promise(resolve => {
       const flatten = (obj) => {
@@ -12719,7 +12575,6 @@ function renderCreditsPage() {
       settings.panelBackgroundColor = normalizePanelColor(settings.panelBackgroundColor, DEFAULT_SETTINGS.panelBackgroundColor);
       settings.panelScale = clampPanelScale(settings.panelScale);
       settings.pageZoomEnabled = settings.pageZoomEnabled !== false;
-      // aplicar zoom de página al arrancar (si está activo)
       applyPanelScale();
       guiSettings = {
         ...settings,

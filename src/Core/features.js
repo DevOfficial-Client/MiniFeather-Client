@@ -351,8 +351,6 @@
 
     window.minibloxApplySelectBoxThickness =
         applySelectBoxThickness;
-
-    // HSV→RGB (componentes 0..1) para el degradado por vértice.
     function hsvToRgb(h) {
         const i = Math.floor(h * 6);
         const f = h * 6 - i;
@@ -366,23 +364,12 @@
             default: return [1, 0, q];
         }
     }
-
-    // ── Arcoíris "rotando" alrededor del cuadrado ──
-    // El hue de cada vértice deriva de su ángulo alrededor del eje Y
-    // (más un leve término espiral vertical). Con el offset temporal los
-    // colores recorren el perímetro como si el contorno estuviera girando
-    // (ciclo 2.5s). Los hijos de thickness comparten geometría → heredan
-    // el efecto solos.
     function applyRainbowBox(selectBox, now) {
         const geo = selectBox.geometry;
         const pos = geo?.attributes?.position;
         if (!pos) return;
 
         const count = pos.count;
-
-        // Hue base por vértice (cacheado; la geometría es estática):
-        // ángulo alrededor del eje Y → los colores recorren el perímetro.
-        // Término espiral suave para que las aristas verticales fluyan.
         let param = geo.__mfRainbowParam;
         if (!param || param.length !== count) {
             param = new Float32Array(count);
@@ -406,8 +393,6 @@
             }
             geo.__mfRainbowParam = param;
         }
-
-        // Atributo de color por vértice
         let colAttr = geo.attributes.color;
         if (!colAttr || colAttr.count !== count) {
             colAttr = new pos.constructor(
@@ -417,7 +402,7 @@
             geo.setAttribute('color', colAttr);
         }
 
-        const offset = (now / 2500) % 1; // "giro" temporal
+        const offset = (now / 2500) % 1;
         const ca = colAttr.array;
         const norm = h => ((h % 1) + 1) % 1;
         for (let i = 0; i < count; i += 2) {
@@ -425,8 +410,6 @@
             let h2 = i + 1 < count
                 ? param[i + 1] + offset
                 : h1;
-            // Camino más corto en el círculo de hue: evita el salto de
-            // color en la arista que cierra el ciclo del perímetro.
             while (h2 - h1 > 0.5) h2 -= 1;
             while (h2 - h1 < -0.5) h2 += 1;
             const [r, g, b] = hsvToRgb(norm(h1));
@@ -441,9 +424,6 @@
             }
         }
         colAttr.needsUpdate = true;
-
-        // vertexColors ON + color base blanco (la multiplicación del
-        // shader no debe teñir el degradado) en el material y los hijos.
         const mats = [selectBox.material];
         if (selectBox._thickChildren) {
             for (const child of selectBox._thickChildren) {
@@ -458,8 +438,6 @@
         }
         selectBox.__mfRainbowOn = true;
     }
-
-    // Apaga vertexColors al desactivar rainbow (guard: solo si estaba ON).
     function clearRainbowBox(selectBox) {
         if (!selectBox.__mfRainbowOn) return;
         selectBox.__mfRainbowOn = false;
@@ -487,10 +465,6 @@
             return false;
         }
     }
-
-    // Aplica el color al material del selectBox Y a los hijos de thickness
-    // (cada nivel >1 crea LineSegments con material propio horneado —
-    // recolorear solo el padre no cambia nada visible).
     function recolorBox(selectBox, color) {
         if (selectBox.material?.color) {
             selectBox.material.color.set(color);
@@ -525,7 +499,7 @@
             const rainbow = rainbowActive();
 
             const color = rainbow
-                ? '#ffffff' // neutro: el degradado vive en los vértices
+                ? '#ffffff'
                 : localStorage.getItem(
                       'miniblox_blockhighlight_color'
                   ) || '#ffffff';
@@ -534,10 +508,6 @@
                 localStorage.getItem(
                     'miniblox_blockhighlight_thickness'
                 ) || '1';
-
-            // Primero thickness (crea/recolorea hijos con el color dado),
-            // luego el arcoíris sobre todo (así los hijos nuevos ya entran
-            // con vertexColors en el mismo frame).
             applySelectBoxThickness(
                 selectBox,
                 thickness,
@@ -669,7 +639,7 @@
                         err?.message || err
                     );
                 } else {
-                    
+
                     bundleStarted = false;
                 }
             });
@@ -693,7 +663,7 @@
 
     let bundleStarted = false;
     let intervalTicks = 0;
-    const MAX_INTERVAL_TICKS = 120; 
+    const MAX_INTERVAL_TICKS = 120;
 
     const interval = setInterval(() => {
         intervalTicks++;
@@ -719,11 +689,6 @@
             void 0;
         }
     }, 500);
-
-    // ── Modo arcoíris del block highlight ──
-    // El color lo calcula refreshBlockHighlight() en cada refresh (corre
-    // tras cada select() del juego), leyendo localStorage. Aquí solo
-    // persistimos la preferencia y forzamos un refresh inmediato.
     function setRainbow(on) {
         localStorage.setItem(
             'miniblox_blockhighlight_rainbow',
@@ -799,9 +764,6 @@
         'minifeather:block-highlight-config',
         onHighlightConfig
     );
-
-    // Guard de re-inyección: destruye interval y listeners del scope
-    // anterior antes de que este re-registre los suyos.
     try { window.__MF_FEATURES_SCOPE__?.destroy?.(); } catch (_) {}
     window.__MF_FEATURES_SCOPE__ = {
         destroy() {

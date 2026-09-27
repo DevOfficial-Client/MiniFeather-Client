@@ -9,11 +9,11 @@
 
     const state = {
         open: false,
-        
+
         catalog: new Map(),
         catalogAt: 0,
-        current: null,        
-        
+        current: null,
+
         targets: new Map(),
         watchdog: null
     };
@@ -63,12 +63,12 @@
 
         const consider = (entity) => {
             if (!entity || entity.id === meId) return;
-            
+
             if (typeof entity.getHealth !== 'function') return;
             const mesh = entity.mesh;
             const MeshClass = mesh?.constructor;
             if (!MeshClass || MeshClass === Object) return;
-            
+
             if (me?.mesh?.constructor === MeshClass) return;
             const key = typeKeyOf(entity);
             if (!key || key === 'player') return;
@@ -97,13 +97,13 @@
     }
 
     function makeProxyEntity(player) {
-        const cache = new Map(); 
+        const cache = new Map();
         return new Proxy(player, {
             get(target, prop) {
                 try {
                     if (prop in target) {
                         const v = Reflect.get(target, prop, target);
-                        
+
                         if (typeof v === 'function') return v.bind(target);
                         return v;
                     }
@@ -112,7 +112,7 @@
                 if (!cache.has(prop)) cache.set(prop, makeCallableZero());
                 return cache.get(prop);
             },
-            
+
             has(target, prop) {
                 try { return prop in target; } catch { return false; }
             },
@@ -170,7 +170,7 @@
         applyOn(me, typeKey);
         state.current = typeKey;
         renderUI();
-        
+
         try { window.MF_Peer?.sendLook?.({ a: 'morph', type: typeKey }); } catch {}
         void 0;
         return { ok: true, type: typeKey };
@@ -194,7 +194,7 @@
         try {
             root.traverse(o => {
                 o.visible = true;
-                o.frustumCulled = false; 
+                o.frustumCulled = false;
                 o.matrixAutoUpdate = true;
             });
         } catch {}
@@ -204,19 +204,19 @@
         stopWatchdog();
         state.watchdog = setInterval(() => {
             const game = getGame();
-            
+
             for (const [id, t] of state.targets) {
                 const me = t.entity;
                 if (!me) continue;
                 if (me.mesh !== t.morphMesh) {
-                    
+
                     const group = getEntityMeshesGroup(game);
                     try { group?.remove?.(me.mesh); } catch {}
                     try { group?.add?.(t.morphMesh); } catch {}
                     me.mesh = t.morphMesh;
                     continue;
                 }
-                
+
                 try {
                     t.morphMesh.traverse(o => {
                         if (o.visible === false) o.visible = true;
@@ -234,12 +234,12 @@
         const game = getGame();
         if (!game) return { ok: false, error: 'sin juego' };
         if (!state.targets.size) return { ok: false, error: 'no hay morph activo' };
-        
+
         for (const id of [...state.targets.keys()]) detachFrom(id);
         state.current = null;
         stopWatchdog();
         renderUI();
-        
+
         try { window.MF_Peer?.sendLook?.({ a: 'unmorph' }); } catch {}
         void 0;
         return { ok: true };
@@ -272,42 +272,42 @@
         const style = document.createElement('style');
         style.id = ID + '-style';
         style.textContent = `
-#${ID} { position:fixed; top:70px; right:16px; z-index:2147483000;
+            #${ID} { position:fixed; top:70px; right:16px; z-index:2147483000;
   background:#14141a; border:1px solid #32323a; border-radius:8px;
   box-shadow:0 8px 32px rgba(0,0,0,.6); color:#e8e8ee;
   font:12px/1.4 system-ui,sans-serif; user-select:none; width:250px; }
-#${ID} .mfm-head { display:flex; align-items:center; gap:8px; padding:8px 10px;
+  #${ID} .mfm-head { display:flex; align-items:center; gap:8px; padding:8px 10px;
   border-bottom:1px solid #26262e; font-weight:700; letter-spacing:.5px; }
-#${ID} .mfm-head .dot { width:8px; height:8px; border-radius:50%;
+  #${ID} .mfm-head .dot { width:8px; height:8px; border-radius:50%;
   background:#b56bff; animation:mfm-pulse 1.5s infinite; }
-@keyframes mfm-pulse { 50% { opacity:.35; } }
-#${ID} .mfm-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px;
+  @keyframes mfm-pulse { 50% { opacity:.35; } }
+  #${ID} .mfm-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px;
   padding:8px 10px; max-height:260px; overflow-y:auto; }
-#${ID} .mfm-item { position:relative; border:1px solid #32323a; border-radius:6px;
+  #${ID} .mfm-item { position:relative; border:1px solid #32323a; border-radius:6px;
   padding:6px 2px; cursor:pointer; text-align:center; background:#191921; }
-#${ID} .mfm-item:hover { border-color:#b56bff; }
-#${ID} .mfm-item.on { border-color:#ff6b2b; background:#241d16; }
-#${ID} .mfm-item .moji { font-size:20px; display:block; line-height:1.2; }
-#${ID} .mfm-item .nm { display:block; font-size:9px; color:#9a9aa6;
+  #${ID} .mfm-item:hover { border-color:#b56bff; }
+  #${ID} .mfm-item.on { border-color:#ff6b2b; background:#241d16; }
+  #${ID} .mfm-item .moji { font-size:20px; display:block; line-height:1.2; }
+  #${ID} .mfm-item .nm { display:block; font-size:9px; color:#9a9aa6;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#${ID} button { background:#23232c; color:#e8e8ee; border:1px solid #3a3a44;
+  #${ID} button { background:#23232c; color:#e8e8ee; border:1px solid #3a3a44;
   border-radius:4px; padding:3px 8px; cursor:pointer; font:inherit; }
-#${ID} button:hover { background:#2e2e3a; }
-#${ID} .mfm-foot { display:flex; gap:6px; padding:6px 10px 10px; }
-#${ID} .mfm-hint { padding:0 10px 6px; font-size:10px; color:#8a8a96; }
+  #${ID} button:hover { background:#2e2e3a; }
+  #${ID} .mfm-foot { display:flex; gap:6px; padding:6px 10px 10px; }
+  #${ID} .mfm-hint { padding:0 10px 6px; font-size:10px; color:#8a8a96; }
         `;
         document.body.appendChild(style);
         const root = document.createElement('div');
         root.id = ID;
         root.innerHTML = `
-<div class="mfm-head"><span class="dot"></span>🧬 MORPH — mobs
+            <div class="mfm-head"><span class="dot"></span>🧬 MORPH — mobs
     <button data-act="close" style="margin-left:auto" title="Cerrar">✕</button></div>
-<div class="mfm-hint">Mobs cosechados del mundo actual. Click = transformarse · arrastra al timeline V2.</div>
-<div class="mfm-grid" id="mfm-grid"></div>
-<div class="mfm-foot">
+        <div class="mfm-hint">Mobs cosechados del mundo actual. Click = transformarse · arrastra al timeline V2.</div>
+            <div class="mfm-grid" id="mfm-grid"></div>
+                <div class="mfm-foot">
     <button data-act="rescan" title="Volver a escanear entidades">⟳ Escanear</button>
     <button data-act="revert" title="Volver a la forma humana">↺ Humano</button>
-</div>
+        </div>
         `;
         document.body.appendChild(root);
         root.querySelector('[data-act="close"]').onclick = () => close();
@@ -378,9 +378,9 @@
         scan,
         apply, revert,
         applyAtTick,
-        
+
         applyOn, detachFrom,
-        
+
         findEntityByName(username) {
             const game = getGame();
             if (!game || !username) return null;

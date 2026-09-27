@@ -1,14 +1,6 @@
 (function () {
   'use strict';
 
-  // Bridge MAIN-world: replica cada página del panel de MiniFeather como un tab nativo
-  // dentro del modal de Ajustes de miniblox.io (markup nativo de Chakra UI).
-  // Comunicación con ClientPanel.js (mundo ISOLATED) via CustomEvents:
-  //   minifeather:nsb-state       (MAIN -> ISOLATED, pide el estado)
-  //   minifeather:nsb-state-data  (ISOLATED -> MAIN, responde con el estado)
-  //   minifeather:nsb-toggle      (MAIN -> ISOLATED, cambia un toggle)
-  //   minifeather:nsb-open-panel  (MAIN -> ISOLATED, abre el panel completo MF en una página)
-
   const GLOBAL_KEY = '__MINIFEATHER_NATIVE_SETTINGS_BRIDGE__';
   const TAG = '[MiniFeather NSB]';
 
@@ -18,8 +10,6 @@
 
   function log(...args) { try { void 0; } catch (_) {} }
   function warn(...args) { try { console.warn(TAG, ...args); } catch (_) {} }
-
-  // --- Markup nativo (clases de Chakra extraídas del modal real de miniblox.io) ---
   const NATIVE = {
     tabButton: 'chakra-stack css-1makr62',
     tabButtonActive: 'css-1eaek6i',
@@ -45,8 +35,6 @@
     headerTitle: 'css-i381on',
     actionButton: 'chakra-button css-zab4iv'
   };
-
-  // --- Iconos pixel-art (viewBox 24x24, mismos rects del juego) ---
   const ICONS = {
     feather: `<rect x="9" y="2" width="6" height="1"></rect><rect x="8" y="3" width="8" height="1"></rect><rect x="7" y="4" width="10" height="1"></rect><rect x="6" y="5" width="12" height="1"></rect><rect x="5" y="6" width="14" height="1"></rect><rect x="4" y="7" width="16" height="1"></rect><rect x="3" y="8" width="18" height="1"></rect><rect x="3" y="9" width="6" height="1"></rect><rect x="2" y="10" width="4" height="1"></rect><rect x="2" y="11" width="3" height="1"></rect><rect x="1" y="12" width="3" height="1"></rect><rect x="1" y="13" width="2" height="1"></rect><rect x="0" y="14" width="2" height="1"></rect><rect x="0" y="15" width="2" height="1"></rect><rect x="1" y="16" width="2" height="1"></rect><rect x="2" y="17" width="3" height="1"></rect><rect x="3" y="18" width="4" height="1"></rect><rect x="4" y="19" width="6" height="1"></rect><rect x="6" y="20" width="8" height="1"></rect>`,
     home: `<rect x="4" y="10" width="16" height="1"></rect><rect x="5" y="9" width="14" height="1"></rect><rect x="6" y="8" width="12" height="1"></rect><rect x="7" y="7" width="10" height="1"></rect><rect x="8" y="6" width="8" height="1"></rect><rect x="9" y="5" width="6" height="1"></rect><rect x="10" y="4" width="4" height="1"></rect><rect x="4" y="11" width="16" height="1"></rect><rect x="5" y="12" width="14" height="8"></rect><rect x="7" y="14" width="4" height="6"></rect><rect x="13" y="14" width="4" height="4"></rect>`,
@@ -75,9 +63,6 @@
     const style = color || ICON_COLORS[name] || '#a78bfa';
     return `<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" style="color:${style};font-size:20px;">${body}</svg>`;
   }
-
-  // --- Definición de tabs: cada página del panel MF = un tab nativo ---
-  // Cada entry de modules: { key } toggle | { link } abre panel MF | { custom } función
   const TABS = [
     {
       id: 'mf-dashboard', icon: 'home', label: 'MF Home',
@@ -343,8 +328,6 @@
     requestTimer: 0,
     destroyed: false
   };
-
-  // --- Comunicación con ClientPanel (ISOLATED) ---
   function requestState() {
     document.dispatchEvent(new CustomEvent('minifeather:nsb-state', { detail: '{}' }));
   }
@@ -378,8 +361,6 @@
   function isModuleEnabled(key) {
     return state.settings[key] === true;
   }
-
-  // --- Construcción de nodos con clases nativas ---
   function makeSwitchRow(entry) {
     const row = document.createElement('div');
     row.className = NATIVE.row;
@@ -545,8 +526,6 @@
       container.appendChild(makeSection(section));
     }
   }
-
-  // --- Inyección de tabs en el modal nativo ---
   function dialogOf(node) {
     return node.closest('[role=dialog]');
   }
@@ -561,16 +540,12 @@
   function activateTab(tabButton) {
     const dialog = dialogOf(tabButton);
     if (!dialog) return;
-
-    // Desmarcar todos los tabs MF y nativos
     for (const t of dialog.querySelectorAll('button.chakra-stack')) {
       t.classList.remove(NATIVE.tabButtonActive);
     }
     tabButton.classList.add(NATIVE.tabButtonActive);
 
     state.activeTabId = tabButton.dataset.mfTabId;
-
-    // Panel de contenido MF
     let container = dialog.querySelector('#mf-native-settings-panel');
     const content = nativeContentPanel(dialog);
     if (!container && content) {
@@ -639,14 +614,10 @@
     for (const tab of TABS) {
       bar.appendChild(makeTabButton(tab));
     }
-
-    // Click en un tab nativo oculta el panel MF y devuelve el control al juego
     for (const nativeTab of [...bar.querySelectorAll('button.chakra-stack')]) {
       if (nativeTab.dataset.mfNativeTab) continue;
       nativeTab.addEventListener('click', () => hideMfPanel(dialog), true);
     }
-
-    // Si React re-crea el contenido nativo mientras estamos activos, ocultarlo
     if (state.modalObserver) state.modalObserver.disconnect();
     state.modalObserver = new MutationObserver(() => {
       const container = dialog.querySelector('#mf-native-settings-panel');
@@ -658,10 +629,6 @@
     });
     state.modalObserver.observe(dialog, { childList: true, subtree: true });
   }
-
-  // El juego muta el body decenas de veces por segundo: en vez de un
-  // querySelectorAll full-document POR lote de mutaciones, acumular y
-  // escanear a lo sumo cada 400ms
   let nsbScanTimer = 0;
   function scheduleDialogScan() {
     if (nsbScanTimer || state.destroyed) return;
@@ -678,7 +645,6 @@
         m.target.id === 'mf-native-settings-panel' || m.target.closest?.('#mf-native-settings-panel') ||
         [...m.addedNodes, ...m.removedNodes].some(n => n.id === 'mf-native-settings-panel' || (n.nodeType === 1 && n.hasAttribute?.('data-mf-native-tab')))
       )) return;
-      // Diferir el escaneo pesado: coalescing con el resto de mutaciones
       scheduleDialogScan();
       return;
     }

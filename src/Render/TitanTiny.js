@@ -2,7 +2,6 @@
     'use strict';
 
     const CONFIG = {
-        // A 0.01x, a two-block-tall player is 0.02 blocks high (< 1 texture pixel).
         minScale: 0.01,
         maxScale: 5.00,
         defaultScale: 1.00,
@@ -740,7 +739,7 @@
         state.cameraHookDepth++;
 
         try {
-            
+
             const result = original.apply(
                 thisArg,
                 args
@@ -1480,8 +1479,6 @@
         'entityWidth',
         'entityHeight'
     ];
-
-    // claves cuyo factor es solo la escala vertical (altura/ojo)
     const HITBOX_HEIGHT_KEYS = new Set([
         'height',
         'eyeHeight',
@@ -2110,12 +2107,6 @@
             state.baseScale.y * factor,
             state.baseScale.z * factor * widthFactor
         );
-
-        // Anclaje al suelo: NO mutamos position (el juego es dueño de esa
-        // posición y peleábamos contra él cada frame — origen del bug del
-        // "cuerpo congelado"). En su lugar, el hook onBeforeRender aplica
-        // el offset como post-fix sobre matrixWorld (se recomputa limpia
-        // cada frame, así que no hay acumulación ni estado que revertir).
         try {
             if (
                 mesh.matrixAutoUpdate === false &&
@@ -2154,13 +2145,6 @@
                     }
 
                     applyCurrentScale();
-
-                    // offset visual de anclaje: post-fix sobre la matrixWorld
-                    // de ESTE renderable. Se aplica después de que el juego
-                    // computó la matrix del frame (antes del draw), así el
-                    // juego nunca ve un position mutado y no hay acumulación:
-                    // el frame siguiente recomputa matrixWorld desde la
-                    // cadena de padres, limpia.
                     const offset =
                         state.enabled
                             ? clamp(
@@ -2181,7 +2165,6 @@
                         this?.matrixWorld?.elements
                     ) {
                         try {
-                            // e[13] = componente Y de la posición mundial
                             this.matrixWorld.elements[13] += offset;
                         } catch {}
                     }

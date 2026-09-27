@@ -5,43 +5,50 @@
     if (window.__MF_Film) return;
     const TAG = '[MF Film]';
 
-    const TPS = 20;               
+    const TPS = 20;
+
     const TICK_MS = 1000 / TPS;
-    const JOINT_NAMES = [         
+    const JOINT_NAMES = [
         'headPivot', 'body', 'skeleton',
         'leftShoulderJoint', 'leftElbowJoint',
         'rightShoulderJoint', 'rightElbowJoint',
         'leftHipJoint', 'leftKneeJoint',
         'rightHipJoint', 'rightKneeJoint'
     ];
-    
+
     const POS_ONLY_JOINTS = new Set(['skeleton']);
-    const EPS = 1e-4;             
+    const EPS = 1e-4;
+
     const LS_KEY = 'minifeather_films_v1';
-    const LS_LIMIT = 45 * 1024 * 1024; 
+    const LS_LIMIT = 45 * 1024 * 1024;
 
     const state = {
-        
+
         recording: false,
-        recStart: 0,              
+        recStart: 0,
+
         recTick: 0,
         recTimer: null,
         frames: [],
         lastFrame: null,
         droppedTicks: 0,
-        
+
         playing: false,
         paused: false,
-        playStart: 0,             
-        playTickBase: 0,          
-        playRange: null,          
+        playStart: 0,
+
+        playTickBase: 0,
+
+        playRange: null,
+
         playRaf: null,
         playFilm: null,
-        playMode: 'film',         
-        playSeq: null,            
-        
-        actors: new Map(),        
-        
+        playMode: 'film',
+
+        playSeq: null,
+
+        actors: new Map(),
+
         films: null
     };
 
@@ -143,10 +150,10 @@
     function recorderTick() {
         const game = getGame();
         const ent = getLocalPlayerEntity(game);
-        if (!ent) return; 
+        if (!ent) return;
 
         const now = performance.now();
-        
+
         const expected = Math.floor((now - state.recStart) / TICK_MS);
         if (expected > state.recTick + 1) {
             state.droppedTicks += expected - state.recTick - 1;
@@ -180,7 +187,7 @@
         clearInterval(state.recTimer);
         state.recTimer = null;
         state.recording = false;
-        
+
         state.frames.push({ ...(state.lastFrame || { t: state.recTick, p: [0, 0, 0] }), t: state.recTick });
         return {
             ok: true,
@@ -218,7 +225,7 @@
             server: (game?.server || '').toString().slice(0, 64) || null,
             actors: [{
                 id: 'actor-1',
-                
+
                 skin: game?.player?.profile?.username || null,
                 frames: state.frames
             }]
@@ -286,7 +293,7 @@
         let node;
         try {
             if (src.isSkinnedMesh) {
-                
+
                 node = new src.constructor(src.geometry, src.material);
                 try {
                     node.bind(src.skeleton, src.bindMatrix || src.matrixWorld?.clone?.() || null);
@@ -304,7 +311,7 @@
             if (src.name) node.name = src.name;
             node.visible = src.visible !== false;
             node.matrixAutoUpdate = true;
-            node.frustumCulled = false; 
+            node.frustumCulled = false;
         } catch {}
         for (const child of (src.children || [])) {
             const c = manualCloneNode(child);
@@ -322,7 +329,7 @@
         if (typeof mesh.clone === 'function') {
             try {
                 const c = mesh.clone(true);
-                
+
                 if (c && countNodes(c) === countNodes(mesh)) clone = c;
             } catch {}
         }
@@ -337,23 +344,23 @@
         try {
             clone.traverse(o => {
                 o.matrixAutoUpdate = true;
-                o.frustumCulled = false; 
-                
+                o.frustumCulled = false;
+
                 o.visible = true;
             });
         } catch {}
-        
+
         try {
             let checks = 0;
             const wd = setInterval(() => {
                 checks++;
                 try {
-                    if (!clone.parent) { clearInterval(wd); return; } 
+                    if (!clone.parent) { clearInterval(wd); return; }
                     clone.traverse(o => {
                         if (o.visible === false) o.visible = true;
                     });
                 } catch {}
-                if (checks >= 40) clearInterval(wd); 
+                if (checks >= 40) clearInterval(wd);
             }, 250);
         } catch {}
         return clone;
@@ -408,14 +415,14 @@
         if (!rec) rec = spawnActor(actor);
         if (!rec) return null;
         if (!rec.isClone) {
-            
+
             rec.root = window.MF_CustomModels?.getRecord?.(rec.cmId)?.root || rec.root || null;
         }
         return rec;
     }
 
     function sampleFrame(frames, tick) {
-        
+
         let lo = 0, hi = frames.length - 1;
         if (tick <= frames[0].t) return { frame: frames[0], prev: frames[0], f: 0 };
         if (tick >= frames[hi].t) return { frame: frames[hi], prev: frames[hi], f: 0 };
@@ -443,7 +450,7 @@
         const { prev, frame, f } = sampleFrame(actor.frames, tick);
 
         root.position.set(lerp(prev.p[0], frame.p[0], f), lerp(prev.p[1], frame.p[1], f), lerp(prev.p[2], frame.p[2], f));
-        
+
         const yaw = prev.yaw + shortestAngle(prev.yaw, frame.yaw) * f;
         rec.yaw = yaw;
         root.rotation.y = yaw;
@@ -470,12 +477,12 @@
         if (!film) { stopPlayback(); return; }
 
         const tick = state.playTickBase + (performance.now() - state.playStart) / TICK_MS;
-        
+
         const endTick = state.playRange.to ?? film.durationTicks;
         const startTick = state.playRange.from ?? 0;
 
         if (tick >= endTick) {
-            
+
             for (const actor of film.actors) {
                 const rec = ensureActor(film, actor);
                 if (rec) applyActorFrame(rec, actor, endTick);
@@ -550,7 +557,7 @@
             return { ok: false, error: 'sequence is empty — drag takes to the timeline' };
         }
         const films = loadFilms();
-        
+
         const items = [];
         for (const c of clips) {
             const film = films[c.filmName];
@@ -568,7 +575,7 @@
         state.paused = false;
         state.playMode = 'sequence';
         state.playSeq = items;
-        state.playFilm = null; 
+        state.playFilm = null;
         state.playTickBase = 0;
         state.playStart = performance.now();
         state.lastFaceTick = -1;
@@ -599,7 +606,7 @@
         const endTick = state.playRange?.to ?? total;
 
         if (tick >= endTick) {
-            
+
             applySeqFrame(items, endTick);
             stopPlayback();
             window.dispatchEvent(new CustomEvent('mf:film-ended', { detail: { atTick: Math.floor(endTick) } }));
@@ -641,7 +648,7 @@
         if (!state.playing || !state.paused) return { ok: false, error: 'not paused' };
         state.paused = false;
         state.playStart = performance.now();
-        
+
         state.playRaf = requestAnimationFrame(state.playMode === 'sequence' ? sequenceLoop : playbackLoop);
         return { ok: true };
     }

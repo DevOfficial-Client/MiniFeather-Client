@@ -38,8 +38,6 @@
       world: { renderBlocks: null }, leafWind: 0.120, starScale: 1.12
     },
     ultra: {
-      // Ultra keeps the premium look but avoids pathological GPU costs. 4096² + 16-tap
-      // Vogel filtering is visually close to 8192² in motion while using 75% less shadow-map memory.
       shadow: { mapSize: 4096, samples: 16, noonRadius: 1.90, horizonRadius: 8.00, bias: -0.00024, normalBias: 0.030, horizonNormalBias: 0.050, intensity: 0.82, moon: true, moonMapSize: 2048, moonRadius: 6.2, moonIntensity: 0.30 },
       water: { alpha: 0.50, waveScale: 1.35, waveSpeed: 1.0, microNormal: 0.27, reflection: 1.0, refraction: 1.0, ssrSteps: 20, tint: [0.14, 0.45, 0.64], tintStrength: 0.22 },
       lava: { alpha: 0.99, waveScale: 1.30, waveSpeed: 1.0, bubbles: 0.30, emission: 0.16 },
@@ -125,7 +123,6 @@
     const artifact = c.shadowArtifactFix / 100;
     const resOptions = [512, 1024, 2048, 4096, 8192];
     const wantedIndex = Math.max(0, resOptions.indexOf(c.shadowResolution));
-    // Avoid resolution cliffs: a tiny FPS adjustment must not instantly halve a shadow map.
     const resolutionDrop = q >= 0.78 ? 0 : q >= 0.55 ? 1 : 2;
     const scaledRes = resOptions[Math.max(0, wantedIndex - resolutionDrop)];
 
