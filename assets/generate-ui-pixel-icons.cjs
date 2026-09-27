@@ -17,9 +17,6 @@ function readLiteral(name) {
 
 const palette = readLiteral('PIXEL_PALETTE');
 const icons = readLiteral('MF_PIXEL_ICONS');
-const animationMatch = panelSource.match(/const MF_ANIMATED_PIXEL_ICONS = Object\.freeze\((\[[\s\S]*?\])\);/);
-if (!animationMatch) throw new Error('MF_ANIMATED_PIXEL_ICONS was not found');
-const animatedIcons = new Set(vm.runInNewContext(animationMatch[1]));
 
 function crc32(bytes) {
   let value = 0xffffffff;
@@ -194,6 +191,9 @@ function makeArt(name, rows) {
       rect(5, 8, 3, 3, 'g'); rect(10, 4, 2, 3, 'g');
       rect(9, 7, 4, 2, 'G'); rect(10, 9, 2, 3, 'g');
       rect(5, 12, 2, 1, 'G'); rect(7, 2, 2, 1, '#');
+      rect(4, 6, 1, 1, 'g'); rect(6, 7, 1, 1, 'Y');
+      rect(11, 5, 1, 1, 'g'); rect(11, 10, 1, 1, 'G');
+      rect(7, 12, 3, 1, 'B');
       break;
     case 'discord':
       clear();
@@ -212,6 +212,9 @@ function makeArt(name, rows) {
       rect(6, 10, 4, 5, 'k'); rect(7, 11, 2, 4, 'N');
       rect(4, 10, 2, 2, 'b'); rect(11, 10, 2, 2, 'b');
       rect(7, 2, 2, 1, '#');
+      rect(4, 7, 2, 1, 'O'); rect(10, 7, 2, 1, 'O');
+      rect(4, 11, 1, 1, '#'); rect(11, 11, 1, 1, '#');
+      rect(8, 12, 1, 1, 'Y');
       break;
     case 'grid':
       clear();
@@ -254,6 +257,8 @@ function makeArt(name, rows) {
       rect(6, 6, 4, 4, 'k'); rect(7, 7, 2, 2, 'y');
       rect(2, 2, 3, 3, '-'); rect(11, 2, 3, 3, '-');
       rect(2, 11, 3, 3, '-'); rect(11, 11, 3, 3, '-');
+      rect(4, 4, 2, 1, '#'); rect(10, 4, 2, 1, '+');
+      rect(5, 10, 1, 1, '-'); rect(10, 10, 1, 1, 'k');
       break;
     case 'hud':
       clear();
@@ -412,10 +417,13 @@ function makeArt(name, rows) {
       break;
     case 'classicTitle':
       clear();
-      rect(1, 3, 14, 10, 'Y'); rect(2, 4, 12, 8, 'y');
-      rect(0, 5, 2, 6, 'O'); rect(14, 5, 2, 6, 'O');
-      rect(4, 5, 8, 2, '#'); rect(7, 6, 2, 6, '#');
-      rect(5, 1, 6, 2, 'Y'); rect(6, 2, 4, 1, '#');
+      rect(1, 2, 14, 12, 'Y'); rect(2, 3, 12, 10, 'V');
+      rect(3, 4, 10, 8, 'v'); rect(1, 2, 14, 1, 'y');
+      rect(3, 4, 2, 1, '#'); rect(11, 5, 2, 2, 'y');
+      rect(10, 6, 1, 1, '#'); rect(4, 10, 8, 2, 'B');
+      rect(6, 6, 1, 4, '#'); rect(7, 7, 1, 3, '#');
+      rect(8, 8, 2, 1, '#'); rect(5, 13, 6, 2, 'O');
+      rect(6, 13, 4, 1, 'y');
       break;
     case 'cosmetics':
       clear();
@@ -431,6 +439,7 @@ function makeArt(name, rows) {
       rect(3, 12, 4, 2, 'B'); rect(2, 14, 2, 1, 'B');
       rect(4, 6, 2, 2, '#'); rect(7, 6, 2, 2, '#');
       rect(10, 6, 2, 2, '#'); rect(4, 3, 8, 1, '+');
+      rect(4, 10, 4, 1, 'B'); rect(11, 4, 1, 1, '#');
       break;
     case 'clientChat':
       clear();
@@ -494,6 +503,8 @@ function makeArt(name, rows) {
       rect(5, 12, 6, 1, 'V'); rect(3, 6, 10, 4, 'v');
       rect(5, 5, 6, 6, 'k'); rect(6, 5, 4, 6, 'y');
       rect(7, 6, 2, 4, 'Y'); rect(7, 6, 1, 1, '#');
+      rect(4, 7, 1, 1, 'b'); rect(11, 7, 1, 1, 'B');
+      rect(7, 11, 2, 1, 'V');
       break;
     case 'shaders':
       clear();
@@ -658,14 +669,13 @@ function encodeArt(name, art) {
         const below = symbolAt(x, y + 1);
         const left = symbolAt(x - 1, y);
         const right = symbolAt(x + 1, y);
-        const detailed = animatedIcons.has(name);
-        const offset = above !== symbol ? (detailed ? 29 : 18)
-          : left !== symbol ? (detailed ? 18 : 10)
-          : below !== symbol ? (detailed ? -27 : -16)
-          : right !== symbol ? (detailed ? -17 : -8)
-          : detailed && symbol !== 'k' && symbol !== '-' && (x + y * 3) % 11 === 0 ? 7 : 0;
+        const edgeLight = (above !== symbol ? 31 : 0) + (left !== symbol ? 17 : 0);
+        const edgeShadow = (below !== symbol ? 27 : 0) + (right !== symbol ? 15 : 0);
+        const offset = Math.max(-38, Math.min(38, edgeLight - edgeShadow));
+        const material = symbol === 'k' ? .55 : symbol === '#' ? .4
+          : symbol === '-' || symbol === '+' ? 1.25 : 1;
         for (let channel = 0; channel < 3; channel++) {
-          const shaded = detailed ? pixel[channel] * (1 + offset / 190) : pixel[channel] + offset;
+          const shaded = pixel[channel] * (1 + offset * material / 175);
           pixel[channel] = Math.max(0, Math.min(255, Math.round(shaded)));
         }
       }

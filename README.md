@@ -64,11 +64,11 @@ The microphone is requested only when answering or after the recipient accepts. 
 
 Developed by:
 
+* **botless**
+* **AngryWolfX**
 * **ShusukeGxE_**
 * **Not_Senpai**
 * **ItzNightrise**
-* **botless**
-* **AngryWolfX**
 
 Made by Miniblox community for the Miniblox community.
 

@@ -199,6 +199,11 @@
     providerGuard: null,
     uploadDrainTimer: null,
     renderWatchdogTimer: null,
+    renderWatchdogGeneration: 0,
+    renderWatchdogProbePending: false,
+    renderWatchdogStalls: 0,
+    renderWatchdogStalledAt: 0,
+    renderLoopStartedAt: 0,
     sceneUpdateRestore: null,
     gameSceneClass: null,
     gameSceneTickRef: null,
@@ -1195,6 +1200,10 @@
     if (state.renderWatchdogTimer) {
       clearInterval(state.renderWatchdogTimer);
     }
+    const generation = ++state.renderWatchdogGeneration;
+    state.renderWatchdogProbePending = false;
+    state.renderWatchdogStalls = 0;
+    state.renderWatchdogStalledAt = 0;
 
     state.renderWatchdogTimer = setInterval(() => {
       const game = state.game;
@@ -1205,50 +1214,65 @@
         return;
       }
 
-      const lastRenderTime =
-        Number(game.lastRenderTime) || 0;
+      if (document.hidden || state.renderWatchdogProbePending) return;
+
+      const lastRenderTime = Number(game.lastRenderTime);
+      if (!Number.isFinite(lastRenderTime)) return;
       const now = performance.now();
 
-      const dead =
-        game.renderLoopErrored === true ||
-        (lastRenderTime > 0 &&
-          now - lastRenderTime > 5000);
-
-      if (!dead) return;
-
-      state.renderWatchdogRevives =
-        (state.renderWatchdogRevives || 0) + 1;
-
-      logWarn(
-        `renderLoop watchdog: loop muerto (errored=${game.renderLoopErrored === true}, sin frames ${lastRenderTime > 0 ? Math.round(now - lastRenderTime) + 'ms' : 'n/a'}) → reviviendo (intento ${state.renderWatchdogRevives})`
-      );
-
-      try {
-        repairGameSceneTick(game);
-        ensureNativeSceneRoots(game);
-        synchronizeLocalCamera(game);
-        patchGameSceneUpdateForLocal(game);
-      } catch (_) {}
-
-      try {
-        game.renderLoopErrored = false;
-        game.lastRenderTime = now;
-        game.lastFixedUpdate = now;
-        game.prevTime = now;
-        game.tickAccumulator = 0;
-
-        requestAnimationFrame(() => {
-          try {
-            game.update?.();
-          } catch (_) {}
-        });
-      } catch (err) {
-        logError('renderLoop watchdog: fallo al revivir:', err);
+      if (lastRenderTime > 0 && now - lastRenderTime <= 5000) {
+        state.renderWatchdogStalledAt = 0;
+        if (game.renderLoopErrored === true) game.renderLoopErrored = false;
+        return;
       }
+      if (lastRenderTime <= 0 && now - state.renderLoopStartedAt <= 5000) return;
+
+      state.renderWatchdogProbePending = true;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (generation !== state.renderWatchdogGeneration) return;
+        state.renderWatchdogProbePending = false;
+        if (
+          !state.active || !state.directLocal ||
+          state.game !== game || document.hidden
+        ) return;
+
+        const latestRenderTime = Number(game.lastRenderTime);
+        const checkedAt = performance.now();
+        if (
+          Number.isFinite(latestRenderTime) &&
+          latestRenderTime > lastRenderTime &&
+          checkedAt - latestRenderTime <= 1500
+        ) {
+          state.renderWatchdogStalledAt = 0;
+          return;
+        }
+
+        if (
+          state.renderWatchdogStalledAt > 0 &&
+          checkedAt - state.renderWatchdogStalledAt < 10000
+        ) return;
+        state.renderWatchdogStalledAt = checkedAt;
+        state.renderWatchdogStalls++;
+
+        logWarn(
+          `renderLoop watchdog: sin frames durante ${lastRenderTime > 0 ? Math.round(checkedAt - lastRenderTime) + 'ms' : 'el arranque'}; reparando escena sin iniciar otro bucle (aviso ${state.renderWatchdogStalls})`
+        );
+
+        try {
+          repairGameSceneTick(game);
+          ensureNativeSceneRoots(game);
+          synchronizeLocalCamera(game);
+          patchGameSceneUpdateForLocal(game);
+        } catch (err) {
+          logError('renderLoop watchdog: fallo al reparar escena:', err);
+        }
+      }));
     }, 2000);
   }
 
   function clearRenderLoopWatchdog() {
+    state.renderWatchdogGeneration++;
+    state.renderWatchdogProbePending = false;
     if (state.renderWatchdogTimer) {
       clearInterval(state.renderWatchdogTimer);
       state.renderWatchdogTimer = null;
@@ -1552,6 +1576,10 @@
       },
       performance: {
         fps: Math.round((Number(state.perfFps) || 0) * 10) / 10,
+        nativeLogicMs: Number(game?.resourceMonitor?.logicTime) || 0,
+        nativeRenderMs: Number(game?.resourceMonitor?.renderTime) || 0,
+        nativeGuiMs: Number(game?.resourceMonitor?.canvasTime) || 0,
+        renderLoopStalls: Number(state.renderWatchdogStalls) || 0,
         audioState: String(audioContext?.state || 'unavailable'),
         audioGuardInstalled: !!state.localAudioRecovery,
         freshAnimations: window.MF_PlayerAnims?.enabled === true,
@@ -7022,16 +7050,11 @@
     ensureLocalPlayerEntity(false);
 
     try {
-      const lastRenderTime = Number(game.lastRenderTime) || 0;
-      const renderLoopAlive =
-        game.renderLoopErrored !== true &&
-        lastRenderTime > 0 &&
-        performance.now() - lastRenderTime < 1500;
-
-      if (!renderLoopAlive) {
+      state.renderLoopStartedAt = performance.now();
+      if (state.localGameStateBefore < 5) {
         game.renderLoopErrored = false;
-        game.lastTickPump = performance.now();
-        game.prevTime = performance.now();
+        game.lastTickPump = state.renderLoopStartedAt;
+        game.prevTime = state.renderLoopStartedAt;
         game.tickAccumulator = 0;
         game.update?.();
       }
@@ -9678,6 +9701,7 @@
     state.gameSceneTickRecovered = false;
     state.sceneUpdateFailures = 0;
     state.sceneUpdateLastError = '';
+    state.renderLoopStartedAt = 0;
     state.renderProbe = null;
     emitState();
 

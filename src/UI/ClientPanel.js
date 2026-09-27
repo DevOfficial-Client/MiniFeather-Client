@@ -662,6 +662,7 @@
 
   const DEFAULT_SETTINGS = {
     rebrand: true,
+    classicTitle: false,
     supportAds: false,
     startupAnimation: true,
     discord: true,
@@ -8840,7 +8841,7 @@
     refreshLogoControls();
   }
   const NSB_BOOLEAN_KEYS = [
-    'rebrand', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
+    'rebrand', 'classicTitle', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
     'waterSplash', 'shineAmbience', 'patPat', 'duckMobs', 'crittersMobs', 'allayPets', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
     'safeSneak', 'autoRespawn', 'idlePlayerBot', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
@@ -11730,6 +11731,9 @@
   function applyGuiSettings() {
     sendLanguageConfig();
     setModuleEnabled('rebrand', settings.rebrand);
+    document.dispatchEvent(new CustomEvent('minifeather:titlescreen-config', {
+      detail: JSON.stringify({ enabled: !!settings.classicTitle, language: settings.language, logo: currentLogo })
+    }));
     setModuleEnabled('discord', settings.rebrand && settings.discord);
     setModuleEnabled('keystrokes', settings.keystrokes);
     setModuleEnabled('fpsCounter', settings.fpsCounter);
