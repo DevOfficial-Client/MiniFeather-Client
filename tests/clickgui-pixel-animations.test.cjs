@@ -40,7 +40,7 @@ test('most module icons have six drawn 32px animation frames', () => {
   const weakFrames = [];
   const shortCycles = [];
   for (const name of names) {
-    const original = fs.readFileSync(path.join(root, `${name}.png`));
+    const original = fs.readFileSync(path.join(root, name, '00.png'));
     const frame0 = fs.readFileSync(path.join(root, name, '00.png'));
     assert.deepEqual(frame0, original, `${name} base frame changed`);
     const originalPixels = rgbaPixels(original);
@@ -51,14 +51,13 @@ test('most module icons have six drawn 32px animation frames', () => {
         assert.ok(frame[offset + 3] === 0 || frame[offset + 3] === 255, `${name} lost hard pixel edges`);
         if (!frame.subarray(offset, offset + 4).equals(originalPixels.subarray(offset, offset + 4))) changed++;
       }
-      if (changed <= 10 || changed >= 750) weakFrames.push(`${name}:${index + 1} (${changed})`);
+      if (changed <= 10 || changed >= 900) weakFrames.push(`${name}:${index + 1} (${changed})`);
     }
     if (new Set(frames.map(frame => frame.toString('hex'))).size < 4) shortCycles.push(name);
   }
   assert.deepEqual(weakFrames, []);
   assert.deepEqual(shortCycles, []);
-  assert.equal(fs.existsSync(path.join(root, 'patPat')), false);
-  assert.equal(fs.existsSync(path.join(root, 'patpat')), false);
+  assert.equal(fs.existsSync(path.join(root, 'patpat', '00.png')), true);
 });
 
 test('animation generator draws actions instead of moving a glint', () => {

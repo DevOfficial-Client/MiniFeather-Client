@@ -3551,11 +3551,9 @@
   const MF_PIXEL_FRAME_COUNT = 6;
 
   function pixelIconPng(name, className = '') {
-    const filename = name === 'patPat' ? 'patpat.png' : `${name}.png`;
+    const folder = name === 'patPat' ? 'patpat' : name;
     const animated = MF_ANIMATED_PIXEL_ICON_SET.has(name);
-    const url = animated
-      ? chrome.runtime.getURL(`assets/ui/${name}/00.png`)
-      : chrome.runtime.getURL(`assets/ui/${filename}`);
+    const url = chrome.runtime.getURL(`assets/ui/${folder}/00.png`);
     const animationData = animated ? ` data-mf-animated-icon="${name}" data-mf-frame="0"` : '';
     return `<img class="mf-pixel-icon ${className}" src="${url}"${animationData} alt="" aria-hidden="true"/>`;
   }
@@ -7029,7 +7027,7 @@
               data-mf-profile="${value}"
               style="padding:14px 10px;font-size:15px;font-weight:700;letter-spacing:.3px;"
             >
-              ${labels[value]}${value === 'potato' ? ` <img class="mf-profile-icon" src="${chrome.runtime.getURL('assets/ui/potato.png')}" alt="" aria-hidden="true">` : ''}
+              ${labels[value]}${value === 'potato' ? ` <img class="mf-profile-icon" src="${chrome.runtime.getURL('assets/ui/potato/00.png')}" alt="" aria-hidden="true">` : ''}
             </button>
           `).join('')}
         </div>

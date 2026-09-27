@@ -209,7 +209,7 @@
     const heading = document.createElement('h2');
     heading.className = 'mf-classic-quicklaunch-section-title';
     const artwork = document.createElement('img');
-    artwork.src = chrome.runtime.getURL(`assets/ui/${icon}.png`);
+    artwork.src = chrome.runtime.getURL(`assets/ui/${icon}/00.png`);
     artwork.alt = '';
     const label = document.createElement('span');
     label.textContent = title;

@@ -12,7 +12,7 @@ function objectLiteral(name) {
   return vm.runInNewContext(`(${match[1]})`);
 }
 
-test('every ClickGUI module has a colored 8x8 pixel icon', () => {
+test('every ClickGUI module has a colored source icon', () => {
   const palette = objectLiteral('PIXEL_PALETTE');
   const icons = objectLiteral('MF_PIXEL_ICONS');
   const index = source.match(/function getModuleIndex\(\) \{[\s\S]*?return \[([\s\S]*?)\];/);
@@ -41,13 +41,15 @@ test('every ClickGUI module has a colored 8x8 pixel icon', () => {
 
 test('ClickGUI loads real transparent PNG assets instead of inline pixel SVGs', () => {
   const icons = objectLiteral('MF_PIXEL_ICONS');
-  assert.match(source, /chrome\.runtime\.getURL\(`assets\/ui\/\$\{filename\}`\)/);
-  assert.match(source, /name === 'patPat' \? 'patpat\.png'/);
+  assert.deepEqual(fs.readdirSync(path.join(__dirname, '../assets/ui'), { withFileTypes: true })
+    .filter(entry => entry.isFile()).map(entry => entry.name), [], 'assets/ui should only contain folders');
+  assert.match(source, /chrome\.runtime\.getURL\(`assets\/ui\/\$\{folder\}\/00\.png`\)/);
+  assert.match(source, /name === 'patPat' \? 'patpat'/);
   assert.doesNotMatch(source, /function pixelIconSvg\(/);
 
   const signature = [137, 80, 78, 71, 13, 10, 26, 10];
   for (const name of Object.keys(icons)) {
-    const file = path.join(__dirname, `../assets/ui/${name === 'patPat' ? 'patpat' : name}.png`);
+    const file = path.join(__dirname, `../assets/ui/${name === 'patPat' ? 'patpat' : name}/00.png`);
     const png = fs.readFileSync(file);
     assert.deepEqual([...png.subarray(0, 8)], signature, `${name} is not a PNG`);
     if (name !== 'patPat') {
@@ -64,8 +66,8 @@ test('Potato preset uses its real pixel-art PNG, not an emoji', () => {
   const labels = [...translations.matchAll(/"profilePotato":\s*"([^"]*)"/g)];
   assert.ok(labels.length >= 10, 'expected a Potato label for every language');
   assert.ok(labels.every((match) => !match[1].includes('🥔')), 'an emoji remains in a Potato label');
-  assert.match(source, /assets\/ui\/potato\.png/);
-  const png = fs.readFileSync(path.join(__dirname, '../assets/ui/potato.png'));
+  assert.match(source, /assets\/ui\/potato\/00\.png/);
+  const png = fs.readFileSync(path.join(__dirname, '../assets/ui/potato/00.png'));
   assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   assert.equal(png.readUInt32BE(16), 32);
   assert.equal(png.readUInt32BE(20), 32);

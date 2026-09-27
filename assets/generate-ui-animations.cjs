@@ -313,10 +313,14 @@ function poseIcon(name, original, frame) {
       break;
     }
     case 'zoom': {
-      rect(4, 5, 8, 5, 'b');
-      const size = [0, 2, 4, 5, 3, 2][frame];
-      rect(8 - Math.floor(size / 2), 8 - Math.floor(size / 2), size, size, 'k');
-      dot(5 + frame % 3, 5, '#');
+      // Keep the glass and grip fixed; animate the small chart inside the lens.
+      rect(6, 5, 3, 4, 'b');
+      const bars = [[2, 2, 3], [2, 3, 3], [3, 3, 4], [3, 4, 4], [2, 4, 3]][frame - 1];
+      rect(6, 9 - bars[0], 1, bars[0], 'r');
+      rect(7, 9 - bars[1], 1, bars[1], 'g');
+      rect(8, 9 - bars[2], 1, bars[2], 'B');
+      rect(4 + frame % 3, 4, 2, 1, '#');
+      dot(10, 3 + frame % 3, '+');
       break;
     }
     case 'cameraOverhaul': {
@@ -492,7 +496,7 @@ for (const name of names) {
   const original = makeArt(name, icons[name]);
   const folder = path.join(root, name);
   fs.mkdirSync(folder, { recursive: true });
-  fs.copyFileSync(path.join(root, `${name}.png`), path.join(folder, '00.png'));
+  fs.writeFileSync(path.join(folder, '00.png'), encodeArt(name, original));
   for (let frame = 1; frame < 6; frame++) {
     const art = poseIcon(name, original, frame);
     fs.writeFileSync(path.join(folder, `${String(frame).padStart(2, '0')}.png`), encodeArt(name, art));
