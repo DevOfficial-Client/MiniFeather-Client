@@ -513,24 +513,32 @@
             return roots;
         },
 
-        async tryLoad(file) {
-            try { await loadModel(file); return true; } catch { return false; }
+        async tryLoad(file, texOverride) {
+            try { await loadModel(file, texOverride); return true; } catch { return false; }
         },
 
         async getGLBBytes(file) {
-            if (!/\.(glb|gltf|obj)$/i.test(file)) throw new Error('solo archivos .glb/.gltf/.obj via P2P');
+            if (/\.(geo\.json|animation\.json|png)$/i.test(file)) {
+                if (!/^[\w.\-\/]+$/i.test(file) || file.includes('..')) throw new Error('ruta invalida');
+                return fetchModelArrayBuffer(file);
+            }
+            if (!/\.(glb|gltf|obj)$/i.test(file)) throw new Error('solo archivos .glb/.gltf/.obj/.geo.json/.png via P2P');
             return fetchModelArrayBuffer(file);
         },
 
         registerModelBytes(file, arrayBuffer) {
             const p = (async () => {
                 let parsed;
-                if (/\.obj$/i.test(file)) {
-
+                if (/\.geo\.json$/i.test(file)) {
+                    p2pAssets.set(file, arrayBuffer);
+                    parsed = await parseGeoModel(file);
+                } else if (/\.obj$/i.test(file)) {
                     parsed = parseOBJ(new TextDecoder().decode(arrayBuffer), file, null);
                 } else if (/\.gltf$/i.test(file)) {
-
                     parsed = await resolveGLTFExternal(JSON.parse(new TextDecoder().decode(arrayBuffer)));
+                } else if (/\.png$/i.test(file)) {
+                    p2pAssets.set(file, arrayBuffer);
+                    return { root: { children: [] } };
                 } else {
                     parsed = parseGLB(arrayBuffer);
                 }
@@ -1767,7 +1775,10 @@
         });
     }
 
+    const p2pAssets = new Map();
+
     async function fetchModelArrayBuffer(file) {
+        if (p2pAssets.has(file)) return p2pAssets.get(file);
         if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
             const url = chrome.runtime.getURL('models/entities/' + file);
             let resp;

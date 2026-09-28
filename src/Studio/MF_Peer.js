@@ -366,15 +366,20 @@ const state = {
         }
         const rec = CM.getRecord(id);
         if (!rec?.root) {
-
             if (!r.file || r.spawning) continue;
+            if (ents.missingFiles && ents.missingFiles.has(r.file)) continue;
             r.spawning = true;
-            CM.tryLoad(r.file).then((ok) => {
-                if (!ok && !ents.knownFiles.has(r.file)) {
-                    log('no tengo "' + r.file + '" — pidiendolo al peer');
-                    ents.knownFiles.add(r.file);
-                    send({ t: 'need-file', file: r.file });
-                } else if (ok) {
+            CM.tryLoad(r.file, r.texture || undefined).then((ok) => {
+                if (!ok) {
+                    if (!ents.knownFiles.has(r.file)) {
+                        log('no tengo "' + r.file + '" — pidiendolo al peer');
+                        ents.knownFiles.add(r.file);
+                        send({ t: 'need-file', file: r.file });
+                        if (!ents.missingFiles) ents.missingFiles = new Set();
+                        ents.missingFiles.add(r.file);
+                    }
+                } else {
+                    if (ents.missingFiles) ents.missingFiles.delete(r.file);
                     spawnPuppetEnt(id, r);
                 }
             }).catch(() => {}).finally(() => {
@@ -588,8 +593,7 @@ const state = {
             break;
         }
         case 'need-file':
-
-            if (msg.file && /\.glb$/i.test(msg.file)) sendFile(msg.file);
+            if (msg.file && /\.(glb|gltf|obj|geo\.json|animation\.json|png)$/i.test(msg.file)) sendFile(msg.file);
             break;
         case 'file-h':
             if (msg.file) ents.recv.set(msg.file, {

@@ -79,6 +79,7 @@
     var devSkinsRegistered = false;
     function registerDevSkins() {
         if (devSkinsRegistered) return;
+        installCustomUrlHook();
         var base = skinsBaseUrl();
         if (!base) return;
 
@@ -96,7 +97,6 @@
             }
         }
         devSkinsRegistered = true;
-        installCustomUrlHook();
     }
 
     var DB_KEY = 'minifeather:custom-skins-db';
@@ -502,7 +502,7 @@
                 var w = im ? im.width : 0, h = im ? im.height : 0;
                 if (!w || !h) return false;
                 var k = w / 64;
-                return Number.isInteger(k) && (h === w || h === w / 2);
+                return Number.isInteger(k) && (h === w || h === w / 2) && k >= 1 && k <= 2;
             });
             if (!mats.length) return;
 
@@ -741,12 +741,9 @@
             var w = m.map?.image?.width, h = m.map?.image?.height;
             if (!w || !h) return false;
             var k64 = w / 64;
-            return Number.isInteger(k64) && (h === w || h === w / 2) && k64 <= 4;
+            return Number.isInteger(k64) && (h === w || h === w / 2) && k64 >= 1 && k64 <= 2;
         });
-        if (skins.length) return skins;
-        var nonFacial = bodyMats.filter(function (m) { return !isFacialTex(m.map); });
-        if (nonFacial.length) return nonFacial;
-        return [];
+        return skins;
     }
 
     function capeMaterialsOf(mesh) {
@@ -1572,13 +1569,21 @@
     document.dispatchEvent(new CustomEvent('minifeather:panel-assets-request', { detail: '{}' }));
     var panelReqAttempts = 0;
     var panelReqTimer = setInterval(function () {
-        if (panelAssetsReceived || panelReqAttempts >= 40) {
+        if (panelAssetsReceived) {
             clearInterval(panelReqTimer);
             return;
         }
+        if (panelReqAttempts >= 40) return;
         panelReqAttempts++;
         document.dispatchEvent(new CustomEvent('minifeather:panel-assets-request', { detail: '{}' }));
     }, 1500);
+    var panelReqSlow = setInterval(function () {
+        if (panelAssetsReceived) {
+            clearInterval(panelReqSlow);
+            return;
+        }
+        document.dispatchEvent(new CustomEvent('minifeather:panel-assets-request', { detail: '{}' }));
+    }, 30000);
     function registerPanelAssets(kind, assets) {
         if (!assets || typeof assets !== 'object') return;
         var changed = false;
