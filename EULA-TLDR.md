@@ -37,7 +37,7 @@ un bug reportado se arregla. una queja vacía, no. tú eliges qué mandar.
 
 si eres de esos: por favor, replantéate tus prioridades. los devs también tienen sentimientos (y café caro). si algo no te gusta, puedes decirlo sin insultar, o mejor aún: **reporta el bug con cariño en discord** y lo miramos. prometemos no llorar. mucho. (˘̩̩̩ε˘̩ƪ)
 
-si eres de los buenos: gracias, de corazón. sois la razón por la que seguimos. ᕦ(ò_óˇ)ᕤ
+si eres de los buenos: gracias, de corazón. son la razón por la que seguimos. :D
 
 ## 3. lo que no hagas con el cliente ٩(◕‿◕)ノ
 
