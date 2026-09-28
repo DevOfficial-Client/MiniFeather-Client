@@ -763,6 +763,18 @@
     customShaderFxUftone: 0.35,
     customShaderFxPhagx: 0.8,
     customShaderFxPhfog: 0.5,
+    customShaderFxGvfog: 0.8,
+    customShaderFxGvdist: 30,
+    customShaderFxGvdesat: 0.55,
+    customShaderFxGvblue: 0.35,
+    customShaderFxGvgrain: 0.3,
+    customShaderFxGvlight: 0.3,
+    customShaderFxNfadapt: 0.75,
+    customShaderFxNfmoon: 0.55,
+    customShaderFxNfpurk: 0.7,
+    customShaderFxNffog: 0.45,
+    customShaderFxNfnoise: 0.35,
+    customShaderFxNfstars: 0.6,
     customShaderPfbloom: 0.35,
     customShaderPfca: 0,
     customShaderPfdof: 0,
@@ -4425,9 +4437,11 @@
     const spookFx = ['vhs', 'crt', 'cel', 'fog', 'grain', 'glitch', 'flash', 'sharp'];
     const ufFx = ['ufsat', 'ufcontrast', 'uftone'];
     const phFx = ['phagx', 'phfog', 'phend', 'phbh', 'phbhsize', 'phbhspin'];
-    const fxList = preset === 'ultrafast' ? ufFx : preset === 'photon' ? phFx : spookFx;
+    const gvFx = ['gvfog', 'gvdist', 'gvdesat', 'gvblue', 'gvgrain', 'gvlight'];
+    const nfFx = ['nfadapt', 'nfmoon', 'nfpurk', 'nffog', 'nfnoise', 'nfstars'];
+    const fxList = preset === 'ultrafast' ? ufFx : preset === 'photon' ? phFx : preset === 'graveyard' ? gvFx : preset === 'nightfall' ? nfFx : spookFx;
     for (const name of fxList) {
-      const fallback = { vhs: 0.6, crt: 0.6, cel: 0.6, fog: 0.7, grain: 0.5, glitch: 0.4, flash: 0.5, sharp: 0.5, ufsat: 1.35, ufcontrast: 0.45, uftone: 0.35, phagx: 0.8, phfog: 0.5, phend: 0, phbh: 0, phbhsize: 0.35, phbhspin: 1 }[name];
+      const fallback = { vhs: 0.6, crt: 0.6, cel: 0.6, fog: 0.7, grain: 0.5, glitch: 0.4, flash: 0.5, sharp: 0.5, ufsat: 1.35, ufcontrast: 0.45, uftone: 0.35, phagx: 0.8, phfog: 0.5, phend: 0, phbh: 0, phbhsize: 0.35, phbhspin: 1, gvfog: 0.8, gvdist: 30, gvdesat: 0.55, gvblue: 0.35, gvgrain: 0.3, gvlight: 0.3, nfadapt: 0.75, nfmoon: 0.55, nfpurk: 0.7, nffog: 0.45, nfnoise: 0.35, nfstars: 0.6 }[name];
       fx[name] = Number(settings['customShaderFx' + name.charAt(0).toUpperCase() + name.slice(1)] ?? fallback);
     }
 
@@ -7572,7 +7586,8 @@
     const isUltrafast = preset === 'ultrafast';
     const isPhoton = preset === 'photon';
     const isComplementary = preset === 'complementaryInspired';
-    const isGraveyard = preset === 'graveyard';
+  const isGraveyard = preset === 'graveyard';
+  const isNightfall = preset === 'nightfall';
 
     const fxSliders = isUltrafast
       ? [
@@ -7609,6 +7624,15 @@
           { id: 'gvgrain', label: t('shadersGvGrain'), value: Number(settings.customShaderFxGvgrain ?? 0.3), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
           { id: 'gvlight', label: t('shadersGvLight'), value: Number(settings.customShaderFxGvlight ?? 0.3), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' }
         ]
+      : isNightfall
+      ? [
+          { id: 'nfadapt', label: t('shadersNfAdapt'), value: Number(settings.customShaderFxNfadapt ?? 0.75), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'nfmoon', label: t('shadersNfMoon'), value: Number(settings.customShaderFxNfmoon ?? 0.55), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'nfpurk', label: t('shadersNfPurk'), value: Number(settings.customShaderFxNfpurk ?? 0.7), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'nffog', label: t('shadersNfFog'), value: Number(settings.customShaderFxNffog ?? 0.45), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'nfnoise', label: t('shadersNfNoise'), value: Number(settings.customShaderFxNfnoise ?? 0.35), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+          { id: 'nfstars', label: t('shadersNfStars'), value: Number(settings.customShaderFxNfstars ?? 0.6), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' }
+        ]
       : [
           { id: 'vhs', label: t('shadersVhs'), value: Number(settings.customShaderFxVhs ?? 0.6), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
           { id: 'crt', label: t('shadersCrt'), value: Number(settings.customShaderFxCrt ?? 0.6), min: 0, max: 1, step: 0.05, fmt: v => Math.round(v * 100) + '%' },
@@ -7644,8 +7668,9 @@
             <option value="ultrafast"${preset === 'ultrafast' ? ' selected' : ''}>UltraFast</option>
             <option value="photon"${preset === 'photon' ? ' selected' : ''}>Photon</option>
             <option value="graveyard"${preset === 'graveyard' ? ' selected' : ''}>${t('shadersGraveyard')}</option>
+            <option value="nightfall"${preset === 'nightfall' ? ' selected' : ''}>${t('shadersNightfall')}</option>
           </select>
-          <div class="mf-muted" style="margin-top:8px;font-size:11px;">${isUltrafast ? t('shadersUfDesc') : isPhoton ? t('shadersPhDesc') : t('shadersHint')}</div>
+          <div class="mf-muted" style="margin-top:8px;font-size:11px;">${isUltrafast ? t('shadersUfDesc') : isPhoton ? t('shadersPhDesc') : isNightfall ? t('shadersNfDesc') : t('shadersHint')}</div>
         </div>
 
         <div class="mf-card">

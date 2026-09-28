@@ -44,6 +44,8 @@
     'sand', 'red_sand', 'gravel', 'stone', 'andesite', 'diorite', 'granite'
   ]);
 
+  let leafMatrixScratch = null;
+
   try { W.MF_FallenLeavesExperimental?.destroy?.(); } catch (_) {}
 
   const state = {
@@ -67,6 +69,9 @@
 
     canopySpots: [],
 
+    speciesBuckets: new Map(),
+    leafPool: [],
+
     stateNameCache: new Map(),
     centerCx: Number.NaN,
     centerCz: Number.NaN,
@@ -80,7 +85,9 @@
     lastGameScan: 0,
     serverSalt: 0,
     assetsBase: '',
-    leavesPlaced: 0
+    leavesPlaced: 0,
+
+    scratchMatrix: null
   };
 
   function findGame(force = false) {
@@ -363,10 +370,17 @@
       state.materials = materials;
       state.buckets = buckets;
       if (!buildVerticalGeometry(ref)) {
-        console.warn(TAG, "no vertical quad: leaves won't fall (decals only)");
+        console.warn(TAG, "no vertical quad: leaves won't fall (decals only)");//im tired boss...
       }
 
       try { state.scratchVec3 = ref.position.clone(); } catch (_) {}
+      try {
+        const Matrix4 = ref.matrixWorld?.constructor;
+        if (typeof Matrix4 === 'function') {
+          state.scratchMatrix = new Matrix4();
+          leafMatrixScratch = new Matrix4();
+        }
+      } catch (_) {}
 
       for (const species of SPECIES) {
         const frames = materials.filter(m => m.species === species.id);
@@ -374,6 +388,12 @@
         for (const name of species.match) {
           state.speciesIndex.set(name, frames[0]);
         }
+      }
+      state.speciesBuckets = new Map();
+      for (let i = 0; i < materials.length; i++) {
+        const sp = materials[i].species;
+        if (!state.speciesBuckets.has(sp)) state.speciesBuckets.set(sp, []);
+        state.speciesBuckets.get(sp).push(i);
       }
       void 0;
       return true;
@@ -402,8 +422,6 @@
     } catch (_) { return; }
     if (!chunk?.cells) return;
 
-    const mats = state.materials;
-
     for (let lx = 0; lx < 16; lx++) {
       for (let lz = 0; lz < 16; lz++) {
         const wx = cx * 16 + lx;
@@ -419,6 +437,18 @@
           const cell = chunk.cells[ci];
           if (!cell?.bitArray) continue;
           const yBase = Number(cell.yBase) || 0;
+
+          if (cell.palette?.length === 1) {
+            const only = cell.palette[0];
+            if (only !== 0) {
+              const name = blockNameAt(chunk, only, wx, yBase, wz);
+              if (name && state.speciesIndex.has(name)) {
+                lastLeafY = yBase + 15;
+                species = state.speciesIndex.get(name);
+              }
+            }
+            continue;
+          }
 
           for (let ly = 15; ly >= 0 && !stop; ly--) {
             const realY = yBase + ly;
@@ -444,17 +474,14 @@
             if (species && GROUND.has(name)) {
               const h = hashXZ(wx, wz);
               if (h / 4294967296 < DENSITY) {
-                const frames = mats.filter(m => m.species === species.species);
-                if (frames.length) {
-                  const mat = frames[(h >>> 12) % frames.length];
-                  const bi = mats.indexOf(mat);
-                  if (bi >= 0) {
-                    const size = MIN_SIZE + ((h >>> 20) & 255) / 255 * (MAX_SIZE - MIN_SIZE);
-                    const ox = 0.2 + ((h >>> 4) & 63) / 63 * 0.6;
-                    const oz = 0.2 + ((h >>> 10) & 63) / 63 * 0.6;
-                    state.buckets[bi].push({ x: wx + ox, y: realY + 1 + SURFACE_EPSILON, z: wz + oz, size, rot: (h >>> 8) & 3 });
-                    state.leavesPlaced++;
-                  }
+                const biList = state.speciesBuckets.get(species.species);
+                if (biList?.length) {
+                  const bi = biList[(h >>> 12) % biList.length];
+                  const size = MIN_SIZE + ((h >>> 20) & 255) / 255 * (MAX_SIZE - MIN_SIZE);
+                  const ox = 0.2 + ((h >>> 4) & 63) / 63 * 0.6;
+                  const oz = 0.2 + ((h >>> 10) & 63) / 63 * 0.6;
+                  state.buckets[bi].push({ x: wx + ox, y: realY + 1 + SURFACE_EPSILON, z: wz + oz, size, rot: (h >>> 8) & 3 });
+                  state.leavesPlaced++;
                 }
               }
 
@@ -547,37 +574,16 @@
     else setTimeout(() => fn({ timeRemaining: () => 4 }), 0);
   }
 
-  function spawnFallingLeaf(now) {
-    if (!state.canopySpots.length || state.falling.length >= FALLING_MAX) return;
-    const scene = state.scene;
-    if (!scene?.add || !state.verticalGeometry) return;
-
-    const p = state.game?.player?.pos;
-    let spot = null;
-    if (p) {
-      let total = 0;
-      const weights = state.canopySpots.map(s => {
-        const d = Math.hypot(s.x - Number(p.x), s.z - Number(p.z));
-        const w = d > 40 ? 0 : 1 / (1 + d);
-        total += w;
-        return w;
-      });
-      if (total <= 0) return;
-      let r = Math.random() * total;
-      for (let i = 0; i < weights.length; i++) {
-        r -= weights[i];
-        if (r <= 0) { spot = state.canopySpots[i]; break; }
+  function acquireLeafMesh(material) {
+    for (let i = state.leafPool.length - 1; i >= 0; i--) {
+      const pooled = state.leafPool[i];
+      if (pooled.material === material) {
+        state.leafPool.splice(i, 1);
+        pooled.visible = true;
+        return pooled;
       }
     }
-    if (!spot) spot = state.canopySpots[(Math.random() * state.canopySpots.length) | 0];
-
-    const frames = state.speciesFrames.get(spot.species);
-    if (!frames?.length) return;
-    const entry = frames[(Math.random() * frames.length) | 0];
-
     try {
-
-      const material = entry.material.clone();
       const MeshCtor = state.referenceMesh.constructor;
       const mesh = new MeshCtor(state.verticalGeometry, material);
       mesh.name = 'MiniFeatherFallingLeaf';
@@ -585,17 +591,73 @@
       mesh.receiveShadow = false;
       mesh.frustumCulled = false;
       mesh.renderOrder = 3;
+      mesh.matrixAutoUpdate = false;
+      return mesh;
+    } catch (_) { return null; }
+  }
+
+  function releaseLeafMesh(mesh) {
+    if (!mesh) return;
+    try { mesh.removeFromParent?.(); } catch (_) {}
+    if (state.leafPool.length < FALLING_MAX) state.leafPool.push(mesh);
+  }
+
+  function pickCanopySpot(playerPos) {
+    const spots = state.canopySpots;
+    if (!spots.length) return null;
+    if (!playerPos) return spots[(Math.random() * spots.length) | 0];
+
+    const px = Number(playerPos.x), pz = Number(playerPos.z);
+    const cutoff = 40 * 40;
+    let total = 0;
+    for (let i = 0; i < spots.length; i++) {
+      const s = spots[i];
+      const dx = s.x - px, dz = s.z - pz;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > cutoff) continue;
+      total += 1 / (1 + d2);
+    }
+    if (total <= 0) return null;
+    let r = Math.random() * total;
+    let acc = 0;
+    for (let i = 0; i < spots.length; i++) {
+      const s = spots[i];
+      const dx = s.x - px, dz = s.z - pz;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > cutoff) continue;
+      acc += 1 / (1 + d2);
+      if (r <= acc) return s;
+    }
+    return spots[spots.length - 1];
+  }
+
+  function spawnFallingLeaf(now) {
+    if (!state.canopySpots.length || state.falling.length >= FALLING_MAX) return;
+    const scene = state.scene;
+    if (!scene?.add || !state.verticalGeometry) return;
+
+    const spot = pickCanopySpot(state.game?.player?.pos);
+    if (!spot) return;
+
+    const frames = state.speciesFrames.get(spot.species);
+    if (!frames?.length) return;
+    const entry = frames[(Math.random() * frames.length) | 0];
+
+    try {
+      const mesh = acquireLeafMesh(entry.material);
+      if (!mesh) return;
       const size = 0.26 + Math.random() * 0.16;
-      mesh.scale.set(size, size, 1);
-      mesh.position.set(spot.x, spot.y, spot.z);
-      mesh.matrixAutoUpdate = true;
-      mesh.updateMatrix();
-      mesh.updateMatrixWorld(true);
+
+      leafMatrixScratch.makeScale(size, size, 1);
+      const le = leafMatrixScratch.elements;
+      le[12] = spot.x; le[13] = spot.y; le[14] = spot.z;
+      mesh.matrix.copy(leafMatrixScratch);
+      mesh.matrixWorld.copy(leafMatrixScratch);
       scene.add(mesh);
 
       state.falling.push({
         mesh,
-        material,
+        size,
         x: spot.x,
         y: spot.y,
         z: spot.z,
@@ -604,9 +666,7 @@
         phase: Math.random() * Math.PI * 2,
         swayFreq: 0.15 + Math.random() * 0.10,
         swayAmp: 0.9 + Math.random() * 0.8,
-
         spinFreq: 0.25 + Math.random() * 0.2,
-
         fallJitter: 0.8 + Math.random() * 0.4
       });
     } catch (_) {}
@@ -619,20 +679,22 @@
 
     let lookX = NaN, lookY = NaN, lookZ = NaN;
     try {
-      const el = camera?.matrixWorld?.elements;
-      if (el && el.length >= 16) { lookX = el[12]; lookY = el[13]; lookZ = el[14]; }
+      const cel = camera?.matrixWorld?.elements;
+      if (cel && cel.length >= 16) { lookX = cel[12]; lookY = cel[13]; lookZ = cel[14]; }
     } catch (_) {}
     if (Number.isNaN(lookX)) {
       const pp = state.game?.player?.pos;
       if (pp) { lookX = Number(pp.x); lookY = Number(pp.y) + 1.6; lookZ = Number(pp.z); }
     }
-    const v3 = state.scratchVec3;
-    const canLook = !!v3 && !Number.isNaN(lookX);
 
     if (now - state.lastSpawn > FALL_SPAWN_MS && state.falling.length < FALLING_MAX) {
       state.lastSpawn = now;
       spawnFallingLeaf(now);
     }
+
+    const m4 = state.scratchMatrix;
+    if (!m4) return;
+    const el = m4.elements;
 
     for (let i = state.falling.length - 1; i >= 0; i--) {
       const leaf = state.falling[i];
@@ -640,30 +702,46 @@
       const remaining = leaf.y - leaf.targetY;
 
       if (remaining <= 0.02) {
-        try { leaf.mesh.removeFromParent?.(); } catch (_) {}
-        try { leaf.material.dispose?.(); } catch (_) {}
+        releaseLeafMesh(leaf.mesh);
         state.falling.splice(i, 1);
         continue;
       }
 
       leaf.y -= FALL_SPEED * leaf.fallJitter * dt;
       const sway = Math.sin(age * leaf.swayFreq * Math.PI * 2 + leaf.phase) * leaf.swayAmp;
-      leaf.mesh.position.set(leaf.x + sway, leaf.y, leaf.z + sway * 0.35);
+      const mesh = leaf.mesh;
+      const px = leaf.x + sway, py = leaf.y, pz = leaf.z + sway * 0.35;
+      mesh.position.set(px, py, pz);
 
-      try {
-        if (canLook) {
-          v3.set(lookX, lookY, lookZ);
-          leaf.mesh.lookAt(v3);
-          leaf.mesh.rotateZ(age * leaf.spinFreq * Math.PI * 2 + leaf.phase);
-        }
-      } catch (_) {}
+      if (!Number.isNaN(lookX)) {
+        let dx = lookX - px, dy = lookY - py, dz = lookZ - pz;
+        const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+        dx /= len; dy /= len; dz /= len;
 
-      try {
-        leaf.mesh.updateMatrix();
-        leaf.mesh.updateMatrixWorld(true);
-      } catch (_) {}
+        const yaw = Math.atan2(dx, dz);
+        const pitch = Math.asin(Math.max(-1, Math.min(1, -dy)));
+        const spin = age * leaf.spinFreq * Math.PI * 2 + leaf.phase;
+        const cy = Math.cos(yaw), sy = Math.sin(yaw);
+        const cp = Math.cos(pitch), sp = Math.sin(pitch);
+        const cs = Math.cos(spin), ss = Math.sin(spin);
+        const s = leaf.size;
 
-      leaf.mesh.visible = true;
+        el[0] = (cy * cs + sy * sp * ss) * s;
+        el[1] = cp * ss * s;
+        el[2] = (-sy * cs + cy * sp * ss) * s;
+        el[3] = 0;
+        el[4] = (-cy * ss + sy * sp * cs) * s;
+        el[5] = cp * cs * s;
+        el[6] = (sy * ss + cy * sp * cs) * s;
+        el[7] = 0;
+        el[8] = sy * cp * s;
+        el[9] = -sp * s;
+        el[10] = cy * cp * s;
+        el[11] = 0;
+        el[12] = px; el[13] = py; el[14] = pz; el[15] = 1;
+        mesh.matrix.copy(m4);
+        mesh.matrixWorld.copy(m4);
+      }
     }
   }
 
@@ -732,9 +810,12 @@
   function clearFalling() {
     for (const leaf of state.falling) {
       try { leaf.mesh?.removeFromParent?.(); } catch (_) {}
-      try { leaf.material?.dispose?.(); } catch (_) {}
     }
     state.falling = [];
+    for (const mesh of state.leafPool) {
+      try { mesh.removeFromParent?.(); } catch (_) {}
+    }
+    state.leafPool.length = 0;
   }
 
   function disposeResources() {

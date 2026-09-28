@@ -104,14 +104,15 @@
     return value;
   }
 
-  float mfAuroraCurtain(
+  vec2 mfAuroraCurtain(
     float az,
     float elevation,
     float t,
     float quality,
     float seed,
     float heightOffset,
-    float widthScale
+    float widthScale,
+    float pulse
   ) {
     // The silhouette is static: these terms never use time. This is what anchors
     // the curtain to a fixed location in the world instead of following the camera.
@@ -124,7 +125,7 @@
 
     float vertical = smoothstep(lower - 0.045, lower + 0.035, elevation);
     vertical *= 1.0 - smoothstep(upper - 0.16, upper + 0.035, elevation);
-    if (vertical <= 0.001) return 0.0;
+    if (vertical <= 0.001) return vec2(0.0);
 
     float relY = clamp((elevation - lower) / max(0.12, thickness), 0.0, 1.0);
 
@@ -132,22 +133,28 @@
     // create folds that breathe and bend without translating the entire aurora.
     float flowA = mfAuroraNoise(vec2(az * 1.72 + seed, t * 0.025 + seed * 3.1));
     float flowB = mfAuroraNoise(vec2(az * 3.35 - seed, t * 0.018 + 19.0 + seed));
-    float warp = (flowA - 0.5) * 0.22 + (flowB - 0.5) * 0.095;
+    float warp = (flowA - 0.5) * 0.24 + (flowB - 0.5) * 0.11;
     warp *= 0.35 + 0.95 * relY;
 
-    // Vertical rays are noise ridges rather than repeated sine columns. This makes
-    // the curtain less illustrated and gives every part a different width/spacing.
+    // Vertical rays are noise ridges rather than repeated sine columns. The vertical
+    // coordinate slides down over time so rays appear to stream upward toward the
+    // zenith, the signature slow drift of a real curtain, without moving its base.
     float rayCoord = az * widthScale + warp;
-    float rayNoise = mfAuroraNoise(vec2(rayCoord, seed * 7.3 + t * 0.010));
-    float rayFine = mfAuroraNoise(vec2(rayCoord * 1.91 + 13.4, seed * 4.1 - t * 0.008));
+    float streamY = elevation * 1.45 - t * 0.020;
+    float rayNoise = mfAuroraNoise(vec2(rayCoord, seed * 7.3 + streamY));
+    float rayFine = mfAuroraNoise(vec2(rayCoord * 1.91 + 13.4, seed * 4.1 + streamY * 0.72 - t * 0.012));
     float ridge = 1.0 - abs(rayNoise * 2.0 - 1.0);
-    ridge = smoothstep(0.30, 0.88, ridge);
-    ridge *= 0.62 + 0.38 * smoothstep(0.20, 0.86, rayFine);
+    ridge = smoothstep(0.28, 0.90, ridge);
+    ridge *= 0.60 + 0.40 * smoothstep(0.18, 0.88, rayFine);
+    if (quality > 1.5) {
+      float rayDetail = mfAuroraNoise(vec2(rayCoord * 3.83 + 47.2, seed * 9.7 + streamY * 1.31));
+      ridge *= 0.72 + 0.28 * smoothstep(0.30, 0.85, rayDetail);
+    }
 
     // Large gaps are static in world-space, so the same broad auroral structures
     // remain above the same horizon while their internal rays continue to move.
     float cluster = mfAuroraFbm(vec2(az * 0.31 + seed * 5.4, seed * 0.83), quality);
-    cluster = smoothstep(0.27, 0.68, cluster);
+    cluster = smoothstep(0.25, 0.66, cluster);
 
     // A faint translucent body prevents the effect from looking like isolated neon bars.
     float body = 0.20 + 0.34 * mfAuroraNoise(vec2(az * 0.68 + seed, elevation * 2.2 + seed));
@@ -156,7 +163,14 @@
     // Natural brightness tends to gather toward the lower green edge, with softer
     // rays climbing upward into the cyan/violet part of the curtain.
     float lowerEdge = 0.62 + 0.38 * (1.0 - smoothstep(0.05, 0.82, relY));
-    return vertical * cluster * rays * lowerEdge;
+
+    // Substorm pulses modulate emission strength only; the curtain never moves.
+    float light = vertical * cluster * rays * lowerEdge * pulse;
+
+    // Nitrogen fringe: a thin magenta hem hugging the sharp green lower border,
+    // the most recognizable trait of a bright aurora.
+    float fringe = smoothstep(0.16, 0.0, relY) * vertical * cluster;
+    return vec2(light, fringe);
   }
 
   vec3 mfAuroraColor(vec3 dir) {
@@ -182,13 +196,28 @@
     float region = sideGate * horizonGate * zenithGate;
     if (region <= 0.001) return vec3(0.0);
 
-    float light = mfAuroraCurtain(az, elevation, t, quality, 1.7, 0.000, 7.5);
+    // Substorm cycle: broad activity waves with quiet periods. Each curtain samples
+    // the cycle at a different phase so they never pulse in lockstep.
+    float cycleA = mfAuroraNoise(vec2(t * 0.021, 3.7));
+    float surgeA = 0.68 + 0.62 * smoothstep(0.35, 0.92, cycleA);
+
+    vec2 layerA = mfAuroraCurtain(az, elevation, t, quality, 1.7, 0.000, 7.5, surgeA);
+    float light = layerA.x;
+    float fringe = layerA.y;
 
     if (quality > 0.5) {
-      light += mfAuroraCurtain(az + 0.10, elevation, t * 0.94, quality, 6.1, 0.075, 10.5) * 0.52;
+      float cycleB = mfAuroraNoise(vec2(t * 0.017 + 40.0, 9.1));
+      float surgeB = 0.62 + 0.55 * smoothstep(0.40, 0.90, cycleB);
+      vec2 layerB = mfAuroraCurtain(az + 0.10, elevation, t * 0.94, quality, 6.1, 0.075, 10.5, surgeB);
+      light += layerB.x * 0.52;
+      fringe = max(fringe, layerB.y * 0.52);
     }
     if (quality > 1.5) {
-      light += mfAuroraCurtain(az - 0.075, elevation, t * 1.04, quality, 10.9, 0.155, 14.5) * 0.30;
+      float cycleC = mfAuroraNoise(vec2(t * 0.026 + 80.0, 15.3));
+      float surgeC = 0.72 + 0.50 * smoothstep(0.38, 0.88, cycleC);
+      vec2 layerC = mfAuroraCurtain(az - 0.075, elevation, t * 1.04, quality, 10.9, 0.155, 14.5, surgeC);
+      light += layerC.x * 0.30;
+      fringe = max(fringe, layerC.y * 0.30);
     }
 
     // Very faint broad glow around the curtains. It remains fixed spatially while
@@ -212,8 +241,14 @@
     float shimmer = 0.91 + 0.09 * shimmerNoise;
 
     float intensity = quality < 0.5 ? 0.105 : (quality < 1.5 ? 0.125 : 0.140);
-    float total = min(light, 1.20) * intensity + veil;
-    return colorA * total * region * night * shimmer;
+    float body = min(light, 1.20) * intensity + veil;
+
+    // Nitrogen fringe: magenta hem riding on the sharp green lower border.
+    vec3 fringeColor = vec3(0.72, 0.10, 0.38);
+    float fringeAmt = fringe * intensity * 1.9;
+
+    vec3 result = (colorA * body + fringeColor * fringeAmt) * region * night * shimmer;
+    return result;
   }
 
   `;

@@ -15,6 +15,8 @@
     const EVT_CONFIG = 'minifeather:pbr-config';
     const EVT_REINSTALL = 'minifeather:pbr-reinstall';
 
+    const PBR_ATLAS_GEN = 2;
+
     const LIGHT_MATERIALS = [
         'MeshLambertMaterial', 'MeshStandardMaterial',
         'MeshPhongMaterial', 'MeshToonMaterial', 'MeshBasicMaterial'
@@ -289,6 +291,13 @@
         state.loading = (async () => {
             let any = false;
             let emptiedKinds = [];
+            let manual = false;
+            try { manual = localStorage.getItem('mf_pbr_manual') === '1'; } catch (_) {}
+            let bundledActive = false;
+            try {
+                bundledActive = !manual
+                    && (localStorage.getItem('mf_pbr_preset') || 'bundled') === 'bundled';
+            } catch (_) {}
             for (const kind of ['n', 's', 'e']) {
                 state.textures[kind] = null;
                 state.kinds[kind] = false;
@@ -297,6 +306,8 @@
 
                     let empty;
                     if (typeof rec.placed === 'number' && rec.placed <= 0) {
+                        empty = true;
+                    } else if (bundledActive && rec.v !== PBR_ATLAS_GEN) {
                         empty = true;
                     } else {
                         empty = await atlasLooksEmpty(rec.dataUrl, kind);
@@ -321,8 +332,6 @@
 
             const missing = ['n', 's', 'e'].filter(k => !state.kinds[k]);
             const reinstallKinds = [...new Set([...emptiedKinds, ...missing])];
-            let manual = false;
-            try { manual = localStorage.getItem('mf_pbr_manual') === '1'; } catch (_) {}
             if (reinstallKinds.length && state.reinstallCount < 3 && !manual) {
                 state.reinstallCount++;
                 try { localStorage.setItem(LS.available, 'false'); } catch (_) {}
@@ -600,21 +609,65 @@
             for (const key in u) shader.uniforms[key] = u[key];
 
             let gameUvExpr = '';
-            const candidates = [...shader.fragmentShader.matchAll(
-                /texture2D\s*\(\s*map\s*,\s*([A-Za-z_][A-Za-z0-9_]*)/g)].map(m => m[1]);
+            const src = shader.fragmentShader;
+            const samplerExprs = [];
+            const reSampler = /texture2D\s*\(\s*map\s*,/g;
+            for (let m; (m = reSampler.exec(src)); ) {
+                let i = m.index + m[0].length, depth = 1;
+                while (i < src.length && depth > 0) {
+                    if (src[i] === '(') depth++;
+                    else if (src[i] === ')') depth--;
+                    i++;
+                }
+                const expr = src.slice(m.index + m[0].length, i - 1).trim();
+                if (expr) samplerExprs.push(expr);
+            }
+            const candidates = [...new Set(samplerExprs
+                .map(e => (e.match(/^[A-Za-z_][A-Za-z0-9_]*/) || [])[0])
+                .filter(Boolean))];
             const isGlobalVarying = (name) => new RegExp(
-                'varying(?:\\s+centroid)?\\s+vec2\\s+' + name + '\\s*;').test(shader.fragmentShader);
-            const pick = candidates.find(v => v === 'vCentroidMapUv')
-                || candidates.find(v => v !== 'uv' && !/overlay/i.test(v) && isGlobalVarying(v))
-                || candidates.find(v => v !== 'uv' && isGlobalVarying(v));
-            gameUvExpr = pick || '';
+                'varying(?:\\s+centroid)?\\s+vec2\\s+' + name + '\\s*;').test(src);
+            // The base block texture is sampled at vCentroidMapUv plus a frame
+            // offset for animated tiles (water/lava strips). vOverlayUV is only
+            // the tint overlay layer, so following it would paint relief on the
+            // wrong tiles. Grab the FULL sampler expression (balanced parens) so
+            // the PBR atlas reads the same animation frame the game renders.
+            const declaredNames = new Set();
+            for (const d of src.matchAll(
+                /(?:centroid\s+)?(?:varying|uniform)\s+(?:centroid\s+)?(?:highp\s+|mediump\s+|lowp\s+)?[A-Za-z0-9_]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]*\])?\s*;/g)) {
+                declaredNames.add(d[1]);
+            }
+            const GLSL_TOKENS = new Set(['vec2', 'vec3', 'vec4', 'float', 'int',
+                'mod', 'floor', 'fract', 'sin', 'cos', 'abs', 'min', 'max',
+                'clamp', 'mix', 'smoothstep', 'step', 'length']);
+            const centroidExpr = samplerExprs.find(e => e.includes('vCentroidMapUv'));
+            if (centroidExpr) {
+                const externals = [...new Set([...centroidExpr
+                    .matchAll(/[A-Za-z_][A-Za-z0-9_]*/g)].map(x => x[0]))]
+                    .filter(id => !GLSL_TOKENS.has(id) && !declaredNames.has(id));
+                const hasAnim = /(?:centroid\s+)?(?:varying|uniform)\s+(?:centroid\s+)?vec[234]\s+vAnimation\s*;/.test(src);
+                const hasTime = declaredNames.has('time');
+                if (externals.length === 0) {
+                    gameUvExpr = centroidExpr;
+                } else if (externals.length === 1 && externals[0] === 'frame'
+                    && hasAnim && hasTime) {
+                    gameUvExpr = centroidExpr.replace(/\bframe\b/g,
+                        'mod(floor(time / vAnimation.y), vAnimation.x)');
+                } else {
+                    gameUvExpr = 'vCentroidMapUv';
+                }
+            } else {
+                const pick = candidates.find(v => v !== 'uv' && !/overlay/i.test(v) && isGlobalVarying(v))
+                    || candidates.find(v => v !== 'uv' && isGlobalVarying(v));
+                gameUvExpr = pick || '';
+            }
             if (gameUvExpr && gameUvExpr !== state.lastGameUv) {
                 void 0;
                 state.lastGameUv = gameUvExpr;
             }
 
             const decl = FRAG_UNIFORMS_DECL + VERT_DECL
-                + (gameUvExpr ? '#define MF_PBR_UV ' + gameUvExpr + '\n'
+                + (gameUvExpr ? '#define MF_PBR_UV (' + gameUvExpr + ')\n'
                               : '#define MF_PBR_UV vMfPbrUv\n')
                 + '\n';
             let frag = decl + shader.fragmentShader;
@@ -748,7 +801,7 @@
         material.customProgramCacheKey = function () {
             const base = originalCacheKey ? originalCacheKey.call(material) : '';
 
-            return 'mfpbr_v18_' + (useNormal ? 'n' : '-') + base;
+            return 'mfpbr_v19_' + (useNormal ? 'n' : '-') + base;
         };
 
         material.needsUpdate = true;
@@ -952,7 +1005,7 @@
                 emissive: state.lastFrag.includes('uMfPbrE, MF_PBR_UV'),
                 vertVarying: (state.lastVert || '').includes('vMfPbrUv = uv'),
 
-                gameUv: (state.lastFrag.match(/#define MF_PBR_UV (\w+)/) || [])[1] || null
+                gameUv: (state.lastFrag.match(/#define MF_PBR_UV (.+)/) || [])[1] || null
             };
         } else {
             out.lastFrag = '¡NUNCA se compiló ningún material hookeado — el hook NO corre!';
@@ -1228,7 +1281,7 @@
                 if (terrainProg) {
                     const fs = terrainProg.fragmentShader;
                     window.__mfTerrainFrag = fs;
-                    const defines = [...fs.matchAll(/#define MF_PBR_UV (\w+)/g)].map(m => m[1]);
+                    const defines = [...fs.matchAll(/#define MF_PBR_UV (.+)/g)].map(m => m[1]);
                     const samplers = [...fs.matchAll(/texture2D\(\s*map\s*,\s*([^);]+)\)/g)].map(m => m[1].trim());
                     void 0;
                     return { ...res, gpuProg: true, defines, samplers };

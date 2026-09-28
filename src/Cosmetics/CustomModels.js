@@ -228,6 +228,7 @@
                 rec.inst = inst;
                 rec.root = inst.root;
                 rec.baseScale = inst.root.scale.x || 1;
+                //don´t ask me wtf is this
                 if (rec.room) {
 
                     let s = (rec.scale && rec.scale !== 1) ? rec.scale : 1;

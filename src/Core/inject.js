@@ -383,8 +383,7 @@
 
   function patchKnownGameData(game) {
     if (!game) return;
-    const defs = state.ranks?.defs;
-    if (!defs || !state.ranksReady) return;
+    if (!state.ranksReady) return;
     patchRecord(game.player);
     patchRecord(game.player?.profile);
 

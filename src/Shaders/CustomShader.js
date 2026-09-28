@@ -602,6 +602,158 @@
             }
         },
 
+        nightfall: {
+            version: 1,
+            uniforms: {
+                uNfTime: { value: 0 },
+                uNfStrength: { value: 0.6 },
+
+                uNfDayFactor: { value: 1.0 },
+
+                uNfAdapt: { value: 0.75 },
+
+                uNfMoonlight: { value: 0.55 },
+
+                uNfPurkinje: { value: 0.7 },
+
+                uNfFog: { value: 0.45 },
+
+                uNfNoise: { value: 0.35 },
+
+                uNfStars: { value: 0.6 },
+
+                uNfResolution: { value: [1600.0, 900.0] }
+            },
+            vertexCode: `
+                varying vec3 mfNfWorldPos;
+                varying float mfNfDepth;
+            `,
+            vertexMain: `
+                mfNfWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+                vec4 mfNfMvPos = modelViewMatrix * vec4(transformed, 1.0);
+                mfNfDepth = -mfNfMvPos.z;
+            `,
+            fragmentCode: `
+                uniform float uNfTime;
+                uniform float uNfStrength;
+                uniform float uNfDayFactor;
+                uniform float uNfAdapt;
+                uniform float uNfMoonlight;
+                uniform float uNfPurkinje;
+                uniform float uNfFog;
+                uniform float uNfNoise;
+                uniform float uNfStars;
+                uniform vec2 uNfResolution;
+                varying vec3 mfNfWorldPos;
+                varying float mfNfDepth;
+
+                float mfNfHash(vec2 p) {
+                    p = fract(p * vec2(123.34, 456.21));
+                    p += dot(p, p + 45.32);
+                    return fract(p.x * p.y);
+                }
+                float mfNfNoise2(vec2 p) {
+                    vec2 i = floor(p), f = fract(p);
+                    f = f * f * (3.0 - 2.0 * f);
+                    float a = mfNfHash(i);
+                    float b = mfNfHash(i + vec2(1.0, 0.0));
+                    float c = mfNfHash(i + vec2(0.0, 1.0));
+                    float d = mfNfHash(i + vec2(1.0, 1.0));
+                    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                }
+                float mfNfFbm(vec2 p) {
+                    float v = 0.0, a = 0.5;
+                    for (int i = 0; i < 3; i++) {
+                        v += a * mfNfNoise2(p);
+                        p = p * 2.03 + vec2(7.7, 3.1);
+                        a *= 0.5;
+                    }
+                    return v;
+                }
+
+                // Estrellas: celdas de alta frecuencia con umbral alto, en coordenadas
+                // de mundo proyectadas para que queden fijas en el cielo.
+                float mfNfStars(vec3 wp) {
+                    vec2 sv = wp.xz * 0.62 + wp.y * 0.18;
+                    vec2 cell = floor(sv * 26.0);
+                    float h = mfNfHash(cell);
+                    float star = step(0.9955, h);
+                    float tw = 0.6 + 0.4 * mfNfHash(cell + floor(uNfTime * 1.7));
+                    return star * tw;
+                }
+            `,
+            postMain: `
+                vec3 mfNfOrig = gl_FragColor.rgb;
+                float mfNfNight = 1.0 - smoothstep(0.16, 0.62, uNfDayFactor);
+                mfNfNight = pow(mfNfNight, 1.3);
+
+                if (mfNfNight > 0.003) {
+                    float mfNfLum = dot(mfNfOrig, vec3(0.2126, 0.7152, 0.0722));
+
+                    // ── 1. Escotópica: pérdida de agudeza y detalle ──
+                    // Aplana el detalle fino: los bastones no resuelven textura.
+                    vec3 mfNfBlur = vec3(mfNfLum);
+                    vec3 mfNfBase = mix(mfNfOrig, mfNfBlur, mfNfNight * uNfAdapt * 0.45);
+
+                    // ── 2. Efecto Purkinje: todo tiende a azul profundo ──
+                    // El rojo casi desaparece de noche (los conos L fallan).
+                    vec3 mfNfRod = mfNfBase * vec3(0.30, 0.55, 1.25);
+                    mfNfRod *= 0.55 + 0.45 * smoothstep(0.0, 0.35, mfNfLum);
+                    mfNfBase = mix(mfNfBase, mfNfRod, mfNfNight * uNfPurkinje);
+
+                    // ── 3. Compresión tonal nocturna ──
+                    // La noche real no es negra: hay un suelo de luminancia muy bajo
+                    // y los highlights se comprimen en vez de saturar a blanco.
+                    mfNfBase = pow(mfNfBase, vec3(1.18, 1.14, 1.05));
+                    mfNfBase *= mix(1.0, 0.42, mfNfNight * (1.0 - uNfMoonlight * 0.5));
+                    mfNfBase += vec3(0.004, 0.006, 0.014) * mfNfNight;
+
+                    // ── 4. Luz de luna fría direccional ──
+                    // Gradiente vertical: arriba de la cámara más luz que abajo.
+                    vec3 mfNfUp = normalize(cameraPosition + vec3(0.0, 1.0, 0.0));
+                    float mfNfMoonDot = dot(normalize(mfNfWorldPos - cameraPosition), mfNfUp);
+                    float mfNfMoonGrad = 0.5 + 0.5 * mfNfMoonDot;
+                    mfNfBase *= mix(1.0, 0.80 + 0.45 * mfNfMoonGrad, mfNfNight * uNfMoonlight);
+
+                    // ── 5. Niebla nocturna con banks a la deriva ──
+                    if (uNfFog > 0.001) {
+                        float mfNfFogAmt = 1.0 - exp(-pow(mfNfDepth / 64.0, 2.0) * uNfFog);
+                        vec2 mfNfFogUv = mfNfWorldPos.xz * 0.021 + vec2(uNfTime * 0.008, uNfTime * 0.005);
+                        float mfNfBanks = mfNfFbm(mfNfFogUv);
+                        mfNfFogAmt = clamp(mfNfFogAmt + (mfNfBanks - 0.5) * 0.20 * uNfFog, 0.0, 1.0);
+                        mfNfFogAmt *= mfNfNight;
+                        vec3 mfNfFogCol = vec3(0.031, 0.041, 0.066);
+                        mfNfBase = mix(mfNfBase, mfNfFogCol, mfNfFogAmt);
+                    }
+
+                    // ── 6. Ruido de bastones (rod path noise) ──
+                    // Visión escotópica real: el ruido neural domina la señal.
+                    if (uNfNoise > 0.001) {
+                        float mfNfN = mfNfHash(gl_FragCoord.xy + fract(uNfTime) * 61.7);
+                        mfNfBase += (mfNfN - 0.5) * 0.055 * uNfNoise * mfNfNight;
+                    }
+
+                    gl_FragColor.rgb = mix(mfNfOrig, mfNfBase, uNfStrength);
+                }
+
+                // ── 7. Estrellas (solo geometría lejana / cielo) ──
+                if (uNfStars > 0.001 && mfNfNight > 0.15 && mfNfDepth > 150.0) {
+                    float mfNfSt = mfNfStars(mfNfWorldPos);
+                    gl_FragColor.rgb += vec3(0.72, 0.78, 1.0) * mfNfSt * uNfStars * mfNfNight * 0.85;
+                }
+            `,
+            update: (u, dt) => {
+                u.uNfTime.value += dt;
+                u.uNfStrength.value = state.strength;
+
+                try {
+                    const wt = Number(state.game?.world?.worldTime ?? 12000);
+                    const dayF = 0.5 + 0.5 * Math.cos((wt - 6000) / 24000 * Math.PI * 2);
+                    u.uNfDayFactor.value = dayF;
+                } catch (_) {}
+            }
+        },
+
         complementaryInspired: {
             uniforms: {
                 uCrStrength: { value: 0.8 },
@@ -881,8 +1033,14 @@
         max: 1 },
         gvgrain:    { key: 'uGvGrain',
         max: 1 },
-        gvlight:    { key: 'uGvLight',
-        max: 1 }
+        gvlight:     { key: 'uGvLight',
+        max: 1 },
+        nfadapt:     { key: 'uNfAdapt',    max: 1 },
+        nfmoon:      { key: 'uNfMoonlight', max: 1 },
+        nfpurk:      { key: 'uNfPurkinje', max: 1 },
+        nffog:       { key: 'uNfFog',      max: 1 },
+        nfnoise:     { key: 'uNfNoise',    max: 1 },
+        nfstars:     { key: 'uNfStars',    max: 1 }
     };
 
     if (!window.__MF_FLASHLIGHT_KEYS__) {
@@ -1468,7 +1626,7 @@
 
         const anchor = 'float cloudShape(vec2 xz) {';
         if (!orig.includes(anchor) ||
-            !orig.includes('return cloudFbm(q);') ||
+            !orig.includes('return cloudFbm(q);') || //WORK YESSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS WORKSSSSSSSSSSSSSSSSSSSSS
             !orig.includes('smoothstep(uCoverage, uCoverage + 0.25, cloudFbm(q))') ||
             !orig.includes('smoothstep(uCoverage, uCoverage + 0.25, n)')) {
             console.warn(`${TAG} cloud shader doesn't match expected shape; custom form skipped.`);
@@ -1814,14 +1972,16 @@
             if (preset.vertexCode && !shader.vertexShader.includes('uPhTime') &&
                 !shader.vertexShader.includes('uCsTime') &&
                 !shader.vertexShader.includes('mfCrDepth') &&
-                !shader.vertexShader.includes('uGvTime')) {
+                !shader.vertexShader.includes('uGvTime') &&
+                !shader.vertexShader.includes('uNfTime')) {
                 shader.vertexShader = preset.vertexCode + '\n' + shader.vertexShader;
             }
 
             if (preset.vertexMain && shader.vertexShader.includes('#include <begin_vertex>') &&
                 !shader.vertexShader.includes('mfCrMvPos =') &&
                 !shader.vertexShader.includes('mfPhDepth =') &&
-                !shader.vertexShader.includes('mfGvDepth =')) {
+                !shader.vertexShader.includes('mfGvDepth =') &&
+                !shader.vertexShader.includes('mfNfDepth =')) {
                 shader.vertexShader = shader.vertexShader.replace(
                     '#include <begin_vertex>',
                     '#include <begin_vertex>\n' + preset.vertexMain
@@ -1834,7 +1994,8 @@
                 !shader.fragmentShader.includes('mfUfHash') &&
                 !shader.fragmentShader.includes('uUfStrength') &&
                 !shader.fragmentShader.includes('mfXrayColor') &&
-                !shader.fragmentShader.includes('mfGvHash')) {
+                !shader.fragmentShader.includes('mfGvHash') &&
+                !shader.fragmentShader.includes('mfNfHash')) {
                 shader.fragmentShader = preset.fragmentCode + '\n' + shader.fragmentShader;
             }
 
@@ -1924,6 +2085,10 @@
                 if (resX > 0 && entry.liveUniforms.uCrResolution) {
                     entry.liveUniforms.uCrResolution.value[0] = resX;
                     entry.liveUniforms.uCrResolution.value[1] = resY;
+                }
+                if (resX > 0 && entry.liveUniforms.uNfResolution) {
+                    entry.liveUniforms.uNfResolution.value[0] = resX;
+                    entry.liveUniforms.uNfResolution.value[1] = resY;
                 }
                 entry.update(entry.liveUniforms, dt);
             } catch (_) {}

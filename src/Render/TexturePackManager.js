@@ -500,6 +500,12 @@
 
     let pbrGenChain = Promise.resolve();
 
+    const PBR_ATLAS_GEN = 2;
+
+    function pbrAtlasStale(rec) {
+        return !rec || typeof rec !== 'object' || rec.v !== PBR_ATLAS_GEN;
+    }
+
     function generateAndStorePbr(pbrMaps) {
         const run = pbrGenChain.then(() => doGenerateAndStorePbr(pbrMaps));
         pbrGenChain = run.catch(() => {});
@@ -513,7 +519,7 @@
             if (!maps || maps.size === 0) continue;
             const atlas = await generatePbrAtlas(kind, maps);
             if (atlas) {
-                const ok = await idbPut('atlas_' + kind, atlas);
+                const ok = await idbPut('atlas_' + kind, { ...atlas, v: PBR_ATLAS_GEN });
                 if (ok) {
                     results[kind] = atlas.placed;
                 } else {
