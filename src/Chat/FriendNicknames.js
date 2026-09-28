@@ -2050,6 +2050,7 @@
     }, 1500);
 
     state.applyTimer = setInterval(() => {
+        if (!state.nicknames.size && !state.friendsByUuid.size) return;
         applyAll(false);
     }, 500);
 

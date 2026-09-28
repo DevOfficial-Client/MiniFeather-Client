@@ -1,9 +1,0 @@
-{
-  "parent": "hollow_knight_map:custom/door2",
-  "textures": {
-    "all": "hollow_knight_map:block/door2",
-    "particle": "hollow_knight_map:block/hollowcobble1",
-    "0": "hollow_knight_map:block/door2"
-  },
-  "render_type": "cutout"
-}

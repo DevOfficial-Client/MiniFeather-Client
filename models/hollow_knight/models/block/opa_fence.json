@@ -1,9 +1,0 @@
-{
-  "parent": "hollow_knight_map:custom/halfwall",
-  "textures": {
-    "all": "hollow_knight_map:block/placeholdertexture",
-    "particle": "hollow_knight_map:block/placeholdertexture",
-    "0": "hollow_knight_map:block/placeholdertexture"
-  },
-  "render_type": "cutout"
-}

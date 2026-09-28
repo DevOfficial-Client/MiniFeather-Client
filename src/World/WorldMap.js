@@ -938,7 +938,7 @@
             canvas.style.cursor = 'grabbing';
         });
 
-        window.addEventListener('mousemove', (e) => {
+        const onMouseMove = (e) => {
             if (!isDragging) return;
             const dx = e.clientX - lastMouseX;
             const dy = e.clientY - lastMouseY;
@@ -950,12 +950,19 @@
             state.centerX -= (dx * scale) / blockPx;
             state.centerZ -= (dy * scale) / blockPx;
             state.snapshotDirty = true;
-        });
+        };
 
-        window.addEventListener('mouseup', () => {
+        const onMouseUp = () => {
             isDragging = false;
             canvas.style.cursor = 'grab';
-        });
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        state.overlayCleanup = () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
 
         canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
@@ -1002,6 +1009,10 @@
     function closeMap() {
         if (!state.open) return;
         state.open = false;
+        if (state.overlayCleanup) {
+            try { state.overlayCleanup(); } catch {}
+            state.overlayCleanup = null;
+        }
         if (state.overlay) {
             state.overlay.remove();
             state.overlay = null;

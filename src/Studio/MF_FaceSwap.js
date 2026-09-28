@@ -177,6 +177,11 @@
         newTex.repeat.copy(tex.repeat);
         newTex.offset.copy(tex.offset);
 
+        if (mat.__mfPrevTex && mat.__mfPrevTex !== newTex && mat.__mfPrevTex.__mfSwappedTex) {
+            try { mat.__mfPrevTex.dispose(); } catch {}
+        }
+        newTex.__mfSwappedTex = true;
+        mat.__mfPrevTex = newTex;
         mat.map = newTex;
         mat.needsUpdate = true;
         emitLookFace(faceName);

@@ -378,6 +378,7 @@
             }
             rec.dead = true;
             try { rec.root?.parent?.remove(rec.root); } catch {}
+            releaseModelResources(rec.root);
             state.customs.delete(id);
 
             return true;
@@ -2444,6 +2445,7 @@
                 }
                 if (geo.attributes.uv) nGeo.setAttribute('uv', geo.attributes.uv);
                 if (geo.index) nGeo.setIndex(geo.index);
+                nGeo.__mfInstanceOwned = true;
                 o.geometry = nGeo;
                 cpuSkinData.set(o, {
                     joints: cs.joints.map((b) => map.get(b) || b),
@@ -2665,11 +2667,22 @@
     } catch {}
     window.__MF_CustomModels_Active = myStamp;
 
+    function releaseModelResources(root) {
+        try {
+            root?.traverse((o) => {
+                try {
+                    if (o.geometry?.__mfInstanceOwned) o.geometry.dispose?.();
+                } catch {}
+            });
+        } catch {}
+    }
+
     function shutdown() {
         try {
             for (const mesh of [...state.applied.keys()]) {
                 const rec = state.applied.get(mesh);
                 try { rec.root?.parent?.remove(rec.root); } catch {}
+                releaseModelResources(rec.root);
                 for (const c of rec.hidden || []) c.visible = true;
                 if (rec.origRender && mesh.render === rec.wrapper) mesh.render = rec.origRender;
             }
@@ -2677,6 +2690,7 @@
             for (const rec of [...state.customs.values()]) {
                 rec.dead = true;
                 try { rec.root?.parent?.remove(rec.root); } catch {}
+                releaseModelResources(rec.root);
             }
             state.customs.clear();
         } catch {}

@@ -12,6 +12,8 @@
         lastGameScan: 0,
         lastHandshake: 0,
         hsFails: 0,
+        techFails: 0,
+        pendingCap: null,
         linked: false,
         linkedWorld: '',
         caps: {},
@@ -118,7 +120,7 @@
 
     function applyCap(cap, world) {
         const api = globalThis.TitanTiny;
-        if (!api || typeof api.setServerCap !== 'function') return;
+        if (!api || typeof api.setServerCap !== 'function') return false;
         const clean = (cap && Number.isFinite(Number(cap.min)) && Number.isFinite(Number(cap.max)))
             ? { min: Math.max(0.01, Math.min(5, Number(cap.min))), max: Math.max(0.01, Math.min(5, Number(cap.max))) }
             : null;
@@ -126,6 +128,14 @@
         const w = String(world || serverKey() || 'default');
         state.caps[w] = clean;
         log('cap applied:', JSON.stringify(clean), 'world:', w);
+        return true;
+    }
+
+    function tryApplyCap() {
+        if (state.pendingCap == null) return;
+        if (applyCap(state.pendingCap.cap, state.pendingCap.world)) {
+            state.pendingCap = null;
+        }
     }
 
     function addWaypointFromServer(name, x, y, z, color) {
@@ -370,12 +380,19 @@
             case 'hello': {
                 state.linked = true;
                 state.hsFails = 0;
+                state.techFails = 0;
                 state.linkedWorld = String(obj.world || '');
-                if (obj.cap) applyCap(obj.cap, obj.world);
+                if (obj.cap) {
+                    state.pendingCap = { cap: obj.cap, world: obj.world };
+                    tryApplyCap();
+                }
                 break;
             }
             case 'cap': {
-                if (obj.cap) applyCap(obj.cap, obj.world);
+                if (obj.cap) {
+                    state.pendingCap = { cap: obj.cap, world: obj.world };
+                    tryApplyCap();
+                }
                 break;
             }
             case 'wp': {

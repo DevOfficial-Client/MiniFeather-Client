@@ -1,8 +1,0 @@
-{
-  "parent": "hollow_knight_map:custom/health3",
-  "textures": {
-    "2": "hollow_knight_map:block/emptymask",
-    "3": "hollow_knight_map:block/mask",
-    "particle": "hollow_knight_map:item/knighticon"
-  }
-}

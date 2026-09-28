@@ -973,6 +973,9 @@
             if (src.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = src.colorSpace;
             nt.flipY = src.flipY; nt.wrapS = src.wrapS; nt.wrapT = src.wrapT;
         } catch {}
+        if (state.tex && state.tex !== src && state.tex.__mfLocalCanvas) {
+            try { state.tex.dispose(); } catch {}
+        }
         for (const m of mats) { m.map = nt; m.needsUpdate = true; }
         state.tex = nt;
         return c;
@@ -1514,8 +1517,15 @@
             let skin = '';
             const sc = e?.profile?.cosmetics?.skin || e?.profile?.skin || e?.mesh?.model?.skin;
             if (typeof sc === 'string' && sc) skin = normSkinId(sc);
-            if (!skin) skin = skinForIdentity(uuid, uname);
-            seen.add(key); out.push({ key: String(key), mesh, name: String(name || key).slice(0, 16), skin });
+            if (!skin || !packIndex.some(p => p.id === skin)) {
+                const dbSkin = skinForIdentity(uuid, uname);
+                if (dbSkin && packIndex.some(p => p.id === dbSkin)) skin = dbSkin;
+            }
+            if (uuid && !skin) {
+                const byUuid = packIndex.find(p => p.uuid === uuid);
+                if (byUuid) skin = byUuid.id;
+            }
+            seen.add(key); out.push({ key: String(key), mesh, name: String(name || key).slice(0, 16), skin, uuid });
         };
         try {
             if (g.world?.players instanceof Map) {
@@ -1659,6 +1669,9 @@
                     if (src.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = src.colorSpace;
                     nt.flipY = src.flipY; nt.wrapS = src.wrapS; nt.wrapT = src.wrapT;
                 } catch {}
+                if (s.tex && s.tex !== src && s.tex.__mfOtherKey) {
+                    try { s.tex.dispose(); } catch {}
+                }
                 s.tex = nt; s.canvas = c;
             }
 
@@ -1696,53 +1709,41 @@
         return c;
     }
 
-    function otherZoneCanvas(s, zone) {
-        if (!s?.baseHead) return null;
-        if (!/^(left|right|up|down)$/.test(zone)) return null;
+    function otherEyeColors(s) {
+        if (s._eye && s._eyeFor === s.baseHead) return s._eye;
         const k = s.k || 1;
         const c = document.createElement('canvas');
         c.width = 8; c.height = 8;
         const cx = c.getContext('2d', { willReadFrequently: true });
         cx.imageSmoothingEnabled = false;
         cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, 0, 0, 8, 8);
+        const eye = { iris: null, white: [219, 219, 219], skin: [230, 180, 150] };
         try {
             const cheek = cx.getImageData(1, 6, 1, 1).data;
-            const skin = [cheek[0], cheek[1], cheek[2]];
-            const rgb = a => `rgb(${a[0]},${a[1]},${a[2]})`;
-
-            let iris = null, white = [219, 219, 219];
-            const px = (x, y) => cx.getImageData(x, y, 1, 1).data;
+            eye.skin = [cheek[0], cheek[1], cheek[2]];
+            const region = cx.getImageData(1, 4, 6, 2).data;
+            const px = (x, y) => { const o = ((y - 4) * 6 + (x - 1)) * 4; return [region[o], region[o + 1], region[o + 2], region[o + 3]]; };
             for (let x = 1; x <= 6; x++) {
                 for (let y = 4; y <= 5; y++) {
                     const d = px(x, y);
                     if (!d || d[3] === 0) continue;
                     const sum = d[0] + d[1] + d[2];
-                    if (!iris || sum < iris[0] + iris[1] + iris[2]) { if (sum < skin[0] + skin[1] + skin[2] - 90) iris = [d[0], d[1], d[2]]; }
-                    if (sum > white[0] + white[1] + white[2]) white = [d[0], d[1], d[2]];
+                    if (!eye.iris || sum < eye.iris[0] + eye.iris[1] + eye.iris[2]) {
+                        if (sum < eye.skin[0] + eye.skin[1] + eye.skin[2] - 90) eye.iris = [d[0], d[1], d[2]];
+                    }
+                    if (sum > eye.white[0] + eye.white[1] + eye.white[2]) eye.white = [d[0], d[1], d[2]];
                 }
             }
-            if (!iris) return c;
-            if (zone === 'left' || zone === 'right') {
-                const dir = zone === 'left' ? -1 : 1;
-                const y = 4;
-                const pair = (ex, dx) => {
-                    cx.fillStyle = rgb(skin); cx.fillRect(ex, y, 2, 2);
-                    cx.fillStyle = rgb(white); cx.fillRect(ex + (dx < 0 ? 0 : 1), y, 1, 2);
-                    cx.fillStyle = rgb(iris); cx.fillRect(ex + (dx < 0 ? 1 : 0), y, 1, 2);
-                };
-                pair(1, dir); pair(5, dir);
-            } else {
-                const dy = zone === 'up' ? -1 : 1;
-                const row = cx.getImageData(0, 4, 8, 2);
-                cx.fillStyle = rgb(skin);
-                cx.fillRect(1, 4, 2, 2); cx.fillRect(5, 4, 2, 2);
-                cx.putImageData(row, 0, 4 + dy);
-            }
         } catch {}
-        return c;
+        s._eye = eye; s._eyeFor = s.baseHead;
+        return eye;
     }
 
-    function otherZone(p, s) {
+    const GAZE_RANGE = 30 * Math.PI / 180;
+    const GAZE_PREDICT_S = 0.12;
+    const GAZE_VMAX = 6;
+
+    function otherGaze(p, s) {
         try {
             const m = p.mesh;
             if (!m) return null;
@@ -1768,13 +1769,58 @@
             if (!head) return null;
             const yaw = wrapPi((Number(head.rotation.y) || 0) - (Number(body?.rotation.y) || 0));
             const pitch = Number(head.rotation.x) || 0;
-            const thr = 22;
-            if (pitch > thr * Math.PI / 180) return 'up';
-            if (pitch < -thr * Math.PI / 180) return 'down';
-            if (yaw > thr * Math.PI / 180) return 'right';
-            if (yaw < -thr * Math.PI / 180) return 'left';
-            return 'front';
+
+            const now = performance.now();
+            if (s && s._gYaw != null) {
+                const dt = (now - s._gT) / 1000;
+                if (dt > 0.001 && dt < 0.5) {
+                    const vy = Math.max(-GAZE_VMAX, Math.min(GAZE_VMAX, wrapPi(yaw - s._gYaw) / dt));
+                    const vp = Math.max(-GAZE_VMAX, Math.min(GAZE_VMAX, (pitch - (s._gPitch ?? pitch)) / dt));
+                    s._gvYaw = (s._gvYaw ?? 0) * 0.7 + vy * 0.3;
+                    s._gvPitch = (s._gvPitch ?? 0) * 0.7 + vp * 0.3;
+                }
+            }
+            if (s) { s._gYaw = yaw; s._gPitch = pitch; s._gT = now; }
+
+            const pyaw = wrapPi(yaw + (s?._gvYaw ?? 0) * GAZE_PREDICT_S);
+            const ppitch = Math.max(-1.4, Math.min(1.4, pitch + (s?._gvPitch ?? 0) * GAZE_PREDICT_S));
+
+            const gx = Math.max(-1, Math.min(1, pyaw / GAZE_RANGE));
+            const gy = Math.max(-1, Math.min(1, ppitch / GAZE_RANGE));
+
+            const thr = 22 * Math.PI / 180;
+            let zone = 'front';
+            if (ppitch > thr) zone = 'up';
+            else if (ppitch < -thr) zone = 'down';
+            else if (pyaw > thr) zone = 'right';
+            else if (pyaw < -thr) zone = 'left';
+
+            return { gx, gy, zone };
         } catch { return null; }
+    }
+
+    function paintOtherGaze(s, gx, gy, base) {
+        if (!s?.baseHead || !s.canvas) return false;
+        const k = s.k || 1;
+        const cx = s.canvas.getContext('2d');
+        cx.imageSmoothingEnabled = false;
+        cx.drawImage(s.baseHead, 0, 0, s.baseHead.width, s.baseHead.height, 0, 0, 64 * k, 16 * k);
+        if (base) cx.drawImage(base, 0, 0, base.width, base.height, 0, 0, 32 * k, 16 * k);
+        const eye = otherEyeColors(s);
+        if (eye.iris) {
+            const rgb = a => `rgb(${a[0]},${a[1]},${a[2]})`;
+            const ix = Math.round((gx * 0.5 + 0.5) * k);
+            const iy = Math.round((0.5 - gy * 0.5) * k);
+            for (const ex of [1, 5]) {
+                const bx = (FACE.x + ex) * k, by = (FACE.y + 4) * k;
+                cx.fillStyle = rgb(eye.white);
+                cx.fillRect(bx, by, 2 * k, 2 * k);
+                cx.fillStyle = rgb(eye.iris);
+                cx.fillRect(bx + ix, by + iy, k, k);
+            }
+        }
+        s.tex.needsUpdate = true;
+        return true;
     }
 
     let _lastOtherTick = 0;
@@ -1799,8 +1845,11 @@
 
             preloadOtherPack(s, pack);
 
-            const z = otherZone(p, s) || 'front';
+            const gaze = otherGaze(p, s) || { gx: 0, gy: 0, zone: 'front' };
+            const z = gaze.zone;
             if (s.zone !== z) { s.zone = z; s.zoneDirty = true; }
+            const gxMove = Math.abs(gaze.gx - (s._gpx ?? 0)) > 0.02 || Math.abs(gaze.gy - (s._gpy ?? 0)) > 0.02;
+            s._gpx = gaze.gx; s._gpy = gaze.gy;
             if (!s.nextBlink) s.nextBlink = now + 800 + Math.random() * others.intervalMinMs;
             if (s.blinkUntil && now >= s.blinkUntil) {
                 s.blinkUntil = 0;
@@ -1822,25 +1871,15 @@
                         } catch {}
                     }
                 }
-            } else if (s.zoneDirty && !s.blinkUntil) {
-
+            } else if (!s.blinkUntil && (s.zoneDirty || gxMove)) {
                 s.zoneDirty = false;
                 const strip = s.pack?.img ? (s.zone === 'front' ? s.pack.img.front : s.pack.img[s.zone]) : null;
-                if (strip) {
+                if (s.zone === 'front') {
+                    paintOtherGaze(s, gaze.gx, gaze.gy, strip || null);
+                } else if (strip) {
                     paintOtherStrip(s, strip);
                 } else {
-                    const cv = s.zone === 'front' ? null : otherZoneCanvas(s, s.zone);
-                    try {
-                        const k = s.k || 1, cx = s.canvas.getContext('2d');
-                        cx.imageSmoothingEnabled = false;
-                        if (cv) {
-                            cx.drawImage(cv, 0, 0, 8, 8, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
-                        } else {
-                            cx.drawImage(s.baseHead, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k, FACE.x * k, FACE.y * k, FACE.w * k, FACE.h * k);
-                            cx.drawImage(s.baseHead, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k, FACE_OV.x * k, FACE_OV.y * k, FACE_OV.w * k, FACE_OV.h * k);
-                        }
-                        s.tex.needsUpdate = true;
-                    } catch {}
+                    paintOtherGaze(s, gaze.gx, gaze.gy, null);
                 }
             }
         }

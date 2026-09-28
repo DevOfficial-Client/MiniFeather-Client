@@ -433,6 +433,7 @@ const state = {
         if (tex.colorSpace !== undefined && 'colorSpace' in nt) nt.colorSpace = tex.colorSpace;
         nt.flipY = tex.flipY; nt.wrapS = tex.wrapS; nt.wrapT = tex.wrapT;
     } catch {}
+    if (tex.__mfMeshCanvas) { try { tex.dispose(); } catch {} }
     for (const m of usable) { m.map = nt; m.needsUpdate = true; }
     return { canvas: c, tex: nt, mats: usable };
     }

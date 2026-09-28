@@ -175,6 +175,22 @@
                 dbByName[uuidKey] = entry;
             }
         }
+        exposeDb();
+    }
+
+    function exposeDb() {
+        var out = { byUuid: {}, byName: {} };
+        function fill(src, dst) {
+            if (!src) return;
+            for (var k in src) {
+                if (!Object.prototype.hasOwnProperty.call(src, k)) continue;
+                var s = src[k] && src[k].__skin;
+                if (s) dst[k] = s;
+            }
+        }
+        fill(dbByUuid, out.byUuid);
+        fill(dbByName, out.byName);
+        try { window.__MF_CustomSkins_DB__ = out; } catch (_) {}
     }
 
     function loadDb() {
@@ -427,6 +443,7 @@
     function applyLiveOverrides() {
         registerDevSkins();
         if (dbByUuid === null && dbByName === null) return;
+        if (!Object.keys(dbByUuid).length && !Object.keys(dbByName).length) return;
 
         var game = findGame();
         var world = game?.world;
@@ -534,6 +551,7 @@
                         } catch (_) {}
                         nt.__mfPainted = url;
                         nt.__mfEpoch = paintEpoch;
+                        if (t.__mfPainted || t.__mfEpoch) { try { t.dispose(); } catch (_) {} }
                         pending[i].map = nt;
                         pending[i].needsUpdate = true;
                     } catch (e) {}
@@ -723,7 +741,19 @@
         } catch (_) {}
     }
 
+    var skinMatsCache = new WeakMap();
+    var SKIN_MATS_TTL = 5000;
+
     function skinMaterialsOf(mesh) {
+        var now = Date.now();
+        var hit = skinMatsCache.get(mesh);
+        if (hit && hit.epoch === paintEpoch && now - hit.at < SKIN_MATS_TTL) return hit.mats;
+        var mats = computeSkinMaterials(mesh);
+        skinMatsCache.set(mesh, { mats, at: now, epoch: paintEpoch });
+        return mats;
+    }
+
+    function computeSkinMaterials(mesh) {
         collectItemMaterials(mesh);
         var exclude = new Set();
         capeMeshesOf(mesh).forEach(function (c) {
@@ -790,6 +820,7 @@
                         } catch (_) {}
                         nt.__mfPainted = url;
                         nt.__mfEpoch = paintEpoch;
+                        if (t.__mfPainted || t.__mfEpoch) { try { t.dispose(); } catch (_) {} }
                         mats[i].map = nt;
                         mats[i].needsUpdate = true;
                         done++;
@@ -828,7 +859,10 @@
             var cid = target.slice(7);
             var reg = globalThis.__MF_PACK_SKINS__ || {};
             if (!reg[cid]) return;
-            if (cosmetics.cape === target && engineAppliedCapes.has(player)) return;
+            if (cosmetics.cape === target && engineAppliedCapes.has(player)) {
+                paintPlayerUrl(player, reg[cid], true);
+                return;
+            }
             try {
                 cosmetics.cape = target;
                 engineAppliedCapes.add(player);
@@ -836,6 +870,7 @@
                 if (player.mesh && typeof player.mesh.recreate === 'function') {
                     player.mesh.recreate();
                 }
+                paintPlayerUrl(player, reg[cid], true);
             } catch (e) {
                 warn('falló aplicar capa custom', target, ':', e && e.message);
             }
@@ -908,6 +943,7 @@
                         } catch (_) {}
                         nt.__mfPainted = url;
                         nt.__mfEpoch = paintEpoch;
+                        if (t.__mfPainted || t.__mfEpoch) { try { t.dispose(); } catch (_) {} }
                         mats[i].map = nt;
                         mats[i].needsUpdate = true;
                         done++;
@@ -949,7 +985,10 @@
             var reg = globalThis.__MF_PACK_SKINS__ || {};
             var avail = reg[cid];
             if (!avail) return;
-            if (cosmetics.skin === target && engineApplied.has(player)) return;
+            if (cosmetics.skin === target && engineApplied.has(player)) {
+                paintPlayerUrl(player, avail, false);
+                return;
+            }
             try {
                 cosmetics.skin = target;
                 engineApplied.add(player);
@@ -957,6 +996,7 @@
                 if (player.mesh && typeof player.mesh.recreate === 'function') {
                     player.mesh.recreate();
                 }
+                paintPlayerUrl(player, avail, false);
             } catch (e) {
                 warn('falló aplicar skin custom', target, ':', e && e.message);
             }
@@ -1670,6 +1710,7 @@
                         } catch (_) {}
                         nt.__mfPainted = url;
                         nt.__mfEpoch = paintEpoch;
+                        if (t !== m.__mfOrigMap && (t.__mfPainted || t.__mfEpoch)) { try { t.dispose(); } catch (_) {} }
                         m.map = nt;
                         m.needsUpdate = true;
                     } catch (_) {}

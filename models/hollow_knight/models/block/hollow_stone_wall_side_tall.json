@@ -1,8 +1,0 @@
-{
-  "parent": "block/template_wall_side_tall",
-  "textures": {
-    "wall": "hollow_knight_map:block/hollowcobble1",
-    "particle": "hollow_knight_map:block/hollowcobble1"
-  },
-  "render_type": "solid"
-}

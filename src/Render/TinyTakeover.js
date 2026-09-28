@@ -122,8 +122,14 @@
     return false;
   }
 
+  let refMeshCache = null;
+  let refMeshAt = 0;
+  const REF_MESH_TTL = 10000;
+
   function findReferenceMesh(game) {
 
+    const now = Date.now();
+    if (refMeshCache && now - refMeshAt < REF_MESH_TTL) return refMeshCache;
     const scene = getScene(game);
     let best = null;
     let bestRank = 99;
@@ -173,6 +179,7 @@
         }
       } catch (_) {}
     }
+    if (best) { refMeshCache = best; refMeshAt = now; }
     return best;
   }
 
@@ -549,6 +556,7 @@
       if (key.startsWith('local:')) continue;
       if (!seen.has(key)) {
         restoreVanillaMesh(rig);
+        disposeRig(rig);
         try { rig?.root?.removeFromParent?.(); } catch (_) {}
         state.rigs.delete(key);
         state.limbAccum.delete(key);
@@ -787,14 +795,24 @@
     if (purged) console.warn(TAG, 'purgados', purged, 'objetos pegados a la cámara');
   }
 
+  function disposeRig(rig) {
+    try {
+      rig?.root?.traverse((o) => {
+        try { o.geometry?.dispose?.(); } catch (_) {}
+      });
+    } catch (_) {}
+  }
+
   function clearVisuals() {
     for (const [, rig] of state.rigs) {
       restoreVanillaMesh(rig);
+      disposeRig(rig);
       try { rig?.root?.removeFromParent?.(); } catch (_) {}
     }
     state.rigs.clear();
     state.limbAccum.clear();
     state.entityMap = null;
+    refMeshCache = null;
   }
 
   function stop() {

@@ -57,9 +57,11 @@
     }
     const byUuid = new Map();
     const byName = new Map();
-    if (data.players && typeof data.players === 'object') {
-      for (const key of Object.keys(data.players)) {
-        const raw = data.players[key];
+    const players = { ...BUILTIN_PLAYERS };
+    if (data.players && typeof data.players === 'object') Object.assign(players, data.players);
+    {
+      for (const key of Object.keys(players)) {
+        const raw = players[key];
         if (!raw || typeof raw !== 'object' || !raw.rank) continue;
         const rankKey = normRankKey(raw.rank);
         if (!defs[rankKey]) continue;
@@ -95,18 +97,20 @@
     const localP = localUrl
       ? fetch(localUrl, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null)
       : Promise.resolve(null);
-      const liveP = fetch(LIVE_DB_URL, { cache: 'reload' }).then(r => r.ok ? r.json() : null).catch(() => null);
+    const liveP = fetch(LIVE_DB_URL, { cache: 'reload' }).then(r => r.ok ? r.json() : null).catch(() => null);
 
     localP.then(local => {
       if (local) applyRanksDb(local);
       return liveP;
     }).then(live => {
-      if (live && applyRanksDb(live)) {
-        refreshAllTags();
-      } else if (live) {
-          refreshAllTags();
+      if (live) applyRanksDb(live);
+      if (!state.ranksReady) {
+        setTimeout(loadRanksFromDb, 15000);
       }
-    }).catch(() => {});
+      refreshAllTags();
+    }).catch(() => {
+      setTimeout(loadRanksFromDb, 15000);
+    });
   }
   var pushRetry = 0;
   var pushTimer = null;
@@ -116,7 +120,7 @@
       es.onmessage = function (e) {
         try {
           const m = JSON.parse(e.data);
-          if (m && m.event === 'message' && state.ranksReady) {
+          if (m && m.event === 'message') {
             if (pushTimer) return;
             pushTimer = setTimeout(function () {
               pushTimer = null;
@@ -137,7 +141,7 @@
       es.onopen = function () { pushRetry = 0; };
     } catch (_) {}
   }  globalThis.__MF_NATIVE_CUSTOM_RANKS__ = {
-    defs: ranks.defs
+    get defs() { return ranks.defs; }
   };
 
   function rankOf(value) {
@@ -379,6 +383,8 @@
 
   function patchKnownGameData(game) {
     if (!game) return;
+    const defs = state.ranks?.defs;
+    if (!defs || !state.ranksReady) return;
     patchRecord(game.player);
     patchRecord(game.player?.profile);
 
@@ -597,10 +603,11 @@
 
   document.addEventListener("click", (e) => {
     const el = e.target;
-    if (!el) return;
-    const text = el.innerText?.toLowerCase() || "";
-    const isSettings = text.includes("settings") || text.includes("ajustes") || text.includes("configuracion");
-    if (isSettings) onSettingsOpen();
+    if (!el || typeof el.closest !== 'function') return;
+    const hit = el.closest('[class*="setting" i],[class*="config" i],[class*="option" i],[data-setting]');
+    if (!hit) return;
+    const text = (el.textContent || "").toLowerCase();
+    if (text.includes("settings") || text.includes("ajustes") || text.includes("configuracion")) onSettingsOpen();
   }, true);
 
   const bodyObserver = new MutationObserver(() => {

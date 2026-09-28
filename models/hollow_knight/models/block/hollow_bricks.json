@@ -1,8 +1,0 @@
-{
-  "parent": "block/cube_all",
-  "textures": {
-    "all": "hollow_knight_map:block/bricks",
-    "particle": "hollow_knight_map:block/hollowcobble1"
-  },
-  "render_type": "solid"
-}
