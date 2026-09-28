@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../src/UI/ClientPanel.js'), 'utf8');
+const experimentalRegistry = fs.readFileSync(path.join(__dirname, '../src/Experimental/ExperimentalRegistry.js'), 'utf8');
 
 function objectLiteral(name) {
   const match = source.match(new RegExp(`const ${name} = (\\{[\\s\\S]*?\\n  \\});`));
@@ -71,4 +72,33 @@ test('Potato preset uses its real pixel-art PNG, not an emoji', () => {
   assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   assert.equal(png.readUInt32BE(16), 32);
   assert.equal(png.readUInt32BE(20), 32);
+});
+
+test('every experimental card uses a direct 32x32 pixel-art PNG instead of an emoji', () => {
+  const icons = [
+    ['experimentalRealistic', '🌤️'],
+    ['experimentalAurora', '🌌'],
+    ['experimentalConstellations', '⭐'],
+    ['experimentalInteractiveVegetation', '🌾'],
+    ['experimentalGrassFlowers', '🌼'],
+    ['experimentalFallenLeaves', '🍂'],
+    ['experimentalBetterAnimationCape', '🧥'],
+    ['experimentalTinyTakeover', '🐺'],
+    ['experimentalAnimatedItems', '✨'],
+    ['experimentalPbr', '✨']
+  ];
+
+  assert.match(source, /exp\.iconAsset \? pixelIconPng\(exp\.iconAsset\)/);
+
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  for (const [name, emoji] of icons) {
+    assert.match(experimentalRegistry, new RegExp(`iconAsset: '${name}'`));
+    assert.doesNotMatch(experimentalRegistry, new RegExp(`icon: '${emoji}'`, 'u'));
+    const file = path.join(__dirname, `../assets/ui/${name}/00.png`);
+    const png = fs.readFileSync(file);
+    assert.deepEqual([...png.subarray(0, 8)], signature, `${name} is not a PNG`);
+    assert.equal(png.readUInt32BE(16), 32, `${name} has the wrong width`);
+    assert.equal(png.readUInt32BE(20), 32, `${name} has the wrong height`);
+    assert.equal(png[25], 6, `${name} is not RGBA`);
+  }
 });

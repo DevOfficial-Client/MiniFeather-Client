@@ -16,6 +16,9 @@ function normalize(entry) {
     description: String(entry.description || ''),
     descriptionKey: entry.descriptionKey == null ? '' : String(entry.descriptionKey),
     icon: String(entry.icon || '🧪'),
+    iconAsset: /^[A-Za-z][A-Za-z0-9]*$/.test(String(entry.iconAsset || ''))
+      ? String(entry.iconAsset)
+      : '',
     settingsKey: entry.settingsKey == null ? '' : String(entry.settingsKey),
     levelKey: entry.levelKey == null ? '' : String(entry.levelKey),
     levelLabelKey: entry.levelLabelKey == null ? '' : String(entry.levelLabelKey),
@@ -73,7 +76,7 @@ function normalize(entry) {
   title: 'Realistic Mode',
   titleKey: 'experimentalRealisticTitle',
   descriptionKey: 'experimentalRealisticDesc',
-  icon: '🌤️',
+  iconAsset: 'experimentalRealistic',
   badge: 'EXPERIMENTAL',
   order: 5
       });
@@ -91,7 +94,7 @@ function normalize(entry) {
   title: 'Aurora Borealis',
   titleKey: 'experimentalAuroraTitle',
   descriptionKey: 'experimentalAuroraDesc',
-  icon: '🌌',
+  iconAsset: 'experimentalAurora',
   badge: 'EXPERIMENTAL',
   order: 10
       });
@@ -109,7 +112,7 @@ function normalize(entry) {
   title: 'Night Constellations',
   titleKey: 'experimentalConstellationsTitle',
   descriptionKey: 'experimentalConstellationsDesc',
-  icon: '⭐',
+  iconAsset: 'experimentalConstellations',
   badge: 'EXPERIMENTAL',
   order: 12
       });
@@ -128,7 +131,7 @@ function normalize(entry) {
   title: '3D Grass Physics',
   titleKey: 'experimentalInteractiveVegetationTitle',
   descriptionKey: 'experimentalInteractiveVegetationDesc',
-  icon: '🌾',
+  iconAsset: 'experimentalInteractiveVegetation',
   badge: 'EXPERIMENTAL',
   order: 18
       });
@@ -139,7 +142,7 @@ function normalize(entry) {
   title: 'Natural Grass Details',
   titleKey: 'experimentalGrassFlowersTitle',
   descriptionKey: 'experimentalGrassFlowersDesc',
-  icon: '🌼',
+  iconAsset: 'experimentalGrassFlowers',
   badge: 'EXPERIMENTAL',
   order: 20
       });
@@ -150,7 +153,7 @@ function normalize(entry) {
   title: 'Fallen Leaves',
   titleKey: 'experimentalFallenLeavesTitle',
   descriptionKey: 'experimentalFallenLeavesDesc',
-  icon: '🍂',
+  iconAsset: 'experimentalFallenLeaves',
   badge: 'EXPERIMENTAL',
   order: 20
       });
@@ -161,7 +164,7 @@ function normalize(entry) {
   title: 'Better Animation Cape',
   titleKey: 'experimentalBetterAnimationCapeTitle',
   descriptionKey: 'experimentalBetterAnimationCapeDesc',
-  icon: '🧥',
+  iconAsset: 'experimentalBetterAnimationCape',
   badge: 'EXPERIMENTAL',
   order: 25
       });
@@ -172,7 +175,7 @@ function normalize(entry) {
   title: 'Tiny Takeover Babies',
   titleKey: 'experimentalTinyTakeoverTitle',
   descriptionKey: 'experimentalTinyTakeoverDesc',
-  icon: '🐺',
+  iconAsset: 'experimentalTinyTakeover',
   badge: 'EXPERIMENTAL',
   order: 27
       });
@@ -183,7 +186,7 @@ function normalize(entry) {
   title: 'Animated Items',
   titleKey: 'experimentalAnimatedItemsTitle',
   descriptionKey: 'experimentalAnimatedItemsDesc',
-  icon: '✨',
+  iconAsset: 'experimentalAnimatedItems',
   badge: 'EXPERIMENTAL',
   order: 30
       });
@@ -194,7 +197,7 @@ function normalize(entry) {
   title: 'PBR Textures',
   titleKey: 'pbrTitle',
   descriptionKey: 'pbrDesc',
-  icon: '✨',
+  iconAsset: 'experimentalPbr',
   badge: 'EXPERIMENTAL',
   order: 30
 });
