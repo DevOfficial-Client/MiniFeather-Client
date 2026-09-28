@@ -15,7 +15,7 @@ it's also **w.i.p.** (work in progress), meaning: we're building the plane while
 
 ## 2. the most important thing, up front and in bold
 
-**nobody is forcing you to use the client, you use it because you want to haha** (๑>ᴗ<๑)
+**nobody is forcing you to use the client, you use it because you want to xd** (๑>ᴗ<๑)
 
 seriously: if something goes wrong (ban, bug, jump scare), that's on you. we warned you everywhere. if you don't agree with that, close this tab and get on with your life, no hard feelings. (~‾⌣‾)~
 

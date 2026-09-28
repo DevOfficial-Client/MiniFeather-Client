@@ -183,7 +183,7 @@ const SKINS = [
   }
   });
 
-  const SPRITESHEET_URL = "https://raw.githubusercontent.com/EstebanGrp/MiniFeather-Client/refs/heads/main/pvtexpack.png";
+  const SPRITESHEET_URL = "https://raw.githubusercontent.com/shusukegxe/MiniFeather-Client/refs/heads/main/pvtexpack.png";
   const SPRITESHEET_FALLBACK_URL = chrome.runtime.getURL("assets/pvtexpack.png");
   const SPRITESHEET_RULE_ID = 999;
 

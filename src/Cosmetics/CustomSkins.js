@@ -203,7 +203,7 @@
             parseDb(data, false);
             db = data || {};
             dbLoading = null;
-            fetch('https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/accounts.json', { cache: 'no-store' })
+            fetch('https://raw.githubusercontent.com/shusukegxe/mfaccs/main/accounts.json', { cache: 'no-store' })
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (live) {
                     if (!live || !live.players) return;
@@ -1042,8 +1042,8 @@
             applyLiveOverrides();
         }, 1000);
     }
-    var LIVE_REPO_API = 'https://api.github.com/repos/EstebanGrp/mfaccs';
-    var LIVE_DB_URL = 'https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/accounts.json';
+    var LIVE_REPO_API = 'https://api.github.com/repos/shusukegxe/mfaccs';
+    var LIVE_DB_URL = 'https://raw.githubusercontent.com/shusukegxe/mfaccs/main/accounts.json';
     var liveLastSha = null;
     var liveBusy = false;
 

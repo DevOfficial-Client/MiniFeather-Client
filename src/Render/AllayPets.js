@@ -117,7 +117,7 @@
         }
         return null;
     }
-    const PET_REMOTE_URL = 'https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/accounts.json';
+    const PET_REMOTE_URL = 'https://raw.githubusercontent.com/shusukegxe/mfaccs/main/accounts.json';
     const PET_PUSH_TOPIC = 'mf-skins-updates-v1';
     const petRemote = { pet: null, fetchedAt: 0, timer: 0, esRetry: 0 };
     let petPushTimer = 0;

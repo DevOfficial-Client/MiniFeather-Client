@@ -8,7 +8,7 @@
     'shusukegxe_': { rank: 'dev' },
     'angrywolfx': { rank: 'dev' }
   };
-  const LIVE_DB_URL = 'https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/accounts.json';
+  const LIVE_DB_URL = 'https://raw.githubusercontent.com/shusukegxe/mfaccs/main/accounts.json';
   const PUSH_TOPIC = 'mf-skins-updates-v1';
 
   const state = {

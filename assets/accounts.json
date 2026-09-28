@@ -1,17 +1,17 @@
 {
-  "$note": "Mapa jugador → skin/rank custom (fallback offline). La DB viva vive en https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/accounts.json y el client la aplica encima de esta. Clave = uuid (preferido) o username. 'skin': (1) id custom:mf_<pack>, (2) ruta /skins/, (3) nombre vanilla, (4) URL absoluta. 'rank': key de la sección 'ranks'. 'name': nombre a mostrar (opcional).",
+  "$note": "Mapa jugador → skin/rank custom (fallback offline). La DB viva vive en https://raw.githubusercontent.com/shusukegxe/mfaccs/main/accounts.json y el client la aplica encima de esta. Clave = uuid (preferido) o username. 'skin': (1) id custom:mf_<pack>, (2) ruta /skins/, (3) nombre vanilla, (4) URL absoluta. 'rank': key de la sección 'ranks'. 'name': nombre a mostrar (opcional).",
   "ranks": {
     "dev": { "label": "DEV", "color": "#00FFFF", "bold": true, "glow": true, "shiny": true, "priorityBase": "eternus" }
   },
   "players": {
-    "6eb7369a-551e-406a-9a63-6db7a358e1e5": { "skin": "https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/skins/shusukegxe/20260916-212035.png", "rank": "dev", "name": "ShusukeGxE_" },
-    "shusukegxe_": { "skin": "https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/skins/shusukegxe/20260916-212035.png", "rank": "dev" },
+    "6eb7369a-551e-406a-9a63-6db7a358e1e5": { "skin": "https://raw.githubusercontent.com/shusukegxe/mfaccs/main/skins/shusukegxe/20260916-212035.png", "rank": "dev", "name": "ShusukeGxE_" },
+    "shusukegxe_": { "skin": "https://raw.githubusercontent.com/shusukegxe/mfaccs/main/skins/shusukegxe/20260916-212035.png", "rank": "dev" },
     "angrywolfx": { "rank": "dev" },
     "itzesteban": { "skin": "custom:mf_dev_itzesteban" },
     "nightrise": { "skin": "custom:mf_dev_nightrise" },
     "notsenpai": { "skin": "custom:mf_dev_notsenpai" },
     "gab": { "skin": "custom:mf_dev_gab" },
     "eve": { "skin": "custom:mf_eve" },
-    "not_senpai": { "skin": "https://raw.githubusercontent.com/EstebanGrp/mfaccs/main/skins/not_senpai/20260916-212032.png" }
+    "not_senpai": { "skin": "https://raw.githubusercontent.com/shusukegxe/mfaccs/main/skins/not_senpai/20260916-212032.png" }
   }
 }
