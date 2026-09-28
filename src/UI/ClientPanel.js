@@ -7517,9 +7517,10 @@
               const levels = Array.isArray(exp.levels) ? exp.levels : [];
               const rawLevel = levelKey ? String(guiSettings[levelKey] || settings[levelKey] || 'medium') : '';
               const currentLevel = levelKey === 'experimentalRealisticLevel' && rawLevel === 'extreme' ? 'ultra' : rawLevel;
+              const featureIcon = exp.iconAsset ? pixelIconPng(exp.iconAsset) : escapeHtml(exp.icon || '🧪');
               return `
                 <label class="mf-toggle" data-key="${escapeHtml(key)}">
-                  <span class="mf-feature-icon" aria-hidden="true" style="font-size:34px;line-height:1;">${escapeHtml(exp.icon || '🧪')}</span>
+                  <span class="mf-feature-icon" aria-hidden="true" style="font-size:34px;line-height:1;">${featureIcon}</span>
                   <span class="mf-toggle-copy">
                     <strong>${escapeHtml(title)}</strong>
                     <span>${escapeHtml(description)}</span>
