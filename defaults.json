@@ -2,11 +2,12 @@
   "_note": "meh...default configs, i think",
   "general": {
     "rebrand": true,
+    "classicTitle": false,
     "supportAds": false,
     "startupAnimation": true,
     "discord": true,
     "language": "en",
-    "performanceProfile": "low"
+    "performanceProfile": "custom"
   },
   "hud": {
     "keystrokes": true,
@@ -37,6 +38,7 @@
     "titanTinyScale": 1.0,
     "titanTinyWidth": 1.0,
     "titanTinyGroundOffset": 0,
+    "titanTinyBind": "",
     "healthNameTags": true,
     "distanceNameTags": true,
     "damageParticles": false,
@@ -44,8 +46,10 @@
     "shineAmbience": false,
     "shineAmbienceDensity": 1,
     "patPat": false,
+    "patPatPreset": "normal",
     "duckMobs": true,
     "crittersMobs": true,
+    "allayPets": false,
     "itemPhysics": true,
     "noWeather": false,
     "fullBright": false,
@@ -68,6 +72,7 @@
     "elytraFlight": false,
     "elytraFlightPreset": "normal",
     "cameraOverhaul": false,
+    "cameraOverhaulBind": "",
     "cameraOverhaulPreset": "normal",
     "antiAfk": false,
     "antiAfkDelay": 120,
@@ -75,6 +80,7 @@
     "safeSneak": false,
     "autoRespawn": true,
     "idlePlayerBot": false,
+    "idlePlayerCount": 1,
     "idlePlayerTarget": ""
   },
   "crosshair": {
@@ -82,10 +88,42 @@
     "dynamicCrosshairSize": 28
   },
   "shaders": {
-    "customShader": false
+    "customShader": false,
     "customShaderPreset": "photon",
     "customShaderStrength": 0.5,
-    "customShaderRenderScale": 1.0
+    "customShaderRenderScale": 1.0,
+    "customShaderFxVhs": 0.6,
+    "customShaderFxCrt": 0.6,
+    "customShaderFxCel": 0.6,
+    "customShaderFxFog": 0.7,
+    "customShaderFxGrain": 0.5,
+    "customShaderFxGlitch": 0.4,
+    "customShaderFxFlash": 0.5,
+    "customShaderFxSharp": 0.5,
+    "customShaderFxUfsat": 1.35,
+    "customShaderFxUfcontrast": 0.45,
+    "customShaderFxUftone": 0.35,
+    "customShaderFxPhagx": 0.8,
+    "customShaderFxPhfog": 0.5,
+    "customShaderFxPhend": 0,
+    "customShaderFxPhbh": 0,
+    "customShaderFxPhbhsize": 0.35,
+    "customShaderFxPhbhspin": 1,
+    "customShaderPfbloom": 0.35,
+    "customShaderPfca": 0,
+    "customShaderPfdof": 0,
+    "customShaderPfdirt": 0,
+    "customShaderPfvignette": 0,
+    "cloudsCoverage": 0.5,
+    "cloudsScale": 0.012,
+    "cloudsWind": 0.02,
+    "cloudsThickness": 30,
+    "cloudsHeight": 128,
+    "cloudsOpacity": 0.9,
+    "cloudsPackNoise": false,
+    "cloudsShapeBrush": 12,
+    "cloudsShapeMix": 0.85,
+    "cloudsShapeTile": 512
   },
   "panel": {
     "panelAccentColor": "#ef3b3b",

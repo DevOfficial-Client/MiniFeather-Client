@@ -4,6 +4,11 @@
 
 MiniFeather is a custom Miniblox client focused on adding new visuals, gameplay features, customization, and quality-of-life improvements.
 
+> [!IMPORTANT]
+> **By downloading, installing or using MiniFeather Client, you explicitly declare that you have read the [EULA](EULA.md) and accepted its terms and conditions.** If you do not agree, do not download or use the client.
+>
+> **This project is W.I.P. (Work In Progress).** Code errors, bugs, incomplete features and breaking changes may occur. Use at your own risk.
+
 ## Features
 
 * Elytra Flight
