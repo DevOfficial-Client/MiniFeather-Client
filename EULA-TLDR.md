@@ -27,6 +27,14 @@ y hablando de dormir: hay noches de código a las 3am. y días que nunca dormimo
 
 y aun así, hay gente que llega a insultarnos a los devs. por un client gratis. que nadie les obligó a usar. que hicimos sin cobrarles nada. (눈_눈)
 
+y lo mejor de todo: **nos tratan como ladrones.** "seguro roban cuentas", "seguro te roban la sesión", "seguro es un keylogger". amigos... si fuéramos ladrones, ¿trabajaríamos gratis a las 3am? los ladrones duermen a esa hora. nosotros no. (¬_¬)
+
+el código es público, está en github, podés leerlo todo. pero bueno, insultar es más fácil que leer, ¿no?
+
+y hay otro grupo: los que creen que **porque el client tiene bugs, es malo y no sirve para nada.** amigo, ¿sabes qué también tenía bugs al principio? literalmente todo software que existe. windows, tu juego favorito, la app de tu banco. la diferencia es que ellos tienen equipos pagados y nosotros tenemos... ganas y café. que el client tenga un bug no lo hace malo, lo hace **w.i.p.** (¿recuerdas la sección 1?). lo que lo haría malo es abandonarlo. y eso no va a pasar. (•̀ᴗ•́)و
+
+un bug reportado se arregla. una queja vacía, no. tú eliges qué mandar.
+
 si eres de esos: por favor, replantéate tus prioridades. los devs también tienen sentimientos (y café caro). si algo no te gusta, puedes decirlo sin insultar, o mejor aún: **reporta el bug con cariño en discord** y lo miramos. prometemos no llorar. mucho. (˘̩̩̩ε˘̩ƪ)
 
 si eres de los buenos: gracias, de corazón. sois la razón por la que seguimos. ᕦ(ò_óˇ)ᕤ

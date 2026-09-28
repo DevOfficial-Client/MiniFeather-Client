@@ -27,6 +27,14 @@ and speaking of sleep: there are nights of coding at 3am. and days we never slep
 
 and still, some people show up just to insult the devs. over a free client. that nobody forced them to use. that we built without charging anyone. (눈_눈)
 
+and the best part: **they treat us like thieves.** "they probably steal accounts", "they probably steal your session", "it's probably a keylogger". friends... if we were thieves, would we be working for free at 3am? thieves sleep at that hour. we don't. (¬_¬)
+
+the code is public, it's on github, you can read every line. but hey, insulting is easier than reading, right?
+
+and there's another group: the ones who think **that because the client has bugs, it's bad and useless.** friend, do you know what else had bugs at first? literally every piece of software that exists. windows, your favorite game, your bank's app. the difference is they have paid teams and we have... motivation and coffee. a bug doesn't make the client bad, it makes it **w.i.p.** (remember section 1?). what would make it bad is abandoning it. and that's not happening. (•̀ᴗ•́)و
+
+a reported bug gets fixed. an empty complaint doesn't. you choose which one to send.
+
 if that's you: please reconsider your priorities. devs have feelings too (and expensive coffee). if you don't like something, you can say it without insulting, or even better: **report the bug nicely on discord** and we'll take a look. we promise not to cry. much. (˘̩̩̩ε˘̩ƪ)
 
 if you're one of the good ones: thank you, from the bottom of our hearts. you're the reason we keep going. ᕦ(ò_óˇ)ᕤ
