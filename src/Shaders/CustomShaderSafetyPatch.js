@@ -2,7 +2,7 @@
     'use strict';
 
     const W = globalThis;
-    const TAG = '[MiniFeather Shader Safety]';
+    const TAG = 'minifeather shader safety';
 
     const state = {
         game: null,

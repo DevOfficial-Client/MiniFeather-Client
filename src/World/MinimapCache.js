@@ -2,7 +2,7 @@
 (function () {
     'use strict';
 
-    const TAG = '[MiniFeather Minimap Cache]';
+    const TAG = 'minifeather minimapcache';
 
     if (window.__MF_MINIMAP_CACHE__) return;
     window.__MF_MINIMAP_CACHE__ = true;

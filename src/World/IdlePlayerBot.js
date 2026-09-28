@@ -659,7 +659,7 @@
       } catch (_) {}
       return makeProtocol(profile.version, profile.names);
     } catch (error) {
-      console.warn('[MiniFeather Idle Player] Using bundled protocol profile:', error);
+      console.warn('minifeather idleplayer using bundled protocol profile:', error);
       return makeProtocol(FALLBACK_VERSION, [...FALLBACK_PACKET_NAMES]);
     }
   }
@@ -1163,7 +1163,7 @@
   function fail(error) {
     if (state.manualStop || state.phase === 'retrying' || state.phase === 'error') return;
     const message = String(error?.message || error || 'Unknown connection error.');
-    console.warn('[MiniFeather Idle Player]', message);
+    console.warn('minifeather idleplayer', message);
     state.operation += 1;
     resetConnectionState();
     if (!state.manualStop && state.retryCount < MAX_RETRIES) {

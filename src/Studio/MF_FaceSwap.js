@@ -3,7 +3,7 @@
     'use strict';
 
     if (window.__MF_FaceSwap) return;
-    const TAG = '[MF FaceSwap]';
+    const TAG = 'minifeather faceswap';
 
     const FACE = { x: 8, y: 8, w: 8, h: 8 };
     const FACE_OVERLAY = { x: 40, y: 8, w: 8, h: 8 };
@@ -268,16 +268,16 @@
                 } else if (t.type === 'skin') {
 
                     window.MF_SkinChanger?.apply?.(t.face.replace(/^skin_/, ''))
-                        .catch(e => console.warn(TAG + ' trigger skin tick ' + t.tick + ' fallo: ' + e.message));
+                        .catch(e => console.warn(TAG + ' trigger skin tick ' + t.tick + ' failed: ' + e.message));
                 } else if (t.type === 'morph') {
 
                     try {
                         window.MF_Morph?.apply?.(t.face.replace(/^morph_/, ''));
                     } catch (e) {
-                        console.warn(TAG + ' trigger morph tick ' + t.tick + ' fallo: ' + (e?.message || e));
+                        console.warn(TAG + ' trigger morph tick ' + t.tick + ' failed: ' + (e?.message || e));
                     }
                 } else {
-                    applyFace(t.face).catch(e => console.warn(TAG + ' trigger tick ' + t.tick + ' fallo: ' + e.message));
+                    applyFace(t.face).catch(e => console.warn(TAG + ' trigger tick ' + t.tick + ' failed: ' + e.message));
                 }
             }
 

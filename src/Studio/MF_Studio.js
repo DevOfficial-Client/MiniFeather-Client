@@ -3,7 +3,7 @@
     'use strict';
 
     if (window.__MF_Studio) return;
-    const TAG = '[MF Studio]';
+    const TAG = 'minifeather studio';
 
     const TPS = 20;
     const ID = 'mf-studio';

@@ -548,7 +548,7 @@ const FREECAM_UUIDS = new Set([
     if (!hasFreecamAccess(game)) {
         state.requestedEnabled = false;
         console.warn(
-            '[MF FreeCam] acceso denegado. user="' + getPlayerUsername(game) +
+            'minifeather freecam access denied. user="' + getPlayerUsername(game) +
             '" uuid=' + (getPlayerUuid(game) || '?') +
             ' nivel=' + getServerPermissionLevel(game)
         );

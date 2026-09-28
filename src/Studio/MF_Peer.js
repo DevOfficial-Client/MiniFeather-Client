@@ -2,7 +2,7 @@
 (function () {
 'use strict';
 
-const TAG = '[MiniFeather P2P]';
+const TAG = 'minifeather p2p';
 const PEERJS_CDN = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
 
 const state = {
@@ -968,7 +968,7 @@ const state = {
             }
         }
     } catch (e) {
-        warn('look-sync ' + a.a + ' fallo: ' + (e?.message || e));
+        warn('look-sync ' + a.a + ' failed: ' + (e?.message || e));
     }
     }
 

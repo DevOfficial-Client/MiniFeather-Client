@@ -3,7 +3,7 @@
 
   const W = globalThis;
   const EVENT_NAME = 'minifeather:fell-leaves-config';
-  const TAG = '[MiniFeather Fallen Leaves]';
+  const TAG = 'minifeather fallenleaves';
   const REGION_RADIUS = 2;
   const REFRESH_MS = 9000;
   const SURFACE_EPSILON = 0.0047;
@@ -363,7 +363,7 @@
       state.materials = materials;
       state.buckets = buckets;
       if (!buildVerticalGeometry(ref)) {
-        console.warn(TAG, 'sin quad vertical: las hojas no caerán (solo decals)');
+        console.warn(TAG, "no vertical quad: leaves won't fall (decals only)");
       }
 
       try { state.scratchVec3 = ref.position.clone(); } catch (_) {}
@@ -378,7 +378,7 @@
       void 0;
       return true;
     } catch (err) {
-      console.warn(TAG, 'No se pudieron cargar las hojas:', String(err?.message || err));
+      console.warn(TAG, 'failed to load leaves:', String(err?.message || err));
       return false;
     }
   }
@@ -519,7 +519,7 @@
       geometry.computeBoundingSphere?.();
       return geometry;
     } catch (err) {
-      console.warn(TAG, 'No se pudo construir la geometría de hojas:', err);
+      console.warn(TAG, 'failed to build leaves geometry:', err);
       return null;
     }
   }
@@ -785,7 +785,7 @@
     state.leavesPlaced = 0;
     rebuildRegion(game, cx, cz, token).catch(err => {
       if (token === state.buildToken) state.building = false;
-      console.warn(TAG, 'Rebuild falló:', err);
+      console.warn(TAG, 'rebuild failed:', err);
     });
   }
 

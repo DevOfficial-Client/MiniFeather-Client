@@ -1,7 +1,7 @@
 
 (function () {
     'use strict';
-    const TAG = '[MiniFeather Critters]';
+    const TAG = 'minifeather critters';
     if (globalThis.MF_CrittersMobs) return;
 
     const CFG = {
@@ -465,7 +465,7 @@
             if (!spot) break;
             if (spawnMob(sp, spot, dir)) n++;
         }
-        if (n) console.log(TAG + ' grupo de ' + n + ' ' + sp.key + ' (bioma ' + bk + ')');
+        if (n) console.log(TAG + ' grupo de ' + n + ' ' + sp.key + ' (biome ' + bk + ')');
         return n;
     }
 
@@ -699,7 +699,7 @@
         start() {
             if (state.enabled) return true;
             if (!globalThis.MF_CustomModels) {
-                console.warn(TAG + ' requiere MF_CustomModels (CustomModels.js)');
+                console.warn(TAG + ' requires MF_CustomModels (CustomModels.js)');
                 return false;
             }
             state.enabled = true;
@@ -707,7 +707,7 @@
             state.lastT = performance.now();
             state.nextGroup = 0;
             schedule();
-            console.log(TAG + ' activado (' + Object.keys(SPECIES).length + ' especies del mod CAC)');
+            console.log(TAG + ' enabled (' + Object.keys(SPECIES).length + ' CAC mod species)');
             return true;
         },
         stop() {
@@ -715,7 +715,7 @@
             state.stamp.alive = false;
             for (const mob of [...state.mobs]) removeMob(mob);
             state.nextGroup = 0;
-            console.log(TAG + ' desactivado');
+            console.log(TAG + ' disabled');
         },
         count() { return state.mobs.length; },
         counts() {

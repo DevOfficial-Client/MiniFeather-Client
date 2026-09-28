@@ -1,7 +1,7 @@
 
 (function () {
     'use strict';
-    const TAG = '[MiniFeather AllayPets]';
+    const TAG = 'minifeather allaypets';
 
     const CFG = {
         MAX: 1,
@@ -526,7 +526,7 @@
             state.lastT = performance.now();
             ensurePets(player);
             if (!state.rafId) state.rafId = requestAnimationFrame(loop);
-            console.log(TAG + ' activado (pendiente resuelto: ' + state.pets.length + ' allay/s)');
+            console.log(TAG + ' enabled (pending resolved: ' + state.pets.length + ' allay/s)');
         }, 700);
     }
 
@@ -539,14 +539,14 @@
             if (!CM || !player) {
                 pendingStart = true;
                 armPendingStart();
-                console.log(TAG + ' en espera: se activará al entrar a un mundo');
+                console.log(TAG + ' waiting: will enable when joining a world');
                 return true;
             }
             state.enabled = true;
             state.lastT = performance.now();
             ensurePets(player);
             if (!state.rafId) state.rafId = requestAnimationFrame(loop);
-            console.log(TAG + ' activado (' + state.pets.length + ' allay/s)');
+            console.log(TAG + ' enabled (' + state.pets.length + ' allay/s)');
             return true;
         },
         stop() {
@@ -555,7 +555,7 @@
             state.enabled = false;
             if (state.rafId) { cancelAnimationFrame(state.rafId); state.rafId = 0; }
             for (const pet of [...state.pets]) removePet(pet);
-            console.log(TAG + ' desactivado');
+            console.log(TAG + ' disabled');
         },
         setCount(n) {
             const want = Math.max(1, Math.min(CFG.MAX, Math.round(Number(n) || 1)));

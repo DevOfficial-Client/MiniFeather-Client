@@ -3,7 +3,7 @@
 
 const W = globalThis;
 const EVENT_CONFIG = 'minifeather:interactive-vegetation-config';
-const TAG = '[MiniFeather 3D Grass Physics]';
+const TAG = 'minifeather grassphysics';
 const VERSION = '3.2.0-extreme';
 const TRAIL_COUNT = 4;
 const VEGETATION_PASS_THROUGH = new Set([

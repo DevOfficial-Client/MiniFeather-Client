@@ -4,7 +4,7 @@
     if (window.__MF_TEXTURE_PACK__) return;
     window.__MF_TEXTURE_PACK__ = true;
 
-    const TAG = '[MiniFeather TexturePack]';
+    const TAG = 'minifeather texturepack';
     const ATLAS_SIZE = 1024;
     const TILE_SIZE = 16;
     const STORAGE_KEY = 'mf_custom_textures';
@@ -68,7 +68,7 @@
         if (vanillaAtlasCache !== null) return vanillaAtlasCache;
         const img = await fetchImage(chrome.runtime.getURL('classic/textures/spritesheet.png'));
         vanillaAtlasCache = img;
-        if (!img) console.warn(`${TAG} No se pudo cargar el atlas vanilla como base`);
+        if (!img) console.warn(`${TAG} failed to load vanilla atlas as base`);
         return vanillaAtlasCache;
     }
 
@@ -209,7 +209,7 @@
             var KEY = ${JSON.stringify(STORAGE_KEY)};
             var RES_KEY = ${JSON.stringify(RES_KEY)};
             var dataUrl = localStorage.getItem(KEY);
-            if (!dataUrl) { console.warn('[MiniFeather TexturePack] No dataUrl in localStorage'); return; }
+            if (!dataUrl) { console.warn('minifeather texturepack No dataUrl in localStorage'); return; }
 
             var res = parseInt(localStorage.getItem(RES_KEY)) || 16;
             var patterns = ['/textures/spritesheet'];
@@ -517,7 +517,7 @@
                 if (ok) {
                     results[kind] = atlas.placed;
                 } else {
-                    console.error(`${TAG} PBR atlas '${kind}' GENERADO pero IndexedDB falló al guardar`);
+                    console.error(`${TAG} PBR atlas '${kind}' generated but IndexedDB save failed`);
                     results[kind] = -1;
                 }
             }
@@ -797,7 +797,7 @@
             void 0;
             return { success: true, results, loadedCount };
         } catch (err) {
-            console.warn(`${TAG} PBR integrado no disponible:`, err);
+            console.warn(`${TAG} PBR integration not available:`, err);
             return { success: false, error: String(err && err.message || err) };
         }
     }

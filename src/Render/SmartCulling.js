@@ -4,7 +4,7 @@
   const W = globalThis;
   try { W.__MF_SMARTCULLING_SCOPE__?.destroy?.(); } catch (_) {}
 
-  const TAG = '[MF SmartCulling]';
+  const TAG = 'minifeather smartculling';
   const SWEEP_MS = 400;
 
   const state = {

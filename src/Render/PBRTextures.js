@@ -2,7 +2,7 @@
 (function () {
     'use strict';
 
-    const TAG = '[MiniFeather PBR]';
+    const TAG = 'minifeather pbr';
     const LS = {
         enabled: 'mf_pbr_enabled',
         normal: 'mf_pbr_normal',
@@ -121,9 +121,9 @@
         state.diagLogged = true;
         void 0;
         if (lights.directional === 0) {
-            console.warn(TAG, 'CERO luces direccionales de three.js — el juego',
-                'ilumina con luz custom (ambient/AO). El relight fallback con',
-                'sol estimado se activará vía #if NUM_DIR_LIGHTS == 0.');
+            console.warn(TAG, 'ZERO three.js directional lights — the game',
+                'uses custom light (ambient/AO). The relight fallback with',
+                'estimated sun will activate via #if NUM_DIR_LIGHTS == 0.');
         }
     }
 
@@ -302,9 +302,9 @@
                         empty = await atlasLooksEmpty(rec.dataUrl, kind);
                     }
                     if (empty) {
-                        console.warn(TAG, `Atlas '${kind}' VACÍO (todo neutro) —`,
-                            'borrando relicto y pidiendo regeneración',
-                            '(placed decía:', rec.placed, ')');
+                        console.warn(TAG, `atlas '${kind}' EMPTY (all neutral) —`,
+                            'deleting leftover and requesting regeneration',
+                            '(placed said:', rec.placed, ')');
                         await idbDelete('atlas_' + kind);
                         emptiedKinds.push(kind);
                         continue;
@@ -727,7 +727,7 @@
             }
             if (!litPerFragment) {
                 console.warn(TAG, 'Shader sin pipeline de luces en', matType,
-                    '— usando fallback autocontenido');
+                    '— using self-contained fallback');
             }
             shader.fragmentShader = frag;
             state.lastFrag = frag;
@@ -818,14 +818,14 @@
                 void 0;
 
                 if (u && u.uMfPbrNormalStr.value <= 0) {
-                    console.warn(TAG, 'Fuerza normal=0 — el relieve está',
-                        'APAGADO. Ejecuta MF_PBR.resetStrength() para',
-                        'restaurar los defaults.');
+                    console.warn(TAG, 'normal strength=0 — relief is',
+                        'OFF. Run MF_PBR.resetStrength() to',
+                        'restore defaults.');
                 }
             } else {
-                console.warn(TAG, 'PBR activo pero SIN atlas en IndexedDB —',
-                    'sube el pack en Cosmetics → Texture Pack → Generate',
-                    '(zip o PNGs con sufijos _n/_s/_e) y recarga');
+                console.warn(TAG, 'PBR active but NO atlas in IndexedDB —',
+                    'upload the pack in Cosmetics → Texture Pack → Generate',
+                    '(zip or PNGs with _n/_s/_e suffixes) and reload');
             }
         });
     }
@@ -1271,7 +1271,7 @@
                     void 0;
                 }
             } else {
-                console.warn(TAG, 'TERRENO ▸ no recompiló en 3s — render pausado');
+                console.warn(TAG, 'terrain ▸ no recompile in 3s — render paused');
             }
 
             const fsDump = window.__mfTerrainFrag || window.__mfTerrainShader;

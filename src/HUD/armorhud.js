@@ -1,7 +1,7 @@
 (function () {
    'use strict';
 
-   const TAG = '[MiniFeather Armor HUD]';
+   const TAG = 'minifeather armorhud';
    let warnedNativeRenderer = false;
 
    const CONFIG = {
@@ -184,7 +184,7 @@
         } catch (error) {
             console.error(
                 TAG,
-                'Failed to read armor HUD layout',
+                'failed to read armor HUD layout',
                 error
             );
             return;
@@ -867,7 +867,7 @@
             warnedNativeRenderer = true;
             console.warn(
                 TAG,
-                'Native item renderer is not available'
+                'native item renderer is not available'
             );
         }
         const maxDurability =

@@ -3,7 +3,7 @@
   'use strict';
 
   const W = typeof window !== 'undefined' ? window : globalThis;
-  const TAG = '[MiniFeather ShineAmbience]';
+  const TAG = 'minifeather shineambience';
   const EVENT_CONFIG = 'minifeather:shine-ambience-config';
   const SPECIES = {
     butterfly: {
@@ -370,7 +370,7 @@
       state.loaded = true;
       return true;
     } catch (err) {
-      console.warn(TAG, 'texturas no cargadas:', String(err?.message || err));
+      console.warn(TAG, 'textures not loaded:', String(err?.message || err));
       return false;
     }
   }
@@ -1153,7 +1153,7 @@
     state.raf = requestAnimationFrame(tick);
     state.scanTimer = setInterval(scheduleScan, 1500);
     scheduleScan();
-    console.info(TAG, 'activo');
+    console.info(TAG, 'active');
   }
 
   function stop() {
@@ -1162,7 +1162,7 @@
     cancelAnimationFrame(state.raf);
     clearInterval(state.scanTimer);
     clearParticles();
-    console.info(TAG, 'detenido');
+    console.info(TAG, 'stopped');
   }
 
   function applyConfig(detail) {

@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    const TAG = '[MiniFeather VerityAI]';
+    const TAG = 'minifeather verityai';
 
     const PROVIDERS = {
         puter: {
@@ -209,7 +209,7 @@
                     u.onerror = (e) => {
 
                         if (tries++ === 0 && voice) {
-                            warn('voz "' + voice.name + '" fallo (' + (e?.error || '?') + '), reintentando con voz default');
+                            warn('voz "' + voice.name + '" failed (' + (e?.error || '?') + '), reintentando con voz default');
                             try { synth.cancel(); } catch {}
                             setTimeout(() => attempt(null), 60);
                         } else {
@@ -255,7 +255,7 @@
                 state.speaking = false;
             }
         } catch (e) {
-            warn('puter TTS fallo (' + (e?.message || e) + '), usando voz del navegador');
+            warn('puter TTS failed (' + (e?.message || e) + '), usando voz del navegador');
             try { return await speakBrowser(text); } catch (e2) {
                 warn('voz del navegador tambien fallo:', e2?.message || e2,
                     '(synth:', !!globalThis.speechSynthesis,

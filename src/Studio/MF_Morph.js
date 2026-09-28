@@ -2,7 +2,7 @@
 (function () {
     'use strict';
     if (window.__MF_Morph) return;
-    const TAG = '[MF Morph]';
+    const TAG = 'minifeather morph';
 
     const ID = 'mf-morph';
     const TPS = 20;

@@ -3,7 +3,7 @@
 
     const W = globalThis;
     const STORAGE_KEY = 'minifeather:friend-nicknames:v1';
-    const TAG = '[FriendNicknames]';
+    const TAG = 'minifeather friendnicknames';
 
     const state = {
         game: null,

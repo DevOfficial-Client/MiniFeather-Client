@@ -3,7 +3,7 @@
     'use strict';
 
     if (window.__MF_Animation) return;
-    const TAG = '[MF Anim]';
+    const TAG = 'minifeather anim';
     const LS_KEY = 'minifeather_anims_v1';
     const CHANNELS = ['rotation', 'position', 'scale'];
     const MIRROR_PART = { leftArm: 'rightArm', rightArm: 'leftArm', leftLeg: 'rightLeg', rightLeg: 'leftLeg' };

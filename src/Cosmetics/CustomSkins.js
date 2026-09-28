@@ -3,7 +3,7 @@
     if (window.__MF_CustomSkins) return;
     window.__MF_CustomSkins = true;
 
-    var TAG = "[MiniFeather Skins]";
+    var TAG = "minifeather skins";
 
     function warn() {
         var args = [TAG].concat(Array.prototype.slice.call(arguments));
@@ -1196,7 +1196,7 @@
                         var orig = originalUrls.get(self);
                         if (orig && !self.__customSkinRetried) {
                             self.__customSkinRetried = true;
-                            warn('fallo la skin custom, volviendo a vanilla:', skinId);
+                            warn('failed la skin custom, volviendo a vanilla:', skinId);
                             originalSet.call(self, orig);
                         }
                     },

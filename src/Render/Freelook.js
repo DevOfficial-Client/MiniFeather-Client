@@ -1,6 +1,6 @@
 (function () {
     'use strict';
-    const TAG = '[MiniFeather Freelook]';
+    const TAG = 'minifeather freelook';
 
     let FREELOOK_KEY = 'KeyZ';
     let FREELOOK_MODE = 'hold';

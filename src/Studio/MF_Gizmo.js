@@ -2,7 +2,7 @@
 (function () {
     'use strict';
     if (window.__MF_Gizmo) return;
-    const TAG = '[MF Gizmo]';
+    const TAG = 'minifeather gizmo';
 
     const AXIS_COLORS = { x: 0xff4d4d, y: 0x4dff88, z: 0x4d9fff };
     const SHAFT_LEN = 0.6;
@@ -270,7 +270,7 @@
             state.size = 1;
             return true;
         } catch (e) {
-            console.warn(TAG + ' attach falló:', e?.message || e);
+            console.warn(TAG + ' attach failed:', e?.message || e);
             return false;
         }
     }

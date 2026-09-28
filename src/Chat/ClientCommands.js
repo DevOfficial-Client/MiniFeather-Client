@@ -548,7 +548,7 @@
             const d = api.debug();
             void 0;
             if (!d.rigs) addChat('Warning: rig not created (see console).', 'error');
-          } catch (e) { console.warn('[MiniFeather /baby] debug failed', e); }
+          } catch (e) { console.warn('minifeather /baby debug failed', e); }
         }, 1500);
         return;
       }

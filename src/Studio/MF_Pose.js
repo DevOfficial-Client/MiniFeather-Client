@@ -3,7 +3,7 @@
     'use strict';
 
     if (window.__MF_Pose) return;
-    const TAG = '[MF Pose]';
+    const TAG = 'minifeather pose';
     const LS_KEY = 'minifeather_poses_v1';
 
     const PARTS = {

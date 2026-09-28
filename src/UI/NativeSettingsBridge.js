@@ -2,7 +2,7 @@
   'use strict';
 
   const GLOBAL_KEY = '__MINIFEATHER_NATIVE_SETTINGS_BRIDGE__';
-  const TAG = '[MiniFeather NSB]';
+  const TAG = 'minifeather nsb';
 
   try {
     globalThis[GLOBAL_KEY]?.destroy?.();

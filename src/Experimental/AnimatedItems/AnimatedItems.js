@@ -3,7 +3,7 @@
 
   const W = globalThis;
   const EVENT_NAME = 'minifeather:animated-items-config';
-  const TAG = '[MiniFeather Animated Items]';
+  const TAG = 'minifeather animateditems';
   const BASE_ATLAS_SIZE = 1024;
   const BASE_ITEM_SIZE = 16;
   const SUPPORTED_ITEM_SIZES = Object.freeze([16, 32]);

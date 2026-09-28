@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const TAG = '[MiniFeather TinyTakeover]';
+  const TAG = 'minifeather tinytakeover';
   const GLOBAL_KEY = '__MINIFEATHER_TINY_TAKEOVER__';
   const EVENT_NAME = 'minifeather:tiny-takeover-config';
   const SCAN_MS = 300;
@@ -524,7 +524,7 @@
       setTimeout(() => { try { purgeUnderCam(); } catch (_) {} }, 0);
       setTimeout(() => { try { purgeUnderCam(); } catch (_) {} }, 500);
       state.rigs.set(key, rig);
-    }).catch(err => console.warn(TAG, 'textura fallida', def.texName, err.message));
+    }).catch(err => console.warn(TAG, 'texture failed', def.texName, err.message));
   }
 
   function scanEntities() {
@@ -766,7 +766,7 @@
       setTimeout(() => { try { purgeUnderCam(); } catch (_) {} }, 0);
       setTimeout(() => { try { purgeUnderCam(); } catch (_) {} }, 500);
       state.rigs.set(rigKey, rig);
-    }).catch(err => console.warn(TAG, 'textura fallida (local)', def.texName, err.message));
+    }).catch(err => console.warn(TAG, 'texture failed (local)', def.texName, err.message));
   }
 
   function disableCullingDeep(root) {
@@ -792,7 +792,7 @@
       }
     };
     try { walk(cam); } catch (_) {}
-    if (purged) console.warn(TAG, 'purgados', purged, 'objetos pegados a la cámara');
+    if (purged) console.warn(TAG, 'purged', purged, 'objects stuck to camera');
   }
 
   function disposeRig(rig) {

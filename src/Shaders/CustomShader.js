@@ -2,7 +2,7 @@
 (function () {
     'use strict';
 
-    const TAG = '[MiniFeather CustomShader]';
+    const TAG = 'minifeather customshader';
 
     if (window.__MF_CUSTOM_SHADER__) return;
     window.__MF_CUSTOM_SHADER__ = true;
@@ -1177,7 +1177,7 @@
         gl.shaderSource(sh, src);
         gl.compileShader(sh);
         if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-            console.warn('[MiniFeather PostFX] Shader error:', gl.getShaderInfoLog(sh));
+            console.warn('minifeather postfx shader error:', gl.getShaderInfoLog(sh));
             gl.deleteShader(sh);
             return null;
         }
@@ -1213,7 +1213,7 @@
         }
         const gl = canvas.__mfGLContext;
         if (!gl) {
-            console.warn('[MiniFeather PostFX] Sin contexto WebGL en el canvas principal.');
+            console.warn('minifeather postfx no WebGL context on main canvas.');
             return false;
         }
 
@@ -1226,7 +1226,7 @@
         gl.attachShader(prog, fs);
         gl.linkProgram(prog);
         if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-            console.warn('[MiniFeather PostFX] Link error:', gl.getProgramInfoLog(prog));
+            console.warn('minifeather postfx link error:', gl.getProgramInfoLog(prog));
             return false;
         }
 
@@ -1457,7 +1457,7 @@
             tex.needsUpdate = true;
             return tex;
         } catch (err) {
-            console.warn(`${TAG} No se pudo crear la textura de forma:`, err);
+            console.warn(`${TAG} failed to create shape texture:`, err);
             return null;
         }
     }
@@ -1471,7 +1471,7 @@
             !orig.includes('return cloudFbm(q);') ||
             !orig.includes('smoothstep(uCoverage, uCoverage + 0.25, cloudFbm(q))') ||
             !orig.includes('smoothstep(uCoverage, uCoverage + 0.25, n)')) {
-            console.warn(`${TAG} Shader de nubes no coincide con lo esperado; forma custom omitida.`);
+            console.warn(`${TAG} cloud shader doesn't match expected shape; custom form skipped.`);
             return false;
         }
 
@@ -1518,7 +1518,7 @@
                 for (let i = 0; i < data.length; i++) data[i] = px[i * 4];
                 cb(makeShapeTexture(data, size));
             } catch (err) {
-                console.warn(`${TAG} Error decodificando el dibujo:`, err);
+                console.warn(`${TAG} error decoding the drawing:`, err);
                 cb(null);
             }
         };
@@ -1610,7 +1610,7 @@
             format = 1022;
             type = 1009;
         } else {
-            console.warn(`${TAG} Bytes por vóxel inesperados: ${bytesPerVoxel}`);
+            console.warn(`${TAG} unexpected bytes per voxel: ${bytesPerVoxel}`);
             return null;
         }
         try {
@@ -1626,7 +1626,7 @@
             tex.needsUpdate = true;
             return tex;
         } catch (err) {
-            console.warn(`${TAG} Textura 3D del pack falló:`, err);
+            console.warn(`${TAG} pack 3D texture failed:`, err);
             return null;
         }
     }
@@ -1702,7 +1702,7 @@
     function applyClouds(cfg) {
         const mesh = resolveClouds();
         if (!mesh) {
-            console.warn(`${TAG} Mesh de nubes no encontrado.`);
+            console.warn(`${TAG} clouds mesh not found.`);
             return false;
         }
         const u = mesh.material.uniforms;
@@ -2229,8 +2229,8 @@
                 const src = shaderSources.get(shader) || '';
 
                 const numbered = src.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n');
-                console.error('[MiniFeather] Shader falló al COMPILAR. Log:', log,
-                    '\n— Fuente numerada —\n', numbered.slice(0, 4000));
+                console.error('minifeather shader failed to COMPILE. log:', log,
+                    '\n— numbered source —\n', numbered.slice(0, 4000));
             } catch (_) {}
         };
 
@@ -2240,7 +2240,7 @@
             try {
                 if (!this.getProgramParameter(program, this.LINK_STATUS)) {
                     const info = this.getProgramInfoLog(program) || 'sin log';
-                    console.error('[MiniFeather] Programa GLSL falló al linkear:', info);
+                    console.error('minifeather GLSL program failed to link:', info);
                 }
             } catch (_) {}
         };

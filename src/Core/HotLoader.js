@@ -52,14 +52,14 @@
         try { d = JSON.parse(d); } catch (_) { return; }
       }
       const id = d.id, url = d.url;
-      console.log('[MF bridge] mf-bg-fetch recibido id', id, 'url', url);
+      console.log('minifeather bridge mf-bg-fetch received id', id, 'url', url);
       if (!id || typeof url !== 'string') {
-        console.warn('[MF bridge] mf-bg-fetch inválido (falta id/url)');
+        console.warn('minifeather bridge mf-bg-fetch invalid (missing id/url)');
         return;
       }
       chrome.runtime.sendMessage({ type: 'MF_BRIDGE_FETCH', url }, (res) => {
-        if (chrome.runtime.lastError) console.warn('[MF bridge] lastError:', chrome.runtime.lastError.message);
-        console.log('[MF bridge] respuesta del background id', id, 'len:', res?.data ? String(res.data).length : 0, 'error:', res?.error);
+        if (chrome.runtime.lastError) console.warn('minifeather bridge lastError:', chrome.runtime.lastError.message);
+        console.log('minifeather bridge background reply id', id, 'len:', res?.data ? String(res.data).length : 0, 'error:', res?.error);
         try {
           window.dispatchEvent(new CustomEvent('mf-bg-fetch-result', {
             detail: JSON.stringify({ id, data: res && res.data, error: res && res.error })
@@ -108,9 +108,9 @@
         .map(g => 'try{delete window[' + JSON.stringify(g) + ']}catch(e){}')
         .join('');
       injectInline(del + '\n' + code + '\n//# sourceURL=' + path + ' (fallback)');
-      try { console.warn('[MF HotLoader] hot falló → versión empaquetada:', path); } catch (_) {}
+      try { console.warn('minifeather hotloader hot failed → bundled version:', path); } catch (_) {}
     }).catch(() => {
-      try { console.warn('[MF HotLoader] fallback no disponible:', path); } catch (_) {}
+      try { console.warn('minifeather hotloader fallback unavailable:', path); } catch (_) {}
     });
   }
 
@@ -181,7 +181,7 @@
         try {
           injectInline(runner);
         } catch (e) {
-          try { console.warn('[MF HotLoader] fallo inyectando', p, e && e.message); } catch (_) {}
+          try { console.warn('minifeather hotloader failed to inject', p, e && e.message); } catch (_) {}
         }
       }
     };

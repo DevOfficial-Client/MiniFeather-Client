@@ -1,7 +1,7 @@
 (function () {
 'use strict';
 
-const TAG = '[Dynamic Crosshair]';
+const TAG = 'minifeather dynamiccrosshair';
 
 const EVENT_CONFIG = 'minifeather:dynamiccrosshair-config';
 const EVENT_STATE = 'minifeather:dynamiccrosshair-state';

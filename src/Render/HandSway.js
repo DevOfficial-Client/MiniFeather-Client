@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    const TAG = '[MiniFeather HandSway]';
+    const TAG = 'minifeather handsway';
 
     const state = {
         enabled: true,

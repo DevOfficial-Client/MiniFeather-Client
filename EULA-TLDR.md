@@ -57,6 +57,7 @@ si eres de los buenos: gracias, de corazón. sois la razón por la que seguimos.
 
 ## 4.2. sobre las cuentas de minifeather (sí, existen, mea culpa, digo porque puse que no antes JAJA)
 
+
 - **sí hay cuentas de minifeather**, y son **opcionales**: sirven para el ecosistema comunitario (skins, rangos, mascotas compartidas). si nunca creas una, el client funciona igual. nada te obliga.
 - **no tienen nada que ver con tu cuenta de miniblox.** es otro universo: usuario y contraseña propios, sin conexión a tu sesión del juego. una cosa por lado. (・_・;)
 - cuando creas una, tu contraseña **se guarda hasheada (pbkdf2, 200k iteraciones)** en una base de datos privada. jamás en texto plano en la db.
@@ -72,7 +73,7 @@ lo que no hagas es quedarte callado abusando del exploit como si no pasara nada:
 ## 5. sobre la ia
 
 - **este client se hizo con bastante ayuda de ia.** código, traducciones, docs... la ia fue copiloto. si encuentras un bug raro... sí, probablemente fue la ia. (o yo. ¿quién sabe?) (¬‿¬)
-- **verityai** (el asistente del client) puede decir tonterías con total seguridad. no lo tomes como fuente de verdad, ni como abogado, ni como médico. es un loro con acceso a internet.
+- **verityai** (el asistente del client) puede decir tonterías con total seguridad. no lo tomes como fuente de verdad, ni como abogado, ni como médico.
 - si activas el auto-reply, el chat del juego pasa por el proveedor de ia. tú decides.
 
 ## 6. actualizaciones y actualizaciones locas

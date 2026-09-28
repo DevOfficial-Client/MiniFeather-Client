@@ -3,7 +3,7 @@
 
   const W = globalThis;
   const EVENT_NAME = 'minifeather:grass-flowers-config';
-  const TAG = '[MiniFeather Grass Flowers]';
+  const TAG = 'minifeather grassflowers';
   const REGION_RADIUS = 2;
   const REFRESH_MS = 9000;
   const SURFACE_EPSILON = 0.0047;
@@ -242,7 +242,7 @@
       state.materials = materials;
       return true;
     } catch (err) {
-      console.warn(TAG, 'No se pudieron preparar las texturas decorativas:', err);
+      console.warn(TAG, 'failed to prepare decorative textures:', err);
       return false;
     }
   }
@@ -365,7 +365,7 @@
       geometry.computeBoundingSphere?.();
       return geometry;
     } catch (err) {
-      console.warn(TAG, 'No se pudo construir la geometría decorativa:', err);
+      console.warn(TAG, 'failed to build decorative geometry:', err);
       return null;
     }
   }
@@ -473,7 +473,7 @@
     const token = ++state.buildToken;
     rebuildRegion(game, cx, cz, token).catch(err => {
       if (token === state.buildToken) state.building = false;
-      console.warn(TAG, 'Rebuild falló:', err);
+      console.warn(TAG, 'rebuild failed:', err);
     });
   }
 

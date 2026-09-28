@@ -3,7 +3,7 @@
 
   const EVENT_CONFIG = 'minifeather:water-splash-config';
   const GLOBAL_KEY = '__MINIFEATHER_WATER_SPLASH__';
-  const TAG = '[MiniFeather WaterSplash]';
+  const TAG = 'minifeather watersplash';
 
   const SPLASH_LIFE_MS = 700;
   const SCAN_MS = 60;
@@ -546,7 +546,7 @@
     const now = performance.now();
     if (now - _lastFailLog < 5000) return;
     _lastFailLog = now;
-    console.warn(TAG, 'recursos no listos:', code, detail ?? '');
+    console.warn(TAG, 'resources not ready:', code, detail ?? '');
   }
 
   async function ensureResources() {
@@ -655,7 +655,7 @@
         }));
         state.rainFramesReady = rainFailures.length === 0;
         if (rainFailures.length) {
-          console.warn(TAG, `frames de lluvia faltantes (${rainFailures.length}/${RAIN_FRAMES}): sin ondas de lluvia hasta recargar`);
+          console.warn(TAG, `missing rain frames (${rainFailures.length}/${RAIN_FRAMES}): no rain ripples until reload`);
         }
 
         if (!state.quadGeometry || !state.dropletGeometry) {
@@ -1153,7 +1153,7 @@
 
         const game = findGame(true);
         const p = game?.player?.pos;
-        if (!p) { console.warn(TAG, 'no hay jugador'); return; }
+        if (!p) { console.warn(TAG, 'no player'); return; }
         const info = {};
         const fire = () => {
           spawnSplash(Number(p.x), Number(p.y), Number(p.z) + 2, -0.8, 0.6, { forever: true, debugInfo: info });
@@ -1168,13 +1168,13 @@
 
         const game = findGame(true);
         const p = game?.player?.pos;
-        if (!p) { console.warn(TAG, 'no hay jugador'); return; }
+        if (!p) { console.warn(TAG, 'no player'); return; }
         const fire = () => {
           const x = Number(p.x), z = Number(p.z) + 2;
           const surfaceY = findWaterSurfaceY(game, x, Number(p.y), z);
-          if (surfaceY == null) { console.warn(TAG, 'ripple: no hay agua delante (superficie=' + surfaceY + ')'); return; }
+          if (surfaceY == null) { console.warn(TAG, 'ripple: no water ahead (surface=' + surfaceY + ')'); return; }
           const material = state.materials.get(rainFrameUrl(0));
-          if (!material || !state.quadGeometry) { console.warn(TAG, 'ripple: faltan recursos', { rainFramesReady: state.rainFramesReady, mats: state.materials.size }); return; }
+          if (!material || !state.quadGeometry) { console.warn(TAG, 'ripple: missing resources', { rainFramesReady: state.rainFramesReady, mats: state.materials.size }); return; }
           try {
             const MeshCtor = state.referenceMesh.constructor;
             const mesh = new MeshCtor(state.quadGeometry, material);
@@ -1191,7 +1191,7 @@
             state.splashes.push({ mesh, spec: null, start: now, life: Infinity, baseWidth: 1, targetScale: 0.6, rain: true, frameLoop: true });
             void 0;
           } catch (err) {
-            console.warn(TAG, 'ripple: fallo al crear mesh:', String(err?.message || err));
+            console.warn(TAG, 'ripple: failed al crear mesh:', String(err?.message || err));
           }
         };
         if (state.resourcesReady) fire();

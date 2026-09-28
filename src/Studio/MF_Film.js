@@ -3,7 +3,7 @@
     'use strict';
 
     if (window.__MF_Film) return;
-    const TAG = '[MF Film]';
+    const TAG = 'minifeather film';
 
     const TPS = 20;
 
@@ -338,7 +338,7 @@
             if (clone) void 0;
         }
         if (!clone) {
-            console.warn(TAG + ' clone del player fallo por completo');
+            console.warn(TAG + ' clone del player failed por completo');
             return null;
         }
         try {

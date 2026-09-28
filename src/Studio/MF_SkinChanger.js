@@ -2,7 +2,7 @@
 (function () {
     'use strict';
     if (window.__MF_SkinChanger) return;
-    const TAG = '[MF SkinChanger]';
+    const TAG = 'minifeather skinchanger';
 
     const ID = 'mf-skinchanger';
     const DB_NAME = 'minifeather_skins';

@@ -1,7 +1,7 @@
 
 (() => {
   'use strict';
-  const TAG = '[MiniFeather SpiderBot]';
+  const TAG = 'minifeather spiderbot';
 
   const LOG = (() => {
     let level = 0;
@@ -461,7 +461,7 @@
         try { mat = state.refMaterial.clone(); } catch (_2) {}
       }
       if (!mat) {
-        console.error(TAG, 'FATAL: no se pudo crear material para patas de araña');
+        console.error(TAG, 'FATAL: could not create spider leg material');
         _sharedLegMat = null;
         return { geo: _sharedLegGeo, tipGeo: _sharedTipGeo, mat: null };
       }
@@ -775,7 +775,7 @@
       }
       if (state.lastFrame) state.lastFrameAppliedAt = now;
     } catch (e) {
-      console.warn(TAG, 'tick error (recuperado)', e);
+      console.warn(TAG, 'tick error (recovered)', e);
       LOG.i('ERROR tick:', e?.message || e);
     }
     state.raf = requestAnimationFrame(tick);
@@ -796,7 +796,7 @@
     state.enabled = on;
     if (on) {
       if (!state.raf) { state.lastTick = performance.now(); state.raf = requestAnimationFrame(tick); }
-      if (!connectSim()) console.warn(TAG, 'MF_SPIDER_SIM no disponible (¿SpiderSim.js cargó?)');
+      if (!connectSim()) console.warn(TAG, 'MF_SPIDER_SIM unavailable (did SpiderSim.js load?)');
     } else {
       clearAll();
     }

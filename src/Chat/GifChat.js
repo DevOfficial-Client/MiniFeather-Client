@@ -88,7 +88,7 @@
   function bridgeFetch(url) {
     return new Promise((resolve, reject) => {
       const id = 'mfgif' + Math.random().toString(36).slice(2);
-      console.log('[GifChat] bridgeFetch →', url);
+      console.log('minifeather gifchat bridgeFetch →', url);
       const onRes = (e) => {
         let d = e.detail || {};
         if (typeof d === 'string') {
@@ -96,7 +96,7 @@
         }
         if (d.id !== id) return;
         cleanup();
-        console.log('[GifChat] bridgeFetch ← id', id, 'error:', d.error, 'len:', d.data ? String(d.data).length : 0);
+        console.log('minifeather gifchat bridgeFetch ← id', id, 'error:', d.error, 'len:', d.data ? String(d.data).length : 0);
         if (d.error) reject(new Error(String(d.error)));
         else if (d.data == null || d.data === '') reject(new Error('empty'));
         else resolve(String(d.data));
@@ -105,7 +105,7 @@
         window.removeEventListener('mf-bg-fetch-result', onRes);
         clearTimeout(timer);
       };
-      const timer = setTimeout(() => { cleanup(); console.warn('[GifChat] bridgeFetch TIMEOUT (¿listener del puente ISOLATED ausente?) id', id); reject(new Error('timeout')); }, 8000);
+      const timer = setTimeout(() => { cleanup(); console.warn('minifeather gifchat bridgeFetch TIMEOUT (ISOLATED bridge listener missing?) id', id); reject(new Error('timeout')); }, 8000);
       window.addEventListener('mf-bg-fetch-result', onRes);
       window.dispatchEvent(new CustomEvent('mf-bg-fetch', { detail: JSON.stringify({ id, url }) }));
     });
@@ -137,7 +137,7 @@
           const full = it?.file?.sd?.webp?.url || it?.file?.sm?.webp?.url || it?.file?.sd?.gif?.url || '';
           if (thumb && full) mapped.push({ thumb, full });
         }
-        console.log('[GifChat] klipyRequest OK:', list.length, 'items crudos →', mapped.length, 'mapeados');
+        console.log('minifeather gifchat klipyRequest OK:', list.length, 'raw items →', mapped.length, 'mapped');
         if (state.cache.size > 40) {
           const now = Date.now();
           for (const [k, v] of state.cache) {
@@ -148,7 +148,7 @@
         return mapped;
       })
       .catch(err => {
-        console.warn('[GifChat] klipyRequest FALLÓ:', err?.message || err);
+        console.warn('minifeather gifchat klipyRequest failed:', err?.message || err);
         throw err;
       });
   }
@@ -384,14 +384,14 @@
 
   function openBar() {
     const input = findChatInput();
-    if (!input) { console.warn('[GifChat] openBar: no se encontró el input del chat'); return; }
+    if (!input) { console.warn('minifeather gifchat openBar: chat input not found'); return; }
     injectBarStyle();
     buildBar();
     positionBar();
     state.bar.hidden = false;
     state.barOpen = true;
     state.button?.classList.add('on');
-    console.log('[GifChat] barra abierta; query =', JSON.stringify(queryFromInput()));
+    console.log('minifeather gifchat bar opened; query =', JSON.stringify(queryFromInput()));
     loadBar(queryFromInput());
     try { input.focus(); } catch (_) {}
   }
@@ -415,7 +415,7 @@
       try { chat.setInputValue?.(item.full); } catch (_) { try { chat.inputValue = item.full; } catch (_) {} }
       chat.submit(game);
     } catch (e) {
-      console.warn('[MiniFeather GifChat] send failed', e);
+      console.warn('minifeather gifchat send failed', e);
       return;
     }
     try { chat.closeInput?.(); } catch (_) {}
@@ -487,7 +487,7 @@
       }
 
       if (!TRIGGER_RE.test(value)) return;
-      console.log('[GifChat] trigger :gif detectado — abriendo barra');
+      console.log('minifeather gifchat :gif trigger detected — opening bar');
       try { chat.setInputValue?.(''); } catch (_) {}
       if (target.value) target.value = '';
       openBar();

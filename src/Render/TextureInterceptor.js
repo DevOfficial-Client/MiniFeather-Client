@@ -130,7 +130,7 @@
         if (st.fails >= NET.THRESHOLD) {
             st.openUntil = now + NET.OPEN_MS;
             st.fails = 0;
-            console.warn('[MiniFeather] host de assets caído (' + o + '); fetches cortados por ' + (NET.OPEN_MS / 1000) + 's');
+            console.warn('minifeather assets host down (' + o + '); fetches cut for ' + (NET.OPEN_MS / 1000) + 's');
         }
         NET.origins.set(o, st);
     }
@@ -281,7 +281,7 @@
     function mfPackBoot() {
         mfPackLoadIndex().then(function (map) {
             if (!map) {
-                console.warn('[MiniFeather mfpack] index no disponible, GitHub raw sin espejo');
+                console.warn('minifeather mfpack index unavailable, GitHub raw without mirror');
                 return;
             }
             patchGithubRaw();
@@ -301,7 +301,7 @@
                 mfPackBoot();
             } else if (tries >= 20) {
                 clearInterval(waitMeta);
-                console.warn('[MiniFeather mfpack] meta mf-mirror-base no apareció; espejo desactivado');
+                console.warn('minifeather mfpack mf-mirror-base meta not found; mirror disabled');
             }
         }, 100);
     }

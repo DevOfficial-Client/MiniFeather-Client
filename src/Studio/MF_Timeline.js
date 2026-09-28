@@ -3,7 +3,7 @@
     'use strict';
 
     if (window.__MF_Timeline) return;
-    const TAG = '[MF Timeline]';
+    const TAG = 'minifeather timeline';
     const TPS = 20;
 
     const CSS = `

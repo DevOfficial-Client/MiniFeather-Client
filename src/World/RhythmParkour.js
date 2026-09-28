@@ -141,7 +141,7 @@ function onLanguageConfig(event) {
 
     if (!setBlockRaw.__warned) {
       setBlockRaw.__warned = true;
-      console.warn('[MiniFeather RhythmParkour] setBlockState falló:', e);
+      console.warn('minifeather rhythmparkour setBlockState failed:', e);
     }
   }
   }
@@ -807,7 +807,7 @@ function onLanguageConfig(event) {
           case 'ice-candidate': await this.handleIceCandidate(data); break;
         }
       } catch (err) {
-        console.warn('[MiniFeather RhythmParkour P2P] Error en señal:', err);
+        console.warn('minifeather rhythmparkour p2p signal error:', err);
       }
     };
   }

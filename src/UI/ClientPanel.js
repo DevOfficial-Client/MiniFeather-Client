@@ -1025,7 +1025,7 @@
           })
           .then(buf => new FontFace('Faithful', buf, { weight: '100 900' }))
           .then(face => document.fonts.add(face))
-          .catch(err => console.warn('MiniFeather font load failed:', err?.message || err));
+          .catch(err => console.warn('minifeather font load failed:', err?.message || err));
       } catch (_) {}
     }
 
@@ -4963,7 +4963,7 @@
           window.setTimeout(() => { if (button.isConnected) button.textContent = original; }, 3500);
         }
       } catch (error) {
-        console.error('[MF WorldImport] fallo:', error);
+        console.error('minifeather worldimport failed:', error);
         if (button) {
           button.textContent = '✗ Failed';
           window.setTimeout(() => { if (button.isConnected) button.textContent = original; }, 2500);
@@ -11869,7 +11869,7 @@
             localStorage.setItem('mf_pbr_available', 'true');
           }
         }).catch(() => {
-            console.warn('[MiniFeather] PBR integrado no instalado — recarga la página (F5)');
+            console.warn('minifeather pbr addon not installed — reload the page (F5)');
         });
       }
     }

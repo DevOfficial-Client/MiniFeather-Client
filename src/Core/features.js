@@ -2,7 +2,7 @@
 (function () {
     'use strict';
 
-    const TAG = '[MiniFeather Features]';
+    const TAG = 'minifeather features';
 
     if (window.__MF_FEATURES_BLOCK_HIGHLIGHT__) return;
     window.__MF_FEATURES_BLOCK_HIGHLIGHT__ = true;

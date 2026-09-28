@@ -4,7 +4,7 @@
 const PREV = globalThis.MF_Mesh;
 if (PREV) { try { PREV.dispose?.(); } catch {} }
 
-const TAG = '[MiniFeather Mesh]';
+const TAG = 'minifeather mesh';
 const PEERJS_CDN = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
 const CODE_RE = /mfm2p[:\s]+([A-Za-z0-9-]{4,24})/i;
 const ANNOUNCE = 'mfm2p:';

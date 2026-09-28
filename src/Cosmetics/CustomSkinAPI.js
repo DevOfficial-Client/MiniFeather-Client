@@ -4,7 +4,7 @@
     if (window.__MF_CustomSkinAPI) return;
     window.__MF_CustomSkinAPI = true;
 
-    const TAG = '[MiniFeather CustomSkinAPI]';
+    const TAG = 'minifeather customskinapi';
     const VERBOSE = localStorage.getItem('mf:csa:verbose') === '1';
     const log = (...a) => { if (VERBOSE) void 0; };
     const warn = (...a) => console.warn(TAG, ...a);

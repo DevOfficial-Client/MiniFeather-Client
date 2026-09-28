@@ -3,7 +3,7 @@
     if (window.__MF_Accounts) return;
     window.__MF_Accounts = true;
 
-    const TAG = '[MiniFeather Accounts]';
+    const TAG = 'minifeather accounts';
     const VERBOSE = (() => { try { return localStorage.getItem('mf_accounts_verbose') === '1'; } catch (_) { return false; } })();
     const log = (...a) => { if (VERBOSE) void 0; };
     const state = {

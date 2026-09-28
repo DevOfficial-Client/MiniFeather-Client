@@ -3,7 +3,7 @@
     'use strict';
     try { window.__MF_EMOTES_SCOPE__?.destroy?.(); } catch {}
 
-    const TAG = '[MF Emotes]';
+    const TAG = 'minifeather emotes';
     const DIR = 'emotes/';
 
     const state = {
@@ -921,7 +921,7 @@
 
         setTimeout(() => {
             if (state.current && state.current.framesSeen === 0) {
-                console.warn(TAG, 'render-hook sin frames en 500ms (rAF sigue activo)');
+                console.warn(TAG, 'render-hook without frames in 500ms (rAF still active)');
             }
         }, 500);
 

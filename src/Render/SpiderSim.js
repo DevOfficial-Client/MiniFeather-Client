@@ -1,7 +1,7 @@
 
 (() => {
   'use strict';
-  const TAG = '[MiniFeather SpiderSim]';
+  const TAG = 'minifeather spidersim';
 
   const LOG = (() => {
     let level = 0;
@@ -3279,7 +3279,7 @@
         Object.keys(st).forEach((k) => { st[k] = 0; });
       }
     } catch (e) {
-      console.warn(TAG, 'tick error (recuperado)', e);
+      console.warn(TAG, 'tick error (recovered)', e);
       LOG.i('ERROR tick:', e?.message || e, '\n' + String(e?.stack || '').split('\n').slice(0, 4).join('\n'));
     }
     sim.tickMs = sim.tickMs ? sim.tickMs * 0.9 + (performance.now() - t0) * 0.1 : (performance.now() - t0);

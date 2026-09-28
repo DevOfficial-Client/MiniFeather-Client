@@ -21,7 +21,7 @@
     };
 
     function log(...args) {
-        try { console.log('[MF_Bridge]', ...args); } catch (_) {}
+        try { console.log('minifeather bridge', ...args); } catch (_) {}
     }
 
     function getGame(force = false) {

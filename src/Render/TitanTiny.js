@@ -90,7 +90,7 @@
             applyEnabledState(true);
             emitState('cap');
             if (notify) try {
-                console.info('[TitanTiny] server cap applied: ' + state.scale.toFixed(2) + 'x');
+                console.info('minifeather titantiny server cap applied: ' + state.scale.toFixed(2) + 'x');
             } catch (_) {}
             return true;
         }

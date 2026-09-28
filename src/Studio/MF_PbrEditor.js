@@ -2,7 +2,7 @@
 (function () {
     'use strict';
     if (window.__MF_PbrEditor) return;
-    const TAG = '[MF PbrEditor]';
+    const TAG = 'minifeather pbreditor';
     const ID = 'mf-pbreditor';
     const LS_MANUAL = 'mf_pbr_manual';
 
@@ -97,7 +97,7 @@
                 state.frames = await res.json();
             }
         } catch (e) {
-            console.warn(TAG, 'fetch directo de frames.json falló (esperando al panel):', e);
+            console.warn(TAG, 'direct frames.json fetch failed (waiting for panel):', e);
         }
         return state.frames;
     }
@@ -113,7 +113,7 @@
             filterTiles(q);
             err('');
         } catch (e) {
-            console.warn(TAG, 'frames del panel ilegibles:', e);
+            console.warn(TAG, 'panel frames unreadable:', e);
         }
     });
 
@@ -141,7 +141,7 @@
                 refreshTexts();
             }
         } catch (e) {
-            console.warn(TAG, 'i18n del panel ilegible:', e);
+            console.warn(TAG, 'panel i18n unreadable:', e);
         }
     });
 
@@ -878,7 +878,7 @@
     async function open() {
         if (state.open) return;
         if (!pbrReady()) {
-            console.warn(TAG, 'PBR no listo — activa PBR Textures e instala un pack primero');
+            console.warn(TAG, 'PBR not ready — enable PBR Textures and install a pack first');
         }
         state.open = true;
         buildUI();

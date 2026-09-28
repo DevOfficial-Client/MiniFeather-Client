@@ -2,7 +2,7 @@
 (function () {
     'use strict';
     if (window.__MF_SkinEditor) return;
-    const TAG = '[MF SkinEditor]';
+    const TAG = 'minifeather skineditor';
 
     const HEAD = { x: 0, y: 0, w: 64, h: 16 };
     const OVERLAY_X = 32;

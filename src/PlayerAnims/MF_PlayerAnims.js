@@ -3,7 +3,7 @@
     'use strict';
     try { window.__MF_PA_SCOPE__?.destroy?.(); } catch {}
 
-    const TAG = '[MF_PlayerAnims]';
+    const TAG = 'minifeather playeranims';
 
     const state = {
         enabled: false,
@@ -403,7 +403,7 @@
                 RT().pushLog?.({ t: 'enabled', lines: state.pack.lines.length });
             } catch (e) {
                 state.packError = String(e?.message || e);
-                console.warn(TAG, 'error cargando pack:', e?.message || e);
+                console.warn(TAG, 'error loading pack:', e?.message || e);
                 state.enabled = false;
             }
         } else {
@@ -437,7 +437,7 @@
 
     function setDebug(v) {
         state.debug = v === true;
-        console.log(TAG, 'debug ' + (state.debug ? 'ON (resumen cada 5s)' : 'OFF'));
+        console.log(TAG, 'debug ' + (state.debug ? 'ON (summary every 5s)' : 'OFF'));
         return state.debug;
     }
 
@@ -457,12 +457,12 @@
     };
     globalThis.MF_PAdiag = {
         buf: [], rec: false,
-        start() { this.buf.length = 0; this.rec = true; console.log(TAG, 'diag: grabando (muévete 5s)'); },
+        start() { this.buf.length = 0; this.rec = true; console.log(TAG, 'diag: recording (move for 5s)'); },
         stop() { this.rec = false; return this.buf.length; },
         dump() {
             this.rec = false;
             const n = this.buf.length;
-            if (!n) { console.log(TAG, 'diag: buffer vacío'); return; }
+            if (!n) { console.log(TAG, 'diag: buffer empty'); return; }
             const rows = this.buf.filter((_, i) => i % Math.max(1, Math.floor(n / 40)) === 0);
             console.log(TAG, 'diag — ' + n + ' muestras (spr=' + this.buf.filter(x => x.spr).length + ' sprint):');
             console.table(rows);
@@ -494,7 +494,7 @@
         pack: !!globalThis.MF_EMF_PACK_FILES
     };
     const missing = Object.entries(deps).filter(([, ok]) => !ok).map(([k]) => k);
-    console.log(TAG, 'script cargado —', missing.length
-        ? 'FALTAN dependencias: ' + missing.join(', ') + ' (revisa orden en manifest)'
-        : 'dependencias OK (' + Object.keys(deps).join(', ') + ')');
+    console.log(TAG, 'script loaded —', missing.length
+        ? 'MISSING dependencies: ' + missing.join(', ') + ' (check order in manifest)'
+        : 'dependencies OK (' + Object.keys(deps).join(', ') + ')');
 })();

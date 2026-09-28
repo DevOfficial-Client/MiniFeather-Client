@@ -1,7 +1,7 @@
 (function () {
 'use strict';
 
-const TAG = '[Baritone]';
+const TAG = 'minifeather baritone';
 
 const EVENT_CONFIG = 'minifeather:baritone-config';
 const EVENT_STATE = 'minifeather:baritone-state';
@@ -1472,7 +1472,7 @@ class MinHeap {
 
             if (!state._loopErr) {
                 state._loopErr = true;
-                console.warn(`${TAG} Loop error (suprimidos los siguientes):`, err);
+                console.warn(`${TAG} loop error (following ones suppressed):`, err);
             }
         }
     }

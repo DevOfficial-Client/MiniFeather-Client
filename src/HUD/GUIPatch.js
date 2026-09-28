@@ -690,7 +690,7 @@
       if (cfg.guiBase) GUI_BASE = cfg.guiBase;
       if (cfg.enabled) enable();
       else disable();
-    } catch (err) { console.error('[GUIPatch] Error:', err); }
+    } catch (err) { console.error('minifeather guipatch error:', err); }
   });
 
   void 0;

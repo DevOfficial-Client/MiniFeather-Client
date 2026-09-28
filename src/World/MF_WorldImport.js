@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const TAG = '[MF WorldImport]';
+  const TAG = 'minifeather worldimport';
   const NBT = { END: 0, BYTE: 1, SHORT: 2, INT: 3, LONG: 4, FLOAT: 5, DOUBLE: 6, BYTE_ARRAY: 7, STRING: 8, LIST: 9, COMPOUND: 10, INT_ARRAY: 11, LONG_ARRAY: 12 };
   const Y_MIN = -64;
   const Y_MAX = 320;
@@ -173,7 +173,7 @@
         const sx = Number(d?.SpawnX), sy = Number(d?.SpawnY), sz = Number(d?.SpawnZ);
         if ([sx, sy, sz].every(Number.isFinite)) spawn = { x: sx, y: sy, z: sz };
       } catch (e) {
-        console.warn(TAG, 'level.dat ignorado:', e?.message || e);
+        console.warn(TAG, 'level.dat ignored:', e?.message || e);
       }
     }
 
@@ -222,7 +222,7 @@
             }
           }
           if (allBlocks.length > MAX_BLOCKS * 4) {
-            console.warn(TAG, 'límite de bloques alcanzado, truncando');
+            console.warn(TAG, 'block limit reached, truncating');
             allBlocks.length = MAX_BLOCKS * 4;
             break;
           }

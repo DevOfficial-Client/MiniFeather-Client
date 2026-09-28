@@ -16,7 +16,7 @@
     }
     document.addEventListener('minifeather:language-config', onLanguageConfig);
 
-    const TAG = '[MiniFeather WorldMap]';
+    const TAG = 'minifeather worldmap';
 
     if (window.__MF_WORLD_MAP__) return;
     window.__MF_WORLD_MAP__ = true;

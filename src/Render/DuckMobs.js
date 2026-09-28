@@ -1,7 +1,7 @@
 
 (function () {
     'use strict';
-    const TAG = '[MiniFeather Ducks]';
+    const TAG = 'minifeather ducks';
     if (globalThis.MF_DuckMobs) return;
 
     const CFG = {
@@ -383,7 +383,7 @@
         }
         if (n) {
             state.flockCenters.push({ x: spot.x, z: spot.z });
-            console.log(TAG + ' parvada de ' + n + ' ' + (sp.key === 'goose' ? 'gansos' : 'patos') + ' rumbo ' + ((dir * 180 / Math.PI) | 0) + 'deg');
+            console.log(TAG + ' parvada de ' + n + ' ' + (sp.key === 'goose' ? 'geese' : 'ducks') + ' heading ' + ((dir * 180 / Math.PI) | 0) + 'deg');
         }
         return n;
     }
@@ -718,7 +718,7 @@
         start() {
             if (state.enabled) return true;
             if (!globalThis.MF_CustomModels) {
-                console.warn(TAG + ' requiere MF_CustomModels (CustomModels.js)');
+                console.warn(TAG + ' requires MF_CustomModels (CustomModels.js)');
                 return false;
             }
             state.enabled = true;
@@ -726,7 +726,7 @@
             state.lastT = performance.now();
             state.nextFlock = 0;
             schedule();
-            console.log(TAG + ' activado (parvadas de patos y gansos)');
+            console.log(TAG + ' enabled (duck and goose flocks)');
             return true;
         },
         stop() {
@@ -734,7 +734,7 @@
             state.stamp.alive = false;
             for (const mob of [...state.mobs]) removeMob(mob);
             state.nextFlock = 0;
-            console.log(TAG + ' desactivado');
+            console.log(TAG + ' disabled');
         },
         count() { return state.mobs.length; },
         counts() {

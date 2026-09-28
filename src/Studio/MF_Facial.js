@@ -2,7 +2,7 @@
 (function () {
     'use strict';
     if (window.__MF_Facial) return;
-    const TAG = '[MF Facial]';
+    const TAG = 'minifeather facial';
 
     const ID = 'mf-facial';
     const LS_KEY = 'minifeather_facials_v1';

@@ -4,7 +4,7 @@
     if (window.__MF_FILMCAMERA__) return;
     window.__MF_FILMCAMERA__ = true;
 
-    const TAG = '[MF_FilmCamera]';
+    const TAG = 'minifeather filmcamera';
     const TPS = 20;
     const LS_KEY = 'minifeather_filmcamera_v1';
 
@@ -103,7 +103,7 @@
     function saveClips() {
         try {
             localStorage.setItem(LS_KEY, JSON.stringify({ version: 1, clips: state.clips }));
-        } catch (e) { console.warn(TAG, 'saveClips (¿lleno?):', e?.message || e); }
+        } catch (e) { console.warn(TAG, 'saveClips (full?):', e?.message || e); }
     }
     state.clips = loadClips();
 

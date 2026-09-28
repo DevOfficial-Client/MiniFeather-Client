@@ -394,7 +394,7 @@
     }
     function setLog(enabled) {
         LOG.enabled = enabled === true;
-        console.log('[MF_EMFRuntime] logging ' + (LOG.enabled ? 'ON' : 'OFF'));
+        console.log('minifeather emfruntime logging ' + (LOG.enabled ? 'ON' : 'OFF'));
         return LOG.enabled;
     }
     function dumpLog() {
@@ -407,7 +407,7 @@
             eventCounts: byType,
             recent: LOG.list.slice(-30)
         };
-        console.log('[MF_EMFRuntime] dump:', summary);
+        console.log('minifeather emfruntime dump:', summary);
         return summary;
     }
 
@@ -415,7 +415,7 @@
         LOG.list.length = 0;
         LOG.unknownEnv.clear();
         LOG.evalCalls = 0;
-        console.log('[MF_EMFRuntime] logs limpiados');
+        console.log('minifeather emfruntime logs cleared');
     }
     globalThis.MF_EMFRuntime = {
         FrameContext,

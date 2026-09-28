@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    const TAG = '[MiniFeather CustomModels]';
+    const TAG = 'minifeather custommodels';
     const state = {
         enabled: true,
         mappings: {},
@@ -103,7 +103,7 @@
                 try { game?.world?.entities?.forEach?.(check); } catch {}
                 try { for (const p of game?.world?.playersIterator?.() ?? []) check(p); } catch {}
                 if (!appliedCount) void 0;
-            } catch (e) { console.warn(TAG + ' applied scan fallo: ' + e); }
+            } catch (e) { console.warn(TAG + ' applied scan failed: ' + e); }
 
             for (const rec of state.customs.values()) {
                 rows.push({
@@ -222,7 +222,7 @@
             loadModel(modelFile, rec.texture).then((built) => {
                 const game = getGame();
                 const scene = game?.gameScene?.scene;
-                if (!scene) { console.warn(TAG + ' no hay escena para ' + id); return; }
+                if (!scene) { console.warn(TAG + ' no scene for ' + id); return; }
                 if (state.customs.get(id) !== rec) return;
                 const inst = cloneInstance(built);
                 rec.inst = inst;
@@ -270,7 +270,7 @@
                     inst.root.scale.multiplyScalar(rec.scale);
                 }
                 if (rec.anim && !inst.anims.some((a) => a.name === rec.anim)) {
-                    console.warn(TAG + ' anim "' + rec.anim + '" no existe en ' + modelFile + '. Disponibles: ' + inst.anims.map((a) => a.name).join(', '));
+                    console.warn(TAG + ' anim "' + rec.anim + '" not found in ' + modelFile + '. available: ' + inst.anims.map((a) => a.name).join(', '));
                     rec.anim = null;
                 }
                 rec.animStart = performance.now();
@@ -311,9 +311,9 @@
 
                 const msg = String(e?.message || e);
                 const hint = /Failed to fetch/.test(msg)
-                    ? ' (extension recargada? refresca la pagina de miniblox; o el archivo no existe en models/entities/)'
+                    ? ' (extension recargada? refresca la pagina de miniblox; o el archivo not found in models/entities/)'
                     : '';
-                console.warn(TAG + ' fallo spawn "' + id + '" [' + modelFile + ']: ' + msg + hint);
+                console.warn(TAG + ' spawn failed "' + id + '" [' + modelFile + ']: ' + msg + hint);
                 state.customs.delete(id);
             });
             return id;
@@ -324,7 +324,7 @@
             if (!rec.inst) { rec.anim = animName; return true; }
             const resolved = animName ? (findAnim(rec.inst, animName) || animName) : null;
             if (animName && resolved !== animName && !rec.inst.anims.some((a) => a.name === resolved)) {
-                console.warn(TAG + ' anim "' + animName + '" no existe. Disponibles: ' + rec.inst.anims.map((a) => a.name).join(', '));
+                console.warn(TAG + ' anim "' + animName + '" not found. available: ' + rec.inst.anims.map((a) => a.name).join(', '));
                 return false;
             }
             if (!resolved) { restoreRest(rec.inst); }
@@ -556,7 +556,7 @@
         },
         followVerity(offset = 1.8, opts = {}) {
             const p = getGame()?.player?.pos;
-            if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
+            if (!p) { console.warn(TAG + ' no player yet'); return null; }
             if (state.customs.has('verity')) MF_CustomModels.despawn('verity');
             const res = MF_CustomModels.spawn('verity_full_model.glb', p.x + offset, p.y, p.z, {
                 id: 'verity',
@@ -575,7 +575,7 @@
 
         spawnIaBox(offset = 2, opts = {}) {
             const p = getGame()?.player?.pos;
-            if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
+            if (!p) { console.warn(TAG + ' no player yet'); return null; }
             if (state.customs.has('verity')) MF_CustomModels.despawn('verity');
             if (state.customs.has('caja_intro')) MF_CustomModels.despawn('caja_intro');
 
@@ -670,7 +670,7 @@
         },
         spawnBox(offset = 2, opts = {}) {
             const p = getGame()?.player?.pos;
-            if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
+            if (!p) { console.warn(TAG + ' no player yet'); return null; }
             if (state.customs.has('caja')) MF_CustomModels.despawn('caja');
             const res = MF_CustomModels.spawn('box.geo.json', p.x + offset, p.y, p.z, {
                 id: 'caja',
@@ -685,7 +685,7 @@
 
         spawnHorse(offset = 2, opts = {}) {
             const p = getGame()?.player?.pos;
-            if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
+            if (!p) { console.warn(TAG + ' no player yet'); return null; }
             if (state.customs.has('caballo')) MF_CustomModels.despawn('caballo');
             return MF_CustomModels.spawn('minecraft_-_horse.glb', p.x + offset, p.y, p.z, {
                 id: 'caballo',
@@ -704,7 +704,7 @@
 
         spawnMaternal(offset = 4, opts = {}) {
             const p = getGame()?.player?.pos;
-            if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
+            if (!p) { console.warn(TAG + ' no player yet'); return null; }
             if (state.customs.has('maternal')) MF_CustomModels.despawn('maternal', true);
             return MF_CustomModels.spawn('oldest_maternal_wraith.glb', p.x + offset, p.y + 2, p.z, {
                 id: 'maternal',
@@ -732,7 +732,7 @@
 
         spawnStalker(offset = 12, opts = {}) {
             const p = getGame()?.player?.pos;
-            if (!p) { console.warn(TAG + ' no hay player aun'); return null; }
+            if (!p) { console.warn(TAG + ' no player yet'); return null; }
             if (state.customs.has('stalker')) MF_CustomModels.despawn('stalker');
             const rec = MF_CustomModels.spawn('stalker_3d_angry.glb', p.x + offset, p.y + 1, p.z, {
                 id: 'stalker',
@@ -781,7 +781,7 @@
             await audio.play();
             void 0;
         } catch (err) {
-            console.warn(TAG + ' intro falló: ' + (err?.message || err));
+            console.warn(TAG + ' intro failed: ' + (err?.message || err));
         }
     }
 
@@ -838,7 +838,7 @@
             }
         };
         walk(cam);
-        if (purged) console.warn(TAG + ' purgados ' + purged + ' objetos pegados a la camara');
+        if (purged) console.warn(TAG + ' purged ' + purged + ' objects stuck to camera');
     }
 
     function grabCtors() {
@@ -876,7 +876,7 @@
                 const si = sm.geometry?.attributes?.skinIndex;
                 c.skinIndexCtor = si?.array?.constructor || null;
                 c.skinIndexNorm = !!si?.normalized;
-                console.log(TAG + ' skinIndex del jugador: ' + (c.skinIndexCtor?.name || '?') +
+                console.log(TAG + ' player skinIndex: ' + (c.skinIndexCtor?.name || '?') +
                     ' normalized=' + c.skinIndexNorm + ' (morph=' + !!sm.morphTargetInfluences + ')');
             } catch { c.skinIndexCtor = null; c.skinIndexNorm = false; }
             state.skinCtors = c;
@@ -1171,7 +1171,7 @@
             if (pbr.baseColorTexture != null) {
                 const tex = await getTextureFor(parsed, pbr.baseColorTexture.index, ctors);
                 if (tex) mat.map = tex;
-                else console.warn(TAG + ' textura base #' + pbr.baseColorTexture.index + ' del material "' + (matDef.name || '?') + '" no se pudo decodificar (queda blanco)');
+                else console.warn(TAG + ' textura base #' + pbr.baseColorTexture.index + ' del material "' + (matDef.name || '?') + '" could not be decoded (stays white)');
             }
             if (pbr.baseColorFactor && 'color' in mat && mat.color?.setRGB) {
                 const [r, g, b, a] = pbr.baseColorFactor;
@@ -1356,7 +1356,7 @@
             console.info(TAG + ' cpu-skin "' + (m2.name || '?') + '": ' + joints.length + ' joints, ' + nv + ' verts'
                 + ' — autotest reposo (IBM): verts vs W·IBM máx ' + vErr.toFixed(4)
                 + (vErr < 0.01 ? ' ✔ bind pose correcta' : ' ✘ REVISAR IBM'));
-        } catch (e) { console.warn(TAG + ' autotest cpu-skin falló: ' + (e?.message || e)); }
+        } catch (e) { console.warn(TAG + ' cpu-skin autotest failed: ' + (e?.message || e)); }
         m2.userData.__mfCpu = true;
         try { m2.frustumCulled = false; } catch {}
         parent.add(m2);
@@ -1540,7 +1540,7 @@
                         + ' | jt.pos=[' + jp.x.toFixed(2) + ',' + jp.y.toFixed(2) + ',' + jp.z.toFixed(2) + '] jt.q=(' + jq.x.toFixed(2) + ',' + jq.y.toFixed(2) + ',' + jq.z.toFixed(2) + ',' + jq.w.toFixed(2) + ')'
                         + ' | jtW_t=[' + f(wj) + '] rootW_t=[' + f(rw) + ']'
                         + (Math.abs(kRecT - anyT) < 1 ? ' — K ok: inputs raros' : ' — ¡K GUARDADO ≠ K RECALCULADO!'));
-                } catch (e) { console.warn(TAG + ' autopsia falló: ' + (e?.message || e)); }
+                } catch (e) { console.warn(TAG + ' autopsy failed: ' + (e?.message || e)); }
             }
         }
     }
@@ -1573,7 +1573,7 @@
         } catch {}
         try { sm.updateMatrixWorld(true); } catch {}
         try { sm.bind(skel, sm.matrixWorld); } catch (e) {
-            console.warn(TAG + ' skinning real falló en bind(): ' + (e?.message || e));
+            console.warn(TAG + ' real skinning failed in bind(): ' + (e?.message || e));
             return false;
         }
         parent.add(sm);
@@ -1736,8 +1736,8 @@
             try { root.updateMatrixWorld(true); } catch {}
             for (const sp of skinPending) {
                 let ok = false;
-                if (skinCtors) { try { ok = attachRealSkin(parsed, gltf, sp, groups, skinCtors); } catch (e) { console.warn(TAG + ' skinning real explotó: ' + (e?.message || e)); } }
-                if (!ok) { try { ok = attachCpuSkin(parsed, gltf, sp, groups, ctors); } catch (e) { console.warn(TAG + ' cpu skin explotó: ' + (e?.message || e)); } }
+                if (skinCtors) { try { ok = attachRealSkin(parsed, gltf, sp, groups, skinCtors); } catch (e) { console.warn(TAG + ' real skinning crashed: ' + (e?.message || e)); } }
+                if (!ok) { try { ok = attachCpuSkin(parsed, gltf, sp, groups, ctors); } catch (e) { console.warn(TAG + ' cpu skin crashed: ' + (e?.message || e)); } }
                 if (!ok) { try { attachRigidSkin(parsed, gltf, sp, groups, ctors); } catch {} }
             }
         }
@@ -1788,12 +1788,12 @@
             } catch (e) {
                 const msg = String(e?.message || e);
                 if (/Extension context invalidated/i.test(msg)) {
-                    console.warn(TAG + ' la extensión se recargó pero la página no: hacé F5 en miniblox.io para que los modelos vuelvan a cargar.');
-                    throw new Error('contexto de extensión invalidado — recargá la página (F5)');
+                    console.warn(TAG + " extension reloaded but page didn't: press F5 on miniblox.io so models load again.");
+                    throw new Error('extension context invalidated - reload the page (F5)');
                 }
-                throw new Error('no se encontro "' + file + '" en models/entities/ (fetch ' + msg + ')');
+                throw new Error('"' + file + '" not found in models/entities/ (fetch ' + msg + ')');
             }
-            if (!resp.ok) throw new Error('HTTP ' + resp.status + ' para ' + file);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status + ' for ' + file);
             return resp.arrayBuffer();
         }
         const url = await bridgeFetchUrl(file);
@@ -2386,7 +2386,7 @@
                 for (let k = 0; k < times.length; k++) {
                     if (!Number.isFinite(times[k])) { times[k] = 0; bad++; }
                 }
-                if (bad) console.warn(TAG + ' anim "' + (a.name || '?') + '" track nodo ' + nodeIdx + ': ' + bad + ' keyframes corruptos reparados');
+                if (bad) console.warn(TAG + ' anim "' + (a.name || '?') + '" track nodo ' + nodeIdx + ': ' + bad + ' corrupt keyframes repaired');
                 const maxT = tAcc.max ? tAcc.max[0] : (times.length ? times[times.length - 1] : 0);
                 if (maxT > duration) duration = maxT;
                 tracks.push({ nodeIdx, path, times, values, interp: smp.interpolation || 'LINEAR', comps: path === 'rotation' ? 4 : 3 });
@@ -2454,7 +2454,7 @@
                 });
                 cpuMeshes.push(o);
             });
-        } catch (e) { console.warn(TAG + ' cpu-skin clone falló: ' + (e?.message || e)); }
+        } catch (e) { console.warn(TAG + ' cpu-skin clone failed: ' + (e?.message || e)); }
 
         let headNode = null;
         try {
@@ -2528,7 +2528,7 @@
                         if (!isFinite(v) || v > 100 || v < 0) {
                             if (!inst.dbg.has('scale' + tr.nodeIdx)) {
                                 inst.dbg.add('scale' + tr.nodeIdx);
-                                console.warn(TAG + ' anim "' + animName + '" escala fuera de rango en nodo ' + tr.nodeIdx + ' (' + v.toFixed(2) + '), usando rest');
+                                console.warn(TAG + ' anim "' + animName + '" scale out of range on node ' + tr.nodeIdx + ' (' + v.toFixed(2) + '), using rest');
                             }
                             const rs = inst.restScale.get(g);
                             if (rs) v = c === 0 ? rs.x : c === 1 ? rs.y : rs.z;
@@ -2540,7 +2540,7 @@
         }
         if (missing && !inst.dbg.has('animmiss' + animName)) {
             inst.dbg.add('animmiss' + animName);
-            console.warn(TAG + ' anim "' + animName + '": ' + missing + '/' + anim.tracks.length + ' tracks sin nodo destino (esos huesos no se animan)');
+            console.warn(TAG + " anim \"" + animName + '": ' + missing + '/' + anim.tracks.length + " tracks without target node (those bones won't animate)");
         }
         return true;
     }
@@ -2631,7 +2631,7 @@
             const animInfo = animState ? ' anim="' + animState.name + '"' : (inst.anims.length ? ' (' + inst.anims.length + ' anims: ' + inst.anims.map((a) => a.name).join(', ') + ')' : '');
             void 0;
         }).catch((e) => {
-            console.warn(TAG + ' fallo ' + name + ' -> ' + file + ': ' + (e?.message || e));
+            console.warn(TAG + ' failed ' + name + ' -> ' + file + ': ' + (e?.message || e));
         }).finally(() => state.loading.delete(key));
     }
 
@@ -3203,7 +3203,7 @@
                     forceVisibleDeep(root);
                     if (!rec.reattachWarned) {
                         rec.reattachWarned = true;
-                        console.warn(TAG + ' "' + rec.id + '" desmontada de la escena; re-adjuntada.');
+                        console.warn(TAG + ' "' + rec.id + '" detached from scene; re-attached.');
                     }
                 }
                 if (!rec._visAt || t - rec._visAt > 500) {

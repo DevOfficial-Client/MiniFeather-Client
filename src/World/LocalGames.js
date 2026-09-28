@@ -76,7 +76,7 @@
   const LOCAL_TERRAIN_RADIUS_CHUNKS = 7;
   const LOCAL_LOOP_INTERVAL_MS = 50;
 
-  const LOG_PREFIX = '[MiniFeather LocalGames]';
+  const LOG_PREFIX = 'minifeather localgames';
   const LOG_LEVEL = (() => {
     try {
       const raw = String(localStorage.getItem('mflg:log') || '').toLowerCase();
@@ -1264,7 +1264,7 @@
           synchronizeLocalCamera(game);
           patchGameSceneUpdateForLocal(game);
         } catch (err) {
-          logError('renderLoop watchdog: fallo al reparar escena:', err);
+          logError('renderLoop watchdog: failed al reparar escena:', err);
         }
       }));
     }, 2000);
@@ -2768,7 +2768,7 @@
 
         console.warn(
           LOG_PREFIX,
-          'ensureWorldAssets timeout (continuando):',
+          'ensureWorldAssets timeout (continuing):',
           assetTimeout?.message || assetTimeout
         );
       });
@@ -5851,7 +5851,7 @@
           if (response.ok) gardenData = await response.json();
           else log('garden: asset HTTP', response.status);
         } catch (error) {
-          log('garden: fallo el asset embebido:', error?.message || error);
+          log('garden: failed el asset embebido:', error?.message || error);
         }
       }
       if (!gardenData) {
