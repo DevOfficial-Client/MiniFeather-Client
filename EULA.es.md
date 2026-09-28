@@ -1,7 +1,7 @@
 # Acuerdo de Licencia de Usuario Final (EULA) — MiniFeather Client
 
-**Versión del acuerdo:** 1.0
-**Fecha de entrada en vigor:** 27 de septiembre de 2026
+**Versión del acuerdo:** 1.1
+**Fecha de entrada en vigor:** 28 de septiembre de 2026
 **Producto:** MiniFeather Client (extensión de navegador para Google Chrome / Chromium, MV3)
 **Desarrolladores:** botless, AngryWolfX, ShusukeGxE_, Not_Senpai, ItzNightrise ("el Equipo de Desarrollo", "nosotros")
 
@@ -67,6 +67,8 @@ El Cliente incluye funcionalidades que automatizan acciones del juego o alteran 
 
 4.2. El Equipo de Desarrollo **no otorga ninguna garantía de que el uso del Software no resulte en la suspensión, restricción o eliminación de la cuenta del Usuario en Miniblox o cualquier servicio de terceros**.
 
+4.3. Antes de activar determinados módulos de alto riesgo, el Cliente puede mostrar una advertencia adicional y exigir que el Usuario acepte los riesgos indicados. Cerrar o rechazar esa advertencia impide la activación. Elegir «aceptar y no volver a mostrar» guarda esa decisión localmente. La aceptación no significa que el servidor permita el módulo, no garantiza protección frente a sanciones y no traslada la responsabilidad del Usuario.
+
 ---
 
 ## 5. Privacidad y tratamiento de datos
@@ -77,7 +79,7 @@ El Software funciona **sin cuentas propias ni servidores propios**. Sin embargo,
 
 Se guardan en el almacenamiento local del navegador (`localStorage`, `IndexedDB`, `chrome.storage.local`), **sin cifrar**:
 
-- Preferencias y configuración del Cliente (equivalentes a `defaults.json`), idioma, colores, atajos de teclado.
+- Preferencias y configuración del Cliente (equivalentes a `defaults.json`), idioma, colores, atajos de teclado y avisos de riesgo de módulos aceptados localmente.
 - Waypoints (nombres de servidor/mundo, coordenadas, colores).
 - Apodos asignados a amigos (UUID y nombre de usuario de Miniblox).
 - Skins y packs de caras importados (imágenes PNG en base64), packs de texturas y modelos.

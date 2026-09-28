@@ -1,7 +1,7 @@
 # End User License Agreement (EULA) — MiniFeather Client
 
-**Agreement version:** 1.0
-**Effective date:** September 27, 2026
+**Agreement version:** 1.1
+**Effective date:** September 28, 2026
 **Product:** MiniFeather Client (browser extension for Google Chrome / Chromium, MV3)
 **Developers:** botless, AngryWolfX, ShusukeGxE_, Not_Senpai, ItzNightrise ("the Development Team", "we")
 
@@ -67,6 +67,8 @@ The Client includes features that automate game actions or alter the information
 
 4.2. The Development Team **gives no warranty that the use of the Software will not result in the suspension, restriction or deletion of the User's account on Miniblox or any third-party service**.
 
+4.3. Before enabling certain high-risk modules, the Client may display an additional warning and require the User to accept the stated risks. Closing or rejecting that warning prevents activation. Choosing “accept and do not show again” stores that choice locally. Acceptance does not mean that a server permits the module, does not guarantee protection from sanctions, and does not transfer responsibility away from the User.
+
 ---
 
 ## 5. Privacy and data handling
@@ -77,7 +79,7 @@ The Software operates **without its own accounts or its own servers**. However, 
 
 Stored in the browser's local storage (`localStorage`, `IndexedDB`, `chrome.storage.local`), **unencrypted**:
 
-- Client preferences and configuration (equivalent to `defaults.json`), language, colors, keybinds.
+- Client preferences and configuration (equivalent to `defaults.json`), language, colors, keybinds, and locally accepted module-risk warnings.
 - Waypoints (server/world names, coordinates, colors).
 - Nicknames assigned to friends (Miniblox UUID and username).
 - Imported skins and face packs (base64 PNG images), texture packs and models.

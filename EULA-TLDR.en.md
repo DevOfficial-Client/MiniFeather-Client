@@ -42,6 +42,7 @@ if you're one of the good ones: thank you, from the bottom of our hearts. you're
 ## 3. what you should not do with the client ٩(◕‿◕)ノ
 
 - **don't use it for unfair advantage on competitive servers.** baritone, bots, anti-afk and friends: use them in your own world, with your friends, where the server allows it. if you get banned for cheating in ranked pvp... well... ¯\\\_(ツ)\_/¯
+- high-risk modules show a warning before activation. closing it cancels activation; “don't show again” saves your acceptance in the browser. **accepting the warning does not mean the server permits the module or prevent a ban.**
 - **don't sell the client or modified copies** passing them off as official. that's just ugly.
 - **don't bypass anticheats, payments or security systems.** we're not that kind of project.
 - **don't harass anyone.** not with ai, not with bots, not with anything. be a good blob citizen. (｡•́︿•̀｡)

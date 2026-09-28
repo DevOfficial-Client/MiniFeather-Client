@@ -660,6 +660,21 @@
     return Math.round(score);
   }
 
+  const SUPPORTED_LANGUAGES = Object.freeze(['en', 'es', 'ja', 'it', 'zh', 'fr', 'de', 'pt', 'ru', 'ko']);
+
+  function normalizeClientLanguage(value) {
+    const primary = String(value || '').trim().toLowerCase().split(/[-_]/)[0];
+    return SUPPORTED_LANGUAGES.includes(primary) ? primary : 'en';
+  }
+
+  function detectClientLanguage() {
+    try {
+      return normalizeClientLanguage(navigator.language || navigator.userLanguage || 'en');
+    } catch (_) {
+      return 'en';
+    }
+  }
+
   const DEFAULT_SETTINGS = {
     rebrand: true,
     classicTitle: false,
@@ -700,6 +715,7 @@
     idlePlayerBot: false,
     idlePlayerCount: 1,
     idlePlayerTarget: '',
+    moduleRiskAcknowledgements: {},
     patPatPreset: 'normal',
     patPatValues: clonePatPatValues(),
     zoom: false,
@@ -805,7 +821,7 @@
     experimentalBetterAnimationCape: false,
     experimentalPbr: false,
 
-    language: 'en'
+    language: detectClientLanguage()
   };
 
   function normalizePanelColor(value, fallback) {
@@ -850,6 +866,82 @@
   }
 
   const TRANSLATIONS = globalThis.MINIFEATHER_TRANSLATIONS || { en: {} };
+
+  const RISK_WARNING_TRANSLATIONS = Object.freeze({
+    en: {
+      title: 'High-risk module',
+      badge: 'EXTREME RISK',
+      body: 'Idle Player creates server-visible guest connections. Using it may violate server rules and can result in restrictions, suspension, or a ban.',
+      recommendation: 'MiniFeather does not recommend this module. Continue only if you understand and accept the risks.',
+      acceptOnce: 'Accept risks and enable',
+      acceptAlways: "Accept and don't show again",
+      close: 'Close without enabling',
+      cancelled: 'Activation cancelled because the risks were not accepted.'
+    },
+    es: {
+      title: 'Módulo de alto riesgo', badge: 'RIESGO EXTREMO',
+      body: 'Idle Player crea conexiones invitadas visibles para el servidor. Su uso puede incumplir las reglas y provocar restricciones, suspensión o un baneo.',
+      recommendation: 'MiniFeather no recomienda este módulo. Continúa sólo si entiendes y aceptas los riesgos.',
+      acceptOnce: 'Aceptar riesgos y activar', acceptAlways: 'Aceptar y no volver a mostrar',
+      close: 'Cerrar sin activar', cancelled: 'La activación se canceló porque no se aceptaron los riesgos.'
+    },
+    ja: {
+      title: '高リスクモジュール', badge: '極めて高いリスク',
+      body: 'Idle Player はサーバーから見えるゲスト接続を作成します。サーバールールに違反し、制限、停止、BAN の対象になる可能性があります。',
+      recommendation: 'MiniFeather はこのモジュールを推奨しません。リスクを理解し、同意する場合のみ続行してください。',
+      acceptOnce: 'リスクに同意して有効化', acceptAlways: '同意して今後表示しない',
+      close: '有効化せず閉じる', cancelled: 'リスクに同意しなかったため、有効化を中止しました。'
+    },
+    it: {
+      title: 'Modulo ad alto rischio', badge: 'RISCHIO ESTREMO',
+      body: 'Idle Player crea connessioni ospite visibili al server. L’uso può violare le regole e causare restrizioni, sospensione o ban.',
+      recommendation: 'MiniFeather sconsiglia questo modulo. Continua solo se comprendi e accetti i rischi.',
+      acceptOnce: 'Accetta i rischi e attiva', acceptAlways: 'Accetta e non mostrare più',
+      close: 'Chiudi senza attivare', cancelled: 'Attivazione annullata perché i rischi non sono stati accettati.'
+    },
+    zh: {
+      title: '高风险模块', badge: '极高风险',
+      body: 'Idle Player 会创建服务器可见的访客连接。使用它可能违反服务器规则，并导致限制、停用或封禁。',
+      recommendation: 'MiniFeather 不建议使用此模块。仅在理解并接受风险后继续。',
+      acceptOnce: '接受风险并启用', acceptAlways: '接受且不再显示',
+      close: '关闭且不启用', cancelled: '由于未接受风险，已取消启用。'
+    },
+    fr: {
+      title: 'Module à haut risque', badge: 'RISQUE EXTRÊME',
+      body: 'Idle Player crée des connexions invité visibles par le serveur. Son utilisation peut enfreindre les règles et entraîner des restrictions, une suspension ou un bannissement.',
+      recommendation: 'MiniFeather déconseille ce module. Continuez uniquement si vous comprenez et acceptez les risques.',
+      acceptOnce: 'Accepter les risques et activer', acceptAlways: 'Accepter et ne plus afficher',
+      close: 'Fermer sans activer', cancelled: 'Activation annulée car les risques n’ont pas été acceptés.'
+    },
+    de: {
+      title: 'Hochrisiko-Modul', badge: 'EXTREMES RISIKO',
+      body: 'Idle Player erstellt für den Server sichtbare Gastverbindungen. Die Nutzung kann gegen Serverregeln verstoßen und zu Einschränkungen, Sperrung oder Bann führen.',
+      recommendation: 'MiniFeather empfiehlt dieses Modul nicht. Fahre nur fort, wenn du die Risiken verstehst und akzeptierst.',
+      acceptOnce: 'Risiken akzeptieren und aktivieren', acceptAlways: 'Akzeptieren und nicht mehr anzeigen',
+      close: 'Schließen ohne Aktivierung', cancelled: 'Aktivierung abgebrochen, da die Risiken nicht akzeptiert wurden.'
+    },
+    pt: {
+      title: 'Módulo de alto risco', badge: 'RISCO EXTREMO',
+      body: 'Idle Player cria conexões de convidado visíveis para o servidor. O uso pode violar regras e resultar em restrições, suspensão ou banimento.',
+      recommendation: 'A MiniFeather não recomenda este módulo. Continue apenas se compreender e aceitar os riscos.',
+      acceptOnce: 'Aceitar riscos e ativar', acceptAlways: 'Aceitar e não mostrar novamente',
+      close: 'Fechar sem ativar', cancelled: 'A ativação foi cancelada porque os riscos não foram aceitos.'
+    },
+    ru: {
+      title: 'Модуль высокого риска', badge: 'КРАЙНЕ ВЫСОКИЙ РИСК',
+      body: 'Idle Player создаёт гостевые подключения, видимые серверу. Использование может нарушать правила и привести к ограничениям, блокировке или бану.',
+      recommendation: 'MiniFeather не рекомендует этот модуль. Продолжайте, только если понимаете и принимаете риски.',
+      acceptOnce: 'Принять риски и включить', acceptAlways: 'Принять и больше не показывать',
+      close: 'Закрыть без включения', cancelled: 'Включение отменено: риски не были приняты.'
+    },
+    ko: {
+      title: '고위험 모듈', badge: '극도로 높은 위험',
+      body: 'Idle Player는 서버에 표시되는 게스트 연결을 만듭니다. 서버 규칙을 위반하여 제한, 정지 또는 차단될 수 있습니다.',
+      recommendation: 'MiniFeather는 이 모듈 사용을 권장하지 않습니다. 위험을 이해하고 동의하는 경우에만 계속하세요.',
+      acceptOnce: '위험 동의 후 활성화', acceptAlways: '동의하고 다시 표시하지 않기',
+      close: '활성화하지 않고 닫기', cancelled: '위험에 동의하지 않아 활성화가 취소되었습니다.'
+    }
+  });
 
   const LOGO_ALT_NAMES = ['miniblox'];
   const LOGO_SOURCE_NAMES = ['miniblox-icon', 'miniblox-logo', 'pwa-icon-192.png'];
@@ -897,6 +989,8 @@
   let idlePlayerBotState = { phase: 'idle', connected: false, error: '', serverId: '', playerName: '', bots: [], connectedCount: 0, maxBots: 16 };
   let clientChatState = null;
   let destroyed = false;
+  let moduleRiskPrompt = null;
+  const sessionRiskAcceptances = new Set();
 
   const MODULES = new Map();
   const ORIGINALS = {
@@ -968,6 +1062,99 @@
     const fallback = TRANSLATIONS.en[key] || key;
     let value = table[key] || fallback;
     return value.replace(/\{(\w+)\}/g, (_, token) => token in vars ? vars[token] : '');
+  }
+
+  function riskText(key) {
+    const language = normalizeClientLanguage(settings.language);
+    return (RISK_WARNING_TRANSLATIONS[language] || RISK_WARNING_TRANSLATIONS.en)[key] || RISK_WARNING_TRANSLATIONS.en[key] || key;
+  }
+
+  function hasPermanentRiskAcceptance(key) {
+    return settings.moduleRiskAcknowledgements?.[key] === true;
+  }
+
+  function injectRiskWarningStyles() {
+    if (document.getElementById('mf-risk-warning-style')) return;
+    const style = document.createElement('style');
+    style.id = 'mf-risk-warning-style';
+    style.textContent = `
+      .mf-risk-warning-backdrop{position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;padding:18px;background:rgba(2,4,8,.82);backdrop-filter:blur(7px);font-family:Inter,system-ui,-apple-system,sans-serif;color:#f8fafc}
+      .mf-risk-warning{position:relative;width:min(520px,calc(100vw - 36px));overflow:hidden;border:1px solid rgba(248,113,113,.42);border-radius:16px;background:linear-gradient(155deg,#211116 0%,#12141b 48%,#0c0f14 100%);box-shadow:0 24px 80px rgba(0,0,0,.68),0 0 35px rgba(239,68,68,.13)}
+      .mf-risk-warning::before{content:'';position:absolute;inset:0 0 auto;height:4px;background:linear-gradient(90deg,#ef4444,#f97316,#ef4444)}
+      .mf-risk-warning-head{display:flex;align-items:flex-start;gap:13px;padding:23px 56px 14px 22px}.mf-risk-warning-icon{flex:0 0 auto;width:42px;height:42px;display:grid;place-items:center;border-radius:11px;background:rgba(239,68,68,.16);border:1px solid rgba(248,113,113,.35);color:#fca5a5;font-size:25px;font-weight:900}
+      .mf-risk-warning-title{margin:1px 0 5px;font-size:20px;line-height:1.2;font-weight:900}.mf-risk-warning-badge{display:inline-flex;padding:4px 8px;border-radius:999px;background:rgba(239,68,68,.17);border:1px solid rgba(248,113,113,.3);color:#fca5a5;font-size:10px;font-weight:900;letter-spacing:.08em}
+      .mf-risk-warning-close{position:absolute;top:15px;right:15px;width:32px;height:32px;border:0;border-radius:8px;background:rgba(255,255,255,.07);color:#e5e7eb;font-size:22px;line-height:1;cursor:pointer}.mf-risk-warning-close:hover{background:rgba(239,68,68,.2);color:#fff}
+      .mf-risk-warning-copy{padding:0 22px 19px;color:#d6d9e0;font-size:13px;line-height:1.58}.mf-risk-warning-copy p{margin:0 0 10px}.mf-risk-warning-copy strong{color:#fca5a5}
+      .mf-risk-warning-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:16px 22px 22px;border-top:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.16)}
+      .mf-risk-warning-button{min-height:43px;padding:9px 12px;border-radius:9px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:#f8fafc;font:inherit;font-size:12px;font-weight:800;cursor:pointer}.mf-risk-warning-button:hover{background:rgba(255,255,255,.12)}.mf-risk-warning-button.primary{border-color:rgba(248,113,113,.55);background:#b91c1c}.mf-risk-warning-button.primary:hover{background:#dc2626}
+      @media(max-width:560px){.mf-risk-warning-actions{grid-template-columns:1fr}.mf-risk-warning-head{padding-left:17px}.mf-risk-warning-copy,.mf-risk-warning-actions{padding-left:17px;padding-right:17px}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function closeModuleRiskPrompt(result = false) {
+    if (!moduleRiskPrompt) return;
+    const current = moduleRiskPrompt;
+    moduleRiskPrompt = null;
+    current.cleanup();
+    current.resolve(result);
+  }
+
+  function requestModuleRiskAcceptance(key) {
+    if (key !== 'idlePlayerBot' || hasPermanentRiskAcceptance(key) || sessionRiskAcceptances.has(key)) return Promise.resolve(true);
+    if (moduleRiskPrompt) return moduleRiskPrompt.promise;
+
+    injectRiskWarningStyles();
+    let resolvePrompt;
+    const promise = new Promise(resolve => { resolvePrompt = resolve; });
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-risk-warning-backdrop';
+    backdrop.innerHTML = `
+      <section class="mf-risk-warning" role="alertdialog" aria-modal="true" aria-labelledby="mf-risk-warning-title" aria-describedby="mf-risk-warning-description">
+        <button type="button" class="mf-risk-warning-close" data-risk-close aria-label="${escapeHtml(riskText('close'))}">×</button>
+        <header class="mf-risk-warning-head">
+          <div class="mf-risk-warning-icon" aria-hidden="true">!</div>
+          <div><h2 id="mf-risk-warning-title" class="mf-risk-warning-title">${escapeHtml(riskText('title'))}</h2><span class="mf-risk-warning-badge">${escapeHtml(riskText('badge'))}</span></div>
+        </header>
+        <div id="mf-risk-warning-description" class="mf-risk-warning-copy">
+          <p><strong>${escapeHtml(t('idlePlayerBot'))}:</strong> ${escapeHtml(riskText('body'))}</p>
+          <p>${escapeHtml(riskText('recommendation'))}</p>
+        </div>
+        <footer class="mf-risk-warning-actions">
+          <button type="button" class="mf-risk-warning-button" data-risk-once>${escapeHtml(riskText('acceptOnce'))}</button>
+          <button type="button" class="mf-risk-warning-button primary" data-risk-always>${escapeHtml(riskText('acceptAlways'))}</button>
+        </footer>
+      </section>`;
+
+    const onKeydown = event => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      closeModuleRiskPrompt(false);
+    };
+    const cleanup = () => {
+      document.removeEventListener('keydown', onKeydown, true);
+      backdrop.remove();
+    };
+    moduleRiskPrompt = { promise, resolve: resolvePrompt, cleanup };
+    backdrop.querySelector('[data-risk-close]')?.addEventListener('click', () => closeModuleRiskPrompt(false));
+    backdrop.querySelector('[data-risk-once]')?.addEventListener('click', () => {
+      sessionRiskAcceptances.add(key);
+      closeModuleRiskPrompt(true);
+    });
+    backdrop.querySelector('[data-risk-always]')?.addEventListener('click', () => {
+      sessionRiskAcceptances.add(key);
+      settings.moduleRiskAcknowledgements = { ...(settings.moduleRiskAcknowledgements || {}), [key]: true };
+      guiSettings.moduleRiskAcknowledgements = { ...settings.moduleRiskAcknowledgements };
+      saveSettings(true);
+      closeModuleRiskPrompt(true);
+    });
+    backdrop.addEventListener('mousedown', event => {
+      if (event.target === backdrop) closeModuleRiskPrompt(false);
+    });
+    document.addEventListener('keydown', onKeydown, true);
+    document.body.appendChild(backdrop);
+    backdrop.querySelector('[data-risk-once]')?.focus();
+    return promise;
   }
   let languageStringsJson = '';
   function buildLanguageStringsJson() {
@@ -3888,7 +4075,7 @@
     respondClientCommand(`freecam_denied_${Date.now()}`, [{ text: t('freecamNoAccess'), status: 'error' }]);
   }
 
-  function handleClientCommand(event) {
+  async function handleClientCommand(event) {
     let request = null;
     try {
       request = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
@@ -3910,6 +4097,10 @@
           settings.freecam = false;
           guiSettings.freecam = false;
           push(t('freecamNoAccess'), 'error');
+        } else if (enabling && !(await requestModuleRiskAcceptance(key))) {
+          settings[key] = false;
+          guiSettings[key] = false;
+          push(riskText('cancelled'), 'error');
         } else {
           settings[key] = enabling;
           guiSettings[key] = settings[key];
@@ -3919,6 +4110,27 @@
           if (activePage === 'dashboard') updateDashboardStats();
           push(t(settings[key] ? 'commandEnabled' : 'commandDisabled', { module: commandModuleLabel(key) }), 'success');
         }
+      }
+      respondClientCommand(requestId, response);
+      return;
+    }
+
+    if (request.action === 'idlebotConnect') {
+      const target = String(args.join(' ') || 'current').trim() || 'current';
+      if (!(await requestModuleRiskAcceptance('idlePlayerBot'))) {
+        settings.idlePlayerBot = false;
+        guiSettings.idlePlayerBot = false;
+        push(riskText('cancelled'), 'error');
+      } else {
+        settings.idlePlayerTarget = target === 'current' ? '' : target;
+        guiSettings.idlePlayerTarget = settings.idlePlayerTarget;
+        settings.idlePlayerBot = true;
+        guiSettings.idlePlayerBot = true;
+        saveSettings(true);
+        if (MODULES.get('idlePlayerBot')?.enabled) sendIdlePlayerBotCommand('connect', target);
+        else applyGuiSettings();
+        if (panel && !searchQuery.trim()) renderCurrentPageContent();
+        push(t('commandEnabled', { module: commandModuleLabel('idlePlayerBot') }), 'success');
       }
       respondClientCommand(requestId, response);
       return;
@@ -6992,11 +7204,13 @@
       favoriteButton.textContent = fav ? '★ Added' : '☆ Add';
       favoriteButton.className = `mf-feature-state ${fav ? 'enabled' : 'disabled'}`;
     };
-    enabledButton?.addEventListener('click', () => {
+    enabledButton?.addEventListener('click', async () => {
       const input = panel.querySelector(`.mf-toggle[data-key="${CSS.escape(key)}"] input`);
       if (input) { input.checked = !input.checked; input.dispatchEvent(new Event('change', { bubbles:true })); }
       else {
-        settings[key] = !settings[key]; guiSettings[key] = settings[key]; saveSettings(true); applyGuiSettings();
+        const next = !settings[key];
+        if (next && !(await requestModuleRiskAcceptance(key))) return;
+        settings[key] = next; guiSettings[key] = settings[key]; saveSettings(true); applyGuiSettings();
         renderCurrentPageContent();
       }
       sync();
@@ -8824,6 +9038,15 @@
       if (saveTimer) return;
       Object.assign(settings, incoming);
       Object.assign(guiSettings, incoming);
+      settings.language = normalizeClientLanguage(settings.language);
+      guiSettings.language = settings.language;
+      settings.moduleRiskAcknowledgements = { ...(settings.moduleRiskAcknowledgements || {}) };
+      guiSettings.moduleRiskAcknowledgements = { ...settings.moduleRiskAcknowledgements };
+      if (settings.idlePlayerBot && !hasPermanentRiskAcceptance('idlePlayerBot') && !sessionRiskAcceptances.has('idlePlayerBot')) {
+        settings.idlePlayerBot = false;
+        guiSettings.idlePlayerBot = false;
+        saveSettings(true);
+      }
       settings.idlePlayerCount = clampIdlePlayerCount(settings.idlePlayerCount);
       guiSettings.idlePlayerCount = settings.idlePlayerCount;
       settings.panelAccentColor = normalizePanelColor(settings.panelAccentColor, DEFAULT_SETTINGS.panelAccentColor);
@@ -8892,7 +9115,7 @@
       }));
     }, { signal: runtimeController?.signal });
 
-    document.addEventListener('minifeather:nsb-toggle', event => {
+    document.addEventListener('minifeather:nsb-toggle', async event => {
       let payload = null;
       try {
         payload = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
@@ -8903,6 +9126,15 @@
       const enabled = payload.enabled !== false;
       if (key === 'freecam' && enabled && !requestFreecamAccess()) {
         showFreecamDenied();
+        document.dispatchEvent(new CustomEvent('minifeather:nsb-state-data', {
+          detail: nsbStatePayload()
+        }));
+        return;
+      }
+      if (enabled && !(await requestModuleRiskAcceptance(key))) {
+        guiSettings[key] = false;
+        settings[key] = false;
+        saveSettings(true);
         document.dispatchEvent(new CustomEvent('minifeather:nsb-state-data', {
           detail: nsbStatePayload()
         }));
@@ -10204,7 +10436,7 @@
     bindAccountsControls();
 
     panel.querySelector('#mf-language-select')?.addEventListener('change', event => {
-      const language = String(event.target.value || 'en');
+      const language = normalizeClientLanguage(event.target.value);
       if (!Object.prototype.hasOwnProperty.call(TRANSLATIONS, language)) return;
       settings.language = language;
       guiSettings.language = language;
@@ -10885,8 +11117,13 @@
       saveSettings(true);
     });
 
-    panel.querySelector('#mf-idle-player-connect')?.addEventListener('click', event => {
+    panel.querySelector('#mf-idle-player-connect')?.addEventListener('click', async event => {
       event.preventDefault();
+      if (!(await requestModuleRiskAcceptance('idlePlayerBot'))) {
+        const input = panel?.querySelector('.mf-toggle[data-key="idlePlayerBot"] input');
+        if (input) input.checked = false;
+        return;
+      }
       const target = idlePlayerTarget?.value?.trim() || '';
       settings.idlePlayerTarget = target;
       guiSettings.idlePlayerTarget = target;
@@ -10926,13 +11163,28 @@
         input.checked = !input.checked;
         input.dispatchEvent(new Event('change', { bubbles: true }));
       });
-      input.addEventListener('change', () => {
+      input.addEventListener('change', async () => {
         if (key === 'freecam' && input.checked && !requestFreecamAccess()) {
           input.checked = false;
           guiSettings.freecam = false;
           settings.freecam = false;
           saveSettings(true);
           showFreecamDenied();
+          return;
+        }
+        if (input.checked && !(await requestModuleRiskAcceptance(key))) {
+          input.checked = false;
+          guiSettings[key] = false;
+          settings[key] = false;
+          label.classList.remove('enabled');
+          label.classList.add('disabled');
+          const state = label.querySelector('.mf-feature-state');
+          if (state) {
+            state.textContent = 'Disabled';
+            state.classList.remove('enabled');
+            state.classList.add('disabled');
+          }
+          saveSettings(true);
           return;
         }
         guiSettings[key] = input.checked;
@@ -11541,8 +11793,8 @@
     }, { signal: panelSignal });
 
     panel.querySelector('#mf-language-select')?.addEventListener('change', event => {
-      settings.language = event.target.value;
-      guiSettings.language = event.target.value;
+      settings.language = normalizeClientLanguage(event.target.value);
+      guiSettings.language = settings.language;
       saveSettings();
       sendLanguageConfig();
       sendDistanceNameTagsConfig(settings.distanceNameTags);
@@ -11754,6 +12006,7 @@
 
   function applyGuiSettings() {
     sendLanguageConfig();
+    if (!settings.idlePlayerBot) sessionRiskAcceptances.delete('idlePlayerBot');
     setModuleEnabled('rebrand', settings.rebrand);
     document.dispatchEvent(new CustomEvent('minifeather:titlescreen-config', {
       detail: JSON.stringify({ enabled: !!settings.classicTitle, language: settings.language, logo: currentLogo })
@@ -12496,6 +12749,7 @@
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    closeModuleRiskPrompt(false);
 
     clearTimeout(updateTimer);
     updateTimer = 0;
@@ -12542,6 +12796,7 @@
     document.getElementById('minifeather-font')?.remove();
     document.getElementById('mf-waypoints-panel-style')?.remove();
     document.getElementById('mf-clean-hud-style')?.remove();
+    document.getElementById('mf-risk-warning-style')?.remove();
 
     overlay = null;
     panel = null;
@@ -12583,7 +12838,12 @@
       const BASE = { ...DEFAULT_SETTINGS, ...fileDefaults };
       chrome.storage.local.get(['settings', 'customLogo', 'favoriteModules'], data => {
         if (destroyed) return;
-        settings = { ...BASE, ...(data.settings || {}) };
+        const storedSettings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+        const hasStoredLanguage = Object.prototype.hasOwnProperty.call(storedSettings, 'language');
+        settings = { ...BASE, ...storedSettings };
+      settings.language = hasStoredLanguage ? normalizeClientLanguage(settings.language) : detectClientLanguage();
+      settings.moduleRiskAcknowledgements = { ...(settings.moduleRiskAcknowledgements || {}) };
+      if (settings.idlePlayerBot && !hasPermanentRiskAcceptance('idlePlayerBot') && !sessionRiskAcceptances.has('idlePlayerBot')) settings.idlePlayerBot = false;
       settings.idlePlayerCount = clampIdlePlayerCount(settings.idlePlayerCount);
       settings.antiAfkDelay = clampAntiAfkDelay(settings.antiAfkDelay);
       settings.patPatValues = clampPatPatValues(settings.patPatValues);
@@ -12607,6 +12867,7 @@
       guiSettings = {
         ...settings,
         moduleBinds: { ...settings.moduleBinds },
+        moduleRiskAcknowledgements: { ...settings.moduleRiskAcknowledgements },
         patPatValues: clonePatPatValues(settings.patPatValues),
         cameraOverhaulValues: cloneCameraValues(settings.cameraOverhaulValues),
         elytraFlightValues: cloneElytraFlightValues(settings.elytraFlightValues)

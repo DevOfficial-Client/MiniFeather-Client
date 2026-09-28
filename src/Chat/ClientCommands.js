@@ -1344,13 +1344,7 @@
       const action = (args[0] || 'status').toLowerCase();
       if (action === 'join' || action === 'connect' || action === 'start') {
         const target = args.slice(1).join(' ').trim() || 'current';
-        addChat('Connecting one idle guest...');
-        Promise.resolve(api.connect(target)).then(current => {
-          if (current.error) addChat('Idle Player failed: ' + current.error, 'error');
-          else addChat('Idle Player connection started. Guests: ' + current.bots.length + '/' + current.maxBots + '.', 'success');
-        }).catch(error => {
-          addChat('Idle Player failed: ' + (error?.message || error), 'error');
-        });
+        dispatchRequest('idlebotConnect', [target]);
         return;
       }
 

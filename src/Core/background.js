@@ -777,11 +777,11 @@ const SKINS = [
   const existing = await chrome.storage.local.get(["settings", "spritesheetEnabled"]);
   await chrome.storage.local.set({
     settings: {
+      ...(existing.settings || {}),
       rebrand: existing.settings?.rebrand ?? true,
       supportAds: existing.settings?.supportAds ?? false,
       discord: existing.settings?.discord ?? true,
-      keystrokes: existing.settings?.keystrokes ?? true,
-      language: existing.settings?.language ?? "en"
+      keystrokes: existing.settings?.keystrokes ?? true
     },
     spritesheetEnabled: existing.spritesheetEnabled !== false
   });

@@ -81,7 +81,8 @@
     "autoRespawn": true,
     "idlePlayerBot": false,
     "idlePlayerCount": 1,
-    "idlePlayerTarget": ""
+    "idlePlayerTarget": "",
+    "moduleRiskAcknowledgements": {}
   },
   "crosshair": {
     "dynamicCrosshair": false,

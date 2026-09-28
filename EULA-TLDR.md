@@ -42,6 +42,7 @@ si eres de los buenos: gracias, de corazón. son la razón por la que seguimos. 
 ## 3. lo que no hagas con el cliente ٩(◕‿◕)ノ
 
 - **no lo uses para ventaja injusta en servidores competitivos.** baritone, bots, anti-afk y amigos: úsalos en tu mundo, con tus amigos, donde el servidor lo permita. si te banean por hacer trampa en pvp ranked... bueno... ¯\\\_(ツ)\_/¯
+- los módulos de alto riesgo muestran un aviso antes de activarse. cerrarlo cancela la activación; «no volver a mostrar» guarda tu aceptación en el navegador. **aceptar el aviso no significa que el servidor permita el módulo ni evita un baneo.**
 - **no vendas el client ni copias modificadas** haciéndolas pasar por oficiales. eso sí que es feo.
 - **no eludas anticheats, pagos ni sistemas de seguridad.** no somos esa clase de proyecto.
 - **no acoses a nadie.** ni con ia, ni con bots, ni con nada. se buen citizeño del blob. (｡•́︿•̀｡)
