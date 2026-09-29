@@ -8,7 +8,9 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'src/World/LocalGames.
 const bridgeSource = fs.readFileSync(path.join(__dirname, '..', 'src/World/LocalGamesNetworkBridge.js'), 'utf8');
 
 function namedFunction(code, name) {
-  const start = code.indexOf(`function ${name}(`);
+  const plain = code.indexOf(`function ${name}(`);
+  const asyncFn = code.indexOf(`async function ${name}(`);
+  const start = asyncFn >= 0 && (plain < 0 || asyncFn < plain) ? asyncFn : plain;
   assert.ok(start >= 0, `${name} missing`);
   const open = code.indexOf('{', start);
   let depth = 0;
@@ -455,6 +457,140 @@ test('streaming wiring: driver, caps and resets are installed', () => {
   assert.match(source, /restoreLocalMobAnimationPatch\(\)/);
   assert.doesNotMatch(source, /animationPatch: null/);
 });
+
+function exposeMany(names, sandbox) {
+  const body = names.map(n => namedFunction(source, n)).join('\n');
+  const tail = `({ ${names.join(', ')} });`;
+  return vm.runInNewContext(`${body}\n${tail}`, sandbox);
+}
+
+test('ClientCommands merges MiniFeather commands into server tab completion', () => {
+  const commandsSource = fs.readFileSync(
+    path.join(__dirname, '..', 'src/Chat/ClientCommands.js'),
+    'utf8'
+  );
+
+  const chat = {
+    isInputCommandMode: true,
+    autoComplete: { active: false, list: [], index: -1 },
+    currentCompletionWord() { return this.__word; },
+    autoCompleteReceived(packet) {
+      const matches = (Array.isArray(packet?.matches) ? packet.matches : [])
+        .map(match => String(match).replace(/^\//, ''))
+        .filter(match => match.toLowerCase().startsWith(this.__word.toLowerCase()));
+      if (!matches.length) return;
+      this.autoComplete.active = true;
+      this.autoComplete.list = matches;
+    }
+  };
+  const sandbox = {
+    RECOGNIZED: new Set(['mesh', 'mf', 'model', 'baritone', 'emote', 'toggle'])
+  };
+  const install = expose(namedFunction(commandsSource, 'installAutoCompleteMerge'), sandbox);
+  install(chat);
+
+  // '/mo' + Tab: server returns nothing -> merge re-opens with MiniFeather matches
+  chat.__word = 'mo';
+  chat.autoCompleteReceived({ matches: [] });
+  assert.deepEqual([...chat.autoComplete.list], ['model']);
+
+  // '/t' + Tab: server returns '/time' -> merged with ours ('toggle')
+  chat.__word = 't';
+  chat.autoCompleteReceived({ matches: ['/time'] });
+  assert.deepEqual([...chat.autoComplete.list], ['time', 'toggle']);
+
+  // plain chat word: no command injection
+  chat.__word = 'hello';
+  chat.isInputCommandMode = false;
+  chat.autoCompleteReceived({ matches: ['hello_friend'] });
+  assert.deepEqual([...chat.autoComplete.list], ['hello_friend']);
+  chat.isInputCommandMode = true;
+
+  // double install must not double-patch
+  install(chat);
+  chat.__word = 'mo';
+  chat.autoCompleteReceived({ matches: [] });
+  assert.equal(chat.autoComplete.list.filter(name => name === 'model').length, 1);
+});
+
+function commandsConstBlock(code, name) {
+  const start = code.indexOf(`const ${name} = `);
+  assert.ok(start >= 0, `${name} missing`);
+  const open = code.indexOf('{', start);
+  let depth = 0;
+  for (let i = open; i < code.length; i++) {
+    if (code[i] === '{') depth++;
+    if (code[i] === '}' && --depth === 0) return code.slice(start, i + 1);
+  }
+  throw new Error(`${name} has no closing brace`);
+}
+
+test('miniFeatherCompletions completes commands and argument variants', () => {
+  const commandsSource = fs.readFileSync(
+    path.join(__dirname, '..', 'src/Chat/ClientCommands.js'),
+    'utf8'
+  );
+  const recognizedLine = commandsSource
+    .split(/\r?\n/)
+    .find(line => line.startsWith('  const RECOGNIZED = '));
+  assert.ok(recognizedLine, 'RECOGNIZED declaration missing');
+
+  const script = [
+    recognizedLine,
+    commandsConstBlock(commandsSource, 'COMPLETION_TREE'),
+    namedFunction(commandsSource, 'miniFeatherCompletions')
+  ].join(';\n');
+
+  const fns = vm.runInNewContext(script + ';({ miniFeatherCompletions });', {});
+
+  assert.deepEqual([...fns.miniFeatherCompletions('')], [], 'bare slash lets the server list flow');
+  assert.deepEqual([...fns.miniFeatherCompletions('bari')], ['baritone']);
+  assert.deepEqual([...fns.miniFeatherCompletions('baritone auto')], ['automine']);
+  assert.ok(fns.miniFeatherCompletions('baritone ').includes('automine'), 'full variant list');
+  assert.deepEqual([...fns.miniFeatherCompletions('verity autoreply ')], ['off', 'on'], 'nested variants');
+  assert.deepEqual([...fns.miniFeatherCompletions('verity auto')], ['autoreply']);
+  assert.deepEqual([...fns.miniFeatherCompletions('waypoint ')], ['add', 'list', 'remove']);
+  assert.deepEqual([...fns.miniFeatherCompletions('time ')], [], 'unknown command -> server flow');
+  assert.deepEqual([...fns.miniFeatherCompletions('toggle')], ['toggle'], 'completing the command name');
+});
+
+test('sendTabComplete serves MiniFeather variants locally without hitting the server', () => {
+  const commandsSource = fs.readFileSync(
+    path.join(__dirname, '..', 'src/Chat/ClientCommands.js'),
+    'utf8'
+  );
+  const chat = {
+    isInputCommandMode: true,
+    inputValue: 'baritone auto',
+    autoComplete: { active: false, list: [], index: -1 },
+    currentCompletionWord() { return this.__word; },
+    autoCompleteReceived(packet) { this.autoComplete.list = ['time']; this.autoComplete.active = true; },
+    sendTabComplete() { this.sentToServer = true; }
+  };
+  const sandbox = {
+    RECOGNIZED: new Set(['baritone', 'toggle']),
+    COMPLETION_TREE: { baritone: ['goto', 'automine', 'stop'] }
+  };
+  const install = expose(namedFunction(commandsSource, 'installAutoCompleteMerge'), sandbox);
+  install(chat);
+
+  chat.sendTabComplete(true);
+  assert.deepEqual([...chat.autoComplete.list], ['automine'], 'local variants served');
+  assert.equal(chat.sentToServer, undefined, 'no packet sent for MiniFeather commands');
+
+  chat.inputValue = 'time';
+  chat.__word = 'time';
+  chat.sendTabComplete(true);
+  assert.equal(chat.sentToServer, true, 'non-MiniFeather words fall through to the server');
+
+  chat.autoComplete.list = [];
+  chat.autoComplete.active = false;
+  chat.inputValue = '';
+  chat.__word = '';
+  chat.autoCompleteReceived({ matches: ['/time'] });
+  assert.deepEqual([...chat.autoComplete.list].sort(), ['baritone', 'time', 'toggle'], 'bare slash merges ours into the official list');
+});
+
 
 test('loop wiring: peer prune, stale proxy hide and move cadence are installed', () => {
   assert.match(source, /pruneStaleHostPeers\(Date\.now\(\)\)/);

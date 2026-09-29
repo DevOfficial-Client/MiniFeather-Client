@@ -4679,6 +4679,8 @@
     restoreLocalMobAnimationPatch();
   }
 
+
+
   function localMobNight() {
     const time = ((Number(state.world?.worldTime) || 0) % 24000 + 24000) % 24000;
     return time >= 13000 && time <= 23000;
@@ -8652,39 +8654,40 @@
 
     if (!proxy) {
       const manager = resolveEntityManager();
-      if (typeof manager?.spawnPlayer !== 'function') return null;
-
       const profile = entry?.profile || {};
       const relative = entry?.target || entry?.position || { x: 0, y: 0, z: 0 };
       const origin = state.origin || { x: 0, y: 80, z: 0 };
+      if (!proxy) {
+        if (typeof manager?.spawnPlayer !== 'function') return null;
 
-      try {
-        manager.spawnPlayer({
-          socketId: String(profile.uuid || `minifeather-peer-${key}`),
-          id: playerId,
-          name: cleanText(profile.name || entry?.name || 'Player', 24),
-          pos: {
-            x: Number(origin.x) + Number(relative.x || 0),
-            y: Number(origin.y) + Number(relative.y || 0),
-            z: Number(origin.z) + Number(relative.z || 0)
-          },
-          yaw: Number(relative.yaw) || 0,
-          pitch: Number(relative.pitch) || 0,
-          gamemode: String(entry?.mode || profile.mode || 'survival'),
-          cosmetics: {
-            skin: profile.skin || profile.cosmetics?.skin || 'bob',
-            cape: profile.cape || profile.cosmetics?.cape || 'none',
-            hat: profile.hat || profile.cosmetics?.hat || 'none',
-            trail: profile.trail || profile.cosmetics?.trail || 'none',
-            aura: profile.aura || profile.cosmetics?.aura || 'none'
-          },
-          rank: profile.rank || '',
-          discordBoosting: profile.discordBoosting === true
-        });
-        proxy = state.world.players?.get?.(playerId) || null;
-      } catch (error) {
-        logWarn('remote player proxy failed:', error?.message || error);
-        return null;
+        try {
+          manager.spawnPlayer({
+            socketId: String(profile.uuid || `minifeather-peer-${key}`),
+            id: playerId,
+            name: spawnName,
+            pos: {
+              x: Number(origin.x) + Number(relative.x || 0),
+              y: Number(origin.y) + Number(relative.y || 0),
+              z: Number(origin.z) + Number(relative.z || 0)
+            },
+            yaw: Number(relative.yaw) || 0,
+            pitch: Number(relative.pitch) || 0,
+            gamemode: String(entry?.mode || profile.mode || 'survival'),
+            cosmetics: {
+              skin: profile.skin || profile.cosmetics?.skin || 'bob',
+              cape: profile.cape || profile.cosmetics?.cape || 'none',
+              hat: profile.hat || profile.cosmetics?.hat || 'none',
+              trail: profile.trail || profile.cosmetics?.trail || 'none',
+              aura: profile.aura || profile.cosmetics?.aura || 'none'
+            },
+            rank: profile.rank || '',
+            discordBoosting: profile.discordBoosting === true
+          });
+          proxy = state.world.players?.get?.(playerId) || null;
+        } catch (error) {
+          logWarn('remote player proxy failed:', error?.message || error);
+          return null;
+        }
       }
     }
 
@@ -8933,7 +8936,7 @@
           '\\white\\/kill [player]\\reset\\',
           '\\white\\/spawn [player]\\reset\\',
           '\\white\\/time <day|night|noon|midnight|0-24000>\\reset\\',
-          '\\white\\/weather <clear|rain|thunder>\\reset\\'
+          '\\white\\/weather <clear|rain|thunder>\\reset\\',
         ];
         for (const l of lines) addGameChat(l);
         if (isMod) {

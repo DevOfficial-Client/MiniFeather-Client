@@ -23,6 +23,27 @@
 
   const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
 
+  // Variantes de argumentos por comando para el Tab-complete client-side.
+  // null = el comando acepta cualquier cosa en esa posicion.
+  const COMPLETION_TREE = {
+    verity: { spawn: null, stay: null, follow: null, ask: null, autoreply: ['on', 'off'] },
+    iaassistant: null,
+    baritone: ['goto', 'follow', 'mine', 'place', 'attack', 'jump', 'locate', 'players', 'automine', 'stop'],
+    p2p: ['host', 'join', 'off', 'auto'],
+    mesh: ['on', 'announce', 'connect'],
+    call: ['on', 'off', 'status', 'answer', 'decline', 'end', 'mute'],
+    waypoint: ['add', 'list', 'remove'],
+    face: ['set', 'preview', 'revert', 'list'],
+    model: ['spawn', 'list', 'despawn', 'stay', 'follow', 'anim', 'anims', 'move'],
+    critter: ['spawn', 'random', 'list', 'count', 'clear'],
+    mf: ['models', 'diag'],
+    idlebot: ['join', 'leave', 'status'],
+    backrooms: null,
+    bridge: null,
+    film: null,
+    studio: null
+  };
+
   function parseDetail(event) {
     try {
       return typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
@@ -1860,7 +1881,85 @@
     state.chat = chat;
     state.originalSubmit = null;
     state.hookedSubmit = null;
+    installAutoCompleteMerge(chat);
     return true;
+  }
+
+  // El Tab-complete de Miniblox es server-driven (CPacketTabComplete →
+  // SPacketTabComplete). Se envuelve autoCompleteReceived para fusionar los
+  // comandos client-side de MiniFeather en la lista que muestra el chat.
+  function installAutoCompleteMerge(chat) {
+    if (chat.__mfAutoCompletePatched) return;
+    if (typeof chat.autoCompleteReceived !== 'function') return;
+    if (typeof chat.currentCompletionWord !== 'function') return;
+
+  function miniFeatherCompletions(inputValue) {
+    const raw = String(inputValue || '').split(' ');
+    const word = (raw.pop() || '').toLowerCase();
+
+    if (!raw.length) {
+      if (!word) return [];
+      return [...RECOGNIZED].filter(name => name.startsWith(word)).sort();
+    }
+
+    const first = raw[0].toLowerCase();
+    if (!RECOGNIZED.has(first)) return [];
+
+    let node = COMPLETION_TREE[first];
+    for (let i = 1; i < raw.length; i++) {
+      if (!node || Array.isArray(node) || typeof node !== 'object') return [];
+      node = node[raw[i].toLowerCase()];
+    }
+
+    const candidates = Array.isArray(node)
+      ? node
+      : node && typeof node === 'object'
+        ? Object.keys(node)
+        : null;
+    if (!candidates) return [];
+
+    return candidates.filter(candidate => candidate.toLowerCase().startsWith(word)).sort();
+  }
+
+  // Los comandos de MiniFeather se completan localmente (el servidor no los
+  // conoce): se responde en el acto sin gastar la peticion al servidor.
+  if (typeof chat.sendTabComplete === 'function') {
+    const originalSend = chat.sendTabComplete;
+    chat.__mfOriginalSendTabComplete = originalSend;
+    chat.sendTabComplete = function (autoShow) {
+      const mine = miniFeatherCompletions(this.inputValue);
+      if (mine.length) {
+        this.autoComplete.active = true;
+        this.autoComplete.list = mine;
+        this.autoComplete.index = -1;
+        return;
+      }
+      return originalSend.call(this, autoShow);
+    };
+  }
+
+    const original = chat.autoCompleteReceived;
+    chat.__mfAutoCompleteOriginal = original;
+    chat.autoCompleteReceived = function (packet) {
+      original.call(this, packet);
+      try {
+        if (!this.isInputCommandMode) return;
+        if (!this.autoComplete) return;
+        const word = String(this.currentCompletionWord() || '').toLowerCase();
+        if (word.startsWith('/')) return;
+
+        const mine = [...RECOGNIZED].filter(name => name.startsWith(word)).sort();
+        if (!mine.length) return;
+
+        const existing =
+          this.autoComplete.active && Array.isArray(this.autoComplete.list)
+            ? this.autoComplete.list
+            : [];
+        this.autoComplete.list = [...new Set([...existing, ...mine])];
+        this.autoComplete.active = true;
+      } catch (_) {}
+    };
+    chat.__mfAutoCompletePatched = true;
   }
 
   function scan() {
@@ -1929,6 +2028,19 @@
     document.removeEventListener(RESPONSE_EVENT, handleResponse);
     document.removeEventListener(BINDS_EVENT, handleBinds);
     window.removeEventListener('keydown', onKeyDown, true);
+    try {
+      const chat = state.chat;
+      if (chat?.__mfAutoCompletePatched && chat.__mfAutoCompleteOriginal) {
+        chat.autoCompleteReceived = chat.__mfAutoCompleteOriginal;
+        chat.__mfAutoCompletePatched = false;
+    try {
+      const chat = state.chat;
+      if (typeof chat?.__mfOriginalSendTabComplete === 'function') {
+        chat.sendTabComplete = chat.__mfOriginalSendTabComplete;
+      }
+    } catch (_) {}
+      }
+    } catch (_) {}
     if (globalThis[GLOBAL_KEY]?.destroy === destroy) delete globalThis[GLOBAL_KEY];
   }
 
@@ -1943,6 +2055,7 @@
     get game() { return state.game; },
     get chat() { return state.chat; },
     get installed() { return !!state.chat; },
+    commands: RECOGNIZED,
     execute,
     showHelp,
     destroy
