@@ -50,3 +50,9 @@ mfbot_actions.log
 models/entities/backrooms_level_0.glb
 
 untitledduckmod-0.8.5-neoforge-1.21.4.zip/
+
+# Mobile builds
+android/.gradle/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/mf/

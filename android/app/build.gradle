@@ -1,0 +1,42 @@
+plugins {
+    id 'com.android.application'
+}
+
+def clientManifest = new groovy.json.JsonSlurper().parseText(file('../../manifest.json').text)
+
+android {
+    namespace 'com.devofficial.minifeather'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.devofficial.minifeather"
+        minSdk 24
+        targetSdk 34
+        versionCode System.getenv('GITHUB_RUN_NUMBER') ? System.getenv('GITHUB_RUN_NUMBER').toInteger() : 1
+        versionName clientManifest.version
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// El APK lleva el client entero (módulos, assets, modelos, classic) bajo assets/client/
+android.sourceSets.main.assets.srcDirs += [layout.buildDirectory.dir('generated/clientAssets')]
+
+tasks.register('syncClientAssets', Copy) {
+    description 'Copia los archivos del client al APK'
+    from(rootDir.parentFile) {
+        include 'src/**', 'assets/**', 'classic/**', 'models/**', 'textures/**', 'skins/**', 'emotes/**',
+                'defaults.json', 'hotload.json', 'manifest.json', 'build.json'
+    }
+    into layout.buildDirectory.dir('generated/clientAssets/client')
+}
+tasks.named('preBuild') { dependsOn 'syncClientAssets' }
