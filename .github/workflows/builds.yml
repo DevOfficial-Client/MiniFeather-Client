@@ -109,10 +109,10 @@ jobs:
 
           the client inside every package **hot-updates itself from github** (hotload), no reinstalls needed.
           the eula ships inside all packages in both flavors: human tl;dr + full legal text, english and spanish."
-          FILES=$(find artifacts -type f \( -name '*.apk' -o -name '*.msi' -o -name '*.AppImage' -o -name '*.deb' \) | sed 's/^/-a /' | tr '\n' ' ')
+          mapfile -t FILES < <(find artifacts -type f \( -name '*.apk' -o -name '*.msi' -o -name '*.AppImage' -o -name '*.deb' \))
           if gh release view apk-latest > /dev/null 2>&1; then
-            gh release upload apk-latest $FILES --clobber
+            gh release upload apk-latest "${FILES[@]}" --clobber
             gh release edit apk-latest --title "minifeather client — builds" --notes "$NOTES"
           else
-            gh release create apk-latest $FILES --title "minifeather client — builds" --notes "$NOTES"
+            gh release create apk-latest "${FILES[@]}" --title "minifeather client — builds" --notes "$NOTES"
           fi
