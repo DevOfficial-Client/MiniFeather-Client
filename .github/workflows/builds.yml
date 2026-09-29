@@ -110,6 +110,12 @@ jobs:
           the client inside every package **hot-updates itself from github** (hotload), no reinstalls needed.
           the eula ships inside all packages in both flavors: human tl;dr + full legal text, english and spanish."
           mapfile -t FILES < <(find artifacts -type f \( -name '*.apk' -o -name '*.msi' -o -name '*.AppImage' -o -name '*.deb' \))
+          VERSION=$(node -p "require('./manifest.json').version")
+          for i in "${!FILES[@]}"; do
+            case "${FILES[$i]}" in
+              */app-debug.apk) cp "${FILES[$i]}" "MiniFeather-Client-$VERSION-android.apk"; FILES[$i]="MiniFeather-Client-$VERSION-android.apk" ;;
+            esac
+          done
           if gh release view apk-latest > /dev/null 2>&1; then
             gh release upload apk-latest "${FILES[@]}" --clobber
             gh release edit apk-latest --title "minifeather client — builds" --notes "$NOTES"
