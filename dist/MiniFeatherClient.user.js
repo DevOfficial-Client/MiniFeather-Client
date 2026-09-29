@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 4e54af091f0bf0424d843952fb495fd939620f29
- * builtAt : 2026-09-29T21:41:41.820Z
+ * commit  : 676705995d1a22b2e642ff261955c3e10a50526d
+ * builtAt : 2026-09-29T22:33:55.954Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"4e54af091f0bf0424d843952fb495fd939620f29","builtAt":"2026-09-29T21:41:41.969Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"676705995d1a22b2e642ff261955c3e10a50526d","builtAt":"2026-09-29T22:33:55.960Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -1070,6 +1070,8 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"4e54af091f0bf0424d843952fb495f
 
 //# sourceURL=MF:src/Core/MF_InPageRedirects.js
 
+(function () {
+  function __mfRunDocStart() {
 /* ==== mf module: src/Core/SplashScreen.js ==== */
 (() => {
   'use strict';
@@ -1170,12 +1172,16 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"4e54af091f0bf0424d843952fb495f
 
   function startAnimation() {
     if (destroyed) return;
+    // in document-created environments (webview2/tauri init scripts) documentElement may
+    // not exist yet: appending to `document` itself wedges the html parser and the whole
+    // page never builds. wait for <html> like everything else does. :v
+    const parent = document.documentElement;
+    if (!parent) { setTimeout(() => startAnimation(), 0); return; }
     const token = ++playToken;
     clearTimeout(endTimer);
     removeRoot();
     style = makeStyle();
     root = makeRoot();
-    const parent = document.documentElement || document;
     parent.appendChild(style);
     parent.appendChild(root);
     startedAt = performance.now();
@@ -94225,6 +94231,17 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
 //# sourceURL=MF:src/World/LocalGamesNetworkBridge.js
 
+  }
+  if (document.documentElement) {
+    __mfRunDocStart();
+  } else {
+    const __mfWaitHtml = function () {
+      if (document.documentElement) __mfRunDocStart();
+      else setTimeout(__mfWaitHtml, 0);
+    };
+    __mfWaitHtml();
+  }
+})();
   function __mfRunDocEnd() {
 /* ==== mf module: src/Chat/ClientChat.js ==== */
 (function () {
