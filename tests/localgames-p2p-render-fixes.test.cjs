@@ -285,10 +285,64 @@ test('network bridge fails publishes fast while the extension port is offline', 
   assert.equal(sandbox.pendingPublishes.size, 0);
 });
 
+test('ensureLocalItemVisual creates the engine mesh when the entity was spawned without one', () => {
+  const build = () => {
+    const root = { children: [], add(child) { this.children.push(child); child.parent = this; } };
+    let created = 0;
+    const manager = {
+      addEntity() {}, addLocalEntity() {}, collectEntity() {}, startDeathRagdoll() {},
+      createDetachedMesh(entity) {
+        created++;
+        return { visible: false, position: { copy() {} }, render() {} };
+      }
+    };
+    const world = {
+      attachEntityMesh(entity) { if (entity.mesh) root.add(entity.mesh); }
+    };
+    const entity = {
+      world: null,
+      pos: { x: 5.5, y: 70.15, z: -3.5 },
+      getEntityItem() { return { stackSize: 1, item: { isItemBlock: () => true } }; }
+    };
+    const sandbox = {
+      state: {
+        active: true,
+        directLocal: true,
+        world,
+        game: { gameScene: { entityMeshes: root } },
+        entityManager: null
+      },
+      resolveEntityManager: () => manager,
+      requestAnimationFrame: () => {}
+    };
+    return { sandbox, root, entity, count: () => created };
+  };
+
+  const named = namedFunction(source, 'ensureLocalItemVisual');
+
+  const meshless = build();
+  const ensure = expose(named, meshless.sandbox);
+  assert.equal(ensure(meshless.entity), true);
+  assert.equal(meshless.count(), 1, 'engine mesh factory must be used');
+  assert.ok(meshless.entity.mesh, 'entity.mesh must be assigned');
+  assert.equal(meshless.entity.mesh.parent, meshless.root, 'mesh must land in entityMeshes');
+  assert.equal(meshless.entity.mesh.visible, true);
+
+  const withMesh = build();
+  const existing = { visible: true, position: { copy() {} }, render() {}, parent: null };
+  withMesh.entity.mesh = existing;
+  const ensureAgain = expose(named, withMesh.sandbox);
+  assert.equal(ensureAgain(withMesh.entity), true);
+  assert.equal(withMesh.count(), 0, 'existing mesh must not be recreated');
+  assert.equal(withMesh.entity.mesh.parent, withMesh.root, 'existing mesh must still be attached');
+});
+
 test('loop wiring: peer prune, stale proxy hide and move cadence are installed', () => {
   assert.match(source, /pruneStaleHostPeers\(Date\.now\(\)\)/);
   assert.match(source, /pruneStaleRemoteProxies\(now\);/);
   assert.match(source, /now - state\.lastMoveSend >= LOCAL_MOVE_SEND_INTERVAL_MS/);
+  assert.match(source, /manager\.createDetachedMesh\(entity\)/);
+  assert.match(source, /typeof world\.attachEntityMesh === 'function'/);
   assert.doesNotMatch(source, /function keepLocalWorldInDaylight/);
   assert.doesNotMatch(source, /function repairZeroColorAttribute/);
 });

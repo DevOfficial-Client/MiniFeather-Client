@@ -3525,6 +3525,16 @@
 
     try { entity.world = world; } catch (_) {}
 
+    if (!entity.mesh) {
+      const manager = resolveEntityManager();
+      try {
+        const mesh = typeof manager?.createDetachedMesh === 'function'
+          ? manager.createDetachedMesh(entity)
+          : null;
+        if (mesh) entity.mesh = mesh;
+      } catch (_) {}
+    }
+
     try {
       if (typeof world.attachEntityMesh === 'function') {
         world.attachEntityMesh(entity);
@@ -3542,6 +3552,16 @@
 
     requestAnimationFrame(() => {
       if (!state.active || !state.directLocal || entity.isDead === true) return;
+
+      if (!entity.mesh) {
+        const manager = resolveEntityManager();
+        try {
+          const mesh = typeof manager?.createDetachedMesh === 'function'
+            ? manager.createDetachedMesh(entity)
+            : null;
+          if (mesh) entity.mesh = mesh;
+        } catch (_) {}
+      }
 
       try {
         if (typeof world.attachEntityMesh === 'function') {
