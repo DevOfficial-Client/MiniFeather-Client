@@ -4,7 +4,7 @@
   "version": "4.17.5",
   "identifier": "com.devofficial.minifeather",
   "build": {
-    "frontendDist": "./empty"
+    "frontendDist": "./splash"
   },
   "app": {
     "windows": [],

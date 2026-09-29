@@ -142,6 +142,17 @@ function wrappedDocStart() {
   ].join('\n');
 }
 
+// init scripts also fire on the local splash document in tauri/electron; booting the
+// whole client there would open sockets and patch things for nothing, so gate it. :D
+function guardedBoot(bodyCode) {
+  return [
+    '(function () {',
+    "  if (!/(^|\\.)miniblox\\.(io|online)$/.test(location.hostname)) return;",
+    bodyCode,
+    '})();'
+  ].join('\n');
+}
+
 if (buildUser) {
   const header = [
     '// ==UserScript==',
@@ -189,11 +200,9 @@ if (buildTauri) {
   const mainJs = [
     buildInfoComment(),
     configLine({ pinned: true, assetBase: 'http://mfapp.localhost/', zoom: 0.68 }),
-    headCode,
-    gateCode,
-    wrappedDocStart()
+    guardedBoot([headCode, gateCode, wrappedDocStart()].join('\n'))
   ].join('\n');
-  const mainEndJs = [buildInfoComment(), '(function(){', '"use strict";', wrappedDocEnd(), '})();'].join('\n');
+  const mainEndJs = [buildInfoComment(), guardedBoot(['(function(){', '"use strict";', wrappedDocEnd(), '})();'].join('\n'))].join('\n');
   write('windows-msi/src-tauri/resources/mf/main.js', mainJs);
   write('windows-msi/src-tauri/resources/mf/main-end.js', mainEndJs);
 }
@@ -204,11 +213,9 @@ if (buildElectron) {
   const mainJs = [
     buildInfoComment(),
     configLine({ pinned: true, assetBase: 'mfapp://app/', zoom: 0.68 }),
-    headCode,
-    gateCode,
-    wrappedDocStart()
+    guardedBoot([headCode, gateCode, wrappedDocStart()].join('\n'))
   ].join('\n');
-  const mainEndJs = [buildInfoComment(), '(function(){', '"use strict";', wrappedDocEnd(), '})();'].join('\n');
+  const mainEndJs = [buildInfoComment(), guardedBoot(['(function(){', '"use strict";', wrappedDocEnd(), '})();'].join('\n'))].join('\n');
   write('linux-installer/resources/mf/main.js', mainJs);
   write('linux-installer/resources/mf/main-end.js', mainEndJs);
 }

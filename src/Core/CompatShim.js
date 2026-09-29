@@ -236,4 +236,49 @@
   };
 
   try { applyPageZoom(resolvePageZoom()); } catch (_) {}
+
+  // ---------- desktop niceties: f11 fullscreen + ctrl +/-/0 zoom ----------
+  let zoomToastTimer = 0;
+  function zoomToast(pct) {
+    try {
+      let t = document.getElementById('mf-zoom-toast');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = 'mf-zoom-toast';
+        t.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:2147483646;background:rgba(15,10,26,.92);color:#e8e4f5;font:600 13px system-ui,sans-serif;padding:8px 14px;border-radius:8px;border:1px solid #6045a0;pointer-events:none;transition:opacity .25s;opacity:0';
+        (document.body || document.documentElement).appendChild(t);
+      }
+      t.textContent = 'zoom ' + pct + '%';
+      t.style.opacity = '1';
+      clearTimeout(zoomToastTimer);
+      zoomToastTimer = setTimeout(() => { t.style.opacity = '0'; }, 900);
+    } catch (_) {}
+  }
+  function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    } catch (_) {}
+  }
+  window.addEventListener('keydown', (e) => {
+    try {
+      const t = e.target;
+      if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+      if (e.key === 'F11') {
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+      }
+      if (e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) {
+        e.preventDefault();
+        const current = resolvePageZoom();
+        const next = e.key === '0'
+          ? ((typeof window.__MF_ZOOM_DEFAULT__ === 'number') ? window.__MF_ZOOM_DEFAULT__ : 1)
+          : Math.min(2, Math.max(0.25, Math.round((current + (e.key === '-' ? -0.1 : 0.1)) * 100) / 100));
+        applyPageZoom(next);
+        try { localStorage.setItem(ZOOM_KEY, String(next)); } catch (_) {}
+        zoomToast(Math.round(next * 100));
+      }
+    } catch (_) {}
+  }, { capture: true });
 })();

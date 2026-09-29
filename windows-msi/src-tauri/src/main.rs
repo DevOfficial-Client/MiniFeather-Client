@@ -133,11 +133,13 @@ fn main() {
             serve_file(&root.parent().unwrap_or(&root).to_path_buf(), &rel)
         })
         .setup(|app| {
-            let url: tauri::Url = "https://miniblox.io/".parse().expect("valid start url");
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+            // boots on the local splash page (frontendDist) which paints instantly and
+            // self-navigates to the game: no white flash, ever. :D
+            WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title("minifeather client")
                 .inner_size(1280.0, 720.0)
                 .min_inner_size(800.0, 480.0)
+                .center()
                 // wry blocks every popup by default, which kills the google sign-in
                 // popup. allow lets webview2 open it natively, keeping window.opener
                 // alive so the oauth postMessage dance works. :D

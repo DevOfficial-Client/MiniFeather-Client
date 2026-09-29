@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>minifeather client</title>
+<!-- painted instantly (local file), so the webview never shows a white flash while
+     miniblox.io loads. self-navigates once the first frame is up. :D -->
+<meta http-equiv="refresh" content="8;url=https://miniblox.io/">
+<style>
+  html, body { margin: 0; height: 100%; background: radial-gradient(ellipse at 50% 42%, #17112b 0%, #0d0919 55%, #050309 100%); overflow: hidden; }
+  body { display: grid; place-items: center; font-family: 'Segoe UI', system-ui, sans-serif; color: #e8e4f5; }
+  .stage { text-align: center; user-select: none; }
+  .logo { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 10px 34px rgba(96,69,160,.45), 0 0 0 1px rgba(183,155,255,.25); animation: pop .7s cubic-bezier(.2,1.4,.4,1) both; }
+  .word { margin-top: 18px; font-size: 34px; font-weight: 750; letter-spacing: -.04em; }
+  .word .mini { font-weight: 480; color: #b79bff; }
+  .word .feather { color: #f1ecff; }
+  .bar { position: relative; width: 220px; height: 3px; margin: 22px auto 0; border-radius: 2px; background: rgba(183,155,255,.15); overflow: hidden; }
+  .bar i { position: absolute; inset: 0; border-radius: 2px; background: linear-gradient(90deg, #6045a0, #b79bff); transform-origin: left; animation: load 7s ease-out forwards; }
+  .hint { margin-top: 14px; font-size: 12px; color: #8d80b8; animation: blink 1.4s ease-in-out infinite; }
+  @keyframes pop { 0% { opacity: 0; transform: translateY(14px) scale(.85); } 100% { opacity: 1; transform: none; } }
+  @keyframes load { 0% { transform: scaleX(0); } 70% { transform: scaleX(.75); } 100% { transform: scaleX(1); } }
+  @keyframes blink { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <img class="logo" src="https://miniblox.io/favicon.png" alt="" onerror="this.style.display='none'">
+    <div class="word"><span class="mini">Mini</span><span class="feather">Feather</span> client</div>
+    <div class="bar"><i></i></div>
+    <div class="hint">loading miniblox…</div>
+  </div>
+  <script>
+    // give the splash one painted frame, then jump to the game. the old paint stays on
+    // screen during navigation, so there is no white flash anywhere in the chain. :D
+    setTimeout(function () { location.replace('https://miniblox.io/'); }, 600);
+  </script>
+</body>
+</html>

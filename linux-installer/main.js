@@ -48,16 +48,27 @@ function createWindow() {
     height: 720,
     minWidth: 800,
     minHeight: 480,
+    center: true,
     title: 'minifeather client',
     autoHideMenuBar: true,
-    backgroundColor: '#0f0a1a',
+    backgroundColor: '#0d0919',
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: false,
       sandbox: false
     }
   });
-  win.loadURL('https://miniblox.io/');
+  // show only once something is painted, boot on the branded splash, then jump to the
+  // game: the white flash never gets a frame to exist in. :D
+  win.once('ready-to-show', () => win.show());
+  win.loadFile(path.join(__dirname, 'splash.html'));
+  let navigatedToGame = false;
+  win.webContents.on('did-finish-load', () => {
+    if (navigatedToGame) return;
+    navigatedToGame = true;
+    setTimeout(() => win.loadURL('https://miniblox.io/').catch(() => {}), 450);
+  });
 }
 
 app.whenReady().then(() => {
