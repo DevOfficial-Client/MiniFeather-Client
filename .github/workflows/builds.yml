@@ -50,7 +50,7 @@ jobs:
         run: npx @tauri-apps/cli@2 icon assets/icon.png --fit contain -o windows-msi/src-tauri/icons
       - name: build msi
         working-directory: windows-msi
-        run: npx @tauri-apps/cli@2 build
+        run: npx @tauri-apps/cli@2 build --verbose
       - uses: actions/upload-artifact@v4
         with:
           name: windows-msi
