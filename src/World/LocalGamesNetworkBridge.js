@@ -185,8 +185,13 @@
 
       const requestId = String(request.requestId);
       pendingPublishes.set(requestId, true);
+      if (!port) {
+        pendingPublishes.delete(requestId);
+        dispatchResponse(requestId, false, { error: 'SIGNAL_BRIDGE_OFFLINE' });
+        return;
+      }
       try {
-        port?.postMessage({
+        port.postMessage({
           type: 'publish',
           requestId,
           topic: wireTopic(raw),

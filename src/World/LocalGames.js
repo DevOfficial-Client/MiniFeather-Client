@@ -68,8 +68,13 @@
   const SAVED_SERVERS_KEY = 'minifeather.localgames.savedServers.v2';
   const SERVER_STALE_AFTER_MS = 330000;
   const SIGNAL_POLL_INTERVAL_MS = 350;
+  const SIGNAL_SEEN_ID_LIMIT = 512;
   const ICE_GATHER_SETTLE_MS = 550;
   const ICE_GATHER_MAX_MS = 3500;
+  const ICE_GATHER_MIN_MS = 1000;
+  const LOCAL_MOVE_SEND_INTERVAL_MS = 45;
+  const HOST_PEER_CONNECT_TIMEOUT_MS = 60000;
+  const REMOTE_PROXY_STALE_MS = 10000;
   const OUTGOING_ALLOW = new Set(['SPacketPing']);
   const INCOMING_ALLOW = new Set(['CPacketPong']);
 
@@ -168,8 +173,10 @@
     remoteEntityProxies: new Map(),
     signalPollTimer: 0,
     signalLastId: '',
+    signalSeenIds: new Set(),
     signalRequests: new Map(),
     signalRequestCounter: 0,
+    lastPeerPrune: 0,
     blockOverrides: new Map(),
     pendingBlockChanges: [],
     suppressBlockBroadcast: false,
@@ -1289,7 +1296,11 @@
 
     try {
       if (guard.provider.unloadChunk === guard.guardedUnloadChunk) {
-        guard.provider.unloadChunk = guard.originalUnloadChunk;
+        if (guard.originalUnloadChunk) {
+          guard.provider.unloadChunk = guard.originalUnloadChunk;
+        } else {
+          delete guard.provider.unloadChunk;
+        }
       }
     } catch (_) {}
 
@@ -1298,8 +1309,11 @@
         guard.provider.unloadAllChunks ===
         guard.guardedUnloadAllChunks
       ) {
-        guard.provider.unloadAllChunks =
-          guard.originalUnloadAllChunks;
+        if (guard.originalUnloadAllChunks) {
+          guard.provider.unloadAllChunks = guard.originalUnloadAllChunks;
+        } else {
+          delete guard.provider.unloadAllChunks;
+        }
       }
     } catch (_) {}
 
@@ -1633,7 +1647,12 @@
     state.renderProbe = probe;
 
     if (logResult) {
-      void 0;
+      log(
+        'render probe:',
+        `state=${probe.gameState} errored=${probe.renderLoopErrored}`,
+        `lastRender=${probe.lastRenderAgeMs}ms fps=${probe.performance.fps}`,
+        `drawCalls=${probe.performance.drawCalls} mobs=${probe.performance.mobs}`
+      );
     }
 
     return probe;
@@ -2487,95 +2506,6 @@
 
     attribute.needsUpdate = true;
     return true;
-  }
-
-  function repairZeroColorAttribute(attribute) {
-    if (!attribute?.array) return false;
-
-    const array = attribute.array;
-    const itemSize = Number(attribute.itemSize) || 0;
-
-    if (itemSize < 3 || array.length < 3) {
-      return false;
-    }
-
-    let max = 0;
-
-    const sample =
-      Math.min(array.length, 4096);
-
-    for (let i = 0; i < sample; i++) {
-      const value =
-        Math.abs(Number(array[i]) || 0);
-
-      if (value > max) max = value;
-
-      if (max > 0.02) {
-        return false;
-      }
-    }
-
-    const integerArray =
-      array instanceof Uint8Array ||
-      array instanceof Uint8ClampedArray ||
-      array instanceof Uint16Array ||
-      array instanceof Uint32Array;
-
-    const full =
-      integerArray
-        ? (
-            array instanceof Uint16Array
-              ? 65535
-              : array instanceof Uint32Array
-                ? 4294967295
-                : 255
-          )
-        : 1;
-
-    for (
-      let i = 0;
-      i < array.length;
-      i += itemSize
-    ) {
-      array[i] = full;
-
-      if (i + 1 < array.length) {
-        array[i + 1] = full;
-      }
-
-      if (i + 2 < array.length) {
-        array[i + 2] = full;
-      }
-
-      if (
-        itemSize >= 4 &&
-        i + 3 < array.length
-      ) {
-        array[i + 3] = full;
-      }
-    }
-
-    attribute.needsUpdate = true;
-    return true;
-  }
-
-  function keepLocalWorldInDaylight() {
-    const game = state.game;
-    const world = state.world;
-
-    if (!game || !world) return;
-
-    if (!Number.isFinite(Number(world.worldTime))) {
-      world.worldTime = 6000;
-    }
-
-    if (!Number.isFinite(Number(world.totalTime))) {
-      world.totalTime = Number(world.worldTime) || 6000;
-    }
-
-    try {
-      game.serverInfo.doDaylightCycle = true;
-    } catch (_) {}
   }
 
   function repairLocalRender(force = false) {
@@ -4328,7 +4258,12 @@
       if (registered && registered !== player) proxy = registered;
     } catch (_) {}
 
-    if (!proxy && state.localPlayerProxy?.world === world && state.localPlayerProxy !== player) {
+    if (
+      !proxy &&
+      state.localPlayerProxy?.world === world &&
+      state.localPlayerProxy !== player &&
+      world.players?.get?.(id) === state.localPlayerProxy
+    ) {
       proxy = state.localPlayerProxy;
     }
     try {
@@ -4440,6 +4375,17 @@
     try { proxy.sneak = player.sneak === true; } catch (_) {}
     try { proxy.punching = player.punching === true; } catch (_) {}
     try { proxy.setSprinting?.(player.isSprinting?.() === true); } catch (_) {}
+
+    try {
+      const x = Number(player.pos?.x);
+      const y = Number(player.pos?.y);
+      const z = Number(player.pos?.z);
+      if ([x, y, z].every(Number.isFinite)) {
+        proxy.serverPos?.set?.(x * 32, y * 32, z * 32);
+        proxy.yaw = Number(player.yaw) || 0;
+        proxy.pitch = Number(player.pitch) || 0;
+      }
+    } catch (_) {}
   }
 
   function looksLikeEntityManager(value) {
@@ -4623,6 +4569,7 @@
 
     const hasRequestedId = requestedId !== null && requestedId !== undefined && Number.isFinite(Number(requestedId));
     const requested = hasRequestedId ? Number(requestedId) : null;
+    if (state.localMobNextId < -2147483600) state.localMobNextId = -2147482000;
     const id = hasRequestedId ? requested : state.localMobNextId--;
     if (hasRequestedId) state.localMobNextId = Math.min(state.localMobNextId, requested - 1);
     const yaw = Math.random() * Math.PI * 2;
@@ -7299,10 +7246,12 @@
     const renderStats =
       repairLocalRender(true) || {
         meshes: 0,
-        fullBright: 0,
-        colorFixed: 0,
+        visible: 0,
         textured: 0,
-        visible: 0
+        nativeMaterials: 0,
+        lightAttributes: 0,
+        blackLightAttributes: 0,
+        repairedLightAttributes: 0
       };
 
     setStatus(
@@ -7337,8 +7286,8 @@
         const stats = repairLocalRender(true);
 
         if (
-          !stats ||
-          stats.nativeMaterials === 0 ||
+          stats &&
+          stats.nativeMaterials > 0 &&
           stats.textured >= stats.nativeMaterials
         ) {
           log(`watchTextureResync: texturas OK (${stats ? stats.textured + '/' + stats.nativeMaterials : 'n/a'}) — vigilancia terminada`);
@@ -7955,12 +7904,19 @@
     return `mf-local-${normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   }
 
+  function shareLinkOrigin() {
+    const origin = String(globalThis.location?.origin || '');
+    return /^https:\/\/miniblox\.(io|online)$/i.test(origin)
+      ? origin
+      : 'https://miniblox.io';
+  }
+
   function makeShareLink(username = '') {
     if (state.mode !== 'host' || !state.serverAddress) return '';
     const p2pid = normalizeServerAddress(state.serverAddress);
     if (!p2pid?.startsWith('MF-')) return '';
     const safeName = String(username || profileSnapshot()?.name || '').replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 16);
-    return `https://miniblox.io/#/local.P2P/${encodeURIComponent(p2pid)}/${safeName || 'Player'}`;
+    return `${shareLinkOrigin()}/#/local.P2P/${encodeURIComponent(p2pid)}/${safeName || 'Player'}`;
   }
 
   function parseShareLink(url) {
@@ -8126,6 +8082,30 @@
     return signalRequest('publish', { topic, message });
   }
 
+  function filterSeenSignalIds(messages) {
+    const fresh = messages.filter(message => {
+      const id = String(message?.id || '');
+      if (!id) return true;
+      return !state.signalSeenIds.has(id);
+    });
+
+    for (const message of fresh) {
+      const id = String(message.id || '');
+      if (id) state.signalSeenIds.add(id);
+    }
+
+    if (state.signalSeenIds.size > SIGNAL_SEEN_ID_LIMIT) {
+      let removed = 0;
+      const excess = state.signalSeenIds.size - SIGNAL_SEEN_ID_LIMIT / 2;
+      for (const id of state.signalSeenIds) {
+        if (removed++ >= excess) break;
+        state.signalSeenIds.delete(id);
+      }
+    }
+
+    return fresh;
+  }
+
   async function pollSignals(topic) {
     const response = await signalRequest('poll', {
       topic,
@@ -8142,7 +8122,7 @@
 
     const result = [];
 
-    for (const message of messages) {
+    for (const message of filterSeenSignalIds(messages)) {
       try {
         result.push({
           id: message.id,
@@ -8170,7 +8150,7 @@
 
     const result = [];
 
-    for (const message of messages) {
+    for (const message of filterSeenSignalIds(messages)) {
       try {
         result.push({
           id: message.id,
@@ -8432,6 +8412,19 @@
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  function pruneStaleRemoteProxies(now = performance.now()) {
+    if (!state.active || !state.directLocal) return;
+    if (state.mode !== 'host' && state.mode !== 'join') return;
+
+    for (const [peerId, entry] of state.remotePlayers.entries()) {
+      const last = Number(entry?.lastNativeUpdate || 0);
+      if (!last || now - last < REMOTE_PROXY_STALE_MS) continue;
+
+      const proxy = state.remoteEntityProxies.get(peerId);
+      if (proxy?.mesh?.visible) proxy.mesh.visible = false;
     }
   }
 
@@ -9091,9 +9084,9 @@
     return new Promise(resolve => {
       let finished = false;
       let settleTimer = 0;
-      const hardTimeout = Math.min(
-        Math.max(1000, Number(timeout) || ICE_GATHER_MAX_MS),
-        ICE_GATHER_MAX_MS
+      const hardTimeout = Math.max(
+        ICE_GATHER_MIN_MS,
+        Number(timeout) || ICE_GATHER_MAX_MS
       );
       const timer = setTimeout(done, hardTimeout);
 
@@ -9661,6 +9654,21 @@
       state.textureWatchTimer = null;
     }
 
+    if (state.chatBridgeTimer) {
+      clearInterval(state.chatBridgeTimer);
+      state.chatBridgeTimer = null;
+    }
+
+    if (state.globalPollTimer) {
+      clearInterval(state.globalPollTimer);
+      state.globalPollTimer = null;
+    }
+
+    if (state.globalWorldTimer) {
+      clearInterval(state.globalWorldTimer);
+      state.globalWorldTimer = null;
+    }
+
     if (state.active) {
       try {
         restoreArena();
@@ -10071,6 +10079,15 @@
     if (channel.label === 'mf-state') {
       peer.stateChannel = channel;
       channel.addEventListener('message', event => onHostStateMessage(peerId, event));
+      channel.addEventListener('close', () => {
+        setTimeout(() => {
+          const live = state.peers.get(peerId);
+          if (!live || live.stateChannel !== channel) return;
+          if (!live.stateChannel.readyState || live.stateChannel.readyState === 'closed') {
+            handleHostPeerDisconnect(peerId);
+          }
+        }, 2000);
+      });
       channel.addEventListener('open', () => {
         if (peer.joinAnnounced) return;
         peer.joinAnnounced = true;
@@ -10116,7 +10133,9 @@
       moveChannel: null,
       accepted: true,
       joinAnnounced: false,
-      ready: false
+      ready: false,
+      createdAt: Date.now(),
+      connectedAt: 0
     };
 
     state.peers.set(peerId, peer);
@@ -10135,7 +10154,8 @@
     pc.addEventListener('connectionstatechange', () => {
       const current = pc.connectionState;
 
-      if (current === 'connected' || current === 'failed' || current === 'closed') {
+      if (current === 'connected') {
+        if (!peer.connectedAt) peer.connectedAt = Date.now();
 
         if (state.mode === 'host' && state.serverAddress) {
           state.lastRegistryPublish = 0;
@@ -10157,6 +10177,22 @@
     });
 
     return peer;
+  }
+
+  function pruneStaleHostPeers(now = Date.now()) {
+    if (state.mode !== 'host') return;
+
+    for (const [peerId, peer] of state.peers.entries()) {
+      if (peer.connectedAt || peer.joinAnnounced) continue;
+      if (now - Number(peer.createdAt || now) <= HOST_PEER_CONNECT_TIMEOUT_MS) continue;
+
+      state.peers.delete(peerId);
+      removeRemotePlayerProxy(peerId);
+      state.remotePlayers.delete(peerId);
+      closePeerConnection(peer);
+      broadcastRoster();
+      logWarn('pruned peer that never connected:', peerId);
+    }
   }
 
   function createGuestConnection() {
@@ -10644,6 +10680,7 @@
       state.perfFrameCount = 0;
     }
     renderLocalMobAnimations(now);
+    pruneStaleRemoteProxies(now);
     if (now - Number(state.lastPeerMarkerUpdate || 0) < 100) {
       state.peerFrame = requestAnimationFrame(updatePeerMarker);
       return;
@@ -10784,8 +10821,15 @@
 
       if (state.directLocal) {
         updateLocalMobs(now);
+      }
 
-        if (state.mode === 'host' && now - state.localMobLastSync >= 250) {
+      if (state.mode === 'host') {
+        if (now - Number(state.lastPeerPrune || 0) >= 5000) {
+          pruneStaleHostPeers(Date.now());
+          state.lastPeerPrune = now;
+        }
+
+        if (now - state.localMobLastSync >= 250) {
           broadcastReliable({ t: 'mob-positions', mobs: localMobSnapshot() });
           state.localMobLastSync = now;
         }
@@ -10803,7 +10847,7 @@
         state.lastTimeSync = now;
       }
 
-      if (now - state.lastMoveSend >= 65) {
+      if (now - state.lastMoveSend >= LOCAL_MOVE_SEND_INTERVAL_MS) {
         const pos = relativePosition();
 
         if (pos) {
