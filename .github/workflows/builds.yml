@@ -47,7 +47,7 @@ jobs:
       - name: bundle client (tauri init scripts)
         run: node tools/build-mobile.js --no-user --no-android --no-electron
       - name: generate app icon
-        run: npx @tauri-apps/cli@2 icon assets/icon.png -o windows-msi/src-tauri/icons
+        run: npx @tauri-apps/cli@2 icon assets/icon.png --fit contain -o windows-msi/src-tauri/icons
       - name: build msi
         working-directory: windows-msi
         run: npx @tauri-apps/cli@2 build
