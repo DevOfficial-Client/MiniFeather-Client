@@ -509,7 +509,17 @@
           }
         }
 
-        if (message?.type === "mfSetPageZoom") return { success: true, skipped: true };
+        if (message?.type === "mfSetPageZoom") {
+          // desktop used chrome.tabs.setZoom; embedded apps map it to css zoom so the
+          // panel slider works everywhere. :v
+          const SHIM2 = window.__MF_SHIM__;
+          if (SHIM2 && typeof SHIM2.applyPageZoom === 'function') {
+            const factor = SHIM2.applyPageZoom(message.zoom);
+            try { localStorage.setItem('mf:pageZoom', String(factor)); } catch (_) {}
+            return { success: true };
+          }
+          return { success: true, skipped: true };
+        }
 
         if (message?.type === "setSpritesheet") { await chrome.storage.local.set({ spritesheetEnabled: message.enabled }); return { success: true }; }
         if (message?.type === "getSpritesheet") {

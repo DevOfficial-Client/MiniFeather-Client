@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use tauri::Manager;
 use tauri::WebviewUrl;
 use tauri::WebviewWindowBuilder;
+use tauri::webview::NewWindowResponse;
 
 const MAIN_JS: &str = include_str!("../resources/mf/main.js");
 const END_JS: &str = include_str!("../resources/mf/main-end.js");
@@ -137,6 +138,10 @@ fn main() {
                 .title("minifeather client")
                 .inner_size(1280.0, 720.0)
                 .min_inner_size(800.0, 480.0)
+                // wry blocks every popup by default, which kills the google sign-in
+                // popup. allow lets webview2 open it natively, keeping window.opener
+                // alive so the oauth postMessage dance works. :D
+                .on_new_window(|_url, _features| NewWindowResponse::Allow)
                 .initialization_script(MAIN_JS)
                 .initialization_script(END_JS)
                 .build()?;

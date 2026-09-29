@@ -86,7 +86,8 @@ function buildInfoComment() {
 
 function configLine(extra) {
   return `window.__MF_BUILD__=${JSON.stringify({ version: VERSION, commit: COMMIT, builtAt: new Date().toISOString(), pinned: !!extra.pinned })};\n` +
-    (extra.assetBase ? `window.__MF_ASSET_BASE__=${JSON.stringify(extra.assetBase)};\n` : '');
+    (extra.assetBase ? `window.__MF_ASSET_BASE__=${JSON.stringify(extra.assetBase)};\n` : '') +
+    (extra.zoom ? `window.__MF_ZOOM_DEFAULT__=${JSON.stringify(extra.zoom)};\n` : '');
 }
 
 const headCode = concat(HEAD);
@@ -187,7 +188,7 @@ if (buildTauri) {
   // base is the custom protocol tauri registers on windows: http://mfapp.localhost/
   const mainJs = [
     buildInfoComment(),
-    configLine({ pinned: true, assetBase: 'http://mfapp.localhost/' }),
+    configLine({ pinned: true, assetBase: 'http://mfapp.localhost/', zoom: 0.68 }),
     headCode,
     gateCode,
     wrappedDocStart()
@@ -202,7 +203,7 @@ if (buildElectron) {
   // electron registers mfapp://app as a standard secure scheme in the main process.
   const mainJs = [
     buildInfoComment(),
-    configLine({ pinned: true, assetBase: 'mfapp://app/' }),
+    configLine({ pinned: true, assetBase: 'mfapp://app/', zoom: 0.68 }),
     headCode,
     gateCode,
     wrappedDocStart()

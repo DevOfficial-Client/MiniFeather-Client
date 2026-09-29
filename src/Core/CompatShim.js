@@ -204,10 +204,36 @@
   };
   window.chrome = chromeShim;
 
+  // ---------- page zoom (embedded apps) ----------
+  // the panel's zoom control used chrome.tabs.setZoom on desktop; here it maps to css
+  // zoom on the document element, persisted, applied as soon as <html> exists. :D
+  const ZOOM_KEY = 'mf:pageZoom';
+  function applyPageZoom(z) {
+    const factor = Math.min(5, Math.max(0.25, Number(z) || 1));
+    const run = () => {
+      try {
+        if (document.documentElement) document.documentElement.style.zoom = String(factor);
+        else setTimeout(run, 0);
+      } catch (_) {}
+    };
+    run();
+    return factor;
+  }
+  function resolvePageZoom() {
+    let saved = null;
+    try { saved = localStorage.getItem(ZOOM_KEY); } catch (_) {}
+    if (saved != null && !Number.isNaN(Number(saved))) return Number(saved);
+    return (typeof window.__MF_ZOOM_DEFAULT__ === 'number') ? window.__MF_ZOOM_DEFAULT__ : 1;
+  }
+
   window.__MF_SHIM__ = {
     build: BUILD,
     assetBase: resolveBase,
     messageListeners,
-    portClass: MFPort
+    portClass: MFPort,
+    applyPageZoom,
+    pageZoom: resolvePageZoom
   };
+
+  try { applyPageZoom(resolvePageZoom()); } catch (_) {}
 })();
