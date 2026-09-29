@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "minifeather client",
+  "productName": "minifeather-client",
   "version": "4.17.5",
   "identifier": "com.devofficial.minifeather",
   "build": {
