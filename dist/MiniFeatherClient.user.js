@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* MiniFeather Client build (sin extensión)
  * version : 4.17.5
- * commit  : 187f3953be50fbe08b8ac69d1bdcd9a965b2d78c
- * builtAt : 2026-09-29T19:52:32.268Z
+ * commit  : baa7fb042c07520d9d6168099520f62ece9c0eae
+ * builtAt : 2026-09-29T19:55:24.041Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"187f3953be50fbe08b8ac69d1bdcd9a965b2d78c","builtAt":"2026-09-29T19:52:32.272Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"baa7fb042c07520d9d6168099520f62ece9c0eae","builtAt":"2026-09-29T19:55:24.106Z","pinned":true};
 
 /* ==== MF module: src/Core/CompatShim.js ==== */
 /*
