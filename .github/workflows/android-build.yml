@@ -44,11 +44,13 @@ jobs:
           APK=android/app/build/outputs/apk/debug/app-debug.apk
           NAME="MiniFeather-Client-$VERSION-android.apk"
           cp "$APK" "$NAME"
-          gh release create apk-latest "$NAME#MiniFeather Client $VERSION (Android)" \
-            --title "MiniFeather Client — build móvil" \
-            --notes "APK Android (debug, firmado con clave de debug) y userscript en dist/MiniFeatherClient.user.js. Regenerado automáticamente en cada push a main." \
-            --clobber \
-          || gh release upload apk-latest "$NAME" --clobber
+          NOTES="APK Android (debug, firmado con clave de debug) y userscript en dist/MiniFeatherClient.user.js. Regenerado automáticamente en cada push a main."
+          if gh release view apk-latest > /dev/null 2>&1; then
+            gh release upload apk-latest "$NAME" --clobber
+          else
+            gh release create apk-latest "$NAME#MiniFeather Client $VERSION (Android)" \
+              --title "MiniFeather Client — build móvil" --notes "$NOTES"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
