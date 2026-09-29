@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : a1166e076b97843a0f71e537eee6a7d332a1859a
- * builtAt : 2026-09-29T23:28:55.805Z
+ * commit  : 3d2eb55ab4858b67fe4dbe677e7f27032b0ddaa0
+ * builtAt : 2026-09-29T23:45:31.915Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"a1166e076b97843a0f71e537eee6a7d332a1859a","builtAt":"2026-09-29T23:28:55.809Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"3d2eb55ab4858b67fe4dbe677e7f27032b0ddaa0","builtAt":"2026-09-29T23:45:31.930Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -109088,6 +109088,7 @@ function normalize(entry) {
     gif: 'gifChat', gifs: 'gifChat', gifchat: 'gifChat', klipy: 'gifChat', stickers: 'gifChat',
     fps: 'fpsCounter', fpscounter: 'fpsCounter',
     gui: 'guiPatch', guipatch: 'guiPatch',
+    panel: 'panel', menu: 'panel', clientmenu: 'panel', panelmenu: 'panel',
     freelook: 'freelook',
     freecam: 'freecam', freecamera: 'freecam',
     health: 'healthNameTags', healthnametags: 'healthNameTags',
@@ -114144,12 +114145,21 @@ function normalize(entry) {
 
   function showGUI() {
     ensureGUI();
+    // the game keeps the pointer locked while playing: without releasing it the panel
+    // shows up but the cursor stays trapped and nothing is clickable. :v
+    try { document.exitPointerLock?.(); } catch (_) {}
     overlay.style.display = 'block';
     panel.style.display = 'block';
     panel.style.pointerEvents = 'auto';
     requestAnimationFrame(() => {
       if (panel) panel.style.opacity = '1';
     });
+    try {
+      panel.animate(
+        [{ opacity: 0, transform: 'scale(.975) translateY(8px)' }, { opacity: 1, transform: 'none' }],
+        { duration: 150, easing: 'cubic-bezier(.2,.9,.3,1)' }
+      );
+    } catch (_) {}
     startDashboardUpdater();
     startPixelIconAnimation();
     if (activePage === 'dashboard') updateDashboardStats();
@@ -117065,11 +117075,14 @@ function normalize(entry) {
   function initGUI() {
     if (guiReady) return;
     guiReady = true;
-    let rightShiftDown = false;
     let leftShiftDown = false;
     let cleanHud = false;
 
     const isTyping = target => target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target?.isContentEditable === true;
+    // the panel open key: right shift by default, rebindable with /bind panel <key>
+    const panelBindDown = { code: null };
+    const panelBindCode = () => normalizeBindCode(settings.moduleBinds?.panel || '') || 'ShiftRight';
+    const panelOpenBlocked = target => isTyping(target) || !!document.getElementById('mf-eula-overlay');
     const setCleanHud = hidden => {
       cleanHud = hidden;
       let style = document.getElementById('mf-clean-hud-style');
@@ -117083,9 +117096,13 @@ function normalize(entry) {
     };
 
     document.addEventListener('keydown', event => {
-      if (event.code === 'ShiftRight' && !rightShiftDown) {
-        rightShiftDown = true;
-        toggleGUI();
+      if (event.code === panelBindCode() && panelBindDown.code !== event.code) {
+        panelBindDown.code = event.code;
+        // no toggling while typing in chat/inputs, and not under the eula gate
+        if (!panelOpenBlocked(event.target)) {
+          event.preventDefault();
+          toggleGUI();
+        }
       }
       if (event.code === 'ShiftLeft') leftShiftDown = true;
       if (event.code === 'KeyH' && leftShiftDown && !event.repeat && !isTyping(event.target)) {
@@ -117097,12 +117114,12 @@ function normalize(entry) {
     }, { capture: true, signal: runtimeController?.signal });
 
     document.addEventListener('keyup', event => {
-      if (event.code === 'ShiftRight') rightShiftDown = false;
+      if (panelBindDown.code === event.code) panelBindDown.code = null;
       if (event.code === 'ShiftLeft') leftShiftDown = false;
     }, { capture: true, signal: runtimeController?.signal });
 
     window.addEventListener('blur', () => {
-      rightShiftDown = false;
+      panelBindDown.code = null;
       leftShiftDown = false;
     }, { signal: runtimeController?.signal });
   }
