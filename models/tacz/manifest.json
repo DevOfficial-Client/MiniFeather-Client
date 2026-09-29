@@ -1,0 +1,47 @@
+{
+ "version": 2,
+ "guns": {
+  "ak47": {
+   "geoName": "ak47",
+   "bones": 73,
+   "cubes": 759,
+   "anims": 7
+  },
+  "m4": {
+   "geoName": "m4a1",
+   "bones": 113,
+   "cubes": 1004,
+   "anims": 7
+  },
+  "awp": {
+   "geoName": "ai_awp",
+   "bones": 91,
+   "cubes": 519,
+   "anims": 7
+  },
+  "desert_eagle": {
+   "geoName": "deagle",
+   "bones": 53,
+   "cubes": 492,
+   "anims": 7
+  },
+  "xm1014": {
+   "geoName": "m1014",
+   "bones": 42,
+   "cubes": 558,
+   "anims": 5
+  },
+  "sawedoff": {
+   "geoName": "db_short",
+   "bones": 21,
+   "cubes": 224,
+   "anims": 7
+  },
+  "famas": {
+   "geoName": "aug",
+   "bones": 54,
+   "cubes": 578,
+   "anims": 7
+  }
+ }
+}
