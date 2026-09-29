@@ -3,6 +3,7 @@
   "productName": "minifeather client",
   "version": "4.17.5",
   "description": "minifeather client for miniblox (electron wrapper for linux)",
+  "homepage": "https://github.com/DevOfficial-Client/MiniFeather-Client",
   "main": "main.js",
   "author": "DevOfficial-Client",
   "license": "MIT",
