@@ -119,6 +119,28 @@ function wrappedDocEnd() {
   ].join('\n');
 }
 
+// chrome document_start guarantees <html> exists; webview2/tauri init scripts run even
+// earlier and modules that touch the dom before <html> would wedge the parser. so the
+// docstart group waits for documentElement, which lands us before any game script. :D
+function wrappedDocStart() {
+  return [
+    '(function () {',
+    '  function __mfRunDocStart() {',
+    docStartCode,
+    '  }',
+    '  if (document.documentElement) {',
+    '    __mfRunDocStart();',
+    '  } else {',
+    '    const __mfWaitHtml = function () {',
+    '      if (document.documentElement) __mfRunDocStart();',
+    '      else setTimeout(__mfWaitHtml, 0);',
+    '    };',
+    '    __mfWaitHtml();',
+    '  }',
+    '})();'
+  ].join('\n');
+}
+
 if (buildUser) {
   const header = [
     '// ==UserScript==',
@@ -141,7 +163,7 @@ if (buildUser) {
     '  "use strict";',
     configLine({ pinned: true }),
     headCode,
-    docStartCode,
+    wrappedDocStart(),
     wrappedDocEnd(),
     '})();'
   ].join('\n');
@@ -153,7 +175,7 @@ if (buildAndroid) {
     buildInfoComment(),
     configLine({ pinned: false, assetBase: 'https://appassets.androidplatform.net/' }),
     headCode,
-    docStartCode
+    wrappedDocStart()
   ].join('\n');
   const mainEndJs = [buildInfoComment(), docEndCode].join('\n');
   write('android/app/src/main/assets/mf/main.js', mainJs);
@@ -168,7 +190,7 @@ if (buildTauri) {
     configLine({ pinned: true, assetBase: 'http://mfapp.localhost/' }),
     headCode,
     gateCode,
-    docStartCode
+    wrappedDocStart()
   ].join('\n');
   const mainEndJs = [buildInfoComment(), '(function(){', '"use strict";', wrappedDocEnd(), '})();'].join('\n');
   write('windows-msi/src-tauri/resources/mf/main.js', mainJs);
@@ -183,7 +205,7 @@ if (buildElectron) {
     configLine({ pinned: true, assetBase: 'mfapp://app/' }),
     headCode,
     gateCode,
-    docStartCode
+    wrappedDocStart()
   ].join('\n');
   const mainEndJs = [buildInfoComment(), '(function(){', '"use strict";', wrappedDocEnd(), '})();'].join('\n');
   write('linux-installer/resources/mf/main.js', mainJs);

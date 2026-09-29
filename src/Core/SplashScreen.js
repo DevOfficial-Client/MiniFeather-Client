@@ -97,12 +97,16 @@
 
   function startAnimation() {
     if (destroyed) return;
+    // in document-created environments (webview2/tauri init scripts) documentElement may
+    // not exist yet: appending to `document` itself wedges the html parser and the whole
+    // page never builds. wait for <html> like everything else does. :v
+    const parent = document.documentElement;
+    if (!parent) { setTimeout(() => startAnimation(), 0); return; }
     const token = ++playToken;
     clearTimeout(endTimer);
     removeRoot();
     style = makeStyle();
     root = makeRoot();
-    const parent = document.documentElement || document;
     parent.appendChild(style);
     parent.appendChild(root);
     startedAt = performance.now();
