@@ -16,6 +16,7 @@
     "active": true,
     "targets": ["msi"],
     "icon": ["icons/icon.ico"],
+    "licenseFile": "windows/license.rtf",
     "resources": {
       "../../src/**/*": "client/src/",
       "../../assets/**/*": "client/assets/",
@@ -32,11 +33,6 @@
       "../../EULA.es.md": "client/eula/EULA.es.md",
       "../../EULA-TLDR.md": "client/eula/EULA-TLDR.md",
       "../../EULA-TLDR.en.md": "client/eula/EULA-TLDR.en.md"
-    },
-    "windows": {
-      "wix": {
-        "license": "windows/license.rtf"
-      }
     }
   }
 }
