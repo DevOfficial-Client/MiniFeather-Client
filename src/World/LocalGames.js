@@ -81,6 +81,22 @@
   const LOCAL_TERRAIN_RADIUS_CHUNKS = 7;
   const LOCAL_LOOP_INTERVAL_MS = 50;
 
+  // Streaming de terreno: el mundo procedural sigue al jugador más allá del
+  // radio inicial, generando y despachando chunks por lotes.
+  const LOCAL_TERRAIN_STREAM_RADIUS_CHUNKS = (() => {
+    const raw = Number(localStorage.getItem('mflg:streamRadius'));
+    return Number.isFinite(raw) && raw >= 8 && raw <= 160 ? Math.floor(raw) : 56;
+  })();
+  const LOCAL_TERRAIN_STREAM_MAX_CHUNKS = (() => {
+    const raw = Number(localStorage.getItem('mflg:streamCap'));
+    return Number.isFinite(raw) && raw >= 200 && raw <= 30000 ? Math.floor(raw) : 8000;
+  })();
+  const LOCAL_TERRAIN_STREAM_BATCH = 2;
+  const LOCAL_TERRAIN_STREAM_TICK_MS = 500;
+  const LOCAL_TERRAIN_STREAM_DISPATCH_RADIUS_CHUNKS = 20;
+  const LOCAL_TERRAIN_STREAM_MAX_PENDING = 400;
+  const LOCAL_TERRAIN_STREAM_INITIAL_CHUNK = LOCAL_TERRAIN_RADIUS_CHUNKS;
+
   const LOG_PREFIX = 'minifeather localgames';
   const LOG_LEVEL = (() => {
     try {
@@ -151,6 +167,12 @@
     blockItemCache: new WeakMap(),
     chunkConstructor: null,
     localChunks: [],
+    streamedChunks: new Set(),
+    pendingStreamedChunks: [],
+    streamedChunkCount: 0,
+    terrainStreamBusy: false,
+    terrainStreamLastTick: 0,
+    streamBlocks: null,
     localGameStateBefore: 0,
     localPlayerId: -2147483000,
     peerPlayerId: -2147482999,
@@ -189,6 +211,8 @@
     localPlayerProxy: null,
     entityManager: null,
     localMobs: new Map(),
+    mobLodPatch: null,
+    mobLodPatchProbe: null,
     localMobNextId: -2147482000,
     localMobStartedAt: 0,
     localMobLastTick: 0,
@@ -4437,7 +4461,8 @@
   function localMobSurface(x, z) {
     const bx = Math.floor(Number(x));
     const bz = Math.floor(Number(z));
-    const height = Number(state.terrainSurface.get(`${bx},${bz}`));
+    let height = Number(state.terrainSurface.get(`${bx},${bz}`));
+    if (!Number.isFinite(height)) height = Number(terrainHeight(bx, bz, state.worldSeed));
     if (!Number.isFinite(height) || height < 63) return null;
     if (!withinWorldBounds(bx, height + 1, bz)) return null;
     try {
@@ -4485,56 +4510,57 @@
           source.includes('fastLOD') &&
           (source.includes('distanceToSquared') || source.includes('entities'))
         ) {
-          return name;
+          return { proto: target, key: name, descriptor };
         }
       }
     }
 
-    return '';
+    return null;
   }
 
-  function restoreLocalMobAnimation(mob) {
-    const patch = mob?.animationPatch;
-    if (!patch?.mesh || !patch.key) return;
+  function restoreLocalMobAnimationPatch() {
+    const patch = state.mobLodPatch;
+    if (!patch) return;
+
+    state.mobLodPatch = null;
+    state.mobLodPatchProbe = null;
 
     try {
-      if (patch.mesh[patch.key] === patch.forced) {
-        if (patch.ownDescriptor) {
-          Object.defineProperty(patch.mesh, patch.key, patch.ownDescriptor);
-        } else {
-          delete patch.mesh[patch.key];
-        }
+      if (patch.descriptor) {
+        Object.defineProperty(patch.proto, patch.key, patch.descriptor);
+      } else {
+        delete patch.proto[patch.key];
       }
     } catch (_) {}
-
-    mob.animationPatch = null;
   }
 
   function ensureLocalMobAnimation(mob) {
     const mesh = mob?.entity?.mesh;
     if (!mesh || typeof mesh.render !== 'function') return null;
-    if (mob.animationPatch?.mesh === mesh) return mesh;
+    if (state.mobLodPatch) return mesh;
 
-    restoreLocalMobAnimation(mob);
+    // El motor arranca con la calidad de entidades en `Fastest`: el resolvedor
+    // de LOD devuelve true y los modelos quedan estáticos sin animación. Se
+    // fuerza full-quality una sola vez a nivel prototype para todos los mobs.
+    if (state.mobLodPatchProbe === mesh) return mesh;
+    state.mobLodPatchProbe = mesh;
 
-    const key = findLocalMobLodResolver(mesh);
-    if (key) {
-      const ownDescriptor = Object.getOwnPropertyDescriptor(mesh, key) || null;
+    const info = findLocalMobLodResolver(mesh);
+    if (!info) return mesh;
+
+    try {
       const forced = function () {
         this.fastLOD = false;
         return false;
       };
-
-      try {
-        Object.defineProperty(mesh, key, {
-          configurable: true,
-          enumerable: ownDescriptor?.enumerable === true,
-          writable: true,
-          value: forced
-        });
-        mob.animationPatch = { mesh, key, ownDescriptor, forced };
-      } catch (_) {}
-    }
+      Object.defineProperty(info.proto, info.key, {
+        configurable: true,
+        enumerable: info.descriptor?.enumerable === true,
+        writable: true,
+        value: forced
+      });
+      state.mobLodPatch = info;
+    } catch (_) {}
 
     return mesh;
   }
@@ -4561,7 +4587,6 @@
       if (![dx, dy, dz].every(Number.isFinite)) continue;
 
       if (dx * dx + dy * dy + dz * dz > maxDistanceSq) {
-        restoreLocalMobAnimation(mob);
         continue;
       }
 
@@ -4623,8 +4648,7 @@
         targetZ: pos.z,
         nextTargetAt: 0,
         lastPositionAt: performance.now(),
-        remoteUpdatedAt: 0,
-        animationPatch: null
+        remoteUpdatedAt: 0
       });
 
       if (state.mode === 'host' && !hasRequestedId) {
@@ -4644,7 +4668,6 @@
   function clearLocalMobs() {
     const world = state.world;
     for (const mob of state.localMobs.values()) {
-      restoreLocalMobAnimation(mob);
       try { world?.removeEntityFromWorld?.(mob.id); } catch (_) {}
     }
     state.localMobs.clear();
@@ -4653,6 +4676,7 @@
     state.localMobLastSpawn = 0;
     state.localMobLastSync = 0;
     state.lastLocalMobAnimationAt = 0;
+    restoreLocalMobAnimationPatch();
   }
 
   function localMobNight() {
@@ -4688,7 +4712,6 @@
   function updateLocalMob(mob, now) {
     const entity = mob.entity;
     if (!entity || entity.dead || !entity.pos) {
-      restoreLocalMobAnimation(mob);
       state.localMobs.delete(mob.id);
       return;
     }
@@ -5651,6 +5674,64 @@
     return true;
   }
 
+  function fillLocalTerrainColumn(x, z, height, setLocal, blocks) {
+    const { bottomY, seaLevel, bedrock, stone, dirt, grass, sand, gravel, water } = blocks;
+
+    setLocal(x, bottomY, z, bedrock || stone);
+
+    const stoneTop = Math.max(
+      bottomY + 1,
+      height - 4
+    );
+
+    for (let y = bottomY + 1; y < stoneTop; y++) {
+      setLocal(x, y, z, stone);
+    }
+
+    const shore =
+      height <= seaLevel + 1;
+
+    const subsurface =
+      shore ? sand : dirt;
+
+    for (
+      let y = stoneTop;
+      y < height;
+      y++
+    ) {
+      setLocal(x, y, z, subsurface);
+    }
+
+    setLocal(
+      x,
+      height,
+      z,
+      shore ? sand : grass
+    );
+
+    if (water && height < seaLevel) {
+      for (
+        let y = height + 1;
+        y <= seaLevel;
+        y++
+      ) {
+        setLocal(x, y, z, water);
+      }
+    }
+
+    if (
+      gravel &&
+      height <= seaLevel - 1 &&
+      hash2D(
+        x,
+        z,
+        state.worldSeed + 83
+      ) > 0.82
+    ) {
+      setLocal(x, height, z, gravel);
+    }
+  }
+
   async function generateLocalChunks(map) {
     log(`generateLocalChunks: begin (map=${map})`);
     const world = state.world;
@@ -6178,6 +6259,10 @@
       };
 
       const heights = new Map();
+      const terrainBlocks = {
+        bedrock, stone, dirt, grass, sand, gravel, water,
+        bottomY, seaLevel
+      };
       let generationRows = 0;
 
       for (let x = minX; x <= maxX; x++) {
@@ -6191,59 +6276,7 @@
             height
           );
 
-          setLocal(x, bottomY, z, bedrock || stone);
-
-          const stoneTop = Math.max(
-            bottomY + 1,
-            height - 4
-          );
-
-          for (let y = bottomY + 1; y < stoneTop; y++) {
-            setLocal(x, y, z, stone);
-          }
-
-          const shore =
-            height <= seaLevel + 1;
-
-          const subsurface =
-            shore ? sand : dirt;
-
-          for (
-            let y = stoneTop;
-            y < height;
-            y++
-          ) {
-            setLocal(x, y, z, subsurface);
-          }
-
-          setLocal(
-            x,
-            height,
-            z,
-            shore ? sand : grass
-          );
-
-          if (water && height < seaLevel) {
-            for (
-              let y = height + 1;
-              y <= seaLevel;
-              y++
-            ) {
-              setLocal(x, y, z, water);
-            }
-          }
-
-          if (
-            gravel &&
-            height <= seaLevel - 1 &&
-            hash2D(
-              x,
-              z,
-              state.worldSeed + 83
-            ) > 0.82
-          ) {
-            setLocal(x, height, z, gravel);
-          }
+          fillLocalTerrainColumn(x, z, height, setLocal, terrainBlocks);
         }
 
         generationRows++;
@@ -6464,6 +6497,268 @@
 
     captureCurrentBlockState();
     return true;
+  }
+
+  function resolveLocalTerrainBlocks() {
+    if (state.streamBlocks) return state.streamBlocks;
+
+    state.streamBlocks = {
+      air: stateForAny('air'),
+      stone: stateForAny('stone', 'cobblestone'),
+      dirt: stateForAny('dirt', 'coarse_dirt', 'stone'),
+      grass: stateForAny('grass_block', 'grass', 'dirt'),
+      sand: stateForAny('sand', 'sandstone', 'dirt'),
+      gravel: stateForAny('gravel', 'stone'),
+      water: stateForAny('water'),
+      bedrock: stateForAny('bedrock', 'stone'),
+      oakLog: stateForAny('oak_log', 'log', 'stone'),
+      leaves: stateForAny('oak_leaves', 'leaves', 'grass_block'),
+      flowerA: stateForAny('dandelion', 'yellow_flower'),
+      flowerB: stateForAny('poppy', 'red_flower'),
+      bottomY: 40,
+      seaLevel: 62
+    };
+
+    return state.streamBlocks;
+  }
+
+  function expandLocalWorldBounds(cx, cz) {
+    const bounds = state.worldBounds;
+    if (!bounds) return;
+
+    bounds.minX = Math.min(bounds.minX, cx * 16);
+    bounds.maxX = Math.max(bounds.maxX, (cx + 1) * 16 - 1);
+    bounds.minZ = Math.min(bounds.minZ, cz * 16);
+    bounds.maxZ = Math.max(bounds.maxZ, (cz + 1) * 16 - 1);
+  }
+
+  function isInsideInitialTerrain(cx, cz) {
+    return (
+      Math.abs(cx) <= LOCAL_TERRAIN_STREAM_INITIAL_CHUNK &&
+      Math.abs(cz) <= LOCAL_TERRAIN_STREAM_INITIAL_CHUNK
+    );
+  }
+
+  async function generateStreamingChunk(cx, cz) {
+    const world = state.world;
+    const dimension = Number(world?.dimensionId) || 0;
+    const chunk = insertLocalChunk(cx, cz);
+    if (!chunk) return null;
+
+    const blocks = resolveLocalTerrainBlocks();
+    const minX = cx * 16;
+    const minZ = cz * 16;
+    const { bottomY, seaLevel } = blocks;
+
+    const setLocal = (x, y, z, blockState) => {
+      if (!blockState) return false;
+      try {
+        return !!chunk.setBlockState(
+          blockPos(x, y, z),
+          Number(blockState.id),
+          false
+        );
+      } catch (_) {
+        return false;
+      }
+    };
+
+    const heightAt = (x, z) =>
+      Math.floor(terrainHeight(x, z, state.worldSeed));
+
+    for (let x = minX; x < minX + 16; x++) {
+      for (let z = minZ; z < minZ + 16; z++) {
+        const height = heightAt(x, z);
+        fillLocalTerrainColumn(x, z, height, setLocal, blocks);
+      }
+    }
+
+    // Decoración con margen de 2: las copas nunca cruzan el borde del chunk,
+    // así host e invitados generan terrain idéntico de forma independiente.
+    const spawnX = 8;
+    const spawnZ = 8;
+
+    for (let x = minX + 2; x < minX + 14; x++) {
+      for (let z = minZ + 2; z < minZ + 14; z++) {
+        const height = heightAt(x, z);
+        if (height <= seaLevel + 1) continue;
+        if (Math.hypot(x - spawnX, z - spawnZ) < 11) continue;
+
+        if (
+          blocks.oakLog &&
+          blocks.leaves &&
+          hash2D(x, z, state.worldSeed + 101) > 0.986
+        ) {
+          let clear = true;
+
+          for (let dx = -2; dx <= 2 && clear; dx++) {
+            for (let dz = -2; dz <= 2; dz++) {
+              const neighbor = heightAt(x + dx, z + dz);
+              if (Math.abs(neighbor - height) > 2) {
+                clear = false;
+                break;
+              }
+            }
+          }
+
+          if (!clear) continue;
+
+          const trunkHeight =
+            4 +
+            Math.floor(hash2D(x, z, state.worldSeed + 131) * 3);
+
+          for (let y = 1; y <= trunkHeight; y++) {
+            setLocal(x, height + y, z, blocks.oakLog);
+          }
+
+          const crownY = height + trunkHeight;
+
+          for (let dy = -2; dy <= 2; dy++) {
+            const layerRadius = Math.abs(dy) >= 2 ? 1 : 2;
+
+            for (let dx = -layerRadius; dx <= layerRadius; dx++) {
+              for (let dz = -layerRadius; dz <= layerRadius; dz++) {
+                if (
+                  Math.abs(dx) === layerRadius &&
+                  Math.abs(dz) === layerRadius &&
+                  hash2D(x + dx, z + dz, state.worldSeed + dy + 151) < 0.35
+                ) {
+                  continue;
+                }
+
+                if (dx === 0 && dz === 0 && dy <= 0) continue;
+
+                setLocal(x + dx, crownY + dy, z + dz, blocks.leaves);
+              }
+            }
+          }
+
+          continue;
+        }
+
+        const flowerRoll = hash2D(x, z, state.worldSeed + 181);
+
+        if (flowerRoll > 0.972 && (blocks.flowerA || blocks.flowerB)) {
+          setLocal(
+            x,
+            height + 1,
+            z,
+            flowerRoll > 0.988
+              ? blocks.flowerB || blocks.flowerA
+              : blocks.flowerA || blocks.flowerB
+          );
+        }
+      }
+    }
+
+    let packet = null;
+
+    try {
+      chunk.isChunkLoaded = true;
+      chunk.generateHeightMap?.();
+      packet = await chunk.toProto?.(dimension);
+      if (!packet) return null;
+      packet.dimension = dimension;
+    } catch (error) {
+      state.chunkLoadDiagnostics.lastError =
+        `Streamed chunk ${cx},${cz} failed: ${String(error?.message || error || 'unknown').slice(0, 120)}`;
+      return null;
+    }
+
+    state.streamedChunkCount++;
+    expandLocalWorldBounds(cx, cz);
+    invalidateLocalChunkGuardSet();
+
+    return { cx, cz, packet };
+  }
+
+  async function streamLocalTerrainTick() {
+    if (
+      !state.active ||
+      !state.directLocal ||
+      state.terrainStreamBusy ||
+      state.map !== 'sandbox'
+    ) {
+      return;
+    }
+
+    const player = state.game?.player?.pos;
+    if (!player || Number(state.game?.state) !== 6) return;
+    if (state.streamedChunkCount >= LOCAL_TERRAIN_STREAM_MAX_CHUNKS) return;
+
+    state.terrainStreamBusy = true;
+
+    try {
+      const pcx = Math.floor(Number(player.x)) >> 4;
+      const pcz = Math.floor(Number(player.z)) >> 4;
+      const dispatchRadiusSq =
+        LOCAL_TERRAIN_STREAM_DISPATCH_RADIUS_CHUNKS *
+        LOCAL_TERRAIN_STREAM_DISPATCH_RADIUS_CHUNKS;
+      const pending = state.pendingStreamedChunks;
+
+      let dispatched = 0;
+      for (let i = pending.length - 1; i >= 0; i--) {
+        if (dispatched >= LOCAL_TERRAIN_STREAM_BATCH * 4) break;
+
+        const entry = pending[i];
+        const dx = entry.cx - pcx;
+        const dz = entry.cz - pcz;
+        if (dx * dx + dz * dz > dispatchRadiusSq) continue;
+
+        pending.splice(i, 1);
+        if (await dispatchChunkPacketNative(entry.packet)) dispatched++;
+      }
+
+      const fresh = [];
+
+      for (
+        let ring = 1;
+        ring <= LOCAL_TERRAIN_STREAM_RADIUS_CHUNKS &&
+        fresh.length < LOCAL_TERRAIN_STREAM_BATCH;
+        ring++
+      ) {
+        for (let dx = -ring; dx <= ring; dx++) {
+          for (let dz = -ring; dz <= ring; dz++) {
+            if (fresh.length >= LOCAL_TERRAIN_STREAM_BATCH) break;
+            if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue;
+
+            const cx = pcx + dx;
+            const cz = pcz + dz;
+            const key = `${cx},${cz}`;
+
+            if (state.streamedChunks.has(key)) continue;
+            if (isInsideInitialTerrain(cx, cz)) continue;
+
+            state.streamedChunks.add(key);
+
+            const entry = await generateStreamingChunk(cx, cz);
+            if (entry) fresh.push(entry);
+          }
+        }
+      }
+
+      if (fresh.length) {
+        pending.unshift(...fresh);
+        while (pending.length > LOCAL_TERRAIN_STREAM_MAX_PENDING) {
+          pending.shift();
+        }
+
+        for (const entry of fresh) {
+          if (dispatched >= LOCAL_TERRAIN_STREAM_BATCH * 4) break;
+
+          const dx = entry.cx - pcx;
+          const dz = entry.cz - pcz;
+          if (dx * dx + dz * dz > dispatchRadiusSq) continue;
+
+          const index = pending.indexOf(entry);
+          if (index >= 0) pending.splice(index, 1);
+
+          if (await dispatchChunkPacketNative(entry.packet)) dispatched++;
+        }
+      }
+    } finally {
+      state.terrainStreamBusy = false;
+    }
   }
 
   async function requestLocalChunkRendering(forceReplay = false) {
@@ -9709,6 +10004,12 @@
     state.world = null;
     state.origin = null;
     state.arena = null;
+    state.streamedChunks?.clear();
+    state.pendingStreamedChunks.length = 0;
+    state.streamedChunkCount = 0;
+    state.terrainStreamBusy = false;
+    state.terrainStreamLastTick = 0;
+    state.streamBlocks = null;
     state.snapshot.clear();
     state.blockState.clear();
     state.blockOverrides.clear();
@@ -10841,6 +11142,11 @@
 
       if (state.directLocal) {
         updateLocalMobs(now);
+
+        if (now - Number(state.terrainStreamLastTick || 0) >= LOCAL_TERRAIN_STREAM_TICK_MS) {
+          state.terrainStreamLastTick = now;
+          streamLocalTerrainTick().catch(() => {});
+        }
       }
 
       if (state.mode === 'host') {

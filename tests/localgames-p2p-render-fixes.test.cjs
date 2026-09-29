@@ -337,6 +337,125 @@ test('ensureLocalItemVisual creates the engine mesh when the entity was spawned 
   assert.equal(withMesh.entity.mesh.parent, withMesh.root, 'existing mesh must still be attached');
 });
 
+test('ensureLocalMobAnimation patches the LOD resolver once at prototype level', () => {
+  const makeWorld = () => {
+    const meshA = Object.create(null);
+    const meshB = Object.create(null);
+    const LivingProto = {
+      mobResolver() {
+        const t = player.pos.distanceToSquared(this.entity.pos);
+        if (t > 1024) return this.fastLOD = true;
+        return this.fastLOD;
+      }
+    };
+    const player = { pos: { x: 0, y: 0, z: 0, distanceToSquared: () => 3200 } };
+    const entity = { pos: { x: 40, y: 0, z: 40 } };
+    meshA.entity = entity;
+    meshB.entity = entity;
+    meshA.render = () => {};
+    meshB.render = () => {};
+    Object.setPrototypeOf(meshA, LivingProto);
+    Object.setPrototypeOf(meshB, LivingProto);
+
+    const state = { mobLodPatch: null, mobLodPatchProbe: null };
+    const sandbox = { state };
+    const ensure = vm.runInNewContext(
+      `${namedFunction(source, 'findLocalMobLodResolver')}\n${namedFunction(source, 'ensureLocalMobAnimation')}\nensureLocalMobAnimation;`,
+      sandbox
+    );
+    const restore = expose(namedFunction(source, 'restoreLocalMobAnimationPatch'), sandbox);
+    return { LivingProto, meshA, meshB, state, ensure, restore, player };
+  };
+
+  const world = makeWorld();
+  const original = world.LivingProto.mobResolver;
+
+  assert.equal(world.ensure({ entity: { mesh: world.meshA } }), world.meshA);
+  assert.ok(world.state.mobLodPatch, 'prototype patch must be recorded');
+  assert.equal(world.meshA.mobResolver(), false);
+  assert.equal(world.meshA.fastLOD, false);
+
+  // Segundo mob, mismo prototype: sin re-parchear (probe/proto ya cubierto)
+  assert.equal(world.ensure({ entity: { mesh: world.meshB } }), world.meshB);
+  assert.equal(world.meshB.mobResolver(), false);
+
+  world.restore();
+  assert.equal(world.state.mobLodPatch, null);
+  assert.equal(world.LivingProto.mobResolver, original);
+  assert.equal(world.meshB.mobResolver(), true, 'original distance logic restored');
+});
+
+function exposePair(names, sandbox) {
+  const body = names.map(n => namedFunction(source, n)).join('\n');
+  const tail = `({ ${names.join(', ')} });`;
+  return vm.runInNewContext(`${body}\n${tail}`, sandbox);
+}
+
+test('fillLocalTerrainColumn reproduces the native column layering', () => {
+  const placed = [];
+  const setLocal = (x, y, z, blockState) => placed.push([x, y, z, blockState.name]);
+  const blocks = {
+    bedrock: { name: 'bedrock' },
+    stone: { name: 'stone' },
+    dirt: { name: 'dirt' },
+    grass: { name: 'grass' },
+    sand: { name: 'sand' },
+    gravel: { name: 'gravel' },
+    water: { name: 'water' },
+    bottomY: 40,
+    seaLevel: 62
+  };
+  const sandbox = { state: { worldSeed: 12345 }, setLocal, blocks, placed };
+  const { hash2D, fillLocalTerrainColumn: fill } = exposePair(['hash2D', 'fillLocalTerrainColumn'], sandbox);
+
+  fill(10, 20, 68, setLocal, blocks);
+
+  assert.equal(placed[0][3], 'bedrock');
+  assert.equal(placed[0][1], 40);
+  assert.equal(placed.at(-1)[3], 'grass');
+  assert.equal(placed.at(-1)[1], 68);
+  assert.ok(placed.some(([x, y, z, name]) => name === 'stone' && y === 63), 'stone below surface');
+  assert.ok(placed.some(([x, y, z, name]) => name === 'dirt' && y === 67), 'dirt subsurface');
+  assert.ok(!placed.some(([x, y, z, name]) => name === 'water'), 'dry column has no water');
+
+  placed.length = 0;
+  fill(10, 20, 55, setLocal, blocks);
+  assert.ok(placed.some(([x, y, z, name]) => name === 'sand' && y === 55), 'shore gets sand');
+  assert.ok(placed.some(([x, y, z, name]) => name === 'water' && y === 62), 'water up to sea level');
+});
+
+test('streaming helpers: initial-terrain skip and world bounds expansion', () => {
+  const bounds = { minX: -112, maxX: 127, minZ: -112, maxZ: 127 };
+  const sandbox = {
+    state: { worldBounds: bounds },
+    LOCAL_TERRAIN_STREAM_INITIAL_CHUNK: 7
+  };
+  const { isInsideInitialTerrain: isInside, expandLocalWorldBounds: expand } =
+    exposePair(['isInsideInitialTerrain', 'expandLocalWorldBounds'], sandbox);
+
+  assert.equal(isInside(0, 0), true);
+  assert.equal(isInside(7, -7), true);
+  assert.equal(isInside(8, 0), false);
+  assert.equal(isInside(-40, 3), false);
+
+  expand(10, -10);
+  assert.equal(bounds.maxX, 175);
+  assert.equal(bounds.minZ, -160);
+  expand(-12, 4);
+  assert.equal(bounds.minX, -192);
+  assert.equal(bounds.maxZ, 127, 'maxZ never shrinks');
+});
+
+test('streaming wiring: driver, caps and resets are installed', () => {
+  assert.match(source, /streamLocalTerrainTick\(\)\.catch/);
+  assert.match(source, /LOCAL_TERRAIN_STREAM_MAX_CHUNKS/);
+  assert.match(source, /mflg:streamRadius/);
+  assert.match(source, /mflg:streamCap/);
+  assert.match(source, /state\.streamedChunks\?\.clear\(\)/);
+  assert.match(source, /restoreLocalMobAnimationPatch\(\)/);
+  assert.doesNotMatch(source, /animationPatch: null/);
+});
+
 test('loop wiring: peer prune, stale proxy hide and move cadence are installed', () => {
   assert.match(source, /pruneStaleHostPeers\(Date\.now\(\)\)/);
   assert.match(source, /pruneStaleRemoteProxies\(now\);/);
