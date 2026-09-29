@@ -1,22 +1,15 @@
-/*
- * MiniFeather Client — MF_MiniBackground
- * Puerto de src/Core/background.js a entornos sin service worker (userscript y app Android).
- * Implementa los handlers de chrome.runtime.sendMessage y chrome.runtime.connect que el
- * client espera del background: cuentas/skins, spritesheet/texturas, updater+hot-sync y
- * los puertos ntfy de señalización (chat, voz, localgames).
- * Los redirects de red de declarativeNetRequest se sustituyen por MF_InPageRedirects.js;
- * aquí solo se persisten las preferencias (currentSkins/currentCapes, etc.).
- */
+// minifeather minibackground. the service worker's understudy, living inside the page.
+// handles every chrome.runtime.sendMessage/connect the client throws at the background.
+// network redirects live in MF_InPageRedirects.js; here we only persist preferences. :D
 (function () {
   'use strict';
   if (window.__MF_MINI_BG__) return;
 
   const SHIM = window.__MF_SHIM__;
-  if (!SHIM) return; // CompatShim debe cargar primero
+  if (!SHIM) return; // the shim must load first, obviously :v
 
   const BUILD = SHIM.build;
 
-  // ---------- Skins / Capes (listas idénticas al background) ----------
   const SKINS = [
     "alice", "bob", "techno", "thebiggelo", "corrupted", "diana", "strange", "endoskeleton",
     "ganyu", "georgenotfound", "holly", "hutao", "jake", "james", "klee", "kyoko",
@@ -40,8 +33,8 @@
 
   async function setActiveAsset(type, name, customUrl) {
     const config = ASSET_TYPES[type];
-    if (!config) throw new Error(`Unknown asset type: ${type}`);
-    if (name && !config.names.includes(name)) throw new Error(`Unknown ${type}: ${name}`);
+    if (!config) throw new Error(`unknown asset type: ${type}`);
+    if (name && !config.names.includes(name)) throw new Error(`unknown ${type}: ${name}`);
     const stored = await chrome.storage.local.get([config.storageKey]);
     const active = stored[config.storageKey] || {};
     if (name) {
@@ -53,11 +46,10 @@
 
   async function resetAllAssets(type) {
     const config = ASSET_TYPES[type];
-    if (!config) throw new Error(`Unknown asset type: ${type}`);
+    if (!config) throw new Error(`unknown asset type: ${type}`);
     await chrome.storage.local.set({ [config.storageKey]: {} });
   }
 
-  // ---------- Updater (DevOfficial-Client/MiniFeather-Client) ----------
   const OWNER = 'DevOfficial-Client';
   const REPO = 'MiniFeather-Client';
   const BRANCH = 'main';
@@ -65,10 +57,10 @@
   const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
   const RAW_MANIFEST = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/manifest.json`;
   const DOWNLOAD_URL = `${REPOSITORY_URL}/archive/refs/heads/${BRANCH}.zip`;
-  const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+  const CHECK_INTERVAL_MS = 30 * 60 * 1000; // hot updates are life support, check every 30 min :D
   const DEFAULT_UPDATER_SETTINGS = Object.freeze({ autoCheck: true, autoDownload: false, autoApply: true });
   const HOT_KEY = 'mfHotCache';
-  const HOT_PLAN_KEY = 'mf:hot:v1'; // el HotLoader (modo sin extensión) lee este plan de localStorage
+  const HOT_PLAN_KEY = 'mf:hot:v1'; // hotloader (non-extension mode) reads this exact key from localStorage
   const HOT_APPLIED = 'mfHotAppliedCommit';
 
   function versionParts(value) {
@@ -127,9 +119,9 @@
   async function fetchRawText(commit, path) {
     const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${commit}/${path}`;
     const response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`Raw ${response.status}`);
+    if (!response.ok) throw new Error(`raw ${response.status}`);
     const text = await response.text();
-    if (!text) throw new Error('vacío');
+    if (!text) throw new Error('empty');
     return text;
   }
   async function getHotCache() {
@@ -166,9 +158,8 @@
         if (cache.files[path]) { delete cache.files[path]; changed = true; }
         continue;
       }
-      // Bundle userscript: viene fijado al commit de build, así que si el commit remoto
-      // difiere, todos los hot modules se consideran actualizables.
-      // Bundle Android: los archivos empaquetados se comparan por blob sha real.
+      // pinned bundles (userscript/tauri/electron) ship a fixed commit, so any remote
+      // drift counts. android compares real blob shas against the packaged copy instead.
       const localSha = BUILD.pinned ? (BUILD.commit === remoteCommit ? remoteSha : null) : await localFileSha(path);
       if (localSha === remoteSha) {
         if (cache.files[path]) { delete cache.files[path]; changed = true; }
@@ -193,6 +184,7 @@
       const isNew = remoteCommit && prev !== remoteCommit;
       if (settings.autoApply && isNew) {
         await chrome.storage.local.set({ [HOT_APPLIED]: remoteCommit });
+        scheduleHotReload();
       } else if (isNew) {
         const st = (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
         await saveState({ ...st, updateAvailable: true, reason: 'hot', hotCommit: remoteCommit });
@@ -201,12 +193,20 @@
     return cache;
   }
 
-  const state = { saveState: null };
   async function saveState(s) {
     await chrome.storage.local.set({ mfUpdaterState: s });
     return s;
   }
-  state.saveState = saveState;
+
+  // hot modules only apply on next load, so reload the page when fresh code lands.
+  // same courtesy the extension had: never reload mid-match (document.title is exactly
+  // what chrome.tabs.query peeked at from the tab list). :v
+  function scheduleHotReload() {
+    try {
+      if (/planet-|in game|playing/i.test(document.title || '')) return;
+      setTimeout(() => { try { location.reload(); } catch (_) {} }, 1500);
+    } catch (_) {}
+  }
 
   async function checkForUpdate(force) {
     const previous = await chrome.storage.local.get(['mfUpdaterState', 'mfUpdaterLastMatchedCommit']);
@@ -225,7 +225,7 @@
       const remoteMessage = String(commit?.commit?.message || '').split('\n')[0].slice(0, 160);
 
       const manifestResponse = await fetch(`${RAW_MANIFEST}?t=${now}`, { cache: 'no-store' });
-      if (!manifestResponse.ok) throw new Error(`Manifest ${manifestResponse.status}`);
+      if (!manifestResponse.ok) throw new Error(`manifest ${manifestResponse.status}`);
       const remoteManifest = await manifestResponse.json();
       const remoteVersion = remoteManifest.version || '0.0.0';
 
@@ -297,13 +297,12 @@
   async function downloadLatest(current) {
     const st = current || (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
     await chrome.storage.local.set({ mfUpdaterLastDownloadedCommit: st.remoteCommit || '' });
-    // chrome.downloads no existe aquí: abrir el zip dispara el DownloadListener del
-    // WebView (Android) o la descarga de Safari (iOS).
+    // no chrome.downloads here: opening the zip hits the webview downloadlistener
+    // on android, or safari's downloader on ios. everyone wins, nobody files bugs :v
     try { window.open(DOWNLOAD_URL, '_blank'); } catch (_) {}
     return 0;
   }
 
-  // ---------- Puertos ntfy (señalización chat/voz/localgames) ----------
   const NTFY_HTTP_BASE = "https://ntfy.sh";
   const CLIENT_CHAT_TOPIC = "mfcc-7f41c6d8b92e4a63b5f1-global-v2";
   const CLIENT_CHAT_SIGNAL_PORT = "minifeather-client-chat-signal";
@@ -362,7 +361,7 @@
     return socket;
   }
 
-  const singleTopicPorts = new Map(); // port -> {topic, socket, timer, failures, stopped}
+  const singleTopicPorts = new Map();
 
   function startSingleTopic(port, entry) {
     const topic = entry.topic;
@@ -404,7 +403,7 @@
     }
   }
 
-  const multiTopicPorts = new Map(); // port -> {subscriptions: Map(topic -> {socket, timer, failures, since}), stopped}
+  const multiTopicPorts = new Map();
 
   function startMultiTopic(port, entry, topic, since) {
     const safe = ntfySafeTopic(topic);
@@ -464,7 +463,6 @@
     try { sub.socket?.close(); } catch (_) {}
   }
 
-  // ---------- Mini background ----------
   const miniBg = {
     ports: new Set(),
 
@@ -568,7 +566,7 @@
           return { success: true, downloadId: id };
         }
 
-        return { success: false, error: 'MF_MINI_BG: unknown message ' + (message?.type || String(message)) };
+        return { success: false, error: 'mf_mini_bg: unknown message ' + (message?.type || String(message)) };
       } catch (error) {
         return { success: false, error: String(error?.message || error) };
       }
@@ -641,7 +639,6 @@
   };
   window.__MF_MINI_BG__ = miniBg;
 
-  // ---------- Arranque: settings por defecto + check del updater ----------
   (async () => {
     try {
       const existing = await chrome.storage.local.get(["settings", "spritesheetEnabled"]);

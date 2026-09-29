@@ -1,10 +1,5 @@
-/*
- * MiniFeather Client — CompatShim
- * Capa de compatibilidad para entornos sin extensión (userscript iOS/escritorio y app Android).
- * Implementa el subconjunto de chrome.* que usa el client sobre localStorage y un
- * mini-background embebido (MF_MiniBackground.js). No hace nada si la extensión real
- * está instalada (chrome.runtime.id presente) para no duplicar funcionalidad.
- */
+// minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
+// it politely does nothing if the real extension is running. :D
 (function () {
   'use strict';
   if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) return;
@@ -26,7 +21,6 @@
     return String(path || '').replace(/^\.\//, '').replace(/^\/+/, '');
   }
 
-  // ---------- storage.local sobre localStorage ----------
   const PREFIX = 'mf:shim:storage:';
   const listeners = new Set();
 
@@ -76,7 +70,7 @@
         changes[k] = { oldValue, newValue };
         try { localStorage.setItem(PREFIX + k, JSON.stringify(newValue)); } catch (e) {
           if (typeof cb === 'function') setTimeout(cb, 0);
-          else return Promise.reject(new Error('MF shim storage quota: ' + e.message));
+          else return Promise.reject(new Error('mf shim storage quota: ' + e.message));
         }
       }
       fireChanged(changes);
@@ -109,7 +103,6 @@
     }
   }
 
-  // ---------- runtime ----------
   const messageListeners = new Set();
   const connectListeners = new Set();
 
@@ -119,7 +112,6 @@
       this._onMessage = [];
       this._onDisconnect = [];
       this._closed = false;
-      // API compatible con chrome: port.onMessage.addListener(fn)
       this.onMessage = {
         addListener: fn => { if (typeof fn === 'function') this._onMessage.push(fn); }
       };
@@ -144,7 +136,7 @@
       const bg = window.__MF_MINI_BG__;
       if (bg) bg.portMessage(this, message);
     }
-    // Como en Chrome: el propio lado no recibe su onDisconnect; solo se cierra el lado del mini-bg
+    // like real chrome: the side that hangs up does not get its own ondisconnect :v
     disconnect() {
       if (this._closed) return;
       const bg = window.__MF_MINI_BG__;
@@ -172,7 +164,7 @@
       };
       Promise.resolve().then(() => {
         const bg = window.__MF_MINI_BG__;
-        if (!bg) return { success: false, error: 'MF_MINI_BG_NOT_READY' };
+        if (!bg) return { success: false, error: 'mf_mini_bg_not_ready' };
         return bg.handleMessage(message);
       }).then(done).catch(error => done({ success: false, error: String(error && error.message || error) }));
     },
@@ -212,7 +204,6 @@
   };
   window.chrome = chromeShim;
 
-  // API interna para MF_MiniBackground y módulos móviles
   window.__MF_SHIM__ = {
     build: BUILD,
     assetBase: resolveBase,

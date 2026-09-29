@@ -1,0 +1,17 @@
+[package]
+name = "minifeather-client"
+version = "4.17.5"
+description = "minifeather client for miniblox"
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

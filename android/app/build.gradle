@@ -28,15 +28,27 @@ android {
     }
 }
 
-// El APK lleva el client entero (módulos, assets, modelos, classic) bajo assets/client/
+// the apk carries the whole client (modules, assets, models, classic) under assets/client/
 android.sourceSets.main.assets.srcDirs += [layout.buildDirectory.dir('generated/clientAssets')]
 
 tasks.register('syncClientAssets', Copy) {
-    description 'Copia los archivos del client al APK'
+    description 'copies the client files into the apk'
     from(rootDir.parentFile) {
         include 'src/**', 'assets/**', 'classic/**', 'models/**', 'textures/**', 'skins/**', 'emotes/**',
                 'defaults.json', 'hotload.json', 'manifest.json', 'build.json'
     }
     into layout.buildDirectory.dir('generated/clientAssets/client')
 }
-tasks.named('preBuild') { dependsOn 'syncClientAssets' }
+
+// the eula (legal + human tl;dr, en/es) ships inside the apk for the native gate
+android.sourceSets.main.assets.srcDirs += [layout.buildDirectory.dir('generated/eulaAssets')]
+
+tasks.register('syncEulaAssets', Copy) {
+    description 'copies the eula files into the apk assets'
+    from(rootDir.parentFile) {
+        include 'EULA.md', 'EULA.es.md', 'EULA-TLDR.md', 'EULA-TLDR.en.md'
+    }
+    into layout.buildDirectory.dir('generated/eulaAssets/eula')
+}
+
+tasks.named('preBuild') { dependsOn 'syncClientAssets', 'syncEulaAssets' }

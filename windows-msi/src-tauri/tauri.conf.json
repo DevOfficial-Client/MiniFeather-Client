@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "minifeather client",
+  "version": "4.17.5",
+  "identifier": "com.devofficial.minifeather",
+  "build": {
+    "frontendDist": "./empty"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi"],
+    "icon": ["icons/icon.ico"],
+    "resources": {
+      "../../src/**/*": "client/src/",
+      "../../assets/**/*": "client/assets/",
+      "../../classic/**/*": "client/classic/",
+      "../../models/**/*": "client/models/",
+      "../../textures/**/*": "client/textures/",
+      "../../skins/**/*": "client/skins/",
+      "../../emotes/**/*": "client/emotes/",
+      "../../defaults.json": "client/defaults.json",
+      "../../hotload.json": "client/hotload.json",
+      "../../manifest.json": "client/manifest.json",
+      "../../build.json": "client/build.json",
+      "../../EULA.md": "client/eula/EULA.md",
+      "../../EULA.es.md": "client/eula/EULA.es.md",
+      "../../EULA-TLDR.md": "client/eula/EULA-TLDR.md",
+      "../../EULA-TLDR.en.md": "client/eula/EULA-TLDR.en.md"
+    },
+    "windows": {
+      "wix": {
+        "license": "windows/license.rtf"
+      }
+    }
+  }
+}

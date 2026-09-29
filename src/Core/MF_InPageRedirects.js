@@ -1,13 +1,6 @@
-/*
- * MiniFeather Client — MF_InPageRedirects
- * Sustituto in-página de las reglas declarativeNetRequest del background para entornos
- * sin extensión (userscript y app Android). Replica los redirects activos del client:
- *  - /textures/spritesheet*          → spritesheet activo (custom | pvtexpack)
- *  - EXTRA_TEXTURES (armaduras/mobs) → pack de texturas del auth-api de MiniBlox
- *  - texturas locales (si activas)   → copia local del client (assetBase)
- *  - skins/capas custom              → URL configurada (currentSkins/currentCapes)
- * Parchea fetch, XMLHttpRequest.open y el src de <img>; todo lo demás pasa intacto.
- */
+// minifeather in-page redirects. declarativeNetRequest cosplay, but from inside the page.
+// replicates the background's active redirect rules by patching fetch / xhr / img.src.
+// everything that does not match goes through untouched, promise. :D
 (function () {
   'use strict';
   if (window.__MF_IN_PAGE_REDIRECTS__) return;
@@ -43,10 +36,8 @@
     { from: "/textures/entity/chest/normal_double.png", to: "entity/chest/normal_double.png" }
   ];
 
-  // Prefs cacheadas (se refrescan vía storage.onChanged)
   const prefs = {
     spritesheetEnabled: true,
-    localTexturesEnabled: true,
     customSpritesheetUrl: null,
     currentSkins: {},
     currentCapes: {}
@@ -55,7 +46,6 @@
   function applyStorage(stored) {
     if (!stored) return;
     if (stored.spritesheetEnabled !== undefined) prefs.spritesheetEnabled = stored.spritesheetEnabled !== false;
-    if (stored.localTexturesEnabled !== undefined) prefs.localTexturesEnabled = stored.localTexturesEnabled !== false;
     if (stored.mfCustomSpritesheetUrl !== undefined) prefs.customSpritesheetUrl = stored.mfCustomSpritesheetUrl || null;
     if (stored.currentSkins) prefs.currentSkins = stored.currentSkins || {};
     if (stored.currentCapes) prefs.currentCapes = stored.currentCapes || {};
@@ -65,7 +55,6 @@
     chrome.storage.onChanged.addListener((changes) => {
       applyStorage({
         spritesheetEnabled: changes.spritesheetEnabled ? changes.spritesheetEnabled.newValue : undefined,
-        localTexturesEnabled: changes.localTexturesEnabled ? changes.localTexturesEnabled.newValue : undefined,
         mfCustomSpritesheetUrl: changes.mfCustomSpritesheetUrl ? changes.mfCustomSpritesheetUrl.newValue : undefined,
         currentSkins: changes.currentSkins ? changes.currentSkins.newValue : undefined,
         currentCapes: changes.currentCapes ? changes.currentCapes.newValue : undefined
@@ -86,7 +75,6 @@
     if (u.protocol !== 'https:' || !GAME_HOSTS.has(u.hostname)) return null;
     const path = u.pathname;
 
-    // skins / capas custom (exacto: /textures/entity/{skins|capes}/{name}.png)
     const skinMatch = /^\/textures\/entity\/skins\/([A-Za-z0-9_-]+)\.png$/.exec(path);
     if (skinMatch) {
       const custom = prefs.currentSkins[skinMatch[1]];
@@ -98,12 +86,10 @@
       if (custom && /^https?:\/\//i.test(custom)) return custom;
     }
 
-    // spritesheet (prefijo /textures/spritesheet, como el urlFilter "/textures/spritesheet*")
     if (prefs.spritesheetEnabled !== false && path.indexOf('/textures/spritesheet') === 0) {
       return activeSpritesheetUrl();
     }
 
-    // EXTRA_TEXTURES → pack del auth-api (prefijo, igual que DNR `${from}*`)
     for (const t of EXTRA_TEXTURES) {
       if (path.indexOf(t.from) === 0) return TEXTURE_PACK_REDIRECT_BASE + t.to;
     }
@@ -111,7 +97,6 @@
     return null;
   }
 
-  // ---- fetch ----
   const origFetch = window.fetch;
   if (typeof origFetch === 'function') {
     window.fetch = function (input, init) {
@@ -133,7 +118,6 @@
     };
   }
 
-  // ---- XMLHttpRequest ----
   try {
     const origOpen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function (method, url) {
@@ -151,7 +135,6 @@
     };
   } catch (_) {}
 
-  // ---- <img src> ----
   try {
     const desc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
     if (desc && desc.set) {

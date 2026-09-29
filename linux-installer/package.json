@@ -1,0 +1,16 @@
+{
+  "name": "minifeather-client",
+  "productName": "minifeather client",
+  "version": "4.17.5",
+  "description": "minifeather client for miniblox (electron wrapper for linux)",
+  "main": "main.js",
+  "author": "DevOfficial-Client",
+  "license": "MIT",
+  "scripts": {
+    "dist": "electron-builder --linux AppImage deb"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  }
+}

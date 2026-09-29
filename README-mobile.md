@@ -1,46 +1,59 @@
-# MiniFeather Client — Móvil (Android APK + iOS userscript)
+# minifeather client — builds (android apk, windows msi, linux, ios userscript)
 
-Port del client a móviles sin extensión de Chrome. Todo reutiliza los módulos originales:
+the client packaged for every platform, no chrome extension needed. everything reuses the
+original modules; the extension chrome is replaced by a small compatibility layer.
 
-- `src/Core/CompatShim.js` — implementa el subconjunto de `chrome.*` que usa el client (`storage`, `runtime.getURL`, `sendMessage`, `connect`) sobre localStorage. No hace nada si la extensión real está instalada.
-- `src/Core/MF_MiniBackground.js` — puerto del service worker (`background.js`): cuentas/skins, spritesheet, updater + hot-sync (OTA sigue funcionando) y los puertos ntfy de señalización (chat, voz, localgames).
-- `src/Core/MF_InPageRedirects.js` — sustituto in-página de `declarativeNetRequest` (parchea `fetch`/XHR/`img.src`): spritesheet, texturas extra, y skins/capas custom.
-- `tools/build-mobile.js` — empaqueta los módulos en el orden exacto de `manifest.json`:
-  - `dist/MiniFeatherClient.user.js` → userscript (iOS / Firefox Android / escritorio)
-  - `android/app/src/main/assets/mf/main.js` + `main-end.js` → arranque del APK
+## how it works
 
-## Android — APK
+- `src/Core/CompatShim.js` — implements the chrome.* subset the client uses (`storage`,
+  `runtime.getURL`, `sendMessage`, `connect`) over localStorage. silently does nothing when
+  the real extension is running.
+- `src/Core/MF_MiniBackground.js` — port of the service worker (`background.js`): accounts,
+  skins/capes, spritesheet prefs, the updater + **hot-sync (the client hot-updates itself
+  from github, no reinstalls)** and the ntfy signaling ports (chat, voice, localgames).
+  hot modules apply on the next load and the page auto-reloads when idle code lands.
+- `src/Core/MF_InPageRedirects.js` — in-page replacement for `declarativeNetRequest`
+  (patches `fetch`/XHR/`img.src`): spritesheet, extra textures, custom skins/capes.
+- `src/Core/MF_EulaGate.js` — accept dialog for the embedded apps (tauri/electron).
+- `tools/build-mobile.js` — packs the modules in the exact `manifest.json` order and emits
+  one bundle per target (userscript, android, tauri, electron).
 
-1. Descarga el APK del release rolling: `https://github.com/DevOfficial-Client/MiniFeather-Client/releases/tag/apk-latest`
-2. Ábrelo en el teléfono y acepta "instalar de origen desconocido".
-3. El primer arranque pide permiso de micrófono (voz P2P). Listo: se abre miniblox.io con el client inyectado.
+## downloads
 
-El APK se regenera automáticamente en cada push a `main` (workflow `mobile-build`). El HotLoader aplica hot-updates de los módulos marcados en `hotload.json` sin reinstalar el APK.
+rolling release, regenerated on every push to `main`:
+`https://github.com/DevOfficial-Client/MiniFeather-Client/releases/tag/apk-latest`
 
-Nota: es un build *debug* firmado con la clave de debug generada en CI — normal para uso personal; si algún día se quiere publicar en Play Store se firma release.
+- **android apk** (debug-signed): open it on the phone, allow unknown sources, done.
+  first launch shows the eula (human tl;dr, en/es, full legal text one tap away).
+- **windows msi** (tauri + webview2): standard installer with the legal eula license page.
+- **linux**: appimage (universal) or deb (electron).
 
-## iOS — Safari + app "Userscripts" (gratis, sin cuenta de developer)
+## ios — safari + the free "userscripts" app
 
-1. Instala **Userscripts** desde el App Store (gratis y open source: https://github.com/quoid/userscripts).
-2. Ajustes → Safari → Extensiones → Userscripts → permitir en `miniblox.io` y activarla.
-3. En la app Userscripts: añadir nuevo script desde URL:
+1. install **userscripts** from the app store (free, open source: https://github.com/quoid/userscripts).
+2. settings → safari → extensions → userscripts → allow on `miniblox.io`.
+3. in the userscripts app, add a new script from url:
    `https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js`
-4. Abre miniblox.io en Safari — el client carga como en escritorio.
+4. open miniblox.io in safari.
 
-Limitaciones iOS: sin redirects de skins vía `declarativeNetRequest` (se usan los in-page), el updater abre el zip por link en vez de `chrome.downloads`, y los hot-modules se aplican al recargar la página.
+## firefox android (no apk)
 
-## Firefox Android (alternativa sin APK)
+install firefox + **violentmonkey**, import the same userscript url.
 
-1. Instala Firefox y la extensión **Violentmonkey**.
-2. Importa el mismo userscript de arriba.
-3. Igual que iOS: shim + mini-background embebidos, sin service worker.
+## eula
 
-## Desarrollo
+every package ships the eula in both flavors and languages: `EULA.md` / `EULA.es.md`
+(full legal text) and `EULA-TLDR.en.md` / `EULA-TLDR.md` (human-readable version).
+
+## development
 
 ```bash
-node tools/build-mobile.js          # regenera userscript + bundles Android
+node tools/build-mobile.js        # regenerate all bundles
 node --check dist/MiniFeatherClient.user.js
-cd android && gradle :app:assembleDebug   # requiere JDK 17 + Android SDK
+gradle :app:assembleDebug -p android          # android (jdk 17 + sdk)
+cd windows-msi && npx @tauri-apps/cli@2 build # windows msi (rust)
+cd linux-installer && npm install && npm run dist # linux packages
 ```
 
-`CompatShim` solo se activa si NO hay extensión real (`chrome.runtime.id` ausente), así que el mismo código es inofensivo en la extensión de escritorio.
+`CompatShim` only activates when the real extension is absent (no `chrome.runtime.id`),
+so the same code is harmless in the desktop extension.

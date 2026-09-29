@@ -2,10 +2,13 @@ package com.devofficial.minifeather;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.AssetManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -33,18 +36,13 @@ import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Scanner;
 
-/**
- * MiniFeather Client para Android.
- * Carga miniblox.io en un WebView e inyecta el client (bundles mf/main.js y mf/main-end.js,
- * generados por tools/build-mobile.js) justo tras <head>, replicando el orden de los
- * content scripts del manifest y la semántica document_start / document_end (defer).
- * Los recursos del client se sirven desde el APK bajo https://appassets.androidplatform.net/
- * con cabeceras CORS, equivalente a web_accessible_resources.
- */
+// minifeather client for android. loads miniblox.io and injects the client before the
+// game notices anything. the eula gate runs first, because lawyers. :v
 public class MainActivity extends Activity {
 
-    private static final String TAG = "MiniFeather";
+    private static final String TAG = "minifeather";
     private static final String ASSET_HOST = "appassets.androidplatform.net";
     private static final String START_URL = "https://miniblox.io/";
     private static final String BOOT_TAGS =
@@ -52,8 +50,11 @@ public class MainActivity extends Activity {
             + "<script defer src=\"https://appassets.androidplatform.net/mf/main-end.js\"></script>";
 
     private static final int FILE_CHOOSER_CODE = 1001;
+    private static final String EULA_PREF = "mf_eula";
+    private static final String EULA_ACCEPTED = "mf_eula_accepted_v1";
 
     private WebView webView;
+    private boolean pendingLoad = true;
     private ValueCallback<Uri[]> filePathCallback;
     private PermissionRequest pendingPermission;
 
@@ -84,7 +85,11 @@ public class MainActivity extends Activity {
         webView.setWebChromeClient(new MFWebChromeClient());
         webView.setDownloadListener(this::enqueueDownload);
 
-        webView.loadUrl(START_URL);
+        if (isEulaAccepted()) {
+            startGame();
+        } else {
+            showEula();
+        }
         ensureMicPermission();
     }
 
@@ -96,7 +101,64 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ---------------- WebViewClient: serving de assets + inyección ----------------
+    // ---------------- eula gate: human tl;dr by default, legal text one tap away ----------------
+
+    private boolean isSpanishLocale() {
+        return getApplicationContext().getResources().getConfiguration()
+                .locale.getLanguage().startsWith("es");
+    }
+
+    private boolean isEulaAccepted() {
+        return getSharedPreferences(EULA_PREF, MODE_PRIVATE).getBoolean(EULA_ACCEPTED, false);
+    }
+
+    private void startGame() {
+        if (!pendingLoad) return;
+        pendingLoad = false;
+        webView.loadUrl(START_URL);
+    }
+
+    private String readAsset(String name) {
+        AssetManager assets = getAssets();
+        try {
+            InputStream in = assets.open("eula/" + name);
+            Scanner scanner = new Scanner(in, "UTF-8").useDelimiter("\\A");
+            String text = scanner.hasNext() ? scanner.next() : "";
+            scanner.close();
+            return text;
+        } catch (IOException e) {
+            return name;
+        }
+    }
+
+    private void showEula() {
+        boolean es = isSpanishLocale();
+        String human = readAsset(es ? "EULA-TLDR.md" : "EULA-TLDR.en.md");
+        String legal = readAsset(es ? "EULA.es.md" : "EULA.md");
+        final boolean[] showingLegal = {false};
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(es ? "eula de minifeather client" : "minifeather client eula")
+                .setMessage(human)
+                .setPositiveButton(es ? "aceptar y jugar" : "accept and play",
+                        (d, which) -> {
+                            getSharedPreferences(EULA_PREF, MODE_PRIVATE)
+                                    .edit().putBoolean(EULA_ACCEPTED, true).apply();
+                            startGame();
+                        })
+                .setNegativeButton(es ? "rechazar y salir" : "decline and exit",
+                        (d, which) -> finish())
+                .setNeutralButton(es ? "ver eula legal" : "view legal eula", null)
+                .setCancelable(false)
+                .create();
+        dialog.show();
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
+            showingLegal[0] = !showingLegal[0];
+            dialog.setMessage(showingLegal[0] ? legal : human);
+        });
+    }
+
+    // ---------------- webviewclient: asset serving + injection ----------------
 
     private class MFWebViewClient extends WebViewClient {
         @Override
@@ -117,14 +179,14 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Sirve el client empaquetado (assets/client/** y assets/mf/**) con CORS abierto. */
+    // serves the packaged client (assets/client/** and assets/mf/**) with open cors
     private WebResourceResponse serveClientAsset(String rawPath) {
         if (rawPath == null) return notFound();
         String path = rawPath.startsWith("/") ? rawPath.substring(1) : rawPath;
         if (path.isEmpty() || path.contains("..")) return notFound();
 
         InputStream in = null;
-        String[] candidates = { "client/" + path, path };
+        String[] candidates = {"client/" + path, path};
         for (String candidate : candidates) {
             try {
                 in = getAssets().open(candidate);
@@ -146,11 +208,8 @@ public class MainActivity extends Activity {
                 new ByteArrayInputStream(new byte[0]));
     }
 
-    /**
-     * Descarga el HTML principal de miniblox.io, inyecta los bundles del client tras <head>
-     * y devuelve la respuesta modificada. Si algo falla, devuelve null para que WebView
-     * cargue la página original (sin client) en lugar de romper la navegación.
-     */
+    // fetches the main html, injects the client bundles right after <head> and serves it.
+    // on any failure returns null so webview loads the original page, client-less but alive.
     private WebResourceResponse interceptGameDocument(Uri uri, Map<String, String> requestHeaders) {
         HttpURLConnection conn = null;
         try {
@@ -178,11 +237,10 @@ public class MainActivity extends Activity {
             byte[] out = html.getBytes(StandardCharsets.UTF_8);
             Map<String, String> headers = new HashMap<>();
             headers.put("Access-Control-Allow-Origin", "*");
-            String contentType = type.contains("charset") ? type : type + "; charset=utf-8";
             return new WebResourceResponse("text/html", "utf-8", 200, "OK", headers,
                     new ByteArrayInputStream(out));
         } catch (Exception e) {
-            Log.w(TAG, "interceptGameDocument falló: " + e);
+            Log.w(TAG, "interceptGameDocument failed: " + e);
             return null;
         } finally {
             if (conn != null) conn.disconnect();
@@ -237,7 +295,7 @@ public class MainActivity extends Activity {
         return guessed != null ? guessed : "application/octet-stream";
     }
 
-    // ---------------- WebChromeClient: permisos, file chooser, consola ----------------
+    // ---------------- webchromeclient: permissions, file chooser, console ----------------
 
     private class MFWebChromeClient extends WebChromeClient {
         @Override
@@ -270,7 +328,7 @@ public class MainActivity extends Activity {
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
                 intent.setType("*/*");
                 startActivityForResult(
-                        Intent.createChooser(intent, "Seleccionar archivo"), FILE_CHOOSER_CODE);
+                        Intent.createChooser(intent, "select file"), FILE_CHOOSER_CODE);
             } catch (Exception e) {
                 filePathCallback = null;
                 return false;
@@ -327,7 +385,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ---------------- Descargas (chrome.downloads shim → DownloadManager) ----------------
+    // ---------------- downloads (chrome.downloads shim -> downloadmanager) ----------------
 
     private void enqueueDownload(String url, String userAgent, String contentDisposition,
                                  String mimeType, long contentLength) {
@@ -342,13 +400,13 @@ public class MainActivity extends Activity {
                     "MiniFeather-Client.zip");
             DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
             dm.enqueue(req);
-            Toast.makeText(this, "Descargando actualización…", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "downloading update…", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
-            Log.w(TAG, "descarga falló: " + e);
+            Log.w(TAG, "download failed: " + e);
         }
     }
 
-    // ---------------- Navegación / ciclo de vida ----------------
+    // ---------------- navigation / lifecycle ----------------
 
     @Override
     public void onBackPressed() {

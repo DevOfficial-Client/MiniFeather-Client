@@ -1,0 +1,113 @@
+name: builds
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: bundle client (userscript + android boot)
+        run: node tools/build-mobile.js --no-tauri --no-electron
+      - name: update userscript in repo (dist/)
+        run: |
+          git config user.name "minifeather-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add dist/MiniFeatherClient.user.js
+          git diff --cached --quiet || git commit -m "build: regenerate mobile userscript [skip ci]"
+          git push
+      - name: build apk
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - run: gradle :app:assembleDebug -p android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+  windows-msi:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: bundle client (tauri init scripts)
+        run: node tools/build-mobile.js --no-user --no-android --no-electron
+      - name: generate app icon
+        working-directory: windows-msi
+        run: npx @tauri-apps/cli@2 icon ../../assets/icon.png -o src-tauri/icons
+      - name: build msi
+        working-directory: windows-msi
+        run: npx @tauri-apps/cli@2 build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi
+          path: windows-msi/src-tauri/target/release/bundle/msi/*.msi
+
+  linux-electron:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: bundle client (electron preload)
+        run: node tools/build-mobile.js --no-user --no-android --no-tauri
+      - name: stage client files for packaging
+        run: |
+          mkdir -p linux-installer/resources/client/eula
+          cp -r src assets classic models textures skins emotes defaults.json hotload.json manifest.json build.json linux-installer/resources/client/
+          cp EULA.md EULA.es.md EULA-TLDR.md EULA-TLDR.en.md linux-installer/resources/client/eula/
+      - name: build appimage + deb
+        working-directory: linux-installer
+        run: |
+          npm install
+          npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            linux-installer/dist/*.AppImage
+            linux-installer/dist/*.deb
+
+  release:
+    needs: [android-apk, windows-msi, linux-electron]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: publish rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="rolling build of minifeather client, regenerated on every push to main.
+
+          - **android apk** (debug-signed): install allowing unknown sources. shows the eula on first launch.
+          - **windows msi** (tauri + webview2): wix license page with the full legal eula.
+          - **linux** appimage (universal) + deb (electron).
+
+          the client inside every package **hot-updates itself from github** (hotload), no reinstalls needed.
+          the eula ships inside all packages in both flavors: human tl;dr + full legal text, english and spanish."
+          FILES=$(find artifacts -type f \( -name '*.apk' -o -name '*.msi' -o -name '*.AppImage' -o -name '*.deb' \) | sed 's/^/-a /' | tr '\n' ' ')
+          if gh release view apk-latest > /dev/null 2>&1; then
+            gh release upload apk-latest $FILES --clobber
+            gh release edit apk-latest --title "minifeather client — builds" --notes "$NOTES"
+          else
+            gh release create apk-latest $FILES --title "minifeather client — builds" --notes "$NOTES"
+          fi
