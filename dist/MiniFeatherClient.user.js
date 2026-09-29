@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 676705995d1a22b2e642ff261955c3e10a50526d
- * builtAt : 2026-09-29T22:33:55.954Z
+ * commit  : 0e4e978279af1271b6b63bf8db3e079e612334d2
+ * builtAt : 2026-09-29T23:01:59.378Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"676705995d1a22b2e642ff261955c3e10a50526d","builtAt":"2026-09-29T22:33:55.960Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"0e4e978279af1271b6b63bf8db3e079e612334d2","builtAt":"2026-09-29T23:01:59.383Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -226,12 +226,38 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"676705995d1a22b2e642ff261955c3
   };
   window.chrome = chromeShim;
 
+  // ---------- page zoom (embedded apps) ----------
+  // the panel's zoom control used chrome.tabs.setZoom on desktop; here it maps to css
+  // zoom on the document element, persisted, applied as soon as <html> exists. :D
+  const ZOOM_KEY = 'mf:pageZoom';
+  function applyPageZoom(z) {
+    const factor = Math.min(5, Math.max(0.25, Number(z) || 1));
+    const run = () => {
+      try {
+        if (document.documentElement) document.documentElement.style.zoom = String(factor);
+        else setTimeout(run, 0);
+      } catch (_) {}
+    };
+    run();
+    return factor;
+  }
+  function resolvePageZoom() {
+    let saved = null;
+    try { saved = localStorage.getItem(ZOOM_KEY); } catch (_) {}
+    if (saved != null && !Number.isNaN(Number(saved))) return Number(saved);
+    return (typeof window.__MF_ZOOM_DEFAULT__ === 'number') ? window.__MF_ZOOM_DEFAULT__ : 1;
+  }
+
   window.__MF_SHIM__ = {
     build: BUILD,
     assetBase: resolveBase,
     messageListeners,
-    portClass: MFPort
+    portClass: MFPort,
+    applyPageZoom,
+    pageZoom: resolvePageZoom
   };
+
+  try { applyPageZoom(resolvePageZoom()); } catch (_) {}
 })();
 
 //# sourceURL=MF:src/Core/CompatShim.js
@@ -748,7 +774,17 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"676705995d1a22b2e642ff261955c3
           }
         }
 
-        if (message?.type === "mfSetPageZoom") return { success: true, skipped: true };
+        if (message?.type === "mfSetPageZoom") {
+          // desktop used chrome.tabs.setZoom; embedded apps map it to css zoom so the
+          // panel slider works everywhere. :v
+          const SHIM2 = window.__MF_SHIM__;
+          if (SHIM2 && typeof SHIM2.applyPageZoom === 'function') {
+            const factor = SHIM2.applyPageZoom(message.zoom);
+            try { localStorage.setItem('mf:pageZoom', String(factor)); } catch (_) {}
+            return { success: true };
+          }
+          return { success: true, skipped: true };
+        }
 
         if (message?.type === "setSpritesheet") { await chrome.storage.local.set({ spritesheetEnabled: message.enabled }); return { success: true }; }
         if (message?.type === "getSpritesheet") {
