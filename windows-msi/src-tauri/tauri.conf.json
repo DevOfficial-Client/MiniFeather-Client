@@ -17,22 +17,6 @@
     "targets": ["msi"],
     "icon": ["icons/icon.ico"],
     "licenseFile": "windows/license.rtf",
-    "resources": {
-      "../../src/**/*": "client/src/",
-      "../../assets/**/*": "client/assets/",
-      "../../classic/**/*": "client/classic/",
-      "../../models/**/*": "client/models/",
-      "../../textures/**/*": "client/textures/",
-      "../../skins/**/*": "client/skins/",
-      "../../emotes/**/*": "client/emotes/",
-      "../../defaults.json": "client/defaults.json",
-      "../../hotload.json": "client/hotload.json",
-      "../../manifest.json": "client/manifest.json",
-      "../../build.json": "client/build.json",
-      "../../EULA.md": "client/eula/EULA.md",
-      "../../EULA.es.md": "client/eula/EULA.es.md",
-      "../../EULA-TLDR.md": "client/eula/EULA-TLDR.md",
-      "../../EULA-TLDR.en.md": "client/eula/EULA-TLDR.en.md"
-    }
+    "resources": ["client/**/*"]
   }
 }
