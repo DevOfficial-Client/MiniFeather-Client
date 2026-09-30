@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : f6fc9671df28b6503729911a4bf76f43940ac07b
- * builtAt : 2026-09-30T00:05:34.161Z
+ * commit  : d5dbeb0448a0db6f04d90046ed980a36f2d8f31b
+ * builtAt : 2026-09-30T00:58:17.147Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"f6fc9671df28b6503729911a4bf76f43940ac07b","builtAt":"2026-09-30T00:05:34.166Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"d5dbeb0448a0db6f04d90046ed980a36f2d8f31b","builtAt":"2026-09-30T00:58:17.157Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -114201,82 +114201,238 @@ function normalize(entry) {
     else showGUI();
   }
 
-  // ---------- first steps tutorial: lowercase, kaomojis, questionable humor ----------
-  // auto-shows exactly once (localStorage), the ? button in the topbar resuscitates it.
-  function firstStepsCopy() {
+  // ---------- interactive first steps walkthrough ----------
+  // a little guided tour: spotlight on the real controls, and you actually have to
+  // click them. the steps change with your pc's horsepower because a potato and a
+  // 4090 should not get the same advice. :D
+  function detectPcTier() {
+    const cores = navigator.hardwareConcurrency || 4;
+    const mem = navigator.deviceMemory || 4;
+    let gpu = '';
+    try {
+      const c = document.createElement('canvas');
+      const gl = c.getContext('webgl2') || c.getContext('webgl');
+      const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+      gpu = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '') : String(gl?.getParameter(gl.RENDERER) || '');
+    } catch (_) {}
+    const g = gpu.toLowerCase();
+    let score = Math.min(cores, 16) * 1.5 + Math.min(mem, 32) * 1.5;
+    if (/rtx|radeon rx|arc a[57]|gtx 1[06]|quadro|radeon pro|apple m[1-4]|rx [5-7][0-9]{3}/.test(g)) score += 25;
+    if (/intel|uhd|hd graphics|iris|mali|adreno|powervr|swiftshader|llvmpipe|software|basic render/.test(g)) score -= 12;
+    const tier = score >= 45 ? 'beast' : score >= 24 ? 'medium' : 'potato';
+    return { tier, cores, mem, gpu };
+  }
+
+  function tutorialCopy(info, toggle) {
     const es = (navigator.language || 'en').toLowerCase().startsWith('es');
-    return es ? {
-      title: 'primeros pasos (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
-      intro: 'bienvenido a minifeather client: no oficial, pero hecho con cariño (｡♥‿♥｡)',
-      steps: [
-        ['right shift', 'abre y cierra este menú. la tecla que nunca usabas por fin sirve para algo (¬‿¬)'],
-        ['clic en un módulo', 'lo activa al instante. sin lag, sin drama y sin mensajes de tu ex (｡•̀ᴗ-)✧'],
-        ['/bind panel <tecla>', 'cambia la tecla del menú, por si right shift te parece demasiado mainstream'],
-        ['/bind <modulo> <tecla>', 'pon tus módulos en teclas, ej: /bind freecam F4 (ง..)ง.. uh, keys'],
-        ['ctrl +/- y f11', 'zoom de toda la pantalla y modo inmersión total. tu gpu llora de felicidad ᕙ(⇀‸↼‶)ᕗ'],
-        ['/help', 'todos los comandos que existen. sí, hay más de estos (๑•̀ㅂ•́)و'],
-        ['auto-updates', 'el client se actualiza solo en segundo plano. tú juega, nosotros compilamos (ﾉ´ヮ`)ﾉ*:･ﾟ']
-      ],
-      footer: 'esto aparece una sola vez, prometido. si lo extrañas, el botón ? de arriba lo resucita (っ˘̩╭╮˘̩)っ',
-      button: '¡a jugar! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧'
-    } : {
-      title: 'first steps (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
-      intro: 'welcome to minifeather client: not official, but made with love (｡♥‿♥｡)',
-      steps: [
-        ['right shift', 'opens and closes this menu. the key you never used finally has a purpose (¬‿¬)'],
-        ['click a module', 'toggles it instantly. no lag, no drama, no texts from your ex (｡•̀ᴗ-)✧'],
-        ['/bind panel <key>', 'change the menu key, in case right shift feels too mainstream for you'],
-        ['/bind <module> <key>', 'hotkey your favorites, e.g. /bind freecam F4 (ง..)ง keys go brrr'],
-        ['ctrl +/- and f11', 'page zoom and full immersion mode. your gpu sheds happy tears ᕙ(⇀‸↼‶)ᕗ'],
-        ['/help', 'every command that exists. yes, there are more of these (๑•̀ㅂ•́)و'],
-        ['auto-updates', 'the client updates itself in the background. you play, we compile (ﾉ´ヮ`)ﾉ*:･ﾟ']
-      ],
-      footer: 'this shows up exactly once, promise. if you miss it, the ? button up top resurrects it (っ˘̩╭╮˘̩)っ',
-      button: 'let me play! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧'
+    const specs = `${info.cores} cores · ${info.mem}gb${info.gpu ? ' · ' + info.gpu.split('(')[0].trim().slice(0, 42) : ''}`;
+    if (es) return {
+      tierLabel: { potato: 'patata 🥔', medium: 'equilibrada (｡•̀ᴗ-)✧', beast: 'bestia ᕙ(⇀‸↼‶)ᕗ' }[info.tier],
+      welcomeTitle: `hola! tu pc es una ${info.tier === 'beast' ? 'bestia' : info.tier === 'potato' ? 'patata con cariño' : 'máquina decente'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
+      welcomeBody: `detectamos: ${specs}<br>el tutorial se adapta a tu hardware, porque no es lo mismo una tostadora que un cohete (¬‿¬)`,
+      searchTitle: 'el buscador, tu mejor amigo',
+      searchBody: 'haz clic en la barra de búsqueda de arriba. escribe "keystrokes", "duck", lo que quieras… encuentra cualquier módulo sin scrollear como desesperado (๑•̀ㅂ•́)و',
+      catTitle: 'filtros',
+      catBody: 'haz clic en una categoría (todas / nuevo / hud / pvp) para filtrar los módulos. sí, tienes que hacer clic, esto es interactivo (ง\'̀-\'́)ง',
+      toggleTitle: `activa ${toggle.name}`,
+      toggleBody: info.tier === 'potato'
+        ? `haz clic en ${toggle.name} para activarlo. un módulo gratis para tu patata: cero costo, pura magia (￣ー￣)`
+        : info.tier === 'beast'
+          ? `haz clic en ${toggle.name} para activarlo. tu gpu quería lucirse hoy. luego pásate por la pestaña de shaders, te debe un render bonito ᕙ(⇀‸↼‶)ᕗ`
+          : `haz clic en ${toggle.name} para activarlo. tu audience de Twitch lo ama (ﾉ´ヮ\`)ﾉ*:･ﾟ`,
+      toggleDone: '¡lo lograste! ya sabes activar módulos ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
+      finalTitle: 'ya casi eres oficialmente minifeather (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
+      finalBody: info.tier === 'potato'
+        ? 'consejos de patata: mantén el render distance bajito, mira los perfiles de rendimiento y no toques los shaders… todavía. tu pc te lo agradecerá con fps estables (｡•̀ᴗ-)✧'
+        : info.tier === 'beast'
+          ? 'consejos de bestia: pestaña shaders, realistic mode y deferred pipeline te esperan. tu gpu pide horas extra y nosotros se las damos ᕙ(⇀‸↼‶)ᕗ'
+          : 'consejos equilibrados: prueba waypoints y el studio (F1). y si algo se rompe… right shift y a otra cosa (｡•̀ᴗ-)✧',
+      footer: 'right shift abre/cierra este menú · /bind panel <tecla> lo cambia · /help lista todo · el client se auto-actualiza solo',
+      next: 'siguiente (ﾉ◕ヮ◕)ﾉ',
+      doIt: 'tu turno: hazlo de verdad (ง\'̀-\'́)ง',
+      skip: 'saltar, ya sé todo esto >:(',
+      done: '¡a jugar! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
+      step: 'paso'
+    };
+    return {
+      tierLabel: { potato: 'potato 🥔', medium: 'balanced (｡•̀ᴗ-)✧', beast: 'beast ᕙ(⇀‸↼‶)ᕗ' }[info.tier],
+      welcomeTitle: `hi! your pc is a ${info.tier === 'beast' ? 'beast' : info.tier === 'potato' ? 'potato, but a loved one' : 'decent machine'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
+      welcomeBody: `detected: ${specs}<br>the tutorial adapts to your hardware, because a toaster and a rocket are not the same thing (¬‿¬)`,
+      searchTitle: 'the search bar, your best friend',
+      searchBody: 'click the search bar up top. type "keystrokes", "duck", anything… find any module without scrolling like a maniac (๑•ㅂ•́)و',
+      catTitle: 'filters',
+      catBody: 'click a category (all / new / hud / pvp) to filter modules. yes, you have to actually click, this is interactive (ง\'̀-\'́)ง',
+      toggleTitle: `enable ${toggle.name}`,
+      toggleBody: info.tier === 'potato'
+        ? `click ${toggle.name} to enable it. a free module for your potato: zero cost, pure magic (￣ー￣)`
+        : info.tier === 'beast'
+          ? `click ${toggle.name} to enable it. your gpu wanted to show off today. then check the shaders tab, it owes you a pretty render ᕙ(⇀‸↼‶)ᕗ`
+          : `click ${toggle.name} to enable it. your Twitch audience loves it (ﾉ´ヮ\`)ﾉ*:･ﾟ`,
+      toggleDone: 'you did it! now you know how to toggle modules ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
+      finalTitle: 'officially almost minifeather (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
+      finalBody: info.tier === 'potato'
+        ? 'potato tips: keep render distance low, check the performance profiles and don\'t touch shaders… yet. your pc will thank you with stable fps (｡•̀ᴗ-)✧'
+        : info.tier === 'beast'
+          ? 'beast tips: shaders tab, realistic mode and the deferred pipeline await. your gpu is asking for overtime and we deliver ᕙ(⇀‸↼‶)ᕗ'
+          : 'balanced tips: try waypoints and the studio (F1). and if something breaks… right shift and move on (｡•̀ᴗ-)✧',
+      footer: 'right shift opens/closes this menu · /bind panel <key> changes it · /help lists everything · the client updates itself',
+      next: 'next (ﾉ◕ヮ◕)ﾉ',
+      doIt: 'your turn: actually do it (ง\'̀-\'́)ง',
+      skip: 'skip, I already know all this >:(',
+      done: 'let me play! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
+      step: 'step'
     };
   }
 
-  function showFirstSteps(markDone) {
+  function runTutorial(markDone) {
     try { globalThis.__MF_FIRST_STEPS__?.destroy?.(); } catch (_) {}
-    const copy = firstStepsCopy();
+    const info = detectPcTier();
+    // pick a module that is actually OFF so the user has something real to do; if the
+    // usual suspects are all on, fall back to the tier's default. :D
+    const candidates = {
+      potato: ['fullBright', 'noWeather', 'coordinates'],
+      medium: ['keystrokes', 'coordinates', 'fpsCounter'],
+      beast: ['waterSplash', 'shineAmbience', 'itemPhysics']
+    }[info.tier];
+    const toggleKey = candidates.find(k => !guiSettings[k] && !settings[k]) || candidates[0];
+    const toggleName = (() => {
+      const entry = getModuleIndex().find(e => e.key === toggleKey);
+      return entry ? String(entry.title).toLowerCase() : toggleKey;
+    })();
+    const L = tutorialCopy(info, { key: toggleKey, name: toggleName });
+    const steps = [
+      { kind: 'info', title: L.welcomeTitle, body: `${L.welcomeBody}<br><span style="opacity:.7">tier: ${L.tierLabel}</span>` },
+      { kind: 'focus', sel: '#mf-gui-search', title: L.searchTitle, body: L.searchBody },
+      { kind: 'click', sel: '.mf-feather-category[data-category="all"]', title: L.catTitle, body: L.catBody },
+      { kind: 'toggle', key: toggleKey, title: L.toggleTitle, body: L.toggleBody },
+      { kind: 'info', title: L.finalTitle, body: `${L.finalBody}<br><span style="opacity:.75">${L.footer}</span>` }
+    ];
+
+    const root = document.createElement('div');
+    root.id = 'mf-tour';
+    root.style.cssText = 'position:fixed;inset:0;z-index:2147483646;pointer-events:none';
+    const spot = document.createElement('div');
+    spot.style.cssText = 'position:fixed;border-radius:12px;box-shadow:0 0 0 9999px rgba(8,5,16,.78),0 0 0 3px #b79bff,0 0 26px rgba(183,155,255,.5);transition:all .25s cubic-bezier(.2,.9,.3,1);pointer-events:none';
+    const card = document.createElement('div');
+    card.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);max-width:560px;width:calc(100% - 40px);background:#150f24;border:1px solid #6045a0;border-radius:14px;padding:18px 20px;box-shadow:0 18px 60px rgba(0,0,0,.6);pointer-events:auto';
+    root.appendChild(spot);
+    root.appendChild(card);
+    (document.body || document.documentElement).appendChild(root);
+
+    let idx = 0;
+    let dead = false;
+    let pollTimer = 0;
+    let trackTimer = 0;
+    let target = null;
+    let celebrated = false;
+
     const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const rows = copy.steps.map(([key, text]) => `
-      <div style="display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-bottom:1px dashed rgba(183,155,255,.16)">
-        <span style="flex:none;background:#241a3f;border:1px solid #6045a0;color:#d8ccff;font:600 12px/1 ui-monospace,monospace;padding:6px 9px;border-radius:6px;white-space:nowrap">${esc(key)}</span>
-        <span style="font:400 13.5px/1.55 system-ui,sans-serif;color:#cfc6ea">${esc(text)}</span>
-      </div>`).join('');
-    const overlay = document.createElement('div');
-    overlay.id = 'mf-first-steps';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(8,5,16,.8);display:flex;align-items:center;justify-content:center;padding:24px';
-    overlay.innerHTML = `
-      <div style="max-width:560px;width:100%;max-height:86vh;overflow:auto;background:#150f24;border:1px solid #6045a0;border-radius:14px;padding:22px;box-shadow:0 18px 60px rgba(0,0,0,.6)">
-        <div style="font:750 20px/1.3 system-ui,sans-serif;color:#b79bff">${esc(copy.title)}</div>
-        <div style="margin:8px 0 4px;font:400 13.5px/1.5 system-ui,sans-serif;color:#9d90c9">${esc(copy.intro)}</div>
-        <div style="margin-top:10px">${rows}</div>
-        <div style="margin-top:12px;font:400 12.5px/1.5 system-ui,sans-serif;color:#8d80b8">${esc(copy.footer)}</div>
-        <button id="mf-first-steps-ok" style="margin-top:14px;width:100%;padding:11px 16px;border:0;border-radius:9px;background:linear-gradient(135deg,#6045a0,#7c5cd6);color:#fff;font:700 14px system-ui,sans-serif;cursor:pointer">${esc(copy.button)}</button>
-      </div>`;
-    const close = () => {
-      try { overlay.remove(); } catch (_) {}
+
+    function cleanup() {
+      if (dead) return;
+      dead = true;
+      clearInterval(pollTimer);
+      clearInterval(trackTimer);
+      window.removeEventListener('resize', place);
       document.removeEventListener('keydown', onKey, true);
-      try { if (markDone) localStorage.setItem('mf:first-steps-v1', 'yes'); } catch (_) {}
+      document.removeEventListener('click', onClick, true);
+      try { root.remove(); } catch (_) {}
       try { delete globalThis.__MF_FIRST_STEPS__; } catch (_) { globalThis.__MF_FIRST_STEPS__ = null; }
+    }
+    const finish = () => {
+      try { if (markDone) localStorage.setItem('mf:first-steps-v2', 'yes'); } catch (_) {}
+      cleanup();
     };
-    const onKey = e => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
-    };
-    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-    overlay.querySelector('#mf-first-steps-ok').addEventListener('click', close);
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(); }
+    }
+    function onClick() {
+      // retarget after clicks (panel re-renders pages)
+      setTimeout(retarget, 60);
+    }
+    function place() {
+      if (!target) { spot.style.opacity = '0'; return; }
+      try {
+        const r = target.getBoundingClientRect();
+        spot.style.opacity = '1';
+        spot.style.left = Math.max(4, r.left - 6) + 'px';
+        spot.style.top = Math.max(4, r.top - 6) + 'px';
+        spot.style.width = Math.min(window.innerWidth - 8, r.width + 12) + 'px';
+        spot.style.height = Math.min(window.innerHeight - 8, r.height + 12) + 'px';
+      } catch (_) { spot.style.opacity = '0'; }
+    }
+    function retarget() {
+      const step = steps[idx];
+      if (!step || dead) return;
+      target = (step.sel && document.querySelector(step.sel)) || (step.key && panel?.querySelector(`.mf-toggle[data-key="${step.key}"]`)) || null;
+      place();
+    }
+    function celebrate() {
+      if (celebrated) return;
+      celebrated = true;
+      card.innerHTML = `<div style="font:750 17px/1.35 system-ui,sans-serif;color:#b79bff">${esc(L.toggleDone)}</div>`;
+      try {
+        card.animate([{ transform: 'translateX(-50%) scale(.96)' }, { transform: 'translateX(-50%) scale(1)' }], { duration: 260, easing: 'ease-out' });
+      } catch (_) {}
+      setTimeout(() => { if (!dead) { idx++; render(); } }, 950);
+    }
+    function render() {
+      const step = steps[idx];
+      if (!step) { finish(); return; }
+      const counter = `${L.step} ${idx + 1}/${steps.length}`;
+      const actions = step.kind === 'info'
+        ? `<button id="mf-tour-next" style="margin-top:12px;padding:10px 18px;border:0;border-radius:9px;background:linear-gradient(135deg,#6045a0,#7c5cd6);color:#fff;font:700 13.5px system-ui,sans-serif;cursor:pointer">${esc(L.next)}</button>`
+        : `<div style="margin-top:12px;font:600 12.5px system-ui,sans-serif;color:#e8b46a;animation:mfTourPulse 1.2s ease-in-out infinite">${esc(L.doIt)}</div>`;
+      const mainBtn = step.kind === 'info' && idx === steps.length - 1 ? L.done : null;
+      card.innerHTML = `
+        <style>@keyframes mfTourPulse{0%,100%{opacity:.55}50%{opacity:1}}</style>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <span style="font:600 11px/1 ui-monospace,monospace;color:#8d80b8;text-transform:lowercase">${esc(counter)}</span>
+          <button id="mf-tour-skip" style="background:none;border:0;color:#8d80b8;font:400 12px system-ui,sans-serif;cursor:pointer;text-decoration:underline">${esc(L.skip)}</button>
+        </div>
+        <div style="margin-top:6px;font:750 17px/1.35 system-ui,sans-serif;color:#b79bff">${esc(step.title)}</div>
+        <div style="margin-top:6px;font:400 13.5px/1.55 system-ui,sans-serif;color:#cfc6ea">${step.body}</div>
+        ${mainBtn ? `<button id="mf-tour-next" style="margin-top:12px;padding:10px 18px;border:0;border-radius:9px;background:linear-gradient(135deg,#6045a0,#7c5cd6);color:#fff;font:700 13.5px system-ui,sans-serif;cursor:pointer">${esc(mainBtn)}</button>` : actions}
+        ${(step.kind !== 'info' && step.key) ? `<div style="margin-top:8px;font:400 12px system-ui,sans-serif;color:#8d80b8">tip: usa el buscador de arriba si no ves el módulo (¬‿¬)</div>` : ''}`;
+      card.querySelector('#mf-tour-skip')?.addEventListener('click', finish);
+      card.querySelector('#mf-tour-next')?.addEventListener('click', () => { idx++; render(); });
+      celebrated = false;
+      retarget();
+      clearInterval(pollTimer);
+      if (step.kind === 'focus') {
+        pollTimer = setInterval(() => {
+          const el = document.querySelector(step.sel);
+          if (el && (document.activeElement === el || el.value)) { clearInterval(pollTimer); idx++; render(); }
+        }, 250);
+      } else if (step.kind === 'click') {
+        const handler = e => {
+          const el = e.target?.closest?.(step.sel);
+          if (el) { document.removeEventListener('click', handler, true); setTimeout(() => { idx++; render(); }, 250); }
+        };
+        document.addEventListener('click', handler, true);
+      } else if (step.kind === 'toggle') {
+        // requires a real state CHANGE: an already-on module would auto-skip the lesson
+        const initial = !!(guiSettings[step.key] || settings[step.key]);
+        pollTimer = setInterval(() => {
+          const now = !!(guiSettings[step.key] || settings[step.key]);
+          if (now !== initial) { clearInterval(pollTimer); celebrate(); }
+        }, 250);
+      }
+    }
+
+    window.addEventListener('resize', place);
     document.addEventListener('keydown', onKey, true);
-    (document.body || document.documentElement).appendChild(overlay);
-    globalThis.__MF_FIRST_STEPS__ = { destroy: close };
+    document.addEventListener('click', onClick, true);
+    trackTimer = setInterval(retarget, 400);
+    globalThis.__MF_FIRST_STEPS__ = { destroy: cleanup };
+    render();
   }
 
   function maybeShowFirstSteps() {
     try {
-      if (localStorage.getItem('mf:first-steps-v1') === 'yes') return;
+      if (localStorage.getItem('mf:first-steps-v2') === 'yes') return;
     } catch (_) { return; }
-    showFirstSteps(true);
+    runTutorial(true);
   }
 
   function applyPanelPersonality() {
@@ -117054,7 +117210,7 @@ function normalize(entry) {
     const panelSignal = panelController.signal;
 
     panel.querySelector('#mf-gui-close')?.addEventListener('click', hideGUI, { signal: panelSignal });
-    panel.querySelector('#mf-gui-help')?.addEventListener('click', () => showFirstSteps(false), { signal: panelSignal });
+    panel.querySelector('#mf-gui-help')?.addEventListener('click', () => runTutorial(false), { signal: panelSignal });
 
     panel.querySelectorAll('[data-page]').forEach(nav => {
       nav.addEventListener('click', () => setActivePage(nav.dataset.page), { signal: panelSignal });
@@ -117171,8 +117327,10 @@ function normalize(entry) {
     let cleanHud = false;
 
     const isTyping = target => target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target?.isContentEditable === true;
-    // the panel open key: right shift by default, rebindable with /bind panel <key>
-    const panelBindDown = { code: null };
+    // the panel open key: right shift by default, rebindable with /bind panel <key>.
+    // event.repeat blocks held-key auto-repeat with zero keyup bookkeeping -- a tracked
+    // "was down" flag sticks if the keyup gets lost (alt-tab mid-press) and deadlocks
+    // the toggle. been there, fixed that. :v
     const panelBindCode = () => normalizeBindCode(settings.moduleBinds?.panel || '') || 'ShiftRight';
     const panelOpenBlocked = target => isTyping(target) || !!document.getElementById('mf-eula-overlay');
     const setCleanHud = hidden => {
@@ -117188,8 +117346,7 @@ function normalize(entry) {
     };
 
     document.addEventListener('keydown', event => {
-      if (event.code === panelBindCode() && panelBindDown.code !== event.code) {
-        panelBindDown.code = event.code;
+      if (event.code === panelBindCode() && !event.repeat) {
         // no toggling while typing in chat/inputs, and not under the eula gate
         if (!panelOpenBlocked(event.target)) {
           event.preventDefault();
@@ -117206,12 +117363,10 @@ function normalize(entry) {
     }, { capture: true, signal: runtimeController?.signal });
 
     document.addEventListener('keyup', event => {
-      if (panelBindDown.code === event.code) panelBindDown.code = null;
       if (event.code === 'ShiftLeft') leftShiftDown = false;
     }, { capture: true, signal: runtimeController?.signal });
 
     window.addEventListener('blur', () => {
-      panelBindDown.code = null;
       leftShiftDown = false;
     }, { signal: runtimeController?.signal });
   }
