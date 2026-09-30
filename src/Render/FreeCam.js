@@ -459,7 +459,9 @@ const FREECAM_UUIDS = new Set([
     } catch (_) {}
 
     const manager = resolveCloneManager();
-    const profile = state.game?.player?.profile || {};
+    const profile = globalThis.__MINIFEATHER_LOCAL_GAMES__?.getProfile?.()
+      ? { ...globalThis.__MINIFEATHER_LOCAL_GAMES__.getProfile(), mode: state.game?.player?.profile?.mode }
+      : (state.game?.player?.profile || {});
     if (!manager || typeof manager.spawnPlayer !== "function") return null;
 
     try {

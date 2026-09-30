@@ -11575,6 +11575,9 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     get game() {
       return state.game;
     },
+    getProfile() {
+      return profileSnapshot();
+    },
     startSandbox() {
       return startWorld('sandbox', 'single', 0, {
         forceDirect: true,

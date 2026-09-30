@@ -69,32 +69,28 @@
         return isLiveGame(state.game) ? state.game : null;
     }
 
-    function playerProfile(game) {
-        const profile = game?.player?.profile || {};
-        return {
-            name: String(profile.username || profile.name || 'Player'),
-            uuid: String(profile.uuid || ''),
-            skin: profile.skin || 'bob',
-            cape: profile.cape || 'none',
-            hat: profile.hat || 'none',
-            trail: profile.trail || 'none',
-            aura: profile.aura || 'none',
-            rank: profile.rank || '',
-            mode: String(profile.mode || 'survival'),
-            discordBoosting: profile.discordBoosting === true
-        };
-    }
+  function playerProfile(game) {
+    const mf = globalThis.__MINIFEATHER_LOCAL_GAMES__?.getProfile?.();
+    const profile = game?.player?.profile || {};
+    const cosmetics = profile.cosmetics || {};
+    return {
+      name: String(mf?.name || profile.username || profile.name || "Player"),
+      uuid: String(mf?.uuid || profile.uuid || ""),
+      skin: String(mf?.skin || cosmetics.skin || profile.skin || "bob"),
+      cape: String(mf?.cosmetics?.cape || cosmetics.cape || "none"),
+      hat: String(mf?.cosmetics?.hat || cosmetics.hat || "none"),
+      trail: String(mf?.cosmetics?.trail || cosmetics.trail || "none"),
+      aura: String(mf?.cosmetics?.aura || cosmetics.aura || "none"),
+      rank: String(mf?.rank || profile.rank || ""),
+      mode: String(profile.mode || "survival"),
+      discordBoosting: profile.discordBoosting === true
+    };
+  }
 
-    // Reparto uniforme en anillo alrededor del jugador, cada clon mirandole.
-    function cloneSlot(index, count, origin) {
-        const total = Math.max(1, Math.min(MAX_CLONES, Number(count) || 1));
-        const angle = (index / total) * Math.PI * 2 + Math.PI / 4;
-        const x = origin.x + Math.cos(angle) * RING_RADIUS;
-        const z = origin.z + Math.sin(angle) * RING_RADIUS;
-        const dx = origin.x - x;
-        const dz = origin.z - z;
-        return { x, y: origin.y, z, yaw: Math.atan2(-dx, dz) };
-    }
+  // El clon nace EXACTAMENTE donde esta el jugador, mirando donde mira.
+  function cloneSlot(index, count, origin) {
+    return { x: origin.x, y: origin.y, z: origin.z, yaw: Number(origin.yaw) || 0 };
+  }
 
     function despawnClone(id) {
         const world = state.world;
@@ -121,7 +117,7 @@
         if (!manager) return null;
 
         const profile = playerProfile(game);
-        const slot = cloneSlot(index, count, game.player.pos);
+        const slot = cloneSlot(index, count, { ...game.player.pos, yaw: Number(game.player.yaw) || 0 });
 
         try {
             manager.spawnPlayer({
@@ -215,7 +211,7 @@
             for (let i = 0; i < effective; i++) {
                 const entity = state.clones.get(CLONE_IDS[i]);
                 if (!entity) continue;
-                const slot = cloneSlot(i, effective, origin);
+                const slot = cloneSlot(i, effective, { ...origin, yaw: Number(player.yaw) || 0 });
                 try {
                     entity.serverPos?.set?.(slot.x * 32, slot.y * 32, slot.z * 32);
                     entity.setPositionAndRotation2?.(slot.x, slot.y, slot.z, slot.yaw, 0, 2);
