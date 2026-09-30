@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 2a1717df3c48393187b6274a2f868fa447d4d555
- * builtAt : 2026-09-30T19:52:54.285Z
+ * commit  : 5fdefbebd4e750ae57c164af01a0ceadcb2c9a55
+ * builtAt : 2026-09-30T20:02:54.552Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"2a1717df3c48393187b6274a2f868fa447d4d555","builtAt":"2026-09-30T19:52:54.371Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"5fdefbebd4e750ae57c164af01a0ceadcb2c9a55","builtAt":"2026-09-30T20:02:54.554Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -44353,6 +44353,9 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     }
     state.pendingImage = file;
     showPreview(file, 'listo · enter para enviar · esc para cancelar (ﾉ´ヮ`)ﾉ*:･ﾟ');
+    // the file dialog (and any drag) steals focus from the chat input; enter must
+    // land on the input or the send never happens
+    try { (state.chatInputEl || findChatInput())?.focus?.(); } catch (_) {}
   }
 
   // ---------- explicit affordances: the 📎 picker + window-wide paste/drop ----------
@@ -44433,6 +44436,15 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     holdImage(file);
   }
 
+  function onDocKeydown(e) {
+    if (!state.enabled || !state.pendingImage || e.key !== 'Enter') return;
+    if (e.target === state.chatInputEl) return;
+    if (pickSurfaceBlocked(e) || !chatOpenForImage()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    uploadAndSend();
+  }
+
   function attachDocumentHooks() {
     if (state.docHooks) return;
     state.docHooks = true;
@@ -44440,6 +44452,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     document.addEventListener('dragover', onDocDragOver, true);
     document.addEventListener('dragleave', onDocDragLeave, true);
     document.addEventListener('drop', onDocDrop, true);
+    document.addEventListener('keydown', onDocKeydown, true);
   }
 
   function clearPendingImage() {
@@ -44558,12 +44571,19 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
 
   async function uploadAndSend() {
     const file = state.pendingImage;
+    if (!file) return;
     const chat = ensureChat();
     const game = state.game;
-    if (!file || !chat || !game) { clearPendingImage(); return; }
+    if (!chat || !game) {
+      // never swallow silently: keep the chip so enter can retry once in a world
+      console.warn('minifeather gifchat: chat del juego no disponible (¿estás en un mundo?)');
+      setPreviewNote('no hay chat del juego — entrá a un mundo y reintentá con enter');
+      return;
+    }
     setPreviewNote('subiendo a catbox… (ﾉ´ヮ`)ﾉ*:･ﾟ');
     try {
       const res = await uploadImage(file);
+      console.log('minifeather gifchat upload →', res && res.success ? res.url : res);
       if (!res?.success || !/^https:\/\/files\.catbox\.moe\//.test(res.url || '')) {
         throw new Error(res?.error || 'upload failed');
       }

@@ -639,6 +639,9 @@
     }
     state.pendingImage = file;
     showPreview(file, 'listo · enter para enviar · esc para cancelar (ﾉ´ヮ`)ﾉ*:･ﾟ');
+    // the file dialog (and any drag) steals focus from the chat input; enter must
+    // land on the input or the send never happens
+    try { (state.chatInputEl || findChatInput())?.focus?.(); } catch (_) {}
   }
 
   // ---------- explicit affordances: the 📎 picker + window-wide paste/drop ----------
@@ -719,6 +722,15 @@
     holdImage(file);
   }
 
+  function onDocKeydown(e) {
+    if (!state.enabled || !state.pendingImage || e.key !== 'Enter') return;
+    if (e.target === state.chatInputEl) return;
+    if (pickSurfaceBlocked(e) || !chatOpenForImage()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    uploadAndSend();
+  }
+
   function attachDocumentHooks() {
     if (state.docHooks) return;
     state.docHooks = true;
@@ -726,6 +738,7 @@
     document.addEventListener('dragover', onDocDragOver, true);
     document.addEventListener('dragleave', onDocDragLeave, true);
     document.addEventListener('drop', onDocDrop, true);
+    document.addEventListener('keydown', onDocKeydown, true);
   }
 
   function clearPendingImage() {
@@ -844,12 +857,19 @@
 
   async function uploadAndSend() {
     const file = state.pendingImage;
+    if (!file) return;
     const chat = ensureChat();
     const game = state.game;
-    if (!file || !chat || !game) { clearPendingImage(); return; }
+    if (!chat || !game) {
+      // never swallow silently: keep the chip so enter can retry once in a world
+      console.warn('minifeather gifchat: chat del juego no disponible (¿estás en un mundo?)');
+      setPreviewNote('no hay chat del juego — entrá a un mundo y reintentá con enter');
+      return;
+    }
     setPreviewNote('subiendo a catbox… (ﾉ´ヮ`)ﾉ*:･ﾟ');
     try {
       const res = await uploadImage(file);
+      console.log('minifeather gifchat upload →', res && res.success ? res.url : res);
       if (!res?.success || !/^https:\/\/files\.catbox\.moe\//.test(res.url || '')) {
         throw new Error(res?.error || 'upload failed');
       }
