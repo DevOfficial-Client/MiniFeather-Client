@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 2fe4776e97536b909c45ec96b7d58371f643b462
- * builtAt : 2026-09-30T18:50:04.418Z
+ * commit  : 4d31e11716ffdce9452a02d1ea925b7c513c7f1d
+ * builtAt : 2026-09-30T18:59:57.304Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"2fe4776e97536b909c45ec96b7d58371f643b462","builtAt":"2026-09-30T18:50:04.435Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"4d31e11716ffdce9452a02d1ea925b7c513c7f1d","builtAt":"2026-09-30T18:59:57.308Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -119412,8 +119412,10 @@ function normalize(entry) {
       shadersTabBody: 'toca la pestaña 🌈. aquí viven el custom shader, el deferred pipeline (bloom + agx, puro cine para gpus felices) y el splash de agua. patata: admira de lejos por ahora, tus fps te lo agradecen (¬‿¬)',
       animsTabTitle: '✨ render: donde viven las animaciones',
       animsTabBody: 'toca la pestaña ✨. animaciones del jugador, elytra con física, camera overhaul y compañía. baratas y se sienten caras, como debe ser (๑¯◡¯๑)',
-      animsTitle: `activa ${toggle.animName}`,
-      animsBody: 'dale al módulo iluminado. animaciones suaves que tu gpu apenas nota: la mejor relación esfuerzo/belleza de todo el client (◕ᴗ◕✿)',
+      animsTitle: 'activa todas las animaciones (ง\'̀-\'́)ง',
+      animsBody: 'toca cada módulo de animación iluminado hasta que no quede ninguno apagado: van cayendo uno por uno. elytra flight y freecam quedan fuera de la lista — son invitados especiales, no los toques (￣ー￣)',
+      animsLeft: 'quedan {n} por activar…',
+      animsDone: '¡todas! tu jugador ahora se mueve como en las cinemáticas ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
       pscaleTitle: 'tamaño de jugador: /pscale',
       pscaleBody: 'en el chat escribe: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. de regalo: /plarge (anchura) y /panchor 0 (pies clavados al suelo). sí, puedes ser un microscopio con espada (⊙_⊙)',
       p2pTitle: 'p2p: amigos directos, cero servidores',
@@ -119453,8 +119455,10 @@ function normalize(entry) {
       shadersTabBody: 'click the 🌈 tab. the custom shader, the deferred pipeline (bloom + agx, pure cinema for happy gpus) and water splash live here. potato tier: admire from afar for now, your fps will thank you (¬‿¬)',
       animsTabTitle: '✨ render: where animations live',
       animsTabBody: 'click the ✨ tab. player animations, elytra physics, camera overhaul and friends. cheap and they feel expensive, as it should be (๑¯◡¯๑)',
-      animsTitle: `enable ${toggle.animName}`,
-      animsBody: 'hit the highlighted module. smooth player animations your gpu barely notices: the best effort-to-beauty ratio in the whole client (◕ᴗ◕✿)',
+      animsTitle: 'enable every animation (ง\'̀-\'́)ง',
+      animsBody: 'tap each highlighted animation module until none is left off: they fall one by one. elytra flight and freecam are off the list — special guests, don\'t touch them (￣ー￣)',
+      animsLeft: '{n} left to enable…',
+      animsDone: 'all of them! your player now moves like a cutscene ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
       pscaleTitle: 'player size: /pscale',
       pscaleBody: 'type in chat: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. bonus: /plarge (width) and /panchor 0 (feet glued to the floor). yes, you can be a microscope with a sword (⊙_⊙)',
       p2pTitle: 'p2p: friends direct, zero servers',
@@ -119494,8 +119498,10 @@ function normalize(entry) {
       shadersTabBody: 'clique na aba 🌈. aqui moram o custom shader, o deferred pipeline (bloom + agx, cinema puro para gpus felizes) e o splash de água. pc batata: admire de longe por enquanto, seus fps agradecem (¬‿¬)',
       animsTabTitle: '✨ render: onde moram as animações',
       animsTabBody: 'clique na aba ✨. animações do jogador, elytra com física, camera overhaul e companhia. baratas e parecem caras, como deve ser (๑¯◡¯๑)',
-      animsTitle: `ative ${toggle.animName}`,
-      animsBody: 'aperte o módulo iluminado. animações suaves que sua gpu quase não sente: o melhor custo-benefício de beleza do client (◕ᴗ◕✿)',
+      animsTitle: 'ative todas as animações (ง\'̀-\'́)ง',
+      animsBody: 'toque em cada módulo de animação iluminado até não sobrar nenhum desligado: eles caem um por um. elytra flight e freecam ficam de fora — são convidados especiais, não mexa (￣ー￣)',
+      animsLeft: 'faltam {n} pra ativar…',
+      animsDone: 'todas! seu jogador agora se move como nas cinemáticas ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
       pscaleTitle: 'tamanho do jogador: /pscale',
       pscaleBody: 'escreva no chat: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. de bônus: /plarge (largura) e /panchor 0 (pés colados no chão). sim, você pode ser um microscópio com espada (⊙_⊙)',
       p2pTitle: 'p2p: amigos diretos, zero servidores',
@@ -119535,8 +119541,10 @@ function normalize(entry) {
       shadersTabBody: 'clique sur l\'onglet 🌈. ici vivent le custom shader, le deferred pipeline (bloom + agx, cinéma pur pour gpus heureuses) et le splash d\'eau. patate : contemple de loin pour l\'instant, tes fps te remercient (¬‿¬)',
       animsTabTitle: '✨ render : là où vivent les animations',
       animsTabBody: 'clique sur l\'onglet ✨. animations du joueur, elytra avec physique, camera overhaul et compagnie. ça coûte peu et ça fait cher, comme il se doit (๑¯◡¯๑)',
-      animsTitle: `active ${toggle.animName}`,
-      animsBody: 'clique sur le module illuminé. des animations fluides que ta gpu remarque à peine : le meilleur rapport effort/beauté du client (◕ᴗ◕✿)',
+      animsTitle: 'active toutes les animations (ง\'̀-\'́)ง',
+      animsBody: 'clique sur chaque module d\'animation illuminé jusqu\'à ce qu\'il n\'en reste plus aucun désactivé : ils tombent un par un. elytra flight et freecam sont hors liste — invités spéciaux, n\'y touche pas (￣ー￣)',
+      animsLeft: 'il en reste {n} à activer…',
+      animsDone: 'toutes ! ton joueur bouge maintenant comme dans une cinématique ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
       pscaleTitle: 'taille du joueur : /pscale',
       pscaleBody: 'tape dans le chat : <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. en bonus : /plarge (largeur) et /panchor 0 (pieds collés au sol). oui, tu peux être un microscope avec une épée (⊙_⊙)',
       p2pTitle: 'p2p : les amis en direct, zéro serveur',
@@ -119576,8 +119584,10 @@ function normalize(entry) {
       shadersTabBody: 'klick auf den 🌈 tab. hier wohnen der custom shader, die deferred pipeline (bloom + agx, pures kino für glückliche gpus) und der wassersplash. kartoffel: erst mal aus der ferne bewundern, deine fps danken es dir (¬‿¬)',
       animsTabTitle: '✨ render: hier wohnen die animationen',
       animsTabBody: 'klick auf den ✨ tab. spieler-animationen, elytra mit physik, camera overhaul und freunde. sie sind billig und wirken teuer, so soll es sein (๑¯◡¯๑)',
-      animsTitle: `${toggle.animName} aktivieren`,
-      animsBody: 'drück das leuchtende modul. weiche spieler-animationen, die deine gpu kaum bemerkt: das beste aufwand/schönheit-verhältnis im client (◕ᴗ◕✿)',
+      animsTitle: 'aktiviere alle animationen (ง\'̀-\'́)ง',
+      animsBody: 'tipp auf jedes leuchtende animationsmodul, bis keiner mehr aus ist: sie fallen einer nach dem anderen. elytra flight und freecam stehen nicht auf der liste — ehrengäste, fass sie nicht an (￣ー￣)',
+      animsLeft: 'noch {n} zu aktivieren…',
+      animsDone: 'alle! dein spieler bewegt sich jetzt wie in einer zwischensequenz ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
       pscaleTitle: 'spielergröße: /pscale',
       pscaleBody: 'tipp im chat: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. als bonus: /plarge (breite) und /panchor 0 (füße am boden festgeklebt). ja, du kannst ein mikroskop mit schwert sein (⊙_⊙)',
       p2pTitle: 'p2p: freunde direkt, null server',
@@ -119617,8 +119627,10 @@ function normalize(entry) {
       shadersTabBody: 'clicca la scheda 🌈. qui vivono il custom shader, il deferred pipeline (bloom + agx, cinema puro per gpu felici) e lo splash dell\'acqua. patatina: ammira da lontano per ora, i tuoi fps ti ringraziano (¬‿¬)',
       animsTabTitle: '✨ render: dove vivono le animazioni',
       animsTabBody: 'clicca la scheda ✨. animazioni del giocatore, elytra con fisica, camera overhaul e compagnia. costano poco e sembrano care, come deve essere (๑¯◡¯๑)',
-      animsTitle: `attiva ${toggle.animName}`,
-      animsBody: 'premi il modulo illuminato. animazioni fluide che la gpu quasi non nota: il miglior rapporto fatica/bellezza del client (◕ᴗ◕✿)',
+      animsTitle: 'attiva tutte le animazioni (ง\'̀-\'́)ง',
+      animsBody: 'tocca ogni modulo di animazione illuminato finché non ne resta nessuno spento: cadono uno per uno. elytra flight e freecam sono fuori lista — ospiti speciali, non toccarli (￣ー￣)',
+      animsLeft: 'ne restano {n} da attivare…',
+      animsDone: 'tutte! il tuo giocatore ora si muove come in una cinematica ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
       pscaleTitle: 'dimensione del giocatore: /pscale',
       pscaleBody: 'scrivi in chat: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. bonus: /plarge (larghezza) e /panchor 0 (piedi incollati al suolo). sì, puoi essere un microscopio con la spada (⊙_⊙)',
       p2pTitle: 'p2p: amici diretti, zero server',
@@ -119658,8 +119670,10 @@ function normalize(entry) {
       shadersTabBody: 'кликни на вкладку 🌈. здесь живут custom shader, deferred pipeline (bloom + agx, чистое кино для счастливых гпу) и брызги воды. картошка: пока любуемся издалека, твои фпс скажут спасибо (¬‿¬)',
       animsTabTitle: '✨ render: здесь живут анимации',
       animsTabBody: 'кликни на вкладку ✨. анимации игрока, элитра с физикой, camera overhaul и компания. стоят дёшево, выглядят дорого — как и должно быть (๑¯◡¯๑)',
-      animsTitle: `включи ${toggle.animName}`,
-      animsBody: 'жми на подсвеченный модуль. плавные анимации игрока, которые гпу почти не замечает: лучшее соотношение усилий и красоты в клиенте (◕ᴗ◕✿)',
+      animsTitle: 'включи все анимации (ง\'̀-\'́)ง',
+      animsBody: 'нажимай на каждый подсвеченный модуль анимации, пока не останется ни одного выключенного: падают один за другим. elytra flight и freecam вне списка — почётные гости, не трогай их (￣ー￣)',
+      animsLeft: 'осталось включить: {n}…',
+      animsDone: 'все! твой игрок теперь двигается как в катсцене ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
       pscaleTitle: 'размер игрока: /pscale',
       pscaleBody: 'напиши в чате: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. бонусом: /plarge (ширина) и /panchor 0 (ноги приклеены к полу). да, ты можешь быть микроскопом с мечом (⊙_⊙)',
       p2pTitle: 'p2p: друзья напрямую, ноль серверов',
@@ -119699,8 +119713,10 @@ function normalize(entry) {
       shadersTabBody: '🌈タブをクリック。custom shader、deferred pipeline（bloom + agx、幸せなgpuのための純映画）、水しぶきがここに住んでる。じゃがいも組は今は遠くから見守ってね、fpsが感謝するよ (¬‿¬)',
       animsTabTitle: '✨ render: アニメーションの住処',
       animsTabBody: '✨タブをクリック。プレイヤーアニメーション、物理エリトラ、camera overhaul仲間たち。安いのに高級感、あるべき姿だ (๑¯◡¯๑)',
-      animsTitle: `${toggle.animName} をオンにする`,
-      animsBody: '光ってるモジュールを押して。gpuがほぼ気づかないほど軽いプレイヤーアニメーション。クライアント内最高のコスパの美しさ (◕ᴗ◕✿)',
+      animsTitle: 'アニメーションを全部オン (ง\'̀-\'́)ง',
+      animsBody: '光ってるアニメーションモジュールを片っ端からオンにしてね。elytra flightとfreecamはリスト外 — 特別ゲストだから触らないで (￣ー￣)',
+      animsLeft: '残り {n} 個…',
+      animsDone: '全オン！プレイヤーの動きがカットシーンみたいになったね ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
       pscaleTitle: 'プレイヤーサイズ: /pscale',
       pscaleBody: 'チャットに入力：<b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan。おまけ：/plarge（幅）と /panchor 0（足を地面に固定）。そう、剣を持った顕微鏡になれるんだ (⊙_⊙)',
       p2pTitle: 'p2p: 友達と直結、サーバーゼロ',
@@ -119740,8 +119756,10 @@ function normalize(entry) {
       shadersTabBody: '点 🌈 标签页。custom shader、deferred pipeline（bloom + agx，给快乐显卡的纯电影感）和水花都在这里。小土豆：先远观欣赏，fps 会谢谢你 (¬‿¬)',
       animsTabTitle: '✨ render：动画的家',
       animsTabBody: '点 ✨ 标签页。玩家动画、物理滑翔、camera overhaul 一家子。便宜但看着贵，本该如此 (๑¯◡¯๑)',
-      animsTitle: `开启 ${toggle.animName}`,
-      animsBody: '点高亮的模块。流畅的玩家动画，显卡几乎无感：全客户端性价比最高的美丽 (◕ᴗ◕✿)',
+      animsTitle: '开启所有动画 (ง\'̀-\'́)ง',
+      animsBody: '把每个高亮的动画模块逐个点亮，一个不留。elytra flight 和 freecam 不在名单上 — 它们是特邀嘉宾，别碰它们 (￣ー￣)',
+      animsLeft: '还剩 {n} 个没开…',
+      animsDone: '全开了！你的角色现在动起来像过场动画一样 ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
       pscaleTitle: '玩家体型：/pscale',
       pscaleBody: '在聊天里输入：<b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan。附赠：/plarge（宽度）和 /panchor 0（脚粘在地上）。没错，你可以当一把带剑的显微镜 (⊙_⊙)',
       p2pTitle: 'p2p：好友直连，零服务器',
@@ -119781,8 +119799,10 @@ function normalize(entry) {
       shadersTabBody: '🌈 탭을 클릭. custom shader, deferred pipeline(bloom + agx, 행복한 gpu를 위한 순수 영화), 물 튀김이 여기 살아. 감자 조는 일단 멀리서 감상만, fps가 고마워할 거야 (¬‿¬)',
       animsTabTitle: '✨ render: 애니메이션의 집',
       animsTabBody: '✨ 탭을 클릭. 플레이어 애니메이션, 물리 엘리트라, camera overhaul 친구들. 싸지만 비싸 보여. 당연한 거지 (๑¯◡¯๑)',
-      animsTitle: `${toggle.animName} 켜기`,
-      animsBody: '빛나는 모듈을 눌러. gpu가 거의 못 느낄 만큼 가벼운 플레이어 애니메이션. 클라이언트에서 가성비 최고의 아름다움 (◕ᴗ◕✿)',
+      animsTitle: '애니메이션 전부 켜기 (ง\'̀-\'́)ง',
+      animsBody: '빛나는 애니메이션 모듈을 하나씩 전부 켜자. elytra flight랑 freecam은 리스트 밖 — 특별 게스트니까 건드리지 마 (￣ー￣)',
+      animsLeft: '{n}개 남았어…',
+      animsDone: '전부 켰다! 네 캐릭터가 컷신처럼 움직이게 됐어 ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
       pscaleTitle: '플레이어 크기: /pscale',
       pscaleBody: '채팅에 입력: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. 보너스: /plarge(너비), /panchor 0(발을 바닥에 고정). 그래, 검 든 현미경이 될 수 있어 (⊙_⊙)',
       p2pTitle: 'p2p: 친구와 직접 연결, 서버 제로',
@@ -119836,15 +119856,11 @@ function normalize(entry) {
       const entry = getModuleIndex().find(e => e.key === toggleKey);
       return entry ? String(entry.title).toLowerCase() : toggleKey;
     })();
-    // the animations lesson wants a module that is OFF too; playerAnims ships on by
-    // default, so the honor usually falls to its render-tab siblings. :D
-    const animCandidates = ['playerAnims', 'elytraFlight', 'cameraOverhaul', 'handSway', 'freecam'];
-    const animKey = animCandidates.find(k => !guiSettings[k] && !settings[k]) || 'playerAnims';
-    const animName = (() => {
-      const entry = getModuleIndex().find(e => e.key === animKey);
-      return entry ? String(entry.title).toLowerCase() : animKey;
-    })();
-    const L = tutorialCopy(info, { key: toggleKey, name: toggleName, animKey, animName });
+    // the animations lesson: every animation module must end up ON before moving on.
+    // elytra flight and freecam are deliberately excluded — they're camera tools,
+    // not look-good animations, and the tour says so. :D
+    const animKeys = ['playerAnims', 'vanillaAnimations', 'handSway', 'cameraOverhaul'];
+    const L = tutorialCopy(info, { key: toggleKey, name: toggleName });
     const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const steps = [
       { kind: 'info', title: L.welcomeTitle, body: `${L.welcomeBody}<br><span style="opacity:.7">tier: ${L.tierLabel}</span>` },
@@ -119855,7 +119871,7 @@ function normalize(entry) {
       { kind: 'click', sel: `[data-mf-profile="${perfProfile}"]`, title: L.perfTitle, body: L.perfBody },
       { kind: 'click', sel: '[data-page="shaders"]', title: L.shadersTabTitle, body: L.shadersTabBody },
       { kind: 'click', sel: '[data-page="render"]', title: L.animsTabTitle, body: L.animsTabBody },
-      { kind: 'toggle', key: animKey, title: L.animsTitle, body: L.animsBody },
+      { kind: 'animset', keys: animKeys, title: L.animsTitle, body: L.animsBody, doneKey: 'animsDone' },
       // the command grimoire is typed in the in-game chat: a player sitting in the
       // main menu gets bounced out to join any world first. obligatory step — no
       // skip button, it only advances once a real game detects them. :D
@@ -119908,16 +119924,23 @@ function normalize(entry) {
       try { delete globalThis.__MF_FIRST_STEPS__; } catch (_) { globalThis.__MF_FIRST_STEPS__ = null; }
     }
     const finish = () => {
-      try { if (markDone) localStorage.setItem('mf:first-steps-v4', 'yes'); } catch (_) {}
+      try { if (markDone) localStorage.setItem('mf:first-steps-v5', 'yes'); } catch (_) {}
       cleanup();
     };
     function onKey(e) {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(); }
     }
+    // pending animation modules for 'animset' steps: the ones still OFF. the spotlight
+    // walks this list one card at a time until the lesson runs out of targets. :D
+    const pendingKeys = step => (step.keys || []).filter(k => !(guiSettings[k] || settings[k]));
     function retarget() {
       const step = steps[idx];
       if (!step || dead) return;
-      const el = (step.sel && document.querySelector(step.sel)) || (step.key && panel?.querySelector(`.mf-toggle[data-key="${step.key}"]`)) || null;
+      const pend = pendingKeys(step);
+      const el = (step.sel && document.querySelector(step.sel))
+        || (step.key && panel?.querySelector(`.mf-toggle[data-key="${step.key}"]`))
+        || (pend[0] && panel?.querySelector(`.mf-toggle[data-key="${pend[0]}"]`))
+        || null;
       if (el === spotted) return;
       clearSpot();
       if (!el) return;
@@ -119928,7 +119951,8 @@ function normalize(entry) {
     function celebrate() {
       if (dead || celebrated) return;
       celebrated = true;
-      card.innerHTML = `<div style="font:750 17px/1.35 system-ui,sans-serif;color:#b79bff">${esc(L.toggleDone)}</div>`;
+      const doneMsg = (steps[idx]?.doneKey && L[steps[idx].doneKey]) || L.toggleDone;
+      card.innerHTML = `<div style="font:750 17px/1.35 system-ui,sans-serif;color:#b79bff">${esc(doneMsg)}</div>`;
       try {
         card.animate([{ transform: 'translateX(-50%) scale(.96)' }, { transform: 'translateX(-50%) scale(1)' }], { duration: 260, easing: 'ease-out' });
       } catch (_) {}
@@ -119942,6 +119966,11 @@ function normalize(entry) {
       const actions = step.kind === 'info'
         ? `<button id="mf-tour-next" style="margin-top:12px;padding:10px 18px;border:0;border-radius:9px;background:linear-gradient(135deg,#6045a0,#7c5cd6);color:#fff;font:700 13.5px system-ui,sans-serif;cursor:pointer">${esc(idx === steps.length - 1 ? L.done : L.next)}</button>`
         : `<div style="margin-top:12px;font:600 12.5px system-ui,sans-serif;color:#e8b46a;animation:mfTourPulse 1.2s ease-in-out infinite">${esc(L.doIt)}</div>`;
+      let bodyHtml = step.body;
+      if (step.kind === 'animset') {
+        const left = pendingKeys(step).length;
+        if (left > 0) bodyHtml += `<div style="margin-top:6px;font:600 12px system-ui,sans-serif;color:#b79bff">${esc(String(L.animsLeft).replace('{n}', left))}</div>`;
+      }
       card.innerHTML = `
         <style>@keyframes mfTourPulse{0%,100%{opacity:.55}50%{opacity:1}}</style>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
@@ -119949,9 +119978,9 @@ function normalize(entry) {
           ${step.kind === 'ingame' ? '<span style="font:600 11px/1 ui-monospace,monospace;color:#e8b46a">★</span>' : `<button id="mf-tour-skip" style="background:none;border:0;color:#8d80b8;font:400 12px system-ui,sans-serif;cursor:pointer;text-decoration:underline">${esc(L.skip)}</button>`}
         </div>
         <div style="margin-top:6px;font:750 17px/1.35 system-ui,sans-serif;color:#b79bff">${esc(step.title)}</div>
-        <div style="margin-top:6px;font:400 13.5px/1.55 system-ui,sans-serif;color:#cfc6ea">${step.body}</div>
+        <div style="margin-top:6px;font:400 13.5px/1.55 system-ui,sans-serif;color:#cfc6ea">${bodyHtml}</div>
         ${actions}
-        ${(step.kind !== 'info' && step.key) ? `<div style="margin-top:8px;font:400 12px system-ui,sans-serif;color:#8d80b8">${esc(L.tip)}</div>` : ''}`;
+        ${(step.kind !== 'info' && (step.key || step.kind === 'animset')) ? `<div style="margin-top:8px;font:400 12px system-ui,sans-serif;color:#8d80b8">${esc(L.tip)}</div>` : ''}`;
       card.querySelector('#mf-tour-skip')?.addEventListener('click', finish);
       card.querySelector('#mf-tour-next')?.addEventListener('click', () => { idx++; render(); });
       celebrated = false;
@@ -119980,6 +120009,12 @@ function normalize(entry) {
         pollTimer = setInterval(() => {
           if (tutorialInGame()) { clearInterval(pollTimer); idx++; render(); }
         }, 500);
+      } else if (step.kind === 'animset') {
+        // the lesson completes only when every animation module is ON; the spotlight
+        // meanwhile hops to whichever module is still pending. :D
+        pollTimer = setInterval(() => {
+          if (pendingKeys(step).length === 0) { clearInterval(pollTimer); celebrate(); }
+        }, 250);
       } else if (step.kind === 'toggle') {
         // requires a real state CHANGE: an already-on module would auto-skip the lesson
         const initial = !!(guiSettings[step.key] || settings[step.key]);
@@ -119998,8 +120033,9 @@ function normalize(entry) {
 
   function maybeShowFirstSteps() {
     try {
-      // v4: adds the obligatory world gate before the command lessons.
-      if (localStorage.getItem('mf:first-steps-v4') === 'yes') return;
+      // v5: the animations lesson now requires every animation module ON (elytra
+      // flight and freecam excluded).
+      if (localStorage.getItem('mf:first-steps-v5') === 'yes') return;
     } catch (_) { return; }
     // a live tour (e.g. parked at the world gate while the panel is closed) must not
     // be restarted just because showGUI fires again mid-tour. :D
