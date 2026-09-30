@@ -55,6 +55,9 @@ untitledduckmod-0.8.5-neoforge-1.21.4.zip/
 windows-msi/src-tauri/target/
 windows-msi/src-tauri/icons/
 windows-msi/src-tauri/resources/mf/
+windows-msi/src-tauri/client/
+windows-msi/src-tauri/gen/
+.commandcode/
 linux-installer/node_modules/
 linux-installer/dist/
 linux-installer/resources/mf/

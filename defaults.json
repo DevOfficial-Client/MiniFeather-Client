@@ -89,6 +89,10 @@
     "dynamicCrosshairSize": 28
   },
   "shaders": {
+    "deferredPipeline": false,
+    "deferredExposure": 1.0,
+    "deferredSaturation": 1.0,
+    "deferredBloom": 0.13,
     "customShader": false,
     "customShaderPreset": "photon",
     "customShaderStrength": 0.5,

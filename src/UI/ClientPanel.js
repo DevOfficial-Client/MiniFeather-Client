@@ -763,6 +763,10 @@
     rhythmParkour: false,
     localGamesWorldName: '',
     guiPatch: false,
+    deferredPipeline: false,
+    deferredExposure: 1.0,
+    deferredSaturation: 1.0,
+    deferredBloom: 0.13,
     customShader: false,
     customShaderPreset: 'spooklementary',
     customShaderStrength: 0.5,
@@ -3582,6 +3586,7 @@
       { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc'), tags: [] },
       { page: 'render', key: 'freecam', title: t('freecam'), desc: t('freecamDesc'), tags: [] },
       { page: 'shaders', key: 'customShader', title: t('navShaders'), desc: t('shadersDesc'), tags: [] },
+      { page: 'shaders', key: 'deferredPipeline', title: 'deferred pipeline (iterationt)', desc: 'bloom + AgX faithful to Tahnass\'s IterationT pack', tags: ['new'] },
       { page: 'movement', key: 'autoSprint', title: t('autoSprint'), desc: t('autoSprintDesc'), tags: ['pvp'] },
       { page: 'movement', key: 'safeSneak', title: t('safeSneak'), desc: t('safeSneakDesc'), tags: ['pvp'] },
       { page: 'movement', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc'), tags: [] },
@@ -4646,6 +4651,17 @@
       disable() { sendGuiPatchConfig(false); },
       refresh() { sendGuiPatchConfig(MODULES.get('guiPatch')?.enabled === true); },
       destroy() { sendGuiPatchConfig(false); }
+    }));
+  }
+
+  function sendDeferredConfig(enabled = settings.deferredPipeline) {
+    document.dispatchEvent(new CustomEvent('minifeather:deferred-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        exposure: Number(settings.deferredExposure ?? 1.0),
+        saturation: Number(settings.deferredSaturation ?? 1.0),
+        bloom: Number(settings.deferredBloom ?? 0.13)
+      })
     }));
   }
 
@@ -7905,6 +7921,29 @@
         </div>
 
         <div class="mf-card">
+          <div class="mf-card-title">Deferred Pipeline · IterationT</div>
+          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">post-proceso fiel al pack de Tahnass: bloom 13-tap + gaussiana axial + exposici&oacute;n autom&aacute;tica + AgX (EV 13) + vi&ntilde;eta</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('deferredPipeline', 'deferred pipeline (iterationt)', 'bloom + AgX del pack IterationT sobre el render del juego')}
+          </div>
+          <div class="mf-shader-strength" style="margin-bottom:10px;margin-top:10px;">
+            <span style="min-width:90px;font-size:12px;">exposure</span>
+            <input id="mf-def-exp" type="range" min="0.4" max="2.5" step="0.05" value="${Number(settings.deferredExposure ?? 1.0)}">
+            <span id="mf-def-exp-value">${Number(settings.deferredExposure ?? 1.0).toFixed(2)}</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-bottom:10px;">
+            <span style="min-width:90px;font-size:12px;">saturation</span>
+            <input id="mf-def-sat" type="range" min="0.5" max="1.5" step="0.05" value="${Number(settings.deferredSaturation ?? 1.0)}">
+            <span id="mf-def-sat-value">${Number(settings.deferredSaturation ?? 1.0).toFixed(2)}</span>
+          </div>
+          <div class="mf-shader-strength">
+            <span style="min-width:90px;font-size:12px;">bloom</span>
+            <input id="mf-def-bloom" type="range" min="0" max="0.6" step="0.01" value="${Number(settings.deferredBloom ?? 0.13)}">
+            <span id="mf-def-bloom-value">${Number(settings.deferredBloom ?? 0.13).toFixed(2)}</span>
+          </div>
+        </div>
+
+        <div class="mf-card">
           <div class="mf-card-title">${t('shadersPreset')}</div>
           <select id="mf-shader-preset" class="mf-select">
             <option value="spooklementary"${preset === 'spooklementary' ? ' selected' : ''}>Spooklementary</option>
@@ -11021,6 +11060,26 @@
         saveSettings(true);
       });
     }
+    const defMap = {
+      exp: { key: 'deferredExposure', fmt: v => v.toFixed(2) },
+      sat: { key: 'deferredSaturation', fmt: v => v.toFixed(2) },
+      bloom: { key: 'deferredBloom', fmt: v => v.toFixed(2) }
+    };
+    for (const [name, { key, fmt }] of Object.entries(defMap)) {
+      const slider = panel.querySelector(`#mf-def-${name}`);
+      if (!slider) continue;
+      slider.addEventListener('input', () => {
+        const value = parseFloat(slider.value);
+        settings[key] = value;
+        guiSettings[key] = value;
+        const valueLabel = panel.querySelector(`#mf-def-${name}-value`);
+        if (valueLabel) valueLabel.textContent = fmt(value);
+        sendDeferredConfig();
+      });
+      slider.addEventListener('change', () => {
+        saveSettings(true);
+      });
+    }
     const CLOUD_PRESETS = {
       default:   { coverage: 0.5, scale: 0.012, wind: 0.02, thickness: 30, height: 128, opacity: 0.9 },
       overcast:  { coverage: 0.75, scale: 0.02, wind: 0.03, thickness: 60, height: 128, opacity: 0.95 },
@@ -12406,6 +12465,7 @@
     setModuleEnabled('itemPhysics', settings.itemPhysics);
     setModuleEnabled('noWeather', settings.noWeather);
     setModuleEnabled('fullBright', settings.fullBright);
+    sendDeferredConfig();
     setModuleEnabled('autoRespawn', settings.autoRespawn);
     setModuleEnabled('autoReconnect', settings.autoReconnect);
     setModuleEnabled('idlePlayerBot', settings.idlePlayerBot);
