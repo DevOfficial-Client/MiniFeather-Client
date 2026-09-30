@@ -712,6 +712,7 @@
     autoSprint: false,
     safeSneak: false,
     autoRespawn: false,
+    autoReconnect: true,
     idlePlayerBot: false,
     idlePlayerCount: 1,
     idlePlayerTarget: '',
@@ -3585,6 +3586,7 @@
       { page: 'movement', key: 'safeSneak', title: t('safeSneak'), desc: t('safeSneakDesc'), tags: ['pvp'] },
       { page: 'movement', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc'), tags: [] },
       { page: 'world', key: 'autoRespawn', title: t('autoRespawn'), desc: t('autoRespawnDesc'), tags: ['pvp'] },
+      { page: 'world', key: 'autoReconnect', title: t('autoReconnect'), desc: t('autoReconnectDesc'), tags: ['pvp'] },
       { page: 'world', key: 'idlePlayerBot', title: t('idlePlayerBot'), desc: t('idlePlayerBotDesc'), tags: ['new'] },
       { page: 'world', key: 'rhythmParkour', title: t('rhythmParkour'), desc: t('rhythmParkourDescShort'), tags: ['new'] },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc'), tags: [] },
@@ -3721,6 +3723,7 @@
     safeSneak: ['........','..gg....','.gGGg...','..gGGg..','.gggggg.','gggggggg','GGGGGGGG','........'],
     antiAfk: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yyyy#yyY','Yyyy#yyY','YyyyyyyY','.YyyyyY.','..YYYY..'],
     autoRespawn: ['..gggg..','.g....g.','g..rr..g','g.rrrr.g','g..rr..g','.g....g.','..ggggg.','......gg'],
+    autoReconnect: ['..gggg..','.gg..gg.','g......g','g.....gg','g....gg.','g....g..','.gg..g..','..gggg..'],
     idlePlayerBot: ['..BBBB..','.BbbbbB.','Bb#bb#bB','BbbbbbbB','.BbyybB.','..BbbB..','.BB..BB.','........'],
     rhythmParkour: ['....yy..','....yy..','....y...','..yyY...','.yYYY...','..GGG...','.GGGGG..','GGGGGGGG'],
     cloudsPackNoise: ['..BBBB..','.BbbbbB.','BbbBbbbB','BbbbbbBB','BBBBBBBB','..b..b..','.b....b.','........'],
@@ -3743,7 +3746,7 @@
     'itemPhysics', 'noWeather', 'fullBright', 'vanillaAnimations', 'handSway',
     'playerAnims', 'zoom', 'cameraOverhaul', 'elytraFlight', 'freecam',
     'freelook', 'blockHighlight', 'autoSprint', 'safeSneak', 'antiAfk',
-    'autoRespawn', 'idlePlayerBot', 'rhythmParkour', 'chatVideos', 'chatLinks',
+    'autoRespawn', 'autoReconnect', 'idlePlayerBot', 'rhythmParkour', 'chatVideos', 'chatLinks',
     'chatMemes', 'gifChat', 'clientChat', 'clientChatMentions', 'discord', 'shaders'
   ]);
   const MF_ANIMATED_PIXEL_ICON_SET = new Set(MF_ANIMATED_PIXEL_ICONS);
@@ -4770,6 +4773,29 @@
       },
       destroy() {
         sendAutoRespawnConfig(false);
+      }
+    }));
+  }
+
+  function sendAutoReconnectConfig(enabled = settings.autoReconnect) {
+    document.dispatchEvent(new CustomEvent('minifeather:auto-reconnect-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initAutoReconnectModule() {
+    registerModule('autoReconnect', () => createLifecycle({
+      enable() {
+        sendAutoReconnectConfig(true);
+      },
+      disable() {
+        sendAutoReconnectConfig(false);
+      },
+      refresh() {
+        sendAutoReconnectConfig(MODULES.get('autoReconnect')?.enabled === true);
+      },
+      destroy() {
+        sendAutoReconnectConfig(false);
       }
     }));
   }
@@ -8438,6 +8464,7 @@
           <div class="mf-card-title">${t('sectionWorldUtilities')}</div>
           <div class="mf-toggle-grid">
             ${renderToggle('autoRespawn', t('autoRespawn'), t('autoRespawnDesc'))}
+            ${renderToggle('autoReconnect', t('autoReconnect'), t('autoReconnectDesc'))}
             ${renderToggle('idlePlayerBot', t('idlePlayerBot'), t('idlePlayerBotDesc'))}
             ${renderToggle('rhythmParkour', t('rhythmParkour'), t('rhythmParkourDescShort'))}
           </div>
@@ -9347,7 +9374,7 @@
     'rebrand', 'classicTitle', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
     'waterSplash', 'shineAmbience', 'patPat', 'duckMobs', 'crittersMobs', 'allayPets', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
-    'safeSneak', 'autoRespawn', 'idlePlayerBot', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
+    'safeSneak', 'autoRespawn', 'autoReconnect', 'idlePlayerBot', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
     'dynamicCrosshair', 'vanillaAnimations', 'leafWind', 'handSway', 'betterPlayerLayers',
     'chatVideos', 'chatLinks', 'chatMemes', 'clientChat', 'rhythmParkour', 'guiPatch',
     'customShader', 'freelook', 'blockHighlight', 'discord', 'supportAds',
@@ -12302,6 +12329,7 @@
     setModuleEnabled('noWeather', settings.noWeather);
     setModuleEnabled('fullBright', settings.fullBright);
     setModuleEnabled('autoRespawn', settings.autoRespawn);
+    setModuleEnabled('autoReconnect', settings.autoReconnect);
     setModuleEnabled('idlePlayerBot', settings.idlePlayerBot);
     setModuleEnabled('antiAfk', settings.antiAfk);
     setModuleEnabled('autoSprint', settings.autoSprint);
@@ -12956,6 +12984,7 @@
     initHandSwayModule();
     initBetterPlayerLayersModule();
     initAutoRespawnModule();
+    initAutoReconnectModule();
     initIdlePlayerBotModule();
     initAntiAfkModule();
     initMovementAssistModules();

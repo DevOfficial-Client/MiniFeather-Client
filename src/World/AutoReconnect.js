@@ -116,6 +116,14 @@
 
     setInterval(tick, CHECK_INTERVAL_MS);
 
+    document.addEventListener('minifeather:auto-reconnect-config', event => {
+        try {
+            const detail = JSON.parse(typeof event.detail === 'string' ? event.detail : '{}');
+            state.enabled = detail.enabled === true;
+            savePreference();
+        } catch (_) {}
+    });
+
     window.MF_AutoReconnect = {
         get enabled() {
             return state.enabled;
