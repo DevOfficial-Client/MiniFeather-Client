@@ -684,6 +684,18 @@ test('FreeCam applyPose converts world coordinates into the engine rig space', (
 });
 
 
+test('FreeCam wires F5 cycling, body-follow and panel key passthrough', () => {
+  assert.match(freecamSource, /event\.code === 'F5'/, 'F5 handler missing');
+  assert.match(freecamSource, /player\.perspective = \(Number\(player\.perspective\) \+ 1\) % 3/, 'perspective cycle missing');
+  assert.match(freecamSource, /function applyFreeBody\(\)/, 'body-follow missing');
+  assert.match(freecamSource, /applyFreeBody\(\);/, 'body-follow must run inside the camera hook');
+  assert.match(freecamSource, /front \? Math\.PI : 0/, 'front-face flip missing');
+  assert.match(freecamSource, /requestPointerLock\?\.\(\)/, 'canvas re-lock missing');
+  // ShiftRight ya no es tecla de movimiento: queda libre para el panel
+  assert.doesNotMatch(freecamSource, /'Space', 'ShiftLeft', 'ShiftRight'/);
+  assert.match(freecamSource, /'Space', 'ShiftLeft',/);
+});
+
 test('loop wiring: peer prune, stale proxy hide and move cadence are installed', () => {
   assert.match(source, /pruneStaleHostPeers\(Date\.now\(\)\)/);
   assert.match(source, /pruneStaleRemoteProxies\(now\);/);

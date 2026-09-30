@@ -419,13 +419,68 @@ const FREECAM_UUIDS = new Set([
     } catch (_) {}
     }
 
+  const FREE_BODY_DISTANCE = 3.2;
+
+  function bodyEntity() {
+    const world = state.game?.world;
+    const player = state.player;
+    if (!world || !player) return null;
+    try {
+      return world.getPlayerById?.(player.id) || world.players?.get?.(player.id) || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // El cuerpo sigue a la camara de la freecam: F5 frontal muestra la cara de
+  // la skin, F5 trasero la espalda y primera persona lo oculta (nativo).
+  function applyFreeBody() {
+    const perspective = Number(state.player?.perspective ?? 1);
+    const mesh = bodyEntity()?.mesh;
+    if (!mesh) return;
+
+    if (perspective === 0) {
+      if (mesh.visible) mesh.visible = false;
+      return;
+    }
+
+    const pos = state.freePosition;
+    if (!pos) return;
+
+    let eyeHeight = 1.62;
+    try {
+      const native = Number(state.player?.getEyeHeight?.());
+      if (Number.isFinite(native) && native > 0) eyeHeight = native;
+    } catch (_) {}
+
+    const sinYaw = Math.sin(state.yaw);
+    const cosYaw = Math.cos(state.yaw);
+    const front = perspective === 1;
+
+    try {
+      mesh.visible = true;
+      mesh.position?.set?.(
+        pos.x - sinYaw * FREE_BODY_DISTANCE,
+        pos.y - eyeHeight,
+        pos.z - cosYaw * FREE_BODY_DISTANCE
+      );
+      if (typeof mesh.rotation?.set === "function") {
+        mesh.rotation.set(0, front ? Math.PI : 0, 0);
+      }
+      mesh.updateMatrixWorld?.(true);
+    } catch (_) {}
+  }
+
     function installCameraHooks(camera) {
     if (!camera) return;
 
     if (state.matrixHook?.camera !== camera && typeof camera.updateMatrixWorld === 'function') {
         const original = camera.updateMatrixWorld;
         const hook = function (...args) {
-            if (state.enabled && state.camera === camera) applyPose(camera);
+            if (state.enabled && state.camera === camera) {
+                applyPose(camera);
+                applyFreeBody();
+            }
             return original.apply(this, args);
         };
         try {
