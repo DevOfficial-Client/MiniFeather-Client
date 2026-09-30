@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 235c2a4dff4f53a7eb682545c09082b3f9d2ab4e
- * builtAt : 2026-09-30T20:40:00.649Z
+ * commit  : 4bd3bca3c612b8d046e415b27267a4153461865a
+ * builtAt : 2026-09-30T20:40:41.897Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"235c2a4dff4f53a7eb682545c09082b3f9d2ab4e","builtAt":"2026-09-30T20:40:00.650Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"4bd3bca3c612b8d046e415b27267a4153461865a","builtAt":"2026-09-30T20:40:41.900Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
