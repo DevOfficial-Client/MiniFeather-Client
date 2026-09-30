@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 04da45a22da3e68291116fed4eeea38d02bdb3ce
- * builtAt : 2026-09-30T03:12:50.064Z
+ * commit  : a43d012908f1de1be404da4722cc52eccf70ed8d
+ * builtAt : 2026-09-30T03:57:31.343Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"04da45a22da3e68291116fed4eeea38d02bdb3ce","builtAt":"2026-09-30T03:12:50.129Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"a43d012908f1de1be404da4722cc52eccf70ed8d","builtAt":"2026-09-30T03:57:31.348Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -18228,9 +18228,57 @@ const FREECAM_UUIDS = new Set([
 
     function applyPose(camera = state.camera) {
     if (!state.enabled || !camera || !state.freePosition) return;
-    copyXYZ(camera.position, state.freePosition);
+
+    const parent = camera.parent || null;
+    let x = state.freePosition.x;
+    let y = state.freePosition.y;
+    let z = state.freePosition.z;
+
     try {
-        if (camera.rotation) {
+        if (parent && typeof parent.updateWorldMatrix === 'function') parent.updateWorldMatrix(true, false);
+    } catch (_) {}
+
+    // El rig del motor (yawObject -> pitchObject -> camera) ya esta posicionado
+    // en el jugador: freePosition son coordenadas de MUNDO y hay que convertirlas
+    // al espacio local del padre actual o la camera sale disparada el doble.
+    try {
+        if (parent && typeof parent.worldToLocal === 'function') {
+            const local = typeof camera.position.clone === 'function' ? camera.position.clone() : { x, y, z };
+            if (typeof local.set === 'function') local.set(x, y, z);
+            else copyXYZ(local, { x, y, z });
+            parent.worldToLocal(local);
+            const lx = Number(local.x);
+            const ly = Number(local.y);
+            const lz = Number(local.z);
+            if ([lx, ly, lz].every(Number.isFinite)) {
+                x = lx;
+                y = ly;
+                z = lz;
+            }
+        }
+    } catch (_) {}
+
+    copyXYZ(camera.position, { x, y, z });
+
+    try {
+        if (camera.quaternion && camera.rotation) {
+            const Quat = camera.quaternion.constructor;
+            const Euler = camera.rotation.constructor;
+            const worldQuat = new Quat().setFromEuler(new Euler(state.pitch, state.yaw, 0, 'YXZ'));
+
+            const parentQuat = new Quat();
+            if (parent && typeof parent.getWorldQuaternion === 'function') {
+                parent.getWorldQuaternion(parentQuat);
+                parentQuat.invert();
+                worldQuat.premultiply(parentQuat);
+            }
+
+            copyQuaternion(camera.quaternion, worldQuat);
+            if (typeof camera.rotation.setFromQuaternion === 'function') {
+                camera.rotation.setFromQuaternion(camera.quaternion, 'YXZ');
+            }
+            if ('order' in camera.rotation) camera.rotation.order = 'YXZ';
+        } else if (camera.rotation) {
             if (typeof camera.rotation.set === 'function') camera.rotation.set(state.pitch, state.yaw, 0, 'YXZ');
             else {
                 camera.rotation.x = state.pitch;
