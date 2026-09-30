@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : b14408789554f5d4105dbfbd45512920692f9adc
- * builtAt : 2026-09-30T16:32:09.869Z
+ * commit  : 08de5083eae1b9e8e99ccca618534a764e5436ae
+ * builtAt : 2026-09-30T16:51:45.584Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"b14408789554f5d4105dbfbd45512920692f9adc","builtAt":"2026-09-30T16:32:09.872Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"08de5083eae1b9e8e99ccca618534a764e5436ae","builtAt":"2026-09-30T16:51:45.665Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -110298,6 +110298,7 @@ function normalize(entry) {
               <button class="mf-feather-category ${activeCategory === 'pvp' ? 'active' : ''}" data-category="pvp">${t('filterPvp')}</button>
             </div>
             <div class="mf-feather-tools">
+              <span id="mf-active-count" class="mf-active-count" aria-live="polite"></span>
               <input id="mf-gui-search" type="text" placeholder="${t('searchPlaceholder')}" value="${searchQuery.replace(/"/g, '&quot;')}">
               <button class="mf-feather-tool ${favoritesOnly ? 'active' : ''}" type="button" data-mf-favorites title="${t('favorites')}">${iconSvg('heart')}</button>
               <button class="mf-feather-tool" type="button" title="${t('grid')}">${iconSvg('grid')}</button>
@@ -115351,6 +115352,44 @@ function normalize(entry) {
     dashboardTimer = 0;
   }
 
+  // staggered fade-up for freshly rendered card grids. wladi already respects
+  // prefers-reduced-motion via the polish css nuking animations, but waapi runs
+  // outside css animations, so we check the media query ourselves. :D
+  function animateCardsIn(container) {
+    if (!container) return;
+    if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const cards = container.querySelectorAll('.mf-feather-module-grid > .mf-toggle, .mf-toggle-grid > .mf-toggle');
+    if (!cards.length) return;
+    cards.forEach((card, index) => {
+      card.animate(
+        [
+          { opacity: 0, transform: 'translateY(7px)' },
+          { opacity: 1, transform: 'translateY(0)' }
+        ],
+        {
+          duration: 230,
+          delay: Math.min(index * 16, 380),
+          easing: 'cubic-bezier(.2,.78,.25,1)',
+          fill: 'backwards'
+        }
+      );
+    });
+  }
+
+  // live "on/total" pill in the filterbar — the fastest answer to "what do i have on?"
+  function updateActiveCount() {
+    const el = panel?.querySelector?.('#mf-active-count');
+    if (!el) return;
+    const modules = getModuleIndex();
+    const on = modules.filter(item => !!guiSettings[item.key]).length;
+    el.innerHTML = '';
+    const b = document.createElement('b');
+    b.textContent = String(on);
+    el.append(b, `/${modules.length}`);
+    el.classList.toggle('has-on', on > 0);
+    el.dataset.on = String(on);
+  }
+
   function renderCurrentPageContent() {
     if (!panel) return;
     const pageContainer = panel.querySelector('#mf-gui-page');
@@ -115373,6 +115412,8 @@ function normalize(entry) {
     }
 
     bindPageControls();
+    animateCardsIn(pageContainer);
+    updateActiveCount();
     if (panel.style.display === 'block') {
       stopPixelIconAnimation();
       startPixelIconAnimation();
@@ -117932,6 +117973,7 @@ function normalize(entry) {
         saveSettings(true);
         applyGuiSettings();
         update();
+        updateActiveCount();
         if (activePage === 'dashboard') updateDashboardStats();
       });
     });
@@ -118518,6 +118560,42 @@ function normalize(entry) {
         nav.classList.toggle('active', !searchQuery.trim() && nav.dataset.page === activePage);
       });
       renderCurrentPageContent();
+    }, { signal: panelSignal });
+
+    // arrow-key navigation over the rendered cards + enter to toggle. the selection
+    // is a plain class so a re-render (every keystroke while searching) just resets
+    // it — no ghost indices into a dom that no longer exists. :D
+    let kbIndex = -1;
+    const kbCards = () => [...panel.querySelectorAll('#mf-gui-page .mf-toggle')].filter(card => card.offsetParent !== null);
+    const kbSet = index => {
+      const cards = kbCards();
+      if (!cards.length) { kbIndex = -1; return; }
+      kbIndex = ((index % cards.length) + cards.length) % cards.length;
+      cards.forEach((card, i) => card.classList.toggle('mf-kb-active', i === kbIndex));
+      cards[kbIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    };
+    const kbClear = () => {
+      kbIndex = -1;
+      panel.querySelectorAll('#mf-gui-page .mf-toggle.mf-kb-active').forEach(card => card.classList.remove('mf-kb-active'));
+    };
+    panel.querySelector('#mf-gui-search')?.addEventListener('keydown', event => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        kbSet(kbIndex < 0 ? (event.key === 'ArrowDown' ? 0 : kbCards().length - 1) : kbIndex + (event.key === 'ArrowDown' ? 1 : -1));
+        return;
+      }
+      if (event.key === 'Enter') {
+        const cards = kbCards();
+        const card = cards[kbIndex] || (cards.length === 1 ? cards[0] : null);
+        if (!card) return;
+        event.preventDefault();
+        const input = card.querySelector('input.mf-switch-hidden');
+        if (!input) return;
+        input.checked = !input.checked;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        return;
+      }
+      if (event.key !== 'Shift' && event.key !== 'Control' && event.key !== 'Alt') kbClear();
     }, { signal: panelSignal });
 
     panel.querySelector('#mf-language-select')?.addEventListener('change', event => {
@@ -119901,6 +119979,42 @@ function normalize(entry) {
       #mf-gui .mf-feature-settings:hover,#mf-gui .mf-feature-favorite:hover,
       .mf-feature-modal button:hover { transform:none !important; }
       #mf-update-banner:hover { transform:translateX(-50%) !important; }
+    }
+
+    /* --- right-shift menu improvements: title, kb nav, active counter, profiles --- */
+
+    /* the page title was boxed at 112px and clipped to "Das..." — but the 13 icon
+       tabs already eat the whole topbar (it collapsed to width 0 anyway), and the
+       active page is identified by its accent tab + tooltip. gone. */
+    #mf-gui #mf-gui-page-title { display:none !important; }
+
+    /* keyboard navigation ring (arrow keys inside the search box) */
+    #mf-gui .mf-toggle.mf-kb-active {
+      border-color:color-mix(in srgb,var(--mf-ui-accent,var(--mf-global-accent)) 85%,#fff 15%) !important;
+      box-shadow:0 0 0 2px color-mix(in srgb,var(--mf-ui-accent,var(--mf-global-accent)) 38%,transparent),
+                 0 10px 26px rgba(0,0,0,.30) !important;
+    }
+
+    /* live "enabled modules" counter pill, first thing in the tools cluster */
+    #mf-gui .mf-active-count {
+      display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;
+      border-radius:6px;background:#181b1f;border:1px solid #23272c;
+      color:#8f959c;font-size:12px;font-weight:800;letter-spacing:.02em;
+      font-family:'Faithful','Inter','Arial',sans-serif;user-select:none;white-space:nowrap;
+    }
+    #mf-gui .mf-active-count b { color:#d9dde2; font-weight:800; }
+    #mf-gui .mf-active-count.has-on b { color:color-mix(in srgb,var(--mf-ui-accent,var(--mf-global-accent)) 70%,#fff 30%); }
+
+    /* performance profile buttons: icon was orphaned at the far left — inline it with
+       the label, and make the active profile glow like the tabs do */
+    #mf-gui .mf-btn[data-mf-profile] {
+      display:inline-flex !important;align-items:center !important;justify-content:center !important;
+      gap:9px !important;
+    }
+    #mf-gui .mf-btn[data-mf-profile] .mf-profile-icon { width:20px;height:20px;margin:0;order:-1; }
+    #mf-gui .mf-btn[data-mf-profile].primary {
+      box-shadow:0 0 0 1px color-mix(in srgb,var(--mf-ui-accent,var(--mf-global-accent)) 55%,transparent),
+                 0 6px 18px color-mix(in srgb,var(--mf-ui-accent,var(--mf-global-accent)) 16%,transparent) !important;
     }
   `;
 
