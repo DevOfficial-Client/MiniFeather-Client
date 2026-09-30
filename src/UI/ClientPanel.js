@@ -3854,6 +3854,7 @@
               <button class="mf-feather-category ${activeCategory === 'pvp' ? 'active' : ''}" data-category="pvp">${t('filterPvp')}</button>
             </div>
             <div class="mf-feather-tools">
+              <span id="mf-active-count" class="mf-active-count" aria-live="polite"></span>
               <input id="mf-gui-search" type="text" placeholder="${t('searchPlaceholder')}" value="${searchQuery.replace(/"/g, '&quot;')}">
               <button class="mf-feather-tool ${favoritesOnly ? 'active' : ''}" type="button" data-mf-favorites title="${t('favorites')}">${iconSvg('heart')}</button>
               <button class="mf-feather-tool" type="button" title="${t('grid')}">${iconSvg('grid')}</button>
@@ -8907,6 +8908,44 @@
     dashboardTimer = 0;
   }
 
+  // staggered fade-up for freshly rendered card grids. wladi already respects
+  // prefers-reduced-motion via the polish css nuking animations, but waapi runs
+  // outside css animations, so we check the media query ourselves. :D
+  function animateCardsIn(container) {
+    if (!container) return;
+    if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const cards = container.querySelectorAll('.mf-feather-module-grid > .mf-toggle, .mf-toggle-grid > .mf-toggle');
+    if (!cards.length) return;
+    cards.forEach((card, index) => {
+      card.animate(
+        [
+          { opacity: 0, transform: 'translateY(7px)' },
+          { opacity: 1, transform: 'translateY(0)' }
+        ],
+        {
+          duration: 230,
+          delay: Math.min(index * 16, 380),
+          easing: 'cubic-bezier(.2,.78,.25,1)',
+          fill: 'backwards'
+        }
+      );
+    });
+  }
+
+  // live "on/total" pill in the filterbar — the fastest answer to "what do i have on?"
+  function updateActiveCount() {
+    const el = panel?.querySelector?.('#mf-active-count');
+    if (!el) return;
+    const modules = getModuleIndex();
+    const on = modules.filter(item => !!guiSettings[item.key]).length;
+    el.innerHTML = '';
+    const b = document.createElement('b');
+    b.textContent = String(on);
+    el.append(b, `/${modules.length}`);
+    el.classList.toggle('has-on', on > 0);
+    el.dataset.on = String(on);
+  }
+
   function renderCurrentPageContent() {
     if (!panel) return;
     const pageContainer = panel.querySelector('#mf-gui-page');
@@ -8929,6 +8968,8 @@
     }
 
     bindPageControls();
+    animateCardsIn(pageContainer);
+    updateActiveCount();
     if (panel.style.display === 'block') {
       stopPixelIconAnimation();
       startPixelIconAnimation();
@@ -11488,6 +11529,7 @@
         saveSettings(true);
         applyGuiSettings();
         update();
+        updateActiveCount();
         if (activePage === 'dashboard') updateDashboardStats();
       });
     });
@@ -12074,6 +12116,42 @@
         nav.classList.toggle('active', !searchQuery.trim() && nav.dataset.page === activePage);
       });
       renderCurrentPageContent();
+    }, { signal: panelSignal });
+
+    // arrow-key navigation over the rendered cards + enter to toggle. the selection
+    // is a plain class so a re-render (every keystroke while searching) just resets
+    // it — no ghost indices into a dom that no longer exists. :D
+    let kbIndex = -1;
+    const kbCards = () => [...panel.querySelectorAll('#mf-gui-page .mf-toggle')].filter(card => card.offsetParent !== null);
+    const kbSet = index => {
+      const cards = kbCards();
+      if (!cards.length) { kbIndex = -1; return; }
+      kbIndex = ((index % cards.length) + cards.length) % cards.length;
+      cards.forEach((card, i) => card.classList.toggle('mf-kb-active', i === kbIndex));
+      cards[kbIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    };
+    const kbClear = () => {
+      kbIndex = -1;
+      panel.querySelectorAll('#mf-gui-page .mf-toggle.mf-kb-active').forEach(card => card.classList.remove('mf-kb-active'));
+    };
+    panel.querySelector('#mf-gui-search')?.addEventListener('keydown', event => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        kbSet(kbIndex < 0 ? (event.key === 'ArrowDown' ? 0 : kbCards().length - 1) : kbIndex + (event.key === 'ArrowDown' ? 1 : -1));
+        return;
+      }
+      if (event.key === 'Enter') {
+        const cards = kbCards();
+        const card = cards[kbIndex] || (cards.length === 1 ? cards[0] : null);
+        if (!card) return;
+        event.preventDefault();
+        const input = card.querySelector('input.mf-switch-hidden');
+        if (!input) return;
+        input.checked = !input.checked;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        return;
+      }
+      if (event.key !== 'Shift' && event.key !== 'Control' && event.key !== 'Alt') kbClear();
     }, { signal: panelSignal });
 
     panel.querySelector('#mf-language-select')?.addEventListener('change', event => {

@@ -273,6 +273,42 @@
       .mf-feature-modal button:hover { transform:none !important; }
       #mf-update-banner:hover { transform:translateX(-50%) !important; }
     }
+
+    /* --- right-shift menu improvements: title, kb nav, active counter, profiles --- */
+
+    /* the page title was boxed at 112px and clipped to "Das..." — but the 13 icon
+       tabs already eat the whole topbar (it collapsed to width 0 anyway), and the
+       active page is identified by its accent tab + tooltip. gone. */
+    #mf-gui #mf-gui-page-title { display:none !important; }
+
+    /* keyboard navigation ring (arrow keys inside the search box) */
+    #mf-gui .mf-toggle.mf-kb-active {
+      border-color:color-mix(in srgb,var(--mf-ui-accent,var(--mf-global-accent)) 85%,#fff 15%) !important;
+      box-shadow:0 0 0 2px color-mix(in srgb,var(--mf-ui-accent,var(--mf-global-accent)) 38%,transparent),
+                 0 10px 26px rgba(0,0,0,.30) !important;
+    }
+
+    /* live "enabled modules" counter pill, first thing in the tools cluster */
+    #mf-gui .mf-active-count {
+      display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;
+      border-radius:6px;background:#181b1f;border:1px solid #23272c;
+      color:#8f959c;font-size:12px;font-weight:800;letter-spacing:.02em;
+      font-family:'Faithful','Inter','Arial',sans-serif;user-select:none;white-space:nowrap;
+    }
+    #mf-gui .mf-active-count b { color:#d9dde2; font-weight:800; }
+    #mf-gui .mf-active-count.has-on b { color:color-mix(in srgb,var(--mf-ui-accent,var(--mf-global-accent)) 70%,#fff 30%); }
+
+    /* performance profile buttons: icon was orphaned at the far left — inline it with
+       the label, and make the active profile glow like the tabs do */
+    #mf-gui .mf-btn[data-mf-profile] {
+      display:inline-flex !important;align-items:center !important;justify-content:center !important;
+      gap:9px !important;
+    }
+    #mf-gui .mf-btn[data-mf-profile] .mf-profile-icon { width:20px;height:20px;margin:0;order:-1; }
+    #mf-gui .mf-btn[data-mf-profile].primary {
+      box-shadow:0 0 0 1px color-mix(in srgb,var(--mf-ui-accent,var(--mf-global-accent)) 55%,transparent),
+                 0 6px 18px color-mix(in srgb,var(--mf-ui-accent,var(--mf-global-accent)) 16%,transparent) !important;
+    }
   `;
 
   function injectStyle() {
