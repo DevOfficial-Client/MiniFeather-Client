@@ -26,6 +26,9 @@
     items: [],
     bar: null,
     button: null,
+    imgButton: null,
+    filePicker: null,
+    docHooks: false,
     chatInputEl: null,
     cache: new Map(),
     reqId: 0,
@@ -304,7 +307,14 @@
       }
       #mf-gifchat-btn:hover { background:#334155; color:#bae6fd; }
       #mf-gifchat-btn.on { background:#0c4a6e; color:#e0f2fe; border-color:#38bdf8; }
-      .mf-gifchat-host > input { padding-right:44px; }
+      #mf-gifchat-img-btn {
+        position:absolute; right:46px; top:50%; transform:translateY(-50%);
+        background:rgba(30,41,59,.85); color:#c4b5fd; border:1px solid #4c3a75; border-radius:6px;
+        font-size:11px; line-height:1; padding:3px 6px 2px;
+        cursor:pointer; z-index:50; font-family:system-ui, sans-serif;
+      }
+      #mf-gifchat-img-btn:hover { background:#334155; }
+      .mf-gifchat-host > input { padding-right:86px; }
     `;
     document.head.appendChild(css);
   }
@@ -459,14 +469,22 @@
     }
     state.button?.remove();
     state.button = null;
+    state.imgButton?.remove();
+    state.imgButton = null;
 
     const btn = document.createElement('button');
     btn.id = 'mf-gifchat-btn';
     btn.type = 'button';
     btn.textContent = 'GIF';
     btn.title = 'MiniFeather GIFs (:gif)';
+    const imgBtn = document.createElement('button');
+    imgBtn.id = 'mf-gifchat-img-btn';
+    imgBtn.type = 'button';
+    imgBtn.textContent = '📎';
+    imgBtn.title = 'subir imagen al chat — click, pegar (ctrl+v) o arrastrar';
     if (getComputedStyle(wrapper).position === 'static') wrapper.style.position = 'relative';
     wrapper.classList.add('mf-gifchat-host');
+    wrapper.appendChild(imgBtn);
     wrapper.appendChild(btn);
     btn.addEventListener('mousedown', event => event.preventDefault());
     btn.addEventListener('click', event => {
@@ -474,6 +492,13 @@
       event.stopPropagation();
       toggleBar();
     });
+    imgBtn.addEventListener('mousedown', event => event.preventDefault());
+    imgBtn.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openPicker();
+    });
+    state.imgButton = imgBtn;
     state.button = btn;
     if (state.barOpen) openBar();
   }
@@ -614,6 +639,93 @@
     }
     state.pendingImage = file;
     showPreview(file, 'listo · enter para enviar · esc para cancelar (ﾉ´ヮ`)ﾉ*:･ﾟ');
+  }
+
+  // ---------- explicit affordances: the 📎 picker + window-wide paste/drop ----------
+  // paste/drag on the bare input was invisible to anyone who didn't already know the
+  // trick; now there's a button, and with the chat open the whole window accepts the
+  // drop. panel/skin-editor surfaces are off limits so we never steal their events.
+
+  function openPicker() {
+    if (!state.enabled) return;
+    try {
+      const chat = ensureChat();
+      chat?.openInput?.(true);
+    } catch (_) {}
+    if (!state.filePicker) {
+      const pick = document.createElement('input');
+      pick.id = 'mf-gifchat-img-picker';
+      pick.type = 'file';
+      pick.accept = 'image/png,image/jpeg,image/gif,image/webp';
+      pick.style.display = 'none';
+      pick.addEventListener('change', () => {
+        const file = pick.files && pick.files[0];
+        if (file) holdImage(file);
+        pick.value = '';
+      });
+      document.body.appendChild(pick);
+      state.filePicker = pick;
+    }
+    state.filePicker.click();
+  }
+
+  function pickSurfaceBlocked(e) {
+    const t = e.target;
+    return !!(t && t.closest && t.closest('#mf-gui, #mf-gui-overlay, #mf-skineditor, #mf-gifchat-bar, #mf-gifchat-paste, #mf-gifchat-img-picker'));
+  }
+
+  function chatOpenForImage() {
+    const input = findChatInput();
+    return !!(input && input.offsetParent !== null);
+  }
+
+  function onDocPaste(e) {
+    if (!state.enabled || e.target === state.chatInputEl) return;
+    if (!chatOpenForImage() || pickSurfaceBlocked(e)) return;
+    const items = e.clipboardData?.items || [];
+    for (const item of items) {
+      if (item.kind === 'file' && UPLOAD_MIME_RE.test(item.type)) {
+        const file = item.getAsFile();
+        if (!file) return;
+        e.preventDefault();
+        e.stopPropagation();
+        holdImage(file);
+        return;
+      }
+    }
+  }
+
+  function onDocDragOver(e) {
+    if (!state.enabled) return;
+    if (!chatOpenForImage() || pickSurfaceBlocked(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    inputDragCue(true);
+  }
+
+  function onDocDragLeave(e) {
+    if (!state.enabled || e.relatedTarget) return;
+    inputDragCue(false);
+  }
+
+  function onDocDrop(e) {
+    if (!state.enabled) return;
+    if (!chatOpenForImage() || pickSurfaceBlocked(e)) return;
+    const file = Array.from(e.dataTransfer?.files || []).find(f => UPLOAD_MIME_RE.test(f.type));
+    if (!file) return;
+    e.preventDefault();
+    e.stopPropagation();
+    inputDragCue(false);
+    holdImage(file);
+  }
+
+  function attachDocumentHooks() {
+    if (state.docHooks) return;
+    state.docHooks = true;
+    document.addEventListener('paste', onDocPaste, true);
+    document.addEventListener('dragover', onDocDragOver, true);
+    document.addEventListener('dragleave', onDocDragLeave, true);
+    document.addEventListener('drop', onDocDrop, true);
   }
 
   function clearPendingImage() {
@@ -777,12 +889,15 @@
       ensureChat();
       ensureButton();
       attachInputHooks();
+      attachDocumentHooks();
     } else {
       closeBar();
       stopRenderer();
       if (state.scanTimer) { clearInterval(state.scanTimer); state.scanTimer = 0; }
       state.button?.remove();
       state.button = null;
+      state.imgButton?.remove();
+      state.imgButton = null;
       state.bar?.remove();
       state.bar = null;
       state.chatInputEl = null;
