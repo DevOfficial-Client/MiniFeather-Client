@@ -343,6 +343,10 @@ const state = {
             }
             break;
         }
+        case 'clone': {
+            try { globalThis.MF_Clones?.receiveClone?.(String(m.key || ''), m); } catch {}
+            break;
+        }
         case 'announce': {
             if (typeof m.code === 'string' && m.code !== state.myCode && !state.conns.has(m.code)) {
                 connect(m.code);
@@ -774,6 +778,7 @@ const state = {
     get names() { return Object.fromEntries(state.names); },
     get connected() { return state.conns.size; },
     start, connect,
+    broadcast,
 
     shareSkinUp(id, dataURL) {
         if (!id || typeof dataURL !== 'string') return;

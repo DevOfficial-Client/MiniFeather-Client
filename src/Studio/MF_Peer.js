@@ -871,6 +871,10 @@ const state = {
     log('look-sync ← ' + a.a + (a.name ? ' (' + a.name + ')' : a.type ? ' (' + a.type + ')' : ''));
     try {
         switch (a.a) {
+            case 'clone': {
+                try { window.MF_Clones?.receiveClone?.(String(a.key || 'peer'), a); } catch {}
+                break;
+            }
             case 'stroke': {
 
                 const s = rememberPeerOriginal(entity, 'head');

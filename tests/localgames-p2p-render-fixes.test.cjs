@@ -721,6 +721,8 @@ function makeCloneWorld() {
         id: options.id,
         name: options.name,
         cosmetics: options.cosmetics,
+        pos: { x: options.pos?.x ?? 0, y: options.pos?.y ?? 0, z: options.pos?.z ?? 0 },
+        yaw: options.yaw ?? 0,
         mesh: { visible: false },
         serverPos: { set(x, y, z) { entity.serverPosValue = [x, y, z]; } },
         setPositionAndRotation2(x, y, z, yaw) { entity.pose = [x, y, z, yaw]; }
@@ -891,6 +893,114 @@ test('MF_Clones roster entries ride the LocalGames P2P roster as clone players',
   assert.ok(mainScripts.includes('src/World/MF_Clones.js'), 'MF_Clones must be injected');
   assert.match(commandsSource, /'clones',/);
   assert.match(commandsSource, /clones: \['on', 'off', '1', '2', '3'\]/);
+});
+
+test('MF_Clones P2P: remote clones spawn from mesh/peer messages and expire', () => {
+  const { world, manager, spawned } = makeCloneWorld();
+  const now = Date.now();
+  const sandbox = {
+    state: {
+      enabled: true,
+      count: 1,
+      player: { perspective: 1, getEyeHeight: () => 1.62, profile: { username: 'Me', uuid: 'me1', skin: 'steve' } },
+      yaw: 0,
+      freePosition: null,
+      game: { world, player: { pos: { x: 0, y: 70, z: 0 }, profile: { username: 'Me', uuid: 'me1', skin: 'steve' } } },
+      clones: new Map(),
+      remoteClones: new Map(),
+      world: null,
+      lastCenter: null,
+      manager: null,
+      lastBroadcastAt: 0
+    },
+    __MINIFEATHER_LOCAL_GAMES__: { state: { moduleNamespace: { mgr: manager } }, active: false },
+    console: { warn() {} },
+    Date,
+    Math,
+    Number,
+    String,
+    Array,
+    Object,
+    FREE_BODY_DISTANCE: 3.2,
+    MAX_CLONES: 3,
+    CLONE_IDS: [-2147483639, -2147483638, -2147483637],
+    document: { dispatchEvent() {} },
+    CustomEvent: class {},
+    SYNC_INTERVAL_MS: 1500
+  };
+  const fns = exposeManyFrom(clonesSource, ['looksLikeEntityManager', 'resolveManager', 'findGame', 'isLiveGame', 'playerProfile', 'cloneSlot', 'spawnClone', 'despawnClone', 'dispatchChanged', 'remoteCloneId', 'receiveClone', 'syncRemoteClones'], sandbox);
+
+  // El receptor crea el clon del otro jugador con su skin y nombre
+  fns.receiveClone('peer-friend', {
+    name: 'Friend', skin: 'alex_skin', rank: 'VIP',
+    count: 1,
+    clones: [{ x: 12.5, y: 70, z: -8.25, yaw: 2.1 }]
+  });
+
+  const key = [...sandbox.state.remoteClones.keys()][0];
+  assert.ok(key === 'peer-friend');
+  const entry = sandbox.state.remoteClones.get(key);
+  assert.equal(entry.name, 'Friend');
+  assert.equal(entry.skin, 'alex_skin');
+  assert.ok(entry.slot, 'valid slot stored');
+  assert.equal(spawned.length, 1, 'remote clone spawned as a player entity');
+  assert.equal(spawned[0].cosmetics.skin, 'alex_skin');
+  assert.equal(spawned[0].name, 'Friend');
+
+  // Expiracion: sin refresh en 10s el clon se retira del mundo
+  entry.at = now - 11000;
+  fns.syncRemoteClones();
+  assert.equal(sandbox.state.remoteClones.size, 0, 'stale remote clone pruned');
+  assert.equal(world.entities.has(entry.id), false, 'entity removed from world');
+});
+
+test('MF_Clones caps to 1 clone on normal servers and broadcasts via mesh/peer', () => {
+  const { world, manager, spawned } = makeCloneWorld();
+  let broadcasts = [];
+  const sandbox = {
+    state: {
+      enabled: true,
+      count: 3,
+      player: { pos: { x: 4, y: 70, z: 6 }, perspective: 1, getEyeHeight: () => 1.62, profile: { username: 'Me', uuid: 'me1', skin: 'steve' } },
+      yaw: 0,
+      freePosition: null,
+      game: { world, player: { pos: { x: 4, y: 70, z: 6 }, profile: { username: 'Me', uuid: 'me1', skin: 'steve' } } },
+      clones: new Map(),
+      remoteClones: new Map(),
+      world: null,
+      lastCenter: null,
+      manager: manager,
+      lastBroadcastAt: 0
+    },
+    __MINIFEATHER_LOCAL_GAMES__: { state: { moduleNamespace: { mgr: manager } }, active: false },
+    console: { warn() {} },
+    Date,
+    Math,
+    Number,
+    String,
+    Array,
+    Object,
+    MF_Mesh: { connected: 2, broadcast: payload => broadcasts.push({ via: 'mesh', payload }) },
+    MF_Peer: { connected: true, sendStudio: payload => broadcasts.push({ via: 'peer', payload }) },
+    MAX_CLONES: 3,
+    RING_RADIUS: 3.5,
+    document: { dispatchEvent() {} },
+    CustomEvent: class {},
+    CLONE_IDS: [-2147483639, -2147483638, -2147483637]
+  };
+  sandbox.globalThis = sandbox;
+  sandbox.miniblox = sandbox.state.game;
+
+  const fns = exposeManyFrom(clonesSource, ['looksLikeEntityManager', 'resolveManager', 'findGame', 'isLiveGame', 'playerProfile', 'cloneSlot', 'spawnClone', 'despawnClone', 'dispatchChanged', 'list', 'myCloneKey', 'sync', 'broadcastClones'], sandbox);
+  fns.sync();
+  
+  assert.equal(spawned.length, 1, 'normal servers cap the squad to 1 clone');
+  sandbox.state.lastBroadcastAt = 0;
+  fns.broadcastClones();
+  assert.equal(broadcasts.length, 4, 'mesh AND peer, from sync and from the explicit call');
+  assert.equal(broadcasts[2].payload.count, 1);
+  assert.equal(broadcasts[2].payload.skin, 'steve');
+  assert.equal(broadcasts[2].payload.name, 'Me');
 });
 
 test('loop wiring: peer prune, stale proxy hide and move cadence are installed', () => {
