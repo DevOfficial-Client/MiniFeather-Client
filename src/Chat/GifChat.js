@@ -671,7 +671,7 @@
 
   function pickSurfaceBlocked(e) {
     const t = e.target;
-    return !!(t && t.closest && t.closest('#mf-gui, #mf-gui-overlay, #mf-skineditor, #mf-gifchat-bar, #mf-gifchat-paste, #mf-gifchat-img-picker'));
+    return !!(t && t.closest && t.closest('#mf-gui, #mf-gui-overlay, #mf-skineditor, #mf-studio, #mf-pbreditor, #mf-facial, #mf-morph, #mf-skinchanger, #mf-gifchat-bar, #mf-gifchat-paste, #mf-gifchat-img-picker'));
   }
 
   function chatOpenForImage() {

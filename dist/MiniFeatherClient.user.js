@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 7cdbdd000bcb86797bd86327c8c8a056e65186e1
- * builtAt : 2026-09-30T19:51:45.803Z
+ * commit  : 474b95d5d16b3c847d73e0ce841ce89c27653268
+ * builtAt : 2026-09-30T19:52:28.297Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"7cdbdd000bcb86797bd86327c8c8a056e65186e1","builtAt":"2026-09-30T19:51:45.808Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"474b95d5d16b3c847d73e0ce841ce89c27653268","builtAt":"2026-09-30T19:52:28.300Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -44385,7 +44385,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
 
   function pickSurfaceBlocked(e) {
     const t = e.target;
-    return !!(t && t.closest && t.closest('#mf-gui, #mf-gui-overlay, #mf-skineditor, #mf-gifchat-bar, #mf-gifchat-paste, #mf-gifchat-img-picker'));
+    return !!(t && t.closest && t.closest('#mf-gui, #mf-gui-overlay, #mf-skineditor, #mf-studio, #mf-pbreditor, #mf-facial, #mf-morph, #mf-skinchanger, #mf-gifchat-bar, #mf-gifchat-paste, #mf-gifchat-img-picker'));
   }
 
   function chatOpenForImage() {
