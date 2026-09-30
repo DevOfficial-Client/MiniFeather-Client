@@ -7,7 +7,9 @@
   const KLIPY_CACHE_TTL = 5 * 60 * 1000;
   const TRIGGER_RE = /(^|\s):gif\b\s*$/i;
   const TRIGGER_TOKEN_RE = /(^|\s):gif\b\s*/i;
-  const KLIPY_URL_RE = /https:\/\/static\.klipy\.com\/[\w./-]+\.(?:gif|webp)(?=\s|$)/gi;
+  // klipy gifs + catbox uploads (paste/drag flow). catbox: no account, permanent
+  // links, no github involved anywhere in the chain. :D
+  const IMG_URL_RE = /https:\/\/(?:static\.klipy\.com\/[\w./-]+\.(?:gif|webp)|files\.catbox\.moe\/[\w.]+\.(?:gif|png|jpe?g|webp))(?=[\s.,!?;:)]|$)/gi;
 
   try {
     globalThis[GLOBAL_KEY]?.destroy?.();
@@ -168,21 +170,21 @@
           if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SCRIPT' || tag === 'STYLE' || tag === 'A' || tag === 'IFRAME' || tag === 'VIDEO' || tag === 'IMG') return NodeFilter.FILTER_REJECT;
           if (parent.isContentEditable) return NodeFilter.FILTER_REJECT;
           if (parent.closest('.mf-gifchat-processed')) return NodeFilter.FILTER_REJECT;
-          KLIPY_URL_RE.lastIndex = 0;
-          return KLIPY_URL_RE.test(textNode.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+          IMG_URL_RE.lastIndex = 0;
+          return IMG_URL_RE.test(textNode.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
         }
       });
       let textNode;
       while ((textNode = walker.nextNode())) renderTextNode(textNode);
     } catch (_) {}
-    KLIPY_URL_RE.lastIndex = 0;
+    IMG_URL_RE.lastIndex = 0;
   }
 
   function renderTextNode(node) {
     const text = node.nodeValue || '';
-    KLIPY_URL_RE.lastIndex = 0;
-    if (!KLIPY_URL_RE.test(text)) return;
-    KLIPY_URL_RE.lastIndex = 0;
+    IMG_URL_RE.lastIndex = 0;
+    if (!IMG_URL_RE.test(text)) return;
+    IMG_URL_RE.lastIndex = 0;
 
     const wrapper = document.createElement('span');
     wrapper.className = 'mf-gifchat-processed';
@@ -190,7 +192,7 @@
 
     let cursor = 0;
     let match;
-    while ((match = KLIPY_URL_RE.exec(text))) {
+    while ((match = IMG_URL_RE.exec(text))) {
       if (match.index > cursor) wrapper.appendChild(document.createTextNode(text.slice(cursor, match.index)));
       const img = document.createElement('img');
       img.className = 'mf-gifchat-img';
@@ -212,6 +214,13 @@
     style.textContent = `
       .mf-gifchat-img { display:inline-block; width:110px; height:110px; object-fit:cover; border-radius:8px; vertical-align:middle; margin:3px 4px 3px 0; }
       .mf-gifchat-processed { display:inline; }
+      #mf-gifchat-paste { position:fixed; z-index:2147483000; display:flex; align-items:center; gap:10px; background:#150f24; border:1px solid #6045a0; border-radius:10px; padding:8px 10px; box-shadow:0 10px 30px rgba(0,0,0,.55); max-width:340px; }
+      #mf-gifchat-paste img { width:52px; height:52px; object-fit:cover; border-radius:6px; }
+      #mf-gifchat-paste .mf-paste-info { display:flex; flex-direction:column; gap:2px; font:400 12px/1.4 system-ui,sans-serif; color:#cfc6ea; overflow:hidden; }
+      #mf-gifchat-paste .mf-paste-info b { color:#b79bff; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      #mf-gifchat-paste .mf-paste-info span { color:#8d80b8; }
+      #mf-gifchat-paste button { background:none; border:0; color:#8d80b8; font-size:15px; cursor:pointer; padding:4px; }
+      #mf-gifchat-paste button:hover { color:#ef4444; }
     `;
     document.head.appendChild(style);
     let pendingNodes = null;
@@ -228,7 +237,7 @@
     function queueScan(node) {
       if (!node) return;
       const text = node.nodeValue || node.textContent || '';
-      if (typeof text === 'string' && !text.includes('static.klipy.com')) return;
+      if (typeof text === 'string' && !text.includes('static.klipy.com') && !text.includes('files.catbox.moe')) return;
       if (!pendingNodes) {
         pendingNodes = [node];
         requestAnimationFrame(() => {
@@ -526,6 +535,180 @@
       }
     }, true);
   }
+  // ---------- paste / drag images: discord-style send via catbox ----------
+  const UPLOAD_MIME_RE = /^image\/(png|jpe?g|gif|webp)$/;
+  const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+  const hookedInputs = new WeakSet();
+
+  function attachInputHooks() {
+    const input = findChatInput();
+    if (!input || hookedInputs.has(input)) return;
+    hookedInputs.add(input);
+    input.addEventListener('paste', onPasteImage, true);
+    input.addEventListener('dragover', onDragOverImage, true);
+    input.addEventListener('dragleave', () => inputDragCue(false), true);
+    input.addEventListener('drop', onDropImage, true);
+    input.addEventListener('keydown', onInputKeydown, true);
+  }
+
+  function inputDragCue(on) {
+    const input = state.chatInputEl;
+    if (!input) return;
+    try { input.style.outline = on ? '2px dashed #7c5cd6' : ''; } catch (_) {}
+  }
+
+  function onPasteImage(e) {
+    if (!state.enabled) return;
+    const items = e.clipboardData?.items || [];
+    for (const item of items) {
+      if (item.kind === 'file' && UPLOAD_MIME_RE.test(item.type)) {
+        const file = item.getAsFile();
+        if (!file) return;
+        e.preventDefault();
+        e.stopPropagation();
+        holdImage(file);
+        return;
+      }
+    }
+  }
+
+  function onDragOverImage(e) {
+    if (!state.enabled) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    inputDragCue(true);
+  }
+
+  function onDropImage(e) {
+    if (!state.enabled) return;
+    const file = Array.from(e.dataTransfer?.files || []).find(f => UPLOAD_MIME_RE.test(f.type));
+    if (!file) return;
+    e.preventDefault();
+    e.stopPropagation();
+    inputDragCue(false);
+    holdImage(file);
+  }
+
+  function onInputKeydown(e) {
+    if (!state.pendingImage) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      clearPendingImage();
+      return;
+    }
+    // the gif bar keeps its own enter handling when a selection is active
+    if (e.key === 'Enter' && !(state.barOpen && state.sel >= 0)) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      uploadAndSend();
+    }
+  }
+
+  function holdImage(file) {
+    if (file.size > MAX_UPLOAD_BYTES) {
+      state.pendingImage = null;
+      showPreview(file, 'demasiado pesada, max 10mb (╥﹏╥)');
+      setTimeout(() => { if (!state.pendingImage) hidePreview(); }, 3500);
+      return;
+    }
+    state.pendingImage = file;
+    showPreview(file, 'listo · enter para enviar · esc para cancelar (ﾉ´ヮ`)ﾉ*:･ﾟ');
+  }
+
+  function clearPendingImage() {
+    state.pendingImage = null;
+    hidePreview();
+  }
+
+  function hidePreview() {
+    state.previewEl?.remove();
+    state.previewEl = null;
+    try { state.previewUrl && URL.revokeObjectURL(state.previewUrl); } catch (_) {}
+    state.previewUrl = null;
+  }
+
+  function showPreview(file, note) {
+    hidePreview();
+    const input = state.chatInputEl || findChatInput();
+    const chip = document.createElement('div');
+    chip.id = 'mf-gifchat-paste';
+    state.previewUrl = URL.createObjectURL(file);
+    chip.innerHTML = `
+      <img src="${state.previewUrl}" alt="">
+      <div class="mf-paste-info"><b>${escapeHtml((file.name || 'imagen').slice(0, 40))}</b><span>${escapeHtml(note)}</span></div>
+      <button type="button" title="cancelar">✕</button>`;
+    chip.querySelector('button').addEventListener('click', clearPendingImage);
+    document.body.appendChild(chip);
+    const rect = input?.getBoundingClientRect();
+    if (rect) {
+      chip.style.left = Math.max(8, rect.left) + 'px';
+      chip.style.top = Math.max(8, rect.top - chip.offsetHeight - 10) + 'px';
+    }
+    state.previewEl = chip;
+  }
+
+  function setPreviewNote(note) {
+    const span = state.previewEl?.querySelector('.mf-paste-info span');
+    if (span) span.textContent = note;
+  }
+
+  function fileToB64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+      reader.onerror = () => reject(new Error('read failed'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // upload transport, best available per platform:
+  //   tauri    -> mfapp://upload (rust posts to catbox, no cors in the webview path)
+  //   electron -> __MF_UPLOAD_BRIDGE__ (main process does the post)
+  //   extension-> MF_UPLOAD_IMAGE through the service worker proxy
+  //   the rest -> direct fetch attempt (works only if the host ever sends cors headers)
+  async function uploadImage(file) {
+    const bridge = window.__MF_UPLOAD_BRIDGE__;
+    if (typeof bridge === 'function') return bridge(file);
+    const base = window.__MF_SHIM__?.assetBase?.() || '';
+    if (/mfapp\.localhost/.test(base)) {
+      const r = await fetch(base + 'upload', { method: 'POST', body: file });
+      const url = (await r.text()).trim();
+      return { success: url.startsWith('https://files.catbox.moe/'), url };
+    }
+    const b64 = await fileToB64(file);
+    return new Promise(resolve => {
+      try {
+        chrome.runtime.sendMessage({ type: 'MF_UPLOAD_IMAGE', name: file.name || 'imagen.png', mime: file.type || 'image/png', b64 }, r => resolve(r || { success: false, error: 'no response' }));
+      } catch (e) {
+        resolve({ success: false, error: String(e) });
+      }
+    });
+  }
+
+  async function uploadAndSend() {
+    const file = state.pendingImage;
+    const chat = ensureChat();
+    const game = state.game;
+    if (!file || !chat || !game) { clearPendingImage(); return; }
+    setPreviewNote('subiendo a catbox… (ﾉ´ヮ`)ﾉ*:･ﾟ');
+    try {
+      const res = await uploadImage(file);
+      if (!res?.success || !/^https:\/\/files\.catbox\.moe\//.test(res.url || '')) {
+        throw new Error(res?.error || 'upload failed');
+      }
+      const caption = String(state.chatInputEl?.value || '').trim();
+      const text = (caption ? caption + ' ' : '') + res.url;
+      try { chat.setInputValue?.(text); } catch (_) { try { chat.inputValue = text; } catch (_) {} }
+      chat.submit(game);
+      try { chat.closeInput?.(); } catch (_) {}
+      clearPendingImage();
+    } catch (error) {
+      console.warn('minifeather gifchat upload failed:', error);
+      setPreviewNote('no se pudo subir (╥﹏╥) — enter reintenta');
+    }
+  }
+
   function onConfig(event) {
     let detail = event.detail;
     try { detail = typeof detail === 'string' ? JSON.parse(detail) : detail; } catch (_) { return; }
@@ -544,11 +727,12 @@
       injectBarStyle();
       if (!state.scanTimer) {
         state.scanTimer = window.setInterval(() => {
-          if (state.enabled) { ensureChat(); ensureButton(); }
+          if (state.enabled) { ensureChat(); ensureButton(); attachInputHooks(); }
         }, 1200);
       }
       ensureChat();
       ensureButton();
+      attachInputHooks();
     } else {
       closeBar();
       stopRenderer();

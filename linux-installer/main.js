@@ -3,9 +3,24 @@
 // and the client's files ride over the mfapp:// custom protocol with cors open wide.
 // no csp on miniblox, so the hotloader can eval freely. lucky us. :D
 
-const { app, BrowserWindow, protocol } = require('electron');
+const { app, BrowserWindow, protocol, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
+
+// paste/drag chat images: the page cannot POST to catbox (no cors on their api), so
+// the main process does the upload. no accounts, no github. :D
+ipcMain.handle('mf-upload', async (_event, { name, mime, b64 }) => {
+  const bytes = Buffer.from(String(b64 || ''), 'base64');
+  const form = new FormData();
+  form.append('reqtype', 'fileupload');
+  form.append('fileToUpload', new Blob([bytes], { type: String(mime || 'image/png') }), String(name || 'image.png'));
+  const res = await fetch('https://catbox.moe/user/api.php', { method: 'POST', body: form });
+  const url = (await res.text()).trim();
+  if (!res.ok || !/^https:\/\/files\.catbox\.moe\/[\w.]+$/.test(url)) {
+    throw new Error(url.slice(0, 100) || `catbox ${res.status}`);
+  }
+  return url;
+});
 
 // must run before app ready, no exceptions. electron is very serious about this one.
 protocol.registerSchemesAsPrivileged([

@@ -5,6 +5,20 @@
 
 const fs = require('fs');
 const path = require('path');
+const { ipcRenderer } = require('electron');
+
+// the page asks for this bridge when it needs to upload a chat image: the main
+// process does the catbox post, because cors does not apply to node. :D
+window.__MF_UPLOAD_BRIDGE__ = async (file) => {
+  const b64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+    reader.onerror = () => reject(new Error('read failed'));
+    reader.readAsDataURL(file);
+  });
+  const url = await ipcRenderer.invoke('mf-upload', { name: file.name || 'imagen.png', mime: file.type || 'image/png', b64 });
+  return { success: true, url };
+};
 
 const PACKAGED_ROOT = process.resourcesPath || '';
 const DEV_ROOT = path.join(__dirname, 'resources');

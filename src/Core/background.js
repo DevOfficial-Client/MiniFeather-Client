@@ -691,6 +691,26 @@ const SKINS = [
     return true;
   }
 
+  if (message.type === "MF_UPLOAD_IMAGE") {
+    // paste/drag chat images: upload to catbox (no account, permanent urls, no
+    // github). endpoint is exact-match so the proxy stays locked down. :D
+    (async () => {
+      try {
+        const bytes = Uint8Array.from(atob(String(message.b64 || "")), ch => ch.charCodeAt(0));
+        const form = new FormData();
+        form.append("reqtype", "fileupload");
+        form.append("fileToUpload", new File([bytes], String(message.name || "image.png"), { type: String(message.mime || "image/png") }));
+        const res = await fetch("https://catbox.moe/user/api.php", { method: "POST", body: form });
+        const url = (await res.text()).trim();
+        if (!res.ok || !/^https:\/\/files\.catbox\.moe\/[\w.]+$/.test(url)) throw new Error("catbox " + res.status);
+        sendResponse({ success: true, url });
+      } catch (error) {
+        sendResponse({ success: false, error: String(error?.message || error) });
+      }
+    })();
+    return true;
+  }
+
   if (message.type === "mfSetPageZoom") {
     const zoom = Math.min(5, Math.max(0.25, Number(message.zoom) || 1));
     const tabId = sender?.tab?.id;

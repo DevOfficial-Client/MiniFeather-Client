@@ -104,6 +104,33 @@ fn serve_file(root: &PathBuf, rel: &str) -> tauri::http::Response<Vec<u8>> {
     }
 }
 
+// paste/drag chat images: the webview cannot POST to catbox (no cors headers on their
+// api), so the rust side does the upload on the page's behalf. no accounts, no github. :D
+fn catbox_upload(bytes: Vec<u8>) -> impl std::future::Future<Output = Result<String, String>> {
+    let part = reqwest::multipart::Part::bytes(bytes)
+        .file_name("image.png")
+        .mime_str("application/octet-stream")
+        .expect("static mime");
+    let form = reqwest::multipart::Form::new()
+        .text("reqtype", "fileupload")
+        .part("fileToUpload", part);
+    async move {
+        let client = reqwest::Client::new();
+        let res = client
+            .post("https://catbox.moe/user/api.php")
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| format!("upload failed: {e}"))?;
+        let text = res.text().await.map_err(|e| format!("read failed: {e}"))?;
+        let url = text.trim().to_string();
+        if url.starts_with("https://files.catbox.moe/") {
+            Ok(url)
+        } else {
+            Err(format!("catbox rejected: {}", url.chars().take(80).collect::<String>()))
+        }
+    }
+}
 fn main() {
     // the 68% lives here, at chromium's device-scale layer: the game sizes its canvas
     // to the css viewport, so css zoom breaks that math (canvas at zoom% of the window).
@@ -115,6 +142,27 @@ fn main() {
             let uri = request.uri();
             let path = percent_decode(uri.path());
             let rel = path.trim_start_matches('/');
+
+            // POST /upload = chat image upload proxy (catbox). the handler thread blocks
+            // on a channel while the spawned task does the async http round trip.
+            if rel == "upload" && request.method() == tauri::http::Method::POST {
+                let body = request.into_body();
+                let (tx, rx) = std::sync::mpsc::channel();
+                tauri::async_runtime::spawn(async move {
+                    let _ = tx.send(catbox_upload(body).await);
+                });
+                let (status, text) = match rx.recv() {
+                    Ok(Ok(url)) => (200u16, url),
+                    Ok(Err(e)) => (502u16, e),
+                    Err(e) => (500u16, format!("channel: {e}")),
+                };
+                return tauri::http::Response::builder()
+                    .status(status)
+                    .header("Content-Type", "text/plain; charset=utf-8")
+                    .header("Access-Control-Allow-Origin", "*")
+                    .body(text.into_bytes())
+                    .unwrap();
+            }
             let root = ctx
                 .app_handle()
                 .path()
