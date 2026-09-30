@@ -524,6 +524,20 @@ const FREECAM_UUIDS = new Set([
     state.forcedPerspective = false;
     }
 
+  // En freecam la camara vuela lejos del cuerpo: el jugador debe verse con
+  // su skin (perspectiva 1/2 del motor ya lo hacen, esto lo garantiza).
+  function enforceBodyVisible() {
+    const player = state.player;
+    if (!player) return;
+    try {
+      const perspective = Number(player.perspective);
+      if (perspective === 0) return;
+      const world = state.game?.world;
+      const entity = world?.getPlayerById?.(player.id) || world?.players?.get?.(player.id) || player;
+      if (entity?.mesh) entity.mesh.visible = true;
+    } catch (_) {}
+  }
+
     function detachCamera(camera) {
     const parent = camera?.parent || null;
     if (!parent) return false;
@@ -631,6 +645,7 @@ const FREECAM_UUIDS = new Set([
     try { window.MF_FREELOOK?.setFL?.(false); } catch (_) {}
 
     forceThirdPerson(player);
+    enforceBodyVisible();
     detachCamera(camera);
 
     state.freePosition = playerOrigin || getPlayerCameraOrigin(player) || worldPosition || captureWorldPosition(camera);
@@ -667,6 +682,7 @@ const FREECAM_UUIDS = new Set([
     globalThis.__MINIFEATHER_FREECAM_ACTIVE__ = false;
     clearKeys();
     neutralizePlayerInput();
+    enforceBodyVisible();
 
     if (camera) {
         if (state.detached) restoreCameraParent(camera);
@@ -743,7 +759,7 @@ const FREECAM_UUIDS = new Set([
     if (keys.KeyD) strafe += 1;
     if (keys.KeyA) strafe -= 1;
     if (keys.Space) vertical += 1;
-    if (keys.ShiftLeft || keys.ShiftRight) vertical -= 1;
+    if (keys.ShiftLeft) vertical -= 1;
 
     const horizontalLength = Math.hypot(forward, strafe);
     if (horizontalLength > 1) {
@@ -766,11 +782,28 @@ const FREECAM_UUIDS = new Set([
 
     const movementKeys = new Set([
     'KeyW', 'KeyA', 'KeyS', 'KeyD',
-    'Space', 'ShiftLeft', 'ShiftRight',
+    'Space', 'ShiftLeft',
     'ControlLeft', 'ControlRight'
         ]);
 
-        window.addEventListener('keydown', event => {
+    window.addEventListener('keydown', event => {
+    if (!state.enabled || isTypingOrUiOpen()) return;
+
+    // F5 propio de la freecam: cicla perspectiva para ver tu cuerpo y su skin.
+    // preventDefault: en el navegador F5 recarga la pagina.
+    if (event.code === 'F5') {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        const player = state.player;
+        if (player && Number.isFinite(Number(player.perspective))) {
+            player.perspective = (Number(player.perspective) + 1) % 3;
+            try { player.toggleCameraPerspective?.(); } catch (_) {}
+            enforceBodyVisible();
+        }
+        return;
+    }
+
     if (!state.enabled || isTypingOrUiOpen()) return;
     if (!movementKeys.has(event.code)) return;
     keys[event.code] = true;
@@ -804,6 +837,9 @@ const FREECAM_UUIDS = new Set([
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
+        if (type === 'mousedown' && !document.pointerLockElement && event.target instanceof HTMLCanvasElement) {
+            try { event.target.requestPointerLock?.(); } catch (_) {}
+        }
     }, true);
     }
 
