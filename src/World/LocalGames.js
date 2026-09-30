@@ -191,6 +191,7 @@
     localHardcore: false,
     peers: new Map(),
     hostPeer: null,
+    peerClones: new Map(),
     remotePlayers: new Map(),
     remoteEntityProxies: new Map(),
     signalPollTimer: 0,
@@ -8391,7 +8392,16 @@
     }
   }
 
-  document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
+    document.addEventListener('mf:clones-changed', () => {
+    if (!state.active) return;
+
+    if (state.mode === 'host') {
+      broadcastRoster();
+    } else if (state.mode === 'join') {
+      sendJSON(state.hostPeer?.stateChannel, { t: 'clones', list: relativeCloneList() });
+    }
+  });
+document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
   document.addEventListener(SIGNAL_READY_EVENT, onSignalReady);
 
   async function publishSignal(topic, payload) {
@@ -8573,6 +8583,36 @@
       .filter(([, peer]) => peer?.pc?.connectionState === 'connected');
   }
 
+  function relativeCloneList() {
+    const origin = state.origin;
+    const clones = window.MF_Clones?.list?.() || [];
+    if (!origin) return [];
+    return clones.map(clone => ({
+      index: clone.index,
+      id: clone.id,
+      x: clone.x - origin.x,
+      y: clone.y - origin.y,
+      z: clone.z - origin.z,
+      yaw: clone.yaw
+    }));
+  }
+
+  function cloneRosterEntry(peerKey, profile, clone) {
+    return {
+      peerId: 'mfclone-' + peerKey + '-' + clone.index,
+      playerId: clone.id,
+      profile: {
+        name: profile.name,
+        skin: profile.skin,
+        rank: profile.rank,
+        mode: profile.mode
+      },
+      role: 'player',
+      position: { x: clone.x, y: clone.y, z: clone.z, yaw: clone.yaw },
+      isClone: true,
+      ping: 0
+    };
+  }
   function rosterPayload() {
     const players = [
       {
@@ -8598,6 +8638,25 @@
       });
     }
 
+
+    const myClones = relativeCloneList();
+    const myProfile = profileNetworkSnapshot();
+    for (const clone of myClones) {
+      players.push(cloneRosterEntry('host', myProfile, clone));
+    }
+
+    for (const [peerId, clones] of state.peerClones) {
+      if (!state.peers.has(peerId)) continue;
+      const peerProfile = {
+        name: state.peers.get(peerId)?.profile?.name || 'Player',
+        skin: state.peers.get(peerId)?.profile?.skin || 'bob',
+        rank: state.peers.get(peerId)?.profile?.rank || '',
+        mode: state.peers.get(peerId)?.profile?.mode || 'survival'
+      };
+      for (const clone of clones) {
+        players.push(cloneRosterEntry(peerId, peerProfile, clone));
+      }
+    }
     return players;
   }
 
@@ -8636,7 +8695,7 @@
       return null;
     }
 
-    const playerId = Number(entry?.playerId) || numericPeerId(key);
+    const playerId = entry?.isClone ? numericPeerId(String(entry.peerId)) : (Number(entry?.playerId) || numericPeerId(key));
     if (playerId === Number(state.localPlayerId)) return null;
 
     let proxy = state.remoteEntityProxies.get(key) || null;
@@ -8738,6 +8797,7 @@
     if (state.mode !== 'host' && state.mode !== 'join') return;
 
     for (const [peerId, entry] of state.remotePlayers.entries()) {
+      if (entry?.isClone) continue;
       const last = Number(entry?.lastNativeUpdate || 0);
       if (!last || now - last < REMOTE_PROXY_STALE_MS) continue;
 
@@ -9512,6 +9572,7 @@
     removeRemotePlayerProxy(peerId);
     state.remotePlayers.delete(peerId);
     broadcastRoster();
+    state.peerClones?.delete(peerId);
     return true;
   }
 
@@ -10007,6 +10068,7 @@
     state.world = null;
     state.origin = null;
     state.arena = null;
+    state.peerClones?.clear();
     state.streamedChunks?.clear();
     state.pendingStreamedChunks.length = 0;
     state.streamedChunkCount = 0;
@@ -10109,6 +10171,14 @@
       return;
     }
 
+    if (message.t === 'clones') {
+      const list = Array.isArray(message.list)
+        ? message.list.filter(clone => clone && Number.isFinite(Number(clone.x)) && Number.isFinite(Number(clone.z))).slice(0, 3)
+        : [];
+      state.peerClones.set(peerId, list);
+      broadcastRoster();
+      return;
+    }
     if (message.t === 'mode') {
 
       const newMode = String(message.mode || 'survival').toLowerCase();

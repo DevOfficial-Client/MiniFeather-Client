@@ -124,6 +124,7 @@
         "src/Experimental/BetterAnimationCape/BetterAnimationCape.js",
         "src/World/AutoRespawn.js",
         "src/World/AutoReconnect.js",
+        "src/World/MF_Clones.js",
         "src/Libraries/brocha.min.js",
         "src/World/IdlePlayerBot.js",
         "src/Movement/MovementAPI.js",

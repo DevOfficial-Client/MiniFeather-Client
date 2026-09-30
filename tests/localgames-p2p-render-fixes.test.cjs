@@ -834,6 +834,65 @@ test('FreeCam clone never breaks the camera, even when it explodes', () => {
   assert.equal(fallback().id, 'fallback-canvas', 'falls back to any canvas');
 });
 
+const commandsSource = fs.readFileSync(
+  path.join(__dirname, '..', 'src/Chat/ClientCommands.js'),
+  'utf8'
+);
+const clonesSource = fs.readFileSync(
+  path.join(__dirname, '..', 'src/World/MF_Clones.js'),
+  'utf8'
+);
+
+test('MF_Clones: ring placement, count clamping and P2P roster integration', () => {
+  const cloneSlot = expose(namedFunction(clonesSource, 'cloneSlot'), { MAX_CLONES: 3, RING_RADIUS: 3.5 });
+
+  const origin = { x: 500, y: 70, z: -300 };
+  const slot0 = cloneSlot(0, 3, origin);
+  const slot1 = cloneSlot(1, 3, origin);
+  const slot2 = cloneSlot(2, 3, origin);
+
+  for (const slot of [slot0, slot1, slot2]) {
+    const dist = Math.hypot(slot.x - origin.x, slot.z - origin.z);
+    assert.ok(Math.abs(dist - 3.5) < 1e-9, 'ring radius respected');
+    assert.equal(slot.y, origin.y, 'same height as the player');
+  }
+  const spread1 = Math.abs(slot1.x - slot0.x) + Math.abs(slot1.z - slot0.z);
+  const spread2 = Math.abs(slot2.x - slot0.x) + Math.abs(slot2.z - slot0.z);
+  assert.ok(spread1 > 1 && spread2 > 1, 'clones spread around the player, not stacked');
+
+  // yaw mira hacia el jugador
+  const dx = origin.x - slot0.x;
+  const dz = origin.z - slot0.z;
+  assert.ok(Math.abs(slot0.yaw - Math.atan2(-dx, dz)) < 1e-9, 'clone faces the player');
+
+  // count=1: un solo punto frente al jugador
+  const single = cloneSlot(0, 1, origin);
+  assert.ok(single.x > origin.x, 'single clone sits on the +x diagonal');
+});
+
+test('MF_Clones roster entries ride the LocalGames P2P roster as clone players', () => {
+  assert.match(source, /function relativeCloneList\(\)/);
+  assert.match(source, /isClone: true/);
+  assert.match(source, /entry\?\.isClone \? numericPeerId\(String\(entry\.peerId\)\)/, 'clone playerId must be stable per entry');
+  assert.match(source, /if \(entry\?\.isClone\) continue;/, 'stale-proxy hide must skip clones');
+  assert.match(source, /state\.peerClones\.set\(peerId, list\);/, 'guest clones arrive via the host');
+  assert.match(source, /state\.peerClones\?\.delete\(peerId\);/, 'peer clones cleaned on disconnect');
+  assert.match(source, /mf:clones-changed/);
+  assert.match(freecamSource, /FREECAM_CLONE_ID = \-2147483641/);
+  assert.match(clonesSource, /CLONE_IDS = \[-2147483639, -2147483638, -2147483637\]/, 'reserved id band');
+  assert.match(clonesSource, /manager\.spawnPlayer\(\{/, 'clones spawn as real player entities');
+
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8')
+  );
+  const mainScripts = manifest.content_scripts.find(
+    entry => entry.world === 'MAIN' && entry.js.includes('src/World/LocalGames.js')
+  ).js;
+  assert.ok(mainScripts.includes('src/World/MF_Clones.js'), 'MF_Clones must be injected');
+  assert.match(commandsSource, /'clones',/);
+  assert.match(commandsSource, /clones: \['on', 'off', '1', '2', '3'\]/);
+});
+
 test('loop wiring: peer prune, stale proxy hide and move cadence are installed', () => {
   assert.match(source, /pruneStaleHostPeers\(Date\.now\(\)\)/);
   assert.match(source, /pruneStaleRemoteProxies\(now\);/);

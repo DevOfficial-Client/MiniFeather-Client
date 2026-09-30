@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'reconnect', 'reconectar', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'clones', 'reconnect', 'reconectar', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
 
   // Variantes de argumentos por comando para el Tab-complete client-side.
   // null = el comando acepta cualquier cosa en esa posicion.
@@ -39,6 +39,7 @@
     mf: ['models', 'diag'],
     idlebot: ['join', 'leave', 'status'],
     backrooms: null,
+    clones: ['on', 'off', '1', '2', '3'],
     bridge: null,
     film: null,
     studio: null
@@ -120,6 +121,7 @@
       '\\yellow\\/call on|off|status|<friend>|answer|decline|end|mute\\reset\\ - MiniFeather voice calls',
       '\\yellow\\/emote <name>\\reset\\ - Play a custom emote (from emotes/)',
       '\\yellow\\/reconnect on|off\\reset\\ - Auto-rejoin when the server kicks or drops you',
+      '\\yellow\\/clones <0-3>\\reset\\ - Client-side clones of yourself (only MiniFeather users see them)',
       '\\yellow\\/emote stop|list|reload\\reset\\ - Manage emotes',
       '\\yellow\\/mf help\\reset\\ - Show this help'
     ];
@@ -923,6 +925,30 @@
       return;
     }
 
+    if (command === 'clones') {
+      const api = globalThis.MF_Clones;
+      if (!api) { addChat('Clones is not ready yet.', 'error'); return; }
+
+      const sub = (args[0] || '').toLowerCase();
+      if (sub === 'on') {
+        const count = api.setCount(Math.max(1, api.count || 3));
+        addChat('Clones: ' + count + ' around you.', 'success');
+        return;
+      }
+      if (sub === 'off') {
+        api.setCount(0);
+        addChat('Clones disabled.', 'success');
+        return;
+      }
+      const num = Number(sub);
+      if (Number.isFinite(num)) {
+        const count = api.setCount(num);
+        addChat('Clones: ' + count + ' around you (max ' + api.MAX + ').', 'success');
+        return;
+      }
+      addChat('Clones: ' + api.count + '/' + api.MAX + ' around you. Use /clones <0-' + api.MAX + '> or on|off.', 'normal');
+      return;
+    }
     if (command === 'face' || command === 'facewap') {
       const api = globalThis.MF_FaceSwap;
       if (!api) { addChat('FaceSwap is not ready yet.', 'error'); return; }
