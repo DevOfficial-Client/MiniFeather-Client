@@ -9120,9 +9120,11 @@
 
   // ---------- interactive first steps walkthrough ----------
   // a guided tour with the spotlight glued to the real controls: you cannot advance
-  // until you actually use the thing. the language follows the panel config, and the
-  // steps adapt to your pc's horsepower because a potato and a 4090 deserve different
-  // advice. :D
+  // until you actually use the thing. the full-client edition covers perf profiles,
+  // shaders, player animations, the command grimoire (/pscale, /p2p and friends) and
+  // a quick peek at the experimental lab, in all 10 client languages — lowercase and
+  // kaomojis are house style, not a bug. steps adapt to your pc's horsepower because
+  // a potato and a 4090 deserve different advice. :D
   function detectPcTier() {
     const cores = navigator.hardwareConcurrency || 4;
     const mem = navigator.deviceMemory || 4;
@@ -9141,91 +9143,458 @@
     return { tier, cores, mem, gpu };
   }
 
-  function tutorialCopy(info, toggle) {
-    // language comes from the panel config first, browser locale as fallback
-    const lang = String(settings.language || navigator.language || 'en').toLowerCase();
-    const es = lang.startsWith('es');
-    const specs = `${info.cores} cores · ${info.mem}gb${info.gpu ? ' · ' + info.gpu.split('(')[0].trim().slice(0, 42) : ''}`;
-    if (es) return {
+  // one copy generator per supported language. every string stays lowercase (house
+  // rule since day one) and keeps the kaomoji flavor; the generators only
+  // interpolate hardware specs, tier jokes and the module picked for the lesson.
+  const TUTORIAL_LANGS = Object.freeze({
+    es: (info, toggle, specs) => ({
       tierLabel: { potato: 'patata 🥔', medium: 'equilibrada (｡•̀ᴗ-)✧', beast: 'bestia ᕙ(⇀‸↼‶)ᕗ' }[info.tier],
-      welcomeTitle: `hola! tu pc es una ${info.tier === 'beast' ? 'bestia' : info.tier === 'potato' ? 'patata con cariño' : 'máquina decente'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
-      welcomeBody: `detectamos: ${specs}<br>el tutorial se adapta a tu hardware, porque no es lo mismo una tostadora que un cohete (¬‿¬)`,
+      welcomeTitle: `hola! tu pc es ${info.tier === 'beast' ? 'una bestia' : info.tier === 'potato' ? 'una patata con cariño' : 'una máquina decente'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
+      welcomeBody: `detectamos: ${specs}<br>este tour cubre todo el cliente, sin relleno: config, shaders, animaciones, comandos y secretos. dura menos que una pantalla de carga (¬‿¬)`,
       searchTitle: 'el buscador, tu mejor amigo',
-      searchBody: 'haz clic en la barra de búsqueda iluminada. escribe "keystrokes", "duck", lo que quieras… encuentra cualquier módulo sin scrollear como desesperado (๑•̀ㅂ•́)و',
+      searchBody: 'haz clic en la barra iluminada y escribe algo: "keystrokes", "duck"… encuentra cualquier módulo sin scrollear como desesperado (๑•̀ㅂ•́)و',
       catTitle: 'filtros',
-      catBody: 'haz clic en la categoría "todas" para filtrar los módulos. sí, tienes que hacer clic, esto es interactivo (ง\'̀-\'́)ง',
+      catBody: 'haz clic en "todas" para ver la colección completa. sí, tienes que hacer clic de verdad, esto es interactivo (ง\'̀-\'́)ง',
       toggleTitle: `activa ${toggle.name}`,
-      toggleBody: info.tier === 'potato'
-        ? `haz clic en ${toggle.name} para activarlo. un módulo gratis para tu patata: cero costo, pura magia (￣ー￣)`
-        : info.tier === 'beast'
-          ? `haz clic en ${toggle.name} para activarlo. tu gpu quería lucirse hoy. luego pásate por la pestaña de shaders, te debe un render bonito ᕙ(⇀‸↼‶)ᕗ`
-          : `haz clic en ${toggle.name} para activarlo. tu audience de Twitch lo ama (ﾉ´ヮ\`)ﾉ*:･ﾟ`,
-      toggleDone: '¡lo lograste! ya sabes activar módulos ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
-      finalTitle: 'ya casi eres oficialmente minifeather (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
-      finalBody: info.tier === 'potato'
-        ? 'consejos de patata: mantén el render distance bajito, mira los perfiles de rendimiento y no toques los shaders… todavía. tu pc te lo agradecerá con fps estables (｡•̀ᴗ-)✧'
-        : info.tier === 'beast'
-          ? 'consejos de bestia: pestaña shaders, realistic mode y deferred pipeline te esperan. tu gpu pide horas extra y nosotros se las damos ᕙ(⇀‸↼‶)ᕗ'
-          : 'consejos equilibrados: prueba waypoints y el studio (F1). y si algo se rompe… right shift y a otra cosa (｡•̀ᴗ-)✧',
+      toggleBody: 'haz clic en el módulo iluminado para activarlo. así se prende y apaga todo en minifeather: un clic, cero drama (￣ー￣)',
+      toggleDone: '¡lo lograste! ya dominas lo más importante ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
+      mapTitle: 'el mapa del tesoro (･ω･)b',
+      mapBody: '🎮 hud: tu overlay · ✨ render: ojos felices · 🎵 youtube music · 🌈 shaders · 🧪 experimental: luego te cuento · 👕 cosmetics · 🪪 accounts · 💬 chat con memes incluidos · 📍 waypoints · 👟 movement · ⚙ settings (el idioma vive aquí) · 🪶 about',
+      perfTitle: 'config bajo consumo, mejor experiencia',
+      perfBody: `haz clic en el perfil iluminado (⚡ arriba del todo). las animaciones del jugador se quedan activadas: cuestan casi nada y se sienten caras. ${info.tier === 'potato' ? 'shaders: todavía no, deja que tu pc respire (￣ー￣)' : info.tier === 'beast' ? 'tu gpu puede soñar en grande: el deferred pipeline te espera cuando quieras ᕙ(⇀‸↼‶)ᕗ' : 'si los fps sobran, sube de perfil o prueba un shader ligero'}`,
+      shadersTabTitle: '🌈 shaders: la sala de luces',
+      shadersTabBody: 'toca la pestaña 🌈. aquí viven el custom shader, el deferred pipeline (bloom + agx, puro cine para gpus felices) y el splash de agua. patata: admira de lejos por ahora, tus fps te lo agradecen (¬‿¬)',
+      animsTabTitle: '✨ render: donde viven las animaciones',
+      animsTabBody: 'toca la pestaña ✨. animaciones del jugador, elytra con física, camera overhaul y compañía. baratas y se sienten caras, como debe ser (๑¯◡¯๑)',
+      animsTitle: `activa ${toggle.animName}`,
+      animsBody: 'dale al módulo iluminado. animaciones suaves que tu gpu apenas nota: la mejor relación esfuerzo/belleza de todo el client (◕ᴗ◕✿)',
+      pscaleTitle: 'tamaño de jugador: /pscale',
+      pscaleBody: 'en el chat escribe: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. de regalo: /plarge (anchura) y /panchor 0 (pies clavados al suelo). sí, puedes ser un microscopio con espada (⊙_⊙)',
+      p2pTitle: 'p2p: amigos directos, cero servidores',
+      p2pBody: 'conecta directo con tus amigos: <b>/p2p host</b> te da un código, tu amigo entra con <b>/p2p join código</b> y comparten la sesión. <b>/p2p auto on</b> lo hace solo por el chat · <b>/call</b> para voz · <b>/mesh</b> sincroniza titan & tiny · <b>/p2p off</b> corta todo (￣▽￣)ゞ',
+      cmdsTitle: 'más hechizos para tu grimorio ✧',
+      cmdsBody: '<b>/toggle</b> módulo · <b>/bind</b> módulo tecla · <b>/waypoint add</b> nombre · <b>/copycoord</b> · <b>/g</b> mensaje (chat global) · <b>/emote</b> nombre · <b>/critter spawn random</b> · <b>/verity ask</b> texto (ia con voz) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · y <b>/help</b> para la lista completa (๑•̀ㅂ•́)و',
+      expTabTitle: '🧪 experimental: entra bajo tu propio riesgo',
+      expTabBody: 'toca la pestaña 🧪 para una pasada rápida. es experimental por ahora: auroras, hierba 3d, hojitas… funciona bonito, pero si algo explota… eh… ¿eso ya estaba así? (･_･;)',
+      finalTitle: 'ya eres minifeather oficial (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
+      finalBody: 'right shift abre/cierra este menú · <b>/help</b> lista todo · el client se auto-actualiza solo · el botón ? repite este tour cuando quieras. ahora ve a lucir esas animaciones (｡•̀ᴗ-)✧',
       footer: 'right shift abre/cierra este menú · /bind panel <tecla> lo cambia · /help lista todo · el client se auto-actualiza solo',
       next: 'siguiente (ﾉ◕ヮ◕)ﾉ',
       doIt: 'tu turno: hazlo de verdad (ง\'̀-\'́)ง',
       skip: 'saltar, ya sé todo esto >:(',
       done: '¡a jugar! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
-      step: 'paso'
-    };
-    return {
+      step: 'paso',
+      tip: 'tip: usa el buscador si no lo ves (¬‿¬)'
+    }),
+    en: (info, toggle, specs) => ({
       tierLabel: { potato: 'potato 🥔', medium: 'balanced (｡•̀ᴗ-)✧', beast: 'beast ᕙ(⇀‸↼‶)ᕗ' }[info.tier],
-      welcomeTitle: `hi! your pc is a ${info.tier === 'beast' ? 'beast' : info.tier === 'potato' ? 'potato, but a loved one' : 'decent machine'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
-      welcomeBody: `detected: ${specs}<br>the tutorial adapts to your hardware, because a toaster and a rocket are not the same thing (¬‿¬)`,
+      welcomeTitle: `hi! your pc is ${info.tier === 'beast' ? 'a beast' : info.tier === 'potato' ? 'a potato, but a loved one' : 'a decent machine'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
+      welcomeBody: `detected: ${specs}<br>this tour covers the whole client, no filler: config, shaders, animations, commands and secrets. shorter than a loading screen (¬‿¬)`,
       searchTitle: 'the search bar, your best friend',
-      searchBody: 'click the highlighted search bar. type "keystrokes", "duck", anything… find any module without scrolling like a maniac (๑•ㅂ•́)و',
+      searchBody: 'click the highlighted search bar and type something: "keystrokes", "duck"… find any module without scrolling like a maniac (๑•̀ㅂ•́)و',
       catTitle: 'filters',
-      catBody: 'click the "all" category to filter modules. yes, you have to actually click, this is interactive (ง\'̀-\'́)ง',
+      catBody: 'click "all" to see the full collection. yes, you have to actually click, this is interactive (ง\'̀-\'́)ง',
       toggleTitle: `enable ${toggle.name}`,
-      toggleBody: info.tier === 'potato'
-        ? `click ${toggle.name} to enable it. a free module for your potato: zero cost, pure magic (￣ー￣)`
-        : info.tier === 'beast'
-          ? `click ${toggle.name} to enable it. your gpu wanted to show off today. then check the shaders tab, it owes you a pretty render ᕙ(⇀‸↼‶)ᕗ`
-          : `click ${toggle.name} to enable it. your Twitch audience loves it (ﾉ´ヮ\`)ﾉ*:･ﾟ`,
-      toggleDone: 'you did it! now you know how to toggle modules ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
-      finalTitle: 'officially almost minifeather (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
-      finalBody: info.tier === 'potato'
-        ? 'potato tips: keep render distance low, check the performance profiles and don\'t touch shaders… yet. your pc will thank you with stable fps (｡•̀ᴗ-)✧'
-        : info.tier === 'beast'
-          ? 'beast tips: shaders tab, realistic mode and the deferred pipeline await. your gpu is asking for overtime and we deliver ᕙ(⇀‸↼‶)ᕗ'
-          : 'balanced tips: try waypoints and the studio (F1). and if something breaks… right shift and move on (｡•̀ᴗ-)✧',
+      toggleBody: 'click the highlighted module to enable it. that\'s how everything works in minifeather: one click, zero drama (￣ー￣)',
+      toggleDone: 'you did it! you just mastered the most important part ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
+      mapTitle: 'the treasure map (･ω･)b',
+      mapBody: '🎮 hud: your overlay · ✨ render: happy eyes · 🎵 youtube music · 🌈 shaders · 🧪 experimental: more on that later · 👕 cosmetics · 🪪 accounts · 💬 chat with memes included · 📍 waypoints · 👟 movement · ⚙ settings (your language lives here) · 🪶 about',
+      perfTitle: 'low consumption, best experience',
+      perfBody: `click the highlighted profile (⚡ at the top). player animations stay on: they cost almost nothing and feel expensive. ${info.tier === 'potato' ? 'shaders: not yet, let your pc breathe (￣ー￣)' : info.tier === 'beast' ? 'your gpu can dream big: the deferred pipeline awaits whenever you want ᕙ(⇀‸↼‶)ᕗ' : 'if fps are spare, move up a profile or try a light shader'}`,
+      shadersTabTitle: '🌈 shaders: the lighting room',
+      shadersTabBody: 'click the 🌈 tab. the custom shader, the deferred pipeline (bloom + agx, pure cinema for happy gpus) and water splash live here. potato tier: admire from afar for now, your fps will thank you (¬‿¬)',
+      animsTabTitle: '✨ render: where animations live',
+      animsTabBody: 'click the ✨ tab. player animations, elytra physics, camera overhaul and friends. cheap and they feel expensive, as it should be (๑¯◡¯๑)',
+      animsTitle: `enable ${toggle.animName}`,
+      animsBody: 'hit the highlighted module. smooth player animations your gpu barely notices: the best effort-to-beauty ratio in the whole client (◕ᴗ◕✿)',
+      pscaleTitle: 'player size: /pscale',
+      pscaleBody: 'type in chat: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. bonus: /plarge (width) and /panchor 0 (feet glued to the floor). yes, you can be a microscope with a sword (⊙_⊙)',
+      p2pTitle: 'p2p: friends direct, zero servers',
+      p2pBody: 'connect straight to your friends: <b>/p2p host</b> gives you a code, your friend joins with <b>/p2p join code</b> and you share the session. <b>/p2p auto on</b> does it via chat automatically · <b>/call</b> for voice · <b>/mesh</b> syncs titan & tiny · <b>/p2p off</b> ends everything (￣▽￣)ゞ',
+      cmdsTitle: 'more spells for your grimoire ✧',
+      cmdsBody: '<b>/toggle</b> module · <b>/bind</b> module key · <b>/waypoint add</b> name · <b>/copycoord</b> · <b>/g</b> message (global chat) · <b>/emote</b> name · <b>/critter spawn random</b> · <b>/verity ask</b> text (ai with voice) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · and <b>/help</b> for the full list (๑•̀ㅂ•́)و',
+      expTabTitle: '🧪 experimental: enter at your own risk',
+      expTabBody: 'click the 🧪 tab for a quick look. it\'s experimental for now: auroras, 3d grass, fallen leaves… it works nicely, but if something explodes… eh… was it always like that? (･_･;)',
+      finalTitle: 'officially minifeather now (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
+      finalBody: 'right shift opens/closes this menu · <b>/help</b> lists everything · the client updates itself · the ? button replays this tour anytime. now go show off those animations (｡•̀ᴗ-)✧',
       footer: 'right shift opens/closes this menu · /bind panel <key> changes it · /help lists everything · the client updates itself',
       next: 'next (ﾉ◕ヮ◕)ﾉ',
       doIt: 'your turn: actually do it (ง\'̀-\'́)ง',
-      skip: 'skip, I already know all this >:(',
+      skip: 'skip, i know all this already >:(',
       done: 'let me play! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
-      step: 'step'
-    };
+      step: 'step',
+      tip: 'tip: use the search bar if you can\'t see it (¬‿¬)'
+    }),
+    pt: (info, toggle, specs) => ({
+      tierLabel: { potato: 'batata 🥔', medium: 'equilibrado (｡•̀ᴗ-)✧', beast: 'bestial ᕙ(⇀‸↼‶)ᕗ' }[info.tier],
+      welcomeTitle: `oi! seu pc é ${info.tier === 'beast' ? 'uma fera' : info.tier === 'potato' ? 'uma batata querida' : 'uma máquina decente'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
+      welcomeBody: `detectamos: ${specs}<br>este tour cobre o cliente inteiro, sem enrolação: config, shaders, animações, comandos e segredos. dura menos que uma tela de carregamento (¬‿¬)`,
+      searchTitle: 'a busca, sua melhor amiga',
+      searchBody: 'clique na barra iluminada e digite: "keystrokes", "duck"… ache qualquer módulo sem rolar como um doido (๑•̀ㅂ•́)و',
+      catTitle: 'filtros',
+      catBody: 'clique em "todos" para ver a coleção completa. sim, precisa clicar de verdade, isso é interativo (ง\'̀-\'́)ง',
+      toggleTitle: `ative ${toggle.name}`,
+      toggleBody: 'clique no módulo iluminado para ativar. é assim que tudo funciona no minifeather: um clique, zero drama (￣ー￣)',
+      toggleDone: 'conseguiu! você já domina a parte mais importante ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
+      mapTitle: 'o mapa do tesouro (･ω･)b',
+      mapBody: '🎮 hud: seu overlay · ✨ render: olhos felizes · 🎵 youtube music · 🌈 shaders · 🧪 experimental: já te conto · 👕 cosmetics · 🪪 contas · 💬 chat com memes incluídos · 📍 waypoints · 👟 movement · ⚙ settings (o idioma mora aqui) · 🪶 about',
+      perfTitle: 'baixo consumo, melhor experiência',
+      perfBody: `clique no perfil iluminado (⚡ lá em cima). as animações do jogador ficam ligadas: quase não custam nada e parecem caras. ${info.tier === 'potato' ? 'shaders: ainda não, deixa seu pc respirar (￣ー￣)' : info.tier === 'beast' ? 'sua gpu pode sonhar grande: o deferred pipeline te espera quando quiser ᕙ(⇀‸↼‶)ᕗ' : 'se os fps sobrarem, suba de perfil ou teste um shader leve'}`,
+      shadersTabTitle: '🌈 shaders: a sala de luzes',
+      shadersTabBody: 'clique na aba 🌈. aqui moram o custom shader, o deferred pipeline (bloom + agx, cinema puro para gpus felizes) e o splash de água. pc batata: admire de longe por enquanto, seus fps agradecem (¬‿¬)',
+      animsTabTitle: '✨ render: onde moram as animações',
+      animsTabBody: 'clique na aba ✨. animações do jogador, elytra com física, camera overhaul e companhia. baratas e parecem caras, como deve ser (๑¯◡¯๑)',
+      animsTitle: `ative ${toggle.animName}`,
+      animsBody: 'aperte o módulo iluminado. animações suaves que sua gpu quase não sente: o melhor custo-benefício de beleza do client (◕ᴗ◕✿)',
+      pscaleTitle: 'tamanho do jogador: /pscale',
+      pscaleBody: 'escreva no chat: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. de bônus: /plarge (largura) e /panchor 0 (pés colados no chão). sim, você pode ser um microscópio com espada (⊙_⊙)',
+      p2pTitle: 'p2p: amigos diretos, zero servidores',
+      p2pBody: 'conecte direto com os amigos: <b>/p2p host</b> te dá um código, seu amigo entra com <b>/p2p join código</b> e vocês dividem a sessão. <b>/p2p auto on</b> faz tudo pelo chat sozinho · <b>/call</b> para voz · <b>/mesh</b> sincroniza titan & tiny · <b>/p2p off</b> encerra tudo (￣▽￣)ゞ',
+      cmdsTitle: 'mais feitiços pro seu grimório ✧',
+      cmdsBody: '<b>/toggle</b> módulo · <b>/bind</b> módulo tecla · <b>/waypoint add</b> nome · <b>/copycoord</b> · <b>/g</b> mensagem (chat global) · <b>/emote</b> nome · <b>/critter spawn random</b> · <b>/verity ask</b> texto (ia com voz) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · e <b>/help</b> pra lista completa (๑•̀ㅂ•́)و',
+      expTabTitle: '🧪 experimental: entre por sua conta e risco',
+      expTabBody: 'clique na aba 🧪 pra uma olhadinha. é experimental por enquanto: auroras, grama 3d, folhinhas… fica bonito, mas se algo explodir… é… sempre foi assim? (･_･;)',
+      finalTitle: 'minifeather oficial agora (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
+      finalBody: 'right shift abre/fecha este menu · <b>/help</b> lista tudo · o client se atualiza sozinho · o botão ? repete o tour quando quiser. agora vá exibir essas animações (｡•̀ᴗ-)✧',
+      footer: 'right shift abre/fecha este menu · /bind panel <tecla> muda o atalho · /help lista tudo · o client se atualiza sozinho',
+      next: 'próximo (ﾉ◕ヮ◕)ﾉ',
+      doIt: 'sua vez: faça de verdade (ง\'̀-\'́)ง',
+      skip: 'pular, já sei tudo isso >:(',
+      done: 'bora jogar! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
+      step: 'passo',
+      tip: 'dica: usa a busca se não estiver vendo (¬‿¬)'
+    }),
+    fr: (info, toggle, specs) => ({
+      tierLabel: { potato: 'patate 🥔', medium: 'équilibré (｡•̀ᴗ-)✧', beast: 'bête de course ᕙ(⇀‸↼‶)ᕗ' }[info.tier],
+      welcomeTitle: `salut ! ton pc est ${info.tier === 'beast' ? 'une bête' : info.tier === 'potato' ? 'une patate, mais qu\'on aime' : 'une machine correcte'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
+      welcomeBody: `détecté : ${specs}<br>cette visite couvre tout le client, sans remplissage : config, shaders, animations, commandes et secrets. plus courte qu\'un écran de chargement (¬‿¬)`,
+      searchTitle: 'la recherche, ta meilleure amie',
+      searchBody: 'clique sur la barre illuminée et tape : "keystrokes", "duck"… trouve n\'importe quel module sans scroller comme un fou (๑•̀ㅂ•́)و',
+      catTitle: 'filtres',
+      catBody: 'clique sur "tout" pour voir la collection complète. oui, il faut vraiment cliquer, c\'est interactif (ง\'̀-\'́)ง',
+      toggleTitle: `active ${toggle.name}`,
+      toggleBody: 'clique sur le module illuminé pour l\'activer. tout minifeather fonctionne comme ça : un clic, zéro drame (￣ー￣)',
+      toggleDone: 'bien joué ! tu viens de maîtriser la partie la plus importante ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
+      mapTitle: 'la carte au trésor (･ω･)b',
+      mapBody: '🎮 hud : ton overlay · ✨ render : yeux heureux · 🎵 youtube music · 🌈 shaders · 🧪 experimental : on en parle après · 👕 cosmetics · 🪪 comptes · 💬 chat avec memes inclus · 📍 waypoints · 👟 movement · ⚙ settings (la langue vit ici) · 🪶 about',
+      perfTitle: 'basse conso, meilleure expérience',
+      perfBody: `clique sur le profil illuminé (⚡ tout en haut). les animations du joueur restent activées : elles coûtent presque rien et font chères. ${info.tier === 'potato' ? 'shaders : pas encore, laisse ton pc respirer (￣ー￣)' : info.tier === 'beast' ? 'ta gpu peut rêver grand : le deferred pipeline t\'attend quand tu veux ᕙ(⇀‸↼‶)ᕗ' : 'si tes fps débordent, monte d\'un profil ou essaie un shader léger'}`,
+      shadersTabTitle: '🌈 shaders : la salle des lumières',
+      shadersTabBody: 'clique sur l\'onglet 🌈. ici vivent le custom shader, le deferred pipeline (bloom + agx, cinéma pur pour gpus heureuses) et le splash d\'eau. patate : contemple de loin pour l\'instant, tes fps te remercient (¬‿¬)',
+      animsTabTitle: '✨ render : là où vivent les animations',
+      animsTabBody: 'clique sur l\'onglet ✨. animations du joueur, elytra avec physique, camera overhaul et compagnie. ça coûte peu et ça fait cher, comme il se doit (๑¯◡¯๑)',
+      animsTitle: `active ${toggle.animName}`,
+      animsBody: 'clique sur le module illuminé. des animations fluides que ta gpu remarque à peine : le meilleur rapport effort/beauté du client (◕ᴗ◕✿)',
+      pscaleTitle: 'taille du joueur : /pscale',
+      pscaleBody: 'tape dans le chat : <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. en bonus : /plarge (largeur) et /panchor 0 (pieds collés au sol). oui, tu peux être un microscope avec une épée (⊙_⊙)',
+      p2pTitle: 'p2p : les amis en direct, zéro serveur',
+      p2pBody: 'connecte-toi en direct avec tes amis : <b>/p2p host</b> te donne un code, ton pote rejoint avec <b>/p2p join code</b> et vous partagez la session. <b>/p2p auto on</b> le fait tout seul dans le chat · <b>/call</b> pour la voix · <b>/mesh</b> synchronise titan & tiny · <b>/p2p off</b> coupe tout (￣▽￣)ゞ',
+      cmdsTitle: 'encore des sorts pour ton grimoire ✧',
+      cmdsBody: '<b>/toggle</b> module · <b>/bind</b> module touche · <b>/waypoint add</b> nom · <b>/copycoord</b> · <b>/g</b> message (chat global) · <b>/emote</b> nom · <b>/critter spawn random</b> · <b>/verity ask</b> texte (ia avec voix) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · et <b>/help</b> pour la liste complète (๑•̀ㅂ•́)و',
+      expTabTitle: '🧪 experimental : entre à tes risques et périls',
+      expTabBody: 'clique sur l\'onglet 🧪 pour un coup d\'œil rapide. c\'est expérimental pour l\'instant : aurores, herbe 3d, feuilles… c\'est joli, mais si quelque chose explose… euh… c\'était comme ça avant ? (･_･;)',
+      finalTitle: 'officiellement minifeather (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
+      finalBody: 'right shift ouvre/ferme ce menu · <b>/help</b> liste tout · le client se met à jour tout seul · ce bouton ? relance la visite quand tu veux. maintenant va briller avec ces animations (｡•̀ᴗ-)✧',
+      footer: 'right shift ouvre/ferme ce menu · /bind panel <touche> le change · /help liste tout · le client se met à jour tout seul',
+      next: 'suivant (ﾉ◕ヮ◕)ﾉ',
+      doIt: 'à toi : fais-le pour de vrai (ง\'̀-\'́)ง',
+      skip: 'passer, je sais déjà tout >:(',
+      done: 'je vais jouer ! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
+      step: 'étape',
+      tip: 'astuce : utilise la recherche si tu ne le vois pas (¬‿¬)'
+    }),
+    de: (info, toggle, specs) => ({
+      tierLabel: { potato: 'kartoffel 🥔', medium: 'ausgewogen (｡•̀ᴗ-)✧', beast: 'bestie ᕙ(⇀‸↼‶)ᕗ' }[info.tier],
+      welcomeTitle: `hallo! dein pc ist ${info.tier === 'beast' ? 'eine bestie' : info.tier === 'potato' ? 'eine kartoffel, aber eine geliebte' : 'eine anständige maschine'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
+      welcomeBody: `erkannt: ${specs}<br>diese tour deckt den ganzen client ab, ganz ohne füllstoff: config, shader, animationen, befehle und geheimnisse. kürzer als ein ladebildschirm (¬‿¬)`,
+      searchTitle: 'die suche, dein bester freund',
+      searchBody: 'klick auf die leuchtende suchleiste und tipp etwas ein: "keystrokes", "duck"… finde jedes modul ohne wie ein verrückter zu scrollen (๑•̀ㅂ•́)و',
+      catTitle: 'filter',
+      catBody: 'klick auf "alle", um die ganze sammlung zu sehen. ja, du musst wirklich klicken, das ist interaktiv (ง\'̀-\'́)ง',
+      toggleTitle: `${toggle.name} aktivieren`,
+      toggleBody: 'klick auf das leuchtende modul, um es einzuschalten. so funktioniert alles in minifeather: ein klick, null drama (￣ー￣)',
+      toggleDone: 'geschafft! du hast gerade den wichtigsten teil gemeistert ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
+      mapTitle: 'die schatzkarte (･ω･)b',
+      mapBody: '🎮 hud: dein overlay · ✨ render: glückliche augen · 🎵 youtube music · 🌈 shaders · 🧪 experimental: dazu später mehr · 👕 cosmetics · 🪪 accounts · 💬 chat mit memes · 📍 waypoints · 👟 movement · ⚙ settings (die sprache wohnt hier) · 🪶 about',
+      perfTitle: 'wenig verbrauch, bestes erlebnis',
+      perfBody: `klick auf das leuchtende profil (⚡ ganz oben). die spieler-animationen bleiben an: sie kosten fast nichts und wirken teuer. ${info.tier === 'potato' ? 'shaders: noch nicht, lass deinen pc atmen (￣ー￣)' : info.tier === 'beast' ? 'deine gpu darf groß träumen: die deferred pipeline wartet, wann du willst ᕙ(⇀‸↼‶)ᕗ' : 'wenn deine fps angeben, steig ein profil auf oder prob einen leichten shader'}`,
+      shadersTabTitle: '🌈 shaders: der lichtsaal',
+      shadersTabBody: 'klick auf den 🌈 tab. hier wohnen der custom shader, die deferred pipeline (bloom + agx, pures kino für glückliche gpus) und der wassersplash. kartoffel: erst mal aus der ferne bewundern, deine fps danken es dir (¬‿¬)',
+      animsTabTitle: '✨ render: hier wohnen die animationen',
+      animsTabBody: 'klick auf den ✨ tab. spieler-animationen, elytra mit physik, camera overhaul und freunde. sie sind billig und wirken teuer, so soll es sein (๑¯◡¯๑)',
+      animsTitle: `${toggle.animName} aktivieren`,
+      animsBody: 'drück das leuchtende modul. weiche spieler-animationen, die deine gpu kaum bemerkt: das beste aufwand/schönheit-verhältnis im client (◕ᴗ◕✿)',
+      pscaleTitle: 'spielergröße: /pscale',
+      pscaleBody: 'tipp im chat: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. als bonus: /plarge (breite) und /panchor 0 (füße am boden festgeklebt). ja, du kannst ein mikroskop mit schwert sein (⊙_⊙)',
+      p2pTitle: 'p2p: freunde direkt, null server',
+      p2pBody: 'verbinde dich direkt mit freunden: <b>/p2p host</b> gibt dir einen code, dein freund kommt mit <b>/p2p join code</b> rein und ihr teilt die session. <b>/p2p auto on</b> macht es von selbst im chat · <b>/call</b> für sprache · <b>/mesh</b> synchronisiert titan & tiny · <b>/p2p off</b> beendet alles (￣▽￣)ゞ',
+      cmdsTitle: 'mehr zauber für dein grimoire ✧',
+      cmdsBody: '<b>/toggle</b> modul · <b>/bind</b> modul taste · <b>/waypoint add</b> name · <b>/copycoord</b> · <b>/g</b> nachricht (globaler chat) · <b>/emote</b> name · <b>/critter spawn random</b> · <b>/verity ask</b> text (ki mit stimme) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · und <b>/help</b> für die komplette liste (๑•̀ㅂ•́)و',
+      expTabTitle: '🧪 experimental: betreten auf eigene gefahr',
+      expTabBody: 'klick für einen kurzen blick auf den 🧪 tab. es ist vorerst experimentell: auroras, 3d-gras, laub… sieht gut aus, aber wenn etwas explodiert… äh… war das schon immer so? (･_･;)',
+      finalTitle: 'jetzt offiziell minifeather (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
+      finalBody: 'right shift öffnet/schließt dieses menü · <b>/help</b> listet alles auf · der client aktualisiert sich von selbst · die ?-taste wiederholt die tour, wann du willst. jetzt zeig diese animationen her (｡•̀ᴗ-)✧',
+      footer: 'right shift öffnet/schließt dieses menü · /bind panel <taste> ändert es · /help listet alles auf · der client aktualisiert sich von selbst',
+      next: 'weiter (ﾉ◕ヮ◕)ﾉ',
+      doIt: 'du bist dran: mach es wirklich (ง\'̀-\'́)ง',
+      skip: 'überspringen, weiß ich schon >:(',
+      done: 'auf spielen! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
+      step: 'schritt',
+      tip: 'tipp: nutz die suche, wenn du es nicht siehst (¬‿¬)'
+    }),
+    it: (info, toggle, specs) => ({
+      tierLabel: { potato: 'patatina 🥔', medium: 'equilibrato (｡•̀ᴗ-)✧', beast: 'bestia ᕙ(⇀‸↼‶)ᕗ' }[info.tier],
+      welcomeTitle: `ciao! il tuo pc è ${info.tier === 'beast' ? 'una bestia' : info.tier === 'potato' ? 'una patata affettuosa' : 'una macchina decente'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
+      welcomeBody: `rilevato: ${specs}<br>questo tour copre tutto il client, senza riempitivi: config, shader, animazioni, comandi e segreti. dura meno di una schermata di caricamento (¬‿¬)`,
+      searchTitle: 'la ricerca, la tua migliore amica',
+      searchBody: 'clicca la barra illuminata e scrivi: "keystrokes", "duck"… trovi qualsiasi modulo senza scorrere come un ossessionato (๑•̀ㅂ•́)و',
+      catTitle: 'filtri',
+      catBody: 'clicca "tutti" per vedere la collezione completa. sì, devi cliccare davvero, questo è interattivo (ง\'̀-\'́)ง',
+      toggleTitle: `attiva ${toggle.name}`,
+      toggleBody: 'clicca il modulo illuminato per attivarlo. così funziona tutto in minifeather: un clic, zero drammi (￣ー￣)',
+      toggleDone: 'ce l\'hai fatta! hai appena imparato la parte più importante ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
+      mapTitle: 'la mappa del tesoro (･ω･)b',
+      mapBody: '🎮 hud: il tuo overlay · ✨ render: occhi felici · 🎵 youtube music · 🌈 shaders · 🧪 experimental: te ne parlo dopo · 👕 cosmetics · 🪪 account · 💬 chat con meme inclusi · 📍 waypoints · 👟 movement · ⚙ settings (la lingua vive qui) · 🪶 about',
+      perfTitle: 'bassi consumi, esperienza top',
+      perfBody: `clicca il profilo illuminato (⚡ in alto). le animazioni del giocatore restano attive: costano pochissimo e sembrano care. ${info.tier === 'potato' ? 'shader: non ancora, lascia respirare il tuo pc (￣ー￣)' : info.tier === 'beast' ? 'la tua gpu può sognare in grande: il deferred pipeline ti aspetta quando vuoi ᕙ(⇀‸↼‶)ᕗ' : 'se gli fps avanzano, sali di profilo o prova uno shader leggero'}`,
+      shadersTabTitle: '🌈 shaders: la sala delle luci',
+      shadersTabBody: 'clicca la scheda 🌈. qui vivono il custom shader, il deferred pipeline (bloom + agx, cinema puro per gpu felici) e lo splash dell\'acqua. patatina: ammira da lontano per ora, i tuoi fps ti ringraziano (¬‿¬)',
+      animsTabTitle: '✨ render: dove vivono le animazioni',
+      animsTabBody: 'clicca la scheda ✨. animazioni del giocatore, elytra con fisica, camera overhaul e compagnia. costano poco e sembrano care, come deve essere (๑¯◡¯๑)',
+      animsTitle: `attiva ${toggle.animName}`,
+      animsBody: 'premi il modulo illuminato. animazioni fluide che la gpu quasi non nota: il miglior rapporto fatica/bellezza del client (◕ᴗ◕✿)',
+      pscaleTitle: 'dimensione del giocatore: /pscale',
+      pscaleBody: 'scrivi in chat: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. bonus: /plarge (larghezza) e /panchor 0 (piedi incollati al suolo). sì, puoi essere un microscopio con la spada (⊙_⊙)',
+      p2pTitle: 'p2p: amici diretti, zero server',
+      p2pBody: 'connettiti direttamente con gli amici: <b>/p2p host</b> ti dà un codice, l\'amico entra con <b>/p2p join codice</b> e condividete la sessione. <b>/p2p auto on</b> lo fa da solo in chat · <b>/call</b> per la voce · <b>/mesh</b> sincronizza titan & tiny · <b>/p2p off</b> chiude tutto (￣▽￣)ゞ',
+      cmdsTitle: 'altri incantesimi per il tuo grimorio ✧',
+      cmdsBody: '<b>/toggle</b> modulo · <b>/bind</b> modulo tasto · <b>/waypoint add</b> nome · <b>/copycoord</b> · <b>/g</b> messaggio (chat globale) · <b>/emote</b> nome · <b>/critter spawn random</b> · <b>/verity ask</b> testo (ia con voce) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · e <b>/help</b> per la lista completa (๑•̀ㅂ•́)و',
+      expTabTitle: '🧪 experimental: entra a tuo rischio',
+      expTabBody: 'clicca la scheda 🧪 per un\'occhiata veloce. per ora è sperimentale: aurore, erba 3d, foglioline… è carino, ma se qualcosa esplode… boh… era così prima? (･_･;)',
+      finalTitle: 'ufficialmente minifeather (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
+      finalBody: 'right shift apre/chiude questo menù · <b>/help</b> elenca tutto · il client si aggiorna da solo · questo pulsante ? ripete il tour quando vuoi. ora vai a sfoggiare quelle animazioni (｡•̀ᴗ-)✧',
+      footer: 'right shift apre/chiude questo menù · /bind panel <tasto> lo cambia · /help elenca tutto · il client si aggiorna da solo',
+      next: 'avanti (ﾉ◕ヮ◕)ﾉ',
+      doIt: 'tocca a te: fallo davvero (ง\'̀-\'́)ง',
+      skip: 'salta, lo so già tutto >:(',
+      done: 'si gioca! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
+      step: 'passo',
+      tip: 'suggerimento: usa la ricerca se non lo vedi (¬‿¬)'
+    }),
+    ru: (info, toggle, specs) => ({
+      tierLabel: { potato: 'картошка 🥔', medium: 'сбалансированная (｡•̀ᴗ-)✧', beast: 'зверюга ᕙ(⇀‸↼‶)ᕗ' }[info.tier],
+      welcomeTitle: `привет! твой пк — ${info.tier === 'beast' ? 'зверюга' : info.tier === 'potato' ? 'картошка, но любимая' : 'приличная машина'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
+      welcomeBody: `мы определили: ${specs}<br>этот тур охватывает весь клиент, без воды: конфиг, шейдеры, анимации, команды и секреты. короче загрузочного экрана (¬‿¬)`,
+      searchTitle: 'поиск — твой лучший друг',
+      searchBody: 'кликни на подсвеченную строку и напиши: "keystrokes", "duck"… найдёшь любой модуль без отчаянного скролла (๑•̀ㅂ•́)و',
+      catTitle: 'фильтры',
+      catBody: 'кликни "все", чтобы увидеть всю коллекцию. да, кликать придётся по-настоящему, тут всё интерактивно (ง\'̀-\'́)ง',
+      toggleTitle: `включи ${toggle.name}`,
+      toggleBody: 'кликни по подсвеченному модулю, чтобы включить. так работает всё в minifeather: один клик, ноль драмы (￣ー￣)',
+      toggleDone: 'получилось! ты только что освоил самое важное ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
+      mapTitle: 'карта сокровищ (･ω･)b',
+      mapBody: '🎮 hud: твой оверлей · ✨ render: счастливые глазки · 🎵 youtube music · 🌈 shaders · 🧪 experimental: об этом позже · 👕 cosmetics · 🪪 аккаунты · 💬 чат с мемами · 📍 waypoints · 👟 movement · ⚙ настройки (язык живёт тут) · 🪶 about',
+      perfTitle: 'мало ест, показывает красиво',
+      perfBody: `кликни на подсвеченный профиль (⚡ в самом верху). анимации игрока остаются включёнными: почти ничего не стоят, а выглядят дорого. ${info.tier === 'potato' ? 'шейдеры: пока нет, дай пк подышать (￣ー￣)' : info.tier === 'beast' ? 'твоя гпу может мечтать о большом: deferred pipeline ждёт когда захочешь ᕙ(⇀‸↼‶)ᕗ' : 'если фпс с запасом, поднимай профиль или попробуй лёгкий шейдер'}`,
+      shadersTabTitle: '🌈 shaders: комната света',
+      shadersTabBody: 'кликни на вкладку 🌈. здесь живут custom shader, deferred pipeline (bloom + agx, чистое кино для счастливых гпу) и брызги воды. картошка: пока любуемся издалека, твои фпс скажут спасибо (¬‿¬)',
+      animsTabTitle: '✨ render: здесь живут анимации',
+      animsTabBody: 'кликни на вкладку ✨. анимации игрока, элитра с физикой, camera overhaul и компания. стоят дёшево, выглядят дорого — как и должно быть (๑¯◡¯๑)',
+      animsTitle: `включи ${toggle.animName}`,
+      animsBody: 'жми на подсвеченный модуль. плавные анимации игрока, которые гпу почти не замечает: лучшее соотношение усилий и красоты в клиенте (◕ᴗ◕✿)',
+      pscaleTitle: 'размер игрока: /pscale',
+      pscaleBody: 'напиши в чате: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. бонусом: /plarge (ширина) и /panchor 0 (ноги приклеены к полу). да, ты можешь быть микроскопом с мечом (⊙_⊙)',
+      p2pTitle: 'p2p: друзья напрямую, ноль серверов',
+      p2pBody: 'соединяйся с друзьями напрямую: <b>/p2p host</b> даст код, друг заходит через <b>/p2p join код</b> — и вы делите сессию. <b>/p2p auto on</b> сам делится в чате · <b>/call</b> для голоса · <b>/mesh</b> синхронизирует titan & tiny · <b>/p2p off</b> всё отключает (￣▽￣)ゞ',
+      cmdsTitle: 'ещё заклинаний в твой гримуар ✧',
+      cmdsBody: '<b>/toggle</b> модуль · <b>/bind</b> модуль клавиша · <b>/waypoint add</b> имя · <b>/copycoord</b> · <b>/g</b> сообщение (глобальный чат) · <b>/emote</b> имя · <b>/critter spawn random</b> · <b>/verity ask</b> текст (ии с голосом) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · и <b>/help</b> для полного списка (๑•̀ㅂ•́)و',
+      expTabTitle: '🧪 experimental: вход на свой страх и риск',
+      expTabBody: 'кликни на вкладку 🧪 для быстрого взгляда. пока это экспериментально: полярные сияния, 3d-трава, листья… красиво, но если что-то взорвётся… эм… так и было? (･_･;)',
+      finalTitle: 'теперь ты официальный minifeather (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
+      finalBody: 'right shift открывает/закрывает это меню · <b>/help</b> перечисляет всё · клиент обновляется сам · кнопка ? повторит тур когда захочешь. а теперь иди блистай этими анимациями (｡•̀ᴗ-)✧',
+      footer: 'right shift открывает/закрывает это меню · /bind panel <клавиша> меняет её · /help перечисляет всё · клиент обновляется сам',
+      next: 'дальше (ﾉ◕ヮ◕)ﾉ',
+      doIt: 'твоя очередь: сделай по-настоящему (ง\'̀-\'́)ง',
+      skip: 'пропустить, я всё это знаю >:(',
+      done: 'играть! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
+      step: 'шаг',
+      tip: 'подсказка: используй поиск, если не видишь (¬‿¬)'
+    }),
+    ja: (info, toggle, specs) => ({
+      tierLabel: { potato: 'じゃがいも 🥔', medium: 'バランス型 (｡•̀ᴗ-)✧', beast: '最強マシン ᕙ(⇀‸↼‶)ᕗ' }[info.tier],
+      welcomeTitle: `こんにちは！あなたのpcは${info.tier === 'beast' ? '最強マシン' : info.tier === 'potato' ? '愛されてるじゃがいも' : 'いい感じのマシン'}です (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
+      welcomeBody: `検出スペック: ${specs}<br>このツアーはクライアント全体をカバーします。設定・シェーダー・アニメーション・コマンド・秘密まで、余計なものなし。ロード画面より短いよ (¬‿¬)`,
+      searchTitle: '検索バーはあなたの親友',
+      searchBody: '光ってる検索バーをクリックして「keystrokes」や「duck」と入力。スクロール地獄なしでどのモジュールも見つかるよ (๑•̀ㅂ•́)و',
+      catTitle: 'フィルター',
+      catBody: '「すべて」をクリックしてコレクションを全部見てみて。そう、本当にクリックする必要があるの。これがインタラクティブというやつです (ง\'̀-\'́)ง',
+      toggleTitle: `${toggle.name} をオンにする`,
+      toggleBody: '光ってるモジュールをクリックしてね。minifeatherのすべてはこれで動いてる：ワンクリック、ドラマゼロ (￣ー￣)',
+      toggleDone: 'できた！一番大事なところをマスターしたね ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
+      mapTitle: '宝の地図 (･ω･)b',
+      mapBody: '🎮 hud: 表示系 · ✨ render: 目が幸せ · 🎵 youtube music · 🌈 shaders · 🧪 experimental: あとでね · 👕 cosmetics · 🪪 accounts · 💬 chat: ミームつき · 📍 waypoints · 👟 movement · ⚙ settings（言語はここ）· 🪶 about',
+      perfTitle: '低消費電力で最高の体験',
+      perfBody: `光ってるプロファイル（⚡いちばん上）をクリック。プレイヤーアニメーションはオンのまま：ほぼコストゼロなのに高級感。${info.tier === 'potato' ? 'シェーダー：まだ早い、pcに呼吸をさせてあげて (￣ー￣)' : info.tier === 'beast' ? 'gpuは大きな夢を見られる：deferred pipelineがいつでも待ってる ᕙ(⇀‸↼‶)ᕗ' : 'fpsに余裕があればプロファイルを上げたり軽いシェーダーを試したり'}`,
+      shadersTabTitle: '🌈 shaders: 光の部屋',
+      shadersTabBody: '🌈タブをクリック。custom shader、deferred pipeline（bloom + agx、幸せなgpuのための純映画）、水しぶきがここに住んでる。じゃがいも組は今は遠くから見守ってね、fpsが感謝するよ (¬‿¬)',
+      animsTabTitle: '✨ render: アニメーションの住処',
+      animsTabBody: '✨タブをクリック。プレイヤーアニメーション、物理エリトラ、camera overhaul仲間たち。安いのに高級感、あるべき姿だ (๑¯◡¯๑)',
+      animsTitle: `${toggle.animName} をオンにする`,
+      animsBody: '光ってるモジュールを押して。gpuがほぼ気づかないほど軽いプレイヤーアニメーション。クライアント内最高のコスパの美しさ (◕ᴗ◕✿)',
+      pscaleTitle: 'プレイヤーサイズ: /pscale',
+      pscaleBody: 'チャットに入力：<b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan。おまけ：/plarge（幅）と /panchor 0（足を地面に固定）。そう、剣を持った顕微鏡になれるんだ (⊙_⊙)',
+      p2pTitle: 'p2p: 友達と直結、サーバーゼロ',
+      p2pBody: '友達と直接つながろう：<b>/p2p host</b> でコード取得、友達は <b>/p2p join コード</b> で参加、セッションをシェア。<b>/p2p auto on</b> ならチャットで自動 · <b>/call</b> で通話 · <b>/mesh</b> で titan & tiny 同期 · <b>/p2p off</b> で全部終了 (￣▽￣)ゞ',
+      cmdsTitle: '魔導書に呪文を追加 ✧',
+      cmdsBody: '<b>/toggle</b> モジュール · <b>/bind</b> モジュール キー · <b>/waypoint add</b> 名前 · <b>/copycoord</b> · <b>/g</b> メッセージ（グローバルチャット）· <b>/emote</b> 名前 · <b>/critter spawn random</b> · <b>/verity ask</b> テキスト（音声つきai）· <b>/baritone goto</b> x y z · <b>/reconnect on</b> · 全リストは <b>/help</b> (๑•̀ㅂ•́)و',
+      expTabTitle: '🧪 experimental: 自己責任でどうぞ',
+      expTabBody: '🧪タブをクリックして軽くチェック。今は実験的：オーロラ、3d草、落ち葉…きれいだけど、もし何か爆発しても…えっと…前からこうだった？ (･_･;)',
+      finalTitle: 'もう公式のminifeather使い (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
+      finalBody: 'right shift でこのメニュー開閉 · <b>/help</b> で全コマンド · クライアントは自動更新 · ？ボタンでツアー再生可能。さあ、そのアニメーションで輝いてきて (｡•̀ᴗ-)✧',
+      footer: 'right shift でこのメニュー開閉 · /bind panel <キー> で変更 · /help で全リスト · クライアントは自動更新',
+      next: 'つぎへ (ﾉ◕ヮ◕)ﾉ',
+      doIt: '君の番：本当にやってみて (ง\'̀-\'́)ง',
+      skip: 'スキップ、全部知ってる >:(',
+      done: '遊ぶ！ (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
+      step: 'ステップ',
+      tip: 'ヒント：見えないときは検索で (¬‿¬)'
+    }),
+    zh: (info, toggle, specs) => ({
+      tierLabel: { potato: '小土豆 🥔', medium: '均衡型 (｡•̀ᴗ-)✧', beast: '猛兽机 ᕙ(⇀‸↼‶)ᕗ' }[info.tier],
+      welcomeTitle: `嗨！你的电脑是${info.tier === 'beast' ? '一头猛兽' : info.tier === 'potato' ? '一颗被爱着的小土豆' : '一台靠谱的机器'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
+      welcomeBody: `检测到：${specs}<br>这份教程覆盖整个客户端，没有废话：配置、着色器、动画、命令和秘密。比加载画面还短 (¬‿¬)`,
+      searchTitle: '搜索栏，你最好的朋友',
+      searchBody: '点一下高亮的搜索框，输入"keystrokes"、"duck"什么的…不用疯狂滚动就能找到任何模块 (๑•̀ㅂ•́)و',
+      catTitle: '筛选',
+      catBody: '点"全部"看完整收藏。没错，必须真的点，这是互动教程 (ง\'̀-\'́)ง',
+      toggleTitle: `开启 ${toggle.name}`,
+      toggleBody: '点高亮的模块开启它。minifeather 的一切都这样运作：一次点击，零 drama (￣ー￣)',
+      toggleDone: '做到了！你已经掌握了最重要的部分 ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
+      mapTitle: '藏宝图 (･ω･)b',
+      mapBody: '🎮 hud：显示层 · ✨ render：眼睛福利 · 🎵 youtube music · 🌈 shaders · 🧪 experimental：待会儿说 · 👕 cosmetics · 🪪 accounts · 💬 chat：自带表情包 · 📍 waypoints · 👟 movement · ⚙ settings（语言住这里）· 🪶 about',
+      perfTitle: '低功耗，最好体验',
+      perfBody: `点高亮的性能档位（⚡在最上面）。玩家动画保持开启：几乎零成本，效果却很贵气。${info.tier === 'potato' ? '着色器：先别碰，让电脑喘口气 (￣ー￣)' : info.tier === 'beast' ? '你的显卡可以做大梦：deferred pipeline 随时等你 ᕙ(⇀‸↼‶)ᕗ' : 'fps 有富余就升档，或试试轻量着色器'}`,
+      shadersTabTitle: '🌈 shaders：灯光室',
+      shadersTabBody: '点 🌈 标签页。custom shader、deferred pipeline（bloom + agx，给快乐显卡的纯电影感）和水花都在这里。小土豆：先远观欣赏，fps 会谢谢你 (¬‿¬)',
+      animsTabTitle: '✨ render：动画的家',
+      animsTabBody: '点 ✨ 标签页。玩家动画、物理滑翔、camera overhaul 一家子。便宜但看着贵，本该如此 (๑¯◡¯๑)',
+      animsTitle: `开启 ${toggle.animName}`,
+      animsBody: '点高亮的模块。流畅的玩家动画，显卡几乎无感：全客户端性价比最高的美丽 (◕ᴗ◕✿)',
+      pscaleTitle: '玩家体型：/pscale',
+      pscaleBody: '在聊天里输入：<b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan。附赠：/plarge（宽度）和 /panchor 0（脚粘在地上）。没错，你可以当一把带剑的显微镜 (⊙_⊙)',
+      p2pTitle: 'p2p：好友直连，零服务器',
+      p2pBody: '和朋友直接连：<b>/p2p host</b> 给你代码，朋友用 <b>/p2p join 代码</b>加入，共享会话。<b>/p2p auto on</b> 会自动发到聊天 · <b>/call</b> 语音 · <b>/mesh</b> 同步 titan & tiny · <b>/p2p off</b> 全部结束 (￣▽￣)ゞ',
+      cmdsTitle: '给魔法书再添几条咒语 ✧',
+      cmdsBody: '<b>/toggle</b> 模块 · <b>/bind</b> 模块 按键 · <b>/waypoint add</b> 名字 · <b>/copycoord</b> · <b>/g</b> 消息（全局聊天）· <b>/emote</b> 名字 · <b>/critter spawn random</b> · <b>/verity ask</b> 文本（带语音的ai）· <b>/baritone goto</b> x y z · <b>/reconnect on</b> · 完整列表看 <b>/help</b> (๑•̀ㅂ•́)و',
+      expTabTitle: '🧪 experimental：进去了后果自负哦',
+      expTabBody: '点 🧪 标签页快速看一眼。目前还是实验性的：极光、3d草、落叶…挺好看，但如果什么东西炸了…呃…它原来就这样吗？ (･_･;)',
+      finalTitle: '你现在是官方认证 minifeather 用户了 (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
+      finalBody: 'right shift 开关这个菜单 · <b>/help</b> 列出全部 · 客户端自动更新 · ？按钮随时重放教程。现在去炫耀你的动画吧 (｡•̀ᴗ-)✧',
+      footer: 'right shift 开关这个菜单 · /bind panel <按键> 改键 · /help 列出全部 · 客户端自动更新',
+      next: '下一步 (ﾉ◕ヮ◕)ﾉ',
+      doIt: '轮到你了：真做一次 (ง\'̀-\'́)ง',
+      skip: '跳过，这些我都会 >:(',
+      done: '开玩！ (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
+      step: '步骤',
+      tip: '提示：看不到就用搜索 (¬‿¬)'
+    }),
+    ko: (info, toggle, specs) => ({
+      tierLabel: { potato: '감자 🥔', medium: '밸런스형 (｡•̀ᴗ-)✧', beast: '괴물 컴퓨터 ᕙ(⇀‸↼‶)ᕗ' }[info.tier],
+      welcomeTitle: `안녕! 네 pc는 ${info.tier === 'beast' ? '괴물 컴퓨터' : info.tier === 'potato' ? '사랑받는 감자' : '그럴듯한 컴퓨터'}야 (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
+      welcomeBody: `감지된 스펙: ${specs}<br>이 투어는 클라이언트 전체를 다뤄. 설정, 셰이더, 애니메이션, 명령어, 비밀까지. 로딩 화면보다 짧아 (¬‿¬)`,
+      searchTitle: '검색창은 네 최고의 친구',
+      searchBody: '빛나는 검색창을 클릭하고 "keystrokes", "duck" 아무거나 입력해 보자. 미친 듯이 스크롤 안 해도 모든 모듈을 찾을 수 있어 (๑•̀ㅂ•́)و',
+      catTitle: '필터',
+      catBody: '"전체"를 클릭해서 전체 컬렉션을 봐. 그래, 진짜로 클릭해야 해. 이게 인터랙티브라는 거야 (ง\'̀-\'́)ง',
+      toggleTitle: `${toggle.name} 켜기`,
+      toggleBody: '빛나는 모듈을 클릭해서 켜자. minifeather의 모든 건 이렇게 작동해: 클릭 한 번, 드라마 제로 (￣ー￣)',
+      toggleDone: '해냈다! 제일 중요한 부분을 마스터했어 ✧ﾟ・: *ヽ(◕ヮ◕ヽ)',
+      mapTitle: '보물지도 (･ω･)b',
+      mapBody: '🎮 hud: 오버레이 · ✨ render: 행복한 눈 · 🎵 youtube music · 🌈 shaders · 🧪 experimental: 나중에 얘기해요 · 👕 cosmetics · 🪪 accounts · 💬 chat: 밈 포함 · 📍 waypoints · 👟 movement · ⚙ settings(언어는 여기) · 🪶 about',
+      perfTitle: '저전력으로 최고의 경험',
+      perfBody: `빛나는 프로필(⚡ 맨 위)을 클릭해. 플레이어 애니메이션은 켜둔 채: 거의 공짜인데 비싸 보여. ${info.tier === 'potato' ? '셰이더: 아직은 글쎄, pc에게 숨통을 틀어줘 (￣ー￣)' : info.tier === 'beast' ? '네 gpu는 큰 꿈을 꿀 수 있어: deferred pipeline이 언제든 기다려 ᕙ(⇀‸↼‶)ᕗ' : 'fps에 여유가 있으면 프로필을 올리거나 가벼운 셰이더를'}`,
+      shadersTabTitle: '🌈 shaders: 빛의 방',
+      shadersTabBody: '🌈 탭을 클릭. custom shader, deferred pipeline(bloom + agx, 행복한 gpu를 위한 순수 영화), 물 튀김이 여기 살아. 감자 조는 일단 멀리서 감상만, fps가 고마워할 거야 (¬‿¬)',
+      animsTabTitle: '✨ render: 애니메이션의 집',
+      animsTabBody: '✨ 탭을 클릭. 플레이어 애니메이션, 물리 엘리트라, camera overhaul 친구들. 싸지만 비싸 보여. 당연한 거지 (๑¯◡¯๑)',
+      animsTitle: `${toggle.animName} 켜기`,
+      animsBody: '빛나는 모듈을 눌러. gpu가 거의 못 느낄 만큼 가벼운 플레이어 애니메이션. 클라이언트에서 가성비 최고의 아름다움 (◕ᴗ◕✿)',
+      pscaleTitle: '플레이어 크기: /pscale',
+      pscaleBody: '채팅에 입력: <b>/pscale 0.05</b> micro · <b>/pscale 0.5</b> tiny · <b>/pscale 1</b> normal · <b>/pscale 2</b> titan. 보너스: /plarge(너비), /panchor 0(발을 바닥에 고정). 그래, 검 든 현미경이 될 수 있어 (⊙_⊙)',
+      p2pTitle: 'p2p: 친구와 직접 연결, 서버 제로',
+      p2pBody: '친구와 바로 연결: <b>/p2p host</b>로 코드 받고, 친구는 <b>/p2p join 코드</b>로 참여하면 세션 공유 완료. <b>/p2p auto on</b>은 채팅으로 자동 · <b>/call</b> 음성 · <b>/mesh</b>는 titan & tiny 동기화 · <b>/p2p off</b>로 전부 종료 (￣▽￣)ゞ',
+      cmdsTitle: '마도서에 주문 추가 ✧',
+      cmdsBody: '<b>/toggle</b> 모듈 · <b>/bind</b> 모듈 키 · <b>/waypoint add</b> 이름 · <b>/copycoord</b> · <b>/g</b> 메시지(전역 채팅) · <b>/emote</b> 이름 · <b>/critter spawn random</b> · <b>/verity ask</b> 텍스트(목소리 있는 ai) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · 전체 목록은 <b>/help</b> (๑•̀ㅂ•́)و',
+      expTabTitle: '🧪 experimental: 들어간 건 네 책임',
+      expTabBody: '🧪 탭을 클릭해서 가볍게 둘러봐. 지금은 실험적이야: 오로라, 3d 잔디, 낙엽… 예쁘긴 한데, 뭔가 터져도… 어… 원래도 그랬나? (･_･;)',
+      finalTitle: '이제 공식 minifeather 유저 (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
+      finalBody: 'right shift로 이 메뉴 열기/닫기 · <b>/help</b> 전체 목록 · 클라이언트는 자동 업데이트 · ？버튼으로 투어 언제든 재생. 이제 그 애니메이션으로 멋내러 가자 (｡•̀ᴗ-)✧',
+      footer: 'right shift로 이 메뉴 열기/닫기 · /bind panel <키>로 변경 · /help 전체 목록 · 클라이언트는 자동 업데이트',
+      next: '다음 (ﾉ◕ヮ◕)ﾉ',
+      doIt: '네 차례: 진짜로 해봐 (ง\'̀-\'́)ง',
+      skip: '건너뛰기, 다 알아 >:(',
+      done: '플레이하러 가자! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
+      step: '단계',
+      tip: '팁: 안 보이면 검색 써 (¬‿¬)'
+    })
+  });
+
+  function tutorialCopy(info, toggle) {
+    // language comes from the panel config first, browser locale as fallback;
+    // normalizeClientLanguage already maps anything unknown onto english. :D
+    const lang = normalizeClientLanguage(String(settings.language || navigator.language || 'en'));
+    const specs = `${info.cores} cores · ${info.mem}gb${info.gpu ? ' · ' + info.gpu.split('(')[0].trim().slice(0, 42) : ''}`;
+    const gen = TUTORIAL_LANGS[lang] || TUTORIAL_LANGS.en;
+    return gen(info, toggle, specs);
   }
 
   function runTutorial(markDone) {
     try { globalThis.__MF_FIRST_STEPS__?.destroy?.(); } catch (_) {}
+    // the tour always starts from the module menu so every step finds its target,
+    // even when relaunched from the ? button while browsing another page. :D
+    try { panel?.querySelector('[data-page="dashboard"]')?.click(); } catch (_) {}
     const info = detectPcTier();
-    // pick a module that is actually OFF so the user has something real to do; if the
-    // usual suspects are all on, fall back to the tier's default. :D
+    // low consumption, best experience: each tier gets the sweet-spot profile that
+    // keeps the pretty-but-cheap stuff running. player animations survive every tier.
+    const perfProfile = { potato: 'potato', medium: 'low', beast: 'medium' }[info.tier] || 'low';
+    // pick a module that is actually OFF so the user has something real to do; the
+    // candidates avoid whatever the recommended profile below would flip, so the
+    // lesson is never undone two steps later. :D
     const candidates = {
       potato: ['fullBright', 'noWeather', 'coordinates'],
       medium: ['keystrokes', 'coordinates', 'fpsCounter'],
-      beast: ['waterSplash', 'shineAmbience', 'itemPhysics']
+      beast: ['coordinates', 'noWeather', 'fullBright']
     }[info.tier];
     const toggleKey = candidates.find(k => !guiSettings[k] && !settings[k]) || candidates[0];
     const toggleName = (() => {
       const entry = getModuleIndex().find(e => e.key === toggleKey);
       return entry ? String(entry.title).toLowerCase() : toggleKey;
     })();
-    const L = tutorialCopy(info, { key: toggleKey, name: toggleName });
+    // the animations lesson wants a module that is OFF too; playerAnims ships on by
+    // default, so the honor usually falls to its render-tab siblings. :D
+    const animCandidates = ['playerAnims', 'elytraFlight', 'cameraOverhaul', 'handSway', 'freecam'];
+    const animKey = animCandidates.find(k => !guiSettings[k] && !settings[k]) || 'playerAnims';
+    const animName = (() => {
+      const entry = getModuleIndex().find(e => e.key === animKey);
+      return entry ? String(entry.title).toLowerCase() : animKey;
+    })();
+    const L = tutorialCopy(info, { key: toggleKey, name: toggleName, animKey, animName });
+    const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const steps = [
       { kind: 'info', title: L.welcomeTitle, body: `${L.welcomeBody}<br><span style="opacity:.7">tier: ${L.tierLabel}</span>` },
       { kind: 'focus', sel: '#mf-gui-search', title: L.searchTitle, body: L.searchBody },
       { kind: 'click', sel: '.mf-feather-category[data-category="all"]', title: L.catTitle, body: L.catBody },
       { kind: 'toggle', key: toggleKey, title: L.toggleTitle, body: L.toggleBody },
-      { kind: 'info', title: L.finalTitle, body: `${L.finalBody}<br><span style="opacity:.75">${L.footer}</span>` }
+      { kind: 'info', sel: '.mf-feather-icon-tabs', title: L.mapTitle, body: L.mapBody },
+      { kind: 'click', sel: `[data-mf-profile="${perfProfile}"]`, title: L.perfTitle, body: L.perfBody },
+      { kind: 'click', sel: '[data-page="shaders"]', title: L.shadersTabTitle, body: L.shadersTabBody },
+      { kind: 'click', sel: '[data-page="render"]', title: L.animsTabTitle, body: L.animsTabBody },
+      { kind: 'toggle', key: animKey, title: L.animsTitle, body: L.animsBody },
+      { kind: 'info', title: L.pscaleTitle, body: L.pscaleBody },
+      { kind: 'info', title: L.p2pTitle, body: L.p2pBody },
+      { kind: 'info', title: L.cmdsTitle, body: L.cmdsBody },
+      { kind: 'click', sel: '[data-page="experimental"]', title: L.expTabTitle, body: L.expTabBody },
+      { kind: 'info', title: L.finalTitle, body: `${L.finalBody}<br><span style="opacity:.75">${esc(L.footer)}</span>` }
     ];
 
     // the spotlight is a class ON the target element (glowing ring + a 9999px dimming
@@ -9249,8 +9618,7 @@
     let trackTimer = 0;
     let spotted = null;
     let celebrated = false;
-
-    const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let activeClickHandler = null;
 
     function clearSpot() {
       if (!spotted) return;
@@ -9260,6 +9628,7 @@
     function cleanup() {
       if (dead) return;
       dead = true;
+      if (activeClickHandler) { document.removeEventListener('click', activeClickHandler, true); activeClickHandler = null; }
       clearInterval(pollTimer);
       clearInterval(trackTimer);
       document.removeEventListener('keydown', onKey, true);
@@ -9269,7 +9638,7 @@
       try { delete globalThis.__MF_FIRST_STEPS__; } catch (_) { globalThis.__MF_FIRST_STEPS__ = null; }
     }
     const finish = () => {
-      try { if (markDone) localStorage.setItem('mf:first-steps-v2', 'yes'); } catch (_) {}
+      try { if (markDone) localStorage.setItem('mf:first-steps-v3', 'yes'); } catch (_) {}
       cleanup();
     };
     function onKey(e) {
@@ -9287,7 +9656,7 @@
       spotted = el;
     }
     function celebrate() {
-      if (celebrated) return;
+      if (dead || celebrated) return;
       celebrated = true;
       card.innerHTML = `<div style="font:750 17px/1.35 system-ui,sans-serif;color:#b79bff">${esc(L.toggleDone)}</div>`;
       try {
@@ -9296,6 +9665,7 @@
       setTimeout(() => { if (!dead) { idx++; render(); } }, 950);
     }
     function render() {
+      if (dead) return;
       const step = steps[idx];
       if (!step) { finish(); return; }
       const counter = `${L.step} ${idx + 1}/${steps.length}`;
@@ -9311,7 +9681,7 @@
         <div style="margin-top:6px;font:750 17px/1.35 system-ui,sans-serif;color:#b79bff">${esc(step.title)}</div>
         <div style="margin-top:6px;font:400 13.5px/1.55 system-ui,sans-serif;color:#cfc6ea">${step.body}</div>
         ${actions}
-        ${(step.kind !== 'info' && step.key) ? `<div style="margin-top:8px;font:400 12px system-ui,sans-serif;color:#8d80b8">tip: usa el buscador si no lo ves (¬‿¬)</div>` : ''}`;
+        ${(step.kind !== 'info' && step.key) ? `<div style="margin-top:8px;font:400 12px system-ui,sans-serif;color:#8d80b8">${esc(L.tip)}</div>` : ''}`;
       card.querySelector('#mf-tour-skip')?.addEventListener('click', finish);
       card.querySelector('#mf-tour-next')?.addEventListener('click', () => { idx++; render(); });
       celebrated = false;
@@ -9323,10 +9693,16 @@
           if (el && (document.activeElement === el || el.value)) { clearInterval(pollTimer); idx++; render(); }
         }, 250);
       } else if (step.kind === 'click') {
+        if (activeClickHandler) { document.removeEventListener('click', activeClickHandler, true); activeClickHandler = null; }
         const handler = e => {
           const el = e.target?.closest?.(step.sel);
-          if (el) { document.removeEventListener('click', handler, true); setTimeout(() => { idx++; render(); }, 250); }
+          if (el) {
+            document.removeEventListener('click', handler, true);
+            activeClickHandler = null;
+            setTimeout(() => { idx++; render(); }, 250);
+          }
         };
+        activeClickHandler = handler;
         document.addEventListener('click', handler, true);
       } else if (step.kind === 'toggle') {
         // requires a real state CHANGE: an already-on module would auto-skip the lesson
@@ -9346,7 +9722,9 @@
 
   function maybeShowFirstSteps() {
     try {
-      if (localStorage.getItem('mf:first-steps-v2') === 'yes') return;
+      // v3: the full-client tour (profiles, shaders, anims, commands). bumps re-run
+      // it once for returning users instead of leaving them on the old 5-step demo.
+      if (localStorage.getItem('mf:first-steps-v3') === 'yes') return;
     } catch (_) { return; }
     runTutorial(true);
   }
@@ -9355,8 +9733,20 @@
     try {
       const search = document.getElementById('mf-gui-search');
       if (search && !search.value) {
-        const es = (navigator.language || 'en').toLowerCase().startsWith('es');
-        search.placeholder = es ? 'busca tu módulo favorito… (๑•̀ㅂ•́)و' : 'search your favorite module… (๑•̀ㅂ•́)و';
+        const lang = normalizeClientLanguage(settings.language || navigator.language || 'en');
+        const PH = {
+          es: 'busca tu módulo favorito… (๑•̀ㅂ•́)و',
+          en: 'search your favorite module… (๑•̀ㅂ•́)و',
+          ja: 'お気に入りのモジュールを検索… (๑•̀ㅂ•́)و',
+          it: 'cerca il tuo modulo preferito… (๑•̀ㅂ•́)و',
+          zh: '搜索你最喜欢的模块… (๑•̀ㅂ•́)و',
+          fr: 'cherche ton module préféré… (๑•̀ㅂ•́)و',
+          de: 'such dein lieblingsmodul… (๑•̀ㅂ•́)و',
+          pt: 'busque seu módulo favorito… (๑•̀ㅂ•́)و',
+          ru: 'ищи свой любимый модуль… (๑•̀ㅂ•́)و',
+          ko: '좋아하는 모듈을 검색… (๑•̀ㅂ•́)و'
+        };
+        search.placeholder = PH[lang] || PH.en;
       }
     } catch (_) {}
   }
