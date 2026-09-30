@@ -21,7 +21,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'reconnect', 'reconectar', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
 
   // Variantes de argumentos por comando para el Tab-complete client-side.
   // null = el comando acepta cualquier cosa en esa posicion.
@@ -119,6 +119,7 @@
       '\\yellow\\/mesh on | announce | connect <code>\\reset\\ - Sync Titan & Tiny with MiniFeather peers',
       '\\yellow\\/call on|off|status|<friend>|answer|decline|end|mute\\reset\\ - MiniFeather voice calls',
       '\\yellow\\/emote <name>\\reset\\ - Play a custom emote (from emotes/)',
+      '\\yellow\\/reconnect on|off\\reset\\ - Auto-rejoin when the server kicks or drops you',
       '\\yellow\\/emote stop|list|reload\\reset\\ - Manage emotes',
       '\\yellow\\/mf help\\reset\\ - Show this help'
     ];
@@ -903,6 +904,22 @@
         return;
       }
       })();
+      return;
+    }
+
+    if (command === 'reconnect' || command === 'reconectar') {
+      const api = globalThis.MF_AutoReconnect;
+      if (!api) { addChat('Auto-Reconnect is not ready yet.', 'error'); return; }
+
+      const sub = (args[0] || '').toLowerCase();
+      if (sub === 'on' || sub === 'off') {
+        const enabled = api.toggle(sub === 'on');
+        addChat('Auto-Reconnect ' + (enabled ? 'enabled' : 'disabled') + '.', 'success');
+        return;
+      }
+
+      const status = api.status;
+      addChat('Auto-Reconnect is ' + (status.enabled ? 'ON' : 'OFF') + ' - last server: ' + (status.lastServerId || 'none') + '. Use /reconnect on|off.', 'normal');
       return;
     }
 
