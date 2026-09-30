@@ -690,18 +690,14 @@ test('FreeCam applyPose converts world coordinates into the engine rig space', (
 });
 
 
-test('FreeCam wires F5 cycling, player clone and panel key passthrough', () => {
-  assert.match(freecamSource, /event\.code === 'F5'/, 'F5 handler missing');
-  assert.match(freecamSource, /player\.perspective = \(Number\(player\.perspective\) \+ 1\) % 3/, 'perspective cycle missing');
-  assert.match(freecamSource, /function applyFreeClone\(\)/, 'clone-follow missing');
-  assert.match(freecamSource, /applyFreeClone\(\);/, 'clone-follow must run inside the camera hook');
-  assert.match(freecamSource, /manager\.spawnPlayer\(\{/, 'clone must spawn as a player entity with the same skin');
-  assert.match(freecamSource, /removeFreeClone\(\);/, 'clone must be removed when freecam disables');
-  assert.match(freecamSource, /front \? state\.yaw \+ Math\.PI : state\.yaw/, 'front-face flip missing');
-  assert.match(freecamSource, /requestPointerLock\?\.\(\)/, 'canvas re-lock missing');
+test('FreeCam stays a pure free camera: no clones, panel key passthrough and re-lock', () => {
+  assert.doesNotMatch(freecamSource, /event\.code === 'F5'/, 'F5 handling removed');
+  assert.doesNotMatch(freecamSource, /ensureFreeClone|applyFreeClone|removeFreeClone|FREECAM_CLONE_ID/, 'clone machinery removed');
+  assert.match(freecamSource, /requestPointerLock\?\.\(\)/, 'canvas re-lock kept');
   // ShiftRight ya no es tecla de movimiento: queda libre para el panel
   assert.doesNotMatch(freecamSource, /'Space', 'ShiftLeft', 'ShiftRight'/);
   assert.match(freecamSource, /'Space', 'ShiftLeft',/);
+  assert.match(freecamSource, /if \(state\.enabled && state\.camera === camera\) applyPose\(camera\);/);
 });
 
 function makeCloneWorld() {
@@ -734,51 +730,6 @@ function makeCloneWorld() {
   return { world, manager, spawned };
 }
 
-test('FreeCam clone spawns with the player skin and follows the camera per perspective', () => {
-  const { world, manager, spawned } = makeCloneWorld();
-  const sandbox = {
-    state: {
-      enabled: true,
-      player: { perspective: 1, getEyeHeight: () => 1.62, profile: { username: 'Tester', uuid: 'u1', skin: 'steve' } },
-      yaw: 0,
-      freePosition: { x: 10, y: 70, z: 20 },
-      game: { world, player: { profile: { username: 'Tester', uuid: 'u1', skin: 'steve' } } },
-      clone: null,
-      cloneManager: null
-    },
-    __MINIFEATHER_LOCAL_GAMES__: { state: { moduleNamespace: { mgr: manager } } },
-    console: { warn() {} },
-    FREE_BODY_DISTANCE: 3.2,
-    FREECAM_CLONE_ID: -2147483641
-  };
-  const fns = exposeManyFrom(freecamSource, ['looksLikeEntityManager', 'resolveCloneManager', 'ensureFreeClone', 'removeFreeClone', 'applyFreeClone'], sandbox);
-
-  const clone = fns.ensureFreeClone();
-  assert.ok(clone, 'clone spawned');
-  assert.equal(spawned[0].cosmetics.skin, 'steve', 'same skin as the player');
-  assert.equal(spawned[0].name, 'Tester');
-  assert.equal(fns.ensureFreeClone(), clone, 'existing clone reused');
-  assert.equal(spawned.length, 1);
-
-  sandbox.state.yaw = 0;
-  fns.applyFreeClone();
-  assert.equal(clone.mesh.visible, true);
-  assert.ok(Math.abs(clone.pose[2] - 16.8) < 1e-9, 'clone placed ahead of the camera view');
-  assert.ok(Math.abs(clone.pose[3] - Math.PI) < 1e-9, 'front view: clone faces the camera');
-
-  sandbox.state.player.perspective = 2;
-  fns.applyFreeClone();
-  assert.ok(Math.abs(clone.pose[3]) < 1e-9, 'back view: clone faces away');
-
-  sandbox.state.player.perspective = 0;
-  fns.applyFreeClone();
-  assert.equal(clone.mesh.visible, false, 'first person hides the clone');
-
-  sandbox.state.player.perspective = 1;
-  fns.removeFreeClone();
-  assert.equal(sandbox.state.clone, null);
-  assert.equal(world.entities.has(-2147483641), false);
-});
 
 test('FreeCam clone never breaks the camera, even when it explodes', () => {
   const { world, manager } = makeCloneWorld();
@@ -910,8 +861,7 @@ test('MF_Clones roster entries ride the LocalGames P2P roster as clone players',
   assert.match(source, /state\.peerClones\.set\(peerId, list\);/, 'guest clones arrive via the host');
   assert.match(source, /state\.peerClones\?\.delete\(peerId\);/, 'peer clones cleaned on disconnect');
   assert.match(source, /mf:clones-changed/);
-  assert.match(freecamSource, /FREECAM_CLONE_ID = \-2147483641/);
-  assert.match(clonesSource, /CLONE_IDS = \[-2147483639, -2147483638, -2147483637\]/, 'reserved id band');
+    assert.match(clonesSource, /CLONE_IDS = \[-2147483639, -2147483638, -2147483637\]/, 'reserved id band');
   assert.match(clonesSource, /manager\.spawnPlayer\(\{/, 'clones spawn as real player entities');
 
   const manifest = JSON.parse(
