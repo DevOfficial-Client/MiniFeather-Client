@@ -1,0 +1,31 @@
+## manzana dorada mejorada v2 - 16x16 - luz arriba-izquierda
+## rampa de oro brillante con hue-shift
+K=3a1e06
+D=9a5b12
+d=bd7c14
+m=e2a81f
+l=f4c93d
+h=fbe474
+w=fffbd2
+S=6b4419
+s=96652c
+e=35691a
+G=55a028
+g=77bb3a
+## hoja apuntada soldada al tallo, muesca abajo, AO bajo la muesca
+................
+........s.KggK..
+.......sSSGGeK..
+.......sS..KK...
+...KKKKsSKKK....
+..KhllmKKdmmK...
+.KwhllmmmmmDdK..
+.KwhlmmmmmmDdK..
+.KhllmmmmmmDdK..
+.KhlmmmmmmmDdK..
+.KhmmmmmmmmDdK..
+.KlmmmmmmmDDdK..
+..KlmmmmmDDdK...
+...KlmmKDDdK....
+....KKK.KKK.....
+................
