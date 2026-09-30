@@ -703,7 +703,9 @@ const SKINS = [
     // github). endpoint is exact-match so the proxy stays locked down. :D
     (async () => {
       try {
-        const bytes = Uint8Array.from(atob(String(message.b64 || "")), ch => ch.charCodeAt(0));
+        const b64 = String(message.b64 || "");
+        if (!b64 || b64.length > 16 * 1024 * 1024) throw new Error("imagen demasiado grande (max 10mb)");
+        const bytes = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
         const form = new FormData();
         form.append("reqtype", "fileupload");
         form.append("fileToUpload", new File([bytes], String(message.name || "image.png"), { type: String(message.mime || "image/png") }));

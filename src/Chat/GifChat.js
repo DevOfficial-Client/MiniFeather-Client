@@ -663,27 +663,71 @@
   }
 
   // upload transport, best available per platform:
-  //   tauri    -> mfapp://upload (rust posts to catbox, no cors in the webview path)
   //   electron -> __MF_UPLOAD_BRIDGE__ (main process does the post)
-  //   extension-> MF_UPLOAD_IMAGE through the service worker proxy
+  //   tauri    -> mfapp upload endpoint (rust posts to catbox; text/plain keeps the
+  //               request "simple" so the webview never sends a cors preflight)
+  //   extension-> mf-bg-upload bridge to the isolated world -> service worker
+  //               (the page world has no chrome.*)
   //   the rest -> direct fetch attempt (works only if the host ever sends cors headers)
+  function bridgeUpload(payload) {
+    return new Promise((resolve, reject) => {
+      const id = 'mfup' + Math.random().toString(36).slice(2);
+      const onRes = (e) => {
+        let d = e.detail || {};
+        if (typeof d === 'string') {
+          try { d = JSON.parse(d); } catch (_) { return; }
+        }
+        if (!d || d.id !== id) return;
+        cleanup();
+        resolve({ success: !!d.success, url: d.url || '', error: d.error });
+      };
+      const cleanup = () => {
+        window.removeEventListener('mf-bg-upload-result', onRes);
+        clearTimeout(timer);
+      };
+      const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, 45000);
+      window.addEventListener('mf-bg-upload-result', onRes);
+      window.dispatchEvent(new CustomEvent('mf-bg-upload', { detail: JSON.stringify({ id, ...payload }) }));
+    });
+  }
+
   async function uploadImage(file) {
+    const meta = { name: file.name || 'imagen.png', mime: file.type || 'image/png' };
     const bridge = window.__MF_UPLOAD_BRIDGE__;
     if (typeof bridge === 'function') return bridge(file);
     const base = window.__MF_SHIM__?.assetBase?.() || '';
-    if (/mfapp\.localhost/.test(base)) {
-      const r = await fetch(base + 'upload', { method: 'POST', body: file });
+    if (/mfapp\./.test(base) || /^mfapp:\/\//.test(base)) {
+      const r = await fetch(base + 'upload', { method: 'POST', body: file, headers: { 'Content-Type': 'text/plain' } });
       const url = (await r.text()).trim();
       return { success: url.startsWith('https://files.catbox.moe/'), url };
     }
-    const b64 = await fileToB64(file);
-    return new Promise(resolve => {
-      try {
-        chrome.runtime.sendMessage({ type: 'MF_UPLOAD_IMAGE', name: file.name || 'imagen.png', mime: file.type || 'image/png', b64 }, r => resolve(r || { success: false, error: 'no response' }));
-      } catch (e) {
-        resolve({ success: false, error: String(e) });
+    let b64Cache = null;
+    const needB64 = () => b64Cache || (b64Cache = fileToB64(file));
+    try {
+      if (localStorage.getItem('mf:bgBridge') === '1') {
+        return await bridgeUpload({ ...meta, b64: await needB64() });
       }
-    });
+      if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+        const b64 = await needB64();
+        return await new Promise(resolve => {
+          try {
+            chrome.runtime.sendMessage({ type: 'MF_UPLOAD_IMAGE', ...meta, b64 }, r => resolve(r || { success: false, error: 'no response' }));
+          } catch (e) {
+            resolve({ success: false, error: String(e) });
+          }
+        });
+      }
+    } catch (_) { /* fall through to the last resort */ }
+    const form = new FormData();
+    form.append('reqtype', 'fileupload');
+    form.append('fileToUpload', file);
+    try {
+      const r = await fetch('https://catbox.moe/user/api.php', { method: 'POST', body: form });
+      const url = (await r.text()).trim();
+      return { success: url.startsWith('https://files.catbox.moe/'), url };
+    } catch (e) {
+      return { success: false, error: String(e?.message || e) };
+    }
   }
 
   async function uploadAndSend() {

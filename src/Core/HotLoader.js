@@ -15,6 +15,25 @@
   }
 
   if (IS_EXT) {
+      // MAIN-world modules can't see chrome.*; mark that the upload bridge below is
+      // alive. localStorage is the one synchronous cross-world store we have.
+      try { localStorage.setItem('mf:bgBridge', '1'); } catch (_) {}
+      window.addEventListener('mf-bg-upload', (e) => {
+      let d = e.detail || {};
+      if (typeof d === 'string') {
+        try { d = JSON.parse(d); } catch (_) { return; }
+      }
+      const id = d && d.id;
+      if (!id) return;
+      chrome.runtime.sendMessage({ type: 'MF_UPLOAD_IMAGE', name: d.name, mime: d.mime, b64: d.b64 }, (res) => {
+        if (chrome.runtime.lastError) console.warn('minifeather upload bridge lastError:', chrome.runtime.lastError.message);
+        try {
+          window.dispatchEvent(new CustomEvent('mf-bg-upload-result', {
+            detail: JSON.stringify({ id, success: !!(res && res.success), url: res && res.url, error: res && res.error })
+          }));
+        } catch (_) {}
+      });
+    });
       window.addEventListener('mf-hot-fetch', (e) => {
       const d = e.detail || {};
       const id = d.id, path = d.path;

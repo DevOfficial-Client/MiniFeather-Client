@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : dbb9de705f957a898eb7c8314f2cc7e0fdad828f
- * builtAt : 2026-09-30T19:09:14.672Z
+ * commit  : c0db6a15ffd5e1deefcde97a1551bf7e90d584d5
+ * builtAt : 2026-09-30T19:41:37.497Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"dbb9de705f957a898eb7c8314f2cc7e0fdad828f","builtAt":"2026-09-30T19:09:14.734Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"c0db6a15ffd5e1deefcde97a1551bf7e90d584d5","builtAt":"2026-09-30T19:41:37.498Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -1674,6 +1674,25 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"dbb9de705f957a898eb7c8314f2cc7
   }
 
   if (IS_EXT) {
+      // MAIN-world modules can't see chrome.*; mark that the upload bridge below is
+      // alive. localStorage is the one synchronous cross-world store we have.
+      try { localStorage.setItem('mf:bgBridge', '1'); } catch (_) {}
+      window.addEventListener('mf-bg-upload', (e) => {
+      let d = e.detail || {};
+      if (typeof d === 'string') {
+        try { d = JSON.parse(d); } catch (_) { return; }
+      }
+      const id = d && d.id;
+      if (!id) return;
+      chrome.runtime.sendMessage({ type: 'MF_UPLOAD_IMAGE', name: d.name, mime: d.mime, b64: d.b64 }, (res) => {
+        if (chrome.runtime.lastError) console.warn('minifeather upload bridge lastError:', chrome.runtime.lastError.message);
+        try {
+          window.dispatchEvent(new CustomEvent('mf-bg-upload-result', {
+            detail: JSON.stringify({ id, success: !!(res && res.success), url: res && res.url, error: res && res.error })
+          }));
+        } catch (_) {}
+      });
+    });
       window.addEventListener('mf-hot-fetch', (e) => {
       const d = e.detail || {};
       const id = d.id, path = d.path;
@@ -44358,27 +44377,71 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
   }
 
   // upload transport, best available per platform:
-  //   tauri    -> mfapp://upload (rust posts to catbox, no cors in the webview path)
   //   electron -> __MF_UPLOAD_BRIDGE__ (main process does the post)
-  //   extension-> MF_UPLOAD_IMAGE through the service worker proxy
+  //   tauri    -> mfapp upload endpoint (rust posts to catbox; text/plain keeps the
+  //               request "simple" so the webview never sends a cors preflight)
+  //   extension-> mf-bg-upload bridge to the isolated world -> service worker
+  //               (the page world has no chrome.*)
   //   the rest -> direct fetch attempt (works only if the host ever sends cors headers)
+  function bridgeUpload(payload) {
+    return new Promise((resolve, reject) => {
+      const id = 'mfup' + Math.random().toString(36).slice(2);
+      const onRes = (e) => {
+        let d = e.detail || {};
+        if (typeof d === 'string') {
+          try { d = JSON.parse(d); } catch (_) { return; }
+        }
+        if (!d || d.id !== id) return;
+        cleanup();
+        resolve({ success: !!d.success, url: d.url || '', error: d.error });
+      };
+      const cleanup = () => {
+        window.removeEventListener('mf-bg-upload-result', onRes);
+        clearTimeout(timer);
+      };
+      const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, 45000);
+      window.addEventListener('mf-bg-upload-result', onRes);
+      window.dispatchEvent(new CustomEvent('mf-bg-upload', { detail: JSON.stringify({ id, ...payload }) }));
+    });
+  }
+
   async function uploadImage(file) {
+    const meta = { name: file.name || 'imagen.png', mime: file.type || 'image/png' };
     const bridge = window.__MF_UPLOAD_BRIDGE__;
     if (typeof bridge === 'function') return bridge(file);
     const base = window.__MF_SHIM__?.assetBase?.() || '';
-    if (/mfapp\.localhost/.test(base)) {
-      const r = await fetch(base + 'upload', { method: 'POST', body: file });
+    if (/mfapp\./.test(base) || /^mfapp:\/\//.test(base)) {
+      const r = await fetch(base + 'upload', { method: 'POST', body: file, headers: { 'Content-Type': 'text/plain' } });
       const url = (await r.text()).trim();
       return { success: url.startsWith('https://files.catbox.moe/'), url };
     }
-    const b64 = await fileToB64(file);
-    return new Promise(resolve => {
-      try {
-        chrome.runtime.sendMessage({ type: 'MF_UPLOAD_IMAGE', name: file.name || 'imagen.png', mime: file.type || 'image/png', b64 }, r => resolve(r || { success: false, error: 'no response' }));
-      } catch (e) {
-        resolve({ success: false, error: String(e) });
+    let b64Cache = null;
+    const needB64 = () => b64Cache || (b64Cache = fileToB64(file));
+    try {
+      if (localStorage.getItem('mf:bgBridge') === '1') {
+        return await bridgeUpload({ ...meta, b64: await needB64() });
       }
-    });
+      if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+        const b64 = await needB64();
+        return await new Promise(resolve => {
+          try {
+            chrome.runtime.sendMessage({ type: 'MF_UPLOAD_IMAGE', ...meta, b64 }, r => resolve(r || { success: false, error: 'no response' }));
+          } catch (e) {
+            resolve({ success: false, error: String(e) });
+          }
+        });
+      }
+    } catch (_) { /* fall through to the last resort */ }
+    const form = new FormData();
+    form.append('reqtype', 'fileupload');
+    form.append('fileToUpload', file);
+    try {
+      const r = await fetch('https://catbox.moe/user/api.php', { method: 'POST', body: form });
+      const url = (await r.text()).trim();
+      return { success: url.startsWith('https://files.catbox.moe/'), url };
+    } catch (e) {
+      return { success: false, error: String(e?.message || e) };
+    }
   }
 
   async function uploadAndSend() {

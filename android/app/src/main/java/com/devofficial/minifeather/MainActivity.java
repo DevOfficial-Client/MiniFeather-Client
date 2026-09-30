@@ -13,10 +13,12 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.util.Base64;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -45,8 +47,24 @@ public class MainActivity extends Activity {
     private static final String TAG = "minifeather";
     private static final String ASSET_HOST = "appassets.androidplatform.net";
     private static final String START_URL = "https://miniblox.io/";
+
+    // defines window.__MF_UPLOAD_BRIDGE__ for the chat paste/drag flow: hands the file
+    // (base64) to the MFAndroidUpload js interface and resolves with the catbox url.
+    private static final String UPLOAD_BRIDGE_JS =
+            "window.__MF_UPLOAD_BRIDGE__=function(file){return new Promise(function(resolve){" +
+            "var fr=new FileReader();fr.onerror=function(){resolve({success:false,error:'read failed'})};" +
+            "fr.onload=function(){var b64=String(fr.result||'').split(',')[1]||'';" +
+            "var cb='mfup'+Date.now()+Math.floor(Math.random()*1e6);var t=setTimeout(function(){" +
+            "if(window[cb]){delete window[cb];resolve({success:false,error:'timeout'})}},90000);" +
+            "window[cb]=function(ok,val){clearTimeout(t);delete window[cb];" +
+            "resolve(ok?{success:true,url:val}:{success:false,error:String(val)})};" +
+            "try{window.MFAndroidUpload.upload(b64,(file&&file.name)||'imagen.png',cb)}" +
+            "catch(e){clearTimeout(t);delete window[cb];resolve({success:false,error:String(e)})}};" +
+            "fr.readAsDataURL(file)})};";
+
     private static final String BOOT_TAGS =
             "<script src=\"https://appassets.androidplatform.net/mf/main.js\"></script>"
+            + "<script>" + UPLOAD_BRIDGE_JS + "</script>"
             + "<script defer src=\"https://appassets.androidplatform.net/mf/main-end.js\"></script>";
 
     private static final int FILE_CHOOSER_CODE = 1001;
@@ -58,7 +76,7 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> filePathCallback;
     private PermissionRequest pendingPermission;
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -66,6 +84,7 @@ public class MainActivity extends Activity {
 
         webView = new WebView(this);
         setContentView(webView);
+        webView.addJavascriptInterface(new MFUploader(), "MFAndroidUpload");
 
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
@@ -293,6 +312,68 @@ public class MainActivity extends Activity {
         if (p.endsWith(".gltf")) return "model/gltf+json";
         String guessed = URLConnection.guessContentTypeFromName(p);
         return guessed != null ? guessed : "application/octet-stream";
+    }
+
+    // ---------------- chat image upload proxy (catbox) ----------------
+    // the webview cannot POST to catbox (no cors headers on their api), so java does
+    // the upload on the page's behalf — same deal as the tauri/extension shells. :D
+    private class MFUploader {
+        @JavascriptInterface
+        public void upload(final String b64, final String name, final String callback) {
+            new Thread(() -> {
+                boolean ok = false;
+                String value = "upload failed";
+                try {
+                    if (b64 == null || b64.isEmpty() || b64.length() > 16 * 1024 * 1024) {
+                        throw new IOException("imagen demasiado grande (max 10mb)");
+                    }
+                    byte[] bytes = Base64.decode(b64, Base64.DEFAULT);
+                    String safeName = (name == null || name.isEmpty() ? "image.png" : name)
+                            .replaceAll("[^\\w.-]", "_");
+                    String boundary = "----minifeather" + System.currentTimeMillis();
+                    java.io.ByteArrayOutputStream body = new java.io.ByteArrayOutputStream();
+                    body.write(("--" + boundary + "\r\n"
+                            + "Content-Disposition: form-data; name=\"reqtype\"\r\n\r\nfileupload\r\n"
+                            + "--" + boundary + "\r\n"
+                            + "Content-Disposition: form-data; name=\"fileToUpload\"; filename=\""
+                            + safeName + "\"\r\n"
+                            + "Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                    body.write(bytes);
+                    body.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+
+                    HttpURLConnection conn = (HttpURLConnection) new URL("https://catbox.moe/user/api.php").openConnection();
+                    conn.setRequestMethod("POST");
+                    conn.setDoOutput(true);
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(90000);
+                    conn.setFixedLengthStreamingMode(body.size());
+                    conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+                    java.io.OutputStream os = conn.getOutputStream();
+                    body.writeTo(os);
+                    os.close();
+                    int code = conn.getResponseCode();
+                    InputStream in = code < 400 ? conn.getInputStream() : conn.getErrorStream();
+                    String text = in == null ? "" : new String(readAll(in), StandardCharsets.UTF_8).trim();
+                    if (in != null) in.close();
+                    conn.disconnect();
+                    ok = code < 400 && text.startsWith("https://files.catbox.moe/");
+                    value = ok ? text : "catbox " + code + ": "
+                            + text.substring(0, Math.min(80, text.length()));
+                } catch (Exception e) {
+                    value = String.valueOf(e);
+                }
+                final boolean fOk = ok;
+                final String fValue = value;
+                final String cb = callback == null ? "" : callback.replaceAll("[^A-Za-z0-9_]", "");
+                runOnUiThread(() -> {
+                    if (cb.isEmpty() || webView == null) return;
+                    String json = "\"" + fValue.replace("\\", "\\\\").replace("\"", "\\\"")
+                            .replace("\r", "\\r").replace("\n", "\\n") + "\"";
+                    webView.evaluateJavascript(
+                            "try{(window['" + cb + "']||0)(" + fOk + "," + json + ")}catch(e){}", null);
+                });
+            }).start();
+        }
     }
 
     // ---------------- webchromeclient: permissions, file chooser, console ----------------

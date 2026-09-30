@@ -217,7 +217,7 @@ fn main() {
                 return tauri::http::Response::builder()
                     .status(200)
                     .header("Access-Control-Allow-Origin", "*")
-                    .header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+                    .header("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS")
                     .header("Access-Control-Allow-Headers", "*")
                     .body(Vec::new())
                     .unwrap();
