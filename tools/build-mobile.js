@@ -195,10 +195,25 @@ if (buildAndroid) {
 
 if (buildTauri) {
   // webview2 init scripts run before any page script, so the docend group waits here.
-  // base is the custom protocol tauri registers on windows: http://mfapp.localhost/
+  // base is the custom protocol tauri registers on windows. it MUST be https
+  // (main.rs sets use_https_scheme(true)): the game page is https and chromium
+  // blocks fetch/xhr to http origins from it — mixed content ate every texture
+  // the client fetches itself (mob models, pbr, emotes, fonts). :D
+  // the ping prelude feeds the rust watchdog: a dead renderer stops stamping and
+  // the app reloads itself instead of sitting white forever. runs on every page
+  // (splash included), outside the miniblox domain guard. :D
+  const pingCode = [
+    '(function () {',
+    '  const base = window.__MF_ASSET_BASE__ || "";',
+    '  if (!/^https:\\/\\/mfapp\\.localhost/.test(base)) return;',
+    '  const beat = () => { try { fetch(base + "ping", { cache: "no-store" }).catch(() => {}); } catch (_) {} };',
+    '  beat(); setInterval(beat, 5000);',
+    '})();'
+  ].join('\n');
   const mainJs = [
     buildInfoComment(),
-    configLine({ pinned: true, assetBase: 'http://mfapp.localhost/' }),
+    configLine({ pinned: true, assetBase: 'https://mfapp.localhost/' }),
+    pingCode,
     guardedBoot([headCode, gateCode, wrappedDocStart()].join('\n'))
   ].join('\n');
   const mainEndJs = [buildInfoComment(), guardedBoot(['(function(){', '"use strict";', wrappedDocEnd(), '})();'].join('\n'))].join('\n');

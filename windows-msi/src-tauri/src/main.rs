@@ -2,11 +2,16 @@
 
 // minifeather client for windows. webview2 loads miniblox.io and the client rides in
 // via initialization scripts (webview2 runs them before any page script, document_start
-// style). assets are served over the mfapp custom protocol straight from the install dir.
-// no csp on miniblox, so the hotloader can eval freely. lucky us. :D
+// style). assets are served over the mfapp custom protocol straight from the install
+// dir — over the https scheme, because the game page is https and chromium hard-blocks
+// fetch/xhr to http origins from there (mixed content), which ate every texture the
+// client loads itself (mob models, pbr, emotes, fonts). no csp on miniblox, so the
+// hotloader can eval freely. lucky us. :D
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use tauri::Manager;
 use tauri::WebviewUrl;
@@ -135,15 +140,54 @@ fn main() {
     // the 68% lives here, at chromium's device-scale layer: the game sizes its canvas
     // to the css viewport, so css zoom breaks that math (canvas at zoom% of the window).
     // dsf makes innerWidth grow instead and the canvas fills the window on its own. :D
-    std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--force-device-scale-factor=0.68");
+    // caller-provided args are preserved (append, not replace) so a debug run can pass
+    // --remote-debugging-port, and the background throttling trio keeps the heartbeat
+    // honest while the window is minimized/occluded.
+    let user_args = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
+    std::env::set_var(
+        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+        format!(
+            "{user_args} --force-device-scale-factor=0.68 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+        ),
+    );
+
+    // renderer-death self-heal: the page fetches /ping every 5s (see the bundle
+    // prelude), the handler below stamps it, and a watchdog thread reloads the
+    // window when the stamps stop -- a dead renderer leaves a white viewport that
+    // webview2 never repaints on its own. misses caps the loop at 3 so we can't
+    // reload-spin if pings are impossible for some reason.
+    let last_ping = Arc::new(Mutex::new(Instant::now()));
+    let armed_at = Arc::new(Mutex::new(Instant::now()));
+    let misses = Arc::new(Mutex::new(0u32));
 
     tauri::Builder::default()
-        .register_uri_scheme_protocol("mfapp", |ctx, request| {
-            let uri = request.uri();
-            let path = percent_decode(uri.path());
-            let rel = path.trim_start_matches('/');
+        .register_uri_scheme_protocol(
+            "mfapp",
+            {
+                let last_ping = last_ping.clone();
+                let misses = misses.clone();
+                move |ctx, request| {
+                    let uri = request.uri();
+                    let path = percent_decode(uri.path());
+                    let rel = path.trim_start_matches('/');
 
-            // POST /upload = chat image upload proxy (catbox). the handler thread blocks
+                    // heartbeat stamp from the page (no body, no caching)
+                    if rel == "ping" {
+                        if let Ok(mut t) = last_ping.lock() {
+                            *t = Instant::now();
+                        }
+                        if let Ok(mut m) = misses.lock() {
+                            *m = 0;
+                        }
+                        return tauri::http::Response::builder()
+                            .status(204)
+                            .header("Access-Control-Allow-Origin", "*")
+                            .header("Cache-Control", "no-store")
+                            .body(Vec::new())
+                            .unwrap();
+                    }
+
+                    // POST /upload = chat image upload proxy (catbox). the handler thread blocks
             // on a channel while the spawned task does the async http round trip.
             if rel == "upload" && request.method() == tauri::http::Method::POST {
                 let body = request.into_body();
@@ -184,11 +228,19 @@ fn main() {
                 format!("client/{}", rel)
             };
             serve_file(&root.parent().unwrap_or(&root).to_path_buf(), &rel)
-        })
-        .setup(|app| {
+                }
+            },
+        )
+        .setup(move |app| {
             // boots on the local splash page (frontendDist) which paints instantly and
             // self-navigates to the game: no white flash, ever. :D
             WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                // https scheme for custom protocols (https://mfapp.localhost instead of
+                // http://) so loading local assets from the https game page is not
+                // mixed content. changing this relocates tauri-origin storage; the
+                // client's own storage lives on the miniblox.io origin, so nothing of
+                // the user's is lost. :D
+                .use_https_scheme(true)
                 .title("minifeather client")
                 .inner_size(1280.0, 720.0)
                 .min_inner_size(800.0, 480.0)
@@ -200,6 +252,37 @@ fn main() {
                 .initialization_script(MAIN_JS)
                 .initialization_script(END_JS)
                 .build()?;
+
+            // heartbeat watchdog: reload the webview when the page stops stamping
+            // /ping (a dead renderer leaves a white viewport webview2 never repaints).
+            // grace after boot/reload covers navigation gaps; the misses cap stops a
+            // ping-hostile environment from becoming a reload spinner. :D
+            let app_handle = app.handle().clone();
+            let wd_last = last_ping.clone();
+            let wd_armed = armed_at.clone();
+            let wd_misses = misses.clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(Duration::from_secs(5));
+                let armed = *wd_armed.lock().unwrap();
+                let last = *wd_last.lock().unwrap();
+                if armed.elapsed() < Duration::from_secs(45) || last.elapsed() < Duration::from_secs(45) {
+                    continue;
+                }
+                if *wd_misses.lock().unwrap() >= 3 {
+                    continue;
+                }
+                let n = {
+                    let mut m = wd_misses.lock().unwrap();
+                    *m += 1;
+                    *m
+                };
+                *wd_armed.lock().unwrap() = Instant::now();
+                *wd_last.lock().unwrap() = Instant::now();
+                if let Some(win) = app_handle.get_webview_window("main") {
+                    println!("mf: webview unresponsive, reloading (miss {n})");
+                    let _ = win.reload();
+                }
+            });
             Ok(())
         })
         .run(tauri::generate_context!())
