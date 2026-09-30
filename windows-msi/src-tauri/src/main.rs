@@ -105,6 +105,11 @@ fn serve_file(root: &PathBuf, rel: &str) -> tauri::http::Response<Vec<u8>> {
 }
 
 fn main() {
+    // the 68% lives here, at chromium's device-scale layer: the game sizes its canvas
+    // to the css viewport, so css zoom breaks that math (canvas at zoom% of the window).
+    // dsf makes innerWidth grow instead and the canvas fills the window on its own. :D
+    std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--force-device-scale-factor=0.68");
+
     tauri::Builder::default()
         .register_uri_scheme_protocol("mfapp", |ctx, request| {
             let uri = request.uri();

@@ -62,6 +62,11 @@ function createWindow() {
   // show only once something is painted, boot on the branded splash, then jump to the
   // game: the white flash never gets a frame to exist in. :D
   win.once('ready-to-show', () => win.show());
+  // 68% at the native page-zoom layer: css zoom breaks the game's canvas sizing math,
+  // chromium page zoom makes innerWidth grow instead and the canvas fills by itself.
+  win.webContents.on('did-finish-load', () => {
+    try { win.webContents.setZoomFactor(0.68); } catch (_) {}
+  });
   win.loadFile(path.join(__dirname, 'splash.html'));
   let navigatedToGame = false;
   win.webContents.on('did-finish-load', () => {

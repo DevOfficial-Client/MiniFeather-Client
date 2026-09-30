@@ -204,56 +204,17 @@
   };
   window.chrome = chromeShim;
 
-  // ---------- page zoom (embedded apps) ----------
-  // the panel's zoom control used chrome.tabs.setZoom on desktop; here it maps to css
-  // zoom on the document element, persisted, applied as soon as <html> exists. :D
-  const ZOOM_KEY = 'mf:pageZoom';
-  function applyPageZoom(z) {
-    const factor = Math.min(5, Math.max(0.25, Number(z) || 1));
-    const run = () => {
-      try {
-        if (document.documentElement) document.documentElement.style.zoom = String(factor);
-        else setTimeout(run, 0);
-      } catch (_) {}
-    };
-    run();
-    return factor;
-  }
-  function resolvePageZoom() {
-    let saved = null;
-    try { saved = localStorage.getItem(ZOOM_KEY); } catch (_) {}
-    if (saved != null && !Number.isNaN(Number(saved))) return Number(saved);
-    return (typeof window.__MF_ZOOM_DEFAULT__ === 'number') ? window.__MF_ZOOM_DEFAULT__ : 1;
-  }
-
   window.__MF_SHIM__ = {
     build: BUILD,
     assetBase: resolveBase,
     messageListeners,
-    portClass: MFPort,
-    applyPageZoom,
-    pageZoom: resolvePageZoom
+    portClass: MFPort
   };
 
-  try { applyPageZoom(resolvePageZoom()); } catch (_) {}
-
-  // ---------- desktop niceties: f11 fullscreen + ctrl +/-/0 zoom ----------
-  let zoomToastTimer = 0;
-  function zoomToast(pct) {
-    try {
-      let t = document.getElementById('mf-zoom-toast');
-      if (!t) {
-        t = document.createElement('div');
-        t.id = 'mf-zoom-toast';
-        t.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:2147483646;background:rgba(15,10,26,.92);color:#e8e4f5;font:600 13px system-ui,sans-serif;padding:8px 14px;border-radius:8px;border:1px solid #6045a0;pointer-events:none;transition:opacity .25s;opacity:0';
-        (document.body || document.documentElement).appendChild(t);
-      }
-      t.textContent = 'zoom ' + pct + '%';
-      t.style.opacity = '1';
-      clearTimeout(zoomToastTimer);
-      zoomToastTimer = setTimeout(() => { t.style.opacity = '0'; }, 900);
-    } catch (_) {}
-  }
+  // ---------- desktop niceties: f11 fullscreen ----------
+  // note: page zoom lives at the native layer (device scale factor / webview zoom),
+  // NOT css zoom -- the game sizes its canvas to the css viewport and css zoom breaks
+  // that math (canvas ends up at zoom% of the window). ask the screen, not the dom. :v
   function toggleFullscreen() {
     try {
       if (document.fullscreenElement) document.exitFullscreen();
@@ -267,17 +228,6 @@
       if (e.key === 'F11') {
         e.preventDefault();
         toggleFullscreen();
-        return;
-      }
-      if (e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) {
-        e.preventDefault();
-        const current = resolvePageZoom();
-        const next = e.key === '0'
-          ? ((typeof window.__MF_ZOOM_DEFAULT__ === 'number') ? window.__MF_ZOOM_DEFAULT__ : 1)
-          : Math.min(2, Math.max(0.25, Math.round((current + (e.key === '-' ? -0.1 : 0.1)) * 100) / 100));
-        applyPageZoom(next);
-        try { localStorage.setItem(ZOOM_KEY, String(next)); } catch (_) {}
-        zoomToast(Math.round(next * 100));
       }
     } catch (_) {}
   }, { capture: true });
