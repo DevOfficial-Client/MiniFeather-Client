@@ -419,33 +419,101 @@ const FREECAM_UUIDS = new Set([
     } catch (_) {}
     }
 
-  const FREE_BODY_DISTANCE = 3.2;
+  const FREECAM_CLONE_ID = -2147483641;
 
-  function bodyEntity() {
-    const world = state.game?.world;
-    const player = state.player;
-    if (!world || !player) return null;
-    try {
-      return world.getPlayerById?.(player.id) || world.players?.get?.(player.id) || null;
-    } catch (_) {
-      return null;
-    }
+  function looksLikeEntityManager(value) {
+    return !!(value && typeof value === "object" &&
+      typeof value.addEntity === "function" &&
+      typeof value.spawnPlayer === "function" &&
+      typeof value.addLocalEntity === "function");
   }
 
-  // El cuerpo sigue a la camara de la freecam: F5 frontal muestra la cara de
-  // la skin, F5 trasero la espalda y primera persona lo oculta (nativo).
-  function applyFreeBody() {
-    const perspective = Number(state.player?.perspective ?? 1);
-    const mesh = bodyEntity()?.mesh;
-    if (!mesh) return;
+  function resolveCloneManager() {
+    if (looksLikeEntityManager(state.cloneManager)) return state.cloneManager;
+    const namespace = globalThis.__MINIFEATHER_LOCAL_GAMES__?.state?.moduleNamespace;
+    if (!namespace || typeof namespace !== "object") return null;
+    try {
+      for (const value of Object.values(namespace)) {
+        if (looksLikeEntityManager(value)) {
+          state.cloneManager = value;
+          return value;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
 
-    if (perspective === 0) {
-      if (mesh.visible) mesh.visible = false;
-      return;
+  // Doble "como otro jugador" con la misma skin: sigue a la camara de la
+  // freecam (F5 frontal = cara, trasero = espalda, primera persona = oculto).
+  // El jugador real no se toca.
+  function ensureFreeClone() {
+    const world = state.game?.world;
+    if (!world) return null;
+
+    try {
+      const existing = world.getEntityIncludingQueued?.(FREECAM_CLONE_ID) || world.entities?.get?.(FREECAM_CLONE_ID);
+      if (existing) {
+        state.clone = existing;
+        return existing;
+      }
+    } catch (_) {}
+
+    const manager = resolveCloneManager();
+    const profile = state.game?.player?.profile || {};
+    if (!manager || typeof manager.spawnPlayer !== "function") return null;
+
+    try {
+      manager.spawnPlayer({
+        socketId: String(profile.uuid || "minifeather-freecam") + "-freecam",
+        id: FREECAM_CLONE_ID,
+        name: String(profile.username || profile.name || "Player"),
+        pos: {
+          x: Number(state.freePosition?.x ?? state.player?.pos?.x ?? 0),
+          y: Number(state.freePosition?.y ?? state.player?.pos?.y ?? 80),
+          z: Number(state.freePosition?.z ?? state.player?.pos?.z ?? 0)
+        },
+        yaw: Number(state.player?.yaw) || 0,
+        pitch: 0,
+        gamemode: String(profile.mode || "survival"),
+        cosmetics: {
+          skin: profile.skin || profile.cosmetics?.skin || "bob",
+          cape: profile.cape || profile.cosmetics?.cape || "none",
+          hat: profile.hat || profile.cosmetics?.hat || "none",
+          trail: profile.trail || profile.cosmetics?.trail || "none",
+          aura: profile.aura || profile.cosmetics?.aura || "none"
+        },
+        rank: profile.rank || "",
+        discordBoosting: profile.discordBoosting === true
+      });
+    } catch (error) {
+      console.warn(TAG, "freecam clone spawn failed:", error?.message || error);
+      return null;
     }
 
-    const pos = state.freePosition;
-    if (!pos) return;
+    const clone = world.getEntityIncludingQueued?.(FREECAM_CLONE_ID) || world.entities?.get?.(FREECAM_CLONE_ID) || null;
+    state.clone = clone;
+    return clone;
+  }
+
+  function removeFreeClone() {
+    const clone = state.clone;
+    state.clone = null;
+    if (!clone) return;
+    try { state.game?.world?.removeEntityFromWorld?.(clone.id); } catch (_) {}
+    try {
+      if (state.game?.world?.entities?.get?.(clone.id) === clone) state.game.world.removeEntity?.(clone);
+    } catch (_) {}
+  }
+
+  function applyFreeClone() {
+    const perspective = Number(state.player?.perspective ?? 1);
+    const clone = state.clone || ensureFreeClone();
+    if (!clone) return;
+
+    if (perspective === 0 || !state.freePosition) {
+      if (clone.mesh?.visible) clone.mesh.visible = false;
+      return;
+    }
 
     let eyeHeight = 1.62;
     try {
@@ -456,18 +524,15 @@ const FREECAM_UUIDS = new Set([
     const sinYaw = Math.sin(state.yaw);
     const cosYaw = Math.cos(state.yaw);
     const front = perspective === 1;
+    const x = state.freePosition.x - sinYaw * FREE_BODY_DISTANCE;
+    const y = state.freePosition.y - eyeHeight;
+    const z = state.freePosition.z - cosYaw * FREE_BODY_DISTANCE;
+    const yaw = front ? state.yaw + Math.PI : state.yaw;
 
     try {
-      mesh.visible = true;
-      mesh.position?.set?.(
-        pos.x - sinYaw * FREE_BODY_DISTANCE,
-        pos.y - eyeHeight,
-        pos.z - cosYaw * FREE_BODY_DISTANCE
-      );
-      if (typeof mesh.rotation?.set === "function") {
-        mesh.rotation.set(0, front ? Math.PI : 0, 0);
-      }
-      mesh.updateMatrixWorld?.(true);
+      clone.serverPos?.set?.(x * 32, y * 32, z * 32);
+      clone.setPositionAndRotation2?.(x, y, z, yaw, 0, 1);
+      clone.mesh.visible = true;
     } catch (_) {}
   }
 
@@ -479,7 +544,7 @@ const FREECAM_UUIDS = new Set([
         const hook = function (...args) {
             if (state.enabled && state.camera === camera) {
                 applyPose(camera);
-                applyFreeBody();
+                applyFreeClone();
             }
             return original.apply(this, args);
         };
@@ -581,18 +646,6 @@ const FREECAM_UUIDS = new Set([
 
   // En freecam la camara vuela lejos del cuerpo: el jugador debe verse con
   // su skin (perspectiva 1/2 del motor ya lo hacen, esto lo garantiza).
-  function enforceBodyVisible() {
-    const player = state.player;
-    if (!player) return;
-    try {
-      const perspective = Number(player.perspective);
-      if (perspective === 0) return;
-      const world = state.game?.world;
-      const entity = world?.getPlayerById?.(player.id) || world?.players?.get?.(player.id) || player;
-      if (entity?.mesh) entity.mesh.visible = true;
-    } catch (_) {}
-  }
-
     function detachCamera(camera) {
     const parent = camera?.parent || null;
     if (!parent) return false;
@@ -700,7 +753,8 @@ const FREECAM_UUIDS = new Set([
     try { window.MF_FREELOOK?.setFL?.(false); } catch (_) {}
 
     forceThirdPerson(player);
-    enforceBodyVisible();
+    ensureFreeClone();
+            applyFreeClone();
     detachCamera(camera);
 
     state.freePosition = playerOrigin || getPlayerCameraOrigin(player) || worldPosition || captureWorldPosition(camera);
@@ -737,7 +791,7 @@ const FREECAM_UUIDS = new Set([
     globalThis.__MINIFEATHER_FREECAM_ACTIVE__ = false;
     clearKeys();
     neutralizePlayerInput();
-    enforceBodyVisible();
+    applyFreeClone();
 
     if (camera) {
         if (state.detached) restoreCameraParent(camera);
@@ -757,6 +811,7 @@ const FREECAM_UUIDS = new Set([
     state.detached = false;
     state.scene = null;
     state.freePosition = null;
+    removeFreeClone();
 
     emitState();
     }
@@ -854,7 +909,7 @@ const FREECAM_UUIDS = new Set([
         if (player && Number.isFinite(Number(player.perspective))) {
             player.perspective = (Number(player.perspective) + 1) % 3;
             try { player.toggleCameraPerspective?.(); } catch (_) {}
-            enforceBodyVisible();
+            applyFreeClone();
         }
         return;
     }
