@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 59940ab7572be0aa54b448e8479e1377c804475c
- * builtAt : 2026-09-30T02:23:50.776Z
+ * commit  : 04da45a22da3e68291116fed4eeea38d02bdb3ce
+ * builtAt : 2026-09-30T03:12:50.064Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"59940ab7572be0aa54b448e8479e1377c804475c","builtAt":"2026-09-30T02:23:50.849Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"04da45a22da3e68291116fed4eeea38d02bdb3ce","builtAt":"2026-09-30T03:12:50.129Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -35881,6 +35881,157 @@ const VEGETATION_PASS_THROUGH = new Set([
 
 //# sourceURL=MF:src/World/AutoRespawn.js
 
+/* ==== mf module: src/World/AutoReconnect.js ==== */
+(function () {
+    'use strict';
+
+    const TAG = 'minifeather auto-reconnect';
+    const PREF_KEY = 'minifeather.autoReconnect';
+    const CHECK_INTERVAL_MS = 2000;
+    const RECONNECT_DELAY_MS = 3000;
+    const MAX_RETRIES = 3;
+    const MANUAL_EXIT_GRACE_MS = 60000;
+
+    if (window.__MF_AUTO_RECONNECT__) return;
+
+    const state = {
+        enabled: loadPreference(),
+        game: null,
+        lastServerId: '',
+        wasInGame: false,
+        manualExitAt: 0,
+        retries: 0,
+        patched: false
+    };
+
+    function loadPreference() {
+        try {
+            return localStorage.getItem(PREF_KEY) !== '0';
+        } catch (_) {
+            return true;
+        }
+    }
+
+    function savePreference() {
+        try {
+            localStorage.setItem(PREF_KEY, state.enabled ? '1' : '0');
+        } catch (_) {}
+    }
+
+    function isGame(value) {
+        return !!(value && typeof value === 'object' && value.serverInfo && typeof value.connect === 'function');
+    }
+
+    function findGame() {
+        const direct = [globalThis.miniblox, globalThis.game];
+        for (const value of direct) if (isGame(value)) return value;
+
+        const element = document.querySelector('#react');
+        if (!element) return null;
+        for (const key of Reflect.ownKeys(element)) {
+            if (!String(key).startsWith('__react')) continue;
+            try {
+                const root = element[key];
+                for (const candidate of [root, root?.stateNode, root?.memoizedProps?.game]) {
+                    if (isGame(candidate)) return candidate;
+                }
+            } catch (_) {}
+        }
+        return null;
+    }
+
+    // El motor marca con 'io client disconnect' la salida iniciada por el propio
+    // cliente (boton Leave). Un kick o caida del transporte llega con otro motivo.
+    function installDisconnectHook(game) {
+        if (state.patched || typeof game.disconnect !== 'function') return;
+        const original = game.disconnect;
+        game.disconnect = function (reason) {
+            try {
+                if (String(reason || '').includes('io client disconnect')) {
+                    state.manualExitAt = Date.now();
+                }
+            } catch (_) {}
+            return original.call(this, reason);
+        };
+        state.patched = true;
+    }
+
+    function tick() {
+        if (!state.enabled) return;
+
+        const game = state.game || findGame();
+        if (!isGame(game)) return;
+        state.game = game;
+        installDisconnectHook(game);
+
+        const serverId = String(game.serverInfo?.serverId || game.connectingServerId || '');
+        const inGame = typeof game.inGame === 'function' ? !!game.inGame() : !!serverId;
+
+        if (inGame && serverId) {
+            state.lastServerId = serverId;
+            state.wasInGame = true;
+            state.retries = 0;
+            return;
+        }
+
+        if (!state.wasInGame) return;
+
+        state.wasInGame = false;
+
+        if (Date.now() - state.manualExitAt < MANUAL_EXIT_GRACE_MS) return;
+        if (!state.lastServerId) return;
+        if (state.retries >= MAX_RETRIES) {
+            console.warn(TAG, `gave up after ${MAX_RETRIES} attempts`);
+            return;
+        }
+
+        state.retries++;
+        const target = state.lastServerId;
+        console.info(TAG, `disconnected — reconnecting to ${target} (attempt ${state.retries}/${MAX_RETRIES})`);
+        setTimeout(() => {
+            if (!state.enabled) return;
+            try {
+                game.connect(target);
+            } catch (error) {
+                console.warn(TAG, 'reconnect failed:', error?.message || error);
+            }
+        }, RECONNECT_DELAY_MS);
+    }
+
+    setInterval(tick, CHECK_INTERVAL_MS);
+
+    document.addEventListener('minifeather:auto-reconnect-config', event => {
+        try {
+            const detail = JSON.parse(typeof event.detail === 'string' ? event.detail : '{}');
+            state.enabled = detail.enabled === true;
+            savePreference();
+        } catch (_) {}
+    });
+
+    window.MF_AutoReconnect = {
+        get enabled() {
+            return state.enabled;
+        },
+        get status() {
+            return {
+                enabled: state.enabled,
+                lastServerId: state.lastServerId,
+                retries: state.retries,
+                manualExitActive: Date.now() - state.manualExitAt < MANUAL_EXIT_GRACE_MS
+            };
+        },
+        toggle(force) {
+            state.enabled = typeof force === 'boolean' ? force : !state.enabled;
+            savePreference();
+            return state.enabled;
+        }
+    };
+
+    window.__MF_AUTO_RECONNECT__ = true;
+})();
+
+//# sourceURL=MF:src/World/AutoReconnect.js
+
 /* ==== mf module: src/Libraries/brocha.min.js ==== */
 // deno-fmt-ignore-file
 // deno-lint-ignore-file
@@ -39963,7 +40114,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'reconnect', 'reconectar', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
 
   // Variantes de argumentos por comando para el Tab-complete client-side.
   // null = el comando acepta cualquier cosa en esa posicion.
@@ -40061,6 +40212,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
       '\\yellow\\/mesh on | announce | connect <code>\\reset\\ - Sync Titan & Tiny with MiniFeather peers',
       '\\yellow\\/call on|off|status|<friend>|answer|decline|end|mute\\reset\\ - MiniFeather voice calls',
       '\\yellow\\/emote <name>\\reset\\ - Play a custom emote (from emotes/)',
+      '\\yellow\\/reconnect on|off\\reset\\ - Auto-rejoin when the server kicks or drops you',
       '\\yellow\\/emote stop|list|reload\\reset\\ - Manage emotes',
       '\\yellow\\/mf help\\reset\\ - Show this help'
     ];
@@ -40845,6 +40997,22 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
         return;
       }
       })();
+      return;
+    }
+
+    if (command === 'reconnect' || command === 'reconectar') {
+      const api = globalThis.MF_AutoReconnect;
+      if (!api) { addChat('Auto-Reconnect is not ready yet.', 'error'); return; }
+
+      const sub = (args[0] || '').toLowerCase();
+      if (sub === 'on' || sub === 'off') {
+        const enabled = api.toggle(sub === 'on');
+        addChat('Auto-Reconnect ' + (enabled ? 'enabled' : 'disabled') + '.', 'success');
+        return;
+      }
+
+      const status = api.status;
+      addChat('Auto-Reconnect is ' + (status.enabled ? 'ON' : 'OFF') + ' - last server: ' + (status.lastServerId || 'none') + '. Use /reconnect on|off.', 'normal');
       return;
     }
 
@@ -95140,6 +95308,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "betterPlayerLayersDesc": "Adds a pixel-by-pixel 3D second skin layer to your player and first-person sleeve without changing native animations.",
     "autoRespawn": "Auto Respawn",
     "autoRespawnDesc": "Respawn automatically as soon as you die.",
+    "autoReconnect": "Auto Reconnect",
+    "autoReconnectDesc": "Automatically rejoin the server if you get kicked or disconnected.",
+    "autoReconnectDesc": "Automatically rejoin the server if you get kicked or disconnected.",
     "idlePlayerBot": "Idle Player",
     "idlePlayerBotDesc": "Connect up to 16 real server-visible guests that stay still. No account generation, spam, combat, or pathfinding.",
     "idlePlayerCount": "Number of bots",
@@ -95950,6 +96121,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "betterPlayerLayersDesc": "Agrega una segunda capa 3D píxel por píxel al jugador y a la manga en primera persona sin modificar las animaciones nativas.",
     "autoRespawn": "Reaparición automática",
     "autoRespawnDesc": "Reaparece automáticamente en cuanto mueres.",
+    "autoReconnect": "Reconexión automática",
+    "autoReconnectDesc": "Vuelve a entrar automáticamente al servidor si te kickean o te desconectas.",
+    "autoReconnectDesc": "Automatically rejoin the server if you get kicked or disconnected.",
     "antiAfk": "Anti-AFK",
     "antiAfkDesc": "Mueve tu jugador después de un tiempo configurable sin actividad. Clic derecho para configurar.",
     "antiAfkSettings": "Ajustes de Anti-AFK",
@@ -96776,6 +96950,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "betterPlayerLayersDesc": "標準アニメーションを変えず、プレイヤーと一人称視点の腕にピクセル単位の3D第2レイヤーを追加します。",
     "autoRespawn": "自動リスポーン",
     "autoRespawnDesc": "死亡するとすぐに自動でリスポーンします。",
+    "autoReconnectDesc": "Automatically rejoin the server if you get kicked or disconnected.",
     "antiAfk": "Anti-AFK",
     "antiAfkDesc": "一定時間操作がないとプレイヤーを少し動かします。右クリックで設定できます。",
     "antiAfkSettings": "Anti-AFK 設定",
@@ -97605,6 +97780,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "betterPlayerLayersDesc": "Aggiunge un secondo layer 3D pixel per pixel al giocatore e alla manica in prima persona senza modificare le animazioni native.",
     "autoRespawn": "Respawn automatico",
     "autoRespawnDesc": "Rientra automaticamente in gioco appena muori.",
+    "autoReconnectDesc": "Automatically rejoin the server if you get kicked or disconnected.",
     "antiAfk": "Anti-AFK",
     "antiAfkDesc": "Muove il giocatore dopo un periodo configurabile di inattività. Clic destro per configurare.",
     "antiAfkSettings": "Impostazioni Anti-AFK",
@@ -98454,6 +98630,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "betterPlayerLayersDesc": "向您的播放器和第一人称套筒添加逐像素 3D 第二皮肤层，而无需更改本机动画。",
     "autoRespawn": "自动重生",
     "autoRespawnDesc": "死亡后会自动重生。",
+    "autoReconnectDesc": "Automatically rejoin the server if you get kicked or disconnected.",
     "idlePlayerBot": "闲置玩家",
     "idlePlayerBotDesc": "最多连接16名服务器可见且保持静止的真实访客。不创建账号、不刷屏、不战斗、不寻路。",
     "idlePlayerCount": "机器人数量",
@@ -99279,6 +99456,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "betterPlayerLayersDesc": "Ajoute une seconde couche de peau 3D pixel par pixel à votre lecteur et à votre pochette à la première personne sans modifier les animations natives.",
     "autoRespawn": "Réapparition automatique",
     "autoRespawnDesc": "Réapparaissez automatiquement dès que vous mourez.",
+    "autoReconnectDesc": "Automatically rejoin the server if you get kicked or disconnected.",
     "idlePlayerBot": "Joueur inactif",
     "idlePlayerBotDesc": "Connectez jusqu'à 16 invités réels visibles sur le serveur qui restent immobiles. Sans création de compte, spam, combat ni recherche de chemin.",
     "idlePlayerCount": "Nombre de bots",
@@ -100104,6 +100282,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "betterPlayerLayersDesc": "Fügt Ihrem Player und Ihrer First-Person-Hülle eine pixelweise 3D-Zweite-Skin-Ebene hinzu, ohne die nativen Animationen zu ändern.",
     "autoRespawn": "Automatischer Respawn",
     "autoRespawnDesc": "Automatisches Respawnen, sobald du stirbst.",
+    "autoReconnectDesc": "Automatically rejoin the server if you get kicked or disconnected.",
     "idlePlayerBot": "Untätiger Spieler",
     "idlePlayerBotDesc": "Verbinden Sie bis zu 16 echte, für den Server sichtbare Gäste, die still stehen. Keine Kontoerstellung, kein Spam, kein Kampf und keine Wegfindung.",
     "idlePlayerCount": "Anzahl der Bots",
@@ -100929,6 +101108,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "betterPlayerLayersDesc": "Adiciona uma segunda camada de skin 3D pixel por pixel ao seu player e capa de primeira pessoa sem alterar as animações nativas.",
     "autoRespawn": "Reaparecimento Automático",
     "autoRespawnDesc": "Renasce automaticamente assim que você morre.",
+    "autoReconnectDesc": "Automatically rejoin the server if you get kicked or disconnected.",
     "idlePlayerBot": "Jogador ocioso",
     "idlePlayerBotDesc": "Conecte até 16 convidados reais visíveis no servidor que ficam parados. Sem criação de contas, spam, combate ou busca de caminhos.",
     "idlePlayerCount": "Quantidade de bots",
@@ -101754,6 +101934,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "betterPlayerLayersDesc": "Добавляет попиксельный 3D-слой второго скина к вашему плееру и рукаву от первого лица без изменения встроенной анимации.",
     "autoRespawn": "Автовозрождение",
     "autoRespawnDesc": "Возрождается автоматически, как только вы умрете.",
+    "autoReconnectDesc": "Automatically rejoin the server if you get kicked or disconnected.",
     "idlePlayerBot": "Простой игрок",
     "idlePlayerBotDesc": "Подключите до 16 реальных гостей, видимых серверу, которые остаются неподвижными. Без создания аккаунтов, спама, боя и поиска пути.",
     "idlePlayerCount": "Количество ботов",
@@ -102579,6 +102760,7 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "betterPlayerLayersDesc": "기본 애니메이션을 변경하지 않고 플레이어와 1인칭 슬리브에 픽셀별 3D 두 번째 스킨 레이어를 추가합니다.",
     "autoRespawn": "자동 부활",
     "autoRespawnDesc": "죽자마자 자동으로 부활합니다.",
+    "autoReconnectDesc": "Automatically rejoin the server if you get kicked or disconnected.",
     "idlePlayerBot": "유휴 플레이어",
     "idlePlayerBotDesc": "서버에 실제로 표시되고 가만히 있는 게스트를 최대 16명까지 연결합니다. 계정 생성, 스팸, 전투, 길 찾기는 하지 않습니다.",
     "idlePlayerCount": "봇 수",
@@ -106048,6 +106230,7 @@ function normalize(entry) {
     autoSprint: false,
     safeSneak: false,
     autoRespawn: false,
+    autoReconnect: true,
     idlePlayerBot: false,
     idlePlayerCount: 1,
     idlePlayerTarget: '',
@@ -108921,6 +109104,7 @@ function normalize(entry) {
       { page: 'movement', key: 'safeSneak', title: t('safeSneak'), desc: t('safeSneakDesc'), tags: ['pvp'] },
       { page: 'movement', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc'), tags: [] },
       { page: 'world', key: 'autoRespawn', title: t('autoRespawn'), desc: t('autoRespawnDesc'), tags: ['pvp'] },
+      { page: 'world', key: 'autoReconnect', title: t('autoReconnect'), desc: t('autoReconnectDesc'), tags: ['pvp'] },
       { page: 'world', key: 'idlePlayerBot', title: t('idlePlayerBot'), desc: t('idlePlayerBotDesc'), tags: ['new'] },
       { page: 'world', key: 'rhythmParkour', title: t('rhythmParkour'), desc: t('rhythmParkourDescShort'), tags: ['new'] },
       { page: 'chat', key: 'chatVideos', title: t('chatVideos'), desc: t('chatVideosDesc'), tags: [] },
@@ -109057,6 +109241,7 @@ function normalize(entry) {
     safeSneak: ['........','..gg....','.gGGg...','..gGGg..','.gggggg.','gggggggg','GGGGGGGG','........'],
     antiAfk: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yyyy#yyY','Yyyy#yyY','YyyyyyyY','.YyyyyY.','..YYYY..'],
     autoRespawn: ['..gggg..','.g....g.','g..rr..g','g.rrrr.g','g..rr..g','.g....g.','..ggggg.','......gg'],
+    autoReconnect: ['..gggg..','.gg..gg.','g......g','g.....gg','g....gg.','g....g..','.gg..g..','..gggg..'],
     idlePlayerBot: ['..BBBB..','.BbbbbB.','Bb#bb#bB','BbbbbbbB','.BbyybB.','..BbbB..','.BB..BB.','........'],
     rhythmParkour: ['....yy..','....yy..','....y...','..yyY...','.yYYY...','..GGG...','.GGGGG..','GGGGGGGG'],
     cloudsPackNoise: ['..BBBB..','.BbbbbB.','BbbBbbbB','BbbbbbBB','BBBBBBBB','..b..b..','.b....b.','........'],
@@ -109079,7 +109264,7 @@ function normalize(entry) {
     'itemPhysics', 'noWeather', 'fullBright', 'vanillaAnimations', 'handSway',
     'playerAnims', 'zoom', 'cameraOverhaul', 'elytraFlight', 'freecam',
     'freelook', 'blockHighlight', 'autoSprint', 'safeSneak', 'antiAfk',
-    'autoRespawn', 'idlePlayerBot', 'rhythmParkour', 'chatVideos', 'chatLinks',
+    'autoRespawn', 'autoReconnect', 'idlePlayerBot', 'rhythmParkour', 'chatVideos', 'chatLinks',
     'chatMemes', 'gifChat', 'clientChat', 'clientChatMentions', 'discord', 'shaders'
   ]);
   const MF_ANIMATED_PIXEL_ICON_SET = new Set(MF_ANIMATED_PIXEL_ICONS);
@@ -110106,6 +110291,29 @@ function normalize(entry) {
       },
       destroy() {
         sendAutoRespawnConfig(false);
+      }
+    }));
+  }
+
+  function sendAutoReconnectConfig(enabled = settings.autoReconnect) {
+    document.dispatchEvent(new CustomEvent('minifeather:auto-reconnect-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initAutoReconnectModule() {
+    registerModule('autoReconnect', () => createLifecycle({
+      enable() {
+        sendAutoReconnectConfig(true);
+      },
+      disable() {
+        sendAutoReconnectConfig(false);
+      },
+      refresh() {
+        sendAutoReconnectConfig(MODULES.get('autoReconnect')?.enabled === true);
+      },
+      destroy() {
+        sendAutoReconnectConfig(false);
       }
     }));
   }
@@ -113774,6 +113982,7 @@ function normalize(entry) {
           <div class="mf-card-title">${t('sectionWorldUtilities')}</div>
           <div class="mf-toggle-grid">
             ${renderToggle('autoRespawn', t('autoRespawn'), t('autoRespawnDesc'))}
+            ${renderToggle('autoReconnect', t('autoReconnect'), t('autoReconnectDesc'))}
             ${renderToggle('idlePlayerBot', t('idlePlayerBot'), t('idlePlayerBotDesc'))}
             ${renderToggle('rhythmParkour', t('rhythmParkour'), t('rhythmParkourDescShort'))}
           </div>
@@ -114683,7 +114892,7 @@ function normalize(entry) {
     'rebrand', 'classicTitle', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
     'waterSplash', 'shineAmbience', 'patPat', 'duckMobs', 'crittersMobs', 'allayPets', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
-    'safeSneak', 'autoRespawn', 'idlePlayerBot', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
+    'safeSneak', 'autoRespawn', 'autoReconnect', 'idlePlayerBot', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
     'dynamicCrosshair', 'vanillaAnimations', 'leafWind', 'handSway', 'betterPlayerLayers',
     'chatVideos', 'chatLinks', 'chatMemes', 'clientChat', 'rhythmParkour', 'guiPatch',
     'customShader', 'freelook', 'blockHighlight', 'discord', 'supportAds',
@@ -117638,6 +117847,7 @@ function normalize(entry) {
     setModuleEnabled('noWeather', settings.noWeather);
     setModuleEnabled('fullBright', settings.fullBright);
     setModuleEnabled('autoRespawn', settings.autoRespawn);
+    setModuleEnabled('autoReconnect', settings.autoReconnect);
     setModuleEnabled('idlePlayerBot', settings.idlePlayerBot);
     setModuleEnabled('antiAfk', settings.antiAfk);
     setModuleEnabled('autoSprint', settings.autoSprint);
@@ -118292,6 +118502,7 @@ function normalize(entry) {
     initHandSwayModule();
     initBetterPlayerLayersModule();
     initAutoRespawnModule();
+    initAutoReconnectModule();
     initIdlePlayerBotModule();
     initAntiAfkModule();
     initMovementAssistModules();
