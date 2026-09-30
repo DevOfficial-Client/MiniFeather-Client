@@ -458,6 +458,12 @@ test('streaming wiring: driver, caps and resets are installed', () => {
   assert.doesNotMatch(source, /animationPatch: null/);
 });
 
+function exposeManyFrom(code, names, sandbox) {
+  const body = names.map(n => namedFunction(code, n)).join(String.fromCharCode(10));
+  const tail = '({ ' + names.join(', ') + ' });';
+  return vm.runInNewContext(body + String.fromCharCode(10) + tail, sandbox);
+}
+
 function exposeMany(names, sandbox) {
   const body = names.map(n => namedFunction(source, n)).join('\n');
   const tail = `({ ${names.join(', ')} });`;
@@ -696,6 +702,136 @@ test('FreeCam wires F5 cycling, player clone and panel key passthrough', () => {
   // ShiftRight ya no es tecla de movimiento: queda libre para el panel
   assert.doesNotMatch(freecamSource, /'Space', 'ShiftLeft', 'ShiftRight'/);
   assert.match(freecamSource, /'Space', 'ShiftLeft',/);
+});
+
+function makeCloneWorld() {
+  const world = {
+    entities: new Map(),
+    players: new Map(),
+    getEntityIncludingQueued: id => world.entities.get(id) ?? null,
+    addPlayer(entity) { world.players.set(entity.id, entity); world.entities.set(entity.id, entity); },
+    removeEntityFromWorld() {},
+    removeEntity(entity) { world.entities.delete(entity.id); }
+  };
+  const spawned = [];
+  const manager = {
+    addEntity() {}, addLocalEntity() {}, collectEntity() {}, startDeathRagdoll() {},
+    spawnPlayer(options) {
+      const entity = {
+        id: options.id,
+        name: options.name,
+        cosmetics: options.cosmetics,
+        mesh: { visible: false },
+        serverPos: { set(x, y, z) { entity.serverPosValue = [x, y, z]; } },
+        setPositionAndRotation2(x, y, z, yaw) { entity.pose = [x, y, z, yaw]; }
+      };
+      spawned.push(options);
+      world.addPlayer(entity);
+    }
+  };
+  return { world, manager, spawned };
+}
+
+test('FreeCam clone spawns with the player skin and follows the camera per perspective', () => {
+  const { world, manager, spawned } = makeCloneWorld();
+  const sandbox = {
+    state: {
+      enabled: true,
+      player: { perspective: 1, getEyeHeight: () => 1.62, profile: { username: 'Tester', uuid: 'u1', skin: 'steve' } },
+      yaw: 0,
+      freePosition: { x: 10, y: 70, z: 20 },
+      game: { world, player: { profile: { username: 'Tester', uuid: 'u1', skin: 'steve' } } },
+      clone: null,
+      cloneManager: null
+    },
+    __MINIFEATHER_LOCAL_GAMES__: { state: { moduleNamespace: { mgr: manager } } },
+    console: { warn() {} },
+    FREE_BODY_DISTANCE: 3.2,
+    FREECAM_CLONE_ID: -2147483641
+  };
+  const fns = exposeManyFrom(freecamSource, ['looksLikeEntityManager', 'resolveCloneManager', 'ensureFreeClone', 'removeFreeClone', 'applyFreeClone'], sandbox);
+
+  const clone = fns.ensureFreeClone();
+  assert.ok(clone, 'clone spawned');
+  assert.equal(spawned[0].cosmetics.skin, 'steve', 'same skin as the player');
+  assert.equal(spawned[0].name, 'Tester');
+  assert.equal(fns.ensureFreeClone(), clone, 'existing clone reused');
+  assert.equal(spawned.length, 1);
+
+  sandbox.state.yaw = 0;
+  fns.applyFreeClone();
+  assert.equal(clone.mesh.visible, true);
+  assert.ok(Math.abs(clone.pose[2] - 16.8) < 1e-9, 'clone placed ahead of the camera view');
+  assert.ok(Math.abs(clone.pose[3] - Math.PI) < 1e-9, 'front view: clone faces the camera');
+
+  sandbox.state.player.perspective = 2;
+  fns.applyFreeClone();
+  assert.ok(Math.abs(clone.pose[3]) < 1e-9, 'back view: clone faces away');
+
+  sandbox.state.player.perspective = 0;
+  fns.applyFreeClone();
+  assert.equal(clone.mesh.visible, false, 'first person hides the clone');
+
+  sandbox.state.player.perspective = 1;
+  fns.removeFreeClone();
+  assert.equal(sandbox.state.clone, null);
+  assert.equal(world.entities.has(-2147483641), false);
+});
+
+test('FreeCam clone never breaks the camera, even when it explodes', () => {
+  const { world, manager } = makeCloneWorld();
+  const camera = {
+    parent: null,
+    position: makeFakeVec3(0, 0, 0),
+    rotation: new FakeEuler(0, 0, 0, 'XYZ'),
+    quaternion: new FakeQuaternion(),
+    updateMatrixWorld() { this.originalRan = true; },
+    updateWorldMatrix() {}
+  };
+  const poisoned = {};
+  Object.defineProperty(poisoned, 'mesh', {
+    get() { throw new Error('boom'); },
+    configurable: true
+  });
+  const sandbox = {
+    state: {
+      enabled: true,
+      player: { perspective: 1, getEyeHeight: () => 1.62 },
+      yaw: 0,
+      freePosition: { x: 1, y: 2, z: 3 },
+      game: { world },
+      clone: poisoned,
+      cloneManager: manager,
+      camera: camera,
+      matrixHook: null,
+      worldMatrixHook: null
+    },
+    __MINIFEATHER_LOCAL_GAMES__: { state: { moduleNamespace: null } },
+    console: { warn() {} },
+    FREE_BODY_DISTANCE: 3.2,
+    FREECAM_CLONE_ID: -2147483641,
+    applyPose: camera2 => { camera2.position.set(9, 9, 9); camera2.__poseApplied = true; },
+    applyFreeClone: () => { throw new Error('clone exploded'); }
+  };
+  const install = expose(namedFunction(freecamSource, 'installCameraHooks'), sandbox);
+  install(camera);
+
+  let escaped = null;
+  try { camera.updateMatrixWorld(); } catch (error) { escaped = error; }
+  assert.equal(escaped, null, 'the camera hook must never throw');
+  assert.equal(camera.originalRan, true, 'original updateMatrixWorld must run (no frozen view)');
+  assert.equal(camera.__poseApplied, true, 'pose applied before the clone hook');
+
+  const resolveCanvas = expose(namedFunction(freecamSource, 'resolveGameCanvas'), {
+    state: { game: { gameScene: { renderer: { domElement: { id: 'engine-canvas' } } } } },
+    document: { querySelector: () => ({ id: 'fallback-canvas' }) }
+  });
+  assert.equal(resolveCanvas().id, 'engine-canvas', 'prefers the engine canvas');
+  const fallback = expose(namedFunction(freecamSource, 'resolveGameCanvas'), {
+    state: { game: {} },
+    document: { querySelector: () => ({ id: 'fallback-canvas' }) }
+  });
+  assert.equal(fallback().id, 'fallback-canvas', 'falls back to any canvas');
 });
 
 test('loop wiring: peer prune, stale proxy hide and move cadence are installed', () => {

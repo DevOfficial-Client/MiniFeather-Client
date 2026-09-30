@@ -544,7 +544,7 @@ const FREECAM_UUIDS = new Set([
         const hook = function (...args) {
             if (state.enabled && state.camera === camera) {
                 applyPose(camera);
-                applyFreeClone();
+                try { applyFreeClone(); } catch (_) {}
             }
             return original.apply(this, args);
         };
@@ -570,6 +570,13 @@ const FREECAM_UUIDS = new Set([
     function clearKeys() {
     for (const key of Object.keys(keys)) keys[key] = false;
     }
+
+  function resolveGameCanvas() {
+    const rendererDom = state.game?.gameScene?.renderer?.domElement
+      || state.game?.renderer?.domElement;
+    if (rendererDom) return rendererDom;
+    return document.querySelector("canvas");
+  }
 
     function isTypingOrUiOpen() {
 
@@ -754,7 +761,7 @@ const FREECAM_UUIDS = new Set([
 
     forceThirdPerson(player);
     ensureFreeClone();
-            applyFreeClone();
+            try { applyFreeClone(); } catch (_) {}
     detachCamera(camera);
 
     state.freePosition = playerOrigin || getPlayerCameraOrigin(player) || worldPosition || captureWorldPosition(camera);
@@ -791,7 +798,7 @@ const FREECAM_UUIDS = new Set([
     globalThis.__MINIFEATHER_FREECAM_ACTIVE__ = false;
     clearKeys();
     neutralizePlayerInput();
-    applyFreeClone();
+    try { applyFreeClone(); } catch (_) {}
 
     if (camera) {
         if (state.detached) restoreCameraParent(camera);
@@ -909,7 +916,7 @@ const FREECAM_UUIDS = new Set([
         if (player && Number.isFinite(Number(player.perspective))) {
             player.perspective = (Number(player.perspective) + 1) % 3;
             try { player.toggleCameraPerspective?.(); } catch (_) {}
-            applyFreeClone();
+            try { applyFreeClone(); } catch (_) {}
         }
         return;
     }
@@ -947,8 +954,8 @@ const FREECAM_UUIDS = new Set([
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-        if (type === 'mousedown' && !document.pointerLockElement && event.target instanceof HTMLCanvasElement) {
-            try { event.target.requestPointerLock?.(); } catch (_) {}
+        if (type === 'mousedown' && !document.pointerLockElement) {
+            try { resolveGameCanvas()?.requestPointerLock?.(); } catch (_) {}
         }
     }, true);
     }
