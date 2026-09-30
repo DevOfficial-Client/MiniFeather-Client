@@ -9,7 +9,7 @@
   const TRIGGER_TOKEN_RE = /(^|\s):gif\b\s*/i;
   // klipy gifs + catbox uploads (paste/drag flow). catbox: no account, permanent
   // links, no github involved anywhere in the chain. :D
-  const IMG_URL_RE = /https:\/\/(?:static\.klipy\.com\/[\w./-]+\.(?:gif|webp)|files\.catbox\.moe\/[\w.]+\.(?:gif|png|jpe?g|webp))(?=[\s.,!?;:)]|$)/gi;
+  const IMG_URL_RE = /https:\/\/(?:static\.klipy\.com\/[\w./-]+\.(?:gif|webp)(?:\?[\w=&.%-]+)?|files\.catbox\.moe\/[\w.]+\.(?:gif|png|jpe?g|webp))(?=[\s.,!?;:)]|$)/gi;
 
   try {
     globalThis[GLOBAL_KEY]?.destroy?.();
@@ -159,6 +159,72 @@
   }
   const chatObserver = { obs: null };
 
+  function buildImageWrapper(text) {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'mf-gifchat-processed';
+    wrapper.dataset.mfOriginalText = text;
+    let cursor = 0;
+    let match;
+    IMG_URL_RE.lastIndex = 0;
+    while ((match = IMG_URL_RE.exec(text))) {
+      if (match.index > cursor) wrapper.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+      const img = document.createElement('img');
+      img.className = 'mf-gifchat-img';
+      img.src = match[0];
+      img.alt = 'GIF';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      wrapper.appendChild(img);
+      cursor = match.index + match[0].length;
+    }
+    IMG_URL_RE.lastIndex = 0;
+    if (cursor < text.length) wrapper.appendChild(document.createTextNode(text.slice(cursor)));
+    return wrapper;
+  }
+
+  // fallback for rich-text renderers that fragment the message so no single text
+  // node ever holds the full url: find the deepest element whose combined text
+  // contains url(s) that no descendant covers alone, and flatten it
+  function renderLeafElements(root) {
+    try {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
+        acceptNode(el) {
+          if (el.closest?.('.mf-gifchat-processed, #mf-gifchat-bar, #mf-gifchat-paste')) return NodeFilter.FILTER_REJECT;
+          const tag = el.tagName;
+          if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SCRIPT' || tag === 'STYLE' || tag === 'A' || tag === 'IFRAME' || tag === 'VIDEO' || tag === 'IMG') return NodeFilter.FILTER_REJECT;
+          if (el.isContentEditable) return NodeFilter.FILTER_REJECT;
+          const text = String(el.textContent || '');
+          IMG_URL_RE.lastIndex = 0;
+          if (!IMG_URL_RE.test(text)) return NodeFilter.FILTER_REJECT;
+          // a deeper element or any intact text node already covers it — leave
+          // those to the normal text-node path (or the deeper element)
+          for (const inner of el.querySelectorAll('*')) {
+            IMG_URL_RE.lastIndex = 0;
+            if (IMG_URL_RE.test(String(inner.textContent || ''))) return NodeFilter.FILTER_REJECT;
+          }
+          const twalker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+          let tn;
+          while ((tn = twalker.nextNode())) {
+            IMG_URL_RE.lastIndex = 0;
+            if (IMG_URL_RE.test(tn.nodeValue || '')) return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      const hits = [];
+      let el;
+      while ((el = walker.nextNode())) hits.push(el);
+      for (const el of hits) {
+        const text = el.textContent || '';
+        el.replaceChildren(buildImageWrapper(text));
+        if (!renderLeafElements.logged) {
+          renderLeafElements.logged = true;
+          console.log('minifeather gifchat: imagen renderizada en el chat (modo hoja)');
+        }
+      }
+    } catch (_) {}
+  }
+
   function scanNode(node) {
     if (!node) return;
     const root = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
@@ -178,36 +244,32 @@
         }
       });
       let textNode;
-      while ((textNode = walker.nextNode())) renderTextNode(textNode);
+      while ((textNode = walker.nextNode())) {
+        renderTextNode(textNode);
+        if (!renderLeafElements.logged) {
+          renderLeafElements.logged = true;
+          console.log('minifeather gifchat: imagen renderizada en el chat');
+        }
+      }
     } catch (_) {}
+    renderLeafElements(root);
     IMG_URL_RE.lastIndex = 0;
+  }
+
+  // safety net for mutations the observer never sees (rows mounted before enable,
+  // reconciler edge cases): rescan the page when any catbox/klipy url is present
+  function rescanChat() {
+    try {
+      const text = document.body?.textContent || '';
+      if (text.includes('files.catbox.moe') || text.includes('static.klipy.com')) scanNode(document.body);
+    } catch (_) {}
   }
 
   function renderTextNode(node) {
     const text = node.nodeValue || '';
     IMG_URL_RE.lastIndex = 0;
     if (!IMG_URL_RE.test(text)) return;
-    IMG_URL_RE.lastIndex = 0;
-
-    const wrapper = document.createElement('span');
-    wrapper.className = 'mf-gifchat-processed';
-    wrapper.dataset.mfOriginalText = text;
-
-    let cursor = 0;
-    let match;
-    while ((match = IMG_URL_RE.exec(text))) {
-      if (match.index > cursor) wrapper.appendChild(document.createTextNode(text.slice(cursor, match.index)));
-      const img = document.createElement('img');
-      img.className = 'mf-gifchat-img';
-      img.src = match[0];
-      img.alt = 'GIF';
-      img.loading = 'lazy';
-      img.decoding = 'async';
-      wrapper.appendChild(img);
-      cursor = match.index + match[0].length;
-    }
-    if (cursor < text.length) wrapper.appendChild(document.createTextNode(text.slice(cursor)));
-    node.replaceWith(wrapper);
+    node.replaceWith(buildImageWrapper(text));
   }
 
   function startRenderer() {
@@ -903,7 +965,7 @@
       injectBarStyle();
       if (!state.scanTimer) {
         state.scanTimer = window.setInterval(() => {
-          if (state.enabled) { ensureChat(); ensureButton(); attachInputHooks(); }
+          if (state.enabled) { ensureChat(); ensureButton(); attachInputHooks(); rescanChat(); }
         }, 1200);
       }
       ensureChat();
