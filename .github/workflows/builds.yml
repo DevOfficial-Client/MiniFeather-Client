@@ -19,12 +19,13 @@ jobs:
           java-version: '17'
       - name: bundle client (userscript + android boot)
         run: node tools/build-mobile.js --no-tauri --no-electron
-      - name: update userscript in repo (dist/)
+      - name: update userscript + mirror in repo (dist/, src/Core/mirror.js)
         run: |
+          node tools/build-mirror.js
           git config user.name "minifeather-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add dist/MiniFeatherClient.user.js
-          git diff --cached --quiet || git commit -m "build: regenerate mobile userscript [skip ci]"
+          git add dist/MiniFeatherClient.user.js src/Core/mirror.js
+          git diff --cached --quiet || git commit -m "build: regenerate userscript + mirror [skip ci]"
           git push
       - name: build apk
         uses: gradle/actions/setup-gradle@v4
@@ -48,6 +49,8 @@ jobs:
         run: node tools/build-mobile.js --no-user --no-android --no-electron
       - name: generate app icon
         run: npx @tauri-apps/cli@2 icon assets/icon.png --fit contain -o windows-msi/src-tauri/icons
+      - name: regenerate mirror for the bundle
+        run: node tools/build-mirror.js
       - name: stage client files for the bundle
         shell: bash
         run: |
@@ -71,6 +74,8 @@ jobs:
           node-version: '20'
       - name: bundle client (electron preload)
         run: node tools/build-mobile.js --no-user --no-android --no-tauri
+      - name: regenerate mirror for the bundle
+        run: node tools/build-mirror.js
       - name: stage client files for packaging
         run: |
           mkdir -p linux-installer/resources/client/eula

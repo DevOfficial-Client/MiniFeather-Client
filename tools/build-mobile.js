@@ -33,14 +33,42 @@ const csBlocks = manifest.content_scripts || [];
 const docStartBlocks = csBlocks.filter(b => (b.run_at || 'document_start') === 'document_start');
 const docEndBlocks = csBlocks.filter(b => b.run_at === 'document_end');
 
+// MAIN-world modules live in mirror.json (the extension injects them via
+// src/Core/mirror.js + MirrorRunner.js; every other target concatenates them
+// at the same position). mirror.js/MirrorRunner.js themselves are
+// extension-only and must not ride along.
+const MIRROR_BOOTSTRAP = /^src\/Core\/(mirror|MirrorRunner)\.js$/;
+const mirrorList = JSON.parse(fs.readFileSync(path.join(ROOT, 'mirror.json'), 'utf8'));
+
 const seen = new Set();
 const docStart = [];
+let mirrorSpliced = false;
 for (const block of docStartBlocks) {
   for (const file of block.js || []) {
     if (seen.has(file)) continue;
+    if (MIRROR_BOOTSTRAP.test(file)) {
+      if (!mirrorSpliced) {
+        mirrorSpliced = true;
+        for (const mf of mirrorList.mainStart || []) {
+          if (seen.has(mf)) continue;
+          seen.add(mf);
+          docStart.push(mf);
+        }
+      }
+      continue;
+    }
     seen.add(file);
     docStart.push(file);
   }
+}
+if (!mirrorSpliced) {
+  console.error('[build-mobile] manifest no tiene MirrorRunner: no se donde insertar mirror.json');
+  process.exit(1);
+}
+for (const mf of mirrorList.isoStart || []) {
+  if (seen.has(mf)) continue;
+  seen.add(mf);
+  docStart.push(mf);
 }
 const docEnd = [];
 for (const block of docEndBlocks) {
@@ -49,6 +77,11 @@ for (const block of docEndBlocks) {
     seen.add(file);
     docEnd.push(file);
   }
+}
+for (const mf of mirrorList.isoEnd || []) {
+  if (seen.has(mf)) continue;
+  seen.add(mf);
+  docEnd.push(mf);
 }
 
 // shared no-extension core: shim -> minibackground -> in-page redirects.

@@ -864,13 +864,11 @@ test('MF_Clones roster entries ride the LocalGames P2P roster as clone players',
     assert.match(clonesSource, /CLONE_IDS = \[-2147483639, -2147483638, -2147483637\]/, 'reserved id band');
   assert.match(clonesSource, /manager\.spawnPlayer\(\{/, 'clones spawn as real player entities');
 
-  const manifest = JSON.parse(
-    fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8')
+  const mirror = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '..', 'mirror.json'), 'utf8')
   );
-  const mainScripts = manifest.content_scripts.find(
-    entry => entry.world === 'MAIN' && entry.js.includes('src/World/LocalGames.js')
-  ).js;
-  assert.ok(mainScripts.includes('src/World/MF_Clones.js'), 'MF_Clones must be injected');
+  assert.ok(mirror.mainStart.includes('src/World/LocalGames.js'), 'LocalGames must be in the mirror injection list');
+  assert.ok(mirror.mainStart.includes('src/World/MF_Clones.js'), 'MF_Clones must be injected via mirror');
   assert.match(commandsSource, /'clones',/);
   assert.match(commandsSource, /clones: \['on', 'off', '1', '2', '3'\]/);
 });

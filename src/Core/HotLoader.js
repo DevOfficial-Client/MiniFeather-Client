@@ -46,6 +46,50 @@
         });
       } catch (_) {}
     });
+    // mirror plan: remote overrides for every MAIN module (see MirrorRunner.js).
+    // localStorage is the only synchronous cross-world store, so the plan is
+    // written here for the NEXT page load; files that don't fit are dropped
+    // (largest first) and fall back to the bundled mirror copy.
+    window.addEventListener('mf-mirror-sync', () => {
+      try {
+        chrome.runtime.sendMessage({ type: 'mfMirror:sync' }, (res) => {
+          try {
+            if (chrome.runtime.lastError || !res || !res.success) return;
+            const files = res.files && typeof res.files === 'object' ? res.files : {};
+            let prev = null;
+            try { prev = JSON.parse(localStorage.getItem('mf:mirror:overrides:v1') || 'null'); } catch (_) {}
+            let fails = {};
+            try { fails = JSON.parse(localStorage.getItem('mf:mirror:fails:v1') || '{}') || {}; } catch (_) {}
+            if (prev && prev.files) {
+              for (const p of Object.keys(files)) {
+                if (prev.files[p] !== files[p]) delete fails[p];
+              }
+            }
+            try { localStorage.setItem('mf:mirror:fails:v1', JSON.stringify(fails)); } catch (_) {}
+            // cap under ~4MB: drop the largest entries, they fall back to bundled
+            let entries = Object.keys(files).map(p => [p, files[p]]);
+            const budget = 4 * 1024 * 1024;
+            const measure = (list) => list.reduce((n, e) => n + e[1].length + e[0].length + 24, 4096);
+            entries.sort((a, b) => b[1].length - a[1].length);
+            while (entries.length && measure(entries) > budget) {
+              const dropped = entries.shift();
+              console.warn('minifeather mirror: override demasiado grande, uso la copia local de', dropped[0]);
+            }
+            const kept = {};
+            for (const [p, code] of entries) kept[p] = code;
+            const next = {
+              v: 1,
+              commit: res.commit || null,
+              ts: Date.now(),
+              buckets: res.buckets && typeof res.buckets === 'object' ? res.buckets : null,
+              files: kept,
+              ok: res.ok && typeof res.ok === 'object' ? res.ok : {}
+            };
+            localStorage.setItem('mf:mirror:overrides:v1', JSON.stringify(next));
+          } catch (_) {}
+        });
+      } catch (_) {}
+    });
     window.addEventListener('mf-bg-fetch', (e) => {
       let d = e.detail || {};
       if (typeof d === 'string') {

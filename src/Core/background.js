@@ -830,6 +830,8 @@ const SKINS = [
 
   const HOT_KEY = 'mfHotCache';
   const HOT_APPLIED = 'mfHotAppliedCommit';
+  const MIRROR_KEY = 'mfMirrorCache';
+  const MIRROR_BOOTSTRAP_RE = /^src\/Core\/(mirror|MirrorRunner|HotLoader|SplashScreen)\.js$/;
 
   async function readHotList() {
     try {
@@ -866,7 +868,7 @@ const SKINS = [
     return stored[HOT_KEY] || { v: 1, commit: null, ts: 0, files: {}, guards: {}, ok: {} };
   }
 
-  async function updateHotCache(remoteCommit, remoteTree) {
+  async function updateHotCache(remoteCommit, remoteTree, mirrorPaths) {
     const hotList = await readHotList();
     const cache = await getHotCache();
     if (!cache.ok || typeof cache.ok !== 'object') cache.ok = {};
@@ -875,10 +877,17 @@ const SKINS = [
         .filter(item => item?.type === 'blob' && item?.path)
         .map(item => [item.path, item.sha])
     );
+    // manifest modules move through the mirror (mfMirrorCache); hotload.json
+    // only feeds extras that no manifest/mirror entry injects (e.g. SpiderBot)
+    const mirrorSet = new Set(mirrorPaths || []);
     let changed = false;
 
     for (const entry of hotList) {
       const path = entry.path;
+      if (mirrorSet.has(path)) {
+        if (cache.files[path]) { delete cache.files[path]; changed = true; }
+        continue;
+      }
       const remoteSha = treeMap.get(path) || null;
       if (!remoteSha) {
         if (cache.files[path]) { delete cache.files[path]; changed = true; }
@@ -897,35 +906,138 @@ const SKINS = [
       } catch (_) {}
     }
 
+    const listed = new Set(hotList.map(entry => entry.path));
+    for (const path of Object.keys(cache.files)) {
+      if (!listed.has(path)) { delete cache.files[path]; changed = true; }
+    }
+
     cache.commit = remoteCommit || null;
     cache.ts = Date.now();
     await chrome.storage.local.set({ [HOT_KEY]: cache });
 
-    if (changed && Object.keys(cache.files).length) {
-      const settings = await getSettings();
-      const prev = (await chrome.storage.local.get([HOT_APPLIED]))[HOT_APPLIED] || '';
-      const isNew = remoteCommit && prev !== remoteCommit;
-      if (settings.autoApply && isNew) {
-        await chrome.storage.local.set({ [HOT_APPLIED]: remoteCommit });
-        try {
-          const tabs = await chrome.tabs.query({ url: ['https://miniblox.io/*', 'https://miniblox.online/*'] });
-          let playing = false;
-          for (const tab of tabs) {
-              if (/planet-|in game|playing/i.test(tab.title || '')) { playing = true; break; }
-          }
-          if (!playing) {
-            for (const tab of tabs) { try { chrome.tabs.reload(tab.id); } catch (_) {} }
-          } else {
-              const st = (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
-            await saveState({ ...st, updateAvailable: true, reason: 'hot', hotCommit: remoteCommit });
-          }
-        } catch (_) {}
-      } else if (isNew) {
-          const st = (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
-        await saveState({ ...st, updateAvailable: true, reason: 'hot', hotCommit: remoteCommit });
+    await maybeApplyHotUpdate(remoteCommit, changed && Object.keys(cache.files).length);
+    return cache;
+  }
+
+  function bucketizeContentScripts(manifest) {
+    const buckets = { mainStart: [], isoStart: [], isoEnd: [] };
+    const seen = new Set();
+    for (const script of manifest?.content_scripts || []) {
+      const bucket = script.world === 'MAIN' ? 'mainStart'
+        : ((script.run_at || 'document_start') === 'document_end' ? 'isoEnd' : 'isoStart');
+      for (const file of script?.js || []) {
+        if (seen.has(file)) continue;
+        seen.add(file);
+        if (MIRROR_BOOTSTRAP_RE.test(file)) continue;
+        buckets[bucket].push(file);
       }
     }
-    return cache;
+    return buckets;
+  }
+
+  async function getMirrorCache() {
+    const stored = await chrome.storage.local.get([MIRROR_KEY]);
+    return stored[MIRROR_KEY] || { v: 1, commit: null, ts: 0, buckets: null, files: {}, ok: {} };
+  }
+
+  async function fetchRemoteMirrorList(remoteCommit) {
+    try {
+      const json = JSON.parse(await fetchRawText(remoteCommit, 'mirror.json'));
+      const out = { mainStart: [], isoStart: [], isoEnd: [] };
+      for (const key of Object.keys(out)) {
+        if (Array.isArray(json[key])) {
+          out[key] = json[key].filter(p => typeof p === 'string' && p && p.indexOf('..') === -1);
+        }
+      }
+      return (out.mainStart.length || out.isoStart.length || out.isoEnd.length) ? out : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function fetchRemoteOkMap(remoteCommit) {
+    try {
+      const json = JSON.parse(await fetchRawText(remoteCommit, 'hotload.json'));
+      const out = {};
+      for (const entry of json.hot || []) {
+        if (entry && typeof entry.path === 'string' && Array.isArray(entry.ok)) out[entry.path] = entry.ok;
+      }
+      return out;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  async function updateMirrorCache(remoteCommit, remoteTree, buckets, okMap) {
+    const cache = await getMirrorCache();
+    if (!cache.files || typeof cache.files !== 'object') cache.files = {};
+    if (!cache.ok || typeof cache.ok !== 'object') cache.ok = {};
+    const order = [...(buckets.mainStart || []), ...(buckets.isoStart || []), ...(buckets.isoEnd || [])];
+    if (cache.commit === remoteCommit && order.length) {
+      cache.ts = Date.now();
+      await chrome.storage.local.set({ [MIRROR_KEY]: cache });
+      return { cache, changed: false };
+    }
+    const treeMap = new Map(
+      (remoteTree?.tree || [])
+        .filter(item => item?.type === 'blob' && item?.path)
+        .map(item => [item.path, item.sha])
+    );
+    const wanted = new Set(order);
+    let changed = false;
+
+    for (const path of Object.keys(cache.files)) {
+      if (!wanted.has(path)) { delete cache.files[path]; changed = true; }
+    }
+    for (const path of order) {
+      const remoteSha = treeMap.get(path) || null;
+      if (!remoteSha) {
+        if (cache.files[path]) { delete cache.files[path]; changed = true; }
+        continue;
+      }
+      const localSha = await localFileSha(path);
+      if (localSha === remoteSha) {
+        if (cache.files[path]) { delete cache.files[path]; changed = true; }
+        continue;
+      }
+      try {
+        cache.files[path] = await fetchRawText(remoteCommit, path);
+        changed = true;
+      } catch (_) {}
+    }
+
+    cache.buckets = buckets;
+    cache.ok = okMap && typeof okMap === 'object' ? okMap : {};
+    cache.commit = remoteCommit || null;
+    cache.ts = Date.now();
+    await chrome.storage.local.set({ [MIRROR_KEY]: cache });
+    return { cache, changed };
+  }
+
+  async function maybeApplyHotUpdate(remoteCommit, changed) {
+    if (!changed) return;
+    const settings = await getSettings();
+    const prev = (await chrome.storage.local.get([HOT_APPLIED]))[HOT_APPLIED] || '';
+    const isNew = remoteCommit && prev !== remoteCommit;
+    if (settings.autoApply && isNew) {
+      await chrome.storage.local.set({ [HOT_APPLIED]: remoteCommit });
+      try {
+        const tabs = await chrome.tabs.query({ url: ['https://miniblox.io/*', 'https://miniblox.online/*'] });
+        let playing = false;
+        for (const tab of tabs) {
+            if (/planet-|in game|playing/i.test(tab.title || '')) { playing = true; break; }
+        }
+        if (!playing) {
+          for (const tab of tabs) { try { chrome.tabs.reload(tab.id); } catch (_) {} }
+        } else {
+            const st = (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
+          await saveState({ ...st, updateAvailable: true, reason: 'hot', hotCommit: remoteCommit });
+        }
+      } catch (_) {}
+    } else if (isNew) {
+        const st = (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
+      await saveState({ ...st, updateAvailable: true, reason: 'hot', hotCommit: remoteCommit });
+    }
   }
 
   function versionParts(value) {
@@ -948,11 +1060,26 @@ const SKINS = [
   }
 
   async function gitBlobSha(buffer) {
+    // compare against GitHub tree SHAs: normalize CRLF checkouts to the LF
+    // blobs the repo stores, or every file looks modified on Windows
     const bytes = new Uint8Array(buffer);
-    const header = new TextEncoder().encode(`blob ${bytes.byteLength}\0`);
-    const joined = new Uint8Array(header.byteLength + bytes.byteLength);
+    let crlf = 0;
+    for (let i = 1; i < bytes.length; i++) {
+      if (bytes[i] === 10 && bytes[i - 1] === 13) crlf++;
+    }
+    let view = bytes;
+    if (crlf) {
+      view = new Uint8Array(bytes.length - crlf);
+      let j = 0;
+      for (let i = 0; i < bytes.length; i++) {
+        if (bytes[i] === 13 && i + 1 < bytes.length && bytes[i + 1] === 10) continue;
+        view[j++] = bytes[i];
+      }
+    }
+    const header = new TextEncoder().encode(`blob ${view.byteLength}\0`);
+    const joined = new Uint8Array(header.byteLength + view.byteLength);
     joined.set(header, 0);
-    joined.set(bytes, header.byteLength);
+    joined.set(view, header.byteLength);
     return toHex(await crypto.subtle.digest('SHA-1', joined));
   }
 
@@ -985,7 +1112,11 @@ const SKINS = [
     const files = new Set(['manifest.json']);
     if (manifest?.background?.service_worker) files.add(manifest.background.service_worker);
     for (const script of manifest?.content_scripts || []) {
-      for (const file of script?.js || []) files.add(file);
+      for (const file of script?.js || []) {
+        // generated from mirror.json; its contents reach clients via mfMirrorCache
+        if (file === 'src/Core/mirror.js') continue;
+        files.add(file);
+      }
     }
     return [...files].sort();
   }
@@ -1085,8 +1216,17 @@ const SKINS = [
       const remoteVersion = remoteManifest.version || '0.0.0';
 
       const comparison = await compareLocalWithTree(localManifest, remoteManifest, remoteTree);
+      const remoteMirror = await fetchRemoteMirrorList(remoteCommit);
+      const mirrorBuckets = remoteMirror || bucketizeContentScripts(remoteManifest);
+      const mirrorPaths = [...mirrorBuckets.mainStart, ...mirrorBuckets.isoStart, ...mirrorBuckets.isoEnd];
+      const okMap = await fetchRemoteOkMap(remoteCommit);
       let hotCache = null;
-      try { hotCache = await updateHotCache(remoteCommit, remoteTree); } catch (_) {}
+      try { hotCache = await updateHotCache(remoteCommit, remoteTree, mirrorPaths); } catch (_) {}
+      let mirrorResult = null;
+      try {
+        mirrorResult = await updateMirrorCache(remoteCommit, remoteTree, mirrorBuckets, okMap);
+        await maybeApplyHotUpdate(remoteCommit, mirrorResult.changed);
+      } catch (_) {}
       const versionNewer = compareVersions(remoteVersion, localVersion) > 0;
       const builtAtMs = buildInfo?.builtAt ? Date.parse(buildInfo.builtAt) : NaN;
       const remoteDateMs = remoteCommitDate ? Date.parse(remoteCommitDate) : NaN;
@@ -1130,6 +1270,8 @@ const SKINS = [
         changedFiles: comparison.changedFiles.slice(0, 12),
         hotFiles: hotCache ? Object.keys(hotCache.files || {}).length : 0,
         hotCommit: hotCache?.commit || null,
+        mirrorFiles: mirrorResult ? Object.keys(mirrorResult.cache.files || {}).length : 0,
+        mirrorCommit: mirrorResult?.cache.commit || null,
         repositoryUrl: REPOSITORY_URL,
         downloadUrl: DOWNLOAD_URL
       };
@@ -1176,6 +1318,19 @@ const SKINS = [
           commit: cache.commit,
           files: cache.files || {},
           guards: cache.guards || {},
+          ok: cache.ok || {}
+        }))
+        .catch(error => sendResponse({ success: false, error: String(error?.message || error) }));
+      return true;
+    }
+
+    if (message?.type === 'mfMirror:sync') {
+      getMirrorCache()
+        .then(cache => sendResponse({
+          success: true,
+          commit: cache.commit,
+          buckets: cache.buckets || null,
+          files: cache.files || {},
           ok: cache.ok || {}
         }))
         .catch(error => sendResponse({ success: false, error: String(error?.message || error) }));
