@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : a66b985d3a38b95cea5145d42da6ce7966bb74f7
- * builtAt : 2026-09-30T04:36:47.218Z
+ * commit  : d81c5f6a99b30911a26ab80e0b559d0ca8c22dce
+ * builtAt : 2026-09-30T14:37:28.201Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"a66b985d3a38b95cea5145d42da6ce7966bb74f7","builtAt":"2026-09-30T04:36:47.223Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"d81c5f6a99b30911a26ab80e0b559d0ca8c22dce","builtAt":"2026-09-30T14:37:28.272Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -14802,6 +14802,10 @@ const state = {
             }
             break;
         }
+        case 'clone': {
+            try { globalThis.MF_Clones?.receiveClone?.(String(m.key || ''), m); } catch {}
+            break;
+        }
         case 'announce': {
             if (typeof m.code === 'string' && m.code !== state.myCode && !state.conns.has(m.code)) {
                 connect(m.code);
@@ -15233,6 +15237,7 @@ const state = {
     get names() { return Object.fromEntries(state.names); },
     get connected() { return state.conns.size; },
     start, connect,
+    broadcast,
 
     shareSkinUp(id, dataURL) {
         if (!id || typeof dataURL !== 'string') return;
@@ -18290,133 +18295,13 @@ const FREECAM_UUIDS = new Set([
     } catch (_) {}
     }
 
-  const FREECAM_CLONE_ID = -2147483641;
-
-  function looksLikeEntityManager(value) {
-    return !!(value && typeof value === "object" &&
-      typeof value.addEntity === "function" &&
-      typeof value.spawnPlayer === "function" &&
-      typeof value.addLocalEntity === "function");
-  }
-
-  function resolveCloneManager() {
-    if (looksLikeEntityManager(state.cloneManager)) return state.cloneManager;
-    const namespace = globalThis.__MINIFEATHER_LOCAL_GAMES__?.state?.moduleNamespace;
-    if (!namespace || typeof namespace !== "object") return null;
-    try {
-      for (const value of Object.values(namespace)) {
-        if (looksLikeEntityManager(value)) {
-          state.cloneManager = value;
-          return value;
-        }
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  // Doble "como otro jugador" con la misma skin: sigue a la camara de la
-  // freecam (F5 frontal = cara, trasero = espalda, primera persona = oculto).
-  // El jugador real no se toca.
-  function ensureFreeClone() {
-    const world = state.game?.world;
-    if (!world) return null;
-
-    try {
-      const existing = world.getEntityIncludingQueued?.(FREECAM_CLONE_ID) || world.entities?.get?.(FREECAM_CLONE_ID);
-      if (existing) {
-        state.clone = existing;
-        return existing;
-      }
-    } catch (_) {}
-
-    const manager = resolveCloneManager();
-    const profile = state.game?.player?.profile || {};
-    if (!manager || typeof manager.spawnPlayer !== "function") return null;
-
-    try {
-      manager.spawnPlayer({
-        socketId: String(profile.uuid || "minifeather-freecam") + "-freecam",
-        id: FREECAM_CLONE_ID,
-        name: String(profile.username || profile.name || "Player"),
-        pos: {
-          x: Number(state.freePosition?.x ?? state.player?.pos?.x ?? 0),
-          y: Number(state.freePosition?.y ?? state.player?.pos?.y ?? 80),
-          z: Number(state.freePosition?.z ?? state.player?.pos?.z ?? 0)
-        },
-        yaw: Number(state.player?.yaw) || 0,
-        pitch: 0,
-        gamemode: String(profile.mode || "survival"),
-        cosmetics: {
-          skin: profile.skin || profile.cosmetics?.skin || "bob",
-          cape: profile.cape || profile.cosmetics?.cape || "none",
-          hat: profile.hat || profile.cosmetics?.hat || "none",
-          trail: profile.trail || profile.cosmetics?.trail || "none",
-          aura: profile.aura || profile.cosmetics?.aura || "none"
-        },
-        rank: profile.rank || "",
-        discordBoosting: profile.discordBoosting === true
-      });
-    } catch (error) {
-      console.warn(TAG, "freecam clone spawn failed:", error?.message || error);
-      return null;
-    }
-
-    const clone = world.getEntityIncludingQueued?.(FREECAM_CLONE_ID) || world.entities?.get?.(FREECAM_CLONE_ID) || null;
-    state.clone = clone;
-    return clone;
-  }
-
-  function removeFreeClone() {
-    const clone = state.clone;
-    state.clone = null;
-    if (!clone) return;
-    try { state.game?.world?.removeEntityFromWorld?.(clone.id); } catch (_) {}
-    try {
-      if (state.game?.world?.entities?.get?.(clone.id) === clone) state.game.world.removeEntity?.(clone);
-    } catch (_) {}
-  }
-
-  function applyFreeClone() {
-    const perspective = Number(state.player?.perspective ?? 1);
-    const clone = state.clone || ensureFreeClone();
-    if (!clone) return;
-
-    if (perspective === 0 || !state.freePosition) {
-      if (clone.mesh?.visible) clone.mesh.visible = false;
-      return;
-    }
-
-    let eyeHeight = 1.62;
-    try {
-      const native = Number(state.player?.getEyeHeight?.());
-      if (Number.isFinite(native) && native > 0) eyeHeight = native;
-    } catch (_) {}
-
-    const sinYaw = Math.sin(state.yaw);
-    const cosYaw = Math.cos(state.yaw);
-    const front = perspective === 1;
-    const x = state.freePosition.x - sinYaw * FREE_BODY_DISTANCE;
-    const y = state.freePosition.y - eyeHeight;
-    const z = state.freePosition.z - cosYaw * FREE_BODY_DISTANCE;
-    const yaw = front ? state.yaw + Math.PI : state.yaw;
-
-    try {
-      clone.serverPos?.set?.(x * 32, y * 32, z * 32);
-      clone.setPositionAndRotation2?.(x, y, z, yaw, 0, 1);
-      clone.mesh.visible = true;
-    } catch (_) {}
-  }
-
     function installCameraHooks(camera) {
     if (!camera) return;
 
     if (state.matrixHook?.camera !== camera && typeof camera.updateMatrixWorld === 'function') {
         const original = camera.updateMatrixWorld;
         const hook = function (...args) {
-            if (state.enabled && state.camera === camera) {
-                applyPose(camera);
-                try { applyFreeClone(); } catch (_) {}
-            }
+            if (state.enabled && state.camera === camera) applyPose(camera);
             return original.apply(this, args);
         };
         try {
@@ -18631,8 +18516,6 @@ const FREECAM_UUIDS = new Set([
     try { window.MF_FREELOOK?.setFL?.(false); } catch (_) {}
 
     forceThirdPerson(player);
-    ensureFreeClone();
-            try { applyFreeClone(); } catch (_) {}
     detachCamera(camera);
 
     state.freePosition = playerOrigin || getPlayerCameraOrigin(player) || worldPosition || captureWorldPosition(camera);
@@ -18669,7 +18552,6 @@ const FREECAM_UUIDS = new Set([
     globalThis.__MINIFEATHER_FREECAM_ACTIVE__ = false;
     clearKeys();
     neutralizePlayerInput();
-    try { applyFreeClone(); } catch (_) {}
 
     if (camera) {
         if (state.detached) restoreCameraParent(camera);
@@ -18689,7 +18571,6 @@ const FREECAM_UUIDS = new Set([
     state.detached = false;
     state.scene = null;
     state.freePosition = null;
-    removeFreeClone();
 
     emitState();
     }
@@ -18777,20 +18658,6 @@ const FREECAM_UUIDS = new Set([
     window.addEventListener('keydown', event => {
     if (!state.enabled || isTypingOrUiOpen()) return;
 
-    // F5 propio de la freecam: cicla perspectiva para ver tu cuerpo y su skin.
-    // preventDefault: en el navegador F5 recarga la pagina.
-    if (event.code === 'F5') {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        const player = state.player;
-        if (player && Number.isFinite(Number(player.perspective))) {
-            player.perspective = (Number(player.perspective) + 1) % 3;
-            try { player.toggleCameraPerspective?.(); } catch (_) {}
-            try { applyFreeClone(); } catch (_) {}
-        }
-        return;
-    }
 
     if (!state.enabled || isTypingOrUiOpen()) return;
     if (!movementKeys.has(event.code)) return;
@@ -36233,6 +36100,392 @@ const VEGETATION_PASS_THROUGH = new Set([
 
 //# sourceURL=MF:src/World/AutoReconnect.js
 
+/* ==== mf module: src/World/MF_Clones.js ==== */
+(function () {
+    'use strict';
+
+    if (window.__MF_CLONES__) return;
+
+    const TAG = 'minifeather clones';
+    const PREF_KEY = 'minifeather.clones.count';
+    const MAX_CLONES = 3;
+    const CLONE_IDS = [-2147483639, -2147483638, -2147483637];
+    const RING_RADIUS = 3.5;
+    const REPOSITION_DISTANCE = 20;
+    const SYNC_INTERVAL_MS = 1500;
+
+    const state = {
+        count: loadPreference(),
+        game: null,
+        manager: null,
+        world: null,
+        clones: new Map(),
+        lastBroadcastAt: 0,
+        remoteClones: new Map(),
+        lastCenter: null
+    };
+
+    function loadPreference() {
+        try {
+            const raw = Number(localStorage.getItem(PREF_KEY));
+            return Number.isFinite(raw) ? Math.max(0, Math.min(MAX_CLONES, Math.floor(raw))) : 0;
+        } catch (_) {
+            return 0;
+        }
+    }
+
+    function savePreference() {
+        try {
+            localStorage.setItem(PREF_KEY, String(state.count));
+        } catch (_) {}
+    }
+
+    function looksLikeEntityManager(value) {
+        return !!(value && typeof value === 'object' &&
+            typeof value.addEntity === 'function' &&
+            typeof value.spawnPlayer === 'function' &&
+            typeof value.addLocalEntity === 'function');
+    }
+
+    function resolveManager() {
+        if (looksLikeEntityManager(state.manager)) return state.manager;
+        const namespace = globalThis.__MINIFEATHER_LOCAL_GAMES__?.state?.moduleNamespace;
+        if (!namespace || typeof namespace !== 'object') return null;
+        try {
+            for (const value of Object.values(namespace)) {
+                if (looksLikeEntityManager(value)) {
+                    state.manager = value;
+                    return value;
+                }
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    function isLiveGame(game) {
+        return !!(game?.player?.pos && game?.world?.entities);
+    }
+
+    function findGame() {
+        if (isLiveGame(state.game)) return state.game;
+        state.game = globalThis.miniblox || null;
+        return isLiveGame(state.game) ? state.game : null;
+    }
+
+  function playerProfile(game) {
+    const mf = globalThis.__MINIFEATHER_LOCAL_GAMES__?.getProfile?.();
+    const profile = game?.player?.profile || {};
+    const cosmetics = profile.cosmetics || {};
+    return {
+      name: String(mf?.name || profile.username || profile.name || "Player"),
+      uuid: String(mf?.uuid || profile.uuid || ""),
+      skin: String(mf?.skin || cosmetics.skin || profile.skin || "bob"),
+      cape: String(mf?.cosmetics?.cape || cosmetics.cape || "none"),
+      hat: String(mf?.cosmetics?.hat || cosmetics.hat || "none"),
+      trail: String(mf?.cosmetics?.trail || cosmetics.trail || "none"),
+      aura: String(mf?.cosmetics?.aura || cosmetics.aura || "none"),
+      rank: String(mf?.rank || profile.rank || ""),
+      mode: String(profile.mode || "survival"),
+      discordBoosting: profile.discordBoosting === true
+    };
+  }
+
+  // El clon nace EXACTAMENTE donde esta el jugador, mirando donde mira.
+  function cloneSlot(index, count, origin) {
+    return { x: origin.x, y: origin.y, z: origin.z, yaw: Number(origin.yaw) || 0 };
+  }
+
+    function despawnClone(id) {
+        const world = state.world;
+        state.clones.delete(id);
+        try { world?.removeEntityFromWorld?.(id); } catch (_) {}
+        try {
+            if (world?.entities?.get?.(id)) world.removeEntity?.(world.entities.get(id));
+        } catch (_) {}
+    }
+
+    function spawnClone(index, count, game) {
+        const world = game.world;
+        const id = CLONE_IDS[index];
+
+        try {
+            const existing = world.getEntityIncludingQueued?.(id) || world.entities?.get?.(id);
+            if (existing) {
+                state.clones.set(id, existing);
+                return existing;
+            }
+        } catch (_) {}
+
+        const manager = resolveManager();
+        if (!manager) return null;
+
+        const profile = playerProfile(game);
+        const slot = cloneSlot(index, count, { ...game.player.pos, yaw: Number(game.player.yaw) || 0 });
+
+        try {
+            manager.spawnPlayer({
+                socketId: (profile.uuid || 'minifeather-clone') + '-clone-' + index,
+                id,
+                name: profile.name,
+                pos: { x: slot.x, y: slot.y, z: slot.z },
+                yaw: slot.yaw,
+                pitch: 0,
+                gamemode: profile.mode,
+                cosmetics: {
+                    skin: profile.skin,
+                    cape: profile.cape,
+                    hat: profile.hat,
+                    trail: profile.trail,
+                    aura: profile.aura
+                },
+                rank: profile.rank,
+                discordBoosting: profile.discordBoosting
+            });
+        } catch (error) {
+            console.warn(TAG, 'clone spawn failed:', error?.message || error);
+            return null;
+        }
+
+        const entity = world.getEntityIncludingQueued?.(id) || world.entities?.get?.(id) || null;
+        if (entity) state.clones.set(id, entity);
+        return entity;
+    }
+
+    function removeAll() {
+        for (const id of Array.from(state.clones.keys())) despawnClone(id);
+        state.clones.clear();
+    }
+
+    function dispatchChanged() {
+        document.dispatchEvent(new CustomEvent('mf:clones-changed', {
+            detail: { count: state.count }
+        }));
+    }
+
+    function sync() {
+
+        if (state.count <= 0) {
+            if (state.clones.size) removeAll();
+            state.lastCenter = null;
+            return;
+        }
+
+        const game = findGame();
+        if (!isLiveGame(game)) return;
+        state.game = game;
+
+        if (state.world && state.world !== game.world) {
+            state.clones.clear();
+            state.lastCenter = null;
+        }
+        state.world = game.world;
+
+        if (!resolveManager()) return;
+
+        const player = game.player;
+        const origin = {
+            x: Number(player.pos.x),
+            y: Number(player.pos.y),
+            z: Number(player.pos.z)
+        };
+
+        let changed = false;
+
+        // retirar los que sobran al bajar el conteo
+        for (const id of Array.from(state.clones.keys())) {
+            if (!CLONE_IDS.slice(0, state.count).includes(id)) {
+                despawnClone(id);
+                changed = true;
+            }
+        }
+
+        // spawn de los que faltan
+        for (let i = 0; i < state.count; i++) {
+            if (!state.clones.has(CLONE_IDS[i])) {
+                if (spawnClone(i, state.count, game)) changed = true;
+            }
+        }
+
+        // reposicionar cuando el jugador se aleja del anillo
+        const movedFar = !state.lastCenter ||
+            Math.hypot(origin.x - state.lastCenter.x, origin.z - state.lastCenter.z) > REPOSITION_DISTANCE;
+        if (movedFar) {
+            for (let i = 0; i < state.count; i++) {
+                const entity = state.clones.get(CLONE_IDS[i]);
+                if (!entity) continue;
+                const slot = cloneSlot(i, state.count, { ...origin, yaw: Number(player.yaw) || 0 });
+                try {
+                    entity.serverPos?.set?.(slot.x * 32, slot.y * 32, slot.z * 32);
+                    entity.setPositionAndRotation2?.(slot.x, slot.y, slot.z, slot.yaw, 0, 2);
+                } catch (_) {}
+            }
+        }
+        state.lastCenter = origin;
+
+        if (changed) dispatchChanged();
+        broadcastClones();
+    }
+
+    function remoteCloneId(key) {
+        let hash = 0x811c9dc5;
+        for (let i = 0; i < key.length; i++) {
+            hash ^= key.charCodeAt(i);
+            hash = Math.imul(hash, 0x01000193);
+        }
+        return -(hash & 0x7fffffff) - 1;
+    }
+
+  // Recepcion P2P: el clon de otro MiniFeather player (mismo skin/nombre).
+  function receiveClone(key, data) {
+    if (!key || !data || typeof data !== "object") return;
+    const entry = state.remoteClones.get(key) || { entity: null, id: remoteCloneId("mfclone:" + key) };
+    entry.name = String(data.name || "Player").slice(0, 24);
+    entry.skin = String(data.skin || "bob").slice(0, 32);
+    entry.rank = String(data.rank || "");
+    entry.slots = (Array.isArray(data.clones) ? data.clones : []).slice(0, 3).map(clone => ({
+      x: Number(clone.x),
+      y: Number(clone.y),
+      z: Number(clone.z),
+      yaw: Number(clone.yaw) || 0
+    })).filter(slot => [slot.x, slot.y, slot.z].every(Number.isFinite));
+    entry.at = Date.now();
+    state.remoteClones.set(key, entry);
+    syncRemoteClones();
+  }
+
+  function syncRemoteClones() {
+    const game = findGame();
+    if (!isLiveGame(game)) return;
+    const world = game.world;
+    const manager = resolveManager();
+    if (!manager) return;
+
+    const now = Date.now();
+    for (const [key, entry] of state.remoteClones) {
+      if (now - entry.at > 10000) {
+        for (const [id, entity] of entry.entities || []) {
+          try { world.removeEntityFromWorld?.(id); } catch (_) {}
+          try { if (world.entities?.get?.(id) === entity) world.removeEntity?.(entity); } catch (_) {}
+        }
+        state.remoteClones.delete(key);
+      }
+    }
+
+    for (const [key, entry] of state.remoteClones) {
+      if (!entry.entities) entry.entities = new Map();
+
+      const slots = entry.slots || [];
+      for (let i = 0; i < slots.length; i++) {
+        const slot = slots[i];
+        const id = remoteCloneId("mfclone:" + key + ":" + i);
+        let entity = entry.entities.get(id);
+        try {
+          if (!entity || world.entities?.get?.(id) !== entity) {
+            manager.spawnPlayer({
+              socketId: "remote-clone-" + id,
+              id,
+              name: entry.name,
+              pos: { x: slot.x, y: slot.y, z: slot.z },
+              yaw: slot.yaw,
+              pitch: 0,
+              gamemode: "survival",
+              cosmetics: { skin: entry.skin, cape: "none", hat: "none", trail: "none", aura: "none" },
+              rank: entry.rank,
+              discordBoosting: false
+            });
+            entity = world.getEntityIncludingQueued?.(id) || world.entities?.get?.(id) || null;
+            if (entity) entry.entities.set(id, entity);
+          }
+          if (entity) {
+            entity.serverPos?.set?.(slot.x * 32, slot.y * 32, slot.z * 32);
+            entity.setPositionAndRotation2?.(slot.x, slot.y, slot.z, slot.yaw, 0, 2);
+            if (entity.mesh) entity.mesh.visible = true;
+          }
+        } catch (_) {}
+      }
+
+      // retirar entidades de slots que desaparecieron
+      for (const [id, entity] of entry.entities) {
+        const keep = slots.some((slot, i) => remoteCloneId("mfclone:" + key + ":" + i) === id);
+        if (keep) continue;
+        try { world.removeEntityFromWorld?.(id); } catch (_) {}
+        try { if (world.entities?.get?.(id) === entity) world.removeEntity?.(entity); } catch (_) {}
+        entry.entities.delete(id);
+      }
+    }
+  }
+  function myCloneKey() {
+    const profile = playerProfile(findGame());
+    return profile.uuid || profile.name;
+  }
+
+  // Emision P2P del clon propio (1 en servidores normales) por mesh y peer.
+  function broadcastClones() {
+    const now = Date.now();
+    if (now - state.lastBroadcastAt < 3000) return;
+    state.lastBroadcastAt = now;
+
+    const clones = list();
+    const profile = playerProfile(findGame());
+    const payload = {
+      t: "clone",
+      key: myCloneKey(),
+      name: profile.name,
+      skin: profile.skin,
+      rank: profile.rank,
+      count: clones.length,
+      clones: clones.map(clone => ({ x: clone.x, y: clone.y, z: clone.z, yaw: clone.yaw }))
+    };
+
+    try { if (globalThis.MF_Mesh?.connected > 0) globalThis.MF_Mesh.broadcast?.(payload); } catch (_) {}
+    try { if (globalThis.MF_Peer?.connected) globalThis.MF_Peer.sendStudio?.(payload); } catch (_) {}
+  }
+
+    function setCount(value) {
+        const next = Math.max(0, Math.min(MAX_CLONES, Math.floor(Number(value) || 0)));
+        state.count = next;
+        savePreference();
+        sync();
+        dispatchChanged();
+        return next;
+    }
+
+    // Posiciones en MUNDO para el P2P de LocalGames (origen se resta alla).
+    function list() {
+        const out = [];
+        for (let i = 0; i < state.count; i++) {
+            const entity = state.clones.get(CLONE_IDS[i]);
+            if (!entity?.pos) continue;
+            out.push({
+                index: i,
+                id: CLONE_IDS[i],
+                x: Number(entity.pos.x) || 0,
+                y: Number(entity.pos.y) || 0,
+                z: Number(entity.pos.z) || 0,
+                yaw: Number(entity.yaw) || 0
+            });
+        }
+        return out;
+    }
+
+    setInterval(sync, SYNC_INTERVAL_MS);
+
+    window.MF_Clones = {
+        MAX: MAX_CLONES,
+        setCount,
+        get count() {
+            return state.count;
+        },
+        list() {
+            return list();
+        }
+    };
+
+    window.__MF_CLONES__ = true;
+})();
+
+//# sourceURL=MF:src/World/MF_Clones.js
+
 /* ==== mf module: src/Libraries/brocha.min.js ==== */
 // deno-fmt-ignore-file
 // deno-lint-ignore-file
@@ -40315,7 +40568,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'reconnect', 'reconectar', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'clones', 'reconnect', 'reconectar', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
 
   // Variantes de argumentos por comando para el Tab-complete client-side.
   // null = el comando acepta cualquier cosa en esa posicion.
@@ -40333,6 +40586,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     mf: ['models', 'diag'],
     idlebot: ['join', 'leave', 'status'],
     backrooms: null,
+    clones: ['on', 'off', '1', '2', '3'],
     bridge: null,
     film: null,
     studio: null
@@ -40414,6 +40668,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
       '\\yellow\\/call on|off|status|<friend>|answer|decline|end|mute\\reset\\ - MiniFeather voice calls',
       '\\yellow\\/emote <name>\\reset\\ - Play a custom emote (from emotes/)',
       '\\yellow\\/reconnect on|off\\reset\\ - Auto-rejoin when the server kicks or drops you',
+      '\\yellow\\/clones <0-3>\\reset\\ - Client-side clones of yourself (only MiniFeather users see them)',
       '\\yellow\\/emote stop|list|reload\\reset\\ - Manage emotes',
       '\\yellow\\/mf help\\reset\\ - Show this help'
     ];
@@ -41217,6 +41472,30 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
       return;
     }
 
+    if (command === 'clones') {
+      const api = globalThis.MF_Clones;
+      if (!api) { addChat('Clones is not ready yet.', 'error'); return; }
+
+      const sub = (args[0] || '').toLowerCase();
+      if (sub === 'on') {
+        const count = api.setCount(Math.max(1, api.count || 3));
+        addChat('Clones: ' + count + ' around you.', 'success');
+        return;
+      }
+      if (sub === 'off') {
+        api.setCount(0);
+        addChat('Clones disabled.', 'success');
+        return;
+      }
+      const num = Number(sub);
+      if (Number.isFinite(num)) {
+        const count = api.setCount(num);
+        addChat('Clones: ' + count + ' around you (max ' + api.MAX + ').', 'success');
+        return;
+      }
+      addChat('Clones: ' + api.count + '/' + api.MAX + ' around you. Use /clones <0-' + api.MAX + '> or on|off.', 'normal');
+      return;
+    }
     if (command === 'face' || command === 'facewap') {
       const api = globalThis.MF_FaceSwap;
       if (!api) { addChat('FaceSwap is not ready yet.', 'error'); return; }
@@ -51410,6 +51689,7 @@ void 0;
     localHardcore: false,
     peers: new Map(),
     hostPeer: null,
+    peerClones: new Map(),
     remotePlayers: new Map(),
     remoteEntityProxies: new Map(),
     signalPollTimer: 0,
@@ -59610,7 +59890,16 @@ void 0;
     }
   }
 
-  document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
+    document.addEventListener('mf:clones-changed', () => {
+    if (!state.active) return;
+
+    if (state.mode === 'host') {
+      broadcastRoster();
+    } else if (state.mode === 'join') {
+      sendJSON(state.hostPeer?.stateChannel, { t: 'clones', list: relativeCloneList() });
+    }
+  });
+document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
   document.addEventListener(SIGNAL_READY_EVENT, onSignalReady);
 
   async function publishSignal(topic, payload) {
@@ -59792,6 +60081,36 @@ void 0;
       .filter(([, peer]) => peer?.pc?.connectionState === 'connected');
   }
 
+  function relativeCloneList() {
+    const origin = state.origin;
+    const clones = window.MF_Clones?.list?.() || [];
+    if (!origin) return [];
+    return clones.map(clone => ({
+      index: clone.index,
+      id: clone.id,
+      x: clone.x - origin.x,
+      y: clone.y - origin.y,
+      z: clone.z - origin.z,
+      yaw: clone.yaw
+    }));
+  }
+
+  function cloneRosterEntry(peerKey, profile, clone) {
+    return {
+      peerId: 'mfclone-' + peerKey + '-' + clone.index,
+      playerId: clone.id,
+      profile: {
+        name: profile.name,
+        skin: profile.skin,
+        rank: profile.rank,
+        mode: profile.mode
+      },
+      role: 'player',
+      position: { x: clone.x, y: clone.y, z: clone.z, yaw: clone.yaw },
+      isClone: true,
+      ping: 0
+    };
+  }
   function rosterPayload() {
     const players = [
       {
@@ -59817,6 +60136,25 @@ void 0;
       });
     }
 
+
+    const myClones = relativeCloneList();
+    const myProfile = profileNetworkSnapshot();
+    for (const clone of myClones) {
+      players.push(cloneRosterEntry('host', myProfile, clone));
+    }
+
+    for (const [peerId, clones] of state.peerClones) {
+      if (!state.peers.has(peerId)) continue;
+      const peerProfile = {
+        name: state.peers.get(peerId)?.profile?.name || 'Player',
+        skin: state.peers.get(peerId)?.profile?.skin || 'bob',
+        rank: state.peers.get(peerId)?.profile?.rank || '',
+        mode: state.peers.get(peerId)?.profile?.mode || 'survival'
+      };
+      for (const clone of clones) {
+        players.push(cloneRosterEntry(peerId, peerProfile, clone));
+      }
+    }
     return players;
   }
 
@@ -59855,7 +60193,7 @@ void 0;
       return null;
     }
 
-    const playerId = Number(entry?.playerId) || numericPeerId(key);
+    const playerId = entry?.isClone ? numericPeerId(String(entry.peerId)) : (Number(entry?.playerId) || numericPeerId(key));
     if (playerId === Number(state.localPlayerId)) return null;
 
     let proxy = state.remoteEntityProxies.get(key) || null;
@@ -59957,6 +60295,7 @@ void 0;
     if (state.mode !== 'host' && state.mode !== 'join') return;
 
     for (const [peerId, entry] of state.remotePlayers.entries()) {
+      if (entry?.isClone) continue;
       const last = Number(entry?.lastNativeUpdate || 0);
       if (!last || now - last < REMOTE_PROXY_STALE_MS) continue;
 
@@ -60731,6 +61070,7 @@ void 0;
     removeRemotePlayerProxy(peerId);
     state.remotePlayers.delete(peerId);
     broadcastRoster();
+    state.peerClones?.delete(peerId);
     return true;
   }
 
@@ -61226,6 +61566,7 @@ void 0;
     state.world = null;
     state.origin = null;
     state.arena = null;
+    state.peerClones?.clear();
     state.streamedChunks?.clear();
     state.pendingStreamedChunks.length = 0;
     state.streamedChunkCount = 0;
@@ -61328,6 +61669,14 @@ void 0;
       return;
     }
 
+    if (message.t === 'clones') {
+      const list = Array.isArray(message.list)
+        ? message.list.filter(clone => clone && Number.isFinite(Number(clone.x)) && Number.isFinite(Number(clone.z))).slice(0, 3)
+        : [];
+      state.peerClones.set(peerId, list);
+      broadcastRoster();
+      return;
+    }
     if (message.t === 'mode') {
 
       const newMode = String(message.mode || 'survival').toLowerCase();
@@ -62723,6 +63072,9 @@ void 0;
     },
     get game() {
       return state.game;
+    },
+    getProfile() {
+      return profileSnapshot();
     },
     startSandbox() {
       return startWorld('sandbox', 'single', 0, {
@@ -73700,6 +74052,10 @@ const state = {
     log('look-sync ← ' + a.a + (a.name ? ' (' + a.name + ')' : a.type ? ' (' + a.type + ')' : ''));
     try {
         switch (a.a) {
+            case 'clone': {
+                try { window.MF_Clones?.receiveClone?.(String(a.key || 'peer'), a); } catch {}
+                break;
+            }
             case 'stroke': {
 
                 const s = rememberPeerOriginal(entity, 'head');
