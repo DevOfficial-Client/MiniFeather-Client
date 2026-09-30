@@ -160,8 +160,7 @@
     }
 
     function sync() {
-        const cap = globalThis.__MINIFEATHER_LOCAL_GAMES__?.active ? MAX_CLONES : 1;
-        const effective = Math.min(state.count, cap);
+
         if (state.count <= 0) {
             if (state.clones.size) removeAll();
             state.lastCenter = null;
@@ -191,16 +190,16 @@
 
         // retirar los que sobran al bajar el conteo
         for (const id of Array.from(state.clones.keys())) {
-            if (!CLONE_IDS.slice(0, effective).includes(id)) {
+            if (!CLONE_IDS.slice(0, state.count).includes(id)) {
                 despawnClone(id);
                 changed = true;
             }
         }
 
         // spawn de los que faltan
-        for (let i = 0; i < effective; i++) {
+        for (let i = 0; i < state.count; i++) {
             if (!state.clones.has(CLONE_IDS[i])) {
-                if (spawnClone(i, effective, game)) changed = true;
+                if (spawnClone(i, state.count, game)) changed = true;
             }
         }
 
@@ -208,10 +207,10 @@
         const movedFar = !state.lastCenter ||
             Math.hypot(origin.x - state.lastCenter.x, origin.z - state.lastCenter.z) > REPOSITION_DISTANCE;
         if (movedFar) {
-            for (let i = 0; i < effective; i++) {
+            for (let i = 0; i < state.count; i++) {
                 const entity = state.clones.get(CLONE_IDS[i]);
                 if (!entity) continue;
-                const slot = cloneSlot(i, effective, { ...origin, yaw: Number(player.yaw) || 0 });
+                const slot = cloneSlot(i, state.count, { ...origin, yaw: Number(player.yaw) || 0 });
                 try {
                     entity.serverPos?.set?.(slot.x * 32, slot.y * 32, slot.z * 32);
                     entity.setPositionAndRotation2?.(slot.x, slot.y, slot.z, slot.yaw, 0, 2);
@@ -240,14 +239,13 @@
     entry.name = String(data.name || "Player").slice(0, 24);
     entry.skin = String(data.skin || "bob").slice(0, 32);
     entry.rank = String(data.rank || "");
-    entry.slot = data.clones && data.clones[0] ? {
-      x: Number(data.clones[0].x),
-      y: Number(data.clones[0].y),
-      z: Number(data.clones[0].z),
-      yaw: Number(data.clones[0].yaw) || 0
-    } : null;
+    entry.slots = (Array.isArray(data.clones) ? data.clones : []).slice(0, 3).map(clone => ({
+      x: Number(clone.x),
+      y: Number(clone.y),
+      z: Number(clone.z),
+      yaw: Number(clone.yaw) || 0
+    })).filter(slot => [slot.x, slot.y, slot.z].every(Number.isFinite));
     entry.at = Date.now();
-    if (!entry.slot || ![entry.slot.x, entry.slot.y, entry.slot.z].every(Number.isFinite)) return;
     state.remoteClones.set(key, entry);
     syncRemoteClones();
   }
@@ -262,42 +260,57 @@
     const now = Date.now();
     for (const [key, entry] of state.remoteClones) {
       if (now - entry.at > 10000) {
-        if (entry.entity) {
-          try { world.removeEntityFromWorld?.(entry.id); } catch (_) {}
-          try { if (world.entities?.get?.(entry.id) === entry.entity) world.removeEntity?.(entry.entity); } catch (_) {}
+        for (const [id, entity] of entry.entities || []) {
+          try { world.removeEntityFromWorld?.(id); } catch (_) {}
+          try { if (world.entities?.get?.(id) === entity) world.removeEntity?.(entity); } catch (_) {}
         }
         state.remoteClones.delete(key);
       }
     }
 
-    for (const entry of state.remoteClones.values()) {
-      let entity = entry.entity;
-      try {
-        if (!entity || world.entities?.get?.(entry.id) !== entity) {
-          manager.spawnPlayer({
-            socketId: "remote-clone-" + entry.id,
-            id: entry.id,
-            name: entry.name,
-            pos: { x: entry.slot.x, y: entry.slot.y, z: entry.slot.z },
-            yaw: entry.slot.yaw,
-            pitch: 0,
-            gamemode: "survival",
-            cosmetics: { skin: entry.skin, cape: "none", hat: "none", trail: "none", aura: "none" },
-            rank: entry.rank,
-            discordBoosting: false
-          });
-          entity = world.getEntityIncludingQueued?.(entry.id) || world.entities?.get?.(entry.id) || null;
-          entry.entity = entity;
-        }
-        if (entity) {
-          entity.serverPos?.set?.(entry.slot.x * 32, entry.slot.y * 32, entry.slot.z * 32);
-          entity.setPositionAndRotation2?.(entry.slot.x, entry.slot.y, entry.slot.z, entry.slot.yaw, 0, 2);
-          if (entity.mesh) entity.mesh.visible = true;
-        }
-      } catch (_) {}
+    for (const [key, entry] of state.remoteClones) {
+      if (!entry.entities) entry.entities = new Map();
+
+      const slots = entry.slots || [];
+      for (let i = 0; i < slots.length; i++) {
+        const slot = slots[i];
+        const id = remoteCloneId("mfclone:" + key + ":" + i);
+        let entity = entry.entities.get(id);
+        try {
+          if (!entity || world.entities?.get?.(id) !== entity) {
+            manager.spawnPlayer({
+              socketId: "remote-clone-" + id,
+              id,
+              name: entry.name,
+              pos: { x: slot.x, y: slot.y, z: slot.z },
+              yaw: slot.yaw,
+              pitch: 0,
+              gamemode: "survival",
+              cosmetics: { skin: entry.skin, cape: "none", hat: "none", trail: "none", aura: "none" },
+              rank: entry.rank,
+              discordBoosting: false
+            });
+            entity = world.getEntityIncludingQueued?.(id) || world.entities?.get?.(id) || null;
+            if (entity) entry.entities.set(id, entity);
+          }
+          if (entity) {
+            entity.serverPos?.set?.(slot.x * 32, slot.y * 32, slot.z * 32);
+            entity.setPositionAndRotation2?.(slot.x, slot.y, slot.z, slot.yaw, 0, 2);
+            if (entity.mesh) entity.mesh.visible = true;
+          }
+        } catch (_) {}
+      }
+
+      // retirar entidades de slots que desaparecieron
+      for (const [id, entity] of entry.entities) {
+        const keep = slots.some((slot, i) => remoteCloneId("mfclone:" + key + ":" + i) === id);
+        if (keep) continue;
+        try { world.removeEntityFromWorld?.(id); } catch (_) {}
+        try { if (world.entities?.get?.(id) === entity) world.removeEntity?.(entity); } catch (_) {}
+        entry.entities.delete(id);
+      }
     }
   }
-
   function myCloneKey() {
     const profile = playerProfile(findGame());
     return profile.uuid || profile.name;
@@ -309,7 +322,7 @@
     if (now - state.lastBroadcastAt < 3000) return;
     state.lastBroadcastAt = now;
 
-    const clones = list().slice(0, 1);
+    const clones = list();
     const profile = playerProfile(findGame());
     const payload = {
       t: "clone",
@@ -337,7 +350,7 @@
     // Posiciones en MUNDO para el P2P de LocalGames (origen se resta alla).
     function list() {
         const out = [];
-        for (let i = 0; i < Math.min(state.count, state.effective ?? state.count); i++) {
+        for (let i = 0; i < state.count; i++) {
             const entity = state.clones.get(CLONE_IDS[i]);
             if (!entity?.pos) continue;
             out.push({

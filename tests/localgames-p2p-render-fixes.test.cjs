@@ -913,8 +913,12 @@ test('MF_Clones P2P: remote clones spawn from mesh/peer messages and expire', ()
   // El receptor crea el clon del otro jugador con su skin y nombre
   fns.receiveClone('peer-friend', {
     name: 'Friend', skin: 'alex_skin', rank: 'VIP',
-    count: 1,
-    clones: [{ x: 12.5, y: 70, z: -8.25, yaw: 2.1 }]
+    count: 3,
+    clones: [
+      { x: 12.5, y: 70, z: -8.25, yaw: 2.1 },
+      { x: 14.5, y: 70, z: -6.25, yaw: 1.1 },
+      { x: 10.5, y: 70, z: -10.25, yaw: 0.4 }
+    ]
   });
 
   const key = [...sandbox.state.remoteClones.keys()][0];
@@ -922,8 +926,17 @@ test('MF_Clones P2P: remote clones spawn from mesh/peer messages and expire', ()
   const entry = sandbox.state.remoteClones.get(key);
   assert.equal(entry.name, 'Friend');
   assert.equal(entry.skin, 'alex_skin');
-  assert.ok(entry.slot, 'valid slot stored');
-  assert.equal(spawned.length, 1, 'remote clone spawned as a player entity');
+  assert.equal(entry.slots.length, 3, 'all three slots stored');
+  assert.equal(spawned.length, 3, 'one entity per slot');
+
+  // bajar a 1 slot: las entidades sobrantes se retiran
+  fns.receiveClone('peer-friend', {
+    name: 'Friend', skin: 'alex_skin', rank: 'VIP',
+    count: 1,
+    clones: [{ x: 12.5, y: 70, z: -8.25, yaw: 2.1 }]
+  });
+  assert.equal(spawned.length, 3, 'no respawn for surviving slots');
+  assert.equal(world.entities.size, 1, 'extra slot entities removed');
   assert.equal(spawned[0].cosmetics.skin, 'alex_skin');
   assert.equal(spawned[0].name, 'Friend');
 
@@ -931,7 +944,7 @@ test('MF_Clones P2P: remote clones spawn from mesh/peer messages and expire', ()
   entry.at = now - 11000;
   fns.syncRemoteClones();
   assert.equal(sandbox.state.remoteClones.size, 0, 'stale remote clone pruned');
-  assert.equal(world.entities.has(entry.id), false, 'entity removed from world');
+  assert.equal(world.entities.size, 0, 'entity removed from world');
 });
 
 test('MF_Clones caps to 1 clone on normal servers and broadcasts via mesh/peer', () => {
@@ -974,11 +987,11 @@ test('MF_Clones caps to 1 clone on normal servers and broadcasts via mesh/peer',
   const fns = exposeManyFrom(clonesSource, ['looksLikeEntityManager', 'resolveManager', 'findGame', 'isLiveGame', 'playerProfile', 'cloneSlot', 'spawnClone', 'despawnClone', 'dispatchChanged', 'list', 'myCloneKey', 'sync', 'broadcastClones'], sandbox);
   fns.sync();
   
-  assert.equal(spawned.length, 1, 'normal servers cap the squad to 1 clone');
+  assert.equal(spawned.length, 3, 'all three clones spawn on normal servers too');
   sandbox.state.lastBroadcastAt = 0;
   fns.broadcastClones();
   assert.equal(broadcasts.length, 4, 'mesh AND peer, from sync and from the explicit call');
-  assert.equal(broadcasts[2].payload.count, 1);
+  assert.equal(broadcasts[2].payload.count, 3, 'all three clones broadcast');
   assert.equal(broadcasts[2].payload.skin, 'steve');
   assert.equal(broadcasts[2].payload.name, 'Me');
 });
