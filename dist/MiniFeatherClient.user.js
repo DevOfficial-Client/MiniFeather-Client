@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : a43d012908f1de1be404da4722cc52eccf70ed8d
- * builtAt : 2026-09-30T03:57:31.343Z
+ * commit  : a66b985d3a38b95cea5145d42da6ce7966bb74f7
+ * builtAt : 2026-09-30T04:36:47.218Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"a43d012908f1de1be404da4722cc52eccf70ed8d","builtAt":"2026-09-30T03:57:31.348Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"a66b985d3a38b95cea5145d42da6ce7966bb74f7","builtAt":"2026-09-30T04:36:47.223Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -18290,13 +18290,133 @@ const FREECAM_UUIDS = new Set([
     } catch (_) {}
     }
 
+  const FREECAM_CLONE_ID = -2147483641;
+
+  function looksLikeEntityManager(value) {
+    return !!(value && typeof value === "object" &&
+      typeof value.addEntity === "function" &&
+      typeof value.spawnPlayer === "function" &&
+      typeof value.addLocalEntity === "function");
+  }
+
+  function resolveCloneManager() {
+    if (looksLikeEntityManager(state.cloneManager)) return state.cloneManager;
+    const namespace = globalThis.__MINIFEATHER_LOCAL_GAMES__?.state?.moduleNamespace;
+    if (!namespace || typeof namespace !== "object") return null;
+    try {
+      for (const value of Object.values(namespace)) {
+        if (looksLikeEntityManager(value)) {
+          state.cloneManager = value;
+          return value;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Doble "como otro jugador" con la misma skin: sigue a la camara de la
+  // freecam (F5 frontal = cara, trasero = espalda, primera persona = oculto).
+  // El jugador real no se toca.
+  function ensureFreeClone() {
+    const world = state.game?.world;
+    if (!world) return null;
+
+    try {
+      const existing = world.getEntityIncludingQueued?.(FREECAM_CLONE_ID) || world.entities?.get?.(FREECAM_CLONE_ID);
+      if (existing) {
+        state.clone = existing;
+        return existing;
+      }
+    } catch (_) {}
+
+    const manager = resolveCloneManager();
+    const profile = state.game?.player?.profile || {};
+    if (!manager || typeof manager.spawnPlayer !== "function") return null;
+
+    try {
+      manager.spawnPlayer({
+        socketId: String(profile.uuid || "minifeather-freecam") + "-freecam",
+        id: FREECAM_CLONE_ID,
+        name: String(profile.username || profile.name || "Player"),
+        pos: {
+          x: Number(state.freePosition?.x ?? state.player?.pos?.x ?? 0),
+          y: Number(state.freePosition?.y ?? state.player?.pos?.y ?? 80),
+          z: Number(state.freePosition?.z ?? state.player?.pos?.z ?? 0)
+        },
+        yaw: Number(state.player?.yaw) || 0,
+        pitch: 0,
+        gamemode: String(profile.mode || "survival"),
+        cosmetics: {
+          skin: profile.skin || profile.cosmetics?.skin || "bob",
+          cape: profile.cape || profile.cosmetics?.cape || "none",
+          hat: profile.hat || profile.cosmetics?.hat || "none",
+          trail: profile.trail || profile.cosmetics?.trail || "none",
+          aura: profile.aura || profile.cosmetics?.aura || "none"
+        },
+        rank: profile.rank || "",
+        discordBoosting: profile.discordBoosting === true
+      });
+    } catch (error) {
+      console.warn(TAG, "freecam clone spawn failed:", error?.message || error);
+      return null;
+    }
+
+    const clone = world.getEntityIncludingQueued?.(FREECAM_CLONE_ID) || world.entities?.get?.(FREECAM_CLONE_ID) || null;
+    state.clone = clone;
+    return clone;
+  }
+
+  function removeFreeClone() {
+    const clone = state.clone;
+    state.clone = null;
+    if (!clone) return;
+    try { state.game?.world?.removeEntityFromWorld?.(clone.id); } catch (_) {}
+    try {
+      if (state.game?.world?.entities?.get?.(clone.id) === clone) state.game.world.removeEntity?.(clone);
+    } catch (_) {}
+  }
+
+  function applyFreeClone() {
+    const perspective = Number(state.player?.perspective ?? 1);
+    const clone = state.clone || ensureFreeClone();
+    if (!clone) return;
+
+    if (perspective === 0 || !state.freePosition) {
+      if (clone.mesh?.visible) clone.mesh.visible = false;
+      return;
+    }
+
+    let eyeHeight = 1.62;
+    try {
+      const native = Number(state.player?.getEyeHeight?.());
+      if (Number.isFinite(native) && native > 0) eyeHeight = native;
+    } catch (_) {}
+
+    const sinYaw = Math.sin(state.yaw);
+    const cosYaw = Math.cos(state.yaw);
+    const front = perspective === 1;
+    const x = state.freePosition.x - sinYaw * FREE_BODY_DISTANCE;
+    const y = state.freePosition.y - eyeHeight;
+    const z = state.freePosition.z - cosYaw * FREE_BODY_DISTANCE;
+    const yaw = front ? state.yaw + Math.PI : state.yaw;
+
+    try {
+      clone.serverPos?.set?.(x * 32, y * 32, z * 32);
+      clone.setPositionAndRotation2?.(x, y, z, yaw, 0, 1);
+      clone.mesh.visible = true;
+    } catch (_) {}
+  }
+
     function installCameraHooks(camera) {
     if (!camera) return;
 
     if (state.matrixHook?.camera !== camera && typeof camera.updateMatrixWorld === 'function') {
         const original = camera.updateMatrixWorld;
         const hook = function (...args) {
-            if (state.enabled && state.camera === camera) applyPose(camera);
+            if (state.enabled && state.camera === camera) {
+                applyPose(camera);
+                try { applyFreeClone(); } catch (_) {}
+            }
             return original.apply(this, args);
         };
         try {
@@ -18321,6 +18441,13 @@ const FREECAM_UUIDS = new Set([
     function clearKeys() {
     for (const key of Object.keys(keys)) keys[key] = false;
     }
+
+  function resolveGameCanvas() {
+    const rendererDom = state.game?.gameScene?.renderer?.domElement
+      || state.game?.renderer?.domElement;
+    if (rendererDom) return rendererDom;
+    return document.querySelector("canvas");
+  }
 
     function isTypingOrUiOpen() {
 
@@ -18395,6 +18522,8 @@ const FREECAM_UUIDS = new Set([
     state.forcedPerspective = false;
     }
 
+  // En freecam la camara vuela lejos del cuerpo: el jugador debe verse con
+  // su skin (perspectiva 1/2 del motor ya lo hacen, esto lo garantiza).
     function detachCamera(camera) {
     const parent = camera?.parent || null;
     if (!parent) return false;
@@ -18502,6 +18631,8 @@ const FREECAM_UUIDS = new Set([
     try { window.MF_FREELOOK?.setFL?.(false); } catch (_) {}
 
     forceThirdPerson(player);
+    ensureFreeClone();
+            try { applyFreeClone(); } catch (_) {}
     detachCamera(camera);
 
     state.freePosition = playerOrigin || getPlayerCameraOrigin(player) || worldPosition || captureWorldPosition(camera);
@@ -18538,6 +18669,7 @@ const FREECAM_UUIDS = new Set([
     globalThis.__MINIFEATHER_FREECAM_ACTIVE__ = false;
     clearKeys();
     neutralizePlayerInput();
+    try { applyFreeClone(); } catch (_) {}
 
     if (camera) {
         if (state.detached) restoreCameraParent(camera);
@@ -18557,6 +18689,7 @@ const FREECAM_UUIDS = new Set([
     state.detached = false;
     state.scene = null;
     state.freePosition = null;
+    removeFreeClone();
 
     emitState();
     }
@@ -18614,7 +18747,7 @@ const FREECAM_UUIDS = new Set([
     if (keys.KeyD) strafe += 1;
     if (keys.KeyA) strafe -= 1;
     if (keys.Space) vertical += 1;
-    if (keys.ShiftLeft || keys.ShiftRight) vertical -= 1;
+    if (keys.ShiftLeft) vertical -= 1;
 
     const horizontalLength = Math.hypot(forward, strafe);
     if (horizontalLength > 1) {
@@ -18637,11 +18770,28 @@ const FREECAM_UUIDS = new Set([
 
     const movementKeys = new Set([
     'KeyW', 'KeyA', 'KeyS', 'KeyD',
-    'Space', 'ShiftLeft', 'ShiftRight',
+    'Space', 'ShiftLeft',
     'ControlLeft', 'ControlRight'
         ]);
 
-        window.addEventListener('keydown', event => {
+    window.addEventListener('keydown', event => {
+    if (!state.enabled || isTypingOrUiOpen()) return;
+
+    // F5 propio de la freecam: cicla perspectiva para ver tu cuerpo y su skin.
+    // preventDefault: en el navegador F5 recarga la pagina.
+    if (event.code === 'F5') {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        const player = state.player;
+        if (player && Number.isFinite(Number(player.perspective))) {
+            player.perspective = (Number(player.perspective) + 1) % 3;
+            try { player.toggleCameraPerspective?.(); } catch (_) {}
+            try { applyFreeClone(); } catch (_) {}
+        }
+        return;
+    }
+
     if (!state.enabled || isTypingOrUiOpen()) return;
     if (!movementKeys.has(event.code)) return;
     keys[event.code] = true;
@@ -18675,6 +18825,9 @@ const FREECAM_UUIDS = new Set([
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
+        if (type === 'mousedown' && !document.pointerLockElement) {
+            try { resolveGameCanvas()?.requestPointerLock?.(); } catch (_) {}
+        }
     }, true);
     }
 
