@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : aaa902088453ff3f52c08e47841a0a95c6fb78d3
- * builtAt : 2026-09-29T23:45:49.949Z
+ * commit  : dc25741ad348e7fd4931b33897d1e10b6a05a151
+ * builtAt : 2026-09-30T00:05:12.642Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"aaa902088453ff3f52c08e47841a0a95c6fb78d3","builtAt":"2026-09-29T23:45:50.018Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"dc25741ad348e7fd4931b33897d1e10b6a05a151","builtAt":"2026-09-30T00:05:12.655Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -109028,6 +109028,7 @@ function normalize(entry) {
             </div>
           </div>
           <h2 id="mf-gui-page-title" aria-hidden="true"></h2>
+          <button id="mf-gui-help" class="mf-feather-close" title="primeros pasos (｡•̀ᴗ-)✧" style="right:52px;color:#b79bff;border-color:rgba(183,155,255,.45);font-size:20px;font-weight:700">?</button>
           <button id="mf-gui-close" class="mf-feather-close" title="${t('close')}">${iconSvg('close')}</button>
         </div>
 
@@ -114163,6 +114164,8 @@ function normalize(entry) {
     startDashboardUpdater();
     startPixelIconAnimation();
     if (activePage === 'dashboard') updateDashboardStats();
+    applyPanelPersonality();
+    setTimeout(maybeShowFirstSteps, 300);
   }
 
   function hideGUI() {
@@ -114196,6 +114199,94 @@ function normalize(entry) {
     }
     if (overlay.style.display === 'block') hideGUI();
     else showGUI();
+  }
+
+  // ---------- first steps tutorial: lowercase, kaomojis, questionable humor ----------
+  // auto-shows exactly once (localStorage), the ? button in the topbar resuscitates it.
+  function firstStepsCopy() {
+    const es = (navigator.language || 'en').toLowerCase().startsWith('es');
+    return es ? {
+      title: 'primeros pasos (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
+      intro: 'bienvenido a minifeather client: no oficial, pero hecho con cariño (｡♥‿♥｡)',
+      steps: [
+        ['right shift', 'abre y cierra este menú. la tecla que nunca usabas por fin sirve para algo (¬‿¬)'],
+        ['clic en un módulo', 'lo activa al instante. sin lag, sin drama y sin mensajes de tu ex (｡•̀ᴗ-)✧'],
+        ['/bind panel <tecla>', 'cambia la tecla del menú, por si right shift te parece demasiado mainstream'],
+        ['/bind <modulo> <tecla>', 'pon tus módulos en teclas, ej: /bind freecam F4 (ง..)ง.. uh, keys'],
+        ['ctrl +/- y f11', 'zoom de toda la pantalla y modo inmersión total. tu gpu llora de felicidad ᕙ(⇀‸↼‶)ᕗ'],
+        ['/help', 'todos los comandos que existen. sí, hay más de estos (๑•̀ㅂ•́)و'],
+        ['auto-updates', 'el client se actualiza solo en segundo plano. tú juega, nosotros compilamos (ﾉ´ヮ`)ﾉ*:･ﾟ']
+      ],
+      footer: 'esto aparece una sola vez, prometido. si lo extrañas, el botón ? de arriba lo resucita (っ˘̩╭╮˘̩)っ',
+      button: '¡a jugar! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧'
+    } : {
+      title: 'first steps (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧',
+      intro: 'welcome to minifeather client: not official, but made with love (｡♥‿♥｡)',
+      steps: [
+        ['right shift', 'opens and closes this menu. the key you never used finally has a purpose (¬‿¬)'],
+        ['click a module', 'toggles it instantly. no lag, no drama, no texts from your ex (｡•̀ᴗ-)✧'],
+        ['/bind panel <key>', 'change the menu key, in case right shift feels too mainstream for you'],
+        ['/bind <module> <key>', 'hotkey your favorites, e.g. /bind freecam F4 (ง..)ง keys go brrr'],
+        ['ctrl +/- and f11', 'page zoom and full immersion mode. your gpu sheds happy tears ᕙ(⇀‸↼‶)ᕗ'],
+        ['/help', 'every command that exists. yes, there are more of these (๑•̀ㅂ•́)و'],
+        ['auto-updates', 'the client updates itself in the background. you play, we compile (ﾉ´ヮ`)ﾉ*:･ﾟ']
+      ],
+      footer: 'this shows up exactly once, promise. if you miss it, the ? button up top resurrects it (っ˘̩╭╮˘̩)っ',
+      button: 'let me play! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧'
+    };
+  }
+
+  function showFirstSteps(markDone) {
+    try { globalThis.__MF_FIRST_STEPS__?.destroy?.(); } catch (_) {}
+    const copy = firstStepsCopy();
+    const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const rows = copy.steps.map(([key, text]) => `
+      <div style="display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-bottom:1px dashed rgba(183,155,255,.16)">
+        <span style="flex:none;background:#241a3f;border:1px solid #6045a0;color:#d8ccff;font:600 12px/1 ui-monospace,monospace;padding:6px 9px;border-radius:6px;white-space:nowrap">${esc(key)}</span>
+        <span style="font:400 13.5px/1.55 system-ui,sans-serif;color:#cfc6ea">${esc(text)}</span>
+      </div>`).join('');
+    const overlay = document.createElement('div');
+    overlay.id = 'mf-first-steps';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(8,5,16,.8);display:flex;align-items:center;justify-content:center;padding:24px';
+    overlay.innerHTML = `
+      <div style="max-width:560px;width:100%;max-height:86vh;overflow:auto;background:#150f24;border:1px solid #6045a0;border-radius:14px;padding:22px;box-shadow:0 18px 60px rgba(0,0,0,.6)">
+        <div style="font:750 20px/1.3 system-ui,sans-serif;color:#b79bff">${esc(copy.title)}</div>
+        <div style="margin:8px 0 4px;font:400 13.5px/1.5 system-ui,sans-serif;color:#9d90c9">${esc(copy.intro)}</div>
+        <div style="margin-top:10px">${rows}</div>
+        <div style="margin-top:12px;font:400 12.5px/1.5 system-ui,sans-serif;color:#8d80b8">${esc(copy.footer)}</div>
+        <button id="mf-first-steps-ok" style="margin-top:14px;width:100%;padding:11px 16px;border:0;border-radius:9px;background:linear-gradient(135deg,#6045a0,#7c5cd6);color:#fff;font:700 14px system-ui,sans-serif;cursor:pointer">${esc(copy.button)}</button>
+      </div>`;
+    const close = () => {
+      try { overlay.remove(); } catch (_) {}
+      document.removeEventListener('keydown', onKey, true);
+      try { if (markDone) localStorage.setItem('mf:first-steps-v1', 'yes'); } catch (_) {}
+      try { delete globalThis.__MF_FIRST_STEPS__; } catch (_) { globalThis.__MF_FIRST_STEPS__ = null; }
+    };
+    const onKey = e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    };
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    overlay.querySelector('#mf-first-steps-ok').addEventListener('click', close);
+    document.addEventListener('keydown', onKey, true);
+    (document.body || document.documentElement).appendChild(overlay);
+    globalThis.__MF_FIRST_STEPS__ = { destroy: close };
+  }
+
+  function maybeShowFirstSteps() {
+    try {
+      if (localStorage.getItem('mf:first-steps-v1') === 'yes') return;
+    } catch (_) { return; }
+    showFirstSteps(true);
+  }
+
+  function applyPanelPersonality() {
+    try {
+      const search = document.getElementById('mf-gui-search');
+      if (search && !search.value) {
+        const es = (navigator.language || 'en').toLowerCase().startsWith('es');
+        search.placeholder = es ? 'busca tu módulo favorito… (๑•̀ㅂ•́)و' : 'search your favorite module… (๑•̀ㅂ•́)و';
+      }
+    } catch (_) {}
   }
 
   let saveTimer = null;
@@ -116963,6 +117054,7 @@ function normalize(entry) {
     const panelSignal = panelController.signal;
 
     panel.querySelector('#mf-gui-close')?.addEventListener('click', hideGUI, { signal: panelSignal });
+    panel.querySelector('#mf-gui-help')?.addEventListener('click', () => showFirstSteps(false), { signal: panelSignal });
 
     panel.querySelectorAll('[data-page]').forEach(nav => {
       nav.addEventListener('click', () => setActivePage(nav.dataset.page), { signal: panelSignal });
