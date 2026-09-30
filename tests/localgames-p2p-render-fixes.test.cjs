@@ -592,6 +592,98 @@ test('sendTabComplete serves MiniFeather variants locally without hitting the se
 });
 
 
+const freecamSource = fs.readFileSync(
+  path.join(__dirname, '..', 'src/Render/FreeCam.js'),
+  'utf8'
+);
+
+function makeFakeVec3(x = 0, y = 0, z = 0) {
+  return {
+    x, y, z,
+    set(nx, ny, nz) { this.x = nx; this.y = ny; this.z = nz; return this; },
+    clone() { return makeFakeVec3(this.x, this.y, this.z); }
+  };
+}
+
+class FakeEuler {
+  constructor(x = 0, y = 0, z = 0, order = 'XYZ') {
+    this.x = x; this.y = y; this.z = z; this.order = order;
+  }
+  setFromQuaternion() { this.__synced = true; }
+}
+
+class FakeQuaternion {
+  constructor() { this.x = 0; this.y = 0; this.z = 0; this.w = 1; }
+  set(nx, ny, nz, nw) { this.x = nx; this.y = ny; this.z = nz; this.w = nw; return this; }
+  setFromEuler(euler) {
+    this.__euler = { pitch: euler.x, yaw: euler.y, order: euler.order };
+    return this;
+  }
+  invert() { return this; }
+  premultiply() { return this; }
+}
+
+function makeFakeQuaternion() {
+  return new FakeQuaternion();
+}
+
+function makeFakeFreecamCamera(rigPosition) {
+  const parent = {
+    position: rigPosition,
+    updateWorldMatrix() {},
+    worldToLocal(vec) {
+      vec.x -= rigPosition.x;
+      vec.y -= rigPosition.y;
+      vec.z -= rigPosition.z;
+      return vec;
+    },
+    getWorldQuaternion(q) { return q.set(0, 0, 0, 1); }
+  };
+  const camera = {
+    parent,
+    position: makeFakeVec3(0, 0, 0),
+    rotation: new FakeEuler(0, 0, 0, 'XYZ'),
+    quaternion: makeFakeQuaternion()
+  };
+  return { camera, parent };
+}
+
+test('FreeCam applyPose converts world coordinates into the engine rig space', () => {
+  const sandbox = {
+    state: {
+      enabled: true,
+      freePosition: { x: 1000, y: 71.6, z: 2000 },
+      pitch: 0.1,
+      yaw: 2.5
+    },
+    copyXYZ(target, source) { target.x = source.x; target.y = source.y; target.z = source.z; return true; },
+    copyQuaternion(target, source) { target.x = source.x; target.y = source.y; target.z = source.z; target.w = source.w; return true; }
+  };
+  const applyPose = expose(namedFunction(freecamSource, 'applyPose'), sandbox);
+
+  // El rig del motor esta EN el jugador (1000, 70, 2000): el bug aplicaba las
+  // coordenadas de mundo como locales y la camera acababa al doble de distancia.
+  const rig = makeFakeFreecamCamera(makeFakeVec3(1000, 70, 2000));
+  applyPose(rig.camera);
+
+  const local = rig.camera.position;
+  assert.ok(Math.abs(local.x) < 1e-9, 'local x must be ~0, got ' + local.x);
+  assert.ok(Math.abs(local.y - 1.6) < 1e-9, 'local y must be ~1.6, got ' + local.y);
+  assert.ok(Math.abs(local.z) < 1e-9, 'local z must be ~0, got ' + local.z);
+  assert.equal(rig.camera.rotation.order, 'YXZ');
+  assert.equal(rig.camera.rotation.__synced, true, 'rotation synced from world quaternion');
+  assert.ok(Number.isFinite(rig.camera.quaternion.w), 'quaternion carries a valid rotation');
+
+  // Camera sin padre (despegada a la escena): coords directas
+  const free = makeFakeFreecamCamera(makeFakeVec3(0, 0, 0));
+  free.camera.parent = null;
+  applyPose(free.camera);
+  assert.equal(free.camera.position.x, 1000);
+  assert.equal(free.camera.position.y, 71.6);
+  assert.equal(free.camera.position.z, 2000);
+});
+
+
 test('loop wiring: peer prune, stale proxy hide and move cadence are installed', () => {
   assert.match(source, /pruneStaleHostPeers\(Date\.now\(\)\)/);
   assert.match(source, /pruneStaleRemoteProxies\(now\);/);
