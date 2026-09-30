@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 24479b48f748fa805f80e9abcbaa1765d13f9034
- * builtAt : 2026-09-30T02:13:26.413Z
+ * commit  : c1a11eae4555a0f90fe122b38622f81913139ed8
+ * builtAt : 2026-09-30T02:23:30.300Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"24479b48f748fa805f80e9abcbaa1765d13f9034","builtAt":"2026-09-30T02:13:26.418Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"c1a11eae4555a0f90fe122b38622f81913139ed8","builtAt":"2026-09-30T02:23:30.315Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -114348,9 +114348,10 @@ function normalize(entry) {
   }
 
   // ---------- interactive first steps walkthrough ----------
-  // a little guided tour: spotlight on the real controls, and you actually have to
-  // click them. the steps change with your pc's horsepower because a potato and a
-  // 4090 should not get the same advice. :D
+  // a guided tour with the spotlight glued to the real controls: you cannot advance
+  // until you actually use the thing. the language follows the panel config, and the
+  // steps adapt to your pc's horsepower because a potato and a 4090 deserve different
+  // advice. :D
   function detectPcTier() {
     const cores = navigator.hardwareConcurrency || 4;
     const mem = navigator.deviceMemory || 4;
@@ -114370,16 +114371,18 @@ function normalize(entry) {
   }
 
   function tutorialCopy(info, toggle) {
-    const es = (navigator.language || 'en').toLowerCase().startsWith('es');
+    // language comes from the panel config first, browser locale as fallback
+    const lang = String(settings.language || navigator.language || 'en').toLowerCase();
+    const es = lang.startsWith('es');
     const specs = `${info.cores} cores · ${info.mem}gb${info.gpu ? ' · ' + info.gpu.split('(')[0].trim().slice(0, 42) : ''}`;
     if (es) return {
       tierLabel: { potato: 'patata 🥔', medium: 'equilibrada (｡•̀ᴗ-)✧', beast: 'bestia ᕙ(⇀‸↼‶)ᕗ' }[info.tier],
       welcomeTitle: `hola! tu pc es una ${info.tier === 'beast' ? 'bestia' : info.tier === 'potato' ? 'patata con cariño' : 'máquina decente'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
       welcomeBody: `detectamos: ${specs}<br>el tutorial se adapta a tu hardware, porque no es lo mismo una tostadora que un cohete (¬‿¬)`,
       searchTitle: 'el buscador, tu mejor amigo',
-      searchBody: 'haz clic en la barra de búsqueda de arriba. escribe "keystrokes", "duck", lo que quieras… encuentra cualquier módulo sin scrollear como desesperado (๑•̀ㅂ•́)و',
+      searchBody: 'haz clic en la barra de búsqueda iluminada. escribe "keystrokes", "duck", lo que quieras… encuentra cualquier módulo sin scrollear como desesperado (๑•̀ㅂ•́)و',
       catTitle: 'filtros',
-      catBody: 'haz clic en una categoría (todas / nuevo / hud / pvp) para filtrar los módulos. sí, tienes que hacer clic, esto es interactivo (ง\'̀-\'́)ง',
+      catBody: 'haz clic en la categoría "todas" para filtrar los módulos. sí, tienes que hacer clic, esto es interactivo (ง\'̀-\'́)ง',
       toggleTitle: `activa ${toggle.name}`,
       toggleBody: info.tier === 'potato'
         ? `haz clic en ${toggle.name} para activarlo. un módulo gratis para tu patata: cero costo, pura magia (￣ー￣)`
@@ -114405,9 +114408,9 @@ function normalize(entry) {
       welcomeTitle: `hi! your pc is a ${info.tier === 'beast' ? 'beast' : info.tier === 'potato' ? 'potato, but a loved one' : 'decent machine'} (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`,
       welcomeBody: `detected: ${specs}<br>the tutorial adapts to your hardware, because a toaster and a rocket are not the same thing (¬‿¬)`,
       searchTitle: 'the search bar, your best friend',
-      searchBody: 'click the search bar up top. type "keystrokes", "duck", anything… find any module without scrolling like a maniac (๑•ㅂ•́)و',
+      searchBody: 'click the highlighted search bar. type "keystrokes", "duck", anything… find any module without scrolling like a maniac (๑•ㅂ•́)و',
       catTitle: 'filters',
-      catBody: 'click a category (all / new / hud / pvp) to filter modules. yes, you have to actually click, this is interactive (ง\'̀-\'́)ง',
+      catBody: 'click the "all" category to filter modules. yes, you have to actually click, this is interactive (ง\'̀-\'́)ง',
       toggleTitle: `enable ${toggle.name}`,
       toggleBody: info.tier === 'potato'
         ? `click ${toggle.name} to enable it. a free module for your potato: zero cost, pure magic (￣ー￣)`
@@ -114454,35 +114457,44 @@ function normalize(entry) {
       { kind: 'info', title: L.finalTitle, body: `${L.finalBody}<br><span style="opacity:.75">${L.footer}</span>` }
     ];
 
-    const root = document.createElement('div');
-    root.id = 'mf-tour';
-    root.style.cssText = 'position:fixed;inset:0;z-index:2147483646;pointer-events:none';
-    const spot = document.createElement('div');
-    spot.style.cssText = 'position:fixed;border-radius:12px;box-shadow:0 0 0 9999px rgba(8,5,16,.78),0 0 0 3px #b79bff,0 0 26px rgba(183,155,255,.5);transition:all .25s cubic-bezier(.2,.9,.3,1);pointer-events:none';
+    // the spotlight is a class ON the target element (glowing ring + a 9999px dimming
+    // shadow): it can never drift out of place because it literally is the element,
+    // through scrolls, re-renders and whatever zoom the universe throws at us. :v
+    if (!document.getElementById('mf-tour-style')) {
+      const styleTag = document.createElement('style');
+      styleTag.id = 'mf-tour-style';
+      styleTag.textContent = '.mf-tour-spot{box-shadow:0 0 0 3px #b79bff,0 0 0 9999px rgba(8,5,16,.78),0 0 26px rgba(183,155,255,.55)!important;border-radius:12px!important;position:relative!important;z-index:2147483645!important;scroll-margin:80px}';
+      document.head.appendChild(styleTag);
+    }
+
     const card = document.createElement('div');
-    card.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);max-width:560px;width:calc(100% - 40px);background:#150f24;border:1px solid #6045a0;border-radius:14px;padding:18px 20px;box-shadow:0 18px 60px rgba(0,0,0,.6);pointer-events:auto';
-    root.appendChild(spot);
-    root.appendChild(card);
-    (document.body || document.documentElement).appendChild(root);
+    card.id = 'mf-tour';
+    card.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);max-width:560px;width:calc(100% - 40px);background:#150f24;border:1px solid #6045a0;border-radius:14px;padding:18px 20px;box-shadow:0 18px 60px rgba(0,0,0,.6);pointer-events:auto;z-index:2147483646';
+    (document.body || document.documentElement).appendChild(card);
 
     let idx = 0;
     let dead = false;
     let pollTimer = 0;
     let trackTimer = 0;
-    let target = null;
+    let spotted = null;
     let celebrated = false;
 
     const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+    function clearSpot() {
+      if (!spotted) return;
+      try { spotted.classList.remove('mf-tour-spot'); } catch (_) {}
+      spotted = null;
+    }
     function cleanup() {
       if (dead) return;
       dead = true;
       clearInterval(pollTimer);
       clearInterval(trackTimer);
-      window.removeEventListener('resize', place);
       document.removeEventListener('keydown', onKey, true);
-      document.removeEventListener('click', onClick, true);
-      try { root.remove(); } catch (_) {}
+      clearSpot();
+      try { card.remove(); } catch (_) {}
+      try { document.getElementById('mf-tour-style')?.remove(); } catch (_) {}
       try { delete globalThis.__MF_FIRST_STEPS__; } catch (_) { globalThis.__MF_FIRST_STEPS__ = null; }
     }
     const finish = () => {
@@ -114492,26 +114504,16 @@ function normalize(entry) {
     function onKey(e) {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(); }
     }
-    function onClick() {
-      // retarget after clicks (panel re-renders pages)
-      setTimeout(retarget, 60);
-    }
-    function place() {
-      if (!target) { spot.style.opacity = '0'; return; }
-      try {
-        const r = target.getBoundingClientRect();
-        spot.style.opacity = '1';
-        spot.style.left = Math.max(4, r.left - 6) + 'px';
-        spot.style.top = Math.max(4, r.top - 6) + 'px';
-        spot.style.width = Math.min(window.innerWidth - 8, r.width + 12) + 'px';
-        spot.style.height = Math.min(window.innerHeight - 8, r.height + 12) + 'px';
-      } catch (_) { spot.style.opacity = '0'; }
-    }
     function retarget() {
       const step = steps[idx];
       if (!step || dead) return;
-      target = (step.sel && document.querySelector(step.sel)) || (step.key && panel?.querySelector(`.mf-toggle[data-key="${step.key}"]`)) || null;
-      place();
+      const el = (step.sel && document.querySelector(step.sel)) || (step.key && panel?.querySelector(`.mf-toggle[data-key="${step.key}"]`)) || null;
+      if (el === spotted) return;
+      clearSpot();
+      if (!el) return;
+      try { el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' }); } catch (_) {}
+      el.classList.add('mf-tour-spot');
+      spotted = el;
     }
     function celebrate() {
       if (celebrated) return;
@@ -114527,9 +114529,8 @@ function normalize(entry) {
       if (!step) { finish(); return; }
       const counter = `${L.step} ${idx + 1}/${steps.length}`;
       const actions = step.kind === 'info'
-        ? `<button id="mf-tour-next" style="margin-top:12px;padding:10px 18px;border:0;border-radius:9px;background:linear-gradient(135deg,#6045a0,#7c5cd6);color:#fff;font:700 13.5px system-ui,sans-serif;cursor:pointer">${esc(L.next)}</button>`
+        ? `<button id="mf-tour-next" style="margin-top:12px;padding:10px 18px;border:0;border-radius:9px;background:linear-gradient(135deg,#6045a0,#7c5cd6);color:#fff;font:700 13.5px system-ui,sans-serif;cursor:pointer">${esc(idx === steps.length - 1 ? L.done : L.next)}</button>`
         : `<div style="margin-top:12px;font:600 12.5px system-ui,sans-serif;color:#e8b46a;animation:mfTourPulse 1.2s ease-in-out infinite">${esc(L.doIt)}</div>`;
-      const mainBtn = step.kind === 'info' && idx === steps.length - 1 ? L.done : null;
       card.innerHTML = `
         <style>@keyframes mfTourPulse{0%,100%{opacity:.55}50%{opacity:1}}</style>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
@@ -114538,8 +114539,8 @@ function normalize(entry) {
         </div>
         <div style="margin-top:6px;font:750 17px/1.35 system-ui,sans-serif;color:#b79bff">${esc(step.title)}</div>
         <div style="margin-top:6px;font:400 13.5px/1.55 system-ui,sans-serif;color:#cfc6ea">${step.body}</div>
-        ${mainBtn ? `<button id="mf-tour-next" style="margin-top:12px;padding:10px 18px;border:0;border-radius:9px;background:linear-gradient(135deg,#6045a0,#7c5cd6);color:#fff;font:700 13.5px system-ui,sans-serif;cursor:pointer">${esc(mainBtn)}</button>` : actions}
-        ${(step.kind !== 'info' && step.key) ? `<div style="margin-top:8px;font:400 12px system-ui,sans-serif;color:#8d80b8">tip: usa el buscador de arriba si no ves el módulo (¬‿¬)</div>` : ''}`;
+        ${actions}
+        ${(step.kind !== 'info' && step.key) ? `<div style="margin-top:8px;font:400 12px system-ui,sans-serif;color:#8d80b8">tip: usa el buscador si no lo ves (¬‿¬)</div>` : ''}`;
       card.querySelector('#mf-tour-skip')?.addEventListener('click', finish);
       card.querySelector('#mf-tour-next')?.addEventListener('click', () => { idx++; render(); });
       celebrated = false;
@@ -114566,9 +114567,7 @@ function normalize(entry) {
       }
     }
 
-    window.addEventListener('resize', place);
     document.addEventListener('keydown', onKey, true);
-    document.addEventListener('click', onClick, true);
     trackTimer = setInterval(retarget, 400);
     globalThis.__MF_FIRST_STEPS__ = { destroy: cleanup };
     render();
