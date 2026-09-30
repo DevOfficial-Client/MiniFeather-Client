@@ -80,6 +80,7 @@
     "src/Cosmetics/CustomModels.js",
     "src/Render/DuckMobs.js",
     "src/Render/CrittersMobs.js",
+    "src/Render/MF_CritterSkins.js",
     "src/Render/AllayPets.js",
     "src/AI/VerityAI.js",
     "src/Studio/MF_Peer.js",

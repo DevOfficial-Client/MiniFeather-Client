@@ -362,6 +362,13 @@
     "spear/iron_spear.png",
     "spear/stone_spear.png",
     "spear/wooden_spear.png",
+    "spear/copper_spear_in_hand.png",
+    "spear/diamond_spear_in_hand.png",
+    "spear/golden_spear_in_hand.png",
+    "spear/infernium_spear_in_hand.png",
+    "spear/iron_spear_in_hand.png",
+    "spear/stone_spear_in_hand.png",
+    "spear/wooden_spear_in_hand.png",
   ];
 
   // same list as the background's EXTRA_TEXTURES dnr rules (pri 1): the remote pack

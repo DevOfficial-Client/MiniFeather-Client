@@ -89,6 +89,7 @@
     "dynamicCrosshairSize": 28
   },
   "shaders": {
+    "critterSkins": false,
     "deferredPipeline": false,
     "deferredExposure": 1.0,
     "deferredSaturation": 1.0,

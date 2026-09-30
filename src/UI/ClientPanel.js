@@ -763,6 +763,7 @@
     rhythmParkour: false,
     localGamesWorldName: '',
     guiPatch: false,
+    critterSkins: false,
     deferredPipeline: false,
     deferredExposure: 1.0,
     deferredSaturation: 1.0,
@@ -3573,6 +3574,7 @@
       { page: 'render', key: 'shineAmbience', title: t('shineAmbience'), desc: t('shineAmbienceDesc'), tags: ['new'] },
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc'), tags: [] },
       { page: 'render', key: 'duckMobs', title: t('duckMobs'), desc: t('duckMobsDesc'), tags: ['new'] },
+      { page: 'render', key: 'critterSkins', title: 'critter variants (cats/wolves)', desc: 'wolf variant textures (persistent per entity) + pack cat models', tags: ['new'] },
       { page: 'render', key: 'crittersMobs', title: t('crittersMobs'), desc: t('crittersMobsDesc'), tags: ['new'] },
       { page: 'render', key: 'allayPets', title: t('allayPets'), desc: t('allayPetsDesc'), tags: ['new'] },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc'), tags: [] },
@@ -4651,6 +4653,12 @@
       disable() { sendGuiPatchConfig(false); },
       refresh() { sendGuiPatchConfig(MODULES.get('guiPatch')?.enabled === true); },
       destroy() { sendGuiPatchConfig(false); }
+    }));
+  }
+
+  function sendCritterSkinsConfig(enabled = settings.critterSkins) {
+    document.dispatchEvent(new CustomEvent('minifeather:critterskins-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
     }));
   }
 
@@ -7410,6 +7418,11 @@
               'rebrand',
               t('rebrand'),
               t('rebrandDesc')
+            )}
+            ${renderToggle(
+              'critterSkins',
+              'critter variants (cats/wolves)',
+              'lobos con textura random persistente por entidad + gatos con los modelos y texturas custom del pack'
             )}
             ${renderToggle(
               'classicTitle',
@@ -12944,6 +12957,7 @@
     setModuleEnabled('noWeather', settings.noWeather);
     setModuleEnabled('fullBright', settings.fullBright);
     sendDeferredConfig();
+    sendCritterSkinsConfig();
     setModuleEnabled('autoRespawn', settings.autoRespawn);
     setModuleEnabled('autoReconnect', settings.autoReconnect);
     setModuleEnabled('idlePlayerBot', settings.idlePlayerBot);

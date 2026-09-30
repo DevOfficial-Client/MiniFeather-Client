@@ -568,7 +568,14 @@ const SKINS = [
   "spear/infernium_spear.png",
   "spear/iron_spear.png",
   "spear/stone_spear.png",
-  "spear/wooden_spear.png"
+  "spear/wooden_spear.png",
+  "spear/copper_spear_in_hand.png",
+  "spear/diamond_spear_in_hand.png",
+  "spear/golden_spear_in_hand.png",
+  "spear/infernium_spear_in_hand.png",
+  "spear/iron_spear_in_hand.png",
+  "spear/stone_spear_in_hand.png",
+  "spear/wooden_spear_in_hand.png"
       ];
 
       const MENU_UI_IMAGES = [
