@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : e1e949e7141545d3d5f2755a67a94b0927dee16b
- * builtAt : 2026-09-30T18:46:04.202Z
+ * commit  : 2fe4776e97536b909c45ec96b7d58371f643b462
+ * builtAt : 2026-09-30T18:50:04.418Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"e1e949e7141545d3d5f2755a67a94b0927dee16b","builtAt":"2026-09-30T18:46:04.209Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"2fe4776e97536b909c45ec96b7d58371f643b462","builtAt":"2026-09-30T18:50:04.435Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -119369,6 +119369,26 @@ function normalize(entry) {
     return { tier, cores, mem, gpu };
   }
 
+  // "am i inside a world right now?" — the waypoints api is the canonical source
+  // (it already digs the react game object for /waypoint); the react scan is the
+  // fallback for when the module hasn't published its global yet. :D
+  function tutorialInGame() {
+    try {
+      const pos = globalThis.__MINIFEATHER_WAYPOINTS__?.getCurrentPosition?.();
+      if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.z)) return true;
+    } catch (_) {}
+    try {
+      const react = document.querySelector('#react');
+      if (react) {
+        for (const root of Object.values(react)) {
+          const game = root?.updateQueue?.baseState?.element?.props?.game;
+          if (game?.chat && typeof game.chat.submit === 'function' && game?.player?.pos) return true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
   // one copy generator per supported language. every string stays lowercase (house
   // rule since day one) and keeps the kaomoji flavor; the generators only
   // interpolate hardware specs, tier jokes and the module picked for the lesson.
@@ -119401,7 +119421,9 @@ function normalize(entry) {
       cmdsTitle: 'más hechizos para tu grimorio ✧',
       cmdsBody: '<b>/toggle</b> módulo · <b>/bind</b> módulo tecla · <b>/waypoint add</b> nombre · <b>/copycoord</b> · <b>/g</b> mensaje (chat global) · <b>/emote</b> nombre · <b>/critter spawn random</b> · <b>/verity ask</b> texto (ia con voz) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · y <b>/help</b> para la lista completa (๑•̀ㅂ•́)و',
       expTabTitle: '🧪 experimental: entra bajo tu propio riesgo',
-      expTabBody: 'toca la pestaña 🧪 para una pasada rápida. es experimental por ahora: auroras, hierba 3d, hojitas… funciona bonito, pero si algo explota… eh… ¿eso ya estaba así? (･_･;)',
+      expTabBody: 'abre el menú otra vez con right shift y toca la pestaña 🧪 para una pasada rápida. es experimental por ahora: auroras, hierba 3d, hojitas… funciona bonito, pero si algo explota… eh… ¿eso ya estaba así? (･_･;)',
+      ingameTitle: 'los comandos viven en el chat del juego',
+      ingameBody: 'paso obligatorio (⊙_⊙): cierra este menú con right shift y entra a un mundo, el que sea — singleplayer, server, el que te pinte. los comandos se escriben en el chat dentro del juego, así que te esperamos ahí (¬‿¬)/',
       finalTitle: 'ya eres minifeather oficial (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
       finalBody: 'right shift abre/cierra este menú · <b>/help</b> lista todo · el client se auto-actualiza solo · el botón ? repite este tour cuando quieras. ahora ve a lucir esas animaciones (｡•̀ᴗ-)✧',
       footer: 'right shift abre/cierra este menú · /bind panel <tecla> lo cambia · /help lista todo · el client se auto-actualiza solo',
@@ -119440,7 +119462,9 @@ function normalize(entry) {
       cmdsTitle: 'more spells for your grimoire ✧',
       cmdsBody: '<b>/toggle</b> module · <b>/bind</b> module key · <b>/waypoint add</b> name · <b>/copycoord</b> · <b>/g</b> message (global chat) · <b>/emote</b> name · <b>/critter spawn random</b> · <b>/verity ask</b> text (ai with voice) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · and <b>/help</b> for the full list (๑•̀ㅂ•́)و',
       expTabTitle: '🧪 experimental: enter at your own risk',
-      expTabBody: 'click the 🧪 tab for a quick look. it\'s experimental for now: auroras, 3d grass, fallen leaves… it works nicely, but if something explodes… eh… was it always like that? (･_･;)',
+      expTabBody: 'open the menu again with right shift and click the 🧪 tab for a quick look. it\'s experimental for now: auroras, 3d grass, fallen leaves… it works nicely, but if something explodes… eh… was it always like that? (･_･;)',
+      ingameTitle: 'commands live in the in-game chat',
+      ingameBody: 'obligatory step (⊙_⊙): close this menu with right shift and join any world — singleplayer, a server, whatever you feel like. commands are typed in the in-game chat, so we\'ll be waiting for you there (¬‿¬)/',
       finalTitle: 'officially minifeather now (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
       finalBody: 'right shift opens/closes this menu · <b>/help</b> lists everything · the client updates itself · the ? button replays this tour anytime. now go show off those animations (｡•̀ᴗ-)✧',
       footer: 'right shift opens/closes this menu · /bind panel <key> changes it · /help lists everything · the client updates itself',
@@ -119479,7 +119503,9 @@ function normalize(entry) {
       cmdsTitle: 'mais feitiços pro seu grimório ✧',
       cmdsBody: '<b>/toggle</b> módulo · <b>/bind</b> módulo tecla · <b>/waypoint add</b> nome · <b>/copycoord</b> · <b>/g</b> mensagem (chat global) · <b>/emote</b> nome · <b>/critter spawn random</b> · <b>/verity ask</b> texto (ia com voz) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · e <b>/help</b> pra lista completa (๑•̀ㅂ•́)و',
       expTabTitle: '🧪 experimental: entre por sua conta e risco',
-      expTabBody: 'clique na aba 🧪 pra uma olhadinha. é experimental por enquanto: auroras, grama 3d, folhinhas… fica bonito, mas se algo explodir… é… sempre foi assim? (･_･;)',
+      expTabBody: 'abra o menu de novo com right shift e clique na aba 🧪 pra uma olhadinha. é experimental por enquanto: auroras, grama 3d, folhinhas… fica bonito, mas se algo explodir… é… sempre foi assim? (･_･;)',
+      ingameTitle: 'os comandos vivem no chat do jogo',
+      ingameBody: 'passo obrigatório (⊙_⊙): feche este menu com right shift e entre em qualquer mundo — singleplayer, server, o que preferir. os comandos são digitados no chat dentro do jogo, então te esperamos lá (¬‿¬)/',
       finalTitle: 'minifeather oficial agora (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
       finalBody: 'right shift abre/fecha este menu · <b>/help</b> lista tudo · o client se atualiza sozinho · o botão ? repete o tour quando quiser. agora vá exibir essas animações (｡•̀ᴗ-)✧',
       footer: 'right shift abre/fecha este menu · /bind panel <tecla> muda o atalho · /help lista tudo · o client se atualiza sozinho',
@@ -119518,7 +119544,9 @@ function normalize(entry) {
       cmdsTitle: 'encore des sorts pour ton grimoire ✧',
       cmdsBody: '<b>/toggle</b> module · <b>/bind</b> module touche · <b>/waypoint add</b> nom · <b>/copycoord</b> · <b>/g</b> message (chat global) · <b>/emote</b> nom · <b>/critter spawn random</b> · <b>/verity ask</b> texte (ia avec voix) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · et <b>/help</b> pour la liste complète (๑•̀ㅂ•́)و',
       expTabTitle: '🧪 experimental : entre à tes risques et périls',
-      expTabBody: 'clique sur l\'onglet 🧪 pour un coup d\'œil rapide. c\'est expérimental pour l\'instant : aurores, herbe 3d, feuilles… c\'est joli, mais si quelque chose explose… euh… c\'était comme ça avant ? (･_･;)',
+      expTabBody: 'rouvre le menu avec right shift et clique sur l\'onglet 🧪 pour un coup d\'œil rapide. c\'est expérimental pour l\'instant : aurores, herbe 3d, feuilles… c\'est joli, mais si quelque chose explose… euh… c\'était comme ça avant ? (･_･;)',
+      ingameTitle: 'les commandes vivent dans le chat du jeu',
+      ingameBody: 'étape obligatoire (⊙_⊙) : ferme ce menu avec right shift et entre dans un monde, n\'importe lequel — solo, serveur, comme tu veux. les commandes se tapent dans le chat en jeu, alors on t\'attend là-bas (¬‿¬)/',
       finalTitle: 'officiellement minifeather (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
       finalBody: 'right shift ouvre/ferme ce menu · <b>/help</b> liste tout · le client se met à jour tout seul · ce bouton ? relance la visite quand tu veux. maintenant va briller avec ces animations (｡•̀ᴗ-)✧',
       footer: 'right shift ouvre/ferme ce menu · /bind panel <touche> le change · /help liste tout · le client se met à jour tout seul',
@@ -119557,7 +119585,9 @@ function normalize(entry) {
       cmdsTitle: 'mehr zauber für dein grimoire ✧',
       cmdsBody: '<b>/toggle</b> modul · <b>/bind</b> modul taste · <b>/waypoint add</b> name · <b>/copycoord</b> · <b>/g</b> nachricht (globaler chat) · <b>/emote</b> name · <b>/critter spawn random</b> · <b>/verity ask</b> text (ki mit stimme) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · und <b>/help</b> für die komplette liste (๑•̀ㅂ•́)و',
       expTabTitle: '🧪 experimental: betreten auf eigene gefahr',
-      expTabBody: 'klick für einen kurzen blick auf den 🧪 tab. es ist vorerst experimentell: auroras, 3d-gras, laub… sieht gut aus, aber wenn etwas explodiert… äh… war das schon immer so? (･_･;)',
+      expTabBody: 'öffne das menü wieder mit right shift und klick für einen kurzen blick auf den 🧪 tab. es ist vorerst experimentell: auroras, 3d-gras, laub… sieht gut aus, aber wenn etwas explodiert… äh… war das schon immer so? (･_･;)',
+      ingameTitle: 'befehle leben im spiel-chat',
+      ingameBody: 'obligatorischer schritt (⊙_⊙): schließ dieses menü mit right shift und betrete irgendeine welt — singleplayer, server, ganz egal. befehle tippst du im spiel-chat ein, also warten wir dort auf dich (¬‿¬)/',
       finalTitle: 'jetzt offiziell minifeather (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
       finalBody: 'right shift öffnet/schließt dieses menü · <b>/help</b> listet alles auf · der client aktualisiert sich von selbst · die ?-taste wiederholt die tour, wann du willst. jetzt zeig diese animationen her (｡•̀ᴗ-)✧',
       footer: 'right shift öffnet/schließt dieses menü · /bind panel <taste> ändert es · /help listet alles auf · der client aktualisiert sich von selbst',
@@ -119596,7 +119626,9 @@ function normalize(entry) {
       cmdsTitle: 'altri incantesimi per il tuo grimorio ✧',
       cmdsBody: '<b>/toggle</b> modulo · <b>/bind</b> modulo tasto · <b>/waypoint add</b> nome · <b>/copycoord</b> · <b>/g</b> messaggio (chat globale) · <b>/emote</b> nome · <b>/critter spawn random</b> · <b>/verity ask</b> testo (ia con voce) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · e <b>/help</b> per la lista completa (๑•̀ㅂ•́)و',
       expTabTitle: '🧪 experimental: entra a tuo rischio',
-      expTabBody: 'clicca la scheda 🧪 per un\'occhiata veloce. per ora è sperimentale: aurore, erba 3d, foglioline… è carino, ma se qualcosa esplode… boh… era così prima? (･_･;)',
+      expTabBody: 'riapri il menù con right shift e clicca la scheda 🧪 per un\'occhiata veloce. per ora è sperimentale: aurore, erba 3d, foglioline… è carino, ma se qualcosa esplode… boh… era così prima? (･_･;)',
+      ingameTitle: 'i comandi vivono nella chat del gioco',
+      ingameBody: 'passaggio obbligatorio (⊙_⊙): chiudi questo menù con right shift e entra in un mondo, qualsiasi — singleplayer, server, come preferisci. i comandi si scrivono in chat dentro al gioco, quindi ti aspettiamo lì (¬‿¬)/',
       finalTitle: 'ufficialmente minifeather (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
       finalBody: 'right shift apre/chiude questo menù · <b>/help</b> elenca tutto · il client si aggiorna da solo · questo pulsante ? ripete il tour quando vuoi. ora vai a sfoggiare quelle animazioni (｡•̀ᴗ-)✧',
       footer: 'right shift apre/chiude questo menù · /bind panel <tasto> lo cambia · /help elenca tutto · il client si aggiorna da solo',
@@ -119635,7 +119667,9 @@ function normalize(entry) {
       cmdsTitle: 'ещё заклинаний в твой гримуар ✧',
       cmdsBody: '<b>/toggle</b> модуль · <b>/bind</b> модуль клавиша · <b>/waypoint add</b> имя · <b>/copycoord</b> · <b>/g</b> сообщение (глобальный чат) · <b>/emote</b> имя · <b>/critter spawn random</b> · <b>/verity ask</b> текст (ии с голосом) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · и <b>/help</b> для полного списка (๑•̀ㅂ•́)و',
       expTabTitle: '🧪 experimental: вход на свой страх и риск',
-      expTabBody: 'кликни на вкладку 🧪 для быстрого взгляда. пока это экспериментально: полярные сияния, 3d-трава, листья… красиво, но если что-то взорвётся… эм… так и было? (･_･;)',
+      expTabBody: 'открой меню снова через right shift и кликни на вкладку 🧪 для быстрого взгляда. пока это экспериментально: полярные сияния, 3d-трава, листья… красиво, но если что-то взорвётся… эм… так и было? (･_･;)',
+      ingameTitle: 'команды живут в игровом чате',
+      ingameBody: 'обязательный шаг (⊙_⊙): закрой это меню через right shift и зайди в любой мир — одиночный, сервер, без разницы. команды пишутся в чате внутри игры, так что ждём тебя там (¬‿¬)/',
       finalTitle: 'теперь ты официальный minifeather (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
       finalBody: 'right shift открывает/закрывает это меню · <b>/help</b> перечисляет всё · клиент обновляется сам · кнопка ? повторит тур когда захочешь. а теперь иди блистай этими анимациями (｡•̀ᴗ-)✧',
       footer: 'right shift открывает/закрывает это меню · /bind panel <клавиша> меняет её · /help перечисляет всё · клиент обновляется сам',
@@ -119674,7 +119708,9 @@ function normalize(entry) {
       cmdsTitle: '魔導書に呪文を追加 ✧',
       cmdsBody: '<b>/toggle</b> モジュール · <b>/bind</b> モジュール キー · <b>/waypoint add</b> 名前 · <b>/copycoord</b> · <b>/g</b> メッセージ（グローバルチャット）· <b>/emote</b> 名前 · <b>/critter spawn random</b> · <b>/verity ask</b> テキスト（音声つきai）· <b>/baritone goto</b> x y z · <b>/reconnect on</b> · 全リストは <b>/help</b> (๑•̀ㅂ•́)و',
       expTabTitle: '🧪 experimental: 自己責任でどうぞ',
-      expTabBody: '🧪タブをクリックして軽くチェック。今は実験的：オーロラ、3d草、落ち葉…きれいだけど、もし何か爆発しても…えっと…前からこうだった？ (･_･;)',
+      expTabBody: 'right shiftでメニューをもう一度開いて、🧪タブを軽くチェック。今は実験的：オーロラ、3d草、落ち葉…きれいだけど、もし何か爆発しても…えっと…前からこうだった？ (･_･;)',
+      ingameTitle: 'コマンドはゲーム内チャットのもの',
+      ingameBody: '必須ステップ (⊙_⊙)：right shiftでこのメニューを閉じて、どれでもいいのでワールドに入ってね。シングルでもサーバーでも、お好きなものを。コマンドはゲーム内チャットで打つから、そこで待ってるよ (¬‿¬)/',
       finalTitle: 'もう公式のminifeather使い (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
       finalBody: 'right shift でこのメニュー開閉 · <b>/help</b> で全コマンド · クライアントは自動更新 · ？ボタンでツアー再生可能。さあ、そのアニメーションで輝いてきて (｡•̀ᴗ-)✧',
       footer: 'right shift でこのメニュー開閉 · /bind panel <キー> で変更 · /help で全リスト · クライアントは自動更新',
@@ -119713,7 +119749,9 @@ function normalize(entry) {
       cmdsTitle: '给魔法书再添几条咒语 ✧',
       cmdsBody: '<b>/toggle</b> 模块 · <b>/bind</b> 模块 按键 · <b>/waypoint add</b> 名字 · <b>/copycoord</b> · <b>/g</b> 消息（全局聊天）· <b>/emote</b> 名字 · <b>/critter spawn random</b> · <b>/verity ask</b> 文本（带语音的ai）· <b>/baritone goto</b> x y z · <b>/reconnect on</b> · 完整列表看 <b>/help</b> (๑•̀ㅂ•́)و',
       expTabTitle: '🧪 experimental：进去了后果自负哦',
-      expTabBody: '点 🧪 标签页快速看一眼。目前还是实验性的：极光、3d草、落叶…挺好看，但如果什么东西炸了…呃…它原来就这样吗？ (･_･;)',
+      expTabBody: '用 right shift 重新打开菜单，点 🧪 标签页快速看一眼。目前还是实验性的：极光、3d草、落叶…挺好看，但如果什么东西炸了…呃…它原来就这样吗？ (･_･;)',
+      ingameTitle: '命令住在游戏内聊天里',
+      ingameBody: '必做步骤 (⊙_⊙)：用 right shift 关掉这个菜单，然后进一个世界，随便哪个 — 单人、服务器都行。命令是在游戏内聊天里输入的，我们在那儿等你 (¬‿¬)/',
       finalTitle: '你现在是官方认证 minifeather 用户了 (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
       finalBody: 'right shift 开关这个菜单 · <b>/help</b> 列出全部 · 客户端自动更新 · ？按钮随时重放教程。现在去炫耀你的动画吧 (｡•̀ᴗ-)✧',
       footer: 'right shift 开关这个菜单 · /bind panel <按键> 改键 · /help 列出全部 · 客户端自动更新',
@@ -119752,7 +119790,9 @@ function normalize(entry) {
       cmdsTitle: '마도서에 주문 추가 ✧',
       cmdsBody: '<b>/toggle</b> 모듈 · <b>/bind</b> 모듈 키 · <b>/waypoint add</b> 이름 · <b>/copycoord</b> · <b>/g</b> 메시지(전역 채팅) · <b>/emote</b> 이름 · <b>/critter spawn random</b> · <b>/verity ask</b> 텍스트(목소리 있는 ai) · <b>/baritone goto</b> x y z · <b>/reconnect on</b> · 전체 목록은 <b>/help</b> (๑•̀ㅂ•́)و',
       expTabTitle: '🧪 experimental: 들어간 건 네 책임',
-      expTabBody: '🧪 탭을 클릭해서 가볍게 둘러봐. 지금은 실험적이야: 오로라, 3d 잔디, 낙엽… 예쁘긴 한데, 뭔가 터져도… 어… 원래도 그랬나? (･_･;)',
+      expTabBody: 'right shift로 메뉴를 다시 열고 🧪 탭을 클릭해서 가볍게 둘러봐. 지금은 실험적이야: 오로라, 3d 잔디, 낙엽… 예쁘긴 한데, 뭔가 터져도… 어… 원래도 그랬나? (･_･;)',
+      ingameTitle: '명령어는 게임 내 채팅에 있어',
+      ingameBody: '필수 단계 (⊙_⊙)：right shift로 이 메뉴를 닫고 아무 월드나 들어가자 — 싱글이든 서버든 상관없어. 명령어는 게임 내 채팅에 입력하는 거라서 거기서 기다릴게 (¬‿¬)/',
       finalTitle: '이제 공식 minifeather 유저 (ﾉ´ヮ`)ﾉ*:･ﾟ✧',
       finalBody: 'right shift로 이 메뉴 열기/닫기 · <b>/help</b> 전체 목록 · 클라이언트는 자동 업데이트 · ？버튼으로 투어 언제든 재생. 이제 그 애니메이션으로 멋내러 가자 (｡•̀ᴗ-)✧',
       footer: 'right shift로 이 메뉴 열기/닫기 · /bind panel <키>로 변경 · /help 전체 목록 · 클라이언트는 자동 업데이트',
@@ -119816,6 +119856,10 @@ function normalize(entry) {
       { kind: 'click', sel: '[data-page="shaders"]', title: L.shadersTabTitle, body: L.shadersTabBody },
       { kind: 'click', sel: '[data-page="render"]', title: L.animsTabTitle, body: L.animsTabBody },
       { kind: 'toggle', key: animKey, title: L.animsTitle, body: L.animsBody },
+      // the command grimoire is typed in the in-game chat: a player sitting in the
+      // main menu gets bounced out to join any world first. obligatory step — no
+      // skip button, it only advances once a real game detects them. :D
+      ...(tutorialInGame() ? [] : [{ kind: 'ingame', title: L.ingameTitle, body: L.ingameBody }]),
       { kind: 'info', title: L.pscaleTitle, body: L.pscaleBody },
       { kind: 'info', title: L.p2pTitle, body: L.p2pBody },
       { kind: 'info', title: L.cmdsTitle, body: L.cmdsBody },
@@ -119864,7 +119908,7 @@ function normalize(entry) {
       try { delete globalThis.__MF_FIRST_STEPS__; } catch (_) { globalThis.__MF_FIRST_STEPS__ = null; }
     }
     const finish = () => {
-      try { if (markDone) localStorage.setItem('mf:first-steps-v3', 'yes'); } catch (_) {}
+      try { if (markDone) localStorage.setItem('mf:first-steps-v4', 'yes'); } catch (_) {}
       cleanup();
     };
     function onKey(e) {
@@ -119902,7 +119946,7 @@ function normalize(entry) {
         <style>@keyframes mfTourPulse{0%,100%{opacity:.55}50%{opacity:1}}</style>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
           <span style="font:600 11px/1 ui-monospace,monospace;color:#8d80b8;text-transform:lowercase">${esc(counter)}</span>
-          <button id="mf-tour-skip" style="background:none;border:0;color:#8d80b8;font:400 12px system-ui,sans-serif;cursor:pointer;text-decoration:underline">${esc(L.skip)}</button>
+          ${step.kind === 'ingame' ? '<span style="font:600 11px/1 ui-monospace,monospace;color:#e8b46a">★</span>' : `<button id="mf-tour-skip" style="background:none;border:0;color:#8d80b8;font:400 12px system-ui,sans-serif;cursor:pointer;text-decoration:underline">${esc(L.skip)}</button>`}
         </div>
         <div style="margin-top:6px;font:750 17px/1.35 system-ui,sans-serif;color:#b79bff">${esc(step.title)}</div>
         <div style="margin-top:6px;font:400 13.5px/1.55 system-ui,sans-serif;color:#cfc6ea">${step.body}</div>
@@ -119930,6 +119974,12 @@ function normalize(entry) {
         };
         activeClickHandler = handler;
         document.addEventListener('click', handler, true);
+      } else if (step.kind === 'ingame') {
+        // obligatory world gate: keep watching until a live game with a player
+        // position shows up, wherever the user decided to wander off to. :D
+        pollTimer = setInterval(() => {
+          if (tutorialInGame()) { clearInterval(pollTimer); idx++; render(); }
+        }, 500);
       } else if (step.kind === 'toggle') {
         // requires a real state CHANGE: an already-on module would auto-skip the lesson
         const initial = !!(guiSettings[step.key] || settings[step.key]);
@@ -119948,10 +119998,12 @@ function normalize(entry) {
 
   function maybeShowFirstSteps() {
     try {
-      // v3: the full-client tour (profiles, shaders, anims, commands). bumps re-run
-      // it once for returning users instead of leaving them on the old 5-step demo.
-      if (localStorage.getItem('mf:first-steps-v3') === 'yes') return;
+      // v4: adds the obligatory world gate before the command lessons.
+      if (localStorage.getItem('mf:first-steps-v4') === 'yes') return;
     } catch (_) { return; }
+    // a live tour (e.g. parked at the world gate while the panel is closed) must not
+    // be restarted just because showGUI fires again mid-tour. :D
+    if (globalThis.__MF_FIRST_STEPS__) return;
     runTutorial(true);
   }
 
