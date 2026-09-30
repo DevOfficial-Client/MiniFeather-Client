@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 8bf1a715b500f34daf4119070b45b2a03c94bb58
- * builtAt : 2026-09-30T20:30:32.724Z
+ * commit  : 235c2a4dff4f53a7eb682545c09082b3f9d2ab4e
+ * builtAt : 2026-09-30T20:40:00.649Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"8bf1a715b500f34daf4119070b45b2a03c94bb58","builtAt":"2026-09-30T20:30:32.727Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"235c2a4dff4f53a7eb682545c09082b3f9d2ab4e","builtAt":"2026-09-30T20:40:00.650Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -43993,7 +43993,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     style.textContent = `
       .mf-gifchat-img { display:inline-block; width:110px; height:110px; object-fit:cover; border-radius:8px; vertical-align:middle; margin:3px 4px 3px 0; }
       .mf-gifchat-processed { display:inline; }
-      #mf-gifchat-paste { position:fixed; z-index:2147483000; display:flex; align-items:center; gap:10px; background:#150f24; border:1px solid #6045a0; border-radius:10px; padding:8px 10px; box-shadow:0 10px 30px rgba(0,0,0,.55); max-width:340px; }
+      #mf-gifchat-paste { position:absolute; bottom:calc(100% + 6px); left:0; z-index:60; display:flex; align-items:center; gap:10px; background:#150f24; border:1px solid #6045a0; border-radius:10px; padding:8px 10px; box-shadow:0 10px 30px rgba(0,0,0,.55); max-width:340px; }
       #mf-gifchat-paste img { width:52px; height:52px; object-fit:cover; border-radius:6px; }
       #mf-gifchat-paste .mf-paste-info { display:flex; flex-direction:column; gap:2px; font:400 12px/1.4 system-ui,sans-serif; color:#cfc6ea; overflow:hidden; }
       #mf-gifchat-paste .mf-paste-info b { color:#b79bff; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -44095,7 +44095,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     document.head.appendChild(css);
   }
 
-  function buildBar() {
+  function buildBar(dock) {
     if (state.bar && state.bar.isConnected) return state.bar;
     state.bar?.remove();
     state.bar = null;
@@ -44110,7 +44110,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
         <span class="mf-gifc-powered">Powered by <a href="https://klipy.com" target="_blank" rel="noopener noreferrer">KLIPY</a></span>
       </div>
     `;
-    document.body.appendChild(bar);
+    (dock || document.body).appendChild(bar);
     bar.querySelector('.mf-gifc-hint').textContent = L('hint');
     bar.addEventListener('mousedown', event => event.preventDefault());
     bar.addEventListener('click', event => {
@@ -44164,25 +44164,11 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     return String(input?.value || '').replace(TRIGGER_TOKEN_RE, ' ').trim();
   }
 
-  function positionBar() {
-    const bar = state.bar;
-    const input = state.chatInputEl;
-    if (!bar || !input) return;
-    const rect = input.getBoundingClientRect();
-    const width = Math.min(560, Math.max(280, rect.width), window.innerWidth * 0.92);
-    bar.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)) + 'px';
-    bar.style.top = Math.max(8, rect.top - 8) + 'px';
-    bar.style.width = width + 'px';
-    const h = bar.offsetHeight || 0;
-    if (rect.top - 8 - h < 0) bar.style.top = (rect.bottom + 8) + 'px';
-  }
-
   function openBar() {
     const input = findChatInput();
     if (!input) { console.warn('minifeather gifchat openBar: chat input not found'); return; }
     injectBarStyle();
-    buildBar();
-    positionBar();
+    buildBar(input.parentElement);
     state.bar.hidden = false;
     state.barOpen = true;
     state.button?.classList.add('on');
@@ -44531,26 +44517,30 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
 
   function showPreview(file, note) {
     hidePreview();
+    closeBar();
     const input = state.chatInputEl || findChatInput();
     const chip = document.createElement('div');
     chip.id = 'mf-gifchat-paste';
-    state.previewUrl = URL.createObjectURL(file);
+    try { state.previewUrl = URL.createObjectURL(file); } catch (_) { state.previewUrl = null; }
     chip.innerHTML = `
-      <img src="${state.previewUrl}" alt="">
+      <img src="${state.previewUrl || ''}" alt="">
       <div class="mf-paste-info"><b>${escapeHtml((file.name || 'imagen').slice(0, 40))}</b><span>${escapeHtml(note)}</span></div>
       <button type="button" title="cancelar">✕</button>`;
     chip.querySelector('button').addEventListener('click', clearPendingImage);
-    document.body.appendChild(chip);
-    const rect = input?.getBoundingClientRect();
-    if (rect) {
-      chip.style.left = Math.max(8, rect.left) + 'px';
-      chip.style.top = Math.max(8, rect.top - chip.offsetHeight - 10) + 'px';
-    }
+    // docked into the chat input's own container so it rides with the chat
+    // (position/scale included) instead of floating with viewport math
+    const dock = (input && input.parentElement) || document.body;
+    dock.appendChild(chip);
     state.previewEl = chip;
   }
 
   function setPreviewNote(note) {
-    const span = state.previewEl?.querySelector('.mf-paste-info span');
+    if (!state.previewEl || !state.previewEl.isConnected) {
+      // the input's wrapper was rebuilt under us (react re-render): re-dock
+      if (state.pendingImage) showPreview(state.pendingImage, note);
+      return;
+    }
+    const span = state.previewEl.querySelector('.mf-paste-info span');
     if (span) span.textContent = note;
   }
 
