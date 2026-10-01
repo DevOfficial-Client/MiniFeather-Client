@@ -35,7 +35,7 @@ Authors recovered from metadata embedded inside the `.emotecraft` files themselv
 | Particular leaf/particle pack | Chailotl ([github.com/Chailotl/particular](https://github.com/Chailotl/particular)), LGPL-3.0 | `assets/particular/`, `assets/mfpack/`, `textures/particle/` |
 | MF_Deferred shader | JS port of **IterationT 3.2.0** by Tahnass — redistribution permission pending | `src/Shaders/`, `src/Core/mirror.js` |
 | Shader data textures | IterationT 3.2.0 (Tahnass) | `assets/shadertextures/` |
-| PBR maps (`_n`/`_s`/`_e`) | from "MLGImposter's Ray-tracing V1.1", based on work © 2020 RRe36 (All Rights Reserved) — pending resolution (permission or replacement) | `assets/pbr/` |
+| PBR maps | **Removed from the package** (2026-10-01): the previously bundled maps derived from work © 2020 RRe36 (All Rights Reserved) could not be redistributed. PBR is available in-client via Modrinth presets: [UltimaCraft PBR](https://modrinth.com/resourcepack/ultimacraft-pbr) (CC-BY-NC-4.0), [SPBR](https://modrinth.com/resourcepack/spbr) (GPL-3.0) and [Vanilla Normals Renewed](https://github.com/Poudingue/Vanilla-Normals-Renewed) | — |
 
 ## Libraries & fonts
 

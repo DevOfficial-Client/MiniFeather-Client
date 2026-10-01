@@ -13062,22 +13062,13 @@
         detail: JSON.stringify({ enabled: !!settings.experimentalPbr })
       })
     );
-    if (settings.experimentalPbr && localStorage.getItem('mf_pbr_available') !== 'true') {
-      if (window.MF_TEXTURE_PACK?.installBundledPbr) {
-        MF_TEXTURE_PACK.installBundledPbr().then((r) => {
-          if (r?.success) {
-            localStorage.setItem('mf_pbr_available', 'true');
-          }
-        }).catch(() => {
-            console.warn('minifeather pbr addon not installed — reload the page (F5)');
-        });
-      }
-    }
     if (!window.__mfPbrReinstallBound) {
       window.__mfPbrReinstallBound = true;
       document.addEventListener('minifeather:pbr-reinstall', () => {
-        if (window.MF_TEXTURE_PACK?.installBundledPbr) {
-          MF_TEXTURE_PACK.installBundledPbr().then((r) => {
+        const cur = window.MF_TEXTURE_PACK?.currentPreset?.();
+        if (!cur || cur === 'none') return;
+        if (window.MF_TEXTURE_PACK?.installPreset) {
+          MF_TEXTURE_PACK.installPreset(cur).then((r) => {
             if (r?.success) {
               localStorage.setItem('mf_pbr_available', 'true');
             }
