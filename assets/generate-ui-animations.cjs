@@ -494,7 +494,7 @@ for (const name of names) {
     throw new Error(`Unsafe or unknown icon: ${name}`);
   }
   const original = makeArt(name, icons[name]);
-  // autoReconnect: frames owned by tools/make-auto-reconnect-icons.js
+  // autoReconnect: sus frames los dibuja tools/make-auto-reconnect-icons.js — nosotros solo miramos
   if (name === 'autoReconnect') continue;
   const folder = path.join(root, name);
   fs.mkdirSync(folder, { recursive: true });

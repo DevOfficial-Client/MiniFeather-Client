@@ -87,9 +87,11 @@
         if (!state.uuid) fromGameProfile();
         return { ...state };
     }
-    // jerarquía canónica de rangos MiniFeather (nivel numérico de menor a mayor;
-    // mfdev y mfowner comparten el tope 201). los ranks llegan como string del
-    // server/bot de discord y se comparan case-insensitive.
+    // jerarquía canónica de rangos minifeather (nivel numérico, de menos a más;
+    // mfdev y mfowner comparten el tope 201... hasta que llega mfdevgf con 9183,
+    // porque la jerarquía manda pero la novia del dev manda más). los ranks llegan
+    // como string del server/bot de discord y se comparan case-insensitive,
+    // porque el casing nunca sobrevive un mensaje de discord.
     const RANK_HIERARCHY = {
         mfuser:   { level: 50,   label: 'MFUser' },
         premium:  { level: 51,   label: 'Premium' },

@@ -87,7 +87,8 @@
     };
   }
 
-  // El clon nace EXACTAMENTE donde esta el jugador, mirando donde mira.
+  // el clon nace exactamente donde está el jugador, mirando donde mira.
+  // nace con más rumbo definido que la mayoría de nosotros un lunes.
   function cloneSlot(index, count, origin) {
     return { x: origin.x, y: origin.y, z: origin.z, yaw: Number(origin.yaw) || 0 };
   }
@@ -232,7 +233,7 @@
         return -(hash & 0x7fffffff) - 1;
     }
 
-  // Recepcion P2P: el clon de otro MiniFeather player (mismo skin/nombre).
+  // recepción p2p: el clon de otro minifeather player (mismo skin/nombre). teléfono estropeado, pero bonito.
   function receiveClone(key, data) {
     if (!key || !data || typeof data !== "object") return;
     const entry = state.remoteClones.get(key) || { entity: null, id: remoteCloneId("mfclone:" + key) };
@@ -316,7 +317,7 @@
     return profile.uuid || profile.name;
   }
 
-  // Emision P2P del clon propio (1 en servidores normales) por mesh y peer.
+  // emisión p2p del clon propio (1 en servidores normales) por mesh y peer. presumir cuesta poco.
   function broadcastClones() {
     const now = Date.now();
     if (now - state.lastBroadcastAt < 3000) return;
@@ -347,7 +348,7 @@
         return next;
     }
 
-    // Posiciones en MUNDO para el P2P de LocalGames (origen se resta alla).
+    // posiciones en MUNDO para el p2p de LocalGames (allá se restan el origen; cada quien su sistema de coordenadas).
     function list() {
         const out = [];
         for (let i = 0; i < state.count; i++) {

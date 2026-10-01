@@ -367,9 +367,10 @@ const FREECAM_UUIDS = new Set([
         if (parent && typeof parent.updateWorldMatrix === 'function') parent.updateWorldMatrix(true, false);
     } catch (_) {}
 
-    // El rig del motor (yawObject -> pitchObject -> camera) ya esta posicionado
+    // el rig del motor (yawObject -> pitchObject -> camera) ya está posicionado
     // en el jugador: freePosition son coordenadas de MUNDO y hay que convertirlas
-    // al espacio local del padre actual o la camera sale disparada el doble.
+    // al espacio local del padre actual, o la camera sale disparada el doble.
+    // física familiar: uno nunca sabe dónde está hasta que pregunta al padre.
     try {
         if (parent && typeof parent.worldToLocal === 'function') {
             const local = typeof camera.position.clone === 'function' ? camera.position.clone() : { x, y, z };
@@ -531,8 +532,9 @@ const FREECAM_UUIDS = new Set([
     state.forcedPerspective = false;
     }
 
-  // En freecam la camara vuela lejos del cuerpo: el jugador debe verse con
+  // en freecam la camara vuela lejos del cuerpo: el jugador debe verse con
   // su skin (perspectiva 1/2 del motor ya lo hacen, esto lo garantiza).
+  // ver tu propio cuerpo flotar lejos es el contenido.
     function detachCamera(camera) {
     const parent = camera?.parent || null;
     if (!parent) return false;

@@ -81,8 +81,9 @@
   const LOCAL_TERRAIN_RADIUS_CHUNKS = 7;
   const LOCAL_LOOP_INTERVAL_MS = 50;
 
-  // Streaming de terreno: el mundo procedural sigue al jugador más allá del
-  // radio inicial, generando y despachando chunks por lotes.
+  // streaming de terreno: el mundo procedural sigue al jugador más allá del
+  // radio inicial, generando y despachando chunks por lotes. el mundo persigue
+  // gente. mínimo sabe mantener la distancia.
   const LOCAL_TERRAIN_STREAM_RADIUS_CHUNKS = (() => {
     const raw = Number(localStorage.getItem('mflg:streamRadius'));
     return Number.isFinite(raw) && raw >= 8 && raw <= 160 ? Math.floor(raw) : 56;
@@ -4540,9 +4541,10 @@
     if (!mesh || typeof mesh.render !== 'function') return null;
     if (state.mobLodPatch) return mesh;
 
-    // El motor arranca con la calidad de entidades en `Fastest`: el resolvedor
-    // de LOD devuelve true y los modelos quedan estáticos sin animación. Se
-    // fuerza full-quality una sola vez a nivel prototype para todos los mobs.
+    // el motor arranca con la calidad de entidades en `Fastest`: el resolvedor
+    // de LOD devuelve true y los modelos quedan estáticos sin animación (colección
+    // de muebles, muy elegante). se fuerza full-quality una sola vez a nivel
+    // prototype para todos los mobs.
     if (state.mobLodPatchProbe === mesh) return mesh;
     state.mobLodPatchProbe = mesh;
 
@@ -6576,8 +6578,9 @@
       }
     }
 
-    // Decoración con margen de 2: las copas nunca cruzan el borde del chunk,
-    // así host e invitados generan terrain idéntico de forma independiente.
+    // decoración con margen de 2: las copas nunca cruzan el borde del chunk,
+    // así host e invitados generan terrain idéntico por separado. determinismo:
+    // la única forma fiable de que dos personas hagan lo mismo.
     const spawnX = 8;
     const spawnZ = 8;
 

@@ -627,11 +627,12 @@
                 .filter(Boolean))];
             const isGlobalVarying = (name) => new RegExp(
                 'varying(?:\\s+centroid)?\\s+vec2\\s+' + name + '\\s*;').test(src);
-            // The base block texture is sampled at vCentroidMapUv plus a frame
+            // the base block texture is sampled at vCentroidMapUv plus a frame
             // offset for animated tiles (water/lava strips). vOverlayUV is only
             // the tint overlay layer, so following it would paint relief on the
-            // wrong tiles. Grab the FULL sampler expression (balanced parens) so
-            // the PBR atlas reads the same animation frame the game renders.
+            // wrong tiles. grab the FULL sampler expression (balanced parens) so
+            // the pbr atlas reads the same animation frame the game renders —
+            // sincronizar con el juego o parecer un bot mal traducido.
             const declaredNames = new Set();
             for (const d of src.matchAll(
                 /(?:centroid\s+)?(?:varying|uniform)\s+(?:centroid\s+)?(?:highp\s+|mediump\s+|lowp\s+)?[A-Za-z0-9_]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]*\])?\s*;/g)) {

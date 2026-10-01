@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 8298a1e687e5ea7b733f46cbe110e10875d33462
- * builtAt : 2026-10-01T07:42:07.216Z
+ * commit  : 53c851e52d3e5c1d39b34061e5874717a87b2101
+ * builtAt : 2026-10-01T16:13:16.753Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"8298a1e687e5ea7b733f46cbe110e10875d33462","builtAt":"2026-10-01T07:42:07.291Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"53c851e52d3e5c1d39b34061e5874717a87b2101","builtAt":"2026-10-01T16:13:16.754Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -11745,11 +11745,12 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"8298a1e687e5ea7b733f46cbe110e1
                 .filter(Boolean))];
             const isGlobalVarying = (name) => new RegExp(
                 'varying(?:\\s+centroid)?\\s+vec2\\s+' + name + '\\s*;').test(src);
-            // The base block texture is sampled at vCentroidMapUv plus a frame
+            // the base block texture is sampled at vCentroidMapUv plus a frame
             // offset for animated tiles (water/lava strips). vOverlayUV is only
             // the tint overlay layer, so following it would paint relief on the
-            // wrong tiles. Grab the FULL sampler expression (balanced parens) so
-            // the PBR atlas reads the same animation frame the game renders.
+            // wrong tiles. grab the FULL sampler expression (balanced parens) so
+            // the pbr atlas reads the same animation frame the game renders —
+            // sincronizar con el juego o parecer un bot mal traducido.
             const declaredNames = new Set();
             for (const d of src.matchAll(
                 /(?:centroid\s+)?(?:varying|uniform)\s+(?:centroid\s+)?(?:highp\s+|mediump\s+|lowp\s+)?[A-Za-z0-9_]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[[^\]]*\])?\s*;/g)) {
@@ -14497,9 +14498,11 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"8298a1e687e5ea7b733f46cbe110e1
         if (!state.uuid) fromGameProfile();
         return { ...state };
     }
-    // jerarquía canónica de rangos MiniFeather (nivel numérico de menor a mayor;
-    // mfdev y mfowner comparten el tope 201). los ranks llegan como string del
-    // server/bot de discord y se comparan case-insensitive.
+    // jerarquía canónica de rangos minifeather (nivel numérico, de menos a más;
+    // mfdev y mfowner comparten el tope 201... hasta que llega mfdevgf con 9183,
+    // porque la jerarquía manda pero la novia del dev manda más). los ranks llegan
+    // como string del server/bot de discord y se comparan case-insensitive,
+    // porque el casing nunca sobrevive un mensaje de discord.
     const RANK_HIERARCHY = {
         mfuser:   { level: 50,   label: 'MFUser' },
         premium:  { level: 51,   label: 'Premium' },
@@ -18714,9 +18717,10 @@ const FREECAM_UUIDS = new Set([
         if (parent && typeof parent.updateWorldMatrix === 'function') parent.updateWorldMatrix(true, false);
     } catch (_) {}
 
-    // El rig del motor (yawObject -> pitchObject -> camera) ya esta posicionado
+    // el rig del motor (yawObject -> pitchObject -> camera) ya está posicionado
     // en el jugador: freePosition son coordenadas de MUNDO y hay que convertirlas
-    // al espacio local del padre actual o la camera sale disparada el doble.
+    // al espacio local del padre actual, o la camera sale disparada el doble.
+    // física familiar: uno nunca sabe dónde está hasta que pregunta al padre.
     try {
         if (parent && typeof parent.worldToLocal === 'function') {
             const local = typeof camera.position.clone === 'function' ? camera.position.clone() : { x, y, z };
@@ -18878,8 +18882,9 @@ const FREECAM_UUIDS = new Set([
     state.forcedPerspective = false;
     }
 
-  // En freecam la camara vuela lejos del cuerpo: el jugador debe verse con
+  // en freecam la camara vuela lejos del cuerpo: el jugador debe verse con
   // su skin (perspectiva 1/2 del motor ya lo hacen, esto lo garantiza).
+  // ver tu propio cuerpo flotar lejos es el contenido.
     function detachCamera(camera) {
     const parent = camera?.parent || null;
     if (!parent) return false;
@@ -40163,7 +40168,8 @@ const VEGETATION_PASS_THROUGH = new Set([
     };
   }
 
-  // El clon nace EXACTAMENTE donde esta el jugador, mirando donde mira.
+  // el clon nace exactamente donde está el jugador, mirando donde mira.
+  // nace con más rumbo definido que la mayoría de nosotros un lunes.
   function cloneSlot(index, count, origin) {
     return { x: origin.x, y: origin.y, z: origin.z, yaw: Number(origin.yaw) || 0 };
   }
@@ -40308,7 +40314,7 @@ const VEGETATION_PASS_THROUGH = new Set([
         return -(hash & 0x7fffffff) - 1;
     }
 
-  // Recepcion P2P: el clon de otro MiniFeather player (mismo skin/nombre).
+  // recepción p2p: el clon de otro minifeather player (mismo skin/nombre). teléfono estropeado, pero bonito.
   function receiveClone(key, data) {
     if (!key || !data || typeof data !== "object") return;
     const entry = state.remoteClones.get(key) || { entity: null, id: remoteCloneId("mfclone:" + key) };
@@ -40392,7 +40398,7 @@ const VEGETATION_PASS_THROUGH = new Set([
     return profile.uuid || profile.name;
   }
 
-  // Emision P2P del clon propio (1 en servidores normales) por mesh y peer.
+  // emisión p2p del clon propio (1 en servidores normales) por mesh y peer. presumir cuesta poco.
   function broadcastClones() {
     const now = Date.now();
     if (now - state.lastBroadcastAt < 3000) return;
@@ -40423,7 +40429,7 @@ const VEGETATION_PASS_THROUGH = new Set([
         return next;
     }
 
-    // Posiciones en MUNDO para el P2P de LocalGames (origen se resta alla).
+    // posiciones en MUNDO para el p2p de LocalGames (allá se restan el origen; cada quien su sistema de coordenadas).
     function list() {
         const out = [];
         for (let i = 0; i < state.count; i++) {
@@ -44774,8 +44780,8 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
 
   const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'clones', 'reconnect', 'reconectar', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
 
-  // Variantes de argumentos por comando para el Tab-complete client-side.
-  // null = el comando acepta cualquier cosa en esa posicion.
+  // variantes de argumentos por comando para el tab-complete client-side.
+  // null = el comando acepta cualquier cosa en esa posicion (como el criterio de algunos).
   const COMPLETION_TREE = {
     verity: { spawn: null, stay: null, follow: null, ask: null, autoreply: ['on', 'off'] },
     iaassistant: null,
@@ -46679,9 +46685,10 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     return true;
   }
 
-  // El Tab-complete de Miniblox es server-driven (CPacketTabComplete →
-  // SPacketTabComplete). Se envuelve autoCompleteReceived para fusionar los
-  // comandos client-side de MiniFeather en la lista que muestra el chat.
+  // el tab-complete de Miniblox es server-driven (CPacketTabComplete →
+  // SPacketTabComplete). se envuelve autoCompleteReceived para colar los
+  // comandos client-side de MiniFeather en la lista del chat, como un buen
+  // invitado que trae su propia comida.
   function installAutoCompleteMerge(chat) {
     if (chat.__mfAutoCompletePatched) return;
     if (typeof chat.autoCompleteReceived !== 'function') return;
@@ -46715,8 +46722,8 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     return candidates.filter(candidate => candidate.toLowerCase().startsWith(word)).sort();
   }
 
-  // Los comandos de MiniFeather se completan localmente (el servidor no los
-  // conoce): se responde en el acto sin gastar la peticion al servidor.
+  // los comandos de MiniFeather se completan localmente (al servidor no lo
+  // consultan ni por cortesía): se responde al acto sin gastar la peticion.
   if (typeof chat.sendTabComplete === 'function') {
     const originalSend = chat.sendTabComplete;
     chat.__mfOriginalSendTabComplete = originalSend;
@@ -55783,8 +55790,9 @@ void 0;
   const LOCAL_TERRAIN_RADIUS_CHUNKS = 7;
   const LOCAL_LOOP_INTERVAL_MS = 50;
 
-  // Streaming de terreno: el mundo procedural sigue al jugador más allá del
-  // radio inicial, generando y despachando chunks por lotes.
+  // streaming de terreno: el mundo procedural sigue al jugador más allá del
+  // radio inicial, generando y despachando chunks por lotes. el mundo persigue
+  // gente. mínimo sabe mantener la distancia.
   const LOCAL_TERRAIN_STREAM_RADIUS_CHUNKS = (() => {
     const raw = Number(localStorage.getItem('mflg:streamRadius'));
     return Number.isFinite(raw) && raw >= 8 && raw <= 160 ? Math.floor(raw) : 56;
@@ -60242,9 +60250,10 @@ void 0;
     if (!mesh || typeof mesh.render !== 'function') return null;
     if (state.mobLodPatch) return mesh;
 
-    // El motor arranca con la calidad de entidades en `Fastest`: el resolvedor
-    // de LOD devuelve true y los modelos quedan estáticos sin animación. Se
-    // fuerza full-quality una sola vez a nivel prototype para todos los mobs.
+    // el motor arranca con la calidad de entidades en `Fastest`: el resolvedor
+    // de LOD devuelve true y los modelos quedan estáticos sin animación (colección
+    // de muebles, muy elegante). se fuerza full-quality una sola vez a nivel
+    // prototype para todos los mobs.
     if (state.mobLodPatchProbe === mesh) return mesh;
     state.mobLodPatchProbe = mesh;
 
@@ -62278,8 +62287,9 @@ void 0;
       }
     }
 
-    // Decoración con margen de 2: las copas nunca cruzan el borde del chunk,
-    // así host e invitados generan terrain idéntico de forma independiente.
+    // decoración con margen de 2: las copas nunca cruzan el borde del chunk,
+    // así host e invitados generan terrain idéntico por separado. determinismo:
+    // la única forma fiable de que dos personas hagan lo mismo.
     const spawnX = 8;
     const spawnZ = 8;
 
@@ -67651,11 +67661,12 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     const TAG = 'minifeather mobragdolls';
     if (globalThis.MF_MobRagdolls) return;
 
-    // Reemplaza el sistema de corpses del juego (gN): los ragdolls no desaparecen,
-    // colisionan con el mundo voxel, no doblan codos/rodillas y tienen fisica propia.
-    // Estrategia: al detectar la muerte, entity.mesh = null impide que el juego
+    // reemplaza el sistema de corpses del juego (gN): los ragdolls no desaparecen,
+    // colisionan con el mundo voxel, no doblan codos/rodillas y tienen física propia.
+    // estrategia: al detectar la muerte, entity.mesh = null impide que el juego
     // intercambie el mesh y llame a startDeathRagdoll (guard "t instanceof LP"),
     // y el mesh real queda en la escena bajo nuestro control via updateMatrixWorld.
+    // secuestrar meshes: técnicamente un crimen, sentimentalmente una adopción.
     const CFG = {
         MAX_CORPSES: 24,
         CULL_DIST: 96,

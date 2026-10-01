@@ -716,8 +716,8 @@ if (require.main === module) {
   for (const [name, rows] of Object.entries(icons)) {
     if (!/^[A-Za-z][A-Za-z0-9]*$/.test(name)) throw new Error(`Unsafe icon name: ${name}`);
     if (name === 'patPat') continue;
-    // autoReconnect: frames owned by tools/make-auto-reconnect-icons.js
-    // experimental* cards: 00.png is hand-made card art, don't regenerate
+    // autoReconnect: sus 6 frames los dibuja tools/make-auto-reconnect-icons.js (no pisar)
+    // experimental*: el 00.png de cada tarjeta es arte a mano; regenerarlo sería vandalismo
     if (name === 'autoReconnect' || name.startsWith('experimental')) continue;
     const folder = path.resolve(outputDir, name);
     fs.mkdirSync(folder, { recursive: true });

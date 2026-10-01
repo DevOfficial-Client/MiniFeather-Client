@@ -4,11 +4,12 @@
     const TAG = 'minifeather mobragdolls';
     if (globalThis.MF_MobRagdolls) return;
 
-    // Reemplaza el sistema de corpses del juego (gN): los ragdolls no desaparecen,
-    // colisionan con el mundo voxel, no doblan codos/rodillas y tienen fisica propia.
-    // Estrategia: al detectar la muerte, entity.mesh = null impide que el juego
+    // reemplaza el sistema de corpses del juego (gN): los ragdolls no desaparecen,
+    // colisionan con el mundo voxel, no doblan codos/rodillas y tienen física propia.
+    // estrategia: al detectar la muerte, entity.mesh = null impide que el juego
     // intercambie el mesh y llame a startDeathRagdoll (guard "t instanceof LP"),
     // y el mesh real queda en la escena bajo nuestro control via updateMatrixWorld.
+    // secuestrar meshes: técnicamente un crimen, sentimentalmente una adopción.
     const CFG = {
         MAX_CORPSES: 24,
         CULL_DIST: 96,

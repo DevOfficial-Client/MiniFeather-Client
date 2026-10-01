@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// converts the legal eula (en) into a rtf license file for the wix msi installer page.
-// run from the repo root: node tools/make-license-rtf.js
+// convierte la eula legal (en) en un rtf para la página de licencia del instalador
+// wix msi. emoción: cero. precisión: total. así es la vida con los abogados.
+// ejecutar en la raíz: node tools/make-license-rtf.js
 'use strict';
 
 const fs = require('fs');

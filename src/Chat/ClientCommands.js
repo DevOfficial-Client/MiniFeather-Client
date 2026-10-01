@@ -23,8 +23,8 @@
 
   const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'clones', 'reconnect', 'reconectar', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
 
-  // Variantes de argumentos por comando para el Tab-complete client-side.
-  // null = el comando acepta cualquier cosa en esa posicion.
+  // variantes de argumentos por comando para el tab-complete client-side.
+  // null = el comando acepta cualquier cosa en esa posicion (como el criterio de algunos).
   const COMPLETION_TREE = {
     verity: { spawn: null, stay: null, follow: null, ask: null, autoreply: ['on', 'off'] },
     iaassistant: null,
@@ -1928,9 +1928,10 @@
     return true;
   }
 
-  // El Tab-complete de Miniblox es server-driven (CPacketTabComplete →
-  // SPacketTabComplete). Se envuelve autoCompleteReceived para fusionar los
-  // comandos client-side de MiniFeather en la lista que muestra el chat.
+  // el tab-complete de Miniblox es server-driven (CPacketTabComplete →
+  // SPacketTabComplete). se envuelve autoCompleteReceived para colar los
+  // comandos client-side de MiniFeather en la lista del chat, como un buen
+  // invitado que trae su propia comida.
   function installAutoCompleteMerge(chat) {
     if (chat.__mfAutoCompletePatched) return;
     if (typeof chat.autoCompleteReceived !== 'function') return;
@@ -1964,8 +1965,8 @@
     return candidates.filter(candidate => candidate.toLowerCase().startsWith(word)).sort();
   }
 
-  // Los comandos de MiniFeather se completan localmente (el servidor no los
-  // conoce): se responde en el acto sin gastar la peticion al servidor.
+  // los comandos de MiniFeather se completan localmente (al servidor no lo
+  // consultan ni por cortesía): se responde al acto sin gastar la peticion.
   if (typeof chat.sendTabComplete === 'function') {
     const originalSend = chat.sendTabComplete;
     chat.__mfOriginalSendTabComplete = originalSend;

@@ -1,12 +1,13 @@
-// MAIN-world mirror runner. src/Core/mirror.js (generated from mirror.json)
-// carries the bundled code of every MAIN module; chrome.storage mfMirrorCache
+// main-world mirror runner. src/Core/mirror.js (generated from mirror.json)
+// carries the bundled code of every main module; chrome.storage mfMirrorCache
 // (synced to localStorage by the HotLoader bridge) carries remote overrides
-// fetched from GitHub by the background. Each module is injected exactly once
+// fetched from github by the background. each module is injected exactly once
 // at document_start, in mirror.json order: remote override when present and
-// healthy, bundled copy otherwise. A module that throws or misses its "ok"
-// globals is pinned to the bundled copy for the next load (mf:mirror:fails).
-// Isolated-world modules are NOT covered: the page CSP blocks eval there, so
-// they stay as direct manifest content scripts.
+// healthy, bundled copy otherwise. a module that throws or misses its "ok"
+// globals is pinned to the bundled copy for the next load (mf:mirror:fails) —
+// desconfianza total, sí, pero ganada a base de throws. isolated-world modules
+// are NOT covered: the page csp blocks eval there, so they stay as direct
+// manifest content scripts.
 (function () {
   'use strict';
   if (globalThis.__MF_MIRROR_RUNNER__) return;
@@ -42,7 +43,7 @@
     } catch (_) {}
   }
 
-  // attribute synchronous errors to the module being injected
+  // attribute synchronous errors to the module being injected — así sabemos a quién culpar
   var current = null;
   try {
     window.addEventListener('error', function (e) {
@@ -94,7 +95,7 @@
       remote + ' desde GitHub, ' + bundled + ' locales, commit ' + ((ov && ov.commit) || 'base') + ')');
   } catch (_) {}
 
-  // refresh the override plan for the next page load (bridge lives in HotLoader)
+  // refresh the override plan for the next page load (bridge lives in HotLoader; viajar en el tiempo sigue sin financiarlo nadie)
   setTimeout(function () {
     try { window.dispatchEvent(new Event('mf-mirror-sync')); } catch (_) {}
   }, 300);

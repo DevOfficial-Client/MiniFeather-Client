@@ -1,5 +1,6 @@
-// Genera los 6 frames (32x32 RGBA) del icono animado de autoReconnect.
-// Uso: node tools/make-auto-reconnect-icons.js
+// genera los 6 frames (32x32 rgba) del icono animado de autoReconnect:
+// un aro que persigue su propio punto. como nosotros con los bugs.
+// uso: node tools/make-auto-reconnect-icons.js
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
@@ -20,7 +21,7 @@ const BASE = [
     '..gggg..'
 ];
 
-// Recorrido del aro en sentido horario (fila, columna).
+// recorrido del aro en sentido horario (fila, columna). el aro nunca descansa.
 const RING = [
     [0, 3], [0, 4], [0, 5], [1, 6], [2, 7], [3, 7], [4, 7], [5, 6],
     [6, 6], [7, 5], [7, 4], [7, 3], [7, 2], [6, 1], [5, 0], [4, 0],
