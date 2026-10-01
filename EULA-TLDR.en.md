@@ -98,7 +98,9 @@ and yes, we do know who to credit. shockingly. turns out people write their name
 | we warn you about the risks (like right now) | you read the warnings (like right now) and don't sue us |
 | we may change or break features whenever we want | you report bugs nicely on discord |
 | we're not responsible for bans or what you do with the client | you play fair and don't ruin other people's games |
-| no premium version, no subscription, no "minifeather pro ultra+" | and nobody charges you to read this either. symmetric deal |
+| there is no paid premium version and no modules behind a paywall | and nobody charges you to read this either. symmetric deal (￣ω￣) |
+
+**what about the discord [PREMIUM] role?** Not_Senpai's idea — one day he woke up and decided a 100%-free thing needed a golden label XD. how it works: you boost the server → you get **cosmetic** perks (prefix, nametag) for supporting. and that's it. the full client stays free, every module and setting available to everyone, whether you boost or not. boost = premium = W 🗿. paywall = doesn't exist. never did. the most expensive premium is still your dignity while boosting for a prefix. (¬‿¬)
 
 ## 8. the short legal line
 

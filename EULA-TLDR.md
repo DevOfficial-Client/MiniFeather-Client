@@ -99,7 +99,9 @@ y sí, sabemos a quién acreditar. sorprendentemente. resulta que la gente deja 
 | avisamos de los riesgos (como ahora) | lees los avisos (como ahora) y no nos demandas |
 | podemos cambiar o romper features cuando queramos | nos cuentas los bugs con cariño en discord |
 | no respondemos por baneos ni por lo que hagas con el client | juegas justo y no arruinas la partida de otros |
-| no hay versión premium, ni suscripción, ni "minifeather pro ultra+" | y tampoco te cobra nadie leer esto. trato simétrico |
+| no existe versión premium de pago ni módulos bloqueados tras un paywall | y tampoco te cobramos por leer esto. trato simétrico (￣ω￣) |
+
+**¿y el rol [PREMIUM] del discord?** idea de Not_Senpai, a quien un día se le dio la gana de ponerle etiqueta dorada a algo que ya era 100% libre XD. funciona así: boosteas el server → recibes perks **cosméticos** (prefix, nametag) por apoyar. y hasta ahí. el client completo sigue gratis, con todos sus módulos y ajustes disponibles para todos, boostees o no. boost = premium = W 🗿. paywall = no existe. nunca existió. el premium más caro sigue siendo tu dignidad al boostear por un prefix. (¬‿¬)
 
 ## 8. la frase legal corta
 
