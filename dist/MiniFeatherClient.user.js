@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 06e2151ea3759a9eb315e7e96505aec86cefc05a
- * builtAt : 2026-10-01T05:53:55.601Z
+ * commit  : 3f32e59789e81e162b2b759fc8a9585af9fc89a3
+ * builtAt : 2026-10-01T06:21:07.640Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"06e2151ea3759a9eb315e7e96505aec86cefc05a","builtAt":"2026-10-01T05:53:55.605Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"3f32e59789e81e162b2b759fc8a9585af9fc89a3","builtAt":"2026-10-01T06:21:07.646Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -114700,6 +114700,8 @@ function normalize(entry) {
     patPat: ['...nn...','..nnnn..','.nNnNnn.','nnnnnnnn','nppppppn','.nppppn.','..NNNN..','........'],
     duckMobs: ['..yyyy..','.y####y.','y#k##k#y','y######y','.yoooooo','..yyyyy.','..O..O..','........'],
     crittersMobs: ['.NN..NN.','NnnNNnnN','NnnnnnnN','NnkNNknN','NnnnnnnN','.Nn##nN.','..NNNN..','........'],
+    critterSkins: ['.k....k.','.kp..pk.','.++++++.','++++++++','++k++k++','++++++++','.++nn++.','..+kk+..'],
+    deferredPipeline: ['........','...yy...','..y##y..','.y#oo#y.','.y#oo#y.','..y##y..','...yy...','........'],
     allayPets: ['..bbbb..','.bBBBBb.','bB#BB#Bb','bBBBBBBb','.bB##Bb.','..bBBb..','.bb..bb.','........'],
     itemPhysics: ['..yyyy..','.yYYyYy.','yYy##yYy','yYy##yYy','.yYYyYy.','..yyyy..','...oo...','....o...'],
     noWeather: ['..BBBB..','.BbbbbB.','BbbbbbbB','BBBBBBBB','...bb...','..bb....','.bb.....','RRRRRRRR'],
