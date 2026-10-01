@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 47828da4ac0147c4e65c10d5c51e185d5110ccd0
- * builtAt : 2026-10-01T05:19:18.426Z
+ * commit  : 0b0a13a0dc711854755945ab6b18f66bc35332b2
+ * builtAt : 2026-10-01T05:32:49.171Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"47828da4ac0147c4e65c10d5c51e185d5110ccd0","builtAt":"2026-10-01T05:19:18.431Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"0b0a13a0dc711854755945ab6b18f66bc35332b2","builtAt":"2026-10-01T05:32:49.235Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -109931,10 +109931,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
     }
 
-    function bundledManifestUrl() {
-        return chrome.runtime.getURL('assets/pbr/manifest.json');
-    }
-
     const PBR_PRESETS = [
         {
             id: 'ultimacraft',
@@ -109965,16 +109961,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             url: 'https://github.com/Poudingue/Vanilla-Normals-Renewed/releases/download/1.20/VNR-1.20.0.zip',
             size: '~4 MB',
             note: 'Normal+specular estilo vanilla puro, el clásico.'
-        },
-        {
-            id: 'bundled',
-            name: 'MiniFeather (integrado)',
-            author: 'MLGImposter RT V1.1',
-            license: 'bundled',
-            credit: '',
-            url: '',
-            size: 'local',
-            note: 'Pack incluido en la extensión (35 bloques).'
         }
     ];
 
@@ -109988,20 +109974,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     function currentPreset() {
-        try { return localStorage.getItem('mf_pbr_preset') || 'bundled'; }
-        catch (_) { return 'bundled'; }
+        try { return localStorage.getItem('mf_pbr_preset') || 'none'; }
+        catch (_) { return 'none'; }
     }
 
     async function doInstallPreset(presetId) {
         const preset = PBR_PRESETS.find(p => p.id === presetId);
         if (!preset) return { success: false, error: `preset desconocido: ${presetId}` };
-        if (preset.id === 'bundled') {
-            const r = await installBundledPbr();
-            if (r.success) {
-                try { localStorage.setItem('mf_pbr_preset', 'bundled'); } catch (_) {}
-            }
-            return r;
-        }
 
         void 0;
         const res = await fetch(preset.url);
@@ -110056,65 +110035,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return presetInFlight;
     }
 
-    async function fetchImage(url) {
-        return new Promise((resolve) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = () => resolve(null);
-            img.src = url;
-        });
-    }
-
-    let bundledPbrInFlight = null;
-
-    function installBundledPbr() {
-
-        if (bundledPbrInFlight) return bundledPbrInFlight;
-        bundledPbrInFlight = doInstallBundledPbr().finally(() => {
-            bundledPbrInFlight = null;
-        });
-        return bundledPbrInFlight;
-    }
-
-    async function doInstallBundledPbr() {
-        try {
-            const res = await fetch(bundledManifestUrl());
-            if (!res.ok) return { success: false, error: 'manifest no disponible' };
-            const names = await res.json();
-            if (!Array.isArray(names) || names.length === 0) {
-                return { success: false, error: 'manifest vacío' };
-            }
-            const pbrMaps = { n: new Map(), s: new Map(), e: new Map() };
-            let loadedCount = 0;
-            for (const name of names) {
-                const base = String(name).replace(/\.png$/i, '');
-                let kind = null;
-                if (/_n$/.test(base)) kind = 'n';
-                else if (/_s$/.test(base)) kind = 's';
-                else if (/_e$/.test(base)) kind = 'e';
-                if (!kind) continue;
-                const img = await fetchImage(chrome.runtime.getURL('assets/pbr/' + name));
-                if (img) {
-                    pbrMaps[kind].set(base.slice(0, -2), img);
-                    loadedCount++;
-                }
-            }
-            if (loadedCount === 0) return { success: false, error: 'ningún PNG cargado' };
-            const results = await generateAndStorePbr(pbrMaps);
-            void 0;
-            return { success: true, results, loadedCount };
-        } catch (err) {
-            console.warn(`${TAG} PBR integration not available:`, err);
-            return { success: false, error: String(err && err.message || err) };
-        }
-    }
-
     window.MF_TEXTURE_PACK = {
         generateAndApply,
         disable,
         clearAll,
         clearPbr,
-        installBundledPbr,
         installPreset,
         listPresets,
         currentPreset,
@@ -124124,22 +124049,13 @@ function normalize(entry) {
         detail: JSON.stringify({ enabled: !!settings.experimentalPbr })
       })
     );
-    if (settings.experimentalPbr && localStorage.getItem('mf_pbr_available') !== 'true') {
-      if (window.MF_TEXTURE_PACK?.installBundledPbr) {
-        MF_TEXTURE_PACK.installBundledPbr().then((r) => {
-          if (r?.success) {
-            localStorage.setItem('mf_pbr_available', 'true');
-          }
-        }).catch(() => {
-            console.warn('minifeather pbr addon not installed — reload the page (F5)');
-        });
-      }
-    }
     if (!window.__mfPbrReinstallBound) {
       window.__mfPbrReinstallBound = true;
       document.addEventListener('minifeather:pbr-reinstall', () => {
-        if (window.MF_TEXTURE_PACK?.installBundledPbr) {
-          MF_TEXTURE_PACK.installBundledPbr().then((r) => {
+        const cur = window.MF_TEXTURE_PACK?.currentPreset?.();
+        if (!cur || cur === 'none') return;
+        if (window.MF_TEXTURE_PACK?.installPreset) {
+          MF_TEXTURE_PACK.installPreset(cur).then((r) => {
             if (r?.success) {
               localStorage.setItem('mf_pbr_available', 'true');
             }
