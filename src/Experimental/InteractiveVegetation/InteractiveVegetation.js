@@ -573,8 +573,9 @@ const VEGETATION_PASS_THROUGH = new Set([
       vec2 mfAway = mfDist > 0.035 ? mfDelta / mfDist : mfTravel;
       vec2 mfPush = normalize(mix(mfAway, mfTravel, clamp(0.38 + mfSpeed * 0.050, 0.38, 0.84)) + vec2(0.0001));
 
-      // High adds two cheap moving foot contacts. They are procedural and do not
-      // require CPU raycasts, so dense grass can still react without a per-blade JS loop.
+      // high adds two cheap moving foot contacts. they are procedural and do not
+      // require CPU raycasts, so dense grass can still react without a per-blade JS loop
+      // (la hierba reacciona sin cobrar horas de cpu).
       if (mfQ > 1.5 && mfSpeed > 0.08) {
         vec2 mfSide = vec2(-mfTravel.y, mfTravel.x);
         float mfStep = sin(mfGrassTime * min(9.0, 4.2 + mfSpeed * 0.55));
@@ -585,9 +586,10 @@ const VEGETATION_PASS_THROUGH = new Set([
         mfBody = max(mfBody, max(mfFA, mfFB) * mfVertical);
       }
 
-      // Extreme adds an oriented contact capsule around the moving lower body. It
+      // extreme adds an oriented contact capsule around the moving lower body. it
       // catches blades between the two feet instead of only sampling circles, which
-      // makes dense grass react continuously when the player cuts through it.
+      // makes dense grass react continuously when the player cuts through it
+      // (pisar hierba ahora tiene consecuencias fisicas y morales).
       if (mfQ > 2.5) {
         vec2 mfSideE = vec2(-mfTravel.y, mfTravel.x);
         vec2 mfLocal = mfBladeRoot - mfGrassPlayerPos.xz;
@@ -604,8 +606,9 @@ const VEGETATION_PASS_THROUGH = new Set([
       float mfFlatten = mfQ < 0.5 ? 0.27 : (mfQ < 1.5 ? 0.34 : (mfQ < 2.5 ? 0.43 : 0.50));
       transformed.xz += mfPush * mfContact * (mfPushStrength + min(mfSpeed * 0.022, 0.18)) * mfBladeFlex;
       transformed.y -= mfContact * (mfFlatten + min(mfSpeed * 0.018, 0.15));
-      // A small bend around the lower-mid segment keeps the base planted while the
-      // upper blade rolls away instead of translating like a rigid billboard.
+      // a small bend around the lower-mid segment keeps the base planted while the
+      // upper blade rolls away instead of translating like a rigid billboard
+      // (la base aguanta; el resto se aparta con dignidad).
       transformed.xz += mfPush * mfBody * mfBladeTip * (1.0 - mfBladeTip) * (0.05 + mfQ * 0.018);
       mfGrassContact = max(mfGrassContact, mfBody);
 
@@ -820,8 +823,9 @@ const VEGETATION_PASS_THROUGH = new Set([
       f = f.replace('#include <common>', '#include <common>\nuniform float mfVegReplaceNativeGrass;\nvarying float mfVegWave;');
     }
     const suppress = `
-      // Replace the flat green grass/fern pixels with procedural blades once the
-      // 3D replacement mesh is ready. Colored flower petals remain visible.
+      // replace the flat green grass/fern pixels with procedural blades once the
+      // 3D replacement mesh is ready. colored flower petals remain visible:
+      // las flores se quedan; ellas no hicieron nada.
       if (mfVegReplaceNativeGrass > 0.5 && mfVegWave > 0.001) {
         float mfGreenDominance = diffuseColor.g - max(diffuseColor.r, diffuseColor.b);
         float mfGrassPixel = smoothstep(0.025, 0.115, mfGreenDominance) * smoothstep(0.06, 0.28, diffuseColor.g);

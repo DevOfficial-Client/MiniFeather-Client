@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : c700829307a518558b93d11f4c5733f14423c34a
- * builtAt : 2026-10-01T16:27:29.705Z
+ * commit  : a27ef2117c69e3568f7d38c60e241cf94c31433e
+ * builtAt : 2026-10-01T16:29:13.674Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"c700829307a518558b93d11f4c5733f14423c34a","builtAt":"2026-10-01T16:27:29.710Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"a27ef2117c69e3568f7d38c60e241cf94c31433e","builtAt":"2026-10-01T16:29:13.675Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -35490,8 +35490,9 @@ const VEGETATION_PASS_THROUGH = new Set([
       vec2 mfAway = mfDist > 0.035 ? mfDelta / mfDist : mfTravel;
       vec2 mfPush = normalize(mix(mfAway, mfTravel, clamp(0.38 + mfSpeed * 0.050, 0.38, 0.84)) + vec2(0.0001));
 
-      // High adds two cheap moving foot contacts. They are procedural and do not
-      // require CPU raycasts, so dense grass can still react without a per-blade JS loop.
+      // high adds two cheap moving foot contacts. they are procedural and do not
+      // require CPU raycasts, so dense grass can still react without a per-blade JS loop
+      // (la hierba reacciona sin cobrar horas de cpu).
       if (mfQ > 1.5 && mfSpeed > 0.08) {
         vec2 mfSide = vec2(-mfTravel.y, mfTravel.x);
         float mfStep = sin(mfGrassTime * min(9.0, 4.2 + mfSpeed * 0.55));
@@ -35502,9 +35503,10 @@ const VEGETATION_PASS_THROUGH = new Set([
         mfBody = max(mfBody, max(mfFA, mfFB) * mfVertical);
       }
 
-      // Extreme adds an oriented contact capsule around the moving lower body. It
+      // extreme adds an oriented contact capsule around the moving lower body. it
       // catches blades between the two feet instead of only sampling circles, which
-      // makes dense grass react continuously when the player cuts through it.
+      // makes dense grass react continuously when the player cuts through it
+      // (pisar hierba ahora tiene consecuencias fisicas y morales).
       if (mfQ > 2.5) {
         vec2 mfSideE = vec2(-mfTravel.y, mfTravel.x);
         vec2 mfLocal = mfBladeRoot - mfGrassPlayerPos.xz;
@@ -35521,8 +35523,9 @@ const VEGETATION_PASS_THROUGH = new Set([
       float mfFlatten = mfQ < 0.5 ? 0.27 : (mfQ < 1.5 ? 0.34 : (mfQ < 2.5 ? 0.43 : 0.50));
       transformed.xz += mfPush * mfContact * (mfPushStrength + min(mfSpeed * 0.022, 0.18)) * mfBladeFlex;
       transformed.y -= mfContact * (mfFlatten + min(mfSpeed * 0.018, 0.15));
-      // A small bend around the lower-mid segment keeps the base planted while the
-      // upper blade rolls away instead of translating like a rigid billboard.
+      // a small bend around the lower-mid segment keeps the base planted while the
+      // upper blade rolls away instead of translating like a rigid billboard
+      // (la base aguanta; el resto se aparta con dignidad).
       transformed.xz += mfPush * mfBody * mfBladeTip * (1.0 - mfBladeTip) * (0.05 + mfQ * 0.018);
       mfGrassContact = max(mfGrassContact, mfBody);
 
@@ -35737,8 +35740,9 @@ const VEGETATION_PASS_THROUGH = new Set([
       f = f.replace('#include <common>', '#include <common>\nuniform float mfVegReplaceNativeGrass;\nvarying float mfVegWave;');
     }
     const suppress = `
-      // Replace the flat green grass/fern pixels with procedural blades once the
-      // 3D replacement mesh is ready. Colored flower petals remain visible.
+      // replace the flat green grass/fern pixels with procedural blades once the
+      // 3D replacement mesh is ready. colored flower petals remain visible:
+      // las flores se quedan; ellas no hicieron nada.
       if (mfVegReplaceNativeGrass > 0.5 && mfVegWave > 0.001) {
         float mfGreenDominance = diffuseColor.g - max(diffuseColor.r, diffuseColor.b);
         float mfGrassPixel = smoothstep(0.025, 0.115, mfGreenDominance) * smoothstep(0.06, 0.28, diffuseColor.g);
@@ -67722,7 +67726,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
     function playerPos() { return state.game?.player?.pos || null; }
 
-    // ---- acceso a voxels (mismo patron que CrittersMobs) ----
+    // ---- acceso a voxels (mismo patrón que CrittersMobs; los vecinos se copian, y bien) ----
     function worldProto() {
         const world = state.game?.world;
         if (!world) return null;
@@ -67765,7 +67769,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         return true;
     }
 
-    // ---- utilidades quat (objetos plain {x,y,z,w}; las APIs de three leen props) ----
+    // ---- utilidades quat (objetos plain {x,y,z,w}; las apis de three leen props sin hacer preguntas) ----
     function quatAxisAngle(axis, ang) {
         const h = ang / 2, s = Math.sin(h);
         return { x: axis.x * s, y: axis.y * s, z: axis.z * s, w: Math.cos(h) };
@@ -67773,7 +67777,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     function quatDot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; }
     function quatClone(q) { return { x: q.x, y: q.y, z: q.z, w: q.w }; }
 
-    // ---- captura ----
+    // ---- captura (momento secuestro/adopción) ----
     const REJECTS = new Map();
     function noteReject(reason, ent) {
         try {
@@ -67835,8 +67839,9 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         try {
             const E = j.rotation.constructor;
             const zero = new E(0, 0, 0, j.rotation.order || 'XYZ');
-            // el setter de Euler de three invoca _onChangeCallback en CADA escritura;
+            // el setter de Euler de three invoca _onChangeCallback en cada escritura;
             // gN (sistema vanilla) sigue escribiendo estos joints: debe ser no-op, nunca null
+            // (el ghostwriter escribe, pero la firma es nuestra)
             zero._onChangeCallback = function () {};
             Object.defineProperty(j, 'rotation', { value: zero, configurable: true, writable: false });
         } catch {}
@@ -67846,8 +67851,8 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         try { return (ent.getHealth?.() <= 0) || ((ent.deathTime | 0) > 0) || ((ent.hurtTime | 0) > 0); } catch { return false; }
     }
 
-    // proteccion inteligente (instalada en el spawn y al capturar): los metodos
-    // originales solo se saltan cuando el mesh ya es un corpse nuestro
+    // protección inteligente (instalada en el spawn y al capturar): los métodos
+    // originales solo se saltan cuando el mesh ya es un corpse nuestro. porte cerrado.
     function protectSpawn(mesh) {
         if (!mesh || mesh.__mfSmartDispose) return;
         if (!mesh.body || !mesh.skeleton || typeof mesh.render !== 'function') return;
@@ -67902,16 +67907,16 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
         // via ventana de muerte: quitar el mesh de la entidad para que el juego
         // no lo intercambie en startDeathRagdoll ni lo deseche al despawnear.
-        // via adopcion (paquete DestroyEntities): el juego ya cambio e.mesh; no tocar.
+        // vía adopción (paquete DestroyEntities): el juego ya cambió e.mesh; no tocar.
         if (swapMesh) { try { ent.mesh = null; } catch {} }
         protectSpawn(mesh);
-        // sin frustum culling en el corpse: los bounding spheres estaticos quedan
-        // desalineados cuando los huesos rotan el cuerpo (patron de CustomModels)
+        // sin frustum culling en el corpse: los bounding spheres estáticos mienten
+        // cuando los huesos rotan el cuerpo (patrón de CustomModels)
         try {
             (function walk(n) { n.frustumCulled = false; const ch = n.children || []; for (let i = 0; i < ch.length; i++) walk(ch[i]); })(mesh);
         } catch {}
 
-        // visuales de corpse (replica de gN.start, con guards)
+        // visuales de corpse (réplica de gN.start, con guards)
         try {
             if (mesh.lodFar && typeof mesh.WNcsnWnN === 'function') mesh.WNcsnWnN(false);
         } catch {}
@@ -67938,7 +67943,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             if (C && typeof mesh.DxhSLGZabrLfnbj === 'function') mesh.DxhSLGZabrLfnbj(new C(1, 0.5, 0.5), 1);
         } catch {}
 
-        // codos y rodillas rigidos (peticion explicita: sin rotacion)
+        // codos y rodillas rígidos (petición explícita: sin rotación; rigor mortis, cortesía de la casa)
         for (const jn of ['leftElbowJoint', 'rightElbowJoint', 'leftKneeJoint', 'rightKneeJoint']) {
             freezeJoint(mesh[jn]);
         }
@@ -67961,7 +67966,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         const worldReady = !!worldProto();
         if (!worldReady) motion.y = 0;
 
-        // tip-over hacia la direccion de caida (como gN)
+        // tip-over hacia la dirección de caída (como gN; caerse con estilo no es gratis)
         const alen = Math.hypot(motion.x, motion.z) || 1;
         const a = { x: motion.x / alen, z: motion.z / alen };
         const tipAxis = { x: a.z, y: 0, z: -a.x };
@@ -67979,7 +67984,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         }
         if (!neckFrom) neckFrom = quatClone(bodyFrom);
 
-        // joints simulados: hombros/caderas/cabeza (NUNCA codos ni rodillas)
+        // joints simulados: hombros/caderas/cabeza (nunca codos ni rodillas; lo dicho es lo dicho)
         const joints = [];
         const p = 0.3 + h * 0.08;
         const head = (mesh.headPivot && (mesh.headPivot.children.length > 0)) ? mesh.headPivot : mesh.neck;
@@ -68052,8 +68057,9 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     }
 
     // ---- hooks del ciclo de vida del mundo (no dependen del sondeo por frame) ----
-    // El truco: taggear cada mob en spawnEntityInWorld y adoptar el mesh en
+    // el truco: taggear cada mob en spawnEntityInWorld y adoptar el mesh en
     // removeEntityFromWorld ANTES de que el juego llame dispose()/gN.
+    // llegar antes que la funeraria es toda un arte.
     function installWorldHooks() {
         const world = state.game?.world;
         if (!world || world.__mfRagdollHooked) return;
@@ -68106,7 +68112,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         } catch {}
     }
 
-    // guard a nivel de contenedor de escena: NADIE desengancha un corpse de entityMeshes
+    // guard a nivel de contenedor de escena: nadie desengancha un corpse de entityMeshes
     function installSceneGuard() {
         const container = state.game?.gameScene?.entityMeshes;
         if (!container || container.__mfSceneGuard) return;
@@ -68124,7 +68130,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             } catch {}
             return origRemove.apply(this, arguments);
         };
-        // clear() vacia TODO el contenedor sin pasar por remove(): rescatar corpses
+        // clear() vacía todo el contenedor sin pasar por remove(): rescatar corpses
         if (typeof container.clear === 'function' && !container.__mfSceneClearGuard) {
             container.__mfSceneClearGuard = true;
             const origClear = container.clear;
@@ -68148,7 +68154,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         const container = state.sceneGuardContainer;
         if (!container?.__mfSceneGuard) return;
         try {
-            // restaurar el metodo original guardado (funciona con o sin prototipo)
+            // restaurar el método original guardado (funciona con o sin prototipo)
             if (container.__mfOrigSceneRemove) container.remove = container.__mfOrigSceneRemove;
             else delete container.remove;
         } catch {}
@@ -68176,7 +68182,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         return Math.max(0, Math.min(1, state.acc / CFG.TICK_MS));
     }
 
-    // ---- fisica ----
+    // ---- física (casera, sin dependencias, sin arrepentimientos) ----
     function probeWorldPoint(c, h, dx, dy, dz, out) {
         // rota (0,h,0) alrededor de tipAxis por tipAngle y suma pos + delta
         const sin = Math.sin(c.tipAngle), cos = Math.cos(c.tipAngle);
@@ -68225,7 +68231,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         const ax = c.tipAxis;
         const nx = ax.x * co - ax.z * s, nz = ax.x * s + ax.z * co;
         ax.x = nx; ax.z = nz;
-        // bodyTo acompana el giro del eje (pre-multiplica yaw delta como gN)
+        // bodyTo acompaña el giro del eje (pre-multiplica yaw delta como gN)
         try {
             const dq = quatAxisAngle({ x: 0, y: 1, z: 0 }, rot);
             const b = c.bodyTo;
@@ -68286,7 +68292,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         c.motion.z = mz * fr;
         c.motion.y = my * (c.landed ? 0 : CFG.AIR_DRAG);
 
-        // tip-over con muelle amortiguado (mas organico que el cubic fijo de gN)
+        // tip-over con muelle amortiguado (más orgánico que el cubic fijo de gN)
         if (c.tipAngle < c.tipTarget) {
             c.tipVel += (c.tipTarget - c.tipAngle) * CFG.TIP_STIFF;
             c.tipVel *= CFG.TIP_DAMP;
@@ -68298,7 +68304,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             }
         }
 
-        // joints: muelle + colision de extremidad (sin codos/rodillas: congelados)
+        // joints: muelle + colisión de extremidad (sin codos/rodillas: congelados)
         for (const j of c.joints) {
             j.vel += (j.rest - j.angle) * CFG.JOINT_STIFF;
             j.vel *= CFG.JOINT_DAMP;
@@ -68311,7 +68317,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             }
         }
 
-        // reposo: dormirse para no gastar CPU (no hay despawn por edad)
+        // reposo: dormirse para no gastar CPU (no hay despawn por edad; los corpses no envejecen, ellos ganan)
         let energy = Math.abs(c.tipVel) + Math.abs(c.motion.x) + Math.abs(c.motion.z);
         for (const j of c.joints) energy += Math.abs(j.vel);
         if (energy < 0.02 && c.tipAngle >= c.tipTarget - 0.01) {
@@ -68349,7 +68355,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
                 rec.mesh.__mfOrigUMW = undefined;
             }
         } catch {}
-        // desbloquear guards ANTES de desmontar (removeFromParent pasa por el
+        // desbloquear guards antes de desmontar (removeFromParent pasa por el
         // guard del contenedor y clear/dispose por los wrappers del mesh)
         rec.mesh.__mfCorpseRec = null;
         const rm = rec.mesh.__mfOrigRemoveFromParent, dp = rec.mesh.__mfOrigDispose;
@@ -68396,14 +68402,14 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         const scene = state.game?.gameScene?.scene;
         const container = state.sceneGuardContainer;
         for (const rec of [...state.corpses]) {
-            // algo externo lo oculto: forzar visible (no somos nosotros quien lo hace)
+            // algo externo lo ocultó: forzar visible (no fuimos nosotros, palabra)
             if (rec.mesh.visible !== true) {
                 rec.mesh.visible = true;
                 noteReject('visible-forzado', rec.ent);
             }
-            // AUTO-REPARACION: si dejo de estar en el arbol de la escena por la
-            // razon que sea, re-enganchar al contenedor (y el contenedor a la
-            // escena si el descolgado fue el contenedor entero)
+            // auto-reparación: si dejó de estar en el árbol de la escena por la
+            // razón que sea, re-enganchar al contenedor (y el contenedor a la
+            // escena si el descolgado fue el contenedor entero; pegamento incluido)
             if (!inSceneOf(rec.mesh, scene) && container) {
                 try {
                     if (scene && !inSceneOf(container, scene)) {
@@ -68414,7 +68420,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
                     noteReject('re-engancho', rec.ent);
                 } catch {}
             }
-            // el juego ya no tiene el mesh: si nadie lo tiene, la escena se desecho
+            // el juego ya no tiene el mesh: si nadie lo tiene, la escena se desechó
             if (!rec.mesh.parent) { removeCorpse(rec, 'desenganchado uuid=' + meshUuid(rec.mesh)); continue; }
             if (p) {
                 const d = Math.hypot(rec.pos.x - p.x, rec.pos.z - p.z);
@@ -68476,7 +68482,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             } catch {}
         }
 
-        // fisica a paso fijo 20 Hz
+        // física a paso fijo 20 Hz
         let dt = t - (state.lastT || t);
         state.lastT = t;
         dt = Math.min(250, dt);
@@ -68500,7 +68506,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         requestAnimationFrame(() => { if (state.stamp.alive) tick(); });
     }
 
-    // ---- API / toggle (mismo patron que CrittersMobs) ----
+    // ---- API / toggle (mismo patrón que CrittersMobs) ----
     globalThis.MF_MobRagdolls = {
         start() {
             if (state.enabled) return true;
@@ -68554,7 +68560,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     try {
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem('mf:mobragdolls') || 'null'); } catch {}
-        // activado por defecto: solo arranca apagado si el usuario lo desactivo antes
+        // activado por defecto: solo arranca apagado si el usuario lo desactivó antes
         if (!saved || saved.enabled !== false) globalThis.MF_MobRagdolls.start();
     } catch {}
     document.addEventListener('minifeather:mobragdolls-toggle', (ev) => {
@@ -76389,7 +76395,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
     const TAG = 'minifeather critterskins';
 
-    // Inventario de variantes generado del disco (critter-bundle.json):
+    // inventario de variantes generado del disco (critter-bundle.json):
     // wolf: combos {breed, n, files:{normal|angry|tame}}; cat: variantes del
     // juego (nombre de la textura vanilla que pide el juego) -> archivos del pack.
     const INVENTORY = {"wolf":[{"breed":"","n":2,"files":{"normal":"wolf2.png","angry":"wolf_angry2.png","tame":"wolf_tame2.png"}},{"breed":"ashen","n":2,"files":{"normal":"wolf_ashen2.png","angry":"wolf_ashen_angry2.png","tame":"wolf_ashen_tame2.png"}},{"breed":"ashen","n":3,"files":{"normal":"wolf_ashen3.png","angry":"wolf_ashen_angry3.png","tame":"wolf_ashen_tame3.png"}},{"breed":"black","n":2,"files":{"normal":"wolf_black2.png","angry":"wolf_black_angry2.png","tame":"wolf_black_tame2.png"}},{"breed":"black","n":3,"files":{"normal":"wolf_black3.png","angry":"wolf_black_angry3.png","tame":"wolf_black_tame3.png"}},{"breed":"chestnut","n":2,"files":{"normal":"wolf_chestnut2.png","angry":"wolf_chestnut_angry2.png","tame":"wolf_chestnut_tame2.png"}},{"breed":"chestnut","n":3,"files":{"normal":"wolf_chestnut3.png","angry":"wolf_chestnut_angry3.png","tame":"wolf_chestnut_tame3.png"}},{"breed":"rusty","n":2,"files":{"normal":"wolf_rusty2.png","angry":"wolf_rusty_angry2.png","tame":"wolf_rusty_tame2.png"}},{"breed":"rusty","n":3,"files":{"normal":"wolf_rusty3.png","angry":"wolf_rusty_angry3.png","tame":"wolf_rusty_tame3.png"}},{"breed":"snowy","n":2,"files":{"normal":"wolf_snowy2.png","angry":"wolf_snowy_angry2.png","tame":"wolf_snowy_tame2.png"}},{"breed":"spotted","n":2,"files":{"normal":"wolf_spotted2.png","angry":"wolf_spotted_angry2.png","tame":"wolf_spotted_tame2.png"}},{"breed":"spotted","n":3,"files":{"normal":"wolf_spotted3.png","angry":"wolf_spotted_angry3.png","tame":"wolf_spotted_tame3.png"}},{"breed":"striped","n":2,"files":{"normal":"wolf_striped2.png","angry":"wolf_striped_angry2.png","tame":"wolf_striped_tame2.png"}},{"breed":"striped","n":3,"files":{"normal":"wolf_striped3.png","angry":"wolf_striped_angry3.png","tame":"wolf_striped_tame3.png"}},{"breed":"woods","n":2,"files":{"normal":"wolf_woods2.png","angry":"wolf_woods_angry2.png","tame":"wolf_woods_tame2.png"}},{"breed":"woods","n":3,"files":{"normal":"wolf_woods3.png","angry":"wolf_woods_angry3.png","tame":"wolf_woods_tame3.png"}}],"cat":{"all_black":["all_black2.png","all_black3.png","all_black4.png","all_black5.png","all_black6.png","all_black7.png","all_black8.png","all_black9.png","all_black10.png","all_black11.png","all_black12.png","all_black13.png","all_black14.png","all_black15.png","all_black16.png","all_black17.png","all_black18.png","all_black19.png","all_black20.png","all_black21.png","all_black22.png","all_black23.png","all_black24.png","all_black25.png"],"black":["black2.png","black3.png","black4.png","black5.png","black6.png","black7.png","black8.png","black9.png","black10.png","black11.png","black12.png","black13.png","black14.png","black15.png","black16.png","black17.png","black18.png","black19.png","black20.png","black21.png","black22.png","black23.png","black24.png","black25.png"],"british_shorthair":["british_shorthair2.png","british_shorthair3.png","british_shorthair4.png","british_shorthair5.png","british_shorthair6.png","british_shorthair7.png","british_shorthair8.png","british_shorthair9.png","british_shorthair10.png","british_shorthair11.png","british_shorthair12.png","british_shorthair13.png","british_shorthair14.png","british_shorthair15.png","british_shorthair16.png","british_shorthair17.png","british_shorthair18.png","british_shorthair19.png","british_shorthair20.png","british_shorthair21.png","british_shorthair22.png","british_shorthair23.png","british_shorthair24.png","british_shorthair25.png"],"calico":["calico2.png","calico3.png","calico4.png","calico5.png","calico6.png","calico7.png","calico8.png","calico9.png","calico10.png","calico11.png","calico12.png","calico13.png","calico14.png","calico15.png","calico16.png","calico17.png","calico18.png","calico19.png","calico20.png","calico21.png","calico22.png","calico23.png","calico24.png","calico25.png"],"jellie":["jellie2.png","jellie3.png","jellie4.png","jellie5.png","jellie6.png","jellie7.png","jellie8.png","jellie9.png","jellie10.png","jellie11.png","jellie12.png","jellie13.png","jellie14.png","jellie15.png","jellie16.png","jellie17.png","jellie18.png","jellie19.png","jellie20.png","jellie21.png","jellie22.png","jellie23.png","jellie24.png","jellie25.png"],"persian":["persian2.png","persian3.png","persian4.png","persian5.png","persian6.png","persian7.png","persian8.png","persian9.png","persian10.png","persian11.png","persian12.png","persian13.png","persian14.png","persian15.png","persian16.png","persian17.png","persian18.png","persian19.png","persian20.png","persian21.png","persian22.png","persian23.png","persian24.png","persian25.png"],"ragdoll":["ragdoll2.png","ragdoll3.png","ragdoll4.png","ragdoll5.png","ragdoll6.png","ragdoll7.png","ragdoll8.png","ragdoll9.png","ragdoll10.png","ragdoll11.png","ragdoll12.png","ragdoll13.png","ragdoll14.png","ragdoll15.png","ragdoll16.png","ragdoll17.png","ragdoll18.png","ragdoll19.png","ragdoll20.png","ragdoll21.png","ragdoll22.png","ragdoll23.png","ragdoll24.png","ragdoll25.png"],"red":["red2.png","red3.png","red4.png","red5.png","red6.png","red7.png","red8.png","red9.png","red10.png","red11.png","red12.png","red13.png","red14.png","red15.png","red16.png","red17.png","red18.png","red19.png","red20.png","red21.png","red22.png","red23.png","red24.png","red25.png"],"siamese":["siamese2.png","siamese3.png","siamese4.png","siamese5.png","siamese6.png","siamese7.png","siamese8.png","siamese9.png","siamese10.png","siamese11.png","siamese12.png","siamese13.png","siamese14.png","siamese15.png","siamese16.png","siamese17.png","siamese18.png","siamese19.png","siamese20.png","siamese21.png","siamese22.png","siamese23.png","siamese24.png","siamese25.png"],"tabby":["tabby2.png","tabby3.png","tabby4.png","tabby5.png","tabby6.png","tabby7.png","tabby8.png","tabby9.png","tabby10.png","tabby11.png","tabby12.png","tabby13.png","tabby14.png","tabby15.png","tabby16.png","tabby17.png","tabby18.png","tabby19.png","tabby20.png","tabby21.png","tabby22.png","tabby23.png","tabby24.png","tabby25.png"],"white":["white2.png","white3.png","white4.png","white5.png","white6.png","white7.png","white8.png","white9.png","white10.png","white11.png","white12.png","white13.png","white14.png","white15.png","white16.png","white17.png","white18.png","white19.png","white20.png","white21.png","white22.png","white23.png","white24.png","white25.png"]}};
@@ -76736,7 +76742,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             }
             const texW = jem.textureSize?.[0] || 2000, texH = jem.textureSize?.[1] || 32;
             const tree = buildCatTree(ctors, jem, texW, texH);
-            // ocultar los meshes vanilla del gato (el collar aparte se queda)
+            // ocultar los meshes vanilla del gato (el collar aparte se queda; el no tuvo la culpa)
             for (const name of CAT_MESHES) {
                 const m = ent.meshes?.[name];
                 if (m) m.visible = false;
@@ -83596,7 +83602,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     frag = frag.replace(
       'vec3 col = mix(uShadowColor, uCloudColor, sun);',
       `vec3 col = mix(uShadowColor, uCloudColor, sun);
-          // Forward scattering / silver lining. Native density + self-shadow remain untouched.
+          // forward scattering / silver lining. native density + self-shadow remain
+          // untouched (borde brillante de nube, sin tocar lo nativo).
           float mfMu = clamp(dot(normalize(rd), normalize(uSunDir)), -1.0, 1.0);
           const float mfG = 0.58;
           float mfPhase = (1.0 - mfG * mfG) / pow(max(1.0 + mfG * mfG - 2.0 * mfG * mfMu, 0.06), 1.5);

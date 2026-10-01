@@ -54,7 +54,8 @@
     frag = frag.replace(
       'vec3 col = mix(uShadowColor, uCloudColor, sun);',
       `vec3 col = mix(uShadowColor, uCloudColor, sun);
-          // Forward scattering / silver lining. Native density + self-shadow remain untouched.
+          // forward scattering / silver lining. native density + self-shadow remain
+          // untouched (borde brillante de nube, sin tocar lo nativo).
           float mfMu = clamp(dot(normalize(rd), normalize(uSunDir)), -1.0, 1.0);
           const float mfG = 0.58;
           float mfPhase = (1.0 - mfG * mfG) / pow(max(1.0 + mfG * mfG - 2.0 * mfG * mfMu, 0.06), 1.5);

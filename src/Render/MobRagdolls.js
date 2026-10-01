@@ -65,7 +65,7 @@
 
     function playerPos() { return state.game?.player?.pos || null; }
 
-    // ---- acceso a voxels (mismo patron que CrittersMobs) ----
+    // ---- acceso a voxels (mismo patrón que CrittersMobs; los vecinos se copian, y bien) ----
     function worldProto() {
         const world = state.game?.world;
         if (!world) return null;
@@ -108,7 +108,7 @@
         return true;
     }
 
-    // ---- utilidades quat (objetos plain {x,y,z,w}; las APIs de three leen props) ----
+    // ---- utilidades quat (objetos plain {x,y,z,w}; las apis de three leen props sin hacer preguntas) ----
     function quatAxisAngle(axis, ang) {
         const h = ang / 2, s = Math.sin(h);
         return { x: axis.x * s, y: axis.y * s, z: axis.z * s, w: Math.cos(h) };
@@ -116,7 +116,7 @@
     function quatDot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; }
     function quatClone(q) { return { x: q.x, y: q.y, z: q.z, w: q.w }; }
 
-    // ---- captura ----
+    // ---- captura (momento secuestro/adopción) ----
     const REJECTS = new Map();
     function noteReject(reason, ent) {
         try {
@@ -178,8 +178,9 @@
         try {
             const E = j.rotation.constructor;
             const zero = new E(0, 0, 0, j.rotation.order || 'XYZ');
-            // el setter de Euler de three invoca _onChangeCallback en CADA escritura;
+            // el setter de Euler de three invoca _onChangeCallback en cada escritura;
             // gN (sistema vanilla) sigue escribiendo estos joints: debe ser no-op, nunca null
+            // (el ghostwriter escribe, pero la firma es nuestra)
             zero._onChangeCallback = function () {};
             Object.defineProperty(j, 'rotation', { value: zero, configurable: true, writable: false });
         } catch {}
@@ -189,8 +190,8 @@
         try { return (ent.getHealth?.() <= 0) || ((ent.deathTime | 0) > 0) || ((ent.hurtTime | 0) > 0); } catch { return false; }
     }
 
-    // proteccion inteligente (instalada en el spawn y al capturar): los metodos
-    // originales solo se saltan cuando el mesh ya es un corpse nuestro
+    // protección inteligente (instalada en el spawn y al capturar): los métodos
+    // originales solo se saltan cuando el mesh ya es un corpse nuestro. porte cerrado.
     function protectSpawn(mesh) {
         if (!mesh || mesh.__mfSmartDispose) return;
         if (!mesh.body || !mesh.skeleton || typeof mesh.render !== 'function') return;
@@ -245,16 +246,16 @@
 
         // via ventana de muerte: quitar el mesh de la entidad para que el juego
         // no lo intercambie en startDeathRagdoll ni lo deseche al despawnear.
-        // via adopcion (paquete DestroyEntities): el juego ya cambio e.mesh; no tocar.
+        // vía adopción (paquete DestroyEntities): el juego ya cambió e.mesh; no tocar.
         if (swapMesh) { try { ent.mesh = null; } catch {} }
         protectSpawn(mesh);
-        // sin frustum culling en el corpse: los bounding spheres estaticos quedan
-        // desalineados cuando los huesos rotan el cuerpo (patron de CustomModels)
+        // sin frustum culling en el corpse: los bounding spheres estáticos mienten
+        // cuando los huesos rotan el cuerpo (patrón de CustomModels)
         try {
             (function walk(n) { n.frustumCulled = false; const ch = n.children || []; for (let i = 0; i < ch.length; i++) walk(ch[i]); })(mesh);
         } catch {}
 
-        // visuales de corpse (replica de gN.start, con guards)
+        // visuales de corpse (réplica de gN.start, con guards)
         try {
             if (mesh.lodFar && typeof mesh.WNcsnWnN === 'function') mesh.WNcsnWnN(false);
         } catch {}
@@ -281,7 +282,7 @@
             if (C && typeof mesh.DxhSLGZabrLfnbj === 'function') mesh.DxhSLGZabrLfnbj(new C(1, 0.5, 0.5), 1);
         } catch {}
 
-        // codos y rodillas rigidos (peticion explicita: sin rotacion)
+        // codos y rodillas rígidos (petición explícita: sin rotación; rigor mortis, cortesía de la casa)
         for (const jn of ['leftElbowJoint', 'rightElbowJoint', 'leftKneeJoint', 'rightKneeJoint']) {
             freezeJoint(mesh[jn]);
         }
@@ -304,7 +305,7 @@
         const worldReady = !!worldProto();
         if (!worldReady) motion.y = 0;
 
-        // tip-over hacia la direccion de caida (como gN)
+        // tip-over hacia la dirección de caída (como gN; caerse con estilo no es gratis)
         const alen = Math.hypot(motion.x, motion.z) || 1;
         const a = { x: motion.x / alen, z: motion.z / alen };
         const tipAxis = { x: a.z, y: 0, z: -a.x };
@@ -322,7 +323,7 @@
         }
         if (!neckFrom) neckFrom = quatClone(bodyFrom);
 
-        // joints simulados: hombros/caderas/cabeza (NUNCA codos ni rodillas)
+        // joints simulados: hombros/caderas/cabeza (nunca codos ni rodillas; lo dicho es lo dicho)
         const joints = [];
         const p = 0.3 + h * 0.08;
         const head = (mesh.headPivot && (mesh.headPivot.children.length > 0)) ? mesh.headPivot : mesh.neck;
@@ -395,8 +396,9 @@
     }
 
     // ---- hooks del ciclo de vida del mundo (no dependen del sondeo por frame) ----
-    // El truco: taggear cada mob en spawnEntityInWorld y adoptar el mesh en
+    // el truco: taggear cada mob en spawnEntityInWorld y adoptar el mesh en
     // removeEntityFromWorld ANTES de que el juego llame dispose()/gN.
+    // llegar antes que la funeraria es toda un arte.
     function installWorldHooks() {
         const world = state.game?.world;
         if (!world || world.__mfRagdollHooked) return;
@@ -449,7 +451,7 @@
         } catch {}
     }
 
-    // guard a nivel de contenedor de escena: NADIE desengancha un corpse de entityMeshes
+    // guard a nivel de contenedor de escena: nadie desengancha un corpse de entityMeshes
     function installSceneGuard() {
         const container = state.game?.gameScene?.entityMeshes;
         if (!container || container.__mfSceneGuard) return;
@@ -467,7 +469,7 @@
             } catch {}
             return origRemove.apply(this, arguments);
         };
-        // clear() vacia TODO el contenedor sin pasar por remove(): rescatar corpses
+        // clear() vacía todo el contenedor sin pasar por remove(): rescatar corpses
         if (typeof container.clear === 'function' && !container.__mfSceneClearGuard) {
             container.__mfSceneClearGuard = true;
             const origClear = container.clear;
@@ -491,7 +493,7 @@
         const container = state.sceneGuardContainer;
         if (!container?.__mfSceneGuard) return;
         try {
-            // restaurar el metodo original guardado (funciona con o sin prototipo)
+            // restaurar el método original guardado (funciona con o sin prototipo)
             if (container.__mfOrigSceneRemove) container.remove = container.__mfOrigSceneRemove;
             else delete container.remove;
         } catch {}
@@ -519,7 +521,7 @@
         return Math.max(0, Math.min(1, state.acc / CFG.TICK_MS));
     }
 
-    // ---- fisica ----
+    // ---- física (casera, sin dependencias, sin arrepentimientos) ----
     function probeWorldPoint(c, h, dx, dy, dz, out) {
         // rota (0,h,0) alrededor de tipAxis por tipAngle y suma pos + delta
         const sin = Math.sin(c.tipAngle), cos = Math.cos(c.tipAngle);
@@ -568,7 +570,7 @@
         const ax = c.tipAxis;
         const nx = ax.x * co - ax.z * s, nz = ax.x * s + ax.z * co;
         ax.x = nx; ax.z = nz;
-        // bodyTo acompana el giro del eje (pre-multiplica yaw delta como gN)
+        // bodyTo acompaña el giro del eje (pre-multiplica yaw delta como gN)
         try {
             const dq = quatAxisAngle({ x: 0, y: 1, z: 0 }, rot);
             const b = c.bodyTo;
@@ -629,7 +631,7 @@
         c.motion.z = mz * fr;
         c.motion.y = my * (c.landed ? 0 : CFG.AIR_DRAG);
 
-        // tip-over con muelle amortiguado (mas organico que el cubic fijo de gN)
+        // tip-over con muelle amortiguado (más orgánico que el cubic fijo de gN)
         if (c.tipAngle < c.tipTarget) {
             c.tipVel += (c.tipTarget - c.tipAngle) * CFG.TIP_STIFF;
             c.tipVel *= CFG.TIP_DAMP;
@@ -641,7 +643,7 @@
             }
         }
 
-        // joints: muelle + colision de extremidad (sin codos/rodillas: congelados)
+        // joints: muelle + colisión de extremidad (sin codos/rodillas: congelados)
         for (const j of c.joints) {
             j.vel += (j.rest - j.angle) * CFG.JOINT_STIFF;
             j.vel *= CFG.JOINT_DAMP;
@@ -654,7 +656,7 @@
             }
         }
 
-        // reposo: dormirse para no gastar CPU (no hay despawn por edad)
+        // reposo: dormirse para no gastar CPU (no hay despawn por edad; los corpses no envejecen, ellos ganan)
         let energy = Math.abs(c.tipVel) + Math.abs(c.motion.x) + Math.abs(c.motion.z);
         for (const j of c.joints) energy += Math.abs(j.vel);
         if (energy < 0.02 && c.tipAngle >= c.tipTarget - 0.01) {
@@ -692,7 +694,7 @@
                 rec.mesh.__mfOrigUMW = undefined;
             }
         } catch {}
-        // desbloquear guards ANTES de desmontar (removeFromParent pasa por el
+        // desbloquear guards antes de desmontar (removeFromParent pasa por el
         // guard del contenedor y clear/dispose por los wrappers del mesh)
         rec.mesh.__mfCorpseRec = null;
         const rm = rec.mesh.__mfOrigRemoveFromParent, dp = rec.mesh.__mfOrigDispose;
@@ -739,14 +741,14 @@
         const scene = state.game?.gameScene?.scene;
         const container = state.sceneGuardContainer;
         for (const rec of [...state.corpses]) {
-            // algo externo lo oculto: forzar visible (no somos nosotros quien lo hace)
+            // algo externo lo ocultó: forzar visible (no fuimos nosotros, palabra)
             if (rec.mesh.visible !== true) {
                 rec.mesh.visible = true;
                 noteReject('visible-forzado', rec.ent);
             }
-            // AUTO-REPARACION: si dejo de estar en el arbol de la escena por la
-            // razon que sea, re-enganchar al contenedor (y el contenedor a la
-            // escena si el descolgado fue el contenedor entero)
+            // auto-reparación: si dejó de estar en el árbol de la escena por la
+            // razón que sea, re-enganchar al contenedor (y el contenedor a la
+            // escena si el descolgado fue el contenedor entero; pegamento incluido)
             if (!inSceneOf(rec.mesh, scene) && container) {
                 try {
                     if (scene && !inSceneOf(container, scene)) {
@@ -757,7 +759,7 @@
                     noteReject('re-engancho', rec.ent);
                 } catch {}
             }
-            // el juego ya no tiene el mesh: si nadie lo tiene, la escena se desecho
+            // el juego ya no tiene el mesh: si nadie lo tiene, la escena se desechó
             if (!rec.mesh.parent) { removeCorpse(rec, 'desenganchado uuid=' + meshUuid(rec.mesh)); continue; }
             if (p) {
                 const d = Math.hypot(rec.pos.x - p.x, rec.pos.z - p.z);
@@ -819,7 +821,7 @@
             } catch {}
         }
 
-        // fisica a paso fijo 20 Hz
+        // física a paso fijo 20 Hz
         let dt = t - (state.lastT || t);
         state.lastT = t;
         dt = Math.min(250, dt);
@@ -843,7 +845,7 @@
         requestAnimationFrame(() => { if (state.stamp.alive) tick(); });
     }
 
-    // ---- API / toggle (mismo patron que CrittersMobs) ----
+    // ---- API / toggle (mismo patrón que CrittersMobs) ----
     globalThis.MF_MobRagdolls = {
         start() {
             if (state.enabled) return true;
@@ -897,7 +899,7 @@
     try {
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem('mf:mobragdolls') || 'null'); } catch {}
-        // activado por defecto: solo arranca apagado si el usuario lo desactivo antes
+        // activado por defecto: solo arranca apagado si el usuario lo desactivó antes
         if (!saved || saved.enabled !== false) globalThis.MF_MobRagdolls.start();
     } catch {}
     document.addEventListener('minifeather:mobragdolls-toggle', (ev) => {
