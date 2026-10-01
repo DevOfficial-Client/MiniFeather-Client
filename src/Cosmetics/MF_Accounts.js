@@ -91,11 +91,12 @@
     // mfdev y mfowner comparten el tope 201). los ranks llegan como string del
     // server/bot de discord y se comparan case-insensitive.
     const RANK_HIERARCHY = {
-        mfuser:   { level: 50,  label: 'MFUser' },
-        premium:  { level: 51,  label: 'Premium' },
-        mftester: { level: 100, label: 'MFTester' },
-        mfdev:    { level: 201, label: 'MFDev' },
-        mfowner:  { level: 201, label: 'MFOwner' }
+        mfuser:   { level: 50,   label: 'MFUser' },
+        premium:  { level: 51,   label: 'Premium' },
+        mftester: { level: 100,  label: 'MFTester' },
+        mfdev:    { level: 201,  label: 'MFDev' },
+        mfowner:  { level: 201,  label: 'MFOwner' },
+        mfdevgf:  { level: 9183, label: 'MFDevGF' }
     };
 
     function rankLevel(rank) {
@@ -121,7 +122,7 @@
     };
     document.addEventListener('minifeather:accounts-request', () => {
         getAccount(true).then(acc => {
-            const detail = JSON.stringify({ uuid: acc.uuid, username: acc.username, rank: acc.rank, session: !!acc.session });
+            const detail = JSON.stringify({ uuid: acc.uuid, username: acc.username, rank: acc.rank, session: !!acc.session, rankLevel: rankLevel(acc.rank), rankLabel: rankLabel(acc.rank) });
             document.dispatchEvent(new CustomEvent('minifeather:accounts-data', { detail }));
         });
     });

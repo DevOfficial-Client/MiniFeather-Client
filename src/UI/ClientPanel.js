@@ -4110,6 +4110,10 @@
       const key = resolveCommandModule(args[0]);
       if (!key) {
         push(t('commandToggleUsage'), 'error');
+      } else if (key.startsWith('experimental') && experimentalTierOk !== true) {
+        push(t('experimentalLockedToast'), 'error');
+        respondClientCommand(requestId, response);
+        return;
       } else {
         const enabling = !settings[key];
         if (key === 'freecam' && enabling && !requestFreecamAccess()) {
@@ -7445,11 +7449,11 @@
               t('betterPlayerLayers'),
               t('betterPlayerLayersDesc')
             )}
-            ${renderToggle(
+            ${experimentalTierOk ? renderToggle(
               'experimentalBetterAnimationCape',
               t('experimentalBetterAnimationCapeTitle'),
               t('experimentalBetterAnimationCapeDesc')
-            )}
+            ) : ''}
             ${renderToggle(
               'healthNameTags',
               t('healthNameTags'),
@@ -7510,11 +7514,11 @@
               t('shineAmbience'),
               t('shineAmbienceDesc')
             )}
-            ${renderToggle(
+            ${experimentalTierOk ? renderToggle(
               'experimentalGrassFlowers',
               t('experimentalGrassFlowersTitle'),
               t('experimentalGrassFlowersDesc')
-            )}
+            ) : ''}
             ${renderToggle(
               'vanillaAnimations',
               t('vanillaAnimations'),
@@ -7781,6 +7785,17 @@
   function renderExperimentalPage() {
     const registry = globalThis.MF_ExperimentalRegistry;
     const experiments = registry?.list?.().filter(exp => exp?.settingsKey) || [];
+
+    if (experimentalTierOk !== true) {
+      return `
+        <div class="mf-page-stack">
+          <div class="mf-card" style="min-height:180px;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;text-align:center;">
+            <div class="mf-card-title" style="font-size:18px;margin:0;">🔒 ${escapeHtml(t('experimentalLockedTitle'))}</div>
+            <span style="color:#7c828a;max-width:430px;">${escapeHtml(t('experimentalLockedDesc'))}</span>
+          </div>
+        </div>
+      `;
+    }
 
     if (!experiments.length) {
       return `
@@ -8702,6 +8717,48 @@
     } catch (_) { cb(null); }
   }
   let accPendingCb = null;
+
+  // ---- gate experimental: tiers 100-9183 (mftester y superior) ----
+  const EXPERIMENTAL_TIER_MIN = 100;
+  const EXPERIMENTAL_TIER_MAX = 9183;
+  let experimentalTierOk = null;
+
+  function forceExperimentalOff() {
+    let changed = false;
+    for (const k of NSB_BOOLEAN_KEYS) {
+      if (k.startsWith('experimental') && settings[k]) {
+        settings[k] = false;
+        guiSettings[k] = false;
+        changed = true;
+      }
+    }
+    if (changed) { saveSettings(true); applyGuiSettings(); }
+  }
+
+  function refreshExperimentalGate() {
+    // listener propio (no el slot compartido de requestAccountData): una carrera
+    // con la página de cuentas dejaría el gate en null = bloqueado para siempre
+    let settled = false;
+    const apply = data => {
+      if (settled) return;
+      settled = true;
+      const level = Number(data?.rankLevel) || 0;
+      experimentalTierOk = level >= EXPERIMENTAL_TIER_MIN && level <= EXPERIMENTAL_TIER_MAX;
+      if (!experimentalTierOk) forceExperimentalOff();
+      if (panel) renderCurrentPageContent();
+    };
+    try {
+      document.addEventListener('minifeather:accounts-data', function onData(e) {
+        let data = null;
+        try { data = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail; } catch (_) {}
+        if (!data) return;
+        document.removeEventListener('minifeather:accounts-data', onData);
+        apply(data);
+      });
+      document.dispatchEvent(new CustomEvent('minifeather:accounts-request', { detail: '{}' }));
+      setTimeout(() => apply(null), 3000);
+    } catch (_) { apply(null); }
+  }
 
   async function refreshAccountCard() {
     if (!panel || activePage !== 'accounts') return;
@@ -12054,6 +12111,15 @@
         input.dispatchEvent(new Event('change', { bubbles: true }));
       });
       input.addEventListener('change', async () => {
+        if (input.checked && key.startsWith('experimental') && experimentalTierOk !== true) {
+          input.checked = false;
+          const state = label.querySelector('.mf-feature-state');
+          if (state) {
+            state.textContent = t('experimentalLockedToast');
+            setTimeout(() => { state.textContent = t('disabled'); }, 2600);
+          }
+          return;
+        }
         if (key === 'freecam' && input.checked && !requestFreecamAccess()) {
           input.checked = false;
           guiSettings.freecam = false;
@@ -12939,6 +13005,11 @@
   }
 
   function applyGuiSettings() {
+    if (experimentalTierOk === false) {
+      for (const k of NSB_BOOLEAN_KEYS) {
+        if (k.startsWith('experimental')) { settings[k] = false; guiSettings[k] = false; }
+      }
+    }
     sendLanguageConfig();
     if (!settings.idlePlayerBot) sessionRiskAcceptances.delete('idlePlayerBot');
     setModuleEnabled('rebrand', settings.rebrand);
@@ -13815,4 +13886,5 @@
 
   globalThis.__MINIFEATHER_CONTENT__ = { destroy };
   boot();
+  refreshExperimentalGate();
 })();

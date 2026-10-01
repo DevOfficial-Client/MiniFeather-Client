@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : e74f47f7791f310c634fe222ca5701a5867399e9
- * builtAt : 2026-10-01T07:17:07.147Z
+ * commit  : 2add0b5b95786f9d9d3cd9fd75231b0cab91e461
+ * builtAt : 2026-10-01T07:41:48.123Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"e74f47f7791f310c634fe222ca5701a5867399e9","builtAt":"2026-10-01T07:17:07.152Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"2add0b5b95786f9d9d3cd9fd75231b0cab91e461","builtAt":"2026-10-01T07:41:48.124Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -14501,11 +14501,12 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"e74f47f7791f310c634fe222ca5701
     // mfdev y mfowner comparten el tope 201). los ranks llegan como string del
     // server/bot de discord y se comparan case-insensitive.
     const RANK_HIERARCHY = {
-        mfuser:   { level: 50,  label: 'MFUser' },
-        premium:  { level: 51,  label: 'Premium' },
-        mftester: { level: 100, label: 'MFTester' },
-        mfdev:    { level: 201, label: 'MFDev' },
-        mfowner:  { level: 201, label: 'MFOwner' }
+        mfuser:   { level: 50,   label: 'MFUser' },
+        premium:  { level: 51,   label: 'Premium' },
+        mftester: { level: 100,  label: 'MFTester' },
+        mfdev:    { level: 201,  label: 'MFDev' },
+        mfowner:  { level: 201,  label: 'MFOwner' },
+        mfdevgf:  { level: 9183, label: 'MFDevGF' }
     };
 
     function rankLevel(rank) {
@@ -14531,7 +14532,7 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"e74f47f7791f310c634fe222ca5701
     };
     document.addEventListener('minifeather:accounts-request', () => {
         getAccount(true).then(acc => {
-            const detail = JSON.stringify({ uuid: acc.uuid, username: acc.username, rank: acc.rank, session: !!acc.session });
+            const detail = JSON.stringify({ uuid: acc.uuid, username: acc.username, rank: acc.rank, session: !!acc.session, rankLevel: rankLevel(acc.rank), rankLabel: rankLabel(acc.rank) });
             document.dispatchEvent(new CustomEvent('minifeather:accounts-data', { detail }));
         });
     });
@@ -101079,6 +101080,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "navShaders": "Shaders",
     "navExperimental": "Experimental",
     "experimentalComingSoon": "Coming soon",
+    "experimentalLockedTitle": "Experimental zone",
+    "experimentalLockedDesc": "Experimental features are reserved for MFTester ranks and above (tier 100-9183). Grab a rank on the MiniFeather Discord.",
+    "experimentalLockedToast": "Experimental: MFTester+ only (tier 100-9183)",
     "experimentalRealisticTitle": "Realistic Mode",
     "experimentalRealisticDesc": "Natural lighting, detailed sun/moon shadows, clearer animated water, persistent wet surfaces, weather-reactive volumetric clouds, block surface depth, brighter stars, snowy-biome auroras and coordinated leaf wind.",
     "experimentalRealisticQuality": "Realistic quality",
@@ -101871,6 +101875,9 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "navShaders": "Shaders",
     "navExperimental": "Experimental",
     "experimentalComingSoon": "Próximamente",
+    "experimentalLockedTitle": "Zona experimental",
+    "experimentalLockedDesc": "Las funciones experimentales son para rangos MFTester o superior (tier 100-9183). Consigue rango en el Discord de MiniFeather.",
+    "experimentalLockedToast": "Experimental: solo MFTester+ (tier 100-9183)",
     "experimentalRealisticTitle": "Modo realista",
     "experimentalRealisticDesc": "Iluminación natural, sombras detalladas del sol y la luna, agua animada más clara, superficies mojadas persistentes, nubes volumétricas que reaccionan al clima, profundidad en bloques, estrellas más brillantes, auroras en biomas nevados y viento coordinado en las hojas.",
     "experimentalRealisticQuality": "Calidad realista",
@@ -115128,6 +115135,10 @@ function normalize(entry) {
       const key = resolveCommandModule(args[0]);
       if (!key) {
         push(t('commandToggleUsage'), 'error');
+      } else if (key.startsWith('experimental') && experimentalTierOk !== true) {
+        push(t('experimentalLockedToast'), 'error');
+        respondClientCommand(requestId, response);
+        return;
       } else {
         const enabling = !settings[key];
         if (key === 'freecam' && enabling && !requestFreecamAccess()) {
@@ -118463,11 +118474,11 @@ function normalize(entry) {
               t('betterPlayerLayers'),
               t('betterPlayerLayersDesc')
             )}
-            ${renderToggle(
+            ${experimentalTierOk ? renderToggle(
               'experimentalBetterAnimationCape',
               t('experimentalBetterAnimationCapeTitle'),
               t('experimentalBetterAnimationCapeDesc')
-            )}
+            ) : ''}
             ${renderToggle(
               'healthNameTags',
               t('healthNameTags'),
@@ -118528,11 +118539,11 @@ function normalize(entry) {
               t('shineAmbience'),
               t('shineAmbienceDesc')
             )}
-            ${renderToggle(
+            ${experimentalTierOk ? renderToggle(
               'experimentalGrassFlowers',
               t('experimentalGrassFlowersTitle'),
               t('experimentalGrassFlowersDesc')
-            )}
+            ) : ''}
             ${renderToggle(
               'vanillaAnimations',
               t('vanillaAnimations'),
@@ -118799,6 +118810,17 @@ function normalize(entry) {
   function renderExperimentalPage() {
     const registry = globalThis.MF_ExperimentalRegistry;
     const experiments = registry?.list?.().filter(exp => exp?.settingsKey) || [];
+
+    if (experimentalTierOk !== true) {
+      return `
+        <div class="mf-page-stack">
+          <div class="mf-card" style="min-height:180px;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;text-align:center;">
+            <div class="mf-card-title" style="font-size:18px;margin:0;">🔒 ${escapeHtml(t('experimentalLockedTitle'))}</div>
+            <span style="color:#7c828a;max-width:430px;">${escapeHtml(t('experimentalLockedDesc'))}</span>
+          </div>
+        </div>
+      `;
+    }
 
     if (!experiments.length) {
       return `
@@ -119720,6 +119742,48 @@ function normalize(entry) {
     } catch (_) { cb(null); }
   }
   let accPendingCb = null;
+
+  // ---- gate experimental: tiers 100-9183 (mftester y superior) ----
+  const EXPERIMENTAL_TIER_MIN = 100;
+  const EXPERIMENTAL_TIER_MAX = 9183;
+  let experimentalTierOk = null;
+
+  function forceExperimentalOff() {
+    let changed = false;
+    for (const k of NSB_BOOLEAN_KEYS) {
+      if (k.startsWith('experimental') && settings[k]) {
+        settings[k] = false;
+        guiSettings[k] = false;
+        changed = true;
+      }
+    }
+    if (changed) { saveSettings(true); applyGuiSettings(); }
+  }
+
+  function refreshExperimentalGate() {
+    // listener propio (no el slot compartido de requestAccountData): una carrera
+    // con la página de cuentas dejaría el gate en null = bloqueado para siempre
+    let settled = false;
+    const apply = data => {
+      if (settled) return;
+      settled = true;
+      const level = Number(data?.rankLevel) || 0;
+      experimentalTierOk = level >= EXPERIMENTAL_TIER_MIN && level <= EXPERIMENTAL_TIER_MAX;
+      if (!experimentalTierOk) forceExperimentalOff();
+      if (panel) renderCurrentPageContent();
+    };
+    try {
+      document.addEventListener('minifeather:accounts-data', function onData(e) {
+        let data = null;
+        try { data = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail; } catch (_) {}
+        if (!data) return;
+        document.removeEventListener('minifeather:accounts-data', onData);
+        apply(data);
+      });
+      document.dispatchEvent(new CustomEvent('minifeather:accounts-request', { detail: '{}' }));
+      setTimeout(() => apply(null), 3000);
+    } catch (_) { apply(null); }
+  }
 
   async function refreshAccountCard() {
     if (!panel || activePage !== 'accounts') return;
@@ -123072,6 +123136,15 @@ function normalize(entry) {
         input.dispatchEvent(new Event('change', { bubbles: true }));
       });
       input.addEventListener('change', async () => {
+        if (input.checked && key.startsWith('experimental') && experimentalTierOk !== true) {
+          input.checked = false;
+          const state = label.querySelector('.mf-feature-state');
+          if (state) {
+            state.textContent = t('experimentalLockedToast');
+            setTimeout(() => { state.textContent = t('disabled'); }, 2600);
+          }
+          return;
+        }
         if (key === 'freecam' && input.checked && !requestFreecamAccess()) {
           input.checked = false;
           guiSettings.freecam = false;
@@ -123957,6 +124030,11 @@ function normalize(entry) {
   }
 
   function applyGuiSettings() {
+    if (experimentalTierOk === false) {
+      for (const k of NSB_BOOLEAN_KEYS) {
+        if (k.startsWith('experimental')) { settings[k] = false; guiSettings[k] = false; }
+      }
+    }
     sendLanguageConfig();
     if (!settings.idlePlayerBot) sessionRiskAcceptances.delete('idlePlayerBot');
     setModuleEnabled('rebrand', settings.rebrand);
@@ -124833,6 +124911,7 @@ function normalize(entry) {
 
   globalThis.__MINIFEATHER_CONTENT__ = { destroy };
   boot();
+  refreshExperimentalGate();
 })();
 
 //# sourceURL=MF:src/UI/ClientPanel.js
