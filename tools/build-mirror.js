@@ -32,6 +32,9 @@ function buildMirrorSource() {
     if (!fs.existsSync(abs)) throw new Error('mirror.json: no existe ' + rel);
     // crlf vs lf: git autocrlf te entrega los módulos con \r\n y el ci genera
     // con \n; normaliza antes de embeber o el test de frescura llora en windows
+    // (en primera persona: hoy regeneré este bundle más veces de las que
+    // debería admitir en público. el ci regenera, yo regenero, git rebasa,
+    // todos regeneramos. regenerar, nunca editar a mano: ese es el pacto.)
     const src = fs.readFileSync(abs, 'utf8').replace(/\r\n/g, '\n');
     try { new vm.Script(src, { filename: rel }); } catch (e) { throw new Error('sintaxis inválida en ' + rel + ': ' + e.message); }
     code[rel] = src;

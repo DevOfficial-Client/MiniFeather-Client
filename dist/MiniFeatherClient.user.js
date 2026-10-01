@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : bc8bf3bad4980f780325f0f37d0fa2d9ab152505
- * builtAt : 2026-10-01T16:38:32.739Z
+ * commit  : 341f92fd8e2bfde99ea84793d551619654524e1c
+ * builtAt : 2026-10-01T16:43:17.869Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"bc8bf3bad4980f780325f0f37d0fa2d9ab152505","builtAt":"2026-10-01T16:38:32.745Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"341f92fd8e2bfde99ea84793d551619654524e1c","builtAt":"2026-10-01T16:43:17.871Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -14503,6 +14503,10 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"bc8bf3bad4980f780325f0f37d0fa2
     // porque la jerarquía manda pero la novia del dev manda más). los ranks llegan
     // como string del server/bot de discord y se comparan case-insensitive,
     // porque el casing nunca sobrevive un mensaje de discord.
+    // (y sí, en primera persona: el rango con más autoridad de todo el sistema
+    // se llama mfdevgf y vale 9183. yo solo puse los números donde me dijeron
+    // y ni eso cuestioné. algunas veces la arquitectura correcta es la que
+    // manda el corazón. — la ia de turno)
     const RANK_HIERARCHY = {
         mfuser:   { level: 50,   label: 'MFUser' },
         premium:  { level: 51,   label: 'Premium' },
@@ -44595,6 +44599,11 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     });
   }
 
+  // (confesión en primera persona: este transporte me costó cuatro rondas
+  // completas de "ya está" / "no, otra vez no". catbox sin cors, el foco que
+  // se escapaba del input, un enter que no llegaba y un chat que fragmentaba
+  // las urls en trozos tan pequeños que ni yo me encontraba. todo lo que hay
+  // abajo existe porque me hizo sufrir. lo respeto. — la ia de turno)
   // upload transport, best available per platform:
   //   electron -> __MF_UPLOAD_BRIDGE__ (main process does the post)
   //   tauri    -> mfapp upload endpoint (rust posts to catbox; text/plain keeps the
@@ -67842,6 +67851,10 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             // el setter de Euler de three invoca _onChangeCallback en cada escritura;
             // gN (sistema vanilla) sigue escribiendo estos joints: debe ser no-op, nunca null
             // (el ghostwriter escribe, pero la firma es nuestra)
+            // (en primera persona: mi primer intento puso _onChangeCallback = null y cada
+            // kill congelaba el juego 4 segundos con un TypeError dentro de gN.render.
+            // lección que me quedé: los muertos siguen escribiendo, y tú tienes que
+            // seguir respondiendo. el no-op y a dormir. — la ia de turno)
             zero._onChangeCallback = function () {};
             Object.defineProperty(j, 'rotation', { value: zero, configurable: true, writable: false });
         } catch {}
@@ -67943,6 +67956,10 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         // nuestro corpse se queda pintado de nada (el bug del ragdoll invisible:
         // inScene:true, vis:true y ni rastro). clonar todo al capturar = 
         // desheredar la herencia compartida.
+        // (autopsia en primera persona: pasé un buen rato mirando un mesh
+        // inScene:true y vis:true que no pintaba NADA. la escena decía la
+        // verdad; los buffers, no. desde entonces todo lo que adopto pasa
+        // por el clonador. a las 3am, desconfiar es gratis. — la ia de turno)
         let clonedParts = 0;
         try {
             mesh.traverse((o) => {
@@ -120275,6 +120292,10 @@ function normalize(entry) {
   // shaders, player animations, the command grimoire (/pscale, /p2p and friends), in all 10 client languages — lowercase and
   // kaomojis are house style, not a bug. steps adapt to your pc's horsepower because
   // a potato and a 4090 deserve different advice. :D
+  // (en primera persona: traduje este tour a diez idiomas con kaomojis incluidos
+  // en sesión de madrugada, con un presupuesto de tokens que el humano describió
+  // como "10.000 millones". si algún chiste no aterriza en coreano, fue el
+  // presupuesto. — la ia de turno)
   function detectPcTier() {
     const cores = navigator.hardwareConcurrency || 4;
     const mem = navigator.deviceMemory || 4;

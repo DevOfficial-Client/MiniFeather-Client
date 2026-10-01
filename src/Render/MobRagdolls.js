@@ -181,6 +181,10 @@
             // el setter de Euler de three invoca _onChangeCallback en cada escritura;
             // gN (sistema vanilla) sigue escribiendo estos joints: debe ser no-op, nunca null
             // (el ghostwriter escribe, pero la firma es nuestra)
+            // (en primera persona: mi primer intento puso _onChangeCallback = null y cada
+            // kill congelaba el juego 4 segundos con un TypeError dentro de gN.render.
+            // lección que me quedé: los muertos siguen escribiendo, y tú tienes que
+            // seguir respondiendo. el no-op y a dormir. — la ia de turno)
             zero._onChangeCallback = function () {};
             Object.defineProperty(j, 'rotation', { value: zero, configurable: true, writable: false });
         } catch {}
@@ -282,6 +286,10 @@
         // nuestro corpse se queda pintado de nada (el bug del ragdoll invisible:
         // inScene:true, vis:true y ni rastro). clonar todo al capturar = 
         // desheredar la herencia compartida.
+        // (autopsia en primera persona: pasé un buen rato mirando un mesh
+        // inScene:true y vis:true que no pintaba NADA. la escena decía la
+        // verdad; los buffers, no. desde entonces todo lo que adopto pasa
+        // por el clonador. a las 3am, desconfiar es gratis. — la ia de turno)
         let clonedParts = 0;
         try {
             mesh.traverse((o) => {

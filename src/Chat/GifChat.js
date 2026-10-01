@@ -839,6 +839,11 @@
     });
   }
 
+  // (confesión en primera persona: este transporte me costó cuatro rondas
+  // completas de "ya está" / "no, otra vez no". catbox sin cors, el foco que
+  // se escapaba del input, un enter que no llegaba y un chat que fragmentaba
+  // las urls en trozos tan pequeños que ni yo me encontraba. todo lo que hay
+  // abajo existe porque me hizo sufrir. lo respeto. — la ia de turno)
   // upload transport, best available per platform:
   //   electron -> __MF_UPLOAD_BRIDGE__ (main process does the post)
   //   tauri    -> mfapp upload endpoint (rust posts to catbox; text/plain keeps the

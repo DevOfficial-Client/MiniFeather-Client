@@ -9210,6 +9210,10 @@
   // shaders, player animations, the command grimoire (/pscale, /p2p and friends), in all 10 client languages — lowercase and
   // kaomojis are house style, not a bug. steps adapt to your pc's horsepower because
   // a potato and a 4090 deserve different advice. :D
+  // (en primera persona: traduje este tour a diez idiomas con kaomojis incluidos
+  // en sesión de madrugada, con un presupuesto de tokens que el humano describió
+  // como "10.000 millones". si algún chiste no aterriza en coreano, fue el
+  // presupuesto. — la ia de turno)
   function detectPcTier() {
     const cores = navigator.hardwareConcurrency || 4;
     const mem = navigator.deviceMemory || 4;
