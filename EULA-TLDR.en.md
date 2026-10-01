@@ -13,11 +13,15 @@ minifeather is a client made by miniblox fans, for miniblox fans.
 
 it's also **w.i.p.** (work in progress), meaning: we're building the plane while you fly it. there can be bugs, half-finished stuff, and features that vanish overnight. if something explodes... relax, it was free. ᕙ(⇀‸↼‶)ᕗ
 
+yes, one more client on the internet. the difference: this one costs you nothing, except patience. (◕‿◕)
+
 ## 2. the most important thing, up front and in bold
 
 **nobody is forcing you to use the client, you use it because you want to xd** (๑>ᴗ<๑)
 
 seriously: if something goes wrong (ban, bug, jump scare), that's on you. we warned you everywhere. if you don't agree with that, close this tab and get on with your life, no hard feelings. (~‾⌣‾)~
+
+psst: accepting terms without reading them is the internet's national sport. here they're at least written in human, so you're already ahead. (¬‿¬)
 
 ## 2.5. let's talk about this: nobody pays us (╥_╥)
 
@@ -27,7 +31,7 @@ and speaking of sleep: there are nights of coding at 3am. and days we never slep
 
 and still, some people show up just to insult the devs. over a free client. that nobody forced them to use. that we built without charging anyone. (눈_눈)
 
-and the best part: **they treat us like thieves.** "they probably steal accounts", "they probably steal your session", "it's probably a keylogger". friends... if we were thieves, would we be working for free at 3am? thieves sleep at that hour. we don't. (¬_¬)
+and the best part: **they treat us like thieves.** "they probably steal accounts", "they probably steal your session", "it's probably a keylogger". friends... if we were thieves, would we be working for free at 3am? thieves sleep at that hour. we don't. (¬_¬) the only theft 100% provable here is of free time, and the victims are us. case closed. (￣ω￣)
 
 the code is public, it's on github, you can read every line. but hey, insulting is easier than reading, right?
 
@@ -43,14 +47,14 @@ if you're one of the good ones: thank you, from the bottom of our hearts. you're
 
 - **don't use it for unfair advantage on competitive servers.** baritone, bots, anti-afk and friends: use them in your own world, with your friends, where the server allows it. if you get banned for cheating in ranked pvp... well... ¯\\\_(ツ)\_/¯
 - high-risk modules show a warning before activation. closing it cancels activation; “don't show again” saves your acceptance in the browser. **accepting the warning does not mean the server permits the module or prevent a ban.**
-- **don't sell the client or modified copies** passing them off as official. that's just ugly.
+- **don't sell the client or modified copies** passing them off as official. that's just ugly. besides, it's free: scamming people with something free isn't even a scam, it's theater. (¬‿¬)
 - **don't bypass anticheats, payments or security systems.** we're not that kind of project.
 - **don't harass anyone.** not with ai, not with bots, not with anything. be a good blob citizen. (｡•́︿•̀｡)
 
 ## 4. things worth knowing about your data ʕ•ᴥ•ʔ
 
 - **nobody here steals your data.** seriously. for starters, **we don't even ask for or store your miniblox password**... and well... why the hell would we want a miniblox account? we have enough problems with the bugs already. (￣ω￣)
-- your settings, waypoints, skins and nicknames are stored **in your browser**, unencrypted. your pc, your vault.
+- your settings, waypoints, skins and nicknames are stored **in your browser**, unencrypted. your pc, your vault. we're practically the app that knows the least about you. we almost deserve a donation. (・_・;)
 - **clientchat and calls** use public channels (ntfy.sh): they work like a town square. **don't send passwords or personal data there** — anyone with the channel name can read along. (∩`ω´)⊃))
 - **voice** only asks for your microphone if you accept a call (`/call on` to enable, `/call off` to shut it all down).
 - if you set up an **ai api key**, it's stored in plain text. use one with a spending cap, not your master key.
@@ -72,7 +76,7 @@ what you shouldn't do is stay quiet abusing the exploit like nothing happened: i
 
 ## 5. about ai
 
-- **this client was built with a lot of ai help.** code, translations, docs... ai was the copilot. if you find a weird bug... yeah, probably the ai. (or me. who knows?) (¬‿¬)
+- **this client was built with a lot of ai help.** code, translations, docs... ai was the copilot. if you find a weird bug... yeah, probably the ai. (or me. who knows?) (¬‿¬) and when something works well, that was our merit. that's how attribution works around here. (⌐■_■)
 - **verityai** (the client's assistant) can say nonsense with total confidence. don't treat it as a source of truth, or a lawyer, or a doctor. it's a parrot with internet access.
 - if you enable auto-reply, game chat goes through the ai provider. your call.
 
@@ -84,6 +88,8 @@ the client **auto-updates from github** and can even apply changes on the fly (h
 
 the client includes art we didn't make: textures, models, emotes, fonts... everything that isn't ours is credited in the repo's [CREDITS.md](CREDITS.md), with its author and license. if something of yours is there, badly credited, uncredited, or you'd rather we removed it: one message on discord and we'll sort it out. (๑•̀ㅂ•́)و
 
+and yes, we do know who to credit. shockingly. turns out people write their names inside the files. who would have thought. (✿◕‿◕)
+
 ## 7. in short, the deal is:
 
 | us | you |
@@ -92,14 +98,15 @@ the client includes art we didn't make: textures, models, emotes, fonts... every
 | we warn you about the risks (like right now) | you read the warnings (like right now) and don't sue us |
 | we may change or break features whenever we want | you report bugs nicely on discord |
 | we're not responsible for bans or what you do with the client | you play fair and don't ruin other people's games |
+| no premium version, no subscription, no "minifeather pro ultra+" | and nobody charges you to read this either. symmetric deal |
 
 ## 8. the short legal line
 
-the software is provided "as is", no warranties. we're not liable for bans, data loss, damages, or whatever the ai decides to say. the full, boring (but binding) version is in the [full eula](EULA.md). if anything in this tl;dr contradicts the full version, the full one wins. always. period. ᕕ( ᐛ )ᕗ
+the software is provided "as is", no warranties. we're not liable for bans, data loss, damages, or whatever the ai decides to say. the full, boring (but binding) version is in the [full eula](EULA.md). if anything in this tl;dr contradicts the full version, the full one wins. always. period. ᕕ( ᐛ )ᕗ (and yes, the full version says this too, in legalese. nobody speaks that natively.)
 
 ---
 
-thanks for reading this far. seriously. you're one of the readers. (っ˘ω˘ς)
+thanks for reading this far. seriously. you're one of the readers. (っ˘ω˘ς) bonus points if you made it to the full eula. zero points if you came just for the kaomojis... fine, one point. they're cute.
 
 found a bug? have an idea? just want to hang out?
 **[discord](https://discord.gg/k4Ku9DTQDQ)**

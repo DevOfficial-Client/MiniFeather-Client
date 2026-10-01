@@ -13,11 +13,15 @@ minifeather es un client hecho por fans de miniblox, para fans de miniblox.
 
 también es **w.i.p.** (work in progress), o sea: lo estamos construyendo mientras vuelas. puede haber bugs, cosas a medias, y features que desaparecen de un día para otro. si algo explota... tranquilo, era gratis. ᕙ(⇀‸↼‶)ᕗ
 
+sí, otro client más en internet. la diferencia es que este no te cuesta nada, salvo la paciencia. (◕‿◕)
+
 ## 2. lo más importante, arriba y en grande
 
 **nadie te obliga a usar el cliente, lo usas porque quieres jaja** (๑>ᴗ<๑)
 
 en serio: si algo sale mal (baneo, bug, susto), la responsabilidad es tuya. nosotros avisamos por todos lados. si no estás de acuerdo con eso, cierra esta pestaña y sigue con tu vida, sin rencores. (~‾⌣‾)~
+
+pd: aceptar términos sin leerlos es el deporte nacional de internet. aquí al menos te los escribimos en humano, así que ya vas ganando. (¬‿¬)
 
 ## 2.5. hablemos de esto: nadie nos paga (╥_╥)
 
@@ -27,7 +31,7 @@ y hablando de dormir: hay noches de código a las 3am. y días que nunca dormimo
 
 y aun así, hay gente que llega a insultarnos a los devs. por un client gratis. que nadie les obligó a usar. que hicimos sin cobrarles nada. (눈_눈)
 
-y lo mejor de todo: **nos tratan como ladrones.** "seguro roban cuentas", "seguro te roban la sesión", "seguro es un keylogger". amigos... si fuéramos ladrones, ¿trabajaríamos gratis a las 3am? los ladrones duermen a esa hora. nosotros no. (¬_¬)
+y lo mejor de todo: **nos tratan como ladrones.** "seguro roban cuentas", "seguro te roban la sesión", "seguro es un keylogger". amigos... si fuéramos ladrones, ¿trabajaríamos gratis a las 3am? los ladrones duermen a esa hora. nosotros no. (¬_¬) el único robo 100% comprobable aquí es de tiempo libre, y las víctimas somos nosotros. caso archivado. (￣ω￣)
 
 el código es público, está en github, podés leerlo todo. pero bueno, insultar es más fácil que leer, ¿no?
 
@@ -43,14 +47,14 @@ si eres de los buenos: gracias, de corazón. son la razón por la que seguimos. 
 
 - **no lo uses para ventaja injusta en servidores competitivos.** baritone, bots, anti-afk y amigos: úsalos en tu mundo, con tus amigos, donde el servidor lo permita. si te banean por hacer trampa en pvp ranked... bueno... ¯\\\_(ツ)\_/¯
 - los módulos de alto riesgo muestran un aviso antes de activarse. cerrarlo cancela la activación; «no volver a mostrar» guarda tu aceptación en el navegador. **aceptar el aviso no significa que el servidor permita el módulo ni evita un baneo.**
-- **no vendas el client ni copias modificadas** haciéndolas pasar por oficiales. eso sí que es feo.
+- **no vendas el client ni copias modificadas** haciéndolas pasar por oficiales. eso sí que es feo. además es gratis: estafar con algo gratis ya ni es estafa, es teatro. (¬‿¬)
 - **no eludas anticheats, pagos ni sistemas de seguridad.** no somos esa clase de proyecto.
 - **no acoses a nadie.** ni con ia, ni con bots, ni con nada. se buen citizeño del blob. (｡•́︿•̀｡)
 
 ## 4. cosas que conviene saber sobre tus datos ʕ•ᴥ•ʔ
 
 - **acá nadie roba tus datos.** de verdad. para empezar, **ni siquiera pedimos ni guardamos tu contraseña de miniblox**... y pues... para qué carajos queremos una cuenta de miniblox? suficientes problemas tenemos con los bugs. (￣ω￣)
-- tus ajustes, waypoints, skins y apodos se guardan **en tu navegador**, sin cifrar. tu pc, tu bóveda.
+- tus ajustes, waypoints, skins y apodos se guardan **en tu navegador**, sin cifrar. tu pc, tu bóveda. prácticamente somos la app que menos sabe de ti. casi que merecemos una donación. (・_・;)
 - el **clientchat y las llamadas** usan canales públicos (ntfy.sh): funcionan como una plaza. **no mandes contraseñas ni datos personales ahí**, cualquiera con el nombre del canal puede leer. (∩`ω´)⊃))
 - la **voz** solo pide micrófono si tú aceptas una llamada (`/call on` para activarlo, `/call off` para apagarlo todo).
 - si configuras una **api key de ia**, se guarda en texto plano. usa una con límite de gasto, no tu llave maestra.
@@ -73,7 +77,7 @@ lo que no hagas es quedarte callado abusando del exploit como si no pasara nada:
 
 ## 5. sobre la ia
 
-- **este client se hizo con bastante ayuda de ia.** código, traducciones, docs... la ia fue copiloto. si encuentras un bug raro... sí, probablemente fue la ia. (o yo. ¿quién sabe?) (¬‿¬)
+- **este client se hizo con bastante ayuda de ia.** código, traducciones, docs... la ia fue copiloto. si encuentras un bug raro... sí, probablemente fue la ia. (o yo. ¿quién sabe?) (¬‿¬) y cuando algo funciona bien, ese fue mérito nuestro. así funciona la atribución por acá. (⌐■_■)
 - **verityai** (el asistente del client) puede decir tonterías con total seguridad. no lo tomes como fuente de verdad, ni como abogado, ni como médico.
 - si activas el auto-reply, el chat del juego pasa por el proveedor de ia. tú decides.
 
@@ -85,6 +89,8 @@ el client se **auto-actualiza desde github** y hasta puede aplicar cambios en ca
 
 el client incluye arte que no hicimos nosotros: texturas, modelos, emotes, fuentes... todo lo que no es nuestro está acreditado en el [CREDITS.md](CREDITS.md) del repositorio, con su autor y su licencia. si algo tuyo aparece ahí mal acreditado, sin acreditar, o prefieres que lo retiremos: un mensaje por discord y listo, se arregla al toque. (๑•̀ㅂ•́)و
 
+y sí, sabemos a quién acreditar. sorprendentemente. resulta que la gente deja su nombre escrito dentro de los archivos. quién lo diría. (✿◕‿◕)
+
 ## 7. en resumen, el trato es:
 
 | nosotros | tú |
@@ -93,14 +99,15 @@ el client incluye arte que no hicimos nosotros: texturas, modelos, emotes, fuent
 | avisamos de los riesgos (como ahora) | lees los avisos (como ahora) y no nos demandas |
 | podemos cambiar o romper features cuando queramos | nos cuentas los bugs con cariño en discord |
 | no respondemos por baneos ni por lo que hagas con el client | juegas justo y no arruinas la partida de otros |
+| no hay versión premium, ni suscripción, ni "minifeather pro ultra+" | y tampoco te cobra nadie leer esto. trato simétrico |
 
 ## 8. la frase legal corta
 
-el software se entrega "tal cual", sin garantías. no somos responsables de baneos, pérdidas de datos, daños, ni de lo que decida la ia. la versión completa y aburrida (pero vinculante) está en la [eula completa en español](EULA.es.md). si algo de este tl;dr contradice a la completa, gana la completa. siempre. período. ᕕ( ᐛ )ᕗ
+el software se entrega "tal cual", sin garantías. no somos responsables de baneos, pérdidas de datos, daños, ni de lo que decida la ia. la versión completa y aburrida (pero vinculante) está en la [eula completa en español](EULA.es.md). si algo de este tl;dr contradice a la completa, gana la completa. siempre. período. ᕕ( ᐛ )ᕗ (y sí, la completa también dice esto, pero en abogadés. ese idioma nadie lo habla de forma nativa.)
 
 ---
 
-gracias por leer hasta aquí. de verdad. eres de los que leen. (っ˘ω˘ς)
+gracias por leer hasta aquí. de verdad. eres de los que leen. (っ˘ω˘ς) puntos extra si llegaste hasta la completa. cero puntos si viniste solo por los kaomojis... bueno, un punto. están bonitos.
 
 ¿encontraste un bug? ¿tienes una idea? ¿solo quieres pasar el rato?
 **[discord](https://discord.gg/k4Ku9DTQDQ)**
