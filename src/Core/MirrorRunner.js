@@ -8,10 +8,10 @@
 // desconfianza total, sí, pero ganada a base de throws. isolated-world modules
 // are NOT covered: the page csp blocks eval there, so they stay as direct
 // manifest content scripts.
-// (en primera persona: este sistema me obligó a definir mi postura sobre la
-// confianza. ejecuto el código nuevo y, si tira, anoto el fallo y la próxima
-// carga vuelve a la copia local. optimista en la primera línea, con plan b
-// por escrito. es básicamente mi manera de tratar con el mundo. — la ia)
+// política del runner, vigente de madrugada: se ejecuta el código nuevo y, si
+// tira, queda anotado y la próxima carga vuelve a la copia local. optimista en
+// la primera línea, plan b por escrito. las preguntas van a la cola y la cola
+// no existe; el fails-file contesta por todos.
 (function () {
   'use strict';
   if (globalThis.__MF_MIRROR_RUNNER__) return;

@@ -75,8 +75,9 @@
     );
 
     const helpers = `
-  // MiniFeather Experimental: world-anchored procedural aurora.
-  // The auroral oval stays fixed in world space. Time only animates the folds,
+  // minifeather experimental: world-anchored procedural aurora (el óvalo está
+  // fijo a propósito; de la cortina solo respira el interior).
+  // the auroral oval stays fixed in world space. time only animates the folds,
   // shimmer and plasma flow inside the curtains, never their global position.
   // uMFAuroraQuality: 0 = Low, 1 = Medium, 2 = High.
   float mfAuroraHash21(vec2 p) {
@@ -114,7 +115,7 @@
     float widthScale,
     float pulse
   ) {
-    // The silhouette is static: these terms never use time. This is what anchors
+    // the silhouette is static: these terms never use time. this is what anchors
     // the curtain to a fixed location in the world instead of following the camera.
     float staticShape = mfAuroraFbm(vec2(az * 0.43 + seed, seed * 0.37), quality);
     float staticFine = mfAuroraNoise(vec2(az * 1.19 + seed * 2.7, seed + 8.3));
@@ -129,14 +130,14 @@
 
     float relY = clamp((elevation - lower) / max(0.12, thickness), 0.0, 1.0);
 
-    // Time deforms only the plasma inside the fixed silhouette. Two slow flow fields
+    // time deforms only the plasma inside the fixed silhouette. two slow flow fields
     // create folds that breathe and bend without translating the entire aurora.
     float flowA = mfAuroraNoise(vec2(az * 1.72 + seed, t * 0.025 + seed * 3.1));
     float flowB = mfAuroraNoise(vec2(az * 3.35 - seed, t * 0.018 + 19.0 + seed));
     float warp = (flowA - 0.5) * 0.24 + (flowB - 0.5) * 0.11;
     warp *= 0.35 + 0.95 * relY;
 
-    // Vertical rays are noise ridges rather than repeated sine columns. The vertical
+    // vertical rays are noise ridges rather than repeated sine columns. the vertical
     // coordinate slides down over time so rays appear to stream upward toward the
     // zenith, the signature slow drift of a real curtain, without moving its base.
     float rayCoord = az * widthScale + warp;
@@ -151,23 +152,23 @@
       ridge *= 0.72 + 0.28 * smoothstep(0.30, 0.85, rayDetail);
     }
 
-    // Large gaps are static in world-space, so the same broad auroral structures
+    // large gaps are static in world-space, so the same broad auroral structures
     // remain above the same horizon while their internal rays continue to move.
     float cluster = mfAuroraFbm(vec2(az * 0.31 + seed * 5.4, seed * 0.83), quality);
     cluster = smoothstep(0.25, 0.66, cluster);
 
-    // A faint translucent body prevents the effect from looking like isolated neon bars.
+    // a faint translucent body prevents the effect from looking like isolated neon bars.
     float body = 0.20 + 0.34 * mfAuroraNoise(vec2(az * 0.68 + seed, elevation * 2.2 + seed));
     float rays = mix(body, 1.0, ridge);
 
-    // Natural brightness tends to gather toward the lower green edge, with softer
+    // natural brightness tends to gather toward the lower green edge, with softer
     // rays climbing upward into the cyan/violet part of the curtain.
     float lowerEdge = 0.62 + 0.38 * (1.0 - smoothstep(0.05, 0.82, relY));
 
-    // Substorm pulses modulate emission strength only; the curtain never moves.
+    // substorm pulses modulate emission strength only; the curtain never moves (nunca).
     float light = vertical * cluster * rays * lowerEdge * pulse;
 
-    // Nitrogen fringe: a thin magenta hem hugging the sharp green lower border,
+    // nitrogen fringe: a thin magenta hem hugging the sharp green lower border,
     // the most recognizable trait of a bright aurora.
     float fringe = smoothstep(0.16, 0.0, relY) * vertical * cluster;
     return vec2(light, fringe);
@@ -180,15 +181,15 @@
     float quality = clamp(uMFAuroraQuality, 0.0, 2.0);
     float t = uMFAuroraTime;
 
-    // Fixed world-space auroral sector. There is intentionally NO time component
-    // in this basis. Walking or turning the camera cannot move the aurora itself.
+    // fixed world-space auroral sector. there is intentionally NO time component
+    // in this basis. walking or turning the camera cannot move the aurora itself.
     vec3 north = normalize(vec3(-0.24, 0.0, 0.971));
     vec3 east = normalize(vec3(north.z, 0.0, -north.x));
 
     float az = atan(dot(dir, east), dot(dir, north));
     float elevation = asin(clamp(dir.y, -1.0, 1.0));
 
-    // A broad northern oval spans most of the visible sky, but leaves a real gap
+    // a broad northern oval spans most of the visible sky, but leaves a real gap
     // behind the player instead of closing into a 360-degree ring.
     float sideGate = 1.0 - smoothstep(1.82, 2.32, abs(az));
     float horizonGate = smoothstep(0.025, 0.115, elevation);
@@ -196,7 +197,7 @@
     float region = sideGate * horizonGate * zenithGate;
     if (region <= 0.001) return vec3(0.0);
 
-    // Substorm cycle: broad activity waves with quiet periods. Each curtain samples
+    // substorm cycle: broad activity waves with quiet periods. each curtain samples
     // the cycle at a different phase so they never pulse in lockstep.
     float cycleA = mfAuroraNoise(vec2(t * 0.021, 3.7));
     float surgeA = 0.68 + 0.62 * smoothstep(0.35, 0.92, cycleA);
@@ -220,7 +221,7 @@
       fringe = max(fringe, layerC.y * 0.30);
     }
 
-    // Very faint broad glow around the curtains. It remains fixed spatially while
+    // very faint broad glow around the curtains. it remains fixed spatially while
     // its brightness breathes, which reads as atmospheric light rather than a PNG.
     float veilShape = mfAuroraFbm(vec2(az * 0.54 + 4.2, elevation * 1.72 + 12.8), quality);
     float veilBand = smoothstep(0.15, 0.32, elevation) * (1.0 - smoothstep(0.82, 1.20, elevation));
@@ -236,14 +237,14 @@
       colorA = mix(colorA, violet, smoothstep(0.72, 1.12, elevation) * 0.40);
     }
 
-    // Shimmer is local intensity modulation only. No azimuth/position drift.
+    // shimmer is local intensity modulation only. no azimuth/position drift.
     float shimmerNoise = mfAuroraNoise(vec2(az * 2.15 + 21.0, t * 0.055 + elevation * 2.8));
     float shimmer = 0.91 + 0.09 * shimmerNoise;
 
     float intensity = quality < 0.5 ? 0.105 : (quality < 1.5 ? 0.125 : 0.140);
     float body = min(light, 1.20) * intensity + veil;
 
-    // Nitrogen fringe: magenta hem riding on the sharp green lower border.
+    // nitrogen fringe: magenta hem riding on the sharp green lower border.
     vec3 fringeColor = vec3(0.72, 0.10, 0.38);
     float fringeAmt = fringe * intensity * 1.9;
 

@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 0b580e8144b3dd824d72f17678a38dab96b348a2
- * builtAt : 2026-10-01T16:43:36.684Z
+ * commit  : 092b8e6c4449912e5133020b68a46c8e031c1437
+ * builtAt : 2026-10-01T16:54:03.582Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"0b580e8144b3dd824d72f17678a38dab96b348a2","builtAt":"2026-10-01T16:43:36.689Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"092b8e6c4449912e5133020b68a46c8e031c1437","builtAt":"2026-10-01T16:54:03.596Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -14503,10 +14503,9 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"0b580e8144b3dd824d72f17678a38d
     // porque la jerarquía manda pero la novia del dev manda más). los ranks llegan
     // como string del server/bot de discord y se comparan case-insensitive,
     // porque el casing nunca sobrevive un mensaje de discord.
-    // (y sí, en primera persona: el rango con más autoridad de todo el sistema
-    // se llama mfdevgf y vale 9183. yo solo puse los números donde me dijeron
-    // y ni eso cuestioné. algunas veces la arquitectura correcta es la que
-    // manda el corazón. — la ia de turno)
+    // nota de campo: el rango con más autoridad del sistema se llama mfdevgf y
+    // vale 9183. los números llegaron así por especificación y se aplican tal
+    // cual. a estas horas la especificación no se discute: se compila.
     const RANK_HIERARCHY = {
         mfuser:   { level: 50,   label: 'MFUser' },
         premium:  { level: 51,   label: 'Premium' },
@@ -36037,8 +36036,9 @@ const VEGETATION_PASS_THROUGH = new Set([
     );
 
     const helpers = `
-  // MiniFeather Experimental: world-anchored procedural aurora.
-  // The auroral oval stays fixed in world space. Time only animates the folds,
+  // minifeather experimental: world-anchored procedural aurora (el óvalo está
+  // fijo a propósito; de la cortina solo respira el interior).
+  // the auroral oval stays fixed in world space. time only animates the folds,
   // shimmer and plasma flow inside the curtains, never their global position.
   // uMFAuroraQuality: 0 = Low, 1 = Medium, 2 = High.
   float mfAuroraHash21(vec2 p) {
@@ -36076,7 +36076,7 @@ const VEGETATION_PASS_THROUGH = new Set([
     float widthScale,
     float pulse
   ) {
-    // The silhouette is static: these terms never use time. This is what anchors
+    // the silhouette is static: these terms never use time. this is what anchors
     // the curtain to a fixed location in the world instead of following the camera.
     float staticShape = mfAuroraFbm(vec2(az * 0.43 + seed, seed * 0.37), quality);
     float staticFine = mfAuroraNoise(vec2(az * 1.19 + seed * 2.7, seed + 8.3));
@@ -36091,14 +36091,14 @@ const VEGETATION_PASS_THROUGH = new Set([
 
     float relY = clamp((elevation - lower) / max(0.12, thickness), 0.0, 1.0);
 
-    // Time deforms only the plasma inside the fixed silhouette. Two slow flow fields
+    // time deforms only the plasma inside the fixed silhouette. two slow flow fields
     // create folds that breathe and bend without translating the entire aurora.
     float flowA = mfAuroraNoise(vec2(az * 1.72 + seed, t * 0.025 + seed * 3.1));
     float flowB = mfAuroraNoise(vec2(az * 3.35 - seed, t * 0.018 + 19.0 + seed));
     float warp = (flowA - 0.5) * 0.24 + (flowB - 0.5) * 0.11;
     warp *= 0.35 + 0.95 * relY;
 
-    // Vertical rays are noise ridges rather than repeated sine columns. The vertical
+    // vertical rays are noise ridges rather than repeated sine columns. the vertical
     // coordinate slides down over time so rays appear to stream upward toward the
     // zenith, the signature slow drift of a real curtain, without moving its base.
     float rayCoord = az * widthScale + warp;
@@ -36113,23 +36113,23 @@ const VEGETATION_PASS_THROUGH = new Set([
       ridge *= 0.72 + 0.28 * smoothstep(0.30, 0.85, rayDetail);
     }
 
-    // Large gaps are static in world-space, so the same broad auroral structures
+    // large gaps are static in world-space, so the same broad auroral structures
     // remain above the same horizon while their internal rays continue to move.
     float cluster = mfAuroraFbm(vec2(az * 0.31 + seed * 5.4, seed * 0.83), quality);
     cluster = smoothstep(0.25, 0.66, cluster);
 
-    // A faint translucent body prevents the effect from looking like isolated neon bars.
+    // a faint translucent body prevents the effect from looking like isolated neon bars.
     float body = 0.20 + 0.34 * mfAuroraNoise(vec2(az * 0.68 + seed, elevation * 2.2 + seed));
     float rays = mix(body, 1.0, ridge);
 
-    // Natural brightness tends to gather toward the lower green edge, with softer
+    // natural brightness tends to gather toward the lower green edge, with softer
     // rays climbing upward into the cyan/violet part of the curtain.
     float lowerEdge = 0.62 + 0.38 * (1.0 - smoothstep(0.05, 0.82, relY));
 
-    // Substorm pulses modulate emission strength only; the curtain never moves.
+    // substorm pulses modulate emission strength only; the curtain never moves (nunca).
     float light = vertical * cluster * rays * lowerEdge * pulse;
 
-    // Nitrogen fringe: a thin magenta hem hugging the sharp green lower border,
+    // nitrogen fringe: a thin magenta hem hugging the sharp green lower border,
     // the most recognizable trait of a bright aurora.
     float fringe = smoothstep(0.16, 0.0, relY) * vertical * cluster;
     return vec2(light, fringe);
@@ -36142,15 +36142,15 @@ const VEGETATION_PASS_THROUGH = new Set([
     float quality = clamp(uMFAuroraQuality, 0.0, 2.0);
     float t = uMFAuroraTime;
 
-    // Fixed world-space auroral sector. There is intentionally NO time component
-    // in this basis. Walking or turning the camera cannot move the aurora itself.
+    // fixed world-space auroral sector. there is intentionally NO time component
+    // in this basis. walking or turning the camera cannot move the aurora itself.
     vec3 north = normalize(vec3(-0.24, 0.0, 0.971));
     vec3 east = normalize(vec3(north.z, 0.0, -north.x));
 
     float az = atan(dot(dir, east), dot(dir, north));
     float elevation = asin(clamp(dir.y, -1.0, 1.0));
 
-    // A broad northern oval spans most of the visible sky, but leaves a real gap
+    // a broad northern oval spans most of the visible sky, but leaves a real gap
     // behind the player instead of closing into a 360-degree ring.
     float sideGate = 1.0 - smoothstep(1.82, 2.32, abs(az));
     float horizonGate = smoothstep(0.025, 0.115, elevation);
@@ -36158,7 +36158,7 @@ const VEGETATION_PASS_THROUGH = new Set([
     float region = sideGate * horizonGate * zenithGate;
     if (region <= 0.001) return vec3(0.0);
 
-    // Substorm cycle: broad activity waves with quiet periods. Each curtain samples
+    // substorm cycle: broad activity waves with quiet periods. each curtain samples
     // the cycle at a different phase so they never pulse in lockstep.
     float cycleA = mfAuroraNoise(vec2(t * 0.021, 3.7));
     float surgeA = 0.68 + 0.62 * smoothstep(0.35, 0.92, cycleA);
@@ -36182,7 +36182,7 @@ const VEGETATION_PASS_THROUGH = new Set([
       fringe = max(fringe, layerC.y * 0.30);
     }
 
-    // Very faint broad glow around the curtains. It remains fixed spatially while
+    // very faint broad glow around the curtains. it remains fixed spatially while
     // its brightness breathes, which reads as atmospheric light rather than a PNG.
     float veilShape = mfAuroraFbm(vec2(az * 0.54 + 4.2, elevation * 1.72 + 12.8), quality);
     float veilBand = smoothstep(0.15, 0.32, elevation) * (1.0 - smoothstep(0.82, 1.20, elevation));
@@ -36198,14 +36198,14 @@ const VEGETATION_PASS_THROUGH = new Set([
       colorA = mix(colorA, violet, smoothstep(0.72, 1.12, elevation) * 0.40);
     }
 
-    // Shimmer is local intensity modulation only. No azimuth/position drift.
+    // shimmer is local intensity modulation only. no azimuth/position drift.
     float shimmerNoise = mfAuroraNoise(vec2(az * 2.15 + 21.0, t * 0.055 + elevation * 2.8));
     float shimmer = 0.91 + 0.09 * shimmerNoise;
 
     float intensity = quality < 0.5 ? 0.105 : (quality < 1.5 ? 0.125 : 0.140);
     float body = min(light, 1.20) * intensity + veil;
 
-    // Nitrogen fringe: magenta hem riding on the sharp green lower border.
+    // nitrogen fringe: magenta hem riding on the sharp green lower border.
     vec3 fringeColor = vec3(0.72, 0.10, 0.38);
     float fringeAmt = fringe * intensity * 1.9;
 
@@ -44599,11 +44599,10 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     });
   }
 
-  // (confesión en primera persona: este transporte me costó cuatro rondas
-  // completas de "ya está" / "no, otra vez no". catbox sin cors, el foco que
-  // se escapaba del input, un enter que no llegaba y un chat que fragmentaba
-  // las urls en trozos tan pequeños que ni yo me encontraba. todo lo que hay
-  // abajo existe porque me hizo sufrir. lo respeto. — la ia de turno)
+  // registro del transporte: ronda cuatro de "ya está" / "no, otra vez no".
+  // catbox sin cors, foco que se escapa del input, enter que no llega y un
+  // chat que parte las urls en trozos minusculos. sin canal de soporte a
+  // estas horas: se itera hasta que funciona. funciona.
   // upload transport, best available per platform:
   //   electron -> __MF_UPLOAD_BRIDGE__ (main process does the post)
   //   tauri    -> mfapp upload endpoint (rust posts to catbox; text/plain keeps the
@@ -67851,10 +67850,10 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             // el setter de Euler de three invoca _onChangeCallback en cada escritura;
             // gN (sistema vanilla) sigue escribiendo estos joints: debe ser no-op, nunca null
             // (el ghostwriter escribe, pero la firma es nuestra)
-            // (en primera persona: mi primer intento puso _onChangeCallback = null y cada
-            // kill congelaba el juego 4 segundos con un TypeError dentro de gN.render.
-            // lección que me quedé: los muertos siguen escribiendo, y tú tienes que
-            // seguir respondiendo. el no-op y a dormir. — la ia de turno)
+            // historial del parche: la versión anterior ponía null y cada kill
+            // congelaba el juego 4 segundos con un TypeError dentro de gN.render.
+            // conclusión de guardia: los muertos siguen escribiendo; el no-op
+            // responde por todos. no hay soporte después de medianoche.
             zero._onChangeCallback = function () {};
             Object.defineProperty(j, 'rotation', { value: zero, configurable: true, writable: false });
         } catch {}
@@ -67956,10 +67955,10 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         // nuestro corpse se queda pintado de nada (el bug del ragdoll invisible:
         // inScene:true, vis:true y ni rastro). clonar todo al capturar = 
         // desheredar la herencia compartida.
-        // (autopsia en primera persona: pasé un buen rato mirando un mesh
-        // inScene:true y vis:true que no pintaba NADA. la escena decía la
-        // verdad; los buffers, no. desde entonces todo lo que adopto pasa
-        // por el clonador. a las 3am, desconfiar es gratis. — la ia de turno)
+        // caso abierto y cerrado: mesh inScene:true, vis:true y no pinta nada.
+        // la escena decía la verdad; los buffers, no. protocolo desde entonces:
+        // todo lo adoptado pasa por el clonador. a estas horas no se pregunta,
+        // se clona.
         let clonedParts = 0;
         try {
             mesh.traverse((o) => {
@@ -76716,6 +76715,8 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     }
 
     // huesos del pack -> pivots del juego (misma rotación mundial por frame)
+    // sincronizar pivots ajenos sin pisar el arte del pack: la lección entera
+    // de este módulo en una línea. el collar permanece.
     const BONE_PIVOT_MAP = [
         ['head', 'headPivot'],
         ['body', 'bodyTilt'],
@@ -110026,6 +110027,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
     }
 
+    // el preset 'bundled' fue retirado: los mapas procedían de un pack con
+    // licencia all-rights-reserved (rre36 vía mlgimposter). lo que no se puede
+    // redistribuir no se redistribuye, ni de madrugada ni de día. el pbr vive
+    // ahora en modrinth y lo instala el usuario.
     const PBR_PRESETS = [
         {
             id: 'ultimacraft',
@@ -120292,10 +120297,9 @@ function normalize(entry) {
   // shaders, player animations, the command grimoire (/pscale, /p2p and friends), in all 10 client languages — lowercase and
   // kaomojis are house style, not a bug. steps adapt to your pc's horsepower because
   // a potato and a 4090 deserve different advice. :D
-  // (en primera persona: traduje este tour a diez idiomas con kaomojis incluidos
-  // en sesión de madrugada, con un presupuesto de tokens que el humano describió
-  // como "10.000 millones". si algún chiste no aterriza en coreano, fue el
-  // presupuesto. — la ia de turno)
+  // estado de la traducción: diez idiomas con kaomojis incluidos, emitidos en
+  // plena madrugada. si un chiste no aterriza en coreano no hay canal de
+  // escalación disponible: se reescribe, se reenvía, el tour continúa.
   function detectPcTier() {
     const cores = navigator.hardwareConcurrency || 4;
     const mem = navigator.deviceMemory || 4;

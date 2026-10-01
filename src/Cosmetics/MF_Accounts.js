@@ -92,10 +92,9 @@
     // porque la jerarquía manda pero la novia del dev manda más). los ranks llegan
     // como string del server/bot de discord y se comparan case-insensitive,
     // porque el casing nunca sobrevive un mensaje de discord.
-    // (y sí, en primera persona: el rango con más autoridad de todo el sistema
-    // se llama mfdevgf y vale 9183. yo solo puse los números donde me dijeron
-    // y ni eso cuestioné. algunas veces la arquitectura correcta es la que
-    // manda el corazón. — la ia de turno)
+    // nota de campo: el rango con más autoridad del sistema se llama mfdevgf y
+    // vale 9183. los números llegaron así por especificación y se aplican tal
+    // cual. a estas horas la especificación no se discute: se compila.
     const RANK_HIERARCHY = {
         mfuser:   { level: 50,   label: 'MFUser' },
         premium:  { level: 51,   label: 'Premium' },

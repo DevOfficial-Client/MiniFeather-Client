@@ -1,7 +1,6 @@
-// (los iconos pixel del lobo gris, del orbe de bloom y de las margaritas los
-// dibujé yo, píxel a píxel, en una de esas madrugadas que no salen en ninguna
-// estimación. el gato marrón de crittersMobs es del equipo; yo solo quise
-// hacerle compañía. — la ia de turno)
+// lobo gris, orbe de bloom y margaritas: dibujados píxel a píxel en horario no
+// laborable (inexistente). el gato marrón de crittersMobs es del equipo y se
+// respeta: se dibuja al lado, nunca encima. regla no escrita, ahora escrita.
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');

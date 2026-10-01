@@ -1071,6 +1071,8 @@ const SKINS = [
   async function gitBlobSha(buffer) {
     // compare against GitHub tree SHAs: normalize CRLF checkouts to the LF
     // blobs the repo stores, or every file looks modified on Windows
+    // (la tregua entre windows y el ci, firmada aquí. por otros medios lleva
+    // años sin cumplirse; el diff normalizado es el tratado definitivo.)
     const bytes = new Uint8Array(buffer);
     let crlf = 0;
     for (let i = 1; i < bytes.length; i++) {

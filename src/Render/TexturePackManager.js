@@ -630,6 +630,10 @@
         }
     }
 
+    // el preset 'bundled' fue retirado: los mapas procedían de un pack con
+    // licencia all-rights-reserved (rre36 vía mlgimposter). lo que no se puede
+    // redistribuir no se redistribuye, ni de madrugada ni de día. el pbr vive
+    // ahora en modrinth y lo instala el usuario.
     const PBR_PRESETS = [
         {
             id: 'ultimacraft',

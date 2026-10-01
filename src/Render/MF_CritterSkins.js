@@ -288,6 +288,8 @@
     }
 
     // huesos del pack -> pivots del juego (misma rotación mundial por frame)
+    // sincronizar pivots ajenos sin pisar el arte del pack: la lección entera
+    // de este módulo en una línea. el collar permanece.
     const BONE_PIVOT_MAP = [
         ['head', 'headPivot'],
         ['body', 'bodyTilt'],
