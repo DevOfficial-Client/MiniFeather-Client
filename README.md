@@ -7,6 +7,8 @@ MiniFeather is a custom Miniblox client focused on adding new visuals, gameplay 
 > [!IMPORTANT]
 > **By downloading, installing or using MiniFeather Client, you explicitly declare that you have read the [EULA](EULA.md) and accepted its terms and conditions.** If you do not agree, do not download or use the client.
 >
+> The EULA is also available in [Español](EULA.es.md), with a friendly TL;DR in [English](EULA-TLDR.en.md) and [Spanish](EULA-TLDR.md).
+>
 > **This project is W.I.P. (Work In Progress).** Code errors, bugs, incomplete features and breaking changes may occur. Use at your own risk.
 
 ## Features
@@ -32,6 +34,7 @@ MiniFeather is a custom Miniblox client focused on adding new visuals, gameplay 
 * Auto Respawn
 * Anti-AFK
 * Texture Pack Manager
+* PBR Textures (labPBR, installable in-client from Modrinth presets)
 * Friend Nicknames
 * MiniFeather Voice (experimental one-to-one calls)
 * Rhythm Parkour

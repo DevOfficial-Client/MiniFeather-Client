@@ -1,7 +1,7 @@
 # Acuerdo de Licencia de Usuario Final (EULA) — MiniFeather Client
 
-**Versión del acuerdo:** 1.1
-**Fecha de entrada en vigor:** 28 de septiembre de 2026
+**Versión del acuerdo:** 1.2
+**Fecha de entrada en vigor:** 1 de octubre de 2026
 **Producto:** MiniFeather Client (extensión de navegador para Google Chrome / Chromium, MV3)
 **Desarrolladores:** botless, AngryWolfX, ShusukeGxE_, Not_Senpai, ItzNightrise ("el Equipo de Desarrollo", "nosotros")
 
@@ -9,6 +9,7 @@ Este Acuerdo de Licencia de Usuario Final ("Acuerdo") es un contrato vinculante 
 
 > [!NOTE]
 > This document is also available in English: [EULA.md](EULA.md)
+> También disponible una versión fácil de leer (TL;DR): [EULA-TLDR.md](EULA-TLDR.md) (español) · [EULA-TLDR.en.md](EULA-TLDR.en.md) (English)
 
 ---
 
@@ -21,6 +22,8 @@ Este Acuerdo de Licencia de Usuario Final ("Acuerdo") es un contrato vinculante 
 1.3. El Cliente se ejecuta sobre el juego Miniblox (`miniblox.io`, `miniblox.online`) y **modifica su comportamiento en el navegador del Usuario** (renderizado, interfaz, entrada de controles y comunicaciones de red del juego). El Usuario reconoce que el uso de software de terceros puede violar los Términos de Servicio de Miniblox y que **el único responsable de las consecuencias (incluida la suspensión o baneo de su cuenta) es el propio Usuario**.
 
 1.4. El Software se proporciona "TAL CUAL" y "SEGÚN DISPONIBILIDAD", sin garantías de ningún tipo, expresas o implícitas, incluyendo pero no limitándose a garantías de comercialización, aptitud para un propósito particular e infracción. El uso del Software es **por cuenta y riesgo del Usuario**.
+
+1.5. **Arte y recursos de terceros.** El Cliente incluye arte, modelos, fuentes, sonidos y otros recursos creados por terceros. Cada obra de terceros incluida está acreditada, con su autor, fuente y licencia, en el archivo [CREDITS.md](CREDITS.md) del proyecto. Dichos recursos siguen siendo propiedad de sus respectivos autores; el Equipo de Desarrollo no reclama ninguna titularidad sobre ellos y los acredita como reconocimiento de buena fe. Los titulares de derechos pueden solicitar una corrección de crédito o la retirada de su obra a través del canal de la sección 14.2.
 
 ---
 
@@ -192,7 +195,7 @@ EN LA MÁXIMA MEDIDA PERMITIDA POR LA LEY APLICABLE, EL EQUIPO DE DESARROLLO NO 
 
 14.1. MiniFeather Client es un proyecto comunitario de código abierto, no comercial y sin ánimo de lucro.
 
-14.2. Si usted es el titular de derechos sobre Miniblox o cualquier activo de terceros utilizado y desea solicitar un cambio o retirada, o si tiene preguntas sobre este Acuerdo o el tratamiento de datos, contacte a través del Discord oficial del proyecto: `https://discord.gg/k4Ku9DTQDQ`.
+14.2. Si usted es el titular de derechos sobre Miniblox o cualquier activo de terceros utilizado (incluida cualquier obra acreditada en el [CREDITS.md](CREDITS.md) del proyecto) y desea solicitar un cambio de crédito o una retirada, o si tiene preguntas sobre este Acuerdo o el tratamiento de datos, contacte a través del Discord oficial del proyecto: `https://discord.gg/k4Ku9DTQDQ`.
 
 ---
 

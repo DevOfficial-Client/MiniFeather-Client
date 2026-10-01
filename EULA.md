@@ -1,7 +1,7 @@
 # End User License Agreement (EULA) — MiniFeather Client
 
-**Agreement version:** 1.1
-**Effective date:** September 28, 2026
+**Agreement version:** 1.2
+**Effective date:** October 1, 2026
 **Product:** MiniFeather Client (browser extension for Google Chrome / Chromium, MV3)
 **Developers:** botless, AngryWolfX, ShusukeGxE_, Not_Senpai, ItzNightrise ("the Development Team", "we")
 
@@ -9,6 +9,7 @@ This End User License Agreement ("Agreement") is a binding contract between you 
 
 > [!NOTE]
 > Este documento también está disponible en español: [EULA.es.md](EULA.es.md)
+> A friendly, human-readable TL;DR is also available: [EULA-TLDR.en.md](EULA-TLDR.en.md) (English) · [EULA-TLDR.md](EULA-TLDR.md) (español)
 
 ---
 
@@ -21,6 +22,8 @@ This End User License Agreement ("Agreement") is a binding contract between you 
 1.3. The Client runs on top of the game Miniblox (`miniblox.io`, `miniblox.online`) and **modifies its behavior inside the User's browser** (rendering, interface, control input and game network communications). The User acknowledges that the use of third-party software may violate Miniblox's Terms of Service and that **the User is solely responsible for any consequences (including suspension or banning of their account)**.
 
 1.4. The Software is provided "AS IS" and "AS AVAILABLE", without warranties of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose and non-infringement. Use of the Software is **at the User's own risk**.
+
+1.5. **Third-party art and resources.** The Client bundles art, models, fonts, sounds and other resources created by third parties. Every bundled third-party work is credited, with its author, source and license, in the project's [CREDITS.md](CREDITS.md) file. Such resources remain the property of their respective authors; the Development Team claims no ownership over them and credits them as a good-faith acknowledgment. Rights holders may request a credit correction or the removal of their work through the channel in section 14.2.
 
 ---
 
@@ -192,7 +195,7 @@ TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE DEVELOPMENT TEAM SHALL NO
 
 14.1. MiniFeather Client is a community-driven, open-source, non-commercial, non-profit project.
 
-14.2. If you are the rights holder of Miniblox or any third-party asset used and wish to request a change or removal, or if you have questions about this Agreement or data handling, contact us through the project's official Discord: `https://discord.gg/k4Ku9DTQDQ`.
+14.2. If you are the rights holder of Miniblox or any third-party asset used (including any work credited in the project's [CREDITS.md](CREDITS.md)) and wish to request a credit change or removal, or if you have questions about this Agreement or data handling, contact us through the project's official Discord: `https://discord.gg/k4Ku9DTQDQ`.
 
 ---
 

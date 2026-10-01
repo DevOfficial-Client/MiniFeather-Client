@@ -1,8 +1,8 @@
 # minifeather client — human-readable eula (tl;dr)
 
 > [!note]
-> this is the easy, made-with-love version of the [full eula](eula.md). fun to read, but just as serious where it matters.
-> english version of [eula-tldr.en.md](eula-tldr.en.md). este documento también está disponible en español: [eula-tldr.md](eula-tldr.md)
+> this is the easy, made-with-love version of the [full eula](EULA.md). fun to read, but just as serious where it matters.
+> spanish version of this document: [eula-tldr.md](EULA-TLDR.md)
 
 ---
 
@@ -80,6 +80,10 @@ what you shouldn't do is stay quiet abusing the exploit like nothing happened: i
 
 the client **auto-updates from github** and can even apply changes on the fly (hotload). translation? sometimes it moves on its own while you're not looking. you can disable it in settings, but then you and the bugs are left alone with the old version. (⌐■_■)
 
+## 6.5. about other people's art (❛‿❛)
+
+the client includes art we didn't make: textures, models, emotes, fonts... everything that isn't ours is credited in the repo's [CREDITS.md](CREDITS.md), with its author and license. if something of yours is there, badly credited, uncredited, or you'd rather we removed it: one message on discord and we'll sort it out. (๑•̀ㅂ•́)و
+
 ## 7. in short, the deal is:
 
 | us | you |
@@ -91,7 +95,7 @@ the client **auto-updates from github** and can even apply changes on the fly (h
 
 ## 8. the short legal line
 
-the software is provided "as is", no warranties. we're not liable for bans, data loss, damages, or whatever the ai decides to say. the full, boring (but binding) version is in the [full eula](eula.md). if anything in this tl;dr contradicts the full version, the full one wins. always. period. ᕕ( ᐛ )ᕗ
+the software is provided "as is", no warranties. we're not liable for bans, data loss, damages, or whatever the ai decides to say. the full, boring (but binding) version is in the [full eula](EULA.md). if anything in this tl;dr contradicts the full version, the full one wins. always. period. ᕕ( ᐛ )ᕗ
 
 ---
 

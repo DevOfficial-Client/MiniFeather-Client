@@ -1,8 +1,8 @@
 # minifeather client — eula en humano (tl;dr)
 
 > [!note]
-> esto es la versión fácil y con cariño de la [eula completa](eula.md). divertida, pero igual de seria donde importa.
-> versión en español de [eula-tldr.md](eula-tldr.md). this file is also available in english: [eula-tldr.en.md](eula-tldr.en.md)
+> esto es la versión fácil y con cariño de la [eula completa en español](EULA.es.md). divertida, pero igual de seria donde importa.
+> versión en inglés de este documento: [eula-tldr.en.md](EULA-TLDR.en.md)
 
 ---
 
@@ -67,7 +67,7 @@ si eres de los buenos: gracias, de corazón. son la razón por la que seguimos. 
 
 ## 4.5. sobre bugs y exploits (los no intencionales, obvio)
 
-a veces se nos escapa un bug. o un exploit. **no es intencional**, lo juramos por el café. cuando nos enterramos de que algo está roto o algo se puede abusar, **intentamos arreglarlo y ponemos límites** lo antes posible. (๑•̀ㅂ•́)و
+a veces se nos escapa un bug. o un exploit. **no es intencional**, lo juramos por el café. cuando nos enteramos de que algo está roto o algo se puede abusar, **intentamos arreglarlo y ponemos límites** lo antes posible. (๑•̀ㅂ•́)و
 
 lo que no hagas es quedarte callado abusando del exploit como si no pasara nada: si ves algo raro, avísanos. arreglar antes > explotar después. y si explotas algo a sabiendas... recuerda la sección 3, la de "no seas eso".
 
@@ -81,6 +81,10 @@ lo que no hagas es quedarte callado abusando del exploit como si no pasara nada:
 
 el client se **auto-actualiza desde github** y hasta puede aplicar cambios en caliente (hotload). ¿traducción? a veces se mueve solo mientras no miras. puedes desactivarlo en ajustes, pero entonces tú y los bugs se quedan solos con la versión vieja. (⌐■_■)
 
+## 6.5. sobre las texturas, modelos y arte de otros (❛‿❛)
+
+el client incluye arte que no hicimos nosotros: texturas, modelos, emotes, fuentes... todo lo que no es nuestro está acreditado en el [CREDITS.md](CREDITS.md) del repositorio, con su autor y su licencia. si algo tuyo aparece ahí mal acreditado, sin acreditar, o prefieres que lo retiremos: un mensaje por discord y listo, se arregla al toque. (๑•̀ㅂ•́)و
+
 ## 7. en resumen, el trato es:
 
 | nosotros | tú |
@@ -92,7 +96,7 @@ el client se **auto-actualiza desde github** y hasta puede aplicar cambios en ca
 
 ## 8. la frase legal corta
 
-el software se entrega "tal cual", sin garantías. no somos responsables de baneos, pérdidas de datos, daños, ni de lo que decida la ia. la versión completa y aburrida (pero vinculante) está en la [eula completa](eula.md). si algo de este tl;dr contradice a la completa, gana la completa. siempre. período. ᕕ( ᐛ )ᕗ
+el software se entrega "tal cual", sin garantías. no somos responsables de baneos, pérdidas de datos, daños, ni de lo que decida la ia. la versión completa y aburrida (pero vinculante) está en la [eula completa en español](EULA.es.md). si algo de este tl;dr contradice a la completa, gana la completa. siempre. período. ᕕ( ᐛ )ᕗ
 
 ---
 
