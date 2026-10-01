@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 7499b5e3c88377524e19f05f9580300d633bd7b9
- * builtAt : 2026-10-01T07:08:34.266Z
+ * commit  : 62de06ebaa8f45d6adefb4116011ecc9b50610be
+ * builtAt : 2026-10-01T07:16:47.765Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"7499b5e3c88377524e19f05f9580300d633bd7b9","builtAt":"2026-10-01T07:08:34.273Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"62de06ebaa8f45d6adefb4116011ecc9b50610be","builtAt":"2026-10-01T07:16:47.766Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -114585,11 +114585,13 @@ function normalize(entry) {
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc'), tags: [] },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc'), tags: [] },
       { page: 'render', key: 'betterPlayerLayers', title: t('betterPlayerLayers'), desc: t('betterPlayerLayersDesc'), tags: [] },
+      { page: 'render', key: 'experimentalBetterAnimationCape', title: t('experimentalBetterAnimationCapeTitle'), desc: t('experimentalBetterAnimationCapeDesc'), tags: [] },
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc'), tags: ['pvp'] },
       { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc'), tags: ['pvp'] },
       { page: 'render', key: 'damageParticles', title: t('damageParticles'), desc: t('damageParticlesDesc'), tags: ['pvp'] },
       { page: 'render', key: 'waterSplash', title: t('waterSplash'), desc: t('waterSplashDesc'), tags: ['new'] },
       { page: 'render', key: 'shineAmbience', title: t('shineAmbience'), desc: t('shineAmbienceDesc'), tags: ['new'] },
+      { page: 'render', key: 'experimentalGrassFlowers', title: t('experimentalGrassFlowersTitle'), desc: t('experimentalGrassFlowersDesc'), tags: [] },
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc'), tags: [] },
       { page: 'render', key: 'duckMobs', title: t('duckMobs'), desc: t('duckMobsDesc'), tags: ['new'] },
       { page: 'render', key: 'critterSkins', title: 'critter variants (cats/wolves)', desc: 'wolf variant textures (persistent per entity) + pack cat models', tags: ['new'] },
@@ -114732,6 +114734,8 @@ function normalize(entry) {
     duckMobs: ['..yyyy..','.y####y.','y#k##k#y','y######y','.yoooooo','..yyyyy.','..O..O..','........'],
     crittersMobs: ['.NN..NN.','NnnNNnnN','NnnnnnnN','NnkNNknN','NnnnnnnN','.Nn##nN.','..NNNN..','........'],
     critterSkins: ['.k....k.','.kp..pk.','.++++++.','++++++++','++k++k++','++++++++','.++nn++.','..+kk+..'],
+    experimentalGrassFlowers: ['........','..#..y..','.#y#.yoy','..#..y..','..g..g..','.g.gg.g.','.gGgGgG.','.gg.gg..'],
+    experimentalBetterAnimationCape: ['......#.','..y...#.','.rr.....','rrRr....','rRRrR...','rrRRrr..','.rRRrR..','..rrr...'],
     deferredPipeline: ['........','...yy...','..y##y..','.y#oo#y.','.y#oo#y.','..y##y..','...yy...','........'],
     allayPets: ['..bbbb..','.bBBBBb.','bB#BB#Bb','bBBBBBBb','.bB##Bb.','..bBBb..','.bb..bb.','........'],
     itemPhysics: ['..yyyy..','.yYYyYy.','yYy##yYy','yYy##yYy','.yYYyYy.','..yyyy..','...oo...','....o...'],
@@ -118460,6 +118464,11 @@ function normalize(entry) {
               t('betterPlayerLayersDesc')
             )}
             ${renderToggle(
+              'experimentalBetterAnimationCape',
+              t('experimentalBetterAnimationCapeTitle'),
+              t('experimentalBetterAnimationCapeDesc')
+            )}
+            ${renderToggle(
               'healthNameTags',
               t('healthNameTags'),
               t('healthNameTagsDesc')
@@ -118518,6 +118527,11 @@ function normalize(entry) {
               'shineAmbience',
               t('shineAmbience'),
               t('shineAmbienceDesc')
+            )}
+            ${renderToggle(
+              'experimentalGrassFlowers',
+              t('experimentalGrassFlowersTitle'),
+              t('experimentalGrassFlowersDesc')
             )}
             ${renderToggle(
               'vanillaAnimations',

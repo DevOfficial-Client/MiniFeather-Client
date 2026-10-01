@@ -717,7 +717,8 @@ if (require.main === module) {
     if (!/^[A-Za-z][A-Za-z0-9]*$/.test(name)) throw new Error(`Unsafe icon name: ${name}`);
     if (name === 'patPat') continue;
     // autoReconnect: frames owned by tools/make-auto-reconnect-icons.js
-    if (name === 'autoReconnect') continue;
+    // experimental* cards: 00.png is hand-made card art, don't regenerate
+    if (name === 'autoReconnect' || name.startsWith('experimental')) continue;
     const folder = path.resolve(outputDir, name);
     fs.mkdirSync(folder, { recursive: true });
     const target = path.resolve(folder, '00.png');

@@ -3567,11 +3567,13 @@
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc'), tags: [] },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc'), tags: [] },
       { page: 'render', key: 'betterPlayerLayers', title: t('betterPlayerLayers'), desc: t('betterPlayerLayersDesc'), tags: [] },
+      { page: 'render', key: 'experimentalBetterAnimationCape', title: t('experimentalBetterAnimationCapeTitle'), desc: t('experimentalBetterAnimationCapeDesc'), tags: [] },
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc'), tags: ['pvp'] },
       { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc'), tags: ['pvp'] },
       { page: 'render', key: 'damageParticles', title: t('damageParticles'), desc: t('damageParticlesDesc'), tags: ['pvp'] },
       { page: 'render', key: 'waterSplash', title: t('waterSplash'), desc: t('waterSplashDesc'), tags: ['new'] },
       { page: 'render', key: 'shineAmbience', title: t('shineAmbience'), desc: t('shineAmbienceDesc'), tags: ['new'] },
+      { page: 'render', key: 'experimentalGrassFlowers', title: t('experimentalGrassFlowersTitle'), desc: t('experimentalGrassFlowersDesc'), tags: [] },
       { page: 'render', key: 'patPat', title: t('patPat'), desc: t('patPatDesc'), tags: [] },
       { page: 'render', key: 'duckMobs', title: t('duckMobs'), desc: t('duckMobsDesc'), tags: ['new'] },
       { page: 'render', key: 'critterSkins', title: 'critter variants (cats/wolves)', desc: 'wolf variant textures (persistent per entity) + pack cat models', tags: ['new'] },
@@ -3714,6 +3716,8 @@
     duckMobs: ['..yyyy..','.y####y.','y#k##k#y','y######y','.yoooooo','..yyyyy.','..O..O..','........'],
     crittersMobs: ['.NN..NN.','NnnNNnnN','NnnnnnnN','NnkNNknN','NnnnnnnN','.Nn##nN.','..NNNN..','........'],
     critterSkins: ['.k....k.','.kp..pk.','.++++++.','++++++++','++k++k++','++++++++','.++nn++.','..+kk+..'],
+    experimentalGrassFlowers: ['........','..#..y..','.#y#.yoy','..#..y..','..g..g..','.g.gg.g.','.gGgGgG.','.gg.gg..'],
+    experimentalBetterAnimationCape: ['......#.','..y...#.','.rr.....','rrRr....','rRRrR...','rrRRrr..','.rRRrR..','..rrr...'],
     deferredPipeline: ['........','...yy...','..y##y..','.y#oo#y.','.y#oo#y.','..y##y..','...yy...','........'],
     allayPets: ['..bbbb..','.bBBBBb.','bB#BB#Bb','bBBBBBBb','.bB##Bb.','..bBBb..','.bb..bb.','........'],
     itemPhysics: ['..yyyy..','.yYYyYy.','yYy##yYy','yYy##yYy','.yYYyYy.','..yyyy..','...oo...','....o...'],
@@ -7442,6 +7446,11 @@
               t('betterPlayerLayersDesc')
             )}
             ${renderToggle(
+              'experimentalBetterAnimationCape',
+              t('experimentalBetterAnimationCapeTitle'),
+              t('experimentalBetterAnimationCapeDesc')
+            )}
+            ${renderToggle(
               'healthNameTags',
               t('healthNameTags'),
               t('healthNameTagsDesc')
@@ -7500,6 +7509,11 @@
               'shineAmbience',
               t('shineAmbience'),
               t('shineAmbienceDesc')
+            )}
+            ${renderToggle(
+              'experimentalGrassFlowers',
+              t('experimentalGrassFlowersTitle'),
+              t('experimentalGrassFlowersDesc')
             )}
             ${renderToggle(
               'vanillaAnimations',
