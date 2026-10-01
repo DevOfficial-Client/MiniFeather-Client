@@ -77,6 +77,8 @@ Developed by:
 
 Made by Miniblox community for the Miniblox community.
 
+Art, models and third-party resources bundled with the client are credited separately in [CREDITS.md](CREDITS.md).
+
 ---
 
 <p align="center">
