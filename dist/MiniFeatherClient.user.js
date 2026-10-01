@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 1abcc3fd73eeb7470eac5c2b8ab558709a2ab925
- * builtAt : 2026-10-01T16:29:35.779Z
+ * commit  : 580a51664f30d95cac67622fd0d6d69e313fc073
+ * builtAt : 2026-10-01T16:38:16.871Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"1abcc3fd73eeb7470eac5c2b8ab558709a2ab925","builtAt":"2026-10-01T16:29:35.785Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"580a51664f30d95cac67622fd0d6d69e313fc073","builtAt":"2026-10-01T16:38:16.872Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -67937,6 +67937,27 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
                 if (typeof mesh.applyDeathArmor === 'function') mesh.applyDeathArmor.call(mesh);
             }
         } catch {}
+        // geometría y materiales PROPIOS: el dispose() del juego destruye las
+        // geometrías compartidas por tipo de mob — cuando otro zombie del mismo
+        // modelo muere o despawnea, los buffers compartidos mueren con él y
+        // nuestro corpse se queda pintado de nada (el bug del ragdoll invisible:
+        // inScene:true, vis:true y ni rastro). clonar todo al capturar = 
+        // desheredar la herencia compartida.
+        let clonedParts = 0;
+        try {
+            mesh.traverse((o) => {
+                if (!o.isMesh) return;
+                try {
+                    if (o.geometry) { o.geometry = o.geometry.clone(); o.geometry.__mfClone = true; clonedParts++; }
+                } catch {}
+                try {
+                    if (Array.isArray(o.material)) o.material = o.material.map((m) => m.clone());
+                    else if (o.material) o.material = o.material.clone();
+                } catch {}
+            });
+        } catch {}
+        // escala cero heredada de cualquier animación previa: el corpse no nace aplanado
+        try { if (!mesh.scale.x || !mesh.scale.y || !mesh.scale.z) mesh.scale.set(1, 1, 1); } catch {}
         // tinte rojo de muerte (HAe/VAe no accesibles: color propio)
         try {
             const C = grabColorCtor(mesh);
@@ -68012,6 +68033,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
         const rec = {
             mesh, ent, game,
+            parts: clonedParts,
             noWorld: !worldReady,
             pos: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
             prevPos: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
@@ -68541,7 +68563,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
                 sceneGuard: !!state.sceneGuardContainer?.__mfSceneGuard,
                 seen: { ...state.diagSeen },
                 corpses: state.corpses.map((r) => ({
-                    type: r.ent?.type || '?', age: r.age, settled: r.settled,
+                    type: r.ent?.type || '?', age: r.age, settled: r.settled, parts: r.parts || 0,
                     x: +r.pos.x.toFixed(1), y: +r.pos.y.toFixed(1), z: +r.pos.z.toFixed(1),
                     uuid: meshUuid(r.mesh),
                     inScene: inSceneOf(r.mesh, state.game?.gameScene?.scene),
