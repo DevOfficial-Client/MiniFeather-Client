@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 670160a44026bdc59dabcf8cbc94beeaaf37634e
- * builtAt : 2026-10-01T16:54:24.075Z
+ * commit  : f4a22df56977932a3c0643a5dbe5c0c6e86957b0
+ * builtAt : 2026-10-01T23:57:09.834Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"670160a44026bdc59dabcf8cbc94beeaaf37634e","builtAt":"2026-10-01T16:54:24.081Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"f4a22df56977932a3c0643a5dbe5c0c6e86957b0","builtAt":"2026-10-01T23:57:09.859Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -14510,6 +14510,7 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"670160a44026bdc59dabcf8cbc94be
         mfuser:   { level: 50,   label: 'MFUser' },
         premium:  { level: 51,   label: 'Premium' },
         mftester: { level: 100,  label: 'MFTester' },
+        dev:      { level: 201,  label: 'MFDev' },
         mfdev:    { level: 201,  label: 'MFDev' },
         mfowner:  { level: 201,  label: 'MFOwner' },
         mfdevgf:  { level: 9183, label: 'MFDevGF' }
@@ -18370,6 +18371,7 @@ const FREECAM_UUIDS = new Set([
 
         const state = {
     enabled: false,
+    returning: null,
     configured: false,
     requestedEnabled: false,
     lastEnableAttempt: 0,
@@ -18389,6 +18391,8 @@ const FREECAM_UUIDS = new Set([
     freePosition: null,
     yaw: 0,
     pitch: 0,
+    entryYaw: 0,
+    entryPitch: 0,
     lastFrame: performance.now(),
     lastGameScan: 0,
     lastCameraScan: 0,
@@ -18709,7 +18713,7 @@ const FREECAM_UUIDS = new Set([
     }
 
     function applyPose(camera = state.camera) {
-    if (!state.enabled || !camera || !state.freePosition) return;
+    if ((!state.enabled && !state.returning) || !camera || !state.freePosition) return;
 
     const parent = camera.parent || null;
     let x = state.freePosition.x;
@@ -18779,7 +18783,7 @@ const FREECAM_UUIDS = new Set([
     if (state.matrixHook?.camera !== camera && typeof camera.updateMatrixWorld === 'function') {
         const original = camera.updateMatrixWorld;
         const hook = function (...args) {
-            if (state.enabled && state.camera === camera) applyPose(camera);
+            if ((state.enabled || state.returning) && state.camera === camera) applyPose(camera);
             return original.apply(this, args);
         };
         try {
@@ -18791,7 +18795,7 @@ const FREECAM_UUIDS = new Set([
     if (state.worldMatrixHook?.camera !== camera && typeof camera.updateWorldMatrix === 'function') {
         const original = camera.updateWorldMatrix;
         const hook = function (...args) {
-            if (state.enabled && state.camera === camera) applyPose(camera);
+            if ((state.enabled || state.returning) && state.camera === camera) applyPose(camera);
             return original.apply(this, args);
         };
         try {
@@ -18931,6 +18935,26 @@ const FREECAM_UUIDS = new Set([
     } catch (_) {}
     }
 
+    function restoreCameraNearPlayer(camera, player) {
+    const eye = getPlayerCameraOrigin(player);
+    const actual = captureWorldPosition(camera);
+    if (!eye || !actual) return false;
+    if (Math.hypot(actual.x - eye.x, actual.y - eye.y, actual.z - eye.z) <= 8) return false;
+
+    const parent = camera.parent;
+    let local = eye;
+    try {
+        parent?.updateWorldMatrix?.(true, false);
+        if (typeof parent?.worldToLocal === 'function' && camera.position?.clone) {
+            const point = camera.position.clone();
+            copyXYZ(point, eye);
+            parent.worldToLocal(point);
+            local = cloneXYZ(point) || eye;
+        }
+    } catch (_) { local = eye; }
+    return copyXYZ(camera.position, local);
+    }
+
     function emitState(extra = {}) {
     const game = getGame(true);
     const permissionLevel = getServerPermissionLevel(game);
@@ -18947,6 +18971,7 @@ const FREECAM_UUIDS = new Set([
 
     function enable() {
     if (state.enabled) return true;
+    if (state.returning) completeDisable();
 
     const game = getGame(true);
     const player = game?.player;
@@ -19007,6 +19032,8 @@ const FREECAM_UUIDS = new Set([
         state.pitch = clamp(rotation?.x ?? Number(player.pitch) ?? 0, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
         state.yaw = rotation?.y ?? Number(player.yaw) ?? 0;
     }
+    state.entryPitch = state.pitch;
+    state.entryYaw = state.yaw;
 
     state.enabled = true;
     globalThis.__MINIFEATHER_FREECAM_ACTIVE__ = true;
@@ -19020,27 +19047,27 @@ const FREECAM_UUIDS = new Set([
     return true;
     }
 
-    function disable(preserveRequest = false) {
-    if (!preserveRequest) state.requestedEnabled = false;
-    if (!state.enabled) return;
-
+    function completeDisable() {
     const camera = state.camera;
     const player = state.player;
 
     state.enabled = false;
+    state.returning = null;
     globalThis.__MINIFEATHER_FREECAM_ACTIVE__ = false;
     clearKeys();
     neutralizePlayerInput();
 
+    restorePerspective(player);
+
     if (camera) {
-        if (state.detached) restoreCameraParent(camera);
+        if (state.originalParent && camera.parent !== state.originalParent) restoreCameraParent(camera);
         if (state.originalPosition) copyXYZ(camera.position, state.originalPosition);
         if (state.originalQuaternion) copyQuaternion(camera.quaternion, state.originalQuaternion);
         if (state.originalRotation) copyRotation(camera.rotation, state.originalRotation);
         try { camera.updateMatrixWorld?.(true); } catch (_) {}
+        restoreCameraNearPlayer(camera, player);
+        try { camera.updateMatrixWorld?.(true); } catch (_) {}
     }
-
-    restorePerspective(player);
 
     state.originalParent = null;
     state.originalIndex = -1;
@@ -19054,6 +19081,53 @@ const FREECAM_UUIDS = new Set([
     emitState();
     }
 
+    function updateReturn(timestamp) {
+    const flight = state.returning;
+    if (!flight) return;
+    const target = getPlayerCameraOrigin(state.player);
+    if (!target || !state.camera || state.game?.player !== state.player) {
+        completeDisable();
+        return;
+    }
+    const progress = clamp((timestamp - flight.start) / flight.duration, 0, 1);
+    const ease = progress * progress * (3 - 2 * progress);
+    state.freePosition = {
+        x: flight.from.x + (target.x - flight.from.x) * ease,
+        y: flight.from.y + (target.y - flight.from.y) * ease,
+        z: flight.from.z + (target.z - flight.from.z) * ease
+    };
+    state.pitch = flight.pitch + (state.entryPitch - flight.pitch) * ease;
+    const yawDelta = Math.atan2(Math.sin(state.entryYaw - flight.yaw), Math.cos(state.entryYaw - flight.yaw));
+    state.yaw = flight.yaw + yawDelta * ease;
+    if (progress >= 1) completeDisable();
+    else applyPose(state.camera);
+    }
+
+    function disable(preserveRequest = false, animate = true) {
+    if (!preserveRequest) state.requestedEnabled = false;
+    if (state.returning) {
+        if (!animate) completeDisable();
+        return;
+    }
+    if (!state.enabled) return;
+    clearKeys();
+    neutralizePlayerInput();
+    const from = cloneXYZ(state.freePosition);
+    const target = getPlayerCameraOrigin(state.player);
+    if (animate && from && target && state.camera && state.game?.player === state.player &&
+        Math.hypot(from.x - target.x, from.y - target.y, from.z - target.z) > 0.5) {
+        const distance = Math.hypot(from.x - target.x, from.y - target.y, from.z - target.z);
+        state.returning = {
+            start: performance.now(), duration: clamp(350 + distance * 4, 350, 800),
+            from, yaw: state.yaw, pitch: state.pitch
+        };
+        state.enabled = false;
+        emitState();
+        return;
+    }
+    completeDisable();
+    }
+
     function setEnabled(value) {
     state.requestedEnabled = !!value;
     if (state.requestedEnabled) return enable();
@@ -19062,12 +19136,16 @@ const FREECAM_UUIDS = new Set([
     }
 
     function update(timestamp) {
+    if (state.returning) {
+        updateReturn(timestamp);
+        return;
+    }
     if (!state.enabled) return;
 
     const game = getGame();
     if (!game?.player || game.player !== state.player) {
         state.requestedEnabled = false;
-        disable(true);
+        disable(true, false);
         return;
     }
 
@@ -19075,7 +19153,7 @@ const FREECAM_UUIDS = new Set([
         state.lastAccessCheck = timestamp;
         if (!hasFreecamAccess(game)) {
             state.requestedEnabled = false;
-            disable(true);
+            disable(true, false);
             emitState({ error: 'NO_SERVER_ADMIN' });
             return;
         }
@@ -19083,7 +19161,7 @@ const FREECAM_UUIDS = new Set([
 
     const camera = resolveCamera();
     if (!camera || camera !== state.camera) {
-        disable(true);
+        disable(true, false);
         return;
     }
 
@@ -19135,12 +19213,9 @@ const FREECAM_UUIDS = new Set([
         ]);
 
     window.addEventListener('keydown', event => {
-    if (!state.enabled || isTypingOrUiOpen()) return;
-
-
-    if (!state.enabled || isTypingOrUiOpen()) return;
+    if ((!state.enabled && !state.returning) || isTypingOrUiOpen()) return;
     if (!movementKeys.has(event.code)) return;
-    keys[event.code] = true;
+    if (state.enabled) keys[event.code] = true;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
@@ -19152,7 +19227,12 @@ const FREECAM_UUIDS = new Set([
     }, true);
 
     window.addEventListener('mousemove', event => {
-    if (!state.enabled || !document.pointerLockElement || isTypingOrUiOpen()) return;
+    if ((!state.enabled && !state.returning) || !document.pointerLockElement || isTypingOrUiOpen()) return;
+    if (state.returning) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+    }
 
     const sensitivity = 0.0022 * clamp(state.sensitivity, 0.1, 3);
     state.yaw -= Number(event.movementX || 0) * sensitivity;
@@ -19166,7 +19246,7 @@ const FREECAM_UUIDS = new Set([
 
     for (const type of ['mousedown', 'mouseup']) {
     window.addEventListener(type, event => {
-        if (!state.enabled || isTypingOrUiOpen()) return;
+        if ((!state.enabled && !state.returning) || isTypingOrUiOpen()) return;
         if (event.button < 0 || event.button > 2) return;
         event.preventDefault();
         event.stopPropagation();
@@ -19178,7 +19258,7 @@ const FREECAM_UUIDS = new Set([
     }
 
     window.addEventListener('wheel', event => {
-    if (!state.enabled || isTypingOrUiOpen()) return;
+        if ((!state.enabled && !state.returning) || isTypingOrUiOpen()) return;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
@@ -19204,7 +19284,7 @@ const FREECAM_UUIDS = new Set([
     }, false);
 
     function loop(timestamp) {
-    if (state.requestedEnabled && !state.enabled && timestamp - state.lastEnableAttempt >= 650) {
+    if (state.requestedEnabled && !state.enabled && !state.returning && timestamp - state.lastEnableAttempt >= 650) {
         state.lastEnableAttempt = timestamp;
         enable();
     }
@@ -119809,6 +119889,20 @@ function normalize(entry) {
   const EXPERIMENTAL_TIER_MIN = 100;
   const EXPERIMENTAL_TIER_MAX = 9183;
   let experimentalTierOk = null;
+  let experimentalGateListener = null;
+  let experimentalGateRetryTimer = 0;
+  let experimentalGateAttempts = 0;
+
+  function experimentalLevelFromAccount(data) {
+    const rank = String(data?.rank || '').trim().toLowerCase();
+    const known = {
+      mfuser: 50, premium: 51, mftester: 100,
+      dev: 201, mfdev: 201, mfowner: 201, mfdevgf: 9183
+    };
+    if (rank) return known[rank] || 0;
+    const level = Number(data?.rankLevel);
+    return Number.isFinite(level) ? level : 0;
+  }
 
   function forceExperimentalOff() {
     let changed = false;
@@ -119823,28 +119917,34 @@ function normalize(entry) {
   }
 
   function refreshExperimentalGate() {
-    // listener propio (no el slot compartido de requestAccountData): una carrera
-    // con la página de cuentas dejaría el gate en null = bloqueado para siempre
-    let settled = false;
-    const apply = data => {
-      if (settled) return;
-      settled = true;
-      const level = Number(data?.rankLevel) || 0;
-      experimentalTierOk = level >= EXPERIMENTAL_TIER_MIN && level <= EXPERIMENTAL_TIER_MAX;
-      if (!experimentalTierOk) forceExperimentalOff();
-      if (panel) renderCurrentPageContent();
-    };
-    try {
-      document.addEventListener('minifeather:accounts-data', function onData(e) {
+    if (destroyed) return;
+    if (!experimentalGateListener) {
+      experimentalGateListener = e => {
         let data = null;
         try { data = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail; } catch (_) {}
-        if (!data) return;
-        document.removeEventListener('minifeather:accounts-data', onData);
-        apply(data);
-      });
+        if (!data || typeof data !== 'object') return;
+        clearTimeout(experimentalGateRetryTimer);
+        experimentalGateRetryTimer = 0;
+        experimentalGateAttempts = 0;
+        const level = experimentalLevelFromAccount(data);
+        experimentalTierOk = level >= EXPERIMENTAL_TIER_MIN && level <= EXPERIMENTAL_TIER_MAX;
+        if (!experimentalTierOk) forceExperimentalOff();
+        if (panel && activePage === 'experimental') renderCurrentPageContent();
+      };
+      document.addEventListener('minifeather:accounts-data', experimentalGateListener);
+    }
+    clearTimeout(experimentalGateRetryTimer);
+    experimentalGateAttempts = 0;
+    experimentalTierOk = null;
+    const request = () => {
+      if (destroyed || experimentalGateAttempts >= 3) return;
+      experimentalGateAttempts++;
       document.dispatchEvent(new CustomEvent('minifeather:accounts-request', { detail: '{}' }));
-      setTimeout(() => apply(null), 3000);
-    } catch (_) { apply(null); }
+      if (experimentalGateAttempts < 3) {
+        experimentalGateRetryTimer = setTimeout(request, experimentalGateAttempts * 5000);
+      }
+    };
+    request();
   }
 
   async function refreshAccountCard() {
@@ -120191,6 +120291,7 @@ function normalize(entry) {
 
   function setActivePage(page) {
     activePage = page;
+    if (page === 'experimental') refreshExperimentalGate();
     searchQuery = '';
     favoritesOnly = false;
     if (panel) {
@@ -124817,6 +124918,12 @@ function normalize(entry) {
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    clearTimeout(experimentalGateRetryTimer);
+    experimentalGateRetryTimer = 0;
+    if (experimentalGateListener) {
+      document.removeEventListener('minifeather:accounts-data', experimentalGateListener);
+      experimentalGateListener = null;
+    }
     closeModuleRiskPrompt(false);
 
     clearTimeout(updateTimer);
