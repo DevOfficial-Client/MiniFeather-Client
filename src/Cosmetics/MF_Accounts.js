@@ -87,7 +87,38 @@
         if (!state.uuid) fromGameProfile();
         return { ...state };
     }
-    window.MF_Accounts = { getAccount, refresh: () => getAccount(true) };
+    // jerarquía canónica de rangos MiniFeather (nivel numérico de menor a mayor;
+    // mfdev y mfowner comparten el tope 201). los ranks llegan como string del
+    // server/bot de discord y se comparan case-insensitive.
+    const RANK_HIERARCHY = {
+        mfuser:   { level: 50,  label: 'MFUser' },
+        premium:  { level: 51,  label: 'Premium' },
+        mftester: { level: 100, label: 'MFTester' },
+        mfdev:    { level: 201, label: 'MFDev' },
+        mfowner:  { level: 201, label: 'MFOwner' }
+    };
+
+    function rankLevel(rank) {
+        if (!rank) return 0;
+        return RANK_HIERARCHY[String(rank).toLowerCase()]?.level || 0;
+    }
+
+    function rankLabel(rank) {
+        return RANK_HIERARCHY[String(rank || '').toLowerCase()]?.label || null;
+    }
+
+    function rankAtLeast(rank, minRank) {
+        return rankLevel(rank) >= rankLevel(minRank);
+    }
+
+    window.MF_Accounts = {
+        getAccount,
+        refresh: () => getAccount(true),
+        RANK_HIERARCHY,
+        rankLevel,
+        rankLabel,
+        rankAtLeast
+    };
     document.addEventListener('minifeather:accounts-request', () => {
         getAccount(true).then(acc => {
             const detail = JSON.stringify({ uuid: acc.uuid, username: acc.username, rank: acc.rank, session: !!acc.session });

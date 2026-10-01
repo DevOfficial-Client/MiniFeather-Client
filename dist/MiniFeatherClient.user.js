@@ -12,12 +12,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : f6e47f0d43d3faffff031cc88936b689649eb48a
- * builtAt : 2026-10-01T06:44:28.905Z
+ * commit  : 71d4fc44ebfab1d682842ae82abdca61d0975ed6
+ * builtAt : 2026-10-01T07:08:18.895Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"f6e47f0d43d3faffff031cc88936b689649eb48a","builtAt":"2026-10-01T06:44:28.966Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"71d4fc44ebfab1d682842ae82abdca61d0975ed6","builtAt":"2026-10-01T07:08:18.896Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -14497,7 +14497,38 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"f6e47f0d43d3faffff031cc88936b6
         if (!state.uuid) fromGameProfile();
         return { ...state };
     }
-    window.MF_Accounts = { getAccount, refresh: () => getAccount(true) };
+    // jerarquía canónica de rangos MiniFeather (nivel numérico de menor a mayor;
+    // mfdev y mfowner comparten el tope 201). los ranks llegan como string del
+    // server/bot de discord y se comparan case-insensitive.
+    const RANK_HIERARCHY = {
+        mfuser:   { level: 50,  label: 'MFUser' },
+        premium:  { level: 51,  label: 'Premium' },
+        mftester: { level: 100, label: 'MFTester' },
+        mfdev:    { level: 201, label: 'MFDev' },
+        mfowner:  { level: 201, label: 'MFOwner' }
+    };
+
+    function rankLevel(rank) {
+        if (!rank) return 0;
+        return RANK_HIERARCHY[String(rank).toLowerCase()]?.level || 0;
+    }
+
+    function rankLabel(rank) {
+        return RANK_HIERARCHY[String(rank || '').toLowerCase()]?.label || null;
+    }
+
+    function rankAtLeast(rank, minRank) {
+        return rankLevel(rank) >= rankLevel(minRank);
+    }
+
+    window.MF_Accounts = {
+        getAccount,
+        refresh: () => getAccount(true),
+        RANK_HIERARCHY,
+        rankLevel,
+        rankLabel,
+        rankAtLeast
+    };
     document.addEventListener('minifeather:accounts-request', () => {
         getAccount(true).then(acc => {
             const detail = JSON.stringify({ uuid: acc.uuid, username: acc.username, rank: acc.rank, session: !!acc.session });
@@ -36962,7 +36993,7 @@ const VEGETATION_PASS_THROUGH = new Set([
 
 //# sourceURL=MF:src/Experimental/Constellations/Constellations.js
 
-/* ==== mf module: src/Experimental/GrassFlowers/GrassFlowers.js ==== */
+/* ==== mf module: src/Render/GrassFlowers.js ==== */
 (() => {
   'use strict';
 
@@ -37494,7 +37525,7 @@ const VEGETATION_PASS_THROUGH = new Set([
   };
 })();
 
-//# sourceURL=MF:src/Experimental/GrassFlowers/GrassFlowers.js
+//# sourceURL=MF:src/Render/GrassFlowers.js
 
 /* ==== mf module: src/Experimental/FallenLeaves/FallenLeaves.js ==== */
 (() => {
@@ -39158,7 +39189,7 @@ const VEGETATION_PASS_THROUGH = new Set([
 
 //# sourceURL=MF:src/Experimental/AnimatedItems/AnimatedItems.js
 
-/* ==== mf module: src/Experimental/BetterAnimationCape/BetterAnimationCape.js ==== */
+/* ==== mf module: src/Render/BetterAnimationCape.js ==== */
 (() => {
     'use strict';
 
@@ -39761,7 +39792,7 @@ const VEGETATION_PASS_THROUGH = new Set([
     requestAnimationFrame(loop);
 })();
 
-//# sourceURL=MF:src/Experimental/BetterAnimationCape/BetterAnimationCape.js
+//# sourceURL=MF:src/Render/BetterAnimationCape.js
 
 /* ==== mf module: src/World/AutoRespawn.js ==== */
 (function () {
