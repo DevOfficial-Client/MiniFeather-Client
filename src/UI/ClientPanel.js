@@ -8722,6 +8722,20 @@
   const EXPERIMENTAL_TIER_MIN = 100;
   const EXPERIMENTAL_TIER_MAX = 9183;
   let experimentalTierOk = null;
+  let experimentalGateListener = null;
+  let experimentalGateRetryTimer = 0;
+  let experimentalGateAttempts = 0;
+
+  function experimentalLevelFromAccount(data) {
+    const rank = String(data?.rank || '').trim().toLowerCase();
+    const known = {
+      mfuser: 50, premium: 51, mftester: 100,
+      dev: 201, mfdev: 201, mfowner: 201, mfdevgf: 9183
+    };
+    if (rank) return known[rank] || 0;
+    const level = Number(data?.rankLevel);
+    return Number.isFinite(level) ? level : 0;
+  }
 
   function forceExperimentalOff() {
     let changed = false;
@@ -8736,28 +8750,34 @@
   }
 
   function refreshExperimentalGate() {
-    // listener propio (no el slot compartido de requestAccountData): una carrera
-    // con la página de cuentas dejaría el gate en null = bloqueado para siempre
-    let settled = false;
-    const apply = data => {
-      if (settled) return;
-      settled = true;
-      const level = Number(data?.rankLevel) || 0;
-      experimentalTierOk = level >= EXPERIMENTAL_TIER_MIN && level <= EXPERIMENTAL_TIER_MAX;
-      if (!experimentalTierOk) forceExperimentalOff();
-      if (panel) renderCurrentPageContent();
-    };
-    try {
-      document.addEventListener('minifeather:accounts-data', function onData(e) {
+    if (destroyed) return;
+    if (!experimentalGateListener) {
+      experimentalGateListener = e => {
         let data = null;
         try { data = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail; } catch (_) {}
-        if (!data) return;
-        document.removeEventListener('minifeather:accounts-data', onData);
-        apply(data);
-      });
+        if (!data || typeof data !== 'object') return;
+        clearTimeout(experimentalGateRetryTimer);
+        experimentalGateRetryTimer = 0;
+        experimentalGateAttempts = 0;
+        const level = experimentalLevelFromAccount(data);
+        experimentalTierOk = level >= EXPERIMENTAL_TIER_MIN && level <= EXPERIMENTAL_TIER_MAX;
+        if (!experimentalTierOk) forceExperimentalOff();
+        if (panel && activePage === 'experimental') renderCurrentPageContent();
+      };
+      document.addEventListener('minifeather:accounts-data', experimentalGateListener);
+    }
+    clearTimeout(experimentalGateRetryTimer);
+    experimentalGateAttempts = 0;
+    experimentalTierOk = null;
+    const request = () => {
+      if (destroyed || experimentalGateAttempts >= 3) return;
+      experimentalGateAttempts++;
       document.dispatchEvent(new CustomEvent('minifeather:accounts-request', { detail: '{}' }));
-      setTimeout(() => apply(null), 3000);
-    } catch (_) { apply(null); }
+      if (experimentalGateAttempts < 3) {
+        experimentalGateRetryTimer = setTimeout(request, experimentalGateAttempts * 5000);
+      }
+    };
+    request();
   }
 
   async function refreshAccountCard() {
@@ -9104,6 +9124,7 @@
 
   function setActivePage(page) {
     activePage = page;
+    if (page === 'experimental') refreshExperimentalGate();
     searchQuery = '';
     favoritesOnly = false;
     if (panel) {
@@ -13730,6 +13751,12 @@
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    clearTimeout(experimentalGateRetryTimer);
+    experimentalGateRetryTimer = 0;
+    if (experimentalGateListener) {
+      document.removeEventListener('minifeather:accounts-data', experimentalGateListener);
+      experimentalGateListener = null;
+    }
     closeModuleRiskPrompt(false);
 
     clearTimeout(updateTimer);

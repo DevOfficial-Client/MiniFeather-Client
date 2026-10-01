@@ -689,6 +689,57 @@ test('FreeCam applyPose converts world coordinates into the engine rig space', (
   assert.equal(free.camera.position.z, 2000);
 });
 
+test('FreeCam returns a displaced camera to the current player position', () => {
+  const sandbox = {
+    getPlayerCameraOrigin: player => ({ x: player.pos.x, y: player.pos.y + 1.6, z: player.pos.z }),
+    cloneXYZ: value => ({ x: value.x, y: value.y, z: value.z }),
+    copyXYZ(target, source) { target.set(source.x, source.y, source.z); return true; },
+    captureWorldPosition(camera) {
+      return {
+        x: camera.parent.position.x + camera.position.x,
+        y: camera.parent.position.y + camera.position.y,
+        z: camera.parent.position.z + camera.position.z
+      };
+    }
+  };
+  const restore = expose(namedFunction(freecamSource, 'restoreCameraNearPlayer'), sandbox);
+  const rig = makeFakeFreecamCamera(makeFakeVec3(0, 70, 0));
+  rig.camera.position.set(100, 10, 100);
+  const player = { pos: { x: 20, y: 70, z: 30 } };
+
+  assert.equal(restore(rig.camera, player), true);
+  assert.equal(rig.camera.position.x, 20);
+  assert.ok(Math.abs(rig.camera.position.y - 1.6) < 1e-9);
+  assert.equal(rig.camera.position.z, 30);
+  assert.equal(restore(rig.camera, player), false, 'nearby camera keeps its native offset');
+});
+
+test('FreeCam return flight eases back before restoring the native camera', () => {
+  const player = { pos: { x: 20, y: 70, z: 30 } };
+  const state = {
+    returning: { start: 100, duration: 400, from: { x: 100, y: 90, z: 100 }, yaw: 2, pitch: 0.5 },
+    player, game: { player }, camera: {}, entryYaw: 0, entryPitch: 0,
+    freePosition: { x: 100, y: 90, z: 100 }, yaw: 2, pitch: 0.5
+  };
+  let applied = 0;
+  let completed = 0;
+  const updateReturn = expose(namedFunction(freecamSource, 'updateReturn'), {
+    state,
+    getPlayerCameraOrigin: () => ({ x: 20, y: 71.6, z: 30 }),
+    clamp: (value, min, max) => Math.min(max, Math.max(min, value)),
+    applyPose: () => { applied++; },
+    completeDisable: () => { completed++; state.returning = null; }
+  });
+  updateReturn(300);
+  assert.ok(state.freePosition.x > 20 && state.freePosition.x < 100);
+  assert.equal(applied, 1);
+  assert.equal(completed, 0);
+  updateReturn(500);
+  assert.equal(state.freePosition.x, 20);
+  assert.equal(state.freePosition.y, 71.6);
+  assert.equal(completed, 1);
+});
+
 
 test('FreeCam stays a pure free camera: no clones, panel key passthrough and re-lock', () => {
   assert.doesNotMatch(freecamSource, /event\.code === 'F5'/, 'F5 handling removed');
@@ -697,7 +748,7 @@ test('FreeCam stays a pure free camera: no clones, panel key passthrough and re-
   // ShiftRight ya no es tecla de movimiento: queda libre para el panel
   assert.doesNotMatch(freecamSource, /'Space', 'ShiftLeft', 'ShiftRight'/);
   assert.match(freecamSource, /'Space', 'ShiftLeft',/);
-  assert.match(freecamSource, /if \(state\.enabled && state\.camera === camera\) applyPose\(camera\);/);
+  assert.match(freecamSource, /if \(\(state\.enabled \|\| state\.returning\) && state\.camera === camera\) applyPose\(camera\);/);
 });
 
 function makeCloneWorld() {

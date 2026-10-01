@@ -17,6 +17,7 @@ const FREECAM_UUIDS = new Set([
 
         const state = {
     enabled: false,
+    returning: null,
     configured: false,
     requestedEnabled: false,
     lastEnableAttempt: 0,
@@ -36,6 +37,8 @@ const FREECAM_UUIDS = new Set([
     freePosition: null,
     yaw: 0,
     pitch: 0,
+    entryYaw: 0,
+    entryPitch: 0,
     lastFrame: performance.now(),
     lastGameScan: 0,
     lastCameraScan: 0,
@@ -356,7 +359,7 @@ const FREECAM_UUIDS = new Set([
     }
 
     function applyPose(camera = state.camera) {
-    if (!state.enabled || !camera || !state.freePosition) return;
+    if ((!state.enabled && !state.returning) || !camera || !state.freePosition) return;
 
     const parent = camera.parent || null;
     let x = state.freePosition.x;
@@ -426,7 +429,7 @@ const FREECAM_UUIDS = new Set([
     if (state.matrixHook?.camera !== camera && typeof camera.updateMatrixWorld === 'function') {
         const original = camera.updateMatrixWorld;
         const hook = function (...args) {
-            if (state.enabled && state.camera === camera) applyPose(camera);
+            if ((state.enabled || state.returning) && state.camera === camera) applyPose(camera);
             return original.apply(this, args);
         };
         try {
@@ -438,7 +441,7 @@ const FREECAM_UUIDS = new Set([
     if (state.worldMatrixHook?.camera !== camera && typeof camera.updateWorldMatrix === 'function') {
         const original = camera.updateWorldMatrix;
         const hook = function (...args) {
-            if (state.enabled && state.camera === camera) applyPose(camera);
+            if ((state.enabled || state.returning) && state.camera === camera) applyPose(camera);
             return original.apply(this, args);
         };
         try {
@@ -578,6 +581,26 @@ const FREECAM_UUIDS = new Set([
     } catch (_) {}
     }
 
+    function restoreCameraNearPlayer(camera, player) {
+    const eye = getPlayerCameraOrigin(player);
+    const actual = captureWorldPosition(camera);
+    if (!eye || !actual) return false;
+    if (Math.hypot(actual.x - eye.x, actual.y - eye.y, actual.z - eye.z) <= 8) return false;
+
+    const parent = camera.parent;
+    let local = eye;
+    try {
+        parent?.updateWorldMatrix?.(true, false);
+        if (typeof parent?.worldToLocal === 'function' && camera.position?.clone) {
+            const point = camera.position.clone();
+            copyXYZ(point, eye);
+            parent.worldToLocal(point);
+            local = cloneXYZ(point) || eye;
+        }
+    } catch (_) { local = eye; }
+    return copyXYZ(camera.position, local);
+    }
+
     function emitState(extra = {}) {
     const game = getGame(true);
     const permissionLevel = getServerPermissionLevel(game);
@@ -594,6 +617,7 @@ const FREECAM_UUIDS = new Set([
 
     function enable() {
     if (state.enabled) return true;
+    if (state.returning) completeDisable();
 
     const game = getGame(true);
     const player = game?.player;
@@ -654,6 +678,8 @@ const FREECAM_UUIDS = new Set([
         state.pitch = clamp(rotation?.x ?? Number(player.pitch) ?? 0, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
         state.yaw = rotation?.y ?? Number(player.yaw) ?? 0;
     }
+    state.entryPitch = state.pitch;
+    state.entryYaw = state.yaw;
 
     state.enabled = true;
     globalThis.__MINIFEATHER_FREECAM_ACTIVE__ = true;
@@ -667,27 +693,27 @@ const FREECAM_UUIDS = new Set([
     return true;
     }
 
-    function disable(preserveRequest = false) {
-    if (!preserveRequest) state.requestedEnabled = false;
-    if (!state.enabled) return;
-
+    function completeDisable() {
     const camera = state.camera;
     const player = state.player;
 
     state.enabled = false;
+    state.returning = null;
     globalThis.__MINIFEATHER_FREECAM_ACTIVE__ = false;
     clearKeys();
     neutralizePlayerInput();
 
+    restorePerspective(player);
+
     if (camera) {
-        if (state.detached) restoreCameraParent(camera);
+        if (state.originalParent && camera.parent !== state.originalParent) restoreCameraParent(camera);
         if (state.originalPosition) copyXYZ(camera.position, state.originalPosition);
         if (state.originalQuaternion) copyQuaternion(camera.quaternion, state.originalQuaternion);
         if (state.originalRotation) copyRotation(camera.rotation, state.originalRotation);
         try { camera.updateMatrixWorld?.(true); } catch (_) {}
+        restoreCameraNearPlayer(camera, player);
+        try { camera.updateMatrixWorld?.(true); } catch (_) {}
     }
-
-    restorePerspective(player);
 
     state.originalParent = null;
     state.originalIndex = -1;
@@ -701,6 +727,53 @@ const FREECAM_UUIDS = new Set([
     emitState();
     }
 
+    function updateReturn(timestamp) {
+    const flight = state.returning;
+    if (!flight) return;
+    const target = getPlayerCameraOrigin(state.player);
+    if (!target || !state.camera || state.game?.player !== state.player) {
+        completeDisable();
+        return;
+    }
+    const progress = clamp((timestamp - flight.start) / flight.duration, 0, 1);
+    const ease = progress * progress * (3 - 2 * progress);
+    state.freePosition = {
+        x: flight.from.x + (target.x - flight.from.x) * ease,
+        y: flight.from.y + (target.y - flight.from.y) * ease,
+        z: flight.from.z + (target.z - flight.from.z) * ease
+    };
+    state.pitch = flight.pitch + (state.entryPitch - flight.pitch) * ease;
+    const yawDelta = Math.atan2(Math.sin(state.entryYaw - flight.yaw), Math.cos(state.entryYaw - flight.yaw));
+    state.yaw = flight.yaw + yawDelta * ease;
+    if (progress >= 1) completeDisable();
+    else applyPose(state.camera);
+    }
+
+    function disable(preserveRequest = false, animate = true) {
+    if (!preserveRequest) state.requestedEnabled = false;
+    if (state.returning) {
+        if (!animate) completeDisable();
+        return;
+    }
+    if (!state.enabled) return;
+    clearKeys();
+    neutralizePlayerInput();
+    const from = cloneXYZ(state.freePosition);
+    const target = getPlayerCameraOrigin(state.player);
+    if (animate && from && target && state.camera && state.game?.player === state.player &&
+        Math.hypot(from.x - target.x, from.y - target.y, from.z - target.z) > 0.5) {
+        const distance = Math.hypot(from.x - target.x, from.y - target.y, from.z - target.z);
+        state.returning = {
+            start: performance.now(), duration: clamp(350 + distance * 4, 350, 800),
+            from, yaw: state.yaw, pitch: state.pitch
+        };
+        state.enabled = false;
+        emitState();
+        return;
+    }
+    completeDisable();
+    }
+
     function setEnabled(value) {
     state.requestedEnabled = !!value;
     if (state.requestedEnabled) return enable();
@@ -709,12 +782,16 @@ const FREECAM_UUIDS = new Set([
     }
 
     function update(timestamp) {
+    if (state.returning) {
+        updateReturn(timestamp);
+        return;
+    }
     if (!state.enabled) return;
 
     const game = getGame();
     if (!game?.player || game.player !== state.player) {
         state.requestedEnabled = false;
-        disable(true);
+        disable(true, false);
         return;
     }
 
@@ -722,7 +799,7 @@ const FREECAM_UUIDS = new Set([
         state.lastAccessCheck = timestamp;
         if (!hasFreecamAccess(game)) {
             state.requestedEnabled = false;
-            disable(true);
+            disable(true, false);
             emitState({ error: 'NO_SERVER_ADMIN' });
             return;
         }
@@ -730,7 +807,7 @@ const FREECAM_UUIDS = new Set([
 
     const camera = resolveCamera();
     if (!camera || camera !== state.camera) {
-        disable(true);
+        disable(true, false);
         return;
     }
 
@@ -782,12 +859,9 @@ const FREECAM_UUIDS = new Set([
         ]);
 
     window.addEventListener('keydown', event => {
-    if (!state.enabled || isTypingOrUiOpen()) return;
-
-
-    if (!state.enabled || isTypingOrUiOpen()) return;
+    if ((!state.enabled && !state.returning) || isTypingOrUiOpen()) return;
     if (!movementKeys.has(event.code)) return;
-    keys[event.code] = true;
+    if (state.enabled) keys[event.code] = true;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
@@ -799,7 +873,12 @@ const FREECAM_UUIDS = new Set([
     }, true);
 
     window.addEventListener('mousemove', event => {
-    if (!state.enabled || !document.pointerLockElement || isTypingOrUiOpen()) return;
+    if ((!state.enabled && !state.returning) || !document.pointerLockElement || isTypingOrUiOpen()) return;
+    if (state.returning) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+    }
 
     const sensitivity = 0.0022 * clamp(state.sensitivity, 0.1, 3);
     state.yaw -= Number(event.movementX || 0) * sensitivity;
@@ -813,7 +892,7 @@ const FREECAM_UUIDS = new Set([
 
     for (const type of ['mousedown', 'mouseup']) {
     window.addEventListener(type, event => {
-        if (!state.enabled || isTypingOrUiOpen()) return;
+        if ((!state.enabled && !state.returning) || isTypingOrUiOpen()) return;
         if (event.button < 0 || event.button > 2) return;
         event.preventDefault();
         event.stopPropagation();
@@ -825,7 +904,7 @@ const FREECAM_UUIDS = new Set([
     }
 
     window.addEventListener('wheel', event => {
-    if (!state.enabled || isTypingOrUiOpen()) return;
+        if ((!state.enabled && !state.returning) || isTypingOrUiOpen()) return;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
@@ -851,7 +930,7 @@ const FREECAM_UUIDS = new Set([
     }, false);
 
     function loop(timestamp) {
-    if (state.requestedEnabled && !state.enabled && timestamp - state.lastEnableAttempt >= 650) {
+    if (state.requestedEnabled && !state.enabled && !state.returning && timestamp - state.lastEnableAttempt >= 650) {
         state.lastEnableAttempt = timestamp;
         enable();
     }

@@ -99,6 +99,7 @@
         mfuser:   { level: 50,   label: 'MFUser' },
         premium:  { level: 51,   label: 'Premium' },
         mftester: { level: 100,  label: 'MFTester' },
+        dev:      { level: 201,  label: 'MFDev' },
         mfdev:    { level: 201,  label: 'MFDev' },
         mfowner:  { level: 201,  label: 'MFOwner' },
         mfdevgf:  { level: 9183, label: 'MFDevGF' }
