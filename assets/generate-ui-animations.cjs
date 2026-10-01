@@ -494,6 +494,8 @@ for (const name of names) {
     throw new Error(`Unsafe or unknown icon: ${name}`);
   }
   const original = makeArt(name, icons[name]);
+  // autoReconnect: frames owned by tools/make-auto-reconnect-icons.js
+  if (name === 'autoReconnect') continue;
   const folder = path.join(root, name);
   fs.mkdirSync(folder, { recursive: true });
   fs.writeFileSync(path.join(folder, '00.png'), encodeArt(name, original));

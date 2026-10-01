@@ -29,7 +29,9 @@ function buildMirrorSource() {
     seen.add(rel);
     const abs = path.join(ROOT, rel);
     if (!fs.existsSync(abs)) throw new Error('mirror.json: no existe ' + rel);
-    const src = fs.readFileSync(abs, 'utf8');
+    // normalize CRLF: embedded copies must be byte-identical on Windows and CI
+    // (git autocrlf checks the modules out with CRLF; the bundle must stay LF)
+    const src = fs.readFileSync(abs, 'utf8').replace(/\r\n/g, '\n');
     try { new vm.Script(src, { filename: rel }); } catch (e) { throw new Error('sintaxis inválida en ' + rel + ': ' + e.message); }
     code[rel] = src;
     total += src.length;

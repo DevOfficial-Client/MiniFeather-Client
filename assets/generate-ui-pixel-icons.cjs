@@ -85,6 +85,21 @@ function makeArt(name, rows) {
     rect(2, 5, 12, 9, 'N'); rect(3, 6, 10, 7, 'n');
     rect(5, 8, 2, 2, 'k'); rect(10, 8, 2, 2, 'k');
     rect(7, 10, 2, 2, 'p'); rect(5, 13, 6, 1, 'N');
+  } else if (name === 'critterSkins') {
+    rect(0, 0, 16, 16, '.');
+    rect(1, 0, 4, 5, 'k'); rect(2, 1, 2, 3, 'p');
+    rect(11, 0, 4, 5, 'k'); rect(12, 1, 2, 3, 'p');
+    rect(2, 3, 12, 11, 'k'); rect(3, 4, 10, 9, '+');
+    rect(3, 4, 3, 3, '-'); rect(10, 4, 3, 3, '-');
+    rect(5, 7, 2, 2, 'k'); rect(9, 7, 2, 2, 'k');
+    rect(5, 10, 6, 3, 'n'); rect(7, 10, 2, 2, 'k');
+  } else if (name === 'deferredPipeline') {
+    rect(0, 0, 16, 16, '.');
+    rect(6, 1, 4, 2, 'y'); rect(4, 3, 8, 1, 'y');
+    rect(2, 4, 3, 8, 'y'); rect(11, 4, 3, 8, 'y');
+    rect(4, 12, 8, 1, 'y'); rect(6, 13, 4, 2, 'y');
+    rect(4, 4, 8, 8, 'o');
+    rect(5, 5, 6, 6, '#');
   } else if (name === 'safeSneak') {
     rect(0, 0, 16, 16, '.');
     rect(2, 12, 14, 2, 'k'); rect(2, 14, 14, 1, '-');
@@ -701,6 +716,8 @@ if (require.main === module) {
   for (const [name, rows] of Object.entries(icons)) {
     if (!/^[A-Za-z][A-Za-z0-9]*$/.test(name)) throw new Error(`Unsafe icon name: ${name}`);
     if (name === 'patPat') continue;
+    // autoReconnect: frames owned by tools/make-auto-reconnect-icons.js
+    if (name === 'autoReconnect') continue;
     const folder = path.resolve(outputDir, name);
     fs.mkdirSync(folder, { recursive: true });
     const target = path.resolve(folder, '00.png');

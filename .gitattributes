@@ -1,0 +1,4 @@
+# Generated bundles: keep exact bytes across OSes so the freshness test
+# (tests/mirror.test.cjs) passes on Windows checkouts too.
+src/Core/mirror.js text eol=lf
+dist/MiniFeatherClient.user.js text eol=lf
