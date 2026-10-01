@@ -1,0 +1,106 @@
+/setblock 7 93 0 black_concrete
+/setblock 25 93 0 black_concrete
+/fill 8 92 0 10 92 0 black_concrete
+/fill 23 92 0 25 92 0 black_concrete
+/fill 9 91 0 11 91 0 black_concrete
+/fill 22 91 0 24 91 0 black_concrete
+/fill 10 90 0 12 90 0 black_concrete
+/fill 21 90 0 23 90 0 black_concrete
+/fill 11 89 0 12 89 0 black_concrete
+/fill 13 89 0 19 89 0 white_concrete
+/fill 20 89 0 21 89 0 black_concrete
+/setblock 10 88 0 black_concrete
+/fill 11 88 0 20 88 0 white_concrete
+/setblock 21 88 0 black_concrete
+/setblock 9 87 0 black_concrete
+/fill 10 87 0 22 87 0 white_concrete
+/setblock 23 87 0 black_concrete
+/setblock 8 86 0 black_concrete
+/fill 9 86 0 23 86 0 white_concrete
+/setblock 24 86 0 black_concrete
+/setblock 8 85 0 black_concrete
+/fill 9 85 0 23 85 0 white_concrete
+/setblock 24 85 0 black_concrete
+/setblock 8 84 0 black_concrete
+/fill 9 84 0 23 84 0 white_concrete
+/setblock 24 84 0 black_concrete
+/setblock 8 83 0 black_concrete
+/fill 9 83 0 17 83 0 white_concrete
+/fill 18 83 0 21 83 0 gray_concrete
+/fill 22 83 0 23 83 0 white_concrete
+/setblock 24 83 0 black_concrete
+/setblock 8 82 0 black_concrete
+/fill 9 82 0 15 82 0 white_concrete
+/fill 16 82 0 21 82 0 gray_concrete
+/fill 22 82 0 23 82 0 white_concrete
+/setblock 24 82 0 black_concrete
+/setblock 8 81 0 black_concrete
+/fill 9 81 0 15 81 0 white_concrete
+/fill 16 81 0 21 81 0 gray_concrete
+/fill 22 81 0 23 81 0 white_concrete
+/setblock 24 81 0 black_concrete
+/setblock 8 80 0 black_concrete
+/fill 9 80 0 17 80 0 white_concrete
+/fill 18 80 0 21 80 0 gray_concrete
+/fill 22 80 0 23 80 0 white_concrete
+/setblock 24 80 0 black_concrete
+/setblock 8 79 0 black_concrete
+/fill 9 79 0 23 79 0 white_concrete
+/setblock 24 79 0 black_concrete
+/setblock 9 78 0 black_concrete
+/fill 10 78 0 21 78 0 white_concrete
+/fill 22 78 0 23 78 0 light_gray_concrete
+/setblock 24 78 0 black_concrete
+/setblock 6 77 0 black_concrete
+/fill 7 77 0 8 77 0 blue_concrete
+/setblock 9 77 0 black_concrete
+/fill 10 77 0 19 77 0 white_concrete
+/fill 20 77 0 22 77 0 light_gray_concrete
+/setblock 23 77 0 black_concrete
+/setblock 5 76 0 black_concrete
+/setblock 6 76 0 light_blue_concrete
+/fill 7 76 0 9 76 0 blue_concrete
+/setblock 10 76 0 black_concrete
+/fill 11 76 0 18 76 0 light_gray_concrete
+/setblock 19 76 0 black_concrete
+/setblock 20 76 0 blue_concrete
+/setblock 21 76 0 black_concrete
+/setblock 22 76 0 blue_concrete
+/setblock 5 75 0 black_concrete
+/setblock 6 75 0 light_blue_concrete
+/fill 7 75 0 8 75 0 blue_concrete
+/fill 9 75 0 10 75 0 gray_concrete
+/setblock 11 75 0 black_concrete
+/fill 12 75 0 16 75 0 light_gray_concrete
+/setblock 17 75 0 black_concrete
+/fill 18 75 0 20 75 0 gray_concrete
+/setblock 21 75 0 black_concrete
+/setblock 5 74 0 black_concrete
+/setblock 6 74 0 light_blue_concrete
+/fill 7 74 0 19 74 0 gray_concrete
+/setblock 20 74 0 black_concrete
+/setblock 5 73 0 black_concrete
+/fill 6 73 0 19 73 0 gray_concrete
+/setblock 20 73 0 black_concrete
+/setblock 5 72 0 black_concrete
+/fill 6 72 0 18 72 0 gray_concrete
+/setblock 19 72 0 black_concrete
+/setblock 5 71 0 black_concrete
+/fill 6 71 0 17 71 0 gray_concrete
+/setblock 18 71 0 black_concrete
+/fill 6 70 0 7 70 0 gray_concrete
+/setblock 8 70 0 black_concrete
+/fill 11 70 0 12 70 0 gray_concrete
+/setblock 13 70 0 black_concrete
+/fill 16 70 0 17 70 0 gray_concrete
+/setblock 18 70 0 black_concrete
+/setblock 6 69 0 gray_concrete
+/setblock 7 69 0 black_concrete
+/setblock 11 69 0 gray_concrete
+/setblock 12 69 0 black_concrete
+/setblock 16 69 0 gray_concrete
+/fill 17 69 0 18 69 0 black_concrete
+/fill 10 68 0 11 68 0 gray_concrete
+/fill 18 68 0 19 68 0 black_concrete
+/fill 8 67 0 9 67 0 gray_concrete
+/fill 20 67 0 21 67 0 black_concrete
