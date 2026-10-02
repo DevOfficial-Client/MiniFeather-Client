@@ -1,0 +1,10 @@
+# zcode context ignore: never load big binaries or local-only build output
+.commandcode/
+windows-msi/src-tauri/target/
+windows-msi/src-tauri/client/
+windows-msi/src-tauri/gen/
+windows-msi/src-tauri/resources/mf/
+android/app/build/
+*.msi
+*.apk
+node_modules/
