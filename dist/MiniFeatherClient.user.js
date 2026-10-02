@@ -1,7 +1,9 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.17.5
+// @version      4.17.5.20261002142815
+// @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
+// @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
 // @author       DevOfficial-Client
 // @match        https://miniblox.io/*
@@ -12,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 495f04c6ebb7786cc6a16bc14333b7473c886c4f
- * builtAt : 2026-10-02T14:28:14.964Z
+ * commit  : c3cc04c6da27e9add2d43752a41cc3ed2dbab247
+ * builtAt : 2026-10-02T14:29:44.196Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"495f04c6ebb7786cc6a16bc14333b7473c886c4f","builtAt":"2026-10-02T14:28:15.022Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"c3cc04c6da27e9add2d43752a41cc3ed2dbab247","builtAt":"2026-10-02T14:29:44.196Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -317,6 +319,10 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"495f04c6ebb7786cc6a16bc14333b7
   const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
   const RAW_MANIFEST = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/manifest.json`;
   const DOWNLOAD_URL = `${REPOSITORY_URL}/archive/refs/heads/${BRANCH}.zip`;
+  // el .user.js crudo: los script managers (tampermonkey/violentmonkey) interceptan
+  // la navegación y muestran su página de instalar con 1 clic. donde no hay manager
+  // que intercepte (webview del apk, ios, tauri/electron) seguimos con el zip de siempre.
+  const RAW_USERSCRIPT_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/dist/MiniFeatherClient.user.js`;
   const CHECK_INTERVAL_MS = 30 * 60 * 1000; // hot updates are life support, check every 30 min :D
   const DEFAULT_UPDATER_SETTINGS = Object.freeze({ autoCheck: true, autoDownload: false, autoApply: true });
   const HOT_KEY = 'mfHotCache';
@@ -557,9 +563,13 @@ window.__MF_BUILD__={"version":"4.17.5","commit":"495f04c6ebb7786cc6a16bc14333b7
   async function downloadLatest(current) {
     const st = current || (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
     await chrome.storage.local.set({ mfUpdaterLastDownloadedCommit: st.remoteCommit || '' });
-    // no chrome.downloads here: opening the zip hits the webview downloadlistener
-    // on android, or safari's downloader on ios. everyone wins, nobody files bugs :v
-    try { window.open(DOWNLOAD_URL, '_blank'); } catch (_) {}
+    // tampermonkey/violentmonkey (desktop + firefox android) interceptan la URL del
+    // .user.js con su página de instalación de 1 clic. ios (app userscripts), el
+    // webview del apk y tauri/electron no interceptan nada: ahí el zip es lo que
+    // hay — el downloader del sistema lo recibe y listo. nadie filing bugs :v
+    const ua = navigator.userAgent || '';
+    const hasManager = !(/;\s*wv\)/.test(ua) || /iPhone|iPad|iPod/.test(ua) || /Electron|Tauri/i.test(ua));
+    try { window.open(hasManager ? RAW_USERSCRIPT_URL : DOWNLOAD_URL, '_blank'); } catch (_) {}
     return 0;
   }
 

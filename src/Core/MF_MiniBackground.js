@@ -57,6 +57,10 @@
   const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}`;
   const RAW_MANIFEST = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/manifest.json`;
   const DOWNLOAD_URL = `${REPOSITORY_URL}/archive/refs/heads/${BRANCH}.zip`;
+  // el .user.js crudo: los script managers (tampermonkey/violentmonkey) interceptan
+  // la navegación y muestran su página de instalar con 1 clic. donde no hay manager
+  // que intercepte (webview del apk, ios, tauri/electron) seguimos con el zip de siempre.
+  const RAW_USERSCRIPT_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/dist/MiniFeatherClient.user.js`;
   const CHECK_INTERVAL_MS = 30 * 60 * 1000; // hot updates are life support, check every 30 min :D
   const DEFAULT_UPDATER_SETTINGS = Object.freeze({ autoCheck: true, autoDownload: false, autoApply: true });
   const HOT_KEY = 'mfHotCache';
@@ -297,9 +301,13 @@
   async function downloadLatest(current) {
     const st = current || (await chrome.storage.local.get(['mfUpdaterState'])).mfUpdaterState || {};
     await chrome.storage.local.set({ mfUpdaterLastDownloadedCommit: st.remoteCommit || '' });
-    // no chrome.downloads here: opening the zip hits the webview downloadlistener
-    // on android, or safari's downloader on ios. everyone wins, nobody files bugs :v
-    try { window.open(DOWNLOAD_URL, '_blank'); } catch (_) {}
+    // tampermonkey/violentmonkey (desktop + firefox android) interceptan la URL del
+    // .user.js con su página de instalación de 1 clic. ios (app userscripts), el
+    // webview del apk y tauri/electron no interceptan nada: ahí el zip es lo que
+    // hay — el downloader del sistema lo recibe y listo. nadie filing bugs :v
+    const ua = navigator.userAgent || '';
+    const hasManager = !(/;\s*wv\)/.test(ua) || /iPhone|iPad|iPod/.test(ua) || /Electron|Tauri/i.test(ua));
+    try { window.open(hasManager ? RAW_USERSCRIPT_URL : DOWNLOAD_URL, '_blank'); } catch (_) {}
     return 0;
   }
 

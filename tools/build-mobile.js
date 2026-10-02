@@ -117,6 +117,25 @@ function buildInfoComment() {
   ].join('\n');
 }
 
+// raw main URLs so tampermonkey/violentmonkey auto-update the bundle even when
+// it was installed from a local file. the version carries the commit's utc
+// stamp: same commit = same version (the CI regenerate commits must NOT
+// trigger re-downloads), new commit = strictly higher version. :D
+const RAW_USERSCRIPT_URL = 'https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js';
+function userVersion() {
+  let ts = null;
+  if (COMMIT) {
+    try {
+      const out = execFileSync('git', ['show', '-s', '--format=%ct', COMMIT], { cwd: ROOT, encoding: 'utf8' }).trim();
+      const n = Number.parseInt(out, 10);
+      if (Number.isFinite(n)) ts = new Date(n * 1000);
+    } catch (_) {}
+  }
+  if (!ts) ts = new Date();
+  const stamp = ts.toISOString().replace(/\D/g, '').slice(0, 14); // yyyymmddhhmmss
+  return `${VERSION}.${stamp}`;
+}
+
 function configLine(extra) {
   return `window.__MF_BUILD__=${JSON.stringify({ version: VERSION, commit: COMMIT, builtAt: new Date().toISOString(), pinned: !!extra.pinned })};\n` +
     (extra.assetBase ? `window.__MF_ASSET_BASE__=${JSON.stringify(extra.assetBase)};\n` : '');
@@ -190,7 +209,9 @@ if (buildUser) {
     '// ==UserScript==',
     '// @name         MiniFeather Client (Mobile)',
     '// @namespace    devofficial-client',
-    `// @version      ${VERSION}`,
+    `// @version      ${userVersion()}`,
+    `// @updateURL    ${RAW_USERSCRIPT_URL}`,
+    `// @downloadURL  ${RAW_USERSCRIPT_URL}`,
     '// @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop',
     '// @author       DevOfficial-Client',
     '// @match        https://miniblox.io/*',
