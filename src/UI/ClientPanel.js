@@ -9697,6 +9697,43 @@
     return gen(info, toggle, specs);
   }
 
+  // shared ui words for the tour (back button, panel-key sentence) and the one-shot
+  // welcome toast. kept OUT of TUTORIAL_LANGS on purpose: dragging ten big generator
+  // closures around just for a 'back' button felt like overkill. :D
+  const TUTORIAL_UI = Object.freeze({
+    es: { back: 'volver', keyRightShift: 'shift derecho', keyLeftShift: 'shift izquierdo', hintPanel: 'este panel se abre y se cierra con la tecla {key} — por si te pierdes (￣ー￣)', startTitle: '¿primera vez por aquí? (・o・)', startBody: 'este client tiene de todo: deja que el tour te lo enseñe en lo que dura una pantalla de carga. abre el panel con la tecla {key}, o dale al botón y vamos allí ahora mismo.', startCta: 'empezar el tour' },
+    en: { back: 'back', keyRightShift: 'right shift', keyLeftShift: 'left shift', hintPanel: 'this panel opens and closes with the {key} key — in case you get lost (￣ー￣)', startTitle: 'first time here? (・o・)', startBody: 'this client has a bit of everything: let the tour show you around in less than a loading screen. open the panel with the {key} key, or press the button and we\'ll go there right now.', startCta: 'start the tour' },
+    pt: { back: 'voltar', keyRightShift: 'shift direito', keyLeftShift: 'shift esquerdo', hintPanel: 'este painel abre e fecha com a tecla {key} — caso se perca (￣ー￣)', startTitle: 'primeira vez por aqui? (・o・)', startBody: 'este client tem de tudo: deixa o tour te mostrar tudo em menos que uma tela de carregamento. abre o painel com a tecla {key}, ou aperta o botão e vamos agora mesmo.', startCta: 'começar o tour' },
+    fr: { back: 'retour', keyRightShift: 'maj droite', keyLeftShift: 'maj gauche', hintPanel: 'ce panneau s\'ouvre et se ferme avec la touche {key} — au cas où tu te perdrais (￣ー￣)', startTitle: 'première fois ici ? (・o・)', startBody: 'ce client a de tout : laisse le tour tout te montrer, ça dure moins qu\'un écran de chargement. ouvre le panneau avec la touche {key}, ou clique sur le bouton et on y va tout de suite.', startCta: 'lancer le tour' },
+    de: { back: 'zurück', keyRightShift: 'rechte shift-taste', keyLeftShift: 'linke shift-taste', hintPanel: 'dieses panel öffnet und schließt man mit der taste {key} — falls du dich verläufst (￣ー￣)', startTitle: 'zum ersten mal hier? (・o・)', startBody: 'dieser client hat alles mögliche: lass dir von der tour alles zeigen, das dauert kürzer als ein ladebildschirm. öffne das panel mit der taste {key}, oder drück den knopf und wir gehen sofort hin.', startCta: 'tour starten' },
+    it: { back: 'indietro', keyRightShift: 'shift destro', keyLeftShift: 'shift sinistro', hintPanel: 'questo pannello si apre e si chiude col tasto {key} — nel caso ti perdi (￣ー￣)', startTitle: 'prima volta qui? (・o・)', startBody: 'questo client ha di tutto: lascia che il tour ti mostri tutto in meno del tempo di un caricamento. apri il pannello col tasto {key}, o premi il bottone e andiamo subito.', startCta: 'avvia il tour' },
+    ru: { back: 'назад', keyRightShift: 'правый shift', keyLeftShift: 'левый shift', hintPanel: 'эта панель открывается и закрывается клавишей {key} — вдруг заблудишься (￣ー￣)', startTitle: 'впервые здесь? (・o・)', startBody: 'в этом клиенте есть всё: тур покажет всё за меньшее время, чем грузится экран. открой панель клавишей {key} или просто нажми кнопку — и полетели.', startCta: 'начать тур' },
+    ja: { back: '戻る', keyRightShift: '右shift', keyLeftShift: '左shift', hintPanel: 'このパネルは{key}キーで開閉できるよ — 迷子になったらね (￣ー￣)', startTitle: 'はじめて？ (・o・)', startBody: 'このclientは盛りだくさん：ロード画面より短い時間でツアーが全部教えてくれる。{key}キーでパネルを開くか、ボタンを押してすぐ行こう。', startCta: 'ツアー開始' },
+    zh: { back: '返回', keyRightShift: '右shift', keyLeftShift: '左shift', hintPanel: '这个面板用 {key} 键开关 — 以防你迷路 (￣ー￣)', startTitle: '第一次来？ (・o・)', startBody: '这个client应有尽有：让导览带你逛一遍，比加载画面还快。用 {key} 键打开面板，或者点按钮现在就去。', startCta: '开始导览' },
+    ko: { back: '뒤로', keyRightShift: '오른쪽 shift', keyLeftShift: '왼쪽 shift', hintPanel: '이 패널은 {key} 키로 열고 닫아요 — 길 잃으면 말이지 (￣ー￣)', startTitle: '처음이야? (・o・)', startBody: '이 client에는 다 있어: 투어가 로딩 화면보다 짧은 시간에 다 알려줄 거야. {key} 키로 패널을 열거나 버튼을 눌러 바로 가자.', startCta: '투어 시작' }
+  });
+  function tutorialUiWords() {
+    const lang = normalizeClientLanguage(String(settings.language || navigator.language || 'en'));
+    return TUTORIAL_UI[lang] || TUTORIAL_UI.en;
+  }
+  // human name for the panel keybind: KeyH → h, Digit5 → 5, the shifts get their
+  // per-language words, anything exotic falls back to the raw code lowercased.
+  // good enough for a hint; nobody remaps to ScrollLock twice. :P
+  function panelKeyLabel() {
+    const code = normalizeBindCode(settings.moduleBinds?.panel || '') || 'ShiftRight';
+    const U = tutorialUiWords();
+    if (code === 'ShiftRight') return U.keyRightShift;
+    if (code === 'ShiftLeft') return U.keyLeftShift;
+    const m = /^(?:Key|Digit)(.+)$/.exec(code);
+    return (m ? m[1] : code).toLowerCase();
+  }
+  const panelKeyChip = () => `<kbd style="background:#241a3f;border:1px solid #6045a0;border-radius:5px;padding:1px 7px;font:600 11.5px ui-monospace,monospace;color:#b79bff;white-space:nowrap">${String(panelKeyLabel()).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</kbd>`;
+  // the sentence with the key chip inside, pre-escaped and ready to drop in innerHTML
+  const panelKeySentence = () => {
+    const U = tutorialUiWords();
+    return String(U.hintPanel).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace('{key}', panelKeyChip());
+  };
+
   function runTutorial(markDone) {
     try { globalThis.__MF_FIRST_STEPS__?.destroy?.(); } catch (_) {}
     // the tour always starts from the module menu so every step finds its target,
@@ -9726,7 +9763,7 @@
     const L = tutorialCopy(info, { key: toggleKey, name: toggleName });
     const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const steps = [
-      { kind: 'info', title: L.welcomeTitle, body: `${L.welcomeBody}<br><span style="opacity:.7">tier: ${L.tierLabel}</span>` },
+      { kind: 'info', title: L.welcomeTitle, body: `${L.welcomeBody}<br><span style="opacity:.75">${panelKeySentence()}</span><br><span style="opacity:.7">tier: ${L.tierLabel}</span>` },
       { kind: 'focus', sel: '#mf-gui-search', title: L.searchTitle, body: L.searchBody },
       { kind: 'click', sel: '.mf-feather-category[data-category="all"]', title: L.catTitle, body: L.catBody },
       { kind: 'toggle', key: toggleKey, title: L.toggleTitle, body: L.toggleBody },
@@ -9824,10 +9861,18 @@
       if (dead) return;
       const step = steps[idx];
       if (!step) { finish(); return; }
+      // going back from an action step must not leave its capture handler armed:
+      // an old 'click' lesson firing while you read an info card would be haunted. :v
+      if (activeClickHandler && step.kind !== 'click') {
+        document.removeEventListener('click', activeClickHandler, true);
+        activeClickHandler = null;
+      }
       const counter = `${L.step} ${idx + 1}/${steps.length}`;
+      const backBtn = idx > 0 ? `<button id="mf-tour-back" style="padding:9px 14px;border:1px solid #3d2f66;border-radius:9px;background:none;color:#8d80b8;font:600 12.5px system-ui,sans-serif;cursor:pointer">${esc(tutorialUiWords().back)}</button>` : '';
+      const pct = Math.round(((idx + 1) / steps.length) * 100);
       const actions = step.kind === 'info'
-        ? `<button id="mf-tour-next" style="margin-top:12px;padding:10px 18px;border:0;border-radius:9px;background:linear-gradient(135deg,#6045a0,#7c5cd6);color:#fff;font:700 13.5px system-ui,sans-serif;cursor:pointer">${esc(idx === steps.length - 1 ? L.done : L.next)}</button>`
-        : `<div style="margin-top:12px;font:600 12.5px system-ui,sans-serif;color:#e8b46a;animation:mfTourPulse 1.2s ease-in-out infinite">${esc(L.doIt)}</div>`;
+        ? `<div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;align-items:center">${backBtn}<button id="mf-tour-next" style="padding:10px 18px;border:0;border-radius:9px;background:linear-gradient(135deg,#6045a0,#7c5cd6);color:#fff;font:700 13.5px system-ui,sans-serif;cursor:pointer">${esc(idx === steps.length - 1 ? L.done : L.next)}</button></div>`
+        : `<div style="margin-top:12px;display:flex;gap:10px;align-items:center">${backBtn}<span style="font:600 12.5px system-ui,sans-serif;color:#e8b46a;animation:mfTourPulse 1.2s ease-in-out infinite">${esc(L.doIt)}</span></div>`;
       let bodyHtml = step.body;
       if (step.kind === 'animset') {
         const left = pendingKeys(step).length;
@@ -9839,11 +9884,13 @@
           <span style="font:600 11px/1 ui-monospace,monospace;color:#8d80b8;text-transform:lowercase">${esc(counter)}</span>
           ${step.kind === 'ingame' ? '<span style="font:600 11px/1 ui-monospace,monospace;color:#e8b46a">★</span>' : `<button id="mf-tour-skip" style="background:none;border:0;color:#8d80b8;font:400 12px system-ui,sans-serif;cursor:pointer;text-decoration:underline">${esc(L.skip)}</button>`}
         </div>
+        <div style="margin-top:8px;height:3px;border-radius:2px;background:#2c2145;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#6045a0,#b79bff);transition:width .25s ease"></div></div>
         <div style="margin-top:6px;font:750 17px/1.35 system-ui,sans-serif;color:#b79bff">${esc(step.title)}</div>
         <div style="margin-top:6px;font:400 13.5px/1.55 system-ui,sans-serif;color:#cfc6ea">${bodyHtml}</div>
         ${actions}
         ${(step.kind !== 'info' && (step.key || step.kind === 'animset')) ? `<div style="margin-top:8px;font:400 12px system-ui,sans-serif;color:#8d80b8">${esc(L.tip)}</div>` : ''}`;
       card.querySelector('#mf-tour-skip')?.addEventListener('click', finish);
+      card.querySelector('#mf-tour-back')?.addEventListener('click', () => { if (idx > 0) { idx--; render(); } });
       card.querySelector('#mf-tour-next')?.addEventListener('click', () => { idx++; render(); });
       celebrated = false;
       retarget();
@@ -9903,6 +9950,58 @@
     // be restarted just because showGUI fires again mid-tour. :D
     if (globalThis.__MF_FIRST_STEPS__) return;
     runTutorial(true);
+  }
+
+  // one-shot welcome toast: a fresh install that reaches a live world without ever
+  // finishing the tour gets exactly ONE tap on the shoulder, bottom-left, with the
+  // panel key and a button that jumps straight into the tour. closes itself, never
+  // nags again. marketing that respects the player (¬‿¬)
+  function maybeShowStartHint() {
+    let tourDone = '';
+    try { tourDone = localStorage.getItem('mf:first-steps-v5'); } catch (_) { return; }
+    if (tourDone === 'yes') return;
+    // mid-tour (parked at the world gate)? the tour IS the hint; don't spend the one-shot.
+    if (globalThis.__MF_FIRST_STEPS__) return;
+    try { if (localStorage.getItem('mf:start-hint-v1') === 'shown') return; localStorage.setItem('mf:start-hint-v1', 'shown'); } catch (_) { return; }
+    const U = tutorialUiWords();
+    const card = document.createElement('div');
+    card.id = 'mf-start-hint';
+    card.style.cssText = 'position:fixed;left:18px;bottom:26px;max-width:340px;width:calc(100% - 60px);background:#150f24;border:1px solid #6045a0;border-radius:14px;padding:14px 34px 14px 16px;box-shadow:0 14px 44px rgba(0,0,0,.55);z-index:2147483640;pointer-events:auto';
+    card.innerHTML = `
+      <button id="mf-start-hint-x" style="position:absolute;top:8px;right:10px;background:none;border:0;color:#8d80b8;font:400 14px system-ui,sans-serif;cursor:pointer;padding:2px 4px">✕</button>
+      <div style="font:750 14.5px/1.35 system-ui,sans-serif;color:#b79bff">${String(U.startTitle).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+      <div style="margin-top:5px;font:400 12.5px/1.55 system-ui,sans-serif;color:#cfc6ea">${String(U.startBody).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace('{key}', panelKeyChip())}</div>
+      <button id="mf-start-hint-go" style="margin-top:10px;padding:8px 14px;border:0;border-radius:9px;background:linear-gradient(135deg,#6045a0,#7c5cd6);color:#fff;font:700 12.5px system-ui,sans-serif;cursor:pointer">${String(U.startCta).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</button>`;
+    (document.body || document.documentElement).appendChild(card);
+    const gone = () => { try { card.remove(); } catch (_) { } };
+    card.querySelector('#mf-start-hint-x')?.addEventListener('click', gone);
+    // the panel's own showGUI schedules the tour 300ms later — no double-start here. :D
+    card.querySelector('#mf-start-hint-go')?.addEventListener('click', () => { gone(); try { showGUI(); } catch (_) { } });
+    // a hint that outstays its welcome becomes clutter: self-fade after 30s. (¬‿¬)
+    setTimeout(() => {
+      try {
+        if (!card.isConnected) return;
+        card.style.transition = 'opacity .4s';
+        card.style.opacity = '0';
+        setTimeout(gone, 420);
+      } catch (_) { }
+    }, 30000);
+  }
+
+  function watchForStartHint() {
+    // fresh install + never finished the tour = the target audience. watches for the
+    // first live world for 20 minutes, then gives up quietly (title-screen idlers
+    // don't need marketing either). :P
+    const startHintPoll = setInterval(() => {
+      let tourDone = '';
+      try { tourDone = localStorage.getItem('mf:first-steps-v5'); } catch (_) { return; }
+      if (tourDone === 'yes') { clearInterval(startHintPoll); return; }
+      if (tutorialInGame()) {
+        clearInterval(startHintPoll);
+        try { maybeShowStartHint(); } catch (_) { }
+      }
+    }, 2500);
+    setTimeout(() => clearInterval(startHintPoll), 20 * 60 * 1000);
   }
 
   function applyPanelPersonality() {
@@ -13663,6 +13762,7 @@
     if (destroyed || runtimeController) return;
 
     runtimeController = new AbortController();
+    watchForStartHint();
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) stopPixelIconAnimation();
       else if (panel?.style.display === 'block') startPixelIconAnimation();
