@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.17.5.20261002204452
+// @version      4.17.5.20261002215507
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 6c6ee5a502352fbd17990cc69c0c30242eab69b5
- * builtAt : 2026-10-02T20:45:17.461Z
+ * commit  : 4c04751b3e811bfa2a99f21c1ad3f9f35353acd4
+ * builtAt : 2026-10-02T21:57:12.555Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"6c6ee5a502352fbd17990cc69c0c30242eab69b5","builtAt":"2026-10-02T20:45:17.461Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"4c04751b3e811bfa2a99f21c1ad3f9f35353acd4","builtAt":"2026-10-02T21:57:12.555Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -32094,6 +32094,7 @@ const state = {
 /* ==== mf module: src/Render/FullBright.js ==== */
 (function () {
   'use strict';
+  const FULLBRIGHT_SETTINGS_VERSION = 1;
 
   const GLOBAL_KEY = '__MINIFEATHER_FULLBRIGHT__';
   const EVENT_CONFIG = 'minifeather:fullbright-config';
@@ -32108,18 +32109,30 @@ const state = {
 
   const controller = new AbortController();
   const patchedUniforms = new Set();
+  const workerLighting = new Map();
   const state = {
     enabled: false,
     floor: DEFAULT_FLOOR,
+    natural: true,
     game: null,
     lastGameScan: 0,
     timer: 0,
     destroyed: false,
     originalWorkerPostMessage: null,
+    workerWrapper: null,
+    deactivateWorkerHook: null,
     workerPatched: false
   };
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+  function brighten(value) {
+    const raw = Number(value);
+    if (!state.enabled || !Number.isFinite(raw) || state.floor === 0) return value;
+    if (!state.natural) return Math.max(raw, state.floor);
+    if (raw >= 1) return value;
+    return state.floor + clamp(raw, 0, 1) * (1 - state.floor);
+  }
 
   function parseDetail(detail) {
     if (detail && typeof detail === 'object') return detail;
@@ -32208,9 +32221,6 @@ const state = {
     }
 
     if (descriptor && descriptor.configurable === false) {
-      if (state.enabled && Number.isFinite(Number(uniform.value))) {
-        uniform.value = Math.max(Number(uniform.value), state.floor);
-      }
       return false;
     }
 
@@ -32233,11 +32243,11 @@ const state = {
         configurable: true,
         enumerable: descriptor?.enumerable ?? true,
         get() {
-          const raw = record.rawValue;
-          if (!state.enabled || !Number.isFinite(Number(raw))) return raw;
-          return Math.max(Number(raw), state.floor);
+          const raw = descriptor?.get ? descriptor.get.call(uniform) : record.rawValue;
+          return brighten(raw);
         },
         set(value) {
+          if (descriptor?.set) descriptor.set.call(uniform, value);
           record.rawValue = value;
         }
       });
@@ -32384,34 +32394,53 @@ const state = {
     state.originalWorkerPostMessage = original;
 
     try {
-      proto.postMessage = function (message, ...rest) {
+      let active = true;
+      const wrapper = function (message, ...rest) {
+        const replayable = rest.length === 0 || (rest.length === 1 && Array.isArray(rest[0]) && rest[0].length === 0);
+        if (active && message?.type === WORKER_LIGHTING_TYPE && !replayable) workerLighting.delete(this);
         if (
+          active &&
           state.enabled &&
           message &&
           typeof message === 'object' &&
           message.type === WORKER_LIGHTING_TYPE &&
-          Number.isFinite(Number(message.ambientLight))
+          Number.isFinite(Number(message.ambientLight)) &&
+          replayable
         ) {
+          workerLighting.set(this, { ...message });
           message = {
             ...message,
-            ambientLight: Math.max(Number(message.ambientLight), state.floor)
+            ambientLight: brighten(message.ambientLight)
           };
         }
         return original.call(this, message, ...rest);
       };
+      proto.postMessage = wrapper;
+      state.workerWrapper = wrapper;
+      state.deactivateWorkerHook = () => { active = false; };
       state.workerPatched = true;
     } catch (_) {}
   }
 
   function restoreWorkerLighting() {
     if (!state.workerPatched || !state.originalWorkerPostMessage || typeof Worker === 'undefined') return;
+    state.deactivateWorkerHook?.();
 
     try {
-      Worker.prototype.postMessage = state.originalWorkerPostMessage;
+      if (Worker.prototype.postMessage === state.workerWrapper) {
+        Worker.prototype.postMessage = state.originalWorkerPostMessage;
+      }
     } catch (_) {}
+
+    for (const [worker, message] of workerLighting) {
+      try { state.originalWorkerPostMessage.call(worker, message); } catch (_) {}
+    }
+    workerLighting.clear();
 
     state.workerPatched = false;
     state.originalWorkerPostMessage = null;
+    state.workerWrapper = null;
+    state.deactivateWorkerHook = null;
   }
 
   function scan(force = false) {
@@ -32445,8 +32474,9 @@ const state = {
   let _scanDelay = SCAN_INTERVAL_MS;
   let _staleScans = 0;
   function scheduleScan() {
-    if (state.destroyed) return;
+    if (state.destroyed || !state.enabled) return;
     state.timer = window.setTimeout(() => {
+      state.timer = 0;
       if (state.enabled) {
         const before = patchedUniforms.size;
         scan(false);
@@ -32460,8 +32490,6 @@ const state = {
           _staleScans = 0;
           _scanDelay = SCAN_INTERVAL_MS;
         }
-      } else {
-          _scanDelay = 2000;
       }
       scheduleScan();
     }, _scanDelay);
@@ -32473,13 +32501,21 @@ const state = {
   }
 
   function setEnabled(enabled) {
-    state.enabled = !!enabled;
+    const next = !!enabled;
+    if (state.enabled === next) return;
+    state.enabled = next;
 
     if (state.enabled) {
       patchWorkerLighting();
-      ensureTimer();
       _scanDelay = SCAN_INTERVAL_MS;
+      _staleScans = 0;
+      ensureTimer();
       scan(true);
+    } else {
+      if (state.timer) clearTimeout(state.timer);
+      state.timer = 0;
+      restoreWorkerLighting();
+      restoreUniforms();
     }
   }
 
@@ -32509,7 +32545,6 @@ const state = {
             });
           } else {
             Object.defineProperty(uniform, 'value', descriptor);
-            uniform.value = rawValue;
           }
         } else {
           delete uniform.value;
@@ -32549,7 +32584,8 @@ const state = {
   document.addEventListener(EVENT_CONFIG, event => {
     const config = parseDetail(event.detail);
     if ('floor' in config) setFloor(config.floor);
-    setEnabled(config.enabled === true);
+    if ('natural' in config) state.natural = config.natural !== false;
+    if ('enabled' in config) setEnabled(config.enabled === true);
   }, { signal: controller.signal });
 
   globalThis[GLOBAL_KEY] = {
@@ -32561,6 +32597,7 @@ const state = {
     getState: () => ({
       enabled: state.enabled,
       floor: state.floor,
+      natural: state.natural,
       patchedAmbientUniforms: patchedUniforms.size,
       workerLightingPatched: state.workerPatched
     })
@@ -44861,6 +44898,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
   'use strict';
 
   const GLOBAL_KEY = '__MINIFEATHER_CLIENT_COMMANDS__';
+  const COMPLETION_CONTEXT_VERSION = 2;
   const REQUEST_EVENT = 'minifeather:client-command';
   const RESPONSE_EVENT = 'minifeather:client-command-response';
   const BINDS_EVENT = 'minifeather:client-binds-config';
@@ -46794,10 +46832,9 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
   function installAutoCompleteMerge(chat) {
     if (chat.__mfAutoCompletePatched) return;
     if (typeof chat.autoCompleteReceived !== 'function') return;
-    if (typeof chat.currentCompletionWord !== 'function') return;
 
   function miniFeatherCompletions(inputValue) {
-    const raw = String(inputValue || '').split(' ');
+    const raw = String(inputValue || '').replace(/^\/+/, '').split(/\s+/);
     const word = (raw.pop() || '').toLowerCase();
 
     if (!raw.length) {
@@ -46805,7 +46842,8 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
       return [...RECOGNIZED].filter(name => name.startsWith(word)).sort();
     }
 
-    const first = raw[0].toLowerCase();
+    const aliases = { llamar: 'call', modelo: 'model', puente: 'bridge' };
+    const first = aliases[raw[0].toLowerCase()] || raw[0].toLowerCase();
     if (!RECOGNIZED.has(first)) return [];
 
     let node = COMPLETION_TREE[first];
@@ -46826,41 +46864,50 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
 
   // los comandos de MiniFeather se completan localmente (al servidor no lo
   // consultan ni por cortesía): se responde al acto sin gastar la peticion.
-  if (typeof chat.sendTabComplete === 'function') {
-    const originalSend = chat.sendTabComplete;
-    chat.__mfOriginalSendTabComplete = originalSend;
-    chat.sendTabComplete = function (autoShow) {
-      const mine = miniFeatherCompletions(this.inputValue);
-      if (mine.length) {
-        this.autoComplete.active = true;
-        this.autoComplete.list = mine;
-        this.autoComplete.index = -1;
-        return;
+  chat.__mfCompletionSendHooks = [];
+  for (const method of ['sendTabComplete', 'requestTabComplete']) {
+    if (typeof chat[method] !== 'function') continue;
+    const originalSend = chat[method];
+    const wrapper = function (...args) {
+      if (!this.isInputCommandMode || this.isInputWorldEditMode || this.autoComplete?.active || String(this.inputValue || '').startsWith('/')) return originalSend.apply(this, args);
+      const input = String(this.inputValue || '').replace(/^\/+/, '');
+      const mine = miniFeatherCompletions(input);
+      const ownArguments = /\s/.test(input) && RECOGNIZED.has(input.split(/\s+/)[0].toLowerCase());
+      if (mine.length || ownArguments) {
+        if (Array.isArray(this.pendingAutoCompletes)) {
+          const packet = { matches: mine };
+          const pending = { autoShow: method === 'sendTabComplete' && args[0] === true, word: input.split(/\s+/).pop() };
+          // Keep native asynchronous requests in order; the local result consumes only its own entry.
+          this.pendingAutoCompletes.unshift(pending);
+          return this.autoCompleteReceived(packet);
+        }
+        return this.autoCompleteReceived({ matches: mine });
       }
-      return originalSend.call(this, autoShow);
+      return originalSend.apply(this, args);
     };
+    chat[method] = wrapper;
+    chat.__mfCompletionSendHooks.push({ method, original: originalSend, wrapper });
   }
 
     const original = chat.autoCompleteReceived;
     chat.__mfAutoCompleteOriginal = original;
     chat.autoCompleteReceived = function (packet) {
-      original.call(this, packet);
       try {
-        if (!this.isInputCommandMode) return;
-        if (!this.autoComplete) return;
-        const word = String(this.currentCompletionWord() || '').toLowerCase();
-        if (word.startsWith('/')) return;
-
-        const mine = [...RECOGNIZED].filter(name => name.startsWith(word)).sort();
-        if (!mine.length) return;
-
-        const existing =
-          this.autoComplete.active && Array.isArray(this.autoComplete.list)
-            ? this.autoComplete.list
-            : [];
-        this.autoComplete.list = [...new Set([...existing, ...mine])];
-        this.autoComplete.active = true;
+        if (this.isInputCommandMode && !this.isInputWorldEditMode && this.autoComplete) {
+          const input = String(this.inputValue ?? this.currentCompletionWord?.() ?? '');
+          const ownArguments = /\s/.test(input) && RECOGNIZED.has(input.split(/\s+/)[0].toLowerCase());
+          const root = input.length > 0 && !/\s/.test(input);
+          if (!input.startsWith('/') && (ownArguments || root)) {
+            const word = input.split(/\s+/).pop().toLowerCase();
+            const mine = miniFeatherCompletions(input);
+            const existing = ownArguments ? [] : (Array.isArray(packet?.matches) ? packet.matches : []).filter(name => String(name).replace(/^\/+/, '').toLowerCase().startsWith(word));
+            const matches = [...new Set([...existing, ...mine])];
+            packet = { ...packet, matches };
+            if (!matches.length) { this.autoComplete.active = false; this.autoComplete.list = []; }
+          }
+        }
       } catch (_) {}
+      return original.call(this, packet);
     };
     chat.__mfAutoCompletePatched = true;
   }
@@ -46936,12 +46983,10 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
       if (chat?.__mfAutoCompletePatched && chat.__mfAutoCompleteOriginal) {
         chat.autoCompleteReceived = chat.__mfAutoCompleteOriginal;
         chat.__mfAutoCompletePatched = false;
-    try {
-      const chat = state.chat;
-      if (typeof chat?.__mfOriginalSendTabComplete === 'function') {
-        chat.sendTabComplete = chat.__mfOriginalSendTabComplete;
-      }
-    } catch (_) {}
+        for (const hook of chat.__mfCompletionSendHooks || []) {
+          if (chat[hook.method] === hook.wrapper) chat[hook.method] = hook.original;
+        }
+        delete chat.__mfCompletionSendHooks;
       }
     } catch (_) {}
     if (globalThis[GLOBAL_KEY]?.destroy === destroy) delete globalThis[GLOBAL_KEY];
@@ -101008,6 +101053,14 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "noWeatherDesc": "Hide rain, snow, storm darkness, weather particles, lightning and weather sounds locally.",
     "fullBright": "FullBright",
     "fullBrightDesc": "Brighten dark areas to a comfortable visibility level without boosting emissive blocks or saturation.",
+    "fullBrightSettings": "FullBright lighting",
+    "fullBrightIntensity": "Light intensity",
+    "fullBrightSoft": "Soft",
+    "fullBrightBalanced": "Balanced",
+    "fullBrightStrong": "Strong",
+    "fullBrightNatural": "Preserve light gradients",
+    "fullBrightReset": "Reset",
+    "fullBrightSettingsHint": "Changes apply while FullBright is enabled. Disabling it restores the original lighting.",
     "leafWind": "Leaf Movement",
     "leafWindDesc": "Adds natural wind movement to leaf blocks without changing collisions.",
     "waterSplash": "Water Splash",
@@ -101835,6 +101888,14 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "noWeatherDesc": "Oculta localmente la lluvia, nieve, oscuridad de tormenta, partículas, rayos y sonidos del clima.",
     "fullBright": "FullBright",
     "fullBrightDesc": "Aclara las zonas oscuras a un nivel cómodo sin aumentar el brillo de bloques emisivos ni la saturación.",
+    "fullBrightSettings": "Iluminación de FullBright",
+    "fullBrightIntensity": "Intensidad de la luz",
+    "fullBrightSoft": "Suave",
+    "fullBrightBalanced": "Equilibrado",
+    "fullBrightStrong": "Intenso",
+    "fullBrightNatural": "Conservar los matices de luz",
+    "fullBrightReset": "Restablecer",
+    "fullBrightSettingsHint": "Los cambios se aplican con FullBright activado. Al desactivarlo vuelve la iluminación original.",
     "leafWind": "Movimiento de Hojas",
     "leafWindDesc": "Añade movimiento natural de viento a las hojas sin cambiar las colisiones.",
     "waterSplash": "Splash de agua",
@@ -102670,6 +102731,14 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "noWeatherDesc": "雨、雪、嵐の暗さ、天候パーティクル、雷、天候サウンドをローカルで非表示にします。",
     "fullBright": "FullBright",
     "fullBrightDesc": "発光ブロックの明るさや彩度を上げずに、暗い場所だけを見やすい明るさにします。",
+    "fullBrightSettings": "FullBright の照明",
+    "fullBrightIntensity": "光の強さ",
+    "fullBrightSoft": "弱め",
+    "fullBrightBalanced": "標準",
+    "fullBrightStrong": "強め",
+    "fullBrightNatural": "光の濃淡を維持",
+    "fullBrightReset": "リセット",
+    "fullBrightSettingsHint": "FullBright が有効な間に変更が反映されます。無効にすると元の照明に戻ります。",
     "leafWind": "葉の揺れ",
     "leafWindDesc": "当たり判定を変えずに、葉ブロックへ自然な風の動きを追加します。",
     "waterSplash": "水しぶき",
@@ -103500,6 +103569,14 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "noWeatherDesc": "Nasconde localmente pioggia, neve, oscurità della tempesta, particelle, fulmini e suoni meteo.",
     "fullBright": "FullBright",
     "fullBrightDesc": "Schiarisce le zone buie a un livello confortevole senza aumentare la luminosità dei blocchi emissivi né la saturazione.",
+    "fullBrightSettings": "Illuminazione FullBright",
+    "fullBrightIntensity": "Intensità della luce",
+    "fullBrightSoft": "Tenue",
+    "fullBrightBalanced": "Bilanciata",
+    "fullBrightStrong": "Intensa",
+    "fullBrightNatural": "Mantieni le sfumature della luce",
+    "fullBrightReset": "Ripristina",
+    "fullBrightSettingsHint": "Le modifiche si applicano quando FullBright è attivo. Disattivandolo viene ripristinata la luce originale.",
     "leafWind": "Movimento Foglie",
     "leafWindDesc": "Aggiunge un movimento naturale del vento alle foglie senza modificare le collisioni.",
     "waterSplash": "Splash d'acqua",
@@ -104211,6 +104288,14 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "language": "语言",
     "fullBright": "FullBright",
     "fullBrightDesc": "适度提亮黑暗区域，不提高发光方块亮度，也不增加饱和度。",
+    "fullBrightSettings": "FullBright 照明",
+    "fullBrightIntensity": "光照强度",
+    "fullBrightSoft": "柔和",
+    "fullBrightBalanced": "均衡",
+    "fullBrightStrong": "强光",
+    "fullBrightNatural": "保留明暗层次",
+    "fullBrightReset": "重置",
+    "fullBrightSettingsHint": "仅在启用 FullBright 时应用更改。关闭后恢复原始光照。",
     "panelScale": "页面缩放",
     "pageZoomEnabled": "应用页面缩放",
     "pageZoomHint": "浏览器缩放（Ctrl+滚轮），作用于整个页面",
@@ -105037,6 +105122,14 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "language": "Langue",
     "fullBright": "FullBright",
     "fullBrightDesc": "Éclaircit les zones sombres à un niveau confortable sans augmenter la luminosité des blocs émissifs ni la saturation.",
+    "fullBrightSettings": "Éclairage FullBright",
+    "fullBrightIntensity": "Intensité lumineuse",
+    "fullBrightSoft": "Doux",
+    "fullBrightBalanced": "Équilibré",
+    "fullBrightStrong": "Intense",
+    "fullBrightNatural": "Conserver les nuances de lumière",
+    "fullBrightReset": "Réinitialiser",
+    "fullBrightSettingsHint": "Les modifications s’appliquent lorsque FullBright est activé. Le désactiver rétablit l’éclairage original.",
     "panelScale": "Zoom de page",
     "pageZoomEnabled": "Appliquer le zoom de page",
     "pageZoomHint": "Zoom du navigateur (Ctrl+molette), affecte toute la page",
@@ -105863,6 +105956,14 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "language": "Sprache",
     "fullBright": "FullBright",
     "fullBrightDesc": "Hellt dunkle Bereiche angenehm auf, ohne leuchtende Blöcke oder die Sättigung zu verstärken.",
+    "fullBrightSettings": "FullBright-Beleuchtung",
+    "fullBrightIntensity": "Lichtintensität",
+    "fullBrightSoft": "Sanft",
+    "fullBrightBalanced": "Ausgewogen",
+    "fullBrightStrong": "Stark",
+    "fullBrightNatural": "Lichtabstufungen erhalten",
+    "fullBrightReset": "Zurücksetzen",
+    "fullBrightSettingsHint": "Änderungen gelten bei aktiviertem FullBright. Beim Ausschalten wird die ursprüngliche Beleuchtung wiederhergestellt.",
     "panelScale": "Seitenzoom",
     "pageZoomEnabled": "Seitenzoom anwenden",
     "pageZoomHint": "Browser-Zoom (Strg+Rad), wirkt auf die ganze Seite",
@@ -106689,6 +106790,14 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "language": "Idioma",
     "fullBright": "FullBright",
     "fullBrightDesc": "Clareia áreas escuras para um nível confortável sem aumentar o brilho de blocos emissivos nem a saturação.",
+    "fullBrightSettings": "Iluminação FullBright",
+    "fullBrightIntensity": "Intensidade da luz",
+    "fullBrightSoft": "Suave",
+    "fullBrightBalanced": "Equilibrada",
+    "fullBrightStrong": "Intensa",
+    "fullBrightNatural": "Preservar as nuances de luz",
+    "fullBrightReset": "Redefinir",
+    "fullBrightSettingsHint": "As alterações se aplicam com o FullBright ativado. Ao desativá-lo, a iluminação original é restaurada.",
     "panelScale": "Zoom da página",
     "pageZoomEnabled": "Aplicar zoom da página",
     "pageZoomHint": "Zoom do navegador (Ctrl+roda), afeta toda a página",
@@ -107515,6 +107624,14 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "language": "Язык",
     "fullBright": "FullBright",
     "fullBrightDesc": "Осветляет тёмные области до комфортного уровня, не усиливая яркость светящихся блоков и насыщенность.",
+    "fullBrightSettings": "Освещение FullBright",
+    "fullBrightIntensity": "Интенсивность света",
+    "fullBrightSoft": "Мягкое",
+    "fullBrightBalanced": "Сбалансированное",
+    "fullBrightStrong": "Яркое",
+    "fullBrightNatural": "Сохранять световые переходы",
+    "fullBrightReset": "Сбросить",
+    "fullBrightSettingsHint": "Изменения применяются при включённом FullBright. При отключении восстанавливается исходное освещение.",
     "panelScale": "Масштаб страницы",
     "pageZoomEnabled": "Применять масштаб страницы",
     "pageZoomHint": "Масштаб браузера (Ctrl+колесо), действует на всю страницу",
@@ -108341,6 +108458,14 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "language": "언어",
     "fullBright": "FullBright",
     "fullBrightDesc": "발광 블록의 밝기나 채도를 높이지 않고 어두운 영역만 편안하게 보이도록 밝게 합니다.",
+    "fullBrightSettings": "FullBright 조명",
+    "fullBrightIntensity": "빛 강도",
+    "fullBrightSoft": "부드럽게",
+    "fullBrightBalanced": "균형 있게",
+    "fullBrightStrong": "강하게",
+    "fullBrightNatural": "빛의 명암 유지",
+    "fullBrightReset": "초기화",
+    "fullBrightSettingsHint": "FullBright가 활성화된 동안 변경 사항이 적용됩니다. 비활성화하면 원래 조명으로 복원됩니다.",
     "panelScale": "페이지 줌",
     "pageZoomEnabled": "페이지 줌 적용",
     "pageZoomHint": "브라우저 줌(Ctrl+휠), 전체 페이지에 적용됩니다",
@@ -111177,6 +111302,7 @@ function normalize(entry) {
 /* ==== mf module: src/UI/ClientPanel.js ==== */
 (function () {
   'use strict';
+  const FULLBRIGHT_SETTINGS_VERSION = 1;
 
   try {
     globalThis.__MINIFEATHER_CONTENT__?.destroy?.();
@@ -111884,6 +112010,8 @@ function normalize(entry) {
     itemPhysics: false,
     noWeather: false,
     fullBright: false,
+    fullBrightFloor: 0.16,
+    fullBrightNatural: true,
     antiAfk: false,
     antiAfkDelay: 120,
     autoSprint: false,
@@ -112163,6 +112291,7 @@ function normalize(entry) {
   let titanTinySettingsCleanup = null;
   let patPatSettingsCleanup = null;
   let zoomSettingsCleanup = null;
+  let fullBrightSettingsCleanup = null;
   let cameraOverhaulSettingsCleanup = null;
   let elytraFlightSettingsCleanup = null;
   let freecamSettingsCleanup = null;
@@ -115696,9 +115825,96 @@ function normalize(entry) {
   }
 
   function sendFullBrightConfig(enabled = settings.fullBright) {
+    const value = Number(settings.fullBrightFloor);
+    const floor = Number.isFinite(value) ? Math.max(0, Math.min(0.35, value)) : 0.16;
+    settings.fullBrightFloor = guiSettings.fullBrightFloor = floor;
     document.dispatchEvent(new CustomEvent('minifeather:fullbright-config', {
-      detail: JSON.stringify({ enabled: !!enabled, floor: 0.16 })
+      detail: JSON.stringify({ enabled: !!enabled, floor, natural: settings.fullBrightNatural !== false })
     }));
+  }
+
+  function closeFullBrightSettings() {
+    fullBrightSettingsCleanup?.();
+    fullBrightSettingsCleanup = null;
+  }
+
+  function openFullBrightSettings() {
+    if (!panel) return;
+    closeFullBrightSettings();
+    sendFullBrightConfig();
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop mf-fullbright-backdrop';
+    backdrop.innerHTML = `
+      <div class="mf-tt-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(t('fullBrightSettings'))}">
+        <div class="mf-tt-head">
+          <div class="mf-tt-title">${t('fullBrightSettings')}</div>
+          <button type="button" class="mf-close" data-fb-close aria-label="${escapeHtml(t('worldMapClose'))}">×</button>
+        </div>
+        <label class="mf-tt-row" for="mf-fb-intensity"><span>${t('fullBrightIntensity')}</span><output data-fb-value></output></label>
+        <input id="mf-fb-intensity" type="range" min="0" max="100" step="1" style="width:100%" value="${Math.round(settings.fullBrightFloor / 0.35 * 100)}">
+        <div class="mf-tt-bind-actions">
+          <button type="button" class="mf-btn secondary" data-fb-preset="0.08">${t('fullBrightSoft')}</button>
+          <button type="button" class="mf-btn secondary" data-fb-preset="0.16">${t('fullBrightBalanced')}</button>
+          <button type="button" class="mf-btn secondary" data-fb-preset="0.30">${t('fullBrightStrong')}</button>
+        </div>
+        <label class="mf-tt-row"><span>${t('fullBrightNatural')}</span><input type="checkbox" data-fb-natural ${settings.fullBrightNatural !== false ? 'checked' : ''}></label>
+        <div class="mf-tt-hint">${t('fullBrightSettingsHint')}</div>
+        <div class="mf-tt-bind-actions">
+          <button type="button" class="mf-btn secondary" data-fb-reset>${t('fullBrightReset')}</button>
+          <button type="button" class="mf-btn primary" data-fb-close>${t('worldMapClose')}</button>
+        </div>
+      </div>`;
+    panel.appendChild(backdrop);
+    const slider = backdrop.querySelector('#mf-fb-intensity');
+    const natural = backdrop.querySelector('[data-fb-natural]');
+    const output = backdrop.querySelector('[data-fb-value]');
+    const update = () => {
+      output.textContent = `${Math.round(settings.fullBrightFloor / 0.35 * 100)}%`;
+      sendFullBrightConfig();
+    };
+    const persist = () => {
+      guiSettings.fullBrightFloor = settings.fullBrightFloor;
+      guiSettings.fullBrightNatural = settings.fullBrightNatural;
+      saveSettings();
+    };
+    slider.addEventListener('input', () => {
+      settings.fullBrightFloor = Number(slider.value) / 100 * 0.35;
+      update();
+    });
+    slider.addEventListener('change', persist);
+    natural.addEventListener('change', () => {
+      settings.fullBrightNatural = natural.checked;
+      update(); persist();
+    });
+    for (const button of backdrop.querySelectorAll('[data-fb-preset]')) {
+      button.addEventListener('click', () => {
+        settings.fullBrightFloor = Number(button.dataset.fbPreset);
+        slider.value = Math.round(settings.fullBrightFloor / 0.35 * 100);
+        update(); persist();
+      });
+    }
+    backdrop.querySelector('[data-fb-reset]').addEventListener('click', () => {
+      settings.fullBrightFloor = 0.16;
+      settings.fullBrightNatural = natural.checked = true;
+      slider.value = Math.round(0.16 / 0.35 * 100);
+      update(); persist();
+    });
+    const cleanup = () => {
+      persist();
+      document.removeEventListener('keydown', onKey, true);
+      backdrop.remove();
+      if (fullBrightSettingsCleanup === cleanup) fullBrightSettingsCleanup = null;
+    };
+    const onKey = event => {
+      if (event.code !== 'Escape') return;
+      event.preventDefault(); event.stopImmediatePropagation(); cleanup();
+    };
+    document.addEventListener('keydown', onKey, true);
+    fullBrightSettingsCleanup = cleanup;
+    for (const button of backdrop.querySelectorAll('[data-fb-close]')) button.addEventListener('click', cleanup);
+    backdrop.addEventListener('mousedown', event => { if (event.target === backdrop) cleanup(); });
+    update();
+    slider.focus();
   }
 
   function initFullBrightModule() {
@@ -118168,7 +118384,7 @@ function normalize(entry) {
   }
 
   const FEATURE_ADVANCED_SETTINGS = new Set([
-    'titanTiny','patPat','antiAfk','idlePlayerBot','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight'
+    'fullBright','titanTiny','patPat','antiAfk','idlePlayerBot','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight'
   ]);
 
   function closeFeatureSettings() {
@@ -118459,6 +118675,7 @@ function normalize(entry) {
     backdrop.querySelector('[data-feature-advanced]')?.addEventListener('click', () => {
       closeFeatureSettings();
       const advanced = {
+        fullBright: openFullBrightSettings,
         titanTiny: openTitanTinySettings, patPat: openPatPatSettings, antiAfk: openAntiAfkSettings, idlePlayerBot: openIdlePlayerBotSettings, zoom: openZoomSettings,
         cameraOverhaul: openCameraOverhaulSettings, elytraFlight: openElytraFlightSettings, dynamicCrosshair: openDynamicCrosshairSettings,
         freelook: openFreelookSettings, freecam: openFreecamSettings, blockHighlight: openBlockHighlightSettings, armorHud: openArmorHudSettings
@@ -120371,6 +120588,7 @@ function normalize(entry) {
 
   function hideGUI() {
     if (!overlay || !panel) return;
+    closeFullBrightSettings();
     closeTitanTinySettings();
     closePatPatSettings();
     closeAntiAfkSettings();
@@ -123139,6 +123357,11 @@ function normalize(entry) {
     });
 
     const zoomToggle = panel.querySelector('.mf-toggle[data-key="zoom"]');
+    panel.querySelector('.mf-toggle[data-key="fullBright"]')?.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openFullBrightSettings();
+    });
     zoomToggle?.addEventListener('contextmenu', event => {
       event.preventDefault();
       event.stopPropagation();
@@ -125056,6 +125279,7 @@ function normalize(entry) {
     fontObserver?.disconnect();
     fontObserver = null;
     chatObserver?.disconnect();
+    closeFullBrightSettings();
     chatObserver = null;
     restoreChatContent();
     restoreChatContent = () => {};
