@@ -107,6 +107,8 @@ y sí, sabemos a quién acreditar. sorprendentemente. resulta que la gente deja 
 
 el software se entrega "tal cual", sin garantías. no somos responsables de baneos, pérdidas de datos, daños, ni de lo que decida la ia. la versión completa y aburrida (pero vinculante) está en la [eula completa en español](EULA.es.md). si algo de este tl;dr contradice a la completa, gana la completa. siempre. período. ᕕ( ᐛ )ᕗ (y sí, la completa también dice esto, pero en abogadés. ese idioma nadie lo habla de forma nativa.)
 
+pd, una más: el código fuente es software libre bajo la [gnu gpl-3.0](LICENSE). léelo, hazle fork, aprende de él, remézclalo (manteniéndolo abierto, ese es el trato). el arte y los assets del juego incluidos NO entran en esa licencia — tienen sus propias licencias, todas mapeadas en [LICENSING.md](LICENSING.md). (⌐■_■)
+
 ---
 
 gracias por leer hasta aquí. de verdad. eres de los que leen. (っ˘ω˘ς) puntos extra si llegaste hasta la completa. cero puntos si viniste solo por los kaomojis... bueno, un punto. están bonitos.

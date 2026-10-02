@@ -106,6 +106,8 @@ and yes, we do know who to credit. shockingly. turns out people write their name
 
 the software is provided "as is", no warranties. we're not liable for bans, data loss, damages, or whatever the ai decides to say. the full, boring (but binding) version is in the [full eula](EULA.md). if anything in this tl;dr contradicts the full version, the full one wins. always. period. ᕕ( ᐛ )ᕗ (and yes, the full version says this too, in legalese. nobody speaks that natively.)
 
+psst, one more thing: the source code is free software under the [gnu gpl-3.0](LICENSE). read it, fork it, learn from it, remix it (keep it open, that's the deal). the bundled art and game assets are NOT part of that grant — their own licenses apply, all mapped out in [LICENSING.md](LICENSING.md). (⌐■_■)
+
 ---
 
 thanks for reading this far. seriously. you're one of the readers. (っ˘ω˘ς) bonus points if you made it to the full eula. zero points if you came just for the kaomojis... fine, one point. they're cute.

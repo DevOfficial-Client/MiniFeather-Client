@@ -66,6 +66,14 @@ Both friends need this version of MiniFeather and must be signed in. Run `/call 
 
 The microphone is requested only when answering or after the recipient accepts. The signaling channel only advertises an account hash and a temporary peer ID, but it does not cryptographically verify a game account; confirm the caller's identity out of band. Audio uses PeerJS/WebRTC, so restrictive networks or iframe microphone permissions (such as on CrazyGames) can still prevent a call. Voice availability is opt-in and `/call off` stops it.
 
+## License
+
+MiniFeather's own source code is free software, licensed under the [GNU GPL-3.0](LICENSE): you may run, study, modify and redistribute it under those terms.
+
+Bundled third-party and game assets are **not** covered by that grant — each one keeps its own license. The exact scope, the exceptions and the known issues are documented in [LICENSING.md](LICENSING.md) and [CREDITS.md](CREDITS.md).
+
+Use of the official distribution and its community services remains subject to the [EULA](EULA.md).
+
 ## Credits
 
 **MiniFeather Client**

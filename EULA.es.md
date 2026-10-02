@@ -33,6 +33,8 @@ Este Acuerdo de Licencia de Usuario Final ("Acuerdo") es un contrato vinculante 
 
 2.2. La titularidad intelectual del Software corresponde al Equipo de Desarrollo. Esta licencia no constituye una venta.
 
+2.3. **Licencia del código fuente.** Con independencia de lo anterior, el código fuente propio del Equipo de Desarrollo (el contenido de `src/`, `tools/` y `tests/` en el repositorio del proyecto) se publica bajo la **Licencia Pública General de GNU v3.0** (véase el archivo [LICENSE](LICENSE)), con el alcance y las exclusiones documentados en [LICENSING.md](LICENSING.md). Dicha licencia rige lo que cualquier persona puede hacer con el código fuente; los assets incluidos no están cubiertos por ella y conservan sus propias licencias (véase [CREDITS.md](CREDITS.md)). Este Acuerdo sigue rigiendo el uso de la distribución oficial del Client y de los servicios comunitarios del proyecto.
+
 ---
 
 ## 3. Restricciones de uso
@@ -193,7 +195,7 @@ EN LA MÁXIMA MEDIDA PERMITIDA POR LA LEY APLICABLE, EL EQUIPO DE DESARROLLO NO 
 
 ## 14. Aviso legal y contacto
 
-14.1. MiniFeather Client es un proyecto comunitario de código abierto, no comercial y sin ánimo de lucro.
+14.1. MiniFeather Client es un proyecto comunitario, no comercial y sin ánimo de lucro. Su código fuente propio es software libre bajo la GNU GPL-3.0 ([LICENSE](LICENSE), [LICENSING.md](LICENSING.md)); los assets incluidos conservan sus propias licencias.
 
 14.2. Si usted es el titular de derechos sobre Miniblox o cualquier activo de terceros utilizado (incluida cualquier obra acreditada en el [CREDITS.md](CREDITS.md) del proyecto) y desea solicitar un cambio de crédito o una retirada, o si tiene preguntas sobre este Acuerdo o el tratamiento de datos, contacte a través del Discord oficial del proyecto: `https://discord.gg/k4Ku9DTQDQ`.
 

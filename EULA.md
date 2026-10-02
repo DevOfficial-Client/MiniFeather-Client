@@ -33,6 +33,8 @@ This End User License Agreement ("Agreement") is a binding contract between you 
 
 2.2. Intellectual ownership of the Software belongs to the Development Team. This license does not constitute a sale.
 
+2.3. **Source code license.** Independently of the above, the Development Team's own source code (the contents of `src/`, `tools/` and `tests/` in the project repository) is published under the **GNU General Public License v3.0** (see the [LICENSE](LICENSE) file), with the scope and exclusions documented in [LICENSING.md](LICENSING.md). That license governs what any person may do with the source code itself; bundled assets are not covered by it and keep their own licenses (see [CREDITS.md](CREDITS.md)). This Agreement continues to govern the use of the official distribution of the Client and the project's community services.
+
 ---
 
 ## 3. Restrictions of use
@@ -193,7 +195,7 @@ TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE DEVELOPMENT TEAM SHALL NO
 
 ## 14. Legal notice and contact
 
-14.1. MiniFeather Client is a community-driven, open-source, non-commercial, non-profit project.
+14.1. MiniFeather Client is a community-driven, non-commercial, non-profit project. Its own source code is free software under the GNU GPL-3.0 ([LICENSE](LICENSE), [LICENSING.md](LICENSING.md)); the bundled assets keep their own licenses.
 
 14.2. If you are the rights holder of Miniblox or any third-party asset used (including any work credited in the project's [CREDITS.md](CREDITS.md)) and wish to request a credit change or removal, or if you have questions about this Agreement or data handling, contact us through the project's official Discord: `https://discord.gg/k4Ku9DTQDQ`.
 
