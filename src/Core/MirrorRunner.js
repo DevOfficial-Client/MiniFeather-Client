@@ -68,12 +68,21 @@
     ? ov.buckets.mainStart
     : (MIRROR.lists.mainStart || []);
   var files = (ov && ov.files && typeof ov.files === 'object') ? ov.files : {};
+  var requiredMarkers = {
+    'src/Chat/ClientCommands.js': 'COMPLETION_CONTEXT_VERSION = 2',
+    'src/Render/FullBright.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
+    'src/UI/ClientPanel.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
+    'src/I18n/Translations.js': '"fullBrightSettings"'
+  };
 
   var injected = 0, remote = 0, bundled = 0;
   for (var i = 0; i < list.length; i++) {
     var p = list[i];
     if (typeof p !== 'string' || !p) continue;
     var useRemote = !!files[p] && typeof files[p] === 'string' && !fails[p];
+    var marker = requiredMarkers[p];
+    if (marker && useRemote && typeof MIRROR.code[p] === 'string' &&
+        MIRROR.code[p].indexOf(marker) >= 0 && files[p].indexOf(marker) < 0) useRemote = false;
     var code = useRemote ? files[p] : MIRROR.code[p];
     if (!code) {
       try { console.warn('minifeather mirror: sin código para', p); } catch (_) {}

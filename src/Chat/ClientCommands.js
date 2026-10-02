@@ -2,6 +2,7 @@
   'use strict';
 
   const GLOBAL_KEY = '__MINIFEATHER_CLIENT_COMMANDS__';
+  const COMPLETION_CONTEXT_VERSION = 2;
   const REQUEST_EVENT = 'minifeather:client-command';
   const RESPONSE_EVENT = 'minifeather:client-command-response';
   const BINDS_EVENT = 'minifeather:client-binds-config';
@@ -1935,10 +1936,9 @@
   function installAutoCompleteMerge(chat) {
     if (chat.__mfAutoCompletePatched) return;
     if (typeof chat.autoCompleteReceived !== 'function') return;
-    if (typeof chat.currentCompletionWord !== 'function') return;
 
   function miniFeatherCompletions(inputValue) {
-    const raw = String(inputValue || '').split(' ');
+    const raw = String(inputValue || '').replace(/^\/+/, '').split(/\s+/);
     const word = (raw.pop() || '').toLowerCase();
 
     if (!raw.length) {
@@ -1946,7 +1946,8 @@
       return [...RECOGNIZED].filter(name => name.startsWith(word)).sort();
     }
 
-    const first = raw[0].toLowerCase();
+    const aliases = { llamar: 'call', modelo: 'model', puente: 'bridge' };
+    const first = aliases[raw[0].toLowerCase()] || raw[0].toLowerCase();
     if (!RECOGNIZED.has(first)) return [];
 
     let node = COMPLETION_TREE[first];
@@ -1967,41 +1968,50 @@
 
   // los comandos de MiniFeather se completan localmente (al servidor no lo
   // consultan ni por cortesía): se responde al acto sin gastar la peticion.
-  if (typeof chat.sendTabComplete === 'function') {
-    const originalSend = chat.sendTabComplete;
-    chat.__mfOriginalSendTabComplete = originalSend;
-    chat.sendTabComplete = function (autoShow) {
-      const mine = miniFeatherCompletions(this.inputValue);
-      if (mine.length) {
-        this.autoComplete.active = true;
-        this.autoComplete.list = mine;
-        this.autoComplete.index = -1;
-        return;
+  chat.__mfCompletionSendHooks = [];
+  for (const method of ['sendTabComplete', 'requestTabComplete']) {
+    if (typeof chat[method] !== 'function') continue;
+    const originalSend = chat[method];
+    const wrapper = function (...args) {
+      if (!this.isInputCommandMode || this.isInputWorldEditMode || this.autoComplete?.active || String(this.inputValue || '').startsWith('/')) return originalSend.apply(this, args);
+      const input = String(this.inputValue || '').replace(/^\/+/, '');
+      const mine = miniFeatherCompletions(input);
+      const ownArguments = /\s/.test(input) && RECOGNIZED.has(input.split(/\s+/)[0].toLowerCase());
+      if (mine.length || ownArguments) {
+        if (Array.isArray(this.pendingAutoCompletes)) {
+          const packet = { matches: mine };
+          const pending = { autoShow: method === 'sendTabComplete' && args[0] === true, word: input.split(/\s+/).pop() };
+          // Keep native asynchronous requests in order; the local result consumes only its own entry.
+          this.pendingAutoCompletes.unshift(pending);
+          return this.autoCompleteReceived(packet);
+        }
+        return this.autoCompleteReceived({ matches: mine });
       }
-      return originalSend.call(this, autoShow);
+      return originalSend.apply(this, args);
     };
+    chat[method] = wrapper;
+    chat.__mfCompletionSendHooks.push({ method, original: originalSend, wrapper });
   }
 
     const original = chat.autoCompleteReceived;
     chat.__mfAutoCompleteOriginal = original;
     chat.autoCompleteReceived = function (packet) {
-      original.call(this, packet);
       try {
-        if (!this.isInputCommandMode) return;
-        if (!this.autoComplete) return;
-        const word = String(this.currentCompletionWord() || '').toLowerCase();
-        if (word.startsWith('/')) return;
-
-        const mine = [...RECOGNIZED].filter(name => name.startsWith(word)).sort();
-        if (!mine.length) return;
-
-        const existing =
-          this.autoComplete.active && Array.isArray(this.autoComplete.list)
-            ? this.autoComplete.list
-            : [];
-        this.autoComplete.list = [...new Set([...existing, ...mine])];
-        this.autoComplete.active = true;
+        if (this.isInputCommandMode && !this.isInputWorldEditMode && this.autoComplete) {
+          const input = String(this.inputValue ?? this.currentCompletionWord?.() ?? '');
+          const ownArguments = /\s/.test(input) && RECOGNIZED.has(input.split(/\s+/)[0].toLowerCase());
+          const root = input.length > 0 && !/\s/.test(input);
+          if (!input.startsWith('/') && (ownArguments || root)) {
+            const word = input.split(/\s+/).pop().toLowerCase();
+            const mine = miniFeatherCompletions(input);
+            const existing = ownArguments ? [] : (Array.isArray(packet?.matches) ? packet.matches : []).filter(name => String(name).replace(/^\/+/, '').toLowerCase().startsWith(word));
+            const matches = [...new Set([...existing, ...mine])];
+            packet = { ...packet, matches };
+            if (!matches.length) { this.autoComplete.active = false; this.autoComplete.list = []; }
+          }
+        }
       } catch (_) {}
+      return original.call(this, packet);
     };
     chat.__mfAutoCompletePatched = true;
   }
@@ -2077,12 +2087,10 @@
       if (chat?.__mfAutoCompletePatched && chat.__mfAutoCompleteOriginal) {
         chat.autoCompleteReceived = chat.__mfAutoCompleteOriginal;
         chat.__mfAutoCompletePatched = false;
-    try {
-      const chat = state.chat;
-      if (typeof chat?.__mfOriginalSendTabComplete === 'function') {
-        chat.sendTabComplete = chat.__mfOriginalSendTabComplete;
-      }
-    } catch (_) {}
+        for (const hook of chat.__mfCompletionSendHooks || []) {
+          if (chat[hook.method] === hook.wrapper) chat[hook.method] = hook.original;
+        }
+        delete chat.__mfCompletionSendHooks;
       }
     } catch (_) {}
     if (globalThis[GLOBAL_KEY]?.destroy === destroy) delete globalThis[GLOBAL_KEY];

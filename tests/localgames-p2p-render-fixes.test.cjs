@@ -560,6 +560,85 @@ test('miniFeatherCompletions completes commands and argument variants', () => {
   assert.deepEqual([...fns.miniFeatherCompletions('toggle')], ['toggle'], 'completing the command name');
 });
 
+test('autocomplete preserves the command before native completion mutates the input', () => {
+  const code = fs.readFileSync(path.join(__dirname, '..', 'src/Chat/ClientCommands.js'), 'utf8');
+  const install = expose(namedFunction(code, 'installAutoCompleteMerge'), {
+    RECOGNIZED: new Set(['model', 'modelo', 'toggle']), COMPLETION_TREE: { model: ['spawn', 'list'] }
+  });
+  const chat = {
+    isInputCommandMode: true, inputValue: 'model sp', autoComplete: { active: false, list: [], index: -1 },
+    autoCompleteReceived(packet) {
+      this.autoCompleteRequested = false;
+      this.autoComplete.list = packet.matches.map(name => name.replace(/^\//, ''));
+      this.autoComplete.active = packet.matches.length > 1;
+      if (packet.matches.length) this.inputValue = this.inputValue.replace(/\S*$/, this.autoComplete.list[0]) + (packet.matches.length === 1 ? ' ' : '');
+    },
+    requestTabComplete() { this.sent = (this.sent || 0) + 1; }
+  };
+  install(chat);
+  chat.requestTabComplete();
+  assert.equal(chat.inputValue, 'model spawn ');
+  assert.equal(chat.sent, undefined);
+  chat.inputValue = 'modelo   sp'; chat.requestTabComplete();
+  assert.equal(chat.inputValue, 'modelo   spawn ');
+  chat.inputValue = 'model spawn '; chat.requestTabComplete();
+  assert.equal(chat.inputValue, 'model spawn ');
+  assert.deepEqual([...chat.autoComplete.list], [], 'no root commands offered after a complete argument');
+  chat.inputValue = 'model xyz'; chat.requestTabComplete();
+  assert.equal(chat.inputValue, 'model xyz'); assert.equal(chat.sent, undefined);
+  chat.inputValue = 't'; chat.autoCompleteReceived({ matches: ['/time'] });
+  assert.equal(chat.inputValue, 'time');
+  assert.deepEqual([...chat.autoComplete.list], ['time', 'toggle'], 'merged before native first selection');
+  chat.autoComplete.active = false; chat.isInputCommandMode = false; chat.inputValue = 'model sp';
+  chat.requestTabComplete(); assert.equal(chat.sent, 1, 'plain chat remains native');
+  chat.isInputCommandMode = true; chat.inputValue = '/set stone'; chat.requestTabComplete();
+  assert.equal(chat.sent, 2, 'WorldEdit double slash remains native');
+});
+
+test('native command arguments remain untouched for every non-client command and modern local requests consume their own queue entry', () => {
+  const code = fs.readFileSync(path.join(__dirname, '..', 'src/Chat/ClientCommands.js'), 'utf8');
+  const recognized = code.split(/\r?\n/).find(line => line.startsWith('  const RECOGNIZED = '));
+  const sandbox = vm.createContext({});
+  vm.runInContext(recognized + ';' + commandsConstBlock(code, 'COMPLETION_TREE') + ';', sandbox);
+  const install = vm.runInContext('(' + namedFunction(code, 'installAutoCompleteMerge') + ')', sandbox);
+  const chat = {
+    isInputCommandMode: true, showInput: true, inputValue: '', pendingAutoCompletes: [],
+    autoComplete: { active: false, list: [] }, currentCompletionWord() { return this.inputValue.split(' ').pop(); },
+    autoCompleteReceived(packet) {
+      const pending = this.pendingAutoCompletes.shift();
+      if (!this.showInput || !pending) return;
+      this.lastPacket = packet;
+      this.autoComplete.list = packet.matches;
+      if (!pending.autoShow && packet.matches.length === 1) this.inputValue = this.inputValue.replace(/\S*$/, packet.matches[0]) + ' ';
+    },
+    sendTabComplete(autoShow) { this.pendingAutoCompletes.push({ autoShow, word: this.currentCompletionWord() }); }
+  };
+  install(chat);
+  // Test the native passthrough invariant, independent of which commands the server supports.
+  const own = vm.runInContext('[...RECOGNIZED]', sandbox);
+  const nativeCommands = ['gamemode', 'give', 'tp', 'teleport', 'effect', 'enchant', 'kill', 'clear', 'summon', 'time', 'weather', 'title', 'fill', 'setblock', 'help', 'seed', 'custom_server_command'];
+  for (const command of nativeCommands.filter(name => !own.includes(name))) {
+    for (const arg of ['', 'survival', 'player 4']) {
+      chat.inputValue = command + ' ' + arg;
+      chat.sendTabComplete(true);
+      const packet = { matches: ['survival', 'creative', 'adventure', 'spectator'] };
+      chat.autoCompleteReceived(packet);
+      assert.equal(chat.lastPacket, packet, command + ': native packet forwarded unchanged');
+      assert.deepEqual(chat.autoComplete.list, packet.matches);
+    }
+  }
+  chat.inputValue = 'model sp'; chat.sendTabComplete(false);
+  assert.equal(chat.inputValue, 'model spawn ');
+  assert.equal(chat.pendingAutoCompletes.length, 0);
+  chat.inputValue = 'model sp'; chat.sendTabComplete(true);
+  assert.equal(chat.inputValue, 'model sp', 'automatic preview must not rewrite typed text');
+  assert.deepEqual([...chat.autoComplete.list], ['spawn']);
+  assert.equal(chat.pendingAutoCompletes.length, 0);
+  chat.isInputWorldEditMode = true; chat.inputValue = 'model sp'; chat.sendTabComplete(true);
+  const worldEdit = { matches: ['native-selection'] }; chat.autoCompleteReceived(worldEdit);
+  assert.equal(chat.lastPacket, worldEdit);
+});
+
 test('sendTabComplete serves MiniFeather variants locally without hitting the server', () => {
   const commandsSource = fs.readFileSync(
     path.join(__dirname, '..', 'src/Chat/ClientCommands.js'),
@@ -570,7 +649,7 @@ test('sendTabComplete serves MiniFeather variants locally without hitting the se
     inputValue: 'baritone auto',
     autoComplete: { active: false, list: [], index: -1 },
     currentCompletionWord() { return this.__word; },
-    autoCompleteReceived(packet) { this.autoComplete.list = ['time']; this.autoComplete.active = true; },
+    autoCompleteReceived(packet) { this.autoComplete.list = packet.matches.map(name => name.replace(/^\//, '')); this.autoComplete.active = this.autoComplete.list.length > 0; },
     sendTabComplete() { this.sentToServer = true; }
   };
   const sandbox = {
@@ -594,7 +673,7 @@ test('sendTabComplete serves MiniFeather variants locally without hitting the se
   chat.inputValue = '';
   chat.__word = '';
   chat.autoCompleteReceived({ matches: ['/time'] });
-  assert.deepEqual([...chat.autoComplete.list].sort(), ['baritone', 'time', 'toggle'], 'bare slash merges ours into the official list');
+  assert.deepEqual([...chat.autoComplete.list].sort(), ['time'], 'empty input preserves native response rather than injecting every client command');
 });
 
 

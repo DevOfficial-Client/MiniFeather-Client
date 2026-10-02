@@ -1,5 +1,6 @@
 (function () {
   'use strict';
+  const FULLBRIGHT_SETTINGS_VERSION = 1;
 
   try {
     globalThis.__MINIFEATHER_CONTENT__?.destroy?.();
@@ -707,6 +708,8 @@
     itemPhysics: false,
     noWeather: false,
     fullBright: false,
+    fullBrightFloor: 0.16,
+    fullBrightNatural: true,
     antiAfk: false,
     antiAfkDelay: 120,
     autoSprint: false,
@@ -986,6 +989,7 @@
   let titanTinySettingsCleanup = null;
   let patPatSettingsCleanup = null;
   let zoomSettingsCleanup = null;
+  let fullBrightSettingsCleanup = null;
   let cameraOverhaulSettingsCleanup = null;
   let elytraFlightSettingsCleanup = null;
   let freecamSettingsCleanup = null;
@@ -4519,9 +4523,96 @@
   }
 
   function sendFullBrightConfig(enabled = settings.fullBright) {
+    const value = Number(settings.fullBrightFloor);
+    const floor = Number.isFinite(value) ? Math.max(0, Math.min(0.35, value)) : 0.16;
+    settings.fullBrightFloor = guiSettings.fullBrightFloor = floor;
     document.dispatchEvent(new CustomEvent('minifeather:fullbright-config', {
-      detail: JSON.stringify({ enabled: !!enabled, floor: 0.16 })
+      detail: JSON.stringify({ enabled: !!enabled, floor, natural: settings.fullBrightNatural !== false })
     }));
+  }
+
+  function closeFullBrightSettings() {
+    fullBrightSettingsCleanup?.();
+    fullBrightSettingsCleanup = null;
+  }
+
+  function openFullBrightSettings() {
+    if (!panel) return;
+    closeFullBrightSettings();
+    sendFullBrightConfig();
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop mf-fullbright-backdrop';
+    backdrop.innerHTML = `
+      <div class="mf-tt-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(t('fullBrightSettings'))}">
+        <div class="mf-tt-head">
+          <div class="mf-tt-title">${t('fullBrightSettings')}</div>
+          <button type="button" class="mf-close" data-fb-close aria-label="${escapeHtml(t('worldMapClose'))}">×</button>
+        </div>
+        <label class="mf-tt-row" for="mf-fb-intensity"><span>${t('fullBrightIntensity')}</span><output data-fb-value></output></label>
+        <input id="mf-fb-intensity" type="range" min="0" max="100" step="1" style="width:100%" value="${Math.round(settings.fullBrightFloor / 0.35 * 100)}">
+        <div class="mf-tt-bind-actions">
+          <button type="button" class="mf-btn secondary" data-fb-preset="0.08">${t('fullBrightSoft')}</button>
+          <button type="button" class="mf-btn secondary" data-fb-preset="0.16">${t('fullBrightBalanced')}</button>
+          <button type="button" class="mf-btn secondary" data-fb-preset="0.30">${t('fullBrightStrong')}</button>
+        </div>
+        <label class="mf-tt-row"><span>${t('fullBrightNatural')}</span><input type="checkbox" data-fb-natural ${settings.fullBrightNatural !== false ? 'checked' : ''}></label>
+        <div class="mf-tt-hint">${t('fullBrightSettingsHint')}</div>
+        <div class="mf-tt-bind-actions">
+          <button type="button" class="mf-btn secondary" data-fb-reset>${t('fullBrightReset')}</button>
+          <button type="button" class="mf-btn primary" data-fb-close>${t('worldMapClose')}</button>
+        </div>
+      </div>`;
+    panel.appendChild(backdrop);
+    const slider = backdrop.querySelector('#mf-fb-intensity');
+    const natural = backdrop.querySelector('[data-fb-natural]');
+    const output = backdrop.querySelector('[data-fb-value]');
+    const update = () => {
+      output.textContent = `${Math.round(settings.fullBrightFloor / 0.35 * 100)}%`;
+      sendFullBrightConfig();
+    };
+    const persist = () => {
+      guiSettings.fullBrightFloor = settings.fullBrightFloor;
+      guiSettings.fullBrightNatural = settings.fullBrightNatural;
+      saveSettings();
+    };
+    slider.addEventListener('input', () => {
+      settings.fullBrightFloor = Number(slider.value) / 100 * 0.35;
+      update();
+    });
+    slider.addEventListener('change', persist);
+    natural.addEventListener('change', () => {
+      settings.fullBrightNatural = natural.checked;
+      update(); persist();
+    });
+    for (const button of backdrop.querySelectorAll('[data-fb-preset]')) {
+      button.addEventListener('click', () => {
+        settings.fullBrightFloor = Number(button.dataset.fbPreset);
+        slider.value = Math.round(settings.fullBrightFloor / 0.35 * 100);
+        update(); persist();
+      });
+    }
+    backdrop.querySelector('[data-fb-reset]').addEventListener('click', () => {
+      settings.fullBrightFloor = 0.16;
+      settings.fullBrightNatural = natural.checked = true;
+      slider.value = Math.round(0.16 / 0.35 * 100);
+      update(); persist();
+    });
+    const cleanup = () => {
+      persist();
+      document.removeEventListener('keydown', onKey, true);
+      backdrop.remove();
+      if (fullBrightSettingsCleanup === cleanup) fullBrightSettingsCleanup = null;
+    };
+    const onKey = event => {
+      if (event.code !== 'Escape') return;
+      event.preventDefault(); event.stopImmediatePropagation(); cleanup();
+    };
+    document.addEventListener('keydown', onKey, true);
+    fullBrightSettingsCleanup = cleanup;
+    for (const button of backdrop.querySelectorAll('[data-fb-close]')) button.addEventListener('click', cleanup);
+    backdrop.addEventListener('mousedown', event => { if (event.target === backdrop) cleanup(); });
+    update();
+    slider.focus();
   }
 
   function initFullBrightModule() {
@@ -6991,7 +7082,7 @@
   }
 
   const FEATURE_ADVANCED_SETTINGS = new Set([
-    'titanTiny','patPat','antiAfk','idlePlayerBot','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight'
+    'fullBright','titanTiny','patPat','antiAfk','idlePlayerBot','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight'
   ]);
 
   function closeFeatureSettings() {
@@ -7282,6 +7373,7 @@
     backdrop.querySelector('[data-feature-advanced]')?.addEventListener('click', () => {
       closeFeatureSettings();
       const advanced = {
+        fullBright: openFullBrightSettings,
         titanTiny: openTitanTinySettings, patPat: openPatPatSettings, antiAfk: openAntiAfkSettings, idlePlayerBot: openIdlePlayerBotSettings, zoom: openZoomSettings,
         cameraOverhaul: openCameraOverhaulSettings, elytraFlight: openElytraFlightSettings, dynamicCrosshair: openDynamicCrosshairSettings,
         freelook: openFreelookSettings, freecam: openFreecamSettings, blockHighlight: openBlockHighlightSettings, armorHud: openArmorHudSettings
@@ -9194,6 +9286,7 @@
 
   function hideGUI() {
     if (!overlay || !panel) return;
+    closeFullBrightSettings();
     closeTitanTinySettings();
     closePatPatSettings();
     closeAntiAfkSettings();
@@ -11962,6 +12055,11 @@
     });
 
     const zoomToggle = panel.querySelector('.mf-toggle[data-key="zoom"]');
+    panel.querySelector('.mf-toggle[data-key="fullBright"]')?.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openFullBrightSettings();
+    });
     zoomToggle?.addEventListener('contextmenu', event => {
       event.preventDefault();
       event.stopPropagation();
@@ -13879,6 +13977,7 @@
     fontObserver?.disconnect();
     fontObserver = null;
     chatObserver?.disconnect();
+    closeFullBrightSettings();
     chatObserver = null;
     restoreChatContent();
     restoreChatContent = () => {};

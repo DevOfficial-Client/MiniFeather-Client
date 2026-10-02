@@ -164,6 +164,32 @@ test('MirrorRunner: buckets remotos reordenan la lista', () => {
   assert.deepEqual(sb.__executed.map(e => e.path), ['m/c.js', 'm/a.js']);
 });
 
+
+test('MirrorRunner does not restore legacy autocomplete from the remote cache', () => {
+  const p = 'src/Chat/ClientCommands.js';
+  const mirror = FAKE_MIRROR(); mirror.lists.mainStart.push(p);
+  mirror.code[p] = 'const COMPLETION_CONTEXT_VERSION = 2; globalThis.newCompletion = true;';
+  const sb = execRunnerSandbox({ mirror, overrides: { v: 1, files: { [p]: 'globalThis.legacyCompletion = true;' }, ok: {} } });
+  assert.equal(sb.globalThis.newCompletion, true); assert.equal(sb.globalThis.legacyCompletion, undefined);
+});
+
+test('MirrorRunner keeps FullBright lighting settings and translations when remote cache is older', () => {
+  const entries = {
+    'src/Render/FullBright.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
+    'src/UI/ClientPanel.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
+    'src/I18n/Translations.js': '"fullBrightSettings"'
+  };
+  const mirror = FAKE_MIRROR(); const files = {};
+  for (const [p, marker] of Object.entries(entries)) {
+    mirror.lists.mainStart.push(p);
+    mirror.code[p] = '// ' + marker + '\nglobalThis.modernLighting = (globalThis.modernLighting || 0) + 1;';
+    files[p] = 'globalThis.legacyLighting = true;';
+  }
+  const sb = execRunnerSandbox({ mirror, overrides: { v: 1, files, ok: {} } });
+  assert.equal(sb.globalThis.modernLighting, 3);
+  assert.equal(sb.globalThis.legacyLighting, undefined);
+});
+
 test('background: trackedFilesFromManifest excluye mirror.js generado', () => {
   const bg = source('src/Core/background.js');
   const fn = namedFunction(bg, 'trackedFilesFromManifest');

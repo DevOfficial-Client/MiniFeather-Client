@@ -1,5 +1,6 @@
 (function () {
   'use strict';
+  const FULLBRIGHT_SETTINGS_VERSION = 1;
 
   const GLOBAL_KEY = '__MINIFEATHER_FULLBRIGHT__';
   const EVENT_CONFIG = 'minifeather:fullbright-config';
@@ -14,18 +15,30 @@
 
   const controller = new AbortController();
   const patchedUniforms = new Set();
+  const workerLighting = new Map();
   const state = {
     enabled: false,
     floor: DEFAULT_FLOOR,
+    natural: true,
     game: null,
     lastGameScan: 0,
     timer: 0,
     destroyed: false,
     originalWorkerPostMessage: null,
+    workerWrapper: null,
+    deactivateWorkerHook: null,
     workerPatched: false
   };
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+  function brighten(value) {
+    const raw = Number(value);
+    if (!state.enabled || !Number.isFinite(raw) || state.floor === 0) return value;
+    if (!state.natural) return Math.max(raw, state.floor);
+    if (raw >= 1) return value;
+    return state.floor + clamp(raw, 0, 1) * (1 - state.floor);
+  }
 
   function parseDetail(detail) {
     if (detail && typeof detail === 'object') return detail;
@@ -114,9 +127,6 @@
     }
 
     if (descriptor && descriptor.configurable === false) {
-      if (state.enabled && Number.isFinite(Number(uniform.value))) {
-        uniform.value = Math.max(Number(uniform.value), state.floor);
-      }
       return false;
     }
 
@@ -139,11 +149,11 @@
         configurable: true,
         enumerable: descriptor?.enumerable ?? true,
         get() {
-          const raw = record.rawValue;
-          if (!state.enabled || !Number.isFinite(Number(raw))) return raw;
-          return Math.max(Number(raw), state.floor);
+          const raw = descriptor?.get ? descriptor.get.call(uniform) : record.rawValue;
+          return brighten(raw);
         },
         set(value) {
+          if (descriptor?.set) descriptor.set.call(uniform, value);
           record.rawValue = value;
         }
       });
@@ -290,34 +300,53 @@
     state.originalWorkerPostMessage = original;
 
     try {
-      proto.postMessage = function (message, ...rest) {
+      let active = true;
+      const wrapper = function (message, ...rest) {
+        const replayable = rest.length === 0 || (rest.length === 1 && Array.isArray(rest[0]) && rest[0].length === 0);
+        if (active && message?.type === WORKER_LIGHTING_TYPE && !replayable) workerLighting.delete(this);
         if (
+          active &&
           state.enabled &&
           message &&
           typeof message === 'object' &&
           message.type === WORKER_LIGHTING_TYPE &&
-          Number.isFinite(Number(message.ambientLight))
+          Number.isFinite(Number(message.ambientLight)) &&
+          replayable
         ) {
+          workerLighting.set(this, { ...message });
           message = {
             ...message,
-            ambientLight: Math.max(Number(message.ambientLight), state.floor)
+            ambientLight: brighten(message.ambientLight)
           };
         }
         return original.call(this, message, ...rest);
       };
+      proto.postMessage = wrapper;
+      state.workerWrapper = wrapper;
+      state.deactivateWorkerHook = () => { active = false; };
       state.workerPatched = true;
     } catch (_) {}
   }
 
   function restoreWorkerLighting() {
     if (!state.workerPatched || !state.originalWorkerPostMessage || typeof Worker === 'undefined') return;
+    state.deactivateWorkerHook?.();
 
     try {
-      Worker.prototype.postMessage = state.originalWorkerPostMessage;
+      if (Worker.prototype.postMessage === state.workerWrapper) {
+        Worker.prototype.postMessage = state.originalWorkerPostMessage;
+      }
     } catch (_) {}
+
+    for (const [worker, message] of workerLighting) {
+      try { state.originalWorkerPostMessage.call(worker, message); } catch (_) {}
+    }
+    workerLighting.clear();
 
     state.workerPatched = false;
     state.originalWorkerPostMessage = null;
+    state.workerWrapper = null;
+    state.deactivateWorkerHook = null;
   }
 
   function scan(force = false) {
@@ -351,8 +380,9 @@
   let _scanDelay = SCAN_INTERVAL_MS;
   let _staleScans = 0;
   function scheduleScan() {
-    if (state.destroyed) return;
+    if (state.destroyed || !state.enabled) return;
     state.timer = window.setTimeout(() => {
+      state.timer = 0;
       if (state.enabled) {
         const before = patchedUniforms.size;
         scan(false);
@@ -366,8 +396,6 @@
           _staleScans = 0;
           _scanDelay = SCAN_INTERVAL_MS;
         }
-      } else {
-          _scanDelay = 2000;
       }
       scheduleScan();
     }, _scanDelay);
@@ -379,13 +407,21 @@
   }
 
   function setEnabled(enabled) {
-    state.enabled = !!enabled;
+    const next = !!enabled;
+    if (state.enabled === next) return;
+    state.enabled = next;
 
     if (state.enabled) {
       patchWorkerLighting();
-      ensureTimer();
       _scanDelay = SCAN_INTERVAL_MS;
+      _staleScans = 0;
+      ensureTimer();
       scan(true);
+    } else {
+      if (state.timer) clearTimeout(state.timer);
+      state.timer = 0;
+      restoreWorkerLighting();
+      restoreUniforms();
     }
   }
 
@@ -415,7 +451,6 @@
             });
           } else {
             Object.defineProperty(uniform, 'value', descriptor);
-            uniform.value = rawValue;
           }
         } else {
           delete uniform.value;
@@ -455,7 +490,8 @@
   document.addEventListener(EVENT_CONFIG, event => {
     const config = parseDetail(event.detail);
     if ('floor' in config) setFloor(config.floor);
-    setEnabled(config.enabled === true);
+    if ('natural' in config) state.natural = config.natural !== false;
+    if ('enabled' in config) setEnabled(config.enabled === true);
   }, { signal: controller.signal });
 
   globalThis[GLOBAL_KEY] = {
@@ -467,6 +503,7 @@
     getState: () => ({
       enabled: state.enabled,
       floor: state.floor,
+      natural: state.natural,
       patchedAmbientUniforms: patchedUniforms.size,
       workerLightingPatched: state.workerPatched
     })
