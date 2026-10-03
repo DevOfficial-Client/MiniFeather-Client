@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.17.5.20261002215507
+// @version      4.17.5.20261002215713
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.17.5
- * commit  : 4c04751b3e811bfa2a99f21c1ad3f9f35353acd4
- * builtAt : 2026-10-02T21:57:12.555Z
+ * commit  : 7e5eb0bc00852564f0798957f413581867e5acf8
+ * builtAt : 2026-10-03T16:15:18.668Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.17.5","commit":"4c04751b3e811bfa2a99f21c1ad3f9f35353acd4","builtAt":"2026-10-02T21:57:12.555Z","pinned":true};
+window.__MF_BUILD__={"version":"4.17.5","commit":"7e5eb0bc00852564f0798957f413581867e5acf8","builtAt":"2026-10-03T16:15:18.668Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -124418,6 +124418,25 @@ function normalize(entry) {
     }, { signal: runtimeController?.signal });
   }
 
+  function injectTouchFab() {
+    // touch devices have no right shift: a small floating feather opens the menu.
+    if (document.getElementById('mf-touch-fab')) return;
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    if (!coarse && !(navigator.maxTouchPoints > 1)) return;
+    const fab = document.createElement('button');
+    fab.id = 'mf-touch-fab';
+    fab.type = 'button';
+    fab.setAttribute('aria-label', 'minifeather menu');
+    fab.style.cssText = 'position:fixed;right:14px;bottom:96px;width:46px;height:46px;border-radius:50%;z-index:999997;display:flex;align-items:center;justify-content:center;background:rgba(21,15,36,.82);border:1px solid #6045a0;color:#b79bff;cursor:pointer;padding:0;box-shadow:0 4px 14px rgba(0,0,0,.45);opacity:.85;touch-action:manipulation';
+    fab.innerHTML = `<svg width="22" height="22" viewBox="0 0 90 60" xmlns="http://www.w3.org/2000/svg"><path d="M3 37C14 19 34 7 63 3c10-1 18 1 24 5-7 16-21 29-42 35-16 5-30 3-42-3 10-1 18-4 25-8-10 3-18 5-25 5Z" fill="#dff4ff"/><path d="M24 29C38 16 57 10 82 6c-9 11-23 21-40 25-8 2-13 2-18-2Z" fill="#9ddcff"/></svg>`;
+    fab.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleGUI();
+    });
+    (document.body || document.documentElement).appendChild(fab);
+  }
+
   function injectFeatherButton() {
     if (document.getElementById('mf-sidebar-btn')) return;
 
@@ -125209,6 +125228,7 @@ function normalize(entry) {
     initDynamicCrosshairModule();
     initClientChatModule();
     initGUI();
+    injectTouchFab();
     initChatFeatures();
     injectFeatherButton();
 

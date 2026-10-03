@@ -13116,6 +13116,25 @@
     }, { signal: runtimeController?.signal });
   }
 
+  function injectTouchFab() {
+    // touch devices have no right shift: a small floating feather opens the menu.
+    if (document.getElementById('mf-touch-fab')) return;
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    if (!coarse && !(navigator.maxTouchPoints > 1)) return;
+    const fab = document.createElement('button');
+    fab.id = 'mf-touch-fab';
+    fab.type = 'button';
+    fab.setAttribute('aria-label', 'minifeather menu');
+    fab.style.cssText = 'position:fixed;right:14px;bottom:96px;width:46px;height:46px;border-radius:50%;z-index:999997;display:flex;align-items:center;justify-content:center;background:rgba(21,15,36,.82);border:1px solid #6045a0;color:#b79bff;cursor:pointer;padding:0;box-shadow:0 4px 14px rgba(0,0,0,.45);opacity:.85;touch-action:manipulation';
+    fab.innerHTML = `<svg width="22" height="22" viewBox="0 0 90 60" xmlns="http://www.w3.org/2000/svg"><path d="M3 37C14 19 34 7 63 3c10-1 18 1 24 5-7 16-21 29-42 35-16 5-30 3-42-3 10-1 18-4 25-8-10 3-18 5-25 5Z" fill="#dff4ff"/><path d="M24 29C38 16 57 10 82 6c-9 11-23 21-40 25-8 2-13 2-18-2Z" fill="#9ddcff"/></svg>`;
+    fab.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleGUI();
+    });
+    (document.body || document.documentElement).appendChild(fab);
+  }
+
   function injectFeatherButton() {
     if (document.getElementById('mf-sidebar-btn')) return;
 
@@ -13907,6 +13926,7 @@
     initDynamicCrosshairModule();
     initClientChatModule();
     initGUI();
+    injectTouchFab();
     initChatFeatures();
     injectFeatherButton();
 
