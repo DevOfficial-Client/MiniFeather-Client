@@ -12,6 +12,7 @@
     { "path": "src/P2P/MF_Mesh.js", "guards": [], "ok": ["MF_Mesh"] },
     { "path": "src/Movement/BaritoneAdapter.js", "guards": [], "ok": ["__MF_BARITONE_ADAPTER__"] },
     { "path": "src/Movement/BaritonePlanner.js", "guards": [], "ok": ["__MF_BARITONE_PLANNER__"] },
+    { "path": "src/Movement/BaritonePathRenderer.js", "guards": [], "ok": ["__MF_BARITONE_PATH_RENDERER__"] },
     { "path": "src/Movement/Baritone.js", "guards": [], "ok": ["Baritone"] }
   ]
 }

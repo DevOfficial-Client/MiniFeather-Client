@@ -1,6 +1,7 @@
 (function () {
   'use strict';
 
+  const BARITONE_ADAPTER_VERSION = 4;
   const KEY = '__MF_BARITONE_ADAPTER__';
   const instances = new Set();
   const INPUT_FIELDS = ['up', 'down', 'left', 'right', 'jump', 'sneak', 'sprint'];
@@ -44,7 +45,7 @@
     return [...new Set([...roots, ...roots.flatMap(values)])];
   }
   function unknown(reason = 'unknown') {
-    return { known: false, air: false, passable: false, solid: true, liquid: false, hazard: true,
+    return { known: false, air: false, passable: false, solid: true, liquid: false, water: false, lava: false, hazard: true,
       replaceable: false, breakable: false, hardness: Infinity, name: '', collision: [], supportHeight: 1, height: 1, reason };
   }
 
@@ -301,6 +302,28 @@
       const ok = steer(yaw, pitch, dtSeconds);
       return { aligned: ok && aligned, yaw, pitch, reason: ok ? '' : lastError || 'native-camera-unavailable' };
     }
+    function swimmingState() {
+      if (!refresh()) return { known: false, inWater: false, inLava: false, onGround: false, oxygen: null, air: null };
+      const flag = (field, explicit) => {
+        try {
+          if (typeof player[explicit] === 'function') return !!player[explicit]();
+          if (typeof player[field] === 'boolean') return player[field];
+          const getter = methods(player).find(entry => new RegExp(`\\breturn\\s+this\\.${field}\\s*[;}]`).test(entry.source));
+          if (getter) return !!player[getter.name]();
+        } catch (_) {}
+        return null;
+      };
+      let inWater = flag('inWater', 'isInWater'), inLava = flag('inLava', 'isInLava');
+      let cell;
+      if (inWater === null || inLava === null) cell = readCell(Math.floor(player.pos.x), Math.floor(player.pos.y + .1), Math.floor(player.pos.z));
+      if (inWater === null && cell?.known) inWater = !!cell.water;
+      if (inLava === null && cell?.known) inLava = !!cell.lava;
+      const oxygen = finite(player.oxygen) ? player.oxygen : null;
+      // The engine applies water ascent to its ordinary jump input. Releasing
+      // jump permits natural sinking; sneak is not a native swim-down command.
+      return { known: inWater !== null && inLava !== null, inWater: inWater === true, inLava: inLava === true,
+        onGround: !!player.onGround, oxygen, air: oxygen };
+    }
     function readCell(x, y, z) {
       if (!refresh() || ![x, y, z].every(Number.isInteger)) return unknown('invalid-position');
       if (y < 0 || y >= (finite(world.height) ? world.height : 256)) return unknown('world-boundary');
@@ -322,7 +345,9 @@
         const name = String(block.name || block.type || '').toLowerCase();
         const air = typeof block.isAir === 'function' ? !!block.isAir() : /^(?:minecraft:)?(?:air|cave_air|void_air)$/.test(name);
         const liquid = typeof block.material?.isLiquid === 'function' ? !!block.material.isLiquid() : /water|lava/.test(name);
-        const hazard = liquid || /lava|fire|magma|cactus|berry_bush|powder_snow/.test(name);
+        const water = liquid && /^(?:minecraft:)?(?:(?:flowing|still)_)?water$/.test(name);
+        const lava = liquid && /lava/.test(name);
+        const hazard = (liquid && !water) || /lava|fire|magma|cactus|berry_bush|powder_snow/.test(name);
         let hardness = Number(block.hardness);
         if (!finite(hardness)) hardness = air ? 0 : Infinity;
         let box;
@@ -342,10 +367,52 @@
         const solid = collision.length > 0;
         const replaceable = air || block.isReplaceable === true;
         const supportHeight = solid ? Math.max(...collision.map(item => item.max.y)) : 0;
-        return { known: true, air, passable: !solid && !hazard, solid, liquid, hazard, replaceable,
+        const interactive = block.isBlockContainer === true || /chest|furnace|crafting_table|(?:^|_)(?:door|bed|lever|button|trapdoor|fence_gate)(?:$|_)/.test(name);
+        return { known: true, air, passable: !solid && !hazard, solid, liquid, water, lava, hazard, replaceable,
           breakable: !air && !liquid && hardness >= 0 && finite(hardness) && !/bedrock|barrier|portal/.test(name),
-          hardness, name, collision, supportHeight, height: supportHeight };
+          hardness, name, collision, supportHeight, height: supportHeight, interactive };
       } catch (_) { return unknown('block-read-failed'); }
+    }
+    function reachDistance() {
+      let reach = player?.abilities?.creative ? 5 : 4.5;
+      try {
+        if (names.reach) {
+          const nativeReach = controller[names.reach]();
+          if (finite(nativeReach) && nativeReach > 0 && nativeReach <= 16) reach = nativeReach;
+        }
+      } catch (_) {}
+      return reach;
+    }
+    function placementAim(target, options = {}) {
+      const origin = eye();
+      if (!origin || !target || ![target.x, target.y, target.z].every(Number.isInteger)) return [];
+      const destination = readCell(target.x, target.y, target.z);
+      if (!destination.known || !destination.replaceable || destination.hazard) return [];
+      const result = [], reach = reachDistance();
+      for (const face of [{ x: 0, y: 1, z: 0 }, { x: 1, y: 0, z: 0 }, { x: -1, y: 0, z: 0 },
+        { x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: -1 }, { x: 0, y: -1, z: 0 }]) {
+        const anchor = { x: target.x - face.x, y: target.y - face.y, z: target.z - face.z };
+        const cell = readCell(anchor.x, anchor.y, anchor.z);
+        if (!cell.known || !cell.solid || cell.hazard || cell.liquid || cell.replaceable || cell.interactive) continue;
+        const axis = face.x ? 'x' : face.y ? 'y' : 'z', direction = face[axis];
+        for (const box of cell.collision) {
+          const min = { x: anchor.x + box.min.x, y: anchor.y + box.min.y, z: anchor.z + box.min.z };
+          const max = { x: anchor.x + box.max.x, y: anchor.y + box.max.y, z: anchor.z + box.max.z };
+          const surface = direction > 0 ? max[axis] : min[axis];
+          const visible = (origin[axis] - surface) * direction > .003;
+          if (!visible && !options.includeHidden) continue;
+          for (const blend of [.5, .25, .75]) {
+            const point = { x: min.x + (max.x - min.x) * blend, y: min.y + (max.y - min.y) * blend,
+              z: min.z + (max.z - min.z) * blend };
+            point[axis] = surface;
+            const distance = Math.hypot(point.x - origin.x, point.y - origin.y, point.z - origin.z);
+            if (distance <= reach + .02) result.push({ ...point, anchor: { ...anchor }, face: { ...face }, distance, visible });
+          }
+        }
+      }
+      // These are aim candidates, not forged ray hits. interact() still requires
+      // the engine to report the exact native face and resulting destination.
+      return result.sort((a, b) => Number(b.visible) - Number(a.visible) || a.distance - b.distance);
     }
     function releaseInteraction() {
       if (mining && controller && names.left) {
@@ -363,11 +430,7 @@
         if (names.ray) controller[names.ray]();
         const hit = controller.objectMouseOver;
         if (!origin || !hit || !xyz(hit.hitVec)) { releaseInteraction(); return { ok: false, reason: 'wait-ray' }; }
-        let reach = player.abilities?.creative ? 5 : 4.5;
-        if (names.reach) {
-          const nativeReach = controller[names.reach]();
-          if (finite(nativeReach) && nativeReach > 0 && nativeReach <= 16) reach = nativeReach;
-        }
+        let reach = reachDistance();
         if (type === 'attack') {
           const item = player.inventory?.getCurrentItem?.()?.item;
           reach = Math.max(3, Number(item?.getAttackReach?.()) || 0);
@@ -392,6 +455,10 @@
           }
           const cell = readCell(target.x, target.y, target.z);
           if (!cell.known || !cell.breakable) { releaseInteraction(); return { ok: false, reason: 'unbreakable' }; }
+          const held = player.inventory?.getCurrentItem?.();
+          if ((held?.getItem?.() || held?.item)?.getWeaponConfig?.()) {
+            releaseInteraction(); return { ok: false, reason: 'held-item-cannot-mine' };
+          }
           if (!names.left || !names.mine) return { ok: false, reason: 'native-mining-unavailable' };
           const key = `${target.x},${target.y},${target.z}`;
           if (mining !== key) { releaseInteraction(); controller[names.left](); mining = key; }
@@ -401,7 +468,9 @@
         if (type === 'place') {
           releaseInteraction();
           if (!names.right || typeof hit.block.offset !== 'function' || !hit.side) return { ok: false, reason: 'native-placement-unavailable' };
-          const destination = hit.block.offset(hit.side);
+          const clicked = readCell(hit.block.x, hit.block.y, hit.block.z);
+          if (!clicked.known) return { ok: false, reason: 'unknown-anchor' };
+          const destination = clicked.replaceable ? hit.block : hit.block.offset(hit.side);
           if (destination.x !== target.x || destination.y !== target.y || destination.z !== target.z) return { ok: false, reason: 'wait-ray' };
           const cell = readCell(target.x, target.y, target.z);
           if (!cell.known || !cell.replaceable) return { ok: false, reason: 'not-replaceable' };
@@ -419,6 +488,121 @@
       player.inventory.currentItem = slot - 1;
       if (game.info && 'selectedSlot' in game.info) game.info.selectedSlot = slot - 1;
       return true;
+    }
+    function getSelectedSlot() {
+      if (!refresh()) return null;
+      const slot = player.inventory?.currentItem;
+      return Number.isInteger(slot) && slot >= 0 && slot < 9 ? slot + 1 : null;
+    }
+    function blockInventory() {
+      if (!refresh()) return [];
+      const inventory = player.inventory, main = inventory?.mainInventory || inventory?.main;
+      if (!Array.isArray(main)) return [];
+      const result = [];
+      for (let index = 0; index < Math.min(9, main.length); index++) {
+        try {
+          const stack = main[index], count = Number(stack?.stackSize), item = stack?.getItem?.() || stack?.item;
+          if (!Number.isInteger(count) || count <= 0 || item?.isItemBlock?.() !== true) continue;
+          const block = item.block || item.getBlockForm?.(), state = block?.defaultState;
+          if (!block) continue;
+          const name = String(block.name || item.name || '').toLowerCase();
+          const liquid = block.material?.isLiquid?.() === true;
+          const fullBlock = typeof state?.isFullCube === 'function' ? state.isFullCube() === true :
+            typeof block.isFullCube === 'function' ? block.isFullCube(state) === true : false;
+          const falling = typeof block.checkFallable === 'function' || typeof block.onStartFalling === 'function';
+          if (!name || !fullBlock || liquid || falling || block.isReplaceable === true || block.isBlockContainer ||
+            /(?:^|[:_])(?:sand|gravel|anvil|tnt|lava|water|fire|magma|cactus|ice|slime|honey|portal|powder_snow)(?:$|_)/.test(name)) continue;
+          result.push({ slot: index + 1, count, name, fullBlock: true, safe: true });
+        } catch (_) {}
+      }
+      return result;
+    }
+    function blockBudget() { return blockInventory().reduce((total, entry) => total + entry.count, 0); }
+    function selectBuildingBlock(preferredSlot) {
+      const entries = blockInventory();
+      const selected = entries.find(entry => entry.slot === preferredSlot) || entries.find(entry => entry.slot === getSelectedSlot()) ||
+        entries.sort((a, b) => b.count - a.count)[0];
+      return selected && selectSlot(selected.slot) ? { ...selected } : null;
+    }
+    function miningProjection(index, stack) {
+      const inventory = player.inventory;
+      const denyWrite = () => false;
+      const arrays = new WeakMap();
+      const readonlyArray = value => {
+        if (!Array.isArray(value)) return value;
+        if (!arrays.has(value)) arrays.set(value, new Proxy(value, {
+          get(target, key, receiver) { return String(key) === String(index) ? stack : Reflect.get(target, key, receiver); },
+          set: denyWrite, deleteProperty: denyWrite, defineProperty: denyWrite
+        }));
+        return arrays.get(value);
+      };
+      const projectedInventory = new Proxy(inventory, {
+        get(target, key, receiver) {
+          if (key === 'currentItem') return index;
+          if (key === 'getCurrentItem') return () => stack;
+          // Preserve the engine's real inventory methods and stack identities.
+          // Only its read-only selected-item view differs for each candidate.
+          if (key === 'main' || key === 'mainInventory') return readonlyArray(Reflect.get(target, key, receiver));
+          return Reflect.get(target, key, receiver);
+        },
+        set: denyWrite, deleteProperty: denyWrite, defineProperty: denyWrite
+      });
+      return new Proxy(player, {
+        get(target, key, receiver) {
+          if (key === 'inventory') return projectedInventory;
+          if (key === 'getActiveItemStack') return () => stack;
+          return Reflect.get(target, key, receiver);
+        },
+        set: denyWrite, deleteProperty: denyWrite, defineProperty: denyWrite
+      });
+    }
+    function miningEstimate(x, y, z) {
+      if (!refresh() || ![x, y, z].every(Number.isInteger)) return null;
+      const info = readCell(x, y, z);
+      if (!info.known || !info.breakable || info.hazard) return null;
+      const pos = position(x, y, z), inventory = player.inventory;
+      const main = inventory?.mainInventory || inventory?.main;
+      if (!pos || !Array.isArray(main)) return null;
+      try {
+        const state = world.getBlockState(pos), block = state?.getBlock?.() || state?.block;
+        if (typeof block?.getPlayerRelativeBlockHardness !== 'function') return null;
+        const current = getSelectedSlot(), estimates = [];
+        for (let index = 0; index < 9; index++) {
+          try {
+            const raw = main[index], stack = raw && Number(raw.stackSize) > 0 ? raw : null;
+            const item = stack?.getItem?.() || stack?.item;
+            if (stack && (!item || item.getWeaponConfig?.())) continue;
+            let maxDamage = Number(stack?.getMaxDamage?.() ?? item?.getMaxDamage?.() ?? item?.maxDurability);
+            const damage = Number(stack?.getItemDamage?.() ?? stack?.itemDamage ?? 0);
+            const damageable = stack?.isItemStackDamageable?.() ?? !stack?.data?.Unbreakable;
+            if (damageable && finite(maxDamage) && maxDamage > 1 && finite(damage) && maxDamage - damage <= 1) continue;
+            const projectedPlayer = miningProjection(index, stack);
+            const strength = Number(block.getPlayerRelativeBlockHardness(projectedPlayer, block));
+            if (!(strength > 0) || !finite(strength)) {
+              // Hardness zero is an instant native break, even if its formula
+              // naturally yields Infinity. Other non-finite results are unknown.
+              if (!(strength === Infinity && info.hardness === 0)) continue;
+            }
+            const ticks = player.abilities?.creative ? 4 : Math.max(1, Math.ceil(1 / strength));
+            if (!finite(ticks) || ticks > 1000000) continue;
+            const canHarvest = typeof projectedPlayer.canHarvestBlock === 'function' ?
+              !!projectedPlayer.canHarvestBlock(block) : null;
+            estimates.push({ ticks, cost: ticks / 20, slot: index + 1,
+              name: String(item?.name || (stack ? 'item' : 'hand')), blockName: info.name, canHarvest, native: true });
+          } catch (_) {}
+        }
+        estimates.sort((a, b) => a.ticks - b.ticks || Number(b.slot === current) - Number(a.slot === current) ||
+          Number(a.name !== 'hand') - Number(b.name !== 'hand') || a.slot - b.slot);
+        return estimates.length ? { ...estimates[0] } : null;
+      } catch (_) { return null; }
+    }
+    function selectMiningTool(target) {
+      const estimate = target && miningEstimate(target.x, target.y, target.z);
+      if (!estimate || inputBlocked()) return null;
+      // Actual selection follows the same path as native hotbar input. The
+      // owning task is responsible for restoring its saved selection on stop.
+      if (getSelectedSlot() !== estimate.slot) releaseInteraction();
+      return selectSlot(estimate.slot) ? estimate : null;
     }
     function entities() {
       if (!refresh()) return [];
@@ -450,14 +634,17 @@
         capabilities: { movement: !!movement?.names.applyInput && !!movement?.names.collectInput,
           blocks: !!nativePosition && typeof world?.getBlockState === 'function',
           camera: !!lookControls || typeof globalThis.MouseEvent === 'function',
-          mine: !!names.left && !!names.mine, nativeMiningLoop, place: !!names.right, attack: !!names.left },
+          mine: !!names.left && !!names.mine, nativeMiningLoop, place: !!names.right, attack: !!names.left,
+          swimming: typeof player?.inWater === 'boolean' || typeof player?.isInWater === 'function',
+          buildingInventory: Array.isArray(player?.inventory?.mainInventory || player?.inventory?.main) },
         controls: desired && { ...desired } };
     }
     const runtime = { bind, observe, setControls, release, releaseInteraction, readCell, aimAt, interact, selectSlot, entities, diagnostics, eye,
+      swimmingState, placementAim, blockInventory, blockBudget, selectBuildingBlock, getSelectedSlot, miningEstimate, selectMiningTool,
       get game() { return game; }, get player() { return player; },
       destroy() { release(); destroyed = true; instances.delete(runtime); game = player = world = controller = movement = null; } };
     instances.add(runtime);
     return runtime;
   }
-  globalThis[KEY] = { create, destroy() { for (const instance of [...instances]) instance.destroy(); } };
+  globalThis[KEY] = { version: BARITONE_ADAPTER_VERSION, create, destroy() { for (const instance of [...instances]) instance.destroy(); } };
 })();

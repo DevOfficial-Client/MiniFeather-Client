@@ -71,9 +71,10 @@
   // An older cached module list must still load the local Baritone dependencies.
   var navigationPath = 'src/Movement/Baritone.js';
   if (list.indexOf(navigationPath) >= 0 && MIRROR.code[navigationPath] &&
-      MIRROR.code[navigationPath].indexOf('BARITONE_NAVIGATION_VERSION = 2') >= 0) {
+      /BARITONE_NAVIGATION_VERSION = [234]/.test(MIRROR.code[navigationPath])) {
     list = list.slice();
-    ['src/Movement/MovementAPI.js', 'src/Movement/BaritoneAdapter.js', 'src/Movement/BaritonePlanner.js'].forEach(function (dependency) {
+    ['src/Movement/MovementAPI.js', 'src/Movement/BaritoneAdapter.js', 'src/Movement/BaritonePlanner.js',
+      'src/Movement/BaritonePathRenderer.js'].forEach(function (dependency) {
       var at = list.indexOf(dependency);
       var before = list.indexOf(navigationPath);
       if (at >= 0 && at < before) return;
@@ -83,11 +84,19 @@
     });
   }
   var requiredMarkers = {
-    'src/Chat/ClientCommands.js': 'COMPLETION_CONTEXT_VERSION = 2',
+    'src/Chat/ClientCommands.js': ['COMPLETION_CONTEXT_VERSION = 2', 'BARITONE_PLACEMENT_COMMANDS_VERSION = 1',
+      'BARITONE_PATH_COMMANDS_VERSION = 1'],
     'src/Render/FullBright.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
     'src/UI/ClientPanel.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
     'src/I18n/Translations.js': '"fullBrightSettings"',
-    'src/Movement/Baritone.js': 'BARITONE_NAVIGATION_VERSION = 2'
+    'src/Movement/Baritone.js': /BARITONE_NAVIGATION_VERSION = 4/.test(MIRROR.code[navigationPath] || '')
+      ? 'BARITONE_NAVIGATION_VERSION = 4' : /BARITONE_NAVIGATION_VERSION = 3/.test(MIRROR.code[navigationPath] || '')
+        ? 'BARITONE_NAVIGATION_VERSION = 3' : 'BARITONE_NAVIGATION_VERSION = 2',
+    'src/Movement/BaritoneAdapter.js': /BARITONE_ADAPTER_VERSION = 4/.test(MIRROR.code['src/Movement/BaritoneAdapter.js'] || '')
+      ? 'BARITONE_ADAPTER_VERSION = 4' : 'BARITONE_ADAPTER_VERSION = 3',
+    'src/Movement/BaritonePlanner.js': /BARITONE_PLANNER_VERSION = 4/.test(MIRROR.code['src/Movement/BaritonePlanner.js'] || '')
+      ? 'BARITONE_PLANNER_VERSION = 4' : 'BARITONE_PLANNER_VERSION = 3',
+    'src/Movement/BaritonePathRenderer.js': 'BARITONE_PATH_RENDERER_VERSION = 1'
   };
 
   var injected = 0, remote = 0, bundled = 0, gated = 0, moderated = 0;
@@ -109,8 +118,10 @@
     }
     var useRemote = !!files[p] && typeof files[p] === 'string' && !fails[p];
     var marker = requiredMarkers[p];
-    if (marker && useRemote && typeof MIRROR.code[p] === 'string' &&
-        MIRROR.code[p].indexOf(marker) >= 0 && files[p].indexOf(marker) < 0) useRemote = false;
+    var markers = Array.isArray(marker) ? marker : marker ? [marker] : [];
+    if (useRemote && typeof MIRROR.code[p] === 'string' && markers.some(function (required) {
+      return MIRROR.code[p].indexOf(required) >= 0 && files[p].indexOf(required) < 0;
+    })) useRemote = false;
     var code = useRemote ? files[p] : MIRROR.code[p];
     if (!code) {
       try { console.warn('minifeather mirror: sin código para', p); } catch (_) {}

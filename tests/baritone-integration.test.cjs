@@ -154,6 +154,8 @@ test('an unloaded frontier produces a partial route, never destination reached',
   assert.equal(result.complete, false);
   assert.equal(result.reason, 'unloaded_frontier');
   for (const waypoint of result.path) { h.moveTo(waypoint); h.advance(50); }
+  assert.equal(h.api.status, 'pathfinding', 'useful frontier progress immediately plans the next section');
+  h.advance(250);
   assert.equal(h.api.status, 'waiting');
   assert.equal(h.api.debug().search.complete, false);
   assert.equal(/Destination reached/.test(h.api.debug().reason), false);
@@ -164,10 +166,15 @@ test('safe progress across many loaded frontiers is not mistaken for repeated fa
   let frontier = 2;
   const h = harness({ unknown: x => x >= frontier });
   h.api.goto(11, 1, 0);
-  for (; frontier <= 12; frontier++) {
-    h.advance(frontier === 2 ? 250 : 1000);
+  const processed = new Set();
+  for (let iteration = 0; iteration < 30 && h.api.status !== 'idle'; iteration++) {
+    h.advance(iteration === 0 ? 250 : 1000);
     for (let i = 0; !h.jobs.at(-1).done && i < 30; i++) h.advance(50);
-    const result = h.jobs.at(-1).result;
+    const job = h.jobs.at(-1);
+    if (processed.has(job)) continue;
+    processed.add(job);
+    const result = job.result;
+    frontier = Math.min(12, frontier + 1);
     for (const waypoint of result.path) { h.moveTo(waypoint); h.advance(50); }
     assert.notEqual(h.api.status, 'failed', 'a new frontier after actual forward progress is not a stalled retry');
     if (result.complete) break;
@@ -251,6 +258,9 @@ test('mining waits for actual world change, not an interaction return value', ()
 
 test('planned mining clears a tall wall from the head down to avoid occluded feet', () => {
   const h = harness();
+  for (let x = -12; x <= 12; x++) for (let z = -12; z <= 12; z++) {
+    h.set(x, 3, z, { ...stone, name: 'bedrock', breakable: false });
+  }
   for (let z = -12; z <= 12; z++) {
     h.set(1, 1, z, stone); h.set(1, 2, z, stone);
   }

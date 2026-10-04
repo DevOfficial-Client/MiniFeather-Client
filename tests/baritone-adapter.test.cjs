@@ -27,10 +27,11 @@ class World {
     assert.ok(pos instanceof Position, 'must never pass a plain object to native world');
     this.reads++;
     const name = this.cells.get(`${pos.x},${pos.y},${pos.z}`) || 'stone';
-    const air = name === 'air', liquid = name === 'water' || name === 'lava';
+    const air = name === 'air', liquid = /water|lava|unknown_liquid/.test(name);
     const block = { name, hardness: name === 'bedrock' ? -1 : 1, isAir: () => air,
+      isReplaceable: name === 'plant',
       material: { isLiquid: () => liquid }, getPlayerRelativeBlockHardness: () => .1 };
-    return { block, getBlock: () => block, getCollisionBoundingBox: () => air || liquid ? null : {
+    return { block, getBlock: () => block, getCollisionBoundingBox: () => air || liquid || name === 'plant' ? null : {
       min: { x: pos.x, y: pos.y, z: pos.z },
       max: { x: pos.x + 1, y: pos.y + (name === 'slab' ? .5 : 1), z: pos.z + 1 }
     } };
@@ -168,7 +169,8 @@ test('classifies hazards, air, bedrock and partial native collision', () => {
   const { adapter, world } = setup();
   for (const [y, name] of [[1, 'air'], [2, 'bedrock'], [3, 'water'], [4, 'slab'], [5, 'lava']]) world.cells.set(`0,${y},0`, name);
   assert.equal(adapter.readCell(0, 1, 0).replaceable, true); assert.equal(adapter.readCell(0, 1, 0).solid, false);
-  assert.equal(adapter.readCell(0, 2, 0).breakable, false); assert.equal(adapter.readCell(0, 3, 0).hazard, true);
+  assert.equal(adapter.readCell(0, 2, 0).breakable, false); assert.equal(adapter.readCell(0, 3, 0).hazard, false);
+  assert.equal(adapter.readCell(0, 3, 0).water, true); assert.equal(adapter.readCell(0, 3, 0).passable, true);
   assert.equal(adapter.readCell(0, 4, 0).height, .5); assert.equal(adapter.readCell(0, 5, 0).hazard, true);
 });
 test('aims through a verified camera controls shape with native negative Z convention', () => {
@@ -276,4 +278,231 @@ test('stable native leftClick is preferred to a punch helper and progress stays 
   assert.equal(next.interact('mine', { x: 0, y: 2, z: -2 }).ok, true);
   assert.equal(called, 1); assert.equal(controller.digTicks, 0);
   next.releaseInteraction(); assert.equal(called, 2);
+});
+
+function buildingStack(name, count = 16, options = {}) {
+  const block = { name, defaultState: { isFullCube: () => options.full !== false },
+    material: { isLiquid: () => !!options.liquid }, ...options.block };
+  return { stackSize: count, item: { name, block, isItemBlock: () => true } };
+}
+test('water and unknown liquids use conservative medium flags without treating water as a hazard', () => {
+  const { adapter, world } = setup();
+  for (const [x, name] of [[1, 'flowing_water'], [2, 'still_water'], [3, 'lava'], [4, 'unknown_liquid']]) world.cells.set(`${x},2,0`, name);
+  for (const x of [1, 2]) {
+    const cell = adapter.readCell(x, 2, 0);
+    assert.equal(cell.water, true); assert.equal(cell.hazard, false); assert.equal(cell.passable, true);
+  }
+  assert.equal(adapter.readCell(3, 2, 0).lava, true);
+  assert.equal(adapter.readCell(3, 2, 0).passable, false);
+  assert.equal(adapter.readCell(4, 2, 0).hazard, true);
+  assert.equal(adapter.readCell(4, 2, 0).water, false);
+});
+test('swimming state reads native flags and oxygen; swimming uses ordinary original jump input', () => {
+  const { adapter, player } = setup();
+  player.inWater = true; player.inLava = false; player.oxygen = 80; player.onGround = false;
+  player.motion = { x: .2, y: -.04, z: .1 };
+  assert.deepEqual(JSON.parse(JSON.stringify(adapter.swimmingState())), {
+    known: true, inWater: true, inLava: false, onGround: false, oxygen: 80, air: 80
+  });
+  adapter.setControls({ forward: 1, jump: true }); player.collectRenamed();
+  assert.equal(player.sent[0].jump, true); assert.equal(player.sent[0].onGround, false);
+  assert.equal(player.sent[0].sequenceNumber, 11); assert.equal(player.sent[0].ackId, 9);
+  assert.deepEqual(player.motion, { x: .2, y: -.04, z: .1 }, 'adapter must never invent swim velocity');
+  adapter.setControls({ forward: 1, jump: false }); player.collectRenamed();
+  assert.equal(player.sent[1].jump, false, 'native gravity handles sinking');
+  adapter.release(); player.collectRenamed(); assert.equal(player.sent[2].up, false);
+});
+test('swimming state resolves semantically renamed lava getter and does not invent breath', () => {
+  const { adapter, player } = setup();
+  player.inWater = false; player.inLava = true;
+  player.lavaRenamed = function () { return this.inLava; };
+  const state = adapter.swimmingState();
+  assert.equal(state.inLava, true); assert.equal(state.oxygen, null);
+});
+test('building inventory counts only safe native full cubes in the actual hotbar', () => {
+  const { adapter, player, game } = setup();
+  player.inventory.main = [buildingStack('stone', 24), buildingStack('tnt'), buildingStack('sand'),
+    buildingStack('gravel'), buildingStack('oak_slab', 16, { full: false }), buildingStack('water', 16, { liquid: true }),
+    buildingStack('chest', 16, { block: { isBlockContainer: true } }), buildingStack('mod_falling_block', 16, {
+      block: { checkFallable() {} } }), buildingStack('cobblestone', 48), buildingStack('dirt', 64)];
+  assert.deepEqual(JSON.parse(JSON.stringify(adapter.blockInventory())).map(({ slot, count, name }) => ({ slot, count, name })), [
+    { slot: 1, count: 24, name: 'stone' }, { slot: 9, count: 48, name: 'cobblestone' }
+  ]);
+  assert.equal(adapter.blockBudget(), 72);
+  assert.equal(adapter.selectBuildingBlock(9).slot, 9); assert.equal(adapter.getSelectedSlot(), 9);
+  assert.equal(player.inventory.currentItem, 8); assert.equal(game.info.selectedSlot, 8);
+  player.inventory.main[8].stackSize = 0;
+  assert.equal(adapter.selectBuildingBlock().slot, 1); assert.equal(adapter.getSelectedSlot(), 1);
+  player.inventory.main[0] = null;
+  assert.equal(adapter.blockBudget(), 0); assert.equal(adapter.selectBuildingBlock(), null);
+});
+test('building inventory fails closed if full cube information is unavailable', () => {
+  const { adapter, player } = setup();
+  player.inventory.main = [{ stackSize: 64, item: { block: { name: 'guess_stone' }, isItemBlock: () => true } }];
+  assert.equal(adapter.blockBudget(), 0); assert.equal(adapter.selectBuildingBlock(), null);
+});
+test('placement aim uses genuine collision surface height and only exposed in-reach faces', () => {
+  const { adapter, world, player } = setup();
+  world.cells.set('0,2,-2', 'air'); world.cells.set('0,1,-2', 'slab');
+  const candidates = adapter.placementAim({ x: 0, y: 2, z: -2 });
+  assert.ok(candidates.length > 0);
+  const top = candidates.find(candidate => candidate.anchor.x === 0 && candidate.anchor.y === 1 && candidate.anchor.z === -2);
+  assert.equal(top.y, 1.5); assert.deepEqual(JSON.parse(JSON.stringify(top.face)), { x: 0, y: 1, z: 0 });
+  assert.ok(candidates.every(candidate => candidate.distance <= 4.52));
+  world.cells.set('0,3,-20', 'air'); assert.equal(adapter.placementAim({ x: 0, y: 3, z: -20 }).length, 0);
+  world.loaded = false; assert.equal(adapter.placementAim({ x: 0, y: 2, z: -2 }).length, 0);
+  world.loaded = true; player.pos = { x: .5, y: 1, z: .5 };
+  world.cells.set('0,0,-1', 'air'); world.cells.set('0,1,-1', 'air');
+  assert.equal(adapter.placementAim({ x: 0, y: 0, z: -1 }).some(candidate =>
+    candidate.anchor.x === 0 && candidate.anchor.y === 0 && candidate.anchor.z === 0), false,
+  'a player must reach the bridge edge before the hidden side of their support is clickable');
+  const withHidden = adapter.placementAim({ x: 0, y: 0, z: -1 }, { includeHidden: true });
+  assert.ok(withHidden.some(candidate => candidate.visible === false && candidate.anchor.z === 0));
+  const firstHidden = withHidden.findIndex(candidate => !candidate.visible);
+  assert.ok(withHidden.slice(firstHidden).every(candidate => !candidate.visible));
+  player.pos.z = -.06;
+  assert.equal(adapter.placementAim({ x: 0, y: 0, z: -1 }).some(candidate =>
+    candidate.anchor.x === 0 && candidate.anchor.y === 0 && candidate.anchor.z === 0), true);
+});
+test('placement follows native replacement of a clicked plant rather than blindly offsetting its face', () => {
+  const { adapter, controller, world } = setup(); target(controller);
+  world.cells.set('0,2,-2', 'plant');
+  assert.equal(adapter.interact('place', { x: 0, y: 3, z: -2 }).reason, 'wait-ray');
+  const actualRay = controller.objectMouseOver;
+  assert.equal(adapter.interact('place', { x: 0, y: 2, z: -2 }).ok, true);
+  assert.equal(controller.placements, 1); assert.equal(controller.objectMouseOver, actualRay);
+});
+test('placement aim avoids interactive anchors that would open a menu instead of building', () => {
+  const { adapter, world } = setup(); world.cells.set('0,2,-2', 'air'); world.cells.set('0,1,-2', 'chest');
+  const candidates = adapter.placementAim({ x: 0, y: 2, z: -2 });
+  assert.ok(candidates.every(candidate => candidate.anchor.y !== 1 || candidate.anchor.x !== 0 || candidate.anchor.z !== -2));
+});
+
+function miningStack(name, speed, options = {}) {
+  const item = { name, getWeaponConfig: () => options.weapon || null, getMaxDamage: () => options.maxDamage || 0 };
+  return { stackSize: options.count ?? 1, item, itemDamage: options.damage || 0, data: { efficiency: options.efficiency || 0 },
+    getItem: () => item, getStrVsBlock: () => speed, canHarvestBlock: () => options.harvest !== false,
+    getMaxDamage: () => options.maxDamage || 0, getItemDamage() { return this.itemDamage; },
+    isItemStackDamageable: () => !!options.maxDamage && !options.unbreakable };
+}
+function nativeMining(h, hardness = 1) {
+  const { player, world } = h;
+  Object.defineProperty(player.inventory, 'mainInventory', { get() { return this.main; }, configurable: true });
+  player.inventory.getStackInSlot = function (index) { return this.main[index] || null; };
+  player.inventory.harvestRenamed = function (block) {
+    const stack = this.getStackInSlot(this.currentItem); return block.requiresNoTool || !!stack?.canHarvestBlock(block);
+  };
+  player.inventory.getStrVsBlock = function (block) {
+    const stack = this.mainInventory[this.currentItem]; return stack ? stack.getStrVsBlock(block) : 1;
+  };
+  player.canHarvestBlock = function (block) { return this.inventory.harvestRenamed(block); };
+  player.hasteMultiplier = 1;
+  player.digSpeedRenamed = function (block) {
+    let speed = this.inventory.getStrVsBlock(block);
+    const stack = this.inventory.getCurrentItem();
+    if (speed > 1 && stack?.data?.efficiency) speed += stack.data.efficiency ** 2 + 1;
+    speed *= this.hasteMultiplier;
+    if (!this.onGround) speed /= 5;
+    if (this.headInWater) speed /= 5;
+    return speed;
+  };
+  const read = world.getBlockState.bind(world);
+  world.getBlockState = function (pos) {
+    const state = read(pos); state.block.hardness = state.block.name === 'bedrock' ? -1 : hardness;
+    state.block.getPlayerRelativeBlockHardness = function (subject, block) {
+      assert.equal(block, this, 'must pass the real native block, preserving item effective-block identity');
+      return subject.digSpeedRenamed(this) / this.hardness / (subject.canHarvestBlock(this) ? 30 : 100);
+    };
+    return state;
+  };
+  return h;
+}
+test('native mining estimates compare real hotbar tools without changing selection, inventory, UI or packets', () => {
+  const h = nativeMining(setup()); const { adapter, player, game } = h;
+  player.inventory.main = [miningStack('wood_pickaxe', 2), miningStack('gold_pickaxe', 20, { harvest: false }),
+    null, miningStack('diamond_pickaxe', 8)];
+  let selected = 0, selectionWrites = 0;
+  Object.defineProperty(player.inventory, 'currentItem', { get: () => selected, set(value) { selectionWrites++; selected = value; }, configurable: true });
+  const inventoryBefore = [...player.inventory.main];
+  const estimate = adapter.miningEstimate(0, 2, -2);
+  assert.equal(estimate.slot, 4); assert.equal(estimate.name, 'diamond_pickaxe'); assert.equal(estimate.blockName, 'stone');
+  assert.equal(estimate.ticks, 4); assert.equal(estimate.cost, .2); assert.equal(estimate.canHarvest, true);
+  assert.equal(estimate.native, true); assert.equal(selectionWrites, 0); assert.equal(selected, 0);
+  assert.equal(game.info.selectedSlot, 0); assert.equal(player.sent.length, 0);
+  assert.deepEqual(player.inventory.main, inventoryBefore);
+  assert.equal(adapter.selectMiningTool({ x: 0, y: 2, z: -2 }).slot, 4);
+  assert.equal(selectionWrites, 1); assert.equal(selected, 3); assert.equal(game.info.selectedSlot, 3);
+  assert.equal(player.sent.length, 0, 'selection must use native hotbar state, never a hand-crafted packet');
+});
+test('native mining estimates automatically include enchantments, potion effects, ground and water penalties', () => {
+  const { adapter, player } = nativeMining(setup(), 3);
+  player.inventory.main = [miningStack('diamond_pickaxe', 8, { efficiency: 3 })];
+  assert.equal(adapter.miningEstimate(0, 2, -2).ticks, 5);
+  player.hasteMultiplier = 2;
+  assert.equal(adapter.miningEstimate(0, 2, -2).ticks, 3);
+  player.onGround = false; player.headInWater = true;
+  assert.equal(adapter.miningEstimate(0, 2, -2).ticks, 63);
+});
+test('automatic mining avoids weapons and almost broken tools; estimates never transfer inventory items', () => {
+  const { adapter, player } = nativeMining(setup());
+  player.inventory.main = [miningStack('wood_pickaxe', 2), miningStack('gun', 10000, { weapon: { ammo: 'bullet' } }),
+    miningStack('diamond_pickaxe', 1000, { maxDamage: 100, damage: 99 }),
+    miningStack('iron_pickaxe', 6), ...Array(5).fill(null), miningStack('external_diamond_pickaxe', 10000)];
+  assert.equal(adapter.miningEstimate(0, 2, -2).slot, 4);
+  assert.equal(adapter.selectMiningTool({ x: 0, y: 2, z: -2 }).name, 'iron_pickaxe');
+  assert.equal(player.inventory.main[9].item.name, 'external_diamond_pickaxe');
+  assert.equal(player.inventory.main[2].itemDamage, 99);
+});
+test('native mining ties keep the currently held tool and creative timing uses the actual engine delay', () => {
+  const { adapter, player } = nativeMining(setup());
+  player.inventory.main = [miningStack('pick_a', 8), miningStack('pick_b', 8)];
+  adapter.selectSlot(2); assert.equal(adapter.miningEstimate(0, 2, -2).slot, 2);
+  player.abilities.creative = true;
+  assert.equal(adapter.miningEstimate(0, 2, -2).ticks, 4);
+});
+test('mining estimates fail closed for unloaded, hazardous, unbreakable or unsupported native targets', () => {
+  const { adapter, world } = nativeMining(setup());
+  world.cells.set('0,2,-2', 'bedrock'); assert.equal(adapter.miningEstimate(0, 2, -2), null);
+  world.cells.set('0,2,-2', 'lava'); assert.equal(adapter.miningEstimate(0, 2, -2), null);
+  world.loaded = false; const before = world.reads;
+  assert.equal(adapter.miningEstimate(0, 2, -2), null); assert.equal(world.reads, before);
+  assert.equal(adapter.selectMiningTool({ x: .1, y: 2, z: -2 }), null);
+  const unsupported = setup();
+  unsupported.world.getBlockState = pos => ({ block: { name: 'stone', hardness: 1 }, getCollisionBoundingBox: () => ({
+    min: { x: pos.x, y: pos.y, z: pos.z }, max: { x: pos.x + 1, y: pos.y + 1, z: pos.z + 1 } }) });
+  assert.equal(unsupported.adapter.miningEstimate(0, 2, -2), null);
+});
+test('native mining projection rejects mutation attempts instead of changing live player or inventory state', () => {
+  const { adapter, player, world } = nativeMining(setup());
+  player.inventory.main = [miningStack('pickaxe', 8)];
+  const read = world.getBlockState.bind(world);
+  world.getBlockState = pos => {
+    const state = read(pos);
+    state.block.getPlayerRelativeBlockHardness = function (subject) { subject.inventory.currentItem = 8; return .1; };
+    return state;
+  };
+  assert.equal(adapter.miningEstimate(0, 2, -2), null); assert.equal(player.inventory.currentItem, 0);
+});
+test('native mining remains read-only in chat and refuses to acquire a different tool until gameplay resumes', () => {
+  const { adapter, player, game } = nativeMining(setup());
+  player.inventory.main = [miningStack('slow', 2), miningStack('fast', 8)]; game.chat = { showInput: true };
+  assert.equal(adapter.miningEstimate(0, 2, -2).slot, 2);
+  assert.equal(adapter.selectMiningTool({ x: 0, y: 2, z: -2 }), null);
+  assert.equal(player.inventory.currentItem, 0);
+  game.chat.showInput = false; assert.equal(adapter.selectMiningTool({ x: 0, y: 2, z: -2 }).slot, 2);
+});
+test('native mining does not fire a weapon if no usable tool can be selected', () => {
+  const { adapter, player, controller } = nativeMining(setup()); target(controller);
+  player.inventory.main = Array.from({ length: 9 }, () => miningStack('gun', 1000, { weapon: { ammo: 'bullet' } }));
+  assert.equal(adapter.selectMiningTool({ x: 0, y: 2, z: -2 }), null);
+  assert.equal(adapter.interact('mine', { x: 0, y: 2, z: -2 }).reason, 'held-item-cannot-mine');
+  assert.equal(controller.punches, 0); assert.equal(controller.digTicks, 0);
+});
+test('switching to a better native mining tool releases the old hold before selecting', () => {
+  const { adapter, player, controller } = nativeMining(setup()); target(controller);
+  player.inventory.main = [miningStack('slow', 2), miningStack('fast', 8)];
+  assert.equal(adapter.interact('mine', { x: 0, y: 2, z: -2 }).ok, true);
+  assert.ok(controller.key.leftClick > 0);
+  assert.equal(adapter.selectMiningTool({ x: 0, y: 2, z: -2 }).slot, 2);
+  assert.equal(controller.key.leftClick, 0); assert.equal(controller.releases, 1);
 });

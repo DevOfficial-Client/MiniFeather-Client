@@ -551,7 +551,11 @@ test('miniFeatherCompletions completes commands and argument variants', () => {
 
   assert.deepEqual([...fns.miniFeatherCompletions('')], [], 'bare slash lets the server list flow');
   assert.deepEqual([...fns.miniFeatherCompletions('bari')], ['baritone']);
-  assert.deepEqual([...fns.miniFeatherCompletions('baritone auto')], ['automine']);
+  assert.deepEqual([...fns.miniFeatherCompletions('baritone auto')], ['automine', 'autoplace']);
+  assert.deepEqual([...fns.miniFeatherCompletions('baritone autop')], ['autoplace']);
+  assert.deepEqual([...fns.miniFeatherCompletions('baritone autoplace ')], [], 'toggle argument is not another module subcommand');
+  assert.deepEqual([...fns.miniFeatherCompletions('baritone render')], ['renderpath']);
+  assert.deepEqual([...fns.miniFeatherCompletions('baritone renderpath ')], [], 'render toggle does not inject other commands');
   assert.ok(fns.miniFeatherCompletions('baritone ').includes('automine'), 'full variant list');
   assert.deepEqual([...fns.miniFeatherCompletions('verity autoreply ')], ['off', 'on'], 'nested variants');
   assert.deepEqual([...fns.miniFeatherCompletions('verity auto')], ['autoreply']);

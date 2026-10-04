@@ -3,6 +3,8 @@
 
   const GLOBAL_KEY = '__MINIFEATHER_CLIENT_COMMANDS__';
   const COMPLETION_CONTEXT_VERSION = 2;
+  const BARITONE_PLACEMENT_COMMANDS_VERSION = 1;
+  const BARITONE_PATH_COMMANDS_VERSION = 1;
   const REQUEST_EVENT = 'minifeather:client-command';
   const RESPONSE_EVENT = 'minifeather:client-command-response';
   const BINDS_EVENT = 'minifeather:client-binds-config';
@@ -29,7 +31,7 @@
   const COMPLETION_TREE = {
     verity: { spawn: null, stay: null, follow: null, ask: null, autoreply: ['on', 'off'] },
     iaassistant: null,
-    baritone: ['goto', 'follow', 'mine', 'place', 'attack', 'jump', 'locate', 'players', 'automine', 'stop'],
+    baritone: ['goto', 'follow', 'mine', 'place', 'attack', 'jump', 'locate', 'players', 'automine', 'autoplace', 'renderpath', 'stop'],
     p2p: ['host', 'join', 'off', 'auto'],
     mesh: ['on', 'announce', 'connect'],
     call: ['on', 'off', 'status', 'answer', 'decline', 'end', 'mute'],
@@ -112,6 +114,8 @@
       '\\yellow\\/baritone attack <player> | jump\\reset\\ - Chase/attack or jump',
       '\\yellow\\/baritone locate <player> | players\\reset\\ - Show live/last known positions',
       '\\yellow\\/baritone automine <on|off>\\reset\\ - Mine blocks that obstruct a route',
+      '\\yellow\\/baritone autoplace <on|off>\\reset\\ - Build safe bridge supports with hotbar blocks',
+      '\\yellow\\/baritone renderpath <on|off>\\reset\\ - Show the calculated route and its planning preview',
       '\\yellow\\/baritone stop\\reset\\ - Stop walking',
       '\\yellow\\/g <message>\\reset\\ - Send to the MiniFeather global chat (all clients + Discord)',
       '\\yellow\\/p2p host [code]\\reset\\ - Share your Verity (friend: /p2p join <code>)',
@@ -1548,6 +1552,22 @@
         return;
       }
 
+      if (action === 'autoplace') {
+        const value = (rest[0] || '').toLowerCase();
+        if (!['on', 'off'].includes(value)) { addChat('Usage: /baritone autoplace <on|off>', 'error'); return; }
+        api.setAutoPlace(value === 'on');
+        addChat('Automatic bridge placement: ' + value + '.', 'success');
+        return;
+      }
+
+      if (action === 'renderpath') {
+        const value = (rest[0] || '').toLowerCase();
+        if (!['on', 'off'].includes(value)) { addChat('Usage: /baritone renderpath <on|off>', 'error'); return; }
+        api.setShowPath(value === 'on');
+        addChat('Calculated path display: ' + value + '.', 'success');
+        return;
+      }
+
       if (action === 'stop' || action === 'cancel') {
         api.stop();
         addChat('Baritone stopped.', 'success');
@@ -1560,7 +1580,7 @@
         return;
       }
 
-      addChat('Usage: /baritone goto|follow|mine|place|attack|jump|locate|players|automine|stop|status', 'error');
+      addChat('Usage: /baritone goto|follow|mine|place|attack|jump|locate|players|automine|autoplace|renderpath|stop|status', 'error');
       return;
     }
 

@@ -63,6 +63,7 @@
     "src/HUD/DynamicCrosshair.js",
     "src/Movement/BaritoneAdapter.js",
     "src/Movement/BaritonePlanner.js",
+    "src/Movement/BaritonePathRenderer.js",
     "src/Movement/Baritone.js",
     "src/Core/features.js",
     "src/HUD/armorhud.js",
