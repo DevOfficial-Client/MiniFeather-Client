@@ -1,0 +1,14 @@
+{
+  "name": "minifeather-client",
+  "version": "4.19.0",
+  "private": true,
+  "description": "MiniFeather Client for Miniblox — build tooling (terser powers the minified distribution repo)",
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "build:mirror": "node tools/build-mirror.js",
+    "build:mobile": "node tools/build-mobile.js"
+  },
+  "devDependencies": {
+    "terser": "^5.31.0"
+  }
+}

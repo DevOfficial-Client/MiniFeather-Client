@@ -1,0 +1,57 @@
+name: publish-release
+
+# stable releases: push a tag v* (ej. v4.19.0) y este workflow arma el
+# release en ESTE repo con el userscript minificado + zip del código fuente
+# legible. el fuente siempre público: anti-piratería sí, cajitas negras no.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: instalar dependencias de build
+        run: npm ci --no-fund --no-audit || npm install --no-fund --no-audit
+
+      - name: armar árbol minificado temporal
+        run: |
+          mkdir -p tmpmin
+          cp -r src tools tests tmpmin/
+          cp mirror.json hotload.json manifest.json defaults.json build.json tmpmin/
+          cp package.json package-lock.json tmpmin/
+          export MF_BUILD_COMMIT="${GITHUB_SHA}"
+          node tools/minify-repo.js "$(pwd)/tmpmin"
+
+      - name: publicar release en el repo de releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          TAG="${GITHUB_REF_NAME}"
+          git archive --format=zip -o "minifeather-client-${VERSION}-source.zip" HEAD
+          NOTES="release estable de minifeather client (v${VERSION}).
+
+          - **userscript minificado**: dist/MiniFeatherClient.user.js — los script managers lo auto-actualizan solos.
+          - **código fuente legible**: el zip, y siempre vivo en la rama `main` de este repo (GPL-3.0). la rama `minified` se genera sola desde él: nada escondido, solo masticado.
+          - la eula aplica: https://github.com/DevOfficial-Client/MiniFeather-Client/blob/main/EULA.es.md
+
+          el client dentro de cada paquete se auto-actualiza (hotload) desde github."
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "tmpmin/dist/MiniFeatherClient.user.js" "minifeather-client-${VERSION}-source.zip" --clobber
+            gh release edit "$TAG" --title "minifeather client v${VERSION}" --notes "$NOTES"
+          else
+            gh release create "$TAG" "tmpmin/dist/MiniFeatherClient.user.js" "minifeather-client-${VERSION}-source.zip" \
+              --title "minifeather client v${VERSION}" --notes "$NOTES"
+          fi

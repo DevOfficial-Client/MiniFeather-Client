@@ -141,8 +141,14 @@
     var useRemote = !!files[p] && typeof files[p] === 'string' && !fails[p];
     var marker = requiredMarkers[p];
     var markers = Array.isArray(marker) ? marker : marker ? [marker] : [];
+    // markers are compared whitespace-free: the minified distribution ships
+    // 'VERSION = 2' as 'VERSION=2', and exact matching would reject every
+    // healthy remote override. the markers live in code, not comments, so
+    // squashing spaces is the only concession minification needs.
+    var squash = function (s) { return String(s).replace(/\s+/g, ''); };
     if (useRemote && typeof MIRROR.code[p] === 'string' && markers.some(function (required) {
-      return MIRROR.code[p].indexOf(required) >= 0 && files[p].indexOf(required) < 0;
+      var needle = squash(required);
+      return squash(MIRROR.code[p]).indexOf(needle) >= 0 && squash(files[p]).indexOf(needle) < 0;
     })) useRemote = false;
     var code = useRemote ? files[p] : MIRROR.code[p];
     if (!code) {

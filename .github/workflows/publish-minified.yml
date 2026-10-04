@@ -1,0 +1,76 @@
+name: publish-minified
+
+# distribution branch sync: every push to beta/main regenerates the `minified`
+# branch. transparency by construction — the readable source lives in main
+# (and beta), the workflow + minifier are public, and anyone can verify the
+# minified blob matches the source. nothing hidden, just chewed. :v
+on:
+  push:
+    branches: [main, beta]
+    paths:
+      - 'src/**'
+      - 'tools/**'
+      - 'mirror.json'
+      - 'hotload.json'
+      - 'manifest.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '*.md'
+      - 'LICENSE'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-minified
+  cancel-in-progress: false
+
+jobs:
+  minified:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: instalar terser
+        run: npm ci --no-fund --no-audit || npm install --no-fund --no-audit
+
+      - name: sincronizar rama minified
+        run: |
+          git clone --depth 1 --branch minified \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" minified
+          cd minified
+          git rm -rq --ignore-unmatch .
+          # code + tooling + docs; NO assets (hotload solo baja src/ + las
+          # listas json, y la rama minificada no necesita 40mb de texturas)
+          cp -r ../src ../tools ../tests .
+          cp ../mirror.json ../hotload.json ../manifest.json ../defaults.json ../build.json .
+          cp ../package.json ../package-lock.json ./
+          cp ../LICENSE ../LICENSING.md ../CREDITS.md ./
+          cp ../EULA.md ../EULA.es.md ../EULA-TLDR.md ../EULA-TLDR.en.md ./
+          # el README de esta rama es suyo (explica qué es); el sync no lo pisa
+          git checkout HEAD -- README.md 2>/dev/null || true
+
+      - name: minificar y regenerar bundles
+        run: |
+          export MF_BUILD_COMMIT="${GITHUB_SHA}"
+          node tools/minify-repo.js "$(pwd)/minified"
+
+      - name: pushear (o callar si no cambió nada)
+        run: |
+          cd minified
+          git config user.name "minifeather-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "sin cambios respecto al minificado actual — nada que pushear"
+            exit 0
+          fi
+          SOURCE_BRANCH="${GITHUB_REF_NAME}"
+          git commit -m "minified build of ${SOURCE_BRANCH}@${GITHUB_SHA}"
+          git push
