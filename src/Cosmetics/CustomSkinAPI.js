@@ -87,6 +87,15 @@
             warn('PNG muy grande para localStorage, solo en memoria esta sesión');
         }
         const id = nextUploadId();
+        // skinguard: esta ruta COMPARTE la skin por p2p (shareSkinUp) y la deja
+        // activa — se trata como publicación, bloqueo duro sin confirmación. :v
+        const guard = globalThis.__MF_SKIN_GUARD__;
+        if (guard) {
+            const verdict = await guard.checkDataUrl(dataUrl);
+            if (verdict.flag) {
+                throw Object.assign(new Error('blocked by content filter (eula §8.2): this skin was flagged as adult content. false positive? report it on discord'), { status: 422 });
+            }
+        }
         try {
             localStorage.setItem(KEY_SKIN, dataUrl);
             localStorage.setItem(KEY_ID, id);

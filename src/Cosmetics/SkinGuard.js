@@ -173,6 +173,63 @@
         return blFetching;
     }
 
+    // ── registro custodiado (__MF_PACK_SKINS__) ───────────────────────────────
+    // AQUÍ es donde de verdad se cargan las skins: cosmetics (p2p, api de skins,
+    // packs dev, facial) escribe en este registro con `__MF_PACK_SKINS__ ||= {}`
+    // y el juego lo lee vía el hook del img.src y el patch de fetch. skinguard
+    // carga ANTES que todos en mirror.json, así que instala un Proxy: escrituras
+    // data:image se revisan async y las marcadas desaparecen del registro para
+    // CUALQUIER lector (get-trap → undefined). los dataURL repetidos (epoch
+    // bumps re-escriben todo) se cachean para no re-decodificar. :v
+    const blockedIds = new Set();
+    const checkedUrls = new Map();
+    const CHECKED_CAP = 400;
+
+    function rememberVerdict(dataUrl, flagged, key) {
+        if (checkedUrls.size > CHECKED_CAP) checkedUrls.clear();
+        checkedUrls.set(dataUrl, flagged);
+        if (key) {
+            if (flagged) blockedIds.add(key);
+            else blockedIds.delete(key);
+        }
+    }
+
+    function isBlockedId(id) { return typeof id === 'string' && blockedIds.has(id); }
+    function markBlockedId(id, blocked) {
+        if (typeof id !== 'string') return;
+        if (blocked) blockedIds.add(id);
+        else blockedIds.delete(id);
+    }
+
+    function installRegistry() {
+        if (globalThis.__MF_PACK_SKINS__) return; // nunca (orden del mirror), pero por si el orden cambia algún día
+        const target = {};
+        globalThis.__MF_PACK_SKINS__ = new Proxy(target, {
+            set(t, k, v) {
+                t[k] = v;
+                if (typeof k === 'string' && typeof v === 'string' && v.indexOf('data:image') === 0) {
+                    const known = checkedUrls.get(v);
+                    if (known === true) blockedIds.add(k);
+                    else if (known === undefined) {
+                        checkDataUrl(v)
+                            .then(verdict => rememberVerdict(v, verdict.flag, k))
+                            .catch(() => {});
+                    }
+                }
+                return true;
+            },
+            get(t, k) {
+                if (typeof k === 'string' && blockedIds.has(k)) return undefined;
+                return t[k];
+            },
+            deleteProperty(t, k) {
+                if (typeof k === 'string') blockedIds.delete(k);
+                delete t[k];
+                return true;
+            }
+        });
+    }
+
     // ── puente hacia el isolated world (panel): evento in → evento out ────────
 
     function installBridge() {
@@ -196,7 +253,8 @@
     }
 
     installBridge();
+    installRegistry();
     loadRemoteBlocklist();
 
-    globalThis.__MF_SKIN_GUARD__ = { evaluateSkinPixels, checkDataUrl, isBlocklisted, setBlocklist, loadRemoteBlocklist };
+    globalThis.__MF_SKIN_GUARD__ = { evaluateSkinPixels, checkDataUrl, isBlocklisted, setBlocklist, loadRemoteBlocklist, isBlockedId, markBlockedId };
 })();

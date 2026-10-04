@@ -68,6 +68,10 @@
 
         var reg = globalThis.__MF_PACK_SKINS__;
         if (reg && reg[skinId]) return reg[skinId];
+        // skinguard: el registro (proxy) ya filtra ids bloqueados; esta ruta sirve
+        // data urls directos de la db local — ids marcados no se sirven tampoco. :v
+        var guard = globalThis.__MF_SKIN_GUARD__;
+        if (guard && guard.isBlockedId(skinId)) return null;
         var entry = getCustomSkinForId(skinId);
         if (entry) {
             var u = entrySkinUrl(entry) || entryCapeUrl(entry);

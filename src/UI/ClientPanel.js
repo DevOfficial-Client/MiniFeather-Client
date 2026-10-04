@@ -12595,10 +12595,32 @@
         return;
       }
 
-      chrome.runtime.sendMessage({ type: 'setSkin', skinName, customUrl }, () => {
-        showSkinStatus(t('skinApplied', { name: skinName }), '#22c55e');
-        refreshActiveSkins();
-      });
+      // skinguard: url remota = se baja aquí para poder mirarla antes de mandarla
+      // al background. si no se puede bajar (cors raro), falla abierto: es una url
+      // que el usuario escribió a mano, no contenido que le llegue de otros. :v
+      const applySkinUrl = () => {
+        chrome.runtime.sendMessage({ type: 'setSkin', skinName, customUrl }, () => {
+          showSkinStatus(t('skinApplied', { name: skinName }), '#22c55e');
+          refreshActiveSkins();
+        });
+      };
+      if (/^https?:/i.test(customUrl)) {
+        fetch(customUrl, { mode: 'cors' })
+          .then(r => (r.ok ? r.blob() : null))
+          .then(async b => {
+            if (!b) return applySkinUrl();
+            const dataUrl = await new Promise(res => {
+              const fr = new FileReader();
+              fr.onload = () => res(fr.result);
+              fr.onerror = () => res(null);
+              fr.readAsDataURL(b);
+            });
+            if (!dataUrl || (await skinGuardLocalCheck(dataUrl))) applySkinUrl();
+          })
+          .catch(() => applySkinUrl());
+        return;
+      }
+      applySkinUrl();
     });
 
     panel.querySelector('#mf-skin-reset')?.addEventListener('click', () => {
@@ -12636,10 +12658,30 @@
         return;
       }
 
-      chrome.runtime.sendMessage({ type: 'setCape', capeName, customUrl }, () => {
-        showCapeStatus(t('capeApplied', { name: capeName }), '#22c55e');
-        refreshActiveCapes();
-      });
+      // skinguard: mismo trato que las skins — mirar la url antes de redirigirla
+      const applyCapeUrl = () => {
+        chrome.runtime.sendMessage({ type: 'setCape', capeName, customUrl }, () => {
+          showCapeStatus(t('capeApplied', { name: capeName }), '#22c55e');
+          refreshActiveCapes();
+        });
+      };
+      if (/^https?:/i.test(customUrl)) {
+        fetch(customUrl, { mode: 'cors' })
+          .then(r => (r.ok ? r.blob() : null))
+          .then(async b => {
+            if (!b) return applyCapeUrl();
+            const dataUrl = await new Promise(res => {
+              const fr = new FileReader();
+              fr.onload = () => res(fr.result);
+              fr.onerror = () => res(null);
+              fr.readAsDataURL(b);
+            });
+            if (!dataUrl || (await skinGuardLocalCheck(dataUrl))) applyCapeUrl();
+          })
+          .catch(() => applyCapeUrl());
+        return;
+      }
+      applyCapeUrl();
     });
 
     panel.querySelector('#mf-cape-reset')?.addEventListener('click', () => {

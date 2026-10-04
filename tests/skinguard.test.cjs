@@ -111,3 +111,17 @@ test('blocklist: hash en lista se detecta (case-insensitive), fuera de lista no'
   assert.equal(guard.isBlocklisted('0000000000000000000000000000000000000000000000000000000000000000'), false);
   assert.equal(guard.isBlocklisted(null), false);
 });
+
+test('registro custodiado: skinguard instala el proxy de __MF_PACK_SKINS__ y los ids bloqueados desaparecen para cualquier lector', () => {
+  const reg = sandbox.__MF_PACK_SKINS__;
+  assert.ok(reg, 'el registro debe existir tras cargar skinguard (carga antes que cosmetics)');
+  reg['mf_test'] = 'https://example.com/skin.png'; // http: no se toca en el set
+  assert.equal(reg['mf_test'], 'https://example.com/skin.png');
+  guard.markBlockedId('mf_test', true);
+  assert.equal(reg['mf_test'], undefined, 'id bloqueado: el get-trap devuelve undefined');
+  assert.equal('mf_test' in Object.assign({}, reg), true, 'sigue existiendo físicamente (purge por veredicto)');
+  guard.markBlockedId('mf_test', false);
+  assert.equal(reg['mf_test'], 'https://example.com/skin.png');
+  delete reg['mf_test'];
+  assert.equal(reg['mf_test'], undefined);
+});
