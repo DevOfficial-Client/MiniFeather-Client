@@ -1,6 +1,6 @@
 # Acuerdo de Licencia de Usuario Final (EULA) — MiniFeather Client
 
-**Versión del acuerdo:** 1.3
+**Versión del acuerdo:** 1.4
 **Fecha de entrada en vigor:** 4 de octubre de 2026
 **Producto:** MiniFeather Client — extensión de navegador MV3 (Chrome/Chromium), userscript (Safari/iOS vía Userscripts, Firefox Android, escritorio), app Android (APK) y apps de escritorio (Windows/Tauri, Linux/Electron)
 **Desarrolladores:** botless, AngryWolfX, ShusukeGxE_, Not_Senpai, ItzNightrise ("el Equipo de Desarrollo", "nosotros")
@@ -63,7 +63,7 @@ El Cliente incluye funcionalidades que automatizan acciones del juego o alteran 
 
 | Nivel de riesgo | Módulos |
 |---|---|
-| Extremo | IdlePlayerBot, Baritone |
+| Extremo | IdlePlayerBot (incluido un modo multibot de hasta 16 bots simulados simultáneos), Baritone |
 | Alto | Anti-AFK |
 | Moderado | Auto Sprint, Safe Sneak, FullBright, Zoom, Health NameTags, Freelook, Elytra Flight (controles) |
 | Bajo | Dynamic Crosshair, Distance NameTags, Auto Respawn |
@@ -80,7 +80,7 @@ El Cliente incluye funcionalidades que automatizan acciones del juego o alteran 
 
 ## 5. Privacidad y tratamiento de datos
 
-El Software funciona **sin cuentas propias ni servidores propios**. Sin embargo, para ofrecer sus funciones procesa y transmite los datos que se describen a continuación. El Usuario acepta este tratamiento al utilizar las funciones correspondientes.
+El Software funciona **sin cuentas propias ni servidores propios**. Sin embargo, para ofrecer sus funciones procesa y transmite los datos que se describen a continuación. Cuando el Usuario proporciona URLs personalizadas (skins, capas, mundos, packs de texturas o recursos de terceros), el Cliente descarga contenido directamente de esas URLs y dicho tráfico queda sujeto a los servicios correspondientes. El Usuario acepta el tratamiento aquí descrito al utilizar las funciones correspondientes.
 
 ### 5.1. Datos almacenados localmente (no salen del dispositivo salvo que se indique)
 
@@ -103,7 +103,8 @@ Se guardan en el almacenamiento local del navegador (`localStorage`, `IndexedDB`
 | ntfy.sh (bus de mensajes público) | ClientChat (chat entre usuarios del Cliente), señalización de llamadas de voz, anuncios de mundos locales, notificaciones de cambios en la base comunitaria de skins/cuentas | Nombre de usuario y UUID de Miniblox (en ClientChat), hash SHA-256 del UUID (en voz), contenido de los mensajes que el Usuario escriba, nombre del mundo y número de jugadores |
 | Catbox (`catbox.moe`, `files.catbox.moe`) | Alojamiento de imágenes enviadas por el chat (botón de adjuntar, pegar o arrastrar) | La imagen enviada, alojada **sin cuenta, de forma permanente y pública**: cualquiera que tenga la URL puede acceder al archivo |
 | PeerJS / WebRTC (P2P) | Voz, transferencia de skins/caras entre amigos, LocalGames | Audio directo entre pares (voz), imagen de skin/cara compartida, dirección IP potencialmente visible por los pares conectados (naturaleza de WebRTC) |
-| Klipy (`api.klipy.com`) | Búsqueda de GIFs para el chat | Consulta de búsqueda del Usuario |
+| Klipy (`api.klipy.com`) | Búsqueda de GIFs para el chat | Consulta de búsqueda del Usuario; la petición se realiza con una clave de API incluida en el Cliente (el Usuario puede configurar la suya propia) |
+| Modrinth (`modrinth.com`, `cdn.modrinth.com`) | Descarga de packs PBR de la lista de presets | Ningún dato personal del Usuario; solo consultas anónimas de descarga |
 | OpenRouter / Zhipu / Puter (VerityAI) | Asistente de IA opcional | Historial de conversación y mensajes del chat del juego si el auto-responder está activo |
 | qu.ax / YouTube | Reproducción de clips de chat e integración musical | Ningún dato personal del Cliente; el embed de YouTube queda sujeto a la política de Google |
 | Miniblox (`miniblox.io`) | Funcionamiento normal del juego | Sesión del Usuario gestionada por el propio juego |
@@ -120,7 +121,7 @@ Se guardan en el almacenamiento local del navegador (`localStorage`, `IndexedDB`
 
 5.3.2. La función de identificación de voz publica un hash SHA-256 del UUID de la cuenta, que no verifica criptográficamente la propiedad de la cuenta. **Confirme la identidad del interlocutor por otros medios antes de revelar información sensible.**
 
-5.3.3. **Cuentas MiniFeather (opcionales).** El ecosistema comunitario (skins, capas, rangos y mascotas compartidas) puede gestionarse mediante una cuenta MiniFeather, creada y administrada por el Equipo de Desarrollo a través de un bot oficial de Discord. Estas cuentas son independientes de la cuenta de Miniblox: la contraseña se guarda únicamente como **hash PBKDF2-SHA256 (200.000 iteraciones)** en la infraestructura privada del equipo, nunca en texto plano; la vinculación registra el identificador de Discord; y el perfil público (nombre de cuenta, rango y URLs de los cosméticos publicados) se aloja en el repositorio comunitario público del proyecto. La solicitud de creación viaja por canales públicos, por lo que **el Usuario debe emplear una contraseña única y no reutilizada**. Las cuentas son prescindibles: todas las funciones del Cliente operan sin ellas. El Usuario puede solicitar la baja o la eliminación de su cuenta a través del canal de la sección 14.2.
+5.3.3. **Cuentas MiniFeather (opcionales).** El ecosistema comunitario (skins, capas, rangos y mascotas compartidas) puede gestionarse mediante una cuenta MiniFeather, creada y administrada por el Equipo de Desarrollo a través de un bot oficial de Discord. Estas cuentas son independientes de la cuenta de Miniblox: la contraseña se guarda únicamente como **hash PBKDF2-SHA256 (200.000 iteraciones)** en la infraestructura privada del equipo, nunca en texto plano; la vinculación registra el identificador de Discord; y el perfil público (nombre de cuenta, rango y URLs de los cosméticos publicados) se aloja en el repositorio comunitario público del proyecto. **La solicitud de creación envía el nombre de usuario y la contraseña sin cifrar, en texto plano, a través de un canal público de ntfy.sh**: cualquier persona que escuche ese canal podría leerlos en tránsito. Por eso **el Usuario debe emplear una contraseña única y no reutilizada**, distinta de la de su correo, Discord o Miniblox. Las cuentas son prescindibles: todas las funciones del Cliente operan sin ellas. El Usuario puede solicitar la baja o la eliminación de su cuenta a través del canal de la sección 14.2.
 
 ### 5.4. Menores de edad
 
@@ -145,6 +146,8 @@ El Software no está dirigido a menores de 13 años. Si el Usuario es menor de e
 7.1. El Cliente utiliza el permiso `declarativeNetRequest` para **redirigir peticiones de texturas y recursos gráficos** de Miniblox hacia versiones personalizadas elegidas por el Usuario (skins, capas, packs de texturas). Estas redirecciones afectan únicamente al navegador del propio Usuario.
 
 7.2. La función "ads" es un **opt-in inverso**: los anuncios se ocultan por defecto (visualmente) y pueden reactivarse voluntariamente con el toggle "Support Ads" para apoyar al juego.
+
+7.3. **Permisos del navegador.** La extensión solicita los permisos que necesita para funcionar: `storage` y `unlimitedStorage` (preferencias, skins, cachés y demás datos locales de la sección 5.1), `alarms` (chequeos periódicos: actualizaciones, configuración de moderación, blocklist del filtro de contenido), `downloads` (guardar en disco los archivos que el Usuario exporta — skins, GIFs, grabaciones del Studio, packs — y componentes de actualización), `activeTab` y `declarativeNetRequest` (sección 7.1). Las distribuciones de escritorio y móviles usan los equivalentes propios de su plataforma (almacenamiento del sistema, micrófono solo para voz).
 
 ---
 

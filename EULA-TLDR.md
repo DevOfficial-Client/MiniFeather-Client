@@ -2,7 +2,7 @@
 
 > [!note]
 > esto es la versión fácil y con cariño de la [eula completa en español](EULA.es.md). divertida, pero igual de seria donde importa.
-> **actualizada a la eula v1.3 (4 de octubre de 2026)** — si la completa cambia, este resumen la alcanza. si algo de acá contradice a la completa, gana la completa (spoiler: siempre gana la completa).
+> **actualizada a la eula v1.4 (4 de octubre de 2026)** — si la completa cambia, este resumen la alcanza. si algo de acá contradice a la completa, gana la completa (spoiler: siempre gana la completa).
 > versión en inglés de este documento: [eula-tldr.en.md](EULA-TLDR.en.md)
 
 ---
@@ -48,7 +48,7 @@ si eres de los buenos: gracias, de corazón. son la razón por la que seguimos. 
 
 ## 3. lo que no hagas con el cliente ٩(◕‿◕)ノ
 
-- **no lo uses para ventaja injusta en servidores competitivos.** baritone, bots, anti-afk y amigos: úsalos en tu mundo, con tus amigos, donde el servidor lo permita. si te banean por hacer trampa en pvp ranked... bueno... ¯\\\_(ツ)\_/¯
+- **no lo uses para ventaja injusta en servidores competitivos.** baritone, bots (el idlebot trae modo multibot de hasta 16 bots simulados, que no es exactamente discreto), anti-afk y amigos: úsalos en tu mundo, con tus amigos, donde el servidor lo permita. si te banean por hacer trampa en pvp ranked... bueno... ¯\\\_(ツ)\_/¯
 - los módulos de alto riesgo muestran un aviso antes de activarse. cerrarlo cancela la activación; «no volver a mostrar» guarda tu aceptación en el navegador. **aceptar el aviso no significa que el servidor permita el módulo ni evita un baneo.**
 - **no vendas el client ni copias modificadas** haciéndolas pasar por oficiales. eso sí que es feo. además es gratis: estafar con algo gratis ya ni es estafa, es teatro. (¬‿¬)
 - **no eludas anticheats, pagos ni sistemas de seguridad.** no somos esa clase de proyecto.
@@ -72,7 +72,7 @@ si eres de los buenos: gracias, de corazón. son la razón por la que seguimos. 
 - **sí hay cuentas de minifeather**, y son **opcionales**: sirven para el ecosistema comunitario (skins, rangos, mascotas compartidas). si nunca creas una, el client funciona igual. nada te obliga.
 - **no tienen nada que ver con tu cuenta de miniblox.** es otro universo: usuario y contraseña propios, sin conexión a tu sesión del juego. una cosa por lado. (・_・;)
 - cuando creas una, tu contraseña **se guarda hasheada (pbkdf2, 200k iteraciones)** en una base de datos privada. jamás en texto plano en la db.
-- **pero seamos honestos:** la petición de creación viaja por ntfy.sh, que es un canal público. por eso: **nunca reutilices la contraseña de tu correo, discord o miniblox aquí.** usa una contraseña única y desechable, duerme tranquilo. (∩`ω´)⊃))
+- **pero seamos honestos de verdad:** la petición de creación envía tu contraseña **en texto plano, sin cifrar, por un canal público de ntfy.sh** — cualquiera escuchando ese canal podría leerla en tránsito. por eso: **nunca, jamás, reutilices la contraseña de tu correo, discord o miniblox aquí.** usa una contraseña única y desechable, duerme tranquilo. (∩`ω´)⊃))
 - las cuentas se gestionan por los devs con un bot en discord (vinculación, skins, etc.). si algo se rompe... sección 4.5. ᕕ( ᐛ )ᕗ
 - **¿te arrepentiste de tu cuenta?** se pide la baja por discord (canal de contacto de la completa) y se elimina. sin dramas, sin formularios en triplete.
 

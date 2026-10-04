@@ -1,6 +1,6 @@
 # End User License Agreement (EULA) — MiniFeather Client
 
-**Agreement version:** 1.3
+**Agreement version:** 1.4
 **Effective date:** October 4, 2026
 **Product:** MiniFeather Client — MV3 browser extension (Chrome/Chromium), userscript (Safari/iOS via Userscripts, Firefox Android, desktop), Android app (APK) and desktop apps (Windows/Tauri, Linux/Electron)
 **Developers:** botless, AngryWolfX, ShusukeGxE_, Not_Senpai, ItzNightrise ("the Development Team", "we")
@@ -63,7 +63,7 @@ The Client includes features that automate game actions or alter the information
 
 | Risk level | Modules |
 |---|---|
-| Extreme | IdlePlayerBot, Baritone |
+| Extreme | IdlePlayerBot (including a multibot mode of up to 16 simultaneous simulated bots), Baritone |
 | High | Anti-AFK |
 | Moderate | Auto Sprint, Safe Sneak, FullBright, Zoom, Health NameTags, Freelook, Elytra Flight (controls) |
 | Low | Dynamic Crosshair, Distance NameTags, Auto Respawn |
@@ -80,7 +80,7 @@ The Client includes features that automate game actions or alter the information
 
 ## 5. Privacy and data handling
 
-The Software operates **without its own accounts or its own servers**. However, to deliver its features it processes and transmits the data described below. The User accepts this handling by using the corresponding features.
+The Software operates **without its own accounts or its own servers**. However, to deliver its features it processes and transmits the data described below. When the User provides custom URLs (skins, capes, worlds, texture packs or third-party resources), the Client downloads content directly from those URLs and that traffic is subject to the corresponding services. The User accepts the handling described here by using the corresponding features.
 
 ### 5.1. Data stored locally (does not leave the device unless stated otherwise)
 
@@ -103,7 +103,8 @@ Stored in the browser's local storage (`localStorage`, `IndexedDB`, `chrome.stor
 | ntfy.sh (public message bus) | ClientChat (chat between Client users), voice call signaling, local world announcements, community skin/account database change notifications | Miniblox username and UUID (in ClientChat), SHA-256 hash of the UUID (voice), content of the messages the User writes, world name and player count |
 | Catbox (`catbox.moe`, `files.catbox.moe`) | Hosting of images sent through the chat (attach button, paste or drag) | The submitted image, hosted **without an account, permanently and publicly**: anyone holding the URL can access the file |
 | PeerJS / WebRTC (P2P) | Voice, skin/face sharing between friends, LocalGames | Direct peer-to-peer audio (voice), shared skin/face image, IP address potentially visible to connected peers (inherent to WebRTC) |
-| Klipy (`api.klipy.com`) | GIF search for chat | The User's search query |
+| Klipy (`api.klipy.com`) | GIF search for chat | The User's search query; requests are made with an API key bundled in the Client (the User can configure their own) |
+| Modrinth (`modrinth.com`, `cdn.modrinth.com`) | Downloads of PBR packs from the presets list | No personal User data; anonymous download requests only |
 | OpenRouter / Zhipu / Puter (VerityAI) | Optional AI assistant | Conversation history and game chat messages if auto-reply is active |
 | qu.ax / YouTube | Chat clip playback and music integration | No personal data from the Client; the YouTube embed is subject to Google's policy |
 | Miniblox (`miniblox.io`) | Normal game operation | User session managed by the game itself |
@@ -120,7 +121,7 @@ Stored in the browser's local storage (`localStorage`, `IndexedDB`, `chrome.stor
 
 5.3.2. The voice identification feature publishes a SHA-256 hash of the account UUID, which does not cryptographically verify account ownership. **Confirm the other party's identity through other means before disclosing sensitive information.**
 
-5.3.3. **MiniFeather accounts (optional).** The community ecosystem (shared skins, capes, ranks and pets) can be managed through a MiniFeather account, created and administered by the Development Team through an official Discord bot. These accounts are independent from the Miniblox account: the password is stored solely as a **PBKDF2-SHA256 hash (200,000 iterations)** on the team's private infrastructure, never in plain text; linking records the Discord identifier; and the public profile (account name, rank and URLs of published cosmetics) is hosted on the project's public community repository. The creation request travels over public channels, so **the User must use a unique, non-reused password**. The accounts are dispensable: every Client feature works without one. The User may request account closure or deletion through the channel in section 14.2.
+5.3.3. **MiniFeather accounts (optional).** The community ecosystem (shared skins, capes, ranks and pets) can be managed through a MiniFeather account, created and administered by the Development Team through an official Discord bot. These accounts are independent from the Miniblox account: the password is stored solely as a **PBKDF2-SHA256 hash (200,000 iterations)** on the team's private infrastructure, never in plain text; linking records the Discord identifier; and the public profile (account name, rank and URLs of published cosmetics) is hosted on the project's public community repository. **The creation request sends the username and password unencrypted, in plain text, through a public ntfy.sh channel**: anyone listening to that channel could read them in transit. Therefore **the User must use a unique, non-reused password**, different from their email, Discord or Miniblox passwords. The accounts are dispensable: every Client feature works without one. The User may request account closure or deletion through the channel in section 14.2.
 
 ### 5.4. Minors
 
@@ -145,6 +146,8 @@ The Software is not directed at children under 13. If the User is a minor, they 
 7.1. The Client uses the `declarativeNetRequest` permission to **redirect texture and graphic asset requests** from Miniblox to customized versions chosen by the User (skins, capes, texture packs). These redirects only affect the User's own browser.
 
 7.2. The "ads" feature is an **inverse opt-in**: ads are hidden by default (visually) and can be voluntarily re-enabled with the "Support Ads" toggle to support the game.
+
+7.3. **Browser permissions.** The extension requests the permissions it needs to work: `storage` and `unlimitedStorage` (preferences, skins, caches and the other local data from section 5.1), `alarms` (periodic checks: updates, moderation config, content-filter blocklist), `downloads` (saving to disk the files the User exports — skins, GIFs, Studio recordings, packs — and update components), `activeTab` and `declarativeNetRequest` (section 7.1). The desktop and mobile distributions use their platform's equivalents (system storage, microphone for voice only).
 
 ---
 

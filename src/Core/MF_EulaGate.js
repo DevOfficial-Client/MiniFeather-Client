@@ -12,9 +12,10 @@
 
   const ACCEPT_KEY = 'mf:eula-accepted-v1';
   // acceptance stores the agreement version, not a bare 'yes': when the eula
-  // changes (v1.3, 2026-10-04: platforms, catbox uploads, mf accounts),
-  // everyone gets asked again. no silent consent to new fine print.
-  const EULA_VERSION = '1.3';
+  // changes (v1.4, 2026-10-04: plaintext account credentials, modrinth,
+  // multibot, browser permissions), everyone gets asked again. no silent
+  // consent to new fine print.
+  const EULA_VERSION = '1.4';
 
   let accepted = null;
   try { accepted = localStorage.getItem(ACCEPT_KEY); } catch (_) {}

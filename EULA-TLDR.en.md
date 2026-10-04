@@ -2,7 +2,7 @@
 
 > [!note]
 > this is the easy, made-with-love version of the [full eula](EULA.md). fun to read, but just as serious where it matters.
-> **updated to eula v1.3 (october 4, 2026)** — when the full one changes, this summary catches up. if anything here contradicts the full one, the full one wins (spoiler: the full one always wins).
+> **updated to eula v1.4 (october 4, 2026)** — when the full one changes, this summary catches up. if anything here contradicts the full one, the full one wins (spoiler: the full one always wins).
 > spanish version of this document: [eula-tldr.md](EULA-TLDR.md)
 
 ---
@@ -48,7 +48,7 @@ if you're one of the good ones: thank you, from the bottom of our hearts. you're
 
 ## 3. what you should not do with the client ٩(◕‿◕)ノ
 
-- **don't use it for unfair advantage on competitive servers.** baritone, bots, anti-afk and friends: use them in your own world, with your friends, where the server allows it. if you get banned for cheating in ranked pvp... well... ¯\\\_(ツ)\_/¯
+- **don't use it for unfair advantage on competitive servers.** baritone, bots (the idlebot ships a multibot mode of up to 16 simulated bots, which is not exactly discreet), anti-afk and friends: use them in your own world, with your friends, where the server allows it. if you get banned for cheating in ranked pvp... well... ¯\\\_(ツ)\_/¯
 - high-risk modules show a warning before activation. closing it cancels activation; “don't show again” saves your acceptance in the browser. **accepting the warning does not mean the server permits the module or prevent a ban.**
 - **don't sell the client or modified copies** passing them off as official. that's just ugly. besides, it's free: scamming people with something free isn't even a scam, it's theater. (¬‿¬)
 - **don't bypass anticheats, payments or security systems.** we're not that kind of project.
@@ -71,7 +71,7 @@ if you're one of the good ones: thank you, from the bottom of our hearts. you're
 - **yes, there are minifeather accounts**, and they're **optional**: they exist for the community ecosystem (shared skins, ranks, pets). if you never create one, the client works just the same. nothing forces you.
 - **they have nothing to do with your miniblox account.** different universe: their own username and password, no connection to your game session. one thing at a time. (・_・;)
 - when you create one, your password is **stored hashed (pbkdf2, 200k iterations)** in a private database. never in plain text in the db.
-- **but let's be honest:** the creation request travels through ntfy.sh, which is a public channel. that's why: **never reuse your email, discord or miniblox password here.** use a unique, disposable password, sleep well. (∩`ω´)⊃))
+- **but let's be really honest:** the creation request sends your password **in plain text, unencrypted, through a public ntfy.sh channel** — anyone listening to that channel could read it in transit. that's why: **never, ever reuse your email, discord or miniblox password here.** use a unique, disposable password and sleep tight.
 - accounts are managed by the devs with a discord bot (linking, skins, etc.). if something breaks... section 4.5. ᕕ( ᐛ )ᕗ
 - **regret creating yours?** request the deletion through discord (the contact channel in the full one) and it's gone. no drama, no triplicate forms.
 
