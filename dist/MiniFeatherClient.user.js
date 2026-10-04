@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261004202146
+// @version      4.19.0.20261004210005
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : d23042b4b35ad0de5fadc0946dde61b61d9a7bab
- * builtAt : 2026-10-04T20:22:03.796Z
+ * commit  : bdf8dc5ebb2cdaecaf22b4621b6ae9e843b1f408
+ * builtAt : 2026-10-04T21:00:27.655Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"d23042b4b35ad0de5fadc0946dde61b61d9a7bab","builtAt":"2026-10-04T20:22:03.796Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"bdf8dc5ebb2cdaecaf22b4621b6ae9e843b1f408","builtAt":"2026-10-04T21:00:27.655Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -50360,7 +50360,7 @@ requestAnimationFrame(loop);
 (function () {
   'use strict';
 
-  const BARITONE_ADAPTER_VERSION = 4;
+  const BARITONE_ADAPTER_VERSION = 6;
   const KEY = '__MF_BARITONE_ADAPTER__';
   const instances = new Set();
   const INPUT_FIELDS = ['up', 'down', 'left', 'right', 'jump', 'sneak', 'sprint'];
@@ -50405,7 +50405,8 @@ requestAnimationFrame(loop);
   }
   function unknown(reason = 'unknown') {
     return { known: false, air: false, passable: false, solid: true, liquid: false, water: false, lava: false, hazard: true,
-      replaceable: false, breakable: false, hardness: Infinity, name: '', collision: [], supportHeight: 1, height: 1, reason };
+      replaceable: false, breakable: false, hardness: Infinity, name: '', collision: [], supportHeight: 1, height: 1,
+      slipperiness: null, reason };
   }
 
   function create() {
@@ -50414,9 +50415,10 @@ requestAnimationFrame(loop);
     let nativePosition = null, lookControls = null, hooked = false, destroyed = false;
     let desired = null, lastError = '', inputTicks = 0, inputMode = '', savedPlayer = null;
     let queuePatch = null, mining = null, lastInteract = 0, nativeMiningLoop = false;
-    let mouseGain = .002, mousePending = null, mouseVerified = false, lastMouseResponse = 0, firstMouseRequest = 0;
+    let mouseGain = .002, mousePending = null, mouseVerified = false;
+    let strafeCarry = 0, strafeDirection = 0, inputEpoch = 0, inputFields = new WeakMap(), guardedSneak = false;
     const keyboardHeld = new Set();
-    const names = { left: '', right: '', ray: '', mine: '', reach: '' };
+    const names = { left: '', right: '', ray: '', mine: '', reach: '', movementFactor: '' };
 
     function resolvePosition() {
       const hit = controller?.objectMouseOver?.block;
@@ -50454,6 +50456,8 @@ requestAnimationFrame(loop);
         callPattern(names.ray).test(entry.source) && callPattern(names.mine).test(entry.source));
       names.reach = methods(controller).find(entry =>
         /return\s+[\w$.]+\.abilities\.creative\s*\?\s*[\d.]+\s*:\s*[\d.]+\s*;?\s*\}/.test(entry.source))?.name || '';
+      names.movementFactor = methods(player).find(entry =>
+        /\breturn\s+this\.landMovementFactor\s*[;}]/.test(entry.source))?.name || '';
       lookControls = candidates(game).find(value => finite(value.yaw) && finite(value.pitch) &&
         value.yawObject?.rotation && value.pitchObject?.rotation && methods(value).some(entry =>
           entry.source.includes('yawObject.rotation.y') && entry.source.includes('pitchObject.rotation.x') &&
@@ -50487,7 +50491,7 @@ requestAnimationFrame(loop);
       release();
       game = nextGame; player = nextGame.player; world = nextGame.world;
       movement = globalThis.__MINIFEATHER_MOVEMENT_API__?.resolve(player, true) || null;
-      mouseVerified = false; firstMouseRequest = 0; lastMouseResponse = 0;
+      mouseGain = .002; mouseVerified = false;
       resolveController();
       if (!movement?.names.applyInput || !movement?.names.collectInput ||
         typeof player[movement.names.applyInput] !== 'function' || typeof player[movement.names.collectInput] !== 'function') {
@@ -50508,15 +50512,49 @@ requestAnimationFrame(loop);
       bind(nextGame);
       return !!player && player === nextGame?.player && world === nextGame?.world;
     }
-    function fields() {
-      return { up: desired.forward > .1, down: desired.forward < -.1,
-        right: desired.strafe > .1, left: desired.strafe < -.1,
+    function fields(input = null) {
+      const cached = input && inputFields.get(input);
+      if (cached?.epoch === inputEpoch && cached.sequence === input.sequenceNumber) return cached.fields;
+      let strafe = desired.strafe;
+      if (desired.pulseStrafe) {
+        const direction = Math.sign(strafe);
+        if (direction !== strafeDirection) { strafeCarry = 0; strafeDirection = direction; }
+        strafeCarry += Math.abs(strafe);
+        const pulse = strafeCarry >= 1 - 1e-9;
+        if (pulse) strafeCarry = Math.max(0, strafeCarry - 1);
+        strafe = pulse ? direction : 0;
+      }
+      const result = { up: desired.forward > .1, down: desired.forward < -.1,
+        right: strafe > .1, left: strafe < -.1,
         jump: !!desired.jump, sneak: !!desired.sneak, sprint: !!desired.sprint };
+      if (desired.canStep) {
+        let allowed = false;
+        try {
+          allowed = desired.canStep(Object.freeze({ forward: Number(result.up) - Number(result.down),
+            strafe: Number(result.right) - Number(result.left), jump: result.jump, sneak: result.sneak,
+            sprint: result.sprint, yaw: player.yaw, pitch: player.pitch })) === true;
+        } catch (_) {}
+        guardedSneak = !allowed;
+        if (!allowed) {
+          result.up = result.down = result.left = result.right = result.jump = result.sprint = false;
+          result.sneak = true;
+        }
+      }
+      // The native queue/send and native apply hooks see the same input object.
+      // Its duty pulse and safety decision must happen once, never twice.
+      if (input && (desired.pulseStrafe || desired.canStep)) {
+        inputFields.set(input, { epoch: inputEpoch, sequence: input.sequenceNumber, fields: result });
+      }
+      return result;
     }
     function patchInput(input) {
       if (!desired || !input || typeof input !== 'object') return;
-      const overrides = fields();
+      const overrides = fields(input);
       for (const key of INPUT_FIELDS) input[key] = overrides[key];
+      if (desired.canStep) {
+        player.sneak = overrides.sneak;
+        if (overrides.sprint !== desired.sprint) movement?.setSprint(overrides.sprint);
+      }
       // Keep the engine's protobuf object, position, ack and sequence number intact.
       // View angles remain the native camera's angles, never a synthetic packet aim.
       inputTicks++;
@@ -50530,6 +50568,10 @@ requestAnimationFrame(loop);
     }
     function feedKeys() {
       const active = fields();
+      if (desired.canStep) {
+        player.sneak = active.sneak;
+        if (active.sprint !== desired.sprint) movement?.setSprint(active.sprint);
+      }
       const map = { KeyW: active.up, KeyS: active.down, KeyD: active.right, KeyA: active.left, Space: active.jump };
       for (const [code, down] of Object.entries(map)) if (keyboardHeld.has(code) !== down) keyEvent(code, down);
     }
@@ -50551,7 +50593,8 @@ requestAnimationFrame(loop);
         before() {
           if (!desired) return;
           if (inputBlocked()) return;
-          player.sneak = !!desired.sneak;
+          inputEpoch++;
+          player.sneak = !!desired.sneak || !!desired.canStep && guardedSneak;
           movement.setSprint(!!desired.sprint);
           if (inputMode === 'native-queue-before-send' && Array.isArray(player.pendingInputs)) {
             restoreQueue();
@@ -50581,7 +50624,7 @@ requestAnimationFrame(loop);
         after() {
           if (!desired) return;
           if (inputBlocked()) return;
-          player.sneak = !!desired.sneak;
+          player.sneak = !!desired.sneak || !!desired.canStep && guardedSneak;
           calibrateMouse();
         }
       });
@@ -50599,27 +50642,38 @@ requestAnimationFrame(loop);
         }
         return false;
       }
-      desired = { forward: clamp(Number(control.forward) || 0, -1, 1), strafe: clamp(Number(control.strafe) || 0, -1, 1),
+      const nextStrafe = clamp(Number(control.strafe) || 0, -1, 1);
+      const pulseStrafe = control.pulseStrafe === true;
+      const canStep = typeof control.canStep === 'function' ? control.canStep : null;
+      if (!canStep) guardedSneak = false;
+      if (!pulseStrafe || Math.sign(nextStrafe) !== strafeDirection) { strafeCarry = 0; strafeDirection = Math.sign(nextStrafe); }
+      desired = { forward: clamp(Number(control.forward) || 0, -1, 1), strafe: nextStrafe,
         jump: !!control.jump, sneak: !!control.sneak, sprint: !!control.sprint,
-        yaw: finite(control.yaw) ? control.yaw : null, pitch: finite(control.pitch) ? control.pitch : null };
+        yaw: finite(control.yaw) ? control.yaw : null, pitch: finite(control.pitch) ? control.pitch : null,
+        pulseStrafe, canStep };
       if (!installHooks()) { desired = null; return false; }
       return true;
     }
     function calibrateMouse() {
       if (!mousePending || !player) return;
       const { yaw, pitch, x, y } = mousePending;
-      const change = x ? -wrap(player.yaw - yaw) / x : y ? -(player.pitch - pitch) / y : 0;
+      const change = Math.abs(x) >= Math.abs(y) && x ? -wrap(player.yaw - yaw) / x : y ? -(player.pitch - pitch) / y : 0;
       if (finite(change) && change > .00001 && change < .1) {
-        mouseGain = change; mousePending = null; mouseVerified = true; lastMouseResponse = Date.now();
+        mouseGain = change; mousePending = null; mouseVerified = true;
       }
     }
-    function steer(yaw, pitch, dt) {
+    function steer(yaw, pitch, dt, navigation = false) {
       if (!player || inputBlocked() || !finite(yaw) || !finite(pitch)) return false;
       pitch = clamp(pitch, -Math.PI / 2 + .001, Math.PI / 2 - .001);
-      const speed = clamp(dt, .005, .1) * 5;
-      const nextYaw = player.yaw + clamp(wrap(yaw - player.yaw), -speed, speed);
-      const nextPitch = player.pitch + clamp(pitch - player.pitch, -speed, speed);
+      const speed = clamp(finite(dt) ? dt : .05, .005, .1) * 5;
+      const yawError = wrap(yaw - player.yaw), pitchError = pitch - player.pitch;
+      // Walking may continue inside its tolerance; do not make the camera
+      // chase tiny changes in the bearing of nearby route points.
+      const deadband = navigation ? .025 : 0;
+      const nextYaw = player.yaw + (Math.abs(yawError) > deadband ? clamp(yawError, -speed, speed) : 0);
+      const nextPitch = player.pitch + (Math.abs(pitchError) > deadband ? clamp(pitchError, -speed, speed) : 0);
       if (lookControls) {
+        if (Math.abs(nextYaw - player.yaw) < .000001 && Math.abs(nextPitch - player.pitch) < .000001) return true;
         lookControls.yaw = nextYaw; lookControls.pitch = nextPitch;
         if (lookControls.rotation) { lookControls.rotation.y = nextYaw; lookControls.rotation.x = nextPitch; }
         lookControls.yawObject.rotation.y = nextYaw;
@@ -50630,17 +50684,21 @@ requestAnimationFrame(loop);
       try {
         calibrateMouse();
         const now = Date.now();
-        if (firstMouseRequest && now - (lastMouseResponse || firstMouseRequest) > 1500 &&
-          (Math.abs(wrap(yaw - player.yaw)) > .04 || Math.abs(pitch - player.pitch) > .04)) {
+        if (mousePending && now - mousePending.requestedAt > 1500) {
           lastError = 'native-camera-not-responding'; return false;
         }
-        const x = clamp(-wrap(nextYaw - player.yaw) / mouseGain, -250, 250);
-        const y = clamp(-(nextPitch - player.pitch) / mouseGain, -250, 250);
+        // A delayed native handler must acknowledge one look before another
+        // is sent, otherwise identical deltas accumulate and overshoot.
+        if (mousePending) return true;
+        // The first small native movement calibrates sensitivity rather than
+        // assuming a full turn's gain from an arbitrary mouse setting.
+        const mouseLimit = mouseVerified ? 250 : 2;
+        const x = clamp(-wrap(nextYaw - player.yaw) / mouseGain, -mouseLimit, mouseLimit);
+        const y = clamp(-(nextPitch - player.pitch) / mouseGain, -mouseLimit, mouseLimit);
         if (Math.abs(x) < .001 && Math.abs(y) < .001) return true;
-        if (!firstMouseRequest) firstMouseRequest = now;
         const event = new MouseEvent('mousemove', { bubbles: true, cancelable: true });
         Object.defineProperties(event, { movementX: { value: x }, movementY: { value: y } });
-        mousePending = { yaw: player.yaw, pitch: player.pitch, x, y };
+        mousePending = { yaw: player.yaw, pitch: player.pitch, x, y, requestedAt: now };
         document.dispatchEvent(event);
         return true;
       } catch (_) { lastError = 'native-camera-unavailable'; return false; }
@@ -50652,14 +50710,24 @@ requestAnimationFrame(loop);
       if (!finite(height) || height <= 0 || height > 5) height = player.sneak ? 1.54 : 1.62;
       return { x: player.pos.x, y: player.pos.y + height, z: player.pos.z };
     }
-    function aimAt(x, y, z, dtSeconds = .05) {
+    function aimAt(x, y, z, dtSeconds = .05, options = {}) {
       const origin = eye();
       if (!origin || ![x, y, z].every(finite)) return { aligned: false, reason: 'invalid-target' };
+      if (!finite(player.yaw) || !finite(player.pitch)) return { aligned: false, reason: 'native-camera-unavailable' };
+      const navigation = options?.mode === 'navigation';
+      const preservePitch = navigation && options.preservePitch !== false;
       const dx = x - origin.x, dy = y - origin.y, dz = z - origin.z;
-      const yaw = Math.atan2(-dx, -dz), pitch = Math.atan2(dy, Math.hypot(dx, dz));
-      const aligned = Math.abs(wrap(yaw - player.yaw)) < .04 && Math.abs(pitch - player.pitch) < .04;
-      const ok = steer(yaw, pitch, dtSeconds);
-      return { aligned: ok && aligned, yaw, pitch, reason: ok ? '' : lastError || 'native-camera-unavailable' };
+      const horizontal = Math.hypot(dx, dz);
+      const yaw = horizontal > .000001 ? Math.atan2(-dx, -dz) : player.yaw;
+      const pitch = preservePitch || horizontal <= .000001 && Math.abs(dy) <= .000001 ? player.pitch : Math.atan2(dy, horizontal);
+      const tolerance = navigation ? clamp(finite(options.tolerance) ? options.tolerance : .18, .04, .35) : .04;
+      const ok = steer(yaw, pitch, dtSeconds, navigation);
+      // Native onLook can apply immediately. Check its real resulting angles,
+      // not the old angles or the angles we merely requested.
+      const yawError = Math.abs(wrap(yaw - player.yaw)), pitchError = Math.abs(pitch - player.pitch);
+      const aligned = yawError < tolerance && (preservePitch || pitchError < .04);
+      return { aligned: ok && aligned, yaw, pitch, yawError, pitchError,
+        reason: ok ? '' : lastError || 'native-camera-unavailable' };
     }
     function swimmingState() {
       if (!refresh()) return { known: false, inWater: false, inLava: false, onGround: false, oxygen: null, air: null };
@@ -50682,6 +50750,44 @@ requestAnimationFrame(loop);
       // jump permits natural sinking; sneak is not a native swim-down command.
       return { known: inWater !== null && inLava !== null, inWater: inWater === true, inLava: inLava === true,
         onGround: !!player.onGround, oxygen, air: oxygen };
+    }
+    function movementFactor() {
+      if (!refresh()) return null;
+      try {
+        const getter = typeof player.getAIMoveSpeed === 'function' ? 'getAIMoveSpeed' :
+          typeof player[names.movementFactor] === 'function' ? names.movementFactor : '';
+        const value = getter ? player[getter]() : player.landMovementFactor;
+        return finite(value) && value >= 0 ? value : null;
+      } catch (_) { return null; }
+    }
+    function groundSlipperiness() {
+      if (!refresh() || !xyz(player.pos)) return null;
+      let minY = player.pos.y;
+      try {
+        const box = player.getEntityBoundingBox?.();
+        if (finite(box?.min?.y)) minY = box.min.y;
+      } catch (_) {}
+      // Match the engine's raw groundScratchPos lookup, independently of the
+      // planner's slightly rounded walking height or its collision footprint.
+      // Friction is native metadata, not permission to navigate outside world
+      // bounds: readCell keeps its separate strict terrain/collision checks.
+      const x = Math.floor(player.pos.x), y = Math.floor(minY - 1), z = Math.floor(player.pos.z);
+      const pos = position(x, y, z);
+      if (!pos || typeof world.getBlockState !== 'function') return null;
+      try {
+        if (typeof world.chunkProvider?.isLoaded === 'function') {
+          if (!world.chunkProvider.isLoaded(Math.floor(x / 16), Math.floor(z / 16))) return null;
+        } else if (typeof world.isBlockLoaded === 'function') {
+          if (!world.isBlockLoaded(pos)) return null;
+        } else return null;
+        if (typeof world.getChunk === 'function') {
+          const chunk = world.getChunk(pos);
+          if (!chunk || chunk.isDummyChunk === true) return null;
+        }
+        const state = world.getBlockState(pos), block = state?.getBlock?.() || state?.block;
+        const value = block?.slipperiness;
+        return finite(value) && value > 0 ? value : null;
+      } catch (_) { return null; }
     }
     function readCell(x, y, z) {
       if (!refresh() || ![x, y, z].every(Number.isInteger)) return unknown('invalid-position');
@@ -50729,7 +50835,8 @@ requestAnimationFrame(loop);
         const interactive = block.isBlockContainer === true || /chest|furnace|crafting_table|(?:^|_)(?:door|bed|lever|button|trapdoor|fence_gate)(?:$|_)/.test(name);
         return { known: true, air, passable: !solid && !hazard, solid, liquid, water, lava, hazard, replaceable,
           breakable: !air && !liquid && hardness >= 0 && finite(hardness) && !/bedrock|barrier|portal/.test(name),
-          hardness, name, collision, supportHeight, height: supportHeight, interactive };
+          hardness, name, collision, supportHeight, height: supportHeight, interactive,
+          slipperiness: finite(block.slipperiness) && block.slipperiness > 0 ? block.slipperiness : null };
       } catch (_) { return unknown('block-read-failed'); }
     }
     function reachDistance() {
@@ -50983,7 +51090,7 @@ requestAnimationFrame(loop);
         }
       }
       savedPlayer = null; hooked = false; mousePending = null;
-      firstMouseRequest = 0; lastMouseResponse = 0;
+      strafeCarry = 0; strafeDirection = 0; inputEpoch = 0; inputFields = new WeakMap(); guardedSneak = false;
     }
     function diagnostics() {
       return { bound: !!player, hooked, inputMode, inputTicks, error: lastError,
@@ -50996,10 +51103,13 @@ requestAnimationFrame(loop);
           mine: !!names.left && !!names.mine, nativeMiningLoop, place: !!names.right, attack: !!names.left,
           swimming: typeof player?.inWater === 'boolean' || typeof player?.isInWater === 'function',
           buildingInventory: Array.isArray(player?.inventory?.mainInventory || player?.inventory?.main) },
-        controls: desired && { ...desired } };
+        controls: desired && { forward: desired.forward, strafe: desired.strafe, jump: desired.jump,
+          sneak: desired.sneak, sprint: desired.sprint, yaw: desired.yaw, pitch: desired.pitch,
+          pulseStrafe: desired.pulseStrafe } };
     }
     const runtime = { bind, observe, setControls, release, releaseInteraction, readCell, aimAt, interact, selectSlot, entities, diagnostics, eye,
-      swimmingState, placementAim, blockInventory, blockBudget, selectBuildingBlock, getSelectedSlot, miningEstimate, selectMiningTool,
+      swimmingState, movementFactor, groundSlipperiness, placementAim, blockInventory, blockBudget, selectBuildingBlock, getSelectedSlot,
+      miningEstimate, selectMiningTool,
       get game() { return game; }, get player() { return player; },
       destroy() { release(); destroyed = true; instances.delete(runtime); game = player = world = controller = movement = null; } };
     instances.add(runtime);
@@ -51014,7 +51124,7 @@ requestAnimationFrame(loop);
 (function () {
     'use strict';
 
-    const BARITONE_PLANNER_VERSION = 4;
+    const BARITONE_PLANNER_VERSION = 6;
     const ROOT = globalThis;
     const SQRT2 = Math.SQRT2;
     const DIRECTIONS = [
@@ -51035,6 +51145,14 @@ requestAnimationFrame(loop);
         const dx = Math.max(0, Math.abs(a.x - b.x) - radius);
         const dz = Math.max(0, Math.abs(a.z - b.z) - radius);
         return Math.max(dx, dz) + (SQRT2 - 1) * Math.min(dx, dz);
+    }
+    function routeDistance(a, b, radius = 0) {
+        // Every ascent pays at least .7 above its horizontal distance; dry
+        // drops pay .35 per block. Swimming also exceeds both lower bounds.
+        // Subtract the entire adjustment radius so every accepted goal has
+        // zero heuristic. These consistent bounds do not weight A* costs.
+        return horizontalDistance(a, b, radius) +
+            Math.max(0, b.y - a.y - radius) * 0.7 + Math.max(0, a.y - b.y - radius) * 0.35;
     }
 
     class Heap {
@@ -51077,6 +51195,7 @@ requestAnimationFrame(loop);
         const now = typeof options.now === 'function' ? options.now : () => ROOT.performance?.now?.() ?? Date.now();
         const defaults = {
             allowMine: options.allowMine === true,
+            fastWalk: options.fastWalk === true,
             allowGap: options.allowGap !== false,
             allowSwim: options.allowSwim !== false,
             maxSubmergedSteps: Math.floor(clamp(options.maxSubmergedSteps, 12, 2, 48)),
@@ -51118,6 +51237,8 @@ requestAnimationFrame(loop);
             return value;
         }
         function excavationCost(block, config) {
+            // Live edge checks need safety, not a new tool/inventory estimate.
+            if (config.validationOnly) return 0;
             const hardness = typeof block.cell.hardness === 'number' ? block.cell.hardness : NaN;
             const fallback = Number.isFinite(hardness) && hardness >= 0 ?
                 clamp(config.mineCost * hardness / 1.5, config.mineCost, 0.25, 300) : config.mineCost;
@@ -51211,11 +51332,91 @@ requestAnimationFrame(loop);
             return candidates(goal, Math.floor(clamp(radius, 4, 0, 4)))[0] ?? null;
         }
 
+        function liveCache(limit = 512) {
+            const observe = () => {};
+            // This cache exists for one synchronous live check only. Never
+            // share it with search snapshots or the next movement tick.
+            observe.cache = new Map();
+            observe.cacheLimit = limit;
+            observe.cacheStats = { reads: 0, hits: 0 };
+            return observe;
+        }
+
+        function canWalkSegment(fromValue, toValue, segmentOptions = {}) {
+            const from = position(fromValue);
+            const to = position(toValue);
+            if (!from || !to || from.y !== to.y ||
+                (fromValue.action && fromValue.action !== 'walk') || (toValue.action && toValue.action !== 'walk')) return false;
+            // X/Z are actual world positions, not integer waypoint centers.
+            // Check every grid interval crossed by both footprint edges: a
+            // sampled ray can miss a narrow diagonal corner or floor hole.
+            const dx = toValue.x - fromValue.x;
+            const dz = toValue.z - fromValue.z;
+            if (Math.hypot(dx, dz) > clamp(segmentOptions.maxDistance, 16, 0, 32)) return false;
+            const halfWidth = 0.3;
+            const epsilon = 1e-7;
+            const events = [0, 1];
+            for (const [start, delta] of [[fromValue.x, dx], [fromValue.z, dz]]) {
+                if (Math.abs(delta) <= epsilon) continue;
+                for (const offset of defaults.blockedEdges?.size ? [-halfWidth, 0, halfWidth] : [-halfWidth, halfWidth]) {
+                    const begin = start + offset;
+                    const end = begin + delta;
+                    for (let boundary = Math.ceil(Math.min(begin, end)); boundary <= Math.max(begin, end); boundary++) {
+                        const t = (boundary - begin) / delta;
+                        if (t > 0 && t < 1) events.push(t);
+                    }
+                }
+            }
+            events.sort((a, b) => a - b);
+            const observe = liveCache();
+            const checked = new Set();
+            let previousCenter = null;
+            const check = t => {
+                const x = fromValue.x + dx * t;
+                const z = fromValue.z + dz * t;
+                const center = { x: Math.floor(x), y: from.y, z: Math.floor(z) };
+                if (previousCenter && key(center) !== key(previousCenter) && defaults.blockedEdges?.has?.(edgeKey(previousCenter, center))) return false;
+                previousCenter = center;
+                for (let bx = Math.floor(x - halfWidth + epsilon); bx <= Math.floor(x + halfWidth - epsilon); bx++) {
+                    for (let bz = Math.floor(z - halfWidth + epsilon); bz <= Math.floor(z + halfWidth - epsilon); bz++) {
+                        const id = `${bx},${bz}`;
+                        if (checked.has(id)) continue;
+                        checked.add(id);
+                        if (!stand(bx, from.y, bz, observe)) return false;
+                        const floor = cell(bx, from.y - 1, bz, observe);
+                        // Centered stepping support is not enough for walking
+                        // across its edge. Require the full contacted tile.
+                        if (Array.isArray(floor.collision) && !floor.collision.some(box => box?.min && box?.max &&
+                            box.min.x <= epsilon && box.max.x >= 1 - epsilon &&
+                            box.min.z <= epsilon && box.max.z >= 1 - epsilon && box.max.y >= 0.99 && box.max.y <= 1.01)) return false;
+                        // Fractional feet above .2 need an additional known
+                        // head cell for the native 1.8-block player height.
+                        if (Math.max(fromValue.y, toValue.y) - from.y > 0.2 && !dryClear(cell(bx, from.y + 2, bz, observe))) return false;
+                    }
+                }
+                return true;
+            };
+            if (!check(0)) return false;
+            for (let index = 1; index < events.length; index++) {
+                if (events[index] - events[index - 1] > epsilon && !check((events[index] + events[index - 1]) * 0.5)) return false;
+            }
+            return check(1);
+        }
+
         function validateTransition(fromValue, toValue) {
             const from = position(fromValue);
             const to = position(toValue);
-            if (!from || !to || !navigate(from.x, from.y, from.z, defaults) || typeof toValue.action !== 'string') return false;
-            return getNeighbors(from, defaults).some(next => {
+            if (!from || !to || typeof toValue.action !== 'string') return false;
+            const dx = to.x - from.x;
+            const dz = to.z - from.z;
+            const vertical = dx === 0 && dz === 0;
+            if (vertical ? toValue.action !== 'swim' || Math.abs(to.y - from.y) !== 1 :
+                Math.abs(dx) > 2 || Math.abs(dz) > 2 ||
+                (Math.max(Math.abs(dx), Math.abs(dz)) === 2 && (toValue.action !== 'gap' || (dx !== 0 && dz !== 0)))) return false;
+            const observe = liveCache(128);
+            if (!navigate(from.x, from.y, from.z, defaults, observe)) return false;
+            const directions = vertical ? [] : [[Math.sign(dx), Math.sign(dz)]];
+            return getNeighbors(from, { ...defaults, validationOnly: true }, observe, directions, vertical).some(next => {
                 if (next.x !== to.x || next.y !== to.y || next.z !== to.z) return false;
                 if (toValue.action === 'bridge') {
                     if (next.action === 'walk') return true;
@@ -51234,7 +51435,7 @@ requestAnimationFrame(loop);
             });
         }
 
-        function getNeighbors(p, config, observeUnknown) {
+        function getNeighbors(p, config, observeUnknown, directions = DIRECTIONS, includeVertical = true) {
             const output = [];
             const inWater = config.allowSwim && swim(p.x, p.y, p.z, observeUnknown);
             const plannedClear = value => ['mine', 'mineJump'].includes(p.action) && p.breakBlocks?.some(block =>
@@ -51291,11 +51492,11 @@ requestAnimationFrame(loop);
                 }
                 return false;
             };
-            if (inWater) {
+            if (inWater && includeVertical) {
                 addSwim(p.x, p.y + 1, p.z, 1.15);
                 addSwim(p.x, p.y - 1, p.z, 1.65);
             }
-            for (const [dx, dz] of DIRECTIONS) {
+            for (const [dx, dz] of directions) {
                 const x = p.x + dx;
                 const z = p.z + dz;
                 const diagonal = dx !== 0 && dz !== 0;
@@ -51384,6 +51585,7 @@ requestAnimationFrame(loop);
             const config = {
                 ...defaults,
                 allowMine: opts.allowMine == null ? defaults.allowMine : opts.allowMine === true,
+                fastWalk: opts.fastWalk == null ? defaults.fastWalk : opts.fastWalk === true,
                 allowGap: opts.allowGap == null ? defaults.allowGap : opts.allowGap !== false,
                 allowSwim: opts.allowSwim == null ? defaults.allowSwim : opts.allowSwim !== false,
                 maxSubmergedSteps: Math.floor(clamp(opts.maxSubmergedSteps, defaults.maxSubmergedSteps, 2, 48)),
@@ -51410,6 +51612,7 @@ requestAnimationFrame(loop);
             let unknownReads = 0;
             let radius = 0;
             let goalKeys = new Set();
+            let fastProbe = null;
             const partialCandidates = new Map();
             const backoffScales = [1.5, 2, 3, 5, 10];
             const observeUnknown = () => { sawUnknown = true; unknownReads++; };
@@ -51425,15 +51628,25 @@ requestAnimationFrame(loop);
                 `|${[...node._placed].sort().join(';')}` : ''}${node._submergedSteps ? `|wet:${node._submergedSteps}` : ''}`;
             const job = { done: false, result: null, step, cancel, preview };
 
-            function pathFor(node) {
+            function copyWaypoint(current) {
+                const point = { x: current.x, y: current.y, z: current.z, action: current.action };
+                if (current.breakBlocks?.length) point.breakBlocks = current.breakBlocks.map(block => ({ ...block }));
+                if (current.placeBlocks?.length) point.placeBlocks = current.placeBlocks.map(block => ({ ...block }));
+                return point;
+            }
+            function pathSnapshot(node, maxWaypoints = Infinity) {
+                const chain = [];
+                for (let current = node; current; current = current.parent) chain.push(current);
                 const path = [];
-                for (let current = node; current; current = current.parent) {
-                    const p = { x: current.x, y: current.y, z: current.z, action: current.action };
-                    if (current.breakBlocks?.length) p.breakBlocks = current.breakBlocks.map(block => ({ ...block }));
-                    if (current.placeBlocks?.length) p.placeBlocks = current.placeBlocks.map(block => ({ ...block }));
-                    path.push(p);
+                // Do not allocate/clone invisible tail waypoints and actions
+                // on every live preview; only finished results need them all.
+                for (let index = chain.length - 1; index >= Math.max(0, chain.length - maxWaypoints); index--) {
+                    path.push(copyWaypoint(chain[index]));
                 }
-                return path.reverse();
+                return { path, pathLength: chain.length };
+            }
+            function pathFor(node) {
+                return pathSnapshot(node).path;
             }
             function useful(node) {
                 return node && start && Math.hypot(node.x - start.x, node.y - start.y, node.z - start.z) >= 3;
@@ -51488,14 +51701,13 @@ requestAnimationFrame(loop);
             function preview(previewOptions = {}) {
                 const maxWaypoints = Math.floor(clamp(previewOptions.maxWaypoints, 96, 1, 2048));
                 const previewNode = job.done ? null : partialFor('preview');
-                const path = job.done ? job.result.path : pathFor(previewNode);
-                const tail = path.at(-1);
+                const snapshot = job.done ? {
+                    path: job.result.path.slice(0, maxWaypoints).map(copyWaypoint), pathLength: job.result.path.length
+                } : pathSnapshot(previewNode, maxWaypoints);
+                const tail = job.done ? job.result.path.at(-1) : previewNode;
                 const frontier = open.items[0];
                 return {
-                    path: path.slice(0, maxWaypoints).map(point => ({ ...point,
-                        ...(point.breakBlocks ? { breakBlocks: point.breakBlocks.map(block => ({ ...block })) } : {}),
-                        ...(point.placeBlocks ? { placeBlocks: point.placeBlocks.map(block => ({ ...block })) } : {}) })),
-                    pathLength: path.length, truncated: path.length > maxWaypoints,
+                    path: snapshot.path, pathLength: snapshot.pathLength, truncated: snapshot.pathLength > maxWaypoints,
                     best: tail ? { x: tail.x, y: tail.y, z: tail.z } : null,
                     frontier: frontier ? { x: frontier.x, y: frontier.y, z: frontier.z } : null,
                     visited, done: job.done, complete: job.result?.complete ?? false, reason: job.result?.reason ?? 'searching',
@@ -51520,6 +51732,7 @@ requestAnimationFrame(loop);
                     adjustedGoal: complete && !!node && key(node) !== key(requestedGoal),
                     elapsedMs: Math.max(0, now() - began)
                 };
+                job.result.fastWalk = complete && fastProbe?.current === node;
                 job.result.cachedCells = observeUnknown.cache.size;
                 job.result.terrainReads = observeUnknown.cacheStats.reads;
                 job.result.cacheHits = observeUnknown.cacheStats.hits;
@@ -51529,6 +51742,7 @@ requestAnimationFrame(loop);
                 expanded.clear();
                 partialCandidates.clear();
                 best = null;
+                fastProbe = null;
                 return job.result;
             }
             function cancel() {
@@ -51545,6 +51759,40 @@ requestAnimationFrame(loop);
                     if (now() - began >= config.maxTimeMs) return finish('time_budget');
                     if (visited >= config.maxNodesTotal) return finish('node_budget');
                     if (count >= maxNodes || now() - sliceBegan >= maxMs) return null;
+                    if (fastProbe) {
+                        // Distribute diagonal steps along the intended line.
+                        // Every completed dry probe uses exactly the minimum
+                        // cardinal/diagonal counts, attaining the octile bound.
+                        // Probe incrementally; any failed edge falls back to
+                        // the unchanged A* frontier, reusing only its snapshot.
+                        count++;
+                        visited++;
+                        const current = fastProbe.current;
+                        fastProbe.error += fastProbe.minor;
+                        const diagonal = fastProbe.error >= fastProbe.major;
+                        if (diagonal) fastProbe.error -= fastProbe.major;
+                        const dx = fastProbe.majorX ? fastProbe.sx : diagonal ? fastProbe.sx : 0;
+                        const dz = fastProbe.majorX ? diagonal ? fastProbe.sz : 0 : fastProbe.sz;
+                        const x = current.x + dx;
+                        const z = current.z + dz;
+                        const next = { x, y: current.y, z, action: 'walk' };
+                        if (config.blockedEdges?.has?.(edgeKey(current, next)) ||
+                            !stand(x, current.y, z, observeUnknown) ||
+                            (dx && dz && (!stand(x, current.y, current.z, observeUnknown) ||
+                                !stand(current.x, current.y, z, observeUnknown)))) {
+                            fastProbe = null;
+                            continue;
+                        }
+                        const g = current.g + (diagonal ? SQRT2 : 1);
+                        const h = routeDistance(next, requestedGoal);
+                        const record = { ...next, _id: key(next), _placeCount: 0, _submergedSteps: 0,
+                            g, h, progress: h, f: g + h, parent: current, order: order++ };
+                        fastProbe.current = record;
+                        best = record;
+                        rememberPartial(record);
+                        if (goalKeys.has(key(record))) return finish('reached', true, record);
+                        continue;
+                    }
                     const current = open.pop();
                     const currentKey = current._id ?? stateKey(current);
                     if (current.g !== bestCosts.get(currentKey) || (expanded.get(currentKey) ?? Infinity) <= current.g) continue;
@@ -51561,8 +51809,8 @@ requestAnimationFrame(loop);
                         const nextKey = stateKey(next);
                         const g = current.g + next.cost;
                         if (g >= (bestCosts.get(nextKey) ?? Infinity)) continue;
-                        const h = horizontalDistance(next, requestedGoal, radius);
-                        const progress = h + Math.abs(next.y - requestedGoal.y) * 0.25;
+                        const h = routeDistance(next, requestedGoal, radius);
+                        const progress = horizontalDistance(next, requestedGoal, radius) + Math.abs(next.y - requestedGoal.y) * 0.25;
                         const record = { ...next, _id: nextKey, g, h, progress, f: g + h, parent: current, order: order++ };
                         bestCosts.set(nextKey, g);
                         open.push(record);
@@ -51595,11 +51843,21 @@ requestAnimationFrame(loop);
                 }
             }
             goalKeys = new Set(goals.map(key));
-            const h = horizontalDistance(start, requestedGoal, radius);
+            const h = routeDistance(start, requestedGoal, radius);
             best = { ...start, _id: key(start), action: swim(start.x, start.y, start.z, observeUnknown) ? 'swim' : 'walk', _placeCount: 0, _submergedSteps: 0,
-                g: 0, h, progress: h + Math.abs(start.y - requestedGoal.y) * 0.25, f: h, parent: null, order: order++ };
+                g: 0, h, progress: horizontalDistance(start, requestedGoal, radius) + Math.abs(start.y - requestedGoal.y) * 0.25,
+                f: h, parent: null, order: order++ };
             bestCosts.set(key(start), 0);
             open.push(best);
+            const dx = requestedGoal.x - start.x;
+            const dz = requestedGoal.z - start.z;
+            const edges = Math.max(Math.abs(dx), Math.abs(dz));
+            if (config.fastWalk && edges > 0 && edges <= 128 && start.y === requestedGoal.y && radius === 0 &&
+                goalKeys.has(key(requestedGoal)) &&
+                stand(start.x, start.y, start.z, observeUnknown) && stand(requestedGoal.x, requestedGoal.y, requestedGoal.z, observeUnknown)) {
+                fastProbe = { current: best, sx: Math.sign(dx), sz: Math.sign(dz), majorX: Math.abs(dx) >= Math.abs(dz),
+                    major: edges, minor: Math.min(Math.abs(dx), Math.abs(dz)), error: edges * 0.5 };
+            }
             // With a distant unloaded goal, exploring the loaded frontier still
             // yields a useful partial route. It is never reported as complete.
             return job;
@@ -51615,6 +51873,7 @@ requestAnimationFrame(loop);
                 return p ? getNeighbors(p, defaults) : [];
             },
             nearestStand,
+            canWalkSegment,
             validateTransition,
             search
         };
@@ -51967,17 +52226,17 @@ requestAnimationFrame(loop);
 (function () {
   'use strict';
 
-  const BARITONE_NAVIGATION_VERSION = 4;
+  const BARITONE_NAVIGATION_VERSION = 7;
 
   // Only the adapter depends on native APIs; the planner knows terrain, not obfuscated names.
   try { globalThis.Baritone?.destroy?.(); } catch (_) {}
   const listeners = [];
   const state = {
     enabled: false, status: 'idle', reason: '', goal: null, routeGoal: null, segmented: false,
-    effectiveGoal: null, searchStart: null, terrainTask: null, originalSlot: null,
+    effectiveGoal: null, searchStart: null, terrainTask: null, footingTask: null, walkFailures: 0, walkYaw: null, walkFast: false, originalSlot: null,
     breathingGoal: null, breathingSince: 0,
     showPath: true, preview: null, previewAt: 0, visualAt: 0, lookahead: 32, checkpoints: [],
-    prefetch: null,
+    prefetch: null, frontierWatch: null,
     path: [], pathIndex: 0, following: null, action: null, actionPhase: 'idle',
     autoMine: true, autoPlace: true, search: null, searchResult: null, retries: 0, resumeAt: 0,
     progressAt: 0, progressPos: null, followPlanAt: 0, followGoal: null,
@@ -52080,7 +52339,8 @@ requestAnimationFrame(loop);
     Object.assign(state, { path: [], pathIndex: 0, goal: null, effectiveGoal: null,
       following: null, followGoal: null, action: null, actionPhase: 'idle', routeGoal: null,
       segmented: false, searchStart: null, breathingGoal: null, breathingSince: 0,
-      preview: null, lookahead: 32, checkpoints: [],
+      footingTask: null, walkFailures: 0, walkYaw: null, walkFast: false,
+      preview: null, lookahead: 32, checkpoints: [], frontierWatch: null,
       jumpUntil: 0, jumpedIndex: -1, bestGoalDistance: Infinity, retries: 0, progressPos: null, searchResult: null });
     state.blockedEdges.clear(); setStatus(status, reason); emitState(true);
   }
@@ -52102,7 +52362,7 @@ requestAnimationFrame(loop);
     const swimBudget = oxygen == null ? 12 : Math.max(2, Math.min(12, Math.floor(oxygen / 15)));
     const miningCosts = new Map();
     planner = globalThis.__MF_BARITONE_PLANNER__.create((x, y, z) => adapter.readCell(x, y, z), {
-      allowMine: state.autoMine, allowGap: true, allowSwim: true,
+      allowMine: state.autoMine, allowGap: true, allowSwim: true, fastWalk: true, terrainCacheLimit: 65536,
       maxSubmergedSteps: swimBudget,
       allowPlace: state.autoPlace && budget > 0, placeBudget: Math.min(32, budget),
       miningCost(position, info) {
@@ -52119,13 +52379,27 @@ requestAnimationFrame(loop);
   }
   function routeTarget(start, goal) {
     const horizontal = Math.hypot(goal.x - start.x, goal.z - start.z);
-    const segmented = horizontal > state.lookahead;
-    const factor = segmented ? state.lookahead / horizontal : 1;
-    return { segmented, goal: segmented ? {
-      x: Math.round(start.x + (goal.x - start.x) * factor),
-      y: start.y + Math.max(-3, Math.min(3, goal.y - start.y)),
-      z: Math.round(start.z + (goal.z - start.z) * factor)
-    } : { ...goal } };
+    const candidate = horizon => {
+      const segmented = horizontal > horizon, factor = segmented ? horizon / horizontal : 1;
+      return { segmented, goal: segmented ? {
+        x: Math.round(start.x + (goal.x - start.x) * factor),
+        y: start.y + Math.max(-3, Math.min(3, goal.y - start.y)),
+        z: Math.round(start.z + (goal.z - start.z) * factor)
+      } : { ...goal } };
+    };
+    let horizon = state.lookahead, route = candidate(horizon);
+    // A longer horizon is useful only within known terrain. Do not confuse a
+    // known obstacle (which A* can route around) with an unloaded target chunk.
+    while (horizon > 32 && [0, 1, -1].some(dy => !adapter.readCell(route.goal.x, route.goal.y + dy, route.goal.z)?.known)) {
+      horizon = Math.max(32, horizon / 2); route = candidate(horizon);
+    }
+    return route;
+  }
+  function extendPlanningHorizon(result) {
+    const path = result?.path;
+    if (state.action || state.following || state.breathingGoal || !result?.complete || !path?.length || path.length < 24 ||
+        result.visited > Math.max(128, path.length * 3) || !path.every(p => plainWalk(p) && p.y === path[0].y)) return;
+    state.lookahead = Math.min(128, state.lookahead * 2);
   }
   function prepare() {
     const game = getGame();
@@ -52142,6 +52416,7 @@ requestAnimationFrame(loop);
   function beginSearch(goal = state.goal) {
     if (!validGoal(goal) || !planner || !state.player?.pos) return false;
     cancelSearch(); cancelPrefetch(); releaseTerrain(); neutral(); refreshPlanner();
+    state.footingTask = null; state.walkYaw = null; state.walkFast = false; state.frontierWatch = null;
     const nextGoal = cell(goal);
     if (!state.goal || state.goal.x !== nextGoal.x || state.goal.y !== nextGoal.y || state.goal.z !== nextGoal.z) {
       state.bestGoalDistance = distance(state.player.pos, center(nextGoal));
@@ -52161,12 +52436,25 @@ requestAnimationFrame(loop);
   }
   function waitOrFail(reason) {
     neutral(); adapter?.releaseInteraction?.(); state.resumeAt = now() + 1000;
+    if (!state.action && !state.following && state.searchResult?.reason === 'unloaded_frontier') {
+      const source = cell(state.player.pos), probes = new Map();
+      const offer = point => {
+        if (point && point.y >= 0 && !adapter.readCell(point.x, point.y, point.z)?.known) {
+          probes.set(`${point.x},${point.y},${point.z}`, { ...point });
+        }
+      };
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (const dy of [0, 1, -1]) {
+        offer({ x: source.x + dx, y: source.y + dy, z: source.z + dz });
+      }
+      offer(state.routeGoal); offer(state.goal);
+      state.frontierWatch = probes.size ? { cells: [...probes.values()].slice(0, 32), position: { ...state.player.pos } } : null;
+    }
     if (++state.retries > 6) stop('failed', reason); else setStatus('waiting', reason);
   }
   function planAhead(time) {
     if (state.search || state.action || state.following || state.breathingGoal || !state.goal ||
         !state.segmented || !state.searchResult?.complete || !state.path.length || state.terrainTask) return;
-    if (!state.prefetch && state.path.length - state.pathIndex <= 8) {
+    if (!state.prefetch && state.path.length - state.pathIndex <= 32) {
       const start = state.path[state.path.length - 1];
       if (!(planner.canNavigate?.(start.x, start.y, start.z) ?? planner.canStand(start.x, start.y, start.z))) return;
       refreshPlanner();
@@ -52176,7 +52464,7 @@ requestAnimationFrame(loop);
     }
     const job = state.prefetch?.job;
     if (!job) return;
-    if (!job.done) job.step({ maxMs: 2, maxNodes: 128 });
+    if (!job.done) job.step({ maxMs: 2, maxNodes: 256 });
     if (time >= state.previewAt) {
       state.preview = job.preview?.({ maxWaypoints: 96 }) || null; state.previewAt = time + 250;
     }
@@ -52193,6 +52481,7 @@ requestAnimationFrame(loop);
     state.searchResult = { ...result, globalComplete: !!result.complete && !state.segmented };
     state.effectiveGoal = result.goal || state.goal;
     state.path = result.path; state.pathIndex = 0; state.jumpedIndex = -1;
+    extendPlanningHorizon(result);
     state.progressAt = now(); state.progressPos = { ...state.player.pos };
     setStatus('moving', 'Continuing the precalculated route'); updateVisual(now(), true); return true;
   }
@@ -52247,6 +52536,7 @@ requestAnimationFrame(loop);
     state.searchResult = { ...job.result, globalComplete: !!job.result?.complete && !state.segmented };
     state.effectiveGoal = job.result?.goal || state.goal;
     state.path = job.result?.path || []; state.pathIndex = 0; state.jumpedIndex = -1;
+    extendPlanningHorizon(job.result);
     state.progressAt = now(); state.progressPos = { ...state.player.pos };
     if (state.path.length) setStatus('moving', state.searchResult.globalComplete ? '' : 'Continuing toward the long-distance goal');
     else if (job.result?.complete) routeComplete();
@@ -52354,6 +52644,166 @@ requestAnimationFrame(loop);
     }
     return true;
   }
+  function plainWalk(point) {
+    return point?.action === 'walk' && !point.breakBlocks?.length && !point.placeBlocks?.length;
+  }
+  function safeWalkLine(from, to) {
+    const feetY = cell(from).y;
+    const feet = state.player.onGround !== false && Math.abs(from.y - feetY) <= .01 ? { ...from, y: feetY } : from;
+    return typeof planner.canWalkSegment === 'function' && planner.canWalkSegment(feet, center(to), { maxDistance: 3.2 });
+  }
+  function walkingYaw(index) {
+    const target = state.path[index];
+    if (state.searchResult?.fastWalk && state.path.length > 1) {
+      const start = state.path[0], end = state.goal || state.path[state.path.length - 1];
+      // Bresenham's digital steps do not represent real bends on a verified
+      // straight corridor. Use its overall heading, not four staircase cells.
+      const yaw = Math.atan2(start.x - end.x, start.z - end.z);
+      // Rounded segment endpoints can leave a one-cell cardinal tail on an
+      // otherwise straight trip. Its correction is positional, not a new turn.
+      if (state.walkYaw == null || !state.walkFast) state.walkYaw = yaw;
+      state.walkFast = true;
+      return state.walkYaw;
+    }
+    state.walkFast = false;
+    let anchor = state.path[index - 1];
+    if (!anchor || anchor.y !== target.y) return state.walkYaw ?? state.player.yaw;
+    let dx = target.x - anchor.x, dz = target.z - anchor.z;
+    if (!dx && !dz) return state.walkYaw ?? state.player.yaw;
+    const edgeYaw = Math.atan2(-dx, -dz);
+    // A waypoint is a position, not a camera target. Average neighboring
+    // cardinal/diagonal steps, but never average across a real right-angle bend.
+    for (let previous = index - 2; previous >= Math.max(0, index - 4); previous--) {
+      const candidate = state.path[previous], next = state.path[previous + 1];
+      if (!plainWalk(candidate) || !plainWalk(next) || candidate.y !== target.y) break;
+      const yaw = Math.atan2(candidate.x - next.x, candidate.z - next.z);
+      if (Math.abs(Math.atan2(Math.sin(yaw - edgeYaw), Math.cos(yaw - edgeYaw))) > .9) break;
+      anchor = candidate;
+    }
+    dx = target.x - anchor.x; dz = target.z - anchor.z;
+    const yaw = Math.atan2(-dx, -dz);
+    if (state.walkYaw == null || Math.abs(Math.atan2(Math.sin(yaw - state.walkYaw), Math.cos(yaw - state.walkYaw))) > .26) {
+      state.walkYaw = yaw;
+    }
+    return state.walkYaw;
+  }
+  function relativeWalking(target) {
+    const player = state.player, yaw = player.yaw;
+    const dx = target.x - player.pos.x, dz = target.z - player.pos.z;
+    const along = -Math.sin(yaw) * dx - Math.cos(yaw) * dz;
+    const lateral = Math.cos(yaw) * dx - Math.sin(yaw) * dz;
+    const motion = player.motion;
+    const lateralSpeed = Number.isFinite(motion?.x) && Number.isFinite(motion?.z) ?
+      Math.cos(yaw) * motion.x - Math.sin(yaw) * motion.z : 0;
+    const correction = Math.abs(lateral) < .04 && Math.abs(lateralSpeed) < .015 ? 0 :
+      Math.max(-1, Math.min(1, lateral * .85 - lateralSpeed * 3));
+    return { forward: Math.abs(along) > .08 ? Math.sign(along) : 0, strafe: correction, along };
+  }
+  function safeWalkingInput(command) {
+    const player = state.player, motion = player.motion, factor = adapter.movementFactor?.();
+    const source = cell(player.pos), slipperiness = adapter.groundSlipperiness?.();
+    if (player.onGround === false || Math.abs(player.pos.y - source.y) > .01 ||
+        !Number.isFinite(motion?.x) || !Number.isFinite(motion?.z) || !Number.isFinite(factor) || factor < 0 ||
+        !Number.isFinite(slipperiness) || slipperiness <= 0) return false;
+    const vx = Math.abs(motion.x) < .005 ? 0 : motion.x, vz = Math.abs(motion.z) < .005 ? 0 : motion.z;
+    const yaw = command.yaw;
+    if (!Number.isFinite(yaw)) return false;
+    // Native input is digital. Bound its entire next-tick swept footprint,
+    // including inertia, actual yaw, sprint and the floor's native friction.
+    const acceleration = factor * (command.sprint ? 1.3 : 1) * .16277136 / (slipperiness * .91) ** 3;
+    const scale = .98 / Math.max(1, .98 * Math.hypot(command.forward, command.strafe));
+    const dx = (-Math.sin(yaw) * command.forward + Math.cos(yaw) * command.strafe) * scale * acceleration;
+    const dz = (-Math.cos(yaw) * command.forward - Math.sin(yaw) * command.strafe) * scale * acceleration;
+    const x = player.pos.x, z = player.pos.z;
+    const minX = Math.min(x, x + vx, x + vx + dx), maxX = Math.max(x, x + vx, x + vx + dx);
+    const minZ = Math.min(z, z + vz, z + vz + dz), maxZ = Math.max(z, z + vz, z + vz + dz);
+    if (maxX - minX > .6 || maxZ - minZ > .6 || !Number.isFinite(acceleration)) return false;
+    // With extents <= one player width, these overlapping corner footprints
+    // cover the envelope, not just the requested line to a waypoint.
+    const point = (px, pz) => ({ x: px, y: source.y, z: pz });
+    return planner.canWalkSegment(point(minX, minZ), point(maxX, maxZ), { maxDistance: 1 }) &&
+      planner.canWalkSegment(point(minX, maxZ), point(maxX, minZ), { maxDistance: 1 });
+  }
+  function naturalArrival(wet) {
+    if (wet || state.action || state.following || state.breathingGoal || state.segmented || !state.searchResult?.globalComplete ||
+        state.player.onGround === false || !state.effectiveGoal || typeof planner.canWalkSegment !== 'function') return false;
+    const player = state.player, target = state.effectiveGoal, feet = cell(player.pos);
+    if (feet.x !== target.x || feet.y !== target.y || feet.z !== target.z || Math.abs(player.pos.y - target.y) > .01 ||
+        Math.hypot(player.pos.x - target.x - .5, player.pos.z - target.z - .5) > .45 ||
+        !state.path.slice(state.pathIndex).every(p => plainWalk(p) && p.y === target.y)) return false;
+    const motion = player.motion;
+    // A missing momentum API cannot authorize an early stop. Precise action
+    // and checkpoint arrival retain their separate existing rules.
+    if (!Number.isFinite(motion?.x) || !Number.isFinite(motion?.z)) return false;
+    const slipperiness = adapter.groundSlipperiness?.(), drag = slipperiness * .91;
+    if (!Number.isFinite(drag) || drag <= 0 || drag >= 1) return false;
+    let vx = motion.x, vz = motion.z, x = player.pos.x, z = player.pos.z;
+    const coast = [{ ...player.pos, y: target.y }];
+    for (let tick = 0; tick < 128; tick++) {
+      const stopsX = vx !== 0 && Math.abs(vx) < .005, stopsZ = vz !== 0 && Math.abs(vz) < .005;
+      if (stopsX || stopsZ) coast.push({ x, y: target.y, z });
+      if (stopsX) vx = 0;
+      if (stopsZ) vz = 0;
+      if (!vx && !vz) break;
+      x += vx; z += vz; vx *= drag; vz *= drag;
+    }
+    if (vx || vz || Math.floor(x) !== target.x || Math.floor(z) !== target.z || Math.hypot(x - target.x - .5, z - target.z - .5) > .45) return false;
+    coast.push({ x, y: target.y, z });
+    // Native per-axis velocity truncation can bend the very last part of a
+    // coast. Check its actual straight pieces, not a chord that cuts a corner.
+    return coast.slice(1).every((point, index) => planner.canWalkSegment(coast[index], point, { maxDistance: 3.2 }));
+  }
+  function passedWaypoint(player, target, previous, next) {
+    if (!plainWalk(target) || !plainWalk(previous) || !plainWalk(next) ||
+        previous.y !== target.y || target.y !== next.y || Math.abs(player.pos.y - target.y) > .15) return false;
+    const dx = target.x - previous.x, dz = target.z - previous.z;
+    const squared = dx * dx + dz * dz;
+    if (!squared) return false;
+    const px = player.pos.x - previous.x - .5, pz = player.pos.z - previous.z - .5;
+    const along = (px * dx + pz * dz) / squared;
+    const lateral = Math.abs(px * dz - pz * dx) / Math.sqrt(squared);
+    return along >= 1 && lateral <= .35 && safeWalkLine(player.pos, next);
+  }
+  function recoverFooting(time) {
+    const player = state.player, source = cell(player.pos), destination = center(source);
+    if (player.onGround === false || Math.abs(player.pos.y - source.y) > .15 ||
+        !planner.canStand(source.x, source.y, source.z)) return false;
+    const fullSupport = info => info?.known && info.solid && !info.hazard && !info.liquid &&
+      (info.height == null && info.supportHeight == null || Math.abs((info.height ?? info.supportHeight) - 1) <= .01) &&
+      (!Array.isArray(info.collision) || info.collision.some(box => box?.min && box?.max &&
+        box.min.x <= 1e-7 && box.max.x >= 1 - 1e-7 && box.min.z <= 1e-7 && box.max.z >= 1 - 1e-7 &&
+        box.max.y >= .99 && box.max.y <= 1.01));
+    if (!fullSupport(adapter.readCell(source.x, source.y - 1, source.z))) return false;
+    const minX = Math.floor(Math.min(player.pos.x, destination.x) - .3 + 1e-7);
+    const maxX = Math.floor(Math.max(player.pos.x, destination.x) + .3 - 1e-7);
+    const minZ = Math.floor(Math.min(player.pos.z, destination.z) - .3 + 1e-7);
+    const maxZ = Math.floor(Math.max(player.pos.z, destination.z) + .3 - 1e-7);
+    let overhang = false;
+    for (let x = minX; x <= maxX; x++) for (let z = minZ; z <= maxZ; z++) {
+      for (const y of [source.y, source.y + 1]) {
+        const body = adapter.readCell(x, y, z);
+        if (!body?.known || body.solid || body.hazard || body.liquid || body.water) return false;
+      }
+      const floor = adapter.readCell(x, source.y - 1, z);
+      if (!floor?.known || floor.hazard || floor.liquid || floor.water) return false;
+      if (!fullSupport(floor)) overhang = true;
+    }
+    if (!overhang) return false;
+    const id = `${source.x},${source.y},${source.z}`;
+    if (state.footingTask?.id !== id) state.footingTask = { id, started: time };
+    if (time - state.footingTask.started > 2500) {
+      stop('failed', 'Unable to regain safe footing at this edge'); return true;
+    }
+    // Recover only inward on the same full support tile. Native sneak protects
+    // its edge; this never authorizes a shortcut across unsupported terrain.
+    const correction = relativeWalking(destination);
+    if (!adapter.setControls({ forward: correction.forward, strafe: correction.strafe, pulseStrafe: true,
+      jump: false, sneak: true, sprint: false })) {
+      stop('failed', adapter.diagnostics()?.error || 'Native input hooks unavailable'); return true;
+    }
+    state.progressAt = time; state.progressPos = { ...player.pos };
+    setStatus('moving', 'Regaining safe footing'); return true;
+  }
   function executePath(time) {
     const player = state.player;
     const remaining = state.goal ? distance(player.pos, center(state.goal)) : Infinity;
@@ -52361,20 +52811,64 @@ requestAnimationFrame(loop);
       // New safe progress is not a failed retry, even across many chunk frontiers.
       state.bestGoalDistance = remaining;
       state.retries = 0;
-      state.lookahead = 32;
     }
     if (!state.path.length || state.pathIndex >= state.path.length) return routeComplete();
     let target = state.path[state.pathIndex];
     const playerCell = cell(player.pos);
     const wet = adapter.swimmingState?.()?.inWater === true ||
       planner.canSwim?.(playerCell.x, playerCell.y, playerCell.z) === true;
-    while (target && distance(player.pos, center(target)) < (target.action === 'swim' ? 0.48 : 0.30) &&
-        (player.onGround !== false || wet || target.action === 'swim')) {
+    if (naturalArrival(wet)) return stop('idle', state.searchResult.adjustedGoal ? 'Reached a safe position near the goal' : 'Destination reached');
+    const endpoint = state.path[state.path.length - 1], prepared = state.prefetch?.job.result?.path;
+    if (!wet && state.segmented && state.prefetch?.job.done && prepared?.length > 1 &&
+        distance(player.pos, center(endpoint)) < .6 && state.path.slice(state.pathIndex).every(plainWalk) &&
+        plainWalk(prepared[1]) && safeWalkLine(player.pos, prepared[1]) && takePrefetch()) return executePath(time);
+    while (target && (player.onGround !== false || wet || target.action === 'swim')) {
+      const previous = state.path[state.pathIndex - 1], next = state.path[state.pathIndex + 1];
+      const finalWalk = !wet && state.pathIndex === state.path.length - 1 && plainWalk(target) &&
+        state.searchResult?.globalComplete && !state.action && !state.following && !state.breathingGoal &&
+        Number.isFinite(player.motion?.x) && Number.isFinite(player.motion?.z) && typeof adapter.groundSlipperiness === 'function';
+      // Do not release at a dangerous high-speed crossing merely because it
+      // briefly passed the center. The final dry goto uses the coast-safe rule.
+      const reached = !finalWalk && distance(player.pos, center(target)) < (target.action === 'swim' ? .48 : .30);
+      // A starting cell is an anchor, not an instruction to turn back to its
+      // exact center. Only a verified dry walking corridor may bypass it.
+      const bypassStart = !wet && state.pathIndex === 0 && plainWalk(target) && plainWalk(next) &&
+        playerCell.x === target.x && playerCell.y === target.y && playerCell.z === target.z && safeWalkLine(player.pos, next);
+      const nearWalkingTurn = !wet && plainWalk(target) && plainWalk(next) && target.y === next.y &&
+        distance(player.pos, center(target)) < .45 && safeWalkLine(player.pos, next);
+      if (!reached && !bypassStart && !nearWalkingTurn && !passedWaypoint(player, target, previous, next)) break;
       releaseTerrain();
       state.pathIndex++; state.jumpedIndex = -1; state.progressAt = time;
       state.progressPos = { ...player.pos }; target = state.path[state.pathIndex];
     }
     if (!target) return routeComplete();
+    let walkingLine = false;
+    if (!wet && player.onGround !== false && plainWalk(target) && typeof planner.canWalkSegment === 'function') {
+      // Pursue a few blocks ahead instead of alternating diagonal/cardinal
+      // headings at every tile. Never skip an action or cut an unsafe corner.
+      const limit = Math.min(state.path.length - 1, state.pathIndex + 6);
+      let steeringIndex = state.pathIndex;
+      for (let index = state.pathIndex; index <= limit; index++) {
+        const candidate = state.path[index];
+        if (!plainWalk(candidate) || candidate.y !== target.y ||
+            Math.hypot(candidate.x + .5 - player.pos.x, candidate.z + .5 - player.pos.z) > 3.2 ||
+            !safeWalkLine(player.pos, candidate)) break;
+        steeringIndex = index; walkingLine = true;
+      }
+      if (!walkingLine) {
+        if (recoverFooting(time)) return;
+        if (++state.walkFailures >= 3) {
+          state.walkFailures = 0;
+          return waitOrFail('Waiting for a safe walking corridor');
+        }
+        return beginSearch();
+      }
+      state.footingTask = null; state.walkFailures = 0;
+      if (steeringIndex !== state.pathIndex) {
+        state.pathIndex = steeringIndex; state.jumpedIndex = -1;
+        target = state.path[steeringIndex];
+      }
+    }
     const from = state.pathIndex ? state.path[state.pathIndex - 1] : cell(player.pos);
     if (target.breakBlocks?.length) {
       // Clear headroom first: the upper block can occlude the ray to the feet.
@@ -52403,7 +52897,7 @@ requestAnimationFrame(loop);
     if (state.status !== 'moving') setStatus('moving');
     const canNavigate = p => planner.canNavigate?.(p.x, p.y, p.z) ?? planner.canStand(p.x, p.y, p.z);
     if (!canNavigate(target)) return beginSearch();
-    if ((player.onGround !== false || wet) &&
+    if (!walkingLine && (player.onGround !== false || wet) &&
         (from.x !== target.x || from.y !== target.y || from.z !== target.z) &&
         !planner.validateTransition(from, target)) {
       return beginSearch();
@@ -52412,8 +52906,13 @@ requestAnimationFrame(loop);
     const swimming = wet || target.action === 'swim';
     const needsJump = ['jump', 'gap', 'mineJump'].includes(target.action) || target.y > player.pos.y + 0.5;
     const eye = adapter.eye();
+    const routeYaw = walkingLine && !needsJump ? walkingYaw(state.pathIndex) : null;
+    if (!walkingLine) { state.walkYaw = null; state.walkFast = false; }
+    const aimTarget = routeYaw == null ? center(target) :
+      { x: player.pos.x - Math.sin(routeYaw) * 32, z: player.pos.z - Math.cos(routeYaw) * 32 };
     const aim = swimming && horizontal <= .22 ? { aligned: true, yaw: player.yaw, pitch: player.pitch } :
-      adapter.aimAt(target.x + 0.5, eye.y, target.z + 0.5, 0.05);
+      adapter.aimAt(aimTarget.x, eye.y, aimTarget.z, 0.05,
+        { mode: 'navigation', tolerance: .18, preservePitch: true });
     if (['native-camera-unresponsive', 'native-camera-not-responding'].includes(aim?.reason)) return stop('failed', aim.reason);
     const aligned = aim === true || aim?.aligned;
     if (aligned && needsJump && state.jumpedIndex !== state.pathIndex && player.onGround !== false &&
@@ -52423,9 +52922,12 @@ requestAnimationFrame(loop);
     const swimUp = swimming && (target.y > player.pos.y + .08 ||
       (target.action !== 'swim' && horizontal < 1.65 && target.y >= player.pos.y - .15));
     // Native water ascent uses jump; releasing it lets gravity sink the player.
-    const applied = adapter.setControls({ forward: aligned && (!swimming || horizontal > .22) ? 1 : 0,
-      strafe: 0, jump: aligned && (swimming ? swimUp : time < state.jumpUntil),
-      sprint: !swimming && aligned && (target.action === 'gap' || (target.action === 'walk' && horizontal > 0.8)),
+    const correction = walkingLine && !needsJump && aligned ? relativeWalking(center(target)) : null;
+    const applied = adapter.setControls({ forward: correction ? correction.forward : aligned && (!swimming || horizontal > .22) ? 1 : 0,
+      strafe: correction?.strafe || 0, pulseStrafe: !!correction, canStep: correction ? safeWalkingInput : null,
+      jump: aligned && (swimming ? swimUp : time < state.jumpUntil),
+      sprint: !swimming && aligned && (target.action === 'gap' || (target.action === 'walk' && horizontal > .8 &&
+        (!correction || correction.forward > 0 && Math.abs(correction.strafe) < .6))),
       sneak: false, yaw: aim?.yaw, pitch: aim?.pitch });
     if (!applied) return stop('failed', adapter.diagnostics()?.error || 'Native input hooks unavailable');
     if (!state.progressPos || distance(player.pos, state.progressPos) > 0.18) {
@@ -52667,6 +53169,15 @@ requestAnimationFrame(loop);
             return;
           }
           if (state.status === 'waiting' && time >= state.resumeAt) {
+            const watch = state.frontierWatch;
+            if (watch && distance(state.player.pos, watch.position) < .75 &&
+                !watch.cells.some(point => adapter.readCell(point.x, point.y, point.z)?.known)) {
+              state.resumeAt = time + 1000;
+              if (++state.retries > 6) stop('failed', 'Nearby chunks did not load; no safe continuation');
+              else neutral();
+              updateVisual(time); state.timer = setTimeout(tick, state.status === 'failed' ? 250 : 50); return;
+            }
+            state.frontierWatch = null;
             if (state.action && state.action.type !== 'attack') {
               state.action.candidates = actionCandidates(state.action);
               if (!nextActionApproach()) {
@@ -52747,6 +53258,8 @@ requestAnimationFrame(loop);
         action: state.action ? { ...state.action, candidates: undefined } : null,
         actionPhase: state.actionPhase, autoMine: state.autoMine, autoPlace: state.autoPlace, showPath: state.showPath,
         lookahead: state.lookahead, precalculating: !!state.prefetch && !state.prefetch.job.done,
+        waitingForChunks: !!state.frontierWatch,
+        recoveringFooting: !!state.footingTask,
         terrain: state.terrainTask ? { type: state.terrainTask.type, target: state.terrainTask.target,
           tool: state.terrainTask.tool ? { slot: state.terrainTask.tool.slot, name: state.terrainTask.tool.name,
             ticks: state.terrainTask.tool.ticks } : null, elapsed: now() - state.terrainTask.started } : null,
