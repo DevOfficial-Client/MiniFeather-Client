@@ -1,0 +1,244 @@
+# End User License Agreement (EULA) — MiniFeather Client
+
+**Agreement version:** 1.4
+**Effective date:** October 4, 2026
+**Product:** MiniFeather Client — MV3 browser extension (Chrome/Chromium), userscript (Safari/iOS via Userscripts, Firefox Android, desktop), Android app (APK) and desktop apps (Windows/Tauri, Linux/Electron)
+**Developers:** botless, AngryWolfX, ShusukeGxE_, Not_Senpai, ItzNightrise ("the Development Team", "we")
+
+This End User License Agreement ("Agreement") is a binding contract between you ("User", "you") and the MiniFeather Development Team. By installing, copying or using MiniFeather Client ("the Client", "the Software"), you agree to be bound by the terms of this Agreement. If you do not agree to any of the terms, do not install or use the Software and delete it from your system.
+
+> [!NOTE]
+> Este documento también está disponible en español: [EULA.es.md](EULA.es.md)
+> A friendly, human-readable TL;DR is also available: [EULA-TLDR.en.md](EULA-TLDR.en.md) (English) · [EULA-TLDR.md](EULA-TLDR.md) (español)
+
+---
+
+## 1. Nature of the product and third-party acknowledgment
+
+1.1. MiniFeather Client is a browser extension developed by community members, **with no affiliation, endorsement or sponsorship from Miniblox, its development team or any third party**. "Miniblox" and its assets are the property of their respective owners.
+
+1.1.1. **Distributions.** The Client ships in several formats built from the same public repository (MV3 extension, userscript, Android APK and desktop apps), all generated from the same source code and subject to the same terms. The desktop apps present this Agreement in a first-boot acceptance dialog and remember the acceptance locally; a new Agreement version asks for it again.
+
+1.2. **Product status: W.I.P. (Work In Progress).** The Client is under active, ongoing development. Features may be unstable, incomplete, change without notice, break after Miniblox or browser updates, or be removed temporarily or permanently. Features labeled "experimental" and those marked as not suitable for regular play may contain bugs and behave unpredictably. The User agrees to use the Software with full knowledge of its development status and **must not rely on it for any critical use**.
+
+1.3. The Client runs on top of the game Miniblox (`miniblox.io`, `miniblox.online`) and **modifies its behavior inside the User's browser** (rendering, interface, control input and game network communications). The User acknowledges that the use of third-party software may violate Miniblox's Terms of Service and that **the User is solely responsible for any consequences (including suspension or banning of their account)**.
+
+1.4. The Software is provided "AS IS" and "AS AVAILABLE", without warranties of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose and non-infringement. Use of the Software is **at the User's own risk**.
+
+1.5. **Third-party art and resources.** The Client bundles art, models, fonts, sounds and other resources created by third parties. Every bundled third-party work is credited, with its author, source and license, in the project's [CREDITS.md](CREDITS.md) file. Such resources remain the property of their respective authors; the Development Team claims no ownership over them and credits them as a good-faith acknowledgment. Rights holders may request a credit correction or the removal of their work through the channel in section 14.2.
+
+---
+
+## 2. License granted
+
+2.1. The User is granted a **limited, revocable, non-exclusive, free and non-transferable** license to install and use the Software for personal, non-commercial purposes.
+
+2.2. Intellectual ownership of the Software belongs to the Development Team. This license does not constitute a sale.
+
+2.3. **Source code license.** Independently of the above, the Development Team's own source code (the contents of `src/`, `tools/` and `tests/` in the project repository) is published under the **GNU General Public License v3.0** (see the [LICENSE](LICENSE) file), with the scope and exclusions documented in [LICENSING.md](LICENSING.md). That license governs what any person may do with the source code itself; bundled assets are not covered by it and keep their own licenses (see [CREDITS.md](CREDITS.md)). This Agreement continues to govern the use of the official distribution of the Client and the project's community services.
+
+---
+
+## 3. Restrictions of use
+
+The User agrees **NOT** to:
+
+3.1. Use the Software to gain an **unfair advantage on competitive servers**, including without limitation: the Baritone module (automated movement, combat and mining), the IdlePlayerBot module (simulated bots), Anti-AFK, or any form of automation not authorized by the rules of the server they are playing on.
+
+3.2. Reverse engineer the Miniblox network protocol for exploitation purposes, overload servers or falsify the number of connected players.
+
+3.3. Sell, rent, sublicense or commercially exploit the Software or any derivative.
+
+3.4. Circumvent anticheat systems, payment systems or access controls of Miniblox or third parties.
+
+3.5. Use the Software to harass, stalk, dox or harm other players.
+
+3.6. Redistribute modified copies of the Software while passing the result off as an official product of the Development Team.
+
+---
+
+## 4. Automation and competitive advantage modules — specific notice
+
+The Client includes features that automate game actions or alter the information perceived by the User. They are listed with an indicative risk level regarding anticheat measures and server rules:
+
+| Risk level | Modules |
+|---|---|
+| Extreme | IdlePlayerBot (including a multibot mode of up to 16 simultaneous simulated bots), Baritone |
+| High | Anti-AFK |
+| Moderate | Auto Sprint, Safe Sneak, FullBright, Zoom, Health NameTags, Freelook, Elytra Flight (controls) |
+| Low | Dynamic Crosshair, Distance NameTags, Auto Respawn |
+| Restricted by design | FreeCam (reserved for server administrators or whitelist) |
+| No gameplay risk (cosmetic/QoL) | Custom skins and models, emotes, shaders, LeafWind, AllayPets, SpiderSim/SpiderBot, DuckMobs, CrittersMobs, MobRagdolls, TaczGuns (weapon models, visual only), animations, GUIPatch, waypoints, map, client chat, and other visual modules |
+
+4.1. The User is solely responsible for verifying which modules are allowed on each server and for disabling those that are not.
+
+4.2. The Development Team **gives no warranty that the use of the Software will not result in the suspension, restriction or deletion of the User's account on Miniblox or any third-party service**.
+
+4.3. Before enabling certain high-risk modules, the Client may display an additional warning and require the User to accept the stated risks. Closing or rejecting that warning prevents activation. Choosing “accept and do not show again” stores that choice locally. Acceptance does not mean that a server permits the module, does not guarantee protection from sanctions, and does not transfer responsibility away from the User.
+
+---
+
+## 5. Privacy and data handling
+
+The Software operates **without its own accounts or its own servers**. However, to deliver its features it processes and transmits the data described below. When the User provides custom URLs (skins, capes, worlds, texture packs or third-party resources), the Client downloads content directly from those URLs and that traffic is subject to the corresponding services. The User accepts the handling described here by using the corresponding features.
+
+### 5.1. Data stored locally (does not leave the device unless stated otherwise)
+
+Stored in the browser's local storage (`localStorage`, `IndexedDB`, `chrome.storage.local`), **unencrypted**:
+
+- Client preferences and configuration (equivalent to `defaults.json`), language, colors, keybinds, and locally accepted module-risk warnings.
+- Waypoints (server/world names, coordinates, colors).
+- Nicknames assigned to friends (Miniblox UUID and username).
+- Imported skins and face packs (base64 PNG images), texture packs and models.
+- Saved local servers (LocalGames).
+- Cached moderation state (last known config and local verdicts; see section 8.5).
+- Linked MiniFeather account data, if any (account identifier and cosmetic preferences; see section 5.3.3).
+- VerityAI conversation history and, if configured by the User, their **AI API key in plain text** (spending-capped keys are recommended).
+
+### 5.2. Data that leaves the device
+
+| Service | Function | Transmitted data |
+|---|---|---|
+| GitHub (`api.github.com`, `raw.githubusercontent.com`, `github.com`) | Auto-update, module hotload, community skin/rank database, resourcepack downloads, moderation config (8.5) and content-filter blocklist (8.4) | No personal User data; anonymous download requests only |
+| ntfy.sh (public message bus) | ClientChat (chat between Client users), voice call signaling, local world announcements, community skin/account database change notifications | Miniblox username and UUID (in ClientChat), SHA-256 hash of the UUID (voice), content of the messages the User writes, world name and player count |
+| Catbox (`catbox.moe`, `files.catbox.moe`) | Hosting of images sent through the chat (attach button, paste or drag) | The submitted image, hosted **without an account, permanently and publicly**: anyone holding the URL can access the file |
+| PeerJS / WebRTC (P2P) | Voice, skin/face sharing between friends, LocalGames | Direct peer-to-peer audio (voice), shared skin/face image, IP address potentially visible to connected peers (inherent to WebRTC) |
+| Klipy (`api.klipy.com`) | GIF search for chat | The User's search query; requests are made with an API key bundled in the Client (the User can configure their own) |
+| Modrinth (`modrinth.com`, `cdn.modrinth.com`) | Downloads of PBR packs from the presets list | No personal User data; anonymous download requests only |
+| OpenRouter / Zhipu / Puter (VerityAI) | Optional AI assistant | Conversation history and game chat messages if auto-reply is active |
+| qu.ax / YouTube | Chat clip playback and music integration | No personal data from the Client; the YouTube embed is subject to Google's policy |
+| Miniblox (`miniblox.io`) | Normal game operation | User session managed by the game itself |
+
+5.2.1. **Important notice about ntfy.sh:** the ClientChat and voice signaling channels are public by design. Anyone who knows the channel name can read the transmitted content. **Do not send personal information, passwords or sensitive data over ClientChat or voice.**
+
+5.2.2. **Microphone:** audio capture is only requested when the User accepts or starts a voice call (opt-in via `/call on`), can be muted at any time and fully disabled with `/call off`.
+
+5.2.3. **Notice about public uploads:** images the User sends through the chat are hosted on Catbox as **public and permanent** files, with no account and no deletion mechanism offered by the Client. The Development Team does not review those images before publication and cannot remove them from the third-party service; the User is solely responsible for what they upload.
+
+### 5.3. Accounts and credentials
+
+5.3.1. The Client **does not request, store or manage Miniblox passwords**. The active game session is created and managed exclusively by Miniblox; the Client only detects it to identify the User within its social features.
+
+5.3.2. The voice identification feature publishes a SHA-256 hash of the account UUID, which does not cryptographically verify account ownership. **Confirm the other party's identity through other means before disclosing sensitive information.**
+
+5.3.3. **MiniFeather accounts (optional).** The community ecosystem (shared skins, capes, ranks and pets) can be managed through a MiniFeather account, created and administered by the Development Team through an official Discord bot. These accounts are independent from the Miniblox account: the password is stored solely as a **PBKDF2-SHA256 hash (200,000 iterations)** on the team's private infrastructure, never in plain text; linking records the Discord identifier; and the public profile (account name, rank and URLs of published cosmetics) is hosted on the project's public community repository. **The creation request sends the username and password unencrypted, in plain text, through a public ntfy.sh channel**: anyone listening to that channel could read them in transit. Therefore **the User must use a unique, non-reused password**, different from their email, Discord or Miniblox passwords. The accounts are dispensable: every Client feature works without one. The User may request account closure or deletion through the channel in section 14.2.
+
+### 5.4. Minors
+
+The Software is not directed at children under 13. If the User is a minor, they must use the Software with the knowledge and supervision of a parent or legal guardian, who accepts this Agreement on their behalf.
+
+---
+
+## 6. Updates and code execution
+
+6.1. The Client includes an **auto-updater** that downloads components from the project's public GitHub repository (`DevOfficial-Client/MiniFeather-Client`) and applies them through a "hotload" system without going through Chrome Web Store review. This includes automatic per-module reloads from the repository (with a bundled local fallback), userscript self-update through the User's script manager, and rolling builds of the APK and desktop distributions. This behavior can be disabled or limited in the settings (depending on the platform).
+
+6.2. The Client loads third-party libraries from public CDNs (PeerJS from `unpkg.com`, Puter from `js.puter.com`).
+
+6.3. The User acknowledges and accepts these mechanisms as part of how the Software works, along with the inherent risks of relying on third-party repositories and CDNs (unavailability, unwanted changes, supply chain compromise).
+
+6.4. Given the W.I.P. status of the project, updates may be applied more frequently than in stable software and may introduce behavior changes, regressions or temporary incompatibilities. The User may disable the auto-updater at their own responsibility, assuming that older versions may become incompatible with the game or with social features (ClientChat, voice, LocalGames).
+
+---
+
+## 7. Network traffic modification
+
+7.1. The Client uses the `declarativeNetRequest` permission to **redirect texture and graphic asset requests** from Miniblox to customized versions chosen by the User (skins, capes, texture packs). These redirects only affect the User's own browser.
+
+7.2. The "ads" feature is an **inverse opt-in**: ads are hidden by default (visually) and can be voluntarily re-enabled with the "Support Ads" toggle to support the game.
+
+7.3. **Browser permissions.** The extension requests the permissions it needs to work: `storage` and `unlimitedStorage` (preferences, skins, caches and the other local data from section 5.1), `alarms` (periodic checks: updates, moderation config, content-filter blocklist), `downloads` (saving to disk the files the User exports — skins, GIFs, Studio recordings, packs — and update components), `activeTab` and `declarativeNetRequest` (section 7.1). The desktop and mobile distributions use their platform's equivalents (system storage, microphone for voice only).
+
+---
+
+## 8. User-generated content and community
+
+8.1. The User is solely responsible for any content they publish through ClientChat, advertised local worlds, voice calls or any other social feature of the Client.
+
+8.2. Publishing illegal content, hate speech, spam, malware, malicious links or sexual content involving minors (including fiction) is prohibited. The Development Team may, at its discretion, remove content from community databases and block access to social features. Images sent through the chat are hosted on public third-party services (see 5.2.3) without prior review by the Team, and the User answers for them.
+
+8.3. Skins, packs and community contributions published in the project repositories may be used, distributed and modified by the Development Team within the MiniFeather ecosystem. By uploading content, the User warrants they hold the necessary rights to it.
+
+8.4. **Custom skins, capes and faces are user-generated content.** The Client applies an automated content filter to skins and capes at local import, peer-to-peer reception and remote download, combining a nudity heuristic (pixel-region analysis of the skin layout) with a team-maintained hash blocklist. The filter is a best-effort measure: it can miss inappropriate content and it can wrongly flag harmless skins. Locally stored content is not human-reviewed and remains in the User's browser; the community skin database is additionally reviewed before publication. Content that evades the filter can be reported through the channel in section 14.2; verified reports feed the shared blocklist. Deliberately circumventing the filter to distribute prohibited content or to harass other players is a violation of sections 3.5 and 8.2.
+
+8.5. **Remote moderation of the Client.** The Development Team maintains a remote moderation configuration that the Client checks at startup and periodically. Through it, the Team may: (a) disable the Client totally or partially (kill switch, including disabling individual modules) for maintenance, security or enforcement of this Agreement; and (b) prevent specific accounts from using the Client, identified by their Miniblox UUID or username, when their conduct violates sections 3 or 8. These measures take effect immediately and require no Software update; the User will see the reason on screen where applicable, and severe measures may be presented through a "blue screen"-style blocking screen. Where expressly indicated in the measure's configuration, it may additionally include resetting the local data stored by the Client itself (settings, caches and preferences); the User's files and base game data are never touched. These measures affect the Client only (the base Miniblox game is untouched) and can be appealed through the contact channel in section 14.2.
+
+---
+
+## 9. Disclaimer of warranties
+
+9.1. The Software is provided without any warranty, in its current development state (W.I.P.). There is no guarantee that it will be uninterrupted, secure, free of errors, that its features are complete, or that it will work with future versions of Miniblox, browsers or third-party dependencies. Bug reports and their fixes are not guaranteed and are not subject to deadlines.
+
+9.2. The Development Team may modify, suspend or discontinue any feature (including ClientChat, voice, LocalGames or VerityAI) at any time and without prior notice, as part of the project's iterative development.
+
+---
+
+## 10. Limitation of liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE DEVELOPMENT TEAM SHALL NOT BE LIABLE FOR:
+
+10.1. Direct, indirect, incidental, special, consequential or punitive damages, data loss, loss of profits or loss of game accounts arising from the use or inability to use the Software.
+
+10.2. Bans, suspensions, restrictions or loss of items, progress or cosmetics on Miniblox or any third-party service.
+
+10.3. Third-party acts: interception of messages on public channels, compromise of repositories or CDNs, abuse of API keys configured by the User, or behavior of other peers in WebRTC connections.
+
+10.4. Loss of locally stored data (browser storage may be cleared by the browser itself, by updates or by other extensions).
+
+---
+
+## 11. Termination
+
+11.1. This license is effective until terminated. The User may terminate it at any time by uninstalling the Software.
+
+11.2. The license terminates automatically if the User breaches any of the terms of this Agreement. In that case, the User must uninstall and destroy all copies of the Software.
+
+---
+
+## 12. Changes to the Agreement
+
+12.1. The Development Team may modify this Agreement at any time. The current version will be published in the project's official repository. Continued use of the Software after changes are published constitutes acceptance of them.
+
+---
+
+## 13. Governing law
+
+13.1. This Agreement is governed by the laws applicable in the jurisdiction of the Development Team, without prejudice to the User's mandatory consumer rights in their place of residence.
+
+13.2. Any dispute will first be attempted to be resolved amicably through the project's official Discord before going to court.
+
+---
+
+## 14. Legal notice and contact
+
+14.1. MiniFeather Client is a community-driven, non-commercial, non-profit project. Its own source code is free software under the GNU GPL-3.0 ([LICENSE](LICENSE), [LICENSING.md](LICENSING.md)); the bundled assets keep their own licenses.
+
+14.2. If you are the rights holder of Miniblox or any third-party asset used (including any work credited in the project's [CREDITS.md](CREDITS.md)) and wish to request a credit change or removal, or if you have questions about this Agreement or data handling, contact us through the project's official Discord: `https://discord.gg/k4Ku9DTQDQ`.
+
+---
+
+## 15. Artificial Intelligence
+
+### 15.1. AI as a development tool
+
+15.1.1. The Client was developed **with the significant assistance of artificial intelligence tools** (code generation, refactoring, translation and documentation). AI-generated contributions were reviewed and adopted by the Development Team, which remains responsible for the published code. Nevertheless, given the nature of these tools, the Software may contain errors, inconsistencies or unintended behaviors that automated review did not detect.
+
+15.1.2. The User acknowledges that the combination of AI-assisted development and the W.I.P. status of the project (section 1.2) increases the likelihood of bugs, and that the Software must not be treated as fully audited code.
+
+### 15.2. VerityAI (AI features included in the Client)
+
+The Client integrates an optional AI assistant ("VerityAI", enabled by default with the free Puter provider, configurable via the `/verity` command).
+
+15.2.1. **Providers and keys.** VerityAI supports Puter (no key required), OpenRouter and Zhipu/GLM (both requiring a User-provided API key). If configured, the API key is stored **unencrypted** in the browser's local storage and sent to the corresponding provider with each request. The User is responsible for the safekeeping, spending limits and revocation of their keys.
+
+15.2.2. **Data transmitted.** When the assistant is used, the conversation history (up to the last 20 messages), the configured persona and the message text are sent to the selected provider's servers. If the `autoReply` mode is enabled, **game chat messages may be processed and answered automatically**, which means game chat content is sent to the AI provider.
+
+15.2.3. **No guarantees of accuracy.** AI responses may be inaccurate, outdated, nonsensical or misleading. The User must not rely on them as factual, technical or legal advice. The Development Team is not responsible for the content of AI responses or for actions taken based on them.
+
+15.2.4. **Compliance with provider terms.** Use of Puter, OpenRouter, Zhipu or any other provider is additionally governed by each provider's own terms of service and policies. The User must ensure their use complies with those terms.
+
+15.2.5. **Prohibited uses.** The User must not use VerityAI to generate or spread content prohibited in section 8, to automate harassment of other players, or to violate the rules of any server or third-party service.
+
+---
+
+**By installing or using MiniFeather Client, you declare that you have read, understood and accepted all the terms of this Agreement.**

@@ -1,0 +1,214 @@
+{
+  "manifest_version": 3,
+  "name": "MiniFeatherClient",
+  "version": "4.19.0",
+  "description": "MiniFeather Client for MiniBlox — movement API resolver for resilient Auto Sprint, Safe Sneak and Anti-AFK, plus Titan & Tiny camera/nametag fixes, FullBright and Realistic V4 Custom.",
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "declarativeNetRequest",
+    "activeTab",
+    "alarms",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://miniblox.io/*",
+    "https://miniblox.online/*",
+    "https://api.github.com/*",
+    "https://raw.githubusercontent.com/*",
+    "https://github.com/*",
+    "https://objects.githubusercontent.com/*",
+    "https://cdn.modrinth.com/*",
+    "https://api.klipy.com/*",
+    "https://catbox.moe/*",
+    "https://ntfy.sh/*",
+    "https://google.com/*"
+  ],
+  "background": {
+    "service_worker": "src/Core/background.js"
+  },
+  "sandbox": {
+    "pages": [
+      "classic/index.html"
+    ]
+  },
+  "content_security_policy": {
+    "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; child-src 'self'; worker-src 'self' blob:"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
+      ],
+      "js": [
+        "src/Core/SplashScreen.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
+      ],
+      "js": [
+        "src/Core/HotLoader.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
+      ],
+      "js": [
+        "src/Core/HotLoader.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
+      ],
+      "js": [
+        "src/Core/mirror.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
+      ],
+      "js": [
+        "src/Core/MirrorRunner.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
+      ],
+      "js": [
+        "src/P2P/MF_VoiceSignalBridge.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
+      ],
+      "js": [
+        "src/World/LocalGamesNetworkBridge.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
+      ],
+      "js": [
+        "src/Chat/ClientChat.js",
+        "src/I18n/Translations.js",
+        "src/Libraries/jszip.min.js",
+        "src/World/MF_WorldImport.js",
+        "src/Render/TexturePackManager.js",
+        "src/Core/AutoUpdater.js",
+        "src/Experimental/ExperimentalRegistry.js",
+        "src/UI/TitleScreen.js",
+        "src/UI/ClientPanel.js",
+        "src/UI/PanelPolish.js",
+        "src/UI/InteractionSounds.js"
+      ],
+      "run_at": "document_end",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_icon": "assets/icon.png"
+  },
+  "icons": {
+    "128": "assets/icon.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "defaults.json",
+        "assets/accounts.json",
+        "assets/icon.png",
+        "assets/background.png",
+        "assets/Faithful.ttf",
+        "assets/memes/gif/*",
+        "assets/patpat.png",
+        "assets/particles/water_splash/*",
+        "assets/particles/water_splash/*/*",
+        "assets/particles/particular/*",
+        "assets/particles/shine/*",
+        "assets/particles/shine/*/*",
+        "assets/particles/shine/*/*/*",
+        "assets/tiny/*",
+        "assets/tiny/*/*",
+        "models/*",
+        "models/*/*",
+        "models/*/*/*",
+        "models/*/*/*/*",
+        "models/tacz/*",
+        "models/tacz/*/*",
+        "assets/pat.ogg",
+        "assets/pat1.ogg",
+        "assets/pat2.ogg",
+        "assets/intro.ogg",
+        "assets/crosshair/*",
+        "assets/armor-hud-editor.png",
+        "assets/spritesheets generator",
+        "assets/frames.json",
+        "assets/pbr/*",
+        "assets/gui/*",
+        "assets/mfpack/*",
+        "assets/pvtexpack.png",
+        "assets/shadertextures/*",
+        "assets/menu/*",
+        "assets/classic/*",
+        "assets/garden/*",
+        "assets/ui/*",
+        "assets/ui/*/*",
+        "assets/voice/*",
+        "classic/*",
+        "classic/*/*",
+        "classic/*/*/*",
+        "classic/*/*/*/*",
+        "classic/*/*/*/*/*",
+        "textures/*",
+        "textures/*/*",
+        "textures/*/*/*",
+        "textures/*/*/*/*",
+        "assets/content/minifeather-pack/entity/*",
+        "models/*",
+        "models/*/*",
+        "models/*/*/*",
+        "emotes/*",
+        "skins/*",
+        "skins/*/*",
+        "skins/*/*/*",
+        "src/Libraries/jszip.min.js"
+      ],
+      "matches": [
+        "https://miniblox.io/*",
+        "https://miniblox.online/*"
+      ]
+    }
+  ]
+}
