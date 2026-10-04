@@ -1,0 +1,79 @@
+name: publish-minified
+
+# distribution repo sync: every push to main regenerates the minified repo.
+# transparency by construction — the source stays public and readable at
+# DevOfficial-Client/MiniFeather-Client, the workflow + minifier are public,
+# and anyone can verify the minified blob matches the source. nothing hidden,
+# just chewed. :v
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tools/**'
+      - 'mirror.json'
+      - 'hotload.json'
+      - 'manifest.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '*.md'
+      - 'LICENSE'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-minified
+  cancel-in-progress: false
+
+jobs:
+  minified:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: instalar terser
+        run: npm ci --no-fund --no-audit || npm install --no-fund --no-audit
+
+      - name: clonar y sincronizar el repo minificado
+        env:
+          TOKEN: ${{ secrets.MF_PUBLISH_TOKEN }}
+        run: |
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/shusukegxe/MiniFeather-Client-minified.git" minified
+          cd minified
+          git rm -rq --ignore-unmatch .
+          # code + tooling + docs; NO assets (hotload solo baja src/ + las
+          # listas json, y el repo minificado no necesita 40mb de texturas)
+          cp -r ../src ../tools ../tests .
+          cp ../mirror.json ../hotload.json ../manifest.json ../defaults.json ../build.json .
+          cp ../package.json ../package-lock.json ./
+          cp ../LICENSE ../LICENSING.md ../CREDITS.md ./
+          cp ../EULA.md ../EULA.es.md ../EULA-TLDR.md ../EULA-TLDR.en.md ./
+          # el README de este repo es suyo (explica qué es); el sync no lo pisa
+          git checkout HEAD -- README.md 2>/dev/null || true
+
+      - name: minificar y regenerar bundles
+        run: |
+          export MF_BUILD_COMMIT="${GITHUB_SHA}"
+          node tools/minify-repo.js "$(pwd)/minified"
+
+      - name: pushear (o callar si no cambió nada)
+        env:
+          TOKEN: ${{ secrets.MF_PUBLISH_TOKEN }}
+        run: |
+          cd minified
+          git config user.name "minifeather-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "sin cambios respecto al minificado actual — nada que pushear"
+            exit 0
+          fi
+          git commit -m "minified build of DevOfficial-Client/MiniFeather-Client@${GITHUB_SHA}"
+          git push
