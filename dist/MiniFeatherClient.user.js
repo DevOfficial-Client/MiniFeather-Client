@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261004173057
+// @version      4.19.0.20261004180444
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : def79c7d8f203dfa89d375050e1f21048e97fbdd
- * builtAt : 2026-10-04T17:31:16.998Z
+ * commit  : 1a7984a2de2f4deddd888b058b1f3d933914d8c4
+ * builtAt : 2026-10-04T18:05:13.285Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"def79c7d8f203dfa89d375050e1f21048e97fbdd","builtAt":"2026-10-04T17:31:16.998Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"1a7984a2de2f4deddd888b058b1f3d933914d8c4","builtAt":"2026-10-04T18:05:13.285Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -50330,1621 +50330,1296 @@ requestAnimationFrame(loop);
 
 //# sourceURL=MF:src/HUD/DynamicCrosshair.js
 
-/* ==== mf module: src/Movement/Baritone.js ==== */
+/* ==== mf module: src/Movement/BaritoneAdapter.js ==== */
 (function () {
-'use strict';
+  'use strict';
 
-const TAG = 'minifeather baritone';
+  const KEY = '__MF_BARITONE_ADAPTER__';
+  const instances = new Set();
+  const INPUT_FIELDS = ['up', 'down', 'left', 'right', 'jump', 'sneak', 'sprint'];
+  let nextId = 0;
+  try { globalThis[KEY]?.destroy?.(); } catch (_) {}
 
-const EVENT_CONFIG = 'minifeather:baritone-config';
-const EVENT_STATE = 'minifeather:baritone-state';
-const EVENT_COMMAND = 'minifeather:baritone-command';
-
-class MinHeap {
-    constructor() { this.data = []; }
-    get size() { return this.data.length; }
-    push(node) {
-        this.data.push(node);
-        this._bubbleUp(this.data.length - 1);
+  const finite = value => Number.isFinite(value);
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const wrap = value => Math.atan2(Math.sin(value), Math.cos(value));
+  const xyz = value => value && [value.x, value.y, value.z].every(finite)
+    ? { x: value.x, y: value.y, z: value.z } : null;
+  function source(fn) {
+    try { return Function.prototype.toString.call(fn); } catch (_) { return ''; }
+  }
+  function methods(object) {
+    const result = [], seen = new Set();
+    for (let current = object, depth = 0; current && depth < 12; depth++, current = Object.getPrototypeOf(current)) {
+      for (const name of Object.getOwnPropertyNames(current)) {
+        if (name === 'constructor' || seen.has(name)) continue;
+        seen.add(name);
+        const descriptor = Object.getOwnPropertyDescriptor(current, name);
+        if (typeof descriptor?.value === 'function') result.push({ name, fn: descriptor.value, source: source(descriptor.value) });
+      }
     }
-    pop() {
-        if (this.data.length === 0) return null;
-        const top = this.data[0];
-        const last = this.data.pop();
-        if (this.data.length > 0) {
-            this.data[0] = last;
-            this._sinkDown(0);
+    return result;
+  }
+  function choose(object, parts, explicit) {
+    const entries = methods(object);
+    const match = entries.find(entry => parts.every(part => entry.source.includes(part)));
+    if (match) return match.name;
+    return explicit && typeof object?.[explicit] === 'function' ? explicit : '';
+  }
+  function values(object) {
+    if (!object || typeof object !== 'object') return [];
+    return Object.values(Object.getOwnPropertyDescriptors(object))
+      .filter(descriptor => descriptor.value && typeof descriptor.value === 'object')
+      .map(descriptor => descriptor.value);
+  }
+  function candidates(game) {
+    const roots = [game, game?.player, game?.gameScene, game?.controls, game?.controller, game?.playerController].filter(Boolean);
+    return [...new Set([...roots, ...roots.flatMap(values)])];
+  }
+  function unknown(reason = 'unknown') {
+    return { known: false, air: false, passable: false, solid: true, liquid: false, hazard: true,
+      replaceable: false, breakable: false, hardness: Infinity, name: '', collision: [], supportHeight: 1, height: 1, reason };
+  }
+
+  function create() {
+    const id = `baritone-${++nextId}`;
+    let game = null, player = null, world = null, movement = null, controller = null;
+    let nativePosition = null, lookControls = null, hooked = false, destroyed = false;
+    let desired = null, lastError = '', inputTicks = 0, inputMode = '', savedPlayer = null;
+    let queuePatch = null, mining = null, lastInteract = 0, nativeMiningLoop = false;
+    let mouseGain = .002, mousePending = null, mouseVerified = false, lastMouseResponse = 0, firstMouseRequest = 0;
+    const keyboardHeld = new Set();
+    const names = { left: '', right: '', ray: '', mine: '', reach: '' };
+
+    function resolvePosition() {
+      const hit = controller?.objectMouseOver?.block;
+      const samples = [hit, world?.storedSpawnPoint, world?.spawnPoint];
+      for (let ctor = world?.constructor, depth = 0; ctor && depth < 10; depth++, ctor = Object.getPrototypeOf(ctor)) {
+        for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(ctor))) {
+          if (descriptor.value && typeof descriptor.value === 'object') samples.push(descriptor.value);
         }
-        return top;
+      }
+      const sample = samples.find(value => xyz(value) && typeof value.getX === 'function' &&
+        typeof value.up === 'function' && typeof value.down === 'function' && value.constructor !== Object);
+      nativePosition = sample || null;
     }
-    _bubbleUp(idx) {
-        const item = this.data[idx];
-        while (idx > 0) {
-            const parentIdx = (idx - 1) >> 1;
-            const parent = this.data[parentIdx];
-            if (item.f >= parent.f) break;
-            this.data[idx] = parent;
-            idx = parentIdx;
-        }
-        this.data[idx] = item;
+    function position(x, y, z) {
+      if (!nativePosition) resolvePosition();
+      if (!nativePosition) return null;
+      try {
+        const result = new nativePosition.constructor(x, y, z);
+        return result.constructor === nativePosition.constructor && xyz(result) &&
+          result.x === x && result.y === y && result.z === z ? result : null;
+      } catch (_) { return null; }
     }
-    _sinkDown(idx) {
-        const length = this.data.length;
-        const item = this.data[idx];
-        while (true) {
-            let left = idx * 2 + 1;
-            let right = left + 1;
-            let swap = -1;
-            if (left < length && this.data[left].f < item.f) swap = left;
-            if (right < length && this.data[right].f < (swap === -1 ? item.f : this.data[left].f)) swap = right;
-            if (swap === -1) break;
-            this.data[idx] = this.data[swap];
-            idx = swap;
-        }
-        this.data[idx] = item;
+    function resolveController() {
+      controller = candidates(game).find(value => value.objectMouseOver &&
+        (typeof value.leftClick === 'function' || methods(value).some(entry =>
+          entry.source.includes('key.leftClick') && entry.source.includes('punch')))) || null;
+      names.left = typeof controller?.leftClick === 'function' ? 'leftClick' : methods(controller)
+        .find(entry => entry.name !== 'punch' && entry.source.includes('key.leftClick') && entry.source.includes('punch'))?.name || '';
+      names.right = choose(controller, ['objectMouseOver', 'rightClickDelayTimer', 'getHeldItem'], 'rightClickMouse');
+      names.ray = choose(controller, ['objectMouseOver=', 'getLook()', 'entities'], 'updateRayTrace');
+      names.mine = choose(controller, ['currBreakingLocation', 'getPlayerRelativeBlockHardness'], 'mine');
+      const callPattern = name => new RegExp(`this\\s*\\.\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\(`);
+      nativeMiningLoop = !!names.mine && !!names.ray && methods(controller).some(entry =>
+        entry.name !== names.left && entry.name !== names.mine &&
+        callPattern(names.ray).test(entry.source) && callPattern(names.mine).test(entry.source));
+      names.reach = methods(controller).find(entry =>
+        /return\s+[\w$.]+\.abilities\.creative\s*\?\s*[\d.]+\s*:\s*[\d.]+\s*;?\s*\}/.test(entry.source))?.name || '';
+      lookControls = candidates(game).find(value => finite(value.yaw) && finite(value.pitch) &&
+        value.yawObject?.rotation && value.pitchObject?.rotation && methods(value).some(entry =>
+          entry.source.includes('yawObject.rotation.y') && entry.source.includes('pitchObject.rotation.x') &&
+          entry.source.includes('onLook'))) || null;
+      resolvePosition();
     }
+    function refresh() {
+      if (!game?.player?.pos || !game.world || destroyed) return false;
+      if (player !== game.player || world !== game.world) bind(game);
+      return !!player;
     }
-
-    const state = {
-    enabled: false,
-    game: null,
-    lastGameScan: 0,
-    path: [],
-    pathIndex: 0,
-    goal: null,
-    status: 'idle',
-    repathTimer: 0,
-    maxPathTime: 5000,
-    chunkCache: new Map(),
-    cacheVersion: 0,
-
-    player: null,
-    readerName: null,
-    originalReader: null,
-    nativeApply: null,
-    _lastPos: null,
-
-    followTarget: null,
-
-    followEntity: null,
-
-    lastFollowScan: 0,
-    followRepathAt: 0,
-
-    action: null,
-    actionPhase: 'idle',
-    actionStartedAt: 0,
-    actionNextAt: 0,
-    heldMouseButton: null,
-    manualJumpUntil: 0,
-    jumpHoldUntil: 0,
-    jumpPhase: 'idle',
-    jumpStartY: 0,
-    jumpNodeIndex: -1,
-    playerPositions: new Map(),
-    nextPlayerScanAt: 0,
-    autoMine: true
-        };
-
-        function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
-
-        const desiredInput = {
-    strafe: 0,
-
-    forward: 0,
-
-    jump: false,
-    sneak: false,
-    sprint: false,
-    yaw: null
-        };
-
-        let inputHooked = false;
-
-        let injectedTicks = 0;
-        let lastInjectAt = 0;
-
-        let probeState = null;
-
-        function startProbe(ms = 1000) {
-    const game = getGame(true);
-    const player = game?.player;
-    if (!player?.pos) { console.warn(`${TAG} probe: no player`); return false; }
-    const p = player.pos;
-    probeState = {
-        player,
-        startedAt: performance.now(),
-        until: performance.now() + ms,
-        startPos: { x: p.x, y: p.y, z: p.z },
-        startInjected: injectedTicks,
-        prevEnabled: state.enabled,
-        prevDesired: { ...desiredInput }
-    };
-
-    state.enabled = true;
-    state.status = 'moving';
-
-    state.path = [];
-
-    state.followTarget = null;
-
-    desiredInput.strafe = 0;
-    desiredInput.forward = 1;
-    desiredInput.jump = false;
-    desiredInput.sneak = false;
-    desiredInput.yaw = Number(player.yaw) || 0;
-
-    if (!inputHooked || state.player !== player) {
-        restorePlayerHook();
-        hookPlayerInput();
+    function inputBlocked() {
+      if (!game || game.chat?.showInput || game.chat?.inputOpen || player?.dead || player?.getHealth?.() <= 0) return true;
+      if (game.info?.menus?.blocksGameplay === true) return true;
+      try { if (typeof game.constructor?.isActive === 'function' && !game.constructor.isActive(false)) return true; } catch (_) { return true; }
+      try {
+        const active = document.activeElement;
+        if (active && (active.isContentEditable || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return true;
+      } catch (_) {}
+      return false;
     }
-    void 0;
-    return true;
+    function bind(nextGame) {
+      if (destroyed || !nextGame?.player?.pos || !nextGame.world) { lastError = 'game-not-ready'; return false; }
+      if (game === nextGame && player === nextGame.player && world === nextGame.world && movement?.isValid() &&
+        typeof player[movement.names.applyInput] === 'function' && typeof player[movement.names.collectInput] === 'function') {
+        const nextController = nextGame.controller || nextGame.playerController;
+        if (nextController && nextController !== controller) { releaseInteraction(); resolveController(); }
+        return true;
+      }
+      const resume = desired && { ...desired };
+      release();
+      game = nextGame; player = nextGame.player; world = nextGame.world;
+      movement = globalThis.__MINIFEATHER_MOVEMENT_API__?.resolve(player, true) || null;
+      mouseVerified = false; firstMouseRequest = 0; lastMouseResponse = 0;
+      resolveController();
+      if (!movement?.names.applyInput || !movement?.names.collectInput ||
+        typeof player[movement.names.applyInput] !== 'function' || typeof player[movement.names.collectInput] !== 'function') {
+        movement = null; lastError = 'native-input-unavailable'; return false;
+      }
+      const nativeCollector = methods(Object.getPrototypeOf(player)).find(entry => entry.name === movement.names.collectInput);
+      const collectorSource = nativeCollector?.source || source(player[movement.names.collectInput]);
+      const pushIndex = collectorSource.search(/pendingInputs\s*\.\s*push\s*\(\s*this\s*\.\s*currentInput\s*\)/);
+      const sendIndex = collectorSource.search(/sendPacket\s*\(\s*this\s*\.\s*currentInput\s*\)/);
+      inputMode = pushIndex >= 0 && sendIndex > pushIndex && Array.isArray(player.pendingInputs)
+        ? 'native-queue-before-send' : 'native-keys';
+      lastError = '';
+      if (resume) setControls(resume);
+      return true;
     }
-
-    function finishProbe() {
-    const pr = probeState;
-    probeState = null;
-    if (!pr) return null;
-    const player = pr.player;
-    const p = player.pos;
-    const moved = Math.hypot(p.x - pr.startPos.x, p.y - pr.startPos.y, p.z - pr.startPos.z);
-    const injected = injectedTicks - pr.startInjected;
-    const report = {
-        seconds: +((performance.now() - pr.startedAt) / 1000).toFixed(2),
-        injectedTicks: injected,
-        movedBlocks: +moved.toFixed(3),
-        inputTookEffect: {
-            currentInputUp: player.currentInput?.up ?? null,
-            wWQmwuDLqA: typeof player.wWQmwuDLqA === 'number' ? +player.wWQmwuDLqA.toFixed(3) : (player.wWQmwuDLqA ?? null),
-            YApHmhhGagG: typeof player.YApHmhhGagG === 'number' ? +player.YApHmhhGagG.toFixed(3) : (player.YApHmhhGagG ?? null),
-            jumping: !!player.jumping
+    function observe(nextGame) {
+      if (desired) return nextGame === game && nextGame?.player === player && nextGame?.world === world;
+      bind(nextGame);
+      return !!player && player === nextGame?.player && world === nextGame?.world;
+    }
+    function fields() {
+      return { up: desired.forward > .1, down: desired.forward < -.1,
+        right: desired.strafe > .1, left: desired.strafe < -.1,
+        jump: !!desired.jump, sneak: !!desired.sneak, sprint: !!desired.sprint };
+    }
+    function patchInput(input) {
+      if (!desired || !input || typeof input !== 'object') return;
+      const overrides = fields();
+      for (const key of INPUT_FIELDS) input[key] = overrides[key];
+      // Keep the engine's protobuf object, position, ack and sequence number intact.
+      // View angles remain the native camera's angles, never a synthetic packet aim.
+      inputTicks++;
+    }
+    function keyEvent(code, down) {
+      try {
+        const event = new KeyboardEvent(down ? 'keydown' : 'keyup', { code, bubbles: true, cancelable: true });
+        globalThis.dispatchEvent(event);
+        if (down) keyboardHeld.add(code); else keyboardHeld.delete(code);
+      } catch (_) { lastError = 'native-key-event-unavailable'; }
+    }
+    function feedKeys() {
+      const active = fields();
+      const map = { KeyW: active.up, KeyS: active.down, KeyD: active.right, KeyA: active.left, Space: active.jump };
+      for (const [code, down] of Object.entries(map)) if (keyboardHeld.has(code) !== down) keyEvent(code, down);
+    }
+    function restoreQueue() {
+      if (!queuePatch) return;
+      const { queue, original, wrapper, own } = queuePatch;
+      if (queue.push === wrapper) {
+        if (own) queue.push = original; else delete queue.push;
+      }
+      queuePatch = null;
+    }
+    function installHooks() {
+      if (hooked) return true;
+      const broker = globalThis.__MINIFEATHER_MOVEMENT_API__;
+      if (!broker || !movement) return false;
+      savedPlayer = { sneak: player.sneak, jumping: player.jumping,
+        sprint: typeof player.isSprinting === 'function' ? !!player.isSprinting() : false };
+      const collect = broker.register(player, 'collectInput', id, {
+        before() {
+          if (!desired) return;
+          if (inputBlocked()) return;
+          player.sneak = !!desired.sneak;
+          movement.setSprint(!!desired.sprint);
+          if (inputMode === 'native-queue-before-send' && Array.isArray(player.pendingInputs)) {
+            restoreQueue();
+            const queue = player.pendingInputs, original = queue.push;
+            const own = Object.prototype.hasOwnProperty.call(queue, 'push');
+            const wrapper = function (...inputs) {
+              for (const input of inputs) if (input === player.currentInput) patchInput(input);
+              restoreQueue();
+              return Reflect.apply(original, this, inputs);
+            };
+            queue.push = wrapper;
+            queuePatch = { queue, original, wrapper, own };
+          } else feedKeys();
         },
-        conclusion: injected === 0
-            ? 'EL READER NO SE LLAMA: el metodo hookeado no es el que el juego usa por tick'
-            : (moved < 0.05
-                ? 'INYECTA PERO NO MUEVE: el apply no aplica el input (metodo equivocado o campos rotados)'
-                : 'OK: input inyectado y el player se mueve')
-    };
-    void 0;
-
-    Object.assign(desiredInput, pr.prevDesired);
-    if (!state.followTarget && state.path.length === 0) {
-        stop('idle', 'probe done');
-    }
-    return report;
-    }
-
-    function getMethods(obj) {
-    const methods = [];
-    const seenFns = new Set();
-    let proto = obj;
-    for (let depth = 0; proto && depth < 10; depth++) {
-        let names = [];
-        try { names = Object.getOwnPropertyNames(proto); } catch (_) {}
-        for (const name of names) {
-            if (name === 'constructor') continue;
-            let fn = null;
-            try { fn = obj[name]; } catch (_) { fn = null; }
-            if (typeof fn !== 'function' || seenFns.has(fn)) {
-
-                try { fn = proto[name]; } catch (_) { fn = null; }
-                if (typeof fn !== 'function' || seenFns.has(fn)) continue;
-            }
-            seenFns.add(fn);
-            let source = '';
-            try { source = Function.prototype.toString.call(fn); } catch (_) {}
-            methods.push({ name, fn, source, own: depth === 0 });
+        after() { restoreQueue(); }
+      });
+      const apply = broker.register(player, 'applyInput', id, {
+        before(context) {
+          // Never rewrite old inputs while the native reconciliation replays them.
+          if (inputMode === 'native-queue-before-send' && !inputBlocked() && context.args[0] === player.currentInput) patchInput(context.args[0]);
         }
-        proto = Object.getPrototypeOf(proto);
-    }
-    return methods;
-    }
-
-    function resolveNativeInput(player) {
-    const methods = getMethods(player);
-
-    const readerBySig = m =>
-        m.source.includes('sentInputThisTick') &&
-        m.source.includes('currentInput') &&
-        m.source.includes('jumping') &&
-        m.source.includes('inputSequenceNumber');
-    const readerBySigLoose = m =>
-        m.source.includes('currentInput') &&
-        m.source.includes('inputSequenceNumber');
-
-    const reader =
-        methods.find(m => m.name === 'bkkAvIfjEgvYuYRLXBgtj') ||
-        methods.find(m => !m.own && readerBySig(m)) ||
-        methods.find(readerBySig) ||
-        methods.find(m => !m.own && readerBySigLoose(m)) ||
-        methods.find(readerBySigLoose);
-
-    const applyObf = m =>
-        m.source.includes('this.wWQmwuDLqA') &&
-        m.source.includes('this.YApHmhhGagG') &&
-        m.source.includes('this.jumping');
-    const readsInputFields = s =>
-        ['.left', '.right', '.up', '.down', '.forward', '.strafe', '.sneak', '.sprint', '.jump']
-            .some(f => s.includes(f));
-    const writesFields = s => (s.match(/this\.[A-Za-z_$][\w$]*\s*=(?!=)/g) || []).length;
-
-    const readerCalls = [...reader.source.matchAll(/this\.([A-Za-z_$][\w$]*)\s*\(/g)]
-        .map(mm => mm[1]);
-    const applyFromReader = readerCalls
-        .map(name => methods.find(m => m.name === name && m.fn !== reader.fn))
-        .find(m => m && readsInputFields(m.source) && writesFields(m.source) >= 2);
-
-    const applyHeuristic = m =>
-        m.source.includes('this.jumping') &&
-        readsInputFields(m.source) &&
-        writesFields(m.source) >= 3;
-
-    const apply =
-        methods.find(m => m.name === 'OBHUlAPATf') ||
-        applyFromReader ||
-        methods.find(m => !m.own && applyObf(m)) ||
-        methods.find(applyObf) ||
-        methods.find(m => !m.own && applyHeuristic(m)) ||
-        methods.find(applyHeuristic);
-
-    let applyWrites = [];
-    if (apply) {
-        applyWrites = [...new Set(
-            [...apply.source.matchAll(/this\.([A-Za-z_$][\w$]*)\s*=(?!=)/g)].map(mm => mm[1])
-        )].slice(0, 10);
-    }
-
-    if (!reader || !apply) {
-
-        const candidates = methods
-            .filter(m => m.source.includes('inputSequenceNumber') ||
-                         m.source.includes('this.jumping') ||
-                         m.source.includes('currentInput'))
-            .map(m => ({ name: m.name, own: m.own, len: m.source.length, head: m.source.slice(0, 100) }));
-        state._resolveError = {
-            readerFound: !!reader,
-            applyFound: !!apply,
-            methodCount: methods.length,
-            candidates: candidates.slice(0, 8)
-        };
-        return null;
-    }
-    state._resolveError = null;
-
-    return {
-        readerName: reader.name,
-        applyName: apply.name,
-        originalReader: player[reader.name],
-        nativeApply: player[apply.name],
-        applyWrites
-    };
-    }
-
-    let fallbackSeq = 0;
-    function nextSequenceNumber(player) {
-    try {
-        const n = player.inputSequenceNumber;
-        if (typeof n === 'number' && Number.isFinite(n)) {
-            player.inputSequenceNumber = n + 1;
-            fallbackSeq = n + 1;
-            return n + 1;
+      });
+      if (!collect || !apply) {
+        broker.unregisterAll(player, id); savedPlayer = null; lastError = 'native-hook-failed'; return false;
+      }
+      if (movement.names.controlState) broker.register(player, 'controlState', id, {
+        after() {
+          if (!desired) return;
+          if (inputBlocked()) return;
+          player.sneak = !!desired.sneak;
+          calibrateMouse();
         }
-    } catch (_) {}
-    fallbackSeq = Math.max(fallbackSeq + 1, (player.currentInput?.sequenceNumber ?? 0) + 1);
-    return fallbackSeq;
+      });
+      hooked = true;
+      return true;
     }
-
-    function createNativeInput(player, controls) {
-
-    let data;
-    try {
-        data = { ...player.currentInput } || {};
-    } catch (_) { data = {}; }
-    Object.assign(data, {
-        sequenceNumber: nextSequenceNumber(player),
-        left: controls.strafe < -0.3,
-        right: controls.strafe > 0.3,
-        up: controls.forward > 0.3,
-        down: controls.forward < -0.3,
-        yaw: controls.yaw !== null ? controls.yaw : Number(player.yaw) || 0,
-        pitch: Number(player.pitch) || 0,
-        jump: controls.jump,
-        sneak: controls.sneak,
-        sprint: !!controls.sprint,
-        pos: null,
-        ackId: player.lastServerAckId > 0 ? player.lastServerAckId : undefined,
-        onGround: player.onGround,
-        usingItem: false
-    });
-
-    return data;
-    }
-
-    function neutralMovement(player) {
-    if (!player) return;
-    try {
-        player.wWQmwuDLqA = 0;
-        player.YApHmhhGagG = 0;
-        player.jumping = false;
-    } catch (_) {}
-    }
-
-    function restorePlayerHook() {
-    const player = state.player;
-    if (player && state.readerName && typeof state.originalReader === 'function') {
-        try {
-            if (player[state.readerName] !== state.originalReader) {
-                player[state.readerName] = state.originalReader;
-            }
-        } catch (_) {}
-    }
-    neutralMovement(player);
-    state.player = null;
-    state.readerName = null;
-    state.originalReader = null;
-    state.nativeApply = null;
-    inputHooked = false;
-    }
-
-    function hookPlayerInput() {
-    if (inputHooked) return true;
-    const game = getGame();
-    if (!game?.player) return false;
-    const player = game.player;
-
-    const native = resolveNativeInput(player);
-    if (!native) {
-
-        if (state._lastHookFail !== player) {
-            state._lastHookFail = player;
-            console.warn(`${TAG} Could not resolve native input methods (patron AntiAFK)`);
+    function setControls(control = {}) {
+      if (!refresh() || !movement) return false;
+      if (inputBlocked()) {
+        // A chat command is handled before ClientCommands closes the input.
+        // Read-only planning may start then, but must not acquire controls.
+        if (!control.forward && !control.strafe && !control.jump && !control.sneak && !control.sprint) {
+          release();
+          return true;
         }
         return false;
+      }
+      desired = { forward: clamp(Number(control.forward) || 0, -1, 1), strafe: clamp(Number(control.strafe) || 0, -1, 1),
+        jump: !!control.jump, sneak: !!control.sneak, sprint: !!control.sprint,
+        yaw: finite(control.yaw) ? control.yaw : null, pitch: finite(control.pitch) ? control.pitch : null };
+      if (!installHooks()) { desired = null; return false; }
+      return true;
     }
-    state._lastHookFail = null;
-
-    state.player = player;
-    state.readerName = native.readerName;
-    state.originalReader = native.originalReader;
-    state.nativeApply = native.nativeApply;
-    state.applyWrites = native.applyWrites || [];
-
-    const readerName = state.readerName;
-    const originalReader = state.originalReader;
-    const nativeApply = state.nativeApply;
-    const applyWrites = state.applyWrites;
-
-    player[readerName] = function (...args) {
-        if (!state.enabled || state.status === 'idle' || state.status === 'failed' || state.player !== this) {
-            return originalReader.apply(this, args);
-        }
-
-        injectedTicks++;
-        lastInjectAt = performance.now();
-        const input = createNativeInput(this, desiredInput);
-
-        this.sentInputThisTick = false;
-        this.currentInput = input;
-
-        if (injectedTicks === 1) {
-            try {
-                void 0;
-            } catch (_) {}
-        }
-
-        try {
-            const result = nativeApply.call(this, input);
-
-            if (desiredInput.jump) this.jumping = true;
-            return result;
-        } finally {
-
-            if (injectedTicks === 1 && applyWrites.length) {
-                try {
-                    const after = {};
-                    for (const f of applyWrites) after[f] = this[f];
-                    void 0;
-                } catch (_) {}
-            }
-        }
-    };
-
-    inputHooked = true;
-    void 0;
-    return true;
+    function calibrateMouse() {
+      if (!mousePending || !player) return;
+      const { yaw, pitch, x, y } = mousePending;
+      const change = x ? -wrap(player.yaw - yaw) / x : y ? -(player.pitch - pitch) / y : 0;
+      if (finite(change) && change > .00001 && change < .1) {
+        mouseGain = change; mousePending = null; mouseVerified = true; lastMouseResponse = Date.now();
+      }
     }
-
-    function getGame(force = false) {
-    const now = performance.now();
-    if (!force && state.game?.player && now - state.lastGameScan < 500) return state.game;
-    state.lastGameScan = now;
-    try {
-        const react = document.querySelector('#react');
-        if (!react) return state.game?.player ? state.game : null;
-        for (const root of Object.values(react)) {
-            const game = root?.updateQueue?.baseState?.element?.props?.game;
-
-            if (game?.player?.pos && game?.world) { state.game = game; return game; }
+    function steer(yaw, pitch, dt) {
+      if (!player || inputBlocked() || !finite(yaw) || !finite(pitch)) return false;
+      pitch = clamp(pitch, -Math.PI / 2 + .001, Math.PI / 2 - .001);
+      const speed = clamp(dt, .005, .1) * 5;
+      const nextYaw = player.yaw + clamp(wrap(yaw - player.yaw), -speed, speed);
+      const nextPitch = player.pitch + clamp(pitch - player.pitch, -speed, speed);
+      if (lookControls) {
+        lookControls.yaw = nextYaw; lookControls.pitch = nextPitch;
+        if (lookControls.rotation) { lookControls.rotation.y = nextYaw; lookControls.rotation.x = nextPitch; }
+        lookControls.yawObject.rotation.y = nextYaw;
+        lookControls.pitchObject.rotation.x = nextPitch;
+        lookControls.onLook?.(nextYaw, nextPitch);
+        return true;
+      }
+      try {
+        calibrateMouse();
+        const now = Date.now();
+        if (firstMouseRequest && now - (lastMouseResponse || firstMouseRequest) > 1500 &&
+          (Math.abs(wrap(yaw - player.yaw)) > .04 || Math.abs(pitch - player.pitch) > .04)) {
+          lastError = 'native-camera-not-responding'; return false;
         }
-    } catch (_) {}
-    return state.game?.player ? state.game : null;
+        const x = clamp(-wrap(nextYaw - player.yaw) / mouseGain, -250, 250);
+        const y = clamp(-(nextPitch - player.pitch) / mouseGain, -250, 250);
+        if (Math.abs(x) < .001 && Math.abs(y) < .001) return true;
+        if (!firstMouseRequest) firstMouseRequest = now;
+        const event = new MouseEvent('mousemove', { bubbles: true, cancelable: true });
+        Object.defineProperties(event, { movementX: { value: x }, movementY: { value: y } });
+        mousePending = { yaw: player.yaw, pitch: player.pitch, x, y };
+        document.dispatchEvent(event);
+        return true;
+      } catch (_) { lastError = 'native-camera-unavailable'; return false; }
     }
-
-    function getWorld() { return state.game?.world || null; }
-
-    function looksLikeEntityMap(value) {
-    if (!value || typeof value !== 'object') return false;
-    try {
-        if (typeof value.values !== 'function') return false;
-        let checked = 0, found = 0;
-        for (const v of value.values()) {
-            if (++checked >= 8) break;
-            if (v && v.pos && (v.mesh || v.profile)) found++;
+    function eye() {
+      if (!refresh()) return null;
+      let height = Number(player.eyeHeight);
+      try { if (typeof player.getEyeHeight === 'function') height = Number(player.getEyeHeight()); } catch (_) {}
+      if (!finite(height) || height <= 0 || height > 5) height = player.sneak ? 1.54 : 1.62;
+      return { x: player.pos.x, y: player.pos.y + height, z: player.pos.z };
+    }
+    function aimAt(x, y, z, dtSeconds = .05) {
+      const origin = eye();
+      if (!origin || ![x, y, z].every(finite)) return { aligned: false, reason: 'invalid-target' };
+      const dx = x - origin.x, dy = y - origin.y, dz = z - origin.z;
+      const yaw = Math.atan2(-dx, -dz), pitch = Math.atan2(dy, Math.hypot(dx, dz));
+      const aligned = Math.abs(wrap(yaw - player.yaw)) < .04 && Math.abs(pitch - player.pitch) < .04;
+      const ok = steer(yaw, pitch, dtSeconds);
+      return { aligned: ok && aligned, yaw, pitch, reason: ok ? '' : lastError || 'native-camera-unavailable' };
+    }
+    function readCell(x, y, z) {
+      if (!refresh() || ![x, y, z].every(Number.isInteger)) return unknown('invalid-position');
+      if (y < 0 || y >= (finite(world.height) ? world.height : 256)) return unknown('world-boundary');
+      if (!nativePosition) resolvePosition();
+      const pos = position(x, y, z);
+      if (!pos || typeof world.getBlockState !== 'function') return unknown('native-block-position-unavailable');
+      try {
+        if (typeof world.chunkProvider?.isLoaded === 'function') {
+          if (!world.chunkProvider.isLoaded(Math.floor(x / 16), Math.floor(z / 16))) return unknown('unloaded-chunk');
+        } else if (typeof world.isBlockLoaded === 'function') {
+          if (!world.isBlockLoaded(pos)) return unknown('unloaded-chunk');
+        } else return unknown('chunk-loading-api-unavailable');
+        if (typeof world.getChunk === 'function') {
+          const chunk = world.getChunk(pos);
+          if (!chunk || chunk.isDummyChunk === true) return unknown('unloaded-chunk');
         }
-        return checked > 0 && found > 0;
-    } catch (_) { return false; }
+        const state = world.getBlockState(pos), block = state?.getBlock?.() || state?.block;
+        if (!block) return unknown('missing-block');
+        const name = String(block.name || block.type || '').toLowerCase();
+        const air = typeof block.isAir === 'function' ? !!block.isAir() : /^(?:minecraft:)?(?:air|cave_air|void_air)$/.test(name);
+        const liquid = typeof block.material?.isLiquid === 'function' ? !!block.material.isLiquid() : /water|lava/.test(name);
+        const hazard = liquid || /lava|fire|magma|cactus|berry_bush|powder_snow/.test(name);
+        let hardness = Number(block.hardness);
+        if (!finite(hardness)) hardness = air ? 0 : Infinity;
+        let box;
+        if (typeof state.getCollisionBoundingBox === 'function') box = state.getCollisionBoundingBox(world, pos);
+        else if (typeof block.getCollisionBoundingBox === 'function') box = block.getCollisionBoundingBox(world, pos, state);
+        else if (air || liquid || block.material?.blocksMovement?.() === false) box = null;
+        else return unknown('collision-api-unavailable');
+        const collision = [];
+        if (box && xyz(box.min) && xyz(box.max)) {
+          const local = { min: xyz(box.min), max: xyz(box.max) };
+          // Native BlockState boxes are world-space; block-local boxes are accepted only at origin.
+          local.min.x -= x; local.max.x -= x;
+          local.min.y -= y; local.max.y -= y;
+          local.min.z -= z; local.max.z -= z;
+          if ([local.min.x, local.min.y, local.min.z, local.max.x, local.max.y, local.max.z].every(finite)) collision.push(local);
+        } else if (box) return unknown('invalid-collision');
+        const solid = collision.length > 0;
+        const replaceable = air || block.isReplaceable === true;
+        const supportHeight = solid ? Math.max(...collision.map(item => item.max.y)) : 0;
+        return { known: true, air, passable: !solid && !hazard, solid, liquid, hazard, replaceable,
+          breakable: !air && !liquid && hardness >= 0 && finite(hardness) && !/bedrock|barrier|portal/.test(name),
+          hardness, name, collision, supportHeight, height: supportHeight };
+      } catch (_) { return unknown('block-read-failed'); }
     }
+    function releaseInteraction() {
+      if (mining && controller && names.left) {
+        try { controller[names.left](true); } catch (_) {}
+      }
+      mining = null;
+    }
+    function interact(type, target) {
+      if (!refresh() || !controller) return { ok: false, reason: 'native-controller-unavailable' };
+      if (inputBlocked() || game.info?.menus?.isOpen?.('inventory')) {
+        releaseInteraction(); return { ok: false, reason: 'game-input-blocked' };
+      }
+      const origin = eye();
+      try {
+        if (names.ray) controller[names.ray]();
+        const hit = controller.objectMouseOver;
+        if (!origin || !hit || !xyz(hit.hitVec)) { releaseInteraction(); return { ok: false, reason: 'wait-ray' }; }
+        let reach = player.abilities?.creative ? 5 : 4.5;
+        if (names.reach) {
+          const nativeReach = controller[names.reach]();
+          if (finite(nativeReach) && nativeReach > 0 && nativeReach <= 16) reach = nativeReach;
+        }
+        if (type === 'attack') {
+          const item = player.inventory?.getCurrentItem?.()?.item;
+          reach = Math.max(3, Number(item?.getAttackReach?.()) || 0);
+        }
+        if (Math.hypot(hit.hitVec.x - origin.x, hit.hitVec.y - origin.y, hit.hitVec.z - origin.z) > reach + .03) {
+          releaseInteraction(); return { ok: false, reason: 'out-of-reach' };
+        }
+        if (type === 'attack') {
+          const entity = target?.entity || target;
+          if (!entity || hit.entity !== entity || !names.left) return { ok: false, reason: 'wait-ray' };
+          releaseInteraction();
+          if (Date.now() - lastInteract < 250) return { ok: true, reason: 'native-cooldown' };
+          controller[names.left](); controller[names.left](true); lastInteract = Date.now();
+          return { ok: true, reason: '' };
+        }
+        if (!target || ![target.x, target.y, target.z].every(Number.isInteger) || !xyz(hit.block)) {
+          releaseInteraction(); return { ok: false, reason: 'wait-ray' };
+        }
+        if (type === 'mine') {
+          if (hit.block.x !== target.x || hit.block.y !== target.y || hit.block.z !== target.z) {
+            releaseInteraction(); return { ok: false, reason: 'wait-ray' };
+          }
+          const cell = readCell(target.x, target.y, target.z);
+          if (!cell.known || !cell.breakable) { releaseInteraction(); return { ok: false, reason: 'unbreakable' }; }
+          if (!names.left || !names.mine) return { ok: false, reason: 'native-mining-unavailable' };
+          const key = `${target.x},${target.y},${target.z}`;
+          if (mining !== key) { releaseInteraction(); controller[names.left](); mining = key; }
+          if (!nativeMiningLoop) controller[names.mine]();
+          return { ok: true, reason: '' };
+        }
+        if (type === 'place') {
+          releaseInteraction();
+          if (!names.right || typeof hit.block.offset !== 'function' || !hit.side) return { ok: false, reason: 'native-placement-unavailable' };
+          const destination = hit.block.offset(hit.side);
+          if (destination.x !== target.x || destination.y !== target.y || destination.z !== target.z) return { ok: false, reason: 'wait-ray' };
+          const cell = readCell(target.x, target.y, target.z);
+          if (!cell.known || !cell.replaceable) return { ok: false, reason: 'not-replaceable' };
+          const stack = player.inventory?.getCurrentItem?.();
+          if (!stack || stack.stackSize <= 0 || stack.item?.isItemBlock?.() !== true) return { ok: false, reason: 'no-block-item' };
+          if (Date.now() - lastInteract < 250) return { ok: true, reason: 'native-cooldown' };
+          controller[names.right](); lastInteract = Date.now();
+          return { ok: true, reason: '' };
+        }
+        return { ok: false, reason: 'unknown-action' };
+      } catch (_) { releaseInteraction(); lastError = 'native-interaction-failed'; return { ok: false, reason: lastError }; }
+    }
+    function selectSlot(slot) {
+      if (!refresh() || !Number.isInteger(slot) || slot < 1 || slot > 9 || !player.inventory || !('currentItem' in player.inventory)) return false;
+      player.inventory.currentItem = slot - 1;
+      if (game.info && 'selectedSlot' in game.info) game.info.selectedSlot = slot - 1;
+      return true;
+    }
+    function entities() {
+      if (!refresh()) return [];
+      const all = world.entities;
+      return all instanceof Map || typeof all?.values === 'function' ? [...all.values()] : Array.isArray(all) ? all : [];
+    }
+    function release() {
+      desired = null;
+      releaseInteraction(); restoreQueue();
+      for (const code of [...keyboardHeld]) keyEvent(code, false);
+      if (player && hooked) {
+        globalThis.__MINIFEATHER_MOVEMENT_API__?.unregisterAll(player, id);
+        if (savedPlayer) {
+          player.sneak = savedPlayer.sneak; player.jumping = false;
+          movement?.setSprint(savedPlayer.sprint);
+        }
+        for (const field of [movement?.names.forwardField, movement?.names.strafeField]) {
+          if (field && typeof player[field] === 'number') player[field] = 0;
+        }
+      }
+      savedPlayer = null; hooked = false; mousePending = null;
+      firstMouseRequest = 0; lastMouseResponse = 0;
+    }
+    function diagnostics() {
+      return { bound: !!player, hooked, inputMode, inputTicks, error: lastError,
+        cameraMode: lookControls ? 'verified-native-controls' : mouseVerified ? 'native-mouse-feedback' : 'native-mouse-unverified',
+        cameraVerified: !!lookControls || mouseVerified,
+        methods: movement ? { ...movement.names } : {},
+        capabilities: { movement: !!movement?.names.applyInput && !!movement?.names.collectInput,
+          blocks: !!nativePosition && typeof world?.getBlockState === 'function',
+          camera: !!lookControls || typeof globalThis.MouseEvent === 'function',
+          mine: !!names.left && !!names.mine, nativeMiningLoop, place: !!names.right, attack: !!names.left },
+        controls: desired && { ...desired } };
+    }
+    const runtime = { bind, observe, setControls, release, releaseInteraction, readCell, aimAt, interact, selectSlot, entities, diagnostics, eye,
+      get game() { return game; }, get player() { return player; },
+      destroy() { release(); destroyed = true; instances.delete(runtime); game = player = world = controller = movement = null; } };
+    instances.add(runtime);
+    return runtime;
+  }
+  globalThis[KEY] = { create, destroy() { for (const instance of [...instances]) instance.destroy(); } };
+})();
 
-    let entityMapCache = null;
-    let entityMapOwner = null;
-    function resolveEntityMap(game) {
-    if (entityMapOwner === game && entityMapCache && looksLikeEntityMap(entityMapCache)) return entityMapCache;
-    const direct = [
-        game?.world?.entitiesDump,
-        game?.world?.entities,
-        game?.world?.entityMap,
-        game?.entityManager?.entities
+//# sourceURL=MF:src/Movement/BaritoneAdapter.js
+
+/* ==== mf module: src/Movement/BaritonePlanner.js ==== */
+(function () {
+    'use strict';
+
+    const ROOT = globalThis;
+    const SQRT2 = Math.SQRT2;
+    const DIRECTIONS = [
+        [1, 0], [0, 1], [-1, 0], [0, -1],
+        [1, 1], [-1, 1], [-1, -1], [1, -1]
     ];
-    for (const candidate of direct) {
-        if (!looksLikeEntityMap(candidate)) continue;
-        entityMapCache = candidate;
-        entityMapOwner = game;
-        return candidate;
+    const key = p => `${p.x},${p.y},${p.z}`;
+    const edgeKey = (a, b) => `${key(a)}>${key(b)}`;
+    const clamp = (value, fallback, min, max) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+    };
+    function position(value) {
+        if (!value || !['x', 'y', 'z'].every(axis => Number.isFinite(value[axis]) && Math.abs(value[axis]) <= 30000000)) return null;
+        return { x: Math.floor(value.x), y: Math.floor(value.y), z: Math.floor(value.z) };
     }
-    return null;
+    function horizontalDistance(a, b, radius = 0) {
+        const dx = Math.max(0, Math.abs(a.x - b.x) - radius);
+        const dz = Math.max(0, Math.abs(a.z - b.z) - radius);
+        return Math.max(dx, dz) + (SQRT2 - 1) * Math.min(dx, dz);
     }
 
-    function findPlayerEntity(username) {
-    const game = getGame();
-    if (!game) return null;
-    const entities = resolveEntityMap(game);
-    if (!entities) return null;
-    const wanted = String(username).toLowerCase();
-    try {
-        for (const entity of entities.values()) {
-            const name = entity?.profile?.username;
-            if (typeof name === 'string' && name.toLowerCase() === wanted && entity?.pos) {
-                return entity;
+    class Heap {
+        constructor() { this.items = []; }
+        get size() { return this.items.length; }
+        less(a, b) { return a.f < b.f || (a.f === b.f && (a.h < b.h || (a.h === b.h && a.order < b.order))); }
+        push(item) {
+            let index = this.items.length;
+            this.items.push(item);
+            while (index > 0) {
+                const parent = (index - 1) >> 1;
+                if (!this.less(item, this.items[parent])) break;
+                this.items[index] = this.items[parent];
+                index = parent;
             }
+            this.items[index] = item;
         }
-    } catch (_) {}
-    return null;
+        pop() {
+            const first = this.items[0];
+            const last = this.items.pop();
+            if (this.items.length) {
+                let index = 0;
+                while (true) {
+                    const left = index * 2 + 1;
+                    if (left >= this.items.length) break;
+                    const right = left + 1;
+                    const child = right < this.items.length && this.less(this.items[right], this.items[left]) ? right : left;
+                    if (!this.less(this.items[child], last)) break;
+                    this.items[index] = this.items[child];
+                    index = child;
+                }
+                this.items[index] = last;
+            }
+            return first;
+        }
     }
 
-    function updatePlayerPositions(now = performance.now(), force = false) {
-    if (!force && now < state.nextPlayerScanAt) return;
-    state.nextPlayerScanAt = now + 250;
-    const entities = resolveEntityMap(getGame());
-    if (!entities) return;
-    try {
-        for (const entity of entities.values()) {
-            const username = entity?.profile?.username;
-            if (typeof username !== 'string' || !entity?.pos) continue;
-            state.playerPositions.set(username.toLowerCase(), {
-                username,
-                x: Number(entity.pos.x), y: Number(entity.pos.y), z: Number(entity.pos.z),
-                seenAt: Date.now(), loaded: true
+    function create(readCell, options = {}) {
+        if (typeof readCell !== 'function') throw new TypeError('BaritonePlanner requires a block reader');
+        const now = typeof options.now === 'function' ? options.now : () => ROOT.performance?.now?.() ?? Date.now();
+        const defaults = {
+            allowMine: options.allowMine === true,
+            allowGap: options.allowGap !== false,
+            maxDrop: Math.floor(clamp(options.maxDrop, 3, 0, 3)),
+            mineCost: clamp(options.mineCost, 4, 1, 100),
+            maxNodesTotal: Math.floor(clamp(options.maxNodesTotal, 12000, 1, 20000)),
+            maxTimeMs: clamp(options.maxTimeMs, 2000, 1, 5000),
+            goalRadius: Math.floor(clamp(options.goalRadius, 2, 0, 4)),
+            blockedEdges: options.blockedEdges
+        };
+
+        function cell(x, y, z, observeUnknown) {
+            let value;
+            try { value = readCell(x, y, z); } catch { value = null; }
+            if (!value || value.known !== true || typeof value.solid !== 'boolean') {
+                observeUnknown?.();
+                return null;
+            }
+            return value;
+        }
+        const clear = value => !!value && !value.solid && !value.hazard;
+        const support = value => {
+            const height = value?.height ?? value?.supportHeight;
+            if (!value || !value.solid || value.hazard ||
+                (height != null && (!Number.isFinite(height) || height < 0.99 || height > 1.01))) return false;
+            if (Array.isArray(value.collision)) {
+                // Integer feet coordinates cannot represent standing on slabs,
+                // fences or a narrow post. Require a full-height box beneath
+                // the player's centered 0.6-block footprint when provided.
+                return value.collision.some(box => box?.min && box?.max &&
+                    [box.min.x, box.min.z, box.max.x, box.max.y, box.max.z].every(Number.isFinite) &&
+                    box.min.x <= 0.2 && box.max.x >= 0.8 && box.min.z <= 0.2 && box.max.z >= 0.8 &&
+                    box.max.y >= 0.99 && box.max.y <= 1.01);
+            }
+            return true;
+        };
+        function stand(x, y, z, observeUnknown) {
+            return clear(cell(x, y, z, observeUnknown)) && clear(cell(x, y + 1, z, observeUnknown)) &&
+                support(cell(x, y - 1, z, observeUnknown));
+        }
+        function candidates(goal, radius) {
+            const result = [];
+            for (let dx = -radius; dx <= radius; dx++) {
+                for (let dz = -radius; dz <= radius; dz++) {
+                    for (let dy = -radius; dy <= radius; dy++) {
+                        const p = { x: goal.x + dx, y: goal.y + dy, z: goal.z + dz };
+                        if (stand(p.x, p.y, p.z)) result.push(p);
+                    }
+                }
+            }
+            result.sort((a, b) => {
+                const distance = p => (p.x - goal.x) ** 2 + (p.y - goal.y) ** 2 + (p.z - goal.z) ** 2;
+                return distance(a) - distance(b);
+            });
+            return result;
+        }
+        function nearestStand(value, radius = 4) {
+            const goal = position(value);
+            if (!goal) return null;
+            if (stand(goal.x, goal.y, goal.z)) return goal;
+            return candidates(goal, Math.floor(clamp(radius, 4, 0, 4)))[0] ?? null;
+        }
+
+        function validateTransition(fromValue, toValue) {
+            const from = position(fromValue);
+            const to = position(toValue);
+            if (!from || !to || !stand(from.x, from.y, from.z) || typeof toValue.action !== 'string') return false;
+            return getNeighbors(from, defaults).some(next => {
+                if (next.x !== to.x || next.y !== to.y || next.z !== to.z) return false;
+                if (toValue.action !== 'mine') return next.action === toValue.action;
+                // Mining is checked before execution. Once some or all of the
+                // planned blocks disappear, the same edge may become walking;
+                // never silently add a newly appeared obstacle to that plan.
+                if (next.action === 'walk') return true;
+                return next.action === 'mine' && Array.isArray(toValue.breakBlocks) &&
+                    next.breakBlocks.every(block => toValue.breakBlocks.some(planned =>
+                        planned.x === block.x && planned.y === block.y && planned.z === block.z));
             });
         }
-        for (const entry of state.playerPositions.values()) entry.loaded = false;
-        for (const entity of entities.values()) {
-            const username = entity?.profile?.username;
-            if (typeof username === 'string') {
-                const entry = state.playerPositions.get(username.toLowerCase());
-                if (entry) entry.loaded = true;
+
+        function getNeighbors(p, config, observeUnknown) {
+            const output = [];
+            const plannedClear = value => p.action === 'mine' && p.breakBlocks?.some(block =>
+                block.x === value.x && block.y === value.y && block.z === value.z);
+            for (const y of [p.y, p.y + 1]) {
+                const originCell = cell(p.x, y, p.z, observeUnknown);
+                if (!originCell || originCell.hazard || (originCell.solid &&
+                    !(originCell.breakable === true && plannedClear({ x: p.x, y, z: p.z })))) return output;
             }
-        }
-    } catch (_) {}
-    }
-
-    function locatePlayer(username) {
-    updatePlayerPositions(performance.now(), true);
-    const entity = findPlayerEntity(username);
-    if (entity?.pos) {
-        return { username: entity.profile?.username || String(username), x: entity.pos.x, y: entity.pos.y, z: entity.pos.z, loaded: true, seenAt: Date.now() };
-    }
-    const cached = state.playerPositions.get(String(username).toLowerCase());
-    return cached ? { ...cached } : null;
-    }
-
-    function isChunkLoaded(x, z) {
-    const world = getWorld();
-    if (!world) return false;
-    const pos = { x: Math.floor(x), z: Math.floor(z) };
-    try {
-        if (typeof world.isBlockLoaded === 'function') {
-            return world.isBlockLoaded(pos);
-        }
-        const proto = Object.getPrototypeOf(world);
-        if (typeof proto.isBlockLoaded === 'function') {
-            return proto.isBlockLoaded.call(world, pos);
-        }
-    } catch (_) {}
-
-    return true;
-    }
-
-    function getBlockState(x, y, z) {
-    if (y < 0 || y > 255) return null;
-    if (!isChunkLoaded(x, z)) return null;
-    const world = getWorld();
-    if (!world) return null;
-    try {
-        const fx = Math.floor(x), fy = Math.floor(y), fz = Math.floor(z);
-        const proto = Object.getPrototypeOf(world);
-
-        if (typeof proto.getChunk === 'function') {
-            const chunk = proto.getChunk.call(world, { x: fx, y: fy, z: fz });
-            if (chunk != null && !chunk.isDummyChunk &&
-                typeof chunk.getBlockState === 'function') {
-                return chunk.getBlockState({ x: fx, y: fy, z: fz });
-            }
-            return null;
-        }
-        if (typeof proto.getBlockState !== 'function') return null;
-        return proto.getBlockState.call(world, { x: fx, y: fy, z: fz });
-    } catch (_) { return null; }
-    }
-
-    function blockSolidity(x, y, z) {
-    const bs = getBlockState(x, y, z);
-    if (!bs) return null;
-    return bs.id !== 0;
-    }
-
-    function isSolid(x, y, z) {
-    return blockSolidity(x, y, z) === true;
-    }
-
-    function isSafe(x, y, z) {
-    const bs = getBlockState(x, y, z);
-    if (!bs) return true;
-    const id = bs.id;
-    if (id === 8 || id === 9 || id === 10 || id === 11) return false;
-    return true;
-    }
-
-    function isWalkable(x, y, z) {
-    if (isSolid(x, y + 1, z) || isSolid(x, y + 2, z)) return false;
-    if (!isSolid(x, y, z)) return false;
-    if (!isSafe(x, y + 1, z) || !isSafe(x, y + 2, z)) return false;
-    return true;
-    }
-
-    function canStand(x, y, z) {
-    const feet = blockSolidity(x, y, z);
-
-    const head = blockSolidity(x, y + 1, z);
-
-    const floor = blockSolidity(x, y - 1, z);
-
-    if (feet === null && floor === null) return true;
-
-    if (feet === true) return false;
-
-    if (head === true) return false;
-
-    if (floor === false) return false;
-
-    return isSafe(x, y, z) && isSafe(x, y + 1, z);
-    }
-
-    function findStandableNear(x, y, z) {
-    for (let r = 0; r <= 12; r++) {
-        for (let dy = 0; dy >= -12; dy--) {
-            for (let dx = -r; dx <= r; dx++) {
-                for (let dz = -r; dz <= r; dz++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
-                    const ny = y + dy;
-                    if (ny < 1 || ny > 254) continue;
-                    if (canStand(x + dx, ny, z + dz)) return { x: x + dx, y: ny, z: z + dz };
+            if (!support(cell(p.x, p.y - 1, p.z, observeUnknown))) return output;
+            const add = (x, y, z, action, cost, breakBlocks) => {
+                const next = { x, y, z, action, cost };
+                if (config.blockedEdges?.has?.(edgeKey(p, next))) return;
+                if (breakBlocks?.length) next.breakBlocks = breakBlocks;
+                output.push(next);
+            };
+            for (const [dx, dz] of DIRECTIONS) {
+                const x = p.x + dx;
+                const z = p.z + dz;
+                const diagonal = dx !== 0 && dz !== 0;
+                if (stand(x, p.y, z, observeUnknown)) {
+                    if (!diagonal || (stand(p.x + dx, p.y, p.z, observeUnknown) && stand(p.x, p.y, p.z + dz, observeUnknown))) {
+                        add(x, p.y, z, 'walk', diagonal ? SQRT2 : 1);
+                    }
+                    continue;
                 }
-            }
-        }
-    }
-    return null;
-    }
+                // Turning corners during jumps or falls requires swept-box physics;
+                // only level walking is diagonal until that can be verified safely.
+                if (diagonal) continue;
 
-    function heuristic(x1, y1, z1, x2, y2, z2) {
-    const dx = Math.abs(x1 - x2);
-    const dy = Math.abs(y1 - y2);
-    const dz = Math.abs(z1 - z2);
-
-    return Math.max(dx, dz) + (Math.SQRT2 - 1) * Math.min(dx, dz);
-    }
-
-    function getNeighbors(x, y, z) {
-    const dirs = [
-        [1, 0], [-1, 0], [0, 1], [0, -1],
-
-        [1, 1], [1, -1], [-1, 1], [-1, -1]
-    ];
-    const result = [];
-
-    for (const [dx, dz] of dirs) {
-        const nx = x + dx;
-        const nz = z + dz;
-        const isDiagonal = dx !== 0 && dz !== 0;
-
-        if (isDiagonal) {
-            if (isSolid(x + dx, y, z) || isSolid(x, y, z + dz)) continue;
-        }
-
-        if (canStand(nx, y, nz)) {
-            result.push({ x: nx, y, z: nz, cost: isDiagonal ? Math.SQRT2 : 1 });
-            continue;
-        }
-
-        if (canStand(nx, y + 1, nz) && canStand(x, y, z)) {
-            result.push({ x: nx, y: y + 1, z: nz, cost: isDiagonal ? Math.SQRT2 + 1.25 : 2.25 });
-            continue;
-        }
-
-        if (canStand(nx, y - 1, nz)) {
-            result.push({ x: nx, y: y - 1, z: nz, cost: isDiagonal ? Math.SQRT2 + 0.35 : 1.35 });
-            continue;
-        }
-
-        for (let dy = 2; dy <= 3; dy++) {
-            if (canStand(nx, y - dy, nz) && !isSolid(nx, y - dy + 1, nz) && !isSolid(nx, y - dy + 2, nz)) {
-                result.push({ x: nx, y: y - dy, z: nz, cost: 1 + dy * 0.8 });
-                break;
-            }
-        }
-    }
-
-    return result;
-    }
-
-    function findPath(startX, startY, startZ, goalX, goalY, goalZ, maxIterOverride) {
-    startX = Math.floor(startX); startY = Math.floor(startY); startZ = Math.floor(startZ);
-    goalX = Math.floor(goalX); goalY = Math.floor(goalY); goalZ = Math.floor(goalZ);
-
-    if (!canStand(goalX, goalY, goalZ)) {
-        const alt = findStandableNear(goalX, goalY, goalZ);
-        if (alt) {
-            void 0;
-            goalX = alt.x; goalY = alt.y; goalZ = alt.z;
-        }
-    }
-
-    const open = new MinHeap();
-    const cameFrom = new Map();
-    const gScore = new Map();
-    const closed = new Set();
-
-    const key = (x, y, z) => `${x},${y},${z}`;
-    const startKey = key(startX, startY, startZ);
-
-    gScore.set(startKey, 0);
-    open.push({ x: startX, y: startY, z: startZ, f: heuristic(startX, startY, startZ, goalX, goalY, goalZ) });
-
-    const startTime = performance.now();
-    let iterations = 0;
-
-    const H_WEIGHT = 1;
-    const MAX_ITER = maxIterOverride || 30000;
-
-    let bestKey = null;
-    let bestH = Infinity;
-
-    const reconstruct = (endKey) => {
-        const path = [];
-        let ck = endKey;
-        while (ck) {
-            const [px, py, pz] = ck.split(',').map(Number);
-            path.unshift({ x: px, y: py, z: pz });
-            if (ck === startKey) break;
-            ck = cameFrom.get(ck);
-        }
-
-        if (path.length > 1) path.shift();
-        return path;
-    };
-
-    while (open.size > 0) {
-        if (++iterations > MAX_ITER || performance.now() - startTime > state.maxPathTime) {
-            console.warn(`${TAG} Path search exceeded limit (${iterations} iterations) — using best-effort path`);
-            break;
-        }
-
-        const current = open.pop();
-        const cKey = key(current.x, current.y, current.z);
-
-        if (closed.has(cKey)) continue;
-        closed.add(cKey);
-
-        const h = heuristic(current.x, current.y, current.z, goalX, goalY, goalZ);
-        if (h < bestH) { bestH = h; bestKey = cKey; }
-
-        if (current.x === goalX && current.y === goalY && current.z === goalZ) {
-            const path = reconstruct(cKey);
-            void 0;
-            return path;
-        }
-
-        const neighbors = getNeighbors(current.x, current.y, current.z);
-
-        for (const n of neighbors) {
-            const nKey = key(n.x, n.y, n.z);
-            if (closed.has(nKey)) continue;
-
-            const tentG = (gScore.get(cKey) || 0) + n.cost;
-            const existingG = gScore.get(nKey);
-
-            if (existingG === undefined || tentG < existingG) {
-                gScore.set(nKey, tentG);
-                cameFrom.set(nKey, cKey);
-                const f = tentG + heuristic(n.x, n.y, n.z, goalX, goalY, goalZ) * H_WEIGHT;
-                open.push({ x: n.x, y: n.y, z: n.z, f });
-            }
-        }
-    }
-
-    if (bestKey && bestH < heuristic(startX, startY, startZ, goalX, goalY, goalZ) - 8) {
-        const path = reconstruct(bestKey);
-        void 0;
-        return path;
-    }
-
-    console.warn(`${TAG} No path found after ${iterations} iterations`);
-    return null;
-    }
-
-    function getLookVector(player) {
-    try {
-        let proto = Object.getPrototypeOf(player);
-        for (let i = 0; i < 4; i++) proto = Object.getPrototypeOf(proto);
-        if (typeof proto.getLook === 'function') return proto.getLook.call(player);
-    } catch (_) {}
-    const yaw = Number(player.yaw) || 0;
-    const pitch = Number(player.pitch) || 0;
-    const cp = Math.cos(pitch);
-    return { x: -Math.sin(yaw) * cp, y: -Math.sin(pitch), z: Math.cos(yaw) * cp };
-    }
-
-    function getCameraRig(player) {
-    const camera = state.game?.gameScene?.camera || state.game?.camera || state.game?.renderer?.camera ||
-        player?.game?.gameScene?.camera || player?.game?.player?.game?.gameScene?.camera;
-    if (!camera) return null;
-    return { camera, pitchObject: camera.parent || null, yawObject: camera.parent?.parent || null };
-    }
-
-    function getViewYaw(player) {
-    const yaw = Number(getCameraRig(player)?.yawObject?.rotation?.y);
-    return Number.isFinite(yaw) ? yaw : (Number(player?.yaw) || 0);
-    }
-
-    function turnCamera(player, yaw, pitch, speed = 0.35) {
-    try {
-        const rig = getCameraRig(player);
-        if (!rig?.yawObject) return false;
-        const { pitchObject, yawObject } = rig;
-        if (yaw != null && typeof yawObject.rotation?.y === 'number') {
-            let yawDiff = yaw - yawObject.rotation.y;
-            while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
-            while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
-            yawObject.rotation.y += clamp(yawDiff, -speed, speed);
-        }
-        if (pitch != null && typeof pitchObject.rotation?.x === 'number') {
-            let pitchDiff = pitch - pitchObject.rotation.x;
-            while (pitchDiff > Math.PI) pitchDiff -= Math.PI * 2;
-            while (pitchDiff < -Math.PI) pitchDiff += Math.PI * 2;
-            pitchObject.rotation.x += clamp(pitchDiff, -speed * 0.7, speed * 0.7);
-        }
-        return true;
-    } catch (_) { return false; }
-    }
-
-    function aimCameraAt(player, tx, ty, tz, speed = 0.35) {
-    const ex = player.pos.x;
-    const ey = player.pos.y + 1.62;
-    const ez = player.pos.z;
-    const dx = tx - ex;
-    const dy = ty - ey;
-    const dz = tz - ez;
-    const distH = Math.hypot(dx, dz);
-    const yaw = Math.atan2(-dx, dz);
-    const pitch = Math.atan2(dy, distH || 1e-6);
-    return turnCamera(player, yaw, pitch, speed);
-    }
-
-    function applyMovementInput(player, strafe, forward, jump, sneak, yaw, pitch, sprint = false) {
-
-    desiredInput.strafe = strafe;
-    desiredInput.forward = forward;
-    desiredInput.jump = jump;
-    desiredInput.sneak = sneak;
-    desiredInput.sprint = sprint;
-    try { player.jumping = !!jump; } catch (_) {}
-
-    desiredInput.yaw = yaw != null ? yaw : Number(player.yaw) || 0;
-
-    if (yaw != null && !state.followTarget) turnCamera(player, yaw, pitch);
-    }
-
-    function movementTowardWorldYaw(player, targetYaw) {
-    let diff = targetYaw - getViewYaw(player);
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    let forward = Math.cos(diff);
-    let strafe = -Math.sin(diff);
-    if (Math.abs(forward) < 0.22) forward = 0;
-    if (Math.abs(strafe) < 0.22) strafe = 0;
-    return { forward, strafe };
-    }
-
-    function obstacleNeedsJump(player, dx, dz) {
-    const len = Math.hypot(dx, dz);
-    if (len < 0.05) return false;
-    const x = Math.floor(player.pos.x + (dx / len) * 0.8);
-    const y = Math.floor(player.pos.y);
-    const z = Math.floor(player.pos.z + (dz / len) * 0.8);
-    return isSolid(x, y, z) && !isSolid(x, y + 1, z);
-    }
-
-    function blockingBlockAhead(player, dx, dz) {
-    const len = Math.hypot(dx, dz);
-    if (len < 0.05) return null;
-    const x = Math.floor(player.pos.x + (dx / len) * 0.78);
-    const z = Math.floor(player.pos.z + (dz / len) * 0.78);
-    const feetY = Math.floor(player.pos.y);
-    for (const y of [feetY + 1, feetY]) {
-        const bs = getBlockState(x, y, z);
-        if (bs && bs.id !== 0 && ![8, 9, 10, 11].includes(bs.id)) return { x, y, z };
-    }
-    return null;
-    }
-
-    function updatePathJump(player, target, distSq, dx, dz, now) {
-    const feetLevel = Math.floor(player.pos.y + 0.12);
-    const stepUp = target.y > feetLevel;
-    const obstacle = obstacleNeedsJump(player, dx, dz);
-    const shouldLaunch = (stepUp && distSq < 2.6) || obstacle;
-
-    if (state.jumpNodeIndex !== state.pathIndex) {
-        state.jumpPhase = 'idle';
-        state.jumpNodeIndex = state.pathIndex;
-    }
-
-    if (state.jumpPhase === 'idle' && shouldLaunch) {
-        state.jumpPhase = 'impulse';
-        state.jumpStartY = Number(player.pos.y) || 0;
-        state.jumpHoldUntil = now + 360;
-    }
-
-    if (state.jumpPhase === 'impulse') {
-        const rose = player.pos.y > state.jumpStartY + 0.28;
-        if (rose || now >= state.jumpHoldUntil) state.jumpPhase = 'airborne';
-        return !rose && now < state.jumpHoldUntil;
-    }
-
-    if (state.jumpPhase === 'airborne') {
-        const reachedLevel = player.pos.y >= target.y - 0.18;
-        if (reachedLevel || (player.onGround && player.pos.y <= state.jumpStartY + 0.12)) {
-            state.jumpPhase = 'idle';
-        }
-    }
-    return false;
-    }
-
-    function executePath(player, keepAlive = false) {
-    if (state.path.length === 0 || state.pathIndex >= state.path.length) {
-        if (!keepAlive) {
-
-            const g = state.goal;
-            if (g && Math.hypot(g.x + 0.5 - player.pos.x, g.y - player.pos.y, g.z + 0.5 - player.pos.z) > 0.85) {
-                void 0;
-                repath();
-                return true;
-            }
-            stop('idle', 'Path complete');
-        }
-        return false;
-    }
-
-    const target = state.path[state.pathIndex];
-    const px = player.pos.x;
-    const py = player.pos.y;
-    const pz = player.pos.z;
-
-    const dx = target.x + 0.5 - px;
-    const dz = target.z + 0.5 - pz;
-    const distSq = dx * dx + dz * dz;
-
-    if (distSq < 0.36 && Math.abs(target.y - py) < 0.7) {
-        state.pathIndex++;
-        if (state.pathIndex >= state.path.length) {
-            if (!keepAlive) {
-                const g = state.goal;
-                if (g && Math.hypot(g.x + 0.5 - player.pos.x, g.y - player.pos.y, g.z + 0.5 - player.pos.z) > 0.85) {
-                    void 0;
-                    repath();
-                    return true;
-                }
-                stop('idle', 'Destination reached');
-            }
-            return false;
-        }
-        return executePath(player, keepAlive);
-    }
-
-    const targetYaw = Math.atan2(-dx, dz);
-
-    const move = movementTowardWorldYaw(player, targetYaw);
-
-    const now = performance.now();
-    const needJump = updatePathJump(player, target, distSq, dx, dz, now);
-
-    applyMovementInput(player, move.strafe, move.forward, needJump, false, null, undefined, move.forward > 0.55);
-
-    state.repathTimer++;
-    if (state.repathTimer > 200) {
-        const lastPos = state._lastPos;
-        if (lastPos) {
-            const moved = Math.hypot(px - lastPos.x, pz - lastPos.z);
-            if (moved < 0.5) {
-                state._stuckCount = (state._stuckCount || 0) + 1;
-                void 0;
-                const obstacle = state.autoMine ? blockingBlockAhead(player, dx, dz) : null;
-                if (obstacle && state.goal) {
-                    const resumeGoal = { ...state.goal };
-                    void 0;
-                    startBlockAction('mine', obstacle.x, obstacle.y, obstacle.z, null, resumeGoal);
-                    return false;
+                const feet = cell(x, p.y, z, observeUnknown);
+                const head = cell(x, p.y + 1, z, observeUnknown);
+                if (support(feet) && stand(x, p.y + 1, z, observeUnknown) &&
+                    clear(cell(p.x, p.y + 2, p.z, observeUnknown))) {
+                    add(x, p.y + 1, z, 'jump', 1.7);
                 }
 
-                if (state._stuckCount === 2 && injectedTicks === 0) {
-                    console.warn(`${TAG} 0 inyecciones desde el start — corriendo probe...`);
-                    startProbe(1000);
-                    return false;
-                }
-                repath();
-                return false;
-            }
-        }
-        state._lastPos = { x: px, y: py, z: pz };
-        state.repathTimer = 0;
-    }
-
-    return true;
-    }
-
-    function follow(username) {
-    const game = getGame(true);
-    if (!game?.player) { console.warn(`${TAG} No player`); return false; }
-
-    const entity = findPlayerEntity(username);
-    if (!entity?.pos) {
-        console.warn(`${TAG} Player "${username}" not found`);
-        return false;
-    }
-
-    releaseMouse();
-    state.action = null;
-    state.actionPhase = 'idle';
-    state.enabled = true;
-    state.followTarget = String(username);
-    state.followEntity = entity;
-    state.goal = { x: Math.floor(entity.pos.x), y: Math.floor(entity.pos.y), z: Math.floor(entity.pos.z) };
-    state.status = 'moving';
-    state.path = [];
-    state.pathIndex = 0;
-    state.followRepathAt = 0;
-
-    void 0;
-    emitState();
-    return true;
-    }
-
-    function stopFollow(silent = false) {
-    state.followTarget = null;
-    state.followEntity = null;
-    if (!silent) void 0;
-    }
-
-    function directChase(player, dx, dz, forceJump = false) {
-    const targetYaw = Math.atan2(-dx, dz);
-    const move = movementTowardWorldYaw(player, targetYaw);
-    const now = performance.now();
-    if (forceJump || obstacleNeedsJump(player, dx, dz)) {
-        state.jumpHoldUntil = Math.max(state.jumpHoldUntil, now + 360);
-    }
-    const jump = now < state.jumpHoldUntil;
-    applyMovementInput(player, move.strafe, move.forward, jump, false, null, undefined, move.forward > 0.55);
-    }
-
-    function followTick(player, now) {
-    const username = state.followTarget;
-    if (!username) return false;
-
-    let entity = state.followEntity;
-    if (!entity?.pos || now - state.lastFollowScan > 1000) {
-        state.lastFollowScan = now;
-        entity = findPlayerEntity(username);
-        state.followEntity = entity;
-    }
-    if (!entity?.pos) {
-
-        applyMovementInput(player, 0, 0, false, false);
-        return true;
-    }
-
-    const dx = entity.pos.x - player.pos.x;
-    const dz = entity.pos.z - player.pos.z;
-    const distH = Math.hypot(dx, dz);
-
-    aimCameraAt(player,
-        entity.pos.x,
-        entity.pos.y + 1.5,
-        entity.pos.z,
-        0.45);
-
-    state.goal = { x: Math.floor(entity.pos.x), y: Math.floor(entity.pos.y), z: Math.floor(entity.pos.z) };
-
-    if (distH < 2.5) {
-        applyMovementInput(player, 0, 0, false, false);
-        return true;
-    }
-
-    if (distH > 24) {
-        directChase(player, dx, dz);
-        return true;
-    }
-
-    if (now >= state.followRepathAt) {
-        state.followRepathAt = now + 1500;
-        const path = findPath(player.pos.x, player.pos.y, player.pos.z,
-                              entity.pos.x, entity.pos.y, entity.pos.z, 3000);
-        if (path && path.length > 0) {
-
-            state.path = path.slice(0, 10);
-            state.pathIndex = 0;
-        } else {
-
-            state.path = [];
-        }
-    }
-
-    if (state.path.length > 0 && state.pathIndex < state.path.length) {
-        const ok = executePath(player, true);
-        if (!ok && state.status !== 'moving') return true;
-    } else {
-
-        directChase(player, dx, dz);
-    }
-    return true;
-    }
-
-    function getInputSurface() {
-    const renderer = state.game?.gameScene?.renderer || state.game?.renderer;
-    return renderer?.domElement || renderer?.canvas ||
-        document.querySelector('#react canvas') || document.querySelector('canvas') || document.body;
-        }
-
-        function dispatchMouse(button, down) {
-    const target = getInputSurface();
-    if (!target) return false;
-    const rect = target.getBoundingClientRect?.() || { left: 0, top: 0, width: innerWidth, height: innerHeight };
-    const init = {
-        bubbles: true, cancelable: true, composed: true,
-        button, buttons: down ? (button === 0 ? 1 : button === 1 ? 4 : 2) : 0,
-        clientX: rect.left + rect.width / 2,
-        clientY: rect.top + rect.height / 2,
-        pointerId: 1, pointerType: 'mouse', isPrimary: true
-    };
-    try {
-        if (typeof PointerEvent === 'function') target.dispatchEvent(new PointerEvent(down ? 'pointerdown' : 'pointerup', init));
-        target.dispatchEvent(new MouseEvent(down ? 'mousedown' : 'mouseup', init));
-        return true;
-    } catch (_) { return false; }
-    }
-
-    function releaseMouse() {
-    try {
-        if (state.player) {
-            state.player.punching = false;
-            if ('attacking' in state.player) state.player.attacking = false;
-        }
-    } catch (_) {}
-    if (state.heldMouseButton == null) return;
-    dispatchMouse(state.heldMouseButton, false);
-    state.heldMouseButton = null;
-    }
-
-    function clickMouse(button) {
-    dispatchMouse(button, true);
-    setTimeout(() => dispatchMouse(button, false), 45);
-    }
-
-    function selectHotbarSlot(slot) {
-    const n = Math.floor(Number(slot));
-    if (n < 1 || n > 9) return;
-    const target = getInputSurface();
-    const init = { key: String(n), code: `Digit${n}`, bubbles: true, cancelable: true };
-    try {
-        target.dispatchEvent(new KeyboardEvent('keydown', init));
-        target.dispatchEvent(new KeyboardEvent('keyup', init));
-    } catch (_) {}
-    }
-
-    function eyeDistance(player, x, y, z) {
-    return Math.hypot(x - player.pos.x, y - (player.pos.y + 1.62), z - player.pos.z);
-    }
-
-    function findActionStand(player, target, reach = 4.4) {
-    const candidates = [];
-    for (let dy = -3; dy <= 3; dy++) {
-        for (let dx = -4; dx <= 4; dx++) {
-            for (let dz = -4; dz <= 4; dz++) {
-                const x = target.x + dx, y = target.y + dy, z = target.z + dz;
-                if (!canStand(x, y, z)) continue;
-                const fromEye = Math.hypot(target.x + 0.5 - (x + 0.5), target.y + 0.5 - (y + 1.62), target.z + 0.5 - (z + 0.5));
-                if (fromEye > reach) continue;
-                candidates.push({ x, y, z, score: Math.hypot(x - player.pos.x, y - player.pos.y, z - player.pos.z) });
-            }
-        }
-    }
-    candidates.sort((a, b) => a.score - b.score);
-    return candidates[0] || null;
-    }
-
-    function findPlaceAnchor(target, player) {
-    const faces = [
-        [0, -1, 0], [0, 1, 0], [-1, 0, 0], [1, 0, 0], [0, 0, -1], [0, 0, 1]
-    ];
-    const anchors = [];
-    for (const [dx, dy, dz] of faces) {
-        const x = target.x + dx, y = target.y + dy, z = target.z + dz;
-        if (!isSolid(x, y, z)) continue;
-        anchors.push({
-            x: x + 0.5 - dx * 0.49,
-            y: y + 0.5 - dy * 0.49,
-            z: z + 0.5 - dz * 0.49,
-            score: eyeDistance(player, x + 0.5, y + 0.5, z + 0.5)
-        });
-    }
-    anchors.sort((a, b) => a.score - b.score);
-    return anchors[0] || null;
-    }
-
-    function setActionStatus(status, phase) {
-    const changed = state.status !== status || state.actionPhase !== phase;
-    state.status = status;
-    state.actionPhase = phase;
-    if (changed) emitState();
-    }
-
-    function planActionApproach(player) {
-    const action = state.action;
-    if (!action || action.type === 'attack') return false;
-    const stand = findActionStand(player, action);
-    if (!stand) return false;
-    state.goal = stand;
-    const path = findPath(player.pos.x, player.pos.y, player.pos.z, stand.x, stand.y, stand.z, 5000);
-    state.path = path || [];
-    state.pathIndex = 0;
-    state.repathTimer = 0;
-    state._lastPos = null;
-    action.repathAt = performance.now() + 1200;
-    return !!path;
-    }
-
-    function startBlockAction(type, x, y, z, slot, resumeGoal = null) {
-    const game = getGame(true);
-    const player = game?.player;
-    if (!player?.pos) return false;
-    releaseMouse();
-    stopFollow(true);
-    state.actionPhase = 'idle';
-    state.enabled = true;
-    state.action = { type, x: Math.floor(x), y: Math.floor(y), z: Math.floor(z), slot: Number(slot) || null, repathAt: 0, resumeGoal };
-    state.actionStartedAt = performance.now();
-    state.actionNextAt = performance.now() + 220;
-    state.path = [];
-    state.pathIndex = 0;
-    if (type === 'place' && state.action.slot) selectHotbarSlot(state.action.slot);
-    planActionApproach(player);
-    setActionStatus('moving', 'approaching');
-    void 0;
-    return true;
-    }
-
-    function attackPlayer(username) {
-    const game = getGame(true);
-    if (!game?.player) return false;
-    const entity = findPlayerEntity(username);
-    if (!entity?.pos) return false;
-    releaseMouse();
-    state.enabled = true;
-    state.action = { type: 'attack', username: String(username), entity };
-    state.followTarget = String(username);
-    state.followEntity = entity;
-    state.path = [];
-    state.pathIndex = 0;
-    state.actionNextAt = 0;
-    state.actionStartedAt = performance.now();
-    setActionStatus('moving', 'chasing');
-    void 0;
-    return true;
-    }
-
-    function finishAction(reason, failed = false) {
-    releaseMouse();
-    const resumeGoal = !failed ? state.action?.resumeGoal : null;
-    state.action = null;
-    state.actionPhase = 'idle';
-    if (resumeGoal) {
-        void 0;
-        goto(resumeGoal.x, resumeGoal.y, resumeGoal.z);
-        return;
-    }
-    stop(failed ? 'failed' : 'idle', reason);
-    }
-
-    function blockActionTick(player, now, action) {
-    const solid = blockSolidity(action.x, action.y, action.z);
-    if (action.type === 'mine' && solid === false) {
-        finishAction('Block mined');
-        return;
-    }
-    if (action.type === 'place' && solid === true) {
-        finishAction('Block placed');
-        return;
-    }
-    if (now - state.actionStartedAt > (action.type === 'mine' ? 20000 : 8000)) {
-        finishAction(`${action.type} timed out`, true);
-        return;
-    }
-
-    const tx = action.x + 0.5, ty = action.y + 0.5, tz = action.z + 0.5;
-    if (eyeDistance(player, tx, ty, tz) > 4.55) {
-        releaseMouse();
-        setActionStatus('moving', 'approaching');
-        if (state.path.length && state.pathIndex < state.path.length) executePath(player, true);
-        else if (now >= action.repathAt) planActionApproach(player);
-        return;
-    }
-
-    applyMovementInput(player, 0, 0, false, false);
-    if (action.type === 'mine') {
-        aimCameraAt(player, tx, ty, tz, 0.42);
-        setActionStatus('mining', 'acting');
-
-        try {
-            player.punching = true;
-            if ('attacking' in player) player.attacking = true;
-        } catch (_) {}
-        if (now >= state.actionNextAt && state.heldMouseButton == null) {
-            dispatchMouse(0, true);
-            state.heldMouseButton = 0;
-        }
-        return;
-    }
-
-    const anchor = findPlaceAnchor(action, player);
-    if (!anchor) {
-        finishAction('No solid neighbor to place against', true);
-        return;
-    }
-    aimCameraAt(player, anchor.x, anchor.y, anchor.z, 0.42);
-    setActionStatus('placing', 'acting');
-    if (now >= state.actionNextAt) {
-        clickMouse(2);
-        state.actionNextAt = now + 480;
-    }
-    }
-
-    function combatTick(player, now, action) {
-    let entity = action.entity;
-    if (!entity?.pos || now - (action.lastScan || 0) > 800) {
-        action.lastScan = now;
-        entity = findPlayerEntity(action.username);
-        action.entity = entity;
-    }
-    if (!entity?.pos) {
-        applyMovementInput(player, 0, 0, false, false);
-        setActionStatus('attacking', 'waiting-target');
-        return;
-    }
-    const dx = entity.pos.x - player.pos.x;
-    const dy = entity.pos.y - player.pos.y;
-    const dz = entity.pos.z - player.pos.z;
-    const distance = Math.hypot(dx, dy, dz);
-    aimCameraAt(player, entity.pos.x, entity.pos.y + 1.35, entity.pos.z, 0.5);
-    state.goal = { x: Math.floor(entity.pos.x), y: Math.floor(entity.pos.y), z: Math.floor(entity.pos.z) };
-    if (distance > 3.45) {
-        setActionStatus('moving', 'chasing');
-        directChase(player, dx, dz, dy > 0.65);
-        return;
-    }
-    applyMovementInput(player, 0, distance < 1.7 ? -0.35 : 0, false, false);
-    setActionStatus('attacking', 'acting');
-    if (now >= state.actionNextAt) {
-        clickMouse(0);
-        state.actionNextAt = now + 520;
-    }
-    }
-
-    function actionTick(player, now) {
-    const action = state.action;
-    if (!action) return false;
-    if (action.type === 'attack') combatTick(player, now, action);
-    else blockActionTick(player, now, action);
-    return true;
-    }
-
-    function jumpOnce(ms = 420) {
-    const game = getGame(true);
-    if (!game?.player) return false;
-    state.enabled = true;
-    state.manualJumpUntil = performance.now() + clamp(Number(ms) || 420, 150, 1200);
-    state.status = 'moving';
-    state.actionPhase = 'jumping';
-    emitState();
-    return true;
-    }
-
-    function goto(x, y, z) {
-    const game = getGame(true);
-    if (!game?.player) { console.warn(`${TAG} No player`); return false; }
-
-    stopFollow(true);
-    releaseMouse();
-    state.action = null;
-    state.actionPhase = 'idle';
-    state.enabled = true;
-    state.goal = { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) };
-    state.status = 'pathfinding';
-    void 0;
-
-    const p = game.player;
-    const path = findPath(p.pos.x, p.pos.y, p.pos.z, state.goal.x, state.goal.y, state.goal.z);
-
-    if (path && path.length > 0) {
-        state.path = path;
-        state.pathIndex = 0;
-        state.repathTimer = 0;
-        state._lastPos = null;
-        state._stuckCount = 0;
-        state.status = 'moving';
-        emitState();
-        return true;
-    }
-    console.warn(`${TAG} No path found to destination`);
-    stop('failed', 'No path found');
-    return false;
-    }
-
-    function repath() {
-    if (!state.goal) return;
-    const game = getGame(true);
-    if (!game?.player) return;
-    const p = game.player;
-    const path = findPath(p.pos.x, p.pos.y, p.pos.z, state.goal.x, state.goal.y, state.goal.z);
-    if (path && path.length > 0) {
-        state.path = path;
-        state.pathIndex = 0;
-        state.repathTimer = 0;
-        state._lastPos = null;
-        state.status = 'moving';
-    } else {
-        stop('failed', 'Re-path failed');
-    }
-    emitState();
-    }
-
-    function stop(status = 'idle', reason = '') {
-    releaseMouse();
-    state.path = [];
-    state.pathIndex = 0;
-    state.goal = null;
-    state.status = status;
-    state.followTarget = null;
-    state.followEntity = null;
-    state.action = null;
-    state.actionPhase = 'idle';
-    state.manualJumpUntil = 0;
-    state.jumpHoldUntil = 0;
-    state._loopErr = false;
-
-    desiredInput.strafe = 0;
-    desiredInput.forward = 0;
-    desiredInput.jump = false;
-    desiredInput.sneak = false;
-    desiredInput.sprint = false;
-    desiredInput.yaw = null;
-
-    neutralMovement(state.player);
-    void 0;
-    emitState();
-    }
-
-    function loop() {
-
-    if (state.enabled) {
-        try { updatePlayerPositions(performance.now()); } catch (_) {}
-        try {
-            const game = getGame();
-            const player = game?.player;
-
-            if (game && player) {
-                const now = performance.now();
-
-                if (!inputHooked || state.player !== player) {
-                    restorePlayerHook();
-                    hookPlayerInput();
+                if (clear(feet) && clear(head)) {
+                    for (let drop = 1; drop <= config.maxDrop; drop++) {
+                        const y = p.y - drop;
+                        if (!clear(cell(x, y, z, observeUnknown))) break;
+                        const floor = cell(x, y - 1, z, observeUnknown);
+                        if (!floor || floor.hazard) break;
+                        if (support(floor)) {
+                            add(x, y, z, 'drop', 1 + drop * 0.35);
+                            break;
+                        }
+                        if (floor.solid) break;
+                    }
+                    const floor = cell(x, p.y - 1, z, observeUnknown);
+                    const landingX = p.x + dx * 2;
+                    const landingZ = p.z + dz * 2;
+                    if (config.allowGap && clear(floor) && stand(landingX, p.y, landingZ, observeUnknown) &&
+                        clear(cell(p.x, p.y + 2, p.z, observeUnknown)) &&
+                        clear(cell(x, p.y + 2, z, observeUnknown)) &&
+                        clear(cell(landingX, p.y + 2, landingZ, observeUnknown))) {
+                        add(landingX, p.y, landingZ, 'gap', 2.8);
+                    }
                 }
 
-                if (probeState) {
-                    if (now >= probeState.until) finishProbe();
-                } else if (state.manualJumpUntil > now) {
-                    applyMovementInput(player, 0, 0, true, false);
-                } else if (state.manualJumpUntil) {
-                    stop('idle', 'Jump complete');
-                } else if (state.action) {
-                    actionTick(player, now);
-                } else if (state.followTarget) {
-                    followTick(player, now);
-                } else if (state.status === 'moving' && state.path.length > 0) {
-                    executePath(player);
+                if (config.allowMine && feet && head && !feet.hazard && !head.hazard &&
+                    support(cell(x, p.y - 1, z, observeUnknown))) {
+                    const obstacles = [];
+                    if (feet.solid) obstacles.push({ x, y: p.y, z, cell: feet });
+                    if (head.solid) obstacles.push({ x, y: p.y + 1, z, cell: head });
+                    if (obstacles.length && obstacles.every(block => block.cell.breakable === true)) {
+                        add(x, p.y, z, 'mine', 1 + config.mineCost * obstacles.length,
+                            obstacles.map(({ x: bx, y, z: bz }) => ({ x: bx, y, z: bz })));
+                    }
                 }
             }
-        } catch (err) {
+            return output;
+        }
 
-            if (!state._loopErr) {
-                state._loopErr = true;
-                console.warn(`${TAG} loop error (following ones suppressed):`, err);
+        function search(startValue, goalValue, opts = {}) {
+            const start = position(startValue);
+            const requestedGoal = position(goalValue);
+            const config = {
+                ...defaults,
+                allowMine: opts.allowMine == null ? defaults.allowMine : opts.allowMine === true,
+                allowGap: opts.allowGap == null ? defaults.allowGap : opts.allowGap !== false,
+                blockedEdges: opts.blockedEdges ?? defaults.blockedEdges,
+                maxNodesTotal: Math.floor(clamp(opts.maxNodesTotal, defaults.maxNodesTotal, 1, 20000)),
+                maxTimeMs: clamp(opts.maxTimeMs, defaults.maxTimeMs, 1, 5000),
+                goalRadius: Math.floor(clamp(opts.goalRadius, defaults.goalRadius, 0, 4))
+            };
+            const began = now();
+            const open = new Heap();
+            const bestCosts = new Map();
+            const expanded = new Map();
+            let best = null;
+            let visited = 0;
+            let order = 0;
+            let sawUnknown = false;
+            let radius = 0;
+            let goalKeys = new Set();
+            const observeUnknown = () => { sawUnknown = true; };
+            const job = { done: false, result: null, step, cancel };
+
+            function pathFor(node) {
+                const path = [];
+                for (let current = node; current; current = current.parent) {
+                    const p = { x: current.x, y: current.y, z: current.z, action: current.action };
+                    if (current.breakBlocks?.length) p.breakBlocks = current.breakBlocks.map(block => ({ ...block }));
+                    path.push(p);
+                }
+                return path.reverse();
             }
+            function finish(reason, complete = false, node = best) {
+                job.done = true;
+                job.result = {
+                    path: pathFor(node), complete, reason, cost: node?.g ?? 0, visited,
+                    requestedGoal: requestedGoal && { ...requestedGoal },
+                    goal: complete && node ? { x: node.x, y: node.y, z: node.z } : requestedGoal && { ...requestedGoal },
+                    adjustedGoal: complete && !!node && key(node) !== key(requestedGoal),
+                    elapsedMs: Math.max(0, now() - began)
+                };
+                open.items.length = 0;
+                bestCosts.clear();
+                expanded.clear();
+                best = null;
+                return job.result;
+            }
+            function cancel() {
+                if (!job.done) finish('cancelled', false, null);
+                return job.result;
+            }
+            function step(budget = {}) {
+                if (job.done) return job.result;
+                const sliceBegan = now();
+                const maxMs = clamp(budget.maxMs, 4, 0.1, 16);
+                const maxNodes = Math.floor(clamp(budget.maxNodes, 200, 1, 1000));
+                let count = 0;
+                while (open.size) {
+                    if (now() - began >= config.maxTimeMs) return finish('time_budget');
+                    if (visited >= config.maxNodesTotal) return finish('node_budget');
+                    if (count >= maxNodes || now() - sliceBegan >= maxMs) return null;
+                    const current = open.pop();
+                    const currentKey = key(current);
+                    if (current.g !== bestCosts.get(currentKey) || (expanded.get(currentKey) ?? Infinity) <= current.g) continue;
+                    expanded.set(currentKey, current.g);
+                    count++;
+                    visited++;
+                    if (!best || current.progress < best.progress || (current.progress === best.progress && current.g < best.g)) best = current;
+                    if (goalKeys.has(currentKey)) return finish('reached', true, current);
+                    for (const next of getNeighbors(current, config, observeUnknown)) {
+                        const nextKey = key(next);
+                        const g = current.g + next.cost;
+                        if (g >= (bestCosts.get(nextKey) ?? Infinity)) continue;
+                        const h = horizontalDistance(next, requestedGoal, radius);
+                        const progress = h + Math.abs(next.y - requestedGoal.y) * 0.25;
+                        const record = { ...next, g, h, progress, f: g + h, parent: current, order: order++ };
+                        bestCosts.set(nextKey, g);
+                        open.push(record);
+                    }
+                }
+                return finish(sawUnknown ? 'unloaded_frontier' : 'unreachable');
+            }
+
+            if (!start || !stand(start.x, start.y, start.z, observeUnknown)) {
+                finish('invalid_start', false, null);
+                return job;
+            }
+            if (!requestedGoal) {
+                finish('invalid_goal', false, null);
+                return job;
+            }
+            let goals = [requestedGoal];
+            if (!stand(requestedGoal.x, requestedGoal.y, requestedGoal.z)) {
+                // Unknown target chunks are not interchangeable with a nearby
+                // loaded tile: stop at the frontier and wait for world data.
+                const targetKnown = [0, 1, -1].every(dy => !!cell(requestedGoal.x, requestedGoal.y + dy, requestedGoal.z));
+                if (targetKnown) {
+                    radius = config.goalRadius;
+                    goals = candidates(requestedGoal, radius);
+                } else {
+                    goals = [];
+                    sawUnknown = true;
+                }
+            }
+            goalKeys = new Set(goals.map(key));
+            const h = horizontalDistance(start, requestedGoal, radius);
+            best = { ...start, action: 'walk', g: 0, h, progress: h + Math.abs(start.y - requestedGoal.y) * 0.25, f: h, parent: null, order: order++ };
+            bestCosts.set(key(start), 0);
+            open.push(best);
+            // With a distant unloaded goal, exploring the loaded frontier still
+            // yields a useful partial route. It is never reported as complete.
+            return job;
         }
-    }
 
-    requestAnimationFrame(loop);
-    }
-
-    document.addEventListener(EVENT_CONFIG, event => {
-    let cfg;
-    try { cfg = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail; }
-    catch (_) { return; }
-    if (!cfg || !('enabled' in cfg)) return;
-
-    if (cfg.enabled) {
-        state.enabled = true;
-    } else {
-        state.enabled = false;
-        stop('idle', 'Disabled via config');
-        restorePlayerHook();
-    }
-    emitState();
-    }, true);
-
-    document.addEventListener(EVENT_COMMAND, event => {
-    let cmd;
-    try { cmd = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail; }
-    catch (_) { return; }
-    if (!cmd) return;
-
-    switch (cmd.type) {
-        case 'goto':
-            goto(cmd.x, cmd.y || 0, cmd.z);
-            break;
-        case 'follow':
-            follow(cmd.username);
-            break;
-        case 'mine':
-            startBlockAction('mine', cmd.x, cmd.y, cmd.z);
-            break;
-        case 'place':
-            startBlockAction('place', cmd.x, cmd.y, cmd.z, cmd.slot);
-            break;
-        case 'attack':
-            attackPlayer(cmd.username);
-            break;
-        case 'jump':
-            jumpOnce(cmd.ms);
-            break;
-        case 'stop':
-            stop('idle', 'User stopped');
-            break;
-        case 'enable':
-            state.enabled = true;
-            emitState();
-            break;
-        case 'disable':
-            state.enabled = false;
-            stop('idle', 'Disabled');
-            break;
-    }
-    }, true);
-
-    function emitState() {
-    try {
-        document.dispatchEvent(new CustomEvent(EVENT_STATE, {
-            detail: JSON.stringify({
-                enabled: state.enabled,
-                status: state.status,
-                goal: state.goal,
-                following: state.followTarget,
-                action: state.action ? { type: state.action.type, username: state.action.username, x: state.action.x, y: state.action.y, z: state.action.z } : null,
-                actionPhase: state.actionPhase,
-                autoMine: state.autoMine,
-                pathLength: state.path.length,
-                pathIndex: state.pathIndex
-            })
-        }));
-    } catch (_) {}
-    }
-
-    globalThis.Baritone = {
-    goto(x, y, z) {
-        if (y === undefined) {
-
-            const game = getGame(true);
-            if (game?.player) y = Math.floor(game.player.pos.y);
-            else y = 64;
-        }
-        return goto(x, y, z);
-    },
-    follow(username) { return follow(username); },
-    attack(username) { return attackPlayer(username); },
-    mine(x, y, z) { return startBlockAction('mine', x, y, z); },
-    place(x, y, z, slot) { return startBlockAction('place', x, y, z, slot); },
-    jump(ms) { return jumpOnce(ms); },
-    locate(username) { return locatePlayer(username); },
-    players() {
-        updatePlayerPositions(performance.now(), true);
-        return [...state.playerPositions.values()].map(p => ({ ...p }));
-    },
-    setAutoMine(value) { state.autoMine = !!value; emitState(); return state.autoMine; },
-    unfollow() { stopFollow(); },
-    probe(ms) { return startProbe(ms); },
-    stop() { stop('idle', 'API stop'); },
-    enable() { state.enabled = true; emitState(); return state.enabled; },
-    disable() {
-        stop('idle', 'Disabled');
-        state.enabled = false;
-        restorePlayerHook();
-        emitState();
-        return state.enabled;
-    },
-    get status() { return state.status; },
-    get goal() { return state.goal; },
-    get pathLength() { return state.path.length; },
-    debug() {
         return {
-            enabled: state.enabled,
-            status: state.status,
-            hooked: inputHooked,
-            readerName: state.readerName,
-            resolveError: state._resolveError,
-            injectedTicks,
-            msSinceLastInject: lastInjectAt ? Math.round(performance.now() - lastInjectAt) : null,
-            desired: { ...desiredInput },
-            followTarget: state.followTarget,
-            action: state.action ? { ...state.action, entity: undefined } : null,
-            actionPhase: state.actionPhase,
-            autoMine: state.autoMine,
-            trackedPlayers: state.playerPositions.size,
-            path: state.path.length,
-            pathIndex: state.pathIndex
+            canStand: (x, y, z) => Number.isInteger(x) && Number.isInteger(y) && Number.isInteger(z) && stand(x, y, z),
+            neighbors: value => {
+                const p = position(value);
+                return p ? getNeighbors(p, defaults) : [];
+            },
+            nearestStand,
+            validateTransition,
+            search
         };
     }
-    };
 
-    void 0;
+    ROOT.__MF_BARITONE_PLANNER__ = Object.freeze({ create, edgeKey, version: 1 });
+})();
 
-requestAnimationFrame(loop);
+//# sourceURL=MF:src/Movement/BaritonePlanner.js
+
+/* ==== mf module: src/Movement/Baritone.js ==== */
+(function () {
+  'use strict';
+
+  const BARITONE_NAVIGATION_VERSION = 2;
+
+  // Only the adapter depends on native APIs; the planner knows terrain, not obfuscated names.
+  try { globalThis.Baritone?.destroy?.(); } catch (_) {}
+  const listeners = [];
+  const state = {
+    enabled: false, status: 'idle', reason: '', goal: null, effectiveGoal: null,
+    path: [], pathIndex: 0, following: null, action: null, actionPhase: 'idle',
+    autoMine: true, search: null, searchResult: null, retries: 0, resumeAt: 0,
+    progressAt: 0, progressPos: null, followPlanAt: 0, followGoal: null,
+    jumpUntil: 0, jumpedIndex: -1, bestGoalDistance: Infinity, blockedEdges: new Set(), players: new Map(),
+    scannedAt: 0, game: null, player: null, world: null, destroyed: false, timer: 0
+  };
+  let adapter = null, planner = null, emitAt = 0;
+  const now = () => performance.now();
+  const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  const cell = p => ({ x: Math.floor(p.x), y: Math.floor(p.y + 0.01), z: Math.floor(p.z) });
+  const center = p => ({ x: p.x + 0.5, y: p.y, z: p.z + 0.5 });
+  const finite = p => p && [p.x, p.y, p.z].every(Number.isFinite);
+
+  function getGame() {
+    const valid = game => finite(game?.player?.pos) && game?.world;
+    const bridge = globalThis.__MINIFEATHER_MOVEMENT_API__;
+    for (const candidate of [bridge?.getGame?.(), globalThis.__MINIBLOX_GAME__,
+      globalThis.game, globalThis.minibloxGame, globalThis.__MB?.game]) {
+      if (valid(candidate)) return candidate;
+    }
+    const root = document.querySelector('#react') || document.querySelector('#root');
+    if (!root) return null;
+    const queue = Object.keys(root).filter(k => /^(?:__react|_reactRoot)/.test(k)).map(k => root[k]);
+    const seen = new Set();
+    for (let i = 0; i < queue.length && i < 300; i++) {
+      const value = queue[i];
+      if (!value || typeof value !== 'object' || seen.has(value)) continue;
+      seen.add(value);
+      for (const game of [value.memoizedProps?.game, value.pendingProps?.game,
+        value.updateQueue?.baseState?.element?.props?.game, value.stateNode?.game]) {
+        if (valid(game)) return game;
+      }
+      for (const next of [value.current, value._internalRoot, value.child, value.sibling, value.return]) {
+        if (next && !seen.has(next)) queue.push(next);
+      }
+    }
+    return null;
+  }
+
+  function emitState(force = false) {
+    if (!force && now() < emitAt) return;
+    emitAt = now() + 250;
+    document.dispatchEvent(new CustomEvent('minifeather:baritone-state', { detail: JSON.stringify({
+      enabled: state.enabled, status: state.status, reason: state.reason,
+      goal: state.goal, effectiveGoal: state.effectiveGoal, following: state.following,
+      action: state.action ? { ...state.action, entity: undefined, candidates: undefined } : null,
+      actionPhase: state.actionPhase, autoMine: state.autoMine,
+      pathLength: state.path.length, pathIndex: state.pathIndex,
+      planning: !!state.search, complete: state.searchResult?.complete ?? null
+    }) }));
+  }
+  function setStatus(status, reason = '') {
+    if (state.status === status && state.reason === reason) return;
+    state.status = status; state.reason = reason; emitState(true);
+  }
+  function neutral() {
+    if (adapter && !adapter.setControls({ forward: 0, strafe: 0, jump: false, sneak: false, sprint: false })) {
+      throw new Error(adapter.diagnostics()?.error || 'Native input hooks unavailable');
+    }
+  }
+  function cancelSearch() { state.search?.cancel(); state.search = null; }
+  function stop(status = 'idle', reason = '') {
+    cancelSearch(); adapter?.release();
+    Object.assign(state, { path: [], pathIndex: 0, goal: null, effectiveGoal: null,
+      following: null, followGoal: null, action: null, actionPhase: 'idle',
+      jumpUntil: 0, jumpedIndex: -1, bestGoalDistance: Infinity, retries: 0, progressPos: null, searchResult: null });
+    state.blockedEdges.clear(); setStatus(status, reason); emitState(true);
+  }
+  function bind(game) {
+    if (!globalThis.__MF_BARITONE_ADAPTER__ || !globalThis.__MF_BARITONE_PLANNER__) {
+      setStatus('failed', 'Navigation dependencies are not loaded'); return false;
+    }
+    if (!adapter) adapter = globalThis.__MF_BARITONE_ADAPTER__.create();
+    if (!adapter.bind(game)) {
+      setStatus('failed', adapter.diagnostics()?.error || 'Native movement API unavailable'); return false;
+    }
+    Object.assign(state, { game, player: game.player, world: game.world });
+    planner = globalThis.__MF_BARITONE_PLANNER__.create((x, y, z) => adapter.readCell(x, y, z),
+      { allowMine: state.autoMine, allowGap: true, blockedEdges: state.blockedEdges });
+    return true;
+  }
+  function prepare() {
+    const game = getGame();
+    if (!game || (typeof game.inGame === 'function' && !game.inGame())) {
+      stop('failed', 'Enter a world before starting Baritone'); return false;
+    }
+    if (globalThis.__MINIFEATHER_FREECAM_ACTIVE__) {
+      stop('failed', 'Disable FreeCam before starting Baritone'); return false;
+    }
+    stop('idle');
+    if (!bind(game)) { adapter?.release(); return false; }
+    state.enabled = true; return true;
+  }
+  function beginSearch(goal = state.goal) {
+    if (!finite(goal) || !planner || !state.player?.pos) return false;
+    cancelSearch(); adapter.releaseInteraction?.(); neutral();
+    const nextGoal = cell(goal);
+    if (!state.goal || state.goal.x !== nextGoal.x || state.goal.y !== nextGoal.y || state.goal.z !== nextGoal.z) {
+      state.bestGoalDistance = distance(state.player.pos, center(nextGoal));
+    }
+    state.path = []; state.pathIndex = 0; state.jumpedIndex = -1; state.goal = nextGoal;
+    state.search = planner.search(cell(state.player.pos), state.goal,
+      { maxNodesTotal: 12000, maxTimeMs: 2000, goalRadius: state.action ? 0 : 3 });
+    state.progressAt = now(); state.progressPos = { ...state.player.pos };
+    setStatus('pathfinding'); return true;
+  }
+  function waitOrFail(reason) {
+    neutral(); adapter?.releaseInteraction?.(); state.resumeAt = now() + 1000;
+    if (++state.retries > 6) stop('failed', reason); else setStatus('waiting', reason);
+  }
+  function routeComplete() {
+    neutral();
+    if (!state.searchResult?.complete) return waitOrFail('Waiting for safe continuation / loaded chunks');
+    if (state.action) {
+      state.actionPhase = 'aiming'; state.path = [];
+      setStatus(state.action.type === 'attack' ? 'attacking' : state.action.type === 'mine' ? 'mining' : 'placing');
+    } else if (state.following) { state.path = []; setStatus('following'); }
+    else stop('idle', state.searchResult.adjustedGoal ? 'Reached a safe position near the goal' : 'Destination reached');
+  }
+  function advanceSearch() {
+    const job = state.search;
+    if (!job) return;
+    job.step({ maxMs: 4, maxNodes: 160 });
+    if (!job.done || state.search !== job) return;
+    state.search = null; state.searchResult = job.result;
+    state.effectiveGoal = job.result?.goal || state.goal;
+    state.path = job.result?.path || []; state.pathIndex = 0; state.jumpedIndex = -1;
+    state.progressAt = now(); state.progressPos = { ...state.player.pos };
+    if (state.path.length) setStatus('moving', job.result.complete ? '' : 'Partial route through loaded terrain');
+    else if (job.result?.complete) routeComplete();
+    else if (state.action && nextActionApproach()) return;
+    else waitOrFail(job.result?.reason || 'No safe route in loaded terrain');
+    emitState(true);
+  }
+  function edgeKey(from, to) {
+    return `${from.x},${from.y},${from.z}>${to.x},${to.y},${to.z}`;
+  }
+  function blockEdge(from, to) {
+    state.blockedEdges.add(edgeKey(from, to));
+    if (state.blockedEdges.size > 256) state.blockedEdges.delete(state.blockedEdges.values().next().value);
+  }
+  function executePath(time) {
+    const player = state.player;
+    const remaining = state.goal ? distance(player.pos, center(state.goal)) : Infinity;
+    if (remaining <= state.bestGoalDistance - 0.9) {
+      // New safe progress is not a failed retry, even across many chunk frontiers.
+      state.bestGoalDistance = remaining;
+      state.retries = 0;
+    }
+    if (!state.path.length || state.pathIndex >= state.path.length) return routeComplete();
+    let target = state.path[state.pathIndex];
+    while (target && distance(player.pos, center(target)) < 0.30 && player.onGround !== false) {
+      state.pathIndex++; state.jumpedIndex = -1; state.progressAt = time;
+      state.progressPos = { ...player.pos }; target = state.path[state.pathIndex];
+    }
+    if (!target) return routeComplete();
+    if (target.breakBlocks?.length) {
+      // Clear headroom first: the upper block can occlude the ray to the feet.
+      const obstruction = [...target.breakBlocks].sort((a, b) => b.y - a.y).find(p => {
+        const info = adapter.readCell(p.x, p.y, p.z); return !info?.known || info.solid;
+      });
+      if (obstruction) {
+        const info = adapter.readCell(obstruction.x, obstruction.y, obstruction.z);
+        if (!state.autoMine || !info?.known || !info.breakable || info.hazard) {
+          blockEdge(cell(player.pos), target); return beginSearch();
+        }
+        neutral();
+        const aim = adapter.aimAt(obstruction.x + 0.5, obstruction.y + 0.5, obstruction.z + 0.5, 0.05);
+        const result = (aim === true || aim?.aligned) ? adapter.interact('mine', obstruction) : null;
+        setStatus('mining', result?.reason || 'Clearing a planned obstacle');
+        if (time - state.progressAt > 18000) {
+          blockEdge(cell(player.pos), target);
+          if (++state.retries > 6) return stop('failed', 'Obstacle cannot be mined');
+          beginSearch();
+        }
+        return;
+      }
+    }
+    adapter.releaseInteraction?.();
+    if (state.status !== 'moving') setStatus('moving');
+    if (!planner.canStand(target.x, target.y, target.z)) return beginSearch();
+    const from = state.pathIndex ? state.path[state.pathIndex - 1] : cell(player.pos);
+    if (player.onGround !== false && planner.canStand(from.x, from.y, from.z) &&
+        (from.x !== target.x || from.y !== target.y || from.z !== target.z) &&
+        !planner.validateTransition(from, target)) {
+      return beginSearch();
+    }
+    const horizontal = Math.hypot(target.x + 0.5 - player.pos.x, target.z + 0.5 - player.pos.z);
+    const needsJump = ['jump', 'gap'].includes(target.action) || target.y > player.pos.y + 0.5;
+    const eye = adapter.eye();
+    const aim = adapter.aimAt(target.x + 0.5, eye.y, target.z + 0.5, 0.05);
+    if (['native-camera-unresponsive', 'native-camera-not-responding'].includes(aim?.reason)) return stop('failed', aim.reason);
+    const aligned = aim === true || aim?.aligned;
+    if (aligned && needsJump && state.jumpedIndex !== state.pathIndex && player.onGround !== false &&
+        horizontal < (target.action === 'gap' ? 2.4 : 1.65)) {
+      state.jumpUntil = time + 150; state.jumpedIndex = state.pathIndex;
+    }
+    const applied = adapter.setControls({ forward: aligned ? 1 : 0, strafe: 0, jump: aligned && time < state.jumpUntil,
+      sprint: aligned && (target.action === 'gap' || (target.action === 'walk' && horizontal > 0.8)),
+      sneak: false, yaw: aim?.yaw, pitch: aim?.pitch });
+    if (!applied) return stop('failed', adapter.diagnostics()?.error || 'Native input hooks unavailable');
+    if (!state.progressPos || distance(player.pos, state.progressPos) > 0.18) {
+      state.progressAt = time; state.progressPos = { ...player.pos };
+    } else if (time - state.progressAt > 2500) {
+      blockEdge(from, target);
+      if (++state.retries > 6) return stop('failed', 'Stuck: no safe continuation');
+      beginSearch();
+    }
+  }
+  function scanPlayers(force = false) {
+    if (!adapter || (!force && now() < state.scannedAt)) return;
+    state.scannedAt = now() + 500;
+    for (const saved of state.players.values()) saved.loaded = false;
+    for (const entity of adapter.entities() || []) {
+      const username = entity?.profile?.username || entity?.username;
+      if (typeof username !== 'string' || !finite(entity.pos)) continue;
+      state.players.set(username.toLowerCase(), { username, x: entity.pos.x, y: entity.pos.y,
+        z: entity.pos.z, loaded: true, seenAt: Date.now() });
+    }
+    for (const [key, entry] of state.players) {
+      if (Date.now() - entry.seenAt > 300000 || state.players.size > 256) state.players.delete(key);
+    }
+  }
+  function entityFor(username) {
+    const wanted = String(username).toLowerCase();
+    return [...(adapter?.entities() || [])].find(entity =>
+      String(entity?.profile?.username || entity?.username || '').toLowerCase() === wanted && finite(entity.pos));
+  }
+  function followTick(time) {
+    const entity = entityFor(state.following);
+    if (!entity) { neutral(); return setStatus('following', 'Waiting for player to be loaded'); }
+    const goal = cell(entity.pos);
+    if (distance(state.player.pos, entity.pos) <= (state.action?.type === 'attack' ? 2.8 : 2.5)) {
+      cancelSearch(); state.path = []; neutral();
+      adapter.aimAt(entity.pos.x, entity.pos.y + 1.3, entity.pos.z, 0.05);
+      if (state.action?.type === 'attack' && time >= state.action.nextAt) {
+        const result = adapter.interact('attack', { entity }); state.action.nextAt = time + 600;
+        setStatus('attacking', result?.reason || '');
+      } else if (!state.action) setStatus('following');
+      return;
+    }
+    if (time >= state.followPlanAt && (!state.followGoal || distance(goal, state.followGoal) >= 2 ||
+        (!state.search && (!state.path.length || state.pathIndex >= state.path.length)))) {
+      state.followGoal = goal; state.followPlanAt = time + 1200; beginSearch(goal);
+    }
+    if (state.search) advanceSearch(); else if (state.path.length) executePath(time); else neutral();
+  }
+  function actionCandidates(action) {
+    const candidates = [];
+    for (let y = action.y - 3; y <= action.y + 2; y++) {
+      for (let x = action.x - 4; x <= action.x + 4; x++) {
+        for (let z = action.z - 4; z <= action.z + 4; z++) {
+          if (!planner.canStand(x, y, z)) continue;
+          const reach = Math.hypot(action.x - x, action.y + 0.5 - (y + 1.62), action.z - z);
+          if (reach <= 4.2) candidates.push({ x, y, z, score: distance(center({ x, y, z }), state.player.pos) });
+        }
+      }
+    }
+    return candidates.sort((a, b) => a.score - b.score).slice(0, 24);
+  }
+  function nextActionApproach() {
+    const next = state.action?.candidates?.shift();
+    if (!next) return false;
+    state.action.phaseStarted = now(); state.actionPhase = 'approaching'; return beginSearch(next);
+  }
+  function placeAnchor(action) {
+    const anchors = [], eye = adapter.eye();
+    for (const [dx, dy, dz] of [[0, -1, 0], [0, 1, 0], [-1, 0, 0], [1, 0, 0], [0, 0, -1], [0, 0, 1]]) {
+      const anchor = { x: action.x + dx, y: action.y + dy, z: action.z + dz };
+      const info = adapter.readCell(anchor.x, anchor.y, anchor.z);
+      if (!info?.known || !info.solid || info.hazard) continue;
+      const aim = { x: anchor.x + 0.5 - dx * 0.499, y: anchor.y + 0.5 - dy * 0.499, z: anchor.z + 0.5 - dz * 0.499 };
+      anchors.push({ ...aim, anchor, score: distance(eye, aim) });
+    }
+    return anchors.sort((a, b) => a.score - b.score)[0] || null;
+  }
+  function blockActionTick(time) {
+    const action = state.action, info = adapter.readCell(action.x, action.y, action.z);
+    if (!info?.known) return waitOrFail('Target chunk is not loaded');
+    if ((action.type === 'mine' && (info.air === true || info.name === 'air')) ||
+        (action.type === 'place' && info.solid)) {
+      return stop('idle', action.type === 'mine' ? 'Block mined (world confirmed)' : 'Block placed (world confirmed)');
+    }
+    if (time - action.started > 45000) return stop('failed', 'Action timed out / server may forbid it');
+    if (state.search) return advanceSearch();
+    if (state.path.length && state.pathIndex < state.path.length) return executePath(time);
+    if (state.status === 'waiting') return;
+    neutral();
+    const aim = action.type === 'place' ? placeAnchor(action) :
+      { x: action.x + 0.5, y: action.y + 0.5, z: action.z + 0.5 };
+    if (!aim) return stop('failed', 'No safe adjacent block to place against');
+    const aligned = adapter.aimAt(aim.x, aim.y, aim.z, 0.05);
+    if (['native-camera-unresponsive', 'native-camera-not-responding'].includes(aligned?.reason)) return stop('failed', aligned.reason);
+    state.actionPhase = 'aiming';
+    if (!(aligned === true || aligned?.aligned)) return;
+    if (action.type === 'place' && time < action.nextAt) return;
+    const result = adapter.interact(action.type, action.type === 'place' ? { ...action, anchor: aim.anchor } : action);
+    if (result?.ok) {
+      state.actionPhase = 'acting'; action.nextAt = time + 500;
+      setStatus(action.type === 'mine' ? 'mining' : 'placing', 'Waiting for world confirmation');
+    } else {
+      setStatus(action.type === 'mine' ? 'mining' : 'placing', result?.reason || 'Waiting for native ray hit');
+      if (time - action.phaseStarted > 2500) {
+        adapter.releaseInteraction?.();
+        if (!nextActionApproach()) stop('failed', result?.reason || 'No reachable visible target');
+      }
+    }
+  }
+  function goto(x, y, z) {
+    const target = { x: Number(x), y: Number(y), z: Number(z) };
+    if (!finite(target) || !prepare()) return false;
+    return beginSearch(target);
+  }
+  function follow(username, attack = false) {
+    if (!String(username || '').trim() || !prepare()) return false;
+    if (!entityFor(username)) { stop('failed', 'Player is not loaded'); return false; }
+    state.following = String(username); state.followGoal = null; state.followPlanAt = 0;
+    if (attack) state.action = { type: 'attack', username: String(username), nextAt: 0 };
+    setStatus('following'); return true;
+  }
+  function blockAction(type, x, y, z, slot) {
+    const target = { x: Number(x), y: Number(y), z: Number(z) };
+    if (!finite(target) || !prepare()) return false;
+    // ClientCommands passes NaN when no optional slot was supplied.
+    if (Number.isNaN(slot)) slot = null;
+    if (slot != null && slot !== 0 && (!Number.isInteger(Number(slot)) || slot < 1 || slot > 9)) {
+      stop('failed', 'Hotbar slot must be 1-9'); return false;
+    }
+    if (type === 'place' && slot && !adapter.selectSlot(Number(slot))) {
+      stop('failed', 'Native hotbar selection unavailable'); return false;
+    }
+    const info = adapter.readCell(Math.floor(target.x), Math.floor(target.y), Math.floor(target.z));
+    if (!info?.known || (type === 'mine' && (info.hazard || (!info.breakable && info.name !== 'air')))) {
+      stop('failed', 'Target is unloaded, hazardous or unbreakable'); return false;
+    }
+    state.action = { type, ...cell(target), started: now(), phaseStarted: now(), nextAt: 0 };
+    state.action.candidates = actionCandidates(state.action);
+    if (distance(adapter.eye(), { x: target.x + 0.5, y: target.y + 0.5, z: target.z + 0.5 }) <= 4.2) {
+      setStatus(type === 'mine' ? 'mining' : 'placing'); state.actionPhase = 'aiming'; return true;
+    }
+    if (nextActionApproach()) return true;
+    stop('failed', 'No safe approach position'); return false;
+  }
+  function jump(ms = 180) {
+    if (!prepare()) return false;
+    state.jumpUntil = now() + Math.max(100, Math.min(350, Number(ms) || 180));
+    state.actionPhase = 'jumping'; setStatus('moving');
+    // An idle runtime sleeps 250ms, longer than a normal jump pulse.
+    clearTimeout(state.timer);
+    state.timer = setTimeout(tick, 50);
+    return true;
+  }
+  function tick() {
+    if (state.destroyed) return;
+    try {
+      if (state.enabled && !['idle', 'failed'].includes(state.status)) {
+        const game = getGame();
+        if (!game || game.player !== state.player || game.world !== state.world ||
+            (typeof game.inGame === 'function' && !game.inGame())) stop('failed', 'World/player changed; start a new command');
+        else if (document.hidden || globalThis.__MINIFEATHER_FREECAM_ACTIVE__) stop('idle', 'Paused: background tab or FreeCam');
+        else if (!adapter.bind(game)) stop('failed', adapter.diagnostics()?.error || 'Native API changed');
+        else {
+          const time = now(); scanPlayers();
+          if (state.status === 'waiting' && time < state.resumeAt) {
+            neutral();
+            state.timer = setTimeout(tick, 50);
+            return;
+          }
+          if (state.status === 'waiting' && time >= state.resumeAt) {
+            if (state.action && state.action.type !== 'attack') {
+              state.action.candidates = actionCandidates(state.action);
+              if (!nextActionApproach()) waitOrFail('No safe action approach');
+            } else beginSearch();
+          }
+          if (state.following) followTick(time);
+          else if (state.action) blockActionTick(time);
+          else if (state.search) advanceSearch();
+          else if (state.status === 'waiting') neutral();
+          else if (state.path.length) executePath(time);
+          else if (state.jumpUntil) {
+            if (time < state.jumpUntil) adapter.setControls({ forward: 0, strafe: 0, jump: true, sneak: false, sprint: false });
+            else stop('idle', 'Jump complete');
+          }
+        }
+      }
+    } catch (error) { stop('failed', String(error?.message || error)); }
+    if (!state.destroyed) state.timer = setTimeout(tick,
+      state.enabled && !['idle', 'failed'].includes(state.status) ? 50 : 250);
+  }
+  function listen(event, handler) {
+    document.addEventListener(event, handler, true);
+    listeners.push(() => document.removeEventListener(event, handler, true));
+  }
+  function parse(event) {
+    try { return typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail; } catch (_) { return null; }
+  }
+  function run(action) {
+    try { return action(); }
+    catch (error) { stop('failed', String(error?.message || error)); return false; }
+  }
+  const api = {
+    goto(x, y, z) { return run(() => goto(x, y === undefined ? getGame()?.player?.pos?.y : y, z)); },
+    follow(username) { return run(() => follow(username)); }, attack(username) { return run(() => follow(username, true)); },
+    mine(x, y, z) { return run(() => blockAction('mine', x, y, z)); },
+    place(x, y, z, slot) { return run(() => blockAction('place', x, y, z, slot)); },
+    jump(ms) { return run(() => jump(ms)); },
+    stop() { stop('idle', 'User stopped'); }, unfollow() { stop('idle', 'Unfollowed'); },
+    enable() { state.enabled = true; emitState(true); return true; },
+    disable() { stop('idle', 'Disabled'); state.enabled = false; emitState(true); return false; },
+    setAutoMine(value) {
+      return run(() => {
+        state.autoMine = !!value;
+        if (state.game && state.goal && bind(state.game)) beginSearch();
+        emitState(true); return state.autoMine;
+      });
+    },
+    locate(username) { this.players(); const saved = state.players.get(String(username).toLowerCase()); return saved ? { ...saved } : null; },
+    players() {
+      const game = getGame();
+      if (game && !adapter) adapter = globalThis.__MF_BARITONE_ADAPTER__?.create();
+      // Entity-only observation must not seize controls.
+      adapter?.observe?.(game); scanPlayers(true);
+      return [...state.players.values()].map(entry => ({ ...entry }));
+    },
+    get status() { return state.status; }, get goal() { return state.goal; },
+    get pathLength() { return state.path.length; },
+    debug() {
+      return { version: BARITONE_NAVIGATION_VERSION, enabled: state.enabled, status: state.status, reason: state.reason,
+        goal: state.goal, effectiveGoal: state.effectiveGoal, followTarget: state.following,
+        action: state.action ? { ...state.action, candidates: undefined } : null,
+        actionPhase: state.actionPhase, autoMine: state.autoMine,
+        path: state.path.length, pathIndex: state.pathIndex, planning: !!state.search,
+        search: state.searchResult ? { ...state.searchResult, path: undefined } : null,
+        retries: state.retries, blockedEdges: state.blockedEdges.size, native: adapter?.diagnostics() || null };
+    },
+    destroy() {
+      stop('idle', 'Destroyed'); state.destroyed = true; clearTimeout(state.timer);
+      for (const remove of listeners) remove(); adapter?.destroy();
+      if (globalThis.Baritone === api) delete globalThis.Baritone;
+    }
+  };
+  listen('minifeather:baritone-config', event => {
+    const cfg = parse(event); if (!cfg || typeof cfg !== 'object') return;
+    if ('autoMine' in cfg) api.setAutoMine(cfg.autoMine);
+    if ('enabled' in cfg) cfg.enabled ? api.enable() : api.disable();
+  });
+  listen('minifeather:baritone-command', event => {
+    const cmd = parse(event); if (!cmd) return;
+    switch (cmd.type) {
+      case 'goto': api.goto(cmd.x, cmd.y, cmd.z); break;
+      case 'follow': api.follow(cmd.username); break;
+      case 'mine': api.mine(cmd.x, cmd.y, cmd.z); break;
+      case 'place': api.place(cmd.x, cmd.y, cmd.z, cmd.slot); break;
+      case 'attack': api.attack(cmd.username); break;
+      case 'jump': api.jump(cmd.ms); break;
+      case 'stop': api.stop(); break;
+      case 'enable': api.enable(); break;
+      case 'disable': api.disable(); break;
+    }
+  });
+  globalThis.Baritone = api; tick();
 })();
 
 //# sourceURL=MF:src/Movement/Baritone.js
