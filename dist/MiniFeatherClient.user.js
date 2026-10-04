@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.18.0.20261004165638
+// @version      4.18.0.20261004170003
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.18.0
- * commit  : 97326eaa931dc6a3e65816870c8e48e286e8ca33
- * builtAt : 2026-10-04T16:59:06.285Z
+ * commit  : 9b72ae6f0e7dc493b09e608744fe8abea04bc410
+ * builtAt : 2026-10-04T17:00:20.247Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.18.0","commit":"97326eaa931dc6a3e65816870c8e48e286e8ca33","builtAt":"2026-10-04T16:59:06.285Z","pinned":true};
+window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8abea04bc410","builtAt":"2026-10-04T17:00:20.247Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -13306,6 +13306,63 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"97326eaa931dc6a3e65816870c8e48
         return blFetching;
     }
 
+    // ── registro custodiado (__MF_PACK_SKINS__) ───────────────────────────────
+    // AQUÍ es donde de verdad se cargan las skins: cosmetics (p2p, api de skins,
+    // packs dev, facial) escribe en este registro con `__MF_PACK_SKINS__ ||= {}`
+    // y el juego lo lee vía el hook del img.src y el patch de fetch. skinguard
+    // carga ANTES que todos en mirror.json, así que instala un Proxy: escrituras
+    // data:image se revisan async y las marcadas desaparecen del registro para
+    // CUALQUIER lector (get-trap → undefined). los dataURL repetidos (epoch
+    // bumps re-escriben todo) se cachean para no re-decodificar. :v
+    const blockedIds = new Set();
+    const checkedUrls = new Map();
+    const CHECKED_CAP = 400;
+
+    function rememberVerdict(dataUrl, flagged, key) {
+        if (checkedUrls.size > CHECKED_CAP) checkedUrls.clear();
+        checkedUrls.set(dataUrl, flagged);
+        if (key) {
+            if (flagged) blockedIds.add(key);
+            else blockedIds.delete(key);
+        }
+    }
+
+    function isBlockedId(id) { return typeof id === 'string' && blockedIds.has(id); }
+    function markBlockedId(id, blocked) {
+        if (typeof id !== 'string') return;
+        if (blocked) blockedIds.add(id);
+        else blockedIds.delete(id);
+    }
+
+    function installRegistry() {
+        if (globalThis.__MF_PACK_SKINS__) return; // nunca (orden del mirror), pero por si el orden cambia algún día
+        const target = {};
+        globalThis.__MF_PACK_SKINS__ = new Proxy(target, {
+            set(t, k, v) {
+                t[k] = v;
+                if (typeof k === 'string' && typeof v === 'string' && v.indexOf('data:image') === 0) {
+                    const known = checkedUrls.get(v);
+                    if (known === true) blockedIds.add(k);
+                    else if (known === undefined) {
+                        checkDataUrl(v)
+                            .then(verdict => rememberVerdict(v, verdict.flag, k))
+                            .catch(() => {});
+                    }
+                }
+                return true;
+            },
+            get(t, k) {
+                if (typeof k === 'string' && blockedIds.has(k)) return undefined;
+                return t[k];
+            },
+            deleteProperty(t, k) {
+                if (typeof k === 'string') blockedIds.delete(k);
+                delete t[k];
+                return true;
+            }
+        });
+    }
+
     // ── puente hacia el isolated world (panel): evento in → evento out ────────
 
     function installBridge() {
@@ -13329,9 +13386,10 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"97326eaa931dc6a3e65816870c8e48
     }
 
     installBridge();
+    installRegistry();
     loadRemoteBlocklist();
 
-    globalThis.__MF_SKIN_GUARD__ = { evaluateSkinPixels, checkDataUrl, isBlocklisted, setBlocklist, loadRemoteBlocklist };
+    globalThis.__MF_SKIN_GUARD__ = { evaluateSkinPixels, checkDataUrl, isBlocklisted, setBlocklist, loadRemoteBlocklist, isBlockedId, markBlockedId };
 })();
 
 //# sourceURL=MF:src/Cosmetics/SkinGuard.js
@@ -13407,6 +13465,10 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"97326eaa931dc6a3e65816870c8e48
 
         var reg = globalThis.__MF_PACK_SKINS__;
         if (reg && reg[skinId]) return reg[skinId];
+        // skinguard: el registro (proxy) ya filtra ids bloqueados; esta ruta sirve
+        // data urls directos de la db local — ids marcados no se sirven tampoco. :v
+        var guard = globalThis.__MF_SKIN_GUARD__;
+        if (guard && guard.isBlockedId(skinId)) return null;
         var entry = getCustomSkinForId(skinId);
         if (entry) {
             var u = entrySkinUrl(entry) || entryCapeUrl(entry);
@@ -15364,6 +15426,15 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"97326eaa931dc6a3e65816870c8e48
             warn('PNG muy grande para localStorage, solo en memoria esta sesión');
         }
         const id = nextUploadId();
+        // skinguard: esta ruta COMPARTE la skin por p2p (shareSkinUp) y la deja
+        // activa — se trata como publicación, bloqueo duro sin confirmación. :v
+        const guard = globalThis.__MF_SKIN_GUARD__;
+        if (guard) {
+            const verdict = await guard.checkDataUrl(dataUrl);
+            if (verdict.flag) {
+                throw Object.assign(new Error('blocked by content filter (eula §8.2): this skin was flagged as adult content. false positive? report it on discord'), { status: 422 });
+            }
+        }
         try {
             localStorage.setItem(KEY_SKIN, dataUrl);
             localStorage.setItem(KEY_ID, id);
@@ -124575,10 +124646,32 @@ function normalize(entry) {
         return;
       }
 
-      chrome.runtime.sendMessage({ type: 'setSkin', skinName, customUrl }, () => {
-        showSkinStatus(t('skinApplied', { name: skinName }), '#22c55e');
-        refreshActiveSkins();
-      });
+      // skinguard: url remota = se baja aquí para poder mirarla antes de mandarla
+      // al background. si no se puede bajar (cors raro), falla abierto: es una url
+      // que el usuario escribió a mano, no contenido que le llegue de otros. :v
+      const applySkinUrl = () => {
+        chrome.runtime.sendMessage({ type: 'setSkin', skinName, customUrl }, () => {
+          showSkinStatus(t('skinApplied', { name: skinName }), '#22c55e');
+          refreshActiveSkins();
+        });
+      };
+      if (/^https?:/i.test(customUrl)) {
+        fetch(customUrl, { mode: 'cors' })
+          .then(r => (r.ok ? r.blob() : null))
+          .then(async b => {
+            if (!b) return applySkinUrl();
+            const dataUrl = await new Promise(res => {
+              const fr = new FileReader();
+              fr.onload = () => res(fr.result);
+              fr.onerror = () => res(null);
+              fr.readAsDataURL(b);
+            });
+            if (!dataUrl || (await skinGuardLocalCheck(dataUrl))) applySkinUrl();
+          })
+          .catch(() => applySkinUrl());
+        return;
+      }
+      applySkinUrl();
     });
 
     panel.querySelector('#mf-skin-reset')?.addEventListener('click', () => {
@@ -124616,10 +124709,30 @@ function normalize(entry) {
         return;
       }
 
-      chrome.runtime.sendMessage({ type: 'setCape', capeName, customUrl }, () => {
-        showCapeStatus(t('capeApplied', { name: capeName }), '#22c55e');
-        refreshActiveCapes();
-      });
+      // skinguard: mismo trato que las skins — mirar la url antes de redirigirla
+      const applyCapeUrl = () => {
+        chrome.runtime.sendMessage({ type: 'setCape', capeName, customUrl }, () => {
+          showCapeStatus(t('capeApplied', { name: capeName }), '#22c55e');
+          refreshActiveCapes();
+        });
+      };
+      if (/^https?:/i.test(customUrl)) {
+        fetch(customUrl, { mode: 'cors' })
+          .then(r => (r.ok ? r.blob() : null))
+          .then(async b => {
+            if (!b) return applyCapeUrl();
+            const dataUrl = await new Promise(res => {
+              const fr = new FileReader();
+              fr.onload = () => res(fr.result);
+              fr.onerror = () => res(null);
+              fr.readAsDataURL(b);
+            });
+            if (!dataUrl || (await skinGuardLocalCheck(dataUrl))) applyCapeUrl();
+          })
+          .catch(() => applyCapeUrl());
+        return;
+      }
+      applyCapeUrl();
     });
 
     panel.querySelector('#mf-cape-reset')?.addEventListener('click', () => {
