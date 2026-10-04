@@ -1,6 +1,7 @@
 (() => {
   'use strict';
 
+  const REALISTIC_PLAYER_FEATURES_VERSION = 1;
   const W = globalThis;
   const EVENT_NAME = 'minifeather:realistic-config';
   try { W.MF_RealisticMode?.destroy?.(); } catch (_) {}
@@ -9,6 +10,9 @@
     enabled: false,
     level: 'medium',
     custom: null,
+    skinLayers: true,
+    armorRelief: true,
+    firstPersonBody: true,
     adaptiveScale: 1,
     fpsEma: 60,
     lastFrameAt: 0,
@@ -161,6 +165,12 @@
     }
   }
 
+  function applyPlayerFeatures() {
+    W.MF_BetterPlayerLayers?.setRealisticOptions?.({ enabled: state.enabled && state.skinLayers });
+    W.MF_BetterPlayerLayersArmor?.setRealisticOptions?.({ enabled: state.enabled && state.armorRelief });
+    W.MF_RealisticFirstPerson?.configure?.({ enabled: state.enabled && state.firstPersonBody });
+  }
+
   function playerPosition(game) {
     const p = game?.player?.pos || game?.player?.position || game?.player?.getPosition?.() || game?.player?.mesh?.position;
     if (!p) return null;
@@ -213,6 +223,7 @@
     const now = performance.now();
     if (!force && now - state.lastScan < 1800) return;
     state.lastScan = now;
+    applyPlayerFeatures();
     const game = findGame();
     const p = currentProfile();
     if (!game || !p) return;
@@ -286,10 +297,12 @@
   function setEnabled(value) {
     const next = !!value;
     if (state.enabled === next) {
+      applyPlayerFeatures();
       applyCompanions(true);
       return;
     }
     state.enabled = next;
+    applyPlayerFeatures();
     if (next) {
       state.lastFrameAt = 0;
       applyProfile(); scan(true); applyCompanions(true);
@@ -315,6 +328,9 @@
     if (!c || typeof c !== 'object') return;
 
     const wasEnabled = state.enabled;
+    if ('skinLayers' in c) state.skinLayers = !!c.skinLayers;
+    if ('armorRelief' in c) state.armorRelief = !!c.armorRelief;
+    if ('firstPersonBody' in c) state.firstPersonBody = !!c.firstPersonBody;
     state.level = profiles()?.normalizeLevel?.(c.level) || 'medium';
     state.custom = profiles()?.clampCustom?.(c.custom || state.custom || {}) || c.custom || null;
     if (!(state.custom?.optimizeFps ?? state.custom?.adaptive)) state.adaptiveScale = 1;
@@ -355,6 +371,11 @@
       enabled: state.enabled, level: state.level, optimizeFps: !!(state.custom?.optimizeFps ?? state.custom?.adaptive), targetFps: Math.round(Number(state.custom?.targetFps) || 60), adaptiveScale: state.adaptiveScale, fps: Math.round(state.fpsEma),
       fluids: state.fluidCount, shadowMaterials: state.shadowMaterials, clouds: W.MF_RealisticClouds?.count?.() || 0,
       renderDistance: W.MF_RealisticRenderDistance?.getState?.() || null,
+      playerFeatures: {
+        skinLayers: state.enabled && state.skinLayers,
+        armorRelief: state.enabled && state.armorRelief,
+        firstPersonBody: state.enabled && state.firstPersonBody
+      },
       wetness: W.MF_RealisticWetness?.getState?.() || null, stars: state.stars.size, snowy: state.snowy
     })
   });

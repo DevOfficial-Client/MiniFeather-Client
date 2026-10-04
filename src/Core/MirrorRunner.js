@@ -83,12 +83,27 @@
       list.splice(list.indexOf(navigationPath), 0, dependency);
     });
   }
+  // Remote plans can predate the player adaptations while local modules are newer.
+  var realisticPath = 'src/Experimental/Realistic/RealisticMode.js';
+  var firstPersonPath = 'src/Experimental/Realistic/FirstPersonModel.js';
+  if (list.indexOf(realisticPath) >= 0 && MIRROR.code[firstPersonPath]) {
+    var firstPersonAt = list.indexOf(firstPersonPath);
+    if (firstPersonAt < 0 || firstPersonAt > list.indexOf(realisticPath)) {
+      list = list.slice();
+      if (firstPersonAt >= 0) list.splice(firstPersonAt, 1);
+      list.splice(list.indexOf(realisticPath), 0, firstPersonPath);
+    }
+  }
   var requiredMarkers = {
     'src/Chat/ClientCommands.js': ['COMPLETION_CONTEXT_VERSION = 2', 'BARITONE_PLACEMENT_COMMANDS_VERSION = 1',
       'BARITONE_PATH_COMMANDS_VERSION = 1'],
     'src/Render/FullBright.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
-    'src/UI/ClientPanel.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
-    'src/I18n/Translations.js': '"fullBrightSettings"',
+    'src/UI/ClientPanel.js': ['FULLBRIGHT_SETTINGS_VERSION = 1', 'experimentalRealisticFirstPerson'],
+    'src/I18n/Translations.js': ['"fullBrightSettings"', '"experimentalRealisticFirstPersonLabel"'],
+    'src/Render/BetterPlayerLayers.js': 'setRealisticOptions',
+    'src/Render/BetterPlayerLayersArmorPatch.js': 'setRealisticOptions',
+    'src/Experimental/Realistic/FirstPersonModel.js': 'FIRST_PERSON_MODEL_VERSION = 3',
+    'src/Experimental/Realistic/RealisticMode.js': 'REALISTIC_PLAYER_FEATURES_VERSION = 1',
     'src/Movement/Baritone.js': /BARITONE_NAVIGATION_VERSION = 7/.test(MIRROR.code[navigationPath] || '')
       ? 'BARITONE_NAVIGATION_VERSION = 7' : /BARITONE_NAVIGATION_VERSION = 6/.test(MIRROR.code[navigationPath] || '')
         ? 'BARITONE_NAVIGATION_VERSION = 6' : /BARITONE_NAVIGATION_VERSION = 5/.test(MIRROR.code[navigationPath] || '')

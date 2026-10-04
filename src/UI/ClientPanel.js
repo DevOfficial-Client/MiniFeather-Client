@@ -814,6 +814,9 @@
     pageZoomEnabled: true,
     experimentalRealistic: false,
     experimentalRealisticLevel: 'medium',
+    experimentalRealisticSkinLayers: true,
+    experimentalRealisticArmorRelief: true,
+    experimentalRealisticFirstPerson: true,
     experimentalWetDrySeconds: 180,
     experimentalRealisticCustom: { ...REALISTIC_CUSTOM_DEFAULTS },
     experimentalAurora: false,
@@ -7764,6 +7767,24 @@
     `;
   }
 
+  function renderRealisticPlayerControls() {
+    const features = [
+      ['experimentalRealisticSkinLayers', 'experimentalRealisticSkinLayersLabel'],
+      ['experimentalRealisticArmorRelief', 'experimentalRealisticArmorReliefLabel'],
+      ['experimentalRealisticFirstPerson', 'experimentalRealisticFirstPersonLabel']
+    ];
+    return `
+      <div class="mf-card" id="mf-realistic-player-section">
+        <div class="mf-card-title">${escapeHtml(t('experimentalRealisticPlayerTitle'))}</div>
+        <div class="mf-muted" style="font-size:11px;line-height:1.5;margin-bottom:8px;">${escapeHtml(t('experimentalRealisticPlayerDesc'))}</div>
+        ${features.map(([key, label]) => `
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;font-size:11px;">
+            <span>${escapeHtml(t(label))}</span>
+            <input type="checkbox" data-mf-realistic-player-key="${key}" ${guiSettings[key] !== false ? 'checked' : ''}>
+          </label>`).join('')}
+      </div>`;
+  }
+
   function renderRealisticCustomControls() {
     const c = clampRealisticCustom(guiSettings.experimentalRealisticCustom || settings.experimentalRealisticCustom);
     const slider = (key, labelKey, min, max, step, suffix = '%') => {
@@ -7936,6 +7957,7 @@
             }).join('')}
           </div>
         </div>
+        ${renderRealisticPlayerControls()}
         ${renderRealisticCustomControls()}
         <div class="mf-card" id="mf-realistic-wetness-section">
           <div class="mf-card-title">💧 ${escapeHtml(t('experimentalWetnessTitle'))}</div>
@@ -10190,6 +10212,10 @@
         });
         const customSection = panel.querySelector('#mf-realistic-custom-section');
         if (customSection) customSection.style.display = String(guiSettings.experimentalRealisticLevel || settings.experimentalRealisticLevel) === 'custom' ? 'block' : 'none';
+        panel.querySelectorAll('[data-mf-realistic-player-key]').forEach(input => {
+          const key = String(input.dataset.mfRealisticPlayerKey || '');
+          if (key in guiSettings) input.checked = guiSettings[key] !== false;
+        });
         const incomingCustom = clampRealisticCustom(guiSettings.experimentalRealisticCustom || settings.experimentalRealisticCustom);
         panel.querySelectorAll('[data-mf-realistic-custom]').forEach(input => { const key = String(input.dataset.mfRealisticCustom || ''); if (key in incomingCustom) input.value = String(incomingCustom[key]); });
         panel.querySelectorAll('[data-mf-realistic-custom-check]').forEach(input => { const key = String(input.dataset.mfRealisticCustomCheck || ''); if (key in incomingCustom) input.checked = !!incomingCustom[key]; });
@@ -12387,6 +12413,17 @@
       });
     });
 
+    panel.querySelectorAll('[data-mf-realistic-player-key]').forEach(input => {
+      const key = String(input.dataset.mfRealisticPlayerKey || '');
+      if (!['experimentalRealisticSkinLayers', 'experimentalRealisticArmorRelief', 'experimentalRealisticFirstPerson'].includes(key)) return;
+      input.addEventListener('change', () => {
+        guiSettings[key] = input.checked;
+        settings[key] = input.checked;
+        saveSettings(true);
+        applyGuiSettings();
+      });
+    });
+
     const refreshRealisticCustomUi = () => {
       const c = clampRealisticCustom(guiSettings.experimentalRealisticCustom || settings.experimentalRealisticCustom);
       guiSettings.experimentalRealisticCustom = { ...c };
@@ -13386,6 +13423,9 @@
       new CustomEvent('minifeather:realistic-config', {
         detail: JSON.stringify({
           enabled: !!settings.experimentalRealistic,
+          skinLayers: settings.experimentalRealisticSkinLayers !== false,
+          armorRelief: settings.experimentalRealisticArmorRelief !== false,
+          firstPersonBody: settings.experimentalRealisticFirstPerson !== false,
           level: String(settings.experimentalRealisticLevel) === 'extreme'
             ? 'ultra'
             : (['low', 'medium', 'high', 'ultra', 'custom'].includes(String(settings.experimentalRealisticLevel))

@@ -190,6 +190,102 @@ test('MirrorRunner keeps FullBright lighting settings and translations when remo
   assert.equal(sb.globalThis.legacyLighting, undefined);
 });
 
+const REALISTIC_PATH = 'src/Experimental/Realistic/RealisticMode.js';
+const FIRST_PERSON_PATH = 'src/Experimental/Realistic/FirstPersonModel.js';
+
+test('MirrorRunner inserts the bundled first-person dependency omitted by an old remote plan', () => {
+  const mirror = FAKE_MIRROR();
+  mirror.lists.mainStart.splice(1, 0, FIRST_PERSON_PATH, REALISTIC_PATH);
+  mirror.code[FIRST_PERSON_PATH] = '// FIRST_PERSON_MODEL_VERSION = 3\nglobalThis.firstPersonLoaded = true;';
+  mirror.code[REALISTIC_PATH] = '// REALISTIC_PLAYER_FEATURES_VERSION = 1\nglobalThis.modernRealistic = globalThis.firstPersonLoaded;';
+  const plan = ['m/c.js', REALISTIC_PATH, 'm/a.js'];
+  const sb = execRunnerSandbox({ mirror, overrides: {
+    v: 1, buckets: { mainStart: plan }, files: { [REALISTIC_PATH]: 'globalThis.legacyRealistic = true;' }, ok: {}
+  } });
+  assert.deepEqual(sb.__executed.map(entry => entry.path), ['m/c.js', FIRST_PERSON_PATH, REALISTIC_PATH, 'm/a.js']);
+  assert.equal(sb.globalThis.modernRealistic, true, 'local coordinator must run after its new dependency');
+  assert.equal(sb.globalThis.legacyRealistic, undefined);
+});
+
+test('MirrorRunner reorders an existing first-person module before Realistic without changing other remote order', () => {
+  const mirror = FAKE_MIRROR();
+  mirror.code[FIRST_PERSON_PATH] = '// FIRST_PERSON_MODEL_VERSION = 3\nglobalThis.firstPersonLoaded = true;';
+  mirror.code[REALISTIC_PATH] = '// REALISTIC_PLAYER_FEATURES_VERSION = 1\nglobalThis.modernRealistic = true;';
+  const sb = execRunnerSandbox({ mirror, overrides: {
+    v: 1, buckets: { mainStart: ['m/b.js', REALISTIC_PATH, 'm/c.js', FIRST_PERSON_PATH, 'm/a.js'] }, files: {}, ok: {}
+  } });
+  assert.deepEqual(sb.__executed.map(entry => entry.path), ['m/b.js', FIRST_PERSON_PATH, REALISTIC_PATH, 'm/c.js', 'm/a.js']);
+  assert.equal(sb.__executed.filter(entry => entry.path === FIRST_PERSON_PATH).length, 1);
+});
+
+test('MirrorRunner preserves all player-adaptation APIs and labels against obsolete remote overrides', () => {
+  const markers = {
+    [FIRST_PERSON_PATH]: 'FIRST_PERSON_MODEL_VERSION = 3',
+    [REALISTIC_PATH]: 'REALISTIC_PLAYER_FEATURES_VERSION = 1',
+    'src/Render/BetterPlayerLayers.js': 'setRealisticOptions',
+    'src/Render/BetterPlayerLayersArmorPatch.js': 'setRealisticOptions',
+    'src/UI/ClientPanel.js': 'FULLBRIGHT_SETTINGS_VERSION = 1 experimentalRealisticFirstPerson',
+    'src/I18n/Translations.js': '"fullBrightSettings" "experimentalRealisticFirstPersonLabel"'
+  };
+  const mirror = FAKE_MIRROR(), files = {};
+  for (const [p, marker] of Object.entries(markers)) {
+    mirror.lists.mainStart.push(p);
+    mirror.code[p] = '// ' + marker + '\nglobalThis.modernPlayer = (globalThis.modernPlayer || 0) + 1;';
+    files[p] = 'globalThis.legacyPlayer = (globalThis.legacyPlayer || 0) + 1;';
+  }
+  const sb = execRunnerSandbox({ mirror, overrides: { v: 1, files, ok: {} } });
+  assert.equal(sb.globalThis.modernPlayer, 6);
+  assert.equal(sb.globalThis.legacyPlayer, undefined);
+  for (const [p, marker] of Object.entries(markers)) files[p] = '// ' + marker + '\nglobalThis.remotePlayer = (globalThis.remotePlayer || 0) + 1;';
+  const current = execRunnerSandbox({ mirror, overrides: { v: 1, files, ok: {} } });
+  assert.equal(current.globalThis.remotePlayer, 6, 'compatible modern overrides must continue working');
+  assert.equal(current.globalThis.modernPlayer, undefined);
+});
+
+test('MirrorRunner replaces a cached first-person v2 with v3 while accepting current v3 overrides', () => {
+  const mirror = FAKE_MIRROR();
+  mirror.lists.mainStart.push(FIRST_PERSON_PATH);
+  mirror.code[FIRST_PERSON_PATH] = '// FIRST_PERSON_MODEL_VERSION = 3\nglobalThis.bodyOnlyFirstPerson = true;';
+  const old = execRunnerSandbox({ mirror, overrides: {
+    v: 1, files: { [FIRST_PERSON_PATH]: '// FIRST_PERSON_MODEL_VERSION = 2\nglobalThis.oldFirstPersonHands = true;' }, ok: {}
+  } });
+  assert.equal(old.globalThis.bodyOnlyFirstPerson, true, 'v2 must not reintroduce the old hands behavior');
+  assert.equal(old.globalThis.oldFirstPersonHands, undefined);
+  const current = execRunnerSandbox({ mirror, overrides: {
+    v: 1, files: { [FIRST_PERSON_PATH]: '// FIRST_PERSON_MODEL_VERSION = 3\nglobalThis.remoteBodyOnlyFirstPerson = true;' }, ok: {}
+  } });
+  assert.equal(current.globalThis.remoteBodyOnlyFirstPerson, true);
+  assert.equal(current.globalThis.bodyOnlyFirstPerson, undefined);
+});
+
+test('MirrorRunner player-version guards remain optional when the local bundle predates those features', () => {
+  const mirror = FAKE_MIRROR(), files = {};
+  for (const p of [REALISTIC_PATH, 'src/UI/ClientPanel.js', 'src/I18n/Translations.js']) {
+    mirror.lists.mainStart.push(p);
+    mirror.code[p] = 'globalThis.oldBundled = true;';
+    files[p] = 'globalThis.compatibleRemote = (globalThis.compatibleRemote || 0) + 1;';
+  }
+  const sb = execRunnerSandbox({ mirror, overrides: { v: 1, files, ok: {} } });
+  assert.equal(sb.globalThis.compatibleRemote, 3);
+  assert.equal(sb.__executed.some(entry => entry.path === FIRST_PERSON_PATH), false);
+});
+
+test('MirrorRunner still enforces moderation on an inserted first-person dependency and the coordinator', () => {
+  const moderationPath = 'src/Core/MF_Moderation.js';
+  for (const locked of [false, true]) {
+    const mirror = FAKE_MIRROR();
+    mirror.code[moderationPath] = `window.__MF_MODERATION__ = { locked: ${locked}, isBlocked: p => p === ${JSON.stringify(FIRST_PERSON_PATH)}, blockReason: () => 'test block' };`;
+    mirror.code[FIRST_PERSON_PATH] = '// FIRST_PERSON_MODEL_VERSION = 3\nglobalThis.firstPersonLoaded = true;';
+    mirror.code[REALISTIC_PATH] = '// REALISTIC_PLAYER_FEATURES_VERSION = 1\nglobalThis.modernRealistic = true;';
+    const sb = execRunnerSandbox({ mirror, overrides: {
+      v: 1, buckets: { mainStart: [moderationPath, REALISTIC_PATH, 'm/a.js'] }, files: {}, ok: {}
+    } });
+    assert.equal(sb.globalThis.firstPersonLoaded, undefined);
+    assert.equal(sb.globalThis.modernRealistic, locked ? undefined : true);
+    assert.deepEqual(sb.__executed.map(entry => entry.path), locked ? [moderationPath] : [moderationPath, REALISTIC_PATH, 'm/a.js']);
+  }
+});
+
 test('background: trackedFilesFromManifest excluye mirror.js generado', () => {
   const bg = source('src/Core/background.js');
   const fn = namedFunction(bg, 'trackedFilesFromManifest');
