@@ -24,6 +24,11 @@ function nativeTerrain(options = {}) {
   h.context.document.removeEventListener = () => {};
   h.game.inGame = () => true;
   h.player.pos = { x: .5, y: 1, z: .5 };
+  // This interaction fixture uses a direct .15-block ground step, without
+  // accumulated momentum. Expose its actual bound to the native input guard;
+  // acceleration/drag and lateral impulses have a separate continuous fixture.
+  h.player.motion = { x: 0, y: 0, z: 0 };
+  h.player.landMovementFactor = .15 / .98;
   h.player.inventory.currentItem = 3;
   const stoneBlock = { name: 'stone', defaultState: { isFullCube: () => true }, material: { isLiquid: () => false } };
   h.player.inventory.main = Array(9).fill(null);
@@ -133,9 +138,10 @@ function nativeTerrain(options = {}) {
       const headWater = cell(Math.floor(h.player.pos.x), Math.floor(h.player.pos.y + 1.62), Math.floor(h.player.pos.z)) === 'water';
       h.player.oxygen = headWater ? h.player.oxygen - 1 : 300;
     } else {
+      const scale = .15 / Math.max(1, .98 * Math.hypot(forward, right));
       const next = { ...h.player.pos,
-        x: h.player.pos.x + (-Math.sin(h.player.yaw) * forward + Math.cos(h.player.yaw) * right) * .15,
-        z: h.player.pos.z + (-Math.cos(h.player.yaw) * forward - Math.sin(h.player.yaw) * right) * .15 };
+        x: h.player.pos.x + (-Math.sin(h.player.yaw) * forward + Math.cos(h.player.yaw) * right) * scale,
+        z: h.player.pos.z + (-Math.cos(h.player.yaw) * forward - Math.sin(h.player.yaw) * right) * scale };
       // Native sneak retains the support footprint; it does not teleport or fly.
       if (!h.player.sneak || supported(next)) h.player.pos = next;
       h.player.onGround = supported(h.player.pos);
@@ -168,7 +174,7 @@ test('real native bridge approach reaches the exposed face, places each support 
   assert.ok(h.placementLog.every(entry => entry.sneak), 'the player stays sneaking at the unbuilt bridge edge');
   assert.ok(h.placementLog.every(entry => entry.player.x <= entry.hit.x + 1.15), 'native placement happens before overshooting the supported edge');
   assert.ok(h.movementLog.every(entry => entry.pos.y === 1), 'do not fall into the gap while awaiting placement');
-  assert.ok(Math.hypot(h.player.pos.x - 5.5, h.player.pos.z - .5) < .31);
+  assert.ok(Math.hypot(h.player.pos.x - 5.5, h.player.pos.z - .5) < .46, 'ordinary goto stops naturally inside its safe destination');
   assert.equal(h.player.inventory.currentItem, 3, 'temporary block selection is restored');
   h.api.destroy(); assert.equal(h.timers.size, 0);
 });

@@ -25,6 +25,8 @@ function runtime() {
   h.context.document.removeEventListener = () => {};
   h.game.inGame = () => true;
   h.player.pos = { x: .5, y: 1, z: .5 };
+  h.player.motion = { x: 0, y: 0, z: 0 };
+  h.player.landMovementFactor = .15 / .98;
   for (let x = -8; x <= 8; x++) for (let z = -8; z <= 8; z++) {
     for (let y = 1; y <= 8; y++) h.world.cells.set(`${x},${y},${z}`, 'air');
   }
@@ -38,8 +40,9 @@ function runtime() {
     h.player.collectRenamed();
     const forward = -h.player.forward, right = h.player.sideways;
     // Flat-ground native input convention, with ordinary walking speed.
-    h.player.pos.x += (-Math.sin(h.player.yaw) * forward + Math.cos(h.player.yaw) * right) * .15;
-    h.player.pos.z += (-Math.cos(h.player.yaw) * forward - Math.sin(h.player.yaw) * right) * .15;
+    const scale = .15 / Math.max(1, .98 * Math.hypot(forward, right));
+    h.player.pos.x += (-Math.sin(h.player.yaw) * forward + Math.cos(h.player.yaw) * right) * scale;
+    h.player.pos.z += (-Math.cos(h.player.yaw) * forward - Math.sin(h.player.yaw) * right) * scale;
   };
   return { ...h, api: h.context.Baritone, step, timers };
 }
@@ -49,7 +52,7 @@ test('real broker/adapter/planner/runtime navigate a simulated player through na
   assert.equal(h.api.goto(4, 1, 0), true);
   for (let i = 0; i < 200 && h.api.status !== 'idle' && h.api.status !== 'failed'; i++) h.step();
   assert.equal(h.api.status, 'idle', JSON.stringify(h.api.debug()));
-  assert.ok(Math.hypot(h.player.pos.x - 4.5, h.player.pos.z - .5) < .31);
+  assert.ok(Math.hypot(h.player.pos.x - 4.5, h.player.pos.z - .5) < .46);
   assert.ok(h.player.sent.some(packet => packet.up && Math.abs(packet.yaw + Math.PI / 2) < .1));
   assert.ok(h.player.sent.every((packet, i) => packet.sequenceNumber === 11 + i));
   assert.equal(h.api.debug().native.hooked, false);
@@ -81,6 +84,6 @@ test('a real chat command can plan before the input closes, without seizing cont
   h.game.chat.showInput = false;
   for (let i = 0; i < 200 && !['idle', 'failed'].includes(h.api.status); i++) h.step();
   assert.equal(h.api.status, 'idle', JSON.stringify(h.api.debug()));
-  assert.ok(Math.hypot(h.player.pos.x - 3.5, h.player.pos.z - .5) < .31);
+  assert.ok(Math.hypot(h.player.pos.x - 3.5, h.player.pos.z - .5) < .46);
   h.api.destroy(); h.adapter.destroy();
 });

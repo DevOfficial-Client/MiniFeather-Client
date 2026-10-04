@@ -37,6 +37,278 @@ function finish(job) {
 function hasNeighbor(planner, from, to, action) {
     return planner.neighbors(from).find(node => node.x === to.x && node.y === to.y && node.z === to.z && (!action || node.action === action));
 }
+function dijkstraCost(planner, start, isGoal) {
+    const frontier = [{ ...start, total: 0 }];
+    const costs = new Map([[coord(start.x, start.y, start.z), 0]]);
+    while (frontier.length) {
+        frontier.sort((a, b) => a.total - b.total);
+        const current = frontier.shift();
+        if (current.total !== costs.get(coord(current.x, current.y, current.z))) continue;
+        if (isGoal(current)) return current.total;
+        for (const next of planner.neighbors(current)) {
+            const total = current.total + next.cost;
+            const id = coord(next.x, next.y, next.z);
+            if (total >= (costs.get(id) ?? Infinity)) continue;
+            costs.set(id, total);
+            frontier.push({ ...next, total });
+        }
+    }
+    return Infinity;
+}
+
+test('live walking edge checks read only their direction, once per cell and without tool-cost callbacks', () => {
+    const blocks = new Map();
+    const reads = new Map();
+    let toolEstimates = 0;
+    const planner = api.create((x, y, z) => {
+        const id = coord(x, y, z);
+        reads.set(id, (reads.get(id) ?? 0) + 1);
+        return blocks.get(id) ?? (y === 0 ? stone : air);
+    }, { allowMine: true, miningCost() { toolEstimates++; return 2; } });
+    for (const [x, z] of [[0, 1], [0, -1], [-1, 0]]) {
+        blocks.set(coord(x, 1, z), stone);
+        blocks.set(coord(x, 2, z), stone);
+    }
+    const walk = { ...pos(1), action: 'walk' };
+    assert.equal(planner.validateTransition(pos(0), walk), true);
+    assert.equal(reads.size, 6, 'a cardinal walking edge needs only both bodies and supports');
+    assert.equal([...reads.values()].every(count => count === 1), true);
+    assert.equal(toolEstimates, 0, 'live validation must not estimate unrelated tools or terrain costs');
+    blocks.set(coord(0, 0, 0), air);
+    assert.equal(planner.validateTransition(pos(0), walk), false, 'the next check must reread the changed source support');
+    reads.clear();
+    assert.equal(planner.validateTransition(pos(0), { ...pos(3), action: 'walk' }), false);
+    assert.equal(reads.size, 0, 'impossible long edges are rejected before touching the block reader');
+});
+
+test('single-direction live validation preserves every generated safe movement action', () => {
+    const fixtures = [
+        w => w.set(1, 0, 0, air),
+        w => w.set(1, 1, 0, stone),
+        w => { w.set(1, 1, 0, stone); w.set(1, 2, 0, stone); },
+        w => { w.set(1, 0, 0, air); w.set(1, -1, 0, stone); },
+        w => { w.set(1, 1, 0, water); w.set(1, 2, 0, water); }
+    ];
+    for (const configure of fixtures) {
+        const w = world({ allowMine: true, allowPlace: true, placeBudget: 4 });
+        configure(w);
+        for (const next of w.planner.neighbors(pos(0))) {
+            assert.equal(w.planner.validateTransition(pos(0), next), true, `${next.action} at ${coord(next.x, next.y, next.z)}`);
+        }
+    }
+    const wet = world();
+    for (let y = 0; y <= 3; y++) wet.set(0, y, 0, water);
+    for (const next of wet.planner.neighbors(pos(0))) assert.equal(wet.planner.validateTransition(pos(0), next), true);
+});
+
+test('walking segment smoothing accepts fractional world positions with a complete swept footprint', () => {
+    const w = world();
+    const from = { x: 0.8, y: 1, z: 0.5 };
+    const to = { x: 3.5, y: 1, z: 2.5, action: 'walk' };
+    assert.equal(w.planner.canWalkSegment(from, to), true);
+    assert.equal(w.planner.canWalkSegment(to, from), true);
+    w.set(0, 1, 1, stone);
+    assert.equal(w.planner.canWalkSegment(from, to), false, 'the footprint clips a corner that the center ray does not enter');
+    w.set(0, 1, 1, air);
+    w.set(1, 2, 0, stone);
+    assert.equal(w.planner.canWalkSegment(from, to), false, 'headroom is swept as well as feet');
+    w.set(1, 2, 0, air);
+    w.set(1, 0, 0, air);
+    assert.equal(w.planner.canWalkSegment(from, to), false, 'a smoothed diagonal cannot cross a missing support corner');
+});
+
+test('walking segments remain live, dry, bounded and preserve nonwalking action markers', () => {
+    const w = world({ min: -20, max: 20 });
+    const from = { x: -3.5, y: 1, z: -0.5 };
+    const to = { x: 0.5, y: 1, z: -0.5, action: 'walk' };
+    assert.equal(w.planner.canWalkSegment(from, to), true);
+    w.unknown.add(coord(-1, 2, -1));
+    assert.equal(w.planner.canWalkSegment(from, to), false);
+    w.unknown.clear();
+    w.set(-1, 1, -1, water);
+    assert.equal(w.planner.canWalkSegment(from, to), false);
+    w.set(-1, 1, -1, air);
+    w.set(-1, 0, -1, { ...stone, hazard: true });
+    assert.equal(w.planner.canWalkSegment(from, to), false);
+    w.set(-1, 0, -1, stone);
+    assert.equal(w.planner.canWalkSegment(from, to), true, 'no earlier live segment snapshot survives a call');
+    for (const action of ['mine', 'mineJump', 'jump', 'gap', 'drop', 'bridge', 'swim']) {
+        assert.equal(w.planner.canWalkSegment(from, { ...to, action }), false, action);
+    }
+    assert.equal(w.planner.canWalkSegment(from, { ...to, y: 2 }), false);
+    assert.equal(w.planner.canWalkSegment(from, { ...to, x: 14.5 }), false);
+    assert.equal(w.planner.canWalkSegment(from, to, { maxDistance: 2 }), false);
+    assert.equal(w.planner.canWalkSegment({ ...from, x: NaN }, to), false);
+});
+
+test('walking segment support must cover the contacted floor tile, not only its center', () => {
+    const w = world();
+    const from = { x: 0.5, y: 1, z: 0.5 };
+    const to = { x: 2.5, y: 1, z: 0.5 };
+    w.set(1, 0, 0, { ...stone, collision: [{ min: { x: 0.2, y: 0, z: 0.2 }, max: { x: 0.8, y: 1, z: 0.8 } }] });
+    assert.equal(w.planner.canStand(1, 1, 0), true);
+    assert.equal(w.planner.canWalkSegment(from, to), false);
+    w.set(1, 0, 0, { ...stone, collision: [{ min: { x: 0, y: 0, z: 0 }, max: { x: 1, y: 1, z: 1 } }] });
+    assert.equal(w.planner.canWalkSegment(from, to), true);
+    w.set(1, 3, 0, stone);
+    assert.equal(w.planner.canWalkSegment({ ...from, y: 1.25 }, { ...to, y: 1.25 }), false);
+});
+
+test('walking segment smoothing honors excluded movement edges and keeps its reads linear', () => {
+    const blockedEdges = new Set();
+    const reads = new Map();
+    const planner = api.create((x, y, z) => {
+        const id = coord(x, y, z);
+        reads.set(id, (reads.get(id) ?? 0) + 1);
+        return y === 0 ? stone : air;
+    }, { blockedEdges });
+    const from = { x: 0.5, y: 1, z: 0.5 };
+    const to = { x: 16.5, y: 1, z: 0.5 };
+    assert.equal(planner.canWalkSegment(from, to), true);
+    assert.equal(reads.size, 51);
+    assert.equal([...reads.values()].every(count => count === 1), true);
+    blockedEdges.add(api.edgeKey(pos(2), pos(3)));
+    assert.equal(planner.canWalkSegment(from, to), false);
+});
+
+test('optional walking probes preserve octile-optimal cardinal, diagonal and mixed-slope route costs', () => {
+    assert.equal(api.version, 6);
+    const w = world({ min: -160, max: 160, fastWalk: true, now: () => 0 });
+    for (const goal of [pos(32), pos(-32), pos(0, 1, 32), pos(24, 1, -24), pos(4, 1, 2),
+        pos(32, 1, 9), pos(-32, 1, 9), pos(9, 1, -32), pos(-9, 1, -32), pos(128, 1, 37)]) {
+        const regular = finish(w.planner.search(pos(0), goal, { fastWalk: false }));
+        const fast = finish(w.planner.search(pos(0), goal));
+        assert.equal(fast.complete, true);
+        assert.equal(fast.fastWalk, true);
+        assert.ok(Math.abs(fast.cost - regular.cost) < 1e-9);
+        const major = Math.max(Math.abs(goal.x), Math.abs(goal.z));
+        const minor = Math.min(Math.abs(goal.x), Math.abs(goal.z));
+        assert.ok(Math.abs(fast.cost - (major + (Math.SQRT2 - 1) * minor)) < 1e-9);
+        assert.equal(fast.path.length, major + 1);
+        assert.equal(fast.visited, major);
+        assert.equal(fast.path.every(node => node.action === 'walk'), true);
+        for (let i = 1; i < fast.path.length; i++) {
+            assert.equal(w.planner.validateTransition(fast.path[i - 1], fast.path[i]), true);
+            const node = fast.path[i];
+            const deviation = Math.abs(node.x * goal.z - node.z * goal.x) / major;
+            assert.ok(deviation <= 0.5 + 1e-9, 'diagonal steps are distributed along the route, not grouped into a large dogleg');
+        }
+        assert.ok(fast.terrainReads < regular.terrainReads, 'probes should avoid reading unused parallel terrain');
+    }
+    assert.equal(finish(w.planner.search(pos(0), pos(129))).fastWalk, false, 'probes remain bounded even on completely loaded long routes');
+    assert.equal(finish(world({ now: () => 0 }).planner.search(pos(0), pos(4))).fastWalk, false, 'optimization stays opt-in');
+});
+
+test('long mixed-slope walking probes reduce block reads while retaining exact endpoints', () => {
+    const w = world({ min: -16, max: 160, fastWalk: true, now: () => 0 });
+    for (const distance of [32, 64, 96, 128]) {
+        const goal = pos(distance, 1, Math.floor(distance * .29));
+        const ordinary = finish(w.planner.search(pos(0), goal, { fastWalk: false }));
+        const fast = finish(w.planner.search(pos(0), goal));
+        assert.equal(fast.complete, true);
+        assert.equal(fast.fastWalk, true);
+        assert.equal(fast.adjustedGoal, false);
+        assert.deepEqual(JSON.parse(JSON.stringify(fast.goal)), goal);
+        assert.ok(Math.abs(fast.cost - ordinary.cost) < 1e-9);
+        assert.ok(fast.terrainReads < ordinary.terrainReads * .6, `distance ${distance} should not read an unrelated eight-direction neighborhood`);
+    }
+});
+
+test('mixed-slope walking probes validate both diagonal corners and fall back without losing safe detours', () => {
+    const changes = [
+        w => { for (let y = 1; y <= 3; y++) w.set(1, y, 1, { ...stone, breakable: false }); },
+        w => w.set(1, 2, 1, stone),
+        w => w.set(1, 0, 1, air),
+        w => w.set(1, 0, 1, { ...stone, height: .5 }),
+        w => w.set(1, 1, 1, water),
+        w => w.set(1, 0, 1, { ...stone, hazard: true }),
+        w => w.unknown.add(coord(1, 2, 1)),
+        w => w.blockedEdges.add(api.edgeKey(pos(1), pos(2, 1, 1)))
+    ];
+    for (const configure of changes) {
+        const blockedEdges = new Set();
+        const w = world({ fastWalk: true, blockedEdges, now: () => 0 });
+        w.blockedEdges = blockedEdges;
+        configure(w);
+        const ordinary = finish(w.planner.search(pos(0), pos(8, 1, 3), { fastWalk: false }));
+        const fast = finish(w.planner.search(pos(0), pos(8, 1, 3)));
+        assert.equal(fast.fastWalk, false);
+        assert.equal(fast.complete, true);
+        assert.ok(Math.abs(fast.cost - ordinary.cost) < 1e-9);
+        for (let i = 1; i < fast.path.length; i++) assert.equal(w.planner.validateTransition(fast.path[i - 1], fast.path[i]), true);
+    }
+});
+
+test('straight walking probes yield safe previews, obey total budgets and release cancelled work', () => {
+    const w = world({ max: 40, fastWalk: true, now: () => 0 });
+    const job = w.planner.search(pos(0), pos(32));
+    assert.equal(job.done, false);
+    assert.equal(job.step({ maxNodes: 3, maxMs: 16 }), null);
+    const preview = job.preview();
+    assert.equal(preview.visited, 3);
+    assert.equal(preview.complete, false);
+    assert.equal(preview.pathLength, 4);
+    assert.equal(preview.path.at(-1).x, 3);
+    const limited = finish(w.planner.search(pos(0), pos(32), { maxNodesTotal: 2 }));
+    assert.equal(limited.complete, false);
+    assert.equal(limited.reason, 'node_budget');
+    assert.equal(limited.visited, 2);
+    assert.equal(limited.path.at(-1).x, 2);
+    job.cancel();
+    assert.equal(job.preview().reason, 'cancelled');
+    assert.equal(job.preview().path.length, 0);
+    assert.equal(job.result.cachedCells > 0, true);
+    let time = 0;
+    const clocked = world({ fastWalk: true, now: () => time }).planner.search(pos(0), pos(5), { maxTimeMs: 4 });
+    time = 5;
+    assert.equal(clocked.step().reason, 'time_budget');
+    assert.equal(clocked.result.complete, false);
+    assert.equal(clocked.result.visited, 0);
+});
+
+test('straight walking probes fall back to full A* around obstacles, unknown chunks and excluded edges', () => {
+    const configure = [
+        w => { for (let y = 1; y <= 3; y++) w.set(2, y, 0, { ...stone, breakable: false }); },
+        w => w.unknown.add(coord(2, 2, 0)),
+        w => w.plannerBlockedEdges.add(api.edgeKey(pos(2), pos(3)))
+    ];
+    for (const change of configure) {
+        const blockedEdges = new Set();
+        const w = world({ fastWalk: true, blockedEdges, now: () => 0 });
+        w.plannerBlockedEdges = blockedEdges;
+        change(w);
+        const ordinary = finish(w.planner.search(pos(0), pos(6), { fastWalk: false }));
+        const fast = finish(w.planner.search(pos(0), pos(6)));
+        assert.equal(fast.complete, true);
+        assert.equal(fast.fastWalk, false);
+        assert.equal(fast.cost, ordinary.cost);
+        assert.ok(fast.path.some(node => node.z !== 0));
+        for (let i = 1; i < fast.path.length; i++) assert.equal(w.planner.validateTransition(fast.path[i - 1], fast.path[i]), true);
+    }
+});
+
+test('failed walking probes keep exact mining, building and swimming capabilities', () => {
+    const tunnel = world({ fastWalk: true, allowMine: true, now: () => 0 });
+    for (let y = 1; y <= 3; y++) tunnel.set(1, y, 0, stone);
+    const mining = finish(tunnel.planner.search(pos(0), pos(4), { miningCost: () => 0.25 }));
+    assert.equal(mining.complete, true);
+    assert.equal(mining.fastWalk, false);
+    assert.ok(mining.path.some(node => node.action === 'mine'));
+    const gap = world({ fastWalk: true, allowPlace: true, placeBudget: 3, allowGap: false, now: () => 0 });
+    for (let x = 1; x <= 3; x++) for (let z = -10; z <= 10; z++) gap.set(x, 0, z, air);
+    const building = finish(gap.planner.search(pos(0), pos(4)));
+    assert.equal(building.complete, true);
+    assert.equal(building.placements, 3);
+    assert.equal(building.fastWalk, false);
+    const pool = world({ fastWalk: true, now: () => 0 });
+    for (let x = 1; x <= 3; x++) for (let z = -10; z <= 10; z++) {
+        pool.set(x, 1, z, water); pool.set(x, 0, z, air);
+    }
+    const swimming = finish(pool.planner.search(pos(0), pos(4)));
+    assert.equal(swimming.complete, true);
+    assert.ok(swimming.path.some(node => node.action === 'swim'));
+    assert.equal(swimming.fastWalk, false);
+});
 
 test('A* finds a shortest level route and walks around a tall obstruction', () => {
     const w = world();
@@ -313,6 +585,97 @@ test('level A* costs match Dijkstra across deterministic obstacle layouts', () =
         const result = finish(w.planner.search(pos(0), pos(5, 1, 5)));
         assert.equal(result.complete, Number.isFinite(expected));
         if (result.complete) assert.ok(Math.abs(result.cost - expected) < 1e-9);
+    }
+});
+
+test('altitude-aware A* remains Dijkstra-optimal across deterministic three-dimensional hills', () => {
+    let seed = 517;
+    const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 0x100000000; };
+    for (let layout = 0; layout < 16; layout++) {
+        const heights = new Map();
+        for (let x = 0; x <= 8; x++) for (let z = 0; z <= 4; z++) heights.set(`${x},${z}`, Math.floor(random() * 3));
+        const planner = api.create((x, y, z) => {
+            if (x < 0 || x > 8 || z < 0 || z > 4 || y < 0 || y > 7) return null;
+            return y <= heights.get(`${x},${z}`) ? stone : air;
+        }, { now: () => 0, allowGap: false, goalRadius: 0 });
+        for (const reverse of [false, true]) {
+            const a = pos(0, heights.get('0,0') + 1);
+            const b = pos(8, heights.get('8,4') + 1, 4);
+            const start = reverse ? b : a, goal = reverse ? a : b;
+            const expected = dijkstraCost(planner, start, node => coord(node.x, node.y, node.z) === coord(goal.x, goal.y, goal.z));
+            const result = finish(planner.search(start, goal));
+            assert.equal(result.complete, Number.isFinite(expected));
+            if (result.complete) assert.ok(Math.abs(result.cost - expected) < 1e-9, `3D hill ${layout}, reversed ${reverse}`);
+        }
+    }
+});
+
+test('altitude-aware bounds remain consistent for walking, mining, bridging, gaps, drops and swimming', () => {
+    const instrumented = { performance };
+    vm.runInNewContext(source.replace('version: BARITONE_PLANNER_VERSION', 'version: BARITONE_PLANNER_VERSION, testDistance: routeDistance'), instrumented);
+    const distance = instrumented.__MF_BARITONE_PLANNER__.testDistance;
+    const edges = [];
+    const addEdges = (w, from) => { for (const next of w.planner.neighbors(from)) edges.push({ from, next }); };
+    addEdges(world(), pos(0));
+    const jump = world(); jump.set(1, 1, 0, stone); addEdges(jump, pos(0));
+    const mine = world({ allowMine: true, miningCost: () => .25 });
+    mine.set(1, 1, 0, stone); mine.set(1, 2, 0, stone); addEdges(mine, pos(0));
+    const bridge = world({ allowPlace: true, placeBudget: 1 }); bridge.set(1, 0, 0, air); addEdges(bridge, pos(0));
+    for (const drop of [1, 2, 3]) {
+        const dry = world({ allowGap: false });
+        for (let y = 0; y > -drop; y--) dry.set(1, y, 0, air);
+        dry.set(1, -drop, 0, stone); addEdges(dry, pos(0));
+        const wet = world({ allowGap: false });
+        for (let y = 0; y > 1 - drop; y--) wet.set(1, y, 0, air);
+        wet.set(1, 1 - drop, 0, water); addEdges(wet, pos(0));
+    }
+    const waterColumn = world();
+    for (let y = 0; y <= 3; y++) waterColumn.set(0, y, 0, water);
+    waterColumn.set(1, 1, 0, stone);
+    waterColumn.set(-1, 1, 0, water); addEdges(waterColumn, pos(0));
+    const actions = new Set(edges.map(({ next }) => next.action));
+    assert.deepEqual([...actions].sort(), ['bridge', 'drop', 'gap', 'jump', 'mine', 'mineJump', 'swim', 'walk']);
+    assert.equal(edges.filter(({ next }) => next.action === 'drop').some(({ from, next }) => from.y - next.y === 3), true);
+    for (const radius of [0, 1, 2, 4]) {
+        for (const goal of [pos(-5, -3, 7), pos(3, 6, -5), pos(0, 1, 0), pos(8, 1, 3)]) {
+            for (const { from, next } of edges) {
+                assert.ok(distance(from, goal, radius) <= next.cost + distance(next, goal, radius) + 1e-9,
+                    `consistent ${next.action} bound toward ${coord(goal.x, goal.y, goal.z)}, radius ${radius}`);
+            }
+            assert.equal(distance({ x: goal.x + radius, y: goal.y - radius, z: goal.z - radius }, goal, radius), 0);
+        }
+    }
+});
+
+test('altitude bounds subtract adjusted-goal radius and do not prefer an unnecessarily high destination', () => {
+    const w = world({ min: -2, max: 8, goalRadius: 2, now: () => 0 });
+    w.set(4, 3, 0, { ...stone, breakable: false });
+    const goal = pos(4, 3);
+    const expected = dijkstraCost(w.planner, pos(0), node =>
+        Math.abs(node.x - goal.x) <= 2 && Math.abs(node.y - goal.y) <= 2 && Math.abs(node.z - goal.z) <= 2);
+    const result = finish(w.planner.search(pos(0), goal));
+    assert.equal(result.complete, true);
+    assert.equal(result.adjustedGoal, true);
+    assert.equal(result.cost, expected);
+    assert.equal(result.cost, 2);
+});
+
+test('long uphill and downhill searches prioritize useful altitude without expanding parallel plains', () => {
+    for (const descending of [false, true]) {
+        for (const length of [32, 64, 96, 128]) {
+            const height = x => descending ? Math.max(0, length / 8 - Math.floor(Math.max(0, x) / 8)) : Math.floor(Math.max(0, x) / 8);
+            const planner = api.create((x, y, z) => {
+                if (x < -16 || x > 160 || z < -96 || z > 96 || y < 0 || y > 48) return null;
+                return y <= height(x) ? stone : air;
+            }, { now: () => 0, goalRadius: 0, maxNodesTotal: 20000, maxTimeMs: 5000 });
+            const result = finish(planner.search(pos(0, height(0) + 1), pos(length, height(length) + 1)));
+            assert.equal(result.complete, true);
+            assert.equal(result.adjustedGoal, false);
+            const expected = length + (descending ? .35 : .7) * (length / 8);
+            assert.ok(Math.abs(result.cost - expected) < 1e-9);
+            assert.equal(result.visited, length + 1, 'the known minimum-cost slope need not explore a broad parallel altitude');
+            assert.ok(result.terrainReads <= (length + 1) * 10);
+        }
     }
 });
 
@@ -739,7 +1102,8 @@ test('live transition validation and a later job never reuse an earlier terrain 
 });
 
 test('job previews are capped, detached from search records and remain available after completion', () => {
-    const w = world();
+    // This test advances by node count, independently of parallel test load.
+    const w = world({ now: () => 0 });
     const job = w.planner.search(pos(0), pos(8));
     assert.equal(job.preview().visited, 0);
     assert.equal(job.preview().done, false);

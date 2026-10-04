@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const BARITONE_ADAPTER_VERSION = 4;
+  const BARITONE_ADAPTER_VERSION = 6;
   const KEY = '__MF_BARITONE_ADAPTER__';
   const instances = new Set();
   const INPUT_FIELDS = ['up', 'down', 'left', 'right', 'jump', 'sneak', 'sprint'];
@@ -46,7 +46,8 @@
   }
   function unknown(reason = 'unknown') {
     return { known: false, air: false, passable: false, solid: true, liquid: false, water: false, lava: false, hazard: true,
-      replaceable: false, breakable: false, hardness: Infinity, name: '', collision: [], supportHeight: 1, height: 1, reason };
+      replaceable: false, breakable: false, hardness: Infinity, name: '', collision: [], supportHeight: 1, height: 1,
+      slipperiness: null, reason };
   }
 
   function create() {
@@ -55,9 +56,10 @@
     let nativePosition = null, lookControls = null, hooked = false, destroyed = false;
     let desired = null, lastError = '', inputTicks = 0, inputMode = '', savedPlayer = null;
     let queuePatch = null, mining = null, lastInteract = 0, nativeMiningLoop = false;
-    let mouseGain = .002, mousePending = null, mouseVerified = false, lastMouseResponse = 0, firstMouseRequest = 0;
+    let mouseGain = .002, mousePending = null, mouseVerified = false;
+    let strafeCarry = 0, strafeDirection = 0, inputEpoch = 0, inputFields = new WeakMap(), guardedSneak = false;
     const keyboardHeld = new Set();
-    const names = { left: '', right: '', ray: '', mine: '', reach: '' };
+    const names = { left: '', right: '', ray: '', mine: '', reach: '', movementFactor: '' };
 
     function resolvePosition() {
       const hit = controller?.objectMouseOver?.block;
@@ -95,6 +97,8 @@
         callPattern(names.ray).test(entry.source) && callPattern(names.mine).test(entry.source));
       names.reach = methods(controller).find(entry =>
         /return\s+[\w$.]+\.abilities\.creative\s*\?\s*[\d.]+\s*:\s*[\d.]+\s*;?\s*\}/.test(entry.source))?.name || '';
+      names.movementFactor = methods(player).find(entry =>
+        /\breturn\s+this\.landMovementFactor\s*[;}]/.test(entry.source))?.name || '';
       lookControls = candidates(game).find(value => finite(value.yaw) && finite(value.pitch) &&
         value.yawObject?.rotation && value.pitchObject?.rotation && methods(value).some(entry =>
           entry.source.includes('yawObject.rotation.y') && entry.source.includes('pitchObject.rotation.x') &&
@@ -128,7 +132,7 @@
       release();
       game = nextGame; player = nextGame.player; world = nextGame.world;
       movement = globalThis.__MINIFEATHER_MOVEMENT_API__?.resolve(player, true) || null;
-      mouseVerified = false; firstMouseRequest = 0; lastMouseResponse = 0;
+      mouseGain = .002; mouseVerified = false;
       resolveController();
       if (!movement?.names.applyInput || !movement?.names.collectInput ||
         typeof player[movement.names.applyInput] !== 'function' || typeof player[movement.names.collectInput] !== 'function') {
@@ -149,15 +153,49 @@
       bind(nextGame);
       return !!player && player === nextGame?.player && world === nextGame?.world;
     }
-    function fields() {
-      return { up: desired.forward > .1, down: desired.forward < -.1,
-        right: desired.strafe > .1, left: desired.strafe < -.1,
+    function fields(input = null) {
+      const cached = input && inputFields.get(input);
+      if (cached?.epoch === inputEpoch && cached.sequence === input.sequenceNumber) return cached.fields;
+      let strafe = desired.strafe;
+      if (desired.pulseStrafe) {
+        const direction = Math.sign(strafe);
+        if (direction !== strafeDirection) { strafeCarry = 0; strafeDirection = direction; }
+        strafeCarry += Math.abs(strafe);
+        const pulse = strafeCarry >= 1 - 1e-9;
+        if (pulse) strafeCarry = Math.max(0, strafeCarry - 1);
+        strafe = pulse ? direction : 0;
+      }
+      const result = { up: desired.forward > .1, down: desired.forward < -.1,
+        right: strafe > .1, left: strafe < -.1,
         jump: !!desired.jump, sneak: !!desired.sneak, sprint: !!desired.sprint };
+      if (desired.canStep) {
+        let allowed = false;
+        try {
+          allowed = desired.canStep(Object.freeze({ forward: Number(result.up) - Number(result.down),
+            strafe: Number(result.right) - Number(result.left), jump: result.jump, sneak: result.sneak,
+            sprint: result.sprint, yaw: player.yaw, pitch: player.pitch })) === true;
+        } catch (_) {}
+        guardedSneak = !allowed;
+        if (!allowed) {
+          result.up = result.down = result.left = result.right = result.jump = result.sprint = false;
+          result.sneak = true;
+        }
+      }
+      // The native queue/send and native apply hooks see the same input object.
+      // Its duty pulse and safety decision must happen once, never twice.
+      if (input && (desired.pulseStrafe || desired.canStep)) {
+        inputFields.set(input, { epoch: inputEpoch, sequence: input.sequenceNumber, fields: result });
+      }
+      return result;
     }
     function patchInput(input) {
       if (!desired || !input || typeof input !== 'object') return;
-      const overrides = fields();
+      const overrides = fields(input);
       for (const key of INPUT_FIELDS) input[key] = overrides[key];
+      if (desired.canStep) {
+        player.sneak = overrides.sneak;
+        if (overrides.sprint !== desired.sprint) movement?.setSprint(overrides.sprint);
+      }
       // Keep the engine's protobuf object, position, ack and sequence number intact.
       // View angles remain the native camera's angles, never a synthetic packet aim.
       inputTicks++;
@@ -171,6 +209,10 @@
     }
     function feedKeys() {
       const active = fields();
+      if (desired.canStep) {
+        player.sneak = active.sneak;
+        if (active.sprint !== desired.sprint) movement?.setSprint(active.sprint);
+      }
       const map = { KeyW: active.up, KeyS: active.down, KeyD: active.right, KeyA: active.left, Space: active.jump };
       for (const [code, down] of Object.entries(map)) if (keyboardHeld.has(code) !== down) keyEvent(code, down);
     }
@@ -192,7 +234,8 @@
         before() {
           if (!desired) return;
           if (inputBlocked()) return;
-          player.sneak = !!desired.sneak;
+          inputEpoch++;
+          player.sneak = !!desired.sneak || !!desired.canStep && guardedSneak;
           movement.setSprint(!!desired.sprint);
           if (inputMode === 'native-queue-before-send' && Array.isArray(player.pendingInputs)) {
             restoreQueue();
@@ -222,7 +265,7 @@
         after() {
           if (!desired) return;
           if (inputBlocked()) return;
-          player.sneak = !!desired.sneak;
+          player.sneak = !!desired.sneak || !!desired.canStep && guardedSneak;
           calibrateMouse();
         }
       });
@@ -240,27 +283,38 @@
         }
         return false;
       }
-      desired = { forward: clamp(Number(control.forward) || 0, -1, 1), strafe: clamp(Number(control.strafe) || 0, -1, 1),
+      const nextStrafe = clamp(Number(control.strafe) || 0, -1, 1);
+      const pulseStrafe = control.pulseStrafe === true;
+      const canStep = typeof control.canStep === 'function' ? control.canStep : null;
+      if (!canStep) guardedSneak = false;
+      if (!pulseStrafe || Math.sign(nextStrafe) !== strafeDirection) { strafeCarry = 0; strafeDirection = Math.sign(nextStrafe); }
+      desired = { forward: clamp(Number(control.forward) || 0, -1, 1), strafe: nextStrafe,
         jump: !!control.jump, sneak: !!control.sneak, sprint: !!control.sprint,
-        yaw: finite(control.yaw) ? control.yaw : null, pitch: finite(control.pitch) ? control.pitch : null };
+        yaw: finite(control.yaw) ? control.yaw : null, pitch: finite(control.pitch) ? control.pitch : null,
+        pulseStrafe, canStep };
       if (!installHooks()) { desired = null; return false; }
       return true;
     }
     function calibrateMouse() {
       if (!mousePending || !player) return;
       const { yaw, pitch, x, y } = mousePending;
-      const change = x ? -wrap(player.yaw - yaw) / x : y ? -(player.pitch - pitch) / y : 0;
+      const change = Math.abs(x) >= Math.abs(y) && x ? -wrap(player.yaw - yaw) / x : y ? -(player.pitch - pitch) / y : 0;
       if (finite(change) && change > .00001 && change < .1) {
-        mouseGain = change; mousePending = null; mouseVerified = true; lastMouseResponse = Date.now();
+        mouseGain = change; mousePending = null; mouseVerified = true;
       }
     }
-    function steer(yaw, pitch, dt) {
+    function steer(yaw, pitch, dt, navigation = false) {
       if (!player || inputBlocked() || !finite(yaw) || !finite(pitch)) return false;
       pitch = clamp(pitch, -Math.PI / 2 + .001, Math.PI / 2 - .001);
-      const speed = clamp(dt, .005, .1) * 5;
-      const nextYaw = player.yaw + clamp(wrap(yaw - player.yaw), -speed, speed);
-      const nextPitch = player.pitch + clamp(pitch - player.pitch, -speed, speed);
+      const speed = clamp(finite(dt) ? dt : .05, .005, .1) * 5;
+      const yawError = wrap(yaw - player.yaw), pitchError = pitch - player.pitch;
+      // Walking may continue inside its tolerance; do not make the camera
+      // chase tiny changes in the bearing of nearby route points.
+      const deadband = navigation ? .025 : 0;
+      const nextYaw = player.yaw + (Math.abs(yawError) > deadband ? clamp(yawError, -speed, speed) : 0);
+      const nextPitch = player.pitch + (Math.abs(pitchError) > deadband ? clamp(pitchError, -speed, speed) : 0);
       if (lookControls) {
+        if (Math.abs(nextYaw - player.yaw) < .000001 && Math.abs(nextPitch - player.pitch) < .000001) return true;
         lookControls.yaw = nextYaw; lookControls.pitch = nextPitch;
         if (lookControls.rotation) { lookControls.rotation.y = nextYaw; lookControls.rotation.x = nextPitch; }
         lookControls.yawObject.rotation.y = nextYaw;
@@ -271,17 +325,21 @@
       try {
         calibrateMouse();
         const now = Date.now();
-        if (firstMouseRequest && now - (lastMouseResponse || firstMouseRequest) > 1500 &&
-          (Math.abs(wrap(yaw - player.yaw)) > .04 || Math.abs(pitch - player.pitch) > .04)) {
+        if (mousePending && now - mousePending.requestedAt > 1500) {
           lastError = 'native-camera-not-responding'; return false;
         }
-        const x = clamp(-wrap(nextYaw - player.yaw) / mouseGain, -250, 250);
-        const y = clamp(-(nextPitch - player.pitch) / mouseGain, -250, 250);
+        // A delayed native handler must acknowledge one look before another
+        // is sent, otherwise identical deltas accumulate and overshoot.
+        if (mousePending) return true;
+        // The first small native movement calibrates sensitivity rather than
+        // assuming a full turn's gain from an arbitrary mouse setting.
+        const mouseLimit = mouseVerified ? 250 : 2;
+        const x = clamp(-wrap(nextYaw - player.yaw) / mouseGain, -mouseLimit, mouseLimit);
+        const y = clamp(-(nextPitch - player.pitch) / mouseGain, -mouseLimit, mouseLimit);
         if (Math.abs(x) < .001 && Math.abs(y) < .001) return true;
-        if (!firstMouseRequest) firstMouseRequest = now;
         const event = new MouseEvent('mousemove', { bubbles: true, cancelable: true });
         Object.defineProperties(event, { movementX: { value: x }, movementY: { value: y } });
-        mousePending = { yaw: player.yaw, pitch: player.pitch, x, y };
+        mousePending = { yaw: player.yaw, pitch: player.pitch, x, y, requestedAt: now };
         document.dispatchEvent(event);
         return true;
       } catch (_) { lastError = 'native-camera-unavailable'; return false; }
@@ -293,14 +351,24 @@
       if (!finite(height) || height <= 0 || height > 5) height = player.sneak ? 1.54 : 1.62;
       return { x: player.pos.x, y: player.pos.y + height, z: player.pos.z };
     }
-    function aimAt(x, y, z, dtSeconds = .05) {
+    function aimAt(x, y, z, dtSeconds = .05, options = {}) {
       const origin = eye();
       if (!origin || ![x, y, z].every(finite)) return { aligned: false, reason: 'invalid-target' };
+      if (!finite(player.yaw) || !finite(player.pitch)) return { aligned: false, reason: 'native-camera-unavailable' };
+      const navigation = options?.mode === 'navigation';
+      const preservePitch = navigation && options.preservePitch !== false;
       const dx = x - origin.x, dy = y - origin.y, dz = z - origin.z;
-      const yaw = Math.atan2(-dx, -dz), pitch = Math.atan2(dy, Math.hypot(dx, dz));
-      const aligned = Math.abs(wrap(yaw - player.yaw)) < .04 && Math.abs(pitch - player.pitch) < .04;
-      const ok = steer(yaw, pitch, dtSeconds);
-      return { aligned: ok && aligned, yaw, pitch, reason: ok ? '' : lastError || 'native-camera-unavailable' };
+      const horizontal = Math.hypot(dx, dz);
+      const yaw = horizontal > .000001 ? Math.atan2(-dx, -dz) : player.yaw;
+      const pitch = preservePitch || horizontal <= .000001 && Math.abs(dy) <= .000001 ? player.pitch : Math.atan2(dy, horizontal);
+      const tolerance = navigation ? clamp(finite(options.tolerance) ? options.tolerance : .18, .04, .35) : .04;
+      const ok = steer(yaw, pitch, dtSeconds, navigation);
+      // Native onLook can apply immediately. Check its real resulting angles,
+      // not the old angles or the angles we merely requested.
+      const yawError = Math.abs(wrap(yaw - player.yaw)), pitchError = Math.abs(pitch - player.pitch);
+      const aligned = yawError < tolerance && (preservePitch || pitchError < .04);
+      return { aligned: ok && aligned, yaw, pitch, yawError, pitchError,
+        reason: ok ? '' : lastError || 'native-camera-unavailable' };
     }
     function swimmingState() {
       if (!refresh()) return { known: false, inWater: false, inLava: false, onGround: false, oxygen: null, air: null };
@@ -323,6 +391,44 @@
       // jump permits natural sinking; sneak is not a native swim-down command.
       return { known: inWater !== null && inLava !== null, inWater: inWater === true, inLava: inLava === true,
         onGround: !!player.onGround, oxygen, air: oxygen };
+    }
+    function movementFactor() {
+      if (!refresh()) return null;
+      try {
+        const getter = typeof player.getAIMoveSpeed === 'function' ? 'getAIMoveSpeed' :
+          typeof player[names.movementFactor] === 'function' ? names.movementFactor : '';
+        const value = getter ? player[getter]() : player.landMovementFactor;
+        return finite(value) && value >= 0 ? value : null;
+      } catch (_) { return null; }
+    }
+    function groundSlipperiness() {
+      if (!refresh() || !xyz(player.pos)) return null;
+      let minY = player.pos.y;
+      try {
+        const box = player.getEntityBoundingBox?.();
+        if (finite(box?.min?.y)) minY = box.min.y;
+      } catch (_) {}
+      // Match the engine's raw groundScratchPos lookup, independently of the
+      // planner's slightly rounded walking height or its collision footprint.
+      // Friction is native metadata, not permission to navigate outside world
+      // bounds: readCell keeps its separate strict terrain/collision checks.
+      const x = Math.floor(player.pos.x), y = Math.floor(minY - 1), z = Math.floor(player.pos.z);
+      const pos = position(x, y, z);
+      if (!pos || typeof world.getBlockState !== 'function') return null;
+      try {
+        if (typeof world.chunkProvider?.isLoaded === 'function') {
+          if (!world.chunkProvider.isLoaded(Math.floor(x / 16), Math.floor(z / 16))) return null;
+        } else if (typeof world.isBlockLoaded === 'function') {
+          if (!world.isBlockLoaded(pos)) return null;
+        } else return null;
+        if (typeof world.getChunk === 'function') {
+          const chunk = world.getChunk(pos);
+          if (!chunk || chunk.isDummyChunk === true) return null;
+        }
+        const state = world.getBlockState(pos), block = state?.getBlock?.() || state?.block;
+        const value = block?.slipperiness;
+        return finite(value) && value > 0 ? value : null;
+      } catch (_) { return null; }
     }
     function readCell(x, y, z) {
       if (!refresh() || ![x, y, z].every(Number.isInteger)) return unknown('invalid-position');
@@ -370,7 +476,8 @@
         const interactive = block.isBlockContainer === true || /chest|furnace|crafting_table|(?:^|_)(?:door|bed|lever|button|trapdoor|fence_gate)(?:$|_)/.test(name);
         return { known: true, air, passable: !solid && !hazard, solid, liquid, water, lava, hazard, replaceable,
           breakable: !air && !liquid && hardness >= 0 && finite(hardness) && !/bedrock|barrier|portal/.test(name),
-          hardness, name, collision, supportHeight, height: supportHeight, interactive };
+          hardness, name, collision, supportHeight, height: supportHeight, interactive,
+          slipperiness: finite(block.slipperiness) && block.slipperiness > 0 ? block.slipperiness : null };
       } catch (_) { return unknown('block-read-failed'); }
     }
     function reachDistance() {
@@ -624,7 +731,7 @@
         }
       }
       savedPlayer = null; hooked = false; mousePending = null;
-      firstMouseRequest = 0; lastMouseResponse = 0;
+      strafeCarry = 0; strafeDirection = 0; inputEpoch = 0; inputFields = new WeakMap(); guardedSneak = false;
     }
     function diagnostics() {
       return { bound: !!player, hooked, inputMode, inputTicks, error: lastError,
@@ -637,10 +744,13 @@
           mine: !!names.left && !!names.mine, nativeMiningLoop, place: !!names.right, attack: !!names.left,
           swimming: typeof player?.inWater === 'boolean' || typeof player?.isInWater === 'function',
           buildingInventory: Array.isArray(player?.inventory?.mainInventory || player?.inventory?.main) },
-        controls: desired && { ...desired } };
+        controls: desired && { forward: desired.forward, strafe: desired.strafe, jump: desired.jump,
+          sneak: desired.sneak, sprint: desired.sprint, yaw: desired.yaw, pitch: desired.pitch,
+          pulseStrafe: desired.pulseStrafe } };
     }
     const runtime = { bind, observe, setControls, release, releaseInteraction, readCell, aimAt, interact, selectSlot, entities, diagnostics, eye,
-      swimmingState, placementAim, blockInventory, blockBudget, selectBuildingBlock, getSelectedSlot, miningEstimate, selectMiningTool,
+      swimmingState, movementFactor, groundSlipperiness, placementAim, blockInventory, blockBudget, selectBuildingBlock, getSelectedSlot,
+      miningEstimate, selectMiningTool,
       get game() { return game; }, get player() { return player; },
       destroy() { release(); destroyed = true; instances.delete(runtime); game = player = world = controller = movement = null; } };
     instances.add(runtime);

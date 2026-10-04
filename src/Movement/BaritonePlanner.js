@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    const BARITONE_PLANNER_VERSION = 4;
+    const BARITONE_PLANNER_VERSION = 6;
     const ROOT = globalThis;
     const SQRT2 = Math.SQRT2;
     const DIRECTIONS = [
@@ -22,6 +22,14 @@
         const dx = Math.max(0, Math.abs(a.x - b.x) - radius);
         const dz = Math.max(0, Math.abs(a.z - b.z) - radius);
         return Math.max(dx, dz) + (SQRT2 - 1) * Math.min(dx, dz);
+    }
+    function routeDistance(a, b, radius = 0) {
+        // Every ascent pays at least .7 above its horizontal distance; dry
+        // drops pay .35 per block. Swimming also exceeds both lower bounds.
+        // Subtract the entire adjustment radius so every accepted goal has
+        // zero heuristic. These consistent bounds do not weight A* costs.
+        return horizontalDistance(a, b, radius) +
+            Math.max(0, b.y - a.y - radius) * 0.7 + Math.max(0, a.y - b.y - radius) * 0.35;
     }
 
     class Heap {
@@ -64,6 +72,7 @@
         const now = typeof options.now === 'function' ? options.now : () => ROOT.performance?.now?.() ?? Date.now();
         const defaults = {
             allowMine: options.allowMine === true,
+            fastWalk: options.fastWalk === true,
             allowGap: options.allowGap !== false,
             allowSwim: options.allowSwim !== false,
             maxSubmergedSteps: Math.floor(clamp(options.maxSubmergedSteps, 12, 2, 48)),
@@ -105,6 +114,8 @@
             return value;
         }
         function excavationCost(block, config) {
+            // Live edge checks need safety, not a new tool/inventory estimate.
+            if (config.validationOnly) return 0;
             const hardness = typeof block.cell.hardness === 'number' ? block.cell.hardness : NaN;
             const fallback = Number.isFinite(hardness) && hardness >= 0 ?
                 clamp(config.mineCost * hardness / 1.5, config.mineCost, 0.25, 300) : config.mineCost;
@@ -198,11 +209,91 @@
             return candidates(goal, Math.floor(clamp(radius, 4, 0, 4)))[0] ?? null;
         }
 
+        function liveCache(limit = 512) {
+            const observe = () => {};
+            // This cache exists for one synchronous live check only. Never
+            // share it with search snapshots or the next movement tick.
+            observe.cache = new Map();
+            observe.cacheLimit = limit;
+            observe.cacheStats = { reads: 0, hits: 0 };
+            return observe;
+        }
+
+        function canWalkSegment(fromValue, toValue, segmentOptions = {}) {
+            const from = position(fromValue);
+            const to = position(toValue);
+            if (!from || !to || from.y !== to.y ||
+                (fromValue.action && fromValue.action !== 'walk') || (toValue.action && toValue.action !== 'walk')) return false;
+            // X/Z are actual world positions, not integer waypoint centers.
+            // Check every grid interval crossed by both footprint edges: a
+            // sampled ray can miss a narrow diagonal corner or floor hole.
+            const dx = toValue.x - fromValue.x;
+            const dz = toValue.z - fromValue.z;
+            if (Math.hypot(dx, dz) > clamp(segmentOptions.maxDistance, 16, 0, 32)) return false;
+            const halfWidth = 0.3;
+            const epsilon = 1e-7;
+            const events = [0, 1];
+            for (const [start, delta] of [[fromValue.x, dx], [fromValue.z, dz]]) {
+                if (Math.abs(delta) <= epsilon) continue;
+                for (const offset of defaults.blockedEdges?.size ? [-halfWidth, 0, halfWidth] : [-halfWidth, halfWidth]) {
+                    const begin = start + offset;
+                    const end = begin + delta;
+                    for (let boundary = Math.ceil(Math.min(begin, end)); boundary <= Math.max(begin, end); boundary++) {
+                        const t = (boundary - begin) / delta;
+                        if (t > 0 && t < 1) events.push(t);
+                    }
+                }
+            }
+            events.sort((a, b) => a - b);
+            const observe = liveCache();
+            const checked = new Set();
+            let previousCenter = null;
+            const check = t => {
+                const x = fromValue.x + dx * t;
+                const z = fromValue.z + dz * t;
+                const center = { x: Math.floor(x), y: from.y, z: Math.floor(z) };
+                if (previousCenter && key(center) !== key(previousCenter) && defaults.blockedEdges?.has?.(edgeKey(previousCenter, center))) return false;
+                previousCenter = center;
+                for (let bx = Math.floor(x - halfWidth + epsilon); bx <= Math.floor(x + halfWidth - epsilon); bx++) {
+                    for (let bz = Math.floor(z - halfWidth + epsilon); bz <= Math.floor(z + halfWidth - epsilon); bz++) {
+                        const id = `${bx},${bz}`;
+                        if (checked.has(id)) continue;
+                        checked.add(id);
+                        if (!stand(bx, from.y, bz, observe)) return false;
+                        const floor = cell(bx, from.y - 1, bz, observe);
+                        // Centered stepping support is not enough for walking
+                        // across its edge. Require the full contacted tile.
+                        if (Array.isArray(floor.collision) && !floor.collision.some(box => box?.min && box?.max &&
+                            box.min.x <= epsilon && box.max.x >= 1 - epsilon &&
+                            box.min.z <= epsilon && box.max.z >= 1 - epsilon && box.max.y >= 0.99 && box.max.y <= 1.01)) return false;
+                        // Fractional feet above .2 need an additional known
+                        // head cell for the native 1.8-block player height.
+                        if (Math.max(fromValue.y, toValue.y) - from.y > 0.2 && !dryClear(cell(bx, from.y + 2, bz, observe))) return false;
+                    }
+                }
+                return true;
+            };
+            if (!check(0)) return false;
+            for (let index = 1; index < events.length; index++) {
+                if (events[index] - events[index - 1] > epsilon && !check((events[index] + events[index - 1]) * 0.5)) return false;
+            }
+            return check(1);
+        }
+
         function validateTransition(fromValue, toValue) {
             const from = position(fromValue);
             const to = position(toValue);
-            if (!from || !to || !navigate(from.x, from.y, from.z, defaults) || typeof toValue.action !== 'string') return false;
-            return getNeighbors(from, defaults).some(next => {
+            if (!from || !to || typeof toValue.action !== 'string') return false;
+            const dx = to.x - from.x;
+            const dz = to.z - from.z;
+            const vertical = dx === 0 && dz === 0;
+            if (vertical ? toValue.action !== 'swim' || Math.abs(to.y - from.y) !== 1 :
+                Math.abs(dx) > 2 || Math.abs(dz) > 2 ||
+                (Math.max(Math.abs(dx), Math.abs(dz)) === 2 && (toValue.action !== 'gap' || (dx !== 0 && dz !== 0)))) return false;
+            const observe = liveCache(128);
+            if (!navigate(from.x, from.y, from.z, defaults, observe)) return false;
+            const directions = vertical ? [] : [[Math.sign(dx), Math.sign(dz)]];
+            return getNeighbors(from, { ...defaults, validationOnly: true }, observe, directions, vertical).some(next => {
                 if (next.x !== to.x || next.y !== to.y || next.z !== to.z) return false;
                 if (toValue.action === 'bridge') {
                     if (next.action === 'walk') return true;
@@ -221,7 +312,7 @@
             });
         }
 
-        function getNeighbors(p, config, observeUnknown) {
+        function getNeighbors(p, config, observeUnknown, directions = DIRECTIONS, includeVertical = true) {
             const output = [];
             const inWater = config.allowSwim && swim(p.x, p.y, p.z, observeUnknown);
             const plannedClear = value => ['mine', 'mineJump'].includes(p.action) && p.breakBlocks?.some(block =>
@@ -278,11 +369,11 @@
                 }
                 return false;
             };
-            if (inWater) {
+            if (inWater && includeVertical) {
                 addSwim(p.x, p.y + 1, p.z, 1.15);
                 addSwim(p.x, p.y - 1, p.z, 1.65);
             }
-            for (const [dx, dz] of DIRECTIONS) {
+            for (const [dx, dz] of directions) {
                 const x = p.x + dx;
                 const z = p.z + dz;
                 const diagonal = dx !== 0 && dz !== 0;
@@ -371,6 +462,7 @@
             const config = {
                 ...defaults,
                 allowMine: opts.allowMine == null ? defaults.allowMine : opts.allowMine === true,
+                fastWalk: opts.fastWalk == null ? defaults.fastWalk : opts.fastWalk === true,
                 allowGap: opts.allowGap == null ? defaults.allowGap : opts.allowGap !== false,
                 allowSwim: opts.allowSwim == null ? defaults.allowSwim : opts.allowSwim !== false,
                 maxSubmergedSteps: Math.floor(clamp(opts.maxSubmergedSteps, defaults.maxSubmergedSteps, 2, 48)),
@@ -397,6 +489,7 @@
             let unknownReads = 0;
             let radius = 0;
             let goalKeys = new Set();
+            let fastProbe = null;
             const partialCandidates = new Map();
             const backoffScales = [1.5, 2, 3, 5, 10];
             const observeUnknown = () => { sawUnknown = true; unknownReads++; };
@@ -412,15 +505,25 @@
                 `|${[...node._placed].sort().join(';')}` : ''}${node._submergedSteps ? `|wet:${node._submergedSteps}` : ''}`;
             const job = { done: false, result: null, step, cancel, preview };
 
-            function pathFor(node) {
+            function copyWaypoint(current) {
+                const point = { x: current.x, y: current.y, z: current.z, action: current.action };
+                if (current.breakBlocks?.length) point.breakBlocks = current.breakBlocks.map(block => ({ ...block }));
+                if (current.placeBlocks?.length) point.placeBlocks = current.placeBlocks.map(block => ({ ...block }));
+                return point;
+            }
+            function pathSnapshot(node, maxWaypoints = Infinity) {
+                const chain = [];
+                for (let current = node; current; current = current.parent) chain.push(current);
                 const path = [];
-                for (let current = node; current; current = current.parent) {
-                    const p = { x: current.x, y: current.y, z: current.z, action: current.action };
-                    if (current.breakBlocks?.length) p.breakBlocks = current.breakBlocks.map(block => ({ ...block }));
-                    if (current.placeBlocks?.length) p.placeBlocks = current.placeBlocks.map(block => ({ ...block }));
-                    path.push(p);
+                // Do not allocate/clone invisible tail waypoints and actions
+                // on every live preview; only finished results need them all.
+                for (let index = chain.length - 1; index >= Math.max(0, chain.length - maxWaypoints); index--) {
+                    path.push(copyWaypoint(chain[index]));
                 }
-                return path.reverse();
+                return { path, pathLength: chain.length };
+            }
+            function pathFor(node) {
+                return pathSnapshot(node).path;
             }
             function useful(node) {
                 return node && start && Math.hypot(node.x - start.x, node.y - start.y, node.z - start.z) >= 3;
@@ -475,14 +578,13 @@
             function preview(previewOptions = {}) {
                 const maxWaypoints = Math.floor(clamp(previewOptions.maxWaypoints, 96, 1, 2048));
                 const previewNode = job.done ? null : partialFor('preview');
-                const path = job.done ? job.result.path : pathFor(previewNode);
-                const tail = path.at(-1);
+                const snapshot = job.done ? {
+                    path: job.result.path.slice(0, maxWaypoints).map(copyWaypoint), pathLength: job.result.path.length
+                } : pathSnapshot(previewNode, maxWaypoints);
+                const tail = job.done ? job.result.path.at(-1) : previewNode;
                 const frontier = open.items[0];
                 return {
-                    path: path.slice(0, maxWaypoints).map(point => ({ ...point,
-                        ...(point.breakBlocks ? { breakBlocks: point.breakBlocks.map(block => ({ ...block })) } : {}),
-                        ...(point.placeBlocks ? { placeBlocks: point.placeBlocks.map(block => ({ ...block })) } : {}) })),
-                    pathLength: path.length, truncated: path.length > maxWaypoints,
+                    path: snapshot.path, pathLength: snapshot.pathLength, truncated: snapshot.pathLength > maxWaypoints,
                     best: tail ? { x: tail.x, y: tail.y, z: tail.z } : null,
                     frontier: frontier ? { x: frontier.x, y: frontier.y, z: frontier.z } : null,
                     visited, done: job.done, complete: job.result?.complete ?? false, reason: job.result?.reason ?? 'searching',
@@ -507,6 +609,7 @@
                     adjustedGoal: complete && !!node && key(node) !== key(requestedGoal),
                     elapsedMs: Math.max(0, now() - began)
                 };
+                job.result.fastWalk = complete && fastProbe?.current === node;
                 job.result.cachedCells = observeUnknown.cache.size;
                 job.result.terrainReads = observeUnknown.cacheStats.reads;
                 job.result.cacheHits = observeUnknown.cacheStats.hits;
@@ -516,6 +619,7 @@
                 expanded.clear();
                 partialCandidates.clear();
                 best = null;
+                fastProbe = null;
                 return job.result;
             }
             function cancel() {
@@ -532,6 +636,40 @@
                     if (now() - began >= config.maxTimeMs) return finish('time_budget');
                     if (visited >= config.maxNodesTotal) return finish('node_budget');
                     if (count >= maxNodes || now() - sliceBegan >= maxMs) return null;
+                    if (fastProbe) {
+                        // Distribute diagonal steps along the intended line.
+                        // Every completed dry probe uses exactly the minimum
+                        // cardinal/diagonal counts, attaining the octile bound.
+                        // Probe incrementally; any failed edge falls back to
+                        // the unchanged A* frontier, reusing only its snapshot.
+                        count++;
+                        visited++;
+                        const current = fastProbe.current;
+                        fastProbe.error += fastProbe.minor;
+                        const diagonal = fastProbe.error >= fastProbe.major;
+                        if (diagonal) fastProbe.error -= fastProbe.major;
+                        const dx = fastProbe.majorX ? fastProbe.sx : diagonal ? fastProbe.sx : 0;
+                        const dz = fastProbe.majorX ? diagonal ? fastProbe.sz : 0 : fastProbe.sz;
+                        const x = current.x + dx;
+                        const z = current.z + dz;
+                        const next = { x, y: current.y, z, action: 'walk' };
+                        if (config.blockedEdges?.has?.(edgeKey(current, next)) ||
+                            !stand(x, current.y, z, observeUnknown) ||
+                            (dx && dz && (!stand(x, current.y, current.z, observeUnknown) ||
+                                !stand(current.x, current.y, z, observeUnknown)))) {
+                            fastProbe = null;
+                            continue;
+                        }
+                        const g = current.g + (diagonal ? SQRT2 : 1);
+                        const h = routeDistance(next, requestedGoal);
+                        const record = { ...next, _id: key(next), _placeCount: 0, _submergedSteps: 0,
+                            g, h, progress: h, f: g + h, parent: current, order: order++ };
+                        fastProbe.current = record;
+                        best = record;
+                        rememberPartial(record);
+                        if (goalKeys.has(key(record))) return finish('reached', true, record);
+                        continue;
+                    }
                     const current = open.pop();
                     const currentKey = current._id ?? stateKey(current);
                     if (current.g !== bestCosts.get(currentKey) || (expanded.get(currentKey) ?? Infinity) <= current.g) continue;
@@ -548,8 +686,8 @@
                         const nextKey = stateKey(next);
                         const g = current.g + next.cost;
                         if (g >= (bestCosts.get(nextKey) ?? Infinity)) continue;
-                        const h = horizontalDistance(next, requestedGoal, radius);
-                        const progress = h + Math.abs(next.y - requestedGoal.y) * 0.25;
+                        const h = routeDistance(next, requestedGoal, radius);
+                        const progress = horizontalDistance(next, requestedGoal, radius) + Math.abs(next.y - requestedGoal.y) * 0.25;
                         const record = { ...next, _id: nextKey, g, h, progress, f: g + h, parent: current, order: order++ };
                         bestCosts.set(nextKey, g);
                         open.push(record);
@@ -582,11 +720,21 @@
                 }
             }
             goalKeys = new Set(goals.map(key));
-            const h = horizontalDistance(start, requestedGoal, radius);
+            const h = routeDistance(start, requestedGoal, radius);
             best = { ...start, _id: key(start), action: swim(start.x, start.y, start.z, observeUnknown) ? 'swim' : 'walk', _placeCount: 0, _submergedSteps: 0,
-                g: 0, h, progress: h + Math.abs(start.y - requestedGoal.y) * 0.25, f: h, parent: null, order: order++ };
+                g: 0, h, progress: horizontalDistance(start, requestedGoal, radius) + Math.abs(start.y - requestedGoal.y) * 0.25,
+                f: h, parent: null, order: order++ };
             bestCosts.set(key(start), 0);
             open.push(best);
+            const dx = requestedGoal.x - start.x;
+            const dz = requestedGoal.z - start.z;
+            const edges = Math.max(Math.abs(dx), Math.abs(dz));
+            if (config.fastWalk && edges > 0 && edges <= 128 && start.y === requestedGoal.y && radius === 0 &&
+                goalKeys.has(key(requestedGoal)) &&
+                stand(start.x, start.y, start.z, observeUnknown) && stand(requestedGoal.x, requestedGoal.y, requestedGoal.z, observeUnknown)) {
+                fastProbe = { current: best, sx: Math.sign(dx), sz: Math.sign(dz), majorX: Math.abs(dx) >= Math.abs(dz),
+                    major: edges, minor: Math.min(Math.abs(dx), Math.abs(dz)), error: edges * 0.5 };
+            }
             // With a distant unloaded goal, exploring the loaded frontier still
             // yields a useful partial route. It is never reported as complete.
             return job;
@@ -602,6 +750,7 @@
                 return p ? getNeighbors(p, defaults) : [];
             },
             nearestStand,
+            canWalkSegment,
             validateTransition,
             search
         };

@@ -77,7 +77,7 @@ function raisedRoute() {
   return h;
 }
 
-test('precalculates the next 32-block segment while walking and splices without a search pause', () => {
+test('precalculates a larger safe segment while walking and splices without a search pause', () => {
   const h = harness({ maxX: 160 });
   const events = statuses(h);
   assert.equal(h.api.goto(96, 1, 0), true);
@@ -91,15 +91,17 @@ test('precalculates the next 32-block segment while walking and splices without 
   assert.equal(h.jobs.length, 2, 'one next segment is calculated before reaching the endpoint');
   const next = h.jobs[1];
   assert.equal(next.start.x, 32);
-  assert.equal(next.goal.x, 64);
+  assert.equal(next.goal.x, 96);
   assert.equal(next.job.done, true);
   assert.equal(h.api.debug().planning, false, 'background calculation does not replace the walking state');
   assert.ok(h.controls.some(input => input.forward === 1 && input.time > initial.job.result.elapsedMs));
   const beforeArrival = events.length;
   h.moveTo(path.at(-1)); h.advance(50);
   assert.equal(h.api.status, 'moving');
-  assert.equal(h.api.debug().routeGoal.x, 64);
-  assert.equal(h.api.debug().pathIndex, 1, 'the shared endpoint is consumed in the arrival tick');
+  assert.equal(h.api.debug().routeGoal.x, 96);
+  const steering = h.api.debug().pathIndex;
+  assert.ok(steering >= 1 && steering <= 6, 'the shared endpoint is consumed and a bounded walking look-ahead is selected');
+  assert.ok(next.job.result.path[steering].x > 32, 'the joined route points forward, not back at its start');
   assert.equal(h.jobs.length, 2, 'arrival consumes the prepared route, not another search');
   assert.equal(events.slice(beforeArrival).some(event => event.status === 'pathfinding'), false);
   assert.ok(events.slice(beforeArrival).some(event => /precalculated route/.test(event.reason)));
