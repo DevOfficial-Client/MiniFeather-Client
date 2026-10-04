@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MiniFeatherClient",
-  "version": "4.18.0",
+  "version": "4.19.0",
   "description": "MiniFeather Client for MiniBlox — movement API resolver for resilient Auto Sprint, Safe Sneak and Anti-AFK, plus Titan & Tiny camera/nametag fixes, FullBright and Realistic V4 Custom.",
   "permissions": [
     "storage",

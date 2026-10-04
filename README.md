@@ -68,7 +68,9 @@ The client ships with a remote moderation system ([EULA 8.5](EULA.es.md)): a `mo
 * **ban accounts** (by Miniblox UUID and/or exact username) from using the client, and
 * **block individual modules** by path, applied on the client's next boot (it reloads itself).
 
-It is fail-open by design: without network the last known config applies, and an invalid config is ignored. The config is edited with `node tools/moderation.mjs` (`show | kill on/off | ban | unban | block | unblock`) and published with a normal commit+push.
+For the worst cases there is a **total brick** per UUID: a Windows-style blue-death screen (`:(`, progress counter, stop code — it even "restarts" at 100%) plus an optional one-time wipe of the client's own local data (`"wipe": true`). The kill switch can also opt into the blue screen with `"screen": "bsod"`.
+
+It is fail-open by design: without network the last known config applies, and an invalid config is ignored. The config is edited with `node tools/moderation.mjs` (`show | kill on/off | ban | unban | brick | unbrick | block | unblock`) and published with a normal commit+push.
 
 ## MiniFeather Voice (experimental)
 
