@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.18.0.20261004170003
+// @version      4.19.0.20261004170021
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -13,13 +13,13 @@
 // @license      MIT
 // ==/UserScript==
 /* minifeather client bundle (no extension)
- * version : 4.18.0
- * commit  : 9b72ae6f0e7dc493b09e608744fe8abea04bc410
- * builtAt : 2026-10-04T17:00:20.247Z
+ * version : 4.19.0
+ * commit  : faa4593bbf282354765752838ea62afd948cdcec
+ * builtAt : 2026-10-04T17:15:35.994Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8abea04bc410","builtAt":"2026-10-04T17:00:20.247Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"faa4593bbf282354765752838ea62afd948cdcec","builtAt":"2026-10-04T17:15:35.994Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -1937,19 +1937,23 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
 
 /* ==== mf module: src/Core/MF_Moderation.js ==== */
 // moderación remota del client: moderation.json (raíz del repo) es la única ley.
-// kill switch total, baneo de cuentas (uuid y/o nombre) y bloqueo fino de
-// módulos por path. este archivo va PRIMERO en mirror.json mainStart porque su
-// veredicto se consulta antes de inyectar cualquier otro módulo: con lock
-// activo MirrorRunner ni lo intenta, el plan de HotLoader se salta los archivos
-// y en los bundles móviles un throw corta el docStart entero (ahí todo el grupo
-// es una sola función, cortar arriba es cortar todo). el overlay se re-crea
-// solo y traga teclado/ratón en capture, porque siempre hay algo intentando
-// colarse por debajo.
+// kill switch total, baneo de cuentas (uuid y/o nombre), BRICKEO total por uuid
+// (pantalla azul estilo windows + wipe opcional del storage local) y bloqueo
+// fino de módulos por path. este archivo va PRIMERO en mirror.json mainStart
+// porque su veredicto se consulta antes de inyectar cualquier otro módulo: con
+// lock activo MirrorRunner ni lo intenta, el plan de HotLoader se salta los
+// archivos y en los bundles móviles un throw corta el docStart entero (ahí todo
+// el grupo es una sola función, cortar arriba es cortar todo). el overlay/BSOD
+// se re-crea solo y traga teclado/ratón en capture, porque siempre hay algo
+// intentando colarse por debajo.
 // la ia de turno: sí, un kill switch remoto dentro de un client mod suena a
 // villanía de película, pero es la única forma de apagar la luz en 400
 // instalaciones sin esperar que cada una actualice a mano. el EULA 8.5 lo
 // dice en cristiano y el que instaló aceptó. la config es fail-open: sin
 // red manda el último cache, y una config rota se ignora en vez de brickear.
+// el BSOD al 100% hace location.reload() de verdad: quien está ladrillado
+// vive el boot loop que windows siempre soñó. es bonito Y funcional — cada
+// reload refetcha la config, así que un desbrickeo se detecta solito.
 (function () {
   'use strict';
   if (window.__MF_MODERATION__) return;
@@ -1957,7 +1961,9 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
   var MOD_URL = 'https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/moderation.json';
   var CFG_KEY = 'mf:moderation:v1';      // última config remota conocida
   var BAN_KEY = 'mf:moderation:ban:v1';  // veredicto personal: esta cuenta está baneada
+  var BRICK_KEY = 'mf:moderation:brick:v1'; // veredicto personal: esta cuenta está LADRILLO
   var OVERLAY_ID = 'mf-moderation-lock';
+  var BSOD_ID = 'mf-moderation-bsod';
   var TOAST_ID = 'mf-moderation-toast';
   var BOOT_FETCH_DELAY = 2500;           // deja respirar al boot crítico antes del primer fetch
   var POLL_MS = 5 * 60 * 1000;           // la obediencia se refresca cada 5 minutos
@@ -1972,7 +1978,15 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
       noReason: 'sin motivo especificado',
       reasonLabel: 'Motivo: ',
       footer: 'Si crees que es un error, contacta con el administrador del client.',
-      moduleToast: 'Moderación: módulos actualizados, recargando…'
+      moduleToast: 'Moderación: módulos actualizados, recargando…',
+      bsodText: 'Tu client tuvo un problema y necesita reiniciarse. Solo estamos recopilando información de errores y luego reiniciaremos por ti.',
+      bsodPctWord: 'completado',
+      bsodInfo: 'Para obtener más información sobre este problema y posibles soluciones, visita',
+      bsodCall: 'Si llamas al administrador, dale esta información:',
+      bsodStopLabel: 'Detención:',
+      bsodStopBrick: 'MF_CLIENTE_LADRILLO',
+      bsodStopKill: 'MF_CLIENTE_DESHABILITADO',
+      bsodReasonLabel: 'Motivo:'
     },
     en: {
       killTitle: 'CLIENT DISABLED',
@@ -1982,7 +1996,15 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
       noReason: 'no reason given',
       reasonLabel: 'Reason: ',
       footer: 'If you think this is a mistake, contact the client administrator.',
-      moduleToast: 'Moderation: modules updated, reloading…'
+      moduleToast: 'Moderation: modules updated, reloading…',
+      bsodText: 'Your client ran into a problem and needs to restart. We\'re just collecting some error info, and then we\'ll restart for you.',
+      bsodPctWord: 'complete',
+      bsodInfo: 'For more information about this issue and possible fixes, visit',
+      bsodCall: 'If you call the administrator, give them this info:',
+      bsodStopLabel: 'Stop code:',
+      bsodStopBrick: 'MF_CLIENT_BRICKED',
+      bsodStopKill: 'MF_CLIENT_DISABLED',
+      bsodReasonLabel: 'Reason:'
     }
   }[(navigator.language || 'es').toLowerCase().indexOf('en') === 0 ? 'en' : 'es'];
 
@@ -1999,8 +2021,9 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
     try { localStorage.removeItem(key); } catch (_) {}
   }
 
-  var cfg = readJSON(CFG_KEY); // { v:1, ts, hash, cfg:{killSwitch, bannedAccounts, blockedModules} }
-  var ban = readJSON(BAN_KEY); // { uuid, name, reason, since, ts }
+  var cfg = readJSON(CFG_KEY);  // { v:1, ts, hash, cfg:{killSwitch, bannedAccounts, brickedAccounts, blockedModules} }
+  var ban = readJSON(BAN_KEY);  // { uuid, name, reason, since, ts }
+  var brick = readJSON(BRICK_KEY); // { uuid, name, reason, since, ts, wiped }
   var identitySeen = null;
   var reloading = false;
 
@@ -2010,6 +2033,7 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
     if (!raw || typeof raw !== 'object' || raw.v !== 1) return null;
     var ks = raw.killSwitch || {};
     var bansIn = Array.isArray(raw.bannedAccounts) ? raw.bannedAccounts : [];
+    var bricksIn = Array.isArray(raw.brickedAccounts) ? raw.brickedAccounts : [];
     var blocksIn = (raw.blockedModules && typeof raw.blockedModules === 'object' && !Array.isArray(raw.blockedModules))
       ? raw.blockedModules : {};
     var bans = [];
@@ -2025,6 +2049,20 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
         since: String(b.since || '').trim().slice(0, 40)
       });
     }
+    var bricks = [];
+    for (var k = 0; k < bricksIn.length; k++) {
+      var r = bricksIn[k] || {};
+      var buuid = String(r.uuid || '').trim().toLowerCase();
+      var bname = String(r.name || '').trim().toLowerCase();
+      if (!buuid && !bname) continue;
+      bricks.push({
+        uuid: buuid,
+        name: bname,
+        reason: String(r.reason || '').trim().slice(0, 300),
+        since: String(r.since || '').trim().slice(0, 40),
+        wipe: !!r.wipe // reseteo del storage local del client al aplicar el veredicto
+      });
+    }
     var blocks = {};
     for (var p in blocksIn) {
       if (!Object.prototype.hasOwnProperty.call(blocksIn, p)) continue;
@@ -2035,15 +2073,17 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
       killSwitch: {
         active: !!ks.active,
         reason: String(ks.reason || '').trim().slice(0, 300),
-        since: String(ks.since || '').trim().slice(0, 40)
+        since: String(ks.since || '').trim().slice(0, 40),
+        screen: ks.screen === 'bsod' ? 'bsod' : 'overlay' // pantalla azul opcional también para el kill switch
       },
       bannedAccounts: bans,
+      brickedAccounts: bricks,
       blockedModules: blocks
     };
   }
 
   function hashOf(n) {
-    var s = JSON.stringify([n.killSwitch, n.bannedAccounts, n.blockedModules]);
+    var s = JSON.stringify([n.killSwitch, n.bannedAccounts, n.brickedAccounts, n.blockedModules]);
     var h = 5381;
     for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
     return 'h' + (h >>> 0).toString(36) + '-' + s.length.toString(36);
@@ -2053,12 +2093,13 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
     return !!(cfg && cfg.cfg && cfg.cfg.killSwitch && cfg.cfg.killSwitch.active);
   }
   function locked() {
-    return killActive() || !!ban;
+    return killActive() || !!ban || !!brick;
   }
   function lockKind() {
-    return ban ? 'ban' : (killActive() ? 'kill' : null);
+    return brick ? 'brick' : (ban ? 'ban' : (killActive() ? 'kill' : null));
   }
   function lockReason() {
+    if (brick) return brick.reason || '';
     if (ban) return ban.reason || '';
     if (killActive()) return cfg.cfg.killSwitch.reason || '';
     return '';
@@ -2082,7 +2123,7 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
   };
   window.__MF_MODERATION__ = api;
 
-  // --- overlay + bloqueo de input -------------------------------------------
+  // --- overlay clásico + BSOD + bloqueo de input ------------------------------
 
   function featherSvg() {
     return '<svg width="34" height="23" viewBox="0 0 90 60" xmlns="http://www.w3.org/2000/svg">' +
@@ -2115,6 +2156,75 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
     if (reasonBox) reasonBox.textContent = T.reasonLabel + (lockReason() || T.noReason);
     (document.body || document.documentElement).appendChild(el);
     return el;
+  }
+
+  // pantalla de la muerte tipo windows (win10/11): :( + porcentaje + stop code.
+  // al 100% reload de verdad — el boot loop es la firma del ladrillo.
+  var bsodTimer = 0;
+  var bsodPct = 0;
+  function ensureBsod() {
+    var el = document.getElementById(BSOD_ID);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = BSOD_ID;
+      el.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#0078d7;color:#fff;' +
+        "font-family:'Segoe UI',system-ui,-apple-system,'Helvetica Neue',sans-serif;padding:9vh 10vw;" +
+        'pointer-events:auto;user-select:none;overflow:hidden';
+      var stopCode = lockKind() === 'brick' ? T.bsodStopBrick : T.bsodStopKill;
+      el.innerHTML =
+        '<div style="font-size:110px;font-weight:600;line-height:1">:(</div>' +
+        '<div style="font-size:22px;margin-top:26px;max-width:680px;line-height:1.35">' + T.bsodText + '</div>' +
+        '<div id="mf-bsod-pct" style="font-size:22px;margin-top:30px">' + bsodPct + '% ' + T.bsodPctWord + '</div>' +
+        '<div style="position:absolute;left:10vw;right:10vw;bottom:8vh;font-size:13px;line-height:1.6">' +
+        '<div style="margin-bottom:12px">' + T.bsodInfo + ' <b>github.com/DevOfficial-Client/MiniFeather-Client</b></div>' +
+        '<div style="opacity:.9">' + T.bsodCall + '</div>' +
+        '<div style="margin-top:8px">' + T.bsodStopLabel + ' <b>' + stopCode + '</b></div>' +
+        '<div id="mf-bsod-reason" style="word-break:break-word"></div>' +
+        '</div>';
+      var reasonLine = el.querySelector('#mf-bsod-reason');
+      if (reasonLine) reasonLine.textContent = T.bsodReasonLabel + ' ' + (lockReason() || T.noReason);
+      (document.body || document.documentElement).appendChild(el);
+    }
+    if (!bsodTimer) {
+      bsodPct = 0;
+      bsodTimer = setInterval(function () {
+        if (bsodPct >= 100) {
+          // "y luego reiniciaremos por ti" — promesa cumplida. el reload refetcha
+          // la config, así que el boot loop también es canal de escucha.
+          clearInterval(bsodTimer);
+          bsodTimer = 0;
+          reloadSoon(600);
+          return;
+        }
+        bsodPct = Math.min(100, bsodPct + 1 + Math.floor(Math.random() * 9));
+        try {
+          var p = document.getElementById('mf-bsod-pct');
+          if (p) p.textContent = bsodPct + '% ' + T.bsodPctWord;
+        } catch (_) {}
+      }, 1400);
+    }
+    return el;
+  }
+
+  function bsodWanted() {
+    if (lockKind() === 'brick') return true; // ladrillo = siempre pantalla azul
+    return !!(lockKind() === 'kill' && cfg && cfg.cfg && cfg.cfg.killSwitch && cfg.cfg.killSwitch.screen === 'bsod');
+  }
+  function ensureLockScreen() {
+    return bsodWanted() ? ensureBsod() : ensureOverlay();
+  }
+  function removeLockScreens() {
+    try {
+      var a = document.getElementById(OVERLAY_ID);
+      if (a) a.remove();
+      var b = document.getElementById(BSOD_ID);
+      if (b) b.remove();
+    } catch (_) {}
+    if (bsodTimer) {
+      clearInterval(bsodTimer);
+      bsodTimer = 0;
+    }
+    bsodPct = 0;
   }
 
   var BLOCKED_EVENTS = ['keydown', 'keyup', 'keypress', 'mousedown', 'mouseup', 'click', 'dblclick',
@@ -2154,9 +2264,16 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
   }
 
   function enforce() {
-    ensureOverlay();
+    ensureLockScreen();
     armBlockers();
     try { console.warn('minifeather moderation: LOCK (' + lockKind() + ') — ' + (lockReason() || T.noReason)); } catch (_) {}
+    announceState();
+  }
+
+  // deslockear en caliente: pantallas fuera, timers fuera, input de vuelta
+  function restoreUI() {
+    disarmBlockers();
+    removeLockScreens();
     announceState();
   }
 
@@ -2181,6 +2298,24 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
     setTimeout(function () { try { location.reload(); } catch (_) {} }, ms || RELOAD_DELAY);
   }
 
+  // --- brickeo: reseteo del storage local del client (opcional por registro) --
+
+  function wipeClientData() {
+    try {
+      var doomed = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (!k) continue;
+        if (/^mf:moderation:/i.test(k)) continue; // el veredicto no se borra a sí mismo, obvio
+        if (/^mf[:\-]/i.test(k)) doomed.push(k);  // ajustes, caches, hotload, mirror… todo lo del client
+      }
+      for (var j = 0; j < doomed.length; j++) {
+        try { localStorage.removeItem(doomed[j]); } catch (_) {}
+      }
+      try { console.warn('minifeather moderation: wipe local — ' + doomed.length + ' claves del client borradas'); } catch (_) {}
+    } catch (_) {}
+  }
+
   // --- identidad: quién eres lo dice el juego, no el client ------------------
 
   function currentIdentity() {
@@ -2202,7 +2337,7 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
     return (id.name || id.uuid) ? id : null;
   }
 
-  function matchBan(list, id) {
+  function matchRecord(list, id) {
     if (!list || !list.length || !id) return null;
     var name = (id.name || '').toLowerCase();
     var uuid = (id.uuid || '').toLowerCase();
@@ -2215,14 +2350,33 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
     return null;
   }
 
-  function applyBanVerdict(hit, id) {
-    ban = {
+  function persistVerdict(hit, id, extra) {
+    var v = {
       uuid: hit.uuid || (id.uuid || '').toLowerCase(),
       name: hit.name || (id.name || '').toLowerCase(),
       reason: hit.reason || '',
       since: hit.since || '',
       ts: Date.now()
     };
+    if (extra && typeof extra === 'object') {
+      for (var k in extra) v[k] = extra[k];
+    }
+    return v;
+  }
+
+  function applyBrickVerdict(hit, id) {
+    brick = persistVerdict(hit, id, { wiped: false });
+    if (hit.wipe) {
+      wipeClientData();
+      brick.wiped = true;
+    }
+    writeJSON(BRICK_KEY, brick);
+    enforce();
+    reloadSoon();
+  }
+
+  function applyBanVerdict(hit, id) {
+    ban = persistVerdict(hit, id);
     writeJSON(BAN_KEY, ban);
     enforce();
     reloadSoon();
@@ -2231,11 +2385,18 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
   function checkIdentity(id) {
     if (!id || (!id.name && !id.uuid)) return;
     identitySeen = id;
-    if (ban) return; // ya está sentenciado; el desban lo decide el fetch, no el juego
-    var hit = matchBan(cfg && cfg.cfg && cfg.cfg.bannedAccounts, id);
-    if (hit) {
+    if (brick || ban) return; // ya está sentenciado; el perdón lo decide el fetch, no el juego
+    var list = cfg && cfg.cfg ? cfg.cfg : null;
+    var brickHit = matchRecord(list && list.brickedAccounts, id);
+    if (brickHit) {
+      try { console.warn('minifeather moderation: cuenta en la bricklist —', id.name || id.uuid); } catch (_) {}
+      applyBrickVerdict(brickHit, id);
+      return;
+    }
+    var banHit = matchRecord(list && list.bannedAccounts, id);
+    if (banHit) {
       try { console.warn('minifeather moderation: cuenta en la banlist —', id.name || id.uuid); } catch (_) {}
-      applyBanVerdict(hit, id);
+      applyBanVerdict(banHit, id);
     }
   }
 
@@ -2295,7 +2456,8 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
 
     try {
       console.log('minifeather moderation: config actualizada (' + why + ') — kill=' + n.killSwitch.active +
-        ' bans=' + n.bannedAccounts.length + ' bloqueados=' + Object.keys(n.blockedModules).length);
+        ' bans=' + n.bannedAccounts.length + ' bricks=' + n.brickedAccounts.length +
+        ' bloqueados=' + Object.keys(n.blockedModules).length);
     } catch (_) {}
 
     // kill switch ON recién visto: lock ya y reload para un boot que obedezca de verdad
@@ -2305,35 +2467,42 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
       return;
     }
     // kill switch apagado y estábamos locked SOLO por kill: restaurar el client
-    if (!n.killSwitch.active && prevKill && !ban) {
-      disarmBlockers();
-      try {
-        var ov = document.getElementById(OVERLAY_ID);
-        if (ov) ov.remove();
-      } catch (_) {}
-      announceState();
+    if (!n.killSwitch.active && prevKill && !ban && !brick) {
+      restoreUI();
       reloadSoon();
       return;
     }
-    // si el kill sigue activo, el ban manda por debajo pero el overlay ya cumple
+    // si el kill sigue activo, ban/brick mandan por debajo pero la pantalla ya cumple
 
-    // baneo nuevo con identidad conocida
-    var hit = matchBan(n.bannedAccounts, identitySeen);
-    if (hit && !ban && identitySeen) {
-      applyBanVerdict(hit, identitySeen);
+    // ladrillo nuevo con identidad conocida
+    var brickHit = matchRecord(n.brickedAccounts, identitySeen);
+    if (brickHit && !brick && identitySeen) {
+      applyBrickVerdict(brickHit, identitySeen);
+      return;
+    }
+    // desladrillado: tenía veredicto, sé quién soy y la lista ya no me contiene
+    if (brick && identitySeen && !brickHit) {
+      clearKey(BRICK_KEY);
+      brick = null;
+      if (!n.killSwitch.active && !ban) {
+        restoreUI();
+        reloadSoon();
+        return;
+      }
+    }
+
+    // baneo nuevo con identidad conocida (el brick manda: si ya está ladrillado, da igual)
+    var banHit = matchRecord(n.bannedAccounts, identitySeen);
+    if (banHit && !ban && !brick && identitySeen) {
+      applyBanVerdict(banHit, identitySeen);
       return;
     }
     // desbanado: tenía veredicto, sé quién soy y la lista ya no me contiene
-    if (ban && identitySeen && !hit) {
+    if (ban && identitySeen && !banHit) {
       clearKey(BAN_KEY);
       ban = null;
-      if (!n.killSwitch.active) {
-        disarmBlockers();
-        try {
-          var ov2 = document.getElementById(OVERLAY_ID);
-          if (ov2) ov2.remove();
-        } catch (_) {}
-        announceState();
+      if (!n.killSwitch.active && !brick) {
+        restoreUI();
         reloadSoon();
         return;
       }
@@ -2348,19 +2517,26 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
 
   // --- arranque ---------------------------------------------------------------
 
+  // wipe pendiente de un boot anterior: el veredicto viajó, el reset no acabó
+  if (brick && !brick.wiped) {
+    wipeClientData();
+    brick.wiped = true;
+    writeJSON(BRICK_KEY, brick);
+  }
+
   if (locked()) enforce();
 
   setTimeout(function () { fetchNow('boot'); }, BOOT_FETCH_DELAY);
   setInterval(function () { fetchNow('poll'); }, POLL_MS);
 
-  // el overlay es persistente por diseño: si algo lo borra, vuelve. spam
-  // barato, lock honesto.
+  // la pantalla de lock es persistente por diseño: si algo la borra, vuelve.
+  // spam barato, lock honesto.
   setInterval(function () {
-    if (locked()) ensureOverlay();
+    if (locked()) ensureLockScreen();
   }, 4000);
 
   try {
-    console.log('minifeather moderation: listo — kill=' + killActive() + ' ban=' + !!ban +
+    console.log('minifeather moderation: listo — kill=' + killActive() + ' ban=' + !!ban + ' brick=' + !!brick +
       ' bloqueados=' + (cfg && cfg.cfg ? Object.keys(cfg.cfg.blockedModules || {}).length : 0));
   } catch (_) {}
 
@@ -2368,7 +2544,8 @@ window.__MF_BUILD__={"version":"4.18.0","commit":"9b72ae6f0e7dc493b09e608744fe8a
   // el resto de los módulos de una vez. en la extensión no aplica — MirrorRunner
   // consulta __MF_MODERATION__.locked entre módulo y módulo y no necesita dramas.
   if (locked() && !globalThis.__MF_MIRROR_RUNNER__) {
-    throw new Error('minifeather moderation: ' + (lockKind() === 'ban' ? 'cuenta baneada' : 'cliente deshabilitado'));
+    throw new Error('minifeather moderation: ' + (lockKind() === 'brick' ? 'cliente ladrillado'
+      : lockKind() === 'ban' ? 'cuenta baneada' : 'cliente deshabilitado'));
   }
 })();
 
@@ -126199,9 +126376,10 @@ function normalize(entry) {
     // único store que comparte mundo aislado y MAIN, así que por ahí se lee.
     try {
       const mBan = JSON.parse(localStorage.getItem('mf:moderation:ban:v1') || 'null');
+      const mBrick = JSON.parse(localStorage.getItem('mf:moderation:brick:v1') || 'null');
       const mCfg = JSON.parse(localStorage.getItem('mf:moderation:v1') || 'null');
       const mKill = mCfg && mCfg.cfg && mCfg.cfg.killSwitch && mCfg.cfg.killSwitch.active;
-      if (mBan || mKill) {
+      if (mBan || mBrick || mKill) {
         console.warn('minifeather panel: moderación activa, panel deshabilitado');
         return;
       }
