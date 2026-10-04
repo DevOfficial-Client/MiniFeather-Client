@@ -11,10 +11,14 @@
   const BASE = SHIM.assetBase();
 
   const ACCEPT_KEY = 'mf:eula-accepted-v1';
+  // acceptance stores the agreement version, not a bare 'yes': when the eula
+  // changes (v1.3, 2026-10-04: platforms, catbox uploads, mf accounts),
+  // everyone gets asked again. no silent consent to new fine print.
+  const EULA_VERSION = '1.3';
 
   let accepted = null;
   try { accepted = localStorage.getItem(ACCEPT_KEY); } catch (_) {}
-  if (accepted === 'yes') return;
+  if (accepted === EULA_VERSION) return;
 
   const isSpanish = (navigator.language || 'en').toLowerCase().indexOf('es') === 0;
   const humanFile = isSpanish ? 'eula/EULA-TLDR.md' : 'eula/EULA-TLDR.en.md';
@@ -100,7 +104,7 @@
     };
     legalBtn.addEventListener('click', () => { showingLegal = !showingLegal; render(); });
     acceptBtn.addEventListener('click', () => {
-      try { localStorage.setItem(ACCEPT_KEY, 'yes'); } catch (_) {}
+      try { localStorage.setItem(ACCEPT_KEY, EULA_VERSION); } catch (_) {}
       overlay.remove();
     });
     declineBtn.addEventListener('click', () => {
