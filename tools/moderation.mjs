@@ -173,7 +173,9 @@ function main() {
     case 'block': {
       // sin lowercase: los paths de raw.githubusercontent son case-sensitive
       const p = String(rest[0] || '').trim().replace(/\\/g, '/');
-      if (!/^src\/[\w.\-/]+\.js$/.test(p)) die('path raro: ' + p);
+      if (!/^src\/[\w.\-]+(?:\/[\w.\-]+)*\.js$/.test(p) || p.split('/').some(s => s === '.' || s === '..')) {
+        die('path raro: ' + p + ' (espero src/....js sin ..)');
+      }
       if (!mirrorPaths().has(p)) console.warn('[moderation] ojo: ese path no está en mirror.json mainStart (¿existe?)');
       if (cfg.blockedModules[p] !== undefined) die('ya bloqueado: ' + p);
       cfg.blockedModules[p] = flags.reason || '';

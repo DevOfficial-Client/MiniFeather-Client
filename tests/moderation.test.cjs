@@ -193,7 +193,7 @@ test('normalización: basura fuera, paths raros fuera', async () => {
     v: 1,
     killSwitch: { active: false },
     bannedAccounts: [{ reason: 'sin id' }, { name: '' }, { uuid: 'not-a-uuid' }],
-    blockedModules: { '../../evil.js': 'x', 'src/Ok.js': 'y' }
+    blockedModules: { '../../evil.js': 'x', 'src/../../evil.js': 'x', 'src/../evil.js': 'x', 'src/Ok.js': 'y' }
   };
   const { sandbox } = makeSandbox({
     fetchImpl: () => Promise.resolve({ ok: true, json: async () => remote })
@@ -202,6 +202,8 @@ test('normalización: basura fuera, paths raros fuera', async () => {
   await tick();
   const api = sandbox.__MF_MODERATION__;
   assert.equal(api.isBlocked('../../evil.js'), false);
+  assert.equal(api.isBlocked('src/../../evil.js'), false, 'traversals fuera aunque lleven src/');
+  assert.equal(api.isBlocked('src/../evil.js'), false);
   assert.equal(api.isBlocked('src/Ok.js'), true);
 });
 

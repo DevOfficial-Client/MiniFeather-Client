@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261004171536
+// @version      4.19.0.20261004171556
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 647bbaf6a62cecc75ebb8e12f7a4d7ad2062c478
- * builtAt : 2026-10-04T17:15:55.269Z
+ * commit  : 9ceb3552db2560cdef6877a07259d765e5833237
+ * builtAt : 2026-10-04T17:30:57.340Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"647bbaf6a62cecc75ebb8e12f7a4d7ad2062c478","builtAt":"2026-10-04T17:15:55.269Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"9ceb3552db2560cdef6877a07259d765e5833237","builtAt":"2026-10-04T17:30:57.340Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -2066,7 +2066,15 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"647bbaf6a62cecc75ebb8e12f7a4d7
     var blocks = {};
     for (var p in blocksIn) {
       if (!Object.prototype.hasOwnProperty.call(blocksIn, p)) continue;
-      if (!/^src\/[\w.\-\/]+\.js$/.test(p)) continue; // solo paths de módulos; nada de ../../rarezas
+      // solo paths de módulos reales: src/a/b.js con segmento '.' o '..' fuera.
+      // el charclass solo no basta: aceptaría src/../../evil.js de joya.
+      if (!/^src\/[\w.\-]+(?:\/[\w.\-]+)*\.js$/.test(p)) continue;
+      var segs = p.split('/');
+      var okPath = true;
+      for (var s = 0; s < segs.length; s++) {
+        if (segs[s] === '.' || segs[s] === '..') { okPath = false; break; }
+      }
+      if (!okPath) continue;
       blocks[p] = String(blocksIn[p] || '').trim().slice(0, 300);
     }
     return {

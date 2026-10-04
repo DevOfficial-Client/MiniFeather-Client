@@ -128,7 +128,15 @@
     var blocks = {};
     for (var p in blocksIn) {
       if (!Object.prototype.hasOwnProperty.call(blocksIn, p)) continue;
-      if (!/^src\/[\w.\-\/]+\.js$/.test(p)) continue; // solo paths de módulos; nada de ../../rarezas
+      // solo paths de módulos reales: src/a/b.js con segmento '.' o '..' fuera.
+      // el charclass solo no basta: aceptaría src/../../evil.js de joya.
+      if (!/^src\/[\w.\-]+(?:\/[\w.\-]+)*\.js$/.test(p)) continue;
+      var segs = p.split('/');
+      var okPath = true;
+      for (var s = 0; s < segs.length; s++) {
+        if (segs[s] === '.' || segs[s] === '..') { okPath = false; break; }
+      }
+      if (!okPath) continue;
       blocks[p] = String(blocksIn[p] || '').trim().slice(0, 300);
     }
     return {
