@@ -2,6 +2,7 @@
 
 > [!note]
 > esto es la versión fácil y con cariño de la [eula completa en español](EULA.es.md). divertida, pero igual de seria donde importa.
+> **actualizada a la eula v1.3 (4 de octubre de 2026)** — si la completa cambia, este resumen la alcanza. si algo de acá contradice a la completa, gana la completa (spoiler: siempre gana la completa).
 > versión en inglés de este documento: [eula-tldr.en.md](EULA-TLDR.en.md)
 
 ---
@@ -53,7 +54,7 @@ si eres de los buenos: gracias, de corazón. son la razón por la que seguimos. 
 - **no eludas anticheats, pagos ni sistemas de seguridad.** no somos esa clase de proyecto.
 - **no acoses a nadie.** ni con ia, ni con bots, ni con nada. se buen citizeño del blob. (｡•́︿•̀｡)
 - **las skins y capas custom son contenido de usuarios**: el client aplica un filtro automático de desnudos a lo que importas y a todo lo que llega por p2p o descarga remota, más una blocklist de hashes alimentada por reportes de discord. es una heurística: puede colarse algo o puede marcar por error cosas inofensivas (¬_¬). un import local marcado te pregunta antes (tu navegador, tu contenido); contenido marcado por p2p se descarta sin preguntar. ¿viste una skin que no debería existir? discord y la caza de hashes.
-- **el client se puede apagar a distancia (y con motivo)**: los devs mantenen una config de moderación remota (sección 8.5 de la eula). sirve para kill switch por mantenimiento/seguridad, desactivar módulos concretos, y bloquear cuentas que violen las reglas — siempre mostrando el motivo en pantalla y solo sobre el client, nunca sobre el juego. el castigo gordo (brickeo por uuid) va con pantalla azul estilo windows y, si toca, reseteo de los datos locales del client. ¿crees que fue un error? discord.
+- **el client se puede apagar a distancia (y con motivo)**: los devs mantienen una config de moderación remota (sección 8.5 de la eula) que el client consulta al arrancar y cada 5 minutos. sirve para kill switch por mantenimiento/seguridad, desactivar módulos concretos, y bloquear cuentas que violen las reglas — siempre mostrando el motivo en pantalla y solo sobre el client, nunca sobre el juego. el castigo gordo (brickeo por uuid) va con pantalla azul estilo windows y, si toca, reseteo de los datos locales del client. ¿crees que fue un error? discord.
 
 ## 4. cosas que conviene saber sobre tus datos ʕ•ᴥ•ʔ
 
@@ -73,6 +74,7 @@ si eres de los buenos: gracias, de corazón. son la razón por la que seguimos. 
 - cuando creas una, tu contraseña **se guarda hasheada (pbkdf2, 200k iteraciones)** en una base de datos privada. jamás en texto plano en la db.
 - **pero seamos honestos:** la petición de creación viaja por ntfy.sh, que es un canal público. por eso: **nunca reutilices la contraseña de tu correo, discord o miniblox aquí.** usa una contraseña única y desechable, duerme tranquilo. (∩`ω´)⊃))
 - las cuentas se gestionan por los devs con un bot en discord (vinculación, skins, etc.). si algo se rompe... sección 4.5. ᕕ( ᐛ )ᕗ
+- **¿te arrepentiste de tu cuenta?** se pide la baja por discord (canal de contacto de la completa) y se elimina. sin dramas, sin formularios en triplete.
 
 ## 4.5. sobre bugs y exploits (los no intencionales, obvio)
 
@@ -89,6 +91,8 @@ lo que no hagas es quedarte callado abusando del exploit como si no pasara nada:
 ## 6. actualizaciones y actualizaciones locas
 
 el client se **auto-actualiza desde github** y hasta puede aplicar cambios en caliente (hotload). ¿traducción? a veces se mueve solo mientras no miras. puedes desactivarlo en ajustes, pero entonces tú y los bugs se quedan solos con la versión vieja. (⌐■_■)
+
+y en las **apps de escritorio** hay un gate: la primera vez te muestra esta eula humana y pide aceptar. **cuando la eula cambia de versión, vuelve a preguntar** — nada de consentir letra chica nueva en silencio. es lo mínimo decente. (・_・;)
 
 ## 6.5. sobre las texturas, modelos y arte de otros (❛‿❛)
 

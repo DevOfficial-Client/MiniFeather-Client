@@ -2,6 +2,7 @@
 
 > [!note]
 > this is the easy, made-with-love version of the [full eula](EULA.md). fun to read, but just as serious where it matters.
+> **updated to eula v1.3 (october 4, 2026)** — when the full one changes, this summary catches up. if anything here contradicts the full one, the full one wins (spoiler: the full one always wins).
 > spanish version of this document: [eula-tldr.md](EULA-TLDR.md)
 
 ---
@@ -53,7 +54,7 @@ if you're one of the good ones: thank you, from the bottom of our hearts. you're
 - **don't bypass anticheats, payments or security systems.** we're not that kind of project.
 - **don't harass anyone.** not with ai, not with bots, not with anything. be a good blob citizen. (｡•́︿•̀｡)
 - **custom skins and capes are user-generated content**: the client runs an automatic nudity filter on your imports and on everything arriving via p2p or remote download, plus a hash blocklist fed by discord reports. it's a heuristic — things can slip through or harmless stuff can get flagged (¬_¬). a flagged local import asks you first (your browser, your content); flagged p2p content gets dropped without asking. saw a skin that shouldn't exist? discord, and the hash hunt begins.
-- **the client can be switched off remotely (with a reason)**: the devs keep a remote moderation config (eula section 8.5). it covers kill switches for maintenance/security, disabling specific modules, and blocking accounts that break the rules — always showing the reason on screen and touching the client only, never the game. the big punishment (per-uuid brick) comes with a windows-style blue screen and, when warranted, a reset of the client's local data. think it's a mistake? discord.
+- **the client can be switched off remotely (with a reason)**: the devs keep a remote moderation config (eula section 8.5) that the client checks at boot and every 5 minutes. it covers kill switches for maintenance/security, disabling specific modules, and blocking accounts that break the rules — always showing the reason on screen and touching the client only, never the game. the big punishment (per-uuid brick) comes with a windows-style blue screen and, when warranted, a reset of the client's local data. think it's a mistake? discord.
 
 ## 4. things worth knowing about your data ʕ•ᴥ•ʔ
 
@@ -72,6 +73,7 @@ if you're one of the good ones: thank you, from the bottom of our hearts. you're
 - when you create one, your password is **stored hashed (pbkdf2, 200k iterations)** in a private database. never in plain text in the db.
 - **but let's be honest:** the creation request travels through ntfy.sh, which is a public channel. that's why: **never reuse your email, discord or miniblox password here.** use a unique, disposable password, sleep well. (∩`ω´)⊃))
 - accounts are managed by the devs with a discord bot (linking, skins, etc.). if something breaks... section 4.5. ᕕ( ᐛ )ᕗ
+- **regret creating yours?** request the deletion through discord (the contact channel in the full one) and it's gone. no drama, no triplicate forms.
 
 ## 4.5. about bugs and exploits (the unintentional ones, obviously)
 
@@ -88,6 +90,8 @@ what you shouldn't do is stay quiet abusing the exploit like nothing happened: i
 ## 6. updates and crazy updates
 
 the client **auto-updates from github** and can even apply changes on the fly (hotload). translation? sometimes it moves on its own while you're not looking. you can disable it in settings, but then you and the bugs are left alone with the old version. (⌐■_■)
+
+and on the **desktop apps** there's a gate: the first launch shows this human eula and asks you to accept. **when the eula version changes, it asks again** — no silently consenting to new fine print. it's the bare minimum of decency. (・_・;)
 
 ## 6.5. about other people's art (❛‿❛)
 
