@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261004181808
+// @version      4.19.0.20261004181824
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : f9f18a551597047201ec78611ba24122a42655a6
- * builtAt : 2026-10-04T18:18:23.958Z
+ * commit  : 1a730f91b0ab6c35d5d954116c0f9115562bf623
+ * builtAt : 2026-10-04T18:22:08.041Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"f9f18a551597047201ec78611ba24122a42655a6","builtAt":"2026-10-04T18:18:23.958Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"1a730f91b0ab6c35d5d954116c0f9115562bf623","builtAt":"2026-10-04T18:22:08.041Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -1946,12 +1946,12 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"f9f18a551597047201ec78611ba241
 // the entire group is a single function — cut the top, cut it all). the lock
 // screen re-creates itself and swallows keyboard/mouse in capture phase,
 // because something is always trying to sneak in from below.
-// the ai on duty: yes, a remote kill switch inside a client mod sounds like
-// movie villainy, but it's the only way to turn the lights off across 400
-// installs without waiting for every single one to update by hand. eula 8.5
-// spells it out in plain words and whoever installed it agreed. the config
-// is fail-open: no network means the last cached verdict wins, and a broken
-// config gets ignored instead of bricking anyone.
+// a remote kill switch inside a client mod sounds like movie villainy, and
+// yet: it's the only way to turn the lights off across 400 installs without
+// waiting for every single one to update by hand. eula 8.5 spells it out in
+// plain words and whoever installed it agreed. the config is fail-open: no
+// network means the last cached verdict wins, and a broken config gets
+// ignored instead of bricking anyone.
 // the bsod reloads for real at 100%: whoever is bricked gets the boot loop
 // windows always dreamed of. it's beautiful AND functional — every reload
 // refetches the config, so an unbrick gets noticed all by itself.
@@ -2411,9 +2411,9 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"f9f18a551597047201ec78611ba241
     }
   }
 
-  // the game emits identity as an event (ClientChatIdentity) and i also poll
-  // the game object directly: with the lock on, our modules are dead, so the
-  // game itself is the only source left alive
+  // the game emits identity as an event (ClientChatIdentity); the game
+  // object also gets polled straight from here: with the lock on, the
+  // client's modules are dead, so the game itself is the only source alive
   try {
     document.addEventListener('minifeather:client-chat-identity', function (e) {
       try {
@@ -2463,7 +2463,7 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"f9f18a551597047201ec78611ba241
     cfg = { v: 1, ts: Date.now(), hash: h, cfg: n };
     writeJSON(CFG_KEY, cfg);
 
-    if (h === prevHash) return; // nothing new under the sun (we only refresh ts)
+    if (h === prevHash) return; // nothing new under the sun (ts gets refreshed, verdicts don't)
 
     try {
       console.log('minifeather moderation: config updated (' + why + ') — kill=' + n.killSwitch.active +
@@ -2477,7 +2477,7 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"f9f18a551597047201ec78611ba241
       reloadSoon();
       return;
     }
-    // kill switch off and we were locked ONLY by kill: hand the client back
+    // kill switch off and the lock was kill-only: hand the client back
     if (!n.killSwitch.active && prevKill && !ban && !brick) {
       restoreUI();
       reloadSoon();
@@ -2491,7 +2491,8 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"f9f18a551597047201ec78611ba241
       applyBrickVerdict(brickHit, identitySeen);
       return;
     }
-    // unbricked: had a verdict, know who i am, and the list no longer contains me
+    // unbricked: a verdict existed, the identity showed up, and the list no
+    // longer contains that account
     if (brick && identitySeen && !brickHit) {
       clearKey(BRICK_KEY);
       brick = null;
@@ -2508,7 +2509,8 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"f9f18a551597047201ec78611ba241
       applyBanVerdict(banHit, identitySeen);
       return;
     }
-    // unbanned: had a verdict, know who i am, and the list no longer contains me
+    // unbanned: a verdict existed, the identity showed up, and the list no
+    // longer contains that account
     if (ban && identitySeen && !banHit) {
       clearKey(BAN_KEY);
       ban = null;
@@ -126061,7 +126063,7 @@ function normalize(entry) {
     // exist. the full overlay lives in MF_Moderation (MAIN world); this is
     // just the courtesy of not building a gui nobody will see. localStorage
     // is the only store shared between isolated and main worlds, so that's
-    // where we read from.
+    // where the read happens.
     try {
       const mBan = JSON.parse(localStorage.getItem('mf:moderation:ban:v1') || 'null');
       const mBrick = JSON.parse(localStorage.getItem('mf:moderation:brick:v1') || 'null');

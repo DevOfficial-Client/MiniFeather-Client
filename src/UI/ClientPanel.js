@@ -14146,7 +14146,7 @@
     // exist. the full overlay lives in MF_Moderation (MAIN world); this is
     // just the courtesy of not building a gui nobody will see. localStorage
     // is the only store shared between isolated and main worlds, so that's
-    // where we read from.
+    // where the read happens.
     try {
       const mBan = JSON.parse(localStorage.getItem('mf:moderation:ban:v1') || 'null');
       const mBrick = JSON.parse(localStorage.getItem('mf:moderation:brick:v1') || 'null');

@@ -181,7 +181,7 @@ test('unban: verdict out + known identity + config without ban → restored', as
   assert.equal(api.locked, true, 'the verdict rules until something better arrives');
   sandbox.document.dispatchEvent({ type: 'minifeather:client-chat-identity', detail: JSON.stringify({ username: 'Griefer', uuid: '' }) });
   await tick();
-  assert.equal(api.locked, true, 'identity alone unbans nobody: the server still has me');
+  assert.equal(api.locked, true, 'identity alone unbans nobody: the server still has the account');
   api.refresh();
   await tick();
   assert.equal(api.locked, false, 'unbanned');
@@ -357,7 +357,7 @@ test('unbrick: like the unban, the remote config rules', async () => {
   assert.equal(api.locked, true, 'the verdict rules');
   sandbox.document.dispatchEvent({ type: 'minifeather:client-chat-identity', detail: JSON.stringify({ username: 'brickman', uuid: '' }) });
   await tick();
-  assert.equal(api.locked, true, 'the server still has me bricked');
+  assert.equal(api.locked, true, 'the server still has the account bricked');
   api.refresh();
   await tick();
   assert.equal(api.locked, false, 'unbricked');
