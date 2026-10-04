@@ -13,6 +13,8 @@ minifeather es un client hecho por fans de miniblox, para fans de miniblox.
 
 también es **w.i.p.** (work in progress), o sea: lo estamos construyendo mientras vuelas. puede haber bugs, cosas a medias, y features que desaparecen de un día para otro. si algo explota... tranquilo, era gratis. ᕙ(⇀‸↼‶)ᕗ
 
+va en **todos los sabores**: extensión de chrome, userscript (ios/safari, firefox android, escritorio), app android (apk) y apps de escritorio (windows/linux). mismo código, mismos términos, mismos bugs para todos. (•̀ᴗ•́)و
+
 sí, otro client más en internet. la diferencia es que este no te cuesta nada, salvo la paciencia. (◕‿◕)
 
 ## 2. lo más importante, arriba y en grande
@@ -60,7 +62,8 @@ si eres de los buenos: gracias, de corazón. son la razón por la que seguimos. 
 - el **clientchat y las llamadas** usan canales públicos (ntfy.sh): funcionan como una plaza. **no mandes contraseñas ni datos personales ahí**, cualquiera con el nombre del canal puede leer. (∩`ω´)⊃))
 - la **voz** solo pide micrófono si tú aceptas una llamada (`/call on` para activarlo, `/call off` para apagarlo todo).
 - si configuras una **api key de ia**, se guarda en texto plano. usa una con límite de gasto, no tu llave maestra.
-- github, klipy, peerjs y demás solo ven lo necesario para funcionar (descargas, búsquedas de gifs, etc.).
+- **las imágenes que mandes al chat se suben a catbox.moe: quedan públicas y permanentes.** sin cuenta, sin botón de borrar. cualquiera con el link las ve, hoy y en diez años. no mandes nada que no quieras ver flotando por internet. (・_・;)
+- github, klipy, peerjs, catbox y demás solo ven lo necesario para funcionar (descargas, búsquedas de gifs, tus imágenes subidas, etc.).
 
 ## 4.2. sobre las cuentas de minifeather (sí, existen, mea culpa, digo porque puse que no antes JAJA)
 

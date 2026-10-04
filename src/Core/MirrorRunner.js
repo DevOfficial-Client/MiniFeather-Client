@@ -103,10 +103,10 @@
   for (var i = 0; i < list.length; i++) {
     var p = list[i];
     if (typeof p !== 'string' || !p) continue;
-    // moderación remota (moderation.json): MF_Moderation va primero en
-    // mainStart y deja su veredicto en window.__MF_MODERATION__ antes de que
-    // este loop llegue al módulo 1. con lock no se inyecta nada más; con
-    // bloqueo fino, solo se salta el módulo señalado.
+    // remote moderation (moderation.json): MF_Moderation sits first in
+    // mainStart and drops its verdict on window.__MF_MODERATION__ before
+    // this loop reaches module 1. locked → nothing else gets injected;
+    // fine-grained block → only the flagged module gets skipped.
     var moderation = window.__MF_MODERATION__;
     if (moderation && p !== 'src/Core/MF_Moderation.js') {
       if (moderation.locked) { gated++; continue; }

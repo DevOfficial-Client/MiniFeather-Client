@@ -1,8 +1,8 @@
 # End User License Agreement (EULA) — MiniFeather Client
 
-**Agreement version:** 1.2
-**Effective date:** October 1, 2026
-**Product:** MiniFeather Client (browser extension for Google Chrome / Chromium, MV3)
+**Agreement version:** 1.3
+**Effective date:** October 4, 2026
+**Product:** MiniFeather Client — MV3 browser extension (Chrome/Chromium), userscript (Safari/iOS via Userscripts, Firefox Android, desktop), Android app (APK) and desktop apps (Windows/Tauri, Linux/Electron)
 **Developers:** botless, AngryWolfX, ShusukeGxE_, Not_Senpai, ItzNightrise ("the Development Team", "we")
 
 This End User License Agreement ("Agreement") is a binding contract between you ("User", "you") and the MiniFeather Development Team. By installing, copying or using MiniFeather Client ("the Client", "the Software"), you agree to be bound by the terms of this Agreement. If you do not agree to any of the terms, do not install or use the Software and delete it from your system.
@@ -16,6 +16,8 @@ This End User License Agreement ("Agreement") is a binding contract between you 
 ## 1. Nature of the product and third-party acknowledgment
 
 1.1. MiniFeather Client is a browser extension developed by community members, **with no affiliation, endorsement or sponsorship from Miniblox, its development team or any third party**. "Miniblox" and its assets are the property of their respective owners.
+
+1.1.1. **Distributions.** The Client ships in several formats built from the same public repository (MV3 extension, userscript, Android APK and desktop apps), all generated from the same source code and subject to the same terms. The desktop apps present this Agreement in a first-boot acceptance dialog and remember the acceptance locally; a new Agreement version asks for it again.
 
 1.2. **Product status: W.I.P. (Work In Progress).** The Client is under active, ongoing development. Features may be unstable, incomplete, change without notice, break after Miniblox or browser updates, or be removed temporarily or permanently. Features labeled "experimental" and those marked as not suitable for regular play may contain bugs and behave unpredictably. The User agrees to use the Software with full knowledge of its development status and **must not rely on it for any critical use**.
 
@@ -66,7 +68,7 @@ The Client includes features that automate game actions or alter the information
 | Moderate | Auto Sprint, Safe Sneak, FullBright, Zoom, Health NameTags, Freelook, Elytra Flight (controls) |
 | Low | Dynamic Crosshair, Distance NameTags, Auto Respawn |
 | Restricted by design | FreeCam (reserved for server administrators or whitelist) |
-| No gameplay risk (cosmetic/QoL) | Custom skins and models, emotes, shaders, LeafWind, AllayPets, SpiderSim/SpiderBot, DuckMobs, CrittersMobs, animations, GUIPatch, waypoints, map, client chat, and other visual modules |
+| No gameplay risk (cosmetic/QoL) | Custom skins and models, emotes, shaders, LeafWind, AllayPets, SpiderSim/SpiderBot, DuckMobs, CrittersMobs, MobRagdolls, TaczGuns (weapon models, visual only), animations, GUIPatch, waypoints, map, client chat, and other visual modules |
 
 4.1. The User is solely responsible for verifying which modules are allowed on each server and for disabling those that are not.
 
@@ -89,14 +91,17 @@ Stored in the browser's local storage (`localStorage`, `IndexedDB`, `chrome.stor
 - Nicknames assigned to friends (Miniblox UUID and username).
 - Imported skins and face packs (base64 PNG images), texture packs and models.
 - Saved local servers (LocalGames).
+- Cached moderation state (last known config and local verdicts; see section 8.5).
+- Linked MiniFeather account data, if any (account identifier and cosmetic preferences; see section 5.3.3).
 - VerityAI conversation history and, if configured by the User, their **AI API key in plain text** (spending-capped keys are recommended).
 
 ### 5.2. Data that leaves the device
 
 | Service | Function | Transmitted data |
 |---|---|---|
-| GitHub (`api.github.com`, `raw.githubusercontent.com`, `github.com`) | Auto-update, community skin/rank database, resourcepack downloads | No personal User data; anonymous download requests only |
-| ntfy.sh (public message bus) | ClientChat (chat between Client users), voice call signaling, local world announcements | Miniblox username and UUID (in ClientChat), SHA-256 hash of the UUID (voice), content of the messages the User writes, world name and player count |
+| GitHub (`api.github.com`, `raw.githubusercontent.com`, `github.com`) | Auto-update, module hotload, community skin/rank database, resourcepack downloads, moderation config (8.5) and content-filter blocklist (8.4) | No personal User data; anonymous download requests only |
+| ntfy.sh (public message bus) | ClientChat (chat between Client users), voice call signaling, local world announcements, community skin/account database change notifications | Miniblox username and UUID (in ClientChat), SHA-256 hash of the UUID (voice), content of the messages the User writes, world name and player count |
+| Catbox (`catbox.moe`, `files.catbox.moe`) | Hosting of images sent through the chat (attach button, paste or drag) | The submitted image, hosted **without an account, permanently and publicly**: anyone holding the URL can access the file |
 | PeerJS / WebRTC (P2P) | Voice, skin/face sharing between friends, LocalGames | Direct peer-to-peer audio (voice), shared skin/face image, IP address potentially visible to connected peers (inherent to WebRTC) |
 | Klipy (`api.klipy.com`) | GIF search for chat | The User's search query |
 | OpenRouter / Zhipu / Puter (VerityAI) | Optional AI assistant | Conversation history and game chat messages if auto-reply is active |
@@ -107,11 +112,15 @@ Stored in the browser's local storage (`localStorage`, `IndexedDB`, `chrome.stor
 
 5.2.2. **Microphone:** audio capture is only requested when the User accepts or starts a voice call (opt-in via `/call on`), can be muted at any time and fully disabled with `/call off`.
 
+5.2.3. **Notice about public uploads:** images the User sends through the chat are hosted on Catbox as **public and permanent** files, with no account and no deletion mechanism offered by the Client. The Development Team does not review those images before publication and cannot remove them from the third-party service; the User is solely responsible for what they upload.
+
 ### 5.3. Accounts and credentials
 
 5.3.1. The Client **does not request, store or manage Miniblox passwords**. The active game session is created and managed exclusively by Miniblox; the Client only detects it to identify the User within its social features.
 
 5.3.2. The voice identification feature publishes a SHA-256 hash of the account UUID, which does not cryptographically verify account ownership. **Confirm the other party's identity through other means before disclosing sensitive information.**
+
+5.3.3. **MiniFeather accounts (optional).** The community ecosystem (shared skins, capes, ranks and pets) can be managed through a MiniFeather account, created and administered by the Development Team through an official Discord bot. These accounts are independent from the Miniblox account: the password is stored solely as a **PBKDF2-SHA256 hash (200,000 iterations)** on the team's private infrastructure, never in plain text; linking records the Discord identifier; and the public profile (account name, rank and URLs of published cosmetics) is hosted on the project's public community repository. The creation request travels over public channels, so **the User must use a unique, non-reused password**. The accounts are dispensable: every Client feature works without one. The User may request account closure or deletion through the channel in section 14.2.
 
 ### 5.4. Minors
 
@@ -121,7 +130,7 @@ The Software is not directed at children under 13. If the User is a minor, they 
 
 ## 6. Updates and code execution
 
-6.1. The Client includes an **auto-updater** that downloads components from the project's public GitHub repository (`DevOfficial-Client/MiniFeather-Client`) and applies them through a "hotload" system without going through Chrome Web Store review. This behavior can be disabled in the settings.
+6.1. The Client includes an **auto-updater** that downloads components from the project's public GitHub repository (`DevOfficial-Client/MiniFeather-Client`) and applies them through a "hotload" system without going through Chrome Web Store review. This includes automatic per-module reloads from the repository (with a bundled local fallback), userscript self-update through the User's script manager, and rolling builds of the APK and desktop distributions. This behavior can be disabled or limited in the settings (depending on the platform).
 
 6.2. The Client loads third-party libraries from public CDNs (PeerJS from `unpkg.com`, Puter from `js.puter.com`).
 
@@ -143,7 +152,7 @@ The Software is not directed at children under 13. If the User is a minor, they 
 
 8.1. The User is solely responsible for any content they publish through ClientChat, advertised local worlds, voice calls or any other social feature of the Client.
 
-8.2. Publishing illegal content, hate speech, spam, malware, malicious links or sexual content involving minors (including fiction) is prohibited. The Development Team may, at its discretion, remove content from community databases and block access to social features.
+8.2. Publishing illegal content, hate speech, spam, malware, malicious links or sexual content involving minors (including fiction) is prohibited. The Development Team may, at its discretion, remove content from community databases and block access to social features. Images sent through the chat are hosted on public third-party services (see 5.2.3) without prior review by the Team, and the User answers for them.
 
 8.3. Skins, packs and community contributions published in the project repositories may be used, distributed and modified by the Development Team within the MiniFeather ecosystem. By uploading content, the User warrants they hold the necessary rights to it.
 
