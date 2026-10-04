@@ -14142,10 +14142,11 @@
   }
 
   function boot() {
-    // moderación remota: con lock (kill switch o ban) el panel no existe.
-    // el overlay completo vive en MF_Moderation (mundo MAIN); esto es solo la
-    // cortesía de no construir una GUI que nadie va a ver. localStorage es el
-    // único store que comparte mundo aislado y MAIN, así que por ahí se lee.
+    // remote moderation: with a lock (kill switch or ban) the panel doesn't
+    // exist. the full overlay lives in MF_Moderation (MAIN world); this is
+    // just the courtesy of not building a gui nobody will see. localStorage
+    // is the only store shared between isolated and main worlds, so that's
+    // where we read from.
     try {
       const mBan = JSON.parse(localStorage.getItem('mf:moderation:ban:v1') || 'null');
       const mBrick = JSON.parse(localStorage.getItem('mf:moderation:brick:v1') || 'null');

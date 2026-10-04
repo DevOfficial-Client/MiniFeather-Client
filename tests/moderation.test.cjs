@@ -1,5 +1,6 @@
-// moderación remota: MF_Moderation (veredicto+overlay), gating en MirrorRunner
-// y presencia en mirror.json/hotload.json. run: node tests/moderation.test.cjs
+// remote moderation: MF_Moderation (verdict + screens), the gates on
+// MirrorRunner, and its presence in mirror.json/hotload.json.
+// run: node tests/moderation.test.cjs
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -18,10 +19,10 @@ const BRICK_KEY = 'mf:moderation:brick:v1';
 const tick = (n = 6) => new Promise(r => setTimeout(r, n));
 
 function makeSandbox({ ls = {}, fetchImpl = null, mirrorRunnerMode = false } = {}) {
-  // los valores se siembran stringificados: JSON.parse de un objeto crudo
-  // devolvería "[object Object]" y el cache parecería vacío
+  // seeded values get stringified: JSON.parse over a raw object would hand
+  // back "[object Object]" and the cache would look empty
   const store = new Map(Object.entries(ls).map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)]));
-  const appended = [];   // todo lo que se cuelga del DOM (overlay, toasts, scripts)
+  const appended = [];   // everything attached to the fake dom (screens, toasts, scripts)
   const docListeners = {};
   const winListeners = {};
 
@@ -98,24 +99,24 @@ function runMod(sandbox) {
 
 const cfgOf = (cfg, hash) => JSON.stringify({ v: 1, ts: 0, hash: hash || 'seed', cfg });
 
-test('kill switch en cache → lock total desde el boot (y sin reload en bucle)', async () => {
+test('cached kill switch → full lock from boot (and no reload loop)', async () => {
   const cached = { killSwitch: { active: true, reason: 'mantenimiento' }, bannedAccounts: [], blockedModules: {} };
   const { sandbox, store, appended } = makeSandbox({
     ls: { [CFG_KEY]: { v: 1, ts: 0, hash: 'seed', cfg: cached } }
   });
-  assert.throws(() => runMod(sandbox), /cliente deshabilitado/, 'mobile: el throw corta el docStart');
+  assert.throws(() => runMod(sandbox), /client disabled/, 'mobile: the throw cuts docStart');
   const api = sandbox.__MF_MODERATION__;
-  assert.ok(api, 'api expuesta');
+  assert.ok(api, 'api exposed');
   assert.equal(api.locked, true);
   assert.equal(api.kind, 'kill');
   assert.equal(api.reason, 'mantenimiento');
-  assert.ok(appended.find(e => e.id === 'mf-moderation-lock'), 'overlay creado');
+  assert.ok(appended.find(e => e.id === 'mf-moderation-lock'), 'overlay created');
   await tick(); // boot fetch
-  assert.equal(sandbox.reloads, 0, 'kill ya conocido: nada de reloads en bucle');
-  assert.ok(store.has(CFG_KEY), 'cache intacta');
+  assert.equal(sandbox.reloads, 0, 'kill already known: no reload loop');
+  assert.ok(store.has(CFG_KEY), 'cache intact');
 });
 
-test('sin lock + isBlocked: bloqueo fino por path', async () => {
+test('no lock + isBlocked: fine-grained block by path', async () => {
   const cached = { killSwitch: { active: false, reason: '' }, bannedAccounts: [], blockedModules: { 'src/Render/TaczGuns.js': 'bug grave' } };
   const { sandbox } = makeSandbox({
     ls: { [CFG_KEY]: { v: 1, ts: 0, hash: 'seed', cfg: cached } },
@@ -129,7 +130,7 @@ test('sin lock + isBlocked: bloqueo fino por path', async () => {
   assert.equal(api.blockReason('src/Render/TaczGuns.js'), 'bug grave');
 });
 
-test('ban por nombre vía evento de identidad (case-insensitive)', async () => {
+test('ban by name via identity event (case-insensitive)', async () => {
   const cached = { killSwitch: { active: false, reason: '' }, bannedAccounts: [{ name: 'griefer', reason: 'spam' }], blockedModules: {} };
   const { sandbox, store } = makeSandbox({
     ls: { [CFG_KEY]: { v: 1, ts: 0, hash: 'seed', cfg: cached } },
@@ -137,7 +138,7 @@ test('ban por nombre vía evento de identidad (case-insensitive)', async () => {
   });
   runMod(sandbox);
   const api = sandbox.__MF_MODERATION__;
-  assert.equal(api.locked, false, 'arranca libre hasta saber quién es');
+  assert.equal(api.locked, false, 'boots free until it knows who you are');
   sandbox.document.dispatchEvent({ type: 'minifeather:client-chat-identity', detail: JSON.stringify({ username: 'Griefer', uuid: '' }) });
   await tick();
   assert.equal(api.locked, true);
@@ -145,10 +146,10 @@ test('ban por nombre vía evento de identidad (case-insensitive)', async () => {
   assert.equal(api.reason, 'spam');
   const verdict = JSON.parse(store.get(BAN_KEY));
   assert.equal(verdict.name, 'griefer');
-  assert.ok(sandbox.reloads >= 1, 'reload para un boot que ya nace bloqueado');
+  assert.ok(sandbox.reloads >= 1, 'reload for a boot that is born locked');
 });
 
-test('fetch aplica kill switch nuevo → enforce + reload', async () => {
+test('fetch applies a fresh kill switch → enforce + reload', async () => {
   const remote = { v: 1, killSwitch: { active: true, reason: 'apagón' }, bannedAccounts: [], blockedModules: {} };
   const { sandbox } = makeSandbox({
     fetchImpl: () => Promise.resolve({ ok: true, json: async () => remote })
@@ -156,12 +157,12 @@ test('fetch aplica kill switch nuevo → enforce + reload', async () => {
   runMod(sandbox);
   await tick();
   const api = sandbox.__MF_MODERATION__;
-  assert.equal(api.locked, true, 'lock en caliente');
+  assert.equal(api.locked, true, 'hot lock');
   assert.equal(api.kind, 'kill');
-  assert.ok(sandbox.reloads >= 1, 'reload para boot limpio');
+  assert.ok(sandbox.reloads >= 1, 'reload for a clean boot');
 });
 
-test('desban: veredicto fuera + identidad conocida + config sin ban → se restaura', async () => {
+test('unban: verdict out + known identity + config without ban → restored', async () => {
   const cached = { killSwitch: { active: false, reason: '' }, bannedAccounts: [{ name: 'griefer', reason: 'spam' }], blockedModules: {} };
   const oldRemote = { v: 1, killSwitch: { active: false, reason: '' }, bannedAccounts: [{ name: 'griefer', reason: 'spam' }], blockedModules: {} };
   const newRemote = { v: 1, killSwitch: { active: false, reason: '' }, bannedAccounts: [], blockedModules: {} };
@@ -171,24 +172,24 @@ test('desban: veredicto fuera + identidad conocida + config sin ban → se resta
       [BAN_KEY]: { uuid: '', name: 'griefer', reason: 'spam', ts: 0 },
       [CFG_KEY]: { v: 1, ts: 0, hash: 'seed', cfg: cached }
     },
-    // primer fetch (boot): el ban sigue en el server. refresh(): ya lo quitaron.
+    // first fetch (boot): the ban is still on the server. refresh(): gone.
     fetchImpl: () => Promise.resolve({ ok: true, json: async () => (++calls === 1 ? oldRemote : newRemote) }),
     mirrorRunnerMode: true
   });
   runMod(sandbox);
   const api = sandbox.__MF_MODERATION__;
-  assert.equal(api.locked, true, 'el veredicto manda mientras no llegue nada mejor');
+  assert.equal(api.locked, true, 'the verdict rules until something better arrives');
   sandbox.document.dispatchEvent({ type: 'minifeather:client-chat-identity', detail: JSON.stringify({ username: 'Griefer', uuid: '' }) });
   await tick();
-  assert.equal(api.locked, true, 'la identidad sola no desbanea: el server aún me tiene');
+  assert.equal(api.locked, true, 'identity alone unbans nobody: the server still has me');
   api.refresh();
   await tick();
-  assert.equal(api.locked, false, 'desbaneado');
-  assert.equal(store.has(BAN_KEY), false, 'veredicto limpiado');
-  assert.ok(sandbox.reloads >= 1, 'reload para restaurar el client');
+  assert.equal(api.locked, false, 'unbanned');
+  assert.equal(store.has(BAN_KEY), false, 'verdict cleaned up');
+  assert.ok(sandbox.reloads >= 1, 'reload to restore the client');
 });
 
-test('normalización: basura fuera, paths raros fuera', async () => {
+test('normalization: garbage out, weird paths out', async () => {
   const remote = {
     v: 1,
     killSwitch: { active: false },
@@ -202,22 +203,22 @@ test('normalización: basura fuera, paths raros fuera', async () => {
   await tick();
   const api = sandbox.__MF_MODERATION__;
   assert.equal(api.isBlocked('../../evil.js'), false);
-  assert.equal(api.isBlocked('src/../../evil.js'), false, 'traversals fuera aunque lleven src/');
+  assert.equal(api.isBlocked('src/../../evil.js'), false, 'traversals out even when wearing a src/ costume');
   assert.equal(api.isBlocked('src/../evil.js'), false);
   assert.equal(api.isBlocked('src/Ok.js'), true);
 });
 
-test('config inválida → ignorada, fail-open', async () => {
+test('invalid config → ignored, fail-open', async () => {
   const { sandbox, store } = makeSandbox({
     fetchImpl: () => Promise.resolve({ ok: true, json: async () => ({ v: 99, nota: 'no me mires' }) })
   });
   runMod(sandbox);
   await tick();
   assert.equal(sandbox.__MF_MODERATION__.locked, false);
-  assert.equal(store.has(CFG_KEY), false, 'no se cachea basura');
+  assert.equal(store.has(CFG_KEY), false, 'garbage never gets cached');
 });
 
-test('MirrorRunner: con lock no inyecta nada; sin lock, todo', () => {
+test('MirrorRunner: locked injects nothing; unlocked, everything', () => {
   const codeA = 'window.A=1;', codeB = 'window.B=1;';
   const mirror = {
     v: 1,
@@ -226,50 +227,50 @@ test('MirrorRunner: con lock no inyecta nada; sin lock, todo', () => {
     code: { 'src/A.js': codeA, 'src/B.js': codeB }
   };
   const cached = { killSwitch: { active: true, reason: '' }, bannedAccounts: [], blockedModules: {} };
-  // sin flag de runner: MF_Moderation corre en modo móvil (locked → throw, pero
-  // deja el veredicto puesto). la flag __MF_MIRROR_RUNNER__ la pone el propio
-  // runner al arrancar; sembrarla a mano haría que MirrorRunner saliera temprano.
+  // no runner flag: MF_Moderation runs in mobile mode (locked → throws, but
+  // the verdict is already out). the __MF_MIRROR_RUNNER__ flag is set by the
+  // runner itself on startup; seeding it by hand would make MirrorRunner
+  // bail out early.
   const locked = makeSandbox({ ls: { [CFG_KEY]: { v: 1, ts: 0, hash: 'seed', cfg: cached } } });
   locked.sandbox.__MF_MIRROR__ = mirror;
-  assert.throws(() => runMod(locked.sandbox), /cliente deshabilitado/);
+  assert.throws(() => runMod(locked.sandbox), /client disabled/);
   vm.runInContext(RUNNER_SRC, locked.sandbox, { filename: 'src/Core/MirrorRunner.js' });
   const scripts = locked.appended.filter(e => e.tagName === 'script');
-  assert.equal(scripts.length, 0, 'lock: cero módulos');
+  assert.equal(scripts.length, 0, 'locked: zero modules');
 
   const free = makeSandbox({});
   free.sandbox.__MF_MIRROR__ = mirror;
   runMod(free.sandbox);
   vm.runInContext(RUNNER_SRC, free.sandbox, { filename: 'src/Core/MirrorRunner.js' });
   const scripts2 = free.appended.filter(e => e.tagName === 'script');
-  assert.equal(scripts2.length, 2, 'libre: los dos módulos');
+  assert.equal(scripts2.length, 2, 'free: both modules');
   assert.match(scripts2[0].textContent, /window\.A=1/);
 });
 
-test('isBlocked bloquea módulos ya inyectados en caliente (MirrorRunner consulta por path)', () => {
-  // el gate del runner existe y consulta la api por cada path antes de inyectar
+test('the gates exist and consult the verdict per path (MirrorRunner + HotLoader)', () => {
   assert.match(RUNNER_SRC, /__MF_MODERATION__/);
   assert.match(RUNNER_SRC, /isBlocked\(p\)/);
   assert.match(RUNNER_SRC, /moderation\.locked/);
   const hot = fs.readFileSync(path.join(ROOT, 'src', 'Core', 'HotLoader.js'), 'utf8');
-  assert.match(hot, /__MF_MODERATION__/, 'HotLoader también consulta el veredicto');
+  assert.match(hot, /__MF_MODERATION__/, 'HotLoader also consults the verdict');
 });
 
-test('moderation.json válida y MF_Moderation es el módulo 0 del mirror', () => {
+test('moderation.json valid and MF_Moderation is mirror module 0', () => {
   const mod = JSON.parse(fs.readFileSync(path.join(ROOT, 'moderation.json'), 'utf8'));
   assert.equal(mod.v, 1);
-  assert.equal(mod.killSwitch.active, false, 'la config de fábrica no apaga a nadie');
+  assert.equal(mod.killSwitch.active, false, 'the factory config turns nobody off');
   assert.deepEqual(mod.bannedAccounts, []);
   assert.deepEqual(mod.brickedAccounts, []);
   assert.deepEqual(mod.blockedModules, {});
   const mirror = JSON.parse(fs.readFileSync(path.join(ROOT, 'mirror.json'), 'utf8'));
-  assert.equal(mirror.mainStart[0], 'src/Core/MF_Moderation.js', 'primero de mainStart: su veredicto manda sobre el resto');
+  assert.equal(mirror.mainStart[0], 'src/Core/MF_Moderation.js', 'first of mainStart: its verdict rules over the rest');
   const hot = JSON.parse(fs.readFileSync(path.join(ROOT, 'hotload.json'), 'utf8'));
   const entry = (hot.hot || []).find(e => e.path === 'src/Core/MF_Moderation.js');
-  assert.ok(entry, 'presente en hotload.json');
+  assert.ok(entry, 'present in hotload.json');
   assert.deepEqual(entry.ok, ['__MF_MODERATION']);
 });
 
-test('brick por uuid vía identidad → pantalla azul, veredicto y reload', async () => {
+test('brick by uuid via identity → blue screen, verdict and reload', async () => {
   const cached = {
     killSwitch: { active: false, reason: '', screen: 'overlay' },
     bannedAccounts: [],
@@ -282,7 +283,7 @@ test('brick por uuid vía identidad → pantalla azul, veredicto y reload', asyn
   });
   runMod(sandbox);
   const api = sandbox.__MF_MODERATION__;
-  assert.equal(api.locked, false, 'libre hasta saber quién es');
+  assert.equal(api.locked, false, 'free until it knows who you are');
   sandbox.document.dispatchEvent({
     type: 'minifeather:client-chat-identity',
     detail: JSON.stringify({ username: 'RandomDude', uuid: 'AABBCCDD-1111-2222-3333-445566778899' })
@@ -292,16 +293,16 @@ test('brick por uuid vía identidad → pantalla azul, veredicto y reload', asyn
   assert.equal(api.kind, 'brick');
   assert.equal(api.reason, 'cheater');
   const bsod = appended.find(e => e.id === 'mf-moderation-bsod');
-  assert.ok(bsod, 'BSOD creada');
-  assert.match(bsod.innerHTML, /:\(/, 'cara de :( estilo windows');
-  assert.match(bsod.innerHTML, /MF_CLIENTE_LADRILLO/, 'stop code del ladrillo');
-  assert.ok(!appended.find(e => e.id === 'mf-moderation-lock'), 'overlay clásico fuera: el brick va de azul');
+  assert.ok(bsod, 'bsod created');
+  assert.match(bsod.innerHTML, /:\(/, 'the windows-style :( face');
+  assert.match(bsod.innerHTML, /MF_CLIENTE_LADRILLO/, 'brick stop code');
+  assert.ok(!appended.find(e => e.id === 'mf-moderation-lock'), 'classic overlay out: brick goes blue');
   const verdict = JSON.parse(store.get(BRICK_KEY));
   assert.equal(verdict.uuid, 'aabbccdd-1111-2222-3333-445566778899');
-  assert.ok(sandbox.reloads >= 1, 'reload para un boot que nace ladrillo');
+  assert.ok(sandbox.reloads >= 1, 'reload for a boot that is born bricked');
 });
 
-test('brick con wipe: borra mf:* y respeta mf:moderation:*', async () => {
+test('brick with wipe: clears mf:* and respects mf:moderation:*', async () => {
   const cached = {
     killSwitch: { active: false, reason: '', screen: 'overlay' },
     bannedAccounts: [],
@@ -312,7 +313,7 @@ test('brick con wipe: borra mf:* y respeta mf:moderation:*', async () => {
     ls: {
       'mf:pageZoom': '1.5',
       'mf:hot:v1': '{"v":1}',
-      'otra-cosa': 'no es del client, se queda',
+      'otra-cosa': 'not the client\'s, it stays',
       [CFG_KEY]: { v: 1, ts: 0, hash: 'seed', cfg: cached }
     },
     mirrorRunnerMode: true
@@ -325,15 +326,15 @@ test('brick con wipe: borra mf:* y respeta mf:moderation:*', async () => {
   await tick();
   const api = sandbox.__MF_MODERATION__;
   assert.equal(api.kind, 'brick');
-  assert.equal(store.has('mf:pageZoom'), false, 'ajustes del client fuera');
-  assert.equal(store.has('mf:hot:v1'), false, 'cache de hotload fuera');
-  assert.equal(store.has('otra-cosa'), true, 'lo que no es del client, intacto');
-  assert.equal(store.has(CFG_KEY), true, 'la config de moderación se queda');
+  assert.equal(store.has('mf:pageZoom'), false, 'client settings gone');
+  assert.equal(store.has('mf:hot:v1'), false, 'hotload cache gone');
+  assert.equal(store.has('otra-cosa'), true, 'whatever is not the client\'s, untouched');
+  assert.equal(store.has(CFG_KEY), true, 'the moderation config stays');
   const verdict = JSON.parse(store.get(BRICK_KEY));
-  assert.equal(verdict.wiped, true, 'wipe marcado para no repetirlo');
+  assert.equal(verdict.wiped, true, 'wipe flagged so it never runs twice');
 });
 
-test('desladrillado: como el desban, la config remota manda', async () => {
+test('unbrick: like the unban, the remote config rules', async () => {
   const cached = {
     killSwitch: { active: false, reason: '', screen: 'overlay' },
     bannedAccounts: [],
@@ -353,18 +354,18 @@ test('desladrillado: como el desban, la config remota manda', async () => {
   });
   runMod(sandbox);
   const api = sandbox.__MF_MODERATION__;
-  assert.equal(api.locked, true, 'el veredicto manda');
+  assert.equal(api.locked, true, 'the verdict rules');
   sandbox.document.dispatchEvent({ type: 'minifeather:client-chat-identity', detail: JSON.stringify({ username: 'brickman', uuid: '' }) });
   await tick();
-  assert.equal(api.locked, true, 'el server aún me tiene ladrillado');
+  assert.equal(api.locked, true, 'the server still has me bricked');
   api.refresh();
   await tick();
-  assert.equal(api.locked, false, 'desladrillado');
-  assert.equal(store.has(BRICK_KEY), false, 'veredicto limpiado');
-  assert.ok(sandbox.reloads >= 1, 'reload para restaurar');
+  assert.equal(api.locked, false, 'unbricked');
+  assert.equal(store.has(BRICK_KEY), false, 'verdict cleaned up');
+  assert.ok(sandbox.reloads >= 1, 'reload to restore');
 });
 
-test('kill switch con screen bsod → pantalla azul en vez de overlay', () => {
+test('kill switch with screen bsod → blue screen instead of overlay', () => {
   const cached = {
     killSwitch: { active: true, reason: 'apagón', screen: 'bsod' },
     bannedAccounts: [],
@@ -374,15 +375,15 @@ test('kill switch con screen bsod → pantalla azul en vez de overlay', () => {
   const { sandbox, appended } = makeSandbox({
     ls: { [CFG_KEY]: { v: 1, ts: 0, hash: 'seed', cfg: cached } }
   });
-  assert.throws(() => runMod(sandbox), /cliente deshabilitado/);
+  assert.throws(() => runMod(sandbox), /client disabled/);
   const bsod = appended.find(e => e.id === 'mf-moderation-bsod');
-  assert.ok(bsod, 'BSOD creada');
-  assert.match(bsod.innerHTML, /MF_CLIENTE_DESHABILITADO/, 'stop code del kill');
-  assert.ok(!appended.find(e => e.id === 'mf-moderation-lock'), 'overlay clásico fuera');
+  assert.ok(bsod, 'bsod created');
+  assert.match(bsod.innerHTML, /MF_CLIENTE_DESHABILITADO/, 'kill stop code');
+  assert.ok(!appended.find(e => e.id === 'mf-moderation-lock'), 'classic overlay out');
   assert.equal(sandbox.__MF_MODERATION__.kind, 'kill');
 });
 
-test('CLI moderation: show funciona', () => {
+test('CLI moderation: show works', () => {
   const out = execFileSync(process.execPath, [path.join(ROOT, 'tools', 'moderation.mjs'), 'show'], { encoding: 'utf8' });
   assert.match(out, /kill switch/);
   assert.match(out, /baneados/);

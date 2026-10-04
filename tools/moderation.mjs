@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// chichote de moderación: editar moderation.json sin pelearte con el JSON.
+// moderation sidekick: edit moderation.json without wrestling the JSON.
 //   node tools/moderation.mjs show
-//   node tools/moderation.mjs kill on --reason "mantenimiento" [--screen bsod]
+//   node tools/moderation.mjs kill on --reason "maintenance" [--screen bsod]
 //   node tools/moderation.mjs kill off
 //   node tools/moderation.mjs ban <uuid|name> [--reason "..."] [--uuid <uuid>] [--name <name>]
 //   node tools/moderation.mjs unban <uuid|name>
-//   node tools/moderation.mjs brick <uuid|name> [--reason "..."] [--wipe]  <- pantalla azul total
+//   node tools/moderation.mjs brick <uuid|name> [--reason "..."] [--wipe]  <- total blue screen
 //   node tools/moderation.mjs unbrick <uuid|name>
 //   node tools/moderation.mjs block src/Render/TaczGuns.js [--reason "..."]
 //   node tools/moderation.mjs unblock src/Render/TaczGuns.js
-// después: commit + push. los clientes traen la config solos (boot + cada
-// 5 min) y obedecen sin reinstall: kill switch y bans/bricks en caliente,
-// bloqueo de módulos en el próximo arranque (el client se recarga solo).
+// afterwards: commit + push. clients fetch the config on their own (boot +
+// every 5 min) and obey without reinstalling: kill switch and bans/bricks
+// land hot, module blocks land on next boot (the client reloads itself).
 'use strict';
 
 import fs from 'node:fs';
@@ -171,7 +171,7 @@ function main() {
     }
 
     case 'block': {
-      // sin lowercase: los paths de raw.githubusercontent son case-sensitive
+      // no lowercasing: raw.githubusercontent paths are case-sensitive
       const p = String(rest[0] || '').trim().replace(/\\/g, '/');
       if (!/^src\/[\w.\-]+(?:\/[\w.\-]+)*\.js$/.test(p) || p.split('/').some(s => s === '.' || s === '..')) {
         die('path raro: ' + p + ' (espero src/....js sin ..)');
