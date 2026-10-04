@@ -9,6 +9,9 @@
     { "path": "src/Chat/ClientCommands.js", "guards": [], "ok": ["__MINIFEATHER_CLIENT_COMMANDS__"] },
     { "path": "src/Cosmetics/CustomSkins.js", "guards": ["__MF_CustomSkins"], "ok": ["__MF_CustomSkins"] },
     { "path": "src/Cosmetics/CustomSkinAPI.js", "guards": ["__MF_CustomSkinAPI"], "ok": ["__MF_CustomSkinAPI"] },
-    { "path": "src/P2P/MF_Mesh.js", "guards": [], "ok": ["MF_Mesh"] }
+    { "path": "src/P2P/MF_Mesh.js", "guards": [], "ok": ["MF_Mesh"] },
+    { "path": "src/Movement/BaritoneAdapter.js", "guards": [], "ok": ["__MF_BARITONE_ADAPTER__"] },
+    { "path": "src/Movement/BaritonePlanner.js", "guards": [], "ok": ["__MF_BARITONE_PLANNER__"] },
+    { "path": "src/Movement/Baritone.js", "guards": [], "ok": ["Baritone"] }
   ]
 }

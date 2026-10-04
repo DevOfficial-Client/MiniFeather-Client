@@ -68,11 +68,26 @@
     ? ov.buckets.mainStart
     : (MIRROR.lists.mainStart || []);
   var files = (ov && ov.files && typeof ov.files === 'object') ? ov.files : {};
+  // An older cached module list must still load the local Baritone dependencies.
+  var navigationPath = 'src/Movement/Baritone.js';
+  if (list.indexOf(navigationPath) >= 0 && MIRROR.code[navigationPath] &&
+      MIRROR.code[navigationPath].indexOf('BARITONE_NAVIGATION_VERSION = 2') >= 0) {
+    list = list.slice();
+    ['src/Movement/MovementAPI.js', 'src/Movement/BaritoneAdapter.js', 'src/Movement/BaritonePlanner.js'].forEach(function (dependency) {
+      var at = list.indexOf(dependency);
+      var before = list.indexOf(navigationPath);
+      if (at >= 0 && at < before) return;
+      if (!MIRROR.code[dependency]) return;
+      if (at >= 0) list.splice(at, 1);
+      list.splice(list.indexOf(navigationPath), 0, dependency);
+    });
+  }
   var requiredMarkers = {
     'src/Chat/ClientCommands.js': 'COMPLETION_CONTEXT_VERSION = 2',
     'src/Render/FullBright.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
     'src/UI/ClientPanel.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
-    'src/I18n/Translations.js': '"fullBrightSettings"'
+    'src/I18n/Translations.js': '"fullBrightSettings"',
+    'src/Movement/Baritone.js': 'BARITONE_NAVIGATION_VERSION = 2'
   };
 
   var injected = 0, remote = 0, bundled = 0, gated = 0, moderated = 0;
