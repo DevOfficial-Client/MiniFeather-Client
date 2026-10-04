@@ -42,7 +42,13 @@ function harness(options = {}) {
     setControls(value) { controls.push({ ...value, time: clock }); return true; },
     release() { controls.push({ forward: 0, strafe: 0, jump: false, sneak: false, time: clock, released: true }); },
     releaseInteraction() { config.miningHeld = false; },
-    aimAt: () => ({ aligned: config.aligned, yaw: player.yaw, pitch: player.pitch }),
+    aimAt(x, y, z, dt, options = {}) {
+      if (config.aligned) {
+        player.yaw = Math.atan2(player.pos.x - x, player.pos.z - z);
+        if (!options.preservePitch) player.pitch = Math.atan2(y - eye().y, Math.hypot(x - player.pos.x, z - player.pos.z));
+      }
+      return { aligned: config.aligned, yaw: player.yaw, pitch: player.pitch };
+    },
     interact(type, target) {
       interactions.push({ type, target: { ...target }, time: clock });
       if (type === 'mine' && config.interactOk) config.miningHeld = true;

@@ -32,7 +32,13 @@ function harness(options = {}) {
     setControls(value) { controls.push({ ...value, time: clock }); return config.controlsAvailable !== false; },
     release() { stats.releases++; controls.push({ forward: 0, strafe: 0, jump: false, time: clock, released: true }); },
     releaseInteraction() {}, eye: () => ({ x: player.pos.x, y: player.pos.y + 1.62, z: player.pos.z }),
-    aimAt: () => ({ aligned: config.aligned, yaw: player.yaw, pitch: player.pitch }),
+    aimAt(x, y, z, dt, options = {}) {
+      if (config.aligned) {
+        player.yaw = Math.atan2(player.pos.x - x, player.pos.z - z);
+        if (!options.preservePitch) player.pitch = Math.atan2(y - adapter.eye().y, Math.hypot(x - player.pos.x, z - player.pos.z));
+      }
+      return { aligned: config.aligned, yaw: player.yaw, pitch: player.pitch };
+    },
     interact(type, target) { interactions.push({ type, target, time: clock }); return { ok: config.interactOk, reason: config.interactOk ? '' : 'wait-ray' }; },
     selectSlot: () => true, entities: () => config.entities,
     diagnostics: () => ({ error: config.bound ? '' : 'native-input-unavailable' }),
@@ -135,15 +141,21 @@ test('hot reload destroys the previous runtime, timer and event listeners', () =
   assert.equal(h.context.Baritone, undefined);
 });
 
-test('the start cell is a real first waypoint, including its center', () => {
+test('a safe off-center start heads forward instead of turning back to its cell center', () => {
   const h = harness();
-  h.player.pos.x = .1;
+  h.player.pos.x = .9;
+  const aims = [];
+  const aimAt = h.adapter.aimAt;
+  h.adapter.aimAt = (x, y, z, ...args) => { aims.push({ x, y, z }); return aimAt(x, y, z, ...args); };
   h.api.goto(3, 1, 0); h.advance(250);
   assert.equal(h.jobs.at(-1).result.path[0].x, 0);
   h.advance(50);
-  assert.equal(h.api.debug().pathIndex, 0);
-  h.moveTo({ x: 0, y: 1, z: 0 }); h.advance(50);
-  assert.equal(h.api.debug().pathIndex, 1);
+  assert.ok(h.api.debug().pathIndex > 0, 'the start anchor is not a recentering target');
+  assert.ok(aims.length > 0 && aims.every(point => point.x > h.player.pos.x), 'never aim behind the player on a clear route');
+  assert.equal(h.controls.at(-1).forward, 1);
+  h.set(2, 0, 0, air); h.advance(50);
+  assert.equal(h.api.status, 'pathfinding', 'look-ahead still rejects an intervening floor removed after planning');
+  assert.equal(h.controls.at(-1).forward, 0);
 });
 
 test('an unloaded frontier produces a partial route, never destination reached', () => {

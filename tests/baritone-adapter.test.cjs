@@ -28,7 +28,7 @@ class World {
     this.reads++;
     const name = this.cells.get(`${pos.x},${pos.y},${pos.z}`) || 'stone';
     const air = name === 'air', liquid = /water|lava|unknown_liquid/.test(name);
-    const block = { name, hardness: name === 'bedrock' ? -1 : 1, isAir: () => air,
+    const block = { name, hardness: name === 'bedrock' ? -1 : 1, slipperiness: name === 'ice' ? .98 : .6, isAir: () => air,
       isReplaceable: name === 'plant',
       material: { isLiquid: () => liquid }, getPlayerRelativeBlockHardness: () => .1 };
     return { block, getBlock: () => block, getCollisionBoundingBox: () => air || liquid || name === 'plant' ? null : {
@@ -42,6 +42,7 @@ class Player {
     this.pos = { x: 0, y: 1, z: 0 }; this.yaw = 0; this.pitch = 0;
     this.pendingInputs = []; this.inputSequenceNumber = 10; this.lastServerAckId = 9;
     this.sent = []; this.sneak = false; this.jumping = false; this.sprinting = false;
+    this.landMovementFactor = .1;
     this.abilities = { creative: false }; this.onGround = true;
     this.inventory = { currentItem: 0, getCurrentItem: () => this.inventory.main[this.inventory.currentItem],
       main: [{ stackSize: 64, item: { isItemBlock: () => true } }] };
@@ -140,6 +141,269 @@ test('resolves renamed native methods and modifies the original packet before it
   assert.equal(adapter.diagnostics().inputMode, 'native-queue-before-send');
   adapter.destroy();
 });
+
+test('fractional strafe pulses once per real packet while keeping sent and applied inputs identical', () => {
+  const { adapter, player, controls } = setup();
+  player.yaw = controls.yaw = -Math.PI / 2;
+  player.pitch = controls.pitch = .3;
+  let checks = 0;
+  const canStep = candidate => {
+    checks++;
+    assert.equal(Object.isFrozen(candidate), true);
+    assert.equal(candidate.forward, 1);
+    assert.ok([0, 1].includes(candidate.strafe));
+    assert.equal(candidate.yaw, -Math.PI / 2);
+    return true;
+  };
+  for (let tick = 0; tick < 40; tick++) {
+    assert.equal(adapter.setControls({ forward: 1, strafe: .25, pulseStrafe: true, canStep }), true);
+    player.collectRenamed();
+    const sent = player.sent.at(-1);
+    assert.equal(sent.up, true);
+    assert.equal(sent.right, player.sideways === 1);
+    assert.equal(sent.left, false);
+    assert.equal(sent.yaw, -Math.PI / 2);
+    assert.equal(sent.pitch, .3);
+    player.applyRenamed(player.currentInput);
+    assert.equal(sent.right, player.sideways === 1, 're-applying this current packet cannot advance its pulse');
+  }
+  assert.equal(player.sent.filter(input => input.right).length, 10);
+  assert.equal(checks, 40, 'the queue/send and apply hooks share one safety decision per packet');
+  assert.equal(player.yaw, -Math.PI / 2);
+  assert.equal(controls.yawObject.rotation.y, 0, 'lateral input cannot steer a camera transform');
+  assert.equal(adapter.diagnostics().controls.canStep, undefined);
+  assert.equal(Object.values(adapter.diagnostics().controls).some(value => typeof value === 'function'), false);
+  adapter.destroy();
+});
+
+test('strafe pulse carry survives control updates but resets on reversal, release and leaving pulse mode', () => {
+  const { adapter, player } = setup();
+  adapter.setControls({ forward: 1, strafe: .75, pulseStrafe: true }); player.collectRenamed();
+  assert.equal(player.sent.at(-1).right, false);
+  for (let tick = 0; tick < 4; tick++) {
+    adapter.setControls({ forward: 1, strafe: -.25, pulseStrafe: true }); player.collectRenamed();
+  }
+  assert.equal(player.sent.filter(input => input.right).length, 0);
+  assert.equal(player.sent.filter(input => input.left).length, 1);
+  adapter.setControls({ forward: 1, strafe: .75, pulseStrafe: true }); player.collectRenamed();
+  adapter.release();
+  adapter.setControls({ forward: 1, strafe: .25, pulseStrafe: true }); player.collectRenamed();
+  assert.equal(player.sent.at(-1).right, false, 'release removes the unfinished old correction');
+  adapter.setControls({ forward: 1, strafe: .25 }); player.collectRenamed();
+  assert.equal(player.sent.at(-1).right, true, 'legacy direct strafe remains unchanged unless pulse mode is requested');
+  adapter.setControls({ forward: 1, strafe: .25, pulseStrafe: true }); player.collectRenamed();
+  assert.equal(player.sent.at(-1).right, false);
+  adapter.destroy();
+});
+
+test('a rejected per-packet step is neutral without modifying native position, motion or protocol metadata', () => {
+  const { adapter, player } = setup();
+  player.motion = { x: .2, y: 0, z: -.03 };
+  const position = { ...player.pos }, motion = { ...player.motion };
+  let checks = 0;
+  adapter.setControls({ forward: 1, strafe: 1, pulseStrafe: true, jump: true, sprint: true,
+    canStep(candidate) { checks++; assert.equal(candidate.strafe, 1); return false; } });
+  player.collectRenamed();
+  const packet = player.sent[0];
+  assert.equal(checks, 1);
+  for (const field of ['up', 'down', 'left', 'right', 'jump', 'sprint']) assert.equal(packet[field], false, field);
+  assert.equal(packet.sneak, true, 'a refused dry step acquires native edge protection');
+  assert.equal(player.sneak, true);
+  assert.equal(player.isSprinting(), false);
+  assert.equal(player.forward, 0); assert.equal(player.sideways, 0);
+  assert.deepEqual(player.pos, position); assert.deepEqual(player.motion, motion);
+  assert.deepEqual(packet.pos, position);
+  assert.equal(packet.sequenceNumber, 11); assert.equal(packet.ackId, 9);
+  assert.equal(player.pendingInputs[0], player.currentInput);
+  assert.equal(Object.hasOwn(player.pendingInputs, 'push'), false);
+  adapter.destroy();
+});
+
+test('step-gate exceptions fail closed and cached native decisions cannot change between send and apply', () => {
+  const { adapter, player } = setup();
+  adapter.setControls({ forward: 1, strafe: 1, pulseStrafe: true,
+    canStep() { throw new Error('unavailable support data'); } });
+  player.collectRenamed();
+  assert.equal(player.sent[0].up, false); assert.equal(player.sent[0].right, false);
+  assert.equal(player.sent[0].sneak, true, 'exceptional support data also acquires native edge protection');
+  let allowed = true, checks = 0;
+  const send = player.sendPacket;
+  player.sendPacket = function (input) { send.call(this, input); allowed = false; };
+  adapter.setControls({ forward: 1, strafe: 1, pulseStrafe: true, canStep() { checks++; return allowed; } });
+  player.collectRenamed();
+  assert.equal(checks, 1);
+  assert.equal(player.sent[1].up, true); assert.equal(player.sent[1].right, true);
+  assert.equal(player.forward, -1); assert.equal(player.sideways, 1);
+  adapter.destroy();
+});
+
+test('a rejected step keeps native sneak protection across view updates until an approved packet or release', () => {
+  const { adapter, player } = setup();
+  let allowed = false;
+  adapter.setControls({ forward: 1, strafe: .25, pulseStrafe: true, canStep: () => allowed });
+  player.collectRenamed();
+  player.viewRenamed();
+  assert.equal(player.sneak, true, 'an extra native view update cannot clear the rejected step edge protection');
+  allowed = true;
+  player.collectRenamed(); player.viewRenamed();
+  assert.equal(player.sneak, false, 'an approved native packet resumes the requested ordinary movement');
+  allowed = false;
+  player.collectRenamed();
+  assert.equal(player.sneak, true);
+  adapter.release();
+  assert.equal(player.sneak, false);
+  adapter.destroy();
+});
+
+test('pulse memoization supports a native input class reused across collection ticks', () => {
+  const { context, game, controls, adapter } = setup();
+  adapter.destroy();
+  class NativeInput {}
+  class ReusingPlayer extends Player {
+    collectRenamed() {
+      this.sentInputThisTick = false; this.inputSequenceNumber++;
+      this.currentInput ||= new NativeInput();
+      Object.assign(this.currentInput, { sequenceNumber: this.inputSequenceNumber, ackId: this.lastServerAckId,
+        pos: { ...this.pos }, up: false, down: false, left: false, right: false,
+        jump: false, sneak: this.sneak, sprint: this.isSprinting(), yaw: this.yaw, pitch: this.pitch });
+      const send = this.serverUsesInputMovement();
+      if (send) { this.pendingInputs.push(this.currentInput); this.sendPacket(this.currentInput); }
+      this.applyRenamed(this.currentInput); this.sentInputThisTick = send;
+    }
+  }
+  const player = new ReusingPlayer(); player.controls = controls; game.player = player;
+  const next = context.__MF_BARITONE_ADAPTER__.create(); next.bind(game);
+  let checks = 0;
+  next.setControls({ forward: 1, strafe: .25, pulseStrafe: true, canStep() { checks++; return true; } });
+  for (let tick = 0; tick < 8; tick++) player.collectRenamed();
+  assert.ok(player.currentInput instanceof NativeInput);
+  assert.equal(player.sent.filter(input => input.right).length, 2);
+  assert.equal(checks, 8);
+  assert.deepEqual(player.sent.map(input => input.sequenceNumber), [11, 12, 13, 14, 15, 16, 17, 18]);
+  next.destroy();
+});
+
+test('native-key fallback samples each lateral pulse and step gate once per collector call', () => {
+  const { context, game, controls, adapter, listeners } = setup();
+  adapter.destroy();
+  class KeyboardPlayer extends Player {
+    constructor() { super(); this.keys = new Set(); }
+    collectRenamed() {
+      this.sentInputThisTick = false; this.inputSequenceNumber++;
+      this.currentInput = { sequenceNumber: this.inputSequenceNumber, ackId: this.lastServerAckId,
+        pos: { ...this.pos }, up: this.keys.has('KeyW'), down: this.keys.has('KeyS'),
+        left: this.keys.has('KeyA'), right: this.keys.has('KeyD'), jump: this.keys.has('Space'),
+        sneak: this.sneak, sprint: this.isSprinting(), yaw: this.yaw, pitch: this.pitch };
+      const send = this.serverUsesInputMovement();
+      // This native collector sends before enqueuing: only genuine key events
+      // may control it, never an after-send synthetic packet modification.
+      if (send) { this.sendPacket(this.currentInput); this.pendingInputs.push(this.currentInput); }
+      this.applyRenamed(this.currentInput); this.sentInputThisTick = send;
+    }
+  }
+  const player = new KeyboardPlayer(); player.controls = controls; game.player = player;
+  listeners.set('keydown', [event => player.keys.add(event.code)]);
+  listeners.set('keyup', [event => player.keys.delete(event.code)]);
+  const next = context.__MF_BARITONE_ADAPTER__.create(); next.bind(game);
+  assert.equal(next.diagnostics().inputMode, 'native-keys');
+  let checks = 0;
+  next.setControls({ forward: 1, strafe: .25, pulseStrafe: true, canStep() { checks++; return true; } });
+  for (let tick = 0; tick < 8; tick++) player.collectRenamed();
+  assert.equal(player.sent.filter(input => input.right).length, 2);
+  assert.ok(player.sent.every(input => input.up));
+  assert.equal(checks, 8);
+  next.release();
+  assert.equal(player.keys.size, 0);
+  next.destroy();
+});
+
+test('movement factor reads native semantic getters and raw block slipperiness without inventing missing data', () => {
+  const { adapter, player, world } = setup();
+  assert.equal(adapter.movementFactor(), .1);
+  player.landMovementFactor = .26;
+  player.speedGetterRenamed = function () { return this.landMovementFactor; };
+  assert.equal(adapter.movementFactor(), .26);
+  player.getAIMoveSpeed = () => .18;
+  assert.equal(adapter.movementFactor(), .18);
+  player.getAIMoveSpeed = () => { throw new Error('native speed unavailable'); };
+  assert.equal(adapter.movementFactor(), null);
+  delete player.getAIMoveSpeed; delete player.speedGetterRenamed; delete player.landMovementFactor;
+  assert.equal(adapter.movementFactor(), null);
+  assert.equal(adapter.readCell(0, 1, 0).slipperiness, .6);
+  world.cells.set('0,2,0', 'ice');
+  assert.equal(adapter.readCell(0, 2, 0).slipperiness, .98);
+  const nativeRead = world.getBlockState;
+  world.getBlockState = function (position) {
+    const state = nativeRead.call(this, position); delete state.block.slipperiness; return state;
+  };
+  assert.equal(adapter.readCell(0, 1, 0).slipperiness, null);
+  world.loaded = false;
+  assert.equal(adapter.readCell(0, 1, 0).slipperiness, null);
+  adapter.destroy();
+});
+
+test('movement-factor semantic lookup is cached at bind rather than scanning native methods per packet', () => {
+  const { context, game, player, adapter } = setup();
+  adapter.destroy();
+  player.speedGetterRenamed = function () { return this.landMovementFactor; };
+  let enumerations = 0;
+  game.player = new Proxy(player, { ownKeys(target) { enumerations++; return Reflect.ownKeys(target); } });
+  const next = context.__MF_BARITONE_ADAPTER__.create();
+  assert.equal(next.bind(game), true);
+  const scans = enumerations;
+  for (let sample = 0; sample < 500; sample++) {
+    player.landMovementFactor = sample % 2 ? .13 : .1;
+    assert.equal(next.movementFactor(), player.landMovementFactor);
+  }
+  assert.equal(enumerations, scans, 'per-packet speed reading cannot rescan or stringify the player methods');
+  next.destroy();
+});
+
+test('ground slipperiness follows the raw native bounding-box floor instead of rounded navigation height', () => {
+  const { adapter, player, world } = setup();
+  player.pos = { x: -.2, y: 3, z: .5 };
+  player.getEntityBoundingBox = () => ({ min: { x: -.5, y: 2.999999, z: .2 }, max: { x: .1, y: 4.8, z: .8 } });
+  world.cells.set('-1,1,0', 'ice'); world.cells.set('-1,2,0', 'stone');
+  assert.equal(adapter.groundSlipperiness(), .98, 'native minY-1 floors to the lower cell before geometry normalization');
+  assert.deepEqual(world.lastChunk, [-1, 0]);
+  player.getEntityBoundingBox = () => ({ min: { y: NaN } });
+  assert.equal(adapter.groundSlipperiness(), .6, 'an unavailable native box falls back to raw player height, not a guessed ground type');
+  delete player.getEntityBoundingBox;
+  assert.equal(adapter.groundSlipperiness(), .6);
+  world.loaded = false;
+  assert.equal(adapter.groundSlipperiness(), null);
+  adapter.destroy();
+});
+
+test('ground friction reads raw native metadata near the world boundary without allowing out-of-bounds terrain', () => {
+  const { adapter, player, world } = setup();
+  player.pos.y = 1 - 1e-9;
+  player.getEntityBoundingBox = () => ({ min: { y: player.pos.y } });
+  world.cells.set('0,-1,0', 'ice');
+  assert.equal(adapter.groundSlipperiness(), .98, 'the real engine floors minY - 1 to -1, even when navigation snaps foot Y to 1');
+  assert.equal(adapter.readCell(0, -1, 0).known, false, 'friction metadata must not authorize terrain outside the world');
+  const nativeRead = world.getBlockState;
+  world.getBlockState = function (position) {
+    const state = nativeRead.call(this, position);
+    delete state.getCollisionBoundingBox;
+    return state;
+  };
+  assert.equal(adapter.groundSlipperiness(), .98, 'the per-input friction read does not need a collision API');
+  world.loaded = false;
+  const reads = world.reads;
+  assert.equal(adapter.groundSlipperiness(), null);
+  assert.equal(world.reads, reads, 'an unknown chunk cannot be read for physics metadata');
+  world.loaded = true;
+  world.getBlockState = () => null;
+  assert.equal(adapter.groundSlipperiness(), null);
+  world.getBlockState = () => ({ block: { slipperiness: NaN } });
+  assert.equal(adapter.groundSlipperiness(), null);
+  world.getBlockState = () => ({ block: { slipperiness: 0 } });
+  assert.equal(adapter.groundSlipperiness(), null);
+  world.getBlockState = () => { throw new Error('native world unavailable'); };
+  assert.equal(adapter.groundSlipperiness(), null);
+  adapter.destroy();
+});
 test('does not modify reconciliation inputs and composes/restores other movement hooks', () => {
   const { context, adapter, player } = setup();
   let otherCalls = 0;
@@ -190,6 +454,183 @@ test('camera fallback dispatches native mouse movement and checks real angle fee
   assert.equal(next.aimAt(4, 2.62, 0).aligned, true); assert.ok(Math.abs(player.yaw + Math.PI / 2) < .04);
   assert.equal(controls.yaw, 0, 'must not mutate a guessed camera parent');
   assert.equal(next.diagnostics().cameraVerified, true);
+});
+
+test('aim alignment uses the applied native camera feedback in the same tick', () => {
+  const { adapter, player, context } = setup();
+  const heading = .2;
+  const aimed = adapter.aimAt(-Math.sin(heading) * 4, 2.62, -Math.cos(heading) * 4);
+  assert.equal(aimed.aligned, true, 'a completed native turn must not add another stopped navigation tick');
+  assert.ok(Math.abs(player.yaw - heading) < .000001);
+  assert.ok(aimed.yawError < .000001);
+  assert.equal(context.__MF_BARITONE_ADAPTER__.version, 6);
+  adapter.setControls({ forward: 1, yaw: aimed.yaw, pitch: aimed.pitch });
+  player.collectRenamed();
+  assert.equal(player.sent[0].yaw, player.yaw, 'the packet still contains the engine camera angles');
+  adapter.destroy();
+});
+
+test('navigation aiming preserves the player pitch and keeps precise interaction aiming separate', () => {
+  const { adapter, player, controls } = setup();
+  player.pitch = controls.pitch = .7;
+  controls.pitchObject.rotation.x = .7;
+  const navigation = adapter.aimAt(-.2, 2.62, -4, .05, { mode: 'navigation', tolerance: .18, preservePitch: true });
+  assert.equal(navigation.aligned, true);
+  assert.equal(player.pitch, .7);
+  assert.equal(controls.pitchObject.rotation.x, .7, 'preserved pitch keeps the existing vertical camera orientation');
+  assert.equal(navigation.pitch, .7);
+  const precise = adapter.aimAt(-.2, 2.62, -4, .05);
+  assert.equal(precise.aligned, false, 'interaction still requires native pitch to point at its target');
+  assert.ok(player.pitch < .7);
+  for (let index = 0; index < 5; index++) adapter.aimAt(-.2, 2.62, -4);
+  assert.equal(adapter.aimAt(-.2, 2.62, -4).aligned, true);
+  assert.ok(Math.abs(player.pitch) < .000001);
+  adapter.destroy();
+});
+
+test('navigation deadband prevents tiny alternating route bearings from scanning the camera sideways', () => {
+  const { adapter, player, controls } = setup();
+  let changes = 0;
+  controls.onLook = (yaw, pitch) => { changes++; player.yaw = yaw; player.pitch = pitch; };
+  for (let index = 0; index < 40; index++) {
+    const heading = index % 2 ? .02 : -.02;
+    const aimed = adapter.aimAt(-Math.sin(heading) * 8, 2.62, -Math.cos(heading) * 8, .05,
+      { mode: 'navigation', tolerance: .18, preservePitch: true });
+    assert.equal(aimed.aligned, true);
+  }
+  assert.equal(changes, 0);
+  assert.equal(player.yaw, 0);
+  assert.equal(adapter.aimAt(-Math.sin(.02) * 8, 2.62, -Math.cos(.02) * 8).aligned, true);
+  assert.equal(changes, 1, 'the navigation deadband cannot reduce precise interaction accuracy');
+  assert.ok(Math.abs(player.yaw - .02) < .000001);
+  adapter.destroy();
+});
+
+test('navigation movement tolerance remains bounded and uses actual feedback rather than requested angles', () => {
+  const { adapter, player, controls } = setup();
+  const heading = .4;
+  const navigation = adapter.aimAt(-Math.sin(heading) * 4, 2.62, -Math.cos(heading) * 4, .005,
+    { mode: 'navigation', tolerance: 100, preservePitch: true });
+  assert.equal(navigation.aligned, false, 'large user tolerance is clamped below a sharp turn');
+  controls.onLook = () => {};
+  player.yaw = controls.yaw = 0;
+  const precise = adapter.aimAt(-Math.sin(.2) * 4, 2.62, -Math.cos(.2) * 4);
+  assert.equal(precise.aligned, false, 'writing a control object without native player feedback is not alignment');
+  assert.equal(player.yaw, 0);
+  assert.ok(Math.abs(controls.yaw - .2) < .000001);
+  adapter.destroy();
+});
+
+test('aiming directly above the eye does not invent a 180-degree horizontal camera turn', () => {
+  const { adapter, player, controls } = setup();
+  player.yaw = controls.yaw = 1.2;
+  for (let index = 0; index < 8; index++) {
+    const aimed = adapter.aimAt(0, 12, 0);
+    assert.equal(aimed.yaw, 1.2);
+    assert.equal(player.yaw, 1.2);
+  }
+  assert.ok(player.pitch > 1.5);
+  assert.equal(adapter.aimAt(0, 12, 0).aligned, true);
+  adapter.destroy();
+});
+
+test('shortest native yaw turn crosses the angle boundary without scanning the long way around', () => {
+  const { adapter, player, controls } = setup();
+  player.yaw = controls.yaw = Math.PI - .05;
+  const heading = -Math.PI + .05;
+  assert.equal(adapter.aimAt(-Math.sin(heading) * 4, 2.62, -Math.cos(heading) * 4).aligned, true);
+  assert.ok(Math.abs(player.yaw - (Math.PI + .05)) < .000001);
+  adapter.destroy();
+});
+
+test('mouse fallback waits for delayed native feedback instead of stacking turn events', () => {
+  const { context, game, player, listeners, adapter } = setup();
+  adapter.destroy(); delete game.controls; delete player.controls;
+  let now = 1000;
+  const pending = [];
+  context.Date = { now: () => now };
+  listeners.set('mousemove', [event => pending.push(event)]);
+  const next = context.__MF_BARITONE_ADAPTER__.create(); next.bind(game);
+  for (let index = 0; index < 12; index++) { next.aimAt(4, 2.62, 0); now += 50; }
+  assert.equal(pending.length, 1, 'unacknowledged native look events must not accumulate');
+  assert.ok(Math.abs(pending[0].movementX) <= 2, 'the unverified first native movement is a small sensitivity probe');
+  const apply = () => {
+    const event = pending.shift();
+    player.yaw -= event.movementX * .004; player.pitch -= event.movementY * .004;
+  };
+  apply();
+  for (let index = 0; index < 10; index++) {
+    next.aimAt(4, 2.62, 0); now += 50;
+    if (pending.length) apply();
+  }
+  assert.equal(next.aimAt(4, 2.62, 0).aligned, true);
+  assert.ok(Math.abs(player.yaw + Math.PI / 2) < .000001);
+  assert.equal(next.diagnostics().cameraVerified, true);
+  next.destroy();
+});
+
+test('mouse sensitivity calibration prevents overshoot for short turns at high native sensitivity', () => {
+  const { context, game, player, listeners, adapter } = setup();
+  adapter.destroy(); delete game.controls; delete player.controls;
+  const turns = [];
+  listeners.set('mousemove', [event => {
+    player.yaw -= event.movementX * .03; player.pitch -= event.movementY * .03;
+    turns.push(player.yaw);
+  }]);
+  const next = context.__MF_BARITONE_ADAPTER__.create(); next.bind(game);
+  const heading = -.15;
+  for (let index = 0; index < 8; index++) next.aimAt(-Math.sin(heading) * 4, 2.62, -Math.cos(heading) * 4);
+  assert.ok(turns.length >= 2);
+  assert.ok(turns.every(yaw => yaw >= heading - .000001 && yaw <= 0), 'native calibration must not overshoot the intended bearing');
+  assert.equal(next.aimAt(-Math.sin(heading) * 4, 2.62, -Math.cos(heading) * 4).aligned, true);
+  next.destroy();
+});
+
+test('mouse feedback watchdog works from time zero and never reposts an ignored native event', () => {
+  const { context, game, listeners, adapter } = setup();
+  adapter.destroy(); delete game.controls; delete game.player.controls;
+  let now = 0, events = 0;
+  context.Date = { now: () => now };
+  listeners.set('mousemove', [() => events++]);
+  const next = context.__MF_BARITONE_ADAPTER__.create(); next.bind(game);
+  next.aimAt(4, 2.62, 0);
+  now = 1600;
+  const ignored = next.aimAt(4, 2.62, 0);
+  assert.equal(ignored.aligned, false);
+  assert.equal(ignored.reason, 'native-camera-not-responding');
+  assert.equal(events, 1);
+  next.destroy();
+});
+
+test('a calibrated native mouse can start a new turn after a long pause without a stale timeout', () => {
+  const { context, game, player, listeners, adapter } = setup();
+  adapter.destroy(); delete game.controls; delete player.controls;
+  let now = 1000;
+  context.Date = { now: () => now };
+  listeners.set('mousemove', [event => {
+    player.yaw -= event.movementX * .004; player.pitch -= event.movementY * .004;
+  }]);
+  const next = context.__MF_BARITONE_ADAPTER__.create(); next.bind(game);
+  for (let index = 0; index < 12; index++) { next.aimAt(4, 2.62, 0); now += 50; }
+  assert.equal(next.aimAt(4, 2.62, 0).aligned, true);
+  now += 10000;
+  const renewed = next.aimAt(0, 2.62, -4);
+  assert.equal(renewed.reason, '', 'a timeout must belong to an unanswered request, not the last successful turn');
+  for (let index = 0; index < 12; index++) { next.aimAt(0, 2.62, -4); now += 50; }
+  assert.equal(next.aimAt(0, 2.62, -4).aligned, true);
+  assert.ok(Math.abs(player.yaw) < .000001);
+  next.destroy();
+});
+
+test('invalid camera angles fail closed and invalid timing never writes nonfinite native transforms', () => {
+  const { adapter, player, controls } = setup();
+  assert.equal(adapter.aimAt(-.1, 2.62, -4, NaN).aligned, true);
+  assert.ok([player.yaw, player.pitch, controls.yawObject.rotation.y, controls.pitchObject.rotation.x].every(Number.isFinite));
+  player.yaw = NaN;
+  const invalid = adapter.aimAt(4, 2.62, 0);
+  assert.equal(invalid.aligned, false);
+  assert.equal(invalid.reason, 'native-camera-unavailable');
+  adapter.destroy();
 });
 test('mining uses native hold and native finish, never fake ray hits, and releases on mismatch', () => {
   const { adapter, controller } = setup(); target(controller);
