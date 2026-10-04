@@ -1,16 +1,16 @@
-# MiniFeather Client — distribución minificada
+# rama `minified` — distribución minificada
 
-**este repo es una máquina de generar, no un escondite.** contiene el código del client minificado automáticamente en cada push del repositorio de desarrollo, por un workflow público que cualquiera puede leer y auditar.
+**esta rama es una máquina de generar, no un escondite.** contiene el código del client minificado automáticamente, sincronizada por el workflow público [`publish-minified`](https://github.com/DevOfficial-Client/MiniFeather-Client/blob/main/.github/workflows/publish-minified.yml) en cada push a `beta` (rolling) o `main` (estable).
 
-## mapa
+## mapa del repo oficial
 
-- **fuente legible y auditable:** [DevOfficial-Client/MiniFeather-Client](https://github.com/DevOfficial-Client/MiniFeather-Client) — GPL-3.0, con tests, historial completo y licencia explícita.
-- **el generador:** `tools/minify-repo.js` + `.github/workflows/publish-minified.yml` en el repo de desarrollo. la minificación es terser con ajustes conservadores (sin mangle, sin poda de globals) y el workflow verifica sintaxis de cada módulo antes de pushear.
-- **releases estables:** [shusukegxe/MiniFeather-Client-releases](https://github.com/shusukegxe/MiniFeather-Client-releases).
+- **`main`** — código fuente 100% legible y auditable, GPL-3.0, con tests e historial completo. la rama oficial.
+- **`beta`** — donde trabajan los devs; betas rolling con los mismos builds automáticos.
+- **`minified`** (esta rama) — el mismo árbol masticado: mismo mirror.json, mismas rutas, mismo hotload.
 
 ## para qué sirve
 
-los canales de distribución (hotload del mirror, userscript) pueden servir desde acá: así quien quiera rebrandear o revender el client se lleva blobs masticados sin comentarios ni estructura legible, mientras el código fuente sigue 100% público. anti-piratería sin cajita negra: nada que verificar a ciegas.
+los canales de distribución (hotload del mirror, userscript) pueden servir desde acá: así quien quiera rebrandear o revender el client se lleva blobs masticados sin comentarios ni estructura legible, mientras el código fuente sigue 100% público en `main`. anti-piratería sin cajita negra: el minificador (`tools/minify-repo.js`) y sus ajustes son públicos, y cualquiera puede verificar que el minificado corresponde al fuente.
 
 ## reglas
 
