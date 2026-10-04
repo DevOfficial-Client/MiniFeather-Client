@@ -12530,6 +12530,43 @@
       showLogoStatus(t('logoResetDone'), '#facc15');
     });
 
+    // skinguard bridge: el filtro vive en main world (src/Cosmetics/SkinGuard.js);
+    // desde el panel (isolated) preguntamos por evento y esperamos veredicto.
+    // timeout 1.6s = falla abierto (la heurística no debe tumbar imports por un
+    // evento perdido). local = confirmación (tu navegador, tu contenido); los
+    // caminos p2p/remoto bloquean duros dentro de sus propios módulos. :v
+    const SKIN_GUARD_CONFIRM = {
+      es: 'el filtro de contenido (eula §8.2) marca esta imagen como posible contenido adulto. puedes usarla de todos modos — es tu navegador y tu contenido, bajo tu responsabilidad — pero no la compartas por p2p. ¿continuar?',
+      en: 'the content filter (eula §8.2) flags this image as possible adult content. you can still use it — it\'s your browser and your content, at your own risk — but it won\'t share over p2p. continue?',
+      pt: 'o filtro de conteúdo (eula §8.2) marca esta imagem como possível conteúdo adulto. podes usar mesmo assim — é o teu navegador e o teu conteúdo, à tua responsabilidade — mas não partilhas por p2p. continuar?',
+      fr: 'le filtre de contenu (eula §8.2) signale cette image comme contenu adulte possible. tu peux quand même l\'utiliser — c\'est ton navigateur et ton contenu, à tes risques — mais pas de partage p2p. continuer ?',
+      de: 'der inhaltsfilter (eula §8.2) markiert dieses bild als mögliches erwachsenen-inhalt. du kannst es trotzdem nutzen — dein browser, dein inhalt, deine verantwortung — aber keine p2p-freigabe. fortfahren?',
+      it: 'il filtro contenuti (eula §8.2) segnala questa immagine come possibile contenuto adulto. puoi usarla comunque — è il tuo browser e il tuo contenuto, a tua responsabilità — ma niente condivisione p2p. continuare?',
+      ru: 'контент-фильтр (eula §8.2) помечает это изображение как возможный контент для взрослых. использовать всё равно можно — это твой браузер и твой контент, под твою ответственность — но по p2p не передастся. продолжить?',
+      ja: 'コンテンツフィルター（eula §8.2）がこの画像をアダルトコンテンツの可能性ありと判定しました。それでも使えます — あなたのブラウザ・あなたのコンテンツ・自己責任 — ただしp2p共有はされません。続けますか？',
+      zh: '内容过滤器（eula §8.2）将此图片标记为疑似成人内容。你仍然可以使用——这是你的浏览器和你的内容，风险自负——但不会通过 p2p 共享。继续吗？',
+      ko: '콘텐츠 필터(eula §8.2)가 이 이미지를 성인 콘텐츠 가능성으로 표시했습니다. 그래도 사용할 수 있습니다 — 당신의 브라우저와 콘텐츠이며 책임은 본인 — 하지만 p2p로는 공유되지 않습니다. 계속할까요?'
+    };
+    async function skinGuardLocalCheck(dataUrl) {
+      try {
+        if (typeof dataUrl !== 'string' || dataUrl.indexOf('data:image') !== 0) return true;
+        const token = 'sg' + Date.now() + Math.random().toString(36).slice(2, 7);
+        const verdict = await new Promise(resolve => {
+          const onResult = ev => {
+            const d = ev && ev.detail;
+            if (d && d.token === token) { window.removeEventListener('mf-skinguard-result', onResult, true); resolve(d); }
+          };
+          window.addEventListener('mf-skinguard-result', onResult, true);
+          setTimeout(() => { window.removeEventListener('mf-skinguard-result', onResult, true); resolve(null); }, 1600);
+          window.dispatchEvent(new CustomEvent('mf-skinguard-check', { detail: { token, dataUrl } }));
+        });
+        if (!verdict || !verdict.flag) return true; // sin veredicto o limpio: pasar
+        const lang = normalizeClientLanguage(String(settings.language || navigator.language || 'en'));
+        const msg = SKIN_GUARD_CONFIRM[lang] || SKIN_GUARD_CONFIRM.en;
+        return globalThis.confirm?.(msg) !== false;
+      } catch (_) { return true; }
+    }
+
     panel.querySelector('#mf-skin-apply')?.addEventListener('click', () => {
       const skinName = panel.querySelector('#mf-skin-select')?.value || '';
       const customUrl = panel.querySelector('#mf-skin-url')?.value.trim() || '';
@@ -12542,7 +12579,8 @@
 
       if (file) {
         const reader = new FileReader();
-        reader.onload = event => {
+        reader.onload = async event => {
+          if (!(await skinGuardLocalCheck(event.target.result))) return; // cancel en el diálogo = fin
           chrome.runtime.sendMessage({ type: 'setSkin', skinName, customUrl: event.target.result }, () => {
             showSkinStatus(t('skinApplied', { name: skinName }), '#22c55e');
             refreshActiveSkins();
@@ -12582,7 +12620,8 @@
 
       if (file) {
         const reader = new FileReader();
-        reader.onload = event => {
+        reader.onload = async event => {
+          if (!(await skinGuardLocalCheck(event.target.result))) return; // cancel en el diálogo = fin
           chrome.runtime.sendMessage({ type: 'setCape', capeName, customUrl: event.target.result }, () => {
             showCapeStatus(t('capeApplied', { name: capeName }), '#22c55e');
             refreshActiveCapes();

@@ -608,6 +608,19 @@
                 });
             })
             .then(function (dataUrl) {
+                // skinguard: skins/capas remotas (amigos/comunidad) pasan el filtro
+                // antes de entrar en caché. bloqueado = no se cachea ni se aplica.
+                var guard = globalThis.__MF_SKIN_GUARD__;
+                if (!guard || typeof dataUrl !== 'string' || dataUrl.indexOf('data:image') !== 0) return dataUrl;
+                return guard.checkDataUrl(dataUrl).then(function (v) {
+                    if (v.flag) {
+                        warn('skin/capa remota bloqueada por el filtro (' + v.reason + '):', url.slice(-28));
+                        return null;
+                    }
+                    return dataUrl;
+                });
+            })
+            .then(function (dataUrl) {
                 if (typeof dataUrl === 'string' && dataUrl.indexOf('data:image') === 0) {
                     var had = !!remoteCache[url];
                     remoteCache[url] = dataUrl;

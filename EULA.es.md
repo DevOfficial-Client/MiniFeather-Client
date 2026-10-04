@@ -147,6 +147,8 @@ El Software no está dirigido a menores de 13 años. Si el Usuario es menor de e
 
 8.3. Las skins, packs y aportaciones comunitarias publicadas en los repositorios del proyecto pueden ser utilizadas, distribuidas y modificadas por el Equipo de Desarrollo dentro del ecosistema MiniFeather. Al subir contenido, el Usuario declara tener los derechos necesarios sobre el mismo.
 
+8.4. **Las skins, capas y caras personalizadas son contenido generado por el Usuario.** El Client aplica un filtro de contenido automatizado a las skins y capas en la importación local, la recepción por p2p y la descarga remota, combinando una heurística de desnudos (análisis de regiones de píxeles del layout de skin) con una blocklist de hashes mantenida por el equipo. El filtro es una medida de mejor esfuerzo: puede dejar pasar contenido inapropiado y puede marcar por error skins inofensivas. El contenido almacenado localmente no tiene revisión humana y permanece en el navegador del Usuario; la base de datos de skins de la comunidad además se revisa antes de publicarse. El contenido que evade el filtro puede reportarse por el canal de la sección 14.2; los reportes verificados alimentan la blocklist compartida. Eludir deliberadamente el filtro para difundir contenido prohibido o acosar a otros jugadores es una violación de las secciones 3.5 y 8.2.
+
 ---
 
 ## 9. Exclusión de garantías

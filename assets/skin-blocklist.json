@@ -1,0 +1,6 @@
+{
+  "v": 1,
+  "updated": "2026-10-04",
+  "note": "sha-256 en hex minúsculas de pngs de skins/capas bloqueados por la eula §8.2/§8.4 (contenido sexual, odio, o lo que dicta la §8.2). los reportes llegan por discord (§14.2) y se verifican a mano antes de entrar aquí. el client baja esta lista cada 6h (skinguard) y bloquea cualquier textura cuyo hash coincida.",
+  "hashes": []
+}

@@ -9,6 +9,7 @@
     "src/Render/TextureInterceptor.js",
     "src/Render/PBRTextures.js",
     "src/Cosmetics/LegacyUnlocks.js",
+    "src/Cosmetics/SkinGuard.js",
     "src/Cosmetics/CustomSkins.js",
     "src/Cosmetics/MF_Accounts.js",
     "src/Cosmetics/CustomSkinAPI.js",

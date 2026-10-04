@@ -147,6 +147,8 @@ The Software is not directed at children under 13. If the User is a minor, they 
 
 8.3. Skins, packs and community contributions published in the project repositories may be used, distributed and modified by the Development Team within the MiniFeather ecosystem. By uploading content, the User warrants they hold the necessary rights to it.
 
+8.4. **Custom skins, capes and faces are user-generated content.** The Client applies an automated content filter to skins and capes at local import, peer-to-peer reception and remote download, combining a nudity heuristic (pixel-region analysis of the skin layout) with a team-maintained hash blocklist. The filter is a best-effort measure: it can miss inappropriate content and it can wrongly flag harmless skins. Locally stored content is not human-reviewed and remains in the User's browser; the community skin database is additionally reviewed before publication. Content that evades the filter can be reported through the channel in section 14.2; verified reports feed the shared blocklist. Deliberately circumventing the filter to distribute prohibited content or to harass other players is a violation of sections 3.5 and 8.2.
+
 ---
 
 ## 9. Disclaimer of warranties

@@ -330,16 +330,31 @@ const state = {
         }
         case 'skin': {
             if (typeof m.id === 'string' && typeof m.dataURL === 'string') {
-                const isNew = !skinById.has(m.id);
-                registerSharedSkin(m.id, m.dataURL, m.name);
-                if (isNew) {
-                    applySkinToPeer(m.name, m.id, m.dataURL);
-
-                    for (const [pid, c] of state.conns) {
-                        if (pid === conn.peer) continue;
-                        sendTo(c, { t: 'skin', id: m.id, dataURL: m.dataURL, name: m.name });
+                // skinguard: lo que llega por p2p se mira ANTES de registrar, aplicar
+                // o re-retransmitir. contenido marcado no se propaga, punto. :v
+                const runSkinGuard = async () => {
+                    const guard = globalThis.__MF_SKIN_GUARD__;
+                    if (guard) {
+                        try {
+                            const v = await guard.checkDataUrl(m.dataURL);
+                            if (v.flag) {
+                                warn('skin p2p bloqueada por el filtro (' + v.reason + ') de', m.name || m.id);
+                                return;
+                            }
+                        } catch (_) {}
                     }
-                }
+                    const isNew = !skinById.has(m.id);
+                    registerSharedSkin(m.id, m.dataURL, m.name);
+                    if (isNew) {
+                        applySkinToPeer(m.name, m.id, m.dataURL);
+
+                        for (const [pid, c] of state.conns) {
+                            if (pid === conn.peer) continue;
+                            sendTo(c, { t: 'skin', id: m.id, dataURL: m.dataURL, name: m.name });
+                        }
+                    }
+                };
+                void runSkinGuard();
             }
             break;
         }

@@ -50,6 +50,7 @@ if you're one of the good ones: thank you, from the bottom of our hearts. you're
 - **don't sell the client or modified copies** passing them off as official. that's just ugly. besides, it's free: scamming people with something free isn't even a scam, it's theater. (¬‿¬)
 - **don't bypass anticheats, payments or security systems.** we're not that kind of project.
 - **don't harass anyone.** not with ai, not with bots, not with anything. be a good blob citizen. (｡•́︿•̀｡)
+- **custom skins and capes are user-generated content**: the client runs an automatic nudity filter on your imports and on everything arriving via p2p or remote download, plus a hash blocklist fed by discord reports. it's a heuristic — things can slip through or harmless stuff can get flagged (¬_¬). a flagged local import asks you first (your browser, your content); flagged p2p content gets dropped without asking. saw a skin that shouldn't exist? discord, and the hash hunt begins.
 
 ## 4. things worth knowing about your data ʕ•ᴥ•ʔ
 
