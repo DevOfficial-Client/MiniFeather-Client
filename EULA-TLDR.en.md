@@ -51,6 +51,7 @@ if you're one of the good ones: thank you, from the bottom of our hearts. you're
 - **don't bypass anticheats, payments or security systems.** we're not that kind of project.
 - **don't harass anyone.** not with ai, not with bots, not with anything. be a good blob citizen. (｡•́︿•̀｡)
 - **custom skins and capes are user-generated content**: the client runs an automatic nudity filter on your imports and on everything arriving via p2p or remote download, plus a hash blocklist fed by discord reports. it's a heuristic — things can slip through or harmless stuff can get flagged (¬_¬). a flagged local import asks you first (your browser, your content); flagged p2p content gets dropped without asking. saw a skin that shouldn't exist? discord, and the hash hunt begins.
+- **the client can be switched off remotely (with a reason)**: the devs keep a remote moderation config (eula section 8.5). it covers kill switches for maintenance/security, disabling specific modules, and blocking accounts that break the rules — always showing the reason on screen and touching the client only, never the game. think it's a mistake? discord.
 
 ## 4. things worth knowing about your data ʕ•ᴥ•ʔ
 

@@ -149,6 +149,8 @@ The Software is not directed at children under 13. If the User is a minor, they 
 
 8.4. **Custom skins, capes and faces are user-generated content.** The Client applies an automated content filter to skins and capes at local import, peer-to-peer reception and remote download, combining a nudity heuristic (pixel-region analysis of the skin layout) with a team-maintained hash blocklist. The filter is a best-effort measure: it can miss inappropriate content and it can wrongly flag harmless skins. Locally stored content is not human-reviewed and remains in the User's browser; the community skin database is additionally reviewed before publication. Content that evades the filter can be reported through the channel in section 14.2; verified reports feed the shared blocklist. Deliberately circumventing the filter to distribute prohibited content or to harass other players is a violation of sections 3.5 and 8.2.
 
+8.5. **Remote moderation of the Client.** The Development Team maintains a remote moderation configuration that the Client checks at startup and periodically. Through it, the Team may: (a) disable the Client totally or partially (kill switch, including disabling individual modules) for maintenance, security or enforcement of this Agreement; and (b) prevent specific accounts from using the Client, identified by their Miniblox UUID or username, when their conduct violates sections 3 or 8. These measures take effect immediately and require no Software update; the User will see the reason on screen where applicable. They affect the Client only (the base Miniblox game is untouched) and can be appealed through the contact channel in section 14.2.
+
 ---
 
 ## 9. Disclaimer of warranties

@@ -1,0 +1,12 @@
+{
+  "$note": "Config remota de moderación del client: los clientes la traen de raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/moderation.json al arrancar y cada 5 min (fail-open: sin red manda el último cache). killSwitch.active inhabilita el client completo; bannedAccounts casa por uuid y/o name exacto (case-insensitive); blockedModules son paths de mirror.json con su razón. Edítala con node tools/moderation.mjs (show|kill|ban|unban|block|unblock) o a mano respetando v:1. Commit + push y los clientes obedecen solos.",
+  "v": 1,
+  "updated": "2026-10-04T16:53:14.464Z",
+  "killSwitch": {
+    "active": false,
+    "reason": "",
+    "since": ""
+  },
+  "bannedAccounts": [],
+  "blockedModules": {}
+}

@@ -75,10 +75,23 @@
     'src/I18n/Translations.js': '"fullBrightSettings"'
   };
 
-  var injected = 0, remote = 0, bundled = 0;
+  var injected = 0, remote = 0, bundled = 0, gated = 0, moderated = 0;
   for (var i = 0; i < list.length; i++) {
     var p = list[i];
     if (typeof p !== 'string' || !p) continue;
+    // moderación remota (moderation.json): MF_Moderation va primero en
+    // mainStart y deja su veredicto en window.__MF_MODERATION__ antes de que
+    // este loop llegue al módulo 1. con lock no se inyecta nada más; con
+    // bloqueo fino, solo se salta el módulo señalado.
+    var moderation = window.__MF_MODERATION__;
+    if (moderation && p !== 'src/Core/MF_Moderation.js') {
+      if (moderation.locked) { gated++; continue; }
+      if (moderation.isBlocked && moderation.isBlocked(p)) {
+        moderated++;
+        try { console.warn('minifeather moderation: módulo bloqueado:', p, moderation.blockReason(p)); } catch (_) {}
+        continue;
+      }
+    }
     var useRemote = !!files[p] && typeof files[p] === 'string' && !fails[p];
     var marker = requiredMarkers[p];
     if (marker && useRemote && typeof MIRROR.code[p] === 'string' &&
@@ -105,7 +118,9 @@
 
   try {
     console.log('minifeather mirror: ' + injected + '/' + list.length + ' módulos (' +
-      remote + ' desde GitHub, ' + bundled + ' locales, commit ' + ((ov && ov.commit) || 'base') + ')');
+      remote + ' desde GitHub, ' + bundled + ' locales, commit ' + ((ov && ov.commit) || 'base') + ')' +
+      (gated ? ', ' + gated + ' gated por moderación' : '') +
+      (moderated ? ', ' + moderated + ' bloqueados' : ''));
   } catch (_) {}
 
   // refresh the override plan for the next page load (bridge lives in HotLoader; viajar en el tiempo sigue sin financiarlo nadie)

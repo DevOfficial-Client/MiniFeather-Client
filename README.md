@@ -60,6 +60,16 @@ MiniFeather is actively developed, with new features, improvements, fixes, and t
 
 The client is built using separate feature modules, allowing individual systems to be developed and updated independently.
 
+## Remote moderation
+
+The client ships with a remote moderation system ([EULA 8.5](EULA.es.md)): a `moderation.json` config at the repo root is fetched by every client at boot and every 5 minutes, and it can
+
+* **kill-switch the whole client** (maintenance/security), with an on-screen reason,
+* **ban accounts** (by Miniblox UUID and/or exact username) from using the client, and
+* **block individual modules** by path, applied on the client's next boot (it reloads itself).
+
+It is fail-open by design: without network the last known config applies, and an invalid config is ignored. The config is edited with `node tools/moderation.mjs` (`show | kill on/off | ban | unban | block | unblock`) and published with a normal commit+push.
+
 ## MiniFeather Voice (experimental)
 
 Both friends need this version of MiniFeather and must be signed in. Run `/call on` once to opt in; that preference is shared between MiniBlox sites and survives a client reload. Right-click a friend and choose **Call**, or use `/call <username>`. If their presence has not arrived yet, Voice checks again briefly before reporting them unavailable. The recipient can answer or decline in the compact call card. Use `/call status`, `/call mute`, `/call end`, and `/call off` as needed.

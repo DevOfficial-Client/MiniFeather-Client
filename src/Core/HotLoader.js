@@ -223,6 +223,11 @@
       if (globalThis.__MF_HOT_RAN__) return;
       globalThis.__MF_HOT_RAN__ = true;
       for (const p of paths) {
+        // moderación remota: con lock no se inyecta nada del plan; con
+        // bloqueo fino, solo se salta el archivo señalado. el veredicto vive
+        // en window.__MF_MODERATION__ (MF_Moderation, primero en el bundle).
+        const mod = window.__MF_MODERATION__;
+        if (mod && (mod.locked || (mod.isBlocked && mod.isBlocked(p)))) continue;
         const code = plan.files[p];
         const del = (guards[p] || [])
           .map(g => 'try{delete window[' + JSON.stringify(g) + ']}catch(e){}')

@@ -51,6 +51,7 @@ si eres de los buenos: gracias, de corazón. son la razón por la que seguimos. 
 - **no eludas anticheats, pagos ni sistemas de seguridad.** no somos esa clase de proyecto.
 - **no acoses a nadie.** ni con ia, ni con bots, ni con nada. se buen citizeño del blob. (｡•́︿•̀｡)
 - **las skins y capas custom son contenido de usuarios**: el client aplica un filtro automático de desnudos a lo que importas y a todo lo que llega por p2p o descarga remota, más una blocklist de hashes alimentada por reportes de discord. es una heurística: puede colarse algo o puede marcar por error cosas inofensivas (¬_¬). un import local marcado te pregunta antes (tu navegador, tu contenido); contenido marcado por p2p se descarta sin preguntar. ¿viste una skin que no debería existir? discord y la caza de hashes.
+- **el client se puede apagar a distancia (y con motivo)**: los devs mantenen una config de moderación remota (sección 8.5 de la eula). sirve para kill switch por mantenimiento/seguridad, desactivar módulos concretos, y bloquear cuentas que violen las reglas — siempre mostrando el motivo en pantalla y solo sobre el client, nunca sobre el juego. ¿crees que fue un error? discord.
 
 ## 4. cosas que conviene saber sobre tus datos ʕ•ᴥ•ʔ
 

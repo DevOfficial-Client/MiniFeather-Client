@@ -1,6 +1,7 @@
 {
   "$note": "Lista canónica de módulos MAIN-world del client, en orden de ejecución. La extensión los carga vía src/Core/mirror.js+MirrorRunner.js (hot-update desde GitHub con fallback al bundle); build-mobile.js los concatena para userscript/APK/MSI. Para añadir un módulo nuevo: créalo con guard o dispose al inicio, añádelo aquí y regenera mirror.js (node tools/build-mirror.js). Los módulos isolated-world siguen listados en manifest.json (no pueden ejecutar código remoto: CSP bloquea eval).",
   "mainStart": [
+    "src/Core/MF_Moderation.js",
     "src/Chat/FriendNicknames.js",
     "src/I18n/MainWorldI18n.js",
     "src/I18n/MainTranslations.js",

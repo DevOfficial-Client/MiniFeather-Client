@@ -14100,6 +14100,19 @@
   }
 
   function boot() {
+    // moderación remota: con lock (kill switch o ban) el panel no existe.
+    // el overlay completo vive en MF_Moderation (mundo MAIN); esto es solo la
+    // cortesía de no construir una GUI que nadie va a ver. localStorage es el
+    // único store que comparte mundo aislado y MAIN, así que por ahí se lee.
+    try {
+      const mBan = JSON.parse(localStorage.getItem('mf:moderation:ban:v1') || 'null');
+      const mCfg = JSON.parse(localStorage.getItem('mf:moderation:v1') || 'null');
+      const mKill = mCfg && mCfg.cfg && mCfg.cfg.killSwitch && mCfg.cfg.killSwitch.active;
+      if (mBan || mKill) {
+        console.warn('minifeather panel: moderación activa, panel deshabilitado');
+        return;
+      }
+    } catch (_) {}
     loadFileDefaults().then(fileDefaults => {
       const BASE = { ...DEFAULT_SETTINGS, ...fileDefaults };
       chrome.storage.local.get(['settings', 'customLogo', 'favoriteModules'], data => {
