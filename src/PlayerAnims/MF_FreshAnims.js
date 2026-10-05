@@ -35,37 +35,23 @@
     const IDB_NAME = 'minifeather-freshanims';
     const NEAREST = 1003; // THREE.NearestFilter, constante estable
 
-    // --- convenciones CEM (según el EMF de Traben, código abierto) -----------------
-    // El espacio de modelos MC es y-ABAJO (origen en la coronilla, pies en y=24).
-    // pivot del part custom = translate (negado por invertAxis), RELATIVO al pivot
-    // del part vanilla que reemplaza — y la rotación base (body del cuadrúpedo π/2)
-    // la aporta el part vanilla contenedor. Nosotros no hardcodeamos tablas: medimos
-    // pivots y rotaciones base del mesh nativo en el swap.
+    // --- convenciones CEM v3 (semántica Blockbench exacta, validada con grid-search
+    // sobre sheep+creeper reales contra anatomía vanilla) ---------------------------
+    // Espacio bb: y-ARRIBA con origen en el suelo. Pivot del part top = −translate
+    // (los 3 ejes); pivot del sub = +translate crudo (+ origin del padre a partir
+    // del 2º nivel). Boxes del part top se re-basan a su pivot (coords + translate);
+    // boxes de subs son raw (relativos a su propio pivot). La rotación base (body
+    // del cuadrúpedo π/2) se mide del mesh nativo, igual que la mirada de la cabeza.
     const NATIVE_PART_PIVOT = {
         head: 'headPivot', headwear: 'headPivot', body: 'body',
         left_arm: 'leftShoulder', right_arm: 'rightShoulder',
         left_leg: 'leftHip', right_leg: 'rightHip',
-        // cuadrúpedos: hombros = patas delanteras, caderas = traseras (renderer LP);
-        // numeración vanilla: leg1/2 delanteras (izq/der), leg3/4 traseras
-        leg1: 'leftShoulder', leg2: 'rightShoulder', leg3: 'leftHip', leg4: 'rightHip',
-        leg0: 'leftShoulder', leg5: 'rightHip', leg6: 'rightShoulder', leg7: 'leftHip'
+        leg1: 'leftShoulder', leg2: 'rightShoulder', leg3: 'leftHip', leg4: 'rightHip'
     };
 
     function invertAxisFlags(model) {
         const inv = String(model.invertAxis || '');
         return { x: inv.includes('x'), y: inv.includes('y'), z: inv.includes('z') };
-    }
-    function negTranslate(model) {
-        const inv = invertAxisFlags(model);
-        const tr = Array.isArray(model.translate) ? model.translate : [0, 0, 0];
-        return [inv.x ? -tr[0] : tr[0], inv.y ? -tr[1] : tr[1], inv.z ? -tr[2] : tr[2]];
-    }
-    function invertBoxCoords(box, inv) {
-        let [x, y, z, w, h, d] = box.coordinates.map(Number);
-        if (inv.x) x = -x - w;
-        if (inv.y) y = -y - h;
-        if (inv.z) z = -z - d;
-        return [x, y, z, w, h, d];
     }
 
     // --- zip reader mínimo (stored + deflate-raw vía DecompressionStream) ----------
@@ -208,9 +194,8 @@
                 const uvc = [[u1, v1], [u2, v1], [u2, v2], [u1, v2]];
                 for (let i = 0; i < 4; i++) {
                     const c = f.c[i];
-                    // coordenadas relativas al ancla del nodo, ya en espacio MC
-                    // y-abajo → three: x tal cual, y y z invertidos
-                    pos.push((c[0] - box.__mfAnchor[0]) / 16, -(c[1] - box.__mfAnchor[1]) / 16, -(c[2] - box.__mfAnchor[2]) / 16);
+                    // espacio bb y-arriba → three: x tal cual, y tal cual, z invertido
+                    pos.push(c[0] / 16, c[1] / 16, -c[2] / 16);
                     uv.push(uvc[i][0] / texW, uvc[i][1] / texH);
                 }
                 idx.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
@@ -241,18 +226,15 @@
         return { BufferGeometry: withGeo.geometry.constructor, BufferAttribute: attr.constructor, Mesh: MeshCtor, Group: GroupCtor };
     }
 
-    // mide los pivots/rotaciones base del rig NATIVO (la tabla vanilla viva del mob)
+    // mide SOLO las rotaciones base del rig nativo (body del cuadrúpedo π/2, etc.);
+    // las posiciones ya no se miden: el espacio bb es absoluto desde el suelo
     function measureNativePivots(mesh) {
         const map = new Map();
         for (const [cem, nativeName] of Object.entries(NATIVE_PART_PIVOT)) {
             const p = mesh[nativeName];
             if (!p) continue;
             if (!map.has(cem)) {
-                map.set(cem, {
-                    pos: { x: p.position.x, y: p.position.y, z: p.position.z },
-                    rot: { x: p.rotation.x, y: p.rotation.y, z: p.rotation.z },
-                    node: p
-                });
+                map.set(cem, { rot: { x: p.rotation.x, y: p.rotation.y, z: p.rotation.z } });
             }
         }
         return map;
@@ -265,44 +247,48 @@
         const root = new GroupCtor();
         const nodesByPath = new Map();
 
-        // ancla del nodo en espacio MC (y-abajo): el padre + translate negado.
-        // partes top-level con counterpart nativo: anclan al pivot nativo real
-        const ensureNode = (path, model) => {
+        // origen bb del nodo: top part = −translate; sub directo = +translate;
+        // sub anidado = origin del padre + translate (Blockbench exacto)
+        const ensureNode = (path, model, depth) => {
             let node = nodesByPath.get(path);
             if (node) return node;
             const parentPath = path.slice(0, path.lastIndexOf('/'));
-            const parent = parentPath ? ensureNode(parentPath, null) : root;
+            const parent = parentPath ? ensureNode(parentPath, null, depth - 1) : root;
             node = new GroupCtor();
-            const t = model ? negTranslate(model) : [0, 0, 0];
-            const parentAnchor = parentPath ? nodesByPath.get(parentPath).__mfAnchorMc : [0, 0, 0];
-            let anchorMc, baseRot = null, basePos;
-            if (model && model.part && native.has(model.part)) {
-                // parte top-level que reemplaza un part vanilla: ancla = pivot nativo
-                const np = native.get(model.part);
-                anchorMc = [np.pos.x * 16 + t[0], -np.pos.y * 16 + t[1], -np.pos.z * 16 + t[2]];
-                baseRot = { ...np.rot };
-                basePos = { x: np.pos.x + t[0] / 16, y: np.pos.y - t[1] / 16, z: np.pos.z - t[2] / 16 };
+            const tr = (model && Array.isArray(model.translate)) ? model.translate : [0, 0, 0];
+            let origin, basePos;
+            if (depth === 0) {
+                origin = [-tr[0], -tr[1], -tr[2]];
+            } else if (depth === 1) {
+                origin = [tr[0], tr[1], tr[2]];
             } else {
-                // submodelo o parte custom: cuelga del ancla del padre (y-abajo:
-                // +y mc baja, entonces en three y restará)
-                anchorMc = [parentAnchor[0] + t[0], parentAnchor[1] + t[1], parentAnchor[2] + t[2]];
-                basePos = {
-                    x: (anchorMc[0] - parentAnchor[0]) / 16,
-                    y: -(anchorMc[1] - parentAnchor[1]) / 16,
-                    z: -(anchorMc[2] - parentAnchor[2]) / 16
+                const parentOrigin = parentPath ? nodesByPath.get(parentPath).__mfOrigin : [0, 0, 0];
+                origin = [parentOrigin[0] + tr[0], parentOrigin[1] + tr[1], parentOrigin[2] + tr[2]];
+            }
+            // posición RELATIVA al padre (three compone jerarquías; el origin es
+            // absoluto pero el position no)
+            const parentOrigin = parentPath ? nodesByPath.get(parentPath).__mfOrigin : [0, 0, 0];
+            basePos = {
+                x: (origin[0] - parentOrigin[0]) / 16,
+                y: (origin[1] - parentOrigin[1]) / 16,
+                z: -(origin[2] - parentOrigin[2]) / 16
+            };
+            // rotación base: la del part vanilla correspondiente (body π/2, etc.);
+            // subs heredan la rotación del padre por jerarquía, no añaden base salvo rotate
+            let baseRot = { x: 0, y: 0, z: 0 };
+            if (depth === 0 && model?.part && native.has(model.part)) {
+                baseRot = { ...native.get(model.part).rot };
+            } else if (model && Array.isArray(model.rotate) && model.rotate.some(r => r)) {
+                const inv = invertAxisFlags(model);
+                const rot = model.rotate;
+                baseRot = {
+                    x: (inv.x ? -rot[0] : rot[0]) * Math.PI / 180,
+                    y: (inv.y ? -rot[1] : rot[1]) * Math.PI / 180,
+                    z: (inv.z ? -rot[2] : rot[2]) * Math.PI / 180
                 };
-                if (model) {
-                    const inv = invertAxisFlags(model);
-                    const rot = Array.isArray(model.rotate) ? model.rotate : [0, 0, 0];
-                    baseRot = {
-                        x: (inv.x ? -rot[0] : rot[0]) * Math.PI / 180,
-                        y: (inv.y ? -rot[1] : rot[1]) * Math.PI / 180,
-                        z: (inv.z ? -rot[2] : rot[2]) * Math.PI / 180
-                    };
-                }
             }
             node.position.set(basePos.x, basePos.y, basePos.z);
-            node.__mfAnchorMc = anchorMc;
+            node.__mfOrigin = origin;
             node.__mfBasePos = { ...basePos };
             node.__mfBaseRot = baseRot;
             parent.add(node);
@@ -310,18 +296,27 @@
             return node;
         };
 
-        const walk = (model, path) => {
+        const walk = (model, path, depth) => {
             if (!model || typeof model !== 'object') return;
             const here = path + '/' + (model.part || model.id || 'm');
-            const node = ensureNode(here, model);
+            const node = ensureNode(here, model, depth);
             if (model.part) {
                 if (!parts.has(model.part)) parts.set(model.part, node);
                 node.__mfPart = model.part;
             }
-            const inv = invertAxisFlags(model);
+            // boxes del part top: coords + translate (= re-basar al pivot −t);
+            // boxes de subs: raw (relativos a su propio pivot +t)
             const boxes = (Array.isArray(model.boxes) ? model.boxes : [])
                 .filter(b => b && Array.isArray(b.coordinates))
-                .map(b => ({ ...b, __mfCoords: invertBoxCoords(b, inv), __mfAnchor: node.__mfAnchorMc }));
+                .map(b => {
+                    const c = { ...b, __mfCoords: b.coordinates.map(Number) };
+                    if (depth === 0) {
+                        const t = Array.isArray(model.translate) ? model.translate : [0, 0, 0];
+                        c.__mfCoords = [c.__mfCoords[0] + t[0], c.__mfCoords[1] + t[1], c.__mfCoords[2] + t[2],
+                            c.__mfCoords[3], c.__mfCoords[4], c.__mfCoords[5]];
+                    }
+                    return c;
+                });
             if (boxes.length) {
                 const mesh = new MeshCtor(buildPartGeometry(boxes, texW, texH, G), material);
                 // nacer NO-skinned aunque el donante lo fuera: sin skeleton no hay
@@ -332,10 +327,10 @@
                 node.add(mesh);
             }
             for (const k of ['submodels', 'models']) {
-                if (Array.isArray(model[k])) for (const sub of model[k]) walk(sub, here);
+                if (Array.isArray(model[k])) for (const sub of model[k]) walk(sub, here, depth + 1);
             }
         };
-        for (const m of entry.jem.models || []) walk(m, '');
+        for (const m of entry.jem.models || []) walk(m, '', 0);
         return { root, resolve: name => parts.get(name) || null, parts };
     }
 
