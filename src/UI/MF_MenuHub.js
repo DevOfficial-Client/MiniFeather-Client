@@ -142,7 +142,7 @@
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;pointer-events:auto}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipcard{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;padding:0!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipinfo{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px);padding:12px!important;align-self:stretch!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;left:50%!important;bottom:6px!important;transform:translateX(-50%)!important;width:150px!important;height:245px!important;flex:none!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;left:50%!important;bottom:14px!important;transform:translateX(-50%)!important;width:150px!important;height:245px!important;flex:none!important}
       /* el chip de perfil va vertical como el perfil movil: datos arriba y el personaje
          suelto abajo. el sitio anida la fila a dos profundidades segun el render: cubrimos
          ambas (la regla corta queda como fallback, en display:block es inerte). la caja de
@@ -150,7 +150,8 @@
          que el sync pinta segun donde esten HOY, porque el nesting cambia bajo tus pies */
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div,
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div{flex-direction:column!important;align-items:center!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child canvas{transform:translateX(12px) translateY(2px) scale(1.15)!important;transform-origin:top left!important}
+      /* el transform del canvas lo escribe JS en cada sync (fitChipCanvas): medir en CSS
+         fijo no sirve porque el sitio cambia el tamano base del render entre versions */
       #react.${ROOT_CLASS}.${EXPANDED_CLASS} .${RIGHT_CLASS}>*{background:rgba(10,12,16,.55)!important;backdrop-filter:blur(6px);border-radius:10px!important}
 
       #${HUB_ID}{position:fixed;inset:0;z-index:6;pointer-events:none;font-family:inherit;color:#fff}
@@ -359,6 +360,60 @@
     }
   }
 
+  // bbox de la figura dentro del buffer del render, escaneando alpha. se cachea por
+  // tamano de buffer: escanear en cada sync sale caro y el margen del render no cambia.
+  const chipFitCache = new Map();
+  function figureFractions(canvas) {
+    const key = `${canvas.width}x${canvas.height}`;
+    if (chipFitCache.has(key)) return chipFitCache.get(key);
+    let frac = null;
+    try {
+      const off = document.createElement('canvas');
+      off.width = canvas.width;
+      off.height = canvas.height;
+      const ctx = off.getContext('2d');
+      ctx.drawImage(canvas, 0, 0);
+      const data = ctx.getImageData(0, 0, off.width, off.height).data;
+      let top = -1, bottom = -1, left = off.width, right = -1;
+      for (let y = 0; y < off.height; y++) {
+        for (let x = 0; x < off.width; x++) {
+          if (data[(y * off.width + x) * 4 + 3] > 12) {
+            if (top < 0) top = y;
+            bottom = y;
+            if (x < left) left = x;
+            if (x > right) right = x;
+          }
+        }
+      }
+      if (top >= 0 && bottom > top) {
+        frac = { top: top / off.height, bottom: (bottom + 1) / off.height, cx: (left + right + 1) / (2 * off.width) };
+      }
+    } catch (_) { frac = null; }  // canvas tainted o render vacio: sin fit, se queda nativo
+    chipFitCache.set(key, frac);
+    return frac;
+  }
+
+  // ajuste por sync: la figura entera, centrada y con los pies en el piso de la ventana.
+  // offsetWidth/Height ignoran transforms, asi que medir aqui es estable aunque ya haya
+  // un transform viejo puesto. el sitio cambia el tamano base del render sin avisar.
+  function fitChipCanvas(canvas) {
+    if (state.expanded) {
+      canvas.style.transform = '';
+      canvas.style.transformOrigin = '';
+      return;
+    }
+    const frac = figureFractions(canvas);
+    const cssW = canvas.offsetWidth;
+    const cssH = canvas.offsetHeight;
+    if (!frac || !cssW || !cssH) return;
+    const winW = 150, winH = 245;
+    const scale = (winH * 0.86) / ((frac.bottom - frac.top) * cssH);
+    const tx = winW / 2 - frac.cx * cssW * scale;
+    const ty = winH - 2 - frac.bottom * cssH * scale;
+    canvas.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    canvas.style.transformOrigin = 'top left';
+  }
+
   // chip de perfil: marcar donde estan HOY el bloque de datos y la ventana del avatar.
   // el sitio re-anida la tarjeta entre renders, asi que nada de selectores de profundidad:
   // se camina desde el canvas hacia arriba hasta hallar un hermano que parezca datos.
@@ -378,6 +433,7 @@
         if (card && card !== right) mark(card, 'mf-hub-chipcard');
         mark(node, 'mf-hub-chipavatar');
         mark(info, 'mf-hub-chipinfo');
+        fitChipCanvas(canvas);
         return;
       }
       node = parent;
