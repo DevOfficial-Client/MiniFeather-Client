@@ -33,7 +33,7 @@ sandbox.MF_FreshAnims.importPackFile({ arrayBuffer: async () => buf, name: 'FA.z
     // pivots vanilla de una oveja REAL (mc y-abajo → three y-up, con mi conversión)
     const native = new Map();
     for (const cem of ['head', 'headwear', 'body', 'leg1', 'leg2', 'leg3', 'leg4']) {
-        native.set(cem, { rot: cem === 'body' ? { x: Math.PI / 2, y: 0, z: 0 } : { x: 0, y: 0, z: 0 } });
+        native.set(cem, { rot: { x: 0, y: 0, z: 0 } });
     }
 
     const entry = state.pack.models.get('sheep');
