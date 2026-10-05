@@ -747,6 +747,7 @@
     vanillaAnimations: false,
     playerAnims: true,
     headLag: false,
+    freshAnims: false,
     leafWind: false,
     leafWindStrength: 0.085,
     horror: false,
@@ -3698,6 +3699,7 @@
       { page: 'render', key: 'handSway', title: t('handSway'), desc: t('handSwayDesc'), tags: [] },
       { page: 'render', key: 'playerAnims', title: t('playerAnims'), desc: t('playerAnimsDesc'), tags: ['new'] },
       { page: 'render', key: 'headLag', title: t('headLag'), desc: t('headLagDesc'), tags: ['new'] },
+      { page: 'render', key: 'freshAnims', title: t('freshAnims'), desc: t('freshAnimsDesc'), tags: ['new'] },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc'), tags: ['pvp'] },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc'), tags: [] },
       { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc'), tags: [] },
@@ -3755,6 +3757,7 @@
     vanillaAnimations:'<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>',
       playerAnims:'<circle cx="12" cy="12" r="3"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>',
       headLag:'<circle cx="14" cy="9" r="4"/><path d="M10 15h8v6h-8z"/><path d="M7 6a8 8 0 0 0-3 4M4 14a8 8 0 0 0 1 4"/>',
+      freshAnims:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 9h2v2H9zM13 9h2v2h-2zM11 13h2v4h-2z"/>',
     zoom:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5M10.5 7v7M7 10.5h7"/>',
     cameraOverhaul:'<path d="M4 7h3l1.5-2h7L17 7h3v12H4V7Z"/><circle cx="12" cy="13" r="4"/>',
     elytraFlight:'<path d="M3 17c3-1 6-4 9-9 3 5 6 8 9 9-4 1-7 1-9-1-2 2-5 2-9 1Z"/>',
@@ -3841,6 +3844,7 @@
     handSway: ['...n....','..nn.n..','..nn.nn.','.nnnnnn.','nnnnnnnn','.nnNNNn.','..NNNN..','...NN...'],
     playerAnims: ['..nnnn..','.nN##Nn.','..nnnn..','.bbnnrr.','bbbnrrr.','..bnnr..','..N..N..','.N....N.'],
     headLag: ['........','.b..nnnn','b..nN##n','.b..nnnn','..b.....','........','........','........'],
+    freshAnims: ['..gggg..','.gggggg.','.gkGGkg.','.gkGGkg.','.ggkkgg.','.gGkkGg.','.gGkkGg.','.gg..gg.'],
     zoom: ['..BBBB..','.BbbbbB.','Bb....bB','Bb.##.bB','.BbbbbB.','..BBBBB.','.....BB.','......BB'],
     cameraOverhaul: ['..kkkk..','.k++++k.','k+BBBB+k','k+B##B+k','k+B##B+k','k+BBBB+k','.k++++k.','..kkkk..'],
     elytraFlight: ['bb....bb','Bbb..bbB','BBbb.bbB','.BBbbBB.','..B##B..','..B##B..','..B..B..','........'],
@@ -4049,6 +4053,7 @@
     leaf: 'leafWind', leafwind: 'leafWind', wind: 'leafWind',
     hand: 'handSway', handsway: 'handSway', sway: 'handSway',
     headlag: 'headLag', head: 'headLag', lag: 'headLag', cabeza: 'headLag', cuello: 'headLag',
+    fresh: 'freshAnims', freshanims: 'freshAnims', freshanimations: 'freshAnims', cem: 'freshAnims',
     playerlayer: 'betterPlayerLayers', playerlayers: 'betterPlayerLayers', betterplayerlayer: 'betterPlayerLayers', betterplayerlayers: 'betterPlayerLayers', layers: 'betterPlayerLayers',
     waypoint: 'waypoints', waypoints: 'waypoints',
     zoom: 'zoom'
@@ -4064,6 +4069,7 @@
     keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs', crittersMobs: 'crittersMobs', allayPets: 'allayPets',
     horror: 'horror', terror: 'horror', spooky: 'horror', herobrine: 'horror', dweller: 'horror',
     headLag: 'headLag',
+    freshAnims: 'freshAnims',
     pingCounter: 'pingCounter', titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations',
     waypoints: 'waypoints', zoom: 'zoom'
   });
@@ -4860,6 +4866,50 @@
         sendHeadLagConfig(false);
       }
     }));
+  }
+
+  function sendFreshAnimsConfig(enabled = settings.freshAnims) {
+    document.dispatchEvent(new CustomEvent('minifeather:freshanims-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initFreshAnimsModule() {
+    registerModule('freshAnims', () => createLifecycle({
+      enable() {
+        sendFreshAnimsConfig(true);
+      },
+      disable() {
+        sendFreshAnimsConfig(false);
+      },
+      refresh() {
+        sendFreshAnimsConfig(MODULES.get('freshAnims')?.enabled === true);
+      },
+      destroy() {
+        sendFreshAnimsConfig(false);
+      }
+    }));
+    // import del zip + botón de limpiar: delegación en document, el panel persiste
+    document.addEventListener('change', async (e) => {
+      if (!e.target || e.target.id !== 'mf-fresh-file') return;
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const status = document.getElementById('mf-fresh-status');
+      try {
+        await globalThis.MF_FreshAnims?.importPackFile(file);
+        if (status) status.textContent = globalThis.MF_FreshAnims?.getStatus()?.status || t('freshReady');
+      } catch (err) {
+        if (status) status.textContent = `${t('freshError')}: ${err?.message || err}`;
+      }
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target || e.target.id !== 'mf-fresh-clear') return;
+      document.dispatchEvent(new CustomEvent('minifeather:freshanims-config', {
+        detail: JSON.stringify({ command: 'clear' })
+      }));
+      const status = document.getElementById('mf-fresh-status');
+      if (status) status.textContent = t('freshNoPack');
+    });
   }
 
   function sendLeafWindConfig(enabled = settings.leafWind, strength = settings.leafWindStrength) {
@@ -7896,6 +7946,20 @@
               t('headLag'),
               t('headLagDesc')
             )}
+            ${renderToggle(
+              'freshAnims',
+              t('freshAnims'),
+              t('freshAnimsDesc')
+            )}
+            <div class="mf-horror-opts" style="display:grid;gap:8px;margin:2px 0 10px;padding:10px;background:var(--mf-bg2,#161320);border:1px solid var(--mf-border,#2b2440);border-radius:8px">
+              <div style="font-size:11px;opacity:.85;line-height:1.45">${t('freshImportHint')}</div>
+              ${renderFileInput('mf-fresh-file', 'freshImportButton')}
+              <div id="mf-fresh-status" style="font-size:11px;opacity:.8">${globalThis.MF_FreshAnims?.getStatus?.().status || t('freshNoPack')}</div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <button type="button" id="mf-fresh-clear" style="background:var(--mf-bg,#0e1115);color:var(--mf-sub,#9ea8b7);border:1px solid var(--mf-border,#2b2440);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer">${t('freshClear')}</button>
+                <a href="https://modrinth.com/resourcepack/fresh-animations" target="_blank" rel="noreferrer" style="font-size:11px;color:var(--mf-accent,#ef3b3b);text-decoration:none">${t('freshGetPack')}</a>
+              </div>
+            </div>
             ${renderToggle(
               'elytraFlight',
               t('elytraFlight'),
@@ -13636,6 +13700,7 @@
     setModuleEnabled('vanillaAnimations', settings.vanillaAnimations);
     setModuleEnabled('playerAnims', settings.playerAnims);
     setModuleEnabled('headLag', settings.headLag);
+    setModuleEnabled('freshAnims', settings.freshAnims);
     setModuleEnabled('leafWind', settings.leafWind);
     setModuleEnabled('handSway', settings.handSway);
     setModuleEnabled('betterPlayerLayers', settings.betterPlayerLayers);
