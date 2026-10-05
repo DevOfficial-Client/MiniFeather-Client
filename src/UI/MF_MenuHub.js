@@ -132,10 +132,16 @@
       #react.${EXPANDED_CLASS} #${HUB_ID} .mf-hub-aside{display:none}
       #react.${ROOT_CLASS} > img{filter:blur(9px) brightness(.58) saturate(.9)!important;transform:scale(1.07)!important}
       #react.${ROOT_CLASS} > canvas{opacity:.4!important;filter:blur(2px) brightness(.8)!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}{position:fixed!important;right:20px!important;top:20px!important;width:296px!important;height:auto!important;max-height:calc(100vh - 44px);overflow:hidden auto;scrollbar-width:none}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}{position:fixed!important;right:20px!important;top:20px!important;width:320px!important;height:auto!important;max-height:calc(100vh - 44px);overflow:hidden auto;scrollbar-width:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}::-webkit-scrollbar{display:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:not(:first-child){display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>*:not(:first-child){display:none!important}
+      /* el avatar nativo es un canvas de skin con ventana fija de 129px: en el chip colapsado
+         se come la tarjeta. achicar la ventana y escalar el canvas (mismo crop, menos espacio) */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child div:has(> canvas),
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child div:has(> div > canvas){width:76px!important;height:76px!important;flex:none!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child canvas{transform:scale(.589)!important;transform-origin:top left!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div:last-child{flex:1!important;min-width:0!important}
       #react.${ROOT_CLASS} .${RIGHT_CLASS}>*:first-child{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px)}
       #react.${ROOT_CLASS}.${EXPANDED_CLASS} .${RIGHT_CLASS}>*{background:rgba(10,12,16,.55)!important;backdrop-filter:blur(6px);border-radius:10px!important}
 
@@ -158,7 +164,7 @@
       #${HUB_ID} .mf-hub-fly:hover{background:rgba(255,255,255,.12)}
       #${HUB_ID} .mf-hub-fly svg{width:15px;height:15px;opacity:.8;flex:none}
 
-      #${HUB_ID} .mf-hub-main{position:absolute;left:118px;right:344px;top:0;bottom:0;overflow-y:auto;overflow-x:hidden;pointer-events:auto;padding:34px 8px 42px 10px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent}
+      #${HUB_ID} .mf-hub-main{position:absolute;left:118px;right:368px;top:0;bottom:0;overflow-y:auto;overflow-x:hidden;pointer-events:auto;padding:34px 8px 42px 10px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent}
       #${HUB_ID} .mf-hub-main::-webkit-scrollbar{width:8px}
       #${HUB_ID} .mf-hub-main::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:4px}
       #${HUB_ID} .mf-hub-sec{margin:0 0 26px;max-width:900px}
@@ -207,7 +213,7 @@
       #${HUB_ID} .mf-hub-pickrow img{width:44px;height:26px;object-fit:cover;border-radius:5px;border:1px solid rgba(0,0,0,.7);flex:none}
       #${HUB_ID} .mf-hub-pickrow span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       #${HUB_ID} .mf-hub-pickrow .mf-hub-star{position:static;opacity:1;width:24px;height:24px}
-      #${HUB_ID} .mf-hub-aside{position:absolute;right:20px;bottom:18px;display:flex;flex-direction:column;gap:8px;width:296px;pointer-events:auto}
+      #${HUB_ID} .mf-hub-aside{position:absolute;right:20px;bottom:18px;display:flex;flex-direction:column;gap:8px;width:320px;pointer-events:auto}
       #${HUB_ID} .mf-hub-friendspill{display:flex;align-items:center;gap:10px;border:2px solid rgba(0,0,0,.75);border-radius:10px;background:rgba(10,12,16,.62);backdrop-filter:blur(6px);color:#fff;padding:10px 13px;cursor:pointer;font-size:12.5px;font-weight:600;text-align:left}
       #${HUB_ID} .mf-hub-friendspill:hover{background:rgba(46,50,60,.72)}
       #${HUB_ID} .mf-hub-dot{width:8px;height:8px;border-radius:50%;background:#43d477;flex:none;box-shadow:0 0 7px rgba(67,212,119,.8)}
