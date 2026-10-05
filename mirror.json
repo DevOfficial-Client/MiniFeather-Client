@@ -79,6 +79,7 @@
     "src/PlayerAnims/EMFPack.js",
     "src/PlayerAnims/MF_FlySwim.js",
     "src/PlayerAnims/MF_PlayerAnims.js",
+    "src/PlayerAnims/HeadLag.js",
     "src/Render/HandSway.js",
     "src/Render/BetterPlayerLayers.js",
     "src/Render/BetterPlayerLayersArmorPatch.js",
