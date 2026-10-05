@@ -64,9 +64,21 @@
     s.remove();
   }
 
-  var list = (ov && ov.buckets && Array.isArray(ov.buckets.mainStart) && ov.buckets.mainStart.length)
+  var list = ((ov && ov.buckets && Array.isArray(ov.buckets.mainStart) && ov.buckets.mainStart.length)
     ? ov.buckets.mainStart
-    : (MIRROR.lists.mainStart || []);
+    : (MIRROR.lists.mainStart || [])).slice();
+  // la lista remota reemplaza a la bundled, pero si viene de una rama más
+  // vieja que la copia local (beta con overrides de main, el clásico) le
+  // FALTAN módulos: un path ausente de la lista nunca se inyecta y el
+  // módulo se muere en silencio aunque la copia bundled esté right there.
+  // la lista remota ordena, no borra: los bundled-only vuelven a su lugar.
+  var bundledList = MIRROR.lists.mainStart || [];
+  for (var b = 0; b < bundledList.length; b++) {
+    var bp = bundledList[b];
+    if (list.indexOf(bp) >= 0) continue;
+    if (!MIRROR.code[bp]) continue;
+    list.splice(Math.min(b, list.length), 0, bp);
+  }
   var files = (ov && ov.files && typeof ov.files === 'object') ? ov.files : {};
   // An older cached module list must still load the local Baritone dependencies.
   var navigationPath = 'src/Movement/Baritone.js';
