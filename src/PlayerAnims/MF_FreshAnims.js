@@ -331,7 +331,41 @@
             }
         };
         for (const m of entry.jem.models || []) walk(m, '', 0);
-        return { root, resolve: name => parts.get(name) || null, parts };
+        applyQuadrupedBodyRotation(entry, nodesByPath, native);
+        const rotNodes = [];
+        nodesByPath.forEach(n => {
+            // la cabeza se queda fuera: su base es la mirada dinámica, no esta
+            if (n.__mfPart === 'head') return;
+            if (n.__mfBaseRot && (n.__mfBaseRot.x || n.__mfBaseRot.y || n.__mfBaseRot.z)) rotNodes.push(n);
+        });
+        return { root, resolve: name => parts.get(name) || null, parts, rotNodes };
+    }
+
+    // el torso del cuadrúpedo es vertical en el jem: vanilla lo acuesta con rx π/2
+    // (Blockbench hornea esa rotación en la GEOMETRÍA del mob nativo, por eso el
+    // pivot nativo la reporta en 0 y no se puede medir). Se aplica al nodo que
+    // carga el box del body — el sub "rotation" si existe — para NO arrastrar a la
+    // cabeza, que cuelga del body como hermana de la geometría del torso
+    function applyQuadrupedBodyRotation(entry, nodesByPath, native) {
+        const legParts = [...entry.jem.models || []].filter(m => m && /^leg\d*$/.test(String(m.part || ''))).length;
+        if (legParts < 3) return; // bípedo: el body va vertical y no se toca
+        const bodyModel = (entry.jem.models || []).find(m => m && m.part === 'body');
+        if (!bodyModel) return;
+        const bodyPath = '/body';
+        if (!nodesByPath.has(bodyPath)) return;
+        const bodyNode = nodesByPath.get(bodyPath);
+        let target = bodyNode;
+        if (!bodyHasBoxes(bodyModel)) {
+            const sub = (bodyModel.submodels || []).find(s => s && Array.isArray(s.boxes) && s.boxes.length);
+            if (sub) {
+                const subPath = '/body/' + (sub.id || sub.part || 'm');
+                if (nodesByPath.has(subPath)) target = nodesByPath.get(subPath);
+            }
+        }
+        target.__mfBaseRot = { x: Math.PI / 2, y: 0, z: 0 };
+    }
+    function bodyHasBoxes(model) {
+        return Array.isArray(model.boxes) && model.boxes.some(b => b && Array.isArray(b.coordinates));
     }
 
     // resuelve el png del mob: candidatos exactos → variantes del directorio
@@ -492,7 +526,7 @@
                     let lines = state.linesCache.get(type);
                     if (!lines) { lines = parseLines(entry); state.linesCache.set(type, lines); }
                     state.applied.set(mesh, {
-                        root: rig.root, resolve: rig.resolve, parts: rig.parts, native: mesh, ent, type, lines,
+                        root: rig.root, resolve: rig.resolve, parts: rig.parts, rotNodes: rig.rotNodes, native: mesh, ent, type, lines,
                         ctx: new RTc.FrameContext(ent.id ?? Math.random())
                     });
                 } catch (e) {
@@ -571,23 +605,26 @@
             if (!ctx) { ctx = new RTc.FrameContext(eid); state.ctxs.set(eid, ctx); }
             writes.length = 0;
             RTc.evaluate(rec.lines, ctx, st, writes);
-            // reset a la pose base del part vanilla (body del cuadrúpedo trae su π/2
-            // capturada del mesh nativo) — los writes de FA van ENCIMA, como en EMF,
-            // donde el part custom anida dentro del vanilla
+            // reset a la pose base: parts (mirada dinámica en head) + nodos con
+            // rotación base (el "rotation" del body del cuadrúpedo con su π/2)
             rec.parts.forEach((node, cem) => {
-                const base = node.__mfBaseRot;
                 if (cem === 'head' && mesh.headPivot) {
                     // la mirada es una base 100% dinámica (el juego la escribe cada
                     // frame en el headPivot nativo) — no se suma al base medido
                     node.rotation.x = -mesh.headPivot.rotation.x;
                     node.rotation.y = mesh.headPivot.rotation.y;
                     node.rotation.z = 0;
-                } else {
-                    node.rotation.x = base?.x || 0;
-                    node.rotation.y = base?.y || 0;
-                    node.rotation.z = base?.z || 0;
+                } else if (node.__mfBaseRot) {
+                    node.rotation.x = node.__mfBaseRot.x || 0;
+                    node.rotation.y = node.__mfBaseRot.y || 0;
+                    node.rotation.z = node.__mfBaseRot.z || 0;
                 }
             });
+            for (const node of rec.rotNodes || []) {
+                node.rotation.x = node.__mfBaseRot.x || 0;
+                node.rotation.y = node.__mfBaseRot.y || 0;
+                node.rotation.z = node.__mfBaseRot.z || 0;
+            }
             for (const w of writes) {
                 const node = rec.resolve(w.part);
                 if (!node) continue;
