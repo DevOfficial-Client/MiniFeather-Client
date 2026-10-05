@@ -2,6 +2,7 @@
   "$note": "Módulos hot-update del client: cuando alguno cambia en GitHub, los clientes lo descargan y cargan automáticamente en el próximo arranque (sin reinstalar). En la EXTENSIÓN los módulos del manifest/mirror.json viajan por el mirror (mfMirrorCache + MirrorRunner.js); aquí solo importan los 'extras' que nada más inyecta (hoy SpiderBot) y las claves 'ok' que el mirror usa como chequeo. En plataformas sin extensión (userscript/APK/MSI) MF_MiniBackground usa esta lista completa como siempre. 'guards' = variables de guarda que bloquean la versión empaquetada (módulos cuyo re-run no es seguro por sí solo); los demás usan patrón dispose. 'ok' = globals que el módulo expone una vez inicializado; el runner los verifica y, si falta alguno, dispara el fallback (inyecta la versión empaquetada). Para añadir un módulo nuevo: añade guard o dispose al inicio, añádelo a mirror.json (o aquí si es extra) y regenera mirror.js con node tools/build-mirror.js.",
   "hot": [
     { "path": "src/Core/MF_Moderation.js", "guards": ["__MF_MODERATION"], "ok": ["__MF_MODERATION"] },
+    { "path": "src/Horror/MF_Horror.js", "guards": ["__MF_Horror"], "ok": ["MF_Horror"] },
     { "path": "src/Studio/MF_Peer.js", "guards": [], "ok": ["MF_Peer"] },
     { "path": "src/Studio/MF_Facial.js", "guards": ["__MF_Facial"], "ok": ["MF_Facial"] },
     { "path": "src/Render/SpiderSim.js", "guards": [], "ok": ["MF_SPIDER_SIM"] },

@@ -55,6 +55,15 @@ Authors recovered from metadata embedded inside the `.emotecraft` files themselv
 - `assets/Faithful.ttf` — UI font; named after the Faithful project but the exact origin could not be verified.
 - `assets/memes/gif/` — internet meme GIFs, unattributable individually.
 
+## Inspirations (mechanics only — no assets or code)
+
+`src/Horror/MF_Horror.js` re-implements, from scratch and client-side, the *experience* of well-known Minecraft horror mods. All of them are All Rights Reserved or without a reusable license: zero assets, sounds, texts or code were taken from any of them. Everything in the module (figures, sounds synthesized with WebAudio, fake chat strings) is MiniFeather's own:
+
+- **From The Fog** (Lunar Eclipse Studio) — inspiration for the "figure in the fog" preset. https://lunareclipse.studio
+- **The Broken Script** (wendigodrip) — inspiration for the "broken script" meta-glitch preset. https://modrinth.com/mod/the-broken-script
+- **Cave Dweller / The Man From The Fog** — inspiration for the "dweller" stalker preset.
+- **Weeping Angels** (Doctor Who concept, multiple MC mods) — inspiration for the freeze-when-watched preset.
+
 ## MiniFeather team art
 
 Made by the MiniFeather team (**botless**, **AngryWolfX**, **ShusukeGxE_**, **Not_Senpai**, **ItzNightrise**), some of it original work inspired by or adapted from existing art (Minecraft-style items and icons, custom mobs and pets):
@@ -63,4 +72,4 @@ Made by the MiniFeather team (**botless**, **AngryWolfX**, **ShusukeGxE_**, **No
 
 ---
 
-Last reviewed: 2026-10-01. New third-party art should land together with a note in this file (what, author, source URL, license).
+Last reviewed: 2026-10-04. New third-party art should land together with a note in this file (what, author, source URL, license).
