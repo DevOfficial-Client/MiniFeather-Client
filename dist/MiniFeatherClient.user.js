@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005223645
+// @version      4.19.0.20261005223940
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 7d63d53d5619cf2cb8d30393c2033e9c38d4c942
- * builtAt : 2026-10-05T22:37:04.370Z
+ * commit  : 4996efe6fe7748ad152b201a106e8c56090fb6e8
+ * builtAt : 2026-10-05T22:39:56.280Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"7d63d53d5619cf2cb8d30393c2033e9c38d4c942","builtAt":"2026-10-05T22:37:04.370Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"4996efe6fe7748ad152b201a106e8c56090fb6e8","builtAt":"2026-10-05T22:39:56.280Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19547,6 +19547,8 @@ const state = {
          backdrop-filter fuera de la tarjeta: un filtro en un ancestro convierte fixed en local */
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;pointer-events:auto}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipcard{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;padding:0!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chiprow{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipextra{display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipinfo{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px);padding:12px!important;align-self:stretch!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;left:50%!important;bottom:14px!important;transform:translateX(-50%)!important;width:150px!important;height:245px!important;flex:none!important}
       /* el chip de perfil va vertical como el perfil movil: datos arriba y el personaje
@@ -19820,30 +19822,46 @@ const state = {
     canvas.style.transformOrigin = 'top left';
   }
 
-  // chip de perfil: marcar donde estan HOY el bloque de datos y la ventana del avatar.
-  // el sitio re-anida la tarjeta entre renders, asi que nada de selectores de profundidad:
-  // se camina desde el canvas hacia arriba hasta hallar un hermano que parezca datos.
+  // chip de perfil, modo logueado incluido: nada de selectores de profundidad (el sitio
+  // re-anida entre renders y entre logged-in/logged-out). se marca estructuralmente:
+  //  - canvas del skin = el mas grande del panel (los demas son iconos)
+  //  - se sube desde el canvas hasta un ancestro con un hermano "de datos" -> ese hermano
+  //    es la caja de info y el camino completo hacia arriba se deja transparente
+  //  - hermanos con datos = cajitas apiladas; relleno sin datos = fuera
   function markChip(right) {
-    const canvas = right.querySelector('canvas');
-    if (!canvas) return;
+    let canvas = null, best = 0;
+    for (const c of right.querySelectorAll('canvas')) {
+      const area = c.offsetWidth * c.offsetHeight;
+      if (area > best) { best = area; canvas = c; }
+    }
+    if (!canvas || !best) return;
     let node = canvas.parentElement;
-    while (node && node !== right) {
+    let row = null, info = null;
+    while (node && node.parentElement && node.parentElement !== right) {
       const parent = node.parentElement;
-      if (!parent || parent === right) return;
-      const info = [...parent.children].find(el =>
+      const data = [...parent.children].find(el =>
         el !== node && !el.contains(canvas) && el.querySelector('button,p'));
-      if (info) {
-        // sin backdrop/filter en la tarjeta: un filtro en un ancestro vuelve "local" el
-        // absolute del avatar y lo ancla a la tarjeta en vez de al piso del panel
-        const card = parent.parentElement;
-        if (card && card !== right) mark(card, 'mf-hub-chipcard');
-        mark(node, 'mf-hub-chipavatar');
-        mark(info, 'mf-hub-chipinfo');
-        fitChipCanvas(canvas);
-        return;
-      }
+      if (data) { row = parent; info = data; break; }
       node = parent;
     }
+    if (!row) return;
+    mark(row, 'mf-hub-chiprow');
+    mark(node, 'mf-hub-chipavatar');
+    mark(info, 'mf-hub-chipinfo');
+    for (const child of row.children) {
+      if (child === node || child === info) continue;
+      mark(child, !child.contains(canvas) && child.querySelector('button,p') ? 'mf-hub-chipinfo' : 'mf-hub-chipextra');
+    }
+    // sin backdrop/filter/borde en NINGUN ancestro: un filtro volveria "local" el absolute
+    // del avatar (anclado a la tarjeta en vez de al piso) y rearmaria el cubo
+    for (let anc = row.parentElement; anc && anc !== right; anc = anc.parentElement) {
+      mark(anc, 'mf-hub-chipcard');
+      for (const child of anc.children) {
+        if (child.contains(node)) continue;
+        mark(child, 'mf-hub-chipextra');
+      }
+    }
+    fitChipCanvas(canvas);
   }
 
   function forwardClick(nativeNode) {
@@ -20151,6 +20169,15 @@ const state = {
   function buildAside() {
     const aside = el('div', 'mf-hub-aside');
     aside.setAttribute('data-mf-i18n-skip', 'true');
+    // el pill vive debajo de la caja de datos: su altura cambia con nivel/xp logueado,
+    // asi que un top fijo choca. se mide la caja real en cada render
+    try {
+      const infoBox = document.querySelector('.mf-hub-chipinfo');
+      if (infoBox) {
+        const top = infoBox.getBoundingClientRect().bottom;
+        if (top > 40) aside.style.top = Math.round(top + 12) + 'px';
+      }
+    } catch (_) {}
     const online = friendsOnlineCount(state.layoutRight);
     if (online) {
       const pill = el('button', 'mf-hub-friendspill');
