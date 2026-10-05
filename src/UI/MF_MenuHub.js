@@ -825,14 +825,26 @@
     if (!state.root) return;
     const scroll = state.hub?.querySelector('.mf-hub-main')?.scrollTop || 0;
     removeHub();
-    const hub = el('div');
-    hub.id = HUB_ID;
-    hub.setAttribute('data-mf-i18n-skip', 'true');
-    hub.append(buildRail(), buildMain(), buildAside());
-    state.root.append(hub);
-    state.hub = hub;
-    hub.querySelector('.mf-hub-main')?.scrollTo({ top: scroll });
-    syncRailActive();
+    try {
+      const hub = el('div');
+      hub.id = HUB_ID;
+      hub.setAttribute('data-mf-i18n-skip', 'true');
+      hub.append(buildRail(), buildMain(), buildAside());
+      state.root.append(hub);
+      state.hub = hub;
+      hub.querySelector('.mf-hub-main')?.scrollTo({ top: scroll });
+      syncRailActive();
+      state.renderFails = 0;
+    } catch (e) {
+      // un fallo de render no puede dejar la pantalla en un vacio oscuro: sin hub y con
+      // la clase puesta, el usuario no ve NADA y la firma ya no cambia para reintentar.
+      // volver a la pantalla nativa y reintentar con backoff creciente
+      try { console.warn('minifeather menuhub: render fallo, pantalla nativa de emergencia', e); } catch (_) {}
+      state.renderFails = (state.renderFails || 0) + 1;
+      state.renderBackoff = performance.now() + Math.min(5000, 300 * state.renderFails);
+      state.signature = '';
+      restore();
+    }
   }
 
   function clearMarks() {
@@ -888,6 +900,11 @@
       state.games.map(game => [game.href, game.image]).slice(0, 12),
       !!state.recentCard, friendsOnlineCount(layout.right)
     ]);
+    // en backoff post-fallo: pantalla nativa sin intentarlo de nuevo hasta que expire
+    if (performance.now() < (state.renderBackoff || 0)) return;
+    // hub huerfano (react se comio el nodo, lo que sea): reconstruir YA. la firma no puede
+    // frenarlo o la pantalla queda en vacio oscuro para siempre con la clase puesta
+    if (state.hub && !state.hub.isConnected) state.hub = null;
     if (!state.hub || (signature !== state.signature && signature === state.prevSignature)) {
       state.signature = signature;
       renderHub();
@@ -895,6 +912,12 @@
       syncRailActive();
     }
     state.prevSignature = signature;
+    if (!state.hub) {
+      // el render fallo y el catch dejo la pantalla nativa: sin clase, sin vacio oscuro.
+      // el backoff decide cuando volver a intentarlo
+      root.classList.remove(ROOT_CLASS, EXPANDED_CLASS);
+      return;
+    }
     root.classList.toggle(ROOT_CLASS, true);
     root.classList.toggle(EXPANDED_CLASS, state.expanded);
     positionAside();
@@ -951,7 +974,7 @@
       state.language = changes.settings.newValue.language;
       if (reRender && state.enabled) renderHub();
     }
-    setEnabled(changes.settings.newValue?.menuHub === true);
+    if (typeof changes.settings.newValue?.menuHub === 'boolean') setEnabled(changes.settings.newValue.menuHub);
   }
 
   function destroy() {
@@ -977,7 +1000,9 @@
       if (typeof data?.settings?.language === 'string' && L10N[data.settings.language]) {
         state.language = data.settings.language;
       }
-      setEnabled(data?.settings?.menuHub === true);
+      // solo si la clave existe: un settings viejo sin menuHub no puede apagar el hub
+      // (la carrera con el dispatch del panel dejaria el modulo muerto hasta reiniciar)
+      if (typeof data?.settings?.menuHub === 'boolean') setEnabled(data.settings.menuHub);
     });
   } catch (_) {}
   globalThis[KEY] = {
