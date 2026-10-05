@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005232550
+// @version      4.19.0.20261005233114
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 89f68839affc494f92ab224586d3c2837a727494
- * builtAt : 2026-10-05T23:26:07.155Z
+ * commit  : f52ee605ba134882c157dac6d1e99361bdd1e98a
+ * builtAt : 2026-10-05T23:31:32.805Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"89f68839affc494f92ab224586d3c2837a727494","builtAt":"2026-10-05T23:26:07.155Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"f52ee605ba134882c157dac6d1e99361bdd1e98a","builtAt":"2026-10-05T23:31:32.805Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19551,6 +19551,8 @@ const state = {
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipextra{display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipinfo{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px);padding:12px!important;align-self:stretch!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;left:50%!important;bottom:14px!important;transform:translateX(-50%)!important;width:150px!important;height:245px!important;flex:none!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar,
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar div{background:transparent!important;box-shadow:none!important}
       /* el chip de perfil va vertical como el perfil movil: datos arriba y el personaje
          suelto abajo. el sitio anida la fila a dos profundidades segun el render: cubrimos
          ambas (la regla corta queda como fallback, en display:block es inerte). la caja de
@@ -19769,7 +19771,8 @@ const state = {
   }
 
   // bbox de la figura dentro del buffer del render, escaneando alpha. se cachea por
-  // tamano de buffer: escanear en cada sync sale caro y el margen del render no cambia.
+  // tamano de buffer SOLO los exitos: un fallo (canvas webgl entre frames, taint) se
+  // reintenta en el proximo sync porque el resultado puede cambiar
   const chipFitCache = new Map();
   function figureFractions(canvas) {
     const key = `${canvas.width}x${canvas.height}`;
@@ -19795,9 +19798,9 @@ const state = {
       }
       if (top >= 0 && bottom > top) {
         frac = { top: top / off.height, bottom: (bottom + 1) / off.height, cx: (left + right + 1) / (2 * off.width) };
+        chipFitCache.set(key, frac);
       }
-    } catch (_) { frac = null; }  // canvas tainted o render vacio: sin fit, se queda nativo
-    chipFitCache.set(key, frac);
+    } catch (_) { frac = null; }  // taint u otro: sin cache, se reintenta
     return frac;
   }
 
@@ -19810,10 +19813,12 @@ const state = {
       canvas.style.transformOrigin = '';
       return;
     }
-    const frac = figureFractions(canvas);
     const cssW = canvas.offsetWidth;
     const cssH = canvas.offsetHeight;
-    if (!frac || !cssW || !cssH) return;
+    if (!cssW || !cssH) return;
+    // sin scan util (webgl no siempre entrega pixels): fracciones por defecto medidas
+    // sobre el render real — mejor un fit aproximado que un cuadro negro sin jugador
+    const frac = figureFractions(canvas) || { top: 0.15, bottom: 0.976, cx: 0.5 };
     const winW = 150, winH = 245;
     const scale = (winH * 0.86) / ((frac.bottom - frac.top) * cssH);
     const tx = winW / 2 - frac.cx * cssW * scale;
