@@ -748,6 +748,10 @@
     playerAnims: true,
     leafWind: false,
     leafWindStrength: 0.085,
+    horror: false,
+    horrorPreset: 'herobrine',
+    horrorIntensity: 'normal',
+    horrorSafeMode: true,
     handSway: true,
     betterPlayerLayers: false,
     dynamicCrosshairMap: {
@@ -2639,6 +2643,9 @@
         font-weight:700;
         color:var(--mf-accent2);
       }
+      .mf-horror-opts { display: none; }
+      .mf-toggle[data-key="horror"].enabled + .mf-horror-opts,
+      .mf-toggle[data-key="horror"]:has(.mf-switch-hidden:checked) + .mf-horror-opts { display: grid; }
       .mf-toggle-grid {
         display:grid;
         grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
@@ -3797,7 +3804,8 @@
     clientChatMentions: ['.BBBBBB.','BbbbbbbB','Bbyyyybb','BbyBBybb','BbyyBybb','.ByyyyB.','..BB....','.BB.....'],
     discord: ['.vvvvvv.','vV....Vv','vVv..vVv','vV#vv#Vv','vVvvvvVv','.VvvvvV.','..VVVV..','........'],
     startupAnimation: ['...rr...','..r##r..','.r#yy#r.','rryyyyrr','.r#yy#r.','..r##r..','...rr...','........'],
-    supportAds: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yy#y#yyY','Yyy##yyY','YyyyyyyY','.YyyyyY.','..YYYY..']
+    supportAds: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yy#y#yyY','Yyy##yyY','YyyyyyyY','.YyyyyY.','..YYYY..'],
+    horror: ['..vvvv..','.vvvvvv.','vv#vv#vv','vvvvvvvv','vvvvvvvv','vVkkkkVv','.v.v.v..','v..v..v.']
   };
 
   const MF_ANIMATED_PIXEL_ICONS = Object.freeze([
@@ -3994,6 +4002,7 @@
     guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers',
     healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
     keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs', crittersMobs: 'crittersMobs', allayPets: 'allayPets',
+    horror: 'horror', spooky: 'horror', herobrine: 'horror', dweller: 'horror',
     pingCounter: 'pingCounter', titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations',
     waypoints: 'waypoints', zoom: 'zoom'
   });
@@ -4747,6 +4756,54 @@
         sendLeafWindConfig(false);
       }
     }));
+  }
+
+  function sendHorrorConfig() {
+    document.dispatchEvent(new CustomEvent('minifeather:horror-config', {
+      detail: JSON.stringify({
+        enabled: MODULES.get('horror')?.enabled === true,
+        preset: settings.horrorPreset || 'herobrine',
+        intensity: settings.horrorIntensity || 'normal',
+        safeMode: settings.horrorSafeMode !== false
+      })
+    }));
+  }
+
+  function initHorrorModule() {
+    registerModule('horror', () => createLifecycle({
+      enable() {
+        sendHorrorConfig();
+      },
+      disable() {
+        document.dispatchEvent(new CustomEvent('minifeather:horror-config', {
+          detail: JSON.stringify({ enabled: false })
+        }));
+      },
+      refresh() {
+        sendHorrorConfig();
+      },
+      destroy() {
+        document.dispatchEvent(new CustomEvent('minifeather:horror-config', {
+          detail: JSON.stringify({ enabled: false })
+        }));
+      }
+    }));
+    // selects del bloque horror: delegación en document, el panel persiste
+    document.addEventListener('change', (e) => {
+      if (!e.target || !e.target.id || e.target.id.indexOf('mf-horror-') !== 0) return;
+      const v = e.target.value;
+      if (e.target.id === 'mf-horror-preset') settings.horrorPreset = v;
+      else if (e.target.id === 'mf-horror-intensity') settings.horrorIntensity = v;
+      saveSettings();
+      sendHorrorConfig();
+    });
+    document.addEventListener('change', (e) => {
+      if (e.target && e.target.id === 'mf-horror-safe') {
+        settings.horrorSafeMode = e.target.checked;
+        saveSettings();
+        sendHorrorConfig();
+      }
+    });
   }
 
   function sendHandSwayConfig(enabled = settings.handSway) {
@@ -7651,6 +7708,34 @@
               t('shineAmbience'),
               t('shineAmbienceDesc')
             )}
+            ${renderToggle(
+              'horror',
+              t('horror'),
+              t('horrorDesc')
+            )}
+            <div class="mf-horror-opts" style="display:grid;gap:6px;margin:2px 0 10px;padding:10px;background:var(--mf-bg2,#161320);border:1px solid var(--mf-border,#2b2440);border-radius:8px">
+              <label style="display:grid;gap:2px;font-size:11px;opacity:.9">
+                <span>${t('horrorPreset')}</span>
+                <select id="mf-horror-preset" class="mf-input" style="width:100%">
+                  <option value="herobrine" ${settings.horrorPreset === 'herobrine' ? 'selected' : ''}>${t('horrorPresetHerobrine')}</option>
+                  <option value="broken" ${settings.horrorPreset === 'broken' ? 'selected' : ''}>${t('horrorPresetBroken')}</option>
+                  <option value="dweller" ${settings.horrorPreset === 'dweller' ? 'selected' : ''}>${t('horrorPresetDweller')}</option>
+                  <option value="weeping" ${settings.horrorPreset === 'weeping' ? 'selected' : ''}>${t('horrorPresetWeeping')}</option>
+                </select>
+              </label>
+              <label style="display:grid;gap:2px;font-size:11px;opacity:.9">
+                <span>${t('horrorIntensity')}</span>
+                <select id="mf-horror-intensity" class="mf-input" style="width:100%">
+                  <option value="chill" ${settings.horrorIntensity === 'chill' ? 'selected' : ''}>${t('horrorIntensityChill')}</option>
+                  <option value="normal" ${settings.horrorIntensity === 'normal' ? 'selected' : ''}>${t('horrorIntensityNormal')}</option>
+                  <option value="nightmare" ${settings.horrorIntensity === 'nightmare' ? 'selected' : ''}>${t('horrorIntensityNightmare')}</option>
+                </select>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:11px;opacity:.9;cursor:pointer">
+                <input type="checkbox" id="mf-horror-safe" ${settings.horrorSafeMode !== false ? 'checked' : ''}>
+                <span>${t('horrorSafeMode')}</span>
+              </label>
+            </div>
             ${experimentalTierOk ? renderToggle(
               'experimentalGrassFlowers',
               t('experimentalGrassFlowersTitle'),
@@ -14091,6 +14176,7 @@
     initPlayerAnimsModule();
     initLeafWindModule();
     initHandSwayModule();
+    initHorrorModule();
     initBetterPlayerLayersModule();
     initAutoRespawnModule();
     initAutoReconnectModule();
