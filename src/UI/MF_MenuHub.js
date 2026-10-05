@@ -24,7 +24,7 @@
     enabled: false, destroyed: false, root: null, style: null, observer: null,
     timer: 0, marks: new Set(), hub: null, expanded: false, layoutRight: null,
     language: 'en', pins: readPins(), nav: new Map(), sections: [], games: [],
-    recentCard: null, signature: ''
+    recentCard: null, signature: '', prevSignature: '', chipLastSeen: 0
   };
 
   const L10N = {
@@ -438,14 +438,24 @@
   }
 
   function markChip(right) {
-    // las marcas del sync anterior son veneno: la tarjeta se re-renderiza y cambian de sitio
-    clearChipMarks();
     let canvas = null, best = 0;
     for (const c of right.querySelectorAll('canvas')) {
       const area = c.offsetWidth * c.offsetHeight;
       if (area > best) { best = area; canvas = c; }
     }
-    if (!canvas || !best) { markChipStatic(right); return; }
+    if (!canvas || !best) {
+      // durante un re-render de react el canvas puede estar desmontado UN instante:
+      // alternar aca pestañea a ritmo de sync. histeresis por tiempo: si lo vimos hace
+      // poco, conservar las marcas; si nunca hubo o lleva rato fuera, modo estatico
+      const gone = performance.now() - (state.chipLastSeen || 0);
+      if (state.chipLastSeen && gone < 1200) return;
+      clearChipMarks();
+      markChipStatic(right);
+      return;
+    }
+    state.chipLastSeen = performance.now();
+    // las marcas del sync anterior son veneno si la tarjeta cambio de forma: re-marcar
+    clearChipMarks();
     let node = canvas.parentElement;
     let row = null, info = null;
     while (node && node.parentElement && node.parentElement !== right) {
@@ -869,19 +879,22 @@
     state.recentCard = state.sections[0]?.cards.find(card => card.tagName === 'BUTTON')
       || state.sections[0]?.cards[0] || null;
 
-    // firma barata: si no cambio nada visible, no re-renderizar el hub (el centro native muta seguido)
+    // firma barata: si no cambio nada visible, no re-renderizar el hub (el centro native muta seguido).
+    // histeresis: un sync con firma distinta puede ser un re-render transitorio de react
+    // (pestañearia el hub entero cada 140ms); exige que la firma nueva se sostenga 2 syncs
     const signature = JSON.stringify([
       state.language, state.pins, state.expanded,
       state.sections.map(section => section.cards.length),
       state.games.map(game => [game.href, game.image]).slice(0, 12),
       !!state.recentCard, friendsOnlineCount(layout.right)
     ]);
-    if (!state.hub || signature !== state.signature) {
+    if (!state.hub || (signature !== state.signature && signature === state.prevSignature)) {
       state.signature = signature;
       renderHub();
     } else {
       syncRailActive();
     }
+    state.prevSignature = signature;
     root.classList.toggle(ROOT_CLASS, true);
     root.classList.toggle(EXPANDED_CLASS, state.expanded);
     positionAside();
