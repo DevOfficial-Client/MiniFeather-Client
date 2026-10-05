@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005205922
+// @version      4.19.0.20261005214944
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 378098ff9b433461354aae41dca92e12026aef1f
- * builtAt : 2026-10-05T21:04:53.718Z
+ * commit  : f525450f9fc2f49d21a4ddb6bf3c4878aeb70900
+ * builtAt : 2026-10-05T21:50:08.428Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"378098ff9b433461354aae41dca92e12026aef1f","builtAt":"2026-10-05T21:04:53.718Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"f525450f9fc2f49d21a4ddb6bf3c4878aeb70900","builtAt":"2026-10-05T21:50:08.428Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -90412,7 +90412,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
       camera.getWorldPosition(eye);
       if (Number.isFinite(eye.y - anchor.y)) dy = Math.max(-0.08 * scale, Math.min(0, eye.y - anchor.y));
     }
-    const dx = Math.sin(yaw) * 0.13 * scale, dz = Math.cos(yaw) * 0.13 * scale;
+    const dx = Math.sin(yaw) * 0.21 * scale, dz = Math.cos(yaw) * 0.21 * scale;
     let local = { x: position.x + dx, y: position.y + dy, z: position.z + dz };
     if (position.clone && mesh.getWorldPosition && mesh.parent?.worldToLocal) {
       local = mesh.getWorldPosition(position.clone());
