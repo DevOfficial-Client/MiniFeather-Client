@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005193550
+// @version      4.19.0.20261005194728
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 5cbd7a1d100b08a2d990129e4fa10a8353b4a2d3
- * builtAt : 2026-10-05T19:41:26.287Z
+ * commit  : 5e4fa303d664bb61421b870cfcd4c07d88eb67f9
+ * builtAt : 2026-10-05T19:47:53.805Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"5cbd7a1d100b08a2d990129e4fa10a8353b4a2d3","builtAt":"2026-10-05T19:41:26.287Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"5e4fa303d664bb61421b870cfcd4c07d88eb67f9","builtAt":"2026-10-05T19:47:53.805Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -73219,7 +73219,14 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     }
     function boxRects(box) {
         if (Array.isArray(box.uvNorth)) {
-            return { north: box.uvNorth, south: box.uvSouth, east: box.uvEast, west: box.uvWest, up: box.uvUp, down: box.uvDown };
+            const n = box.uvNorth;
+            // los boxes planos de Blockbench exportan solo algunas caras (los ojos del
+            // zombie traen únicamente uvNorth): las caras faltantes heredan esa recta
+            // — en un box de área cero no se ven igual
+            return {
+                north: n, south: box.uvSouth || n, east: box.uvEast || n,
+                west: box.uvWest || n, up: box.uvUp || n, down: box.uvDown || n
+            };
         }
         const [x, y, z, w, h, d] = box.coordinates;
         const off = box.textureOffset || [0, 0];
@@ -73272,7 +73279,12 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         if (!attr?.constructor) throw new Error('BufferAttribute no alcanzable');
         const MeshCtor = mesh.children?.find(c => c.isMesh || (c.geometry && c.type === 'Mesh'))?.constructor;
         if (!MeshCtor) throw new Error('Mesh ctor no alcanzable');
-        return { BufferGeometry: withGeo.geometry.constructor, BufferAttribute: attr.constructor, Mesh: MeshCtor, Group: mesh.constructor };
+        // Group: NUNCA el constructor del mesh nativo (puede ser subclase del juego
+        // que exige argumentos); un pivot nombrado del renderer LP es Object3D plano
+        const pivot = mesh.headPivot || mesh.skeleton || mesh.body || mesh.neck
+            || mesh.children?.find(c => !c.geometry && !c.isMesh);
+        const GroupCtor = pivot?.constructor || mesh.constructor;
+        return { BufferGeometry: withGeo.geometry.constructor, BufferAttribute: attr.constructor, Mesh: MeshCtor, Group: GroupCtor };
     }
 
     function buildModelRig(entry, material, G, MeshCtor, GroupCtor) {
@@ -73404,19 +73416,24 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         } catch { return null; }
     }
 
+    const SWAP_RETRY_MS = 4000;
+    const SWAP_MAX_FAILS = 3;
+
     function applyToEntity(ent, mesh) {
         const type = String(ent.type || '').toLowerCase();
         const entry = state.pack?.models?.get(type);
         if (!entry || state.applied.has(mesh) || state.pending.has(mesh)) return;
         if (mesh.__mfCustomModelApplied) return; // respeto a CustomModels
+        // backoff: un mesh que falla no se reintenta cada frame ni para siempre
+        if (mesh.__mfFreshFails >= SWAP_MAX_FAILS) return;
+        if (mesh.__mfFreshFailAt && performance.now() - mesh.__mfFreshFailAt < SWAP_RETRY_MS) return;
+        const matSample = mesh.children?.find(c => c.material)?.material;
+        if (!matSample) return;
         state.pending.add(mesh);
         try {
             const G = makeCtors(mesh);
-            const matSample = mesh.children?.find(c => c.material)?.material;
-            if (!matSample) return;
             const MatCtor = matSample.constructor;
             const material = new MatCtor();
-            const canvas = null; // la textura se resuelve async abajo
             loadTextureCanvas(entry).then(canvas => {
                 state.pending.delete(mesh);
                 if (!state.enabled || !mesh.parent) return;
@@ -73461,13 +73478,23 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
                         ctx: new RTc.FrameContext(ent.id ?? Math.random())
                     });
                 } catch (e) {
-                    state.tickStats.errors++;
-                    console.warn(TAG, 'swap falló:', type, e?.message);
+                    markSwapFail(mesh, type, e);
                 }
             }).catch(() => state.pending.delete(mesh));
         } catch (e) {
-            state.pending.delete(mesh);
-            state.tickStats.errors++;
+            markSwapFail(mesh, type, e);
+        }
+    }
+
+    function markSwapFail(mesh, type, e) {
+        state.pending.delete(mesh);
+        state.tickStats.errors++;
+        mesh.__mfFreshFails = (mesh.__mfFreshFails || 0) + 1;
+        mesh.__mfFreshFailAt = performance.now();
+        if (mesh.__mfFreshFails <= 2) {
+            console.warn(TAG, 'swap falló (' + mesh.__mfFreshFails + '/3):', type, e?.message || e);
+        } else if (mesh.__mfFreshFails === SWAP_MAX_FAILS) {
+            console.warn(TAG, type, 'se rinde tras 3 intentos (se resetea al recargar)');
         }
     }
 
@@ -73675,6 +73702,9 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         },
         get enabled() { return state.enabled; }
     };
+    // autoarranque: si hay pack persistido de una sesión anterior, se hidrata y
+    // enciende solo (loadPackFiles ya hace setEnabled(true)) — sin panel de por medio
+    hydratePack();
     console.log(TAG, 'script loaded (motor CEM sin assets — el pack lo importa el usuario)');
 })();
 
