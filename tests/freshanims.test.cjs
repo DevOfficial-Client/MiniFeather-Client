@@ -144,7 +144,10 @@ const FA_ZIP = () => zipOf({
             { part: 'root', id: 'root' },
             { part: 'body', id: 'body', boxes: [{ coordinates: [-4, 12, -2, 8, 12, 4], textureOffset: [16, 16] }] },
             { part: 'head', id: 'head', submodels: [
-                { id: 'head2', boxes: [{ coordinates: [-4, 24, -4, 8, 8, 8], textureOffset: [0, 0] }] }
+                { id: 'head2', boxes: [
+                    { coordinates: [-4, 24, -4, 8, 8, 8], textureOffset: [0, 0] },
+                    { coordinates: [0, 28, -4.002, 2, 1, 0], uvNorth: [13, 18, 15, 19] }
+                ] }
             ] },
             { part: 'right_arm', id: 'right_arm', boxes: [{ coordinates: [4, 12, -2, 4, 12, 4], textureOffset: [40, 16] }] }
         ]
