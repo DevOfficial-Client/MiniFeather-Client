@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005060052
+// @version      4.19.0.20261005061637
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 7a70b40146d5ecc047472c9490b272234e3f2b6b
- * builtAt : 2026-10-05T06:01:13.023Z
+ * commit  : 0fd4c91e424699b02a69b052f3990098e8f7a242
+ * builtAt : 2026-10-05T06:16:54.513Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"7a70b40146d5ecc047472c9490b272234e3f2b6b","builtAt":"2026-10-05T06:01:13.023Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"0fd4c91e424699b02a69b052f3990098e8f7a242","builtAt":"2026-10-05T06:16:54.513Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -80501,9 +80501,12 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
   };
 
   var INTENSITY = {
-    chill:    { minGap: 420, maxGap: 900,  tensionRate: 0.35, showMs: 2600 },
-    normal:   { minGap: 240, maxGap: 520,  tensionRate: 0.6,  showMs: 3200 },
-    nightmare:{ minGap: 110, maxGap: 260,  tensionRate: 1.0,  showMs: 4200 }
+    // firstGap: el debut. el slow burn es arte, pero un primer avistamiento en
+    // el minuto 7 se siente como un mod roto — el primer evento llega temprano
+    // y DESPUÉS el director vuelve a su cadencia normal de minutos.
+    chill:    { minGap: 420, maxGap: 900,  tensionRate: 0.35, showMs: 2600, firstGap: [75, 150] },
+    normal:   { minGap: 240, maxGap: 520,  tensionRate: 0.6,  showMs: 3200, firstGap: [40, 90] },
+    nightmare:{ minGap: 110, maxGap: 260,  tensionRate: 1.0,  showMs: 4200, firstGap: [20, 45] }
   };
 
   // --- helpers de juego (defensivos: el internals cambia, el terror no) ------
@@ -80988,9 +80991,11 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     return null;
   }
 
-  function scheduleNext() {
+  function scheduleNext(first) {
     var cfg = INTENSITY[state.intensity] || INTENSITY.normal;
-    var gap = (cfg.minGap + Math.random() * (cfg.maxGap - cfg.minGap)) * 1000;
+    var lo = (first && cfg.firstGap) ? cfg.firstGap[0] : cfg.minGap;
+    var hi = (first && cfg.firstGap) ? cfg.firstGap[1] : cfg.maxGap;
+    var gap = (lo + Math.random() * (hi - lo)) * 1000;
     state.cooldownUntil = performance.now() + gap;
     state.phase = 'tension';
   }
@@ -81109,7 +81114,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
       if (c.enabled && !state.enabled) {
         state.sessionStart = performance.now();
         state.tension = 0;
-        scheduleNext();
+        scheduleNext(true); // debut temprano; después, cadencia normal
         try { console.log(TAG + 'activo — preset ' + (c.preset || state.preset) + (state.safeMode ? ' (safe)' : '')); } catch (_) {}
       }
       if (!c.enabled && state.enabled) {
@@ -81126,7 +81131,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
       despawnFigure(true);
       state.preset = c.preset;
       state.tension = 0;
-      scheduleNext();
+      scheduleNext(true); // cambiar de preset también debuta rápido (testear presets sin esperar minutos)
     }
     if (c.intensity && INTENSITY[c.intensity]) state.intensity = c.intensity;
     if (typeof c.safeMode === 'boolean') {
