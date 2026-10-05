@@ -746,6 +746,7 @@
     dynamicCrosshairSize: 28,
     vanillaAnimations: false,
     playerAnims: true,
+    headLag: false,
     leafWind: false,
     leafWindStrength: 0.085,
     horror: false,
@@ -3696,6 +3697,7 @@
       { page: 'render', key: 'vanillaAnimations', title: t('vanillaAnimations'), desc: t('vanillaAnimationsDesc'), tags: [] },
       { page: 'render', key: 'handSway', title: t('handSway'), desc: t('handSwayDesc'), tags: [] },
       { page: 'render', key: 'playerAnims', title: t('playerAnims'), desc: t('playerAnimsDesc'), tags: ['new'] },
+      { page: 'render', key: 'headLag', title: t('headLag'), desc: t('headLagDesc'), tags: ['new'] },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc'), tags: ['pvp'] },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc'), tags: [] },
       { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc'), tags: [] },
@@ -3752,6 +3754,7 @@
     fullBright:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>',
     vanillaAnimations:'<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>',
       playerAnims:'<circle cx="12" cy="12" r="3"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>',
+      headLag:'<circle cx="14" cy="9" r="4"/><path d="M10 15h8v6h-8z"/><path d="M7 6a8 8 0 0 0-3 4M4 14a8 8 0 0 0 1 4"/>',
     zoom:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5M10.5 7v7M7 10.5h7"/>',
     cameraOverhaul:'<path d="M4 7h3l1.5-2h7L17 7h3v12H4V7Z"/><circle cx="12" cy="13" r="4"/>',
     elytraFlight:'<path d="M3 17c3-1 6-4 9-9 3 5 6 8 9 9-4 1-7 1-9-1-2 2-5 2-9 1Z"/>',
@@ -3837,6 +3840,7 @@
     vanillaAnimations: ['..nnnn..','.nNNNNn.','..n##n..','.nnnnnn.','n.nrrn.n','..nNNn..','..N..N..','.N....N.'],
     handSway: ['...n....','..nn.n..','..nn.nn.','.nnnnnn.','nnnnnnnn','.nnNNNn.','..NNNN..','...NN...'],
     playerAnims: ['..nnnn..','.nN##Nn.','..nnnn..','.bbnnrr.','bbbnrrr.','..bnnr..','..N..N..','.N....N.'],
+    headLag: ['........','.b..nnnn','b..nN##n','.b..nnnn','..b.....','........','........','........'],
     zoom: ['..BBBB..','.BbbbbB.','Bb....bB','Bb.##.bB','.BbbbbB.','..BBBBB.','.....BB.','......BB'],
     cameraOverhaul: ['..kkkk..','.k++++k.','k+BBBB+k','k+B##B+k','k+B##B+k','k+BBBB+k','.k++++k.','..kkkk..'],
     elytraFlight: ['bb....bb','Bbb..bbB','BBbb.bbB','.BBbbBB.','..B##B..','..B##B..','..B..B..','........'],
@@ -4044,6 +4048,7 @@
     vanilla: 'vanillaAnimations', vanillaanimations: 'vanillaAnimations',
     leaf: 'leafWind', leafwind: 'leafWind', wind: 'leafWind',
     hand: 'handSway', handsway: 'handSway', sway: 'handSway',
+    headlag: 'headLag', head: 'headLag', lag: 'headLag', cabeza: 'headLag', cuello: 'headLag',
     playerlayer: 'betterPlayerLayers', playerlayers: 'betterPlayerLayers', betterplayerlayer: 'betterPlayerLayers', betterplayerlayers: 'betterPlayerLayers', layers: 'betterPlayerLayers',
     waypoint: 'waypoints', waypoints: 'waypoints',
     zoom: 'zoom'
@@ -4058,6 +4063,7 @@
     healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
     keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs', crittersMobs: 'crittersMobs', allayPets: 'allayPets',
     horror: 'horror', terror: 'horror', spooky: 'horror', herobrine: 'horror', dweller: 'horror',
+    headLag: 'headLag',
     pingCounter: 'pingCounter', titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations',
     waypoints: 'waypoints', zoom: 'zoom'
   });
@@ -4829,6 +4835,29 @@
       },
       destroy() {
         sendPlayerAnimsConfig(false);
+      }
+    }));
+  }
+
+  function sendHeadLagConfig(enabled = settings.headLag) {
+    document.dispatchEvent(new CustomEvent('minifeather:headlag-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initHeadLagModule() {
+    registerModule('headLag', () => createLifecycle({
+      enable() {
+        sendHeadLagConfig(true);
+      },
+      disable() {
+        sendHeadLagConfig(false);
+      },
+      refresh() {
+        sendHeadLagConfig(MODULES.get('headLag')?.enabled === true);
+      },
+      destroy() {
+        sendHeadLagConfig(false);
       }
     }));
   }
@@ -7861,6 +7890,11 @@
               'cameraOverhaul',
               t('cameraOverhaul'),
               t('cameraOverhaulDesc')
+            )}
+            ${renderToggle(
+              'headLag',
+              t('headLag'),
+              t('headLagDesc')
             )}
             ${renderToggle(
               'elytraFlight',
@@ -13601,6 +13635,7 @@
     setModuleEnabled('dynamicCrosshair', settings.dynamicCrosshair);
     setModuleEnabled('vanillaAnimations', settings.vanillaAnimations);
     setModuleEnabled('playerAnims', settings.playerAnims);
+    setModuleEnabled('headLag', settings.headLag);
     setModuleEnabled('leafWind', settings.leafWind);
     setModuleEnabled('handSway', settings.handSway);
     setModuleEnabled('betterPlayerLayers', settings.betterPlayerLayers);
