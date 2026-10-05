@@ -168,7 +168,7 @@ test('MirrorRunner: buckets remotos reordenan la lista', () => {
 test('MirrorRunner does not restore legacy autocomplete from the remote cache', () => {
   const p = 'src/Chat/ClientCommands.js';
   const mirror = FAKE_MIRROR(); mirror.lists.mainStart.push(p);
-  mirror.code[p] = 'const COMPLETION_CONTEXT_VERSION = 2; globalThis.newCompletion = true;';
+  mirror.code[p] = 'const COMPLETION_CONTEXT_VERSION = 3; globalThis.newCompletion = true;';
   const sb = execRunnerSandbox({ mirror, overrides: { v: 1, files: { [p]: 'globalThis.legacyCompletion = true;' }, ok: {} } });
   assert.equal(sb.globalThis.newCompletion, true); assert.equal(sb.globalThis.legacyCompletion, undefined);
 });
