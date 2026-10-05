@@ -75,6 +75,7 @@ const PRESETS = Object.freeze({
     lastGameScan: 0,
     lastCameraScan: 0,
     lastFrame: performance.now(),
+    loopScheduled: false,
     viewHook: null,
     viewHookDepth: 0,
     projectionHook: null,
@@ -506,17 +507,22 @@ const PRESETS = Object.freeze({
     } catch (_) {}
     }
 
+    // el mismo plato lavado cada frame; nadie lo nota y el recolector descansa
+    const scratchFactors = { position: 1, rotation: 1, fov: 1 };
+    const scratchMotion = { x: 0, y: 0, z: 0 };
+    const scratchRelative = { forward: 0, strafe: 0 };
+    const emptyMotion = {};
+
     function motionData(player) {
-    const source = player?.motion || player?.velocity || player?.vel || {};
+    const source = player?.motion || player?.velocity || player?.vel || emptyMotion;
     const x = Number(source.x);
     const y = Number(source.y);
     const z = Number(source.z);
 
-    return {
-        x: Number.isFinite(x) ? x : 0,
-        y: Number.isFinite(y) ? y : 0,
-        z: Number.isFinite(z) ? z : 0
-    };
+    scratchMotion.x = Number.isFinite(x) ? x : 0;
+    scratchMotion.y = Number.isFinite(y) ? y : 0;
+    scratchMotion.z = Number.isFinite(z) ? z : 0;
+    return scratchMotion;
     }
 
     function relativeMotion(player, motion) {
@@ -526,24 +532,34 @@ const PRESETS = Object.freeze({
         yaw = Number(state.yawObject?.rotation?.y);
     }
 
-    if (!Number.isFinite(yaw)) return { forward: 0, strafe: 0 };
+    if (!Number.isFinite(yaw)) {
+        scratchRelative.forward = 0;
+        scratchRelative.strafe = 0;
+        return scratchRelative;
+    }
 
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
 
-    return {
-        forward: -sin * motion.x + cos * motion.z,
-        strafe: cos * motion.x + sin * motion.z
-    };
+    scratchRelative.forward = -sin * motion.x + cos * motion.z;
+    scratchRelative.strafe = cos * motion.x + sin * motion.z;
+    return scratchRelative;
     }
 
     function perspectiveFactors(player) {
     const perspective = Number(player?.perspective);
     const firstPerson = !Number.isFinite(perspective) || perspective === 0;
 
-    return firstPerson
-        ? { position: 1, rotation: 1, fov: 1 }
-        : { position: 0.48, rotation: 0.78, fov: 0.82 };
+    if (firstPerson) {
+        scratchFactors.position = 1;
+        scratchFactors.rotation = 1;
+        scratchFactors.fov = 1;
+    } else {
+        scratchFactors.position = 0.48;
+        scratchFactors.rotation = 0.78;
+        scratchFactors.fov = 0.82;
+    }
+    return scratchFactors;
         }
 
         function clearChannels() {
@@ -831,6 +847,7 @@ const PRESETS = Object.freeze({
     if (next) {
         resolveCamera(true);
         clearChannels();
+        scheduleLoop();
     } else {
         resetEffects();
     }
@@ -942,13 +959,26 @@ const PRESETS = Object.freeze({
     }, true);
 
     function loop(timestamp) {
+    state.loopScheduled = false;
+
+    // desactivado no hay ronda: el bucle no se reengancha por pura costumbre
+    if (!state.enabled) {
+        return;
+    }
+
     const dt = clamp((timestamp - state.lastFrame) / 1000, 0.001, 0.05);
     state.lastFrame = timestamp;
 
-    if (state.enabled) {
-        updateEffects(timestamp, dt);
+    updateEffects(timestamp, dt);
+
+    state.loopScheduled = true;
+    requestAnimationFrame(loop);
     }
 
+    function scheduleLoop() {
+    // un solo despertar por turno
+    if (state.loopScheduled) return;
+    state.loopScheduled = true;
     requestAnimationFrame(loop);
     }
 
@@ -1008,5 +1038,5 @@ const PRESETS = Object.freeze({
     }
     };
 
-requestAnimationFrame(loop);
+scheduleLoop();
 })();

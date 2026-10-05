@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261004214105
+// @version      4.19.0.20261004214120
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 73c4b88c2fdd587f62ba0c726f76c60d73b6e419
- * builtAt : 2026-10-04T21:41:19.743Z
+ * commit  : cb0cfb632890c315f4231c7f8fa7a06a1c7b7dd3
+ * builtAt : 2026-10-05T01:02:27.780Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"73c4b88c2fdd587f62ba0c726f76c60d73b6e419","builtAt":"2026-10-04T21:41:19.743Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"cb0cfb632890c315f4231c7f8fa7a06a1c7b7dd3","builtAt":"2026-10-05T01:02:27.780Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -4646,6 +4646,10 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"73c4b88c2fdd587f62ba0c726f76c6
     inline: [],
     inlineTemplates: [],
     observer: null,
+    pending: new Set(),
+    pendingAttrs: new Set(),
+    flushHandle: 0,
+    applying: false,
     originals: {
       alert: globalThis.alert,
       confirm: globalThis.confirm,
@@ -4830,20 +4834,20 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"73c4b88c2fdd587f62ba0c726f76c6
     }
 
     if (!(node instanceof Element)) return;
+    // la raiz ya se evalua antes de montar el walker; que no pague el mismo peaje dos veces
     if (isClientElement(node)) translateElement(node);
 
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
-    let current = walker.currentNode;
+    let current = walker.nextNode();
     while (current) {
-      if (!isTranslationSkipped(current)) {
-        if (current.nodeType === Node.TEXT_NODE) {
-          if (isClientElement(current)) {
-            const next = translate(current.nodeValue);
-            if (next !== current.nodeValue) current.nodeValue = next;
-          }
-        } else if (current instanceof Element && isClientElement(current)) {
-          translateElement(current);
+      if (current.nodeType === Node.TEXT_NODE) {
+        if (!isTranslationSkipped(current) && isClientElement(current)) {
+          const next = translate(current.nodeValue);
+          if (next !== current.nodeValue) current.nodeValue = next;
         }
+      } else {
+        // translateElement ya filtra skip y cliente por su cuenta; no duplicar el examen
+        translateElement(current);
       }
       current = walker.nextNode();
     }
@@ -4851,7 +4855,13 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"73c4b88c2fdd587f62ba0c726f76c6
 
   function translateDocument() {
     if (!document.documentElement) return;
-    translateNode(document.documentElement);
+    // barrido completo con el mismo seguro de reentrada: lo que esto escribe no hace falta releerlo
+    state.applying = true;
+    try {
+      translateNode(document.documentElement);
+    } finally {
+      queueMicrotask(() => { state.applying = false; });
+    }
   }
 
   function setLanguage(language) {
@@ -4906,6 +4916,10 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"73c4b88c2fdd587f62ba0c726f76c6
   function destroy() {
     document.removeEventListener(EVENT, onLanguage);
     state.observer?.disconnect();
+    if (state.flushHandle) {
+      cancelAnimationFrame(state.flushHandle);
+      state.flushHandle = 0;
+    }
     if (typeof state.originals.alert === 'function') globalThis.alert = state.originals.alert;
     if (typeof state.originals.confirm === 'function') globalThis.confirm = state.originals.confirm;
     if (typeof state.originals.prompt === 'function') globalThis.prompt = state.originals.prompt;
@@ -4914,12 +4928,35 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"73c4b88c2fdd587f62ba0c726f76c6
   }
 
   document.addEventListener(EVENT, onLanguage);
-  state.observer = new MutationObserver(mutations => {
-    for (const mutation of mutations) {
-      if (mutation.type === 'characterData') translateNode(mutation.target);
-      if (mutation.type === 'attributes') translateElement(mutation.target);
-      mutation.addedNodes?.forEach(translateNode);
+
+  // el observador anota y cobra una vez por frame; contestar a cada micro-escritura del react sale caro
+  function flushPending() {
+    state.flushHandle = 0;
+    if (!state.pending.size && !state.pendingAttrs.size) return;
+    const nodes = Array.from(state.pending);
+    const attrs = Array.from(state.pendingAttrs);
+    state.pending.clear();
+    state.pendingAttrs.clear();
+    // anti-reentrada: las escrituras de abajo disparan este mismo observador; ese lote es eco y se descarta
+    state.applying = true;
+    try {
+      for (const node of nodes) translateNode(node);
+      for (const element of attrs) translateElement(element);
+    } finally {
+      queueMicrotask(() => { state.applying = false; });
     }
+  }
+
+  state.observer = new MutationObserver(mutations => {
+    if (state.applying) return;
+    for (const mutation of mutations) {
+      if (mutation.type === 'attributes') state.pendingAttrs.add(mutation.target);
+      else if (mutation.type === 'characterData') state.pending.add(mutation.target);
+      mutation.addedNodes?.forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE || node.nodeType === Node.ELEMENT_NODE) state.pending.add(node);
+      });
+    }
+    if (!state.flushHandle) state.flushHandle = requestAnimationFrame(flushPending);
   });
   state.observer.observe(document.documentElement || document, {
     childList: true,
@@ -15990,10 +16027,30 @@ const state = {
     const packSkinReg = (globalThis.__MF_PACK_SKINS__ ||= {});
     const skinById = new Map();
 
+    // el id lo inventa el par (cadena arbitraria) y cada skin pesa entre 10KB y
+    // 1MB; sin techo, un par mandando ids únicos llena la memoria en una tarde
+    // (y de paso hace griefing). LRU de 32: lo viejo se evicta y ya no resuelve,
+    // el par lo re-manda si alguien lo pide. los ids que el mesh mete en
+    // packSkinReg se apuntan aparte para no borrar en dispose entradas de
+    // otros módulos (customskins, facial) que comparten el registro.
+    const SKIN_LRU_MAX = 32;
+    const SKIN_ID_MAX = 64;
+    const skinRegOurs = new Set();
+
     function registerSharedSkin(id, dataURL, name) {
-    if (!id || typeof dataURL !== 'string' || !dataURL.startsWith('data:image/')) return false;
+    if (!id || typeof id !== 'string' || id.length > SKIN_ID_MAX) return false;
+    if (typeof dataURL !== 'string' || !dataURL.startsWith('data:image/')) return false;
+    const known = skinById.has(id);
+    if (known) skinById.delete(id); // reinsertar refresca la recencia
+    if (!(id in packSkinReg)) skinRegOurs.add(id);
     packSkinReg[id] = dataURL;
     skinById.set(id, { dataURL, name: name || null, at: Date.now() });
+    while (skinById.size > SKIN_LRU_MAX) {
+        const oldest = skinById.keys().next().value;
+        if (oldest === undefined || oldest === id) break;
+        skinById.delete(oldest);
+        if (skinRegOurs.delete(oldest)) delete packSkinReg[oldest];
+    }
     return true;
     }
 
@@ -16216,8 +16273,8 @@ const state = {
                         } catch (_) {}
                     }
                     const isNew = !skinById.has(m.id);
-                    registerSharedSkin(m.id, m.dataURL, m.name);
-                    if (isNew) {
+                    const ok = registerSharedSkin(m.id, m.dataURL, m.name);
+                    if (isNew && ok) {
                         applySkinToPeer(m.name, m.id, m.dataURL);
 
                         for (const [pid, c] of state.conns) {
@@ -16339,6 +16396,9 @@ const state = {
     const pendingSkins = new Map();
 
     function drainPending() {
+    // con el mesh apagado o sin pares no hay nada que aplicar: ahorrarse el
+    // paseo por el árbol de React cada 1.5s eternamente.
+    if (state.status === 'off' || state.status === 'error' || !state.conns.size) return;
     for (const [name, skin] of pendingSkins) {
         const entity = entityByUsername(name);
         if (!entity) continue;
@@ -16371,7 +16431,7 @@ const state = {
 
     }
     }
-    setInterval(drainPending, 1500);
+    const drainTimer = setInterval(drainPending, 1500);
 
     function revertMeshSkin(name) {
     if (!name) return;
@@ -16688,6 +16748,7 @@ const state = {
     dispose() {
         clearInterval(chatTimer);
         clearInterval(scaleTimer);
+        clearInterval(drainTimer);
         if (state.announceTimer) clearInterval(state.announceTimer);
         for (const t of pendingReconnects.values()) clearTimeout(t);
         pendingReconnects.clear();
@@ -16697,6 +16758,13 @@ const state = {
         state.names.clear();
         state.peerScales.clear();
         state.seenCodes.clear();
+        // skins compartidas fuera: solo las que metió el mesh; las entradas de
+        // otros módulos en packSkinReg no son cosa nuestra.
+        for (const id of skinById.keys()) {
+            if (skinRegOurs.delete(id)) { try { delete packSkinReg[id]; } catch {} }
+        }
+        skinById.clear();
+        pendingSkins.clear();
         try { state.peer?.destroy?.(); } catch {}
         state.peer = null; state.myCode = null; state.status = 'off';
     },
@@ -17993,6 +18061,7 @@ const state = {
     playerList: null,
     playerListApplyEntry: null,
     playerListApplyEntryWrapped: null,
+    patchSig: null,
     timer: 0,
     boot: 0,
     proxyUrl: '',
@@ -18533,18 +18602,51 @@ const state = {
   loadRanksFromDb();
   startRanksPushListener();
 
-  state.boot = setInterval(() => {
-    if (installRuntime()) clearInterval(state.boot);
-  }, 25);
+  // firma barata del mundo: si no cambio nada, re-parchear lo ya parcheado es trabajo voluntario
+  function gameSignature(game) {
+    const entities = game.world?.loadedEntityList;
+    const recent = game.serverInfo?.recentPlayers;
+    const chat = game.chat?.log;
+    return {
+      playerList: game.playerList || null,
+      entities: entities ? entities.length : -1,
+      recent: recent ? recent.length : -1,
+      chat: Array.isArray(chat) ? chat.length : -1
+    };
+  }
+
+  function sameSignature(a, b) {
+    return !!a && !!b &&
+      a.playerList === b.playerList &&
+      a.entities === b.entities &&
+      a.recent === b.recent &&
+      a.chat === b.chat;
+  }
+
+  // sondeo de arranque con retroceso: machacar findGame 40 veces por segundo contra el menu no lo hace aparecer antes
+  let bootDelay = 25;
+  const bootProbe = () => {
+    if (installRuntime()) return;
+    bootDelay = Math.min(bootDelay * 2, 500);
+    state.boot = setTimeout(bootProbe, bootDelay);
+  };
+  state.boot = setTimeout(bootProbe, bootDelay);
 
   state.timer = setInterval(() => {
     const game = findGame();
     if (!game) return;
     if (game !== state.game || game.playerList !== state.playerList) {
+      // juego o lista nueva: la firma anterior ya no describe nada
+      state.patchSig = null;
       installRuntime();
       return;
     }
-    patchKnownGameData(game);
+    const sig = gameSignature(game);
+    if (!sameSignature(state.patchSig, sig)) {
+      state.patchSig = sig;
+      patchKnownGameData(game);
+    }
+    // el chat se mira siempre: recorrer 24 entradas contra el WeakSet cuesta menos que discutirlo
     patchChatLog(game);
   }, 250);
   })();
@@ -24213,8 +24315,15 @@ requestAnimationFrame(loop);
             return null;
         }
 
+        // plato reutilizado para los decoradores vivos; los arrays de cortesía se acabaron
+        const activeScratch = [];
+
         function activeDecorators() {
-            return Array.from(state.decorators.values()).filter(item => item.enabled && typeof item.transform === 'function');
+            activeScratch.length = 0;
+            for (const item of state.decorators.values()) {
+                if (item.enabled && typeof item.transform === 'function') activeScratch.push(item);
+            }
+            return activeScratch;
         }
 
         function patchEntity(entity) {
@@ -24274,7 +24383,8 @@ requestAnimationFrame(loop);
         }
 
         function restoreAll() {
-            for (const [entity, record] of Array.from(state.patched.entries())) unpatchEntity(entity, record);
+            // iterar y borrar sobre el mismo mapa: el turno de noche lo permite
+            for (const [entity, record] of state.patched) unpatchEntity(entity, record);
         }
 
         function refreshPlayers(force = false) {
@@ -24315,16 +24425,32 @@ requestAnimationFrame(loop);
             const current = state.decorators.get(id);
             if (!current) return;
             current.enabled = !!enabled;
-            if (activeDecorators().length) refreshPlayers(true);
-            else restoreAll();
+            if (activeDecorators().length) {
+                ensureLoop();
+                refreshPlayers(true);
+            } else {
+                restoreAll();
+            }
         }
 
+        let loopRunning = false;
+
         function loop() {
-            if (activeDecorators().length) refreshPlayers(false);
+            // sin decoradores activos no hay nada que vigilar: el bucle se va a dormir
+            if (!activeDecorators().length) {
+                loopRunning = false;
+                return;
+            }
+            refreshPlayers(false);
             requestAnimationFrame(loop);
         }
 
-        requestAnimationFrame(loop);
+        function ensureLoop() {
+            // reenganche idempotente: dos despertares no hacen dos rondas
+            if (loopRunning) return;
+            loopRunning = true;
+            requestAnimationFrame(loop);
+        }
 
         return {
             registerDecorator,
@@ -24529,6 +24655,13 @@ requestAnimationFrame(loop);
     destroyed: false
   };
 
+  // un solo Vector3 para todas las proyecciones y una lectura de viewport por
+  // tick: project() recibe decenas de llamadas por frame y ninguna de ellas
+  // retiene el resultado, así que el scratch se recicla sin pudor.
+  let projScratch = null;
+  let viewW = 0;
+  let viewH = 0;
+
   function getGame() {
     if (globalThis.miniblox?.player) {
       state.game = globalThis.miniblox;
@@ -24709,8 +24842,15 @@ requestAnimationFrame(loop);
     const camera = getCamera();
     if (!camera) return null;
 
-    const point = createVector3(x, y, z);
-    if (!point || typeof point.project !== 'function') return null;
+    if (!projScratch) {
+      const candidate = createVector3(0, 0, 0);
+      if (!candidate || typeof candidate.project !== 'function') return null;
+      projScratch = candidate;
+    }
+    const point = projScratch;
+    point.x = x;
+    point.y = y;
+    point.z = z;
 
     try {
       point.project(camera);
@@ -24725,8 +24865,8 @@ requestAnimationFrame(loop);
       }
 
       return {
-        x: (point.x * 0.5 + 0.5) * innerWidth,
-        y: (-point.y * 0.5 + 0.5) * innerHeight
+        x: (point.x * 0.5 + 0.5) * viewW,
+        y: (-point.y * 0.5 + 0.5) * viewH
       };
     } catch (_) {
       return null;
@@ -24883,6 +25023,10 @@ requestAnimationFrame(loop);
 
     const now = performance.now();
 
+    // viewport leído una vez por tick, no una vez por partícula
+    viewW = innerWidth;
+    viewH = innerHeight;
+
     for (const particle of state.particles) {
       const age = now - particle.started;
 
@@ -25017,7 +25161,8 @@ requestAnimationFrame(loop);
   const TAG = 'minifeather watersplash';
 
   const SPLASH_LIFE_MS = 700;
-  const SCAN_MS = 60;
+  // 150ms: cada 60ms se recorrian todas las entidades dos veces por tick
+  const SCAN_MS = 150;
   const MIN_FALL_SPEED = 0.08;
   const HOOK_MS = 900;
 
@@ -25825,11 +25970,10 @@ requestAnimationFrame(loop);
     }
   }
 
-  function tickRain() {
+  function tickRain(game) {
     if (!state.enabled || state.destroyed || !state.resourcesReady) { state.rainBlocked = 'disabled/recursos'; return; }
     if (!state.rainFramesReady) { state.rainBlocked = 'sin-frames-ripple'; return; }
 
-    const game = findGame();
     if (!game) { state.rainBlocked = 'sin-game'; return; }
 
     const forced = state.forceRain && performance.now() < state.forceRain;
@@ -26001,7 +26145,9 @@ requestAnimationFrame(loop);
     const game = findGame();
     if (!game) return;
 
-    tickRain();
+    // el game se resuelve una vez por barrido y se pasa al tick de lluvia;
+    // resolverlo dos veces en el mismo tick era interrogar al objeto reactivo dos veces por gusto
+    tickRain(game);
 
     const now = performance.now();
     const seen = new Set();
@@ -29465,7 +29611,16 @@ requestAnimationFrame(loop);
     const t0 = performance.now();
     try {
       if (sim.spiders.length === 0) {
-        if (sim.replace.on) {
+        // sin aranas no hay simulacion que pagar; con replace activo el spawner vive
+        // dentro de app.update y solo actua cada 10 ticks, asi que basta con darle
+        // cuerda en ese mismo compas: mismo ritmo de aparicion, decima parte de trabajo
+        if (sim.replace.on && !predators.on && !evoActive) {
+          if (sim.tickCount % 10 === 0) {
+            sim.world.clearCache();
+            sim.app.update();
+          }
+          sim.tickCount++;
+        } else if (sim.replace.on) {
           sim.world.clearCache();
           sim.app.update();
           sim.tickCount++;
@@ -29863,6 +30018,8 @@ requestAnimationFrame(loop);
     raf: 0,
     scanTimer: 0,
     stateNameCache: new Map(),
+    chunkEmitterCache: new Map(),
+    cacheWorld: null,
     serverSalt: 0,
     loaded: false
   };
@@ -30123,13 +30280,13 @@ requestAnimationFrame(loop);
       return false;
     }
   }
-  function scanChunk(world, proto, cx, cz) {
+  function scanChunk(world, proto, cx, cz, out) {
     let chunk = null;
     try {
-      if (typeof proto.isChunkLoaded === 'function' && !proto.isChunkLoaded.call(world, cx, cz)) return;
+      if (typeof proto.isChunkLoaded === 'function' && !proto.isChunkLoaded.call(world, cx, cz)) return null;
       chunk = proto.getChunkByID.call(world, cx, cz);
-    } catch (_) { return; }
-    if (!chunk?.cells) return;
+    } catch (_) { return null; }
+    if (!chunk?.cells) return null;
 
     for (let lx = 0; lx < 16; lx++) {
       for (let lz = 0; lz < 16; lz++) {
@@ -30154,14 +30311,13 @@ requestAnimationFrame(loop);
             done = true;
             const h = hashXZ(wx, wz);
             const r = h / 4294967296;
-            if (state.emitters.length >= MAX_EMITTERS) return;
             if (GRASS_BLOCKS.has(name) && r < 0.30) {
-              state.emitters.push({
+              out.push({
                 kind: name === 'tall_grass' ? 'tall' : 'low',
                 x: wx + 0.5, y: realY + 1, z: wz + 0.5
               });
             } else if (WATER_BLOCKS.has(name) && r < 0.05) {
-              state.emitters.push({
+              out.push({
                 kind: 'water',
                 x: wx + 0.5, y: realY + 0.92, z: wz + 0.5
               });
@@ -30170,6 +30326,8 @@ requestAnimationFrame(loop);
         }
       }
     }
+
+    return chunk;
   }
 
   function randomEmitter(kind) {
@@ -30866,12 +31024,53 @@ requestAnimationFrame(loop);
     state.serverSalt = state.serverSalt || computeServerSalt(game);
     state.stateNameCache.clear();
 
+    // misma guillotina que el cache de nombres: si cambia el mundo, los chunks
+    // cacheados son de otra partida y sobran
+    if (state.cacheWorld !== world) {
+      state.chunkEmitterCache.clear();
+      state.cacheWorld = world;
+    } else if (state.chunkEmitterCache.size > 512) {
+      state.chunkEmitterCache.clear();
+    }
+
     state.emitters.length = 0;
     const ccx = Math.floor(pp.x / 16), ccz = Math.floor(pp.z / 16);
     const R = 3;
     for (let dz = -R; dz <= R; dz++) {
       for (let dx = -R; dx <= R; dx++) {
-        scanChunk(world, proto, ccx + dx, ccz + dz);
+        const cx = ccx + dx, cz = ccz + dz;
+        const key = cx + ',' + cz;
+        let entry = state.chunkEmitterCache.get(key);
+
+        if (entry) {
+          // validar identidad: mismo objeto chunk, mismas celdas, misma altura de capas;
+          // si el motor recarga o recicla el chunk, se reescanea
+          let chunk = null;
+          try {
+            if (typeof proto.isChunkLoaded === 'function' && !proto.isChunkLoaded.call(world, cx, cz)) chunk = null;
+            else chunk = proto.getChunkByID.call(world, cx, cz);
+          } catch (_) { chunk = null; }
+          if (!chunk?.cells || entry.chunk !== chunk || entry.cells !== chunk.cells || entry.cellCount !== chunk.cells.length) {
+            state.chunkEmitterCache.delete(key);
+            entry = null;
+          }
+        }
+
+        let emitters;
+        if (entry) {
+          emitters = entry.emitters;
+        } else {
+          emitters = [];
+          const chunk = scanChunk(world, proto, cx, cz, emitters);
+          if (chunk?.cells) {
+            state.chunkEmitterCache.set(key, { chunk, cells: chunk.cells, cellCount: chunk.cells.length, emitters });
+          }
+        }
+
+        for (let i = 0; i < emitters.length && state.emitters.length < MAX_EMITTERS; i++) {
+          state.emitters.push(emitters[i]);
+        }
+        if (state.emitters.length >= MAX_EMITTERS) return;
       }
     }
   }
@@ -30918,12 +31117,17 @@ requestAnimationFrame(loop);
 
   W.MF_ShineAmbience = {
     setEnabled(v) { applyConfig({ enabled: v }); },
-    refresh() { state.emitters.length = 0; scheduleScan(); },
+    refresh() {
+      state.emitters.length = 0;
+      state.chunkEmitterCache.clear();
+      scheduleScan();
+    },
     destroy() {
       state.destroyed = true;
       stop();
       state.materials = {};
       state.emitters.length = 0;
+      state.chunkEmitterCache.clear();
     }
   };
 })();
@@ -34011,11 +34215,12 @@ const state = {
         state.fullScan = true;
     }
 
-    chunkRoot.updateMatrixWorld?.(true);
-
+    // sin updateMatrixWorld(true) forzado en la raiz: recalcular todo el arbol de chunks
+    // cada 900ms mata la cache de matrices de three; cada mesh ya tiene su matrixWorld,
+    // y tagMesh actualiza el del mesh que va a inspeccionar
     chunkRoot.traverse(mesh => {
         if (!mesh?.isMesh || !mesh.geometry?.attributes?.position) return;
-        if (!state.fullScan && !possibleLeafMesh(mesh)) return;
+        if (!possibleLeafMesh(mesh)) return;
 
         const source = mesh.geometry.attributes.position.array;
         const currentAttribute = mesh.geometry.getAttribute?.('mfLeaf');
@@ -34635,8 +34840,11 @@ const state = {
           this.root.position.z * VM_SCALE + VM_POS[2]
         );
         this.root.rotation.set(VM_EULER[0], VM_EULER[1], VM_EULER[2]);
+        // null = aún no hay muestra previa (guarda de primer frame). los objetos
+        // reales se crean una vez en update y se reutilizan; aquí solo el hueco.
         this.lastItemPos = null;
         this.lastItemQuat = null;
+        this.lastItemQuatInv = null;
         if (lf) {
           this.origUpdate = lf.update;
           const self = this;
@@ -34697,7 +34905,10 @@ const state = {
             dy = ip.y - this.lastItemPos.y;
             dz = ip.z - this.lastItemPos.z;
             if (this.lastItemQuat) {
-              this.root.quaternion.copy(iq).multiply(this.lastItemQuat.clone().invert());
+              // scratch persistente del propio viewmodel: cero clones por frame
+              // (el recolector de basura no cobra por pureza, cobra por volumen)
+              if (!this.lastItemQuatInv) this.lastItemQuatInv = this.lastItemQuat.clone();
+              this.root.quaternion.copy(iq).multiply(this.lastItemQuatInv.copy(this.lastItemQuat).invert());
               const e = this.root.rotation;
               this.root.rotation.set(e.x + VM_EULER[0], e.y + VM_EULER[1], e.z + VM_EULER[2]);
             }
@@ -34707,8 +34918,15 @@ const state = {
             dy + VM_POS[1] + (this.tuneY || 0),
             dz + VM_POS[2] + (this.tuneZ || 0)
           );
-          this.lastItemPos = { x: ip.x, y: ip.y, z: ip.z };
-          this.lastItemQuat = iq.clone();
+          if (this.lastItemPos) {
+            this.lastItemPos.x = ip.x;
+            this.lastItemPos.y = ip.y;
+            this.lastItemPos.z = ip.z;
+          } else {
+            this.lastItemPos = { x: ip.x, y: ip.y, z: ip.z };
+          }
+          if (this.lastItemQuat) this.lastItemQuat.copy(iq);
+          else this.lastItemQuat = iq.clone();
         }
       }
       this.logT = (this.logT || 0) + dt;
@@ -41317,6 +41535,9 @@ const VEGETATION_PASS_THROUGH = new Set([
     }
 
     function sync() {
+        // caducidad de clones remotos también desde el tick periódico: si el par
+        // deja de emitir, aquí muere (los remotos no dependen del conteo local).
+        sweepRemoteClones();
 
         if (state.count <= 0) {
             if (state.clones.size) removeAll();
@@ -41407,6 +41628,26 @@ const VEGETATION_PASS_THROUGH = new Set([
     syncRemoteClones();
   }
 
+  // barrido de caducidad: un par que deja de emitir no se queda eterno en el
+  // mundo (rig completo = memoria). misma regla de 10s desde receiveClone y
+  // desde el tick periódico; antes solo expiraba si el par seguía mandando,
+  // irónico negocio el de la inmortalidad por abandono.
+  function sweepRemoteClones() {
+    if (!state.remoteClones.size) return;
+    const now = Date.now();
+    const game = findGame();
+    const world = isLiveGame(game) ? game.world : null;
+    for (const [key, entry] of state.remoteClones) {
+      if (now - entry.at > 10000) {
+        for (const [id, entity] of entry.entities || []) {
+          try { world?.removeEntityFromWorld?.(id); } catch (_) {}
+          try { if (world?.entities?.get?.(id) === entity) world?.removeEntity?.(entity); } catch (_) {}
+        }
+        state.remoteClones.delete(key);
+      }
+    }
+  }
+
   function syncRemoteClones() {
     const game = findGame();
     if (!isLiveGame(game)) return;
@@ -41414,16 +41655,7 @@ const VEGETATION_PASS_THROUGH = new Set([
     const manager = resolveManager();
     if (!manager) return;
 
-    const now = Date.now();
-    for (const [key, entry] of state.remoteClones) {
-      if (now - entry.at > 10000) {
-        for (const [id, entity] of entry.entities || []) {
-          try { world.removeEntityFromWorld?.(id); } catch (_) {}
-          try { if (world.entities?.get?.(id) === entity) world.removeEntity?.(entity); } catch (_) {}
-        }
-        state.remoteClones.delete(key);
-      }
-    }
+    sweepRemoteClones();
 
     for (const [key, entry] of state.remoteClones) {
       if (!entry.entities) entry.entities = new Map();
@@ -43869,6 +44101,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     lastCameraScan: 0,
     lastWorldScan: 0,
     lastMarkerSyncToken: '',
+    lastCoordsHtml: '',
     listeners: []
   };
 
@@ -44523,6 +44756,8 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
       state.coordsHud = document.createElement('div');
       state.coordsHud.id = 'mf-coordinates-hud';
       (document.body || document.documentElement).appendChild(state.coordsHud);
+      // hud recién nacido: la caché del último render no aplica
+      state.lastCoordsHtml = '';
     }
   }
 
@@ -44571,8 +44806,23 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     }
   }
 
+  function ensureFrameLoop() {
+    if (state.destroyed || state.frameId) return;
+    if (!state.enabled && !state.coordinatesEnabled) return;
+    state.frameId = requestAnimationFrame(renderFrame);
+  }
+
   function renderFrame() {
     if (state.destroyed) return;
+
+    // módulo apagado por completo: la ronda termina y deja el hud limpio
+    if (!state.enabled && !state.coordinatesEnabled) {
+      state.frameId = 0;
+      if (state.coordsHud) state.coordsHud.style.display = 'none';
+      if (state.layer) state.layer.style.display = 'none';
+      return;
+    }
+
     state.frameId = requestAnimationFrame(renderFrame);
     ensureLayer();
 
@@ -44582,7 +44832,12 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
 
     if (state.coordinatesEnabled && pos && validCoord(pos.x) && validCoord(pos.y) && validCoord(pos.z)) {
       state.coordsHud.style.display = 'block';
-      state.coordsHud.innerHTML = `<strong>XYZ</strong> ${Math.floor(Number(pos.x))} ${Math.floor(Number(pos.y))} ${Math.floor(Number(pos.z))}`;
+      const html = `<strong>XYZ</strong> ${Math.floor(Number(pos.x))} ${Math.floor(Number(pos.y))} ${Math.floor(Number(pos.z))}`;
+      // mismas cifras, mismo html: no hay motivo para re-parsear la cartelería cada frame
+      if (html !== state.lastCoordsHtml) {
+        state.lastCoordsHtml = html;
+        state.coordsHud.innerHTML = html;
+      }
     } else if (state.coordsHud) {
       state.coordsHud.style.display = 'none';
     }
@@ -44674,6 +44929,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     state.enabled = value.enabled !== false;
     state.coordinatesEnabled = !!value.coordinatesEnabled;
     if (value.edgeIndicators != null) state.edgeIndicators = value.edgeIndicators !== false;
+    ensureFrameLoop();
   }
 
   function respondUI(requestId, result) {
@@ -45083,12 +45339,17 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     IMG_URL_RE.lastIndex = 0;
   }
 
-  // safety net for mutations the observer never sees (rows mounted before enable,
-  // reconciler edge cases): rescan the page when any catbox/klipy url is present
+  // red de seguridad para mutaciones que el observador no ve (filas montadas
+  // antes de enable, casos raros del reconciler): antes serializaba el
+  // textContent de TODO el body cada 1.2s solo para buscar dos substrings.
+  // se escanea el contenedor del chat — el input del chat ya lo ancla dentro
+  // de #react (la misma raíz que resuelve ensureChat/findGame) — y body solo
+  // si el contenedor no está.
   function rescanChat() {
     try {
-      const text = document.body?.textContent || '';
-      if (text.includes('files.catbox.moe') || text.includes('static.klipy.com')) scanNode(document.body);
+      const container = state.chatInputEl?.closest('#react') || document.querySelector('#react') || document.body;
+      const text = container.textContent || '';
+      if (text.includes('files.catbox.moe') || text.includes('static.klipy.com')) scanNode(container);
     } catch (_) {}
   }
 
@@ -45379,61 +45640,71 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
   }
   let searchDebounce = 0;
 
+  // handlers con nombre a nivel de módulo: antes eran closures anónimas que
+  // ningún destroy() podía descolgar — cada re-ejecución del script apilaba
+  // otra pareja de listeners de captura sobre document. ahora se quitan en
+  // destroy() y se vuelven a poner al re-iniciar.
+  function onTypingInput(event) {
+    if (!state.enabled) return;
+    const target = event.target;
+    if (!target || target.tagName !== 'INPUT') return;
+    if (target.closest('#mf-gifchat-bar')) return;
+    const chat = ensureChat();
+    if (!chat?.showInput && !chat?.inputOpen) return;
+    const value = String(target.value || '');
+
+    if (state.barOpen) {
+        clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => loadBar(value.replace(TRIGGER_TOKEN_RE, ' ').trim()), 350);
+      return;
+    }
+
+    if (!TRIGGER_RE.test(value)) return;
+    console.log('minifeather gifchat :gif trigger detected — opening bar');
+    try { chat.setInputValue?.(''); } catch (_) {}
+    if (target.value) target.value = '';
+    openBar();
+  }
+
+  function onBarKeydown(event) {
+    if (!state.enabled || !state.barOpen) return;
+    const input = state.chatInputEl;
+    if (!input || event.target !== input) return;
+
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const n = state.items.length;
+      if (!n) return;
+      const dir = event.shiftKey ? -1 : 1;
+      state.sel = (state.sel + dir + n) % n;
+      updateActive();
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const item = state.items[state.sel] || state.items[0];
+      if (item) sendGif(item);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeBar();
+    }
+  }
+
   function hookTyping() {
-    document.addEventListener('input', event => {
-      if (!state.enabled) return;
-      const target = event.target;
-      if (!target || target.tagName !== 'INPUT') return;
-      if (target.closest('#mf-gifchat-bar')) return;
-      const chat = ensureChat();
-      if (!chat?.showInput && !chat?.inputOpen) return;
-      const value = String(target.value || '');
-
-      if (state.barOpen) {
-          clearTimeout(searchDebounce);
-        searchDebounce = setTimeout(() => loadBar(value.replace(TRIGGER_TOKEN_RE, ' ').trim()), 350);
-        return;
-      }
-
-      if (!TRIGGER_RE.test(value)) return;
-      console.log('minifeather gifchat :gif trigger detected — opening bar');
-      try { chat.setInputValue?.(''); } catch (_) {}
-      if (target.value) target.value = '';
-      openBar();
-    }, true);
+    document.removeEventListener('input', onTypingInput, true);
+    document.addEventListener('input', onTypingInput, true);
   }
 
   function hookKeys() {
-    document.addEventListener('keydown', event => {
-      if (!state.enabled || !state.barOpen) return;
-      const input = state.chatInputEl;
-      if (!input || event.target !== input) return;
-
-      if (event.key === 'Tab') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        const n = state.items.length;
-        if (!n) return;
-        const dir = event.shiftKey ? -1 : 1;
-        state.sel = (state.sel + dir + n) % n;
-        updateActive();
-        return;
-      }
-
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        const item = state.items[state.sel] || state.items[0];
-        if (item) sendGif(item);
-        return;
-      }
-
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        closeBar();
-      }
-    }, true);
+    document.removeEventListener('keydown', onBarKeydown, true);
+    document.addEventListener('keydown', onBarKeydown, true);
   }
   // ---------- paste / drag images: discord-style send via catbox ----------
   const UPLOAD_MIME_RE = /^image\/(png|jpe?g|gif|webp)$/;
@@ -45814,6 +46085,8 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     sync();
     clearInterval(state.scanTimer);
     document.removeEventListener(CONFIG_EVENT, onConfig);
+    document.removeEventListener('input', onTypingInput, true);
+    document.removeEventListener('keydown', onBarKeydown, true);
     state.bar?.remove();
     state.bar = null;
     if (globalThis[GLOBAL_KEY]?.destroy === destroy) delete globalThis[GLOBAL_KEY];
@@ -48882,6 +49155,7 @@ const PRESETS = Object.freeze({
     lastGameScan: 0,
     lastCameraScan: 0,
     lastFrame: performance.now(),
+    loopScheduled: false,
     viewHook: null,
     viewHookDepth: 0,
     projectionHook: null,
@@ -49313,17 +49587,22 @@ const PRESETS = Object.freeze({
     } catch (_) {}
     }
 
+    // el mismo plato lavado cada frame; nadie lo nota y el recolector descansa
+    const scratchFactors = { position: 1, rotation: 1, fov: 1 };
+    const scratchMotion = { x: 0, y: 0, z: 0 };
+    const scratchRelative = { forward: 0, strafe: 0 };
+    const emptyMotion = {};
+
     function motionData(player) {
-    const source = player?.motion || player?.velocity || player?.vel || {};
+    const source = player?.motion || player?.velocity || player?.vel || emptyMotion;
     const x = Number(source.x);
     const y = Number(source.y);
     const z = Number(source.z);
 
-    return {
-        x: Number.isFinite(x) ? x : 0,
-        y: Number.isFinite(y) ? y : 0,
-        z: Number.isFinite(z) ? z : 0
-    };
+    scratchMotion.x = Number.isFinite(x) ? x : 0;
+    scratchMotion.y = Number.isFinite(y) ? y : 0;
+    scratchMotion.z = Number.isFinite(z) ? z : 0;
+    return scratchMotion;
     }
 
     function relativeMotion(player, motion) {
@@ -49333,24 +49612,34 @@ const PRESETS = Object.freeze({
         yaw = Number(state.yawObject?.rotation?.y);
     }
 
-    if (!Number.isFinite(yaw)) return { forward: 0, strafe: 0 };
+    if (!Number.isFinite(yaw)) {
+        scratchRelative.forward = 0;
+        scratchRelative.strafe = 0;
+        return scratchRelative;
+    }
 
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
 
-    return {
-        forward: -sin * motion.x + cos * motion.z,
-        strafe: cos * motion.x + sin * motion.z
-    };
+    scratchRelative.forward = -sin * motion.x + cos * motion.z;
+    scratchRelative.strafe = cos * motion.x + sin * motion.z;
+    return scratchRelative;
     }
 
     function perspectiveFactors(player) {
     const perspective = Number(player?.perspective);
     const firstPerson = !Number.isFinite(perspective) || perspective === 0;
 
-    return firstPerson
-        ? { position: 1, rotation: 1, fov: 1 }
-        : { position: 0.48, rotation: 0.78, fov: 0.82 };
+    if (firstPerson) {
+        scratchFactors.position = 1;
+        scratchFactors.rotation = 1;
+        scratchFactors.fov = 1;
+    } else {
+        scratchFactors.position = 0.48;
+        scratchFactors.rotation = 0.78;
+        scratchFactors.fov = 0.82;
+    }
+    return scratchFactors;
         }
 
         function clearChannels() {
@@ -49638,6 +49927,7 @@ const PRESETS = Object.freeze({
     if (next) {
         resolveCamera(true);
         clearChannels();
+        scheduleLoop();
     } else {
         resetEffects();
     }
@@ -49749,13 +50039,26 @@ const PRESETS = Object.freeze({
     }, true);
 
     function loop(timestamp) {
+    state.loopScheduled = false;
+
+    // desactivado no hay ronda: el bucle no se reengancha por pura costumbre
+    if (!state.enabled) {
+        return;
+    }
+
     const dt = clamp((timestamp - state.lastFrame) / 1000, 0.001, 0.05);
     state.lastFrame = timestamp;
 
-    if (state.enabled) {
-        updateEffects(timestamp, dt);
+    updateEffects(timestamp, dt);
+
+    state.loopScheduled = true;
+    requestAnimationFrame(loop);
     }
 
+    function scheduleLoop() {
+    // un solo despertar por turno
+    if (state.loopScheduled) return;
+    state.loopScheduled = true;
     requestAnimationFrame(loop);
     }
 
@@ -49815,7 +50118,7 @@ const PRESETS = Object.freeze({
     }
     };
 
-requestAnimationFrame(loop);
+scheduleLoop();
 })();
 
 //# sourceURL=MF:src/Render/CameraOverhaul.js
@@ -55568,9 +55871,12 @@ requestAnimationFrame(loop);
         state.originalClearRect = null;
     }
 
+    let loopRunning = false;
+
     function loop() {
         if (!state.enabled) {
-            requestAnimationFrame(loop);
+            // apagado es apagado: nada de rondas fantasma reenganchándose solas
+            loopRunning = false;
             return;
         }
 
@@ -55602,6 +55908,13 @@ requestAnimationFrame(loop);
         requestAnimationFrame(loop);
     }
 
+    function startLoop() {
+        // el turno empieza cuando hay minimapa que robar, no antes
+        if (loopRunning) return;
+        loopRunning = true;
+        requestAnimationFrame(loop);
+    }
+
     function setEnabled(enabled) {
         const next = !!enabled;
         if (state.enabled === next) return;
@@ -55628,6 +55941,9 @@ requestAnimationFrame(loop);
             ensureCacheCanvas();
             installHook();
             invalidateCache('enable');
+
+            // el bucle nace aquí, no en la carga del módulo
+            startLoop();
 
             void 0;
         } else {
@@ -55740,8 +56056,6 @@ requestAnimationFrame(loop);
     } else {
         init();
     }
-
-    requestAnimationFrame(loop);
 })();
 
 //# sourceURL=MF:src/World/MinimapCache.js
@@ -70136,7 +70450,8 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         vecCtor: null,
         solidCache: new Map(),
         worldCache: { world: null, proto: null, at: 0 },
-        diagSeen: { n: 0, mobs: 0 }
+        diagSeen: { n: 0, mobs: 0 },
+        scanAt: 0
     };
 
     function getGame() {
@@ -70861,7 +71176,9 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         const p = playerPos();
         const scene = state.game?.gameScene?.scene;
         const container = state.sceneGuardContainer;
-        for (const rec of [...state.corpses]) {
+        // hacia atrás: removeCorpse hace splice y los índices ya visitados no se movieron
+        for (let i = state.corpses.length - 1; i >= 0; i--) {
+            const rec = state.corpses[i];
             // algo externo lo ocultó: forzar visible (no fuimos nosotros, palabra)
             if (rec.mesh.visible !== true) {
                 rec.mesh.visible = true;
@@ -70928,9 +71245,12 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         installSceneGuard();
         tagExistingMobs();
 
-        // capturar muertes nuevas (ventana de muerte; respaldo del hook de destroy)
+        // capturar muertes nuevas (ventana de muerte; respaldo del hook de destroy).
+        // sondeo a 5 Hz: las muertes ya vienen enventanadas por el hook, y recorrer
+        // TODAS las entidades por frame era un impuesto sobre cada uno de los 60.
         const ents = state.game.world.entities;
-        if (ents && typeof ents.forEach === 'function') {
+        if (ents && typeof ents.forEach === 'function' && t - state.scanAt >= 200) {
+            state.scanAt = t;
             try {
                 ents.forEach((ent) => {
                     try {
@@ -70962,8 +71282,13 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         schedule();
     }
 
+    function scheduledTick() {
+        if (state.stamp.alive) tick();
+    }
+
     function schedule() {
-        requestAnimationFrame(() => { if (state.stamp.alive) tick(); });
+        // callback persistente a nivel de módulo: una función, cientos de frames
+        requestAnimationFrame(scheduledTick);
     }
 
     // ---- API / toggle (mismo patrón que CrittersMobs) ----
@@ -74480,14 +74805,14 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             const p = (async () => {
                 let parsed;
                 if (/\.geo\.json$/i.test(file)) {
-                    p2pAssets.set(file, arrayBuffer);
+                    p2pAssetsRemember(file, arrayBuffer);
                     parsed = await parseGeoModel(file);
                 } else if (/\.obj$/i.test(file)) {
                     parsed = parseOBJ(new TextDecoder().decode(arrayBuffer), file, null);
                 } else if (/\.gltf$/i.test(file)) {
                     parsed = await resolveGLTFExternal(JSON.parse(new TextDecoder().decode(arrayBuffer)));
                 } else if (/\.png$/i.test(file)) {
-                    p2pAssets.set(file, arrayBuffer);
+                    p2pAssetsRemember(file, arrayBuffer);
                     return { root: { children: [] } };
                 } else {
                     parsed = parseGLB(arrayBuffer);
@@ -75727,8 +76052,28 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
     const p2pAssets = new Map();
 
+    // bytes crudos de modelos p2p: cada ArrayBuffer pesa entre 0.1 y 10MB y los
+    // nombres los pone el par. set-only era una fuga con cara de colección;
+    // LRU de 16 y a otra cosa. el buffer devuelto en lectura es el mismo.
+    const P2P_ASSETS_MAX = 16;
+
+    function p2pAssetsRemember(file, buf) {
+        if (p2pAssets.has(file)) p2pAssets.delete(file); // reinsertar refresca la recencia
+        p2pAssets.set(file, buf);
+        while (p2pAssets.size > P2P_ASSETS_MAX) {
+            const oldest = p2pAssets.keys().next().value;
+            if (oldest === undefined || oldest === file) break;
+            p2pAssets.delete(oldest);
+        }
+    }
+
     async function fetchModelArrayBuffer(file) {
-        if (p2pAssets.has(file)) return p2pAssets.get(file);
+        if (p2pAssets.has(file)) {
+            const buf = p2pAssets.get(file);
+            p2pAssets.delete(file);
+            p2pAssets.set(file, buf);
+            return buf;
+        }
         if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
             const url = chrome.runtime.getURL('models/entities/' + file);
             let resp;
@@ -78027,15 +78372,20 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             state.nextFlock = t + (state.mobs.length ? CFG.FLOCK_MIN_MS + Math.random() * (CFG.FLOCK_MAX_MS - CFG.FLOCK_MIN_MS) : CFG.RETRY_MS);
         }
 
-        for (const mob of [...state.mobs]) {
-            try { aiTick(mob, dt, t); } catch {}
+        // hacia atrás: aiTick puede eliminar mobs; el array vive sin copias
+        for (let i = state.mobs.length - 1; i >= 0; i--) {
+            try { aiTick(state.mobs[i], dt, t); } catch {}
         }
 
         schedule();
     }
 
+    function scheduledTick() {
+        if (state.stamp.alive) tick();
+    }
+
     function schedule() {
-        requestAnimationFrame(() => { if (state.stamp.alive) tick(); });
+        requestAnimationFrame(scheduledTick);
     }
 
     globalThis.MF_DuckMobs = {
@@ -78772,14 +79122,20 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         }
 
         const playerNoise = updatePlayerNoise(t);
-        for (const mob of [...state.mobs]) {
-            try { aiTick(mob, dt, t, playerNoise); } catch {}
+        // hacia atrás: aiTick puede eliminar mobs (reset distance) y el índice
+        // recién usado no se mueve con el splice; copia del array: cancelada
+        for (let i = state.mobs.length - 1; i >= 0; i--) {
+            try { aiTick(state.mobs[i], dt, t, playerNoise); } catch {}
         }
         schedule();
     }
 
+    function scheduledTick() {
+        if (state.stamp.alive) tick();
+    }
+
     function schedule() {
-        requestAnimationFrame(() => { if (state.stamp.alive) tick(); });
+        requestAnimationFrame(scheduledTick);
     }
 
     globalThis.MF_CrittersMobs = {
@@ -79937,8 +80293,15 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             }
             state.lastGrounded = grounded;
 
-            for (const pet of [...state.pets]) petTick(pet, dt, ts, player);
-            state.lastPlayerPos = { x: player.x, z: player.z };
+            // hacia atrás: petTick puede eliminar mascotas (grace/mount timeout)
+            for (let i = state.pets.length - 1; i >= 0; i--) petTick(state.pets[i], dt, ts, player);
+            // mismo objeto reciclado frame a frame; nadie retiene la versión anterior
+            if (state.lastPlayerPos) {
+                state.lastPlayerPos.x = player.x;
+                state.lastPlayerPos.z = player.z;
+            } else {
+                state.lastPlayerPos = { x: player.x, z: player.z };
+            }
         }
         state.rafId = requestAnimationFrame(loop);
     }
@@ -83016,7 +83379,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         time: 0,
         lastT: performance.now(),
         params: { bloom: 0.35, ca: 0.0, dof: 0.0, dirt: 0.0, vignette: 0.0 },
-        active: false
+        active: false,
+        rafId: null,
+        retryTimer: null,
+        retryGuard: null
     };
 
     const POSTFX_FS_SRC = `
@@ -83213,9 +83579,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         const loop = () => {
             if (!postfx.active) return;
             try { postfxDraw(gl); } catch (_) {}
-            requestAnimationFrame(loop);
+            postfx.rafId = requestAnimationFrame(loop);
         };
-        requestAnimationFrame(loop);
+        postfx.rafId = requestAnimationFrame(loop);
 
         void 0;
         return true;
@@ -83313,6 +83679,44 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         }
     }
 
+    function refreshPostFxEnabled() {
+        postfx.enabled = !!(postfx.params.bloom > 0 || postfx.params.ca > 0 ||
+            postfx.params.dof > 0 || postfx.params.dirt > 0 || postfx.params.vignette > 0);
+    }
+
+    // sin esto el rAF seguia reprogramandose eternamente con el pase ya inerte
+    function stopPostFx() {
+        postfx.enabled = false;
+        postfx.active = false;
+        if (postfx.retryTimer) {
+            clearInterval(postfx.retryTimer);
+            postfx.retryTimer = null;
+        }
+        if (postfx.retryGuard) {
+            clearTimeout(postfx.retryGuard);
+            postfx.retryGuard = null;
+        }
+        if (postfx.rafId) {
+            cancelAnimationFrame(postfx.rafId);
+            postfx.rafId = null;
+        }
+    }
+
+    function armPostFxRetry() {
+        if (!postfx.enabled || postfx.active || postfx.retryTimer) return;
+        const retry = setInterval(() => {
+            if (!postfx.enabled || installPostFx()) {
+                clearInterval(retry);
+                if (postfx.retryTimer === retry) postfx.retryTimer = null;
+            }
+        }, 1000);
+        postfx.retryTimer = retry;
+        postfx.retryGuard = setTimeout(() => {
+            clearInterval(retry);
+            if (postfx.retryTimer === retry) postfx.retryTimer = null;
+        }, 30000);
+    }
+
     function setPostFx(cfg) {
         if (cfg) {
             if (cfg.bloom !== undefined) postfx.params.bloom = Math.max(0, Math.min(1, +cfg.bloom || 0));
@@ -83321,14 +83725,11 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             if (cfg.dirt !== undefined) postfx.params.dirt = Math.max(0, Math.min(1, +cfg.dirt || 0));
             if (cfg.vignette !== undefined) postfx.params.vignette = Math.max(0, Math.min(1, +cfg.vignette || 0));
         }
-        postfx.enabled = !!(postfx.params.bloom > 0 || postfx.params.ca > 0 ||
-            postfx.params.dof > 0 || postfx.params.dirt > 0 || postfx.params.vignette > 0);
+        refreshPostFxEnabled();
         if (postfx.enabled && !postfx.active) {
-
-            const retry = setInterval(() => {
-                if (installPostFx() || !postfx.enabled) clearInterval(retry);
-            }, 1000);
-            setTimeout(() => clearInterval(retry), 30000);
+            armPostFxRetry();
+        } else if (!postfx.enabled) {
+            stopPostFx();
         }
     }
 
@@ -83954,11 +84355,14 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             state.enabled = true;
             localStorage.setItem('miniblox_customshader', 'true');
             scan();
+            refreshPostFxEnabled();
+            armPostFxRetry();
         },
         disable() {
             state.enabled = false;
             localStorage.setItem('miniblox_customshader', 'false');
             disable();
+            stopPostFx();
         },
         setPreset(name) {
             if (!PRESETS[name]) {
@@ -84220,8 +84624,16 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         api: null,
         originalDisable: null,
         disableEvent: false,
-        wrapped: false
+        wrapped: false,
+        timer: null,
+        attempts: 0
     };
+
+    // sondeo diferido: la escena no se va a recorrer en bucle solo porque el módulo existe
+    const POLL_MS = 250;
+    const POLL_BACKOFF_MS = 2000;
+    const BACKOFF_AFTER = 10;
+    const WARN_AFTER = 20;
 
     const isGame = g => Boolean(g && typeof g === 'object' && g.player && g.world);
 
@@ -84538,6 +84950,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
         if (originalEnable) {
             api.enable = function () {
+                startPolling();
                 snapshotClouds();
                 return originalEnable();
             };
@@ -84560,6 +84973,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             if (!cfg || typeof cfg !== 'object') return;
 
             if (cfg.enabled === true || cfg.clouds || cfg.cloudsShape || cfg.cloudsPackNoise) {
+                startPolling();
                 snapshotClouds();
             }
 
@@ -84574,10 +84988,40 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         true
     );
 
-    const timer = setInterval(() => {
-        wrapApi();
+    function stopPolling() {
+        if (state.timer != null) {
+            clearTimeout(state.timer);
+            state.timer = null;
+        }
+    }
+
+    function startPolling(delay) {
+        if (state.timer != null) return;
+        state.timer = setTimeout(pollStep, delay || POLL_MS);
+    }
+
+    function pollStep() {
+        state.timer = null;
+
+        const wrapped = wrapApi();
         if (!state.cloudBaseline) snapshotClouds();
-    }, 250);
+
+        // api envuelta y baseline capturada: nada queda por esperar, dejar de mirar
+        if (wrapped && state.cloudBaseline) return;
+
+        if (!state.cloudBaseline) {
+            state.attempts++;
+            if (state.attempts === WARN_AFTER) {
+                console.warn(
+                    'minifeather shader safety: ' + WARN_AFTER + ' intentos sin ver el material de nubes; ' +
+                    'reintentando cada ' + (POLL_BACKOFF_MS / 1000) + 's, que no corre nada'
+                );
+            }
+        }
+
+        // el material puede tardar en aparecer (menus, otros servidores): reintentar, no rendirse
+        startPolling(!state.cloudBaseline && state.attempts >= BACKOFF_AFTER ? POLL_BACKOFF_MS : POLL_MS);
+    }
 
     W.MF_CustomShaderSafety = {
         restore: hardRestore,
@@ -84586,7 +85030,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             cloudBaseline: Boolean(state.cloudBaseline)
         }),
         destroy: () => {
-            clearInterval(timer);
+            stopPolling();
             hardRestore();
         }
     };
@@ -86652,19 +87096,27 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     }
   }
 
+  const pruneKeysScratch = [];
+
   function prune(now) {
     const ttl = dryMs();
     for (const [key, cell] of wetBlocks) if (now - cell.lastWet > ttl) wetBlocks.delete(key);
     for (const [key, cell] of puddles) {
       if (now - cell.lastWet > ttl || cell.amount <= 0.001) puddles.delete(key);
     }
+    // ordenar claves reutilizando el mismo rascador en vez de repartir entradas nuevas;
+    // el resultado (que claves se podan y en que orden) es identico
     if (wetBlocks.size > 2048) {
-      const sorted = [...wetBlocks.entries()].sort((a, b) => a[1].lastWet - b[1].lastWet);
-      for (let i = 0; i < sorted.length - 2048; i++) wetBlocks.delete(sorted[i][0]);
+      pruneKeysScratch.length = 0;
+      for (const key of wetBlocks.keys()) pruneKeysScratch.push(key);
+      pruneKeysScratch.sort((a, b) => wetBlocks.get(a).lastWet - wetBlocks.get(b).lastWet);
+      for (let i = 0; i < pruneKeysScratch.length - 2048; i++) wetBlocks.delete(pruneKeysScratch[i]);
     }
     if (puddles.size > 256) {
-      const sorted = [...puddles.entries()].sort((a, b) => a[1].lastWet - b[1].lastWet);
-      for (let i = 0; i < sorted.length - 256; i++) puddles.delete(sorted[i][0]);
+      pruneKeysScratch.length = 0;
+      for (const key of puddles.keys()) pruneKeysScratch.push(key);
+      pruneKeysScratch.sort((a, b) => puddles.get(a).lastWet - puddles.get(b).lastWet);
+      for (let i = 0; i < pruneKeysScratch.length - 256; i++) puddles.delete(pruneKeysScratch[i]);
     }
   }
   const packScratch = [];
@@ -86691,18 +87143,14 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     const count = Math.min(maxK, liveCount);
     const arr = shared.uMFWetCells.value;
     arr.fill(0);
-    const used = usedIdxScratch;
-    used.fill(false);
+    // antes: seleccion del mas cercano vuelta a vuelta, O(maxK x vivos) (~131k peores casos);
+    // una ordenacion estable de indices produce la misma seleccion en el mismo orden
+    const order = packOrderScratch;
+    order.length = liveCount;
+    for (let i = 0; i < liveCount; i++) order[i] = i;
+    order.sort((a, b) => packScratch[a].dist2 - packScratch[b].dist2);
     for (let k = 0; k < count; k++) {
-      let best = -1, bestD = Infinity;
-      for (let i = 0; i < liveCount; i++) {
-        if (used[i]) continue;
-        const d = packScratch[i].dist2;
-        if (d < bestD) { bestD = d; best = i; }
-      }
-      if (best < 0) break;
-      used[best] = true;
-      const cell = packScratch[best], o = k * 4;
+      const cell = packScratch[order[k]], o = k * 4;
       arr[o] = cell.x;
       arr[o + 1] = cell.y;
       arr[o + 2] = cell.z;
@@ -86710,7 +87158,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     }
     shared.uMFWetCellCount.value = count;
   }
-  const usedIdxScratch = new Array(2048);
+  const packOrderScratch = [];
 
   function updateRain(game, now, dt) {
     let rain = 0;
@@ -86759,12 +87207,22 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     }
 
     const cp = game?.gameScene?.camera?.position || game?.player?.pos || game?.player?.position;
-    if (cp) Object.assign(shared.uMFWetCameraPos.value, { x: Number(cp.x) || 0, y: Number(cp.y) || 0, z: Number(cp.z) || 0 });
+    const cam = shared.uMFWetCameraPos.value;
+    if (cp) {
+      cam.x = Number(cp.x) || 0;
+      cam.y = Number(cp.y) || 0;
+      cam.z = Number(cp.z) || 0;
+    }
 
-    Object.assign(puddleUniforms.uMFPuddleLightDir.value, dir);
-    Object.assign(puddleUniforms.uMFPuddleLightColor.value, col);
+    // escritura directa en los campos: cuatro Object.assign con literales nuevos
+    // por frame era recoleccion de basura por deporte
+    const pDir = puddleUniforms.uMFPuddleLightDir.value;
+    pDir.x = dir.x; pDir.y = dir.y; pDir.z = dir.z;
+    const pCol = puddleUniforms.uMFPuddleLightColor.value;
+    pCol.x = col.x; pCol.y = col.y; pCol.z = col.z;
     puddleUniforms.uMFPuddleLightStrength.value = shared.uMFWetLightStrength.value;
-    Object.assign(puddleUniforms.uMFPuddleCameraPos.value, shared.uMFWetCameraPos.value);
+    const pCam = puddleUniforms.uMFPuddleCameraPos.value;
+    pCam.x = cam.x; pCam.y = cam.y; pCam.z = cam.z;
   }
 
   function findReferenceMesh(game) {
@@ -87735,6 +88193,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
   const GUI_BUNDLE_RE = /\/assets\/GuiHud[^/]*\.js(\?.*)?$/i;
   let guiBundleActive = false;
+  let lastBundleScan = 0;
 
   function testGuiHudUrl(url) {
     return GUI_BUNDLE_RE.test(url || '');
@@ -87766,6 +88225,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
   function isGuiHudBundleActive() {
     if (guiBundleActive) return true;
     try {
+      // el historial de recursos solo crece; escaneo completo como mucho una vez cada 7s
+      const now = performance.now();
+      if (lastBundleScan && now - lastBundleScan < 7000) return false;
+      lastBundleScan = now;
 
       for (const s of document.scripts) {
         if (testGuiHudUrl(s.getAttribute('src'))) return (guiBundleActive = true);
@@ -87799,6 +88262,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     observers: [],
     overlay: null,
     overlayInterval: null,
+    barFinderInterval: null,
     healthBarRef: null,
     foodBarRef: null,
     xpBarRef: null
@@ -87967,6 +88431,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
   }
 
   function patchPlayerList() {
+    // los padres ya servidos no vuelven a pagar queryselector
+    const patchedParents = new WeakSet();
     const observer = new MutationObserver(() => {
       if (!canPatch()) return;
       if (!isGameReady(getGame())) return;
@@ -87974,9 +88440,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
         const nodes = [];
         while (walker.nextNode()) {
+          if (!/^\d+ms$/.test(walker.currentNode.textContent)) continue;
           const parent = walker.currentNode.parentElement;
-          if (parent && parent.querySelector('.wifi-icon-patch')) continue;
-          if (walker.currentNode.textContent.match(/^\d+ms$/)) nodes.push(walker.currentNode);
+          if (!parent || patchedParents.has(parent)) continue;
+          const first = parent.firstElementChild;
+          if (first && first.classList.contains('wifi-icon-patch')) { patchedParents.add(parent); continue; }
+          if (parent.querySelector('.wifi-icon-patch')) { patchedParents.add(parent); continue; }
+          nodes.push(walker.currentNode);
         }
         nodes.forEach(node => {
           const match = node.textContent.match(/^(\d+)ms$/);
@@ -87988,6 +88458,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             icon.className = 'wifi-icon-patch';
             parent.insertBefore(icon, node);
           }
+          if (parent) patchedParents.add(parent);
         });
       });
     });
@@ -88014,12 +88485,16 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
   function patchXPBar() {
     let lastXpKey = '';
-    const interval = setInterval(() => {
-      if (!canPatch()) return;
-      const game = getGame();
-      if (!game || !game.info) return;
+    let searchDelay = 100;
+    let xpTimer = null;
 
-      if (!isGameReady(game)) return;
+    // xpWork devuelve el retardo del siguiente ciclo; el trabajo de dentro no cambia
+    const xpWork = () => {
+      if (!canPatch()) return 100;
+      const game = getGame();
+      if (!game || !game.info) return 100;
+
+      if (!isGameReady(game)) return 100;
 
       const experience = (game.info?.xp?.experience || 0);
       const level = (game.info?.xp?.experienceLevel || 0);
@@ -88035,46 +88510,53 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
       }
 
       if (!xpBar) {
-        const allDivs = document.querySelectorAll('div');
-        for (const el of allDivs) {
-          if (el.classList.contains('mf-xp-icons') || el.closest('.mf-xp-icons')) continue;
-          if (el.classList.contains('mf-hearts') || el.closest('.mf-hearts')) continue;
-          if (el.classList.contains('mf-food') || el.closest('.mf-food')) continue;
-          if (el.dataset.mfReplaced || el.dataset.mfXpReplaced) continue;
-          if (isInChatArea(el)) continue;
+        // en fantasma no hay barra que rastrear; el barrido completo se ahorra
+        if (!isGhostMode(game)) {
+          const allDivs = document.querySelectorAll('div');
+          for (const el of allDivs) {
+            if (el.classList.contains('mf-xp-icons') || el.closest('.mf-xp-icons')) continue;
+            if (el.classList.contains('mf-hearts') || el.closest('.mf-hearts')) continue;
+            if (el.classList.contains('mf-food') || el.closest('.mf-food')) continue;
+            if (el.dataset.mfReplaced || el.dataset.mfXpReplaced) continue;
+            if (isInChatArea(el)) continue;
 
-          if (el.querySelector('.mf-hearts, .mf-food')) continue;
+            if (el.querySelector('.mf-hearts, .mf-food')) continue;
 
-          const textContent = el.textContent.trim();
-          if (/^\d+\.?\d*\s*\/\s*\d+$/.test(textContent)) continue;
+            const textContent = el.textContent.trim();
+            if (/^\d+\.?\d*\s*\/\s*\d+$/.test(textContent)) continue;
 
-          const h = el.offsetHeight;
-          const w = el.offsetWidth;
+            const h = el.offsetHeight;
+            const w = el.offsetWidth;
 
-          if (h < 3 || h > 25) continue;
-          if (w < 60 || w < h * 3) continue;
+            if (h < 3 || h > 25) continue;
+            if (w < 60 || w < h * 3) continue;
 
-          const rect = el.getBoundingClientRect();
-          if (rect.top < window.innerHeight * 0.5) continue;
-          if (!isCenteredLikeHud(el)) continue;
+            const rect = el.getBoundingClientRect();
+            if (rect.top < window.innerHeight * 0.5) continue;
+            if (!isCenteredLikeHud(el)) continue;
 
-          let colored = hasColoredBg(el);
-          if (!colored) {
-            for (const child of el.children) {
-              if (hasColoredBg(child)) { colored = true; break; }
+            let colored = hasColoredBg(el);
+            if (!colored) {
+              for (const child of el.children) {
+                if (hasColoredBg(child)) { colored = true; break; }
+              }
             }
-          }
-          if (!colored) continue;
+            if (!colored) continue;
 
-          xpBar = el;
-          state.xpBarRef = el;
-          break;
+            xpBar = el;
+            state.xpBarRef = el;
+            break;
+          }
         }
+        // ref perdido: cada reintento tarda el doble, con techo de 2s
+        searchDelay = Math.min(searchDelay * 2, 2000);
+        return searchDelay;
       }
 
-      if (!xpBar) return;
+      // ref vivo: la búsqueda recupera el ritmo de siempre
+      searchDelay = 100;
 
-      if (xpBar.querySelector('.mf-hearts, .mf-food')) return;
+      if (xpBar.querySelector('.mf-hearts, .mf-food')) return 100;
 
       const ghost = isGhostMode(game);
       const guiOpacity = ghost ? 0.35 : 1;
@@ -88084,7 +88566,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
         existing.style.opacity = guiOpacity;
         existing.style.transition = 'opacity 0.3s';
-        if (lastXpKey === xpKey) return;
+        if (lastXpKey === xpKey) return 100;
       }
       lastXpKey = xpKey;
 
@@ -88162,11 +88644,20 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         'pointer-events:none', 'z-index:2'
       ].join(';');
       container.appendChild(levelText);
-    }, 100);
+
+      return 100;
+    };
+
+    const xpTick = () => {
+      let delay = 100;
+      try { delay = xpWork(); } catch (_) {}
+      xpTimer = setTimeout(xpTick, delay);
+    };
+    xpTimer = setTimeout(xpTick, 100);
 
     state.observers.push({
       disconnect: () => {
-        clearInterval(interval);
+        clearTimeout(xpTimer);
         state.xpBarRef = null;
         document.querySelectorAll('[data-mf-xp-replaced]').forEach(el => {
           delete el.dataset.mfXpReplaced;
@@ -88177,12 +88668,21 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
   }
 
   function patchDebugStats() {
+    // recuento y primera casilla congelados: la pasada entera se da por servida
+    let lastStatCount = -1;
+    let lastStatFirst = null;
     const observer = new MutationObserver(() => {
       if (!canPatch()) return;
       if (!isGameReady(getGame())) return;
       schedulePatch(() => {
         const pingElements = document.querySelectorAll('[class*="debug"], [class*="stat"]');
+        const firstEl = pingElements[0] || null;
+        if (pingElements.length === lastStatCount && firstEl === lastStatFirst) return;
+        lastStatCount = pingElements.length;
+        lastStatFirst = firstEl;
         pingElements.forEach(el => {
+          // solo hojas: un contenedor con hijos no lleva el ping encima
+          if (el.children.length !== 0) return;
           if (el.classList.contains('debug-patched')) return;
           const text = el.textContent;
           const match = text.match(/Ping[:\s]*(\d+(?:\.\d+)?)\s*ms/i);
@@ -88205,9 +88705,30 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     state.observers.push(observer);
   }
 
+  // rastreo lento de barras originales: cada 1.5s y solo mientras falten refs
+  function startBarFinder() {
+    if (state.barFinderInterval) return;
+    state.barFinderInterval = setInterval(() => {
+      if (!canPatch()) return;
+      const game = getGame();
+      if (!game || !game.info || !isGameReady(game)) return;
+      if (isGhostMode(game)) return;
+      findOriginalBars();
+      // con las dos barras en casa, el rastreo se apaga solo
+      if (state.healthBarRef?.isConnected && state.foodBarRef?.isConnected) {
+        clearInterval(state.barFinderInterval);
+        state.barFinderInterval = null;
+      }
+    }, 1500);
+  }
+
   function createHealthFoodOverlay() {
     if (state.overlay) return;
     state.overlay = true;
+
+    let lastOverlayKey = '';
+    let lastHealthBar = null;
+    let lastFoodBar = null;
 
     state.overlayInterval = setInterval(() => {
       if (!canPatch()) return;
@@ -88228,9 +88749,20 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
       const ghost = isGhostMode(game);
       const guiOpacity = ghost ? 0.35 : 1;
 
-      const bars = (state.healthBarRef?.isConnected && state.foodBarRef?.isConnected)
-        ? { healthBar: state.healthBarRef, foodBar: state.foodBarRef }
-        : (ghost ? { healthBar: null, foodBar: null } : findOriginalBars());
+      const bars = {
+        healthBar: state.healthBarRef?.isConnected ? state.healthBarRef : null,
+        foodBar: state.foodBarRef?.isConnected ? state.foodBarRef : null
+      };
+      // refs ausentes o a medias: el rastreo lento se encarga, no este tick
+      if ((!bars.healthBar || !bars.foodBar) && !ghost) startBarFinder();
+
+      const healthLive = !!(bars.healthBar && bars.healthBar.querySelector('.mf-hearts'));
+      const foodLive = !!(bars.foodBar && bars.foodBar.querySelector('.mf-food'));
+      const overlayKey = [health, food, absorption, hardcore, ghost, iconSize, healthLive, foodLive,
+        bars.healthBar === lastHealthBar, bars.foodBar === lastFoodBar].join(':');
+      // mismas cifras y mismas barras: esta ronda el dom descansa
+      if (overlayKey === lastOverlayKey) return;
+      lastOverlayKey = overlayKey;
 
       const nuke = (el) => {
         if (!el) return;
@@ -88317,6 +88849,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
           }
           hearts.appendChild(goldRow);
         }
+        lastHealthBar = bars.healthBar;
       }
 
       if (bars.foodBar) {
@@ -88365,6 +88898,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
           ].join(';');
           foodIcons.appendChild(img);
         }
+        lastFoodBar = bars.foodBar;
       }
     }, 200);
   }
@@ -88373,6 +88907,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     if (state.overlayInterval) {
       clearInterval(state.overlayInterval);
       state.overlayInterval = null;
+    }
+    if (state.barFinderInterval) {
+      clearInterval(state.barFinderInterval);
+      state.barFinderInterval = null;
     }
     state.overlay = null;
     state.healthBarRef = null;
@@ -88392,12 +88930,16 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
   function enable() {
     if (state.enabled) return;
     state.enabled = true;
+    // se rearma el vigía del bundle, que el disable lo mandó a dormir
+    scriptObserver.observe(document.documentElement, { childList: true, subtree: true });
     void 0;
     initPatches();
   }
 
   function disable() {
     state.enabled = false;
+    // el vigía del bundle también descansa al apagar
+    scriptObserver.disconnect();
     state.observers.forEach(o => o.disconnect());
     state.observers = [];
     if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
@@ -93665,13 +94207,21 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         state.tex.needsUpdate = true;
     }
 
+    // canvas de mezcla reutilizado: crear un <canvas> por frame durante un
+    // blend era gc a 60fps para dibujar exactamente lo mismo
+    let blendScratch = null;
     function blendFrames(a, b, t) {
         const w = Math.max(a.canvas.width, b.canvas.width);
         const h = Math.max(a.canvas.height, b.canvas.height);
-        const c = document.createElement('canvas');
-        c.width = w; c.height = h;
+        if (!blendScratch || blendScratch.width !== w || blendScratch.height !== h) {
+            blendScratch = document.createElement('canvas');
+            blendScratch.width = w; blendScratch.height = h;
+        }
+        const c = blendScratch;
         const ctx = c.getContext('2d');
         ctx.imageSmoothingEnabled = false;
+        ctx.globalAlpha = 1;
+        ctx.clearRect(0, 0, w, h);
         ctx.drawImage(a.canvas, 0, 0, w, h);
         ctx.globalAlpha = t;
         ctx.drawImage(b.canvas, 0, 0, w, h);
@@ -93698,12 +94248,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         }
 
         const t0 = performance.now();
+        const totalMs = frames.reduce((s, f) => s + f.holdMs + f.blendMs, 0) || 1;
         const tick = () => {
             if (!state.playing) return;
             const anim = state.library[state.playing];
             if (!anim) return stop(true);
-            const dur = frames.reduce((s, f) => s + f.holdMs + f.blendMs, 0) || 1;
-            let t = (performance.now() - t0) % dur;
+            // duración invariante del loop: calculada una vez en play(), no a 60fps
+            let t = (performance.now() - t0) % totalMs;
             let i = 0;
             while (t > frames[i].holdMs + frames[i].blendMs) {
                 t -= frames[i].holdMs + frames[i].blendMs;
@@ -100995,7 +101546,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         return null;
     }
 
-    const viewport = { canvases: [], origAspect: null };
+    const viewport = { canvases: [], origAspect: null, rect: null, rectAt: 0 };
+    // leer el rect del preview cada frame era read-write-read a 60fps:
+    // el cache se refresca a 5hz o por evento, el clamp no pierde precisión visible
+    const RECT_MS = 200;
     let clampLogN = 0, clampLogLast = 0;
     function dumpCanvases() {
         const out = [];
@@ -101026,16 +101580,21 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         return found;
     }
 
-    function fitTransform() {
+    function fitTransform(force) {
+        const now = performance.now();
+        if (!force && viewport.rect && now - viewport.rectAt < RECT_MS) return viewport.rect;
         const p = document.getElementById('mf-studio-preview');
-        if (!p) return null;
+        if (!p) { viewport.rect = null; return null; }
         const pr = p.getBoundingClientRect();
-        if (pr.width < 2 || pr.height < 2) return null;
-        return {
+        if (pr.width < 2 || pr.height < 2) { viewport.rect = null; return null; }
+        viewport.rect = {
             tx: pr.left, ty: pr.top,
             sx: pr.width / window.innerWidth,
-            sy: pr.height / window.innerHeight
+            sy: pr.height / window.innerHeight,
+            pw: pr.width, ph: pr.height
         };
+        viewport.rectAt = now;
+        return viewport.rect;
     }
 
     function parseTransform(cv) {
@@ -101045,9 +101604,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         if (!nums || nums.length < 4) return null;
         return { tx: +nums[0], ty: +nums[1], sx: +nums[2], sy: +nums[3] };
     }
-    function clampGameCanvas() {
+    function clampGameCanvas(force) {
 
-        const want = fitTransform();
+        const want = fitTransform(force);
         if (!want) return;
         if (!viewport.canvases.length) {
             viewport.canvases = collectGameCanvases();
@@ -101075,11 +101634,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 }
             }
 
-            const p = document.getElementById('mf-studio-preview');
-            const pr = p.getBoundingClientRect();
+            const p = viewport.rect;
             const c = cam.camera;
-            if (c && pr.width > 2 && pr.height > 2) {
-                const asp = pr.width / pr.height;
+            if (c && p && p.pw > 2 && p.ph > 2) {
+                const asp = p.pw / p.ph;
                 if (viewport.origAspect == null) viewport.origAspect = c.aspect;
                 if (Math.abs(c.aspect - asp) > 0.001) {
                     c.aspect = asp;
@@ -101091,7 +101649,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         }
     }
 
-    function applyViewportRect() { clampGameCanvas(); }
+    function applyViewportRect() { clampGameCanvas(true); }
     function viewportEnable() {
         const cvs = collectGameCanvases();
         const p = document.getElementById('mf-studio-preview');
@@ -114787,6 +115345,11 @@ function normalize(entry) {
   }
 
   function replaceTextNodes(targetText, replacement) {
+    // podar entradas de nodos que react ya desmontó; si no, el map los
+    // retiene en memoria hasta el apagón definitivo
+    for (const [node] of ORIGINALS.textNodes) {
+      if (!node.isConnected) ORIGINALS.textNodes.delete(node);
+    }
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         if (isMiniFeatherNode(node)) return NodeFilter.FILTER_REJECT;
@@ -114861,10 +115424,44 @@ function normalize(entry) {
 
     patchCanvas(document);
 
+    let pendingCanvasRoots = null;
+
+    function queueCanvasPatch(root) {
+      // los text nodes no traen canvas; el resto se acumula para un solo
+      // pase por frame en vez de un querySelectorAll por nodo añadido
+      if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+      if (!pendingCanvasRoots) {
+        pendingCanvasRoots = new Set([root]);
+        requestAnimationFrame(() => {
+          const batch = pendingCanvasRoots;
+          pendingCanvasRoots = null;
+          if (destroyed) return;
+          flushCanvasPatch(batch);
+        });
+      } else {
+        pendingCanvasRoots.add(root);
+      }
+    }
+
+    function flushCanvasPatch(batch) {
+      // fusiona roots solapados: un querySelectorAll por contenedor superior
+      // en vez de N recorridos que se pisan entre sí
+      const roots = [];
+      for (const root of batch) {
+        let merged = false;
+        for (let i = 0; i < roots.length; i++) {
+          if (roots[i].contains(root)) { merged = true; break; }
+          if (root.contains(roots[i])) { roots[i] = root; merged = true; break; }
+        }
+        if (!merged) roots.push(root);
+      }
+      roots.forEach(patchCanvas);
+    }
+
     if (fontObserver) return;
     fontObserver = new MutationObserver(mutations => {
       for (const mutation of mutations) {
-        mutation.addedNodes.forEach(patchCanvas);
+        mutation.addedNodes.forEach(queueCanvasPatch);
       }
     });
     fontObserver.observe(document.body, { childList: true, subtree: true });
@@ -115301,6 +115898,7 @@ function normalize(entry) {
       let interval = 0;
       let leftClicks = [];
       let rightClicks = [];
+      let lastCpsHtml = '';
 
       function createBox() {
         if (box?.isConnected) return;
@@ -115328,6 +115926,7 @@ function normalize(entry) {
           cursor:move;
         `;
         document.body.appendChild(box);
+        lastCpsHtml = '';
       }
 
       function render() {
@@ -115335,7 +115934,11 @@ function normalize(entry) {
         leftClicks = leftClicks.filter(time => now - time < 1000);
         rightClicks = rightClicks.filter(time => now - time < 1000);
         if (box) {
-          box.innerHTML = `<span style="color:#9ca3af;">${t('cpsLabel')}</span> <span style="color:#f8fafc;">${leftClicks.length}</span> <span style="color:#64748b;">|</span> <span style="color:#f8fafc;">${rightClicks.length}</span>`;
+          const html = `<span style="color:#9ca3af;">${t('cpsLabel')}</span> <span style="color:#f8fafc;">${leftClicks.length}</span> <span style="color:#64748b;">|</span> <span style="color:#f8fafc;">${rightClicks.length}</span>`;
+          // repintar el innerHTML cada 100ms sin cambios es pintar la pared
+          if (html === lastCpsHtml) return;
+          lastCpsHtml = html;
+          box.innerHTML = html;
         }
       }
 
@@ -126850,7 +127453,7 @@ function normalize(entry) {
       if (document.getElementById('mf-sidebar-btn')) return true;
       const buttons = document.querySelectorAll('button');
       const settingsButton = Array.from(buttons).find(btn => {
-        const text = btn.innerText?.trim();
+        const text = btn.textContent?.trim();
         return text === 'Settings' || text === 'Ajustes' || text === 'Configuración' || text === 'Inicio' || text === 'Home';
       });
       if (!settingsButton) return false;
@@ -126863,13 +127466,25 @@ function normalize(entry) {
     if (!tryInject()) {
       sidebarObserver?.disconnect();
       clearTimeout(sidebarObserverTimer);
+      let lastTry = 0;
+      let trailingTry = 0;
       sidebarObserver = new MutationObserver(() => {
-        if (!tryInject()) return;
-        sidebarObserver?.disconnect();
-        sidebarObserver = null;
+        if (trailingTry) return;
+        // throttle: sondear todos los botones 5 veces por segundo basta, y
+        // el intento final queda programado para no perder la última ráfaga
+        const wait = Math.max(0, 200 - (performance.now() - lastTry));
+        trailingTry = window.setTimeout(() => {
+          trailingTry = 0;
+          lastTry = performance.now();
+          if (!tryInject()) return;
+          sidebarObserver?.disconnect();
+          sidebarObserver = null;
+        }, wait);
       });
       sidebarObserver.observe(document.body, { childList: true, subtree: true });
       sidebarObserverTimer = window.setTimeout(() => {
+        clearTimeout(trailingTry);
+        trailingTry = 0;
         sidebarObserver?.disconnect();
         sidebarObserver = null;
         sidebarObserverTimer = 0;
@@ -127370,6 +127985,14 @@ function normalize(entry) {
       return urlRegex.test(text);
     }
 
+    function hasChatMarker(text) {
+      // prefiltro barato: http cubre links y videos, los gifs traen ':' y
+      // los memes son claves del mapa. más barato que caminar el subtree
+      if (text.includes('http')) return true;
+      if (MODULES.get('chatMemes')?.enabled === true && (gifRegex.test(text) || findMeme(text))) return true;
+      return false;
+    }
+
     function renderWrapper(wrapper) {
       const text = wrapper.dataset.mfOriginalText;
       if (text == null) return;
@@ -127439,12 +128062,33 @@ function normalize(entry) {
         MODULES.get('chatMemes')?.enabled === true;
     }
 
+    let pendingChatNodes = null;
+
+    function queueChatScan(node) {
+      if (!node) return;
+      const text = node.nodeValue ?? node.textContent;
+      // sin marcadores no hay nada que renderizar; leer el textContent cuesta
+      // mucho menos que un tree walker con closest por cada text node
+      if (typeof text !== 'string' || !hasChatMarker(text)) return;
+      if (!pendingChatNodes) {
+        pendingChatNodes = new Set([node]);
+        requestAnimationFrame(() => {
+          const batch = pendingChatNodes;
+          pendingChatNodes = null;
+          if (!chatObserver) return;
+          batch.forEach(scan);
+        });
+      } else {
+        pendingChatNodes.add(node);
+      }
+    }
+
     function startChatObserver() {
       if (chatObserver) return;
       chatObserver = new MutationObserver(mutations => {
         mutations.forEach(mutation => {
-          if (mutation.type === 'childList') mutation.addedNodes.forEach(scan);
-          else if (mutation.type === 'characterData') scan(mutation.target);
+          if (mutation.type === 'childList') mutation.addedNodes.forEach(queueChatScan);
+          else if (mutation.type === 'characterData') queueChatScan(mutation.target);
         });
       });
       chatObserver.observe(document.body, {
@@ -127464,6 +128108,7 @@ function normalize(entry) {
 
       chatObserver?.disconnect();
       chatObserver = null;
+      pendingChatNodes = null;
       restoreChatContent();
       document.getElementById('minifeather-chat-style')?.remove();
     }
@@ -127480,13 +128125,17 @@ function normalize(entry) {
     registerModule('chatMemes', createChatLifecycle);
   }
   let lastRebrandSignature = '';
+  let lastRebrandTitle = document.title;
+  let lastRebrandImageCount = -1;
+  let rebrandSettled = false;
 
   function computeRebrandSignature() {
+      // firma barata y estable: título + imgs con alt. contar todos los
+      // button y p era dejar que el hud del juego encendiera el rebrand
+      // cada 400ms durante toda la partida
       return [
       document.title,
-      document.querySelectorAll('img').length,
-      document.querySelectorAll('button').length,
-      document.querySelectorAll('p').length
+      document.querySelectorAll('img[alt]').length
     ].join('|');
   }
 
@@ -127496,7 +128145,16 @@ function normalize(entry) {
         refreshLogoControls();
       return;
     }
+    const sep = sig.lastIndexOf('|');
+    const title = sig.slice(0, sep);
+    const images = Number(sig.slice(sep + 1));
+    // solo un título nuevo o imgs nuevas justifican repetir el camino caro;
+    // si ya reposó, que el hud encoja no paga otros cinco tree walkers
+    const matters = title !== lastRebrandTitle || images > lastRebrandImageCount;
+    lastRebrandTitle = title;
+    lastRebrandImageCount = images;
     lastRebrandSignature = sig;
+    if (!matters && rebrandSettled) return;
 
     MODULES.get('rebrand')?.refresh();
     MODULES.get('discord')?.refresh();
@@ -127505,6 +128163,7 @@ function normalize(entry) {
     else blockAds();
 
     refreshLogoControls();
+    rebrandSettled = true;
   }
 
   function initRootObserver() {

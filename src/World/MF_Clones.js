@@ -161,6 +161,9 @@
     }
 
     function sync() {
+        // caducidad de clones remotos también desde el tick periódico: si el par
+        // deja de emitir, aquí muere (los remotos no dependen del conteo local).
+        sweepRemoteClones();
 
         if (state.count <= 0) {
             if (state.clones.size) removeAll();
@@ -251,6 +254,26 @@
     syncRemoteClones();
   }
 
+  // barrido de caducidad: un par que deja de emitir no se queda eterno en el
+  // mundo (rig completo = memoria). misma regla de 10s desde receiveClone y
+  // desde el tick periódico; antes solo expiraba si el par seguía mandando,
+  // irónico negocio el de la inmortalidad por abandono.
+  function sweepRemoteClones() {
+    if (!state.remoteClones.size) return;
+    const now = Date.now();
+    const game = findGame();
+    const world = isLiveGame(game) ? game.world : null;
+    for (const [key, entry] of state.remoteClones) {
+      if (now - entry.at > 10000) {
+        for (const [id, entity] of entry.entities || []) {
+          try { world?.removeEntityFromWorld?.(id); } catch (_) {}
+          try { if (world?.entities?.get?.(id) === entity) world?.removeEntity?.(entity); } catch (_) {}
+        }
+        state.remoteClones.delete(key);
+      }
+    }
+  }
+
   function syncRemoteClones() {
     const game = findGame();
     if (!isLiveGame(game)) return;
@@ -258,16 +281,7 @@
     const manager = resolveManager();
     if (!manager) return;
 
-    const now = Date.now();
-    for (const [key, entry] of state.remoteClones) {
-      if (now - entry.at > 10000) {
-        for (const [id, entity] of entry.entities || []) {
-          try { world.removeEntityFromWorld?.(id); } catch (_) {}
-          try { if (world.entities?.get?.(id) === entity) world.removeEntity?.(entity); } catch (_) {}
-        }
-        state.remoteClones.delete(key);
-      }
-    }
+    sweepRemoteClones();
 
     for (const [key, entry] of state.remoteClones) {
       if (!entry.entities) entry.entities = new Map();

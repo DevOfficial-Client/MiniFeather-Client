@@ -1198,6 +1198,11 @@
   }
 
   function replaceTextNodes(targetText, replacement) {
+    // podar entradas de nodos que react ya desmontó; si no, el map los
+    // retiene en memoria hasta el apagón definitivo
+    for (const [node] of ORIGINALS.textNodes) {
+      if (!node.isConnected) ORIGINALS.textNodes.delete(node);
+    }
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         if (isMiniFeatherNode(node)) return NodeFilter.FILTER_REJECT;
@@ -1272,10 +1277,44 @@
 
     patchCanvas(document);
 
+    let pendingCanvasRoots = null;
+
+    function queueCanvasPatch(root) {
+      // los text nodes no traen canvas; el resto se acumula para un solo
+      // pase por frame en vez de un querySelectorAll por nodo añadido
+      if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+      if (!pendingCanvasRoots) {
+        pendingCanvasRoots = new Set([root]);
+        requestAnimationFrame(() => {
+          const batch = pendingCanvasRoots;
+          pendingCanvasRoots = null;
+          if (destroyed) return;
+          flushCanvasPatch(batch);
+        });
+      } else {
+        pendingCanvasRoots.add(root);
+      }
+    }
+
+    function flushCanvasPatch(batch) {
+      // fusiona roots solapados: un querySelectorAll por contenedor superior
+      // en vez de N recorridos que se pisan entre sí
+      const roots = [];
+      for (const root of batch) {
+        let merged = false;
+        for (let i = 0; i < roots.length; i++) {
+          if (roots[i].contains(root)) { merged = true; break; }
+          if (root.contains(roots[i])) { roots[i] = root; merged = true; break; }
+        }
+        if (!merged) roots.push(root);
+      }
+      roots.forEach(patchCanvas);
+    }
+
     if (fontObserver) return;
     fontObserver = new MutationObserver(mutations => {
       for (const mutation of mutations) {
-        mutation.addedNodes.forEach(patchCanvas);
+        mutation.addedNodes.forEach(queueCanvasPatch);
       }
     });
     fontObserver.observe(document.body, { childList: true, subtree: true });
@@ -1712,6 +1751,7 @@
       let interval = 0;
       let leftClicks = [];
       let rightClicks = [];
+      let lastCpsHtml = '';
 
       function createBox() {
         if (box?.isConnected) return;
@@ -1739,6 +1779,7 @@
           cursor:move;
         `;
         document.body.appendChild(box);
+        lastCpsHtml = '';
       }
 
       function render() {
@@ -1746,7 +1787,11 @@
         leftClicks = leftClicks.filter(time => now - time < 1000);
         rightClicks = rightClicks.filter(time => now - time < 1000);
         if (box) {
-          box.innerHTML = `<span style="color:#9ca3af;">${t('cpsLabel')}</span> <span style="color:#f8fafc;">${leftClicks.length}</span> <span style="color:#64748b;">|</span> <span style="color:#f8fafc;">${rightClicks.length}</span>`;
+          const html = `<span style="color:#9ca3af;">${t('cpsLabel')}</span> <span style="color:#f8fafc;">${leftClicks.length}</span> <span style="color:#64748b;">|</span> <span style="color:#f8fafc;">${rightClicks.length}</span>`;
+          // repintar el innerHTML cada 100ms sin cambios es pintar la pared
+          if (html === lastCpsHtml) return;
+          lastCpsHtml = html;
+          box.innerHTML = html;
         }
       }
 
@@ -13261,7 +13306,7 @@
       if (document.getElementById('mf-sidebar-btn')) return true;
       const buttons = document.querySelectorAll('button');
       const settingsButton = Array.from(buttons).find(btn => {
-        const text = btn.innerText?.trim();
+        const text = btn.textContent?.trim();
         return text === 'Settings' || text === 'Ajustes' || text === 'Configuración' || text === 'Inicio' || text === 'Home';
       });
       if (!settingsButton) return false;
@@ -13274,13 +13319,25 @@
     if (!tryInject()) {
       sidebarObserver?.disconnect();
       clearTimeout(sidebarObserverTimer);
+      let lastTry = 0;
+      let trailingTry = 0;
       sidebarObserver = new MutationObserver(() => {
-        if (!tryInject()) return;
-        sidebarObserver?.disconnect();
-        sidebarObserver = null;
+        if (trailingTry) return;
+        // throttle: sondear todos los botones 5 veces por segundo basta, y
+        // el intento final queda programado para no perder la última ráfaga
+        const wait = Math.max(0, 200 - (performance.now() - lastTry));
+        trailingTry = window.setTimeout(() => {
+          trailingTry = 0;
+          lastTry = performance.now();
+          if (!tryInject()) return;
+          sidebarObserver?.disconnect();
+          sidebarObserver = null;
+        }, wait);
       });
       sidebarObserver.observe(document.body, { childList: true, subtree: true });
       sidebarObserverTimer = window.setTimeout(() => {
+        clearTimeout(trailingTry);
+        trailingTry = 0;
         sidebarObserver?.disconnect();
         sidebarObserver = null;
         sidebarObserverTimer = 0;
@@ -13781,6 +13838,14 @@
       return urlRegex.test(text);
     }
 
+    function hasChatMarker(text) {
+      // prefiltro barato: http cubre links y videos, los gifs traen ':' y
+      // los memes son claves del mapa. más barato que caminar el subtree
+      if (text.includes('http')) return true;
+      if (MODULES.get('chatMemes')?.enabled === true && (gifRegex.test(text) || findMeme(text))) return true;
+      return false;
+    }
+
     function renderWrapper(wrapper) {
       const text = wrapper.dataset.mfOriginalText;
       if (text == null) return;
@@ -13850,12 +13915,33 @@
         MODULES.get('chatMemes')?.enabled === true;
     }
 
+    let pendingChatNodes = null;
+
+    function queueChatScan(node) {
+      if (!node) return;
+      const text = node.nodeValue ?? node.textContent;
+      // sin marcadores no hay nada que renderizar; leer el textContent cuesta
+      // mucho menos que un tree walker con closest por cada text node
+      if (typeof text !== 'string' || !hasChatMarker(text)) return;
+      if (!pendingChatNodes) {
+        pendingChatNodes = new Set([node]);
+        requestAnimationFrame(() => {
+          const batch = pendingChatNodes;
+          pendingChatNodes = null;
+          if (!chatObserver) return;
+          batch.forEach(scan);
+        });
+      } else {
+        pendingChatNodes.add(node);
+      }
+    }
+
     function startChatObserver() {
       if (chatObserver) return;
       chatObserver = new MutationObserver(mutations => {
         mutations.forEach(mutation => {
-          if (mutation.type === 'childList') mutation.addedNodes.forEach(scan);
-          else if (mutation.type === 'characterData') scan(mutation.target);
+          if (mutation.type === 'childList') mutation.addedNodes.forEach(queueChatScan);
+          else if (mutation.type === 'characterData') queueChatScan(mutation.target);
         });
       });
       chatObserver.observe(document.body, {
@@ -13875,6 +13961,7 @@
 
       chatObserver?.disconnect();
       chatObserver = null;
+      pendingChatNodes = null;
       restoreChatContent();
       document.getElementById('minifeather-chat-style')?.remove();
     }
@@ -13891,13 +13978,17 @@
     registerModule('chatMemes', createChatLifecycle);
   }
   let lastRebrandSignature = '';
+  let lastRebrandTitle = document.title;
+  let lastRebrandImageCount = -1;
+  let rebrandSettled = false;
 
   function computeRebrandSignature() {
+      // firma barata y estable: título + imgs con alt. contar todos los
+      // button y p era dejar que el hud del juego encendiera el rebrand
+      // cada 400ms durante toda la partida
       return [
       document.title,
-      document.querySelectorAll('img').length,
-      document.querySelectorAll('button').length,
-      document.querySelectorAll('p').length
+      document.querySelectorAll('img[alt]').length
     ].join('|');
   }
 
@@ -13907,7 +13998,16 @@
         refreshLogoControls();
       return;
     }
+    const sep = sig.lastIndexOf('|');
+    const title = sig.slice(0, sep);
+    const images = Number(sig.slice(sep + 1));
+    // solo un título nuevo o imgs nuevas justifican repetir el camino caro;
+    // si ya reposó, que el hud encoja no paga otros cinco tree walkers
+    const matters = title !== lastRebrandTitle || images > lastRebrandImageCount;
+    lastRebrandTitle = title;
+    lastRebrandImageCount = images;
     lastRebrandSignature = sig;
+    if (!matters && rebrandSettled) return;
 
     MODULES.get('rebrand')?.refresh();
     MODULES.get('discord')?.refresh();
@@ -13916,6 +14016,7 @@
     else blockAds();
 
     refreshLogoControls();
+    rebrandSettled = true;
   }
 
   function initRootObserver() {

@@ -275,9 +275,12 @@
         state.originalClearRect = null;
     }
 
+    let loopRunning = false;
+
     function loop() {
         if (!state.enabled) {
-            requestAnimationFrame(loop);
+            // apagado es apagado: nada de rondas fantasma reenganchándose solas
+            loopRunning = false;
             return;
         }
 
@@ -309,6 +312,13 @@
         requestAnimationFrame(loop);
     }
 
+    function startLoop() {
+        // el turno empieza cuando hay minimapa que robar, no antes
+        if (loopRunning) return;
+        loopRunning = true;
+        requestAnimationFrame(loop);
+    }
+
     function setEnabled(enabled) {
         const next = !!enabled;
         if (state.enabled === next) return;
@@ -335,6 +345,9 @@
             ensureCacheCanvas();
             installHook();
             invalidateCache('enable');
+
+            // el bucle nace aquí, no en la carga del módulo
+            startLoop();
 
             void 0;
         } else {
@@ -447,6 +460,4 @@
     } else {
         init();
     }
-
-    requestAnimationFrame(loop);
 })();

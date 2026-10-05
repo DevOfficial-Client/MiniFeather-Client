@@ -118,10 +118,30 @@ const state = {
     const packSkinReg = (globalThis.__MF_PACK_SKINS__ ||= {});
     const skinById = new Map();
 
+    // el id lo inventa el par (cadena arbitraria) y cada skin pesa entre 10KB y
+    // 1MB; sin techo, un par mandando ids únicos llena la memoria en una tarde
+    // (y de paso hace griefing). LRU de 32: lo viejo se evicta y ya no resuelve,
+    // el par lo re-manda si alguien lo pide. los ids que el mesh mete en
+    // packSkinReg se apuntan aparte para no borrar en dispose entradas de
+    // otros módulos (customskins, facial) que comparten el registro.
+    const SKIN_LRU_MAX = 32;
+    const SKIN_ID_MAX = 64;
+    const skinRegOurs = new Set();
+
     function registerSharedSkin(id, dataURL, name) {
-    if (!id || typeof dataURL !== 'string' || !dataURL.startsWith('data:image/')) return false;
+    if (!id || typeof id !== 'string' || id.length > SKIN_ID_MAX) return false;
+    if (typeof dataURL !== 'string' || !dataURL.startsWith('data:image/')) return false;
+    const known = skinById.has(id);
+    if (known) skinById.delete(id); // reinsertar refresca la recencia
+    if (!(id in packSkinReg)) skinRegOurs.add(id);
     packSkinReg[id] = dataURL;
     skinById.set(id, { dataURL, name: name || null, at: Date.now() });
+    while (skinById.size > SKIN_LRU_MAX) {
+        const oldest = skinById.keys().next().value;
+        if (oldest === undefined || oldest === id) break;
+        skinById.delete(oldest);
+        if (skinRegOurs.delete(oldest)) delete packSkinReg[oldest];
+    }
     return true;
     }
 
@@ -344,8 +364,8 @@ const state = {
                         } catch (_) {}
                     }
                     const isNew = !skinById.has(m.id);
-                    registerSharedSkin(m.id, m.dataURL, m.name);
-                    if (isNew) {
+                    const ok = registerSharedSkin(m.id, m.dataURL, m.name);
+                    if (isNew && ok) {
                         applySkinToPeer(m.name, m.id, m.dataURL);
 
                         for (const [pid, c] of state.conns) {
@@ -467,6 +487,9 @@ const state = {
     const pendingSkins = new Map();
 
     function drainPending() {
+    // con el mesh apagado o sin pares no hay nada que aplicar: ahorrarse el
+    // paseo por el árbol de React cada 1.5s eternamente.
+    if (state.status === 'off' || state.status === 'error' || !state.conns.size) return;
     for (const [name, skin] of pendingSkins) {
         const entity = entityByUsername(name);
         if (!entity) continue;
@@ -499,7 +522,7 @@ const state = {
 
     }
     }
-    setInterval(drainPending, 1500);
+    const drainTimer = setInterval(drainPending, 1500);
 
     function revertMeshSkin(name) {
     if (!name) return;
@@ -816,6 +839,7 @@ const state = {
     dispose() {
         clearInterval(chatTimer);
         clearInterval(scaleTimer);
+        clearInterval(drainTimer);
         if (state.announceTimer) clearInterval(state.announceTimer);
         for (const t of pendingReconnects.values()) clearTimeout(t);
         pendingReconnects.clear();
@@ -825,6 +849,13 @@ const state = {
         state.names.clear();
         state.peerScales.clear();
         state.seenCodes.clear();
+        // skins compartidas fuera: solo las que metió el mesh; las entradas de
+        // otros módulos en packSkinReg no son cosa nuestra.
+        for (const id of skinById.keys()) {
+            if (skinRegOurs.delete(id)) { try { delete packSkinReg[id]; } catch {} }
+        }
+        skinById.clear();
+        pendingSkins.clear();
         try { state.peer?.destroy?.(); } catch {}
         state.peer = null; state.myCode = null; state.status = 'off';
     },

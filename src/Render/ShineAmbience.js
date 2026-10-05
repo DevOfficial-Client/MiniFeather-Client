@@ -133,6 +133,8 @@
     raf: 0,
     scanTimer: 0,
     stateNameCache: new Map(),
+    chunkEmitterCache: new Map(),
+    cacheWorld: null,
     serverSalt: 0,
     loaded: false
   };
@@ -393,13 +395,13 @@
       return false;
     }
   }
-  function scanChunk(world, proto, cx, cz) {
+  function scanChunk(world, proto, cx, cz, out) {
     let chunk = null;
     try {
-      if (typeof proto.isChunkLoaded === 'function' && !proto.isChunkLoaded.call(world, cx, cz)) return;
+      if (typeof proto.isChunkLoaded === 'function' && !proto.isChunkLoaded.call(world, cx, cz)) return null;
       chunk = proto.getChunkByID.call(world, cx, cz);
-    } catch (_) { return; }
-    if (!chunk?.cells) return;
+    } catch (_) { return null; }
+    if (!chunk?.cells) return null;
 
     for (let lx = 0; lx < 16; lx++) {
       for (let lz = 0; lz < 16; lz++) {
@@ -424,14 +426,13 @@
             done = true;
             const h = hashXZ(wx, wz);
             const r = h / 4294967296;
-            if (state.emitters.length >= MAX_EMITTERS) return;
             if (GRASS_BLOCKS.has(name) && r < 0.30) {
-              state.emitters.push({
+              out.push({
                 kind: name === 'tall_grass' ? 'tall' : 'low',
                 x: wx + 0.5, y: realY + 1, z: wz + 0.5
               });
             } else if (WATER_BLOCKS.has(name) && r < 0.05) {
-              state.emitters.push({
+              out.push({
                 kind: 'water',
                 x: wx + 0.5, y: realY + 0.92, z: wz + 0.5
               });
@@ -440,6 +441,8 @@
         }
       }
     }
+
+    return chunk;
   }
 
   function randomEmitter(kind) {
@@ -1136,12 +1139,53 @@
     state.serverSalt = state.serverSalt || computeServerSalt(game);
     state.stateNameCache.clear();
 
+    // misma guillotina que el cache de nombres: si cambia el mundo, los chunks
+    // cacheados son de otra partida y sobran
+    if (state.cacheWorld !== world) {
+      state.chunkEmitterCache.clear();
+      state.cacheWorld = world;
+    } else if (state.chunkEmitterCache.size > 512) {
+      state.chunkEmitterCache.clear();
+    }
+
     state.emitters.length = 0;
     const ccx = Math.floor(pp.x / 16), ccz = Math.floor(pp.z / 16);
     const R = 3;
     for (let dz = -R; dz <= R; dz++) {
       for (let dx = -R; dx <= R; dx++) {
-        scanChunk(world, proto, ccx + dx, ccz + dz);
+        const cx = ccx + dx, cz = ccz + dz;
+        const key = cx + ',' + cz;
+        let entry = state.chunkEmitterCache.get(key);
+
+        if (entry) {
+          // validar identidad: mismo objeto chunk, mismas celdas, misma altura de capas;
+          // si el motor recarga o recicla el chunk, se reescanea
+          let chunk = null;
+          try {
+            if (typeof proto.isChunkLoaded === 'function' && !proto.isChunkLoaded.call(world, cx, cz)) chunk = null;
+            else chunk = proto.getChunkByID.call(world, cx, cz);
+          } catch (_) { chunk = null; }
+          if (!chunk?.cells || entry.chunk !== chunk || entry.cells !== chunk.cells || entry.cellCount !== chunk.cells.length) {
+            state.chunkEmitterCache.delete(key);
+            entry = null;
+          }
+        }
+
+        let emitters;
+        if (entry) {
+          emitters = entry.emitters;
+        } else {
+          emitters = [];
+          const chunk = scanChunk(world, proto, cx, cz, emitters);
+          if (chunk?.cells) {
+            state.chunkEmitterCache.set(key, { chunk, cells: chunk.cells, cellCount: chunk.cells.length, emitters });
+          }
+        }
+
+        for (let i = 0; i < emitters.length && state.emitters.length < MAX_EMITTERS; i++) {
+          state.emitters.push(emitters[i]);
+        }
+        if (state.emitters.length >= MAX_EMITTERS) return;
       }
     }
   }
@@ -1188,12 +1232,17 @@
 
   W.MF_ShineAmbience = {
     setEnabled(v) { applyConfig({ enabled: v }); },
-    refresh() { state.emitters.length = 0; scheduleScan(); },
+    refresh() {
+      state.emitters.length = 0;
+      state.chunkEmitterCache.clear();
+      scheduleScan();
+    },
     destroy() {
       state.destroyed = true;
       stop();
       state.materials = {};
       state.emitters.length = 0;
+      state.chunkEmitterCache.clear();
     }
   };
 })();

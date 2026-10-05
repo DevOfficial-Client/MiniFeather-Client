@@ -1882,7 +1882,10 @@
         return null;
     }
 
-    const viewport = { canvases: [], origAspect: null };
+    const viewport = { canvases: [], origAspect: null, rect: null, rectAt: 0 };
+    // leer el rect del preview cada frame era read-write-read a 60fps:
+    // el cache se refresca a 5hz o por evento, el clamp no pierde precisión visible
+    const RECT_MS = 200;
     let clampLogN = 0, clampLogLast = 0;
     function dumpCanvases() {
         const out = [];
@@ -1913,16 +1916,21 @@
         return found;
     }
 
-    function fitTransform() {
+    function fitTransform(force) {
+        const now = performance.now();
+        if (!force && viewport.rect && now - viewport.rectAt < RECT_MS) return viewport.rect;
         const p = document.getElementById('mf-studio-preview');
-        if (!p) return null;
+        if (!p) { viewport.rect = null; return null; }
         const pr = p.getBoundingClientRect();
-        if (pr.width < 2 || pr.height < 2) return null;
-        return {
+        if (pr.width < 2 || pr.height < 2) { viewport.rect = null; return null; }
+        viewport.rect = {
             tx: pr.left, ty: pr.top,
             sx: pr.width / window.innerWidth,
-            sy: pr.height / window.innerHeight
+            sy: pr.height / window.innerHeight,
+            pw: pr.width, ph: pr.height
         };
+        viewport.rectAt = now;
+        return viewport.rect;
     }
 
     function parseTransform(cv) {
@@ -1932,9 +1940,9 @@
         if (!nums || nums.length < 4) return null;
         return { tx: +nums[0], ty: +nums[1], sx: +nums[2], sy: +nums[3] };
     }
-    function clampGameCanvas() {
+    function clampGameCanvas(force) {
 
-        const want = fitTransform();
+        const want = fitTransform(force);
         if (!want) return;
         if (!viewport.canvases.length) {
             viewport.canvases = collectGameCanvases();
@@ -1962,11 +1970,10 @@
                 }
             }
 
-            const p = document.getElementById('mf-studio-preview');
-            const pr = p.getBoundingClientRect();
+            const p = viewport.rect;
             const c = cam.camera;
-            if (c && pr.width > 2 && pr.height > 2) {
-                const asp = pr.width / pr.height;
+            if (c && p && p.pw > 2 && p.ph > 2) {
+                const asp = p.pw / p.ph;
                 if (viewport.origAspect == null) viewport.origAspect = c.aspect;
                 if (Math.abs(c.aspect - asp) > 0.001) {
                     c.aspect = asp;
@@ -1978,7 +1985,7 @@
         }
     }
 
-    function applyViewportRect() { clampGameCanvas(); }
+    function applyViewportRect() { clampGameCanvas(true); }
     function viewportEnable() {
         const cvs = collectGameCanvases();
         const p = document.getElementById('mf-studio-preview');

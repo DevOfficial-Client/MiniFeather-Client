@@ -153,8 +153,15 @@
             return null;
         }
 
+        // plato reutilizado para los decoradores vivos; los arrays de cortesía se acabaron
+        const activeScratch = [];
+
         function activeDecorators() {
-            return Array.from(state.decorators.values()).filter(item => item.enabled && typeof item.transform === 'function');
+            activeScratch.length = 0;
+            for (const item of state.decorators.values()) {
+                if (item.enabled && typeof item.transform === 'function') activeScratch.push(item);
+            }
+            return activeScratch;
         }
 
         function patchEntity(entity) {
@@ -214,7 +221,8 @@
         }
 
         function restoreAll() {
-            for (const [entity, record] of Array.from(state.patched.entries())) unpatchEntity(entity, record);
+            // iterar y borrar sobre el mismo mapa: el turno de noche lo permite
+            for (const [entity, record] of state.patched) unpatchEntity(entity, record);
         }
 
         function refreshPlayers(force = false) {
@@ -255,16 +263,32 @@
             const current = state.decorators.get(id);
             if (!current) return;
             current.enabled = !!enabled;
-            if (activeDecorators().length) refreshPlayers(true);
-            else restoreAll();
+            if (activeDecorators().length) {
+                ensureLoop();
+                refreshPlayers(true);
+            } else {
+                restoreAll();
+            }
         }
 
+        let loopRunning = false;
+
         function loop() {
-            if (activeDecorators().length) refreshPlayers(false);
+            // sin decoradores activos no hay nada que vigilar: el bucle se va a dormir
+            if (!activeDecorators().length) {
+                loopRunning = false;
+                return;
+            }
+            refreshPlayers(false);
             requestAnimationFrame(loop);
         }
 
-        requestAnimationFrame(loop);
+        function ensureLoop() {
+            // reenganche idempotente: dos despertares no hacen dos rondas
+            if (loopRunning) return;
+            loopRunning = true;
+            requestAnimationFrame(loop);
+        }
 
         return {
             registerDecorator,

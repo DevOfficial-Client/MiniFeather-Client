@@ -9,6 +9,7 @@
 
   const GUI_BUNDLE_RE = /\/assets\/GuiHud[^/]*\.js(\?.*)?$/i;
   let guiBundleActive = false;
+  let lastBundleScan = 0;
 
   function testGuiHudUrl(url) {
     return GUI_BUNDLE_RE.test(url || '');
@@ -40,6 +41,10 @@
   function isGuiHudBundleActive() {
     if (guiBundleActive) return true;
     try {
+      // el historial de recursos solo crece; escaneo completo como mucho una vez cada 7s
+      const now = performance.now();
+      if (lastBundleScan && now - lastBundleScan < 7000) return false;
+      lastBundleScan = now;
 
       for (const s of document.scripts) {
         if (testGuiHudUrl(s.getAttribute('src'))) return (guiBundleActive = true);
@@ -73,6 +78,7 @@
     observers: [],
     overlay: null,
     overlayInterval: null,
+    barFinderInterval: null,
     healthBarRef: null,
     foodBarRef: null,
     xpBarRef: null
@@ -241,6 +247,8 @@
   }
 
   function patchPlayerList() {
+    // los padres ya servidos no vuelven a pagar queryselector
+    const patchedParents = new WeakSet();
     const observer = new MutationObserver(() => {
       if (!canPatch()) return;
       if (!isGameReady(getGame())) return;
@@ -248,9 +256,13 @@
         const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
         const nodes = [];
         while (walker.nextNode()) {
+          if (!/^\d+ms$/.test(walker.currentNode.textContent)) continue;
           const parent = walker.currentNode.parentElement;
-          if (parent && parent.querySelector('.wifi-icon-patch')) continue;
-          if (walker.currentNode.textContent.match(/^\d+ms$/)) nodes.push(walker.currentNode);
+          if (!parent || patchedParents.has(parent)) continue;
+          const first = parent.firstElementChild;
+          if (first && first.classList.contains('wifi-icon-patch')) { patchedParents.add(parent); continue; }
+          if (parent.querySelector('.wifi-icon-patch')) { patchedParents.add(parent); continue; }
+          nodes.push(walker.currentNode);
         }
         nodes.forEach(node => {
           const match = node.textContent.match(/^(\d+)ms$/);
@@ -262,6 +274,7 @@
             icon.className = 'wifi-icon-patch';
             parent.insertBefore(icon, node);
           }
+          if (parent) patchedParents.add(parent);
         });
       });
     });
@@ -288,12 +301,16 @@
 
   function patchXPBar() {
     let lastXpKey = '';
-    const interval = setInterval(() => {
-      if (!canPatch()) return;
-      const game = getGame();
-      if (!game || !game.info) return;
+    let searchDelay = 100;
+    let xpTimer = null;
 
-      if (!isGameReady(game)) return;
+    // xpWork devuelve el retardo del siguiente ciclo; el trabajo de dentro no cambia
+    const xpWork = () => {
+      if (!canPatch()) return 100;
+      const game = getGame();
+      if (!game || !game.info) return 100;
+
+      if (!isGameReady(game)) return 100;
 
       const experience = (game.info?.xp?.experience || 0);
       const level = (game.info?.xp?.experienceLevel || 0);
@@ -309,46 +326,53 @@
       }
 
       if (!xpBar) {
-        const allDivs = document.querySelectorAll('div');
-        for (const el of allDivs) {
-          if (el.classList.contains('mf-xp-icons') || el.closest('.mf-xp-icons')) continue;
-          if (el.classList.contains('mf-hearts') || el.closest('.mf-hearts')) continue;
-          if (el.classList.contains('mf-food') || el.closest('.mf-food')) continue;
-          if (el.dataset.mfReplaced || el.dataset.mfXpReplaced) continue;
-          if (isInChatArea(el)) continue;
+        // en fantasma no hay barra que rastrear; el barrido completo se ahorra
+        if (!isGhostMode(game)) {
+          const allDivs = document.querySelectorAll('div');
+          for (const el of allDivs) {
+            if (el.classList.contains('mf-xp-icons') || el.closest('.mf-xp-icons')) continue;
+            if (el.classList.contains('mf-hearts') || el.closest('.mf-hearts')) continue;
+            if (el.classList.contains('mf-food') || el.closest('.mf-food')) continue;
+            if (el.dataset.mfReplaced || el.dataset.mfXpReplaced) continue;
+            if (isInChatArea(el)) continue;
 
-          if (el.querySelector('.mf-hearts, .mf-food')) continue;
+            if (el.querySelector('.mf-hearts, .mf-food')) continue;
 
-          const textContent = el.textContent.trim();
-          if (/^\d+\.?\d*\s*\/\s*\d+$/.test(textContent)) continue;
+            const textContent = el.textContent.trim();
+            if (/^\d+\.?\d*\s*\/\s*\d+$/.test(textContent)) continue;
 
-          const h = el.offsetHeight;
-          const w = el.offsetWidth;
+            const h = el.offsetHeight;
+            const w = el.offsetWidth;
 
-          if (h < 3 || h > 25) continue;
-          if (w < 60 || w < h * 3) continue;
+            if (h < 3 || h > 25) continue;
+            if (w < 60 || w < h * 3) continue;
 
-          const rect = el.getBoundingClientRect();
-          if (rect.top < window.innerHeight * 0.5) continue;
-          if (!isCenteredLikeHud(el)) continue;
+            const rect = el.getBoundingClientRect();
+            if (rect.top < window.innerHeight * 0.5) continue;
+            if (!isCenteredLikeHud(el)) continue;
 
-          let colored = hasColoredBg(el);
-          if (!colored) {
-            for (const child of el.children) {
-              if (hasColoredBg(child)) { colored = true; break; }
+            let colored = hasColoredBg(el);
+            if (!colored) {
+              for (const child of el.children) {
+                if (hasColoredBg(child)) { colored = true; break; }
+              }
             }
-          }
-          if (!colored) continue;
+            if (!colored) continue;
 
-          xpBar = el;
-          state.xpBarRef = el;
-          break;
+            xpBar = el;
+            state.xpBarRef = el;
+            break;
+          }
         }
+        // ref perdido: cada reintento tarda el doble, con techo de 2s
+        searchDelay = Math.min(searchDelay * 2, 2000);
+        return searchDelay;
       }
 
-      if (!xpBar) return;
+      // ref vivo: la búsqueda recupera el ritmo de siempre
+      searchDelay = 100;
 
-      if (xpBar.querySelector('.mf-hearts, .mf-food')) return;
+      if (xpBar.querySelector('.mf-hearts, .mf-food')) return 100;
 
       const ghost = isGhostMode(game);
       const guiOpacity = ghost ? 0.35 : 1;
@@ -358,7 +382,7 @@
 
         existing.style.opacity = guiOpacity;
         existing.style.transition = 'opacity 0.3s';
-        if (lastXpKey === xpKey) return;
+        if (lastXpKey === xpKey) return 100;
       }
       lastXpKey = xpKey;
 
@@ -436,11 +460,20 @@
         'pointer-events:none', 'z-index:2'
       ].join(';');
       container.appendChild(levelText);
-    }, 100);
+
+      return 100;
+    };
+
+    const xpTick = () => {
+      let delay = 100;
+      try { delay = xpWork(); } catch (_) {}
+      xpTimer = setTimeout(xpTick, delay);
+    };
+    xpTimer = setTimeout(xpTick, 100);
 
     state.observers.push({
       disconnect: () => {
-        clearInterval(interval);
+        clearTimeout(xpTimer);
         state.xpBarRef = null;
         document.querySelectorAll('[data-mf-xp-replaced]').forEach(el => {
           delete el.dataset.mfXpReplaced;
@@ -451,12 +484,21 @@
   }
 
   function patchDebugStats() {
+    // recuento y primera casilla congelados: la pasada entera se da por servida
+    let lastStatCount = -1;
+    let lastStatFirst = null;
     const observer = new MutationObserver(() => {
       if (!canPatch()) return;
       if (!isGameReady(getGame())) return;
       schedulePatch(() => {
         const pingElements = document.querySelectorAll('[class*="debug"], [class*="stat"]');
+        const firstEl = pingElements[0] || null;
+        if (pingElements.length === lastStatCount && firstEl === lastStatFirst) return;
+        lastStatCount = pingElements.length;
+        lastStatFirst = firstEl;
         pingElements.forEach(el => {
+          // solo hojas: un contenedor con hijos no lleva el ping encima
+          if (el.children.length !== 0) return;
           if (el.classList.contains('debug-patched')) return;
           const text = el.textContent;
           const match = text.match(/Ping[:\s]*(\d+(?:\.\d+)?)\s*ms/i);
@@ -479,9 +521,30 @@
     state.observers.push(observer);
   }
 
+  // rastreo lento de barras originales: cada 1.5s y solo mientras falten refs
+  function startBarFinder() {
+    if (state.barFinderInterval) return;
+    state.barFinderInterval = setInterval(() => {
+      if (!canPatch()) return;
+      const game = getGame();
+      if (!game || !game.info || !isGameReady(game)) return;
+      if (isGhostMode(game)) return;
+      findOriginalBars();
+      // con las dos barras en casa, el rastreo se apaga solo
+      if (state.healthBarRef?.isConnected && state.foodBarRef?.isConnected) {
+        clearInterval(state.barFinderInterval);
+        state.barFinderInterval = null;
+      }
+    }, 1500);
+  }
+
   function createHealthFoodOverlay() {
     if (state.overlay) return;
     state.overlay = true;
+
+    let lastOverlayKey = '';
+    let lastHealthBar = null;
+    let lastFoodBar = null;
 
     state.overlayInterval = setInterval(() => {
       if (!canPatch()) return;
@@ -502,9 +565,20 @@
       const ghost = isGhostMode(game);
       const guiOpacity = ghost ? 0.35 : 1;
 
-      const bars = (state.healthBarRef?.isConnected && state.foodBarRef?.isConnected)
-        ? { healthBar: state.healthBarRef, foodBar: state.foodBarRef }
-        : (ghost ? { healthBar: null, foodBar: null } : findOriginalBars());
+      const bars = {
+        healthBar: state.healthBarRef?.isConnected ? state.healthBarRef : null,
+        foodBar: state.foodBarRef?.isConnected ? state.foodBarRef : null
+      };
+      // refs ausentes o a medias: el rastreo lento se encarga, no este tick
+      if ((!bars.healthBar || !bars.foodBar) && !ghost) startBarFinder();
+
+      const healthLive = !!(bars.healthBar && bars.healthBar.querySelector('.mf-hearts'));
+      const foodLive = !!(bars.foodBar && bars.foodBar.querySelector('.mf-food'));
+      const overlayKey = [health, food, absorption, hardcore, ghost, iconSize, healthLive, foodLive,
+        bars.healthBar === lastHealthBar, bars.foodBar === lastFoodBar].join(':');
+      // mismas cifras y mismas barras: esta ronda el dom descansa
+      if (overlayKey === lastOverlayKey) return;
+      lastOverlayKey = overlayKey;
 
       const nuke = (el) => {
         if (!el) return;
@@ -591,6 +665,7 @@
           }
           hearts.appendChild(goldRow);
         }
+        lastHealthBar = bars.healthBar;
       }
 
       if (bars.foodBar) {
@@ -639,6 +714,7 @@
           ].join(';');
           foodIcons.appendChild(img);
         }
+        lastFoodBar = bars.foodBar;
       }
     }, 200);
   }
@@ -647,6 +723,10 @@
     if (state.overlayInterval) {
       clearInterval(state.overlayInterval);
       state.overlayInterval = null;
+    }
+    if (state.barFinderInterval) {
+      clearInterval(state.barFinderInterval);
+      state.barFinderInterval = null;
     }
     state.overlay = null;
     state.healthBarRef = null;
@@ -666,12 +746,16 @@
   function enable() {
     if (state.enabled) return;
     state.enabled = true;
+    // se rearma el vigía del bundle, que el disable lo mandó a dormir
+    scriptObserver.observe(document.documentElement, { childList: true, subtree: true });
     void 0;
     initPatches();
   }
 
   function disable() {
     state.enabled = false;
+    // el vigía del bundle también descansa al apagar
+    scriptObserver.disconnect();
     state.observers.forEach(o => o.disconnect());
     state.observers = [];
     if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }

@@ -685,14 +685,20 @@
         }
 
         const playerNoise = updatePlayerNoise(t);
-        for (const mob of [...state.mobs]) {
-            try { aiTick(mob, dt, t, playerNoise); } catch {}
+        // hacia atrás: aiTick puede eliminar mobs (reset distance) y el índice
+        // recién usado no se mueve con el splice; copia del array: cancelada
+        for (let i = state.mobs.length - 1; i >= 0; i--) {
+            try { aiTick(state.mobs[i], dt, t, playerNoise); } catch {}
         }
         schedule();
     }
 
+    function scheduledTick() {
+        if (state.stamp.alive) tick();
+    }
+
     function schedule() {
-        requestAnimationFrame(() => { if (state.stamp.alive) tick(); });
+        requestAnimationFrame(scheduledTick);
     }
 
     globalThis.MF_CrittersMobs = {

@@ -256,12 +256,17 @@
     IMG_URL_RE.lastIndex = 0;
   }
 
-  // safety net for mutations the observer never sees (rows mounted before enable,
-  // reconciler edge cases): rescan the page when any catbox/klipy url is present
+  // red de seguridad para mutaciones que el observador no ve (filas montadas
+  // antes de enable, casos raros del reconciler): antes serializaba el
+  // textContent de TODO el body cada 1.2s solo para buscar dos substrings.
+  // se escanea el contenedor del chat — el input del chat ya lo ancla dentro
+  // de #react (la misma raíz que resuelve ensureChat/findGame) — y body solo
+  // si el contenedor no está.
   function rescanChat() {
     try {
-      const text = document.body?.textContent || '';
-      if (text.includes('files.catbox.moe') || text.includes('static.klipy.com')) scanNode(document.body);
+      const container = state.chatInputEl?.closest('#react') || document.querySelector('#react') || document.body;
+      const text = container.textContent || '';
+      if (text.includes('files.catbox.moe') || text.includes('static.klipy.com')) scanNode(container);
     } catch (_) {}
   }
 
@@ -552,61 +557,71 @@
   }
   let searchDebounce = 0;
 
+  // handlers con nombre a nivel de módulo: antes eran closures anónimas que
+  // ningún destroy() podía descolgar — cada re-ejecución del script apilaba
+  // otra pareja de listeners de captura sobre document. ahora se quitan en
+  // destroy() y se vuelven a poner al re-iniciar.
+  function onTypingInput(event) {
+    if (!state.enabled) return;
+    const target = event.target;
+    if (!target || target.tagName !== 'INPUT') return;
+    if (target.closest('#mf-gifchat-bar')) return;
+    const chat = ensureChat();
+    if (!chat?.showInput && !chat?.inputOpen) return;
+    const value = String(target.value || '');
+
+    if (state.barOpen) {
+        clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => loadBar(value.replace(TRIGGER_TOKEN_RE, ' ').trim()), 350);
+      return;
+    }
+
+    if (!TRIGGER_RE.test(value)) return;
+    console.log('minifeather gifchat :gif trigger detected — opening bar');
+    try { chat.setInputValue?.(''); } catch (_) {}
+    if (target.value) target.value = '';
+    openBar();
+  }
+
+  function onBarKeydown(event) {
+    if (!state.enabled || !state.barOpen) return;
+    const input = state.chatInputEl;
+    if (!input || event.target !== input) return;
+
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const n = state.items.length;
+      if (!n) return;
+      const dir = event.shiftKey ? -1 : 1;
+      state.sel = (state.sel + dir + n) % n;
+      updateActive();
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const item = state.items[state.sel] || state.items[0];
+      if (item) sendGif(item);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeBar();
+    }
+  }
+
   function hookTyping() {
-    document.addEventListener('input', event => {
-      if (!state.enabled) return;
-      const target = event.target;
-      if (!target || target.tagName !== 'INPUT') return;
-      if (target.closest('#mf-gifchat-bar')) return;
-      const chat = ensureChat();
-      if (!chat?.showInput && !chat?.inputOpen) return;
-      const value = String(target.value || '');
-
-      if (state.barOpen) {
-          clearTimeout(searchDebounce);
-        searchDebounce = setTimeout(() => loadBar(value.replace(TRIGGER_TOKEN_RE, ' ').trim()), 350);
-        return;
-      }
-
-      if (!TRIGGER_RE.test(value)) return;
-      console.log('minifeather gifchat :gif trigger detected — opening bar');
-      try { chat.setInputValue?.(''); } catch (_) {}
-      if (target.value) target.value = '';
-      openBar();
-    }, true);
+    document.removeEventListener('input', onTypingInput, true);
+    document.addEventListener('input', onTypingInput, true);
   }
 
   function hookKeys() {
-    document.addEventListener('keydown', event => {
-      if (!state.enabled || !state.barOpen) return;
-      const input = state.chatInputEl;
-      if (!input || event.target !== input) return;
-
-      if (event.key === 'Tab') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        const n = state.items.length;
-        if (!n) return;
-        const dir = event.shiftKey ? -1 : 1;
-        state.sel = (state.sel + dir + n) % n;
-        updateActive();
-        return;
-      }
-
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        const item = state.items[state.sel] || state.items[0];
-        if (item) sendGif(item);
-        return;
-      }
-
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        closeBar();
-      }
-    }, true);
+    document.removeEventListener('keydown', onBarKeydown, true);
+    document.addEventListener('keydown', onBarKeydown, true);
   }
   // ---------- paste / drag images: discord-style send via catbox ----------
   const UPLOAD_MIME_RE = /^image\/(png|jpe?g|gif|webp)$/;
@@ -987,6 +1002,8 @@
     sync();
     clearInterval(state.scanTimer);
     document.removeEventListener(CONFIG_EVENT, onConfig);
+    document.removeEventListener('input', onTypingInput, true);
+    document.removeEventListener('keydown', onBarKeydown, true);
     state.bar?.remove();
     state.bar = null;
     if (globalThis[GLOBAL_KEY]?.destroy === destroy) delete globalThis[GLOBAL_KEY];
