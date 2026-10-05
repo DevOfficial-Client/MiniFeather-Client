@@ -51,9 +51,12 @@
   };
 
   var INTENSITY = {
-    chill:    { minGap: 420, maxGap: 900,  tensionRate: 0.35, showMs: 2600 },
-    normal:   { minGap: 240, maxGap: 520,  tensionRate: 0.6,  showMs: 3200 },
-    nightmare:{ minGap: 110, maxGap: 260,  tensionRate: 1.0,  showMs: 4200 }
+    // firstGap: el debut. el slow burn es arte, pero un primer avistamiento en
+    // el minuto 7 se siente como un mod roto — el primer evento llega temprano
+    // y DESPUÉS el director vuelve a su cadencia normal de minutos.
+    chill:    { minGap: 420, maxGap: 900,  tensionRate: 0.35, showMs: 2600, firstGap: [75, 150] },
+    normal:   { minGap: 240, maxGap: 520,  tensionRate: 0.6,  showMs: 3200, firstGap: [40, 90] },
+    nightmare:{ minGap: 110, maxGap: 260,  tensionRate: 1.0,  showMs: 4200, firstGap: [20, 45] }
   };
 
   // --- helpers de juego (defensivos: el internals cambia, el terror no) ------
@@ -538,9 +541,11 @@
     return null;
   }
 
-  function scheduleNext() {
+  function scheduleNext(first) {
     var cfg = INTENSITY[state.intensity] || INTENSITY.normal;
-    var gap = (cfg.minGap + Math.random() * (cfg.maxGap - cfg.minGap)) * 1000;
+    var lo = (first && cfg.firstGap) ? cfg.firstGap[0] : cfg.minGap;
+    var hi = (first && cfg.firstGap) ? cfg.firstGap[1] : cfg.maxGap;
+    var gap = (lo + Math.random() * (hi - lo)) * 1000;
     state.cooldownUntil = performance.now() + gap;
     state.phase = 'tension';
   }
@@ -659,7 +664,7 @@
       if (c.enabled && !state.enabled) {
         state.sessionStart = performance.now();
         state.tension = 0;
-        scheduleNext();
+        scheduleNext(true); // debut temprano; después, cadencia normal
         try { console.log(TAG + 'activo — preset ' + (c.preset || state.preset) + (state.safeMode ? ' (safe)' : '')); } catch (_) {}
       }
       if (!c.enabled && state.enabled) {
@@ -676,7 +681,7 @@
       despawnFigure(true);
       state.preset = c.preset;
       state.tension = 0;
-      scheduleNext();
+      scheduleNext(true); // cambiar de preset también debuta rápido (testear presets sin esperar minutos)
     }
     if (c.intensity && INTENSITY[c.intensity]) state.intensity = c.intensity;
     if (typeof c.safeMode === 'boolean') {
