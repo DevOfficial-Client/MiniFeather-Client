@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005154336
+// @version      4.19.0.20261005182524
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : a8de42cbc5a82b5e0f3035261957ec615aa709e6
- * builtAt : 2026-10-05T15:43:57.030Z
+ * commit  : 4de004f0f995d00fdbc7e6bce797a113a31737b1
+ * builtAt : 2026-10-05T18:25:46.784Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"a8de42cbc5a82b5e0f3035261957ec615aa709e6","builtAt":"2026-10-05T15:43:57.030Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"4de004f0f995d00fdbc7e6bce797a113a31737b1","builtAt":"2026-10-05T18:25:46.784Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -17078,7 +17078,7 @@ const state = {
 
         const sections = [
             ['MOVEMENT', ['zoom', 'freelook', 'freecam', 'elytraFlight', 'cameraOverhaul', 'antiAfk', 'autoRespawn']],
-            ['RENDER', ['fullBright', 'leafWind', 'handSway', 'vanillaAnimations', 'playerAnims', 'healthNameTags', 'distanceNameTags']],
+            ['RENDER', ['fullBright', 'leafWind', 'handSway', 'vanillaAnimations', 'playerAnims', 'headLag', 'healthNameTags', 'distanceNameTags']],
             ['MODULES', ['duckMobs', 'crittersMobs', 'allaypets', 'titanTiny', 'dynamicCrosshair', 'customShader']],
             ['HUD', ['keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud', 'coordinates', 'waypoints']],
             ['CHAT', ['chatVideos', 'chatLinks', 'chatMemes', 'gifChat', 'clientChat']]
@@ -72869,6 +72869,201 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
 //# sourceURL=MF:src/PlayerAnims/MF_PlayerAnims.js
 
+/* ==== mf module: src/PlayerAnims/HeadLag.js ==== */
+
+(function () {
+    'use strict';
+    try { window.__MF_HEADLAG_SCOPE__?.destroy?.(); } catch {}
+
+    const TAG = 'minifeather headlag';
+
+    // la cabeza llega tarde a donde apunta la cámara: suavizado exponencial sobre
+    // headPivot con el patrón de la casa (apply → original → restore, como MF_PlayerAnims).
+    // delay fijo duro se ve robótico; exponencial se siente "pesada", que es el chiste.
+
+    const state = {
+        enabled: false,
+        tau: 0.11,            // constante de tiempo en segundos (0.11 = delay mínimo perceptible)
+        game: null,
+        lastGameScan: 0,
+        wrapped: new Set(),   // headPivots con wrapper vivo
+        rafId: null,
+        tickStats: { local: 0, errors: 0 }
+    };
+
+    function getGame() {
+        const now = performance.now();
+        if (state.game?.player && now - state.lastGameScan < 1000) return state.game;
+        state.lastGameScan = now;
+        const local = globalThis.__MINIFEATHER_LOCAL_GAMES__;
+        const localGame = local?.active ? local.game : null;
+        if (localGame?.player) return (state.game = localGame);
+        try {
+            const react = document.querySelector('#react');
+            if (react) {
+                for (const root of Object.values(react)) {
+                    const game = root?.updateQueue?.baseState?.element?.props?.game;
+                    if (game?.player) return (state.game = game);
+                }
+            }
+        } catch {}
+        return state.game?.player ? state.game : null;
+    }
+
+    function shortestArc(from, to) {
+        let delta = (to - from) % (Math.PI * 2);
+        if (delta > Math.PI) delta -= Math.PI * 2;
+        if (delta < -Math.PI) delta += Math.PI * 2;
+        return delta;
+    }
+
+    // solo el jugador local: la cabeza de los demás ya llega tarde vía red (20Hz)
+    function isLocalMesh(mesh, game) {
+        return !!game?.player && mesh === game.player.mesh;
+    }
+
+    function wrapHeadPivot(mesh, game) {
+        const head = mesh.headPivot;
+        if (!head || head._mfHeadLagHook) return;
+        head._mfHeadLagHook = true;
+        head._mfHeadLagMesh = mesh;
+        const original = head.updateMatrixWorld.bind(head);
+        head._mfHeadLagOrig = original;
+        const lag = { yaw: null, pitch: null, last: 0 };
+
+        const wrapper = function () {
+            if (head.updateMatrixWorld !== wrapper) return original.apply(this, arguments);
+            const mesh = head._mfHeadLagMesh;
+            const game = state.game;
+            // pose cosmética del pack EMF manda: no pelear por el mismo pivote
+            if (!state.enabled || head.__mfPAPose || mesh?.__mfPASuppress || !game || !isLocalMesh(mesh, game)) {
+                lag.yaw = lag.pitch = null;
+                return original.apply(this, arguments);
+            }
+            try {
+                // perspective: 0 = 1ª persona, 2 = 3ª (Emotes ya usa esta convención)
+                if (game.player.perspective !== 2) {
+                    lag.yaw = lag.pitch = null;
+                    return original.apply(this, arguments);
+                }
+                const targetYaw = this.rotation.y;
+                const targetPitch = this.rotation.x;
+                const now = performance.now();
+                const dt = lag.last ? Math.max(0.001, Math.min(0.1, (now - lag.last) / 1000)) : 0.016;
+                lag.last = now;
+                if (lag.yaw === null) {
+                    lag.yaw = targetYaw;
+                    lag.pitch = targetPitch;
+                } else {
+                    const k = 1 - Math.exp(-dt / state.tau);
+                    lag.yaw += shortestArc(lag.yaw, targetYaw) * k;
+                    lag.pitch += (targetPitch - lag.pitch) * k;
+                    if (Math.abs(shortestArc(lag.yaw, targetYaw)) < 0.0006) lag.yaw = targetYaw;
+                    if (Math.abs(targetPitch - lag.pitch) < 0.0006) lag.pitch = targetPitch;
+                }
+                const r = this.rotation;
+                const px = r.x, py = r.y;
+                r.x = lag.pitch;
+                r.y = lag.yaw;
+                try { return original.apply(this, arguments); }
+                finally {
+                    r.x = px;
+                    r.y = py;
+                }
+            } catch (e) {
+                lag.yaw = lag.pitch = null;
+                state.tickStats.errors++;
+                return original.apply(this, arguments);
+            }
+        };
+        head.updateMatrixWorld = wrapper;
+        state.wrapped.add(head);
+    }
+
+    function unwrapAll() {
+        for (const head of [...state.wrapped]) {
+            if (head._mfHeadLagHook) {
+                head.updateMatrixWorld = head._mfHeadLagOrig;
+                head._mfHeadLagHook = false;
+                head._mfHeadLagOrig = undefined;
+                head._mfHeadLagMesh = undefined;
+            }
+        }
+        state.wrapped.clear();
+    }
+
+    function tick() {
+        if (!state.enabled) return;
+        const game = getGame();
+        if (game) {
+            try {
+                const mesh = game.player?.mesh;
+                if (mesh?.headPivot) {
+                    wrapHeadPivot(mesh, game);
+                    state.tickStats.local++;
+                }
+                // mundo/respawn cambiaron de mesh o de headPivot: soltar wrappers huérfanos
+                for (const head of [...state.wrapped]) {
+                    if (head._mfHeadLagMesh !== mesh || mesh.headPivot !== head) {
+                        head.updateMatrixWorld = head._mfHeadLagOrig;
+                        head._mfHeadLagHook = false;
+                        head._mfHeadLagOrig = undefined;
+                        head._mfHeadLagMesh = undefined;
+                        state.wrapped.delete(head);
+                    }
+                }
+            } catch {
+                state.tickStats.errors++;
+            }
+        }
+        state.rafId = requestAnimationFrame(tick);
+    }
+
+    function setEnabled(enabled) {
+        enabled = enabled === true || enabled === 'true';
+        if (enabled === state.enabled) return;
+        state.enabled = enabled;
+        if (enabled) {
+            state.rafId = requestAnimationFrame(tick);
+            console.log(TAG, 'on (tau=' + state.tau + 's)');
+        } else {
+            if (state.rafId) { cancelAnimationFrame(state.rafId); state.rafId = null; }
+            unwrapAll();
+            console.log(TAG, 'off');
+        }
+    }
+
+    function onHeadLagConfig(e) {
+        try {
+            const cfg = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail;
+            if (cfg.enabled !== undefined) setEnabled(cfg.enabled);
+            if (cfg.tau !== undefined) {
+                const t = Number(cfg.tau);
+                if (Number.isFinite(t) && t >= 0.02 && t <= 0.4) state.tau = t;
+            }
+        } catch {}
+    }
+    document.addEventListener('minifeather:headlag-config', onHeadLagConfig);
+    window.__MF_HEADLAG_SCOPE__ = {
+        destroy() {
+            try { if (state.enabled) setEnabled(false); } catch {}
+            if (state.rafId) { cancelAnimationFrame(state.rafId); state.rafId = null; }
+            document.removeEventListener('minifeather:headlag-config', onHeadLagConfig);
+        }
+    };
+    globalThis.MF_HeadLag = {
+        setEnabled,
+        get enabled() { return state.enabled; },
+        get tau() { return state.tau; },
+        get stats() {
+            return { enabled: state.enabled, tau: state.tau, wrapped: state.wrapped.size, tickStats: { ...state.tickStats } };
+        }
+    };
+    console.log(TAG, 'script loaded');
+})();
+
+//# sourceURL=MF:src/PlayerAnims/HeadLag.js
+
 /* ==== mf module: src/Render/HandSway.js ==== */
 (function () {
     'use strict';
@@ -105211,6 +105406,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "fullBrightSettingsHint": "Changes apply while FullBright is enabled. Disabling it restores the original lighting.",
     "leafWind": "Leaf Movement",
     "leafWindDesc": "Adds natural wind movement to leaf blocks without changing collisions.",
+    "headLag": "Head Lag",
+    "headLagDesc": "Your head reaches where the camera points a moment later in third person. Subtle, like it should.",
     "horror": "Horror (opt-in)",
     "horrorDesc": "Psychological horror inspired by classic mods: figures that only you can see, fog that closes in, false glitches. Never leaves your browser.",
     "horrorPreset": "Horror preset",
@@ -106063,6 +106260,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "fullBrightSettingsHint": "Los cambios se aplican con FullBright activado. Al desactivarlo vuelve la iluminación original.",
     "leafWind": "Movimiento de Hojas",
     "leafWindDesc": "Añade movimiento natural de viento a las hojas sin cambiar las colisiones.",
+    "headLag": "Cabeza con Retraso",
+    "headLagDesc": "En tercera persona tu cabeza llega un instante tarde a donde apunta la cámara. Sutil, como debe ser.",
     "horror": "Terror (opt-in)",
     "horrorDesc": "Terror psicológico inspirado en los mods clásicos: figuras que solo tú ves, niebla que se cierra, glitches falsos. Nunca sale de tu navegador.",
     "horrorPreset": "Preset de terror",
@@ -106923,6 +107122,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "fullBrightSettingsHint": "FullBright が有効な間に変更が反映されます。無効にすると元の照明に戻ります。",
     "leafWind": "葉の揺れ",
     "leafWindDesc": "当たり判定を変えずに、葉ブロックへ自然な風の動きを追加します。",
+    "headLag": "頭のラグ",
+    "headLagDesc": "三人称視点で、頭がカメラの向きに一瞬遅れて追従します。さりげなく、それでいい。",
     "waterSplash": "水しぶき",
     "waterSplashDesc": "プレイヤーやエンティティが水に落ちたとき、トレーラー風の演出の水しぶきを表示します。",
     "handSway": "手の揺れ",
@@ -107761,6 +107962,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "fullBrightSettingsHint": "Le modifiche si applicano quando FullBright è attivo. Disattivandolo viene ripristinata la luce originale.",
     "leafWind": "Movimento Foglie",
     "leafWindDesc": "Aggiunge un movimento naturale del vento alle foglie senza modificare le collisioni.",
+    "headLag": "Testa in Ritardo",
+    "headLagDesc": "In terza persona la tua testa raggiunge la telecamera un attimo dopo. Sottile, come deve essere.",
     "waterSplash": "Splash d'acqua",
     "waterSplashDesc": "Splash cinematografico in stile trailer quando tu o un'entità cadete in acqua.",
     "handSway": "Oscillazione della mano",
@@ -116230,6 +116433,7 @@ function normalize(entry) {
     dynamicCrosshairSize: 28,
     vanillaAnimations: false,
     playerAnims: true,
+    headLag: false,
     leafWind: false,
     leafWindStrength: 0.085,
     horror: false,
@@ -119180,6 +119384,7 @@ function normalize(entry) {
       { page: 'render', key: 'vanillaAnimations', title: t('vanillaAnimations'), desc: t('vanillaAnimationsDesc'), tags: [] },
       { page: 'render', key: 'handSway', title: t('handSway'), desc: t('handSwayDesc'), tags: [] },
       { page: 'render', key: 'playerAnims', title: t('playerAnims'), desc: t('playerAnimsDesc'), tags: ['new'] },
+      { page: 'render', key: 'headLag', title: t('headLag'), desc: t('headLagDesc'), tags: ['new'] },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc'), tags: ['pvp'] },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc'), tags: [] },
       { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc'), tags: [] },
@@ -119236,6 +119441,7 @@ function normalize(entry) {
     fullBright:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>',
     vanillaAnimations:'<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>',
       playerAnims:'<circle cx="12" cy="12" r="3"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>',
+      headLag:'<circle cx="14" cy="9" r="4"/><path d="M10 15h8v6h-8z"/><path d="M7 6a8 8 0 0 0-3 4M4 14a8 8 0 0 0 1 4"/>',
     zoom:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5M10.5 7v7M7 10.5h7"/>',
     cameraOverhaul:'<path d="M4 7h3l1.5-2h7L17 7h3v12H4V7Z"/><circle cx="12" cy="13" r="4"/>',
     elytraFlight:'<path d="M3 17c3-1 6-4 9-9 3 5 6 8 9 9-4 1-7 1-9-1-2 2-5 2-9 1Z"/>',
@@ -119321,6 +119527,7 @@ function normalize(entry) {
     vanillaAnimations: ['..nnnn..','.nNNNNn.','..n##n..','.nnnnnn.','n.nrrn.n','..nNNn..','..N..N..','.N....N.'],
     handSway: ['...n....','..nn.n..','..nn.nn.','.nnnnnn.','nnnnnnnn','.nnNNNn.','..NNNN..','...NN...'],
     playerAnims: ['..nnnn..','.nN##Nn.','..nnnn..','.bbnnrr.','bbbnrrr.','..bnnr..','..N..N..','.N....N.'],
+    headLag: ['........','.b..nnnn','b..nN##n','.b..nnnn','..b.....','........','........','........'],
     zoom: ['..BBBB..','.BbbbbB.','Bb....bB','Bb.##.bB','.BbbbbB.','..BBBBB.','.....BB.','......BB'],
     cameraOverhaul: ['..kkkk..','.k++++k.','k+BBBB+k','k+B##B+k','k+B##B+k','k+BBBB+k','.k++++k.','..kkkk..'],
     elytraFlight: ['bb....bb','Bbb..bbB','BBbb.bbB','.BBbbBB.','..B##B..','..B##B..','..B..B..','........'],
@@ -119528,6 +119735,7 @@ function normalize(entry) {
     vanilla: 'vanillaAnimations', vanillaanimations: 'vanillaAnimations',
     leaf: 'leafWind', leafwind: 'leafWind', wind: 'leafWind',
     hand: 'handSway', handsway: 'handSway', sway: 'handSway',
+    headlag: 'headLag', head: 'headLag', lag: 'headLag', cabeza: 'headLag', cuello: 'headLag',
     playerlayer: 'betterPlayerLayers', playerlayers: 'betterPlayerLayers', betterplayerlayer: 'betterPlayerLayers', betterplayerlayers: 'betterPlayerLayers', layers: 'betterPlayerLayers',
     waypoint: 'waypoints', waypoints: 'waypoints',
     zoom: 'zoom'
@@ -119542,6 +119750,7 @@ function normalize(entry) {
     healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
     keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs', crittersMobs: 'crittersMobs', allayPets: 'allayPets',
     horror: 'horror', terror: 'horror', spooky: 'horror', herobrine: 'horror', dweller: 'horror',
+    headLag: 'headLag',
     pingCounter: 'pingCounter', titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations',
     waypoints: 'waypoints', zoom: 'zoom'
   });
@@ -120313,6 +120522,29 @@ function normalize(entry) {
       },
       destroy() {
         sendPlayerAnimsConfig(false);
+      }
+    }));
+  }
+
+  function sendHeadLagConfig(enabled = settings.headLag) {
+    document.dispatchEvent(new CustomEvent('minifeather:headlag-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initHeadLagModule() {
+    registerModule('headLag', () => createLifecycle({
+      enable() {
+        sendHeadLagConfig(true);
+      },
+      disable() {
+        sendHeadLagConfig(false);
+      },
+      refresh() {
+        sendHeadLagConfig(MODULES.get('headLag')?.enabled === true);
+      },
+      destroy() {
+        sendHeadLagConfig(false);
       }
     }));
   }
@@ -123345,6 +123577,11 @@ function normalize(entry) {
               'cameraOverhaul',
               t('cameraOverhaul'),
               t('cameraOverhaulDesc')
+            )}
+            ${renderToggle(
+              'headLag',
+              t('headLag'),
+              t('headLagDesc')
             )}
             ${renderToggle(
               'elytraFlight',
@@ -129085,6 +129322,7 @@ function normalize(entry) {
     setModuleEnabled('dynamicCrosshair', settings.dynamicCrosshair);
     setModuleEnabled('vanillaAnimations', settings.vanillaAnimations);
     setModuleEnabled('playerAnims', settings.playerAnims);
+    setModuleEnabled('headLag', settings.headLag);
     setModuleEnabled('leafWind', settings.leafWind);
     setModuleEnabled('handSway', settings.handSway);
     setModuleEnabled('betterPlayerLayers', settings.betterPlayerLayers);
