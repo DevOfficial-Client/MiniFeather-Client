@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005225720
+// @version      4.19.0.20261005231232
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : c8efeba74aa3b113a2c63629d362b892595c4c0f
- * builtAt : 2026-10-05T22:57:39.637Z
+ * commit  : 37693f5aafde1558c52ff0594d2935806a71732d
+ * builtAt : 2026-10-05T23:12:52.035Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"c8efeba74aa3b113a2c63629d362b892595c4c0f","builtAt":"2026-10-05T22:57:39.638Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"37693f5aafde1558c52ff0594d2935806a71732d","builtAt":"2026-10-05T23:12:52.035Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19430,7 +19430,7 @@ const state = {
     enabled: false, destroyed: false, root: null, style: null, observer: null,
     timer: 0, marks: new Set(), hub: null, expanded: false, layoutRight: null,
     language: 'en', pins: readPins(), nav: new Map(), sections: [], games: [],
-    recentCard: null, signature: ''
+    recentCard: null, signature: '', prevSignature: '', chipLastSeen: 0
   };
 
   const L10N = {
@@ -19844,14 +19844,24 @@ const state = {
   }
 
   function markChip(right) {
-    // las marcas del sync anterior son veneno: la tarjeta se re-renderiza y cambian de sitio
-    clearChipMarks();
     let canvas = null, best = 0;
     for (const c of right.querySelectorAll('canvas')) {
       const area = c.offsetWidth * c.offsetHeight;
       if (area > best) { best = area; canvas = c; }
     }
-    if (!canvas || !best) { markChipStatic(right); return; }
+    if (!canvas || !best) {
+      // durante un re-render de react el canvas puede estar desmontado UN instante:
+      // alternar aca pestañea a ritmo de sync. histeresis por tiempo: si lo vimos hace
+      // poco, conservar las marcas; si nunca hubo o lleva rato fuera, modo estatico
+      const gone = performance.now() - (state.chipLastSeen || 0);
+      if (state.chipLastSeen && gone < 1200) return;
+      clearChipMarks();
+      markChipStatic(right);
+      return;
+    }
+    state.chipLastSeen = performance.now();
+    // las marcas del sync anterior son veneno si la tarjeta cambio de forma: re-marcar
+    clearChipMarks();
     let node = canvas.parentElement;
     let row = null, info = null;
     while (node && node.parentElement && node.parentElement !== right) {
@@ -20275,19 +20285,22 @@ const state = {
     state.recentCard = state.sections[0]?.cards.find(card => card.tagName === 'BUTTON')
       || state.sections[0]?.cards[0] || null;
 
-    // firma barata: si no cambio nada visible, no re-renderizar el hub (el centro native muta seguido)
+    // firma barata: si no cambio nada visible, no re-renderizar el hub (el centro native muta seguido).
+    // histeresis: un sync con firma distinta puede ser un re-render transitorio de react
+    // (pestañearia el hub entero cada 140ms); exige que la firma nueva se sostenga 2 syncs
     const signature = JSON.stringify([
       state.language, state.pins, state.expanded,
       state.sections.map(section => section.cards.length),
       state.games.map(game => [game.href, game.image]).slice(0, 12),
       !!state.recentCard, friendsOnlineCount(layout.right)
     ]);
-    if (!state.hub || signature !== state.signature) {
+    if (!state.hub || (signature !== state.signature && signature === state.prevSignature)) {
       state.signature = signature;
       renderHub();
     } else {
       syncRailActive();
     }
+    state.prevSignature = signature;
     root.classList.toggle(ROOT_CLASS, true);
     root.classList.toggle(EXPANDED_CLASS, state.expanded);
     positionAside();
