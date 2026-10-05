@@ -1071,6 +1071,31 @@
     return fallback;
   }
 
+  // ¿hay un mundo vivo con jugador? los flotantes del hud no pisan el menú;
+  // el escaneo de react va throttled porque preguntarle esto cada frame ya es abuso
+  let hudGameCache = null;
+  let hudGameScanAt = 0;
+
+  function inGameWorld() {
+    const local = globalThis.__MINIFEATHER_LOCAL_GAMES__;
+    if (local?.active && local.game?.player?.pos) return true;
+    if (window.miniblox?.player?.pos || window.game?.player?.pos) return true;
+    const now = performance.now();
+    if (now - hudGameScanAt < 1000) return !!hudGameCache?.player?.pos;
+    hudGameScanAt = now;
+    try {
+      const react = document.querySelector('#react');
+      if (react) {
+        for (const root of Object.values(react)) {
+          const game = root?.updateQueue?.baseState?.element?.props?.game;
+          if (game?.player?.pos) { hudGameCache = game; return true; }
+        }
+      }
+    } catch (_) {}
+    hudGameCache = null;
+    return false;
+  }
+
   function t(key, vars = {}) {
     const table = TRANSLATIONS[settings.language] || TRANSLATIONS.en;
     const fallback = TRANSLATIONS.en[key] || key;
@@ -1640,6 +1665,7 @@
       let frames = 0;
       let last = 0;
       let visible = !document.hidden;
+      let hudShown = null;
 
       function createBox() {
         if (box?.isConnected) return;
@@ -1669,7 +1695,12 @@
 
       function loop(now) {
         if (!controller) return;
-        if (visible) {
+        const inWorld = inGameWorld();
+        if (inWorld !== hudShown) {
+          hudShown = inWorld;
+          box.style.visibility = inWorld ? 'visible' : 'hidden';
+        }
+        if (visible && inWorld) {
           frames++;
           const elapsed = now - last;
           if (elapsed >= 1000) {
@@ -1688,6 +1719,8 @@
         enable() {
           createBox();
           box.style.display = 'block';
+          hudShown = inGameWorld();
+          box.style.visibility = hudShown ? 'visible' : 'hidden';
           controller = new AbortController();
           const signal = controller.signal;
           let dragging = false;
@@ -1756,6 +1789,7 @@
       let leftClicks = [];
       let rightClicks = [];
       let lastCpsHtml = '';
+      let hudShown = null;
 
       function createBox() {
         if (box?.isConnected) return;
@@ -1787,6 +1821,13 @@
       }
 
       function render() {
+        if (box) {
+          const inWorld = inGameWorld();
+          if (inWorld !== hudShown) {
+            hudShown = inWorld;
+            box.style.visibility = inWorld ? 'visible' : 'hidden';
+          }
+        }
         const now = performance.now();
         leftClicks = leftClicks.filter(time => now - time < 1000);
         rightClicks = rightClicks.filter(time => now - time < 1000);
@@ -1871,6 +1912,7 @@
       let measuring = false;
       let enabled = false;
       const samples = [];
+      let hudShown = null;
 
       function createBox() {
         if (box?.isConnected) return;
@@ -1911,6 +1953,11 @@
         const color = value === null ? '#94a3b8' : value <= 80 ? '#22c55e' : value <= 150 ? '#facc15' : '#ef4444';
         dashboardStats.ping = value;
         if (box) {
+          const inWorld = inGameWorld();
+          if (inWorld !== hudShown) {
+            hudShown = inWorld;
+            box.style.visibility = inWorld ? 'visible' : 'hidden';
+          }
           box.innerHTML = `<span style="color:#9ca3af;">${t('pingLabel')}</span> <span style="color:${color};">${value === null ? '--' : value}</span> <span style="color:#64748b;">ms</span>`;
         }
       }
@@ -2099,6 +2146,7 @@
       let interval = 0;
       const buttons = {};
       const clickCounters = { LMB: [], RMB: [] };
+      let hudShown = null;
 
       function ensureStyle() {
         if (document.getElementById('minifeather-keystroke-css')) return;
@@ -2220,6 +2268,8 @@
         enable() {
           createContainer();
           container.style.display = 'flex';
+          hudShown = inGameWorld();
+          container.style.visibility = hudShown ? 'visible' : 'hidden';
           controller = new AbortController();
           const signal = controller.signal;
           let dragging = false;
@@ -2277,6 +2327,11 @@
           }, { signal });
 
           interval = window.setInterval(() => {
+            const inWorld = inGameWorld();
+            if (inWorld !== hudShown) {
+              hudShown = inWorld;
+              container.style.visibility = inWorld ? 'visible' : 'hidden';
+            }
             updateCps('LMB');
             updateCps('RMB');
           }, 200);
