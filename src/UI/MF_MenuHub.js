@@ -422,13 +422,30 @@
   //  - se sube desde el canvas hasta un ancestro con un hermano "de datos" -> ese hermano
   //    es la caja de info y el camino completo hacia arriba se deja transparente
   //  - hermanos con datos = cajitas apiladas; relleno sin datos = fuera
+  // sin canvas (el render es asincrono y a veces no existe): la tira de perfil como cajita
+  function clearChipMarks() {
+    for (const entry of [...state.marks]) {
+      if (String(entry[1]).startsWith('mf-hub-chip')) {
+        entry[0].classList.remove(entry[1]);
+        state.marks.delete(entry);
+      }
+    }
+  }
+
+  function markChipStatic(right) {
+    const strip = right.firstElementChild;
+    if (strip) mark(strip.firstElementChild || strip, 'mf-hub-chipinfo');
+  }
+
   function markChip(right) {
+    // las marcas del sync anterior son veneno: la tarjeta se re-renderiza y cambian de sitio
+    clearChipMarks();
     let canvas = null, best = 0;
     for (const c of right.querySelectorAll('canvas')) {
       const area = c.offsetWidth * c.offsetHeight;
       if (area > best) { best = area; canvas = c; }
     }
-    if (!canvas || !best) return;
+    if (!canvas || !best) { markChipStatic(right); return; }
     let node = canvas.parentElement;
     let row = null, info = null;
     while (node && node.parentElement && node.parentElement !== right) {
@@ -438,7 +455,7 @@
       if (data) { row = parent; info = data; break; }
       node = parent;
     }
-    if (!row) return;
+    if (!row) { markChipStatic(right); return; }
     mark(row, 'mf-hub-chiprow');
     mark(node, 'mf-hub-chipavatar');
     mark(info, 'mf-hub-chipinfo');
@@ -763,15 +780,6 @@
   function buildAside() {
     const aside = el('div', 'mf-hub-aside');
     aside.setAttribute('data-mf-i18n-skip', 'true');
-    // el pill vive debajo de la caja de datos: su altura cambia con nivel/xp logueado,
-    // asi que un top fijo choca. se mide la caja real en cada render
-    try {
-      const infoBox = document.querySelector('.mf-hub-chipinfo');
-      if (infoBox) {
-        const top = infoBox.getBoundingClientRect().bottom;
-        if (top > 40) aside.style.top = Math.round(top + 12) + 'px';
-      }
-    } catch (_) {}
     const online = friendsOnlineCount(state.layoutRight);
     if (online) {
       const pill = el('button', 'mf-hub-friendspill');
@@ -784,6 +792,16 @@
       aside.append(pill);
     }
     return aside;
+  }
+
+  // el pill vive debajo de la caja de datos, cuya altura cambia con nivel/xp logueado:
+  // medir al final de cada sync (en buildAside el layout todavia no asienta)
+  function positionAside() {
+    const aside = state.hub?.querySelector('.mf-hub-aside');
+    const infoBox = document.querySelector('.mf-hub-chipinfo');
+    if (!aside || !infoBox) return;
+    const top = infoBox.getBoundingClientRect().bottom;
+    if (top > 40) aside.style.top = Math.round(top + 12) + 'px';
   }
 
   function removeHub() {
@@ -866,6 +884,7 @@
     }
     root.classList.toggle(ROOT_CLASS, true);
     root.classList.toggle(EXPANDED_CLASS, state.expanded);
+    positionAside();
   }
 
   function schedule() {
