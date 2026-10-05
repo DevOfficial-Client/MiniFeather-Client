@@ -3,6 +3,7 @@
   "hot": [
     { "path": "src/Core/MF_Moderation.js", "guards": ["__MF_MODERATION"], "ok": ["__MF_MODERATION"] },
     { "path": "src/Horror/MF_Horror.js", "guards": ["__MF_Horror"], "ok": ["MF_Horror"] },
+    { "path": "src/Seasonal/MF_Seasonal.js", "guards": ["__MF_Seasonal"], "ok": ["__MF_SEASONAL_STATE__"] },
     { "path": "src/Studio/MF_Peer.js", "guards": [], "ok": ["MF_Peer"] },
     { "path": "src/Studio/MF_Facial.js", "guards": ["__MF_Facial"], "ok": ["MF_Facial"] },
     { "path": "src/Render/SpiderSim.js", "guards": [], "ok": ["MF_SPIDER_SIM"] },

@@ -88,6 +88,7 @@
     "src/Render/MF_CritterSkins.js",
     "src/Render/AllayPets.js",
     "src/Horror/MF_Horror.js",
+    "src/Seasonal/MF_Seasonal.js",
     "src/AI/VerityAI.js",
     "src/Studio/MF_Peer.js",
     "src/Shaders/CustomShader.js",

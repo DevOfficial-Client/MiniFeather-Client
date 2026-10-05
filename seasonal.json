@@ -1,0 +1,19 @@
+{
+  "$note": "eventos de temporada del client: ventanas de fecha + efectos para todos + objetivos por cuenta (matching SOLO por hash sha-256 de uuid/name en minusculas — un target con uuid plano se ignora a proposito, el repo es publico). los mensajes van en base64 (ofuscacion, no cifrado: no escribas aqui nada que no quieras leer al vecino). edita con node tools/seasonal.mjs o a mano respetando v:1. commit + push y los clientes obedecen en <=15 min.",
+  "v": 1,
+  "updated": "2026-10-04T00:00:00Z",
+  "events": [
+    {
+      "id": "halloween-2026",
+      "start": "2026-10-25",
+      "end": "2026-10-31",
+      "effects": {
+        "vignette": "#ff7b00",
+        "vignetteStrength": 0.22,
+        "heartRain": false,
+        "loginToast": "trick or treat — octubre trae sorpresas al client"
+      },
+      "targets": []
+    }
+  ]
+}
