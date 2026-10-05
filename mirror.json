@@ -103,7 +103,6 @@
     "src/Experimental/Realistic/CloudShaderPatch.js",
     "src/Experimental/Realistic/WetnessSystem.js",
     "src/Experimental/Realistic/RenderDistanceSystem.js",
-    "src/Experimental/Realistic/FirstPersonModel.js",
     "src/Experimental/Realistic/RealisticMode.js",
     "src/HUD/GUIPatch.js",
     "src/Cosmetics/Emotes.js",
