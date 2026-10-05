@@ -13,9 +13,6 @@
     { "path": "src/Movement/BaritoneAdapter.js", "guards": [], "ok": ["__MF_BARITONE_ADAPTER__"] },
     { "path": "src/Movement/BaritonePlanner.js", "guards": [], "ok": ["__MF_BARITONE_PLANNER__"] },
     { "path": "src/Movement/BaritonePathRenderer.js", "guards": [], "ok": ["__MF_BARITONE_PATH_RENDERER__"] },
-    { "path": "src/Movement/Baritone.js", "guards": [], "ok": ["Baritone"] },
-    { "path": "src/Render/BetterPlayerLayers.js", "guards": [], "ok": ["MF_BetterPlayerLayers"] },
-    { "path": "src/Render/BetterPlayerLayersArmorPatch.js", "guards": [], "ok": ["MF_BetterPlayerLayersArmor"] },
-    { "path": "src/Experimental/Realistic/FirstPersonModel.js", "guards": [], "ok": ["MF_RealisticFirstPerson"] }
+    { "path": "src/Movement/Baritone.js", "guards": [], "ok": ["Baritone"] }
   ]
 }

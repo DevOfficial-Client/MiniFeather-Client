@@ -975,7 +975,7 @@ test('MF_Clones: the MiniFeather profile (real skin) wins over the native one', 
     RING_RADIUS: 3.5,
     CLONE_IDS: [-2147483639, -2147483638, -2147483637]
   };
-  const fns = exposeManyFrom(clonesSource, ['looksLikeEntityManager', 'resolveManager', 'findGame', 'isLiveGame', 'playerProfile', 'cloneSlot', 'spawnClone', 'despawnClone', 'dispatchChanged', 'list', 'myCloneKey', 'sync', 'broadcastClones'], sandbox);
+  const fns = exposeManyFrom(clonesSource, ['looksLikeEntityManager', 'resolveManager', 'findGame', 'isLiveGame', 'playerProfile', 'cloneSlot', 'spawnClone', 'despawnClone', 'dispatchChanged', 'sweepRemoteClones', 'list', 'myCloneKey', 'sync', 'broadcastClones'], sandbox);
   fns.sync();
 
   assert.equal(spawned.length, 1);
@@ -1040,7 +1040,7 @@ test('MF_Clones P2P: remote clones spawn from mesh/peer messages and expire', ()
     CustomEvent: class {},
     SYNC_INTERVAL_MS: 1500
   };
-  const fns = exposeManyFrom(clonesSource, ['looksLikeEntityManager', 'resolveManager', 'findGame', 'isLiveGame', 'playerProfile', 'cloneSlot', 'spawnClone', 'despawnClone', 'dispatchChanged', 'remoteCloneId', 'receiveClone', 'syncRemoteClones'], sandbox);
+  const fns = exposeManyFrom(clonesSource, ['looksLikeEntityManager', 'resolveManager', 'findGame', 'isLiveGame', 'playerProfile', 'cloneSlot', 'spawnClone', 'despawnClone', 'dispatchChanged', 'remoteCloneId', 'sweepRemoteClones', 'receiveClone', 'syncRemoteClones'], sandbox);
 
   // El receptor crea el clon del otro jugador con su skin y nombre
   fns.receiveClone('peer-friend', {
@@ -1116,9 +1116,9 @@ test('MF_Clones caps to 1 clone on normal servers and broadcasts via mesh/peer',
   sandbox.globalThis = sandbox;
   sandbox.miniblox = sandbox.state.game;
 
-  const fns = exposeManyFrom(clonesSource, ['looksLikeEntityManager', 'resolveManager', 'findGame', 'isLiveGame', 'playerProfile', 'cloneSlot', 'spawnClone', 'despawnClone', 'dispatchChanged', 'list', 'myCloneKey', 'sync', 'broadcastClones'], sandbox);
+  const fns = exposeManyFrom(clonesSource, ['looksLikeEntityManager', 'resolveManager', 'findGame', 'isLiveGame', 'playerProfile', 'cloneSlot', 'spawnClone', 'despawnClone', 'dispatchChanged', 'sweepRemoteClones', 'list', 'myCloneKey', 'sync', 'broadcastClones'], sandbox);
   fns.sync();
-  
+
   assert.equal(spawned.length, 3, 'all three clones spawn on normal servers too');
   sandbox.state.lastBroadcastAt = 0;
   fns.broadcastClones();
