@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005062626
+// @version      4.19.0.20261005063020
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : bcb1697c236c371962088dea515ca1a8f533a5c3
- * builtAt : 2026-10-05T06:26:43.882Z
+ * commit  : c05138dbd7bcd20a2780230b2713a62b2dcbf4fc
+ * builtAt : 2026-10-05T06:30:37.226Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"bcb1697c236c371962088dea515ca1a8f533a5c3","builtAt":"2026-10-05T06:26:43.882Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"c05138dbd7bcd20a2780230b2713a62b2dcbf4fc","builtAt":"2026-10-05T06:30:37.226Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -80519,6 +80519,18 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     for (var i = 0; i < cands.length; i++) {
       if (cands[i] && cands[i].player) return cands[i];
     }
+    // mismo fallback que mobragdolls: el game también cuelga de la fibra de react
+    try {
+      var react = document.querySelector('#react');
+      if (react) {
+        var roots = Object.values(react);
+        for (var j = 0; j < roots.length; j++) {
+          var r = roots[j] && roots[j].updateQueue && roots[j].updateQueue.baseState;
+          var g = r && r.element && r.element.props && r.element.props.game;
+          if (g && g.player) return g;
+        }
+      }
+    } catch (_) {}
     return null;
   }
 
@@ -80538,8 +80550,12 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
   }
 
   function getPlayerPos(game) {
+    // el shape real de miniblox es player.pos (mismo que mobragdolls lee);
+    // player.position era un deseo — sin esto spawnFigure salía en silencio
+    // y herobrine jamás existió, lo cual explica el XD del usuario
     var p = game && game.player;
-    return (p && (p.position || (p.obj && p.obj.position) || (p.entity && p.entity.position))) || null;
+    return (p && (p.pos || p.position || (p.obj && p.obj.pos) || (p.obj && p.obj.position) ||
+      (p.entity && p.entity.pos) || (p.entity && p.entity.position))) || null;
   }
 
   // forward de cámara leyendo la matrixWorld directamente: sin clase THREE,
@@ -80570,9 +80586,30 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     return found;
   }
 
+  // el mesh del jugador local puede no existir (truco corpse: entity.mesh=null),
+  // y sin geometría donante no hay figura — cualquier mesh del mundo sirve:
+  // la figura son cajas y la geometría donada es una caja
+  function findSrcMesh(game) {
+    var m = findPlayerMesh(game);
+    if (m) return m;
+    var scene = getScene(game);
+    if (!scene) return null;
+    var found = null;
+    scene.traverse(function (o) {
+      if (found || !o.isMesh || !o.geometry) return;
+      found = o;
+    });
+    return found;
+  }
+
+  // la figura es de color plano: sin textura del donante ni vertex colors —
+  // clonar material de un mob/pj tal cual puede traer skin pegada
   function cloneMatLike(src, colorHex) {
     var m = src ? src.clone() : null;
-    if (m && m.color && m.color.set) m.color.set(colorHex);
+    if (!m) return null;
+    try { if (m.map) { m.map = null; m.needsUpdate = true; } } catch (_) {}
+    try { if (m.vertexColors) { m.vertexColors = false; m.needsUpdate = true; } } catch (_) {}
+    if (m.color && m.color.set) m.color.set(colorHex);
     return m;
   }
 
@@ -80581,7 +80618,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
   function makeFigure(game, kind) {
     var scene = getScene(game);
     if (!scene) return null;
-    var srcMesh = findPlayerMesh(game);
+    var srcMesh = findSrcMesh(game);
     var srcGeo = null, srcMat = null;
     if (srcMesh) {
       srcMesh.traverse(function (o) {
@@ -80614,7 +80651,10 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     try {
       // los Mesh del juego se instancian con su propio constructor (sin importar THREE)
       root = new (srcMesh.constructor)(srcGeo, mat);
-      root.visible = false;
+      // visible=true ACÁ: nació con visible=false y nadie lo cambiaba nunca —
+      // herobrine llevaba toda la partida parado enfrente tuyo, invisible,
+      // que es la peor implementación posible del terror psicológico
+      root.visible = true;
       // proporciones minecraft: total ~1.8; dweller estirado 1.5x
       var s = kind === 'dweller' ? 1.5 : 1;
       var legs = box(0.22, 0.75 * s, 0.24, pants, -0.13, 0.375 * s, 0);
@@ -80666,6 +80706,9 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     state.figure = fig;
     state.figureData = { kind: kind, spawnedAt: performance.now(), dist: distMeters };
     state.figureShownAt = performance.now();
+    // susurro de spawn: el aviso diegético de que hay ALGO — te hace girar la
+    // cabeza, que es literalmente el punto del preset
+    sfx.whisper();
     return true;
   }
 
@@ -81018,10 +81061,13 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
       var shown = now - state.figureShownAt;
 
       if (kind === 'herobrine') {
-        // se queda quieto mirando; si te acercas mucho o lo miras fijo, se va
+        // se queda quieto mirando; si te acercas mucho o lo miras fijo, se va.
+        // paciencia: mientras NO lo hayas visto se queda 2.5x showMs — 4s de
+        // ventana a 30m detrás tuyo es un susto que nadie recibe
         applyFog(getGame(), true);
         if (sight && sight.seen) state.stareAccum += 16; else state.stareAccum = Math.max(0, state.stareAccum - 8);
-        if (state.lastFigDist < 12 || state.stareAccum > 1600 || shown > cfg.showMs) {
+        var patience = (sight && sight.seen) ? cfg.showMs : cfg.showMs * 2.5;
+        if (state.lastFigDist < 12 || state.stareAccum > 1600 || shown > patience) {
           applyFog(getGame(), false);
           despawnFigure(false);
           scheduleNext();
