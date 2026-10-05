@@ -679,6 +679,7 @@
   const DEFAULT_SETTINGS = {
     rebrand: true,
     classicTitle: false,
+    menuHub: true,
     supportAds: false,
     startupAnimation: true,
     discord: true,
@@ -3677,6 +3678,7 @@
       { page: 'hud', key: 'pingCounter', title: t('pingCounter'), desc: t('pingCounterDesc'), tags: ['hud', 'pvp'] },
       { page: 'hud', key: 'armorHud', title: t('armorHud'), desc: t('armorHudDesc'), tags: ['hud', 'pvp'] },
       { page: 'hud', key: 'guiPatch', title: t('guiPatch'), desc: t('guiPatchDesc'), tags: ['hud'] },
+      { page: 'hud', key: 'menuHub', title: t('menuHub'), desc: t('menuHubDesc'), tags: ['hud', 'new'] },
       { page: 'hud', key: 'coordinates', title: t('coordinates'), desc: t('coordinatesDesc'), tags: ['hud'] },
       { page: 'hud', key: 'dynamicCrosshair', title: t('dynamicCrosshair'), desc: t('dynamicCrosshairDesc'), tags: ['hud', 'pvp', 'new'] },
       { page: 'waypoints', key: 'waypoints', title: t('waypoints'), desc: t('waypointsDesc'), tags: ['new'] },
@@ -3746,6 +3748,7 @@
     cpsCounter:'<circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/>',
     pingCounter:'<path d="M4 12a8 8 0 0 1 16 0"/><path d="M7 12a5 5 0 0 1 10 0M10 12a2 2 0 0 1 4 0"/><path d="M12 12v.01"/>',
     guiPatch:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 13h3M13 13h3M8 16h8"/>',
+    menuHub:'<rect x="3.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.4"/><path d="M17 14v6M14 17h6"/>',
     armorHud:'<path d="M8 3h8l2 4-2 14H8L6 7l2-4Z"/><path d="M9 7h6M8 11h8M9 16h6"/>',
     coordinates:'<path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5M8 17h3"/>',
     dynamicCrosshair:'<circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
@@ -3806,6 +3809,7 @@
     settings: ['..+kk+..','.+----+.','+-YyyY-+','k-YkkY-k','k-YkkY-k','+-YyyY-+','.+----+.','..+kk+..'],
     hud: ['BBBBBBBB','BbbbbbbB','BbkkkbbB','BbbbbbbB','BbggbybB','BbbbbbbB','BBBBBBBB','........'],
     classicTitle: ['..YYYY..','.YyyyyY.','Yy##y#yY','Yy##y#yY','Yy#yy#yY','Yy##y#yY','.YyyyyY.','..YYYY..'],
+    menuHub: ['.kkkkkk.','kyykkbbk','kyykkbbk','kkkkkkkk','kbbkkyyk','kbbkkyyk','.kkkkkk.','........'],
     render: ['...vv...','..v##v..','.v#yy#v.','vvyyyyvv','.v#yy#v.','..v##v..','...vv...','........'],
     cosmetics: ['..pppp..','.p#kk#p.','pPp##pPp','pPp##pPp','.Pp##pP.','.Pp##pP.','..PPPP..','........'],
     chat: ['.BBBBBB.','BbbbbbbB','BbkbbkbB','BbbbbbbB','BbbbbbbB','.BBBBBB.','..BB....','.BB.....'],
@@ -4039,6 +4043,7 @@
     gif: 'gifChat', gifs: 'gifChat', gifchat: 'gifChat', klipy: 'gifChat', stickers: 'gifChat',
     fps: 'fpsCounter', fpscounter: 'fpsCounter',
     gui: 'guiPatch', guipatch: 'guiPatch',
+    menuhub: 'menuHub', hub: 'menuHub', menuhome: 'menuHub', iniciohub: 'menuHub',
     panel: 'panel', menu: 'panel', clientmenu: 'panel', panelmenu: 'panel',
     freelook: 'freelook',
     freecam: 'freecam', freecamera: 'freecam',
@@ -4073,6 +4078,7 @@
     horror: 'horror', terror: 'horror', spooky: 'horror', herobrine: 'horror', dweller: 'horror',
     headLag: 'headLag',
     freshAnims: 'freshAnims',
+    menuHub: 'menuHub',
     pingCounter: 'pingCounter', titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations',
     waypoints: 'waypoints', zoom: 'zoom'
   });
@@ -4867,6 +4873,29 @@
       },
       destroy() {
         sendHeadLagConfig(false);
+      }
+    }));
+  }
+
+  function sendMenuHubConfig(enabled = settings.menuHub) {
+    document.dispatchEvent(new CustomEvent('minifeather:menuhub-config', {
+      detail: JSON.stringify({ enabled: !!enabled, language: settings.language })
+    }));
+  }
+
+  function initMenuHubModule() {
+    registerModule('menuHub', () => createLifecycle({
+      enable() {
+        sendMenuHubConfig(true);
+      },
+      disable() {
+        sendMenuHubConfig(false);
+      },
+      refresh() {
+        sendMenuHubConfig(MODULES.get('menuHub')?.enabled === true);
+      },
+      destroy() {
+        sendMenuHubConfig(false);
       }
     }));
   }
@@ -7817,6 +7846,11 @@
               t('classicTitleDesc')
             )}
             ${renderToggle(
+              'menuHub',
+              t('menuHub'),
+              t('menuHubDesc')
+            )}
+            ${renderToggle(
               'titanTiny',
               t('titanTiny'),
               t('titanTinyDesc')
@@ -9669,6 +9703,11 @@
     else showGUI();
   }
 
+  // el hub del menu principal (MF_MenuHub) abre el panel con este evento: boton MODS del rail
+  document.addEventListener('minifeather:open-panel', () => {
+    if (!overlay || !panel || overlay.style.display !== 'block') showGUI();
+  });
+
   // ---------- interactive first steps walkthrough ----------
   // a guided tour with the spotlight glued to the real controls: you cannot advance
   // until you actually use the thing. the full-client edition covers perf profiles,
@@ -10564,7 +10603,7 @@
     refreshLogoControls();
   }
   const NSB_BOOLEAN_KEYS = [
-    'rebrand', 'classicTitle', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
+    'rebrand', 'classicTitle', 'menuHub', 'startupAnimation', 'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud',
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
     'waterSplash', 'shineAmbience', 'patPat', 'duckMobs', 'crittersMobs', 'allayPets', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
     'safeSneak', 'autoRespawn', 'autoReconnect', 'idlePlayerBot', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
@@ -13693,6 +13732,9 @@
     document.dispatchEvent(new CustomEvent('minifeather:titlescreen-config', {
       detail: JSON.stringify({ enabled: !!settings.classicTitle, language: settings.language, logo: currentLogo })
     }));
+    setModuleEnabled('menuHub', settings.menuHub);
+    // dispatch directo aunque el lifecycle no cambie de estado: el hub relee language
+    sendMenuHubConfig(settings.menuHub);
     setModuleEnabled('discord', settings.rebrand && settings.discord);
     setModuleEnabled('keystrokes', settings.keystrokes);
     setModuleEnabled('fpsCounter', settings.fpsCounter);
@@ -14427,6 +14469,7 @@
     initRhythmParkourModule();
     initLocalGamesModule();
     initGuiPatchModule();
+    initMenuHubModule();
     initCustomShaderModule();
     initZoomModule();
     initCameraOverhaulModule();

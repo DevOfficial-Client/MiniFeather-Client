@@ -19,6 +19,7 @@
     "src/P2P/MF_VoiceChat.js",
     "src/Core/inject.js",
     "src/UI/NativeSettingsBridge.js",
+    "src/UI/MF_MenuHub.js",
     "src/Render/FreeCam.js",
     "src/Render/Freelook.js",
     "src/Render/ElytraFlight.js",
