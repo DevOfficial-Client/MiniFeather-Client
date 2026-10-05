@@ -152,7 +152,14 @@
     }
     function boxRects(box) {
         if (Array.isArray(box.uvNorth)) {
-            return { north: box.uvNorth, south: box.uvSouth, east: box.uvEast, west: box.uvWest, up: box.uvUp, down: box.uvDown };
+            const n = box.uvNorth;
+            // los boxes planos de Blockbench exportan solo algunas caras (los ojos del
+            // zombie traen únicamente uvNorth): las caras faltantes heredan esa recta
+            // — en un box de área cero no se ven igual
+            return {
+                north: n, south: box.uvSouth || n, east: box.uvEast || n,
+                west: box.uvWest || n, up: box.uvUp || n, down: box.uvDown || n
+            };
         }
         const [x, y, z, w, h, d] = box.coordinates;
         const off = box.textureOffset || [0, 0];
@@ -628,5 +635,8 @@
         },
         get enabled() { return state.enabled; }
     };
+    // autoarranque: si hay pack persistido de una sesión anterior, se hidrata y
+    // enciende solo (loadPackFiles ya hace setEnabled(true)) — sin panel de por medio
+    hydratePack();
     console.log(TAG, 'script loaded (motor CEM sin assets — el pack lo importa el usuario)');
 })();
