@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005022051
+// @version      4.19.0.20261005022143
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : e2afa7a36fd150349037790bbed03fdd076b3da3
- * builtAt : 2026-10-05T02:21:42.809Z
+ * commit  : 344349d9996ce52f0a72d8fedbfd0537361cf31f
+ * builtAt : 2026-10-05T05:14:16.223Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"e2afa7a36fd150349037790bbed03fdd076b3da3","builtAt":"2026-10-05T02:21:42.809Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"344349d9996ce52f0a72d8fedbfd0537361cf31f","builtAt":"2026-10-05T05:14:16.223Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -46111,7 +46111,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
   'use strict';
 
   const GLOBAL_KEY = '__MINIFEATHER_CLIENT_COMMANDS__';
-  const COMPLETION_CONTEXT_VERSION = 2;
+  const COMPLETION_CONTEXT_VERSION = 3;
   const BARITONE_PLACEMENT_COMMANDS_VERSION = 1;
   const BARITONE_PATH_COMMANDS_VERSION = 1;
   const REQUEST_EVENT = 'minifeather:client-command';
@@ -46133,7 +46133,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'clones', 'reconnect', 'reconectar', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'horror', 'terror', 'spooky', 'herobrine', 'dweller', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'clones', 'reconnect', 'reconectar', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
 
   // variantes de argumentos por comando para el tab-complete client-side.
   // null = el comando acepta cualquier cosa en esa posicion (como el criterio de algunos).
@@ -46154,7 +46154,14 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     clones: ['on', 'off', '1', '2', '3'],
     bridge: null,
     film: null,
-    studio: null
+    studio: null,
+    horror: {
+      on: null, off: null,
+      preset: ['herobrine', 'broken', 'dweller', 'weeping'],
+      intensity: ['chill', 'normal', 'nightmare'],
+      safe: ['on', 'off'],
+      status: null
+    }
   };
 
   function parseDetail(event) {
@@ -47020,6 +47027,27 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
         return;
       }
       })();
+      return;
+    }
+
+    if (command === 'horror' || command === 'terror' || command === 'spooky' || command === 'herobrine' || command === 'dweller') {
+      if (!globalThis.MF_Horror) { addChat('Horror is not ready yet.', 'error'); return; }
+      const sub = (args[0] || '').toLowerCase();
+      if (!sub) { dispatchRequest('horrorSet', []); return; }
+      if (sub === 'on' || sub === 'off') { dispatchRequest('horrorSet', [sub]); return; }
+      if (sub === 'preset' || sub === 'preset') {
+        const value = (args[1] || '').toLowerCase();
+        dispatchRequest('horrorSet', ['preset', value]);
+        return;
+      }
+      if (sub === 'intensity' || sub === 'intensity') {
+        const value = (args[1] || '').toLowerCase();
+        dispatchRequest('horrorSet', ['intensity', value]);
+        return;
+      }
+      if (sub === 'safe' || sub === 'seguro') { dispatchRequest('horrorSet', ['safe', (args[1] || 'on').toLowerCase()]); return; }
+      if (sub === 'status' || sub === 'status') { dispatchRequest('horrorSet', ['status']); return; }
+      addChat('Usage: /horror [on|off|preset <herobrine|broken|dweller|weeping>|intensity <chill|normal|nightmare>|safe <on|off>|status]', 'error');
       return;
     }
 
@@ -104627,6 +104655,11 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "horrorIntensityNormal": "Normal",
     "horrorIntensityNightmare": "Nightmare (frequent)",
     "horrorSafeMode": "Streamer mode (no fake crashes/disconnects)",
+    "horrorCmdPreset": "Horror preset: {value}",
+    "horrorCmdIntensity": "Horror intensity: {value}",
+    "horrorCmdSafe": "Streamer mode: {value}",
+    "horrorCmdStatus": "Horror {state} · preset {preset} · intensity {intensity} · streamer mode {safe}",
+    "horrorCmdUsage": "Usage: /horror [on|off|preset <herobrine|broken|dweller|weeping>|intensity <chill|normal|nightmare>|safe <on|off>|status]",
     "waterSplash": "Water Splash",
     "waterSplashDesc": "Cinematic trailer-style splash when you or any entity falls into water.",
     "shineAmbience": "Shine Ambience",
@@ -105474,6 +105507,11 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "horrorIntensityNormal": "Normal",
     "horrorIntensityNightmare": "Pesadilla (frecuente)",
     "horrorSafeMode": "Modo streamer (sin crashes/desconexiones falsas)",
+    "horrorCmdPreset": "Preset de terror: {value}",
+    "horrorCmdIntensity": "Intensidad del terror: {value}",
+    "horrorCmdSafe": "Modo streamer: {value}",
+    "horrorCmdStatus": "Terror {state} · preset {preset} · intensidad {intensity} · modo streamer {safe}",
+    "horrorCmdUsage": "Uso: /horror [on|off|preset <herobrine|broken|dweller|weeping>|intensity <chill|normal|nightmare>|safe <on|off>|status]",
     "waterSplash": "Splash de agua",
     "waterSplashDesc": "Splash cinematográfico estilo tráiler al caer al agua (tú o cualquier entidad).",
     "shineAmbience": "Ambiente Shine",
@@ -118880,7 +118918,7 @@ function normalize(entry) {
     guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers',
     healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
     keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs', crittersMobs: 'crittersMobs', allayPets: 'allayPets',
-    horror: 'horror', spooky: 'horror', herobrine: 'horror', dweller: 'horror',
+    horror: 'horror', terror: 'horror', spooky: 'horror', herobrine: 'horror', dweller: 'horror',
     pingCounter: 'pingCounter', titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations',
     waypoints: 'waypoints', zoom: 'zoom'
   });
@@ -119069,6 +119107,52 @@ function normalize(entry) {
           if (activePage === 'dashboard') updateDashboardStats();
           push(t(settings[key] ? 'commandEnabled' : 'commandDisabled', { module: commandModuleLabel(key) }), 'success');
         }
+      }
+      respondClientCommand(requestId, response);
+      return;
+    }
+
+    if (request.action === 'horrorSet') {
+      const sub = String(args[0] || '').toLowerCase();
+      const PRESETS_OK = ['herobrine', 'broken', 'dweller', 'weeping'];
+      const INTENSITY_OK = ['chill', 'normal', 'nightmare'];
+      if (!sub) {
+        settings.horror = !settings.horror;
+        guiSettings.horror = settings.horror;
+        saveSettings();
+        applyGuiSettings();
+        sendHorrorConfig();
+        push(t(settings.horror ? 'commandEnabled' : 'commandDisabled', { module: commandModuleLabel('horror') }), 'success');
+      } else if (sub === 'on' || sub === 'off') {
+        settings.horror = sub === 'on';
+        guiSettings.horror = settings.horror;
+        saveSettings();
+        applyGuiSettings();
+        sendHorrorConfig();
+        push(t(settings.horror ? 'commandEnabled' : 'commandDisabled', { module: commandModuleLabel('horror') }), 'success');
+      } else if (sub === 'preset') {
+        const value = String(args[1] || '').toLowerCase();
+        if (PRESETS_OK.indexOf(value) < 0) { push(t('horrorCmdUsage'), 'error'); }
+        else { settings.horrorPreset = value; saveSettings(); sendHorrorConfig(); push(t('horrorCmdPreset', { value }), 'success'); }
+      } else if (sub === 'intensity') {
+        const value = String(args[1] || '').toLowerCase();
+        if (INTENSITY_OK.indexOf(value) < 0) { push(t('horrorCmdUsage'), 'error'); }
+        else { settings.horrorIntensity = value; saveSettings(); sendHorrorConfig(); push(t('horrorCmdIntensity', { value }), 'success'); }
+      } else if (sub === 'safe') {
+        const value = String(args[1] || 'on').toLowerCase() !== 'off';
+        settings.horrorSafeMode = value;
+        saveSettings();
+        sendHorrorConfig();
+        push(t('horrorCmdSafe', { value: value ? 'ON' : 'OFF' }), 'success');
+      } else if (sub === 'status') {
+        push(t('horrorCmdStatus', {
+          state: settings.horror ? 'ON' : 'OFF',
+          preset: settings.horrorPreset || 'herobrine',
+          intensity: settings.horrorIntensity || 'normal',
+          safe: settings.horrorSafeMode !== false ? 'ON' : 'OFF'
+        }), 'info');
+      } else {
+        push(t('horrorCmdUsage'), 'error');
       }
       respondClientCommand(requestId, response);
       return;

@@ -4002,7 +4002,7 @@
     guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers',
     healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
     keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs', crittersMobs: 'crittersMobs', allayPets: 'allayPets',
-    horror: 'horror', spooky: 'horror', herobrine: 'horror', dweller: 'horror',
+    horror: 'horror', terror: 'horror', spooky: 'horror', herobrine: 'horror', dweller: 'horror',
     pingCounter: 'pingCounter', titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations',
     waypoints: 'waypoints', zoom: 'zoom'
   });
@@ -4191,6 +4191,52 @@
           if (activePage === 'dashboard') updateDashboardStats();
           push(t(settings[key] ? 'commandEnabled' : 'commandDisabled', { module: commandModuleLabel(key) }), 'success');
         }
+      }
+      respondClientCommand(requestId, response);
+      return;
+    }
+
+    if (request.action === 'horrorSet') {
+      const sub = String(args[0] || '').toLowerCase();
+      const PRESETS_OK = ['herobrine', 'broken', 'dweller', 'weeping'];
+      const INTENSITY_OK = ['chill', 'normal', 'nightmare'];
+      if (!sub) {
+        settings.horror = !settings.horror;
+        guiSettings.horror = settings.horror;
+        saveSettings();
+        applyGuiSettings();
+        sendHorrorConfig();
+        push(t(settings.horror ? 'commandEnabled' : 'commandDisabled', { module: commandModuleLabel('horror') }), 'success');
+      } else if (sub === 'on' || sub === 'off') {
+        settings.horror = sub === 'on';
+        guiSettings.horror = settings.horror;
+        saveSettings();
+        applyGuiSettings();
+        sendHorrorConfig();
+        push(t(settings.horror ? 'commandEnabled' : 'commandDisabled', { module: commandModuleLabel('horror') }), 'success');
+      } else if (sub === 'preset') {
+        const value = String(args[1] || '').toLowerCase();
+        if (PRESETS_OK.indexOf(value) < 0) { push(t('horrorCmdUsage'), 'error'); }
+        else { settings.horrorPreset = value; saveSettings(); sendHorrorConfig(); push(t('horrorCmdPreset', { value }), 'success'); }
+      } else if (sub === 'intensity') {
+        const value = String(args[1] || '').toLowerCase();
+        if (INTENSITY_OK.indexOf(value) < 0) { push(t('horrorCmdUsage'), 'error'); }
+        else { settings.horrorIntensity = value; saveSettings(); sendHorrorConfig(); push(t('horrorCmdIntensity', { value }), 'success'); }
+      } else if (sub === 'safe') {
+        const value = String(args[1] || 'on').toLowerCase() !== 'off';
+        settings.horrorSafeMode = value;
+        saveSettings();
+        sendHorrorConfig();
+        push(t('horrorCmdSafe', { value: value ? 'ON' : 'OFF' }), 'success');
+      } else if (sub === 'status') {
+        push(t('horrorCmdStatus', {
+          state: settings.horror ? 'ON' : 'OFF',
+          preset: settings.horrorPreset || 'herobrine',
+          intensity: settings.horrorIntensity || 'normal',
+          safe: settings.horrorSafeMode !== false ? 'ON' : 'OFF'
+        }), 'info');
+      } else {
+        push(t('horrorCmdUsage'), 'error');
       }
       respondClientCommand(requestId, response);
       return;

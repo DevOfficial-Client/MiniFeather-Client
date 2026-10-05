@@ -87,6 +87,20 @@ test('líneas falsas por idioma y sin repetir literal del chat real del juego', 
   assert.match(SRC, /te vi girar/); // nuestra línea, nuestra culpa
 });
 
+test('el comando /horror existe en ClientCommands y su cambio invalida completions', () => {
+  const cc = fs.readFileSync(path.join(ROOT, 'src', 'Chat', 'ClientCommands.js'), 'utf8');
+  assert.match(cc, /COMPLETION_CONTEXT_VERSION = 3/, 'nuevo comando = nuevo árbol = bump de versión');
+  assert.match(cc, /'horror', 'terror', 'spooky', 'herobrine', 'dweller'/, 'RECOGNIZED con aliases');
+  assert.match(cc, /horror: \{[\s\S]*?preset: \['herobrine', 'broken', 'dweller', 'weeping'\]/, 'completion tree');
+  assert.match(cc, /dispatchRequest\('horrorSet'/, 'las subacciones van por el puente del panel');
+  // 'weeping' ya era un comando (entidad stalker): no se puede pisar
+  const panel = fs.readFileSync(path.join(ROOT, 'src', 'UI', 'ClientPanel.js'), 'utf8');
+  assert.doesNotMatch(panel, /weeping: 'horror'/, 'alias weeping fuera: conflicto con el stalker');
+  assert.match(panel, /request.action === 'horrorSet'/, 'panel maneja horrorSet');
+  const runner = fs.readFileSync(path.join(ROOT, 'src', 'Core', 'MirrorRunner.js'), 'utf8');
+  assert.match(runner, /COMPLETION_CONTEXT_VERSION = 3/, 'marker del runner a v3');
+});
+
 test('integración: el panel despacha el mismo evento que el módulo escucha', () => {
   const panel = fs.readFileSync(path.join(ROOT, 'src', 'UI', 'ClientPanel.js'), 'utf8');
   assert.match(panel, /minifeather:horror-config/, 'evento compartido');

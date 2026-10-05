@@ -84,7 +84,7 @@
     });
   }
   var requiredMarkers = {
-    'src/Chat/ClientCommands.js': ['COMPLETION_CONTEXT_VERSION = 2', 'BARITONE_PLACEMENT_COMMANDS_VERSION = 1',
+    'src/Chat/ClientCommands.js': ['COMPLETION_CONTEXT_VERSION = 3', 'BARITONE_PLACEMENT_COMMANDS_VERSION = 1',
       'BARITONE_PATH_COMMANDS_VERSION = 1'],
     'src/Render/FullBright.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
     'src/UI/ClientPanel.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
