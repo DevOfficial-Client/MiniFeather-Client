@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005215413
+// @version      4.19.0.20261005220449
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 4e216d7a32c5d7705941f03204c7e98c949fe3b1
- * builtAt : 2026-10-05T21:54:32.260Z
+ * commit  : da30f166513ba671f51c87b07f56096034d0c35d
+ * builtAt : 2026-10-05T22:05:09.113Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"4e216d7a32c5d7705941f03204c7e98c949fe3b1","builtAt":"2026-10-05T21:54:32.260Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"da30f166513ba671f51c87b07f56096034d0c35d","builtAt":"2026-10-05T22:05:09.113Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19542,12 +19542,17 @@ const state = {
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}::-webkit-scrollbar{display:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:not(:first-child){display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>*:not(:first-child){display:none!important}
-      /* el avatar nativo es un canvas de skin con ventana fija de 129px que recorta la cabeza:
-         el render ya trae el cuerpo entero (168x285), entra escalado a 76x129 — personaje completo de pie */
+      /* el chip de perfil va vertical como el perfil movil: datos arriba y el personaje
+         grande parado abajo. el sitio anida la fila a dos profundidades segun el render:
+         cubrimos ambas (la regla corta queda como fallback, en display:block es inerte).
+         buffer real del canvas 99x168 con la figura en y=32..164: escala 1.15 asienta los pies */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div,
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div{flex-direction:column!important;align-items:center!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div:last-child,
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div>div:last-child{order:-1!important;align-self:stretch!important;flex:none!important;min-width:0!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child div:has(> canvas),
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child div:has(> div > canvas){width:76px!important;height:129px!important;flex:none!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child canvas{transform:scale(.4526)!important;transform-origin:top left!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div:last-child{flex:1!important;min-width:0!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child div:has(> div > canvas){width:150px!important;height:245px!important;flex:none!important;align-self:center!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child canvas{transform:translateX(12px) translateY(2px) scale(1.15)!important;transform-origin:top left!important}
       #react.${ROOT_CLASS} .${RIGHT_CLASS}>*:first-child{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px)}
       #react.${ROOT_CLASS}.${EXPANDED_CLASS} .${RIGHT_CLASS}>*{background:rgba(10,12,16,.55)!important;backdrop-filter:blur(6px);border-radius:10px!important}
 
