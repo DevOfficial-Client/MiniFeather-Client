@@ -16,6 +16,7 @@
     playerList: null,
     playerListApplyEntry: null,
     playerListApplyEntryWrapped: null,
+    patchSig: null,
     timer: 0,
     boot: 0,
     proxyUrl: '',
@@ -556,18 +557,51 @@
   loadRanksFromDb();
   startRanksPushListener();
 
-  state.boot = setInterval(() => {
-    if (installRuntime()) clearInterval(state.boot);
-  }, 25);
+  // firma barata del mundo: si no cambio nada, re-parchear lo ya parcheado es trabajo voluntario
+  function gameSignature(game) {
+    const entities = game.world?.loadedEntityList;
+    const recent = game.serverInfo?.recentPlayers;
+    const chat = game.chat?.log;
+    return {
+      playerList: game.playerList || null,
+      entities: entities ? entities.length : -1,
+      recent: recent ? recent.length : -1,
+      chat: Array.isArray(chat) ? chat.length : -1
+    };
+  }
+
+  function sameSignature(a, b) {
+    return !!a && !!b &&
+      a.playerList === b.playerList &&
+      a.entities === b.entities &&
+      a.recent === b.recent &&
+      a.chat === b.chat;
+  }
+
+  // sondeo de arranque con retroceso: machacar findGame 40 veces por segundo contra el menu no lo hace aparecer antes
+  let bootDelay = 25;
+  const bootProbe = () => {
+    if (installRuntime()) return;
+    bootDelay = Math.min(bootDelay * 2, 500);
+    state.boot = setTimeout(bootProbe, bootDelay);
+  };
+  state.boot = setTimeout(bootProbe, bootDelay);
 
   state.timer = setInterval(() => {
     const game = findGame();
     if (!game) return;
     if (game !== state.game || game.playerList !== state.playerList) {
+      // juego o lista nueva: la firma anterior ya no describe nada
+      state.patchSig = null;
       installRuntime();
       return;
     }
-    patchKnownGameData(game);
+    const sig = gameSignature(game);
+    if (!sameSignature(state.patchSig, sig)) {
+      state.patchSig = sig;
+      patchKnownGameData(game);
+    }
+    // el chat se mira siempre: recorrer 24 entradas contra el WeakSet cuesta menos que discutirlo
     patchChatLog(game);
   }, 250);
   })();

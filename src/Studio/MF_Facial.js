@@ -1001,13 +1001,21 @@
         state.tex.needsUpdate = true;
     }
 
+    // canvas de mezcla reutilizado: crear un <canvas> por frame durante un
+    // blend era gc a 60fps para dibujar exactamente lo mismo
+    let blendScratch = null;
     function blendFrames(a, b, t) {
         const w = Math.max(a.canvas.width, b.canvas.width);
         const h = Math.max(a.canvas.height, b.canvas.height);
-        const c = document.createElement('canvas');
-        c.width = w; c.height = h;
+        if (!blendScratch || blendScratch.width !== w || blendScratch.height !== h) {
+            blendScratch = document.createElement('canvas');
+            blendScratch.width = w; blendScratch.height = h;
+        }
+        const c = blendScratch;
         const ctx = c.getContext('2d');
         ctx.imageSmoothingEnabled = false;
+        ctx.globalAlpha = 1;
+        ctx.clearRect(0, 0, w, h);
         ctx.drawImage(a.canvas, 0, 0, w, h);
         ctx.globalAlpha = t;
         ctx.drawImage(b.canvas, 0, 0, w, h);
@@ -1034,14 +1042,17 @@
         }
 
         const t0 = performance.now();
+        const totalMs = frames.reduce((s, f) => s + f.holdMs + f.blendMs, 0) || 1;
         const tick = () => {
             if (!state.playing) return;
             const anim = state.library[state.playing];
             if (!anim) return stop(true);
-            const dur = frames.reduce((s, f) => s + f.holdMs + f.blendMs, 0) || 1;
-            let t = (performance.now() - t0) % dur;
+            // duración invariante del loop: calculada una vez en play(), no a 60fps
+            let t = (performance.now() - t0) % totalMs;
             let i = 0;
-            while (t > frames[i].holdMs + frames[i].blendMs) {
+            // paseo acotado: un holdMs negativo (el input no valida nada) hace
+            // que t crezca en vez de bajar y este while se convierte en un arete
+            for (let n = 0; n < frames.length && t > frames[i].holdMs + frames[i].blendMs; n++) {
                 t -= frames[i].holdMs + frames[i].blendMs;
                 i = (i + 1) % frames.length;
             }

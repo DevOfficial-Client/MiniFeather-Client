@@ -462,11 +462,12 @@ const state = {
         state.fullScan = true;
     }
 
-    chunkRoot.updateMatrixWorld?.(true);
-
+    // sin updateMatrixWorld(true) forzado en la raiz: recalcular todo el arbol de chunks
+    // cada 900ms mata la cache de matrices de three; cada mesh ya tiene su matrixWorld,
+    // y tagMesh actualiza el del mesh que va a inspeccionar
     chunkRoot.traverse(mesh => {
         if (!mesh?.isMesh || !mesh.geometry?.attributes?.position) return;
-        if (!state.fullScan && !possibleLeafMesh(mesh)) return;
+        if (!possibleLeafMesh(mesh)) return;
 
         const source = mesh.geometry.attributes.position.array;
         const currentAttribute = mesh.geometry.getAttribute?.('mfLeaf');

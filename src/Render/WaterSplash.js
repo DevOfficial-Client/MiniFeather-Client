@@ -6,7 +6,8 @@
   const TAG = 'minifeather watersplash';
 
   const SPLASH_LIFE_MS = 700;
-  const SCAN_MS = 60;
+  // 150ms: cada 60ms se recorrian todas las entidades dos veces por tick
+  const SCAN_MS = 150;
   const MIN_FALL_SPEED = 0.08;
   const HOOK_MS = 900;
 
@@ -814,11 +815,10 @@
     }
   }
 
-  function tickRain() {
+  function tickRain(game) {
     if (!state.enabled || state.destroyed || !state.resourcesReady) { state.rainBlocked = 'disabled/recursos'; return; }
     if (!state.rainFramesReady) { state.rainBlocked = 'sin-frames-ripple'; return; }
 
-    const game = findGame();
     if (!game) { state.rainBlocked = 'sin-game'; return; }
 
     const forced = state.forceRain && performance.now() < state.forceRain;
@@ -990,7 +990,9 @@
     const game = findGame();
     if (!game) return;
 
-    tickRain();
+    // el game se resuelve una vez por barrido y se pasa al tick de lluvia;
+    // resolverlo dos veces en el mismo tick era interrogar al objeto reactivo dos veces por gusto
+    tickRain(game);
 
     const now = performance.now();
     const seen = new Set();

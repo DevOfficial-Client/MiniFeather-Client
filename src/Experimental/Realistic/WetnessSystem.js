@@ -493,19 +493,27 @@
     }
   }
 
+  const pruneKeysScratch = [];
+
   function prune(now) {
     const ttl = dryMs();
     for (const [key, cell] of wetBlocks) if (now - cell.lastWet > ttl) wetBlocks.delete(key);
     for (const [key, cell] of puddles) {
       if (now - cell.lastWet > ttl || cell.amount <= 0.001) puddles.delete(key);
     }
+    // ordenar claves reutilizando el mismo rascador en vez de repartir entradas nuevas;
+    // el resultado (que claves se podan y en que orden) es identico
     if (wetBlocks.size > 2048) {
-      const sorted = [...wetBlocks.entries()].sort((a, b) => a[1].lastWet - b[1].lastWet);
-      for (let i = 0; i < sorted.length - 2048; i++) wetBlocks.delete(sorted[i][0]);
+      pruneKeysScratch.length = 0;
+      for (const key of wetBlocks.keys()) pruneKeysScratch.push(key);
+      pruneKeysScratch.sort((a, b) => wetBlocks.get(a).lastWet - wetBlocks.get(b).lastWet);
+      for (let i = 0; i < pruneKeysScratch.length - 2048; i++) wetBlocks.delete(pruneKeysScratch[i]);
     }
     if (puddles.size > 256) {
-      const sorted = [...puddles.entries()].sort((a, b) => a[1].lastWet - b[1].lastWet);
-      for (let i = 0; i < sorted.length - 256; i++) puddles.delete(sorted[i][0]);
+      pruneKeysScratch.length = 0;
+      for (const key of puddles.keys()) pruneKeysScratch.push(key);
+      pruneKeysScratch.sort((a, b) => puddles.get(a).lastWet - puddles.get(b).lastWet);
+      for (let i = 0; i < pruneKeysScratch.length - 256; i++) puddles.delete(pruneKeysScratch[i]);
     }
   }
   const packScratch = [];
@@ -532,18 +540,14 @@
     const count = Math.min(maxK, liveCount);
     const arr = shared.uMFWetCells.value;
     arr.fill(0);
-    const used = usedIdxScratch;
-    used.fill(false);
+    // antes: seleccion del mas cercano vuelta a vuelta, O(maxK x vivos) (~131k peores casos);
+    // una ordenacion estable de indices produce la misma seleccion en el mismo orden
+    const order = packOrderScratch;
+    order.length = liveCount;
+    for (let i = 0; i < liveCount; i++) order[i] = i;
+    order.sort((a, b) => packScratch[a].dist2 - packScratch[b].dist2);
     for (let k = 0; k < count; k++) {
-      let best = -1, bestD = Infinity;
-      for (let i = 0; i < liveCount; i++) {
-        if (used[i]) continue;
-        const d = packScratch[i].dist2;
-        if (d < bestD) { bestD = d; best = i; }
-      }
-      if (best < 0) break;
-      used[best] = true;
-      const cell = packScratch[best], o = k * 4;
+      const cell = packScratch[order[k]], o = k * 4;
       arr[o] = cell.x;
       arr[o + 1] = cell.y;
       arr[o + 2] = cell.z;
@@ -551,7 +555,7 @@
     }
     shared.uMFWetCellCount.value = count;
   }
-  const usedIdxScratch = new Array(2048);
+  const packOrderScratch = [];
 
   function updateRain(game, now, dt) {
     let rain = 0;
@@ -600,12 +604,22 @@
     }
 
     const cp = game?.gameScene?.camera?.position || game?.player?.pos || game?.player?.position;
-    if (cp) Object.assign(shared.uMFWetCameraPos.value, { x: Number(cp.x) || 0, y: Number(cp.y) || 0, z: Number(cp.z) || 0 });
+    const cam = shared.uMFWetCameraPos.value;
+    if (cp) {
+      cam.x = Number(cp.x) || 0;
+      cam.y = Number(cp.y) || 0;
+      cam.z = Number(cp.z) || 0;
+    }
 
-    Object.assign(puddleUniforms.uMFPuddleLightDir.value, dir);
-    Object.assign(puddleUniforms.uMFPuddleLightColor.value, col);
+    // escritura directa en los campos: cuatro Object.assign con literales nuevos
+    // por frame era recoleccion de basura por deporte
+    const pDir = puddleUniforms.uMFPuddleLightDir.value;
+    pDir.x = dir.x; pDir.y = dir.y; pDir.z = dir.z;
+    const pCol = puddleUniforms.uMFPuddleLightColor.value;
+    pCol.x = col.x; pCol.y = col.y; pCol.z = col.z;
     puddleUniforms.uMFPuddleLightStrength.value = shared.uMFWetLightStrength.value;
-    Object.assign(puddleUniforms.uMFPuddleCameraPos.value, shared.uMFWetCameraPos.value);
+    const pCam = puddleUniforms.uMFPuddleCameraPos.value;
+    pCam.x = cam.x; pCam.y = cam.y; pCam.z = cam.z;
   }
 
   function findReferenceMesh(game) {

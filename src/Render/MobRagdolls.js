@@ -45,7 +45,8 @@
         vecCtor: null,
         solidCache: new Map(),
         worldCache: { world: null, proto: null, at: 0 },
-        diagSeen: { n: 0, mobs: 0 }
+        diagSeen: { n: 0, mobs: 0 },
+        scanAt: 0
     };
 
     function getGame() {
@@ -770,7 +771,9 @@
         const p = playerPos();
         const scene = state.game?.gameScene?.scene;
         const container = state.sceneGuardContainer;
-        for (const rec of [...state.corpses]) {
+        // hacia atrás: removeCorpse hace splice y los índices ya visitados no se movieron
+        for (let i = state.corpses.length - 1; i >= 0; i--) {
+            const rec = state.corpses[i];
             // algo externo lo ocultó: forzar visible (no fuimos nosotros, palabra)
             if (rec.mesh.visible !== true) {
                 rec.mesh.visible = true;
@@ -837,9 +840,12 @@
         installSceneGuard();
         tagExistingMobs();
 
-        // capturar muertes nuevas (ventana de muerte; respaldo del hook de destroy)
+        // capturar muertes nuevas (ventana de muerte; respaldo del hook de destroy).
+        // sondeo a 5 Hz: las muertes ya vienen enventanadas por el hook, y recorrer
+        // TODAS las entidades por frame era un impuesto sobre cada uno de los 60.
         const ents = state.game.world.entities;
-        if (ents && typeof ents.forEach === 'function') {
+        if (ents && typeof ents.forEach === 'function' && t - state.scanAt >= 200) {
+            state.scanAt = t;
             try {
                 ents.forEach((ent) => {
                     try {
@@ -871,8 +877,13 @@
         schedule();
     }
 
+    function scheduledTick() {
+        if (state.stamp.alive) tick();
+    }
+
     function schedule() {
-        requestAnimationFrame(() => { if (state.stamp.alive) tick(); });
+        // callback persistente a nivel de módulo: una función, cientos de frames
+        requestAnimationFrame(scheduledTick);
     }
 
     // ---- API / toggle (mismo patrón que CrittersMobs) ----

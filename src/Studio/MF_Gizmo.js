@@ -31,6 +31,7 @@
         dragCtx: null,
 
         ctors: null,
+        scene: null,
         size: 1
     };
 
@@ -204,6 +205,9 @@
 
             const scene = findScene(joint) || findPlayerMesh()?.parent;
             if (!scene || !scene.add) return false;
+            // para el guard de update(): el ancestro más alto de verdad, no el
+            // fallback intermedio, o el gizmo se soltaría solo al primer tick
+            state.scene = findScene(joint) || scene;
             state.joint = joint;
             state.onDelta = onDelta;
             state.root = new ctors.Group();
@@ -270,6 +274,9 @@
             state.size = 1;
             return true;
         } catch (e) {
+            // fallo a mitad de construcción: no dejar un root fantasma con
+            // visible() en true y joint apuntando a nada
+            detach();
             console.warn(TAG + ' attach failed:', e?.message || e);
             return false;
         }
@@ -278,6 +285,10 @@
     function update() {
         if (!state.root || !state.joint) return;
         try {
+            // el rig puede despawnearse o reconstruirse (cambio de skin) con el
+            // gizmo puesto: si el joint ya no cuelga de la escena, soltar antes
+            // de seguir arrastrando el cadáver
+            if (state.scene && findScene(state.joint) !== state.scene) { detach(); return; }
             state.joint.updateMatrixWorld?.(true);
             const V3 = state.joint.position.constructor;
             const p = new V3();
@@ -320,9 +331,17 @@
         }
         state.root = null; state.arrows = null; state.joint = null;
         state.onDelta = null; state.dragging = null; state.dragCtx = null;
+        state.scene = null;
     }
 
     function visible() { return !!state.root; }
+
+    // rect de referencia para proyectar: el mismo canvas que usa beginDrag y
+    // pickPart. faltaba esta función entera — pick/pickRing/dragDelta llevaban
+    // años devolviendo null por un ReferenceError silencioso
+    function effectiveRect() {
+        return (getGameCanvas() || document.body).getBoundingClientRect();
+    }
 
     function pick(clientX, clientY, camera) {
         if (!state.arrows || !state.joint) return null;

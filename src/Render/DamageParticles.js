@@ -27,6 +27,13 @@
     destroyed: false
   };
 
+  // un solo Vector3 para todas las proyecciones y una lectura de viewport por
+  // tick: project() recibe decenas de llamadas por frame y ninguna de ellas
+  // retiene el resultado, así que el scratch se recicla sin pudor.
+  let projScratch = null;
+  let viewW = 0;
+  let viewH = 0;
+
   function getGame() {
     if (globalThis.miniblox?.player) {
       state.game = globalThis.miniblox;
@@ -207,8 +214,15 @@
     const camera = getCamera();
     if (!camera) return null;
 
-    const point = createVector3(x, y, z);
-    if (!point || typeof point.project !== 'function') return null;
+    if (!projScratch) {
+      const candidate = createVector3(0, 0, 0);
+      if (!candidate || typeof candidate.project !== 'function') return null;
+      projScratch = candidate;
+    }
+    const point = projScratch;
+    point.x = x;
+    point.y = y;
+    point.z = z;
 
     try {
       point.project(camera);
@@ -223,8 +237,8 @@
       }
 
       return {
-        x: (point.x * 0.5 + 0.5) * innerWidth,
-        y: (-point.y * 0.5 + 0.5) * innerHeight
+        x: (point.x * 0.5 + 0.5) * viewW,
+        y: (-point.y * 0.5 + 0.5) * viewH
       };
     } catch (_) {
       return null;
@@ -380,6 +394,10 @@
     }
 
     const now = performance.now();
+
+    // viewport leído una vez por tick, no una vez por partícula
+    viewW = innerWidth;
+    viewH = innerHeight;
 
     for (const particle of state.particles) {
       const age = now - particle.started;

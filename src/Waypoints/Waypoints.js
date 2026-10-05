@@ -41,6 +41,7 @@
     lastCameraScan: 0,
     lastWorldScan: 0,
     lastMarkerSyncToken: '',
+    lastCoordsHtml: '',
     listeners: []
   };
 
@@ -695,6 +696,8 @@
       state.coordsHud = document.createElement('div');
       state.coordsHud.id = 'mf-coordinates-hud';
       (document.body || document.documentElement).appendChild(state.coordsHud);
+      // hud recién nacido: la caché del último render no aplica
+      state.lastCoordsHtml = '';
     }
   }
 
@@ -743,8 +746,23 @@
     }
   }
 
+  function ensureFrameLoop() {
+    if (state.destroyed || state.frameId) return;
+    if (!state.enabled && !state.coordinatesEnabled) return;
+    state.frameId = requestAnimationFrame(renderFrame);
+  }
+
   function renderFrame() {
     if (state.destroyed) return;
+
+    // módulo apagado por completo: la ronda termina y deja el hud limpio
+    if (!state.enabled && !state.coordinatesEnabled) {
+      state.frameId = 0;
+      if (state.coordsHud) state.coordsHud.style.display = 'none';
+      if (state.layer) state.layer.style.display = 'none';
+      return;
+    }
+
     state.frameId = requestAnimationFrame(renderFrame);
     ensureLayer();
 
@@ -754,7 +772,12 @@
 
     if (state.coordinatesEnabled && pos && validCoord(pos.x) && validCoord(pos.y) && validCoord(pos.z)) {
       state.coordsHud.style.display = 'block';
-      state.coordsHud.innerHTML = `<strong>XYZ</strong> ${Math.floor(Number(pos.x))} ${Math.floor(Number(pos.y))} ${Math.floor(Number(pos.z))}`;
+      const html = `<strong>XYZ</strong> ${Math.floor(Number(pos.x))} ${Math.floor(Number(pos.y))} ${Math.floor(Number(pos.z))}`;
+      // mismas cifras, mismo html: no hay motivo para re-parsear la cartelería cada frame
+      if (html !== state.lastCoordsHtml) {
+        state.lastCoordsHtml = html;
+        state.coordsHud.innerHTML = html;
+      }
     } else if (state.coordsHud) {
       state.coordsHud.style.display = 'none';
     }
@@ -846,6 +869,7 @@
     state.enabled = value.enabled !== false;
     state.coordinatesEnabled = !!value.coordinatesEnabled;
     if (value.edgeIndicators != null) state.edgeIndicators = value.edgeIndicators !== false;
+    ensureFrameLoop();
   }
 
   function respondUI(requestId, result) {

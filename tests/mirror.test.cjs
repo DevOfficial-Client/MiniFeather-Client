@@ -156,19 +156,26 @@ test('MirrorRunner: ok-globals faltante registra fail para el próximo arranque'
   assert.equal(sb.globalThis.XB, undefined);
 });
 
-test('MirrorRunner: buckets remotos reordenan la lista', () => {
+test('MirrorRunner: buckets remotos ordenan la lista sin borrar bundled-only', () => {
+  // la lista remota ordena, no borra: m/b no está en la override pero su
+  // código bundled existe, así que vuelve a su posición original
   const sb = execRunnerSandbox({
     mirror: FAKE_MIRROR(),
     overrides: { v: 1, buckets: { mainStart: ['m/c.js', 'm/a.js'], isoStart: [], isoEnd: [] }, files: {}, ok: {} }
   });
-  assert.deepEqual(sb.__executed.map(e => e.path), ['m/c.js', 'm/a.js']);
+  assert.deepEqual(sb.__executed.map(e => e.path), ['m/c.js', 'm/b.js', 'm/a.js']);
+  assert.deepEqual(
+    sb.__executed.map(e => e.path).sort(),
+    ['m/a.js', 'm/b.js', 'm/c.js'],
+    'ningún módulo bundled se pierde por una lista remota vieja'
+  );
 });
 
 
 test('MirrorRunner does not restore legacy autocomplete from the remote cache', () => {
   const p = 'src/Chat/ClientCommands.js';
   const mirror = FAKE_MIRROR(); mirror.lists.mainStart.push(p);
-  mirror.code[p] = 'const COMPLETION_CONTEXT_VERSION = 2; globalThis.newCompletion = true;';
+  mirror.code[p] = 'const COMPLETION_CONTEXT_VERSION = 3; globalThis.newCompletion = true;';
   const sb = execRunnerSandbox({ mirror, overrides: { v: 1, files: { [p]: 'globalThis.legacyCompletion = true;' }, ok: {} } });
   assert.equal(sb.globalThis.newCompletion, true); assert.equal(sb.globalThis.legacyCompletion, undefined);
 });

@@ -1232,7 +1232,10 @@
         time: 0,
         lastT: performance.now(),
         params: { bloom: 0.35, ca: 0.0, dof: 0.0, dirt: 0.0, vignette: 0.0 },
-        active: false
+        active: false,
+        rafId: null,
+        retryTimer: null,
+        retryGuard: null
     };
 
     const POSTFX_FS_SRC = `
@@ -1429,9 +1432,9 @@
         const loop = () => {
             if (!postfx.active) return;
             try { postfxDraw(gl); } catch (_) {}
-            requestAnimationFrame(loop);
+            postfx.rafId = requestAnimationFrame(loop);
         };
-        requestAnimationFrame(loop);
+        postfx.rafId = requestAnimationFrame(loop);
 
         void 0;
         return true;
@@ -1529,6 +1532,44 @@
         }
     }
 
+    function refreshPostFxEnabled() {
+        postfx.enabled = !!(postfx.params.bloom > 0 || postfx.params.ca > 0 ||
+            postfx.params.dof > 0 || postfx.params.dirt > 0 || postfx.params.vignette > 0);
+    }
+
+    // sin esto el rAF seguia reprogramandose eternamente con el pase ya inerte
+    function stopPostFx() {
+        postfx.enabled = false;
+        postfx.active = false;
+        if (postfx.retryTimer) {
+            clearInterval(postfx.retryTimer);
+            postfx.retryTimer = null;
+        }
+        if (postfx.retryGuard) {
+            clearTimeout(postfx.retryGuard);
+            postfx.retryGuard = null;
+        }
+        if (postfx.rafId) {
+            cancelAnimationFrame(postfx.rafId);
+            postfx.rafId = null;
+        }
+    }
+
+    function armPostFxRetry() {
+        if (!postfx.enabled || postfx.active || postfx.retryTimer) return;
+        const retry = setInterval(() => {
+            if (!postfx.enabled || installPostFx()) {
+                clearInterval(retry);
+                if (postfx.retryTimer === retry) postfx.retryTimer = null;
+            }
+        }, 1000);
+        postfx.retryTimer = retry;
+        postfx.retryGuard = setTimeout(() => {
+            clearInterval(retry);
+            if (postfx.retryTimer === retry) postfx.retryTimer = null;
+        }, 30000);
+    }
+
     function setPostFx(cfg) {
         if (cfg) {
             if (cfg.bloom !== undefined) postfx.params.bloom = Math.max(0, Math.min(1, +cfg.bloom || 0));
@@ -1537,14 +1578,11 @@
             if (cfg.dirt !== undefined) postfx.params.dirt = Math.max(0, Math.min(1, +cfg.dirt || 0));
             if (cfg.vignette !== undefined) postfx.params.vignette = Math.max(0, Math.min(1, +cfg.vignette || 0));
         }
-        postfx.enabled = !!(postfx.params.bloom > 0 || postfx.params.ca > 0 ||
-            postfx.params.dof > 0 || postfx.params.dirt > 0 || postfx.params.vignette > 0);
+        refreshPostFxEnabled();
         if (postfx.enabled && !postfx.active) {
-
-            const retry = setInterval(() => {
-                if (installPostFx() || !postfx.enabled) clearInterval(retry);
-            }, 1000);
-            setTimeout(() => clearInterval(retry), 30000);
+            armPostFxRetry();
+        } else if (!postfx.enabled) {
+            stopPostFx();
         }
     }
 
@@ -2170,11 +2208,14 @@
             state.enabled = true;
             localStorage.setItem('miniblox_customshader', 'true');
             scan();
+            refreshPostFxEnabled();
+            armPostFxRetry();
         },
         disable() {
             state.enabled = false;
             localStorage.setItem('miniblox_customshader', 'false');
             disable();
+            stopPostFx();
         },
         setPreset(name) {
             if (!PRESETS[name]) {

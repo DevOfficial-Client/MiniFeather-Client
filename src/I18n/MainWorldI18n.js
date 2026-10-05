@@ -16,6 +16,10 @@
     inline: [],
     inlineTemplates: [],
     observer: null,
+    pending: new Set(),
+    pendingAttrs: new Set(),
+    flushHandle: 0,
+    applying: false,
     originals: {
       alert: globalThis.alert,
       confirm: globalThis.confirm,
@@ -200,20 +204,20 @@
     }
 
     if (!(node instanceof Element)) return;
+    // la raiz ya se evalua antes de montar el walker; que no pague el mismo peaje dos veces
     if (isClientElement(node)) translateElement(node);
 
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
-    let current = walker.currentNode;
+    let current = walker.nextNode();
     while (current) {
-      if (!isTranslationSkipped(current)) {
-        if (current.nodeType === Node.TEXT_NODE) {
-          if (isClientElement(current)) {
-            const next = translate(current.nodeValue);
-            if (next !== current.nodeValue) current.nodeValue = next;
-          }
-        } else if (current instanceof Element && isClientElement(current)) {
-          translateElement(current);
+      if (current.nodeType === Node.TEXT_NODE) {
+        if (!isTranslationSkipped(current) && isClientElement(current)) {
+          const next = translate(current.nodeValue);
+          if (next !== current.nodeValue) current.nodeValue = next;
         }
+      } else {
+        // translateElement ya filtra skip y cliente por su cuenta; no duplicar el examen
+        translateElement(current);
       }
       current = walker.nextNode();
     }
@@ -221,7 +225,13 @@
 
   function translateDocument() {
     if (!document.documentElement) return;
-    translateNode(document.documentElement);
+    // barrido completo con el mismo seguro de reentrada: lo que esto escribe no hace falta releerlo
+    state.applying = true;
+    try {
+      translateNode(document.documentElement);
+    } finally {
+      queueMicrotask(() => { state.applying = false; });
+    }
   }
 
   function setLanguage(language) {
@@ -276,6 +286,10 @@
   function destroy() {
     document.removeEventListener(EVENT, onLanguage);
     state.observer?.disconnect();
+    if (state.flushHandle) {
+      cancelAnimationFrame(state.flushHandle);
+      state.flushHandle = 0;
+    }
     if (typeof state.originals.alert === 'function') globalThis.alert = state.originals.alert;
     if (typeof state.originals.confirm === 'function') globalThis.confirm = state.originals.confirm;
     if (typeof state.originals.prompt === 'function') globalThis.prompt = state.originals.prompt;
@@ -284,12 +298,35 @@
   }
 
   document.addEventListener(EVENT, onLanguage);
-  state.observer = new MutationObserver(mutations => {
-    for (const mutation of mutations) {
-      if (mutation.type === 'characterData') translateNode(mutation.target);
-      if (mutation.type === 'attributes') translateElement(mutation.target);
-      mutation.addedNodes?.forEach(translateNode);
+
+  // el observador anota y cobra una vez por frame; contestar a cada micro-escritura del react sale caro
+  function flushPending() {
+    state.flushHandle = 0;
+    if (!state.pending.size && !state.pendingAttrs.size) return;
+    const nodes = Array.from(state.pending);
+    const attrs = Array.from(state.pendingAttrs);
+    state.pending.clear();
+    state.pendingAttrs.clear();
+    // anti-reentrada: las escrituras de abajo disparan este mismo observador; ese lote es eco y se descarta
+    state.applying = true;
+    try {
+      for (const node of nodes) translateNode(node);
+      for (const element of attrs) translateElement(element);
+    } finally {
+      queueMicrotask(() => { state.applying = false; });
     }
+  }
+
+  state.observer = new MutationObserver(mutations => {
+    if (state.applying) return;
+    for (const mutation of mutations) {
+      if (mutation.type === 'attributes') state.pendingAttrs.add(mutation.target);
+      else if (mutation.type === 'characterData') state.pending.add(mutation.target);
+      mutation.addedNodes?.forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE || node.nodeType === Node.ELEMENT_NODE) state.pending.add(node);
+      });
+    }
+    if (!state.flushHandle) state.flushHandle = requestAnimationFrame(flushPending);
   });
   state.observer.observe(document.documentElement || document, {
     childList: true,

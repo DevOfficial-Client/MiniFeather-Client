@@ -302,7 +302,7 @@
 
         const sections = [
             ['MOVEMENT', ['zoom', 'freelook', 'freecam', 'elytraFlight', 'cameraOverhaul', 'antiAfk', 'autoRespawn']],
-            ['RENDER', ['fullBright', 'leafWind', 'handSway', 'vanillaAnimations', 'playerAnims', 'healthNameTags', 'distanceNameTags']],
+            ['RENDER', ['fullBright', 'leafWind', 'handSway', 'vanillaAnimations', 'playerAnims', 'headLag', 'healthNameTags', 'distanceNameTags']],
             ['MODULES', ['duckMobs', 'crittersMobs', 'allaypets', 'titanTiny', 'dynamicCrosshair', 'customShader']],
             ['HUD', ['keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'armorHud', 'coordinates', 'waypoints']],
             ['CHAT', ['chatVideos', 'chatLinks', 'chatMemes', 'gifChat', 'clientChat']]

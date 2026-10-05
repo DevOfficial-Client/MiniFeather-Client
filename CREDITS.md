@@ -9,6 +9,7 @@ MiniFeather Client ships with art, models and resources made by other people. Th
 | Gun models & textures (7 guns) | TACZ — Timeless and Classics Zero (MCModderAnchor), converted from the mod's default gun pack ([CurseForge](https://www.curseforge.com/minecraft/mc-mods/timeless-and-classics-zero)) | `models/tacz/` |
 | Better Cats (cat model + textures) | Mrblueyeti — credit embedded in the pack files ("The only official virus free download of Better Cats": [CurseForge](https://www.curseforge.com/minecraft/texture-packs/better-cats-minecraft)) | `textures/entity/cat/` |
 | Player animation rig (`player.jem`) | Fresh Animations lineage — FreshLX (original), Traben (player adaptation), BoZo_Xo2 (base pack), Ithan (edits); names embedded in the file | `src/PlayerAnims/EMFPack.js` |
+| Fresh Animations CEM engine (mob models & animations, `MF_FreshAnims`) | Engine code is ours; **no Fresh Animations assets are bundled**. Fresh Animations is © FreshLX, All Rights Reserved ([Modrinth](https://modrinth.com/resourcepack/fresh-animations) · [CurseForge](https://www.curseforge.com/minecraft/texture-packs/fresh-animations)). Each user imports their own downloaded copy locally; per the official terms it is not redistributed, re-hosted or shared modified from here. | `src/PlayerAnims/MF_FreshAnims.js` |
 | Horse model | Vincent Yanez ([sketchfab.com/vinceyanez](https://sketchfab.com/vinceyanez)), CC-BY-4.0 | `models/entities/minecraft_-_horse.glb` |
 | Backrooms Level 0 | "bro" ([sketchfab.com/speakerscientist74_Legit](https://sketchfab.com/speakerscientist74_Legit)), CC-BY-4.0 | `models/entities/backrooms_level_0.glb` (+ `assets/content/minifeather-pack/`) |
 | Maternal Wraith / Stalker | Besmot ([sketchfab.com/Besmot](https://sketchfab.com/Besmot)), CC-BY-4.0 | `models/entities/` |
@@ -55,6 +56,15 @@ Authors recovered from metadata embedded inside the `.emotecraft` files themselv
 - `assets/Faithful.ttf` — UI font; named after the Faithful project but the exact origin could not be verified.
 - `assets/memes/gif/` — internet meme GIFs, unattributable individually.
 
+## Inspirations (mechanics only — no assets or code)
+
+`src/Horror/MF_Horror.js` re-implements, from scratch and client-side, the *experience* of well-known Minecraft horror mods. All of them are All Rights Reserved or without a reusable license: zero assets, sounds, texts or code were taken from any of them. Everything in the module (figures, sounds synthesized with WebAudio, fake chat strings) is MiniFeather's own:
+
+- **From The Fog** (Lunar Eclipse Studio) — inspiration for the "figure in the fog" preset. https://lunareclipse.studio
+- **The Broken Script** (wendigodrip) — inspiration for the "broken script" meta-glitch preset. https://modrinth.com/mod/the-broken-script
+- **Cave Dweller / The Man From The Fog** — inspiration for the "dweller" stalker preset.
+- **Weeping Angels** (Doctor Who concept, multiple MC mods) — inspiration for the freeze-when-watched preset.
+
 ## MiniFeather team art
 
 Made by the MiniFeather team (**botless**, **AngryWolfX**, **ShusukeGxE_**, **Not_Senpai**, **ItzNightrise**), some of it original work inspired by or adapted from existing art (Minecraft-style items and icons, custom mobs and pets):
@@ -63,4 +73,4 @@ Made by the MiniFeather team (**botless**, **AngryWolfX**, **ShusukeGxE_**, **No
 
 ---
 
-Last reviewed: 2026-10-01. New third-party art should land together with a note in this file (what, author, source URL, license).
+Last reviewed: 2026-10-04. New third-party art should land together with a note in this file (what, author, source URL, license).

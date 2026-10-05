@@ -3237,7 +3237,16 @@
     const t0 = performance.now();
     try {
       if (sim.spiders.length === 0) {
-        if (sim.replace.on) {
+        // sin aranas no hay simulacion que pagar; con replace activo el spawner vive
+        // dentro de app.update y solo actua cada 10 ticks, asi que basta con darle
+        // cuerda en ese mismo compas: mismo ritmo de aparicion, decima parte de trabajo
+        if (sim.replace.on && !predators.on && !evoActive) {
+          if (sim.tickCount % 10 === 0) {
+            sim.world.clearCache();
+            sim.app.update();
+          }
+          sim.tickCount++;
+        } else if (sim.replace.on) {
           sim.world.clearCache();
           sim.app.update();
           sim.tickCount++;

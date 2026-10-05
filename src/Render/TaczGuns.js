@@ -507,8 +507,11 @@
           this.root.position.z * VM_SCALE + VM_POS[2]
         );
         this.root.rotation.set(VM_EULER[0], VM_EULER[1], VM_EULER[2]);
+        // null = aún no hay muestra previa (guarda de primer frame). los objetos
+        // reales se crean una vez en update y se reutilizan; aquí solo el hueco.
         this.lastItemPos = null;
         this.lastItemQuat = null;
+        this.lastItemQuatInv = null;
         if (lf) {
           this.origUpdate = lf.update;
           const self = this;
@@ -569,7 +572,10 @@
             dy = ip.y - this.lastItemPos.y;
             dz = ip.z - this.lastItemPos.z;
             if (this.lastItemQuat) {
-              this.root.quaternion.copy(iq).multiply(this.lastItemQuat.clone().invert());
+              // scratch persistente del propio viewmodel: cero clones por frame
+              // (el recolector de basura no cobra por pureza, cobra por volumen)
+              if (!this.lastItemQuatInv) this.lastItemQuatInv = this.lastItemQuat.clone();
+              this.root.quaternion.copy(iq).multiply(this.lastItemQuatInv.copy(this.lastItemQuat).invert());
               const e = this.root.rotation;
               this.root.rotation.set(e.x + VM_EULER[0], e.y + VM_EULER[1], e.z + VM_EULER[2]);
             }
@@ -579,8 +585,15 @@
             dy + VM_POS[1] + (this.tuneY || 0),
             dz + VM_POS[2] + (this.tuneZ || 0)
           );
-          this.lastItemPos = { x: ip.x, y: ip.y, z: ip.z };
-          this.lastItemQuat = iq.clone();
+          if (this.lastItemPos) {
+            this.lastItemPos.x = ip.x;
+            this.lastItemPos.y = ip.y;
+            this.lastItemPos.z = ip.z;
+          } else {
+            this.lastItemPos = { x: ip.x, y: ip.y, z: ip.z };
+          }
+          if (this.lastItemQuat) this.lastItemQuat.copy(iq);
+          else this.lastItemQuat = iq.clone();
         }
       }
       this.logT = (this.logT || 0) + dt;

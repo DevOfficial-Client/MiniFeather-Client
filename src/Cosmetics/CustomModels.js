@@ -532,14 +532,14 @@
             const p = (async () => {
                 let parsed;
                 if (/\.geo\.json$/i.test(file)) {
-                    p2pAssets.set(file, arrayBuffer);
+                    p2pAssetsRemember(file, arrayBuffer);
                     parsed = await parseGeoModel(file);
                 } else if (/\.obj$/i.test(file)) {
                     parsed = parseOBJ(new TextDecoder().decode(arrayBuffer), file, null);
                 } else if (/\.gltf$/i.test(file)) {
                     parsed = await resolveGLTFExternal(JSON.parse(new TextDecoder().decode(arrayBuffer)));
                 } else if (/\.png$/i.test(file)) {
-                    p2pAssets.set(file, arrayBuffer);
+                    p2pAssetsRemember(file, arrayBuffer);
                     return { root: { children: [] } };
                 } else {
                     parsed = parseGLB(arrayBuffer);
@@ -1779,8 +1779,28 @@
 
     const p2pAssets = new Map();
 
+    // bytes crudos de modelos p2p: cada ArrayBuffer pesa entre 0.1 y 10MB y los
+    // nombres los pone el par. set-only era una fuga con cara de colección;
+    // LRU de 16 y a otra cosa. el buffer devuelto en lectura es el mismo.
+    const P2P_ASSETS_MAX = 16;
+
+    function p2pAssetsRemember(file, buf) {
+        if (p2pAssets.has(file)) p2pAssets.delete(file); // reinsertar refresca la recencia
+        p2pAssets.set(file, buf);
+        while (p2pAssets.size > P2P_ASSETS_MAX) {
+            const oldest = p2pAssets.keys().next().value;
+            if (oldest === undefined || oldest === file) break;
+            p2pAssets.delete(oldest);
+        }
+    }
+
     async function fetchModelArrayBuffer(file) {
-        if (p2pAssets.has(file)) return p2pAssets.get(file);
+        if (p2pAssets.has(file)) {
+            const buf = p2pAssets.get(file);
+            p2pAssets.delete(file);
+            p2pAssets.set(file, buf);
+            return buf;
+        }
         if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
             const url = chrome.runtime.getURL('models/entities/' + file);
             let resp;

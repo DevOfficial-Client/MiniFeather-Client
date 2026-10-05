@@ -2,7 +2,7 @@
   'use strict';
 
   const GLOBAL_KEY = '__MINIFEATHER_CLIENT_COMMANDS__';
-  const COMPLETION_CONTEXT_VERSION = 2;
+  const COMPLETION_CONTEXT_VERSION = 3;
   const BARITONE_PLACEMENT_COMMANDS_VERSION = 1;
   const BARITONE_PATH_COMMANDS_VERSION = 1;
   const REQUEST_EVENT = 'minifeather:client-command';
@@ -24,7 +24,7 @@
     destroyed: false
   };
 
-  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'clones', 'reconnect', 'reconectar', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
+  const RECOGNIZED = new Set(['toggle', 'bind', 'unbind', 'binds', 'afk', 'copycoord', 'waypoint', 'mf', 'verity', 'iaassistant', 'caja', 'caballo', 'horse', 'model', 'modelo', 'room', 'habitacion', 'sala', 'maternal', 'wraith', 'madre', 'stalker', 'weeping', 'idlebot', 'idleplayer', 'baritone', 'goto', 'follow', 'p2p', 'mesh', 'call', 'llamar', 'g', 'global', 'horror', 'terror', 'spooky', 'herobrine', 'dweller', 'backrooms', 'br', 'emote', 'emotes', 'face', 'facewap', 'film', 'pelicula', 'studio', 'estudio', 'baby', 'spider', 'arana', 'araña', 'pscale', 'panchor', 'plarge', 'clones', 'reconnect', 'reconectar', 'bridge', 'puente', 'critter', 'critters', 'cac', 'bicho', 'bichos', 'animal', 'animales']);
 
   // variantes de argumentos por comando para el tab-complete client-side.
   // null = el comando acepta cualquier cosa en esa posicion (como el criterio de algunos).
@@ -45,7 +45,14 @@
     clones: ['on', 'off', '1', '2', '3'],
     bridge: null,
     film: null,
-    studio: null
+    studio: null,
+    horror: {
+      on: null, off: null,
+      preset: ['herobrine', 'broken', 'dweller', 'weeping'],
+      intensity: ['chill', 'normal', 'nightmare'],
+      safe: ['on', 'off'],
+      status: null
+    }
   };
 
   function parseDetail(event) {
@@ -911,6 +918,27 @@
         return;
       }
       })();
+      return;
+    }
+
+    if (command === 'horror' || command === 'terror' || command === 'spooky' || command === 'herobrine' || command === 'dweller') {
+      if (!globalThis.MF_Horror) { addChat('Horror is not ready yet.', 'error'); return; }
+      const sub = (args[0] || '').toLowerCase();
+      if (!sub) { dispatchRequest('horrorSet', []); return; }
+      if (sub === 'on' || sub === 'off') { dispatchRequest('horrorSet', [sub]); return; }
+      if (sub === 'preset' || sub === 'preset') {
+        const value = (args[1] || '').toLowerCase();
+        dispatchRequest('horrorSet', ['preset', value]);
+        return;
+      }
+      if (sub === 'intensity' || sub === 'intensity') {
+        const value = (args[1] || '').toLowerCase();
+        dispatchRequest('horrorSet', ['intensity', value]);
+        return;
+      }
+      if (sub === 'safe' || sub === 'seguro') { dispatchRequest('horrorSet', ['safe', (args[1] || 'on').toLowerCase()]); return; }
+      if (sub === 'status' || sub === 'status') { dispatchRequest('horrorSet', ['status']); return; }
+      addChat('Usage: /horror [on|off|preset <herobrine|broken|dweller|weeping>|intensity <chill|normal|nightmare>|safe <on|off>|status]', 'error');
       return;
     }
 

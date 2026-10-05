@@ -746,8 +746,14 @@
     dynamicCrosshairSize: 28,
     vanillaAnimations: false,
     playerAnims: true,
+    headLag: false,
+    freshAnims: false,
     leafWind: false,
     leafWindStrength: 0.085,
+    horror: false,
+    horrorPreset: 'herobrine',
+    horrorIntensity: 'normal',
+    horrorSafeMode: true,
     handSway: true,
     betterPlayerLayers: false,
     dynamicCrosshairMap: {
@@ -1070,6 +1076,31 @@
     return fallback;
   }
 
+  // ¿hay un mundo vivo con jugador? los flotantes del hud no pisan el menú;
+  // el escaneo de react va throttled porque preguntarle esto cada frame ya es abuso
+  let hudGameCache = null;
+  let hudGameScanAt = 0;
+
+  function inGameWorld() {
+    const local = globalThis.__MINIFEATHER_LOCAL_GAMES__;
+    if (local?.active && local.game?.player?.pos) return true;
+    if (window.miniblox?.player?.pos || window.game?.player?.pos) return true;
+    const now = performance.now();
+    if (now - hudGameScanAt < 1000) return !!hudGameCache?.player?.pos;
+    hudGameScanAt = now;
+    try {
+      const react = document.querySelector('#react');
+      if (react) {
+        for (const root of Object.values(react)) {
+          const game = root?.updateQueue?.baseState?.element?.props?.game;
+          if (game?.player?.pos) { hudGameCache = game; return true; }
+        }
+      }
+    } catch (_) {}
+    hudGameCache = null;
+    return false;
+  }
+
   function t(key, vars = {}) {
     const table = TRANSLATIONS[settings.language] || TRANSLATIONS.en;
     const fallback = TRANSLATIONS.en[key] || key;
@@ -1201,6 +1232,11 @@
   }
 
   function replaceTextNodes(targetText, replacement) {
+    // podar entradas de nodos que react ya desmontó; si no, el map los
+    // retiene en memoria hasta el apagón definitivo
+    for (const [node] of ORIGINALS.textNodes) {
+      if (!node.isConnected) ORIGINALS.textNodes.delete(node);
+    }
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         if (isMiniFeatherNode(node)) return NodeFilter.FILTER_REJECT;
@@ -1275,10 +1311,44 @@
 
     patchCanvas(document);
 
+    let pendingCanvasRoots = null;
+
+    function queueCanvasPatch(root) {
+      // los text nodes no traen canvas; el resto se acumula para un solo
+      // pase por frame en vez de un querySelectorAll por nodo añadido
+      if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+      if (!pendingCanvasRoots) {
+        pendingCanvasRoots = new Set([root]);
+        requestAnimationFrame(() => {
+          const batch = pendingCanvasRoots;
+          pendingCanvasRoots = null;
+          if (destroyed) return;
+          flushCanvasPatch(batch);
+        });
+      } else {
+        pendingCanvasRoots.add(root);
+      }
+    }
+
+    function flushCanvasPatch(batch) {
+      // fusiona roots solapados: un querySelectorAll por contenedor superior
+      // en vez de N recorridos que se pisan entre sí
+      const roots = [];
+      for (const root of batch) {
+        let merged = false;
+        for (let i = 0; i < roots.length; i++) {
+          if (roots[i].contains(root)) { merged = true; break; }
+          if (root.contains(roots[i])) { roots[i] = root; merged = true; break; }
+        }
+        if (!merged) roots.push(root);
+      }
+      roots.forEach(patchCanvas);
+    }
+
     if (fontObserver) return;
     fontObserver = new MutationObserver(mutations => {
       for (const mutation of mutations) {
-        mutation.addedNodes.forEach(patchCanvas);
+        mutation.addedNodes.forEach(queueCanvasPatch);
       }
     });
     fontObserver.observe(document.body, { childList: true, subtree: true });
@@ -1600,6 +1670,7 @@
       let frames = 0;
       let last = 0;
       let visible = !document.hidden;
+      let hudShown = null;
 
       function createBox() {
         if (box?.isConnected) return;
@@ -1629,7 +1700,12 @@
 
       function loop(now) {
         if (!controller) return;
-        if (visible) {
+        const inWorld = inGameWorld();
+        if (inWorld !== hudShown) {
+          hudShown = inWorld;
+          box.style.visibility = inWorld ? 'visible' : 'hidden';
+        }
+        if (visible && inWorld) {
           frames++;
           const elapsed = now - last;
           if (elapsed >= 1000) {
@@ -1648,6 +1724,8 @@
         enable() {
           createBox();
           box.style.display = 'block';
+          hudShown = inGameWorld();
+          box.style.visibility = hudShown ? 'visible' : 'hidden';
           controller = new AbortController();
           const signal = controller.signal;
           let dragging = false;
@@ -1715,6 +1793,8 @@
       let interval = 0;
       let leftClicks = [];
       let rightClicks = [];
+      let lastCpsHtml = '';
+      let hudShown = null;
 
       function createBox() {
         if (box?.isConnected) return;
@@ -1742,14 +1822,26 @@
           cursor:move;
         `;
         document.body.appendChild(box);
+        lastCpsHtml = '';
       }
 
       function render() {
+        if (box) {
+          const inWorld = inGameWorld();
+          if (inWorld !== hudShown) {
+            hudShown = inWorld;
+            box.style.visibility = inWorld ? 'visible' : 'hidden';
+          }
+        }
         const now = performance.now();
         leftClicks = leftClicks.filter(time => now - time < 1000);
         rightClicks = rightClicks.filter(time => now - time < 1000);
         if (box) {
-          box.innerHTML = `<span style="color:#9ca3af;">${t('cpsLabel')}</span> <span style="color:#f8fafc;">${leftClicks.length}</span> <span style="color:#64748b;">|</span> <span style="color:#f8fafc;">${rightClicks.length}</span>`;
+          const html = `<span style="color:#9ca3af;">${t('cpsLabel')}</span> <span style="color:#f8fafc;">${leftClicks.length}</span> <span style="color:#64748b;">|</span> <span style="color:#f8fafc;">${rightClicks.length}</span>`;
+          // repintar el innerHTML cada 100ms sin cambios es pintar la pared
+          if (html === lastCpsHtml) return;
+          lastCpsHtml = html;
+          box.innerHTML = html;
         }
       }
 
@@ -1825,6 +1917,7 @@
       let measuring = false;
       let enabled = false;
       const samples = [];
+      let hudShown = null;
 
       function createBox() {
         if (box?.isConnected) return;
@@ -1865,6 +1958,11 @@
         const color = value === null ? '#94a3b8' : value <= 80 ? '#22c55e' : value <= 150 ? '#facc15' : '#ef4444';
         dashboardStats.ping = value;
         if (box) {
+          const inWorld = inGameWorld();
+          if (inWorld !== hudShown) {
+            hudShown = inWorld;
+            box.style.visibility = inWorld ? 'visible' : 'hidden';
+          }
           box.innerHTML = `<span style="color:#9ca3af;">${t('pingLabel')}</span> <span style="color:${color};">${value === null ? '--' : value}</span> <span style="color:#64748b;">ms</span>`;
         }
       }
@@ -2053,6 +2151,7 @@
       let interval = 0;
       const buttons = {};
       const clickCounters = { LMB: [], RMB: [] };
+      let hudShown = null;
 
       function ensureStyle() {
         if (document.getElementById('minifeather-keystroke-css')) return;
@@ -2174,6 +2273,8 @@
         enable() {
           createContainer();
           container.style.display = 'flex';
+          hudShown = inGameWorld();
+          container.style.visibility = hudShown ? 'visible' : 'hidden';
           controller = new AbortController();
           const signal = controller.signal;
           let dragging = false;
@@ -2231,6 +2332,11 @@
           }, { signal });
 
           interval = window.setInterval(() => {
+            const inWorld = inGameWorld();
+            if (inWorld !== hudShown) {
+              hudShown = inWorld;
+              container.style.visibility = inWorld ? 'visible' : 'hidden';
+            }
             updateCps('LMB');
             updateCps('RMB');
           }, 200);
@@ -2597,6 +2703,9 @@
         font-weight:700;
         color:var(--mf-accent2);
       }
+      .mf-horror-opts { display: none; }
+      .mf-toggle[data-key="horror"].enabled + .mf-horror-opts,
+      .mf-toggle[data-key="horror"]:has(.mf-switch-hidden:checked) + .mf-horror-opts { display: grid; }
       .mf-toggle-grid {
         display:grid;
         grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
@@ -3592,6 +3701,8 @@
       { page: 'render', key: 'vanillaAnimations', title: t('vanillaAnimations'), desc: t('vanillaAnimationsDesc'), tags: [] },
       { page: 'render', key: 'handSway', title: t('handSway'), desc: t('handSwayDesc'), tags: [] },
       { page: 'render', key: 'playerAnims', title: t('playerAnims'), desc: t('playerAnimsDesc'), tags: ['new'] },
+      { page: 'render', key: 'headLag', title: t('headLag'), desc: t('headLagDesc'), tags: ['new'] },
+      { page: 'render', key: 'freshAnims', title: t('freshAnims'), desc: t('freshAnimsDesc'), tags: ['new'] },
       { page: 'render', key: 'zoom', title: t('zoom'), desc: t('zoomDesc'), tags: ['pvp'] },
       { page: 'render', key: 'cameraOverhaul', title: t('cameraOverhaul'), desc: t('cameraOverhaulDesc'), tags: [] },
       { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc'), tags: [] },
@@ -3648,6 +3759,8 @@
     fullBright:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>',
     vanillaAnimations:'<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>',
       playerAnims:'<circle cx="12" cy="12" r="3"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>',
+      headLag:'<circle cx="14" cy="9" r="4"/><path d="M10 15h8v6h-8z"/><path d="M7 6a8 8 0 0 0-3 4M4 14a8 8 0 0 0 1 4"/>',
+      freshAnims:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 9h2v2H9zM13 9h2v2h-2zM11 13h2v4h-2z"/>',
     zoom:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5M10.5 7v7M7 10.5h7"/>',
     cameraOverhaul:'<path d="M4 7h3l1.5-2h7L17 7h3v12H4V7Z"/><circle cx="12" cy="13" r="4"/>',
     elytraFlight:'<path d="M3 17c3-1 6-4 9-9 3 5 6 8 9 9-4 1-7 1-9-1-2 2-5 2-9 1Z"/>',
@@ -3733,6 +3846,8 @@
     vanillaAnimations: ['..nnnn..','.nNNNNn.','..n##n..','.nnnnnn.','n.nrrn.n','..nNNn..','..N..N..','.N....N.'],
     handSway: ['...n....','..nn.n..','..nn.nn.','.nnnnnn.','nnnnnnnn','.nnNNNn.','..NNNN..','...NN...'],
     playerAnims: ['..nnnn..','.nN##Nn.','..nnnn..','.bbnnrr.','bbbnrrr.','..bnnr..','..N..N..','.N....N.'],
+    headLag: ['........','.b..nnnn','b..nN##n','.b..nnnn','..b.....','........','........','........'],
+    freshAnims: ['..gggg..','.gggggg.','.gkGGkg.','.gkGGkg.','.ggkkgg.','.gGkkGg.','.gGkkGg.','.gg..gg.'],
     zoom: ['..BBBB..','.BbbbbB.','Bb....bB','Bb.##.bB','.BbbbbB.','..BBBBB.','.....BB.','......BB'],
     cameraOverhaul: ['..kkkk..','.k++++k.','k+BBBB+k','k+B##B+k','k+B##B+k','k+BBBB+k','.k++++k.','..kkkk..'],
     elytraFlight: ['bb....bb','Bbb..bbB','BBbb.bbB','.BBbbBB.','..B##B..','..B##B..','..B..B..','........'],
@@ -3755,7 +3870,8 @@
     clientChatMentions: ['.BBBBBB.','BbbbbbbB','Bbyyyybb','BbyBBybb','BbyyBybb','.ByyyyB.','..BB....','.BB.....'],
     discord: ['.vvvvvv.','vV....Vv','vVv..vVv','vV#vv#Vv','vVvvvvVv','.VvvvvV.','..VVVV..','........'],
     startupAnimation: ['...rr...','..r##r..','.r#yy#r.','rryyyyrr','.r#yy#r.','..r##r..','...rr...','........'],
-    supportAds: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yy#y#yyY','Yyy##yyY','YyyyyyyY','.YyyyyY.','..YYYY..']
+    supportAds: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yy#y#yyY','Yyy##yyY','YyyyyyyY','.YyyyyY.','..YYYY..'],
+    horror: ['..vvvv..','.vvvvvv.','vv#vv#vv','vvvvvvvv','vvvvvvvv','vVkkkkVv','.v.v.v..','v..v..v.']
   };
 
   const MF_ANIMATED_PIXEL_ICONS = Object.freeze([
@@ -3939,6 +4055,8 @@
     vanilla: 'vanillaAnimations', vanillaanimations: 'vanillaAnimations',
     leaf: 'leafWind', leafwind: 'leafWind', wind: 'leafWind',
     hand: 'handSway', handsway: 'handSway', sway: 'handSway',
+    headlag: 'headLag', head: 'headLag', lag: 'headLag', cabeza: 'headLag', cuello: 'headLag',
+    fresh: 'freshAnims', freshanims: 'freshAnims', freshanimations: 'freshAnims', cem: 'freshAnims',
     playerlayer: 'betterPlayerLayers', playerlayers: 'betterPlayerLayers', betterplayerlayer: 'betterPlayerLayers', betterplayerlayers: 'betterPlayerLayers', layers: 'betterPlayerLayers',
     waypoint: 'waypoints', waypoints: 'waypoints',
     zoom: 'zoom'
@@ -3952,6 +4070,9 @@
     guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers',
     healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
     keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs', crittersMobs: 'crittersMobs', allayPets: 'allayPets',
+    horror: 'horror', terror: 'horror', spooky: 'horror', herobrine: 'horror', dweller: 'horror',
+    headLag: 'headLag',
+    freshAnims: 'freshAnims',
     pingCounter: 'pingCounter', titanTiny: 'titanTiny', vanillaAnimations: 'vanillaAnimations',
     waypoints: 'waypoints', zoom: 'zoom'
   });
@@ -4140,6 +4261,52 @@
           if (activePage === 'dashboard') updateDashboardStats();
           push(t(settings[key] ? 'commandEnabled' : 'commandDisabled', { module: commandModuleLabel(key) }), 'success');
         }
+      }
+      respondClientCommand(requestId, response);
+      return;
+    }
+
+    if (request.action === 'horrorSet') {
+      const sub = String(args[0] || '').toLowerCase();
+      const PRESETS_OK = ['herobrine', 'broken', 'dweller', 'weeping'];
+      const INTENSITY_OK = ['chill', 'normal', 'nightmare'];
+      if (!sub) {
+        settings.horror = !settings.horror;
+        guiSettings.horror = settings.horror;
+        saveSettings();
+        applyGuiSettings();
+        sendHorrorConfig();
+        push(t(settings.horror ? 'commandEnabled' : 'commandDisabled', { module: commandModuleLabel('horror') }), 'success');
+      } else if (sub === 'on' || sub === 'off') {
+        settings.horror = sub === 'on';
+        guiSettings.horror = settings.horror;
+        saveSettings();
+        applyGuiSettings();
+        sendHorrorConfig();
+        push(t(settings.horror ? 'commandEnabled' : 'commandDisabled', { module: commandModuleLabel('horror') }), 'success');
+      } else if (sub === 'preset') {
+        const value = String(args[1] || '').toLowerCase();
+        if (PRESETS_OK.indexOf(value) < 0) { push(t('horrorCmdUsage'), 'error'); }
+        else { settings.horrorPreset = value; saveSettings(); sendHorrorConfig(); push(t('horrorCmdPreset', { value }), 'success'); }
+      } else if (sub === 'intensity') {
+        const value = String(args[1] || '').toLowerCase();
+        if (INTENSITY_OK.indexOf(value) < 0) { push(t('horrorCmdUsage'), 'error'); }
+        else { settings.horrorIntensity = value; saveSettings(); sendHorrorConfig(); push(t('horrorCmdIntensity', { value }), 'success'); }
+      } else if (sub === 'safe') {
+        const value = String(args[1] || 'on').toLowerCase() !== 'off';
+        settings.horrorSafeMode = value;
+        saveSettings();
+        sendHorrorConfig();
+        push(t('horrorCmdSafe', { value: value ? 'ON' : 'OFF' }), 'success');
+      } else if (sub === 'status') {
+        push(t('horrorCmdStatus', {
+          state: settings.horror ? 'ON' : 'OFF',
+          preset: settings.horrorPreset || 'herobrine',
+          intensity: settings.horrorIntensity || 'normal',
+          safe: settings.horrorSafeMode !== false ? 'ON' : 'OFF'
+        }), 'info');
+      } else {
+        push(t('horrorCmdUsage'), 'error');
       }
       respondClientCommand(requestId, response);
       return;
@@ -4681,6 +4848,73 @@
     }));
   }
 
+  function sendHeadLagConfig(enabled = settings.headLag) {
+    document.dispatchEvent(new CustomEvent('minifeather:headlag-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initHeadLagModule() {
+    registerModule('headLag', () => createLifecycle({
+      enable() {
+        sendHeadLagConfig(true);
+      },
+      disable() {
+        sendHeadLagConfig(false);
+      },
+      refresh() {
+        sendHeadLagConfig(MODULES.get('headLag')?.enabled === true);
+      },
+      destroy() {
+        sendHeadLagConfig(false);
+      }
+    }));
+  }
+
+  function sendFreshAnimsConfig(enabled = settings.freshAnims) {
+    document.dispatchEvent(new CustomEvent('minifeather:freshanims-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initFreshAnimsModule() {
+    registerModule('freshAnims', () => createLifecycle({
+      enable() {
+        sendFreshAnimsConfig(true);
+      },
+      disable() {
+        sendFreshAnimsConfig(false);
+      },
+      refresh() {
+        sendFreshAnimsConfig(MODULES.get('freshAnims')?.enabled === true);
+      },
+      destroy() {
+        sendFreshAnimsConfig(false);
+      }
+    }));
+    // import del zip + botón de limpiar: delegación en document, el panel persiste
+    document.addEventListener('change', async (e) => {
+      if (!e.target || e.target.id !== 'mf-fresh-file') return;
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const status = document.getElementById('mf-fresh-status');
+      try {
+        await globalThis.MF_FreshAnims?.importPackFile(file);
+        if (status) status.textContent = globalThis.MF_FreshAnims?.getStatus()?.status || t('freshReady');
+      } catch (err) {
+        if (status) status.textContent = `${t('freshError')}: ${err?.message || err}`;
+      }
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target || e.target.id !== 'mf-fresh-clear') return;
+      document.dispatchEvent(new CustomEvent('minifeather:freshanims-config', {
+        detail: JSON.stringify({ command: 'clear' })
+      }));
+      const status = document.getElementById('mf-fresh-status');
+      if (status) status.textContent = t('freshNoPack');
+    });
+  }
+
   function sendLeafWindConfig(enabled = settings.leafWind, strength = settings.leafWindStrength) {
     document.dispatchEvent(new CustomEvent('minifeather:leaf-wind-config', {
       detail: JSON.stringify({ enabled: !!enabled, strength: Number(strength) || 0.085 })
@@ -4705,6 +4939,54 @@
         sendLeafWindConfig(false);
       }
     }));
+  }
+
+  function sendHorrorConfig() {
+    document.dispatchEvent(new CustomEvent('minifeather:horror-config', {
+      detail: JSON.stringify({
+        enabled: MODULES.get('horror')?.enabled === true,
+        preset: settings.horrorPreset || 'herobrine',
+        intensity: settings.horrorIntensity || 'normal',
+        safeMode: settings.horrorSafeMode !== false
+      })
+    }));
+  }
+
+  function initHorrorModule() {
+    registerModule('horror', () => createLifecycle({
+      enable() {
+        sendHorrorConfig();
+      },
+      disable() {
+        document.dispatchEvent(new CustomEvent('minifeather:horror-config', {
+          detail: JSON.stringify({ enabled: false })
+        }));
+      },
+      refresh() {
+        sendHorrorConfig();
+      },
+      destroy() {
+        document.dispatchEvent(new CustomEvent('minifeather:horror-config', {
+          detail: JSON.stringify({ enabled: false })
+        }));
+      }
+    }));
+    // selects del bloque horror: delegación en document, el panel persiste
+    document.addEventListener('change', (e) => {
+      if (!e.target || !e.target.id || e.target.id.indexOf('mf-horror-') !== 0) return;
+      const v = e.target.value;
+      if (e.target.id === 'mf-horror-preset') settings.horrorPreset = v;
+      else if (e.target.id === 'mf-horror-intensity') settings.horrorIntensity = v;
+      saveSettings();
+      sendHorrorConfig();
+    });
+    document.addEventListener('change', (e) => {
+      if (e.target && e.target.id === 'mf-horror-safe') {
+        settings.horrorSafeMode = e.target.checked;
+        saveSettings();
+        sendHorrorConfig();
+      }
+    });
   }
 
   function sendHandSwayConfig(enabled = settings.handSway) {
@@ -7609,6 +7891,34 @@
               t('shineAmbience'),
               t('shineAmbienceDesc')
             )}
+            ${renderToggle(
+              'horror',
+              t('horror'),
+              t('horrorDesc')
+            )}
+            <div class="mf-horror-opts" style="display:grid;gap:6px;margin:2px 0 10px;padding:10px;background:var(--mf-bg2,#161320);border:1px solid var(--mf-border,#2b2440);border-radius:8px">
+              <label style="display:grid;gap:2px;font-size:11px;opacity:.9">
+                <span>${t('horrorPreset')}</span>
+                <select id="mf-horror-preset" class="mf-input" style="width:100%">
+                  <option value="herobrine" ${settings.horrorPreset === 'herobrine' ? 'selected' : ''}>${t('horrorPresetHerobrine')}</option>
+                  <option value="broken" ${settings.horrorPreset === 'broken' ? 'selected' : ''}>${t('horrorPresetBroken')}</option>
+                  <option value="dweller" ${settings.horrorPreset === 'dweller' ? 'selected' : ''}>${t('horrorPresetDweller')}</option>
+                  <option value="weeping" ${settings.horrorPreset === 'weeping' ? 'selected' : ''}>${t('horrorPresetWeeping')}</option>
+                </select>
+              </label>
+              <label style="display:grid;gap:2px;font-size:11px;opacity:.9">
+                <span>${t('horrorIntensity')}</span>
+                <select id="mf-horror-intensity" class="mf-input" style="width:100%">
+                  <option value="chill" ${settings.horrorIntensity === 'chill' ? 'selected' : ''}>${t('horrorIntensityChill')}</option>
+                  <option value="normal" ${settings.horrorIntensity === 'normal' ? 'selected' : ''}>${t('horrorIntensityNormal')}</option>
+                  <option value="nightmare" ${settings.horrorIntensity === 'nightmare' ? 'selected' : ''}>${t('horrorIntensityNightmare')}</option>
+                </select>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:11px;opacity:.9;cursor:pointer">
+                <input type="checkbox" id="mf-horror-safe" ${settings.horrorSafeMode !== false ? 'checked' : ''}>
+                <span>${t('horrorSafeMode')}</span>
+              </label>
+            </div>
             ${experimentalTierOk ? renderToggle(
               'experimentalGrassFlowers',
               t('experimentalGrassFlowersTitle'),
@@ -7634,6 +7944,25 @@
               t('cameraOverhaul'),
               t('cameraOverhaulDesc')
             )}
+            ${renderToggle(
+              'headLag',
+              t('headLag'),
+              t('headLagDesc')
+            )}
+            ${renderToggle(
+              'freshAnims',
+              t('freshAnims'),
+              t('freshAnimsDesc')
+            )}
+            <div class="mf-horror-opts" style="display:grid;gap:8px;margin:2px 0 10px;padding:10px;background:var(--mf-bg2,#161320);border:1px solid var(--mf-border,#2b2440);border-radius:8px">
+              <div style="font-size:11px;opacity:.85;line-height:1.45">${t('freshImportHint')}</div>
+              ${renderFileInput('mf-fresh-file', 'freshImportButton')}
+              <div id="mf-fresh-status" style="font-size:11px;opacity:.8">${globalThis.MF_FreshAnims?.getStatus?.().status || t('freshNoPack')}</div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <button type="button" id="mf-fresh-clear" style="background:var(--mf-bg,#0e1115);color:var(--mf-sub,#9ea8b7);border:1px solid var(--mf-border,#2b2440);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer">${t('freshClear')}</button>
+                <a href="https://modrinth.com/resourcepack/fresh-animations" target="_blank" rel="noreferrer" style="font-size:11px;color:var(--mf-accent,#ef3b3b);text-decoration:none">${t('freshGetPack')}</a>
+              </div>
+            </div>
             ${renderToggle(
               'elytraFlight',
               t('elytraFlight'),
@@ -13298,7 +13627,7 @@
       if (document.getElementById('mf-sidebar-btn')) return true;
       const buttons = document.querySelectorAll('button');
       const settingsButton = Array.from(buttons).find(btn => {
-        const text = btn.innerText?.trim();
+        const text = btn.textContent?.trim();
         return text === 'Settings' || text === 'Ajustes' || text === 'Configuración' || text === 'Inicio' || text === 'Home';
       });
       if (!settingsButton) return false;
@@ -13311,13 +13640,25 @@
     if (!tryInject()) {
       sidebarObserver?.disconnect();
       clearTimeout(sidebarObserverTimer);
+      let lastTry = 0;
+      let trailingTry = 0;
       sidebarObserver = new MutationObserver(() => {
-        if (!tryInject()) return;
-        sidebarObserver?.disconnect();
-        sidebarObserver = null;
+        if (trailingTry) return;
+        // throttle: sondear todos los botones 5 veces por segundo basta, y
+        // el intento final queda programado para no perder la última ráfaga
+        const wait = Math.max(0, 200 - (performance.now() - lastTry));
+        trailingTry = window.setTimeout(() => {
+          trailingTry = 0;
+          lastTry = performance.now();
+          if (!tryInject()) return;
+          sidebarObserver?.disconnect();
+          sidebarObserver = null;
+        }, wait);
       });
       sidebarObserver.observe(document.body, { childList: true, subtree: true });
       sidebarObserverTimer = window.setTimeout(() => {
+        clearTimeout(trailingTry);
+        trailingTry = 0;
         sidebarObserver?.disconnect();
         sidebarObserver = null;
         sidebarObserverTimer = 0;
@@ -13395,6 +13736,8 @@
     setModuleEnabled('dynamicCrosshair', settings.dynamicCrosshair);
     setModuleEnabled('vanillaAnimations', settings.vanillaAnimations);
     setModuleEnabled('playerAnims', settings.playerAnims);
+    setModuleEnabled('headLag', settings.headLag);
+    setModuleEnabled('freshAnims', settings.freshAnims);
     setModuleEnabled('leafWind', settings.leafWind);
     setModuleEnabled('handSway', settings.handSway);
     setModuleEnabled('betterPlayerLayers', settings.betterPlayerLayers);
@@ -13821,6 +14164,14 @@
       return urlRegex.test(text);
     }
 
+    function hasChatMarker(text) {
+      // prefiltro barato: http cubre links y videos, los gifs traen ':' y
+      // los memes son claves del mapa. más barato que caminar el subtree
+      if (text.includes('http')) return true;
+      if (MODULES.get('chatMemes')?.enabled === true && (gifRegex.test(text) || findMeme(text))) return true;
+      return false;
+    }
+
     function renderWrapper(wrapper) {
       const text = wrapper.dataset.mfOriginalText;
       if (text == null) return;
@@ -13890,12 +14241,33 @@
         MODULES.get('chatMemes')?.enabled === true;
     }
 
+    let pendingChatNodes = null;
+
+    function queueChatScan(node) {
+      if (!node) return;
+      const text = node.nodeValue ?? node.textContent;
+      // sin marcadores no hay nada que renderizar; leer el textContent cuesta
+      // mucho menos que un tree walker con closest por cada text node
+      if (typeof text !== 'string' || !hasChatMarker(text)) return;
+      if (!pendingChatNodes) {
+        pendingChatNodes = new Set([node]);
+        requestAnimationFrame(() => {
+          const batch = pendingChatNodes;
+          pendingChatNodes = null;
+          if (!chatObserver) return;
+          batch.forEach(scan);
+        });
+      } else {
+        pendingChatNodes.add(node);
+      }
+    }
+
     function startChatObserver() {
       if (chatObserver) return;
       chatObserver = new MutationObserver(mutations => {
         mutations.forEach(mutation => {
-          if (mutation.type === 'childList') mutation.addedNodes.forEach(scan);
-          else if (mutation.type === 'characterData') scan(mutation.target);
+          if (mutation.type === 'childList') mutation.addedNodes.forEach(queueChatScan);
+          else if (mutation.type === 'characterData') queueChatScan(mutation.target);
         });
       });
       chatObserver.observe(document.body, {
@@ -13915,6 +14287,7 @@
 
       chatObserver?.disconnect();
       chatObserver = null;
+      pendingChatNodes = null;
       restoreChatContent();
       document.getElementById('minifeather-chat-style')?.remove();
     }
@@ -13931,13 +14304,17 @@
     registerModule('chatMemes', createChatLifecycle);
   }
   let lastRebrandSignature = '';
+  let lastRebrandTitle = document.title;
+  let lastRebrandImageCount = -1;
+  let rebrandSettled = false;
 
   function computeRebrandSignature() {
+      // firma barata y estable: título + imgs con alt. contar todos los
+      // button y p era dejar que el hud del juego encendiera el rebrand
+      // cada 400ms durante toda la partida
       return [
       document.title,
-      document.querySelectorAll('img').length,
-      document.querySelectorAll('button').length,
-      document.querySelectorAll('p').length
+      document.querySelectorAll('img[alt]').length
     ].join('|');
   }
 
@@ -13947,7 +14324,16 @@
         refreshLogoControls();
       return;
     }
+    const sep = sig.lastIndexOf('|');
+    const title = sig.slice(0, sep);
+    const images = Number(sig.slice(sep + 1));
+    // solo un título nuevo o imgs nuevas justifican repetir el camino caro;
+    // si ya reposó, que el hud encoja no paga otros cinco tree walkers
+    const matters = title !== lastRebrandTitle || images > lastRebrandImageCount;
+    lastRebrandTitle = title;
+    lastRebrandImageCount = images;
     lastRebrandSignature = sig;
+    if (!matters && rebrandSettled) return;
 
     MODULES.get('rebrand')?.refresh();
     MODULES.get('discord')?.refresh();
@@ -13956,6 +14342,7 @@
     else blockAds();
 
     refreshLogoControls();
+    rebrandSettled = true;
   }
 
   function initRootObserver() {
@@ -14030,6 +14417,7 @@
     initPlayerAnimsModule();
     initLeafWindModule();
     initHandSwayModule();
+    initHorrorModule();
     initBetterPlayerLayersModule();
     initAutoRespawnModule();
     initAutoReconnectModule();

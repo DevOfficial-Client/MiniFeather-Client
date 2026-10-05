@@ -10,8 +10,16 @@
         api: null,
         originalDisable: null,
         disableEvent: false,
-        wrapped: false
+        wrapped: false,
+        timer: null,
+        attempts: 0
     };
+
+    // sondeo diferido: la escena no se va a recorrer en bucle solo porque el módulo existe
+    const POLL_MS = 250;
+    const POLL_BACKOFF_MS = 2000;
+    const BACKOFF_AFTER = 10;
+    const WARN_AFTER = 20;
 
     const isGame = g => Boolean(g && typeof g === 'object' && g.player && g.world);
 
@@ -328,6 +336,7 @@
 
         if (originalEnable) {
             api.enable = function () {
+                startPolling();
                 snapshotClouds();
                 return originalEnable();
             };
@@ -350,6 +359,7 @@
             if (!cfg || typeof cfg !== 'object') return;
 
             if (cfg.enabled === true || cfg.clouds || cfg.cloudsShape || cfg.cloudsPackNoise) {
+                startPolling();
                 snapshotClouds();
             }
 
@@ -364,10 +374,40 @@
         true
     );
 
-    const timer = setInterval(() => {
-        wrapApi();
+    function stopPolling() {
+        if (state.timer != null) {
+            clearTimeout(state.timer);
+            state.timer = null;
+        }
+    }
+
+    function startPolling(delay) {
+        if (state.timer != null) return;
+        state.timer = setTimeout(pollStep, delay || POLL_MS);
+    }
+
+    function pollStep() {
+        state.timer = null;
+
+        const wrapped = wrapApi();
         if (!state.cloudBaseline) snapshotClouds();
-    }, 250);
+
+        // api envuelta y baseline capturada: nada queda por esperar, dejar de mirar
+        if (wrapped && state.cloudBaseline) return;
+
+        if (!state.cloudBaseline) {
+            state.attempts++;
+            if (state.attempts === WARN_AFTER) {
+                console.warn(
+                    'minifeather shader safety: ' + WARN_AFTER + ' intentos sin ver el material de nubes; ' +
+                    'reintentando cada ' + (POLL_BACKOFF_MS / 1000) + 's, que no corre nada'
+                );
+            }
+        }
+
+        // el material puede tardar en aparecer (menus, otros servidores): reintentar, no rendirse
+        startPolling(!state.cloudBaseline && state.attempts >= BACKOFF_AFTER ? POLL_BACKOFF_MS : POLL_MS);
+    }
 
     W.MF_CustomShaderSafety = {
         restore: hardRestore,
@@ -376,7 +416,7 @@
             cloudBaseline: Boolean(state.cloudBaseline)
         }),
         destroy: () => {
-            clearInterval(timer);
+            stopPolling();
             hardRestore();
         }
     };

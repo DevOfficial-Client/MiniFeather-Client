@@ -507,8 +507,15 @@
             }
             state.lastGrounded = grounded;
 
-            for (const pet of [...state.pets]) petTick(pet, dt, ts, player);
-            state.lastPlayerPos = { x: player.x, z: player.z };
+            // hacia atrás: petTick puede eliminar mascotas (grace/mount timeout)
+            for (let i = state.pets.length - 1; i >= 0; i--) petTick(state.pets[i], dt, ts, player);
+            // mismo objeto reciclado frame a frame; nadie retiene la versión anterior
+            if (state.lastPlayerPos) {
+                state.lastPlayerPos.x = player.x;
+                state.lastPlayerPos.z = player.z;
+            } else {
+                state.lastPlayerPos = { x: player.x, z: player.z };
+            }
         }
         state.rafId = requestAnimationFrame(loop);
     }

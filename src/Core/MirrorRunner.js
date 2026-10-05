@@ -12,173 +12,180 @@
 // tira, queda anotado y la próxima carga vuelve a la copia local. optimista en
 // la primera línea, plan b por escrito. las preguntas van a la cola y la cola
 // no existe; el fails-file contesta por todos.
+// mirror.js vive en otra entrada MAIN del manifest y el orden entre entradas
+// no es un contrato (una lectura vacía del archivo tampoco avisa en consola):
+// si el mirror no llegó todavía, se espera en vez de declarar la catástrofe
+// en el primer tick.
 (function () {
   'use strict';
   if (globalThis.__MF_MIRROR_RUNNER__) return;
   globalThis.__MF_MIRROR_RUNNER__ = true;
 
-  var MIRROR = globalThis.__MF_MIRROR__;
-  if (!MIRROR || MIRROR.v !== 1 || !MIRROR.lists || !MIRROR.code) {
-    try { console.warn('minifeather mirror: __MF_MIRROR__ ausente o inválido'); } catch (_) {}
-    return;
-  }
+  var RETRIES = 40;
 
-  var OVERRIDES_KEY = 'mf:mirror:overrides:v1';
-  var FAILS_KEY = 'mf:mirror:fails:v1';
-
-  function readJSON(key) {
-    try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; }
-  }
-
-  var ov = readJSON(OVERRIDES_KEY);
-  if (!ov || ov.v !== 1) ov = null;
-  var fails = readJSON(FAILS_KEY);
-  if (!fails || typeof fails !== 'object') fails = {};
-
-  function saveFails() {
-    try { localStorage.setItem(FAILS_KEY, JSON.stringify(fails)); } catch (_) {}
-  }
-
-  function recordFail(path, msg) {
-    try {
-      fails[path] = String(msg).slice(0, 200);
-      saveFails();
-      console.warn('minifeather mirror: fallback a la versión local de', path, '-', msg);
-    } catch (_) {}
-  }
-
-  // attribute synchronous errors to the module being injected — así sabemos a quién culpar
-  var current = null;
-  try {
-    window.addEventListener('error', function (e) {
-      if (!current) return;
-      var msg = (e && e.message) || (e && e.error && e.error.message) || 'error';
-      recordFail(current, msg);
-    }, true);
-  } catch (_) {}
-
-  function inject(code, path) {
-    var s = document.createElement('script');
-    s.textContent = code + '\n//# sourceURL=' + path;
-    (document.head || document.documentElement || document).appendChild(s);
-    s.remove();
-  }
-
-  var list = (ov && ov.buckets && Array.isArray(ov.buckets.mainStart) && ov.buckets.mainStart.length)
-    ? ov.buckets.mainStart
-    : (MIRROR.lists.mainStart || []);
-  var files = (ov && ov.files && typeof ov.files === 'object') ? ov.files : {};
-  // An older cached module list must still load the local Baritone dependencies.
-  var navigationPath = 'src/Movement/Baritone.js';
-  if (list.indexOf(navigationPath) >= 0 && MIRROR.code[navigationPath] &&
-      /BARITONE_NAVIGATION_VERSION = [234567]/.test(MIRROR.code[navigationPath])) {
-    list = list.slice();
-    ['src/Movement/MovementAPI.js', 'src/Movement/BaritoneAdapter.js', 'src/Movement/BaritonePlanner.js',
-      'src/Movement/BaritonePathRenderer.js'].forEach(function (dependency) {
-      var at = list.indexOf(dependency);
-      var before = list.indexOf(navigationPath);
-      if (at >= 0 && at < before) return;
-      if (!MIRROR.code[dependency]) return;
-      if (at >= 0) list.splice(at, 1);
-      list.splice(list.indexOf(navigationPath), 0, dependency);
-    });
-  }
-  // Remote plans can predate the player adaptations while local modules are newer.
-  var realisticPath = 'src/Experimental/Realistic/RealisticMode.js';
-  var firstPersonPath = 'src/Experimental/Realistic/FirstPersonModel.js';
-  if (list.indexOf(realisticPath) >= 0 && MIRROR.code[firstPersonPath]) {
-    var firstPersonAt = list.indexOf(firstPersonPath);
-    if (firstPersonAt < 0 || firstPersonAt > list.indexOf(realisticPath)) {
-      list = list.slice();
-      if (firstPersonAt >= 0) list.splice(firstPersonAt, 1);
-      list.splice(list.indexOf(realisticPath), 0, firstPersonPath);
+  function start() {
+    var MIRROR = globalThis.__MF_MIRROR__;
+    if (!MIRROR || MIRROR.v !== 1 || !MIRROR.lists || !MIRROR.code) {
+      if (RETRIES-- > 0) { setTimeout(start, 25); return; }
+      try { console.warn('minifeather mirror: __MF_MIRROR__ ausente o inválido'); } catch (_) {}
+      return;
     }
-  }
-  var requiredMarkers = {
-    'src/Chat/ClientCommands.js': ['COMPLETION_CONTEXT_VERSION = 2', 'BARITONE_PLACEMENT_COMMANDS_VERSION = 1',
-      'BARITONE_PATH_COMMANDS_VERSION = 1'],
-    'src/Render/FullBright.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
-    'src/UI/ClientPanel.js': ['FULLBRIGHT_SETTINGS_VERSION = 1', 'experimentalRealisticFirstPerson'],
-    'src/I18n/Translations.js': ['"fullBrightSettings"', '"experimentalRealisticFirstPersonLabel"'],
-    'src/Render/BetterPlayerLayers.js': 'setRealisticOptions',
-    'src/Render/BetterPlayerLayersArmorPatch.js': 'setRealisticOptions',
-    'src/Experimental/Realistic/FirstPersonModel.js': 'FIRST_PERSON_MODEL_VERSION = 3',
-    'src/Experimental/Realistic/RealisticMode.js': 'REALISTIC_PLAYER_FEATURES_VERSION = 1',
-    'src/Movement/Baritone.js': /BARITONE_NAVIGATION_VERSION = 7/.test(MIRROR.code[navigationPath] || '')
-      ? 'BARITONE_NAVIGATION_VERSION = 7' : /BARITONE_NAVIGATION_VERSION = 6/.test(MIRROR.code[navigationPath] || '')
-        ? 'BARITONE_NAVIGATION_VERSION = 6' : /BARITONE_NAVIGATION_VERSION = 5/.test(MIRROR.code[navigationPath] || '')
-        ? 'BARITONE_NAVIGATION_VERSION = 5' : /BARITONE_NAVIGATION_VERSION = 4/.test(MIRROR.code[navigationPath] || '')
-        ? 'BARITONE_NAVIGATION_VERSION = 4' : /BARITONE_NAVIGATION_VERSION = 3/.test(MIRROR.code[navigationPath] || '')
-          ? 'BARITONE_NAVIGATION_VERSION = 3' : 'BARITONE_NAVIGATION_VERSION = 2',
-    'src/Movement/BaritoneAdapter.js': /BARITONE_ADAPTER_VERSION = 6/.test(MIRROR.code['src/Movement/BaritoneAdapter.js'] || '')
-      ? 'BARITONE_ADAPTER_VERSION = 6' : /BARITONE_ADAPTER_VERSION = 5/.test(MIRROR.code['src/Movement/BaritoneAdapter.js'] || '')
-        ? 'BARITONE_ADAPTER_VERSION = 5' : /BARITONE_ADAPTER_VERSION = 4/.test(MIRROR.code['src/Movement/BaritoneAdapter.js'] || '')
-        ? 'BARITONE_ADAPTER_VERSION = 4' : 'BARITONE_ADAPTER_VERSION = 3',
-    'src/Movement/BaritonePlanner.js': /BARITONE_PLANNER_VERSION = 6/.test(MIRROR.code['src/Movement/BaritonePlanner.js'] || '')
-      ? 'BARITONE_PLANNER_VERSION = 6' : /BARITONE_PLANNER_VERSION = 5/.test(MIRROR.code['src/Movement/BaritonePlanner.js'] || '')
-        ? 'BARITONE_PLANNER_VERSION = 5' : /BARITONE_PLANNER_VERSION = 4/.test(MIRROR.code['src/Movement/BaritonePlanner.js'] || '')
-        ? 'BARITONE_PLANNER_VERSION = 4' : 'BARITONE_PLANNER_VERSION = 3',
-    'src/Movement/BaritonePathRenderer.js': 'BARITONE_PATH_RENDERER_VERSION = 1'
-  };
 
-  var injected = 0, remote = 0, bundled = 0, gated = 0, moderated = 0;
-  for (var i = 0; i < list.length; i++) {
-    var p = list[i];
-    if (typeof p !== 'string' || !p) continue;
-    // remote moderation (moderation.json): MF_Moderation sits first in
-    // mainStart and drops its verdict on window.__MF_MODERATION__ before
-    // this loop reaches module 1. locked → nothing else gets injected;
-    // fine-grained block → only the flagged module gets skipped.
-    var moderation = window.__MF_MODERATION__;
-    if (moderation && p !== 'src/Core/MF_Moderation.js') {
-      if (moderation.locked) { gated++; continue; }
-      if (moderation.isBlocked && moderation.isBlocked(p)) {
-        moderated++;
-        try { console.warn('minifeather moderation: módulo bloqueado:', p, moderation.blockReason(p)); } catch (_) {}
+    var OVERRIDES_KEY = 'mf:mirror:overrides:v1';
+    var FAILS_KEY = 'mf:mirror:fails:v1';
+
+    function readJSON(key) {
+      try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; }
+    }
+
+    var ov = readJSON(OVERRIDES_KEY);
+    if (!ov || ov.v !== 1) ov = null;
+    var fails = readJSON(FAILS_KEY);
+    if (!fails || typeof fails !== 'object') fails = {};
+
+    function saveFails() {
+      try { localStorage.setItem(FAILS_KEY, JSON.stringify(fails)); } catch (_) {}
+    }
+
+    function recordFail(path, msg) {
+      try {
+        fails[path] = String(msg).slice(0, 200);
+        saveFails();
+        console.warn('minifeather mirror: fallback a la versión local de', path, '-', msg);
+      } catch (_) {}
+    }
+
+    // attribute synchronous errors to the module being injected — así sabemos a quién culpar
+    var current = null;
+    try {
+      window.addEventListener('error', function (e) {
+        if (!current) return;
+        var msg = (e && e.message) || (e && e.error && e.error.message) || 'error';
+        recordFail(current, msg);
+      }, true);
+    } catch (_) {}
+
+    function inject(code, path) {
+      var s = document.createElement('script');
+      s.textContent = code + '\n//# sourceURL=' + path;
+      (document.head || document.documentElement || document).appendChild(s);
+      s.remove();
+    }
+
+    var list = ((ov && ov.buckets && Array.isArray(ov.buckets.mainStart) && ov.buckets.mainStart.length)
+      ? ov.buckets.mainStart
+      : (MIRROR.lists.mainStart || [])).slice();
+    // la lista remota reemplaza a la bundled, pero si viene de una rama más
+    // vieja que la copia local (beta con overrides de main, el clásico) le
+    // FALTAN módulos: un path ausente de la lista nunca se inyecta y el
+    // módulo se muere en silencio aunque la copia bundled esté right there.
+    // la lista remota ordena, no borra: los bundled-only vuelven a su lugar.
+    var bundledList = MIRROR.lists.mainStart || [];
+    for (var b = 0; b < bundledList.length; b++) {
+      var bp = bundledList[b];
+      if (list.indexOf(bp) >= 0) continue;
+      if (!MIRROR.code[bp]) continue;
+      list.splice(Math.min(b, list.length), 0, bp);
+    }
+    var files = (ov && ov.files && typeof ov.files === 'object') ? ov.files : {};
+    // An older cached module list must still load the local Baritone dependencies.
+    var navigationPath = 'src/Movement/Baritone.js';
+    if (list.indexOf(navigationPath) >= 0 && MIRROR.code[navigationPath] &&
+        /BARITONE_NAVIGATION_VERSION = [234567]/.test(MIRROR.code[navigationPath])) {
+      ['src/Movement/MovementAPI.js', 'src/Movement/BaritoneAdapter.js', 'src/Movement/BaritonePlanner.js',
+        'src/Movement/BaritonePathRenderer.js'].forEach(function (dependency) {
+        var at = list.indexOf(dependency);
+        var before = list.indexOf(navigationPath);
+        if (at >= 0 && at < before) return;
+        if (!MIRROR.code[dependency]) return;
+        if (at >= 0) list.splice(at, 1);
+        list.splice(list.indexOf(navigationPath), 0, dependency);
+      });
+    }
+    var requiredMarkers = {
+      'src/Chat/ClientCommands.js': ['COMPLETION_CONTEXT_VERSION = 3', 'BARITONE_PLACEMENT_COMMANDS_VERSION = 1',
+        'BARITONE_PATH_COMMANDS_VERSION = 1'],
+      'src/Render/FullBright.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
+      'src/UI/ClientPanel.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
+      'src/I18n/Translations.js': '"fullBrightSettings"',
+      'src/Movement/Baritone.js': /BARITONE_NAVIGATION_VERSION = 7/.test(MIRROR.code[navigationPath] || '')
+        ? 'BARITONE_NAVIGATION_VERSION = 7' : /BARITONE_NAVIGATION_VERSION = 6/.test(MIRROR.code[navigationPath] || '')
+          ? 'BARITONE_NAVIGATION_VERSION = 6' : /BARITONE_NAVIGATION_VERSION = 5/.test(MIRROR.code[navigationPath] || '')
+          ? 'BARITONE_NAVIGATION_VERSION = 5' : /BARITONE_NAVIGATION_VERSION = 4/.test(MIRROR.code[navigationPath] || '')
+          ? 'BARITONE_NAVIGATION_VERSION = 4' : /BARITONE_NAVIGATION_VERSION = 3/.test(MIRROR.code[navigationPath] || '')
+            ? 'BARITONE_NAVIGATION_VERSION = 3' : 'BARITONE_NAVIGATION_VERSION = 2',
+      'src/Movement/BaritoneAdapter.js': /BARITONE_ADAPTER_VERSION = 6/.test(MIRROR.code['src/Movement/BaritoneAdapter.js'] || '')
+        ? 'BARITONE_ADAPTER_VERSION = 6' : /BARITONE_ADAPTER_VERSION = 5/.test(MIRROR.code['src/Movement/BaritoneAdapter.js'] || '')
+          ? 'BARITONE_ADAPTER_VERSION = 5' : /BARITONE_ADAPTER_VERSION = 4/.test(MIRROR.code['src/Movement/BaritoneAdapter.js'] || '')
+          ? 'BARITONE_ADAPTER_VERSION = 4' : 'BARITONE_ADAPTER_VERSION = 3',
+      'src/Movement/BaritonePlanner.js': /BARITONE_PLANNER_VERSION = 6/.test(MIRROR.code['src/Movement/BaritonePlanner.js'] || '')
+        ? 'BARITONE_PLANNER_VERSION = 6' : /BARITONE_PLANNER_VERSION = 5/.test(MIRROR.code['src/Movement/BaritonePlanner.js'] || '')
+          ? 'BARITONE_PLANNER_VERSION = 5' : /BARITONE_PLANNER_VERSION = 4/.test(MIRROR.code['src/Movement/BaritonePlanner.js'] || '')
+          ? 'BARITONE_PLANNER_VERSION = 4' : 'BARITONE_PLANNER_VERSION = 3',
+      'src/Movement/BaritonePathRenderer.js': 'BARITONE_PATH_RENDERER_VERSION = 1'
+    };
+
+    var injected = 0, remote = 0, bundled = 0, gated = 0, moderated = 0;
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i];
+      if (typeof p !== 'string' || !p) continue;
+      // remote moderation (moderation.json): MF_Moderation sits first in
+      // mainStart and drops its verdict on window.__MF_MODERATION__ before
+      // this loop reaches module 1. locked → nothing else gets injected;
+      // fine-grained block → only the flagged module gets skipped.
+      var moderation = window.__MF_MODERATION__;
+      if (moderation && p !== 'src/Core/MF_Moderation.js') {
+        if (moderation.locked) { gated++; continue; }
+        if (moderation.isBlocked && moderation.isBlocked(p)) {
+          moderated++;
+          try { console.warn('minifeather moderation: módulo bloqueado:', p, moderation.blockReason(p)); } catch (_) {}
+          continue;
+        }
+      }
+      var useRemote = !!files[p] && typeof files[p] === 'string' && !fails[p];
+      var marker = requiredMarkers[p];
+      var markers = Array.isArray(marker) ? marker : marker ? [marker] : [];
+      // markers are compared whitespace-free: the minified distribution ships
+      // 'VERSION = 2' as 'VERSION=2', and exact matching would reject every
+      // healthy remote override. the markers live in code, not comments, so
+      // squashing spaces is the only concession minification needs.
+      var squash = function (s) { return String(s).replace(/\s+/g, ''); };
+      if (useRemote && typeof MIRROR.code[p] === 'string' && markers.some(function (required) {
+        var needle = squash(required);
+        return squash(MIRROR.code[p]).indexOf(needle) >= 0 && squash(files[p]).indexOf(needle) < 0;
+      })) useRemote = false;
+      var code = useRemote ? files[p] : MIRROR.code[p];
+      if (!code) {
+        try { console.warn('minifeather mirror: sin código para', p); } catch (_) {}
         continue;
       }
-    }
-    var useRemote = !!files[p] && typeof files[p] === 'string' && !fails[p];
-    var marker = requiredMarkers[p];
-    var markers = Array.isArray(marker) ? marker : marker ? [marker] : [];
-    // markers are compared whitespace-free: the minified distribution ships
-    // 'VERSION = 2' as 'VERSION=2', and exact matching would reject every
-    // healthy remote override. the markers live in code, not comments, so
-    // squashing spaces is the only concession minification needs.
-    var squash = function (s) { return String(s).replace(/\s+/g, ''); };
-    if (useRemote && typeof MIRROR.code[p] === 'string' && markers.some(function (required) {
-      var needle = squash(required);
-      return squash(MIRROR.code[p]).indexOf(needle) >= 0 && squash(files[p]).indexOf(needle) < 0;
-    })) useRemote = false;
-    var code = useRemote ? files[p] : MIRROR.code[p];
-    if (!code) {
-      try { console.warn('minifeather mirror: sin código para', p); } catch (_) {}
-      continue;
-    }
-    current = p;
-    try { inject(code, p); injected++; } catch (e) {
-      recordFail(p, (e && e.message) || 'inject');
-    }
-    current = null;
-    if (useRemote) remote++; else bundled++;
+      current = p;
+      try { inject(code, p); injected++; } catch (e) {
+        recordFail(p, (e && e.message) || 'inject');
+      }
+      current = null;
+      if (useRemote) remote++; else bundled++;
 
-    var ok = (ov && ov.ok && ov.ok[p]) || MIRROR.ok[p] || [];
-    for (var j = 0; j < ok.length; j++) {
-      var g = null;
-      try { g = window[ok[j]]; } catch (_) { g = null; }
-      if (!g || g === 1) { recordFail(p, 'falta global ' + ok[j]); break; }
+      var ok = (ov && ov.ok && ov.ok[p]) || MIRROR.ok[p] || [];
+      for (var j = 0; j < ok.length; j++) {
+        var g = null;
+        try { g = window[ok[j]]; } catch (_) { g = null; }
+        if (!g || g === 1) { recordFail(p, 'falta global ' + ok[j]); break; }
+      }
     }
+
+    try {
+      console.log('minifeather mirror: ' + injected + '/' + list.length + ' módulos (' +
+        remote + ' desde GitHub, ' + bundled + ' locales, commit ' + ((ov && ov.commit) || 'base') + ')' +
+        (gated ? ', ' + gated + ' gated por moderación' : '') +
+        (moderated ? ', ' + moderated + ' bloqueados' : ''));
+    } catch (_) {}
+
+    // refresh the override plan for the next page load (bridge lives in HotLoader; viajar en el tiempo sigue sin financiarlo nadie)
+    setTimeout(function () {
+      try { window.dispatchEvent(new Event('mf-mirror-sync')); } catch (_) {}
+    }, 300);
   }
 
-  try {
-    console.log('minifeather mirror: ' + injected + '/' + list.length + ' módulos (' +
-      remote + ' desde GitHub, ' + bundled + ' locales, commit ' + ((ov && ov.commit) || 'base') + ')' +
-      (gated ? ', ' + gated + ' gated por moderación' : '') +
-      (moderated ? ', ' + moderated + ' bloqueados' : ''));
-  } catch (_) {}
-
-  // refresh the override plan for the next page load (bridge lives in HotLoader; viajar en el tiempo sigue sin financiarlo nadie)
-  setTimeout(function () {
-    try { window.dispatchEvent(new Event('mf-mirror-sync')); } catch (_) {}
-  }, 300);
+  start();
 })();

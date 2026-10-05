@@ -703,15 +703,20 @@
             state.nextFlock = t + (state.mobs.length ? CFG.FLOCK_MIN_MS + Math.random() * (CFG.FLOCK_MAX_MS - CFG.FLOCK_MIN_MS) : CFG.RETRY_MS);
         }
 
-        for (const mob of [...state.mobs]) {
-            try { aiTick(mob, dt, t); } catch {}
+        // hacia atrás: aiTick puede eliminar mobs; el array vive sin copias
+        for (let i = state.mobs.length - 1; i >= 0; i--) {
+            try { aiTick(state.mobs[i], dt, t); } catch {}
         }
 
         schedule();
     }
 
+    function scheduledTick() {
+        if (state.stamp.alive) tick();
+    }
+
     function schedule() {
-        requestAnimationFrame(() => { if (state.stamp.alive) tick(); });
+        requestAnimationFrame(scheduledTick);
     }
 
     globalThis.MF_DuckMobs = {

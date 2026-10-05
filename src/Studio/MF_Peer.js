@@ -1054,15 +1054,7 @@ const state = {
 
     function wireConn(conn) {
     state.conn = conn;
-    conn.on('open', () => {
-        state.status = state.role;
-        log('conectado (' + state.role + ') — verity compartida');
-        send({ t: 'hello', name: myName(), role: state.role });
-        if (state.role === 'host') startBroadcast();
-        else state.lastFrameIn = performance.now();
-    });
-    conn.on('data', handleMsg);
-    conn.on('close', () => {
+    const onConnClosed = () => {
         log('conexion cerrada');
         if (state.role === 'guest') killPuppet();
 
@@ -1074,6 +1066,9 @@ const state = {
         }
         ents._lastKey = null;
         ents.recv.clear();
+        // lo que el peer anterior no tenía no define al siguiente
+        ents.knownFiles.clear();
+        ents.missingFiles = null;
 
         if (look.entity && look.morphType) {
             try { window.MF_Morph?.detachFrom?.(look.entity.id); } catch {}
@@ -1089,8 +1084,22 @@ const state = {
         stopBroadcast();
         state.conn = null;
         state.status = 'off';
+    };
+    conn.on('open', () => {
+        state.status = state.role;
+        log('conectado (' + state.role + ') — verity compartida');
+        send({ t: 'hello', name: myName(), role: state.role });
+        if (state.role === 'host') startBroadcast();
+        else state.lastFrameIn = performance.now();
     });
-    conn.on('error', (e) => warn('error de conexion:', e?.message || e));
+    conn.on('data', handleMsg);
+    conn.on('close', onConnClosed);
+    conn.on('error', (e) => {
+        warn('error de conexion:', e?.message || e);
+        // socket muerto que a veces nunca llega a emitir close: si no se
+        // limpia aquí, la UI dice "conectado" y el peer es un fantasma
+        if (!conn.open) onConnClosed();
+    });
     }
 
     const autoShare = {
@@ -1183,6 +1192,17 @@ const state = {
     peer.on('error', (e) => {
         warn('peer error:', e?.message || e.type || e);
         state.status = 'error';
+        const t = e?.type;
+        if (t === 'peer-unavailable' || t === 'network' || t === 'disconnected') return;
+        // error fatal: si el Peer zombi queda en state, host/join se niegan
+        // con "ya hay sesion activa" hasta que caiga el sol. destruir y limpiar
+        try { peer.destroy?.(); } catch {}
+        if (state.peer === peer) {
+            stopBroadcast();
+            state.peer = null;
+            state.conn = null;
+            state.status = 'off';
+        }
     });
     return id;
     }
@@ -1203,6 +1223,17 @@ const state = {
     peer.on('error', (e) => {
         warn('peer error:', e?.message || e.type || e);
         state.status = 'error';
+        const t = e?.type;
+        if (t === 'peer-unavailable' || t === 'network' || t === 'disconnected') return;
+        // error fatal: si el Peer zombi queda en state, host/join se niegan
+        // con "ya hay sesion activa" hasta que caiga el sol. destruir y limpiar
+        try { peer.destroy?.(); } catch {}
+        if (state.peer === peer) {
+            stopBroadcast();
+            state.peer = null;
+            state.conn = null;
+            state.status = 'off';
+        }
     });
     return true;
     }

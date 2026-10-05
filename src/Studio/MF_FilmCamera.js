@@ -97,7 +97,16 @@
             const raw = localStorage.getItem(LS_KEY);
             if (!raw) return [];
             const data = JSON.parse(raw);
-            return Array.isArray(data?.clips) ? data.clips.filter(c => TYPES[c?.type]) : [];
+            if (!Array.isArray(data?.clips)) return [];
+            const out = [];
+            for (const c of data.clips) {
+                const T = TYPES[c?.type];
+                if (!T) continue;
+                // evalClip hace p.pose.x sin preguntar: un clip guardado sin props (o a medias) revienta el uiLoop del studio
+                c.props = { ...clone(T.defaults), ...(c.props && typeof c.props === 'object' ? c.props : null) };
+                out.push(c);
+            }
+            return out;
         } catch (e) { console.warn(TAG, 'loadClips:', e?.message || e); return []; }
     }
     function saveClips() {
@@ -381,11 +390,13 @@
                 if (!el && c.props.src) {
                     el = new Audio(c.props.src);
                     el.volume = clamp(Number(c.props.volume) || 1, 0, 1);
-                    el.loop = c.duration / TPS > (el.duration || 1e9);
+                    // el.duration es NaN hasta loadedmetadata: decidir el loop entonces, no aquí
+                    el.addEventListener('loadedmetadata', () => { el.loop = c.duration / TPS > el.duration; });
                     state.audioEls.set(c.id, el);
                     const off = Number(c.props.offset) || 0;
                     try { if (off > 0) el.currentTime = off; } catch {}
-                    el.play().catch(() => { state.audioEls.delete(c.id); });
+                    // borrar el elemento al rechazar play() lo recreaba a 20 por segundo mientras siga fallando
+                    el.play().catch(() => {});
                 } else if (el && el.paused) el.play().catch(() => {});
             } else if (el && (!inWindow || !playing)) {
                 if (!inWindow) stopAudioFor(c);
