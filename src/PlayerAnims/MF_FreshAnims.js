@@ -205,7 +205,12 @@
         if (!attr?.constructor) throw new Error('BufferAttribute no alcanzable');
         const MeshCtor = mesh.children?.find(c => c.isMesh || (c.geometry && c.type === 'Mesh'))?.constructor;
         if (!MeshCtor) throw new Error('Mesh ctor no alcanzable');
-        return { BufferGeometry: withGeo.geometry.constructor, BufferAttribute: attr.constructor, Mesh: MeshCtor, Group: mesh.constructor };
+        // Group: NUNCA el constructor del mesh nativo (puede ser subclase del juego
+        // que exige argumentos); un pivot nombrado del renderer LP es Object3D plano
+        const pivot = mesh.headPivot || mesh.skeleton || mesh.body || mesh.neck
+            || mesh.children?.find(c => !c.geometry && !c.isMesh);
+        const GroupCtor = pivot?.constructor || mesh.constructor;
+        return { BufferGeometry: withGeo.geometry.constructor, BufferAttribute: attr.constructor, Mesh: MeshCtor, Group: GroupCtor };
     }
 
     function buildModelRig(entry, material, G, MeshCtor, GroupCtor) {
@@ -337,19 +342,24 @@
         } catch { return null; }
     }
 
+    const SWAP_RETRY_MS = 4000;
+    const SWAP_MAX_FAILS = 3;
+
     function applyToEntity(ent, mesh) {
         const type = String(ent.type || '').toLowerCase();
         const entry = state.pack?.models?.get(type);
         if (!entry || state.applied.has(mesh) || state.pending.has(mesh)) return;
         if (mesh.__mfCustomModelApplied) return; // respeto a CustomModels
+        // backoff: un mesh que falla no se reintenta cada frame ni para siempre
+        if (mesh.__mfFreshFails >= SWAP_MAX_FAILS) return;
+        if (mesh.__mfFreshFailAt && performance.now() - mesh.__mfFreshFailAt < SWAP_RETRY_MS) return;
+        const matSample = mesh.children?.find(c => c.material)?.material;
+        if (!matSample) return;
         state.pending.add(mesh);
         try {
             const G = makeCtors(mesh);
-            const matSample = mesh.children?.find(c => c.material)?.material;
-            if (!matSample) return;
             const MatCtor = matSample.constructor;
             const material = new MatCtor();
-            const canvas = null; // la textura se resuelve async abajo
             loadTextureCanvas(entry).then(canvas => {
                 state.pending.delete(mesh);
                 if (!state.enabled || !mesh.parent) return;
@@ -394,13 +404,23 @@
                         ctx: new RTc.FrameContext(ent.id ?? Math.random())
                     });
                 } catch (e) {
-                    state.tickStats.errors++;
-                    console.warn(TAG, 'swap falló:', type, e?.message);
+                    markSwapFail(mesh, type, e);
                 }
             }).catch(() => state.pending.delete(mesh));
         } catch (e) {
-            state.pending.delete(mesh);
-            state.tickStats.errors++;
+            markSwapFail(mesh, type, e);
+        }
+    }
+
+    function markSwapFail(mesh, type, e) {
+        state.pending.delete(mesh);
+        state.tickStats.errors++;
+        mesh.__mfFreshFails = (mesh.__mfFreshFails || 0) + 1;
+        mesh.__mfFreshFailAt = performance.now();
+        if (mesh.__mfFreshFails <= 2) {
+            console.warn(TAG, 'swap falló (' + mesh.__mfFreshFails + '/3):', type, e?.message || e);
+        } else if (mesh.__mfFreshFails === SWAP_MAX_FAILS) {
+            console.warn(TAG, type, 'se rinde tras 3 intentos (se resetea al recargar)');
         }
     }
 
