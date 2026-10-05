@@ -396,20 +396,35 @@
         return out;
     }
 
+    // altura/minY COMRIENDO la jerarquía (los boxes son locales a sus pivots:
+    // sin acumular posiciones, un mob mediría la mitad)
+    function walkGeometryY(node, out) {
+        const oy = out.oy + (node.position?.y || 0);
+        const pa = node.geometry?.attributes?.position;
+        if (pa) {
+            for (let i = 0; i < pa.count; i++) {
+                const y = (pa.getY ? pa.getY(i) : pa.array[i * 3 + 1]) + oy;
+                if (y < out.minY) out.minY = y;
+                if (y > out.maxY) out.maxY = y;
+            }
+        }
+        for (const c of node.children || []) walkGeometryY(c, out);
+    }
+
     function meshHeight(mesh) {
         try {
-            const wp = { y: 0 };
-            let minY = Infinity, maxY = -Infinity;
-            mesh.traverse(c => {
-                const pa = c.geometry?.attributes?.position;
-                if (!pa) return;
-                for (let i = 0; i < pa.count; i++) {
-                    const y = pa.getY ? pa.getY(i) : pa.array[i * 3 + 1];
-                    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-                }
-            });
-            return maxY > minY ? maxY - minY : null;
+            const out = { minY: Infinity, maxY: -Infinity, oy: 0 };
+            walkGeometryY(mesh, out);
+            return out.maxY > out.minY ? out.maxY - out.minY : null;
         } catch { return null; }
+    }
+
+    function geometryMinY(node) {
+        try {
+            const out = { minY: Infinity, maxY: -Infinity, oy: 0 };
+            walkGeometryY(node, out);
+            return out.minY;
+        } catch { return Infinity; }
     }
 
     const SWAP_RETRY_MS = 4000;
@@ -455,10 +470,19 @@
                     const rig = buildModelRig(entry, material, G, G.Mesh, G.Group, measureNativePivots(mesh));
                     if (!rig.parts.size) return;
                     const native = meshHeight(mesh) || (ent.height || 1.8) / 16;
+                    const builtFeet = geometryMinY(rig.root); // rig SIN escalar
                     const built = meshHeight(rig.root);
+                    let s = 1;
                     if (built > 0) {
-                        const s = Math.max(0.05, Math.min(2.5, native / built));
+                        s = Math.max(0.05, Math.min(2.5, native / built));
                         rig.root.scale.multiplyScalar(s);
+                    }
+                    // aterrizar: el origen del mesh nativo puede estar en el centro de
+                    // la entidad y no en los pies (patrón CustomModels) — los pies del
+                    // rig van a la misma altura que los pies de la geometría nativa
+                    const nativeFeet = geometryMinY(mesh);
+                    if (Number.isFinite(nativeFeet) && Number.isFinite(builtFeet)) {
+                        rig.root.position.y = nativeFeet - builtFeet * s;
                     }
                     const hidden = [...mesh.children].filter(c => !c.__mfFreshRoot);
                     for (const c of hidden) c.visible = false;
