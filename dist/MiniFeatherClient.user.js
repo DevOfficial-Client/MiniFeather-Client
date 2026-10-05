@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005221747
+// @version      4.19.0.20261005222043
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 58a161780ca7540175ad7feecd88f4483f578ee7
- * builtAt : 2026-10-05T22:18:12.995Z
+ * commit  : d2b792803e2bc5c110e94e403ef8dc12bebe55f3
+ * builtAt : 2026-10-05T22:20:58.884Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"58a161780ca7540175ad7feecd88f4483f578ee7","builtAt":"2026-10-05T22:18:12.995Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"d2b792803e2bc5c110e94e403ef8dc12bebe55f3","builtAt":"2026-10-05T22:20:58.884Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -74341,20 +74341,35 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         return out;
     }
 
+    // altura/minY COMRIENDO la jerarquía (los boxes son locales a sus pivots:
+    // sin acumular posiciones, un mob mediría la mitad)
+    function walkGeometryY(node, out) {
+        const oy = out.oy + (node.position?.y || 0);
+        const pa = node.geometry?.attributes?.position;
+        if (pa) {
+            for (let i = 0; i < pa.count; i++) {
+                const y = (pa.getY ? pa.getY(i) : pa.array[i * 3 + 1]) + oy;
+                if (y < out.minY) out.minY = y;
+                if (y > out.maxY) out.maxY = y;
+            }
+        }
+        for (const c of node.children || []) walkGeometryY(c, out);
+    }
+
     function meshHeight(mesh) {
         try {
-            const wp = { y: 0 };
-            let minY = Infinity, maxY = -Infinity;
-            mesh.traverse(c => {
-                const pa = c.geometry?.attributes?.position;
-                if (!pa) return;
-                for (let i = 0; i < pa.count; i++) {
-                    const y = pa.getY ? pa.getY(i) : pa.array[i * 3 + 1];
-                    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-                }
-            });
-            return maxY > minY ? maxY - minY : null;
+            const out = { minY: Infinity, maxY: -Infinity, oy: 0 };
+            walkGeometryY(mesh, out);
+            return out.maxY > out.minY ? out.maxY - out.minY : null;
         } catch { return null; }
+    }
+
+    function geometryMinY(node) {
+        try {
+            const out = { minY: Infinity, maxY: -Infinity, oy: 0 };
+            walkGeometryY(node, out);
+            return out.minY;
+        } catch { return Infinity; }
     }
 
     const SWAP_RETRY_MS = 4000;
@@ -74400,10 +74415,19 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
                     const rig = buildModelRig(entry, material, G, G.Mesh, G.Group, measureNativePivots(mesh));
                     if (!rig.parts.size) return;
                     const native = meshHeight(mesh) || (ent.height || 1.8) / 16;
+                    const builtFeet = geometryMinY(rig.root); // rig SIN escalar
                     const built = meshHeight(rig.root);
+                    let s = 1;
                     if (built > 0) {
-                        const s = Math.max(0.05, Math.min(2.5, native / built));
+                        s = Math.max(0.05, Math.min(2.5, native / built));
                         rig.root.scale.multiplyScalar(s);
+                    }
+                    // aterrizar: el origen del mesh nativo puede estar en el centro de
+                    // la entidad y no en los pies (patrón CustomModels) — los pies del
+                    // rig van a la misma altura que los pies de la geometría nativa
+                    const nativeFeet = geometryMinY(mesh);
+                    if (Number.isFinite(nativeFeet) && Number.isFinite(builtFeet)) {
+                        rig.root.position.y = nativeFeet - builtFeet * s;
                     }
                     const hidden = [...mesh.children].filter(c => !c.__mfFreshRoot);
                     for (const c of hidden) c.visible = false;
