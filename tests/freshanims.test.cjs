@@ -87,7 +87,9 @@ function makeWorld() {
     mesh.add(sample);
     mesh.entity = ent;
     ent.mesh = mesh;
-    mesh.headPivot = { rotation: { x: 0.1, y: 0.3, z: 0 } };
+    mesh.headPivot = new FakeNode(); // pivot real del rig: Object3D con constructor propio
+    mesh.headPivot.rotation.x = 0.1;
+    mesh.headPivot.rotation.y = 0.3;
     const scene = new FakeNode();
     scene.add(mesh);
     const game = { player: { id: 1, mesh: new FakeNode(), pos: { x: 0, y: 64, z: 0 } }, world: { entities: new Map([[7, ent]]) } };
@@ -142,7 +144,10 @@ const FA_ZIP = () => zipOf({
             { part: 'root', id: 'root' },
             { part: 'body', id: 'body', boxes: [{ coordinates: [-4, 12, -2, 8, 12, 4], textureOffset: [16, 16] }] },
             { part: 'head', id: 'head', submodels: [
-                { id: 'head2', boxes: [{ coordinates: [-4, 24, -4, 8, 8, 8], textureOffset: [0, 0] }] }
+                { id: 'head2', boxes: [
+                    { coordinates: [-4, 24, -4, 8, 8, 8], textureOffset: [0, 0] },
+                    { coordinates: [0, 28, -4.002, 2, 1, 0], uvNorth: [13, 18, 15, 19] }
+                ] }
             ] },
             { part: 'right_arm', id: 'right_arm', boxes: [{ coordinates: [4, 12, -2, 4, 12, 4], textureOffset: [40, 16] }] }
         ]
@@ -220,4 +225,66 @@ test('disable desmonta todos los rigs', async () => {
     s.sandbox.MF_FreshAnims.setEnabled(false);
     assert.equal(s.sandbox.MF_FreshAnims.getStatus().applied, 0);
     assert.ok(s.world.mesh.children[0].visible === true);
+});
+
+// el crash real visto en miniblox: el mesh nativo es subclase del juego cuyo
+// constructor exige argumentos (lea .pos de un def) — el rig se arma con el
+// constructor de un pivot nombrado, no con el del mesh
+test('mesh subclase del juego con constructor quisquilloso hace swap igual', async () => {
+    const s = setup();
+    class GameMeshSub extends FakeNode {
+        constructor(def) { if (!def || !def.pos) throw new Error("Cannot read properties of undefined (reading 'pos')"); super(); }
+    }
+    const s2 = s.world;
+    const sub = new GameMeshSub({ pos: { x: 1, y: 1, z: 1 } });
+    for (const c of [...s2.mesh.children]) { sub.add(c); s2.mesh.children.splice(s2.mesh.children.indexOf(c), 1); }
+    sub.entity = s2.ent; sub.headPivot = s2.mesh.headPivot;
+    s2.ent.mesh = sub; sub.parent = s2.mesh.parent;
+    s2.mesh.parent.children[s2.mesh.parent.children.indexOf(s2.mesh)] = sub;
+
+    await s.sandbox.MF_FreshAnims.importPackFile({ arrayBuffer: async () => FA_ZIP(), name: 'test.zip' });
+    s.sandbox.MF_FreshAnims.setEnabled(true);
+    await s.pump(3);
+    assert.equal(s.sandbox.MF_FreshAnims.getStatus().applied, 1, 'el swap esquivó el constructor quisquilloso');
+    assert.ok(sub.children.some(c => c.__mfFreshRoot));
+});
+
+test('un mesh que falla hace backoff y se rinde: sin spam infinito', async () => {
+    const s = setup();
+    const warns = [];
+    const origWarn = console.warn;
+    console.warn = (...a) => { if (String(a[1] || '').includes('falló')) warns.push(a); };
+    try {
+        // sin headPivot: GroupCtor cae al constructor del mesh... que aquí es FakeNode
+        // (válido), así que forzamos el fallo por otra vía: constructor del mesh roto
+        const broken = new FakeNode();
+        broken.constructor; // noop
+        Object.defineProperty(broken, 'constructor2', { value: null });
+        class BrokenGroup { constructor() { throw new Error('def.pos esperado'); } }
+        const meshRoto = new (class extends FakeNode { })(); // GroupCtor vendrá de headPivot...
+        // vía directa: mesh sin pivots y cuyo constructor lanza
+        const EvilMesh = class extends FakeNode { constructor() { super(); } };
+        EvilMesh.prototype.add = FakeNode.prototype.add;
+        const evil = new EvilMesh();
+        const sGeo = new FakeGeo();
+        sGeo.setAttribute('position', new FakeAttr(new Float32Array(72), 3));
+        evil.add(new FakeMesh(sGeo, new FakeMat()));
+        evil.constructor2 = null;
+        // parche: el módulo usa mesh.constructor como último recurso — hacedlo lanzar
+        Object.setPrototypeOf(evil, { constructor: BrokenGroup });
+        evil.entity = s.world.ent;
+        evil.headPivot = undefined;
+        s.world.ent.mesh = evil;
+        evil.parent = s.world.mesh.parent;
+        s.world.ent.getHealth = () => 20;
+
+        await s.sandbox.MF_FreshAnims.importPackFile({ arrayBuffer: async () => FA_ZIP(), name: 'test.zip' });
+        s.sandbox.MF_FreshAnims.setEnabled(true);
+        await s.pump(12); // bastantes frames: el backoff tiene que dejar el contador en 1 intento
+        assert.equal(s.sandbox.MF_FreshAnims.getStatus().applied, 0);
+        assert.equal(evil.__mfFreshFails, 1, `1 intento, no spam (fue ${evil.__mfFreshFails})`);
+        assert.ok(warns.length <= 2, `warns=${warns.length} (el backoff no está frenando el spam)`);
+    } finally {
+        console.warn = origWarn;
+    }
 });
