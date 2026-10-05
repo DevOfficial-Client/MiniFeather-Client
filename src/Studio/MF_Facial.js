@@ -1050,7 +1050,9 @@
             // duración invariante del loop: calculada una vez en play(), no a 60fps
             let t = (performance.now() - t0) % totalMs;
             let i = 0;
-            while (t > frames[i].holdMs + frames[i].blendMs) {
+            // paseo acotado: un holdMs negativo (el input no valida nada) hace
+            // que t crezca en vez de bajar y este while se convierte en un arete
+            for (let n = 0; n < frames.length && t > frames[i].holdMs + frames[i].blendMs; n++) {
                 t -= frames[i].holdMs + frames[i].blendMs;
                 i = (i + 1) % frames.length;
             }

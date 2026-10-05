@@ -34,7 +34,11 @@
 
     function load() {
         if (state.anims) return state.anims;
-        try { state.anims = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); }
+        try {
+            const p = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+            // storage corrupto puede parsear a null/escalar: cur() haría a[state.cur] y revienta
+            state.anims = (p && typeof p === 'object' && !Array.isArray(p)) ? p : {};
+        }
         catch { state.anims = {}; }
         return state.anims;
     }
@@ -208,6 +212,8 @@
     function play() {
         const a = cur();
         if (!a) return { ok: false, error: 'sin animación abierta' };
+        // ya hay una cadena de rAF andando: encender otra la duplica hasta que una muera sola
+        if (state.playing) return { ok: true };
         state.playing = true;
         state.lastFrame = 0;
         state.fpsClock = 0;

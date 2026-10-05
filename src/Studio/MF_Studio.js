@@ -863,14 +863,14 @@
                 if (files.length) skinsImport(files);
             });
         }
-        window.addEventListener('mf:skinchanger-items', () => refreshSkinsList(), { once: false });
+        // el listener de window vive en el guard de keysBound: aquí solo el
+        // refresco del DOM recién construido
         refreshSkinsList();
 
         $('mfs-morph-rescan').onclick = () => {
             window.MF_Morph?.scan?.(true);
             refreshMorphList();
         };
-        window.addEventListener('mf:morph-catalog', () => refreshMorphList(), { once: false });
         refreshMorphList();
 
         const gm = document.getElementById('mfs-gizmo-mode');
@@ -932,15 +932,17 @@
 
         if (!state.keysBound) {
             state.keysBound = true;
+            // bind() corre en cada open: sin este guard, cada ciclo open/close
+            // apila otra copia de estos listeners de window
             window.addEventListener('keydown', (ev) => {
                 if (!state.open) return;
 
-                if (playerCtrl.active) {
-                    if (ev.key === 'F1') { ev.preventDefault(); close(); }
-                    return;
-                }
-                if (ev.key === 'F1') { ev.preventDefault(); close(); }
-                else if (ev.code === 'Space' && !isTypingTarget(ev.target)) { ev.preventDefault(); togglePlay(); }
+                if (playerCtrl.active) return;
+
+                /* F1 lo lleva el toggle global del final del módulo; repetirlo aquí
+                   cerraba el studio en el mismo pulsado que lo abría: a partir del
+                   segundo ciclo el F1 parecía muerto */
+                if (ev.code === 'Space' && !isTypingTarget(ev.target)) { ev.preventDefault(); togglePlay(); }
                 else if (ev.key === 'Home') { ev.preventDefault(); seek(0); }
                 else if ((ev.key === 'i' || ev.key === 'I') && !isTypingTarget(ev.target)) markIn();
                 else if ((ev.key === 'o' || ev.key === 'O') && !isTypingTarget(ev.target)) markOut();
@@ -958,6 +960,8 @@
             window.addEventListener('mf:skineditor-presets', () => {
                 if (state.open) refreshMediaPool();
             });
+            window.addEventListener('mf:skinchanger-items', () => refreshSkinsList());
+            window.addEventListener('mf:morph-catalog', () => refreshMorphList());
         }
 
         state.raf = requestAnimationFrame(uiLoop);
@@ -1709,9 +1713,6 @@
         if (!box) return;
         const FC = window.MF_FilmCamera;
         const clips = FC?.clips || [];
-        if (!clips.length) {
-            box.innerHTML = '<div class="mfs-empty">No clips.<br>Position the camera and add one:</div>';
-        }
 
         const btns = el('div');
         btns.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:6px 0;';
@@ -1770,6 +1771,10 @@
                 list.appendChild(row);
             }
             box.appendChild(list);
+        } else {
+            // el mensaje de vacío se pintaba arriba y el box.innerHTML='' de
+            // aquí abajo lo borraba en la misma llamada: nunca se veía
+            box.appendChild(el('div', 'mfs-empty', 'No clips.<br>Position the camera and add one:'));
         }
     }
 
@@ -1783,6 +1788,7 @@
             if (playbackCamActive) {
                 playbackCamActive = false;
                 FC.reset();
+                renderSubtitle(null);
 
                 if (cam.origFov != null && cam.camera) {
                     try { cam.camera.fov = cam.origFov; cam.camera.updateProjectionMatrix?.(); } catch {}
@@ -1791,16 +1797,22 @@
             return;
         }
         if (!FC.clips.length) return;
+        // activo desde el primer tick con clips: si solo hay audio/subtítulos,
+        // este reset al parar es la única limpieza (stopPlayback de MF_Film no resetea)
+        playbackCamActive = true;
         const pose = FC.onTick(s.tick ?? 0, !s.paused);
         if (pose?.hasPos) {
             if (!cam.active) try { cameraEnable(); } catch {}
-            playbackCamActive = true;
-            cam.pos.x = pose.x; cam.pos.y = pose.y; cam.pos.z = pose.z;
-            cam.yaw = pose.yaw; cam.pitch = pose.pitch;
-            applyCamFov(pose.fov || null);
+            // cameraEnable puede fallar (menú, recarga de mundo) y dejar cam.pos
+            // en null: escribir aquí tumbaba el uiLoop y con él todo el studio
+            if (cam.pos) {
+                cam.pos.x = pose.x; cam.pos.y = pose.y; cam.pos.z = pose.z;
+                cam.yaw = pose.yaw; cam.pitch = pose.pitch;
+                applyCamFov(pose.fov || null);
 
-            if (pose.roll && cam.camera?.rotation?.set) {
-                try { cam._roll = pose.roll; } catch {}
+                if (pose.roll && cam.camera?.rotation?.set) {
+                    try { cam._roll = pose.roll; } catch {}
+                }
             }
         }
         renderSubtitle(FC.subtitle);
@@ -1944,6 +1956,9 @@
 
         const want = fitTransform(force);
         if (!want) return;
+        // purgar canvas muertos: el juego puede reemplazar el canvas (recarga de
+        // mundo) y sin esto el clamp no se re-engancha nunca con el nuevo
+        viewport.canvases = viewport.canvases.filter(cv => cv.isConnected);
         if (!viewport.canvases.length) {
             viewport.canvases = collectGameCanvases();
             if (!viewport.canvases.length) return;
@@ -2026,6 +2041,8 @@
             } catch {}
         }
         viewport.canvases = []; viewport.origAspect = null;
+        // el rect cacheado de la sesión anterior no debe sobrevivir al close
+        viewport.rect = null; viewport.rectAt = 0;
     }
 
     function cameraEnable() {
@@ -2084,23 +2101,33 @@
         cam.keys = {};
         removeCamHooks();
         const camera = cam.camera;
-        if (camera && cam.origParent) {
+        if (camera) {
             try {
-
                 if (cam.origPos) camera.position.set(cam.origPos.x, cam.origPos.y, cam.origPos.z);
                 if (cam.origQuat) camera.quaternion.set(cam.origQuat.x, cam.origQuat.y, cam.origQuat.z, cam.origQuat.w);
-                cam.origParent.add(camera);
-                if (cam.origIndex >= 0 && Array.isArray(cam.origParent.children)) {
-                    const idx = cam.origParent.children.indexOf(camera);
-                    if (idx >= 0 && idx !== cam.origIndex && cam.origIndex < cam.origParent.children.length) {
-                        cam.origParent.children.splice(idx, 1);
-                        cam.origParent.children.splice(cam.origIndex, 0, camera);
+            } catch {}
+            try {
+                if (cam.origParent) {
+                    cam.origParent.add(camera);
+                    if (cam.origIndex >= 0 && Array.isArray(cam.origParent.children)) {
+                        const idx = cam.origParent.children.indexOf(camera);
+                        if (idx >= 0 && idx !== cam.origIndex && cam.origIndex < cam.origParent.children.length) {
+                            cam.origParent.children.splice(idx, 1);
+                            cam.origParent.children.splice(cam.origIndex, 0, camera);
+                        }
                     }
+                } else {
+                    // cámara sin padre original: devolverla fuera del grafo, no solo
+                    // moverla; si no, se quedaba en la escena donde la dejara el studio
+                    camera.parent?.remove?.(camera);
                 }
                 camera.updateMatrixWorld?.(true);
             } catch {}
         }
         cam.camera = null; cam.origParent = null; cam.scene = null;
+        // fov original era de la cámara vieja: sin reset, applyCamFov le clava el
+        // fov de la cámara anterior a la siguiente sesión
+        cam.origFov = null;
     }
 
     const camHooks = { umw: null, uwm: null, updating: false };
@@ -2673,6 +2700,8 @@
     }
 
     function posingDeselect() {
+        // sin esto el brillo del hover quedaba pegado a la pieza para siempre
+        clearHoverHighlight();
         if (posing.outline) {
             try { posing.outline.restore?.(); } catch {}
             posing.outline = null;
@@ -3151,6 +3180,9 @@
         const root = document.getElementById(ID);
         const style = document.getElementById(ID + '-style');
         root?.remove(); style?.remove();
+        // subEl quedaba apuntando al root viejo: tras reabrir, los subtítulos se
+        // pintaban sobre un elemento desconectado y no se veía nada
+        subEl = null;
         void 0;
     }
 

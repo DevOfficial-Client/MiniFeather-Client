@@ -19,6 +19,8 @@
     const state = {
 
         rest: null,
+
+        restMesh: null,
         poses: null
     };
 
@@ -83,11 +85,14 @@
             };
         }
         state.rest = rest;
+        state.restMesh = mesh;
         return rest;
     }
 
     function ensureRest() {
-        if (!state.rest) captureRest();
+        // el rest es del mesh que lo capturó: tras un respawn o recreate el
+        // objeto es otro y el rest viejo vale para restaurar un fantasma
+        if (!state.rest || state.restMesh !== getMesh()) captureRest();
         return state.rest;
     }
 
@@ -134,8 +139,14 @@
         for (const part in pose) {
             const def = PARTS[part];
             if (!def) continue;
+            // pose remota por p2p: un dato malformado no debe meter NaN en la
+            // articulación y fundir el rig en silencio
+            const v = pose[part];
+            if (!Array.isArray(v) || v.length < 3) continue;
+            const rx = +v[0], ry = +v[1], rz = +v[2];
+            if (!Number.isFinite(rx) || !Number.isFinite(ry) || !Number.isFinite(rz)) continue;
             const j = findJoint(mesh, def.joints[0]);
-            if (j) j.rotation.set(pose[part][0], pose[part][1], pose[part][2]);
+            if (j) j.rotation.set(rx, ry, rz);
         }
         return { ok: true };
     }
@@ -202,7 +213,13 @@
         const p = PRESETS[name];
         if (!p) return { ok: false, error: 'preset "' + name + '" does not exist: ' + Object.keys(PRESETS).join(', ') };
         reset();
-        for (const part in p) setPart(part, p[part]);
+        // un rig con pivots de menos no debe tumbar el preset entero a medias:
+        // se aplica lo que se pueda y se cuenta lo que no
+        const failed = [];
+        for (const part in p) {
+            try { setPart(part, p[part]); } catch { failed.push(part); }
+        }
+        if (failed.length) return { ok: false, error: 'joints no encontrados: ' + failed.join(', '), preset: name };
         return { ok: true, preset: name };
     }
 

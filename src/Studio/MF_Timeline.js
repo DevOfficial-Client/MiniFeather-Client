@@ -5,9 +5,13 @@
     if (window.__MF_Timeline) return;
     const TAG = 'minifeather timeline';
     const TPS = 20;
+    // la columna de etiquetas (76px) más su padding (4px) desplazan el carril: regla, playhead,
+    // scrub y drops se miden desde el borde del carril, no desde el borde del panel
+    const LANE_LEFT = 80;
 
     const CSS = `
         #mf-timeline {
+    position: relative;
     display: flex; flex-direction: column; height: 100%;
     font-family: 'Consolas', 'Courier New', monospace;
     background: #001B33; color: #e8e8ec;
@@ -105,6 +109,7 @@
         snapEnabled: true,
         seqDuration: 0,
         onChange: null,
+        onKeyDown: null,
         els: {}
     };
 
@@ -192,7 +197,7 @@
             ev.preventDefault();
             ev.stopPropagation();
             const r = tracks.getBoundingClientRect();
-            const tick = Math.max(0, Math.round(xToTick(ev.clientX - r.left)));
+            const tick = Math.max(0, Math.round(xToTick(ev.clientX - r.left - LANE_LEFT)));
 
             const skinName = ev.dataTransfer.getData('text/mf-skin');
             if (skinName) {
@@ -243,18 +248,18 @@
 
             ev.preventDefault();
             const r = ruler.getBoundingClientRect();
-            zoom(ev.deltaY < 0 ? 1.25 : 1 / 1.25, ev.clientX - r.left);
+            zoom(ev.deltaY < 0 ? 1.25 : 1 / 1.25, ev.clientX - r.left - LANE_LEFT);
         }, { passive: false });
 
         ruler.addEventListener('wheel', (ev) => {
             if (ev.altKey) return;
             ev.preventDefault();
-            zoom(ev.deltaY < 0 ? 1.2 : 1 / 1.2, ev.offsetX);
+            zoom(ev.deltaY < 0 ? 1.2 : 1 / 1.2, ev.offsetX - LANE_LEFT);
         }, { passive: false });
 
         const scrub = (ev) => {
             const r = ruler.getBoundingClientRect();
-            state.playheadTick = xToTick(ev.clientX - r.left);
+            state.playheadTick = xToTick(ev.clientX - r.left - LANE_LEFT);
             updatePlayhead();
             state.onChange?.('scrub', state.playheadTick);
         };
@@ -289,21 +294,25 @@
             }
         });
 
-        window.addEventListener('keydown', (ev) => {
+        // el studio reconstruye el panel en cada open(): sin esto el listener de teclado se acumula por montaje
+        if (state.onKeyDown) window.removeEventListener('keydown', state.onKeyDown);
+        state.onKeyDown = (ev) => {
             if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
             if (!state.selection.size) return;
             const t = ev.target;
             if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
             deleteSelected();
             ev.preventDefault();
-        });
+        };
+        window.addEventListener('keydown', state.onKeyDown);
     }
 
     function zoom(factor, pivotX) {
         const before = pivotX != null ? xToSec(pivotX) : null;
         state.view.pxPerSec = Math.min(600, Math.max(8, state.view.pxPerSec * factor));
         if (before != null) {
-            state.view.scrollSec += xToSec(pivotX) - before;
+            // anclar el segundo bajo el cursor: scroll = before - pivotX/pps; sumar el término viejo invertía el signo
+            state.view.scrollSec = before - pivotX / state.view.pxPerSec;
         }
         state.view.scrollSec = Math.max(0, state.view.scrollSec);
         render();
@@ -676,8 +685,8 @@
 
         ctx.font = '9px Consolas, monospace';
         for (let s = Math.max(0, firstSec); s <= lastSec; s += stepSec) {
-            const x = secToX(s);
-            if (x < -20 || x > w + 20) continue;
+            const x = LANE_LEFT + secToX(s);
+            if (x < LANE_LEFT || x > w + 20) continue;
             ctx.strokeStyle = 'rgba(255,255,255,.27)';
             ctx.beginPath(); ctx.moveTo(x + .5, h - 10); ctx.lineTo(x + .5, h); ctx.stroke();
             ctx.fillStyle = '#aaa';
@@ -687,7 +696,7 @@
             if (stepSec * pxPerSec > 90) {
                 ctx.strokeStyle = 'rgba(255,255,255,.13)';
                 for (let i = 1; i < 5; i++) {
-                    const sx = secToX(s + stepSec * i / 5);
+                    const sx = LANE_LEFT + secToX(s + stepSec * i / 5);
                     ctx.beginPath(); ctx.moveTo(sx + .5, h - 5); ctx.lineTo(sx + .5, h); ctx.stroke();
                 }
             }
@@ -696,8 +705,8 @@
         const r = window.MF_Film?.getPlayRange?.();
         if (r && (r.from != null || r.to != null)) {
             const TPS = 20;
-            const fromX = r.from != null ? secToX(r.from / TPS) : 0;
-            const toX = r.to != null ? secToX(r.to / TPS) : w;
+            const fromX = r.from != null ? LANE_LEFT + secToX(r.from / TPS) : LANE_LEFT;
+            const toX = r.to != null ? LANE_LEFT + secToX(r.to / TPS) : w;
 
             ctx.fillStyle = 'rgba(60, 170, 90, .18)';
             ctx.fillRect(fromX, 0, Math.max(0, toX - fromX), h);
@@ -717,7 +726,7 @@
     function updatePlayhead() {
         const { playhead, root } = state.els;
         if (!playhead || !root) return;
-        playhead.style.left = tickToX(state.playheadTick) + 'px';
+        playhead.style.left = (LANE_LEFT + tickToX(state.playheadTick)) + 'px';
     }
 
     function updateInfo() {

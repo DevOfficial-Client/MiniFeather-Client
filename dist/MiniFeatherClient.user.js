@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005061637
+// @version      4.19.0.20261005061654
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 0fd4c91e424699b02a69b052f3990098e8f7a242
- * builtAt : 2026-10-05T06:16:54.513Z
+ * commit  : 19ca7f22ee3e425c8a558b77fbf1616f2c43be44
+ * builtAt : 2026-10-05T06:26:26.065Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"0fd4c91e424699b02a69b052f3990098e8f7a242","builtAt":"2026-10-05T06:16:54.513Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"19ca7f22ee3e425c8a558b77fbf1616f2c43be44","builtAt":"2026-10-05T06:26:26.065Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -82600,15 +82600,7 @@ const state = {
 
     function wireConn(conn) {
     state.conn = conn;
-    conn.on('open', () => {
-        state.status = state.role;
-        log('conectado (' + state.role + ') — verity compartida');
-        send({ t: 'hello', name: myName(), role: state.role });
-        if (state.role === 'host') startBroadcast();
-        else state.lastFrameIn = performance.now();
-    });
-    conn.on('data', handleMsg);
-    conn.on('close', () => {
+    const onConnClosed = () => {
         log('conexion cerrada');
         if (state.role === 'guest') killPuppet();
 
@@ -82620,6 +82612,9 @@ const state = {
         }
         ents._lastKey = null;
         ents.recv.clear();
+        // lo que el peer anterior no tenía no define al siguiente
+        ents.knownFiles.clear();
+        ents.missingFiles = null;
 
         if (look.entity && look.morphType) {
             try { window.MF_Morph?.detachFrom?.(look.entity.id); } catch {}
@@ -82635,8 +82630,22 @@ const state = {
         stopBroadcast();
         state.conn = null;
         state.status = 'off';
+    };
+    conn.on('open', () => {
+        state.status = state.role;
+        log('conectado (' + state.role + ') — verity compartida');
+        send({ t: 'hello', name: myName(), role: state.role });
+        if (state.role === 'host') startBroadcast();
+        else state.lastFrameIn = performance.now();
     });
-    conn.on('error', (e) => warn('error de conexion:', e?.message || e));
+    conn.on('data', handleMsg);
+    conn.on('close', onConnClosed);
+    conn.on('error', (e) => {
+        warn('error de conexion:', e?.message || e);
+        // socket muerto que a veces nunca llega a emitir close: si no se
+        // limpia aquí, la UI dice "conectado" y el peer es un fantasma
+        if (!conn.open) onConnClosed();
+    });
     }
 
     const autoShare = {
@@ -82729,6 +82738,17 @@ const state = {
     peer.on('error', (e) => {
         warn('peer error:', e?.message || e.type || e);
         state.status = 'error';
+        const t = e?.type;
+        if (t === 'peer-unavailable' || t === 'network' || t === 'disconnected') return;
+        // error fatal: si el Peer zombi queda en state, host/join se niegan
+        // con "ya hay sesion activa" hasta que caiga el sol. destruir y limpiar
+        try { peer.destroy?.(); } catch {}
+        if (state.peer === peer) {
+            stopBroadcast();
+            state.peer = null;
+            state.conn = null;
+            state.status = 'off';
+        }
     });
     return id;
     }
@@ -82749,6 +82769,17 @@ const state = {
     peer.on('error', (e) => {
         warn('peer error:', e?.message || e.type || e);
         state.status = 'error';
+        const t = e?.type;
+        if (t === 'peer-unavailable' || t === 'network' || t === 'disconnected') return;
+        // error fatal: si el Peer zombi queda en state, host/join se niegan
+        // con "ya hay sesion activa" hasta que caiga el sol. destruir y limpiar
+        try { peer.destroy?.(); } catch {}
+        if (state.peer === peer) {
+            stopBroadcast();
+            state.peer = null;
+            state.conn = null;
+            state.status = 'off';
+        }
     });
     return true;
     }
@@ -94996,7 +95027,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             // duración invariante del loop: calculada una vez en play(), no a 60fps
             let t = (performance.now() - t0) % totalMs;
             let i = 0;
-            while (t > frames[i].holdMs + frames[i].blendMs) {
+            // paseo acotado: un holdMs negativo (el input no valida nada) hace
+            // que t crezca en vez de bajar y este while se convierte en un arete
+            for (let n = 0; n < frames.length && t > frames[i].holdMs + frames[i].blendMs; n++) {
                 t -= frames[i].holdMs + frames[i].blendMs;
                 i = (i + 1) % frames.length;
             }
@@ -97117,7 +97150,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         state.recTimer = null;
         state.recording = false;
 
-        state.frames.push({ ...(state.lastFrame || { t: state.recTick, p: [0, 0, 0] }), t: state.recTick });
+        // flush del último tick; si no se capturó nada no se inventa un frame en el origen del mundo
+        if (state.lastFrame) state.frames.push({ ...state.lastFrame, t: state.recTick });
         return {
             ok: true,
             keyframes: state.frames.length,
@@ -97128,7 +97162,11 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
     function loadFilms() {
         if (state.films) return state.films;
-        try { state.films = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { state.films = {}; }
+        try {
+            const p = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+            // storage corrupto puede parsear a null/número/array: el resto del módulo asume un objeto
+            state.films = (p && typeof p === 'object' && !Array.isArray(p)) ? p : {};
+        } catch { state.films = {}; }
         return state.films;
     }
 
@@ -97165,6 +97203,11 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         if (!state.frames.length) return { ok: false, error: 'no take in memory (record first)' };
         const films = loadFilms();
         const film = currentTakeAsFilm(name);
+        if (!name) {
+            // el nombre automático tiene precisión de segundo: no pisar la toma grabada hace un segundo
+            const base = film.name;
+            for (let n = 2; films[film.name]; n++) film.name = base + '-' + n;
+        }
         films[film.name] = film;
         state.films = films;
         const r = persistFilms();
@@ -97195,16 +97238,23 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
     function importFilm(name, data) {
         if (!data || typeof data !== 'object') return { ok: false, error: 'invalid data' };
-        if (!Array.isArray(data.actors) || !data.actors.length) {
+        if (!Array.isArray(data.actors) || !data.actors.length ||
+            !data.actors.every(a => Array.isArray(a?.frames))) {
             return { ok: false, error: '.mffilm.json format not recognized (no actors)' };
         }
         const films = loadFilms();
         const finalName = name || data.name || ('imported-' + Date.now());
+        // la duración es el último tick grabado, no el número de keyframes (una toma quieta tiene 10 frames y 600 ticks)
+        let lastTick = 0;
+        for (const a of data.actors) {
+            const fr = a.frames;
+            if (fr.length) lastTick = Math.max(lastTick, +fr[fr.length - 1].t || 0);
+        }
         const film = {
             ...data,
             name: finalName,
             version: data.version || 1,
-            durationTicks: data.durationTicks || data.actors[0]?.frames?.length || 0
+            durationTicks: data.durationTicks || lastTick
         };
         films[finalName] = film;
         state.films = films;
@@ -97311,7 +97361,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         const game = getGame();
         const scene = game?.gameScene?.scene;
         if (!scene) return null;
-        const first = actor.frames[0];
+        const first = actor.frames?.[0];
+        // film corrupto o sin frames: mejor sin actor que un TypeError dentro del rAF dejando el playback colgado
+        if (!first?.p) return null;
         despawnOne(actor.id);
 
         const clone = clonePlayerMesh();
@@ -97341,6 +97393,11 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
     function ensureActor(film, actor) {
         let rec = state.actors.get(actor.id);
+        // cambio de mundo/escena: el clon quedó huérfano, respawnear en la escena actual
+        if (rec && rec.isClone && rec.root && !rec.root.parent) {
+            despawnOne(actor.id);
+            rec = null;
+        }
         if (!rec) rec = spawnActor(actor);
         if (!rec) return null;
         if (!rec.isClone) {
@@ -97404,6 +97461,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         if (!state.playing || state.paused) return;
         const film = state.playFilm;
         if (!film) { stopPlayback(); return; }
+        // sin mundo no hay playback zombie moviendo mallas huérfanas
+        if (!getGame()) { stopPlayback(); despawnActors(); return; }
 
         const tick = state.playTickBase + (performance.now() - state.playStart) / TICK_MS;
 
@@ -97452,6 +97511,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             ? films[name] || null
             : (state.frames.length ? currentTakeAsFilm(null) : null);
         if (!film) return { ok: false, error: 'take not found (record one or specify a name from /film list)' };
+        if (!Array.isArray(film.actors) || !film.actors.length) return { ok: false, error: 'film is corrupt (no actors)' };
 
         let r = range || state.playRange;
         if (r && typeof r === 'object') {
@@ -97490,7 +97550,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         const items = [];
         for (const c of clips) {
             const film = films[c.filmName];
-            if (!film) continue;
+            // un clip cuyo film ya no existe se salta; uno corrupto también, no a matar el loop de rAF
+            if (!film || !Array.isArray(film.actors)) continue;
             items.push({
                 film,
                 start: Math.max(0, c.start),
@@ -97529,6 +97590,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         if (!state.playing || state.paused || state.playMode !== 'sequence') return;
         const items = state.playSeq;
         if (!items?.length) { stopPlayback(); return; }
+        if (!getGame()) { stopPlayback(); despawnActors(); return; }
 
         let tick = state.playTickBase + (performance.now() - state.playStart) / TICK_MS;
         const total = seqTotalTicks(items);
@@ -97629,7 +97691,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 recording: state.recording,
                 playing: state.playing,
                 paused: state.paused,
-                tick: state.playing ? Math.floor(state.playTickBase + (performance.now() - state.playStart) / TICK_MS) : null,
+                // en pausa el reloj está congelado: playStart es viejo, sumarlo avanzaría el tick sin reproducir
+                tick: state.playing ? Math.floor(state.playTickBase + (state.paused ? 0 : (performance.now() - state.playStart) / TICK_MS)) : null,
                 frames: state.frames.length,
                 actors: state.actors.size
             };
@@ -97758,7 +97821,16 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             const raw = localStorage.getItem(LS_KEY);
             if (!raw) return [];
             const data = JSON.parse(raw);
-            return Array.isArray(data?.clips) ? data.clips.filter(c => TYPES[c?.type]) : [];
+            if (!Array.isArray(data?.clips)) return [];
+            const out = [];
+            for (const c of data.clips) {
+                const T = TYPES[c?.type];
+                if (!T) continue;
+                // evalClip hace p.pose.x sin preguntar: un clip guardado sin props (o a medias) revienta el uiLoop del studio
+                c.props = { ...clone(T.defaults), ...(c.props && typeof c.props === 'object' ? c.props : null) };
+                out.push(c);
+            }
+            return out;
         } catch (e) { console.warn(TAG, 'loadClips:', e?.message || e); return []; }
     }
     function saveClips() {
@@ -98042,11 +98114,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 if (!el && c.props.src) {
                     el = new Audio(c.props.src);
                     el.volume = clamp(Number(c.props.volume) || 1, 0, 1);
-                    el.loop = c.duration / TPS > (el.duration || 1e9);
+                    // el.duration es NaN hasta loadedmetadata: decidir el loop entonces, no aquí
+                    el.addEventListener('loadedmetadata', () => { el.loop = c.duration / TPS > el.duration; });
                     state.audioEls.set(c.id, el);
                     const off = Number(c.props.offset) || 0;
                     try { if (off > 0) el.currentTime = off; } catch {}
-                    el.play().catch(() => { state.audioEls.delete(c.id); });
+                    // borrar el elemento al rechazar play() lo recreaba a 20 por segundo mientras siga fallando
+                    el.play().catch(() => {});
                 } else if (el && el.paused) el.play().catch(() => {});
             } else if (el && (!inWindow || !playing)) {
                 if (!inWindow) stopAudioFor(c);
@@ -98133,6 +98207,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     const state = {
 
         rest: null,
+
+        restMesh: null,
         poses: null
     };
 
@@ -98197,11 +98273,14 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             };
         }
         state.rest = rest;
+        state.restMesh = mesh;
         return rest;
     }
 
     function ensureRest() {
-        if (!state.rest) captureRest();
+        // el rest es del mesh que lo capturó: tras un respawn o recreate el
+        // objeto es otro y el rest viejo vale para restaurar un fantasma
+        if (!state.rest || state.restMesh !== getMesh()) captureRest();
         return state.rest;
     }
 
@@ -98248,8 +98327,14 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         for (const part in pose) {
             const def = PARTS[part];
             if (!def) continue;
+            // pose remota por p2p: un dato malformado no debe meter NaN en la
+            // articulación y fundir el rig en silencio
+            const v = pose[part];
+            if (!Array.isArray(v) || v.length < 3) continue;
+            const rx = +v[0], ry = +v[1], rz = +v[2];
+            if (!Number.isFinite(rx) || !Number.isFinite(ry) || !Number.isFinite(rz)) continue;
             const j = findJoint(mesh, def.joints[0]);
-            if (j) j.rotation.set(pose[part][0], pose[part][1], pose[part][2]);
+            if (j) j.rotation.set(rx, ry, rz);
         }
         return { ok: true };
     }
@@ -98316,7 +98401,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         const p = PRESETS[name];
         if (!p) return { ok: false, error: 'preset "' + name + '" does not exist: ' + Object.keys(PRESETS).join(', ') };
         reset();
-        for (const part in p) setPart(part, p[part]);
+        // un rig con pivots de menos no debe tumbar el preset entero a medias:
+        // se aplica lo que se pueda y se cuenta lo que no
+        const failed = [];
+        for (const part in p) {
+            try { setPart(part, p[part]); } catch { failed.push(part); }
+        }
+        if (failed.length) return { ok: false, error: 'joints no encontrados: ' + failed.join(', '), preset: name };
         return { ok: true, preset: name };
     }
 
@@ -98783,6 +98874,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         dragCtx: null,
 
         ctors: null,
+        scene: null,
         size: 1
     };
 
@@ -98956,6 +99048,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
             const scene = findScene(joint) || findPlayerMesh()?.parent;
             if (!scene || !scene.add) return false;
+            // para el guard de update(): el ancestro más alto de verdad, no el
+            // fallback intermedio, o el gizmo se soltaría solo al primer tick
+            state.scene = findScene(joint) || scene;
             state.joint = joint;
             state.onDelta = onDelta;
             state.root = new ctors.Group();
@@ -99022,6 +99117,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             state.size = 1;
             return true;
         } catch (e) {
+            // fallo a mitad de construcción: no dejar un root fantasma con
+            // visible() en true y joint apuntando a nada
+            detach();
             console.warn(TAG + ' attach failed:', e?.message || e);
             return false;
         }
@@ -99030,6 +99128,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     function update() {
         if (!state.root || !state.joint) return;
         try {
+            // el rig puede despawnearse o reconstruirse (cambio de skin) con el
+            // gizmo puesto: si el joint ya no cuelga de la escena, soltar antes
+            // de seguir arrastrando el cadáver
+            if (state.scene && findScene(state.joint) !== state.scene) { detach(); return; }
             state.joint.updateMatrixWorld?.(true);
             const V3 = state.joint.position.constructor;
             const p = new V3();
@@ -99072,9 +99174,17 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         }
         state.root = null; state.arrows = null; state.joint = null;
         state.onDelta = null; state.dragging = null; state.dragCtx = null;
+        state.scene = null;
     }
 
     function visible() { return !!state.root; }
+
+    // rect de referencia para proyectar: el mismo canvas que usa beginDrag y
+    // pickPart. faltaba esta función entera — pick/pickRing/dragDelta llevaban
+    // años devolviendo null por un ReferenceError silencioso
+    function effectiveRect() {
+        return (getGameCanvas() || document.body).getBoundingClientRect();
+    }
 
     function pick(clientX, clientY, camera) {
         if (!state.arrows || !state.joint) return null;
@@ -99351,7 +99461,11 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
     function load() {
         if (state.anims) return state.anims;
-        try { state.anims = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); }
+        try {
+            const p = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+            // storage corrupto puede parsear a null/escalar: cur() haría a[state.cur] y revienta
+            state.anims = (p && typeof p === 'object' && !Array.isArray(p)) ? p : {};
+        }
         catch { state.anims = {}; }
         return state.anims;
     }
@@ -99525,6 +99639,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     function play() {
         const a = cur();
         if (!a) return { ok: false, error: 'sin animación abierta' };
+        // ya hay una cadena de rAF andando: encender otra la duplica hasta que una muera sola
+        if (state.playing) return { ok: true };
         state.playing = true;
         state.lastFrame = 0;
         state.fpsClock = 0;
@@ -99662,9 +99778,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     if (window.__MF_Timeline) return;
     const TAG = 'minifeather timeline';
     const TPS = 20;
+    // la columna de etiquetas (76px) más su padding (4px) desplazan el carril: regla, playhead,
+    // scrub y drops se miden desde el borde del carril, no desde el borde del panel
+    const LANE_LEFT = 80;
 
     const CSS = `
         #mf-timeline {
+    position: relative;
     display: flex; flex-direction: column; height: 100%;
     font-family: 'Consolas', 'Courier New', monospace;
     background: #001B33; color: #e8e8ec;
@@ -99762,6 +99882,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         snapEnabled: true,
         seqDuration: 0,
         onChange: null,
+        onKeyDown: null,
         els: {}
     };
 
@@ -99849,7 +99970,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             ev.preventDefault();
             ev.stopPropagation();
             const r = tracks.getBoundingClientRect();
-            const tick = Math.max(0, Math.round(xToTick(ev.clientX - r.left)));
+            const tick = Math.max(0, Math.round(xToTick(ev.clientX - r.left - LANE_LEFT)));
 
             const skinName = ev.dataTransfer.getData('text/mf-skin');
             if (skinName) {
@@ -99900,18 +100021,18 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
             ev.preventDefault();
             const r = ruler.getBoundingClientRect();
-            zoom(ev.deltaY < 0 ? 1.25 : 1 / 1.25, ev.clientX - r.left);
+            zoom(ev.deltaY < 0 ? 1.25 : 1 / 1.25, ev.clientX - r.left - LANE_LEFT);
         }, { passive: false });
 
         ruler.addEventListener('wheel', (ev) => {
             if (ev.altKey) return;
             ev.preventDefault();
-            zoom(ev.deltaY < 0 ? 1.2 : 1 / 1.2, ev.offsetX);
+            zoom(ev.deltaY < 0 ? 1.2 : 1 / 1.2, ev.offsetX - LANE_LEFT);
         }, { passive: false });
 
         const scrub = (ev) => {
             const r = ruler.getBoundingClientRect();
-            state.playheadTick = xToTick(ev.clientX - r.left);
+            state.playheadTick = xToTick(ev.clientX - r.left - LANE_LEFT);
             updatePlayhead();
             state.onChange?.('scrub', state.playheadTick);
         };
@@ -99946,21 +100067,25 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             }
         });
 
-        window.addEventListener('keydown', (ev) => {
+        // el studio reconstruye el panel en cada open(): sin esto el listener de teclado se acumula por montaje
+        if (state.onKeyDown) window.removeEventListener('keydown', state.onKeyDown);
+        state.onKeyDown = (ev) => {
             if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
             if (!state.selection.size) return;
             const t = ev.target;
             if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
             deleteSelected();
             ev.preventDefault();
-        });
+        };
+        window.addEventListener('keydown', state.onKeyDown);
     }
 
     function zoom(factor, pivotX) {
         const before = pivotX != null ? xToSec(pivotX) : null;
         state.view.pxPerSec = Math.min(600, Math.max(8, state.view.pxPerSec * factor));
         if (before != null) {
-            state.view.scrollSec += xToSec(pivotX) - before;
+            // anclar el segundo bajo el cursor: scroll = before - pivotX/pps; sumar el término viejo invertía el signo
+            state.view.scrollSec = before - pivotX / state.view.pxPerSec;
         }
         state.view.scrollSec = Math.max(0, state.view.scrollSec);
         render();
@@ -100333,8 +100458,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
         ctx.font = '9px Consolas, monospace';
         for (let s = Math.max(0, firstSec); s <= lastSec; s += stepSec) {
-            const x = secToX(s);
-            if (x < -20 || x > w + 20) continue;
+            const x = LANE_LEFT + secToX(s);
+            if (x < LANE_LEFT || x > w + 20) continue;
             ctx.strokeStyle = 'rgba(255,255,255,.27)';
             ctx.beginPath(); ctx.moveTo(x + .5, h - 10); ctx.lineTo(x + .5, h); ctx.stroke();
             ctx.fillStyle = '#aaa';
@@ -100344,7 +100469,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             if (stepSec * pxPerSec > 90) {
                 ctx.strokeStyle = 'rgba(255,255,255,.13)';
                 for (let i = 1; i < 5; i++) {
-                    const sx = secToX(s + stepSec * i / 5);
+                    const sx = LANE_LEFT + secToX(s + stepSec * i / 5);
                     ctx.beginPath(); ctx.moveTo(sx + .5, h - 5); ctx.lineTo(sx + .5, h); ctx.stroke();
                 }
             }
@@ -100353,8 +100478,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         const r = window.MF_Film?.getPlayRange?.();
         if (r && (r.from != null || r.to != null)) {
             const TPS = 20;
-            const fromX = r.from != null ? secToX(r.from / TPS) : 0;
-            const toX = r.to != null ? secToX(r.to / TPS) : w;
+            const fromX = r.from != null ? LANE_LEFT + secToX(r.from / TPS) : LANE_LEFT;
+            const toX = r.to != null ? LANE_LEFT + secToX(r.to / TPS) : w;
 
             ctx.fillStyle = 'rgba(60, 170, 90, .18)';
             ctx.fillRect(fromX, 0, Math.max(0, toX - fromX), h);
@@ -100374,7 +100499,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     function updatePlayhead() {
         const { playhead, root } = state.els;
         if (!playhead || !root) return;
-        playhead.style.left = tickToX(state.playheadTick) + 'px';
+        playhead.style.left = (LANE_LEFT + tickToX(state.playheadTick)) + 'px';
     }
 
     function updateInfo() {
@@ -101267,14 +101392,14 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 if (files.length) skinsImport(files);
             });
         }
-        window.addEventListener('mf:skinchanger-items', () => refreshSkinsList(), { once: false });
+        // el listener de window vive en el guard de keysBound: aquí solo el
+        // refresco del DOM recién construido
         refreshSkinsList();
 
         $('mfs-morph-rescan').onclick = () => {
             window.MF_Morph?.scan?.(true);
             refreshMorphList();
         };
-        window.addEventListener('mf:morph-catalog', () => refreshMorphList(), { once: false });
         refreshMorphList();
 
         const gm = document.getElementById('mfs-gizmo-mode');
@@ -101336,15 +101461,17 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
         if (!state.keysBound) {
             state.keysBound = true;
+            // bind() corre en cada open: sin este guard, cada ciclo open/close
+            // apila otra copia de estos listeners de window
             window.addEventListener('keydown', (ev) => {
                 if (!state.open) return;
 
-                if (playerCtrl.active) {
-                    if (ev.key === 'F1') { ev.preventDefault(); close(); }
-                    return;
-                }
-                if (ev.key === 'F1') { ev.preventDefault(); close(); }
-                else if (ev.code === 'Space' && !isTypingTarget(ev.target)) { ev.preventDefault(); togglePlay(); }
+                if (playerCtrl.active) return;
+
+                /* F1 lo lleva el toggle global del final del módulo; repetirlo aquí
+                   cerraba el studio en el mismo pulsado que lo abría: a partir del
+                   segundo ciclo el F1 parecía muerto */
+                if (ev.code === 'Space' && !isTypingTarget(ev.target)) { ev.preventDefault(); togglePlay(); }
                 else if (ev.key === 'Home') { ev.preventDefault(); seek(0); }
                 else if ((ev.key === 'i' || ev.key === 'I') && !isTypingTarget(ev.target)) markIn();
                 else if ((ev.key === 'o' || ev.key === 'O') && !isTypingTarget(ev.target)) markOut();
@@ -101362,6 +101489,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             window.addEventListener('mf:skineditor-presets', () => {
                 if (state.open) refreshMediaPool();
             });
+            window.addEventListener('mf:skinchanger-items', () => refreshSkinsList());
+            window.addEventListener('mf:morph-catalog', () => refreshMorphList());
         }
 
         state.raf = requestAnimationFrame(uiLoop);
@@ -102113,9 +102242,6 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         if (!box) return;
         const FC = window.MF_FilmCamera;
         const clips = FC?.clips || [];
-        if (!clips.length) {
-            box.innerHTML = '<div class="mfs-empty">No clips.<br>Position the camera and add one:</div>';
-        }
 
         const btns = el('div');
         btns.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:6px 0;';
@@ -102174,6 +102300,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 list.appendChild(row);
             }
             box.appendChild(list);
+        } else {
+            // el mensaje de vacío se pintaba arriba y el box.innerHTML='' de
+            // aquí abajo lo borraba en la misma llamada: nunca se veía
+            box.appendChild(el('div', 'mfs-empty', 'No clips.<br>Position the camera and add one:'));
         }
     }
 
@@ -102187,6 +102317,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             if (playbackCamActive) {
                 playbackCamActive = false;
                 FC.reset();
+                renderSubtitle(null);
 
                 if (cam.origFov != null && cam.camera) {
                     try { cam.camera.fov = cam.origFov; cam.camera.updateProjectionMatrix?.(); } catch {}
@@ -102195,16 +102326,22 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             return;
         }
         if (!FC.clips.length) return;
+        // activo desde el primer tick con clips: si solo hay audio/subtítulos,
+        // este reset al parar es la única limpieza (stopPlayback de MF_Film no resetea)
+        playbackCamActive = true;
         const pose = FC.onTick(s.tick ?? 0, !s.paused);
         if (pose?.hasPos) {
             if (!cam.active) try { cameraEnable(); } catch {}
-            playbackCamActive = true;
-            cam.pos.x = pose.x; cam.pos.y = pose.y; cam.pos.z = pose.z;
-            cam.yaw = pose.yaw; cam.pitch = pose.pitch;
-            applyCamFov(pose.fov || null);
+            // cameraEnable puede fallar (menú, recarga de mundo) y dejar cam.pos
+            // en null: escribir aquí tumbaba el uiLoop y con él todo el studio
+            if (cam.pos) {
+                cam.pos.x = pose.x; cam.pos.y = pose.y; cam.pos.z = pose.z;
+                cam.yaw = pose.yaw; cam.pitch = pose.pitch;
+                applyCamFov(pose.fov || null);
 
-            if (pose.roll && cam.camera?.rotation?.set) {
-                try { cam._roll = pose.roll; } catch {}
+                if (pose.roll && cam.camera?.rotation?.set) {
+                    try { cam._roll = pose.roll; } catch {}
+                }
             }
         }
         renderSubtitle(FC.subtitle);
@@ -102348,6 +102485,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
         const want = fitTransform(force);
         if (!want) return;
+        // purgar canvas muertos: el juego puede reemplazar el canvas (recarga de
+        // mundo) y sin esto el clamp no se re-engancha nunca con el nuevo
+        viewport.canvases = viewport.canvases.filter(cv => cv.isConnected);
         if (!viewport.canvases.length) {
             viewport.canvases = collectGameCanvases();
             if (!viewport.canvases.length) return;
@@ -102430,6 +102570,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             } catch {}
         }
         viewport.canvases = []; viewport.origAspect = null;
+        // el rect cacheado de la sesión anterior no debe sobrevivir al close
+        viewport.rect = null; viewport.rectAt = 0;
     }
 
     function cameraEnable() {
@@ -102488,23 +102630,33 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         cam.keys = {};
         removeCamHooks();
         const camera = cam.camera;
-        if (camera && cam.origParent) {
+        if (camera) {
             try {
-
                 if (cam.origPos) camera.position.set(cam.origPos.x, cam.origPos.y, cam.origPos.z);
                 if (cam.origQuat) camera.quaternion.set(cam.origQuat.x, cam.origQuat.y, cam.origQuat.z, cam.origQuat.w);
-                cam.origParent.add(camera);
-                if (cam.origIndex >= 0 && Array.isArray(cam.origParent.children)) {
-                    const idx = cam.origParent.children.indexOf(camera);
-                    if (idx >= 0 && idx !== cam.origIndex && cam.origIndex < cam.origParent.children.length) {
-                        cam.origParent.children.splice(idx, 1);
-                        cam.origParent.children.splice(cam.origIndex, 0, camera);
+            } catch {}
+            try {
+                if (cam.origParent) {
+                    cam.origParent.add(camera);
+                    if (cam.origIndex >= 0 && Array.isArray(cam.origParent.children)) {
+                        const idx = cam.origParent.children.indexOf(camera);
+                        if (idx >= 0 && idx !== cam.origIndex && cam.origIndex < cam.origParent.children.length) {
+                            cam.origParent.children.splice(idx, 1);
+                            cam.origParent.children.splice(cam.origIndex, 0, camera);
+                        }
                     }
+                } else {
+                    // cámara sin padre original: devolverla fuera del grafo, no solo
+                    // moverla; si no, se quedaba en la escena donde la dejara el studio
+                    camera.parent?.remove?.(camera);
                 }
                 camera.updateMatrixWorld?.(true);
             } catch {}
         }
         cam.camera = null; cam.origParent = null; cam.scene = null;
+        // fov original era de la cámara vieja: sin reset, applyCamFov le clava el
+        // fov de la cámara anterior a la siguiente sesión
+        cam.origFov = null;
     }
 
     const camHooks = { umw: null, uwm: null, updating: false };
@@ -103077,6 +103229,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     }
 
     function posingDeselect() {
+        // sin esto el brillo del hover quedaba pegado a la pieza para siempre
+        clearHoverHighlight();
         if (posing.outline) {
             try { posing.outline.restore?.(); } catch {}
             posing.outline = null;
@@ -103555,6 +103709,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         const root = document.getElementById(ID);
         const style = document.getElementById(ID + '-style');
         root?.remove(); style?.remove();
+        // subEl quedaba apuntando al root viejo: tras reabrir, los subtítulos se
+        // pintaban sobre un elemento desconectado y no se veía nada
+        subEl = null;
         void 0;
     }
 

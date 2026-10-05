@@ -156,12 +156,19 @@ test('MirrorRunner: ok-globals faltante registra fail para el próximo arranque'
   assert.equal(sb.globalThis.XB, undefined);
 });
 
-test('MirrorRunner: buckets remotos reordenan la lista', () => {
+test('MirrorRunner: buckets remotos ordenan la lista sin borrar bundled-only', () => {
+  // la lista remota ordena, no borra: m/b no está en la override pero su
+  // código bundled existe, así que vuelve a su posición original
   const sb = execRunnerSandbox({
     mirror: FAKE_MIRROR(),
     overrides: { v: 1, buckets: { mainStart: ['m/c.js', 'm/a.js'], isoStart: [], isoEnd: [] }, files: {}, ok: {} }
   });
-  assert.deepEqual(sb.__executed.map(e => e.path), ['m/c.js', 'm/a.js']);
+  assert.deepEqual(sb.__executed.map(e => e.path), ['m/c.js', 'm/b.js', 'm/a.js']);
+  assert.deepEqual(
+    sb.__executed.map(e => e.path).sort(),
+    ['m/a.js', 'm/b.js', 'm/c.js'],
+    'ningún módulo bundled se pierde por una lista remota vieja'
+  );
 });
 
 

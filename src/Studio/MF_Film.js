@@ -188,7 +188,8 @@
         state.recTimer = null;
         state.recording = false;
 
-        state.frames.push({ ...(state.lastFrame || { t: state.recTick, p: [0, 0, 0] }), t: state.recTick });
+        // flush del último tick; si no se capturó nada no se inventa un frame en el origen del mundo
+        if (state.lastFrame) state.frames.push({ ...state.lastFrame, t: state.recTick });
         return {
             ok: true,
             keyframes: state.frames.length,
@@ -199,7 +200,11 @@
 
     function loadFilms() {
         if (state.films) return state.films;
-        try { state.films = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { state.films = {}; }
+        try {
+            const p = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+            // storage corrupto puede parsear a null/número/array: el resto del módulo asume un objeto
+            state.films = (p && typeof p === 'object' && !Array.isArray(p)) ? p : {};
+        } catch { state.films = {}; }
         return state.films;
     }
 
@@ -236,6 +241,11 @@
         if (!state.frames.length) return { ok: false, error: 'no take in memory (record first)' };
         const films = loadFilms();
         const film = currentTakeAsFilm(name);
+        if (!name) {
+            // el nombre automático tiene precisión de segundo: no pisar la toma grabada hace un segundo
+            const base = film.name;
+            for (let n = 2; films[film.name]; n++) film.name = base + '-' + n;
+        }
         films[film.name] = film;
         state.films = films;
         const r = persistFilms();
@@ -266,16 +276,23 @@
 
     function importFilm(name, data) {
         if (!data || typeof data !== 'object') return { ok: false, error: 'invalid data' };
-        if (!Array.isArray(data.actors) || !data.actors.length) {
+        if (!Array.isArray(data.actors) || !data.actors.length ||
+            !data.actors.every(a => Array.isArray(a?.frames))) {
             return { ok: false, error: '.mffilm.json format not recognized (no actors)' };
         }
         const films = loadFilms();
         const finalName = name || data.name || ('imported-' + Date.now());
+        // la duración es el último tick grabado, no el número de keyframes (una toma quieta tiene 10 frames y 600 ticks)
+        let lastTick = 0;
+        for (const a of data.actors) {
+            const fr = a.frames;
+            if (fr.length) lastTick = Math.max(lastTick, +fr[fr.length - 1].t || 0);
+        }
         const film = {
             ...data,
             name: finalName,
             version: data.version || 1,
-            durationTicks: data.durationTicks || data.actors[0]?.frames?.length || 0
+            durationTicks: data.durationTicks || lastTick
         };
         films[finalName] = film;
         state.films = films;
@@ -382,7 +399,9 @@
         const game = getGame();
         const scene = game?.gameScene?.scene;
         if (!scene) return null;
-        const first = actor.frames[0];
+        const first = actor.frames?.[0];
+        // film corrupto o sin frames: mejor sin actor que un TypeError dentro del rAF dejando el playback colgado
+        if (!first?.p) return null;
         despawnOne(actor.id);
 
         const clone = clonePlayerMesh();
@@ -412,6 +431,11 @@
 
     function ensureActor(film, actor) {
         let rec = state.actors.get(actor.id);
+        // cambio de mundo/escena: el clon quedó huérfano, respawnear en la escena actual
+        if (rec && rec.isClone && rec.root && !rec.root.parent) {
+            despawnOne(actor.id);
+            rec = null;
+        }
         if (!rec) rec = spawnActor(actor);
         if (!rec) return null;
         if (!rec.isClone) {
@@ -475,6 +499,8 @@
         if (!state.playing || state.paused) return;
         const film = state.playFilm;
         if (!film) { stopPlayback(); return; }
+        // sin mundo no hay playback zombie moviendo mallas huérfanas
+        if (!getGame()) { stopPlayback(); despawnActors(); return; }
 
         const tick = state.playTickBase + (performance.now() - state.playStart) / TICK_MS;
 
@@ -523,6 +549,7 @@
             ? films[name] || null
             : (state.frames.length ? currentTakeAsFilm(null) : null);
         if (!film) return { ok: false, error: 'take not found (record one or specify a name from /film list)' };
+        if (!Array.isArray(film.actors) || !film.actors.length) return { ok: false, error: 'film is corrupt (no actors)' };
 
         let r = range || state.playRange;
         if (r && typeof r === 'object') {
@@ -561,7 +588,8 @@
         const items = [];
         for (const c of clips) {
             const film = films[c.filmName];
-            if (!film) continue;
+            // un clip cuyo film ya no existe se salta; uno corrupto también, no a matar el loop de rAF
+            if (!film || !Array.isArray(film.actors)) continue;
             items.push({
                 film,
                 start: Math.max(0, c.start),
@@ -600,6 +628,7 @@
         if (!state.playing || state.paused || state.playMode !== 'sequence') return;
         const items = state.playSeq;
         if (!items?.length) { stopPlayback(); return; }
+        if (!getGame()) { stopPlayback(); despawnActors(); return; }
 
         let tick = state.playTickBase + (performance.now() - state.playStart) / TICK_MS;
         const total = seqTotalTicks(items);
@@ -700,7 +729,8 @@
                 recording: state.recording,
                 playing: state.playing,
                 paused: state.paused,
-                tick: state.playing ? Math.floor(state.playTickBase + (performance.now() - state.playStart) / TICK_MS) : null,
+                // en pausa el reloj está congelado: playStart es viejo, sumarlo avanzaría el tick sin reproducir
+                tick: state.playing ? Math.floor(state.playTickBase + (state.paused ? 0 : (performance.now() - state.playStart) / TICK_MS)) : null,
                 frames: state.frames.length,
                 actors: state.actors.size
             };
