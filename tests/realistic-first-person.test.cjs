@@ -676,14 +676,14 @@ test('yaw alignment and eye clearance are visual-only and never accumulate over 
     assert.deepEqual(f.seenBodyQuaternion(), body);
     assert.deepEqual(f.mesh.body.quaternion, f.mesh.neck.quaternion);
     assert.ok(Math.abs(f.mesh.position.y + 0.04125) < 1e-9);
-    assert.equal(f.mesh.position.z, 0.13);
+    assert.equal(f.mesh.position.z, 0.21);
     assert.equal(f.mesh.skinnedBody.geometry, filtered);
     assert.deepEqual(f.camera.position, eyes);
     assert.deepEqual(f.player.pos, player);
   }
   f.player.yaw = Math.PI / 2;
   f.mesh.render();
-  assert.ok(Math.abs(f.mesh.position.x - 0.13) < 1e-9);
+  assert.ok(Math.abs(f.mesh.position.x - 0.21) < 1e-9);
   assert.ok(Math.abs(f.mesh.position.z) < 1e-9);
   f.api.configure({ enabled: false });
   assert.equal(f.mesh.position.x, root.x);
@@ -698,7 +698,7 @@ test('model clearance respects crouch, custom scale, mounts, gliding and emotes'
   f.mesh.skeleton.scale = vector(0.95, 0.95, 0.95);
   f.mesh.neck.localToWorld = point => Object.assign(point, { y: point.y + 0.4 });
   f.api.configure({ enabled: true });
-  assert.ok(Math.abs(f.mesh.position.z - 0.013) < 1e-9);
+  assert.ok(Math.abs(f.mesh.position.z - 0.021) < 1e-9);
   assert.equal(f.mesh.position.y, 0, 'a crouched/shorter head does not lift the body to the camera');
   f.mesh.neck.localToWorld = point => Object.assign(point, { y: point.y + 8 });
   f.mesh.render();
@@ -712,6 +712,31 @@ test('model clearance respects crouch, custom scale, mounts, gliding and emotes'
     assert.equal(f.mesh.position.y, 0);
     assert.equal(f.mesh.position.z, 0);
     assert.equal(f.api.getState().bodyOffset, null);
+  }
+});
+
+test('extra neck clearance stays behind the view for every yaw without changing camera pitch or player position', () => {
+  for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    const f = fixture();
+    f.player.yaw = yaw;
+    const eyes = { ...f.camera.position }, player = { ...f.player.pos }, orientation = { ...f.camera.quaternion };
+    f.api.configure({ enabled: true });
+    for (const pitch of [-1.3, 0, 1.3]) {
+      f.player.pitch = pitch;
+      f.mesh.render();
+      const offset = f.api.getState().bodyOffset;
+      assert.ok(Math.abs(offset.x * Math.sin(yaw) + offset.z * Math.cos(yaw) - 0.21) < 1e-9);
+      assert.ok(Math.abs(offset.x * Math.cos(yaw) - offset.z * Math.sin(yaw)) < 1e-9);
+      assert.deepEqual(f.camera.position, eyes);
+      assert.deepEqual(f.camera.quaternion, orientation);
+      assert.deepEqual(f.player.pos, player);
+      assert.equal(f.mesh.leftShoulder.visible, true);
+      assert.equal(f.mesh.rightShoulder.visible, true);
+    }
+    f.api.configure({ enabled: false });
+    assert.equal(f.mesh.position.x, 0);
+    assert.equal(f.mesh.position.y, 0);
+    assert.equal(f.mesh.position.z, 0);
   }
 });
 

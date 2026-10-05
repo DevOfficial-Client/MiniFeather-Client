@@ -390,7 +390,7 @@
       camera.getWorldPosition(eye);
       if (Number.isFinite(eye.y - anchor.y)) dy = Math.max(-0.08 * scale, Math.min(0, eye.y - anchor.y));
     }
-    const dx = Math.sin(yaw) * 0.13 * scale, dz = Math.cos(yaw) * 0.13 * scale;
+    const dx = Math.sin(yaw) * 0.21 * scale, dz = Math.cos(yaw) * 0.21 * scale;
     let local = { x: position.x + dx, y: position.y + dy, z: position.z + dz };
     if (position.clone && mesh.getWorldPosition && mesh.parent?.worldToLocal) {
       local = mesh.getWorldPosition(position.clone());
