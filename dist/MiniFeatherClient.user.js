@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005220449
+// @version      4.19.0.20261005221747
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : da30f166513ba671f51c87b07f56096034d0c35d
- * builtAt : 2026-10-05T22:05:09.113Z
+ * commit  : 58a161780ca7540175ad7feecd88f4483f578ee7
+ * builtAt : 2026-10-05T22:18:12.995Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"da30f166513ba671f51c87b07f56096034d0c35d","builtAt":"2026-10-05T22:05:09.113Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"58a161780ca7540175ad7feecd88f4483f578ee7","builtAt":"2026-10-05T22:18:12.995Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19538,22 +19538,25 @@ const state = {
       #react.${EXPANDED_CLASS} #${HUB_ID} .mf-hub-aside{display:none}
       #react.${ROOT_CLASS} > img{filter:blur(9px) brightness(.58) saturate(.9)!important;transform:scale(1.07)!important}
       #react.${ROOT_CLASS} > canvas{opacity:.4!important;filter:blur(2px) brightness(.8)!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}{position:fixed!important;right:20px!important;top:20px!important;width:320px!important;height:auto!important;max-height:calc(100vh - 44px);overflow:hidden auto;scrollbar-width:none}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}{position:fixed!important;right:20px!important;top:20px!important;bottom:0!important;width:320px!important;height:auto!important;max-height:none!important;overflow:visible!important;pointer-events:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}::-webkit-scrollbar{display:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:not(:first-child){display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>*:not(:first-child){display:none!important}
+      /* el chip va estilo perfil movil: la caja (borde+fondo) es SOLO de los datos;
+         el personaje queda suelto fuera del cubo, parado con los pies en el piso de la pantalla.
+         backdrop-filter fuera de la tarjeta: un filtro en un ancestro convierte fixed en local */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;pointer-events:auto}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipcard{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;padding:0!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipinfo{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px);padding:12px!important;align-self:stretch!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;left:50%!important;bottom:6px!important;transform:translateX(-50%)!important;width:150px!important;height:245px!important;flex:none!important}
       /* el chip de perfil va vertical como el perfil movil: datos arriba y el personaje
-         grande parado abajo. el sitio anida la fila a dos profundidades segun el render:
-         cubrimos ambas (la regla corta queda como fallback, en display:block es inerte).
-         buffer real del canvas 99x168 con la figura en y=32..164: escala 1.15 asienta los pies */
+         suelto abajo. el sitio anida la fila a dos profundidades segun el render: cubrimos
+         ambas (la regla corta queda como fallback, en display:block es inerte). la caja de
+         datos y el avatar suelto viajan por clases (.mf-hub-chipinfo/.mf-hub-chipavatar)
+         que el sync pinta segun donde esten HOY, porque el nesting cambia bajo tus pies */
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div,
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div{flex-direction:column!important;align-items:center!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div:last-child,
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div>div:last-child{order:-1!important;align-self:stretch!important;flex:none!important;min-width:0!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child div:has(> canvas),
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child div:has(> div > canvas){width:150px!important;height:245px!important;flex:none!important;align-self:center!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child canvas{transform:translateX(12px) translateY(2px) scale(1.15)!important;transform-origin:top left!important}
-      #react.${ROOT_CLASS} .${RIGHT_CLASS}>*:first-child{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px)}
       #react.${ROOT_CLASS}.${EXPANDED_CLASS} .${RIGHT_CLASS}>*{background:rgba(10,12,16,.55)!important;backdrop-filter:blur(6px);border-radius:10px!important}
 
       #${HUB_ID}{position:fixed;inset:0;z-index:6;pointer-events:none;font-family:inherit;color:#fff}
@@ -19624,7 +19627,7 @@ const state = {
       #${HUB_ID} .mf-hub-pickrow img{width:44px;height:26px;object-fit:cover;border-radius:5px;border:1px solid rgba(0,0,0,.7);flex:none}
       #${HUB_ID} .mf-hub-pickrow span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       #${HUB_ID} .mf-hub-pickrow .mf-hub-star{position:static;opacity:1;width:24px;height:24px}
-      #${HUB_ID} .mf-hub-aside{position:absolute;right:20px;bottom:18px;display:flex;flex-direction:column;gap:8px;width:320px;pointer-events:auto}
+      #${HUB_ID} .mf-hub-aside{position:absolute;right:20px;top:260px;bottom:auto;display:flex;flex-direction:column;gap:8px;width:320px;pointer-events:auto}
       #${HUB_ID} .mf-hub-friendspill{display:flex;align-items:center;gap:10px;border:2px solid rgba(0,0,0,.75);border-radius:10px;background:rgba(10,12,16,.62);backdrop-filter:blur(6px);color:#fff;padding:10px 13px;cursor:pointer;font-size:12.5px;font-weight:600;text-align:left}
       #${HUB_ID} .mf-hub-friendspill:hover{background:rgba(46,50,60,.72)}
       #${HUB_ID} .mf-hub-dot{width:8px;height:8px;border-radius:50%;background:#43d477;flex:none;box-shadow:0 0 7px rgba(67,212,119,.8)}
@@ -19759,6 +19762,31 @@ const state = {
         if (!state.nav.has(name)) state.nav.set(name, button);
         break;
       }
+    }
+  }
+
+  // chip de perfil: marcar donde estan HOY el bloque de datos y la ventana del avatar.
+  // el sitio re-anida la tarjeta entre renders, asi que nada de selectores de profundidad:
+  // se camina desde el canvas hacia arriba hasta hallar un hermano que parezca datos.
+  function markChip(right) {
+    const canvas = right.querySelector('canvas');
+    if (!canvas) return;
+    let node = canvas.parentElement;
+    while (node && node !== right) {
+      const parent = node.parentElement;
+      if (!parent || parent === right) return;
+      const info = [...parent.children].find(el =>
+        el !== node && !el.contains(canvas) && el.querySelector('button,p'));
+      if (info) {
+        // sin backdrop/filter en la tarjeta: un filtro en un ancestro vuelve "local" el
+        // absolute del avatar y lo ancla a la tarjeta en vez de al piso del panel
+        const card = parent.parentElement;
+        if (card && card !== right) mark(card, 'mf-hub-chipcard');
+        mark(node, 'mf-hub-chipavatar');
+        mark(info, 'mf-hub-chipinfo');
+        return;
+      }
+      node = parent;
     }
   }
 
@@ -20140,6 +20168,7 @@ const state = {
     mark(layout.center, CENTER_CLASS);
     mark(layout.right, RIGHT_CLASS);
     findNativeButtons(layout.nav);
+    markChip(layout.right);
     state.sections = findSections(layout.center);
     state.games = collectGames(layout.center);
     state.recentCard = state.sections[0]?.cards.find(card => card.tagName === 'BUTTON')
