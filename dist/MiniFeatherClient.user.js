@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005192448
+// @version      4.19.0.20261005193550
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 476c7bcf31d624b642131bb0c86c9167fb50cf93
- * builtAt : 2026-10-05T19:25:15.813Z
+ * commit  : 5cbd7a1d100b08a2d990129e4fa10a8353b4a2d3
+ * builtAt : 2026-10-05T19:41:26.287Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"476c7bcf31d624b642131bb0c86c9167fb50cf93","builtAt":"2026-10-05T19:25:15.813Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"5cbd7a1d100b08a2d990129e4fa10a8353b4a2d3","builtAt":"2026-10-05T19:41:26.287Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -73617,6 +73617,8 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         state.status = `${models.size} mobs listos (${name})`;
         console.log(TAG, state.status);
         if (save) persistPack(files, name);
+        // pack presente = opt-in explícito: encender sin esperar al panel
+        setEnabled(true);
     }
 
     function clearPack() {
@@ -73625,6 +73627,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         state.packName = '';
         state.linesCache.clear();
         state.status = 'sin pack';
+        setEnabled(false);
         try { indexedDB.deleteDatabase(IDB_NAME); } catch {}
     }
 
