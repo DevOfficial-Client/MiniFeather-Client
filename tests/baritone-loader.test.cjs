@@ -44,7 +44,8 @@ for (const version of [2, 3, 4, 5, 6, 7]) test(`old remote cache cannot restore 
   sandbox.window = sandbox;
   const context = vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/Core/MirrorRunner.js'), 'utf8'), context);
-  assert.deepEqual(executed, [...(version >= 3 ? [commands] : []), 'unrelated.js', ...dependencies, main]);
+  // lista remota ordena, no borra: las dependencias bundled re-ordenan al frente
+  assert.deepEqual(executed, [...dependencies, ...(version >= 3 ? [commands] : []), 'unrelated.js', main]);
   assert.equal(context.loadedNavigation, version);
   if (version >= 3) {
     assert.equal(context.loadedAdapter, Math.min(version, 6));
