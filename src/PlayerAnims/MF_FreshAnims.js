@@ -35,17 +35,37 @@
     const IDB_NAME = 'minifeather-freshanims';
     const NEAREST = 1003; // THREE.NearestFilter, constante estable
 
-    // --- pivots vanilla en unidades MC (jem "translate" = offset desde aquí) ------
-    const VANILLA_PIVOTS = {
-        head: [0, 24, 0], headwear: [0, 24, 0], body: [0, 24, 0],
-        left_arm: [-5, 22, 0], right_arm: [5, 22, 0],
-        left_leg: [-1.9, 12, 0], right_leg: [1.9, 12, 0],
-        leg0: [-2, 12, -5], leg1: [2, 12, -5], leg2: [-2, 12, 5], leg3: [2, 12, 5]
+    // --- convenciones CEM (según el EMF de Traben, código abierto) -----------------
+    // El espacio de modelos MC es y-ABAJO (origen en la coronilla, pies en y=24).
+    // pivot del part custom = translate (negado por invertAxis), RELATIVO al pivot
+    // del part vanilla que reemplaza — y la rotación base (body del cuadrúpedo π/2)
+    // la aporta el part vanilla contenedor. Nosotros no hardcodeamos tablas: medimos
+    // pivots y rotaciones base del mesh nativo en el swap.
+    const NATIVE_PART_PIVOT = {
+        head: 'headPivot', headwear: 'headPivot', body: 'body',
+        left_arm: 'leftShoulder', right_arm: 'rightShoulder',
+        left_leg: 'leftHip', right_leg: 'rightHip',
+        // cuadrúpedos: hombros = patas delanteras, caderas = traseras (renderer LP);
+        // numeración vanilla: leg1/2 delanteras (izq/der), leg3/4 traseras
+        leg1: 'leftShoulder', leg2: 'rightShoulder', leg3: 'leftHip', leg4: 'rightHip',
+        leg0: 'leftShoulder', leg5: 'rightHip', leg6: 'rightShoulder', leg7: 'leftHip'
     };
-    function pivotFor(model) {
-        const base = VANILLA_PIVOTS[model.part] || [0, 0, 0];
+
+    function invertAxisFlags(model) {
+        const inv = String(model.invertAxis || '');
+        return { x: inv.includes('x'), y: inv.includes('y'), z: inv.includes('z') };
+    }
+    function negTranslate(model) {
+        const inv = invertAxisFlags(model);
         const tr = Array.isArray(model.translate) ? model.translate : [0, 0, 0];
-        return [base[0] + tr[0], base[1] + tr[1], base[2] + tr[2]];
+        return [inv.x ? -tr[0] : tr[0], inv.y ? -tr[1] : tr[1], inv.z ? -tr[2] : tr[2]];
+    }
+    function invertBoxCoords(box, inv) {
+        let [x, y, z, w, h, d] = box.coordinates.map(Number);
+        if (inv.x) x = -x - w;
+        if (inv.y) y = -y - h;
+        if (inv.z) z = -z - d;
+        return [x, y, z, w, h, d];
     }
 
     // --- zip reader mínimo (stored + deflate-raw vía DecompressionStream) ----------
@@ -166,17 +186,15 @@
         return faceRectFromOffset(off[0], off[1], Math.abs(w), Math.abs(h), Math.abs(d));
     }
 
-    function buildPartGeometry(boxes, pivot, texW, texH, G) {
+    function buildPartGeometry(boxes, texW, texH, G) {
         const pos = [], uv = [], idx = [];
         let vi = 0;
-        const normals = { north: [0, 0, -1], south: [0, 0, 1], west: [-1, 0, 0], east: [1, 0, 0], up: [0, 1, 0], down: [0, -1, 0] };
         for (const box of boxes) {
-            const [x, y, z, w, h, d] = box.coordinates.map(Number);
+            const [x, y, z, w, h, d] = box.__mfCoords;
             const inf = Number(box.sizeAdd || 0);
             const x0 = x - inf, y0 = y - inf, z0 = z - inf;
             const x1 = x + w + inf, y1 = y + h + inf, z1 = z + d + inf;
             const rects = boxRects(box);
-            // esquinas en orden (tl, tr, br, bl) visto de frente por cada cara
             const faces = [
                 { n: 'north', c: [[x1, y1, z0], [x0, y1, z0], [x0, y0, z0], [x1, y0, z0]] },
                 { n: 'south', c: [[x0, y1, z1], [x1, y1, z1], [x1, y0, z1], [x0, y0, z1]] },
@@ -190,8 +208,9 @@
                 const uvc = [[u1, v1], [u2, v1], [u2, v2], [u1, v2]];
                 for (let i = 0; i < 4; i++) {
                     const c = f.c[i];
-                    // MC→THREE: x tal cual, y tal cual, z invertido
-                    pos.push((c[0] - pivot[0]) / 16, (c[1] - pivot[1]) / 16, -(c[2] - pivot[2]) / 16);
+                    // coordenadas relativas al ancla del nodo, ya en espacio MC
+                    // y-abajo → three: x tal cual, y y z invertidos
+                    pos.push((c[0] - box.__mfAnchor[0]) / 16, -(c[1] - box.__mfAnchor[1]) / 16, -(c[2] - box.__mfAnchor[2]) / 16);
                     uv.push(uvc[i][0] / texW, uvc[i][1] / texH);
                 }
                 idx.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
@@ -222,30 +241,70 @@
         return { BufferGeometry: withGeo.geometry.constructor, BufferAttribute: attr.constructor, Mesh: MeshCtor, Group: GroupCtor };
     }
 
-    function buildModelRig(entry, material, G, MeshCtor, GroupCtor) {
+    // mide los pivots/rotaciones base del rig NATIVO (la tabla vanilla viva del mob)
+    function measureNativePivots(mesh) {
+        const map = new Map();
+        for (const [cem, nativeName] of Object.entries(NATIVE_PART_PIVOT)) {
+            const p = mesh[nativeName];
+            if (!p) continue;
+            if (!map.has(cem)) {
+                map.set(cem, {
+                    pos: { x: p.position.x, y: p.position.y, z: p.position.z },
+                    rot: { x: p.rotation.x, y: p.rotation.y, z: p.rotation.z },
+                    node: p
+                });
+            }
+        }
+        return map;
+    }
+
+    function buildModelRig(entry, material, G, MeshCtor, GroupCtor, native) {
         const texW = entry.jem.textureSize?.[0] || 64;
         const texH = entry.jem.textureSize?.[1] || 64;
         const parts = new Map();
         const root = new GroupCtor();
         const nodesByPath = new Map();
 
+        // ancla del nodo en espacio MC (y-abajo): el padre + translate negado.
+        // partes top-level con counterpart nativo: anclan al pivot nativo real
         const ensureNode = (path, model) => {
             let node = nodesByPath.get(path);
             if (node) return node;
             const parentPath = path.slice(0, path.lastIndexOf('/'));
             const parent = parentPath ? ensureNode(parentPath, null) : root;
             node = new GroupCtor();
-            // los boxes son espacio absoluto MC: un submodelo anónimo hereda el pivot
-            // del padre; una parte nombrada usa vanilla + su translate
-            const parentPivot = parentPath ? nodesByPath.get(parentPath).__mfPivot : [0, 0, 0];
-            const pivot = model ? pivotFor(model) : parentPivot;
-            node.position.set(
-                (pivot[0] - parentPivot[0]) / 16,
-                (pivot[1] - parentPivot[1]) / 16,
-                -(pivot[2] - parentPivot[2]) / 16
-            );
-            node.__mfPivot = pivot;
-            node.__mfBase = { x: node.position.x, y: node.position.y, z: node.position.z };
+            const t = model ? negTranslate(model) : [0, 0, 0];
+            const parentAnchor = parentPath ? nodesByPath.get(parentPath).__mfAnchorMc : [0, 0, 0];
+            let anchorMc, baseRot = null, basePos;
+            if (model && model.part && native.has(model.part)) {
+                // parte top-level que reemplaza un part vanilla: ancla = pivot nativo
+                const np = native.get(model.part);
+                anchorMc = [np.pos.x * 16 + t[0], -np.pos.y * 16 + t[1], -np.pos.z * 16 + t[2]];
+                baseRot = { ...np.rot };
+                basePos = { x: np.pos.x + t[0] / 16, y: np.pos.y - t[1] / 16, z: np.pos.z - t[2] / 16 };
+            } else {
+                // submodelo o parte custom: cuelga del ancla del padre (y-abajo:
+                // +y mc baja, entonces en three y restará)
+                anchorMc = [parentAnchor[0] + t[0], parentAnchor[1] + t[1], parentAnchor[2] + t[2]];
+                basePos = {
+                    x: (anchorMc[0] - parentAnchor[0]) / 16,
+                    y: -(anchorMc[1] - parentAnchor[1]) / 16,
+                    z: -(anchorMc[2] - parentAnchor[2]) / 16
+                };
+                if (model) {
+                    const inv = invertAxisFlags(model);
+                    const rot = Array.isArray(model.rotate) ? model.rotate : [0, 0, 0];
+                    baseRot = {
+                        x: (inv.x ? -rot[0] : rot[0]) * Math.PI / 180,
+                        y: (inv.y ? -rot[1] : rot[1]) * Math.PI / 180,
+                        z: (inv.z ? -rot[2] : rot[2]) * Math.PI / 180
+                    };
+                }
+            }
+            node.position.set(basePos.x, basePos.y, basePos.z);
+            node.__mfAnchorMc = anchorMc;
+            node.__mfBasePos = { ...basePos };
+            node.__mfBaseRot = baseRot;
             parent.add(node);
             nodesByPath.set(path, node);
             return node;
@@ -254,14 +313,17 @@
         const walk = (model, path) => {
             if (!model || typeof model !== 'object') return;
             const here = path + '/' + (model.part || model.id || 'm');
-            const node = ensureNode(here, model.part ? model : null);
+            const node = ensureNode(here, model);
             if (model.part) {
                 if (!parts.has(model.part)) parts.set(model.part, node);
                 node.__mfPart = model.part;
             }
-            const boxes = Array.isArray(model.boxes) ? model.boxes.filter(b => b && Array.isArray(b.coordinates)) : [];
+            const inv = invertAxisFlags(model);
+            const boxes = (Array.isArray(model.boxes) ? model.boxes : [])
+                .filter(b => b && Array.isArray(b.coordinates))
+                .map(b => ({ ...b, __mfCoords: invertBoxCoords(b, inv), __mfAnchor: node.__mfAnchorMc }));
             if (boxes.length) {
-                const mesh = new MeshCtor(buildPartGeometry(boxes, node.__mfPivot, texW, texH, G), material);
+                const mesh = new MeshCtor(buildPartGeometry(boxes, texW, texH, G), material);
                 // nacer NO-skinned aunque el donante lo fuera: sin skeleton no hay
                 // update() que pedirle al renderer
                 if ('isSkinnedMesh' in mesh) mesh.isSkinnedMesh = false;
@@ -395,10 +457,8 @@
                     // las capas (headwear etc.) usan alpha del png base
                     if ('alphaTest' in material) material.alphaTest = 0.1;
                     if ('transparent' in material) material.transparent = false;
-                    const rig = buildModelRig(entry, material, G, G.Mesh, G.Group);
+                    const rig = buildModelRig(entry, material, G, G.Mesh, G.Group, measureNativePivots(mesh));
                     if (!rig.parts.size) return;
-                    // capturar base de posición para writes de translate
-                    rig.parts.forEach(node => { node.__mfBase = { x: node.position.x, y: node.position.y, z: node.position.z }; });
                     const native = meshHeight(mesh) || (ent.height || 1.8) / 16;
                     const built = meshHeight(rig.root);
                     if (built > 0) {
@@ -413,7 +473,7 @@
                     let lines = state.linesCache.get(type);
                     if (!lines) { lines = parseLines(entry); state.linesCache.set(type, lines); }
                     state.applied.set(mesh, {
-                        root: rig.root, resolve: rig.resolve, native: mesh, ent, type, lines,
+                        root: rig.root, resolve: rig.resolve, parts: rig.parts, native: mesh, ent, type, lines,
                         ctx: new RTc.FrameContext(ent.id ?? Math.random())
                     });
                 } catch (e) {
@@ -492,28 +552,38 @@
             if (!ctx) { ctx = new RTc.FrameContext(eid); state.ctxs.set(eid, ctx); }
             writes.length = 0;
             RTc.evaluate(rec.lines, ctx, st, writes);
-            // mirada: copiar la rotación de cabeza nativa antes de que FA pise si quiere
-            const nativeHead = mesh.headPivot;
-            const myHead = rec.resolve('head');
-            if (nativeHead && myHead) {
-                myHead.rotation.x = -nativeHead.rotation.x;
-                myHead.rotation.y = nativeHead.rotation.y;
-            }
+            // reset a la pose base del part vanilla (body del cuadrúpedo trae su π/2
+            // capturada del mesh nativo) — los writes de FA van ENCIMA, como en EMF,
+            // donde el part custom anida dentro del vanilla
+            rec.parts.forEach((node, cem) => {
+                const base = node.__mfBaseRot;
+                if (cem === 'head' && mesh.headPivot) {
+                    // la mirada es una base 100% dinámica (el juego la escribe cada
+                    // frame en el headPivot nativo) — no se suma al base medido
+                    node.rotation.x = -mesh.headPivot.rotation.x;
+                    node.rotation.y = mesh.headPivot.rotation.y;
+                    node.rotation.z = 0;
+                } else {
+                    node.rotation.x = base?.x || 0;
+                    node.rotation.y = base?.y || 0;
+                    node.rotation.z = base?.z || 0;
+                }
+            });
             for (const w of writes) {
                 const node = rec.resolve(w.part);
                 if (!node) continue;
                 const c = w.channel;
                 if (c[0] === 'r') {
                     if (w.part === 'head' && c === 'ry') continue; // la mirada la pone el juego
-                    node.rotation[c[1]] = w.value;
+                    node.rotation[c[1]] += w.value;
                 } else if (c[0] === 's') {
                     node.scale[c[1]] = Math.max(0.01, w.value);
                 } else if (c[0] === 't') {
-                    const base = node.__mfBase || node.position;
-                    const delta = (w.value - 0) / 16;
-                    if (c === 'tx') node.position.x = base.x - delta;
+                    const base = node.__mfBasePos || node.position;
+                    const delta = w.value / 16;
+                    if (c === 'tx') node.position.x = base.x + delta;
                     else if (c === 'ty') node.position.y = base.y - delta;
-                    else if (c === 'tz') node.position.z = base.z + delta;
+                    else if (c === 'tz') node.position.z = base.z - delta;
                 }
             }
             state.tickStats.frames++;

@@ -196,10 +196,11 @@ test('swap completo: rig montado, nativo escondido, writes CEM aplicados', async
     const status = s.sandbox.MF_FreshAnims.getStatus();
     assert.equal(status.applied, 1);
 
-    // head.rx = var.test - 1 = 2 - 1 = 1
+    // head.rx = var.test - 1 = 1, SUMADO a la mirada dinámica (−headPivot.x = −0.1):
+    // en EMF el part custom anida dentro del vanilla, así que el write va encima
     const head = s.findPart('head');
     assert.ok(head, 'nodo head no encontrado');
-    assert.equal(head.rotation.x, 1, 'la línea del jpm no llegó al nodo');
+    assert.equal(head.rotation.x, 0.9, 'la línea del jpm no llegó al nodo');
     // head.ry se salta: la mirada la pone el juego (copia del headPivot nativo)
     assert.equal(head.rotation.y, 0.3, 'el write de head.ry pisó la mirada nativa');
     // right_arm.ry directo
