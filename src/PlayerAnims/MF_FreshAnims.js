@@ -550,6 +550,8 @@
         state.status = `${models.size} mobs listos (${name})`;
         console.log(TAG, state.status);
         if (save) persistPack(files, name);
+        // pack presente = opt-in explícito: encender sin esperar al panel
+        setEnabled(true);
     }
 
     function clearPack() {
@@ -558,6 +560,7 @@
         state.packName = '';
         state.linesCache.clear();
         state.status = 'sin pack';
+        setEnabled(false);
         try { indexedDB.deleteDatabase(IDB_NAME); } catch {}
     }
 
