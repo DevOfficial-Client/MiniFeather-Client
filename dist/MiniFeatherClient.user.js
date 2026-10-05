@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005214016
+// @version      4.19.0.20261005215413
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 3db923f35b035ba54773afd8adbe6222187df33f
- * builtAt : 2026-10-05T21:40:34.033Z
+ * commit  : 4e216d7a32c5d7705941f03204c7e98c949fe3b1
+ * builtAt : 2026-10-05T21:54:32.260Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"3db923f35b035ba54773afd8adbe6222187df33f","builtAt":"2026-10-05T21:40:34.033Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"4e216d7a32c5d7705941f03204c7e98c949fe3b1","builtAt":"2026-10-05T21:54:32.260Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19542,11 +19542,11 @@ const state = {
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}::-webkit-scrollbar{display:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:not(:first-child){display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>*:not(:first-child){display:none!important}
-      /* el avatar nativo es un canvas de skin con ventana fija de 129px: en el chip colapsado
-         se come la tarjeta. achicar la ventana y escalar el canvas (mismo crop, menos espacio) */
+      /* el avatar nativo es un canvas de skin con ventana fija de 129px que recorta la cabeza:
+         el render ya trae el cuerpo entero (168x285), entra escalado a 76x129 — personaje completo de pie */
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child div:has(> canvas),
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child div:has(> div > canvas){width:76px!important;height:76px!important;flex:none!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child canvas{transform:scale(.589)!important;transform-origin:top left!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child div:has(> div > canvas){width:76px!important;height:129px!important;flex:none!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child canvas{transform:scale(.4526)!important;transform-origin:top left!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div:last-child{flex:1!important;min-width:0!important}
       #react.${ROOT_CLASS} .${RIGHT_CLASS}>*:first-child{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px)}
       #react.${ROOT_CLASS}.${EXPANDED_CLASS} .${RIGHT_CLASS}>*{background:rgba(10,12,16,.55)!important;backdrop-filter:blur(6px);border-radius:10px!important}
