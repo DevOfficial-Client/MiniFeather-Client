@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005223940
+// @version      4.19.0.20261005225720
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 4996efe6fe7748ad152b201a106e8c56090fb6e8
- * builtAt : 2026-10-05T22:39:56.280Z
+ * commit  : c8efeba74aa3b113a2c63629d362b892595c4c0f
+ * builtAt : 2026-10-05T22:57:39.637Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"4996efe6fe7748ad152b201a106e8c56090fb6e8","builtAt":"2026-10-05T22:39:56.280Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"c8efeba74aa3b113a2c63629d362b892595c4c0f","builtAt":"2026-10-05T22:57:39.638Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19828,13 +19828,30 @@ const state = {
   //  - se sube desde el canvas hasta un ancestro con un hermano "de datos" -> ese hermano
   //    es la caja de info y el camino completo hacia arriba se deja transparente
   //  - hermanos con datos = cajitas apiladas; relleno sin datos = fuera
+  // sin canvas (el render es asincrono y a veces no existe): la tira de perfil como cajita
+  function clearChipMarks() {
+    for (const entry of [...state.marks]) {
+      if (String(entry[1]).startsWith('mf-hub-chip')) {
+        entry[0].classList.remove(entry[1]);
+        state.marks.delete(entry);
+      }
+    }
+  }
+
+  function markChipStatic(right) {
+    const strip = right.firstElementChild;
+    if (strip) mark(strip.firstElementChild || strip, 'mf-hub-chipinfo');
+  }
+
   function markChip(right) {
+    // las marcas del sync anterior son veneno: la tarjeta se re-renderiza y cambian de sitio
+    clearChipMarks();
     let canvas = null, best = 0;
     for (const c of right.querySelectorAll('canvas')) {
       const area = c.offsetWidth * c.offsetHeight;
       if (area > best) { best = area; canvas = c; }
     }
-    if (!canvas || !best) return;
+    if (!canvas || !best) { markChipStatic(right); return; }
     let node = canvas.parentElement;
     let row = null, info = null;
     while (node && node.parentElement && node.parentElement !== right) {
@@ -19844,7 +19861,7 @@ const state = {
       if (data) { row = parent; info = data; break; }
       node = parent;
     }
-    if (!row) return;
+    if (!row) { markChipStatic(right); return; }
     mark(row, 'mf-hub-chiprow');
     mark(node, 'mf-hub-chipavatar');
     mark(info, 'mf-hub-chipinfo');
@@ -20169,15 +20186,6 @@ const state = {
   function buildAside() {
     const aside = el('div', 'mf-hub-aside');
     aside.setAttribute('data-mf-i18n-skip', 'true');
-    // el pill vive debajo de la caja de datos: su altura cambia con nivel/xp logueado,
-    // asi que un top fijo choca. se mide la caja real en cada render
-    try {
-      const infoBox = document.querySelector('.mf-hub-chipinfo');
-      if (infoBox) {
-        const top = infoBox.getBoundingClientRect().bottom;
-        if (top > 40) aside.style.top = Math.round(top + 12) + 'px';
-      }
-    } catch (_) {}
     const online = friendsOnlineCount(state.layoutRight);
     if (online) {
       const pill = el('button', 'mf-hub-friendspill');
@@ -20190,6 +20198,16 @@ const state = {
       aside.append(pill);
     }
     return aside;
+  }
+
+  // el pill vive debajo de la caja de datos, cuya altura cambia con nivel/xp logueado:
+  // medir al final de cada sync (en buildAside el layout todavia no asienta)
+  function positionAside() {
+    const aside = state.hub?.querySelector('.mf-hub-aside');
+    const infoBox = document.querySelector('.mf-hub-chipinfo');
+    if (!aside || !infoBox) return;
+    const top = infoBox.getBoundingClientRect().bottom;
+    if (top > 40) aside.style.top = Math.round(top + 12) + 'px';
   }
 
   function removeHub() {
@@ -20272,6 +20290,7 @@ const state = {
     }
     root.classList.toggle(ROOT_CLASS, true);
     root.classList.toggle(EXPANDED_CLASS, state.expanded);
+    positionAside();
   }
 
   function schedule() {
