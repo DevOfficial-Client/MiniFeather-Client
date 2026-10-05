@@ -210,10 +210,12 @@
         const withGeo = mesh.children?.find(c => c.geometry?.attributes?.position);
         const attr = withGeo?.geometry.getAttribute?.('position') || withGeo?.geometry.attributes?.position;
         if (!attr?.constructor) throw new Error('BufferAttribute no alcanzable');
-        const MeshCtor = mesh.children?.find(c => c.isMesh || (c.geometry && c.type === 'Mesh'))?.constructor;
+        // los mobs de miniblox son SkinnedMesh: un box creado con ese ctor nace
+        // pidiendo skeleton y el renderer revienta con undefined.update. si solo
+        // hay skinned a mano, el flag se apaga igual en cada box creado
+        const MeshCtor = (mesh.children?.find(c => (c.isMesh || c.type === 'Mesh') && !c.isSkinnedMesh)
+            || mesh.children?.find(c => c.isMesh || c.type === 'Mesh'))?.constructor;
         if (!MeshCtor) throw new Error('Mesh ctor no alcanzable');
-        // Group: NUNCA el constructor del mesh nativo (puede ser subclase del juego
-        // que exige argumentos); un pivot nombrado del renderer LP es Object3D plano
         const pivot = mesh.headPivot || mesh.skeleton || mesh.body || mesh.neck
             || mesh.children?.find(c => !c.geometry && !c.isMesh);
         const GroupCtor = pivot?.constructor || mesh.constructor;
@@ -260,6 +262,10 @@
             const boxes = Array.isArray(model.boxes) ? model.boxes.filter(b => b && Array.isArray(b.coordinates)) : [];
             if (boxes.length) {
                 const mesh = new MeshCtor(buildPartGeometry(boxes, node.__mfPivot, texW, texH, G), material);
+                // nacer NO-skinned aunque el donante lo fuera: sin skeleton no hay
+                // update() que pedirle al renderer
+                if ('isSkinnedMesh' in mesh) mesh.isSkinnedMesh = false;
+                if ('skeleton' in mesh) mesh.skeleton = null;
                 mesh.frustumCulled = false;
                 node.add(mesh);
             }

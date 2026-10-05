@@ -70,6 +70,10 @@ class FakeNode {
 class FakeMesh extends FakeNode {
     constructor(geo, mat) { super(); this.type = 'Mesh'; this.isMesh = true; this.geometry = geo; this.material = mat; }
 }
+// los mobs de miniblox son SkinnedMesh: el donante de ctors nace skinned
+class FakeSkinnedMesh extends FakeMesh {
+    constructor(geo, mat) { super(geo, mat); this.isSkinnedMesh = true; }
+}
 
 function makeWorld() {
     const ent = {
@@ -81,7 +85,7 @@ function makeWorld() {
     };
     const sampleGeo = new FakeGeo();
     sampleGeo.setAttribute('position', new FakeAttr(new Float32Array(72), 3));
-    const sample = new FakeMesh(sampleGeo, new FakeMat());
+    const sample = new FakeSkinnedMesh(sampleGeo, new FakeMat());
     const mesh = new FakeNode();
     mesh.type = 'Object3D';
     mesh.add(sample);
@@ -201,6 +205,13 @@ test('swap completo: rig montado, nativo escondido, writes CEM aplicados', async
     // right_arm.ry directo
     const arm = s.findPart('right_arm');
     assert.equal(arm.rotation.y, 0.25);
+    // NINGÚN box del RIG nace skinned: el renderer les pediría skeleton undefined
+    // y tumba el render entero con "Cannot read properties of undefined (reading 'update')"
+    const rig = s.world.mesh.children.find(c => c.__mfFreshRoot);
+    let skinned = 0, boxes = 0;
+    rig.traverse(c => { if (c.isMesh) { boxes++; if (c.isSkinnedMesh) skinned++; } });
+    assert.ok(boxes > 0, 'no se construyó ningún box');
+    assert.equal(skinned, 0, `${skinned}/${boxes} boxes nacieron skinned (crash del renderer)`);
 });
 
 test('muerte del mob: rig desmontado y nativo restaurado para el cadáver', async () => {
