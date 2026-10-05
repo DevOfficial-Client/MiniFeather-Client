@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005152319
+// @version      4.19.0.20261005154336
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 31da157110e39a8fffcfbe43c55e1721e17a7102
- * builtAt : 2026-10-05T15:23:42.480Z
+ * commit  : a8de42cbc5a82b5e0f3035261957ec615aa709e6
+ * builtAt : 2026-10-05T15:43:57.030Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"31da157110e39a8fffcfbe43c55e1721e17a7102","builtAt":"2026-10-05T15:23:42.480Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"a8de42cbc5a82b5e0f3035261957ec615aa709e6","builtAt":"2026-10-05T15:43:57.030Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -116555,6 +116555,31 @@ function normalize(entry) {
     return fallback;
   }
 
+  // ¿hay un mundo vivo con jugador? los flotantes del hud no pisan el menú;
+  // el escaneo de react va throttled porque preguntarle esto cada frame ya es abuso
+  let hudGameCache = null;
+  let hudGameScanAt = 0;
+
+  function inGameWorld() {
+    const local = globalThis.__MINIFEATHER_LOCAL_GAMES__;
+    if (local?.active && local.game?.player?.pos) return true;
+    if (window.miniblox?.player?.pos || window.game?.player?.pos) return true;
+    const now = performance.now();
+    if (now - hudGameScanAt < 1000) return !!hudGameCache?.player?.pos;
+    hudGameScanAt = now;
+    try {
+      const react = document.querySelector('#react');
+      if (react) {
+        for (const root of Object.values(react)) {
+          const game = root?.updateQueue?.baseState?.element?.props?.game;
+          if (game?.player?.pos) { hudGameCache = game; return true; }
+        }
+      }
+    } catch (_) {}
+    hudGameCache = null;
+    return false;
+  }
+
   function t(key, vars = {}) {
     const table = TRANSLATIONS[settings.language] || TRANSLATIONS.en;
     const fallback = TRANSLATIONS.en[key] || key;
@@ -117124,6 +117149,7 @@ function normalize(entry) {
       let frames = 0;
       let last = 0;
       let visible = !document.hidden;
+      let hudShown = null;
 
       function createBox() {
         if (box?.isConnected) return;
@@ -117153,7 +117179,12 @@ function normalize(entry) {
 
       function loop(now) {
         if (!controller) return;
-        if (visible) {
+        const inWorld = inGameWorld();
+        if (inWorld !== hudShown) {
+          hudShown = inWorld;
+          box.style.visibility = inWorld ? 'visible' : 'hidden';
+        }
+        if (visible && inWorld) {
           frames++;
           const elapsed = now - last;
           if (elapsed >= 1000) {
@@ -117172,6 +117203,8 @@ function normalize(entry) {
         enable() {
           createBox();
           box.style.display = 'block';
+          hudShown = inGameWorld();
+          box.style.visibility = hudShown ? 'visible' : 'hidden';
           controller = new AbortController();
           const signal = controller.signal;
           let dragging = false;
@@ -117240,6 +117273,7 @@ function normalize(entry) {
       let leftClicks = [];
       let rightClicks = [];
       let lastCpsHtml = '';
+      let hudShown = null;
 
       function createBox() {
         if (box?.isConnected) return;
@@ -117271,6 +117305,13 @@ function normalize(entry) {
       }
 
       function render() {
+        if (box) {
+          const inWorld = inGameWorld();
+          if (inWorld !== hudShown) {
+            hudShown = inWorld;
+            box.style.visibility = inWorld ? 'visible' : 'hidden';
+          }
+        }
         const now = performance.now();
         leftClicks = leftClicks.filter(time => now - time < 1000);
         rightClicks = rightClicks.filter(time => now - time < 1000);
@@ -117355,6 +117396,7 @@ function normalize(entry) {
       let measuring = false;
       let enabled = false;
       const samples = [];
+      let hudShown = null;
 
       function createBox() {
         if (box?.isConnected) return;
@@ -117395,6 +117437,11 @@ function normalize(entry) {
         const color = value === null ? '#94a3b8' : value <= 80 ? '#22c55e' : value <= 150 ? '#facc15' : '#ef4444';
         dashboardStats.ping = value;
         if (box) {
+          const inWorld = inGameWorld();
+          if (inWorld !== hudShown) {
+            hudShown = inWorld;
+            box.style.visibility = inWorld ? 'visible' : 'hidden';
+          }
           box.innerHTML = `<span style="color:#9ca3af;">${t('pingLabel')}</span> <span style="color:${color};">${value === null ? '--' : value}</span> <span style="color:#64748b;">ms</span>`;
         }
       }
@@ -117583,6 +117630,7 @@ function normalize(entry) {
       let interval = 0;
       const buttons = {};
       const clickCounters = { LMB: [], RMB: [] };
+      let hudShown = null;
 
       function ensureStyle() {
         if (document.getElementById('minifeather-keystroke-css')) return;
@@ -117704,6 +117752,8 @@ function normalize(entry) {
         enable() {
           createContainer();
           container.style.display = 'flex';
+          hudShown = inGameWorld();
+          container.style.visibility = hudShown ? 'visible' : 'hidden';
           controller = new AbortController();
           const signal = controller.signal;
           let dragging = false;
@@ -117761,6 +117811,11 @@ function normalize(entry) {
           }, { signal });
 
           interval = window.setInterval(() => {
+            const inWorld = inGameWorld();
+            if (inWorld !== hudShown) {
+              hudShown = inWorld;
+              container.style.visibility = inWorld ? 'visible' : 'hidden';
+            }
             updateCps('LMB');
             updateCps('RMB');
           }, 200);
