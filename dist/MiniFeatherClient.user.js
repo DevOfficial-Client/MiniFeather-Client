@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006224851
+// @version      4.19.0.20261006230120
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 145ce57d89f77210d4621e2b08ae4c96dd707135
- * builtAt : 2026-10-06T22:49:35.904Z
+ * commit  : 7e8051888b63471cfd637c6d7e009165c08aec7c
+ * builtAt : 2026-10-06T23:01:35.669Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"145ce57d89f77210d4621e2b08ae4c96dd707135","builtAt":"2026-10-06T22:49:35.904Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"7e8051888b63471cfd637c6d7e009165c08aec7c","builtAt":"2026-10-06T23:01:35.669Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -89712,16 +89712,24 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     const TAG = 'minifeather waterstyle';
 
     // ─────────────────────────────────────────────────────────────────────
-    // Agua 100% transparente con tinte verdoso. El juego renderiza el fluido
-    // con UN material compartido (agua + lava) cuyo onBeforeCompile inyecta
-    // el shader de olas/refracciones (`water_shader_v53`); se identifica
-    // porque es el único con userData.waterShadersEnabled. Envolvemos su
-    // onBeforeCompile y añadimos AL FINAL del fragment main un override que
-    // re-tinta por luminancia y fija el alfa — gated por vColor.r < 0.49,
-    // el mismo discriminador agua/lava que usa el shader del juego, así que
-    // la lava queda intacta (sigue full-bright con su sheen).
-    // Sin exposición automática de nada: dos sliders (opacidad y fuerza del
-    // tinte) mandan, y el color verde es fijo pero editable por config.
+    // Agua 100% transparente con tinte verdoso + OLAS NOTORIAS y ondas que
+    // reaccionan al jugador (v3). El juego renderiza el fluido con UN material
+    // compartido (agua + lava) cuyo onBeforeCompile inyecta el shader de
+    // olas/refracciones (`water_shader_v53`); se identifica porque es el único
+    // con userData.waterShadersEnabled. Envolvemos su onBeforeCompile y:
+    //   1. fuerza la rama fancy (USE_WATER_SHADERS) aunque el setting del
+    //      juego esté apagado — seguro: los raymarch de texturas están gated
+    //      por reflectionEnabled>0.5 y corren fallbacks analíticos;
+    //   2. amplifica la amplitud de las olas de AGUA (kinds 1 y 2; la lava
+    //      usa kind 0 y no se toca) × uMfWaveScale;
+    //   3. suma un anillo radial centrado en el jugador DENTRO de
+    //      waterWaveHeight — así también perturba la normal que calcula el
+    //      juego con la misma función, y el brillo del sol titila con las
+    //      olas. Gated kind>=0.5 para que la lava jamás reaccione.
+    //   4. al final del fragment: re-tinte por luminancia + alfa fijo
+    //      (uMfWater*), ANTES del fog del template.
+    // El juego hace tick de userData.time en fixedUpdate sin importar su
+    // setting, así que la animación corre siempre.
     // ─────────────────────────────────────────────────────────────────────
 
     const TINT = [0.45, 0.95, 0.55];   // verde agua; lum × esto = tono final
@@ -89730,8 +89738,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         enabled: localStorage.getItem('mf_waterstyle') === 'true',
         alpha: readNum('mf_waterstyle_alpha', 0.12),
         tintMix: readNum('mf_waterstyle_tintmix', 0.85),
+        waveScale: readNum('mf_waterstyle_wavescale', 2.0),
         game: null,
         scanTimer: 0,
+        tickTimer: 0,
         lastScan: 0,
         hooked: new Map(),      // material → { orig, origKey, liveUniforms }
         destroyed: false
@@ -89766,6 +89776,21 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         return src.slice(0, lastBrace) + '\n' + code + '\n' + src.slice(lastBrace);
     }
 
+    const WAVE_GLSL = `
+        uniform float uMfWaveScale;
+        uniform vec3 uMfPlayerPos;
+        uniform float uMfPlayerRipple;
+        // anillo radial que nace del jugador; kind>=0.5 = agua (la lava pide
+        // kind 0.0 y sale por el if de una). El módulo suaviza
+        // uMfPlayerRipple hacia 1 en agua / 0.15 en tierra
+        float mfPlayerRipple(vec2 p, float t, float kind) {
+            if (kind < 0.5) return 0.0;
+            float mfD = length(p - uMfPlayerPos.xz);
+            float mfRing = sin(mfD * 2.0 - t * 6.0);
+            return mfRing * exp(-mfD * 0.5) * uMfPlayerRipple * 0.05 * uMfWaveScale;
+        }
+    `;
+
     const FRAG_TAIL = `
         // mf water style: tinte verde por luminancia + alfa fijo. vColor.r < 0.49
         // es el gate agua/lava del propio shader del juego; lava pasa de largo.
@@ -89788,7 +89813,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         const liveUniforms = {
             uMfWaterAlpha: { value: state.alpha },
             uMfWaterTintMix: { value: state.tintMix },
-            uMfWaterTint: { value: TINT.slice() }
+            uMfWaterTint: { value: TINT.slice() },
+            uMfWaveScale: { value: state.waveScale },
+            uMfPlayerPos: { value: [0, 0, 0] },
+            uMfPlayerRipple: { value: 0 }
         };
 
         const wrapper = function (shader) {
@@ -89796,6 +89824,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             shader.uniforms.uMfWaterAlpha = liveUniforms.uMfWaterAlpha;
             shader.uniforms.uMfWaterTintMix = liveUniforms.uMfWaterTintMix;
             shader.uniforms.uMfWaterTint = liveUniforms.uMfWaterTint;
+            shader.uniforms.uMfWaveScale = liveUniforms.uMfWaveScale;
+            shader.uniforms.uMfPlayerPos = liveUniforms.uMfPlayerPos;
+            shader.uniforms.uMfPlayerRipple = liveUniforms.uMfPlayerRipple;
 
             // superficie VIVA aunque el juego tenga "water shaders" apagado: el
             // setting gatea el define en compilación y el uniform en runtime.
@@ -89807,19 +89838,41 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             // reales aparecen solos (nuestro tint los preserva vía el mix).
             // Los uniforms nuestros van en el header (alcance global; el tail
             // antes del fog es statement-only dentro de main).
-            const header =
-                '#define USE_WATER_SHADERS\n' +
-                'uniform float uMfWaterAlpha;\n' +
-                'uniform float uMfWaterTintMix;\n' +
-                'uniform vec3 uMfWaterTint;\n';
             if (!shader.vertexShader.includes('USE_WATER_SHADERS')) {
                 shader.vertexShader = '#define USE_WATER_SHADERS\n' + shader.vertexShader;
             }
+            if (!shader.vertexShader.includes('uMfWaveScale')) {
+                shader.vertexShader = WAVE_GLSL + shader.vertexShader;
+            }
             if (!shader.fragmentShader.includes('uMfWaterAlpha')) {
-                shader.fragmentShader = header + shader.fragmentShader;
+                shader.fragmentShader =
+                    '#define USE_WATER_SHADERS\n' +
+                    'uniform float uMfWaterAlpha;\n' +
+                    'uniform float uMfWaterTintMix;\n' +
+                    'uniform vec3 uMfWaterTint;\n' +
+                    shader.fragmentShader;
             }
             if (shader.uniforms.waterShadersEnabled) {
                 shader.uniforms.waterShadersEnabled.value = 1;
+            }
+
+            // olas notorias + reacción al jugador: parcheo waterWaveHeight del
+            // propio juego — la normal que ilumina la superficie sale de la
+            // MISMA función (waterWaveNormal la llama), así que el brillo del
+            // sol titila con las olas y el anillo. Si el bundle cambia y los
+            // marcadores ya no están, el agua queda vanilla en vez de no
+            // compilar (fail-open, la lección del CustomShader)
+            if (!shader.vertexShader.includes('mfPlayerRipple(p, t, kind)')) {
+                let vs = shader.vertexShader;
+                const ampOrig = 'float amp = kind < 0.5 ? 0.01 : (kind < 1.5 ? 0.045 : 0.03);';
+                if (vs.includes(ampOrig)) {
+                    vs = vs.replace(ampOrig,
+                        'float amp = kind < 0.5 ? 0.01 : (kind < 1.5 ? 0.045 * uMfWaveScale : 0.03 * uMfWaveScale);');
+                }
+                if (vs.includes('return w * amp;')) {
+                    vs = vs.replace('return w * amp;', 'return w * amp + mfPlayerRipple(p, t, kind);');
+                }
+                shader.vertexShader = vs;
             }
 
             const stamp = 'float mfWaterStyle = 1.0;\n' + FRAG_TAIL;
@@ -89841,7 +89894,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v1';
+            return base + '_mfws_v2';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
@@ -89897,6 +89950,30 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         for (const [, entry] of state.hooked) {
             entry.liveUniforms.uMfWaterAlpha.value = state.alpha;
             entry.liveUniforms.uMfWaterTintMix.value = state.tintMix;
+            entry.liveUniforms.uMfWaveScale.value = state.waveScale;
+        }
+    }
+
+    // 10 Hz basta: el anillo se anima con el time del juego (60fps en shader),
+    // aquí solo actualizamos el CENTRO (pos del jugador) y la intensidad
+    function tickPlayer() {
+        if (!state.enabled || state.destroyed) return;
+        if (!state.game?.player) {
+            state.game = findGame() || state.game;
+        }
+        const p = state.game?.player;
+        const pos = p?.pos;
+        for (const [, entry] of state.hooked) {
+            const u = entry.liveUniforms;
+            if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.z)) {
+                u.uMfPlayerPos.value[0] = pos.x;
+                u.uMfPlayerPos.value[1] = pos.y || 0;
+                u.uMfPlayerPos.value[2] = pos.z;
+            }
+            // en agua = 1, en tierra = 0.15 (la caída exponencial del anillo
+            // deja el efecto local de todos modos — "el agua te nota")
+            const target = p?.inWater ? 1 : 0.15;
+            u.uMfPlayerRipple.value += (target - u.uMfPlayerRipple.value) * 0.18;
         }
     }
 
@@ -89906,6 +89983,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         if (!state.scanTimer) {
             state.scanTimer = setInterval(scan, 2000);
         }
+        if (!state.tickTimer) {
+            state.tickTimer = setInterval(tickPlayer, 100);
+        }
         scan();
     }
 
@@ -89913,6 +89993,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         state.enabled = false;
         localStorage.setItem('mf_waterstyle', 'false');
         if (state.scanTimer) { clearInterval(state.scanTimer); state.scanTimer = 0; }
+        if (state.tickTimer) { clearInterval(state.tickTimer); state.tickTimer = 0; }
         for (const m of [...state.hooked.keys()]) unhookMaterial(m);
     }
 
@@ -89931,6 +90012,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 localStorage.setItem('mf_waterstyle_tintmix', String(state.tintMix));
             }
         }
+        if (cfg && cfg.waveScale !== undefined) {
+            const w = parseFloat(cfg.waveScale);
+            if (Number.isFinite(w)) {
+                state.waveScale = Math.max(1, Math.min(4, w));
+                localStorage.setItem('mf_waterstyle_wavescale', String(state.waveScale));
+            }
+        }
         if (cfg && cfg.tint && Array.isArray(cfg.tint) && cfg.tint.length === 3) {
             const t = cfg.tint.map(Number);
             if (t.every(Number.isFinite)) {
@@ -89947,6 +90035,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             hooked: state.hooked.size,
             alpha: state.alpha,
             tintMix: state.tintMix,
+            waveScale: state.waveScale,
             tint: TINT.slice()
         };
     }
@@ -120507,6 +120596,7 @@ function normalize(entry) {
     waterStyle: false,
     waterStyleAlpha: 0.12,
     waterStyleTintMix: 0.85,
+    waterStyleWaveScale: 2.0,
     kotoSky: false,
     kotoSkyStrength: 1.0,
     customShader: false,
@@ -124886,7 +124976,8 @@ function normalize(entry) {
       detail: JSON.stringify({
         enabled: !!enabled,
         alpha: Number(settings.waterStyleAlpha ?? 0.12),
-        tintMix: Number(settings.waterStyleTintMix ?? 0.85)
+        tintMix: Number(settings.waterStyleTintMix ?? 0.85),
+        waveScale: Number(settings.waterStyleWaveScale ?? 2.0)
       })
     }));
   }
@@ -128234,6 +128325,11 @@ function normalize(entry) {
             <span style="min-width:90px;font-size:12px;">tinte</span>
             <input id="mf-ws-tint" type="range" min="0" max="1" step="0.05" value="${Number(settings.waterStyleTintMix ?? 0.85)}">
             <span id="mf-ws-tint-value">${Math.round(Number(settings.waterStyleTintMix ?? 0.85) * 100)}%</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-top:10px;">
+            <span style="min-width:90px;font-size:12px;">ondas</span>
+            <input id="mf-ws-wave" type="range" min="1" max="4" step="0.1" value="${Number(settings.waterStyleWaveScale ?? 2.0)}">
+            <span id="mf-ws-wave-value">${Number(settings.waterStyleWaveScale ?? 2.0).toFixed(1)}&times;</span>
           </div>
         </div>
 
@@ -132069,7 +132165,8 @@ function normalize(entry) {
     }
     const wsMap = {
       alpha: { key: 'waterStyleAlpha', fmt: v => Math.round(v * 100) + '%' },
-      tint: { key: 'waterStyleTintMix', fmt: v => Math.round(v * 100) + '%' }
+      tint: { key: 'waterStyleTintMix', fmt: v => Math.round(v * 100) + '%' },
+      wave: { key: 'waterStyleWaveScale', fmt: v => v.toFixed(1) + '\u00d7' }
     };
     for (const [name, { key, fmt }] of Object.entries(wsMap)) {
       const slider = panel.querySelector(`#mf-ws-${name}`);
