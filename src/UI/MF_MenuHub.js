@@ -132,26 +132,18 @@
       #react.${EXPANDED_CLASS} #${HUB_ID} .mf-hub-aside{display:none}
       #react.${ROOT_CLASS} > img{filter:blur(9px) brightness(.58) saturate(.9)!important;transform:scale(1.07)!important}
       #react.${ROOT_CLASS} > canvas{opacity:.4!important;filter:blur(2px) brightness(.8)!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}{position:fixed!important;right:20px!important;top:20px!important;bottom:0!important;width:320px!important;height:auto!important;max-height:none!important;overflow:visible!important;pointer-events:none}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}{position:fixed!important;right:20px!important;top:20px!important;width:320px!important;height:auto!important;max-height:calc(100vh - 44px);overflow:hidden auto;scrollbar-width:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}::-webkit-scrollbar{display:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:not(:first-child){display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>*:not(:first-child){display:none!important}
-      /* el chip va estilo perfil movil: la caja (borde+fondo) es SOLO de los datos;
-         el personaje queda suelto fuera del cubo, parado con los pies en el piso de la pantalla.
-         backdrop-filter fuera de la tarjeta: un filtro en un ancestro convierte fixed en local */
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;pointer-events:auto}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipcard{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;padding:0!important}
+      /* el chip va vertical estilo perfil movil: datos arriba en su cajita y el personaje
+         grande DEBAJO pero DENTRO de la tarjeta (el piso de la pantalla quedo descartado).
+         el sync pinta .mf-hub-chiprow/.mf-hub-chipinfo/.mf-hub-chipavatar segun donde esten
+         HOY los nodos, porque el nesting cambia bajo tus pies */
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chiprow{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipextra{display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipinfo{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px);padding:12px!important;align-self:stretch!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;left:50%!important;bottom:14px!important;transform:translateX(-50%)!important;width:150px!important;height:245px!important;flex:none!important;border:none!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar,
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar div{background:transparent!important;box-shadow:none!important}
-      /* el chip de perfil va vertical como el perfil movil: datos arriba y el personaje
-         suelto abajo. el sitio anida la fila a dos profundidades segun el render: cubrimos
-         ambas (la regla corta queda como fallback, en display:block es inerte). la caja de
-         datos y el avatar suelto viajan por clases (.mf-hub-chipinfo/.mf-hub-chipavatar)
-         que el sync pinta segun donde esten HOY, porque el nesting cambia bajo tus pies */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{width:150px!important;height:245px!important;flex:none!important;align-self:center!important;border:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div,
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div{flex-direction:column!important;align-items:center!important}
       /* el transform del canvas lo escribe JS en cada sync (fitChipCanvas): medir en CSS
@@ -482,15 +474,8 @@
       if (child === node || child === info) continue;
       mark(child, !child.contains(canvas) && child.querySelector('button,p') ? 'mf-hub-chipinfo' : 'mf-hub-chipextra');
     }
-    // sin backdrop/filter/borde en NINGUN ancestro: un filtro volveria "local" el absolute
-    // del avatar (anclado a la tarjeta en vez de al piso) y rearmaria el cubo
-    for (let anc = row.parentElement; anc && anc !== right; anc = anc.parentElement) {
-      mark(anc, 'mf-hub-chipcard');
-      for (const child of anc.children) {
-        if (child.contains(node)) continue;
-        mark(child, 'mf-hub-chipextra');
-      }
-    }
+    // el avatar vive DENTRO de la tarjeta (en flujo): no hay que pelar ancestros ni
+    // escapar del cubo, asi que los filtros nativos de la tarjeta no molestan
     fitChipCanvas(canvas, frac);
   }
 
