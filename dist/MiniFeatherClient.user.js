@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006200433
+// @version      4.19.0.20261006201433
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 74dcc343a069de6956ed3eb0695f0dff46e1c7b7
- * builtAt : 2026-10-06T20:04:46.390Z
+ * commit  : aa452bfcf2e06c86616021501509fcf19edcaef9
+ * builtAt : 2026-10-06T20:14:58.835Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"74dcc343a069de6956ed3eb0695f0dff46e1c7b7","builtAt":"2026-10-06T20:04:46.390Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"aa452bfcf2e06c86616021501509fcf19edcaef9","builtAt":"2026-10-06T20:14:58.835Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -14808,6 +14808,27 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"74dcc343a069de6956ed3eb0695f0d
         });
     }
 
+    // skins que llegan cortadas por el cable: un data-url de png al que le falta
+    // el final (IEND) hace que chrome lo rechace con ERR_INVALID_URL y el jugador
+    // cae al skin default. lo que no llegó no se recupera, pero la consola al
+    // menos cuenta qué pasó en vez de un error criptico de red
+    var dataSkinWarned = false;
+    function looksTruncatedPngDataUrl(value) {
+        if (value.lastIndexOf('data:image/png;base64,', 0) !== 0) return false;
+        var b64 = value.slice(22);
+        if (!b64 || b64.length % 4 === 1) return true;
+        try {
+            // todo png termina con IEND + crc fijo AE 42 60 82; los últimos 12
+            // chars de base64 son 3 grupos enteros y alcanzan para verlo
+            var tail = atob(b64.slice(-12));
+            var n = tail.length;
+            if (n >= 4 &&
+                tail.charCodeAt(n - 4) === 0xAE && tail.charCodeAt(n - 3) === 0x42 &&
+                tail.charCodeAt(n - 2) === 0x60 && tail.charCodeAt(n - 1) === 0x82) return false;
+        } catch (_) {}
+        return true;
+    }
+
     function patchImageSrc() {
         if (patched) return true;
 
@@ -14828,6 +14849,11 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"74dcc343a069de6956ed3eb0695f0d
                 if (typeof value !== 'string') {
                     originalSet.call(this, value);
                     return;
+                }
+
+                if (!dataSkinWarned && looksTruncatedPngDataUrl(value)) {
+                    dataSkinWarned = true;
+                    warn('una skin llegó truncada por la red (data-url incompleta) — se usa el skin default; el cliente no puede recuperarla');
                 }
 
                 var match = value.match(SKIN_PATH_REGEX) || value.match(SKIN_PATH_REGEX_DEEP);
@@ -46965,6 +46991,9 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     closeBar();
   }
   function findChatInput() {
+    // corremos en todos los frames (all_frames) y alguno no tiene body todavia:
+    // sin body no hay chat que buscar, y document.body.contains revienta
+    if (!document.body) return null;
     if (state.chatInputEl && document.body.contains(state.chatInputEl) && state.chatInputEl.offsetParent !== null) {
       return state.chatInputEl;
     }
@@ -47445,7 +47474,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
       injectBarStyle();
       if (!state.scanTimer) {
         state.scanTimer = window.setInterval(() => {
-          if (state.enabled) { ensureChat(); ensureButton(); attachInputHooks(); rescanChat(); }
+          if (state.enabled && document.body) { ensureChat(); ensureButton(); attachInputHooks(); rescanChat(); }
         }, 1200);
       }
       ensureChat();
@@ -117207,6 +117236,53 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return null;
     }
 
+    // MC no tiene equipo de esmeralda: el tier esmeralda de miniblox se viste
+    // con el DIAMOND del pack recoloreado a esmeralda, píxel a píxel (rampa
+    // sombra→luz según la luminancia del original, no un velo encima). caché
+    // por textura fuente: 10 items comparten la misma conversión.
+    const EMERALD_PIECES = new Set([
+        'axe', 'pickaxe', 'shovel', 'sword', 'hoe',
+        'helmet', 'chestplate', 'leggings', 'boots'
+    ]);
+    const EMERALD_DARK = [16, 82, 48];
+    const EMERALD_BRIGHT = [70, 232, 138];
+
+    function tintedSpriteForFrame(fileName, search, tintCache) {
+        const baseName = fileName.replace(/\.png$/, '');
+        const m = /^emerald_(.+)$/.exec(baseName);
+        if (!m || !EMERALD_PIECES.has(m[1])) return null;
+        const srcName = 'diamond_' + m[1];
+        if (tintCache.has(srcName)) return tintCache.get(srcName);
+        let out = null;
+        const src = findSprite(srcName, search);
+        const iw = src?.naturalWidth, ih = src?.naturalHeight;
+        if (src && iw && ih) {
+            const cv = document.createElement('canvas');
+            cv.width = iw; cv.height = ih;
+            const ctx = cv.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(src, 0, 0);
+            let data;
+            try { data = ctx.getImageData(0, 0, iw, ih); } catch (_) { data = null; }
+            if (data) {
+                const px = data.data;
+                for (let i = 0; i < px.length; i += 4) {
+                    if (!px[i + 3]) continue;
+                    // luminancia perceptual (no max): separa highlight blanco /
+                    // cuerpo cyan / sombra azul del diamante en TRES zonas de la
+                    // rampa esmeralda. con max() cuerpo y highlight colapsaban.
+                    const lum = (px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11) / 255;
+                    px[i] = EMERALD_DARK[0] + (EMERALD_BRIGHT[0] - EMERALD_DARK[0]) * lum;
+                    px[i + 1] = EMERALD_DARK[1] + (EMERALD_BRIGHT[1] - EMERALD_DARK[1]) * lum;
+                    px[i + 2] = EMERALD_DARK[2] + (EMERALD_BRIGHT[2] - EMERALD_DARK[2]) * lum;
+                }
+                ctx.putImageData(data, 0, 0);
+                out = cv;
+            }
+        }
+        tintCache.set(srcName, out);
+        return out;
+    }
+
     function fetchImage(src) {
         return new Promise((resolve) => {
             const img = new Image();
@@ -117262,6 +117338,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const stats = { total: entries.length, placed: 0, custom: 0, original: vanilla ? entries.length : 0, placeholder: vanilla ? 0 : 0, resolution };
 
         const textureNames = [];
+        const tintCache = new Map();
 
         for (const [fileName, data] of entries) {
             const frame = data.frame || {};
@@ -117274,14 +117351,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             const baseName = fileName.replace(/\.png$/, '');
             const customImg = spriteForFrame(fileName, search, dirMap);
             const anim = customImg ? null : animMatch(fileName, search, dirMap, animMeta);
+            const tinted = (customImg || anim) ? null : tintedSpriteForFrame(fileName, search, tintCache);
 
-            if (customImg || anim) {
+            if (customImg || anim || tinted) {
                 if (anim && anim.fw) {
                     // tira vertical: una fila del strip del pack al slot del frame
                     ctx.drawImage(anim.img, 0, anim.row * anim.fh, anim.fw, anim.fh, fx, fy, fw, fh);
                 } else if (anim) {
                     // cuadro numerado (item/clock/0.png): imagen entera al slot
                     ctx.drawImage(anim.img, fx, fy, fw, fh);
+                } else if (tinted) {
+                    // esmeralda = diamante recoloreado, ya en canvas propio
+                    ctx.drawImage(tinted, fx, fy, fw, fh);
                 } else if (rotated) {
                     ctx.save();
                     ctx.translate(fx, fy);
