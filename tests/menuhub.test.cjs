@@ -30,6 +30,23 @@ test('el hub esta cableado al panel: default on, config, init llamado y toggle',
   assert.ok(mirrorBundle.includes('menuhub-config'), 'mirror.js regenerado con el modulo embebido');
 });
 
+test('la gui respira con la musica: tap del howl html5 en rama y fail-open', () => {
+  // la musica es un howl html5 (elemento audio de Howler, NO pasa por masterGain):
+  // MediaElementSource reponiendo el camino audible PRIMERO y analyser en rama sin salida
+  assert.match(source, /function beatMusicElement\(\)/);
+  assert.match(source, /origin !== location\.origin\) continue;/);   // cross-origin NUNCA se toca
+  assert.match(source, /source\.connect\(ctx\.destination\)/);       // el audio del usuario se repone antes que nada
+  assert.match(source, /boost\.connect\(analyser\)/);                // rama de analisis: analiza pero no suena
+  assert.match(source, /__MF_MENU_BEAT__/);                          // analizador reutilizable entre hotloads
+  assert.match(source, /beat\.blocked = true/);                      // elemento ya sourceado: no reventar
+  assert.match(source, /typeof requestAnimationFrame !== 'function'/); // entornos sin rAF (jsdom): gui quieta
+  assert.match(source, /beat\.retry = setTimeout/);                  // el tap se reintenta: el ctx se desbloquea con el primer click real y en pagina quieta no llegan syncs
+  assert.match(source, /removeProperty\('--mf-beat'\)/);             // apagar deja la gui quieta
+  assert.match(source, /!state\.enabled \|\| state\.destroyed \|\| !state\.hub \|\| !beat\.analyser/);  // loop muere sin hub
+  // reaccion sutil en tres superficies: escenario + tarjeta continue + vineta
+  assert.ok((source.match(/var\(--mf-beat,0\)/g) || []).length >= 4);
+});
+
 test('el head-tracking del chip se re-ancla tras cada fit del canvas', () => {
   // el sitio congela el ancla del mouse en el primer syncToVisible; el hub escribe
   // positionOnScreen directamente via el manager que vive en la fiber de react.
@@ -61,6 +78,9 @@ test('el head-tracking del chip se re-ancla tras cada fit del canvas', () => {
   assert.match(source, /state\.chipCanvas\?\.isConnected/);
   // canvases sin fiber (tests jsdom, otros modulos) no deben romper el fit
   assert.match(source, /chipTrackers = new WeakMap/);
+  // personaje un poco mas grande: 93% del escenario (pedido "mas grandesito .v?")
+  assert.match(source, /winH \* 0\.93\) \/ figH/);
+  assert.doesNotMatch(source, /winH \* 0\.86\)/);
 });
 
 test('menuHub tiene nombre y descripcion en todos los idiomas del cliente', () => {
