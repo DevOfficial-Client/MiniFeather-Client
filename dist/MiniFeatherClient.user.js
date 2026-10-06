@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006170818
+// @version      4.19.0.20261006175640
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : de5420858769b7f143419515e657031844afb8c6
- * builtAt : 2026-10-06T17:08:34.518Z
+ * commit  : fed4fac3f4e86e71faa1b997040522063393106a
+ * builtAt : 2026-10-06T17:56:55.664Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"de5420858769b7f143419515e657031844afb8c6","builtAt":"2026-10-06T17:08:34.518Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"fed4fac3f4e86e71faa1b997040522063393106a","builtAt":"2026-10-06T17:56:55.664Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19583,7 +19583,7 @@ const state = {
          pero RELATIVE (ancla de badges y ventana) y overflow:hidden como cinturon de
          seguridad: si el fit se desmadra un frame, el personaje se recorta en el borde del
          escenario en vez de pisar la caja de datos */
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;top:calc(50vh - 142px)!important;left:50%!important;transform:translateX(-50%)!important;margin:0!important;width:150px!important;height:245px!important;flex:none!important;overflow:hidden!important;border:2px solid rgba(0,0,0,.8)!important;border-radius:12px!important;background:linear-gradient(180deg,rgba(26,31,42,.5),rgba(11,13,19,.78))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),inset 0 -22px 26px -20px rgba(120,170,255,.18),0 14px 34px rgba(0,0,0,.45)!important;pointer-events:auto!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;top:calc(50vh - 142px)!important;left:50%!important;transform:translateX(-50%)!important;margin:0!important;width:150px!important;height:245px!important;flex:none!important;overflow:hidden!important;border:2px solid rgba(0,0,0,.8)!important;border-radius:12px!important;background:linear-gradient(180deg,rgba(26,31,42,.5),rgba(11,13,19,.78))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),inset 0 -22px 26px -20px rgba(120,170,255,calc(.18 + var(--mf-beat,0)*.3)),0 14px 34px rgba(0,0,0,.45),0 0 calc(var(--mf-beat,0)*26px) rgba(120,170,255,calc(var(--mf-beat,0)*.28))!important;pointer-events:auto!important}
       /* ventana(s) absolutas entre el canvas y la caja: llenan la caja sin pintar nada
          propio (su borde de color de nivel era el rectangulo flotante) */
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipcard{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;pointer-events:auto!important}
@@ -19606,7 +19606,7 @@ const state = {
       #react.${ROOT_CLASS}.${EXPANDED_CLASS} .${RIGHT_CLASS}>*{background:rgba(10,12,16,.55)!important;backdrop-filter:blur(6px);border-radius:10px!important}
 
       #${HUB_ID}{position:fixed;inset:0;z-index:6;pointer-events:none;font-family:inherit;color:#fff}
-      #${HUB_ID}::before{content:"";position:absolute;inset:0;pointer-events:none;
+      #${HUB_ID}::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:calc(.88 + var(--mf-beat,0)*.12);
         background:radial-gradient(130% 100% at 50% 0%,rgba(0,0,0,.12) 0%,rgba(0,0,0,.32) 60%,rgba(0,0,0,.52) 100%)}
       #${HUB_ID} .mf-hub-rail{position:absolute;left:18px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px;pointer-events:auto;width:178px;align-items:stretch}
       #${HUB_ID} .mf-hub-brand{display:flex;flex-direction:row;align-items:center;gap:9px;margin-bottom:8px;user-select:none}
@@ -19634,7 +19634,7 @@ const state = {
       #${HUB_ID} .mf-hub-seeall{margin-left:auto;border:none;background:transparent;color:rgba(255,255,255,.75);font-size:12px;font-weight:600;cursor:pointer;padding:4px 6px;border-radius:6px;text-shadow:1px 1px #000}
       #${HUB_ID} .mf-hub-seeall:hover{color:#fff;background:rgba(255,255,255,.1)}
 
-      #${HUB_ID} .mf-hub-continue{position:relative;display:flex;align-items:flex-end;width:min(660px,100%);min-height:250px;border:3px solid rgba(0,0,0,.85);border-radius:12px;overflow:hidden;cursor:pointer;background:#101318;box-shadow:0 14px 34px rgba(0,0,0,.45);transition:transform .14s ease,border-color .14s ease;padding:0}
+      #${HUB_ID} .mf-hub-continue{position:relative;display:flex;align-items:flex-end;width:min(660px,100%);min-height:250px;border:3px solid rgba(0,0,0,.85);border-radius:12px;overflow:hidden;cursor:pointer;background:#101318;box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 calc(var(--mf-beat,0)*24px) rgba(185,153,244,calc(var(--mf-beat,0)*.2));transition:transform .14s ease,border-color .14s ease;padding:0}
       #${HUB_ID} .mf-hub-continue:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.5)}
       #${HUB_ID} .mf-hub-continue img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
       #${HUB_ID} .mf-hub-continue::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.05) 30%,rgba(0,0,0,.72) 100%)}
@@ -19945,7 +19945,7 @@ const state = {
     if (!bw || !bh) return;
     const figH = frac.bottom - frac.top;
     if (!(figH > 0 && figH <= 1)) return;
-    const cssH = (winH * 0.86) / figH;
+    const cssH = (winH * 0.93) / figH;
     const cssW = cssH * (bw / bh);
     canvas.style.position = 'absolute';
     canvas.style.margin = '0';
@@ -20016,6 +20016,100 @@ const state = {
     state.chipResizeTimer = setTimeout(() => {
       if (state.enabled && state.chipCanvas?.isConnected) syncChipTracker(state.chipCanvas);
     }, 120);
+  }
+
+  // == beat: la gui respira con la musica, apenas ==
+  // la musica del menu es un howl html5: suena por un <audio> de Howler y NO pasa por
+  // masterGain (un analyser ahi da puros ceros, comprobado). se tapa el elemento con
+  // MediaElementSource: primero se repone el camino audible (source → destination, mismo
+  // volumen de siempre) y despues la rama de analisis (boost → analyser SIN salida: solo
+  // lectura). fail-open: cross-origin NUNCA se toca (un source lo silenciaria), sin
+  // elemento o ctx suspendido = gui quieta, y el loop solo vive mientras hay hub
+  const BEAT_KEY = '__MF_MENU_BEAT__';
+  const beat = { analyser: null, data: null, level: 0, peak: 0.05, raf: 0, last: 0, retry: 0, blocked: false };
+
+  function beatMusicElement() {
+    try {
+      for (const howl of window.Howler?._howls || []) {
+        const el = howl?._sounds?.[0]?._node;
+        if (!(el instanceof HTMLAudioElement) || !el.src) continue;
+        if (new URL(el.src, location.href).origin !== location.origin) continue;   // cross-origin jamas
+        return el;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function ensureBeat() {
+    if (beat.analyser) return beat.analyser;
+    if (beat.blocked) return null;
+    // hotload: la instancia anterior ya tapo el elemento; adoptar su analizador
+    try {
+      const saved = globalThis[BEAT_KEY];
+      if (saved?.analyser) { beat.analyser = saved.analyser; beat.data = saved.data; return beat.analyser; }
+    } catch (_) {}
+    const ctx = window.Howler?.ctx;
+    const element = beatMusicElement();
+    if (!ctx || ctx.state !== 'running' || !element) return null;   // aun no hay musica: reintentar en el proximo sync
+    let source = null;
+    try {
+      source = ctx.createMediaElementSource(element);
+      source.connect(ctx.destination);   // el audio del usuario se repone ANTES que nada
+      const boost = ctx.createGain();
+      boost.gain.value = 15;             // la musica vive a volumen 0.025: sin boost el scan de 8 bits es cuantizado a nada
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+      source.connect(boost);
+      boost.connect(analyser);           // sin salida: analiza pero no suena
+      beat.analyser = analyser;
+      beat.data = new Uint8Array(analyser.frequencyBinCount);
+      try { globalThis[BEAT_KEY] = { analyser, data: beat.data }; } catch (_) {}
+    } catch (_) {
+      // InvalidState = ya tiene source ajeno al global: sin analizador esta sesion, sin romper nada
+      try { source?.connect(ctx.destination); } catch (_) {}
+      beat.blocked = true;
+    }
+    return beat.analyser;
+  }
+
+  function beatFrame(now) {
+    beat.raf = 0;
+    if (!state.enabled || state.destroyed || !state.hub || !beat.analyser) return;
+    try {
+      beat.analyser.getByteFrequencyData(beat.data);
+      let bassLevel = 0;
+      for (let bin = 0; bin < 8; bin++) bassLevel += beat.data[bin];   // 0-1.4kHz: patada y bajos
+      bassLevel /= 8 * 255;
+      beat.peak = bassLevel > beat.peak ? bassLevel : beat.peak + (bassLevel - beat.peak) * 0.004;
+      const target = beat.peak > 0.02 ? Math.min(1, bassLevel / beat.peak) : 0;
+      // ataque casi instantaneo, release lento: pulso musical, no estroboscopico
+      beat.level = target > beat.level ? target : beat.level + (target - beat.level) * 0.12;
+      if (now - beat.last >= 33) {
+        beat.last = now;
+        document.documentElement.style.setProperty('--mf-beat', beat.level.toFixed(3));
+      }
+    } catch (_) {}
+    beat.raf = requestAnimationFrame(beatFrame);
+  }
+
+  function startBeat() {
+    ensureBeat();
+    if (typeof requestAnimationFrame !== 'function') return;   // entorno sin rAF (jsdom): gui quieta, nada revienta
+    if (!beat.raf && state.enabled && state.hub) beat.raf = requestAnimationFrame(beatFrame);
+    // el ctx se desbloquea con el PRIMER click real del usuario, pero los syncs solo
+    // corren con mutaciones: en una pagina quieta el tap no se reintentaria nunca
+    clearTimeout(beat.retry);
+    if (!beat.analyser && !beat.blocked && state.enabled && state.hub) {
+      beat.retry = setTimeout(() => { if (state.enabled && state.hub) startBeat(); }, 2000);
+    }
+  }
+
+  function stopBeat() {
+    if (beat.raf) cancelAnimationFrame(beat.raf);
+    beat.raf = 0;
+    clearTimeout(beat.retry);
+    try { document.documentElement.style.removeProperty('--mf-beat'); } catch (_) {}
   }
 
   function clearChipMarks() {
@@ -20583,6 +20677,7 @@ const state = {
     }
     root.classList.toggle(ROOT_CLASS, true);
     root.classList.toggle(EXPANDED_CLASS, state.expanded);
+    startBeat();
   }
 
   function schedule() {
@@ -20609,6 +20704,7 @@ const state = {
       state.timer = 0;
       state.observer?.disconnect();
       state.observer = null;
+      stopBeat();
       restore();
       state.style?.remove();
       state.style = null;
