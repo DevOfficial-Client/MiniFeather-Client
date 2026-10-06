@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006051551
+// @version      4.19.0.20261006052942
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 77082919c00d55c90661899a14e1fd8f4b32ed30
- * builtAt : 2026-10-06T05:16:07.459Z
+ * commit  : f568c5e61e50d646a5a3c69f885b553cb5700d8b
+ * builtAt : 2026-10-06T05:29:58.787Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"77082919c00d55c90661899a14e1fd8f4b32ed30","builtAt":"2026-10-06T05:16:07.459Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"f568c5e61e50d646a5a3c69f885b553cb5700d8b","builtAt":"2026-10-06T05:29:58.787Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -116774,16 +116774,38 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             || null;
     }
 
-    function spriteForFrame(fileName, search) {
+    function spriteForFrame(fileName, search, dirMap) {
         const baseName = fileName.replace(/\.png$/, '');
         const direct = findSprite(baseName, search);
         if (direct) return direct;
-        // frames.json lleva rutas propias (bed/black.png): el zip guarda el
-        // archivo pelado (black.png) en entity/bed/. sin este fallback esas
-        // 26 llaves jamás matchean y el pack "no encuentra los bloques".
-        const slash = baseName.lastIndexOf('/');
-        if (slash === -1) return null;
-        return findSprite(baseName.slice(slash + 1), search);
+        if (!dirMap) return null;
+        // frames.json lleva rutas propias (bed/black.png, chest/normal.png,
+        // signs/oak.png): el zip las guarda en entity/<dir>/<nombre>.png.
+        // matchear por basename pelado era pintar la cama con el overlay de
+        // lámparas CTM o la manta de una llama (hubo de todo XD) — el empareje
+        // es por los DOS últimos segmentos de la ruta del zip.
+        const hit = dirMap.get(baseName.toLowerCase());
+        if (hit) return hit;
+        // el tile flat del bloque de cama (red_bed.png) es la misma arte que
+        // entity/bed/red.png: alias semántico.
+        const bedSlash = baseName.toLowerCase().lastIndexOf('_bed');
+        if (bedSlash !== -1 && bedSlash + 4 === baseName.length) {
+            const viaBed = dirMap.get('bed/' + baseName.slice(0, bedSlash).toLowerCase());
+            if (viaBed) return viaBed;
+        }
+        // miniblox aún nombra cosas como MC pre-1.13: tabla chica hacia los
+        // nombres modernos que sí traen los packs de hoy.
+        const FRAME_ALIASES = {
+            book_normal: 'book',
+            book_writable: 'writable_book',
+            book_written: 'written_book',
+            book_enchanted: 'enchanted_book',
+            grass_path_side: 'dirt_path_side',
+            grass_path_top: 'dirt_path_top'
+        };
+        const aliased = FRAME_ALIASES[baseName.toLowerCase()];
+        if (aliased) return findSprite(aliased, search);
+        return null;
     }
 
     function fetchImage(src) {
@@ -116804,7 +116826,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return vanillaAtlasCache;
     }
 
-    async function generateSpritesheet(customFiles) {
+    async function generateSpritesheet(customFiles, dirLeaves) {
         const frames = await loadFramesData();
         if (!frames) {
             console.error(`${TAG} No frames data available`);
@@ -116822,6 +116844,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
         const entries = Object.entries(frames);
         const search = buildLookup(customFiles);
+        // mapa dir/nombre → sprite para las llaves de frames con ruta
+        const dirMap = new Map();
+        if (dirLeaves) {
+            for (const [k, v] of dirLeaves) dirMap.set(k.toLowerCase(), v);
+        }
         const canvas = document.createElement('canvas');
         canvas.width = atlasSize;
         canvas.height = atlasSize;
@@ -116846,7 +116873,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             const rotated = data.rotated || false;
 
             const baseName = fileName.replace(/\.png$/, '');
-            const customImg = spriteForFrame(fileName, search);
+            const customImg = spriteForFrame(fileName, search, dirMap);
 
             if (customImg) {
                 if (rotated) {
@@ -117072,8 +117099,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 // backslash: sin normalizar, el basename sale con toda la ruta
                 // adentro y el matching da CERO bloques.
                 const normalized = entry.name.replace(/\\/g, '/');
-                const baseName = normalized.split('/').pop().replace(/\.png$/i, '');
-                return { name: baseName, img };
+                const segments = normalized.split('/');
+                const baseName = segments.pop().replace(/\.png$/i, '');
+                // ruta relativa de dos segmentos (entity/bed/black → bed/black):
+                // es el tier con el que frames.json nombra camas, cofres y carteles.
+                const dirLeaf = segments.length >= 1
+                    ? segments[segments.length - 1] + '/' + baseName
+                    : baseName;
+                return { name: baseName, img, dirLeaf };
             } catch (_) {
                 return null;
             }
@@ -117084,6 +117117,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     async function processUploadedFiles(fileList) {
         const customSprites = new Map();
+        const dirLeaves = new Map();
         const pbrMaps = { n: new Map(), s: new Map(), e: new Map() };
         const files = Array.from(fileList);
         let loaded = 0;
@@ -117130,14 +117164,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         for (const zipFile of zipFiles) {
             void 0;
             const extracted = await extractZip(zipFile);
-            for (const { name, img } of extracted) {
+            for (const { name, img, dirLeaf } of extracted) {
                 if (!registerPbr(name, img)) customSprites.set(name, img);
+                if (dirLeaf && !dirLeaves.has(dirLeaf.toLowerCase())) {
+                    dirLeaves.set(dirLeaf.toLowerCase(), img);
+                }
                 loaded++;
             }
             void 0;
         }
 
-        return { customSprites, pbrMaps, loaded };
+        return { customSprites, dirLeaves, pbrMaps, loaded };
     }
 
     function pbrNeutral(kind) {
@@ -117295,7 +117332,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     async function generateAndApply(files) {
         void 0;
-        const { customSprites, pbrMaps, loaded } = await processUploadedFiles(files);
+        const { customSprites, dirLeaves, pbrMaps, loaded } = await processUploadedFiles(files);
 
         if (loaded === 0) {
             console.warn(`${TAG} No valid PNG files found`);
@@ -117311,7 +117348,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
 
         void 0;
-        const result = await generateSpritesheet(customSprites);
+        const result = await generateSpritesheet(customSprites, dirLeaves);
 
         if (!result) {
             return { success: false, error: 'Generation failed' };
