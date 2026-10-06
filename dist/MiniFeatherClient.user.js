@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005223650
+// @version      4.19.0.20261005223713
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 6ae45326e47d1db6bafd0a7c5ca94d5cd53cdd74
- * builtAt : 2026-10-05T22:37:13.200Z
+ * commit  : 82d3c4ca53359a3fb3beb3c379033a3fce82295b
+ * builtAt : 2026-10-06T03:35:19.308Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"6ae45326e47d1db6bafd0a7c5ca94d5cd53cdd74","builtAt":"2026-10-05T22:37:13.200Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"82d3c4ca53359a3fb3beb3c379033a3fce82295b","builtAt":"2026-10-06T03:35:19.308Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19430,7 +19430,7 @@ const state = {
     enabled: false, destroyed: false, root: null, style: null, observer: null,
     timer: 0, marks: new Set(), hub: null, expanded: false, layoutRight: null,
     language: 'en', pins: readPins(), nav: new Map(), sections: [], games: [],
-    recentCard: null, signature: ''
+    recentCard: null, signature: '', prevSignature: '', chipLastSeen: 0, chipLastPaint: 0
   };
 
   const L10N = {
@@ -19538,22 +19538,24 @@ const state = {
       #react.${EXPANDED_CLASS} #${HUB_ID} .mf-hub-aside{display:none}
       #react.${ROOT_CLASS} > img{filter:blur(9px) brightness(.58) saturate(.9)!important;transform:scale(1.07)!important}
       #react.${ROOT_CLASS} > canvas{opacity:.4!important;filter:blur(2px) brightness(.8)!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}{position:fixed!important;right:20px!important;top:20px!important;bottom:0!important;width:320px!important;height:auto!important;max-height:none!important;overflow:visible!important;pointer-events:none}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}{position:fixed!important;right:20px!important;top:20px!important;width:320px!important;height:auto!important;max-height:calc(100vh - 44px);overflow:hidden auto;scrollbar-width:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}::-webkit-scrollbar{display:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:not(:first-child){display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>*:not(:first-child){display:none!important}
-      /* el chip va estilo perfil movil: la caja (borde+fondo) es SOLO de los datos;
-         el personaje queda suelto fuera del cubo, parado con los pies en el piso de la pantalla.
-         backdrop-filter fuera de la tarjeta: un filtro en un ancestro convierte fixed en local */
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;pointer-events:auto}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipcard{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;padding:0!important}
+      /* el chip va vertical estilo perfil movil: datos arriba en su cajita y el personaje
+         grande DEBAJO pero DENTRO de la tarjeta (el piso de la pantalla quedo descartado).
+         el sync pinta .mf-hub-chiprow/.mf-hub-chipinfo/.mf-hub-chipavatar segun donde esten
+         HOY los nodos, porque el nesting cambia bajo tus pies */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chiprow{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipextra{display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipinfo{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px);padding:12px!important;align-self:stretch!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;left:50%!important;bottom:14px!important;transform:translateX(-50%)!important;width:150px!important;height:245px!important;flex:none!important}
-      /* el chip de perfil va vertical como el perfil movil: datos arriba y el personaje
-         suelto abajo. el sitio anida la fila a dos profundidades segun el render: cubrimos
-         ambas (la regla corta queda como fallback, en display:block es inerte). la caja de
-         datos y el avatar suelto viajan por clases (.mf-hub-chipinfo/.mf-hub-chipavatar)
-         que el sync pinta segun donde esten HOY, porque el nesting cambia bajo tus pies */
+      /* caja del avatar en flujo pero RELATIVE: los badges de nivel/racha y la ventana del
+         render son absolute con offsets negativos y dependen de este ancla; forzarla static
+         los suelta y terminan flotando donde sea (bug del rectangulo azul del 2026-10-05) */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:relative!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;width:150px!important;height:245px!important;flex:none!important;align-self:center!important;overflow:visible!important;border:none!important;border-radius:0!important;background:transparent!important}
+      /* ventana(s) absolutas entre el canvas y la caja: llenan la caja pero SIN recortar
+         (overflow:hidden nativo) ni pintar su borde de nivel encima del personaje */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipwindow{position:absolute!important;inset:0!important;width:auto!important;height:auto!important;overflow:visible!important;border:none!important;border-radius:0!important;padding:0!important;background:transparent!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div,
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div{flex-direction:column!important;align-items:center!important}
       /* el transform del canvas lo escribe JS en cada sync (fitChipCanvas): medir en CSS
@@ -19628,7 +19630,7 @@ const state = {
       #${HUB_ID} .mf-hub-pickrow img{width:44px;height:26px;object-fit:cover;border-radius:5px;border:1px solid rgba(0,0,0,.7);flex:none}
       #${HUB_ID} .mf-hub-pickrow span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       #${HUB_ID} .mf-hub-pickrow .mf-hub-star{position:static;opacity:1;width:24px;height:24px}
-      #${HUB_ID} .mf-hub-aside{position:absolute;right:20px;top:260px;bottom:auto;display:flex;flex-direction:column;gap:8px;width:320px;pointer-events:auto}
+      #${HUB_ID} .mf-hub-aside{position:absolute;right:20px;bottom:20px;top:auto;display:flex;flex-direction:column;gap:8px;width:320px;pointer-events:auto}
       #${HUB_ID} .mf-hub-friendspill{display:flex;align-items:center;gap:10px;border:2px solid rgba(0,0,0,.75);border-radius:10px;background:rgba(10,12,16,.62);backdrop-filter:blur(6px);color:#fff;padding:10px 13px;cursor:pointer;font-size:12.5px;font-weight:600;text-align:left}
       #${HUB_ID} .mf-hub-friendspill:hover{background:rgba(46,50,60,.72)}
       #${HUB_ID} .mf-hub-dot{width:8px;height:8px;border-radius:50%;background:#43d477;flex:none;box-shadow:0 0 7px rgba(67,212,119,.8)}
@@ -19767,11 +19769,14 @@ const state = {
   }
 
   // bbox de la figura dentro del buffer del render, escaneando alpha. se cachea por
-  // tamano de buffer: escanear en cada sync sale caro y el margen del render no cambia.
+  // tamano de buffer SOLO los exitos: un fallo (canvas webgl entre frames, taint) se
+  // reintenta en el proximo sync porque el resultado puede cambiar. el cache se valida
+  // con dos filas sonda: el render puede cambiar de contenido SIN cambiar de buffer
+  // (fallback de cabeza -> cuerpo 3d) y un frac viejo pinta al personaje gigante
   const chipFitCache = new Map();
   function figureFractions(canvas) {
     const key = `${canvas.width}x${canvas.height}`;
-    if (chipFitCache.has(key)) return chipFitCache.get(key);
+    const cached = chipFitCache.get(key);
     let frac = null;
     try {
       const off = document.createElement('canvas');
@@ -19780,6 +19785,19 @@ const state = {
       const ctx = off.getContext('2d');
       ctx.drawImage(canvas, 0, 0);
       const data = ctx.getImageData(0, 0, off.width, off.height).data;
+      const rowAlpha = y => {
+        let count = 0;
+        for (let x = 0; x < off.width; x++) {
+          if (data[(y * off.width + x) * 4 + 3] > 12) count++;
+        }
+        return count;
+      };
+      if (cached) {
+        const yBottom = Math.min(off.height - 1, Math.max(0, Math.round(cached.bottom * off.height) - 1));
+        const yTop = Math.min(off.height - 1, Math.max(0, Math.round(cached.top * off.height)));
+        if (rowAlpha(yBottom) >= 2 && rowAlpha(yTop) >= 2) return cached;
+        chipFitCache.delete(key);
+      }
       let top = -1, bottom = -1, left = off.width, right = -1;
       for (let y = 0; y < off.height; y++) {
         for (let x = 0; x < off.width; x++) {
@@ -19793,57 +19811,126 @@ const state = {
       }
       if (top >= 0 && bottom > top) {
         frac = { top: top / off.height, bottom: (bottom + 1) / off.height, cx: (left + right + 1) / (2 * off.width) };
+        chipFitCache.set(key, frac);
       }
-    } catch (_) { frac = null; }  // canvas tainted o render vacio: sin fit, se queda nativo
-    chipFitCache.set(key, frac);
+    } catch (_) { frac = null; }  // taint u otro: sin cache, se reintenta
     return frac;
   }
 
   // ajuste por sync: la figura entera, centrada y con los pies en el piso de la ventana.
-  // offsetWidth/Height ignoran transforms, asi que medir aqui es estable aunque ya haya
-  // un transform viejo puesto. el sitio cambia el tamano base del render sin avisar.
-  function fitChipCanvas(canvas) {
-    if (state.expanded) {
+  // control total del canvas: tamano explicito con el aspect del BUFFER (el sitio estira la
+  // caja con left/right y deforma al personaje) y translate puro, sin confiar en los
+  // offsets nativos (left:-18px, bottom:-151px...) porque su origen cambia con cada variante.
+  // offsetWidth/Height ignoran transforms pero aca ni los usamos: el buffer manda.
+  function fitChipCanvas(canvas, frac) {
+    const clear = () => {
       canvas.style.transform = '';
       canvas.style.transformOrigin = '';
-      return;
-    }
-    const frac = figureFractions(canvas);
-    const cssW = canvas.offsetWidth;
-    const cssH = canvas.offsetHeight;
-    if (!frac || !cssW || !cssH) return;
+      canvas.style.left = ''; canvas.style.top = '';
+      canvas.style.right = ''; canvas.style.bottom = '';
+      canvas.style.width = ''; canvas.style.height = '';
+    };
+    if (state.expanded) { clear(); return; }
     const winW = 150, winH = 245;
-    const scale = (winH * 0.86) / ((frac.bottom - frac.top) * cssH);
-    const tx = winW / 2 - frac.cx * cssW * scale;
-    const ty = winH - 2 - frac.bottom * cssH * scale;
-    canvas.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    const bw = canvas.width, bh = canvas.height;
+    if (!bw || !bh) return;
+    const figH = frac.bottom - frac.top;
+    if (!(figH > 0 && figH <= 1)) return;
+    const cssH = (winH * 0.86) / figH;
+    const cssW = cssH * (bw / bh);
+    canvas.style.left = '0px';
+    canvas.style.top = '0px';
+    canvas.style.right = 'auto';
+    canvas.style.bottom = 'auto';
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
+    const tx = winW / 2 - frac.cx * cssW;
+    const ty = winH - 2 - frac.bottom * cssH;
+    canvas.style.transform = `translate(${tx}px, ${ty}px)`;
     canvas.style.transformOrigin = 'top left';
   }
 
-  // chip de perfil: marcar donde estan HOY el bloque de datos y la ventana del avatar.
-  // el sitio re-anida la tarjeta entre renders, asi que nada de selectores de profundidad:
-  // se camina desde el canvas hacia arriba hasta hallar un hermano que parezca datos.
+  function clearChipMarks() {
+    for (const entry of [...state.marks]) {
+      if (String(entry[1]).startsWith('mf-hub-chip')) {
+        entry[0].classList.remove(entry[1]);
+        state.marks.delete(entry);
+      }
+    }
+  }
+
+  // modo estatico: NO marcar nada. la tarjeta nativa se ve como nacio — su estilo de
+  // siempre es el unico que es correcto en TODAS las variantes de nesting que el sitio
+  // inventa. las marcas finas solo existen para el camino con personaje
+  function markChipStatic() {
+    clearChipMarks();
+  }
+
   function markChip(right) {
-    const canvas = right.querySelector('canvas');
-    if (!canvas) return;
-    let node = canvas.parentElement;
-    while (node && node !== right) {
-      const parent = node.parentElement;
-      if (!parent || parent === right) return;
-      const info = [...parent.children].find(el =>
-        el !== node && !el.contains(canvas) && el.querySelector('button,p'));
-      if (info) {
-        // sin backdrop/filter en la tarjeta: un filtro en un ancestro vuelve "local" el
-        // absolute del avatar y lo ancla a la tarjeta en vez de al piso del panel
-        const card = parent.parentElement;
-        if (card && card !== right) mark(card, 'mf-hub-chipcard');
-        mark(node, 'mf-hub-chipavatar');
-        mark(info, 'mf-hub-chipinfo');
-        fitChipCanvas(canvas);
+    let canvas = null, best = 0;
+    for (const c of right.querySelectorAll('canvas')) {
+      const area = c.offsetWidth * c.offsetHeight;
+      if (area > best) { best = area; canvas = c; }
+    }
+    if (!canvas || !best) {
+      // durante un re-render de react el canvas puede estar desmontado UN instante:
+      // alternar aca pestañea a ritmo de sync. histeresis por tiempo: si lo vimos hace
+      // poco, conservar las marcas; si nunca hubo o lleva rato fuera, tarjeta nativa
+      const gone = performance.now() - (state.chipLastSeen || 0);
+      if (state.chipLastSeen && gone < 1200) return;
+      markChipStatic();
+      return;
+    }
+    state.chipLastSeen = performance.now();
+    // juzgar por CONTENIDO, no por presencia: un canvas mudo (render asincrono que no
+    // llego, webgl con preserveDrawingBuffer en pestana de fondo) no da personaje.
+    // gracia por TIEMPO, no por syncs: en una pagina quieta los syncs no corren y un
+    // contador en syncs dejaria marcas huerfanas minutos enteros
+    const frac = figureFractions(canvas);
+    if (!frac) {
+      if (performance.now() - (state.chipLastPaint || 0) > 1500) {
+        markChipStatic();
         return;
       }
-      node = parent;
+      return;   // pinto hace poco: aguantar las marcas que hay, puede volver a pintar
     }
+    state.chipLastPaint = performance.now();
+    // las marcas del sync anterior son veneno si la tarjeta cambio de forma: re-marcar
+    clearChipMarks();
+    // ventana(s) de render = ancestros ABSOLUTOS del canvas (llenan la caja, recortan y
+    // a veces llevan el borde de color de nivel). la caja del avatar es el primer ancestro
+    // que NO es absolute: ahi anclan badges y ventana, ahi hay que quedarse
+    const windows = [];
+    let node = canvas.parentElement;
+    while (node && node !== right && getComputedStyle(node).position === 'absolute') {
+      windows.push(node);
+      node = node.parentElement;
+    }
+    if (!node || node === right || !node.parentElement) { markChipStatic(); return; }
+    // fila = ancestro con un hermano ESTATICO que tenga button/p (la columna de datos).
+    // los badges de nivel/racha son absolute y contienen p: sin el filtro de position
+    // el walk los confunde con la columna y marca chiprow en la caja del avatar
+    let row = null, info = null, probe = node;
+    while (probe.parentElement && probe.parentElement !== right) {
+      const parent = probe.parentElement;
+      const data = [...parent.children].find(el =>
+        el !== probe && !el.contains(canvas) &&
+        getComputedStyle(el).position === 'static' && el.querySelector('button,p'));
+      if (data) { row = parent; info = data; break; }
+      probe = parent;
+    }
+    if (!row) { markChipStatic(); return; }
+    mark(row, 'mf-hub-chiprow');
+    mark(node, 'mf-hub-chipavatar');
+    mark(info, 'mf-hub-chipinfo');
+    for (const win of windows) if (win !== node) mark(win, 'mf-hub-chipwindow');
+    for (const child of row.children) {
+      if (child === node || child === info) continue;
+      mark(child, !child.contains(canvas) && child.querySelector('button,p') ? 'mf-hub-chipinfo' : 'mf-hub-chipextra');
+    }
+    // el avatar vive DENTRO de la tarjeta (en flujo): no hay que pelar ancestros ni
+    // escapar del cubo, asi que los filtros nativos de la tarjeta no molestan
+    fitChipCanvas(canvas, frac);
   }
 
   function forwardClick(nativeNode) {
@@ -20176,14 +20263,26 @@ const state = {
     if (!state.root) return;
     const scroll = state.hub?.querySelector('.mf-hub-main')?.scrollTop || 0;
     removeHub();
-    const hub = el('div');
-    hub.id = HUB_ID;
-    hub.setAttribute('data-mf-i18n-skip', 'true');
-    hub.append(buildRail(), buildMain(), buildAside());
-    state.root.append(hub);
-    state.hub = hub;
-    hub.querySelector('.mf-hub-main')?.scrollTo({ top: scroll });
-    syncRailActive();
+    try {
+      const hub = el('div');
+      hub.id = HUB_ID;
+      hub.setAttribute('data-mf-i18n-skip', 'true');
+      hub.append(buildRail(), buildMain(), buildAside());
+      state.root.append(hub);
+      state.hub = hub;
+      hub.querySelector('.mf-hub-main')?.scrollTo({ top: scroll });
+      syncRailActive();
+      state.renderFails = 0;
+    } catch (e) {
+      // un fallo de render no puede dejar la pantalla en un vacio oscuro: sin hub y con
+      // la clase puesta, el usuario no ve NADA y la firma ya no cambia para reintentar.
+      // volver a la pantalla nativa y reintentar con backoff creciente
+      try { console.warn('minifeather menuhub: render fallo, pantalla nativa de emergencia', e); } catch (_) {}
+      state.renderFails = (state.renderFails || 0) + 1;
+      state.renderBackoff = performance.now() + Math.min(5000, 300 * state.renderFails);
+      state.signature = '';
+      restore();
+    }
   }
 
   function clearMarks() {
@@ -20194,6 +20293,15 @@ const state = {
   function restore() {
     removeHub();
     clearMarks();
+    // fitChipCanvas deja estilos inline en el canvas del chip: sin esta limpieza el
+    // personaje queda recortado/desplazado en la tarjeta nativa hasta que react lo remonte
+    if (state.layoutRight) {
+      for (const c of state.layoutRight.querySelectorAll('canvas')) {
+        for (const prop of ['transform', 'transformOrigin', 'left', 'top', 'right', 'bottom', 'width', 'height']) {
+          c.style[prop] = '';
+        }
+      }
+    }
     state.root?.classList.remove(ROOT_CLASS, EXPANDED_CLASS);
     state.root = null;
     state.layoutRight = null;
@@ -20230,18 +20338,32 @@ const state = {
     state.recentCard = state.sections[0]?.cards.find(card => card.tagName === 'BUTTON')
       || state.sections[0]?.cards[0] || null;
 
-    // firma barata: si no cambio nada visible, no re-renderizar el hub (el centro native muta seguido)
+    // firma barata: si no cambio nada visible, no re-renderizar el hub (el centro native muta seguido).
+    // histeresis: un sync con firma distinta puede ser un re-render transitorio de react
+    // (pestañearia el hub entero cada 140ms); exige que la firma nueva se sostenga 2 syncs
     const signature = JSON.stringify([
       state.language, state.pins, state.expanded,
       state.sections.map(section => section.cards.length),
       state.games.map(game => [game.href, game.image]).slice(0, 12),
       !!state.recentCard, friendsOnlineCount(layout.right)
     ]);
-    if (!state.hub || signature !== state.signature) {
+    // en backoff post-fallo: pantalla nativa sin intentarlo de nuevo hasta que expire
+    if (performance.now() < (state.renderBackoff || 0)) return;
+    // hub huerfano (react se comio el nodo, lo que sea): reconstruir YA. la firma no puede
+    // frenarlo o la pantalla queda en vacio oscuro para siempre con la clase puesta
+    if (state.hub && !state.hub.isConnected) state.hub = null;
+    if (!state.hub || (signature !== state.signature && signature === state.prevSignature)) {
       state.signature = signature;
       renderHub();
     } else {
       syncRailActive();
+    }
+    state.prevSignature = signature;
+    if (!state.hub) {
+      // el render fallo y el catch dejo la pantalla nativa: sin clase, sin vacio oscuro.
+      // el backoff decide cuando volver a intentarlo
+      root.classList.remove(ROOT_CLASS, EXPANDED_CLASS);
+      return;
     }
     root.classList.toggle(ROOT_CLASS, true);
     root.classList.toggle(EXPANDED_CLASS, state.expanded);
@@ -20298,7 +20420,7 @@ const state = {
       state.language = changes.settings.newValue.language;
       if (reRender && state.enabled) renderHub();
     }
-    setEnabled(changes.settings.newValue?.menuHub === true);
+    if (typeof changes.settings.newValue?.menuHub === 'boolean') setEnabled(changes.settings.newValue.menuHub);
   }
 
   function destroy() {
@@ -20324,7 +20446,9 @@ const state = {
       if (typeof data?.settings?.language === 'string' && L10N[data.settings.language]) {
         state.language = data.settings.language;
       }
-      setEnabled(data?.settings?.menuHub === true);
+      // solo si la clave existe: un settings viejo sin menuHub no puede apagar el hub
+      // (la carrera con el dispatch del panel dejaria el modulo muerto hasta reiniciar)
+      if (typeof data?.settings?.menuHub === 'boolean') setEnabled(data.settings.menuHub);
     });
   } catch (_) {}
   globalThis[KEY] = {
