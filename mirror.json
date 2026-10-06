@@ -97,7 +97,7 @@
     "src/Shaders/CustomShader.js",
     "src/Shaders/CustomShaderSafetyPatch.js",
     "src/Shaders/MF_Deferred.js",
-    "src/Render/MF_AntiTear.js",
+    "src/Shaders/MF_WaterStyle.js",
     "src/Experimental/Realistic/RealisticProfiles.js",
     "src/Experimental/Realistic/ShadowSystem.js",
     "src/Experimental/Realistic/ShadowFilterPatch.js",
