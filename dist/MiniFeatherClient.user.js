@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006175640
+// @version      4.19.0.20261006181016
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : fed4fac3f4e86e71faa1b997040522063393106a
- * builtAt : 2026-10-06T17:56:55.664Z
+ * commit  : 273a43e3aaaafeb84eb511f0c9b271da622f4b2f
+ * builtAt : 2026-10-06T18:10:34.190Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"fed4fac3f4e86e71faa1b997040522063393106a","builtAt":"2026-10-06T17:56:55.664Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"273a43e3aaaafeb84eb511f0c9b271da622f4b2f","builtAt":"2026-10-06T18:10:34.190Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -20132,37 +20132,12 @@ const state = {
     restoreChipCanvas(right);
   }
 
-  function markChip(right) {
-    let canvas = null, best = 0;
-    for (const c of right.querySelectorAll('canvas')) {
-      const area = c.offsetWidth * c.offsetHeight;
-      if (area > best) { best = area; canvas = c; }
-    }
-    if (!canvas || !best) {
-      // durante un re-render de react el canvas puede estar desmontado UN instante:
-      // alternar aca pestañea a ritmo de sync. histeresis por tiempo: si lo vimos hace
-      // poco, conservar las marcas; si nunca hubo o lleva rato fuera, tarjeta nativa
-      const gone = performance.now() - (state.chipLastSeen || 0);
-      if (state.chipLastSeen && gone < 1200) return;
-      markChipStatic(right);
-      return;
-    }
-    state.chipLastSeen = performance.now();
-    // juzgar por CONTENIDO, no por presencia: un canvas mudo (render asincrono que no
-    // llego, webgl con preserveDrawingBuffer en pestana de fondo) no da personaje.
-    // gracia por TIEMPO, no por syncs: en una pagina quieta los syncs no corren y un
-    // contador en syncs dejaria marcas huerfanas minutos enteros
-    const frac = figureFractions(canvas);
-    if (!frac) {
-      if (performance.now() - (state.chipLastPaint || 0) > 1500) {
-        markChipStatic(right);
-        return;
-      }
-      return;   // pinto hace poco: aguantar las marcas que hay, puede volver a pintar
-    }
-    state.chipLastPaint = performance.now();
-    // las marcas del sync anterior son veneno si la tarjeta cambio de forma: re-marcar
-    clearChipMarks();
+  // estructura del chip: fila arriba, tarjeta de datos arriba, escenario a 50vh.
+  // SOLO necesita que el canvas exista — el contenido (frac) es condicion del fit,
+  // no de las marcas. sin esto, un remount de react nace sin marcas y el fit inline
+  // del canvas se ancla al contenedor equivocado: personaje arriba y ENCIMA de la
+  // tarjeta, y como los syncs solo corren con mutaciones, el derrumbe puede quedarse
+  function markChipStructure(right, canvas) {
     // ventana(s) de render = ancestros ABSOLUTOS del canvas (llenan la caja, recortan y
     // a veces llevan el borde de color de nivel). la caja del avatar es el primer ancestro
     // que NO es absolute: ahi anclan badges y ventana, ahi hay que quedarse
@@ -20172,7 +20147,7 @@ const state = {
       windows.push(node);
       node = node.parentElement;
     }
-    if (!node || node === right || !node.parentElement) { markChipStatic(right); return; }
+    if (!node || node === right || !node.parentElement) return null;
     // fila = ancestro con un hermano ESTATICO que tenga button/p (la columna de datos).
     // los badges de nivel/racha son absolute y contienen p: sin el filtro de position
     // el walk los confunde con la columna y marca chiprow en la caja del avatar
@@ -20185,7 +20160,7 @@ const state = {
       if (data) { row = parent; info = data; break; }
       probe = parent;
     }
-    if (!row) { markChipStatic(right); return; }
+    if (!row) return null;
     mark(row, 'mf-hub-chiprow');
     mark(node, 'mf-hub-chipavatar');
     mark(info, 'mf-hub-chipinfo');
@@ -20217,6 +20192,46 @@ const state = {
         mark(child, 'mf-hub-chipextra');
       }
     }
+    return { row, node, info };
+  }
+
+  function markChip(right) {
+    let canvas = null, best = 0;
+    for (const c of right.querySelectorAll('canvas')) {
+      const area = c.offsetWidth * c.offsetHeight;
+      if (area > best) { best = area; canvas = c; }
+    }
+    if (!canvas || !best) {
+      // durante un re-render de react el canvas puede estar desmontado UN instante:
+      // alternar aca pestañea a ritmo de sync. histeresis por tiempo: si lo vimos hace
+      // poco, conservar las marcas; si nunca hubo o lleva rato fuera, tarjeta nativa
+      const gone = performance.now() - (state.chipLastSeen || 0);
+      if (state.chipLastSeen && gone < 1200) return;
+      markChipStatic(right);
+      return;
+    }
+    state.chipLastSeen = performance.now();
+    // el CONTENIDO decide el fit, no las marcas: un canvas mudo (render asincrono que
+    // no llego, pestana de fondo) igual marca estructura — el layout no puede derrumbarse
+    // mientras el render llega. gracia por TIEMPO, no por syncs: en una pagina quieta
+    // los syncs no corren y un contador dejaria marcas huerfanas minutos enteros
+    const frac = figureFractions(canvas);
+    if (!frac) {
+      if (performance.now() - (state.chipLastPaint || 0) > 1500) {
+        markChipStatic(right);
+        return;
+      }
+      // pinto hace poco: estructura marcada (tarjeta arriba, escenario a 50vh) y el
+      // escenario se ve vacio un instante — infinitamente mejor que el personaje
+      // pisando la tarjeta. si el walk falla, tarjeta nativa
+      clearChipMarks();
+      if (!markChipStructure(right, canvas)) markChipStatic(right);
+      return;
+    }
+    state.chipLastPaint = performance.now();
+    // las marcas del sync anterior son veneno si la tarjeta cambio de forma: re-marcar
+    clearChipMarks();
+    if (!markChipStructure(right, canvas)) { markChipStatic(right); return; }
     state.chipCanvas = canvas;
     fitChipCanvas(canvas, frac);
   }
