@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006195525
+// @version      4.19.0.20261006200433
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : c0ee6ac33a5f045026abec6fd2f1ed8c1105b4e6
- * builtAt : 2026-10-06T19:55:44.709Z
+ * commit  : 74dcc343a069de6956ed3eb0695f0dff46e1c7b7
+ * builtAt : 2026-10-06T20:04:46.390Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"c0ee6ac33a5f045026abec6fd2f1ed8c1105b4e6","builtAt":"2026-10-06T19:55:44.709Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"74dcc343a069de6956ed3eb0695f0dff46e1c7b7","builtAt":"2026-10-06T20:04:46.390Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -117111,7 +117111,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         book_written: 'written_book',
         book_enchanted: 'enchanted_book',
         grass_path_side: 'dirt_path_side',
-        grass_path_top: 'dirt_path_top'
+        grass_path_top: 'dirt_path_top',
+        grass: 'short_grass'
     };
 
     function buildLookup(customFiles) {
@@ -117156,6 +117157,56 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return null;
     }
 
+    // frames individuales de animación vieja (clock_00.png, compass_17.png,
+    // bow_pulling_2.png): los packs modernos los traen como UNA tira vertical
+    // (clock.png de N cuadros + .png.mcmeta). aquí se rebana: stem_N → fila N
+    // de la tira. si el mcmeta reordena (animation.frames) se respeta; si el
+    // índice se sale de la tira, no hay match (queda vanilla, jamás inventado).
+    const STRIP_ROW_OFFSETS = {
+        bow_pulling: 1,        // fila 0 de bow.png = standby (bow pelado)
+        crossbow_pulling: 1,
+        crossbow_arrow: 4
+    };
+
+    function animMatch(fileName, search, dirMap, animMeta) {
+        if (!animMeta || !animMeta.size) return null;
+        const baseName = fileName.replace(/\.png$/, '');
+        const m = /^(.+?)_(\d+)$/.exec(baseName);
+        if (!m) return null;
+        const stemLc = m[1].toLowerCase();
+        const idx = parseInt(m[2], 10);
+        const meta = animMeta.get(stemLc);
+        if (meta) {
+            const strip = findSprite(m[1], search) || (dirMap && dirMap.get(stemLc));
+            if (strip) {
+                const frameW = strip.naturalWidth;
+                if (frameW && strip.naturalHeight > frameW) {
+                    const count = Math.floor(strip.naturalHeight / frameW);
+                    let row = idx;
+                    const frames = meta.animation && meta.animation.frames;
+                    if (Array.isArray(frames)) {
+                        const f = frames[idx];
+                        if (typeof f === 'number') row = f;
+                        else if (f && typeof f.index === 'number') row = f.index;
+                        else return null;
+                    }
+                    row += STRIP_ROW_OFFSETS[stemLc] || 0;
+                    if (row >= 0 && row < count) {
+                        return { img: strip, row, fw: frameW, fh: frameW };
+                    }
+                }
+            }
+        }
+        // formato optifine/cit: item/clock/0.png — el cuadro N es un archivo
+        // numerado dentro de la carpeta stem. el dirMap ya trae 'stem/N'.
+        if (dirMap) {
+            const pad = idx < 10 ? '0' + idx : String(idx);
+            const viaDir = dirMap.get(stemLc + '/' + idx) || dirMap.get(stemLc + '/' + pad);
+            if (viaDir) return { img: viaDir };
+        }
+        return null;
+    }
+
     function fetchImage(src) {
         return new Promise((resolve) => {
             const img = new Image();
@@ -117174,7 +117225,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return vanillaAtlasCache;
     }
 
-    async function generateSpritesheet(customFiles, dirLeaves) {
+    async function generateSpritesheet(customFiles, dirLeaves, animMeta) {
         const frames = await loadFramesData();
         if (!frames) {
             console.error(`${TAG} No frames data available`);
@@ -117222,9 +117273,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
             const baseName = fileName.replace(/\.png$/, '');
             const customImg = spriteForFrame(fileName, search, dirMap);
+            const anim = customImg ? null : animMatch(fileName, search, dirMap, animMeta);
 
-            if (customImg) {
-                if (rotated) {
+            if (customImg || anim) {
+                if (anim && anim.fw) {
+                    // tira vertical: una fila del strip del pack al slot del frame
+                    ctx.drawImage(anim.img, 0, anim.row * anim.fh, anim.fw, anim.fh, fx, fy, fw, fh);
+                } else if (anim) {
+                    // cuadro numerado (item/clock/0.png): imagen entera al slot
+                    ctx.drawImage(anim.img, fx, fy, fw, fh);
+                } else if (rotated) {
                     ctx.save();
                     ctx.translate(fx, fy);
                     ctx.rotate(Math.PI / 2);
@@ -117430,6 +117488,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const pngEntries = Object.values(zip.files).filter(
             f => !f.dir && f.name.toLowerCase().endsWith('.png')
         );
+        // los strips de animación viajan con un .png.mcmeta hermano que puede
+        // reordenar cuadros; se parsea para que animMatch respete el orden.
+        const metaEntries = Object.values(zip.files).filter(
+            f => !f.dir && f.name.toLowerCase().endsWith('.png.mcmeta')
+        );
+        const metas = new Map();
+        await Promise.all(metaEntries.map(async (entry) => {
+            try {
+                const parsed = JSON.parse(await entry.async('text'));
+                if (parsed && parsed.animation) {
+                    const stem = entry.name.replace(/\\/g, '/').split('/').pop()
+                        .replace(/\.png\.mcmeta$/i, '');
+                    metas.set(stem.toLowerCase(), parsed);
+                }
+            } catch (_) {}
+        }));
 
         void 0;
 
@@ -117454,7 +117528,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 const dirLeaf = segments.length >= 1
                     ? segments[segments.length - 1] + '/' + baseName
                     : baseName;
-                return { name: baseName, img, dirLeaf };
+                return { name: baseName, img, dirLeaf, meta: metas.get(baseName.toLowerCase()) };
             } catch (_) {
                 return null;
             }
@@ -117466,6 +117540,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     async function processUploadedFiles(fileList) {
         const customSprites = new Map();
         const dirLeaves = new Map();
+        const animMeta = new Map();
         const pbrMaps = { n: new Map(), s: new Map(), e: new Map() };
         const files = Array.from(fileList);
         let loaded = 0;
@@ -117512,17 +117587,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         for (const zipFile of zipFiles) {
             void 0;
             const extracted = await extractZip(zipFile);
-            for (const { name, img, dirLeaf } of extracted) {
+            for (const { name, img, dirLeaf, meta } of extracted) {
                 if (!registerPbr(name, img)) customSprites.set(name, img);
                 if (dirLeaf && !dirLeaves.has(dirLeaf.toLowerCase())) {
                     dirLeaves.set(dirLeaf.toLowerCase(), img);
+                }
+                if (meta && !animMeta.has(name.toLowerCase())) {
+                    animMeta.set(name.toLowerCase(), meta);
                 }
                 loaded++;
             }
             void 0;
         }
 
-        return { customSprites, dirLeaves, pbrMaps, loaded };
+        return { customSprites, dirLeaves, animMeta, pbrMaps, loaded };
     }
 
     function pbrNeutral(kind) {
@@ -117696,7 +117774,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
 
         void 0;
-        const result = await generateSpritesheet(customSprites, dirLeaves);
+        const result = await generateSpritesheet(customSprites, dirLeaves, animMeta);
 
         if (!result) {
             return { success: false, error: 'Generation failed' };
