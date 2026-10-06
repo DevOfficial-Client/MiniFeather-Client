@@ -1,11 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-<<<<<<< HEAD
-// @version      4.19.0.20261006225131
-=======
-// @version      4.19.0.20261006224851
->>>>>>> beta
+// @version      4.19.0.20261006230242
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -18,21 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
-<<<<<<< HEAD
- * commit  : c6df03eaebd8ecfdc06dbaf61e7844fc78e9f998
- * builtAt : 2026-10-06T22:52:04.215Z
+ * commit  : 39567db440525712b3d6001adf6906aba11881ed
+ * builtAt : 2026-10-06T23:02:56.896Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"c6df03eaebd8ecfdc06dbaf61e7844fc78e9f998","builtAt":"2026-10-06T22:52:04.215Z","pinned":true};
-=======
- * commit  : 145ce57d89f77210d4621e2b08ae4c96dd707135
- * builtAt : 2026-10-06T22:49:35.904Z
- */
-(function () {
-  "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"145ce57d89f77210d4621e2b08ae4c96dd707135","builtAt":"2026-10-06T22:49:35.904Z","pinned":true};
->>>>>>> beta
+window.__MF_BUILD__={"version":"4.19.0","commit":"39567db440525712b3d6001adf6906aba11881ed","builtAt":"2026-10-06T23:02:56.896Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -81835,6 +81822,222 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
 //# sourceURL=MF:src/Render/CrittersMobs.js
 
+/* ==== mf module: src/Render/MF_AntiTear.js ==== */
+(function () {
+    'use strict';
+
+    // re-ejecución (hot-reload): desenganchar los clamps antes de nada
+    try { window.__MF_ANTI_TEAR__?.destroy?.(); } catch (_) {}
+
+    const TAG = 'minifeather antitear';
+
+    // el juego acumula el frame anterior para motion blur / god rays high sin
+    // chequear si el píxel del historial todavía representa lo mismo
+    // (disocclusion), y encima le mete jitter por píxel (IGN) esperando que un
+    // denoiser temporal que NO existe lo limpie. resultado: bandas diagonales
+    // translúcidas + estática punteada que la ia de turno se tragó en vanilla
+    // con la misma gpu del usuario. esto no toca settings ni la nube de la
+    // cuenta: clava los passes en runtime y listo.
+    const MEDIUM_GOD_RAY_TIER = { steps: 12, occlusionSteps: 4, resolutionScale: 0.5, temporal: false, maxDistance: 200 };
+
+    const state = {
+        enabled: false,
+        game: null,
+        keeperTimer: 0,
+        warnAt: 0,
+        restore: [],
+        motionBlurPass: null,
+        fogPass: null
+    };
+
+    function findGame() {
+        try {
+            const root = document.getElementById('react');
+            if (!root) return null;
+            for (const key in root) {
+                if (!key.startsWith('__reactContainer') && !key.startsWith('__reactFiber')) continue;
+                const fiber = root[key];
+                const cand = fiber?.updateQueue?.baseState?.element?.props?.game;
+                if (cand && cand.player) return cand;
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    // los passes viven en el manager de post del juego (recreado por mundo).
+    // bfs acotado desde el game object: los shaders no están colgando de la
+    // escena three, así que corto las ramas gordas y pongo techo de nodos.
+    const SKIP_KEYS = new Set(['parent', 'children', 'world', 'scene', 'player', 'players', 'entities', 'domElement', 'chat']);
+    const MAX_NODES = 8000;
+    const MAX_DEPTH = 5;
+
+    function isMotionBlurPass(o) {
+        return Object.prototype.hasOwnProperty.call(o, '_prevViewProj') &&
+            Object.prototype.hasOwnProperty.call(o, '_blur') &&
+            Object.prototype.hasOwnProperty.call(o, '_target');
+    }
+
+    function isFogPass(o) {
+        return Object.prototype.hasOwnProperty.call(o, '_godRayTier') &&
+            Object.prototype.hasOwnProperty.call(o, '_raymarch');
+    }
+
+    function findPasses(game) {
+        const out = {};
+        if (!game) return out;
+        const seen = new Set();
+        let budget = MAX_NODES;
+        const queue = [[game, 0]];
+        seen.add(game);
+        while (queue.length && budget > 0 && !(out.motionBlur && out.fog)) {
+            const [node, depth] = queue.shift();
+            budget--;
+            let props;
+            try { props = Object.getOwnPropertyNames(node); } catch (_) { continue; }
+            for (const k of props) {
+                if (SKIP_KEYS.has(k) || k.startsWith('__react') || k.startsWith('__MF')) continue;
+                let v;
+                try { v = node[k]; } catch (_) { continue; }
+                if (!v || typeof v !== 'object') continue;
+                if (seen.has(v)) continue;
+                seen.add(v);
+                if (!out.motionBlur && isMotionBlurPass(v)) out.motionBlur = v;
+                if (!out.fog && isFogPass(v)) out.fog = v;
+                if (out.motionBlur && out.fog) return out;
+                if (depth < MAX_DEPTH && budget > 0) queue.push([v, depth + 1]);
+            }
+        }
+        return out;
+    }
+
+    function clampMotionBlur(pass) {
+        const hadOwn = Object.prototype.hasOwnProperty.call(pass, 'enabled');
+        const prev = hadOwn ? pass.enabled : undefined;
+        const restore = () => {
+            try { delete pass.enabled; } catch (_) {}
+            if (hadOwn) { try { pass.enabled = prev; } catch (_) {} }
+        };
+        try {
+            Object.defineProperty(pass, 'enabled', {
+                configurable: true,
+                enumerable: true,
+                get() { return false; },
+                set() {} // el frame escribe enabled cada frame y el composer lo pregunta; ambos pierden
+            });
+            state.restore.push(restore);
+            state.motionBlurPass = pass;
+            return true;
+        } catch (_) { return false; }
+    }
+
+    function clampGodRays(pass) {
+        let current = null;
+        try { current = pass._godRayTier; } catch (_) {}
+        const restore = () => {
+            try { delete pass._godRayTier; } catch (_) {}
+            try { pass._godRayTier = current; } catch (_) {}
+        };
+        try {
+            Object.defineProperty(pass, '_godRayTier', {
+                configurable: true,
+                enumerable: true,
+                get() { return current; },
+                set(v) {
+                    // high es el tier temporal a media resolución; medium hace lo
+                    // mismo sin historial. off/null pasa de largo.
+                    current = (v && v.temporal === true) ? MEDIUM_GOD_RAY_TIER : v;
+                }
+            });
+            state.restore.push(restore);
+            state.fogPass = pass;
+            return true;
+        } catch (_) { return false; }
+    }
+
+    function unhookAll() {
+        for (const fn of state.restore) { try { fn(); } catch (_) {} }
+        state.restore = [];
+        state.motionBlurPass = null;
+        state.fogPass = null;
+    }
+
+    function hookPasses() {
+        // sin throttle: el interval de 3s ya es el límite de abuso
+        state.game = findGame() || state.game;
+        if (!state.game) return status();
+        const passes = findPasses(state.game);
+        if (!passes.motionBlur && !passes.fog) {
+            const t = performance.now();
+            if (t - state.warnAt > 30000) {
+                state.warnAt = t;
+                console.info(TAG, 'manager de post no encontrado todavía (offscreen rendering? otro mundo?) — reintento');
+            }
+            return status();
+        }
+        if (passes.motionBlur && passes.motionBlur !== state.motionBlurPass) clampMotionBlur(passes.motionBlur);
+        if (passes.fog && passes.fog !== state.fogPass) clampGodRays(passes.fog);
+        return status();
+    }
+
+    function loadPrefs() {
+        // sin prefs: el default del cliente es ON y el panel manda el evento
+    }
+
+    function enable() {
+        state.enabled = true;
+        loadPrefs();
+        hookPasses();
+        if (!state.keeperTimer) {
+            state.keeperTimer = setInterval(() => {
+                if (!state.enabled) return;
+                // re-escaneo siempre: el juego recrea el manager por cambio de
+                // mundo y los passes viejos quedan clampeados pero huérfanos
+                hookPasses();
+            }, 3000);
+        }
+        console.info(TAG, 'activo — caza de passes en curso (motion blur + god rays temporal)');
+        return true;
+    }
+
+    function disable() {
+        state.enabled = false;
+        if (state.keeperTimer) { clearInterval(state.keeperTimer); state.keeperTimer = 0; }
+        unhookAll();
+        // reset completo: el game object de un mundo viejo no sirve para el próximo
+        state.game = null;
+        return true;
+    }
+
+    function status() {
+        return {
+            enabled: state.enabled,
+            motionBlur: !!state.motionBlurPass,
+            godRays: !!state.fogPass,
+            game: !!state.game
+        };
+    }
+
+    function destroy() {
+        disable();
+        try { delete window.MF_AntiTear; } catch (_) {}
+        try { delete window.__MF_ANTI_TEAR__; } catch (_) {}
+    }
+
+    document.addEventListener('minifeather:antitear-config', (ev) => {
+        try {
+            const cfg = JSON.parse(ev.detail || '{}');
+            if (cfg.enabled === true) enable();
+            else if (cfg.enabled === false) disable();
+        } catch (_) {}
+    });
+
+    window.MF_AntiTear = { enable, disable, status, destroy };
+    window.__MF_ANTI_TEAR__ = { destroy };
+    console.info(TAG, 'módulo cargado (inactivo hasta minifeather:antitear-config {enabled:true})');
+})();
+
+//# sourceURL=MF:src/Render/MF_AntiTear.js
+
 /* ==== mf module: src/Render/MF_CritterSkins.js ==== */
 (function () {
     'use strict';
@@ -89839,16 +90042,24 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     const TAG = 'minifeather waterstyle';
 
     // ─────────────────────────────────────────────────────────────────────
-    // Agua 100% transparente con tinte verdoso. El juego renderiza el fluido
-    // con UN material compartido (agua + lava) cuyo onBeforeCompile inyecta
-    // el shader de olas/refracciones (`water_shader_v53`); se identifica
-    // porque es el único con userData.waterShadersEnabled. Envolvemos su
-    // onBeforeCompile y añadimos AL FINAL del fragment main un override que
-    // re-tinta por luminancia y fija el alfa — gated por vColor.r < 0.49,
-    // el mismo discriminador agua/lava que usa el shader del juego, así que
-    // la lava queda intacta (sigue full-bright con su sheen).
-    // Sin exposición automática de nada: dos sliders (opacidad y fuerza del
-    // tinte) mandan, y el color verde es fijo pero editable por config.
+    // Agua 100% transparente con tinte verdoso + OLAS NOTORIAS y ondas que
+    // reaccionan al jugador (v3). El juego renderiza el fluido con UN material
+    // compartido (agua + lava) cuyo onBeforeCompile inyecta el shader de
+    // olas/refracciones (`water_shader_v53`); se identifica porque es el único
+    // con userData.waterShadersEnabled. Envolvemos su onBeforeCompile y:
+    //   1. fuerza la rama fancy (USE_WATER_SHADERS) aunque el setting del
+    //      juego esté apagado — seguro: los raymarch de texturas están gated
+    //      por reflectionEnabled>0.5 y corren fallbacks analíticos;
+    //   2. amplifica la amplitud de las olas de AGUA (kinds 1 y 2; la lava
+    //      usa kind 0 y no se toca) × uMfWaveScale;
+    //   3. suma un anillo radial centrado en el jugador DENTRO de
+    //      waterWaveHeight — así también perturba la normal que calcula el
+    //      juego con la misma función, y el brillo del sol titila con las
+    //      olas. Gated kind>=0.5 para que la lava jamás reaccione.
+    //   4. al final del fragment: re-tinte por luminancia + alfa fijo
+    //      (uMfWater*), ANTES del fog del template.
+    // El juego hace tick de userData.time en fixedUpdate sin importar su
+    // setting, así que la animación corre siempre.
     // ─────────────────────────────────────────────────────────────────────
 
     const TINT = [0.45, 0.95, 0.55];   // verde agua; lum × esto = tono final
@@ -89857,8 +90068,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         enabled: localStorage.getItem('mf_waterstyle') === 'true',
         alpha: readNum('mf_waterstyle_alpha', 0.12),
         tintMix: readNum('mf_waterstyle_tintmix', 0.85),
+        waveScale: readNum('mf_waterstyle_wavescale', 2.0),
         game: null,
         scanTimer: 0,
+        tickTimer: 0,
         lastScan: 0,
         hooked: new Map(),      // material → { orig, origKey, liveUniforms }
         destroyed: false
@@ -89893,6 +90106,21 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         return src.slice(0, lastBrace) + '\n' + code + '\n' + src.slice(lastBrace);
     }
 
+    const WAVE_GLSL = `
+        uniform float uMfWaveScale;
+        uniform vec3 uMfPlayerPos;
+        uniform float uMfPlayerRipple;
+        // anillo radial que nace del jugador; kind>=0.5 = agua (la lava pide
+        // kind 0.0 y sale por el if de una). El módulo suaviza
+        // uMfPlayerRipple hacia 1 en agua / 0.15 en tierra
+        float mfPlayerRipple(vec2 p, float t, float kind) {
+            if (kind < 0.5) return 0.0;
+            float mfD = length(p - uMfPlayerPos.xz);
+            float mfRing = sin(mfD * 2.0 - t * 6.0);
+            return mfRing * exp(-mfD * 0.5) * uMfPlayerRipple * 0.05 * uMfWaveScale;
+        }
+    `;
+
     const FRAG_TAIL = `
         // mf water style: tinte verde por luminancia + alfa fijo. vColor.r < 0.49
         // es el gate agua/lava del propio shader del juego; lava pasa de largo.
@@ -89915,7 +90143,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         const liveUniforms = {
             uMfWaterAlpha: { value: state.alpha },
             uMfWaterTintMix: { value: state.tintMix },
-            uMfWaterTint: { value: TINT.slice() }
+            uMfWaterTint: { value: TINT.slice() },
+            uMfWaveScale: { value: state.waveScale },
+            uMfPlayerPos: { value: [0, 0, 0] },
+            uMfPlayerRipple: { value: 0 }
         };
 
         const wrapper = function (shader) {
@@ -89923,6 +90154,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             shader.uniforms.uMfWaterAlpha = liveUniforms.uMfWaterAlpha;
             shader.uniforms.uMfWaterTintMix = liveUniforms.uMfWaterTintMix;
             shader.uniforms.uMfWaterTint = liveUniforms.uMfWaterTint;
+            shader.uniforms.uMfWaveScale = liveUniforms.uMfWaveScale;
+            shader.uniforms.uMfPlayerPos = liveUniforms.uMfPlayerPos;
+            shader.uniforms.uMfPlayerRipple = liveUniforms.uMfPlayerRipple;
 
             // superficie VIVA aunque el juego tenga "water shaders" apagado: el
             // setting gatea el define en compilación y el uniform en runtime.
@@ -89934,19 +90168,41 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             // reales aparecen solos (nuestro tint los preserva vía el mix).
             // Los uniforms nuestros van en el header (alcance global; el tail
             // antes del fog es statement-only dentro de main).
-            const header =
-                '#define USE_WATER_SHADERS\n' +
-                'uniform float uMfWaterAlpha;\n' +
-                'uniform float uMfWaterTintMix;\n' +
-                'uniform vec3 uMfWaterTint;\n';
             if (!shader.vertexShader.includes('USE_WATER_SHADERS')) {
                 shader.vertexShader = '#define USE_WATER_SHADERS\n' + shader.vertexShader;
             }
+            if (!shader.vertexShader.includes('uMfWaveScale')) {
+                shader.vertexShader = WAVE_GLSL + shader.vertexShader;
+            }
             if (!shader.fragmentShader.includes('uMfWaterAlpha')) {
-                shader.fragmentShader = header + shader.fragmentShader;
+                shader.fragmentShader =
+                    '#define USE_WATER_SHADERS\n' +
+                    'uniform float uMfWaterAlpha;\n' +
+                    'uniform float uMfWaterTintMix;\n' +
+                    'uniform vec3 uMfWaterTint;\n' +
+                    shader.fragmentShader;
             }
             if (shader.uniforms.waterShadersEnabled) {
                 shader.uniforms.waterShadersEnabled.value = 1;
+            }
+
+            // olas notorias + reacción al jugador: parcheo waterWaveHeight del
+            // propio juego — la normal que ilumina la superficie sale de la
+            // MISMA función (waterWaveNormal la llama), así que el brillo del
+            // sol titila con las olas y el anillo. Si el bundle cambia y los
+            // marcadores ya no están, el agua queda vanilla en vez de no
+            // compilar (fail-open, la lección del CustomShader)
+            if (!shader.vertexShader.includes('mfPlayerRipple(p, t, kind)')) {
+                let vs = shader.vertexShader;
+                const ampOrig = 'float amp = kind < 0.5 ? 0.01 : (kind < 1.5 ? 0.045 : 0.03);';
+                if (vs.includes(ampOrig)) {
+                    vs = vs.replace(ampOrig,
+                        'float amp = kind < 0.5 ? 0.01 : (kind < 1.5 ? 0.045 * uMfWaveScale : 0.03 * uMfWaveScale);');
+                }
+                if (vs.includes('return w * amp;')) {
+                    vs = vs.replace('return w * amp;', 'return w * amp + mfPlayerRipple(p, t, kind);');
+                }
+                shader.vertexShader = vs;
             }
 
             const stamp = 'float mfWaterStyle = 1.0;\n' + FRAG_TAIL;
@@ -89968,7 +90224,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v1';
+            return base + '_mfws_v2';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
@@ -90024,6 +90280,30 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         for (const [, entry] of state.hooked) {
             entry.liveUniforms.uMfWaterAlpha.value = state.alpha;
             entry.liveUniforms.uMfWaterTintMix.value = state.tintMix;
+            entry.liveUniforms.uMfWaveScale.value = state.waveScale;
+        }
+    }
+
+    // 10 Hz basta: el anillo se anima con el time del juego (60fps en shader),
+    // aquí solo actualizamos el CENTRO (pos del jugador) y la intensidad
+    function tickPlayer() {
+        if (!state.enabled || state.destroyed) return;
+        if (!state.game?.player) {
+            state.game = findGame() || state.game;
+        }
+        const p = state.game?.player;
+        const pos = p?.pos;
+        for (const [, entry] of state.hooked) {
+            const u = entry.liveUniforms;
+            if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.z)) {
+                u.uMfPlayerPos.value[0] = pos.x;
+                u.uMfPlayerPos.value[1] = pos.y || 0;
+                u.uMfPlayerPos.value[2] = pos.z;
+            }
+            // en agua = 1, en tierra = 0.15 (la caída exponencial del anillo
+            // deja el efecto local de todos modos — "el agua te nota")
+            const target = p?.inWater ? 1 : 0.15;
+            u.uMfPlayerRipple.value += (target - u.uMfPlayerRipple.value) * 0.18;
         }
     }
 
@@ -90033,6 +90313,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         if (!state.scanTimer) {
             state.scanTimer = setInterval(scan, 2000);
         }
+        if (!state.tickTimer) {
+            state.tickTimer = setInterval(tickPlayer, 100);
+        }
         scan();
     }
 
@@ -90040,6 +90323,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         state.enabled = false;
         localStorage.setItem('mf_waterstyle', 'false');
         if (state.scanTimer) { clearInterval(state.scanTimer); state.scanTimer = 0; }
+        if (state.tickTimer) { clearInterval(state.tickTimer); state.tickTimer = 0; }
         for (const m of [...state.hooked.keys()]) unhookMaterial(m);
     }
 
@@ -90058,6 +90342,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 localStorage.setItem('mf_waterstyle_tintmix', String(state.tintMix));
             }
         }
+        if (cfg && cfg.waveScale !== undefined) {
+            const w = parseFloat(cfg.waveScale);
+            if (Number.isFinite(w)) {
+                state.waveScale = Math.max(1, Math.min(4, w));
+                localStorage.setItem('mf_waterstyle_wavescale', String(state.waveScale));
+            }
+        }
         if (cfg && cfg.tint && Array.isArray(cfg.tint) && cfg.tint.length === 3) {
             const t = cfg.tint.map(Number);
             if (t.every(Number.isFinite)) {
@@ -90074,6 +90365,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             hooked: state.hooked.size,
             alpha: state.alpha,
             tintMix: state.tintMix,
+            waveScale: state.waveScale,
             tint: TINT.slice()
         };
     }
@@ -90507,222 +90799,6 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 })();
 
 //# sourceURL=MF:src/Shaders/MF_KotoSky.js
-
-/* ==== mf module: src/Render/MF_AntiTear.js ==== */
-(function () {
-    'use strict';
-
-    // re-ejecución (hot-reload): desenganchar los clamps antes de nada
-    try { window.__MF_ANTI_TEAR__?.destroy?.(); } catch (_) {}
-
-    const TAG = 'minifeather antitear';
-
-    // el juego acumula el frame anterior para motion blur / god rays high sin
-    // chequear si el píxel del historial todavía representa lo mismo
-    // (disocclusion), y encima le mete jitter por píxel (IGN) esperando que un
-    // denoiser temporal que NO existe lo limpie. resultado: bandas diagonales
-    // translúcidas + estática punteada que la ia de turno se tragó en vanilla
-    // con la misma gpu del usuario. esto no toca settings ni la nube de la
-    // cuenta: clava los passes en runtime y listo.
-    const MEDIUM_GOD_RAY_TIER = { steps: 12, occlusionSteps: 4, resolutionScale: 0.5, temporal: false, maxDistance: 200 };
-
-    const state = {
-        enabled: false,
-        game: null,
-        keeperTimer: 0,
-        warnAt: 0,
-        restore: [],
-        motionBlurPass: null,
-        fogPass: null
-    };
-
-    function findGame() {
-        try {
-            const root = document.getElementById('react');
-            if (!root) return null;
-            for (const key in root) {
-                if (!key.startsWith('__reactContainer') && !key.startsWith('__reactFiber')) continue;
-                const fiber = root[key];
-                const cand = fiber?.updateQueue?.baseState?.element?.props?.game;
-                if (cand && cand.player) return cand;
-            }
-        } catch (_) {}
-        return null;
-    }
-
-    // los passes viven en el manager de post del juego (recreado por mundo).
-    // bfs acotado desde el game object: los shaders no están colgando de la
-    // escena three, así que corto las ramas gordas y pongo techo de nodos.
-    const SKIP_KEYS = new Set(['parent', 'children', 'world', 'scene', 'player', 'players', 'entities', 'domElement', 'chat']);
-    const MAX_NODES = 8000;
-    const MAX_DEPTH = 5;
-
-    function isMotionBlurPass(o) {
-        return Object.prototype.hasOwnProperty.call(o, '_prevViewProj') &&
-            Object.prototype.hasOwnProperty.call(o, '_blur') &&
-            Object.prototype.hasOwnProperty.call(o, '_target');
-    }
-
-    function isFogPass(o) {
-        return Object.prototype.hasOwnProperty.call(o, '_godRayTier') &&
-            Object.prototype.hasOwnProperty.call(o, '_raymarch');
-    }
-
-    function findPasses(game) {
-        const out = {};
-        if (!game) return out;
-        const seen = new Set();
-        let budget = MAX_NODES;
-        const queue = [[game, 0]];
-        seen.add(game);
-        while (queue.length && budget > 0 && !(out.motionBlur && out.fog)) {
-            const [node, depth] = queue.shift();
-            budget--;
-            let props;
-            try { props = Object.getOwnPropertyNames(node); } catch (_) { continue; }
-            for (const k of props) {
-                if (SKIP_KEYS.has(k) || k.startsWith('__react') || k.startsWith('__MF')) continue;
-                let v;
-                try { v = node[k]; } catch (_) { continue; }
-                if (!v || typeof v !== 'object') continue;
-                if (seen.has(v)) continue;
-                seen.add(v);
-                if (!out.motionBlur && isMotionBlurPass(v)) out.motionBlur = v;
-                if (!out.fog && isFogPass(v)) out.fog = v;
-                if (out.motionBlur && out.fog) return out;
-                if (depth < MAX_DEPTH && budget > 0) queue.push([v, depth + 1]);
-            }
-        }
-        return out;
-    }
-
-    function clampMotionBlur(pass) {
-        const hadOwn = Object.prototype.hasOwnProperty.call(pass, 'enabled');
-        const prev = hadOwn ? pass.enabled : undefined;
-        const restore = () => {
-            try { delete pass.enabled; } catch (_) {}
-            if (hadOwn) { try { pass.enabled = prev; } catch (_) {} }
-        };
-        try {
-            Object.defineProperty(pass, 'enabled', {
-                configurable: true,
-                enumerable: true,
-                get() { return false; },
-                set() {} // el frame escribe enabled cada frame y el composer lo pregunta; ambos pierden
-            });
-            state.restore.push(restore);
-            state.motionBlurPass = pass;
-            return true;
-        } catch (_) { return false; }
-    }
-
-    function clampGodRays(pass) {
-        let current = null;
-        try { current = pass._godRayTier; } catch (_) {}
-        const restore = () => {
-            try { delete pass._godRayTier; } catch (_) {}
-            try { pass._godRayTier = current; } catch (_) {}
-        };
-        try {
-            Object.defineProperty(pass, '_godRayTier', {
-                configurable: true,
-                enumerable: true,
-                get() { return current; },
-                set(v) {
-                    // high es el tier temporal a media resolución; medium hace lo
-                    // mismo sin historial. off/null pasa de largo.
-                    current = (v && v.temporal === true) ? MEDIUM_GOD_RAY_TIER : v;
-                }
-            });
-            state.restore.push(restore);
-            state.fogPass = pass;
-            return true;
-        } catch (_) { return false; }
-    }
-
-    function unhookAll() {
-        for (const fn of state.restore) { try { fn(); } catch (_) {} }
-        state.restore = [];
-        state.motionBlurPass = null;
-        state.fogPass = null;
-    }
-
-    function hookPasses() {
-        // sin throttle: el interval de 3s ya es el límite de abuso
-        state.game = findGame() || state.game;
-        if (!state.game) return status();
-        const passes = findPasses(state.game);
-        if (!passes.motionBlur && !passes.fog) {
-            const t = performance.now();
-            if (t - state.warnAt > 30000) {
-                state.warnAt = t;
-                console.info(TAG, 'manager de post no encontrado todavía (offscreen rendering? otro mundo?) — reintento');
-            }
-            return status();
-        }
-        if (passes.motionBlur && passes.motionBlur !== state.motionBlurPass) clampMotionBlur(passes.motionBlur);
-        if (passes.fog && passes.fog !== state.fogPass) clampGodRays(passes.fog);
-        return status();
-    }
-
-    function loadPrefs() {
-        // sin prefs: el default del cliente es ON y el panel manda el evento
-    }
-
-    function enable() {
-        state.enabled = true;
-        loadPrefs();
-        hookPasses();
-        if (!state.keeperTimer) {
-            state.keeperTimer = setInterval(() => {
-                if (!state.enabled) return;
-                // re-escaneo siempre: el juego recrea el manager por cambio de
-                // mundo y los passes viejos quedan clampeados pero huérfanos
-                hookPasses();
-            }, 3000);
-        }
-        console.info(TAG, 'activo — caza de passes en curso (motion blur + god rays temporal)');
-        return true;
-    }
-
-    function disable() {
-        state.enabled = false;
-        if (state.keeperTimer) { clearInterval(state.keeperTimer); state.keeperTimer = 0; }
-        unhookAll();
-        // reset completo: el game object de un mundo viejo no sirve para el próximo
-        state.game = null;
-        return true;
-    }
-
-    function status() {
-        return {
-            enabled: state.enabled,
-            motionBlur: !!state.motionBlurPass,
-            godRays: !!state.fogPass,
-            game: !!state.game
-        };
-    }
-
-    function destroy() {
-        disable();
-        try { delete window.MF_AntiTear; } catch (_) {}
-        try { delete window.__MF_ANTI_TEAR__; } catch (_) {}
-    }
-
-    document.addEventListener('minifeather:antitear-config', (ev) => {
-        try {
-            const cfg = JSON.parse(ev.detail || '{}');
-            if (cfg.enabled === true) enable();
-            else if (cfg.enabled === false) disable();
-        } catch (_) {}
-    });
-
-    window.MF_AntiTear = { enable, disable, status, destroy };
-    window.__MF_ANTI_TEAR__ = { destroy };
-    console.info(TAG, 'módulo cargado (inactivo hasta minifeather:antitear-config {enabled:true})');
-})();
-
-//# sourceURL=MF:src/Render/MF_AntiTear.js
 
 /* ==== mf module: src/Experimental/Realistic/RealisticProfiles.js ==== */
 (() => {
@@ -120705,6 +120781,7 @@ function normalize(entry) {
     waterStyle: false,
     waterStyleAlpha: 0.12,
     waterStyleTintMix: 0.85,
+    waterStyleWaveScale: 2.0,
     kotoSky: false,
     kotoSkyStrength: 1.0,
     customShader: false,
@@ -125087,7 +125164,8 @@ function normalize(entry) {
       detail: JSON.stringify({
         enabled: !!enabled,
         alpha: Number(settings.waterStyleAlpha ?? 0.12),
-        tintMix: Number(settings.waterStyleTintMix ?? 0.85)
+        tintMix: Number(settings.waterStyleTintMix ?? 0.85),
+        waveScale: Number(settings.waterStyleWaveScale ?? 2.0)
       })
     }));
   }
@@ -128454,6 +128532,11 @@ function normalize(entry) {
             <span style="min-width:90px;font-size:12px;">tinte</span>
             <input id="mf-ws-tint" type="range" min="0" max="1" step="0.05" value="${Number(settings.waterStyleTintMix ?? 0.85)}">
             <span id="mf-ws-tint-value">${Math.round(Number(settings.waterStyleTintMix ?? 0.85) * 100)}%</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-top:10px;">
+            <span style="min-width:90px;font-size:12px;">ondas</span>
+            <input id="mf-ws-wave" type="range" min="1" max="4" step="0.1" value="${Number(settings.waterStyleWaveScale ?? 2.0)}">
+            <span id="mf-ws-wave-value">${Number(settings.waterStyleWaveScale ?? 2.0).toFixed(1)}&times;</span>
           </div>
         </div>
 
@@ -132293,7 +132376,8 @@ function normalize(entry) {
     }
     const wsMap = {
       alpha: { key: 'waterStyleAlpha', fmt: v => Math.round(v * 100) + '%' },
-      tint: { key: 'waterStyleTintMix', fmt: v => Math.round(v * 100) + '%' }
+      tint: { key: 'waterStyleTintMix', fmt: v => Math.round(v * 100) + '%' },
+      wave: { key: 'waterStyleWaveScale', fmt: v => v.toFixed(1) + '\u00d7' }
     };
     for (const [name, { key, fmt }] of Object.entries(wsMap)) {
       const slider = panel.querySelector(`#mf-ws-${name}`);
