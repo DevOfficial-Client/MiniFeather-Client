@@ -2007,11 +2007,13 @@
                 shader.uniforms[key] = liveUniforms[key];
             }
 
-            if (preset.vertexCode && !shader.vertexShader.includes('uPhTime') &&
-                !shader.vertexShader.includes('uCsTime') &&
-                !shader.vertexShader.includes('mfCrDepth') &&
-                !shader.vertexShader.includes('uGvTime') &&
-                !shader.vertexShader.includes('uNfTime')) {
+            // los marcadores son los varyings mf*WorldPos que TODO preset declara en su
+            // vertexCode; los time uniforms viven solo en el fragment y no sirven aqui
+            if (preset.vertexCode && !shader.vertexShader.includes('mfPhWorldPos') &&
+                !shader.vertexShader.includes('mfCsWorldPos') &&
+                !shader.vertexShader.includes('mfCrWorldPos') &&
+                !shader.vertexShader.includes('mfGvWorldPos') &&
+                !shader.vertexShader.includes('mfNfWorldPos')) {
                 shader.vertexShader = preset.vertexCode + '\n' + shader.vertexShader;
             }
 
