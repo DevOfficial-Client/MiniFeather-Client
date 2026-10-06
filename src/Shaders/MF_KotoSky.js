@@ -77,6 +77,7 @@
     const state = {
         enabled: localStorage.getItem('mf_kotosky') === 'true',
         strength: readNum('mf_kotosky_strength', 1),
+        forceNight: false,     // debug por consola: MF_KotoSky.setConfig({forceNight:true})
         game: null,
         lastScan: 0,
         timer: 0,
@@ -138,30 +139,71 @@
     }
 
     // ── carga de caras ──────────────────────────────────────────────────
+    // Dos orígenes por cara, en orden: el paquete de la extensión y (si el
+    // paquete instalado aún no trae assets/koto_sky) raw.githubusercontent —
+    // el mirror solo hot-actualiza CÓDIGO, los assets viajan con el paquete,
+    // así que el fallback hace el módulo usable sin reinstalar la extensión.
     // La textura THREE se materializa después robando el constructor del
     // primer .map vivo de la escena (el bundle no da THREE; los sprites del
-    // sol/luna traen Texture). Por eso la carga va por fases: <img> primero,
+    // sol/luna traen Texture). Por eso va por fases: <img> primero,
     // materialización cuando haya un game al que robarle la clase.
+
+    function rawBase() {
+        let base = 'https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/';
+        try {
+            if (window.__MF_ASSET_BASE__) base = String(window.__MF_ASSET_BASE__).replace(/\/+$/, '') + '/';
+            else {
+                const o = localStorage.getItem('mf:assetBase');
+                if (o) base = String(o).replace(/\/+$/, '') + '/';
+            }
+        } catch (_) {}
+        return base;
+    }
+
+    function faceCandidates(file) {
+        const urls = [];
+        try {
+            if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
+                urls.push({ url: chrome.runtime.getURL('assets/koto_sky/' + file), cors: false });
+            }
+        } catch (_) {}
+        urls.push({ url: rawBase() + 'assets/koto_sky/' + file, cors: true });
+        return urls;
+    }
 
     function loadFaces() {
         if (state.rawImgs || state.loadFailed) return;
         const imgs = FACE_FILES.map(() => null);
         let pending = FACE_FILES.length;
         let done = false;
+        const deadUrls = [];
         FACE_FILES.forEach((file, i) => {
-            const img = new Image();
-            img.onload = () => {
-                imgs[i] = img;
-                if (--pending === 0 && !done) { done = true; state.rawImgs = imgs; }
-            };
-            img.onerror = () => {
+            const candidates = faceCandidates(file);
+            let k = 0;
+            const attempt = () => {
                 if (done) return;
-                done = true;
-                state.loadFailed = true;
-                console.warn(TAG, 'no se pudo cargar', file, '— módulo inerte (fail-open)');
+                if (k >= candidates.length) {
+                    done = true;
+                    state.loadFailed = true;
+                    console.warn(TAG, 'ningún origen sirvió las caras — módulo inerte (fail-open). probé:', deadUrls.join(' | '));
+                    return;
+                }
+                const { url, cors } = candidates[k++];
+                const img = new Image();
+                if (cors) img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    if (done) return;
+                    imgs[i] = img;
+                    if (--pending === 0) { done = true; state.rawImgs = imgs; }
+                };
+                img.onerror = () => {
+                    if (done) return;
+                    deadUrls.push(url);
+                    attempt();
+                };
+                img.src = url;
             };
-            try { img.src = chrome.runtime.getURL('assets/koto_sky/' + file); }
-            catch (_) { img.src = 'assets/koto_sky/' + file; }
+            attempt();
         });
     }
 
@@ -276,6 +318,7 @@
     // ── factor noche ────────────────────────────────────────────────────
 
     function nightFactor(g) {
+        if (state.forceNight) return 1;   // debug: fuerza el foto-cielo a cualquier hora
         if (!daylightSky(g)) return 0;
         let depth = 0;
         try {
@@ -365,6 +408,7 @@
                 localStorage.setItem('mf_kotosky_strength', String(state.strength));
             }
         }
+        if (cfg && cfg.forceNight !== undefined) state.forceNight = !!cfg.forceNight;
     }
 
     function status() {
@@ -373,6 +417,7 @@
             loaded: state.loaded,
             failed: state.loadFailed,
             strength: state.strength,
+            forceNight: state.forceNight,
             mix: state.mix,
             mounted: !!state.mesh
         };
