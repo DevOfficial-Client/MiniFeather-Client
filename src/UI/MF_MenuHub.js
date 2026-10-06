@@ -23,7 +23,7 @@
   const state = {
     enabled: false, destroyed: false, root: null, style: null, observer: null,
     timer: 0, marks: new Set(), hub: null, expanded: false, layoutRight: null,
-    language: 'en', pins: readPins(), nav: new Map(), sections: [], games: [],
+    language: 'en', pins: readPins(), nav: new Map(), sections: [], games: [], community: [],
     recentCard: null, signature: '', prevSignature: '', chipLastSeen: 0, chipLastPaint: 0
   };
 
@@ -32,26 +32,31 @@
       continue: 'Continue playing', favorites: 'Favorites', discover: 'Discover', viewAll: 'View all',
       recent: 'Recent worlds', topGames: 'Top games', custom: 'Custom games', planets: 'My planets',
       friends: 'Friends', messages: 'Messages', online: 'online', pick: 'Pin your favorites',
+      community: 'Community',
       popular: 'Popular now', unpin: 'Unpin', pin: 'Pin' },
     es: { home: 'Inicio', play: 'Jugar', social: 'Social', mods: 'Mods', shop: 'Tienda', more: 'Más', settings: 'Ajustes',
       continue: 'Seguir jugando', favorites: 'Favoritos', discover: 'Descubrir', viewAll: 'Ver todo',
       recent: 'Mundos recientes', topGames: 'Top juegos', custom: 'Personalizados', planets: 'Mis planetas',
       friends: 'Amigos', messages: 'Mensajes', online: 'en línea', pick: 'Fija tus favoritos',
+      community: 'Comunidad',
       popular: 'Popular ahora', unpin: 'Quitar', pin: 'Fijar' },
     ja: { home: 'ホーム', play: 'プレイ', social: 'ソーシャル', mods: 'Mod', shop: 'ショップ', more: 'もっと', settings: '設定',
       continue: 'プレイ再開', favorites: 'お気に入り', discover: '見つける', viewAll: 'すべて表示',
       recent: '最近のワールド', topGames: '人気ゲーム', custom: 'カスタム', planets: 'マイ惑星',
       friends: 'フレンド', messages: 'メッセージ', online: 'オンライン', pick: 'お気に入りを固定',
+      community: 'コミュニティ',
       popular: '人気', unpin: '外す', pin: '固定' },
     it: { home: 'Home', play: 'Gioca', social: 'Social', mods: 'Mod', shop: 'Negozio', more: 'Altro', settings: 'Impostazioni',
       continue: 'Continua a giocare', favorites: 'Preferiti', discover: 'Scopri', viewAll: 'Vedi tutto',
       recent: 'Mondi recenti', topGames: 'Gioco top', custom: 'Personalizzati', planets: 'Pianeti miei',
       friends: 'Amici', messages: 'Messaggi', online: 'online', pick: 'Fissa i preferiti',
+      community: 'Comunità',
       popular: 'Popolari', unpin: 'Rimuovi', pin: 'Fissa' },
     zh: { home: '主页', play: '开始', social: '社交', mods: '模组', shop: '商店', more: '更多', settings: '设置',
       continue: '继续游戏', favorites: '收藏', discover: '发现', viewAll: '查看全部',
       recent: '最近的世界', topGames: '热门游戏', custom: '自定义', planets: '我的星球',
       friends: '好友', messages: '消息', online: '在线', pick: '固定收藏',
+      community: '社区',
       popular: '热门', unpin: '取消', pin: '固定' },
     fr: { home: 'Accueil', play: 'Jouer', social: 'Social', mods: 'Mods', shop: 'Boutique', more: 'Plus', settings: 'Paramètres',
       continue: 'Reprendre', favorites: 'Favoris', discover: 'Découvrir', viewAll: 'Tout afficher',
@@ -62,6 +67,7 @@
       continue: 'Weiterspielen', favorites: 'Favoriten', discover: 'Entdecken', viewAll: 'Alle anzeigen',
       recent: 'Neue Welten', topGames: 'Top-Spiele', custom: 'Benutzerdefiniert', planets: 'Meine Planeten',
       friends: 'Freunde', messages: 'Nachrichten', online: 'online', pick: 'Favoriten anheften',
+      community: 'Community',
       popular: 'Beliebt', unpin: 'Lösen', pin: 'Anheften' },
     pt: { home: 'Início', play: 'Jogar', social: 'Social', mods: 'Mods', shop: 'Loja', more: 'Mais', settings: 'Ajustes',
       continue: 'Continuar jogando', favorites: 'Favoritos', discover: 'Descobrir', viewAll: 'Ver tudo',
@@ -77,6 +83,7 @@
       continue: '이어서 플레이', favorites: '즐겨찾기', discover: '둘러보기', viewAll: '모두 보기',
       recent: '최근 월드', topGames: '인기 게임', custom: '커스텀', planets: '내 행성',
       friends: '친구', messages: '메시지', online: '온라인', pick: '즐겨찾기 고정',
+      community: '커뮤니티',
       popular: '인기', unpin: '고정 해제', pin: '고정' }
   };
 
@@ -235,6 +242,8 @@
       #${HUB_ID} .mf-hub-pickrow:hover{background:rgba(255,255,255,.09)}
       #${HUB_ID} .mf-hub-pickrow img{width:44px;height:26px;object-fit:cover;border-radius:5px;border:1px solid rgba(0,0,0,.7);flex:none}
       #${HUB_ID} .mf-hub-pickrow span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #${HUB_ID} .mf-hub-picker h3.mf-hub-pickhead{margin:12px 0 8px;opacity:.65}
+      #${HUB_ID} .mf-hub-pickrow .mf-hub-pickplays{flex:none;font-size:10.5px;opacity:.6;margin-right:6px}
       #${HUB_ID} .mf-hub-pickrow .mf-hub-star{position:static;opacity:1;width:24px;height:24px}
       #${HUB_ID} .mf-hub-aside{position:absolute;right:20px;bottom:20px;top:auto;display:flex;flex-direction:column;gap:8px;width:320px;pointer-events:auto}
       #${HUB_ID} .mf-hub-friendspill{display:flex;align-items:center;gap:10px;border:2px solid rgba(0,0,0,.75);border-radius:10px;background:rgba(10,12,16,.62);backdrop-filter:blur(6px);color:#fff;padding:10px 13px;cursor:pointer;font-size:12.5px;font-weight:600;text-align:left}
@@ -359,6 +368,46 @@
       });
     }
     return [...games.values()];
+  }
+
+  // texto de tarjeta de comunidad: [nombre, jugadores] — al REVES que las oficiales
+  // (jugadas, nombre). un server se llama "0" a veces: el nombre es el texto no numerico
+  function communityText(node) {
+    const texts = [...node.querySelectorAll('p')].map(p => p.textContent.trim()).filter(Boolean);
+    if (!texts.length) return { name: labelOf(node).slice(0, 40) || '?', plays: '' };
+    const numeric = t => /^[\d.,]+\s*[kM]?$/i.test(t);
+    const name = texts.find(t => !numeric(t)) || texts[0];
+    const plays = texts.find(t => numeric(t) && t !== name) || '';
+    return { name, plays };
+  }
+
+  // servers de la comunidad: tarjetas DIV role=button (no links) con splash art de mundo
+  // session.coolmathblox.ca/world-splash/<ID>.jpg — el ID es la clave estable del pin.
+  // las tarjetas de tus propios mundos tambien llevan splash: se excluye la primera
+  // seccion (seguir jugando) para no mezclar
+  function collectCommunity(center, sections) {
+    const worldSection = sections[0]?.el || null;
+    const servers = new Map();
+    for (const node of center.querySelectorAll('[role="button"]')) {
+      if (!isCardNode(node)) continue;
+      if (worldSection?.contains(node)) continue;
+      const img = node.querySelector('img');
+      const src = img?.currentSrc || img?.src || img?.getAttribute('src') || '';
+      const id = (src.match(/world-splash\/(\d+)\./) || [])[1];
+      if (!id) continue;
+      const key = `w:${id}`;
+      if (servers.has(key)) continue;
+      const info = communityText(node);
+      servers.set(key, {
+        key,
+        id,
+        name: info.name || `#${id}`,
+        plays: info.plays,
+        image: src,
+        node
+      });
+    }
+    return [...servers.values()];
   }
 
   function findNativeButtons(nav) {
@@ -565,24 +614,29 @@
     return state.games.find(game => game.slug === slug) || null;
   }
 
-  function togglePin(slug) {
-    const index = state.pins.indexOf(slug);
+  function entryByKey(key) {
+    if (key.startsWith('w:')) return state.community.find(server => server.key === key) || null;
+    return gameBySlug(key);
+  }
+
+  function togglePin(key) {
+    const index = state.pins.indexOf(key);
     if (index >= 0) state.pins.splice(index, 1);
-    else { state.pins.push(slug); if (state.pins.length > 8) state.pins.shift(); }
+    else { state.pins.push(key); if (state.pins.length > 12) state.pins.shift(); }
     writePins();
     renderHub();
   }
 
-  function starButton(slug, extraClass) {
+  function starButton(key, extraClass) {
     const star = el('button', `mf-hub-star${extraClass ? ` ${extraClass}` : ''}`);
     star.type = 'button';
-    star.dataset.on = state.pins.includes(slug) ? 'true' : 'false';
-    star.title = state.pins.includes(slug) ? t('unpin') : t('pin');
+    star.dataset.on = state.pins.includes(key) ? 'true' : 'false';
+    star.title = state.pins.includes(key) ? t('unpin') : t('pin');
     star.append(svgIcon('star'));
     star.addEventListener('click', event => {
       event.stopPropagation();
       event.preventDefault();
-      togglePin(slug);
+      togglePin(key);
     });
     return star;
   }
@@ -616,10 +670,10 @@
       img.loading = 'lazy';
       card.append(img);
     }
-    card.append(el('span', null, game?.name || game.slug));
-    if (withStar && game?.slug) card.append(starButton(game.slug));
+    card.append(el('span', null, game?.name || game.slug || game?.key));
+    if (withStar && game) card.append(starButton(game.slug || game.key));
     if (game?.node) card.addEventListener('click', () => forwardClick(game.node));
-    else card.addEventListener('click', () => { try { location.assign(`/game/${game.slug}`); } catch (_) {} });
+    else if (game?.slug) card.addEventListener('click', () => { try { location.assign(`/game/${game.slug}`); } catch (_) {} });
     return card;
   }
 
@@ -638,7 +692,7 @@
     picker.id = 'mf-hub-picker';
     picker.setAttribute('data-mf-i18n-skip', 'true');
     picker.append(el('h3', null, t('pick')));
-    if (!state.games.length) picker.append(el('p', 'mf-hub-empty', '…'));
+    if (!state.games.length && !state.community.length) picker.append(el('p', 'mf-hub-empty', '…'));
     for (const game of state.games) {
       const row = el('button', 'mf-hub-pickrow');
       row.type = 'button';
@@ -652,6 +706,24 @@
       row.append(starButton(game.slug));
       row.addEventListener('click', () => forwardClick(game.node));
       picker.append(row);
+    }
+    if (state.community.length) {
+      picker.append(el('h3', 'mf-hub-pickhead', t('community')));
+      for (const server of state.community) {
+        const row = el('button', 'mf-hub-pickrow');
+        row.type = 'button';
+        if (server.image) {
+          const img = document.createElement('img');
+          img.src = server.image;
+          img.alt = '';
+          row.append(img);
+        }
+        row.append(el('span', null, server.name));
+        if (server.plays) row.append(el('span', 'mf-hub-pickplays', server.plays));
+        row.append(starButton(server.key));
+        row.addEventListener('click', () => forwardClick(server.node));
+        picker.append(row);
+      }
     }
     state.hub.append(picker);
     const dismiss = event => {
@@ -813,9 +885,10 @@
       const fallback = state.pins.length ? [] : state.games.slice(0, 4);
       const sec = section(t('favorites'), fallback.length ? t('popular') : null);
       const row = el('div', 'mf-hub-row');
-      for (const slug of state.pins) {
-        const game = gameBySlug(slug);
-        row.append(favCard(game || { slug, name: MODE_NAMES[slug] || slug }));
+      for (const key of state.pins) {
+        const entry = entryByKey(key);
+        if (key.startsWith('w:') && !entry) continue;  // server que ya no esta en las listas del sitio
+        row.append(favCard(entry || { slug: key, name: MODE_NAMES[key] || key }));
       }
       for (const game of fallback) row.append(favCard(game, true));
       const add = el('button', 'mf-hub-add');
@@ -931,6 +1004,7 @@
     state.nav.clear();
     state.sections = [];
     state.games = [];
+    state.community = [];
     state.recentCard = null;
     state.signature = '';
     state.expanded = false;
@@ -958,6 +1032,7 @@
     markChip(layout.right);
     state.sections = findSections(layout.center);
     state.games = collectGames(layout.center);
+    state.community = collectCommunity(layout.center, state.sections);
     state.recentCard = state.sections[0]?.cards.find(card => card.tagName === 'BUTTON')
       || state.sections[0]?.cards[0] || null;
 
@@ -968,6 +1043,7 @@
       state.language, state.pins, state.expanded,
       state.sections.map(section => section.cards.length),
       state.games.map(game => [game.href, game.image]).slice(0, 12),
+      state.community.map(server => server.key).slice(0, 8),
       !!state.recentCard, friendsOnlineCount(layout.right)
     ]);
     // en backoff post-fallo: pantalla nativa sin intentarlo de nuevo hasta que expire

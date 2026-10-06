@@ -9,6 +9,7 @@
     "build:mobile": "node tools/build-mobile.js"
   },
   "devDependencies": {
+    "jsdom": "^30.1.2",
     "terser": "^5.31.0"
   }
 }
