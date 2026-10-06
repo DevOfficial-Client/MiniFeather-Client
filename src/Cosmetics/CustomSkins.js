@@ -1160,6 +1160,27 @@
         });
     }
 
+    // skins que llegan cortadas por el cable: un data-url de png al que le falta
+    // el final (IEND) hace que chrome lo rechace con ERR_INVALID_URL y el jugador
+    // cae al skin default. lo que no llegó no se recupera, pero la consola al
+    // menos cuenta qué pasó en vez de un error criptico de red
+    var dataSkinWarned = false;
+    function looksTruncatedPngDataUrl(value) {
+        if (value.lastIndexOf('data:image/png;base64,', 0) !== 0) return false;
+        var b64 = value.slice(22);
+        if (!b64 || b64.length % 4 === 1) return true;
+        try {
+            // todo png termina con IEND + crc fijo AE 42 60 82; los últimos 12
+            // chars de base64 son 3 grupos enteros y alcanzan para verlo
+            var tail = atob(b64.slice(-12));
+            var n = tail.length;
+            if (n >= 4 &&
+                tail.charCodeAt(n - 4) === 0xAE && tail.charCodeAt(n - 3) === 0x42 &&
+                tail.charCodeAt(n - 2) === 0x60 && tail.charCodeAt(n - 1) === 0x82) return false;
+        } catch (_) {}
+        return true;
+    }
+
     function patchImageSrc() {
         if (patched) return true;
 
@@ -1180,6 +1201,11 @@
                 if (typeof value !== 'string') {
                     originalSet.call(this, value);
                     return;
+                }
+
+                if (!dataSkinWarned && looksTruncatedPngDataUrl(value)) {
+                    dataSkinWarned = true;
+                    warn('una skin llegó truncada por la red (data-url incompleta) — se usa el skin default; el cliente no puede recuperarla');
                 }
 
                 var match = value.match(SKIN_PATH_REGEX) || value.match(SKIN_PATH_REGEX_DEEP);
