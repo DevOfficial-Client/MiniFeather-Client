@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261005233114
+// @version      4.19.0.20261006002509
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : f52ee605ba134882c157dac6d1e99361bdd1e98a
- * builtAt : 2026-10-05T23:31:32.805Z
+ * commit  : 50b0ecaf502a0db9fc6fb642ac6965e002d019e7
+ * builtAt : 2026-10-06T00:25:25.096Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"f52ee605ba134882c157dac6d1e99361bdd1e98a","builtAt":"2026-10-05T23:31:32.805Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"50b0ecaf502a0db9fc6fb642ac6965e002d019e7","builtAt":"2026-10-06T00:25:25.096Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19430,7 +19430,7 @@ const state = {
     enabled: false, destroyed: false, root: null, style: null, observer: null,
     timer: 0, marks: new Set(), hub: null, expanded: false, layoutRight: null,
     language: 'en', pins: readPins(), nav: new Map(), sections: [], games: [],
-    recentCard: null, signature: '', prevSignature: '', chipLastSeen: 0
+    recentCard: null, signature: '', prevSignature: '', chipLastSeen: 0, chipScanFails: 0
   };
 
   const L10N = {
@@ -19550,7 +19550,7 @@ const state = {
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chiprow{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipextra{display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipinfo{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px);padding:12px!important;align-self:stretch!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;left:50%!important;bottom:14px!important;transform:translateX(-50%)!important;width:150px!important;height:245px!important;flex:none!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;left:50%!important;bottom:14px!important;transform:translateX(-50%)!important;width:150px!important;height:245px!important;flex:none!important;border:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar,
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar div{background:transparent!important;box-shadow:none!important}
       /* el chip de perfil va vertical como el perfil movil: datos arriba y el personaje
@@ -19807,7 +19807,7 @@ const state = {
   // ajuste por sync: la figura entera, centrada y con los pies en el piso de la ventana.
   // offsetWidth/Height ignoran transforms, asi que medir aqui es estable aunque ya haya
   // un transform viejo puesto. el sitio cambia el tamano base del render sin avisar.
-  function fitChipCanvas(canvas) {
+  function fitChipCanvas(canvas, frac) {
     if (state.expanded) {
       canvas.style.transform = '';
       canvas.style.transformOrigin = '';
@@ -19816,9 +19816,6 @@ const state = {
     const cssW = canvas.offsetWidth;
     const cssH = canvas.offsetHeight;
     if (!cssW || !cssH) return;
-    // sin scan util (webgl no siempre entrega pixels): fracciones por defecto medidas
-    // sobre el render real — mejor un fit aproximado que un cuadro negro sin jugador
-    const frac = figureFractions(canvas) || { top: 0.15, bottom: 0.976, cx: 0.5 };
     const winW = 150, winH = 245;
     const scale = (winH * 0.86) / ((frac.bottom - frac.top) * cssH);
     const tx = winW / 2 - frac.cx * cssW * scale;
@@ -19846,6 +19843,8 @@ const state = {
   function markChipStatic(right) {
     const strip = right.firstElementChild;
     if (strip) mark(strip.firstElementChild || strip, 'mf-hub-chipinfo');
+    // un canvas mudo no aporta nada a la vista: fuera
+    for (const c of right.querySelectorAll('canvas')) mark(c, 'mf-hub-chipextra');
   }
 
   function markChip(right) {
@@ -19865,6 +19864,18 @@ const state = {
       return;
     }
     state.chipLastSeen = performance.now();
+    // juzgar por CONTENIDO, no por presencia: un canvas mudo (render asincrono que no
+    // llego, webgl entre frames) no da personaje. unos scans vacios de gracia y, si
+    // sigue mudo, modo estatico HASTA que pinte de verdad — nada de ir-y-volver
+    const frac = figureFractions(canvas);
+    if (!frac) {
+      state.chipScanFails += 1;
+      if (state.chipScanFails < 5) return;
+      clearChipMarks();
+      markChipStatic(right);
+      return;
+    }
+    state.chipScanFails = 0;
     // las marcas del sync anterior son veneno si la tarjeta cambio de forma: re-marcar
     clearChipMarks();
     let node = canvas.parentElement;
@@ -19893,7 +19904,7 @@ const state = {
         mark(child, 'mf-hub-chipextra');
       }
     }
-    fitChipCanvas(canvas);
+    fitChipCanvas(canvas, frac);
   }
 
   function forwardClick(nativeNode) {
