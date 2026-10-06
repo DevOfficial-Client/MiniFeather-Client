@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006202624
+// @version      4.19.0.20261006203408
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : bb0ec7340381bda8694dcf902855721ea50efa6e
- * builtAt : 2026-10-06T20:26:43.462Z
+ * commit  : a511f264cde2457c7481c63d522ebc97247fab4e
+ * builtAt : 2026-10-06T20:34:31.308Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"bb0ec7340381bda8694dcf902855721ea50efa6e","builtAt":"2026-10-06T20:26:43.463Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"a511f264cde2457c7481c63d522ebc97247fab4e","builtAt":"2026-10-06T20:34:31.308Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -11565,6 +11565,54 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"bb0ec7340381bda8694dcf90285572
         return d;
     }
 
+    // ---- entity pack del convertidor (camas/mobs/armor como archivos
+    // individuales): IDB → memoria al boot, matcheo por SUFFIX de la ruta
+    // después de /textures/ — así da igual qué otro interceptor reescribió
+    // la URL antes (local, mirror, dnr): la cola siempre es la misma. ----
+    var ENTITY_FLAG = 'mf_entity_pack_active';
+    var entityMap = null;
+
+    function entityPathOf(url) {
+        if (typeof url !== 'string' || url.indexOf('/textures/') === -1) return null;
+        var clean = url.split(/[?#]/)[0];
+        var idx = clean.indexOf('/textures/');
+        return clean.slice(idx + '/textures/'.length);
+    }
+
+    function entityDataUrlFor(url) {
+        if (!entityMap || !entityMap.size) return null;
+        var p = entityPathOf(url);
+        if (!p) return null;
+        return entityMap.get(p) || null;
+    }
+
+    function entityBoot() {
+        var on = false;
+        try { on = localStorage.getItem(ENTITY_FLAG) === '1'; } catch (_) {}
+        if (!on) return;
+        try {
+            var req = indexedDB.open('mf_entity_store', 1);
+            req.onupgradeneeded = function () {
+                if (!req.result.objectStoreNames.contains('packs')) {
+                    req.result.createObjectStore('packs');
+                }
+            };
+            req.onsuccess = function () {
+                try {
+                    var tx = req.result.transaction('packs', 'readonly');
+                    var g = tx.objectStore('packs').get('current');
+                    g.onsuccess = function () {
+                        var rec = g.result;
+                        if (rec && rec.files && typeof rec.files === 'object') {
+                            entityMap = new Map(Object.entries(rec.files));
+                        }
+                    };
+                } catch (_) {}
+            };
+        } catch (_) {}
+    }
+    entityBoot();
+
     function getPatterns() {
         var res = parseInt(localStorage.getItem(RES_KEY)) || 16;
         var patterns = ['/textures/spritesheet', 'miniblox.io/textures/spritesheet'];
@@ -11653,6 +11701,16 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"bb0ec7340381bda8694dcf90285572
         try {
             url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
         } catch (_) {}
+        var eUrl = entityDataUrlFor(url);
+        if (eUrl) {
+            try {
+                return Promise.resolve(new Response(dataUrlToBlob(eUrl), {
+                    headers: { 'Content-Type': 'image/png' }
+                }));
+            } catch (e) {
+                console.warn('minifeather texturepack entidad rota (' + e + ') — fetch real');
+            }
+        }
         var dataUrl = (url.indexOf('spritesheet') !== -1 || url.indexOf('texturepacks/default') !== -1)
             ? getDataUrl() : null;
         if (dataUrl && url && matches(url)) {
@@ -11678,6 +11736,11 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"bb0ec7340381bda8694dcf90285572
     if (desc && desc.configurable) {
         Object.defineProperty(HTMLImageElement.prototype, 'src', {
             set: function (v) {
+                var eUrl = entityDataUrlFor(v);
+                if (eUrl) {
+                    desc.set.call(this, eUrl);
+                    return;
+                }
                 var dataUrl = getDataUrl();
                 if (typeof v === 'string' && dataUrl && matches(v)) {
                     desc.set.call(this, dataUrl);
@@ -11692,9 +11755,14 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"bb0ec7340381bda8694dcf90285572
 
     var origXHRopen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function (method, url) {
-        var dataUrl = getDataUrl();
-        if (dataUrl && typeof url === 'string' && matches(url)) {
-            arguments[1] = dataUrl;
+        var eUrl = entityDataUrlFor(url);
+        if (eUrl) {
+            arguments[1] = eUrl;
+        } else {
+            var dataUrl = getDataUrl();
+            if (dataUrl && typeof url === 'string' && matches(url)) {
+                arguments[1] = dataUrl;
+            }
         }
         return origXHRopen.apply(this, arguments);
     };
@@ -117969,7 +118037,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 const dirLeaf = segments.length >= 1
                     ? segments[segments.length - 1] + '/' + baseName
                     : baseName;
-                return { name: baseName, img, dirLeaf, meta: metas.get(baseName.toLowerCase()) };
+                // ruta relativa después de /textures/ (entity/bed/black.png,
+                // models/armor/diamond_layer_1.png): es la llave EXACTA con la
+                // que el juego pide entidades individuales — no van en el atlas.
+                const lowerAll = normalized.toLowerCase();
+                const tIdx = lowerAll.lastIndexOf('/textures/');
+                const relPath = tIdx !== -1 ? normalized.slice(tIdx + '/textures/'.length) : null;
+                return { name: baseName, img, dirLeaf, meta: metas.get(baseName.toLowerCase()), relPath };
             } catch (_) {
                 return null;
             }
@@ -117982,6 +118056,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const customSprites = new Map();
         const dirLeaves = new Map();
         const animMeta = new Map();
+        let entityFiles = {};
         const pbrMaps = { n: new Map(), s: new Map(), e: new Map() };
         const files = Array.from(fileList);
         let loaded = 0;
@@ -118039,9 +118114,106 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 loaded++;
             }
             void 0;
+            // entidades: el juego las pide como archivos individuales
+            // (/textures/entity/...), fuera del atlas — se empaquetan aparte.
+            entityFiles = { ...entityFiles, ...buildEntityFiles(extracted) };
         }
 
-        return { customSprites, dirLeaves, animMeta, pbrMaps, loaded };
+        return { customSprites, dirLeaves, animMeta, pbrMaps, entityFiles, loaded };
+    }
+
+    // entidades y capas de armor del pack, indexadas por la ruta EXACTA con la
+    // que el juego las pide (entity/bed/black.png, models/armor/iron_layer_1.png).
+    // las miniblox-only (skeleton/sans) no existen en packs de MC → siguen locales.
+    const ENTITY_LIMIT_FILES = 400;
+    const ENTITY_LIMIT_BYTES = 8 * 1024 * 1024;
+
+    function buildEntityFiles(extracted) {
+        const out = {};
+        let encoded = 0, count = 0;
+        for (const { img, relPath } of extracted) {
+            if (!relPath || count >= ENTITY_LIMIT_FILES || encoded >= ENTITY_LIMIT_BYTES) break;
+            if (!(relPath.startsWith('entity/') || relPath.startsWith('models/armor/'))) continue;
+            const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+            if (!w || !h) continue;
+            try {
+                const cv = document.createElement('canvas');
+                cv.width = w; cv.height = h;
+                cv.getContext('2d').drawImage(img, 0, 0);
+                const d = cv.toDataURL('image/png');
+                out[relPath] = d;
+                count++;
+                encoded += d.length;
+            } catch (_) {}
+        }
+        // packs 1.21+ movieron el armor a entity/equipment/: el juego pide el
+        // layout viejo models/armor/<mat>_layer_N.png — se aliasa al vuelo
+        // (humanoid/<mat>.png → layer_1, humanoid_leggings/<mat>.png → layer_2)
+        // para que el interceptor siga siendo tonto y por suffix-match.
+        const alias = {};
+        for (const p of Object.keys(out)) {
+            let m = /^entity\/equipment\/humanoid\/(.+)\.png$/.exec(p);
+            if (m) { alias['models/armor/' + m[1] + '_layer_1.png'] = out[p]; continue; }
+            m = /^entity\/equipment\/humanoid_leggings\/(.+)\.png$/.exec(p);
+            if (m) { alias['models/armor/' + m[1] + '_layer_2.png'] = out[p]; continue; }
+            // aldeas: el juego usa entity/villager/<prof>.png pelado; los packs
+            // modernos van por profession/ y renombraron priest→cleric y
+            // smith→toolsmith (el 'smith' de miniblox era el de herramientas).
+            m = /^entity\/villager\/profession\/(.+)\.png$/.exec(p);
+            if (m) {
+                alias['entity/villager/' + m[1] + '.png'] = out[p];
+                if (m[1] === 'cleric') alias['entity/villager/priest.png'] = out[p];
+                if (m[1] === 'toolsmith') alias['entity/villager/smith.png'] = out[p];
+            }
+        }
+        Object.assign(out, alias);
+        return out;
+    }
+
+    function idbEntityPut(files) {
+        return new Promise((resolve) => {
+            let db = null;
+            const req = indexedDB.open('mf_entity_store', 1);
+            req.onupgradeneeded = () => {
+                if (!req.result.objectStoreNames.contains('packs')) {
+                    req.result.createObjectStore('packs');
+                }
+            };
+            req.onsuccess = () => {
+                db = req.result;
+                try {
+                    const tx = db.transaction('packs', 'readwrite');
+                    tx.objectStore('packs').put({ v: 1, files }, 'current');
+                    tx.oncomplete = () => resolve(true);
+                    tx.onerror = () => resolve(false);
+                } catch (_) { resolve(false); }
+            };
+            req.onerror = () => resolve(false);
+        });
+    }
+
+    function idbEntityClear() {
+        return new Promise((resolve) => {
+            const req = indexedDB.open('mf_entity_store', 1);
+            req.onupgradeneeded = () => {
+                if (!req.result.objectStoreNames.contains('packs')) {
+                    req.result.createObjectStore('packs');
+                }
+            };
+            req.onsuccess = () => {
+                try {
+                    const tx = req.result.transaction('packs', 'readwrite');
+                    tx.objectStore('packs').delete('current');
+                    tx.oncomplete = () => resolve(true);
+                    tx.onerror = () => resolve(false);
+                } catch (_) { resolve(false); }
+            };
+            req.onerror = () => resolve(false);
+        });
+    }
+
+    function setEntityActive(on) {
+        try { localStorage.setItem('mf_entity_pack_active', on ? '1' : '0'); } catch (_) {}
     }
 
     function pbrNeutral(kind) {
@@ -118199,11 +118371,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     async function generateAndApply(files) {
         void 0;
-        const { customSprites, dirLeaves, pbrMaps, loaded } = await processUploadedFiles(files);
+        const { customSprites, dirLeaves, animMeta, entityFiles, pbrMaps, loaded } = await processUploadedFiles(files);
 
         if (loaded === 0) {
             console.warn(`${TAG} No valid PNG files found`);
             return { success: false, error: 'No valid PNG files' };
+        }
+
+        // entidades del pack: reemplazan SIEMPRE lo anterior (un pack sin
+        // entity/ desactiva el servicio en vez de dejar mezcla vieja).
+        const entityCount = entityFiles ? Object.keys(entityFiles).length : 0;
+        if (entityCount > 0) {
+            const ok = await idbEntityPut(entityFiles);
+            setEntityActive(ok);
+            if (!ok) console.warn(`${TAG} entity pack generated but IndexedDB save failed`);
+        } else {
+            await idbEntityClear();
+            setEntityActive(false);
         }
 
         const hasPbr = pbrMaps.n.size || pbrMaps.s.size || pbrMaps.e.size;
@@ -118239,11 +118423,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         interceptSpritesheet(result.dataUrl);
 
         void 0;
-        return { success: true, stats: result.stats, textureNames: result.textureNames };
+        return { success: true, stats: { ...result.stats, entity: entityCount }, textureNames: result.textureNames };
     }
 
     function disable() {
         setActive(false);
+        setEntityActive(false);
         void 0;
     }
 
@@ -118285,6 +118470,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function clearAll() {
         clearStorage();
         clearPbr();
+        idbEntityClear();
+        setEntityActive(false);
         void 0;
     }
 
