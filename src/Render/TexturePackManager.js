@@ -6,6 +6,9 @@
 
     const TAG = 'minifeather texturepack';
     const ATLAS_SIZE = 1024;
+    // 4096 es el techo seguro: GPUs de laptop iGPU y móviles suelen cortar ahí.
+    // un atlas 8192+ se crea bien en canvas y reventar arrive en la subida GL.
+    const MAX_ATLAS_SIZE = 4096;
     const TILE_SIZE = 16;
     const STORAGE_KEY = 'mf_custom_textures';
     const ACTIVE_KEY = 'mf_custom_textures_active';
@@ -29,11 +32,15 @@
         return null;
     }
 
-    function detectResolution(customFiles) {
-        for (const img of customFiles.values()) {
-            if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-                return img.naturalWidth;
-            }
+    function detectResolution(customFiles, frames) {
+        // solo cuentan sprites que de verdad van al atlas: el pack.png (icono
+        // 128/256) o cualquier png suelto del zip no define la resolución del
+        // pack. antes el primer png del zip decidía el scale y un icono grande
+        // pintaba un atlas gigante que reventaba en GPUs viejas.
+        for (const [name, img] of customFiles) {
+            if (frames && !frames[name + '.png']) continue;
+            const w = img.naturalWidth;
+            if (w > 0 && w % TILE_SIZE === 0) return w;
         }
         return TILE_SIZE;
     }
@@ -79,8 +86,11 @@
             return null;
         }
 
-        const resolution = detectResolution(customFiles);
-        const scale = resolution / TILE_SIZE;
+        const resolution = detectResolution(customFiles, frames);
+        // si el atlas capado se queda corto para la resolución pedida, el
+        // effective scale manda: los sprites se reescalan al slot (downscale
+        // automático) y nadie revienta por un atlas de 16k.
+        const scale = Math.min(resolution / TILE_SIZE, MAX_ATLAS_SIZE / ATLAS_SIZE);
         const atlasSize = ATLAS_SIZE * scale;
 
         void 0;
@@ -129,6 +139,13 @@
             } else {
                 stats.placeholder++;
             }
+        }
+
+        // sin vanilla de base Y sin matches el canvas queda transparente:
+        // aplicarlo es regalar un mundo invisible sobre fondo blanco.
+        if (!vanilla && stats.custom === 0) {
+            console.error(`${TAG} atlas vacío (sin base vanilla y sin matches) — no aplico nada`);
+            return null;
         }
 
         const dataUrl = canvas.toDataURL('image/png');
@@ -207,9 +224,12 @@
 
         const code = `(function(){
             var KEY = ${JSON.stringify(STORAGE_KEY)};
+            var ACTIVE_KEY = ${JSON.stringify(ACTIVE_KEY)};
             var RES_KEY = ${JSON.stringify(RES_KEY)};
             var dataUrl = localStorage.getItem(KEY);
             if (!dataUrl) { console.warn('minifeather texturepack No dataUrl in localStorage'); return; }
+            var PREFIX = 'data:image/png;base64,';
+            if (dataUrl.slice(0, PREFIX.length) !== PREFIX) { console.warn('minifeather texturepack dataUrl raro, no intercepto'); return; }
 
             var res = parseInt(localStorage.getItem(RES_KEY)) || 16;
             var patterns = ['/textures/spritesheet'];
@@ -233,7 +253,14 @@
             window.fetch = function(input, init){
                 var url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
                 if(matches(url)){
-                    return Promise.resolve(new Response(dataUrlToBlob(dataUrl),{headers:{'Content-Type':'image/png'}}));
+                    try {
+                        return Promise.resolve(new Response(dataUrlToBlob(dataUrl),{headers:{'Content-Type':'image/png'}}));
+                    } catch (e) {
+                        // atlas roto en vivo: soltar el flag y dejar pasar la
+                        // red real, como dios manda.
+                        console.warn('minifeather texturepack atlas roto en fetch (' + e + ') — red real');
+                        try { localStorage.removeItem(ACTIVE_KEY); } catch (_) {}
+                    }
                 }
                 return origFetch.apply(this, arguments);
             };
@@ -559,6 +586,14 @@
 
         if (!result) {
             return { success: false, error: 'Generation failed' };
+        }
+
+        // probar que el atlas de verdad decodifica ANTES de activarlo: un
+        // dataUrl muerto en localStorage es un interceptor roto que sobrevive
+        // a todos los reloads del mundo.
+        const sanity = await fetchImage(result.dataUrl);
+        if (!sanity) {
+            return { success: false, error: 'Generated atlas failed to decode' };
         }
 
         const saved = saveToStorage(result.dataUrl);
