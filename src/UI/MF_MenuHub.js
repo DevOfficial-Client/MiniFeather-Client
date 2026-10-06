@@ -224,7 +224,7 @@
       #${HUB_ID} .mf-hub-pickrow img{width:44px;height:26px;object-fit:cover;border-radius:5px;border:1px solid rgba(0,0,0,.7);flex:none}
       #${HUB_ID} .mf-hub-pickrow span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       #${HUB_ID} .mf-hub-pickrow .mf-hub-star{position:static;opacity:1;width:24px;height:24px}
-      #${HUB_ID} .mf-hub-aside{position:absolute;right:20px;top:260px;bottom:auto;display:flex;flex-direction:column;gap:8px;width:320px;pointer-events:auto}
+      #${HUB_ID} .mf-hub-aside{position:absolute;right:20px;bottom:20px;top:auto;display:flex;flex-direction:column;gap:8px;width:320px;pointer-events:auto}
       #${HUB_ID} .mf-hub-friendspill{display:flex;align-items:center;gap:10px;border:2px solid rgba(0,0,0,.75);border-radius:10px;background:rgba(10,12,16,.62);backdrop-filter:blur(6px);color:#fff;padding:10px 13px;cursor:pointer;font-size:12.5px;font-weight:600;text-align:left}
       #${HUB_ID} .mf-hub-friendspill:hover{background:rgba(46,50,60,.72)}
       #${HUB_ID} .mf-hub-dot{width:8px;height:8px;border-radius:50%;background:#43d477;flex:none;box-shadow:0 0 7px rgba(67,212,119,.8)}
@@ -846,19 +846,6 @@
     return aside;
   }
 
-  // el pill vive debajo de la TARJETA entera (no de la caja de datos, o quedaria flotando
-  // sobre el personaje): medir al final de cada sync. en modo estatico no hay marcas:
-  // se mide la tira nativa directamente
-  function positionAside() {
-    const aside = state.hub?.querySelector('.mf-hub-aside');
-    if (!aside) return;
-    const box = document.querySelector('.mf-hub-chiprow') ||
-      document.querySelector('.mf-hub-right')?.firstElementChild?.firstElementChild;
-    if (!box) return;
-    const top = box.getBoundingClientRect().bottom;
-    if (top > 40) aside.style.top = Math.round(top + 12) + 'px';
-  }
-
   function removeHub() {
     closePicker();
     state.hub?.remove();
@@ -974,7 +961,6 @@
     }
     root.classList.toggle(ROOT_CLASS, true);
     root.classList.toggle(EXPANDED_CLASS, state.expanded);
-    positionAside();
   }
 
   function schedule() {
