@@ -47,6 +47,13 @@ test('la gui respira con la musica: tap del howl html5 en rama y fail-open', () 
   assert.ok((source.match(/var\(--mf-beat,0\)/g) || []).length >= 4);
 });
 
+test('los flyouts del rail flotan sobre el contenido principal', () => {
+  // main pinta despues que rail (mismo contexto de apilamiento): sin z-index el
+  // flyout quedaba DETRAS de favoritos/descubrir
+  assert.match(source, /#\$\{HUB_ID\} \.mf-hub-rail\{[^}]*z-index:2/);
+  assert.match(source, /#\$\{HUB_ID\} \.mf-hub-picker\{[^}]*z-index:3/);
+});
+
 test('la estructura del chip se marca aunque el canvas este mudo', () => {
   // un remount de react nace sin marcas y el fit inline del canvas se ancla al
   // contenedor equivocado: personaje arriba y encima de la tarjeta. las marcas
