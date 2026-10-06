@@ -139,24 +139,25 @@
       #react.${EXPANDED_CLASS} #${HUB_ID} .mf-hub-aside{display:none}
       #react.${ROOT_CLASS} > img{filter:blur(9px) brightness(.58) saturate(.9)!important;transform:scale(1.07)!important}
       #react.${ROOT_CLASS} > canvas{opacity:.4!important;filter:blur(2px) brightness(.8)!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}{position:fixed!important;right:20px!important;top:20px!important;width:320px!important;height:auto!important;max-height:calc(100vh - 44px);overflow:hidden auto;scrollbar-width:none}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}{position:fixed!important;right:20px!important;top:20px!important;bottom:0!important;width:320px!important;height:auto!important;max-height:none!important;overflow:visible!important;pointer-events:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}::-webkit-scrollbar{display:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:not(:first-child){display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>*:not(:first-child){display:none!important}
       /* el chip va vertical estilo perfil movil: datos arriba en su cajita y el personaje
-         grande DEBAJO pero DENTRO de la tarjeta (el piso de la pantalla quedo descartado).
+         flota en la MITAD del eje y (compromiso entre el piso descartado y la tarjeta).
          el sync pinta .mf-hub-chiprow/.mf-hub-chipinfo/.mf-hub-chipavatar segun donde esten
          HOY los nodos, porque el nesting cambia bajo tus pies */
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chiprow{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chiprow{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important;pointer-events:auto!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipextra{display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipinfo{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px);padding:12px!important;align-self:stretch!important}
       /* caja del avatar = ESCENARIO visible: marco propio con brillo en el piso, en flujo
          pero RELATIVE (ancla de badges y ventana) y overflow:hidden como cinturon de
          seguridad: si el fit se desmadra un frame, el personaje se recorta en el borde del
          escenario en vez de pisar la caja de datos */
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:relative!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;width:150px!important;height:245px!important;flex:none!important;align-self:center!important;overflow:hidden!important;border:2px solid rgba(0,0,0,.8)!important;border-radius:12px!important;background:linear-gradient(180deg,rgba(26,31,42,.5),rgba(11,13,19,.78))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),inset 0 -22px 26px -20px rgba(120,170,255,.18)!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;top:calc(50vh - 142px)!important;left:50%!important;transform:translateX(-50%)!important;margin:0!important;width:150px!important;height:245px!important;flex:none!important;overflow:hidden!important;border:2px solid rgba(0,0,0,.8)!important;border-radius:12px!important;background:linear-gradient(180deg,rgba(26,31,42,.5),rgba(11,13,19,.78))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),inset 0 -22px 26px -20px rgba(120,170,255,.18),0 14px 34px rgba(0,0,0,.45)!important;pointer-events:auto!important}
       /* ventana(s) absolutas entre el canvas y la caja: llenan la caja sin pintar nada
          propio (su borde de color de nivel era el rectangulo flotante) */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipcard{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;pointer-events:auto!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipwindow{position:absolute!important;inset:0!important;width:auto!important;height:auto!important;overflow:visible!important;border:none!important;border-radius:0!important;padding:0!important;background:transparent!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipwindow :not(canvas){border:none!important;background:none!important;box-shadow:none!important}
       /* badges nativos (nivel/racha/logros): fijados DENTRO del escenario en esquinas
@@ -600,8 +601,15 @@
       if (child === node || child === info) continue;
       mark(child, !child.contains(canvas) && child.querySelector('button,p') ? 'mf-hub-chipinfo' : 'mf-hub-chipextra');
     }
-    // el avatar vive DENTRO de la tarjeta (en flujo): no hay que pelar ancestros ni
-    // escapar del cubo, asi que los filtros nativos de la tarjeta no molestan
+    // el escenario flota en la mitad del eje y: pelar el cromo de los ancestros (borde,
+    // fondo y sobre todo backdrop-filter, que volveria el absolute local a la tarjeta)
+    for (let anc = row.parentElement; anc && anc !== right; anc = anc.parentElement) {
+      mark(anc, 'mf-hub-chipcard');
+      for (const child of anc.children) {
+        if (child.contains(node) || child.contains(info)) continue;
+        mark(child, 'mf-hub-chipextra');
+      }
+    }
     fitChipCanvas(canvas, frac);
   }
 
