@@ -79,6 +79,54 @@
         return d;
     }
 
+    // ---- entity pack del convertidor (camas/mobs/armor como archivos
+    // individuales): IDB → memoria al boot, matcheo por SUFFIX de la ruta
+    // después de /textures/ — así da igual qué otro interceptor reescribió
+    // la URL antes (local, mirror, dnr): la cola siempre es la misma. ----
+    var ENTITY_FLAG = 'mf_entity_pack_active';
+    var entityMap = null;
+
+    function entityPathOf(url) {
+        if (typeof url !== 'string' || url.indexOf('/textures/') === -1) return null;
+        var clean = url.split(/[?#]/)[0];
+        var idx = clean.indexOf('/textures/');
+        return clean.slice(idx + '/textures/'.length);
+    }
+
+    function entityDataUrlFor(url) {
+        if (!entityMap || !entityMap.size) return null;
+        var p = entityPathOf(url);
+        if (!p) return null;
+        return entityMap.get(p) || null;
+    }
+
+    function entityBoot() {
+        var on = false;
+        try { on = localStorage.getItem(ENTITY_FLAG) === '1'; } catch (_) {}
+        if (!on) return;
+        try {
+            var req = indexedDB.open('mf_entity_store', 1);
+            req.onupgradeneeded = function () {
+                if (!req.result.objectStoreNames.contains('packs')) {
+                    req.result.createObjectStore('packs');
+                }
+            };
+            req.onsuccess = function () {
+                try {
+                    var tx = req.result.transaction('packs', 'readonly');
+                    var g = tx.objectStore('packs').get('current');
+                    g.onsuccess = function () {
+                        var rec = g.result;
+                        if (rec && rec.files && typeof rec.files === 'object') {
+                            entityMap = new Map(Object.entries(rec.files));
+                        }
+                    };
+                } catch (_) {}
+            };
+        } catch (_) {}
+    }
+    entityBoot();
+
     function getPatterns() {
         var res = parseInt(localStorage.getItem(RES_KEY)) || 16;
         var patterns = ['/textures/spritesheet', 'miniblox.io/textures/spritesheet'];
@@ -167,6 +215,16 @@
         try {
             url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
         } catch (_) {}
+        var eUrl = entityDataUrlFor(url);
+        if (eUrl) {
+            try {
+                return Promise.resolve(new Response(dataUrlToBlob(eUrl), {
+                    headers: { 'Content-Type': 'image/png' }
+                }));
+            } catch (e) {
+                console.warn('minifeather texturepack entidad rota (' + e + ') — fetch real');
+            }
+        }
         var dataUrl = (url.indexOf('spritesheet') !== -1 || url.indexOf('texturepacks/default') !== -1)
             ? getDataUrl() : null;
         if (dataUrl && url && matches(url)) {
@@ -192,6 +250,11 @@
     if (desc && desc.configurable) {
         Object.defineProperty(HTMLImageElement.prototype, 'src', {
             set: function (v) {
+                var eUrl = entityDataUrlFor(v);
+                if (eUrl) {
+                    desc.set.call(this, eUrl);
+                    return;
+                }
                 var dataUrl = getDataUrl();
                 if (typeof v === 'string' && dataUrl && matches(v)) {
                     desc.set.call(this, dataUrl);
@@ -206,9 +269,14 @@
 
     var origXHRopen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function (method, url) {
-        var dataUrl = getDataUrl();
-        if (dataUrl && typeof url === 'string' && matches(url)) {
-            arguments[1] = dataUrl;
+        var eUrl = entityDataUrlFor(url);
+        if (eUrl) {
+            arguments[1] = eUrl;
+        } else {
+            var dataUrl = getDataUrl();
+            if (dataUrl && typeof url === 'string' && matches(url)) {
+                arguments[1] = dataUrl;
+            }
         }
         return origXHRopen.apply(this, arguments);
     };
