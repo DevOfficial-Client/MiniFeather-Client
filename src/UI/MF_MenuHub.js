@@ -143,7 +143,13 @@
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chiprow{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipextra{display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipinfo{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px);padding:12px!important;align-self:stretch!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:static!important;width:150px!important;height:245px!important;flex:none!important;align-self:center!important;border:none!important}
+      /* caja del avatar en flujo pero RELATIVE: los badges de nivel/racha y la ventana del
+         render son absolute con offsets negativos y dependen de este ancla; forzarla static
+         los suelta y terminan flotando donde sea (bug del rectangulo azul del 2026-10-05) */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:relative!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;width:150px!important;height:245px!important;flex:none!important;align-self:center!important;overflow:visible!important;border:none!important;border-radius:0!important;background:transparent!important}
+      /* ventana(s) absolutas entre el canvas y la caja: llenan la caja pero SIN recortar
+         (overflow:hidden nativo) ni pintar su borde de nivel encima del personaje */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipwindow{position:absolute!important;inset:0!important;width:auto!important;height:auto!important;overflow:visible!important;border:none!important;border-radius:0!important;padding:0!important;background:transparent!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div,
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div{flex-direction:column!important;align-items:center!important}
       /* el transform del canvas lo escribe JS en cada sync (fitChipCanvas): medir en CSS
@@ -391,22 +397,35 @@
   }
 
   // ajuste por sync: la figura entera, centrada y con los pies en el piso de la ventana.
-  // offsetWidth/Height ignoran transforms, asi que medir aqui es estable aunque ya haya
-  // un transform viejo puesto. el sitio cambia el tamano base del render sin avisar.
+  // control total del canvas: tamano explicito con el aspect del BUFFER (el sitio estira la
+  // caja con left/right y deforma al personaje) y translate puro, sin confiar en los
+  // offsets nativos (left:-18px, bottom:-151px...) porque su origen cambia con cada variante.
+  // offsetWidth/Height ignoran transforms pero aca ni los usamos: el buffer manda.
   function fitChipCanvas(canvas, frac) {
-    if (state.expanded) {
+    const clear = () => {
       canvas.style.transform = '';
       canvas.style.transformOrigin = '';
-      return;
-    }
-    const cssW = canvas.offsetWidth;
-    const cssH = canvas.offsetHeight;
-    if (!cssW || !cssH) return;
+      canvas.style.left = ''; canvas.style.top = '';
+      canvas.style.right = ''; canvas.style.bottom = '';
+      canvas.style.width = ''; canvas.style.height = '';
+    };
+    if (state.expanded) { clear(); return; }
     const winW = 150, winH = 245;
-    const scale = (winH * 0.86) / ((frac.bottom - frac.top) * cssH);
-    const tx = winW / 2 - frac.cx * cssW * scale;
-    const ty = winH - 2 - frac.bottom * cssH * scale;
-    canvas.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    const bw = canvas.width, bh = canvas.height;
+    if (!bw || !bh) return;
+    const figH = frac.bottom - frac.top;
+    if (!(figH > 0 && figH <= 1)) return;
+    const cssH = (winH * 0.86) / figH;
+    const cssW = cssH * (bw / bh);
+    canvas.style.left = '0px';
+    canvas.style.top = '0px';
+    canvas.style.right = 'auto';
+    canvas.style.bottom = 'auto';
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
+    const tx = winW / 2 - frac.cx * cssW;
+    const ty = winH - 2 - frac.bottom * cssH;
+    canvas.style.transform = `translate(${tx}px, ${ty}px)`;
     canvas.style.transformOrigin = 'top left';
   }
 
@@ -457,19 +476,33 @@
     state.chipLastPaint = performance.now();
     // las marcas del sync anterior son veneno si la tarjeta cambio de forma: re-marcar
     clearChipMarks();
+    // ventana(s) de render = ancestros ABSOLUTOS del canvas (llenan la caja, recortan y
+    // a veces llevan el borde de color de nivel). la caja del avatar es el primer ancestro
+    // que NO es absolute: ahi anclan badges y ventana, ahi hay que quedarse
+    const windows = [];
     let node = canvas.parentElement;
-    let row = null, info = null;
-    while (node && node.parentElement && node.parentElement !== right) {
-      const parent = node.parentElement;
-      const data = [...parent.children].find(el =>
-        el !== node && !el.contains(canvas) && el.querySelector('button,p'));
-      if (data) { row = parent; info = data; break; }
-      node = parent;
+    while (node && node !== right && getComputedStyle(node).position === 'absolute') {
+      windows.push(node);
+      node = node.parentElement;
     }
-    if (!row) { markChipStatic(right); return; }
+    if (!node || node === right || !node.parentElement) { markChipStatic(); return; }
+    // fila = ancestro con un hermano ESTATICO que tenga button/p (la columna de datos).
+    // los badges de nivel/racha son absolute y contienen p: sin el filtro de position
+    // el walk los confunde con la columna y marca chiprow en la caja del avatar
+    let row = null, info = null, probe = node;
+    while (probe.parentElement && probe.parentElement !== right) {
+      const parent = probe.parentElement;
+      const data = [...parent.children].find(el =>
+        el !== probe && !el.contains(canvas) &&
+        getComputedStyle(el).position === 'static' && el.querySelector('button,p'));
+      if (data) { row = parent; info = data; break; }
+      probe = parent;
+    }
+    if (!row) { markChipStatic(); return; }
     mark(row, 'mf-hub-chiprow');
     mark(node, 'mf-hub-chipavatar');
     mark(info, 'mf-hub-chipinfo');
+    for (const win of windows) if (win !== node) mark(win, 'mf-hub-chipwindow');
     for (const child of row.children) {
       if (child === node || child === info) continue;
       mark(child, !child.contains(canvas) && child.querySelector('button,p') ? 'mf-hub-chipinfo' : 'mf-hub-chipextra');
@@ -852,6 +885,15 @@
   function restore() {
     removeHub();
     clearMarks();
+    // fitChipCanvas deja estilos inline en el canvas del chip: sin esta limpieza el
+    // personaje queda recortado/desplazado en la tarjeta nativa hasta que react lo remonte
+    if (state.layoutRight) {
+      for (const c of state.layoutRight.querySelectorAll('canvas')) {
+        for (const prop of ['transform', 'transformOrigin', 'left', 'top', 'right', 'bottom', 'width', 'height']) {
+          c.style[prop] = '';
+        }
+      }
+    }
     state.root?.classList.remove(ROOT_CLASS, EXPANDED_CLASS);
     state.root = null;
     state.layoutRight = null;
