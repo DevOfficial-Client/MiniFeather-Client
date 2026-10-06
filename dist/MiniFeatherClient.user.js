@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006155920
+// @version      4.19.0.20261006163834
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : f37c85f34b59bee877040b0e322c8886dd39a5ba
- * builtAt : 2026-10-06T15:59:39.619Z
+ * commit  : 11e69d2291a4a964bbca63256fa65f0cc836baa0
+ * builtAt : 2026-10-06T16:38:51.578Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"f37c85f34b59bee877040b0e322c8886dd39a5ba","builtAt":"2026-10-06T15:59:39.619Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"11e69d2291a4a964bbca63256fa65f0cc836baa0","builtAt":"2026-10-06T16:38:51.578Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19916,7 +19916,7 @@ const state = {
       canvas.style.width = ''; canvas.style.height = '';
       canvas.style.position = ''; canvas.style.margin = '';
     };
-    if (state.expanded) { clear(); return; }
+    if (state.expanded) { clear(); syncChipTracker(canvas); return; }
     const winW = 150, winH = 245;
     const bw = canvas.width, bh = canvas.height;
     if (!bw || !bh) return;
@@ -19936,6 +19936,55 @@ const state = {
     const ty = winH - 2 - frac.bottom * cssH;
     canvas.style.transform = `translate(${tx}px, ${ty}px)`;
     canvas.style.transformOrigin = 'top left';
+    syncChipTracker(canvas);
+  }
+
+  // el sitio congela el ancla del head-tracking en el PRIMER syncToVisible: lee
+  // getBoundingClientRect una vez y jamas vuelve a leerlo (i ||= syncToVisible, cortocircuito).
+  // cuando el hub muda el canvas a su escenario, el ancla queda en la posicion nativa y la
+  // cabeza mira hacia un punto que ya no existe. el manager del renderer vive en los deps
+  // del useEffect del componente dueno del canvas (fiber de react): rellamar syncToVisible
+  // tras cada fit re-ancla con la geometria real — es el metodo del sitio, no un parche a ciegas
+  const chipTrackers = new WeakMap();
+
+  function findChipTracker(canvas) {
+    let tracker = chipTrackers.get(canvas);
+    if (tracker !== undefined) return tracker;
+    tracker = null;
+    try {
+      const fiberKey = Object.keys(canvas).find(key => key.startsWith('__reactFiber$'));
+      for (let fiber = fiberKey && canvas[fiberKey], depth = 0; fiber && depth < 14 && !tracker; depth += 1, fiber = fiber.return) {
+        for (let hook = fiber.memoizedState, i = 0; hook && i < 24 && !tracker; i += 1, hook = hook.next) {
+          const st = hook.memoizedState;
+          const cands = [st, st?.current, ...(Array.isArray(st?.deps) ? st.deps : [])];
+          for (const cand of cands) {
+            if (cand && typeof cand === 'object' && cand.guiPlayer && typeof cand.syncToVisible === 'function') {
+              tracker = cand;
+              break;
+            }
+          }
+        }
+      }
+    } catch (_) { tracker = null; }
+    if (tracker) chipTrackers.set(canvas, tracker);
+    return tracker;
+  }
+
+  // sin offscreen el setSize del metodo revienta, y un rect de 0px es el guard del
+  // sitio para "todavia invisible": en ambos casos el proximo fit reintenta
+  function syncChipTracker(canvas) {
+    const tracker = findChipTracker(canvas);
+    if (!tracker || !tracker.offscreen) return;
+    try { tracker.syncToVisible(canvas); } catch (_) {}
+  }
+
+  // el ancla es coordenada de viewport: si la ventana cambia de tamano el escenario
+  // se mueve (50vh) y el ancla queda mirando el lugar viejo hasta el proximo fit
+  function onChipResize() {
+    clearTimeout(state.chipResizeTimer);
+    state.chipResizeTimer = setTimeout(() => {
+      if (state.enabled && state.chipCanvas?.isConnected) syncChipTracker(state.chipCanvas);
+    }, 120);
   }
 
   function clearChipMarks() {
@@ -20039,6 +20088,7 @@ const state = {
         mark(child, 'mf-hub-chipextra');
       }
     }
+    state.chipCanvas = canvas;
     fitChipCanvas(canvas, frac);
   }
 
@@ -20567,6 +20617,8 @@ const state = {
     document.removeEventListener('keydown', onKeydown);
     window.removeEventListener('popstate', schedule);
     window.removeEventListener('hashchange', schedule);
+    window.removeEventListener('resize', onChipResize);
+    clearTimeout(state.chipResizeTimer);
     try { chrome.storage.onChanged.removeListener(onStorage); } catch (_) {}
     if (globalThis[KEY]?.destroy === destroy) delete globalThis[KEY];
   }
@@ -20574,6 +20626,7 @@ const state = {
   document.addEventListener(CONFIG_EVENT, onConfig);
   window.addEventListener('popstate', schedule);
   window.addEventListener('hashchange', schedule);
+  window.addEventListener('resize', onChipResize);
   document.addEventListener('keydown', onKeydown);
   try {
     chrome.storage.onChanged.addListener(onStorage);
