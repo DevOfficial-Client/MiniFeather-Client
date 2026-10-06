@@ -774,13 +774,15 @@
     localGamesWorldName: '',
     guiPatch: false,
     critterSkins: false,
+    antiTear: true,
     deferredPipeline: false,
-    deferredExposure: 1.0,
+    deferredExposure: 0.8,
     deferredSaturation: 1.0,
     deferredBloom: 0.13,
     customShader: false,
     customShaderPreset: 'spooklementary',
     customShaderStrength: 0.5,
+    customShaderGray: 0.25,
     customShaderRenderScale: 1.0,
     customShaderFxVhs: 0.6,
     customShaderFxCrt: 0.6,
@@ -3707,6 +3709,7 @@
       { page: 'render', key: 'elytraFlight', title: t('elytraFlight'), desc: t('elytraFlightDesc'), tags: [] },
       { page: 'render', key: 'freecam', title: t('freecam'), desc: t('freecamDesc'), tags: [] },
       { page: 'shaders', key: 'customShader', title: t('navShaders'), desc: t('shadersDesc'), tags: [] },
+      { page: 'shaders', key: 'antiTear', title: 'anti-tear (vanilla fix)', desc: 'clamps miniblox motion blur + temporal god rays so frames never ghost', tags: ['new'] },
       { page: 'shaders', key: 'deferredPipeline', title: 'deferred pipeline (iterationt)', desc: 'bloom + AgX faithful to Tahnass\'s IterationT pack', tags: ['new'] },
       { page: 'movement', key: 'autoSprint', title: t('autoSprint'), desc: t('autoSprintDesc'), tags: ['pvp'] },
       { page: 'movement', key: 'safeSneak', title: t('safeSneak'), desc: t('safeSneakDesc'), tags: ['pvp'] },
@@ -3840,6 +3843,7 @@
     experimentalGrassFlowers: ['........','..#..y..','.#y#.yoy','..#..y..','..g..g..','.g.gg.g.','.gGgGgG.','.gg.gg..'],
     experimentalBetterAnimationCape: ['......#.','..y...#.','.rr.....','rrRr....','rRRrR...','rrRRrr..','.rRRrR..','..rrr...'],
     deferredPipeline: ['........','...yy...','..y##y..','.y#oo#y.','.y#oo#y.','..y##y..','...yy...','........'],
+    antiTear: ['..BBBB..','.BbbbbB.','BbybbybB','BbbkkbbB','BbkkkkbB','BbkbbkbB','.BbbbbB.','..BBBB..'],
     allayPets: ['..bbbb..','.bBBBBb.','bB#BB#Bb','bBBBBBBb','.bB##Bb.','..bBBb..','.bb..bb.','........'],
     itemPhysics: ['..yyyy..','.yYYyYy.','yYy##yYy','yYy##yYy','.yYYyYy.','..yyyy..','...oo...','....o...'],
     noWeather: ['..BBBB..','.BbbbbB.','BbbbbbbB','BBBBBBBB','...bb...','..bb....','.bb.....','RRRRRRRR'],
@@ -5078,10 +5082,25 @@
     document.dispatchEvent(new CustomEvent('minifeather:deferred-config', {
       detail: JSON.stringify({
         enabled: !!enabled,
-        exposure: Number(settings.deferredExposure ?? 1.0),
+        exposure: Number(settings.deferredExposure ?? 0.8),
         saturation: Number(settings.deferredSaturation ?? 1.0),
         bloom: Number(settings.deferredBloom ?? 0.13)
       })
+    }));
+  }
+
+  function sendAntiTearConfig(enabled = settings.antiTear) {
+    document.dispatchEvent(new CustomEvent('minifeather:antitear-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initAntiTearModule() {
+    registerModule('antiTear', () => createLifecycle({
+      enable() { sendAntiTearConfig(true); },
+      disable() { sendAntiTearConfig(false); },
+      refresh() { sendAntiTearConfig(MODULES.get('antiTear')?.enabled === true); },
+      destroy() { sendAntiTearConfig(false); }
     }));
   }
 
@@ -5104,6 +5123,7 @@
         enabled: !!enabled,
         preset,
         strength: Number(settings.customShaderStrength) || 0.5,
+        gray: Number(settings.customShaderGray ?? 0.25),
         renderScale: Number(settings.customShaderRenderScale) || 1.0,
         effects: fx,
         postfx: {
@@ -8420,15 +8440,23 @@
         </div>
 
         <div class="mf-card">
+          <div class="mf-card-title">Anti-tear · vanilla fix</div>
+          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">mata los &quot;desgarros&quot; del juego base: motion blur con jitter + god rays temporales dejan bandas y puntitas en vanilla (repro y todo). runtime only, no toca tus settings ni la nube</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('antiTear', 'anti-tear (vanilla fix)', 'neutraliza motion blur + god rays high temporales de miniblox')}
+          </div>
+        </div>
+
+        <div class="mf-card">
           <div class="mf-card-title">Deferred Pipeline · IterationT</div>
-          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">post-proceso fiel al pack de Tahnass: bloom 13-tap + gaussiana axial + exposici&oacute;n autom&aacute;tica + AgX (EV 13) + vi&ntilde;eta</div>
+          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">bloom 13-tap + gaussiana + AgX (EV 13) + vi&ntilde;eta del pack de Tahnass, graduado sobre el render final del juego (badge "iterationt" abajo a la izquierda = corriendo)</div>
           <div class="mf-toggle-grid">
             ${renderToggle('deferredPipeline', 'deferred pipeline (iterationt)', 'bloom + AgX del pack IterationT sobre el render del juego')}
           </div>
           <div class="mf-shader-strength" style="margin-bottom:10px;margin-top:10px;">
             <span style="min-width:90px;font-size:12px;">exposure</span>
-            <input id="mf-def-exp" type="range" min="0.4" max="2.5" step="0.05" value="${Number(settings.deferredExposure ?? 1.0)}">
-            <span id="mf-def-exp-value">${Number(settings.deferredExposure ?? 1.0).toFixed(2)}</span>
+            <input id="mf-def-exp" type="range" min="0.4" max="2.5" step="0.05" value="${Number(settings.deferredExposure ?? 0.8)}">
+            <span id="mf-def-exp-value">${Number(settings.deferredExposure ?? 0.8).toFixed(2)}</span>
           </div>
           <div class="mf-shader-strength" style="margin-bottom:10px;">
             <span style="min-width:90px;font-size:12px;">saturation</span>
@@ -8467,6 +8495,22 @@
               value="${strength}"
             >
             <span id="mf-shader-strength-value">${Math.round(strength * 100)}%</span>
+          </div>
+        </div>
+
+        <div class="mf-card">
+          <div class="mf-card-title">gris global</div>
+          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">desatura TODOS los presets por igual, encima de cada look</div>
+          <div class="mf-shader-strength">
+            <input
+              id="mf-shader-gray"
+              type="range"
+              min="0"
+              max="0.9"
+              step="0.05"
+              value="${Number(settings.customShaderGray ?? 0.25)}"
+            >
+            <span id="mf-shader-gray-value">${Math.round(Number(settings.customShaderGray ?? 0.25) * 100)}%</span>
           </div>
         </div>
 
@@ -12082,6 +12126,20 @@
     shaderStrength?.addEventListener('change', () => {
       saveSettings(true);
     });
+    const shaderGray = panel.querySelector('#mf-shader-gray');
+    shaderGray?.addEventListener('input', () => {
+      const value = parseFloat(shaderGray.value);
+      settings.customShaderGray = value;
+      guiSettings.customShaderGray = value;
+      const valueLabel = panel.querySelector('#mf-shader-gray-value');
+      if (valueLabel) valueLabel.textContent = Math.round(value * 100) + '%';
+      if (settings.customShader) {
+        sendCustomShaderConfig(true);
+      }
+    });
+    shaderGray?.addEventListener('change', () => {
+      saveSettings(true);
+    });
 
     const shaderRenderScale = panel.querySelector('#mf-shader-renderscale');
     shaderRenderScale?.addEventListener('input', () => {
@@ -13726,6 +13784,7 @@
     setModuleEnabled('noWeather', settings.noWeather);
     setModuleEnabled('fullBright', settings.fullBright);
     sendDeferredConfig();
+    sendAntiTearConfig();
     sendCritterSkinsConfig();
     setModuleEnabled('autoRespawn', settings.autoRespawn);
     setModuleEnabled('autoReconnect', settings.autoReconnect);
@@ -14431,6 +14490,7 @@
     initGuiPatchModule();
     initMenuHubModule();
     initCustomShaderModule();
+    initAntiTearModule();
     initZoomModule();
     initCameraOverhaulModule();
     initElytraFlightModule();

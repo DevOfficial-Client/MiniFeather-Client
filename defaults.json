@@ -94,8 +94,9 @@
   },
   "shaders": {
     "critterSkins": false,
+    "antiTear": true,
     "deferredPipeline": false,
-    "deferredExposure": 1.0,
+    "deferredExposure": 0.8,
     "deferredSaturation": 1.0,
     "deferredBloom": 0.13,
     "customShader": false,

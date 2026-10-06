@@ -1,120 +1,40 @@
 (function () {
     'use strict';
 
-    // re-ejecución (hot-reload): desenganchar el render del juego antes de nada
+    // re-ejecución (hot-reload): parar el loop anterior antes de nada
     try { window.__MF_DEFERRED_SCOPE__?.destroy?.(); } catch (_) {}
 
     const TAG = 'minifeather deferred';
-    const GL_HALF_FLOAT = 5131;   // GL_HALF_FLOAT (WebGL2)
 
     // ─────────────────────────────────────────────────────────────────────
-    // FASE 2 — port fiel de la cadena post de IterationT 3.2.0 (Tahnass):
-    //   composite9-13 (bloom: downsample 13-tap + gaussiana axial) →
-    //   PROGRAM_FINAL_0 (MergeBloom → Vignette → exposición auto → AgX →
-    //   saturación). Los valores y matrices están copiados 1:1 de
-    //   Lib/Programs/Final.glsl, Lib/IndividualFounctions/Bloom.glsl y
-    //   Lib/Settings.glsl (BLOOM_AMOUNT 0.13, AGX_EV 13.0, pre-scale 2.3,
-    //   AE_CURVE 0.7, AE_OFFSET 0, VIGNETTE_FALLOFF 0.4, ROUNDNESS 0.0).
-    // Desviaciones documentadas (todo lo demás es verbatim):
-    //   * Sin CurveToLinear (c⁴): el pack guarda el HDR con curva c^0.25;
-    //     nuestro RT ya es lineal HalfFloat, así que la curva es identidad
-    //     y las conversiones se omiten (misma matemática, menos ops).
-    //   * El AgX del pack no trae encode de display (su ACES sí hace
-    //     LinearToGamma dentro del operador); cerramos con sRGB para el
-    //     canvas, igual que el camino ACES del pack.
-    //   * MergeBloom: los términos de lluvia/VOG/underwater necesitan
-    //     datos del juego que no tenemos; bloomAmount = BLOOM_AMOUNT seco.
-    //   * La exposición auto usa SU fórmula (8.5·ae^-0.7 con ae = media·40)
-    //     sobre nuestra escala de escena, con clamp de seguridad.
-    // Permiso de Tahnass pendiente antes de redistribuir el GLSL portado.
+    // FASE 2 (modo canvas-post) — port de la cadena post de IterationT 3.2.0
+    // (Tahnass): composite9-13 (bloom downsample 13-tap + gaussiana axial) →
+    // PROGRAM_FINAL_0 (MergeBloom → Vignette → AgX → saturación).
+    //
+    // POR QUÉ CANVAS-POST Y NO EL HOOK DEL RENDERER: el renderer del juego
+    // vive en una clase ESTÁTICA del bundle (colorPass/bloomPass/fogPass/
+    // composer como statics) sin referencia global ni desde el objeto game —
+    // el hook renderer.render de la fase 1 jamás encontró la instancia y el
+    // módulo entero era un passthrough silencioso ("no noto cambio alguno").
+    // Encima el juego ya renderiza con SU composer (fogPass raymarched,
+    // motion blur, eyeAdaptation, glowOutline), así que interceptar la pasada
+    // de escena rompería sus targets de todos modos.
+    //
+    // El enfoque actual es el mismo que ya usa el postfx del CustomShader:
+    // copiar el framebuffer final del juego (copyTexImage2D en el MISMO lote
+    // de rAF, el buffer sigue vivo hasta que el browser compone) y dibujar
+    // el grade encima, con snapshot/restore del estado GL para no desincronizar
+    // las cachés de three. Cuesta algo de HDR (graduamos el LDR ya tonemapeado
+    // por el composer del juego), pero funciona con CUALQUIER pipeline del
+    // juego y no pelea con nadie.
+    //
+    // Valores copiados de Lib/Programs/Final.glsl + Bloom.glsl + Settings.glsl
+    // (BLOOM_AMOUNT 0.13, pre-scale 2.3, AGX_EV 13, VIGNETTE_FALLOFF 0.4).
+    // Desviación documentada: sin exposición automática del pack — su fórmula
+    // (8.5·ae^-0.7) espera radiancia lineal HDR y sobre LDR duplica el brillo;
+    // en su lugar EV manual (slider, default 0.8 = medios casi neutros medidos
+    // con la curva real). Permiso de Tahnass pendiente antes de redistribuir.
     // ─────────────────────────────────────────────────────────────────────
-
-    const state = {
-        enabled: false,
-        renderer: null,
-        game: null,
-        gameScene: null,
-        originalRender: null,
-        rt: null,               // escena full-res (HalfFloat + depth)
-        rtBloomA: null, rtBloomB: null,   // half-res ping-pong
-        rtAeA: null, rtAeB: null,         // 1x1 exposición temporal
-        aeFlip: false,
-        gl: null,
-        prog: null,             // { down, blur, ae, final } + uniforms
-        compositing: false,
-        destroyed: false,
-        hooked: false,
-        keeperTimer: 0,
-        rtCtor: null,
-        rtCtorAt: 0,
-        lastGameAt: 0,
-        firstPassDone: false,
-        exposure: 1.0,          // offset EV en stops (1.0 = neutro)
-        saturation: 1.0,        // SATURATION del pack
-        bloom: 0.13,            // BLOOM_AMOUNT del pack
-        warnThrottle: 0
-    };
-
-    // ── detección ──────────────────────────────────────────────────────────
-    function looksLikeRenderer(value) {
-        if (!value || typeof value !== 'object') return false;
-        if (value.isWebGLRenderer === true) return true;
-        return typeof value.setRenderTarget === 'function' &&
-            typeof value.setSize === 'function' &&
-            value.domElement instanceof HTMLCanvasElement;
-    }
-
-    function findGame() {
-        try {
-            const root = document.getElementById('react');
-            if (!root) return null;
-            for (const key in root) {
-                if (!key.startsWith('__reactContainer') && !key.startsWith('__reactFiber')) continue;
-                const fiber = root[key];
-                const cand = fiber?.updateQueue?.baseState?.element?.props?.game;
-                if (cand && cand.player) return cand;
-            }
-        } catch (_) {}
-        return null;
-    }
-
-    function resolveRenderer(game) {
-        if (looksLikeRenderer(state.renderer)) return state.renderer;
-        const direct = [
-            game?.renderer, game?.gameScene?.renderer, game?.scene?.renderer,
-            game?.engine?.renderer, game?.graphics?.renderer
-        ];
-        for (const cand of direct) {
-            if (looksLikeRenderer(cand)) { state.renderer = cand; return cand; }
-        }
-        return null;
-    }
-
-    // El constructor WebGLRenderTarget se roba de una instancia existente del
-    // juego (el shadow map del sol existe tras el primer render con sombras)
-    function resolveRtCtor() {
-        if (state.rtCtor) return state.rtCtor;
-        const now = performance.now();
-        if (now - (state.rtCtorAt || 0) < 2000) return null;
-        state.rtCtorAt = now;
-        let found = null;
-        try {
-            const scene = state.game?.gameScene?.scene || state.game?.scene?.scene;
-            if (scene?.traverse) {
-                scene.traverse((o) => {
-                    if (found) return;
-                    const map = o?.shadow?.map;
-                    if (map && map.isRenderTarget === true) found = map;
-                });
-            }
-        } catch (_) {}
-        if (found && found.constructor) {
-            state.rtCtor = found.constructor;
-            console.info(TAG, 'WebGLRenderTarget adquirido del shadow map del juego');
-            return state.rtCtor;
-        }
-        return null;
-    }
 
     // ── infra GL cruda (triángulo fullscreen por gl_VertexID, sin buffers) ─
     const VS = `#version 300 es
@@ -127,7 +47,7 @@
     `;
 
     // BloomDownSample de Lib/IndividualFounctions/Bloom.glsl verbatim
-    // (13 taps, pesos .125/.5/.25, sum *0.25) — sin conversiones de curva.
+    // (13 taps, pesos .125/.5/.25, sum *0.25)
     const BLOOM_DOWN_FS = `#version 300 es
         precision highp float;
         uniform sampler2D uTex;
@@ -153,9 +73,7 @@
         }
     `;
 
-    // AxialGaussianBlur de Bloom.glsl verbatim (exp2(-i²·alpha·5.77)),
-    // steps/alpha/eje como uniforms; clamp de borde incluido. El step del
-    // pack es 2px (axis / coordScale * pixelSize * i * 2).
+    // AxialGaussianBlur de Bloom.glsl (exp2(-i²·alpha·5.77)), paso 2px
     const BLUR_FS = `#version 300 es
         precision highp float;
         uniform sampler2D uTex;
@@ -178,45 +96,19 @@
         }
     `;
 
-    // Exposición auto: media de luminancia lineal (grid 16x16) mezclada
-    // temporalmente con el frame anterior (SMOOTH_EXPOSURE, EXPOSURE_TIME 1s).
-    const AE_FS = `#version 300 es
-        precision highp float;
-        uniform sampler2D uTex;
-        uniform sampler2D uPrev;
-        uniform float uMix;       // 1 - exp(-dt / 1.0)
-        in vec2 mfUv;
-        out vec4 mfOut;
-        float lum(vec3 c) { return dot(c, vec3(0.2125, 0.7154, 0.0721)); }
-        void main() {
-            float sum = 0.0;
-            for (int y = 0; y < 16; y++) {
-                for (int x = 0; x < 16; x++) {
-                    vec2 uv = (vec2(float(x), float(y)) + 0.5) / 16.0;
-                    sum += lum(texture(uTex, uv).rgb);
-                }
-            }
-            float avg = sum / 256.0;
-            float prev = texture(uPrev, vec2(0.5)).a;
-            mfOut = vec4(0.0, 0.0, 0.0, mix(prev, avg, uMix));
-        }
-    `;
-
-    // PROGRAM_FINAL_0 de Lib/Programs/Final.glsl verbatim:
-    // MergeBloom → Vignette → exposición → AgX → SATURATION → encode sRGB.
+    // PROGRAM_FINAL_0 de Final.glsl adaptado a entrada LDR: bloom merge +
+    // viñeta en display space, luego linearizar → EV → AgX → saturación → sRGB.
     const FINAL_FS = `#version 300 es
         precision highp float;
-        uniform sampler2D uScene;   // colortex1 (HDR lineal)
-        uniform sampler2D uBloom;   // colortex5
-        uniform sampler2D uAe;      // colortex2 (media en .a)
+        uniform sampler2D uScene;   // copia sRGB del canvas del juego
+        uniform sampler2D uBloom;
         uniform float uBloomAmount; // BLOOM_AMOUNT 0.13
-        uniform float uEvOffset;    // offset manual en stops
+        uniform float uEvOffset;    // offset manual en stops (log2 del slider)
         uniform float uSaturation;  // SATURATION 1.0
         uniform float uVignette;    // 1 = on (default del pack)
         in vec2 mfUv;
         out vec4 mfOut;
 
-        // Lib/Utilities.glsl
         float Luminance(vec3 c) { return dot(c, vec3(0.2125, 0.7154, 0.0721)); }
 
         // Final.glsl Vignette() verbatim
@@ -227,16 +119,8 @@
             return 1.0 / (rf * rf);
         }
 
-        // GetExposureValue() — rama SMOOTH_EXPOSURE con nuestra escala:
-        // ae = media * (5120/128); ae = pow(ae, -AE_CURVE); exp = 8.5 * ae
-        float GetExposureValue() {
-            float ae = texture(uAe, vec2(0.5)).a * 40.0;
-            ae = pow(max(ae, 1e-6), -0.7);
-            ae *= exp2(uEvOffset);
-            return clamp(8.5 * ae, 0.02, 60.0);
-        }
-
-        // MergeBloom() — términos secos: bloomAmount = BLOOM_AMOUNT
+        // MergeBloom() — términos secos (los de lluvia/VOG necesitan datos
+        // del juego que no tenemos desde fuera del composer)
         vec3 MergeBloom(vec3 color) {
             vec3 bloom = texture(uBloom, mfUv).rgb;
             return mix(color, bloom, clamp(uBloomAmount, 0.0, 1.0));
@@ -253,7 +137,7 @@
                           0.0423756549057051, 0.0784336, 0.879142973793104);
             const float hev = 13.0 * 0.5;   // AGX_EV 13.0
             const float middle_grey = 0.18;
-            color = clamp(log2(color / middle_grey), -hev, hev);
+            color = clamp(log2(max(color, vec3(1e-8)) / middle_grey), -hev, hev);
             color = (color + hev) / 13.0;
             color = AgxDefaultContrastApprox(color);
             color *= mat3(1.19687900512017, -0.0980208811401368, -0.0990297440797205,
@@ -262,303 +146,399 @@
             return color;
         }
 
+        vec3 mfSrgbToLinear(vec3 c) {
+            return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+        }
         vec3 mfLinearToSRGB(vec3 c) {
             c = clamp(c, 0.0, 1.0);
-            return mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0031308)), vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+            return mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0031308)), vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
         }
 
         void main() {
             vec3 color = texture(uScene, mfUv).rgb;
             color = MergeBloom(color);
             if (uVignette > 0.5) color *= Vignette(mfUv, 0.4, 0.0);  // FALLOFF/ROUNDNESS default
-            color *= GetExposureValue();
-            color = AgX(color);
+            vec3 lin = mfSrgbToLinear(clamp(color, vec3(0.0), vec3(1.0)));
+            lin *= exp2(uEvOffset);
+            lin = AgX(lin);
             // SATURATION del pack (el camino ADVANCED_COLOR va comentado en el pack)
-            color = mix(color, vec3(Luminance(color)), vec3(1.0 - uSaturation));
-            // encode de display (ver nota de cabecera)
-            mfOut = vec4(mfLinearToSRGB(clamp(color, 0.0, 1.0)), 1.0);
+            lin = mix(lin, vec3(Luminance(lin)), vec3(1.0 - uSaturation));
+            mfOut = vec4(mfLinearToSRGB(lin), 1.0);
         }
     `;
+
+    const state = {
+        enabled: false,
+        destroyed: false,
+        canvas: null,
+        gl: null,
+        prog: null,             // { down, blur, final } + uniforms
+        vao: null,
+        texScene: null, fboScene: null,
+        bloomA: null, bloomB: null,   // { tex, fbo, w, h }
+        texW: 0, texH: 0,
+        rafId: 0,
+        keeperTimer: 0,
+        lastScanAt: 0,
+        lastWarnAt: 0,
+        frames: 0,
+        firstPassDone: false,
+        exposure: 0.8,          // multiplicador EV; 0.8 = medios ~neutros en LDR (medido)
+        saturation: 1.0,        // SATURATION del pack
+        bloom: 0.13,            // BLOOM_AMOUNT del pack
+        badge: null
+    };
+
+    // ── canvas/contexto ────────────────────────────────────────────────────
+    function findMainGameCanvas() {
+        const registry = window.__MF_GL_CANVASES__;
+        if (Array.isArray(registry) && registry.length) {
+            const live = registry.filter(c =>
+                c.isConnected && !c.__mfIsHUD &&
+                c.width >= 300 && c.height >= 200);
+            live.sort((a, b) => b.width * b.height - a.width * a.height);
+            if (live[0]) return live[0];
+        }
+        const canvases = [...document.querySelectorAll('canvas')];
+        return canvases
+            .filter(c => c.width >= 300 && c.height >= 200)
+            .sort((a, b) => b.width * b.height - a.width * a.height)[0] || null;
+    }
 
     function compile(gl, type, src) {
         const sh = gl.createShader(type);
         gl.shaderSource(sh, src);
         gl.compileShader(sh);
         if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-            const err = new Error(gl.getShaderInfoLog(sh) || 'compile error');
-            try { gl.deleteShader(sh); } catch (_) {}
-            throw err;
+            console.warn(TAG, 'shader error:', gl.getShaderInfoLog(sh));
+            gl.deleteShader(sh);
+            return null;
         }
         return sh;
     }
 
     function makeProgram(gl, fsSrc) {
-        const program = gl.createProgram();
         const vs = compile(gl, gl.VERTEX_SHADER, VS);
         const fs = compile(gl, gl.FRAGMENT_SHADER, fsSrc);
-        gl.attachShader(program, vs);
-        gl.attachShader(program, fs);
-        gl.linkProgram(program);
-        try { gl.detachShader(program, vs); gl.deleteShader(vs); } catch (_) {}
-        try { gl.detachShader(program, fs); gl.deleteShader(fs); } catch (_) {}
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-            const err = new Error(gl.getProgramInfoLog(program) || 'link error');
-            try { gl.deleteProgram(program); } catch (_) {}
-            throw err;
+        if (!vs || !fs) return null;
+        const p = gl.createProgram();
+        gl.attachShader(p, vs);
+        gl.attachShader(p, fs);
+        gl.linkProgram(p);
+        gl.deleteShader(vs);
+        gl.deleteShader(fs);
+        if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+            console.warn(TAG, 'link error:', gl.getProgramInfoLog(p));
+            gl.deleteProgram(p);
+            return null;
         }
-        return program;
+        return p;
     }
 
-    function uniforms(gl, program, names) {
-        const out = {};
-        for (const n of names) out[n] = gl.getUniformLocation(program, n);
-        return out;
+    function makeTarget(gl, w, h) {
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        const fbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return { tex, fbo, w, h };
     }
 
-    function ensurePasses() {
-        if (state.prog) return true;
-        const gl = state.gl || (state.gl = state.renderer?.getContext?.());
-        if (!gl) return false;
+    function installGl() {
+        const now = performance.now();
+        if (now - state.lastScanAt < 1000) return !!state.gl;
+        state.lastScanAt = now;
+
+        const canvas = findMainGameCanvas();
+        if (!canvas) { setBadge('waiting'); return false; }
+        if (state.canvas === canvas && state.gl && !state.gl.isContextLost()) return true;
+
+        const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        if (!gl) { setBadge('waiting'); return false; }
+
+        disposeGl();
+        const down = makeProgram(gl, BLOOM_DOWN_FS);
+        const blur = makeProgram(gl, BLUR_FS);
+        const final = makeProgram(gl, FINAL_FS);
+        if (!down || !blur || !final) { setBadge('waiting'); return false; }
+
+        const U = (p, n) => gl.getUniformLocation(p, n);
+        state.prog = {
+            down: { p: down, u: { uTex: U(down, 'uTex'), uTexel: U(down, 'uTexel') } },
+            blur: { p: blur, u: { uTex: U(blur, 'uTex'), uAxis: U(blur, 'uAxis'), uTexel: U(blur, 'uTexel'), uSteps: U(blur, 'uSteps'), uAlpha: U(blur, 'uAlpha') } },
+            final: { p: final, u: { uScene: U(final, 'uScene'), uBloom: U(final, 'uBloom'), uBloomAmount: U(final, 'uBloomAmount'), uEvOffset: U(final, 'uEvOffset'), uSaturation: U(final, 'uSaturation'), uVignette: U(final, 'uVignette') } }
+        };
+        // VAO propio vacío: el triángulo por gl_VertexID no necesita atributos
+        // y así no heredamos arrays habilitados del VAO que three dejó abierto
+        state.vao = typeof gl.createVertexArray === 'function' ? gl.createVertexArray() : null;
+        state.canvas = canvas;
+        state.gl = gl;
+        state.texW = 0; state.texH = 0;
+        console.info(TAG, 'canvas del juego agarrado (' + canvas.width + 'x' + canvas.height + ')');
+        return true;
+    }
+
+    function disposeGl() {
+        const gl = state.gl;
+        if (gl) {
+            for (const t of [state.texScene, state.bloomA?.tex, state.bloomB?.tex]) {
+                try { gl.deleteTexture(t); } catch (_) {}
+            }
+            for (const f of [state.fboScene, state.bloomA?.fbo, state.bloomB?.fbo]) {
+                try { gl.deleteFramebuffer(f); } catch (_) {}
+            }
+            try { if (state.vao) gl.deleteVertexArray(state.vao); } catch (_) {}
+            if (state.prog) {
+                for (const k of ['down', 'blur', 'final']) {
+                    try { gl.deleteProgram(state.prog[k]?.p); } catch (_) {}
+                }
+            }
+        }
+        state.prog = null;
+        state.vao = null;
+        state.texScene = null; state.fboScene = null;
+        state.bloomA = null; state.bloomB = null;
+        state.texW = 0; state.texH = 0;
+        state.canvas = null;
+        state.gl = null;
+    }
+
+    function ensureTargets(gl, w, h) {
+        if (state.texW === w && state.texH === h && state.texScene && state.bloomA) return true;
+        const bw = Math.max(1, w >> 1), bh = Math.max(1, h >> 1);
         try {
-            const down = makeProgram(gl, BLOOM_DOWN_FS);
-            const blur = makeProgram(gl, BLUR_FS);
-            const ae = makeProgram(gl, AE_FS);
-            const final = makeProgram(gl, FINAL_FS);
-            state.prog = {
-                down: { p: down, u: uniforms(gl, down, ['uTex', 'uTexel']) },
-                blur: { p: blur, u: uniforms(gl, blur, ['uTex', 'uAxis', 'uTexel', 'uSteps', 'uAlpha']) },
-                ae: { p: ae, u: uniforms(gl, ae, ['uTex', 'uPrev', 'uMix']) },
-                final: { p: final, u: uniforms(gl, final, ['uScene', 'uBloom', 'uAe', 'uBloomAmount', 'uEvOffset', 'uSaturation', 'uVignette']) }
-            };
-            return true;
-        } catch (err) {
-            console.warn(TAG, 'passes no disponibles:', err?.message || err);
-            disposePasses();
+            if (state.texScene) gl.deleteTexture(state.texScene);
+            if (state.fboScene) gl.deleteFramebuffer(state.fboScene);
+            if (state.bloomA) { gl.deleteTexture(state.bloomA.tex); gl.deleteFramebuffer(state.bloomA.fbo); }
+            if (state.bloomB) { gl.deleteTexture(state.bloomB.tex); gl.deleteFramebuffer(state.bloomB.fbo); }
+
+            const tex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            const fbo = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+
+            state.texScene = tex;
+            state.fboScene = fbo;
+            state.bloomA = makeTarget(gl, bw, bh);
+            state.bloomB = makeTarget(gl, bw, bh);
+            state.texW = w; state.texH = h;
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            return !!(state.bloomA && state.bloomB);
+        } catch (_) {
             return false;
         }
     }
 
-    function disposePasses() {
+    // ── badge (prueba visible de que la cadena corre — pedido tras el "no
+    // noto cambio alguno" de la fase 1) ─────────────────────────────────────
+    function setBadge(mode) {
+        if (!state.enabled) { removeBadge(); return; }
+        if (!state.badge) {
+            state.badge = document.createElement('div');
+            state.badge.id = 'mf-deferred-badge';
+            state.badge.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:999990;' +
+                'font:10px/1 monospace;letter-spacing:.5px;padding:4px 7px;border-radius:6px;' +
+                'pointer-events:none;opacity:.6;background:rgba(0,0,0,.55);color:#9fe8a0;';
+            (document.body || document.documentElement).appendChild(state.badge);
+        }
+        const txt = mode === 'on' ? 'iterationt · on'
+            : mode === 'waiting' ? 'iterationt · sin canvas'
+            : 'iterationt';
+        if (state.badge.textContent !== txt) state.badge.textContent = txt;
+        state.badge.style.color = mode === 'on' ? '#9fe8a0' : '#e8c89f';
+    }
+
+    function removeBadge() {
+        try { state.badge?.remove(); } catch (_) {}
+        state.badge = null;
+    }
+
+    // ── frame (mismo lote de rAF que el juego: su callback fue registrado
+    // antes, así que este corre SIEMPRE después de su render) ───────────────
+    function frame() {
+        state.rafId = 0;
+        if (!state.enabled || state.destroyed) return;
+
         const gl = state.gl;
-        if (!gl || !state.prog) { state.prog = null; return; }
-        try { for (const k of Object.keys(state.prog)) gl.deleteProgram(state.prog[k].p); } catch (_) {}
-        state.prog = null;
+        const canvas = state.canvas;
+        if (!gl || !canvas || !canvas.isConnected || gl.isContextLost()) {
+            setBadge('waiting');
+            installGl();
+        } else {
+            drawComposite();
+        }
+        if (state.enabled && !state.destroyed) {
+            state.rafId = requestAnimationFrame(frame);
+        }
     }
 
-    // Handle GL interno de una Texture de three (r158: properties.get(t).__webglTexture)
-    function glTextureOf(renderer, texture) {
+    function drawComposite() {
+        const gl = state.gl;
+        const canvas = state.canvas;
+        if (!gl || !state.prog) return;
+
+        const w = canvas.width, h = canvas.height;
+        if (!w || !h) return;
+
+        // snapshot del estado que three cachea y podría no re-bindear
+        const lastProg = gl.getParameter(gl.CURRENT_PROGRAM);
+        const lastActiveTex = gl.getParameter(gl.ACTIVE_TEXTURE);
+        const lastFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+        const lastReadFbo = gl.READ_FRAMEBUFFER_BINDING !== undefined
+            ? gl.getParameter(gl.READ_FRAMEBUFFER_BINDING) : null;
+        const lastViewport = gl.getParameter(gl.VIEWPORT);
+        const lastArrayBuf = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
+        const lastVao = gl.VERTEX_ARRAY_BINDING !== undefined
+            ? gl.getParameter(gl.VERTEX_ARRAY_BINDING) : null;
+
+        gl.activeTexture(gl.TEXTURE0);
+        const lastTex0 = gl.getParameter(gl.TEXTURE_BINDING_2D);
+        gl.activeTexture(gl.TEXTURE1);
+        const lastTex1 = gl.getParameter(gl.TEXTURE_BINDING_2D);
+
+        const lastEnabled = [];
+        [gl.BLEND, gl.DEPTH_TEST, gl.CULL_FACE, gl.SCISSOR_TEST].forEach(cap => {
+            if (gl.isEnabled(cap)) lastEnabled.push(cap);
+        });
+
         try {
-            const props = renderer.properties?.get?.(texture);
-            return props?.__webglTexture || props?.texture || null;
-        } catch (_) { return null; }
-    }
-
-    // ── render targets ─────────────────────────────────────────────────────
-    function ensureRt(w, h) {
-        const RtCtor = resolveRtCtor();
-        if (!RtCtor) return false;
-        const need = (rt, tw, th, depth) => !rt || rt.width !== tw || rt.height !== th;
-        const make = (tw, th, depth) => {
-            try {
-                return new RtCtor(tw, th, { depthBuffer: depth, type: GL_HALF_FLOAT });
-            } catch (_) {
-                try { return new RtCtor(tw, th, { depthBuffer: depth }); } catch (_) { return null; }
-            }
-        };
-        if (need(state.rt, w, h, true)) {
-            try { state.rt?.dispose?.(); } catch (_) {}
-            state.rt = make(w, h, true);
-            if (!state.rt) return false;
-        }
-        const bw = Math.max(1, w >> 1), bh = Math.max(1, h >> 1);
-        if (need(state.rtBloomA, bw, bh, false)) {
-            try { state.rtBloomA?.dispose?.(); state.rtBloomB?.dispose?.(); } catch (_) {}
-            state.rtBloomA = make(bw, bh, false);
-            state.rtBloomB = make(bw, bh, false);
-        }
-        if (!state.rtAeA) {
-            state.rtAeA = make(1, 1, false);
-            state.rtAeB = make(1, 1, false);
-        }
-        return !!(state.rt && state.rtBloomA && state.rtBloomB && state.rtAeA && state.rtAeB);
-    }
-
-    function disposeRts() {
-        for (const key of ['rt', 'rtBloomA', 'rtBloomB', 'rtAeA', 'rtAeB']) {
-            try { state[key]?.dispose?.(); } catch (_) {}
-            state[key] = null;
-        }
-    }
-
-    // ── hook del render ────────────────────────────────────────────────────
-    function isGameScene(scene) {
-        // re-resolver SIEMPRE: los cambios de mundo reemplazan gameScene.scene.
-        // gameScene puede SER la escena directamente (sin .scene).
-        const g = state.game;
-        const gs = g?.gameScene?.scene || g?.scene?.scene || g?.gameScene || g?.scene || state.gameScene;
-        return !!scene && !!gs && scene === gs;
-    }
-
-    function bindTex(gl, unit, tex, loc) {
-        gl.activeTexture(gl.TEXTURE0 + unit);
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.uniform1i(loc, unit);
-    }
-
-    function wrappedRender(scene, camera) {
-        if (state.compositing || !state.enabled || state.destroyed) {
-            return state.originalRender.call(this, scene, camera);
-        }
-        const nowMs = performance.now();
-        if (nowMs - (state.lastGameAt || 0) > 1000) {
-            state.lastGameAt = nowMs;
-            state.game = findGame() || state.game;
-        }
-        if (!isGameScene(scene)) {
-            return state.originalRender.call(this, scene, camera);
-        }
-        const dom = this.domElement;
-        const w = dom.width, h = dom.height;
-        if (!w || !h) return state.originalRender.call(this, scene, camera);
-        if (!ensureRt(w, h) || !ensurePasses() || !state.rt) {
-            const now = performance.now();
-            if (now - state.warnThrottle > 10000) {
-                state.warnThrottle = now;
-                console.warn(TAG, 'sin RT/passes todavía — passthrough directo');
-            }
-            return state.originalRender.call(this, scene, camera);
-        }
-
-        this.setRenderTarget(state.rt);
-        state.originalRender.call(this, scene, camera);
-
-        state.compositing = true;
-        try {
-            const gl = state.gl || (state.gl = this.getContext());
             const P = state.prog;
-            const texScene = glTextureOf(this, state.rt.texture);
-            if (!gl || !P || !texScene) throw new Error('gl/texture no listos');
+            // unidad 0 SIEMPRE: crear/targets y pases solo tocan unidades 0/1,
+            // que son las que el finally restaura (la activa de three era otra)
+            gl.activeTexture(gl.TEXTURE0);
+            // DENTRO del snapshot: crear/redimensionar targets toca texturas y
+            // framebuffer, y tiene que restaurarse como el resto
+            if (!ensureTargets(gl, w, h)) return warnThrottled('sin targets todavía');
+            const bw = state.bloomA.w, bh = state.bloomA.h;
 
-            const bw = state.rtBloomA.width, bh = state.rtBloomA.height;
-            const texBloomA = glTextureOf(this, state.rtBloomA.texture);
-            const texBloomB = glTextureOf(this, state.rtBloomB.texture);
-            const texAeA = glTextureOf(this, state.rtAeA.texture);
-            const texAeB = glTextureOf(this, state.rtAeB.texture);
-
-            gl.disable(gl.DEPTH_TEST);
+            gl.bindVertexArray(state.vao);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.viewport(0, 0, w, h);
             gl.disable(gl.BLEND);
+            gl.disable(gl.DEPTH_TEST);
+            gl.disable(gl.CULL_FACE);
+            gl.disable(gl.SCISSOR_TEST);
 
-            // 1) bloom downsample: escena full-res → half (13 taps del pack)
-            this.setRenderTarget(state.rtBloomA);
+            // 0) copia del framebuffer final del juego (mismo lote de rAF,
+            //    el drawing buffer sigue vivo hasta que el browser compone)
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, state.texScene);
+            if (state.texW !== w || state.texH !== h) {
+                gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, w, h, 0);
+            } else {
+                gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, w, h);
+            }
+
+            // 1) bloom downsample: canvas → half (13 taps del pack)
+            gl.bindFramebuffer(gl.FRAMEBUFFER, state.bloomA.fbo);
             gl.viewport(0, 0, bw, bh);
             gl.useProgram(P.down.p);
-            bindTex(gl, 0, texScene, P.down.u.uTex);
+            gl.uniform1i(P.down.u.uTex, 0);
             gl.uniform2f(P.down.u.uTexel, 1 / w, 1 / h);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
 
             // 2) gaussiana axial H+V sobre half-res (ping-pong)
-            this.setRenderTarget(state.rtBloomB);
-            gl.viewport(0, 0, bw, bh);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, state.bloomB.fbo);
             gl.useProgram(P.blur.p);
-            bindTex(gl, 0, texBloomA, P.blur.u.uTex);
+            gl.bindTexture(gl.TEXTURE_2D, state.bloomA.tex);
+            gl.uniform1i(P.blur.u.uTex, 0);
             gl.uniform2f(P.blur.u.uAxis, 1, 0);
             gl.uniform2f(P.blur.u.uTexel, 1 / bw, 1 / bh);
             gl.uniform1f(P.blur.u.uSteps, 6);
             gl.uniform1f(P.blur.u.uAlpha, 0.1);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-            this.setRenderTarget(state.rtBloomA);
-            gl.viewport(0, 0, bw, bh);
-            gl.useProgram(P.blur.p);
-            bindTex(gl, 0, texBloomB, P.blur.u.uTex);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, state.bloomA.fbo);
+            gl.bindTexture(gl.TEXTURE_2D, state.bloomB.tex);
             gl.uniform2f(P.blur.u.uAxis, 0, 1);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-            // 3) exposición auto: media temporal 1x1 (ping-pong, dt real)
-            const last = state.lastAeAt || nowMs;
-            const dt = Math.min(0.2, Math.max(0.001, (nowMs - last) / 1000));
-            state.lastAeAt = nowMs;
-            const mixNow = 1 - Math.exp(-dt / 1.0);   // EXPOSURE_TIME 1.0
-            const dst = state.aeFlip ? state.rtAeA : state.rtAeB;
-            const src = state.aeFlip ? state.rtAeB : state.rtAeA;
-            state.aeFlip = !state.aeFlip;
-            const texSrc = glTextureOf(this, src.texture);
-            this.setRenderTarget(dst);
-            gl.viewport(0, 0, 1, 1);
-            gl.useProgram(P.ae.p);
-            bindTex(gl, 0, texScene, P.ae.u.uTex);
-            bindTex(gl, 1, texSrc, P.ae.u.uPrev);
-            gl.uniform1f(P.ae.u.uMix, mixNow);
-            gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-            // 4) FINAL del pack al canvas: bloom merge + vignette + AE + AgX + sat
-            this.setRenderTarget(null);
+            // 3) FINAL del pack al canvas: bloom merge + viñeta + AgX + sat
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.viewport(0, 0, w, h);
             gl.useProgram(P.final.p);
-            bindTex(gl, 0, texScene, P.final.u.uScene);
-            bindTex(gl, 1, texBloomA, P.final.u.uBloom);
-            bindTex(gl, 2, glTextureOf(this, dst.texture), P.final.u.uAe);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, state.texScene);
+            gl.uniform1i(P.final.u.uScene, 0);
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, state.bloomA.tex);
+            gl.uniform1i(P.final.u.uBloom, 1);
             gl.uniform1f(P.final.u.uBloomAmount, state.bloom);
             gl.uniform1f(P.final.u.uEvOffset, Math.log2(Math.max(0.05, state.exposure)));
             gl.uniform1f(P.final.u.uSaturation, state.saturation);
             gl.uniform1f(P.final.u.uVignette, 1);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-            this.state?.reset?.();
+            state.frames++;
+            setBadge('on');
             if (!state.firstPassDone) {
                 state.firstPassDone = true;
-                console.info(TAG, '✔ cadena IterationT activa: bloom 13-tap → gaussiana → AE → AgX(EV 13) → final');
+                console.info(TAG, '✔ cadena IterationT activa (canvas-post): bloom 13-tap → gaussiana → AgX(EV 13) → final');
             }
         } catch (err) {
-            const now = performance.now();
-            if (now - state.warnThrottle > 10000) {
-                state.warnThrottle = now;
-                console.warn(TAG, 'composición falló:', err?.message || err);
-            }
-            try { this.setRenderTarget(null); state.originalRender.call(this, scene, camera); } catch (_) {}
+            warnThrottled('composición falló: ' + (err?.message || err));
         } finally {
-            state.compositing = false;
+            gl.bindFramebuffer(gl.FRAMEBUFFER, lastFbo);
+            if (lastReadFbo !== null && gl.READ_FRAMEBUFFER_BINDING !== undefined) {
+                gl.bindFramebuffer(gl.READ_FRAMEBUFFER, lastReadFbo);
+            }
+            gl.bindBuffer(gl.ARRAY_BUFFER, lastArrayBuf);
+            if (lastVao !== null && gl.bindVertexArray) gl.bindVertexArray(lastVao);
+            else if (gl.bindVertexArray) gl.bindVertexArray(null);
+            gl.useProgram(lastProg);
+            lastEnabled.forEach(cap => gl.enable(cap));
+            [gl.BLEND, gl.DEPTH_TEST, gl.CULL_FACE, gl.SCISSOR_TEST].forEach(cap => {
+                if (!lastEnabled.includes(cap)) gl.disable(cap);
+            });
+            gl.viewport(lastViewport[0], lastViewport[1], lastViewport[2], lastViewport[3]);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, lastTex0);
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, lastTex1);
+            gl.activeTexture(lastActiveTex);
         }
     }
 
-    function hook() {
-        if (state.hooked) return true;
-        const game = findGame();
-        if (!game) return false;
-        const renderer = resolveRenderer(game);
-        if (!renderer) return false;
-        if (renderer.render?.__mfDeferredOwner) { state.hooked = true; return true; }
-        state.game = game;
-        state.gameScene = game.gameScene?.scene || game.scene?.scene || null;
-        state.originalRender = renderer.render;
-        const wrapped = function (scene, camera) { return wrappedRender.call(this, scene, camera); };
-        wrapped.__mfDeferredOwner = 'mf-deferred';
-        try {
-            renderer.render = wrapped;
-            state.hooked = true;
-            console.info(TAG, 'renderer.render enganchado');
-            return true;
-        } catch (_) { return false; }
+    function warnThrottled(msg) {
+        const now = performance.now();
+        if (now - state.lastWarnAt < 10000) return;
+        state.lastWarnAt = now;
+        console.warn(TAG, msg);
     }
 
-    function unhook() {
-        if (!state.hooked || !state.renderer) return;
-        try {
-            if (state.renderer.render?.__mfDeferredOwner === 'mf-deferred') {
-                state.renderer.render = state.originalRender;
-            }
-        } catch (_) {}
-        state.hooked = false;
+    // ── loop del keeper: canvas nuevo/cambio de mundo/contexto perdido ─────
+    function keeper() {
+        if (!state.enabled || state.destroyed) return;
+        if (!state.gl || !state.canvas || !state.canvas.isConnected ||
+            state.gl.isContextLost?.()) {
+            state.firstPassDone = false;
+            installGl();
+        }
+        if (state.enabled && !state.rafId) {
+            state.rafId = requestAnimationFrame(frame);
+        }
     }
 
-    // ── API pública ────────────────────────────────────────────────────────
+    // ── prefs + API pública ────────────────────────────────────────────────
     function loadPrefs() {
         try {
             const e = parseFloat(localStorage.getItem('mf_deferred_exposure'));
-            if (Number.isFinite(e)) state.exposure = e;
             const s = parseFloat(localStorage.getItem('mf_deferred_saturation'));
-            if (Number.isFinite(s)) state.saturation = s;
             const b = parseFloat(localStorage.getItem('mf_deferred_bloom'));
+            if (Number.isFinite(e)) state.exposure = e;
+            if (Number.isFinite(s)) state.saturation = s;
             if (Number.isFinite(b)) state.bloom = b;
         } catch (_) {}
     }
@@ -573,30 +553,26 @@
 
     function enable() {
         state.enabled = true;
+        state.destroyed = false;
         loadPrefs();
-        if (!hook()) {
-            console.info(TAG, 'esperando al renderer del juego...');
+        if (!installGl()) {
+            console.info(TAG, 'esperando al canvas del juego...');
+            setBadge('waiting');
         }
         if (!state.keeperTimer) {
-            state.keeperTimer = setInterval(() => {
-                if (state.destroyed || !state.enabled) return;
-                const r = state.renderer;
-                if (!r || !looksLikeRenderer(r) || r.render?.__mfDeferredOwner !== 'mf-deferred') {
-                    state.renderer = null;
-                    state.hooked = false;
-                    disposePasses();
-                    disposeRts();
-                    hook();
-                }
-            }, 3000);
+            state.keeperTimer = setInterval(keeper, 1500);
+        }
+        if (!state.rafId) {
+            state.rafId = requestAnimationFrame(frame);
         }
         return true;
     }
 
     function disable() {
         state.enabled = false;
-        unhook();
+        if (state.rafId) { cancelAnimationFrame(state.rafId); state.rafId = 0; }
         if (state.keeperTimer) { clearInterval(state.keeperTimer); state.keeperTimer = 0; }
+        removeBadge();
     }
 
     function setGrade(exposure, saturation, bloom) {
@@ -609,11 +585,9 @@
     function status() {
         return {
             enabled: state.enabled,
-            hooked: state.hooked,
-            hasRt: !!state.rt,
-            rtCtor: !!state.rtCtor,
-            passes: !!state.prog,
-            renderer: !!state.renderer,
+            mode: 'canvas-post',
+            canvas: !!state.canvas,
+            frames: state.frames,
             exposure: state.exposure,
             saturation: state.saturation,
             bloom: state.bloom
@@ -623,8 +597,7 @@
     function destroy() {
         state.destroyed = true;
         disable();
-        disposePasses();
-        disposeRts();
+        disposeGl();
         try { delete window.MF_Deferred; } catch (_) {}
         try { delete window.__MF_DEFERRED_SCOPE__; } catch (_) {}
     }
@@ -640,5 +613,5 @@
 
     window.MF_Deferred = { enable, disable, setGrade, status, destroy };
     window.__MF_DEFERRED_SCOPE__ = { destroy };
-    console.info(TAG, 'módulo cargado (inactivo hasta minifeather:deferred-config {enabled:true})');
+    console.info(TAG, 'módulo cargado (canvas-post; inactivo hasta minifeather:deferred-config {enabled:true})');
 })();
