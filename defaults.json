@@ -95,6 +95,9 @@
   "shaders": {
     "critterSkins": false,
     "antiTear": true,
+    "waterStyle": false,
+    "waterStyleAlpha": 0.12,
+    "waterStyleTintMix": 0.85,
     "deferredPipeline": false,
     "deferredExposure": 0.8,
     "deferredSaturation": 1.0,
