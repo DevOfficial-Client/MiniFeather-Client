@@ -30,6 +30,24 @@ test('el hub esta cableado al panel: default on, config, init llamado y toggle',
   assert.ok(mirrorBundle.includes('menuhub-config'), 'mirror.js regenerado con el modulo embebido');
 });
 
+test('el head-tracking del chip se re-ancla tras cada fit del canvas', () => {
+  // el sitio congela el ancla del mouse en el primer syncToVisible; el hub debe
+  // re-llamarlo via el manager que vive en la fiber de react, no parchear a ciegas
+  assert.match(source, /function findChipTracker\(canvas\)/);
+  assert.match(source, /__reactFiber\$/);
+  assert.match(source, /cand\.guiPlayer && typeof cand\.syncToVisible === 'function'/);
+  assert.match(source, /function syncChipTracker\(canvas\)/);
+  assert.match(source, /try \{ tracker\.syncToVisible\(canvas\); \} catch \(_\) \{\}/);
+  // el fit en ambas ramas (escenario y expanded) re-ancla
+  assert.ok((source.match(/syncChipTracker\(canvas\)/g) || []).length >= 3, 'fitChipCanvas debe re-anclar en escenario y expanded');
+  // resize: el ancla es viewport, el escenario se mueve con la ventana
+  assert.match(source, /window\.addEventListener\('resize', onChipResize\)/);
+  assert.match(source, /window\.removeEventListener\('resize', onChipResize\)/);
+  assert.match(source, /state\.chipCanvas\?\.isConnected/);
+  // canvases sin fiber (tests jsdom, otros modulos) no deben romper el fit
+  assert.match(source, /chipTrackers = new WeakMap/);
+});
+
 test('menuHub tiene nombre y descripcion en todos los idiomas del cliente', () => {
   const sandbox = {};
   vm.runInNewContext(translationsSource, sandbox);
