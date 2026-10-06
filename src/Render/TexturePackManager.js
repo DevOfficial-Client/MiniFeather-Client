@@ -215,6 +215,53 @@
         return null;
     }
 
+    // MC no tiene equipo de esmeralda: el tier esmeralda de miniblox se viste
+    // con el DIAMOND del pack recoloreado a esmeralda, píxel a píxel (rampa
+    // sombra→luz según la luminancia del original, no un velo encima). caché
+    // por textura fuente: 10 items comparten la misma conversión.
+    const EMERALD_PIECES = new Set([
+        'axe', 'pickaxe', 'shovel', 'sword', 'hoe',
+        'helmet', 'chestplate', 'leggings', 'boots'
+    ]);
+    const EMERALD_DARK = [16, 82, 48];
+    const EMERALD_BRIGHT = [70, 232, 138];
+
+    function tintedSpriteForFrame(fileName, search, tintCache) {
+        const baseName = fileName.replace(/\.png$/, '');
+        const m = /^emerald_(.+)$/.exec(baseName);
+        if (!m || !EMERALD_PIECES.has(m[1])) return null;
+        const srcName = 'diamond_' + m[1];
+        if (tintCache.has(srcName)) return tintCache.get(srcName);
+        let out = null;
+        const src = findSprite(srcName, search);
+        const iw = src?.naturalWidth, ih = src?.naturalHeight;
+        if (src && iw && ih) {
+            const cv = document.createElement('canvas');
+            cv.width = iw; cv.height = ih;
+            const ctx = cv.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(src, 0, 0);
+            let data;
+            try { data = ctx.getImageData(0, 0, iw, ih); } catch (_) { data = null; }
+            if (data) {
+                const px = data.data;
+                for (let i = 0; i < px.length; i += 4) {
+                    if (!px[i + 3]) continue;
+                    // luminancia perceptual (no max): separa highlight blanco /
+                    // cuerpo cyan / sombra azul del diamante en TRES zonas de la
+                    // rampa esmeralda. con max() cuerpo y highlight colapsaban.
+                    const lum = (px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11) / 255;
+                    px[i] = EMERALD_DARK[0] + (EMERALD_BRIGHT[0] - EMERALD_DARK[0]) * lum;
+                    px[i + 1] = EMERALD_DARK[1] + (EMERALD_BRIGHT[1] - EMERALD_DARK[1]) * lum;
+                    px[i + 2] = EMERALD_DARK[2] + (EMERALD_BRIGHT[2] - EMERALD_DARK[2]) * lum;
+                }
+                ctx.putImageData(data, 0, 0);
+                out = cv;
+            }
+        }
+        tintCache.set(srcName, out);
+        return out;
+    }
+
     function fetchImage(src) {
         return new Promise((resolve) => {
             const img = new Image();
@@ -270,6 +317,7 @@
         const stats = { total: entries.length, placed: 0, custom: 0, original: vanilla ? entries.length : 0, placeholder: vanilla ? 0 : 0, resolution };
 
         const textureNames = [];
+        const tintCache = new Map();
 
         for (const [fileName, data] of entries) {
             const frame = data.frame || {};
@@ -282,14 +330,18 @@
             const baseName = fileName.replace(/\.png$/, '');
             const customImg = spriteForFrame(fileName, search, dirMap);
             const anim = customImg ? null : animMatch(fileName, search, dirMap, animMeta);
+            const tinted = (customImg || anim) ? null : tintedSpriteForFrame(fileName, search, tintCache);
 
-            if (customImg || anim) {
+            if (customImg || anim || tinted) {
                 if (anim && anim.fw) {
                     // tira vertical: una fila del strip del pack al slot del frame
                     ctx.drawImage(anim.img, 0, anim.row * anim.fh, anim.fw, anim.fh, fx, fy, fw, fh);
                 } else if (anim) {
                     // cuadro numerado (item/clock/0.png): imagen entera al slot
                     ctx.drawImage(anim.img, fx, fy, fw, fh);
+                } else if (tinted) {
+                    // esmeralda = diamante recoloreado, ya en canvas propio
+                    ctx.drawImage(tinted, fx, fy, fw, fh);
                 } else if (rotated) {
                     ctx.save();
                     ctx.translate(fx, fy);
