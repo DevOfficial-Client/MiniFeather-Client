@@ -143,7 +143,7 @@
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chiprow{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipextra{display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipinfo{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px);padding:12px!important;align-self:stretch!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{width:150px!important;height:245px!important;flex:none!important;align-self:center!important;border:none!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:static!important;width:150px!important;height:245px!important;flex:none!important;align-self:center!important;border:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div,
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div{flex-direction:column!important;align-items:center!important}
       /* el transform del canvas lo escribe JS en cada sync (fitChipCanvas): medir en CSS
@@ -798,13 +798,13 @@
     return aside;
   }
 
-  // el pill vive debajo de la tarjeta de perfil, cuya altura cambia con nivel/xp logueado:
-  // medir al final de cada sync (en buildAside el layout todavia no asienta). en modo
-  // estatico no hay caja marcada: se mide la tira nativa directamente
+  // el pill vive debajo de la TARJETA entera (no de la caja de datos, o quedaria flotando
+  // sobre el personaje): medir al final de cada sync. en modo estatico no hay marcas:
+  // se mide la tira nativa directamente
   function positionAside() {
     const aside = state.hub?.querySelector('.mf-hub-aside');
     if (!aside) return;
-    const box = document.querySelector('.mf-hub-chipinfo') ||
+    const box = document.querySelector('.mf-hub-chiprow') ||
       document.querySelector('.mf-hub-right')?.firstElementChild?.firstElementChild;
     if (!box) return;
     const top = box.getBoundingClientRect().bottom;
