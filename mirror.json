@@ -98,6 +98,7 @@
     "src/Shaders/CustomShaderSafetyPatch.js",
     "src/Shaders/MF_Deferred.js",
     "src/Shaders/MF_WaterStyle.js",
+    "src/Shaders/MF_KotoSky.js",
     "src/Render/MF_AntiTear.js",
     "src/Experimental/Realistic/RealisticProfiles.js",
     "src/Experimental/Realistic/ShadowSystem.js",

@@ -782,6 +782,8 @@
     waterStyle: false,
     waterStyleAlpha: 0.12,
     waterStyleTintMix: 0.85,
+    kotoSky: false,
+    kotoSkyStrength: 1.0,
     customShader: false,
     customShaderPreset: 'spooklementary',
     customShaderStrength: 0.5,
@@ -3715,6 +3717,7 @@
       { page: 'shaders', key: 'antiTear', title: 'anti-tear (vanilla fix)', desc: 'clamps miniblox motion blur + temporal god rays so frames never ghost', tags: ['new'] },
       { page: 'shaders', key: 'deferredPipeline', title: 'deferred pipeline (iterationt)', desc: 'bloom + AgX faithful to Tahnass\'s IterationT pack', tags: ['new'] },
       { page: 'shaders', key: 'waterStyle', title: 'water style', desc: 'agua clara con tinte verdoso: opacidad y fuerza del tinte ajustables', tags: ['new'] },
+      { page: 'shaders', key: 'kotoSky', title: 'koto sky', desc: 'cielo nocturno real con vía láctea (pack "nighttime sky" de koto): aparece al anochecer y se apaga con lluvia', tags: ['new'] },
       { page: 'movement', key: 'autoSprint', title: t('autoSprint'), desc: t('autoSprintDesc'), tags: ['pvp'] },
       { page: 'movement', key: 'safeSneak', title: t('safeSneak'), desc: t('safeSneakDesc'), tags: ['pvp'] },
       { page: 'movement', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc'), tags: [] },
@@ -3822,6 +3825,8 @@
     world: ['..BBBB..','.BbbggB.','BbggggbB','BggBBggB','BgggBbbB','.BggbbB.','..BBBB..','........'],
     about: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yyyy#yyY','Yyyy#yyY','Yyy###yY','.YyyyyY.','..YYYY..'],
     shaders: ['........','..VVVV..','.VvvvvV.','VvbbbbvV','.VvvvvV.','..VVVV..','..tttt..','........'],
+    kotoSky: ['kkkkkkkv','kkk+kkvb','kkk+kbvv','kkkbvbvv','kb+bvvv.','k+bvv+k.','+kbvv+kk','kkbvvkk+'],
+    waterStyle: ['........','.kkkkkk.','kbbbbbbk','bbbbbbbb','bbgbbgbb','bggbbggb','BBBBBBBB','........'],
     experimental: ['...++...','...++...','..+kk+..','..+kk+..','.kggggk.','kgtvgggk','kggggggk','.kkkkkk.'],
     keystrokes: ['...BB...','..ByyB..','..BBBB..','.BB.BB..','B##BB##B','BBBBBBBB','........','........'],
     fpsCounter: ['........','......gg','....g.gg','..g.g.gg','..g.g.gg','ggg.g.gg','GGGGGGGG','........'],
@@ -4066,6 +4071,7 @@
     leaf: 'leafWind', leafwind: 'leafWind', wind: 'leafWind',
     hand: 'handSway', handsway: 'handSway', sway: 'handSway',
     headlag: 'headLag', head: 'headLag', lag: 'headLag', cabeza: 'headLag', cuello: 'headLag',
+    koto: 'kotoSky', kotosky: 'kotoSky', sky: 'kotoSky', cielo: 'kotoSky', lactea: 'kotoSky', milkyway: 'kotoSky',
     fresh: 'freshAnims', freshanims: 'freshAnims', freshanimations: 'freshAnims', cem: 'freshAnims',
     playerlayer: 'betterPlayerLayers', playerlayers: 'betterPlayerLayers', betterplayerlayer: 'betterPlayerLayers', betterplayerlayers: 'betterPlayerLayers', layers: 'betterPlayerLayers',
     waypoint: 'waypoints', waypoints: 'waypoints',
@@ -5166,6 +5172,24 @@
       disable() { sendWaterStyleConfig(false); },
       refresh() { sendWaterStyleConfig(MODULES.get('waterStyle')?.enabled === true); },
       destroy() { sendWaterStyleConfig(false); }
+    }));
+  }
+
+  function sendKotoSkyConfig(enabled = settings.kotoSky) {
+    document.dispatchEvent(new CustomEvent('minifeather:kotosky-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        strength: Number(settings.kotoSkyStrength ?? 1)
+      })
+    }));
+  }
+
+  function initKotoSkyModule() {
+    registerModule('kotoSky', () => createLifecycle({
+      enable() { sendKotoSkyConfig(true); },
+      disable() { sendKotoSkyConfig(false); },
+      refresh() { sendKotoSkyConfig(MODULES.get('kotoSky')?.enabled === true); },
+      destroy() { sendKotoSkyConfig(false); }
     }));
   }
 
@@ -8485,6 +8509,19 @@
             <span style="min-width:90px;font-size:12px;">tinte</span>
             <input id="mf-ws-tint" type="range" min="0" max="1" step="0.05" value="${Number(settings.waterStyleTintMix ?? 0.85)}">
             <span id="mf-ws-tint-value">${Math.round(Number(settings.waterStyleTintMix ?? 0.85) * 100)}%</span>
+          </div>
+        </div>
+
+        <div class="mf-card">
+          <div class="mf-card-title">Koto Sky</div>
+          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">cielo nocturno real: el cubemap &quot;nighttime sky&quot; de koto (v&iacute;a l&aacute;ctea + nubes) sustituye la noche del juego al anochecer, con fundido suave; con lluvia se apaga solo. cr&eacute;dito al autor del pack</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('kotoSky', 'koto sky', 'vía láctea real de noche (pack de koto)')}
+          </div>
+          <div class="mf-shader-strength" style="margin-top:10px;">
+            <span style="min-width:90px;font-size:12px;">intensidad</span>
+            <input id="mf-ks-strength" type="range" min="0" max="1" step="0.05" value="${Number(settings.kotoSkyStrength ?? 1)}">
+            <span id="mf-ks-strength-value">${Math.round(Number(settings.kotoSkyStrength ?? 1) * 100)}%</span>
           </div>
         </div>
 
@@ -12324,6 +12361,24 @@
         saveSettings(true);
       });
     }
+    const ksMap = {
+      strength: { key: 'kotoSkyStrength', fmt: v => Math.round(v * 100) + '%' }
+    };
+    for (const [name, { key, fmt }] of Object.entries(ksMap)) {
+      const slider = panel.querySelector(`#mf-ks-${name}`);
+      if (!slider) continue;
+      slider.addEventListener('input', () => {
+        const value = parseFloat(slider.value);
+        settings[key] = value;
+        guiSettings[key] = value;
+        const valueLabel = panel.querySelector(`#mf-ks-${name}-value`);
+        if (valueLabel) valueLabel.textContent = fmt(value);
+        sendKotoSkyConfig();
+      });
+      slider.addEventListener('change', () => {
+        saveSettings(true);
+      });
+    }
     const CLOUD_PRESETS = {
       default:   { coverage: 0.5, scale: 0.012, wind: 0.02, thickness: 30, height: 128, opacity: 0.9 },
       overcast:  { coverage: 0.75, scale: 0.02, wind: 0.03, thickness: 60, height: 128, opacity: 0.95 },
@@ -13846,6 +13901,8 @@
     sendDeferredConfig();
     sendAntiTearConfig();
     setModuleEnabled('waterStyle', settings.waterStyle);
+    setModuleEnabled('kotoSky', settings.kotoSky);
+    sendKotoSkyConfig();
     sendCritterSkinsConfig();
     setModuleEnabled('autoRespawn', settings.autoRespawn);
     setModuleEnabled('autoReconnect', settings.autoReconnect);
@@ -14552,6 +14609,7 @@
     initMenuHubModule();
     initCustomShaderModule();
     initWaterStyleModule();
+    initKotoSkyModule();
     initAntiTearModule();
     initZoomModule();
     initCameraOverhaulModule();
