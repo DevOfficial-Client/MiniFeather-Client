@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006233907
+// @version      4.19.0.20261006235332
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : fdf81a6e8f64509497ad6e4a0c067b22fa2addf5
- * builtAt : 2026-10-06T23:39:25.496Z
+ * commit  : 638888660ddf18e07f76396623b1ff15e3c80134
+ * builtAt : 2026-10-06T23:53:46.899Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"fdf81a6e8f64509497ad6e4a0c067b22fa2addf5","builtAt":"2026-10-06T23:39:25.496Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"638888660ddf18e07f76396623b1ff15e3c80134","builtAt":"2026-10-06T23:53:46.899Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -89782,30 +89782,44 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         uniform float uMfWaveScale;
         uniform vec3 uMfPlayerPos;
         uniform float uMfPlayerRipple;
-        // TURBULENCIA: los 3 senos del juego son swell lento y liso; esto es
-        // chop — tres trenes cruzados de alta frecuencia (λ≈2-3 bloques, el
-        // techo antes de que la malla por-bloque aliasee) con fase que deambula
-        // (seno dentro del seno) para que no se vea de tapicería, y skew
-        // cuadrático que empina las crestas y aplasta los valles: agua que
-        // SE APILA, no que se hunde
+        // TURBULENCIA (v5) band-limited: la malla del fluido tiene vértices
+        // por bloque, así que TODO lo que pase de ~π rad/bloque aliassea en
+        // picos — "paneles", la lección v4 (la v4 iba a 2.7-3.2 rad/bloque y
+        // hasta el seno medio del juego, 2.8 rad/bloque, se volvía sierra al
+        // amplificarlo). Los trenes de aquí van a λ≥3.5 bloques; la
+        // turbulencia FINA vive en el fragment como perturbación de normal
+        // por-píxel (uMfChop), donde la resolución es la del píxel y no hay
+        // malla que engañar
         float mfTurbulence(vec2 p, float t) {
-            float tt = t * 11.0;
-            float h = sin(dot(p, vec2( 2.2,  1.5)) + tt) * 0.50;
-            h += sin(dot(p, vec2(-1.9,  2.6)) + tt * 1.37 + sin(dot(p, vec2( 2.2,  1.5)) * 0.7 - tt * 0.61) * 1.2) * 0.35;
-            h += sin(dot(p, vec2( 2.9, -1.2)) - tt * 1.71 + sin(dot(p, vec2(-1.9,  2.6)) * 0.5 + tt * 0.43) * 0.9) * 0.30;
-            h += h * 0.35 * h;
-            return h * 0.028;
+            float tt = t * 9.0;
+            float h = sin(dot(p, vec2( 1.15,  0.80)) + tt) * 0.45;
+            h += sin(dot(p, vec2(-0.95,  1.30)) + tt * 1.31 + sin(dot(p, vec2( 0.45, -0.35)) + tt * 0.53) * 1.1) * 0.35;
+            h += sin(dot(p, vec2( 1.45, -0.60)) - tt * 1.67 + sin(dot(p, vec2(-0.40,  0.50)) + tt * 0.41) * 0.9) * 0.30;
+            h += h * 0.25 * h;
+            return h * 0.030;
         }
         // anillo radial que nace del jugador; kind>=0.5 = agua (la lava pide
-        // kind 0.0 y sale por el if de una). El módulo suaviza
-        // uMfPlayerRipple hacia 1 en agua / 0.15 en tierra
+        // kind 0.0 y sale por el if de una). Frecuencia espacial 1.2 rad/bloque
+        // (la v4 usaba 2.0 y también Panels Mode cerca del jugador)
         float mfPlayerRipple(vec2 p, float t, float kind) {
             if (kind < 0.5) return 0.0;
             float mfD = length(p - uMfPlayerPos.xz);
-            float mfRing = sin(mfD * 2.0 - t * 6.0);
-            return mfRing * exp(-mfD * 0.5) * uMfPlayerRipple * 0.05 * uMfWaveScale;
+            float mfRing = sin(mfD * 1.2 - t * 6.0);
+            return mfRing * exp(-mfD * 0.5) * uMfPlayerRipple * 0.06 * uMfWaveScale;
         }
     `;
+
+    // chop por-píxel: reemplaza el normal liso de renderWaterColor por uno con
+    // micro-olas de alta frecuencia (per-píxel = resolución total, cero
+    // aliasing de malla). Al estar ANTES de NdotV/fresnel/refracción/SSR,
+    // titilan el brillo del sol, la transparencia y los reflejos
+    const FRAG_CHOP = `// mf chop: turbulencia fina por-pixel
+        vec3 normal = normalize(vWorldNormal + vec3(
+            sin(dot(vWorldPosition.xz, vec2( 5.3,  3.7)) + time * 2.9) * 0.32 +
+            sin(dot(vWorldPosition.xz, vec2(-4.1,  6.9)) + time * 3.7) * 0.24,
+            0.0,
+            sin(dot(vWorldPosition.xz, vec2( 6.9, -2.9)) + time * 3.3) * 0.32
+        ) * uMfChop);`;
 
     const FRAG_TAIL = `
         // mf water style: tinte verde por luminancia + alfa fijo. vColor.r < 0.49
@@ -89831,6 +89845,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             uMfWaterTintMix: { value: state.tintMix },
             uMfWaterTint: { value: TINT.slice() },
             uMfWaveScale: { value: state.waveScale },
+            uMfChop: { value: 0.35 * state.waveScale },
             uMfPlayerPos: { value: [0, 0, 0] },
             uMfPlayerRipple: { value: 0 }
         };
@@ -89841,6 +89856,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             shader.uniforms.uMfWaterTintMix = liveUniforms.uMfWaterTintMix;
             shader.uniforms.uMfWaterTint = liveUniforms.uMfWaterTint;
             shader.uniforms.uMfWaveScale = liveUniforms.uMfWaveScale;
+            shader.uniforms.uMfChop = liveUniforms.uMfChop;
             shader.uniforms.uMfPlayerPos = liveUniforms.uMfPlayerPos;
             shader.uniforms.uMfPlayerRipple = liveUniforms.uMfPlayerRipple;
 
@@ -89886,11 +89902,35 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                     vs = vs.replace(ampOrig,
                         'float amp = kind < 0.5 ? 0.01 : (kind < 1.5 ? 0.045 * uMfWaveScale : 0.03 * uMfWaveScale);');
                 }
+                // los senos 2 y 3 del juego van a 2.8 y 2.15 rad/bloque: al
+                // amplificar el amp se volvían sierra por-vértice (paneles).
+                // sus coeficientes se doman — la textura media la repone
+                // mfTurbulence a frecuencias representables
+                const s2Orig = 'sin(p.x * 2.3 - p.y * 1.6 + t * 1.15) * 0.5;';
+                if (vs.includes(s2Orig)) {
+                    vs = vs.replace(s2Orig, 'sin(p.x * 2.3 - p.y * 1.6 + t * 1.15) * 0.16;');
+                }
+                const s3Orig = 'cos(p.x * 0.8 + p.y * 2.0 + t * 0.9) * 0.35;';
+                if (vs.includes(s3Orig)) {
+                    vs = vs.replace(s3Orig, 'cos(p.x * 0.8 + p.y * 2.0 + t * 0.9) * 0.20;');
+                }
                 if (vs.includes('return w * amp;')) {
                     vs = vs.replace('return w * amp;',
                         'return w * amp + mfTurbulence(p, t) * uMfWaveScale + mfPlayerRipple(p, t, kind);');
                 }
                 shader.vertexShader = vs;
+            }
+
+            // chop por-pixel (turbulencia fina, sin aliasing de malla)
+            if (!shader.fragmentShader.includes('uMfChop')) {
+                shader.fragmentShader = 'uniform float uMfChop;\n' + shader.fragmentShader;
+            }
+            if (!shader.fragmentShader.includes('mf chop') &&
+                shader.fragmentShader.includes('vec3 normal = normalize(vWorldNormal);')) {
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    'vec3 normal = normalize(vWorldNormal);',
+                    FRAG_CHOP
+                );
             }
 
             const stamp = 'float mfWaterStyle = 1.0;\n' + FRAG_TAIL;
@@ -89912,7 +89952,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v3';
+            return base + '_mfws_v4';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
@@ -89969,6 +90009,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             entry.liveUniforms.uMfWaterAlpha.value = state.alpha;
             entry.liveUniforms.uMfWaterTintMix.value = state.tintMix;
             entry.liveUniforms.uMfWaveScale.value = state.waveScale;
+            entry.liveUniforms.uMfChop.value = 0.35 * state.waveScale;
         }
     }
 
