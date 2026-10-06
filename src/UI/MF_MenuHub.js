@@ -364,11 +364,13 @@
 
   // bbox de la figura dentro del buffer del render, escaneando alpha. se cachea por
   // tamano de buffer SOLO los exitos: un fallo (canvas webgl entre frames, taint) se
-  // reintenta en el proximo sync porque el resultado puede cambiar
+  // reintenta en el proximo sync porque el resultado puede cambiar. el cache se valida
+  // con dos filas sonda: el render puede cambiar de contenido SIN cambiar de buffer
+  // (fallback de cabeza -> cuerpo 3d) y un frac viejo pinta al personaje gigante
   const chipFitCache = new Map();
   function figureFractions(canvas) {
     const key = `${canvas.width}x${canvas.height}`;
-    if (chipFitCache.has(key)) return chipFitCache.get(key);
+    const cached = chipFitCache.get(key);
     let frac = null;
     try {
       const off = document.createElement('canvas');
@@ -377,6 +379,19 @@
       const ctx = off.getContext('2d');
       ctx.drawImage(canvas, 0, 0);
       const data = ctx.getImageData(0, 0, off.width, off.height).data;
+      const rowAlpha = y => {
+        let count = 0;
+        for (let x = 0; x < off.width; x++) {
+          if (data[(y * off.width + x) * 4 + 3] > 12) count++;
+        }
+        return count;
+      };
+      if (cached) {
+        const yBottom = Math.min(off.height - 1, Math.max(0, Math.round(cached.bottom * off.height) - 1));
+        const yTop = Math.min(off.height - 1, Math.max(0, Math.round(cached.top * off.height)));
+        if (rowAlpha(yBottom) >= 2 && rowAlpha(yTop) >= 2) return cached;
+        chipFitCache.delete(key);
+      }
       let top = -1, bottom = -1, left = off.width, right = -1;
       for (let y = 0; y < off.height; y++) {
         for (let x = 0; x < off.width; x++) {
