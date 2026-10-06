@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006155427
+// @version      4.19.0.20261006155444
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 4ce6293d7cef969bb733c137592370d789342651
- * builtAt : 2026-10-06T15:54:43.638Z
+ * commit  : 8fcccdf03b63f08ec2c8e29f3bbe054ce340c2fc
+ * builtAt : 2026-10-06T16:40:07.373Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"4ce6293d7cef969bb733c137592370d789342651","builtAt":"2026-10-06T15:54:43.638Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"8fcccdf03b63f08ec2c8e29f3bbe054ce340c2fc","builtAt":"2026-10-06T16:40:07.373Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19568,24 +19568,25 @@ const state = {
       #react.${EXPANDED_CLASS} #${HUB_ID} .mf-hub-aside{display:none}
       #react.${ROOT_CLASS} > img{filter:blur(9px) brightness(.58) saturate(.9)!important;transform:scale(1.07)!important}
       #react.${ROOT_CLASS} > canvas{opacity:.4!important;filter:blur(2px) brightness(.8)!important}
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}{position:fixed!important;right:20px!important;top:20px!important;width:320px!important;height:auto!important;max-height:calc(100vh - 44px);overflow:hidden auto;scrollbar-width:none}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}{position:fixed!important;right:20px!important;top:20px!important;bottom:0!important;width:320px!important;height:auto!important;max-height:none!important;overflow:visible!important;pointer-events:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}::-webkit-scrollbar{display:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:not(:first-child){display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>*:not(:first-child){display:none!important}
       /* el chip va vertical estilo perfil movil: datos arriba en su cajita y el personaje
-         grande DEBAJO pero DENTRO de la tarjeta (el piso de la pantalla quedo descartado).
+         flota en la MITAD del eje y (compromiso entre el piso descartado y la tarjeta).
          el sync pinta .mf-hub-chiprow/.mf-hub-chipinfo/.mf-hub-chipavatar segun donde esten
          HOY los nodos, porque el nesting cambia bajo tus pies */
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chiprow{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chiprow{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important;pointer-events:auto!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipextra{display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipinfo{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px);padding:12px!important;align-self:stretch!important}
       /* caja del avatar = ESCENARIO visible: marco propio con brillo en el piso, en flujo
          pero RELATIVE (ancla de badges y ventana) y overflow:hidden como cinturon de
          seguridad: si el fit se desmadra un frame, el personaje se recorta en el borde del
          escenario en vez de pisar la caja de datos */
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:relative!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;width:150px!important;height:245px!important;flex:none!important;align-self:center!important;overflow:hidden!important;border:2px solid rgba(0,0,0,.8)!important;border-radius:12px!important;background:linear-gradient(180deg,rgba(26,31,42,.5),rgba(11,13,19,.78))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),inset 0 -22px 26px -20px rgba(120,170,255,.18)!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;top:calc(50vh - 142px)!important;left:50%!important;transform:translateX(-50%)!important;margin:0!important;width:150px!important;height:245px!important;flex:none!important;overflow:hidden!important;border:2px solid rgba(0,0,0,.8)!important;border-radius:12px!important;background:linear-gradient(180deg,rgba(26,31,42,.5),rgba(11,13,19,.78))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),inset 0 -22px 26px -20px rgba(120,170,255,.18),0 14px 34px rgba(0,0,0,.45)!important;pointer-events:auto!important}
       /* ventana(s) absolutas entre el canvas y la caja: llenan la caja sin pintar nada
          propio (su borde de color de nivel era el rectangulo flotante) */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipcard{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;pointer-events:auto!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipwindow{position:absolute!important;inset:0!important;width:auto!important;height:auto!important;overflow:visible!important;border:none!important;border-radius:0!important;padding:0!important;background:transparent!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipwindow :not(canvas){border:none!important;background:none!important;box-shadow:none!important}
       /* badges nativos (nivel/racha/logros): fijados DENTRO del escenario en esquinas
@@ -19607,23 +19608,23 @@ const state = {
       #${HUB_ID}{position:fixed;inset:0;z-index:6;pointer-events:none;font-family:inherit;color:#fff}
       #${HUB_ID}::before{content:"";position:absolute;inset:0;pointer-events:none;
         background:radial-gradient(130% 100% at 50% 0%,rgba(0,0,0,.12) 0%,rgba(0,0,0,.32) 60%,rgba(0,0,0,.52) 100%)}
-      #${HUB_ID} .mf-hub-rail{position:absolute;left:16px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:7px;pointer-events:auto;width:74px;align-items:center}
-      #${HUB_ID} .mf-hub-brand{display:flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:10px;user-select:none}
-      #${HUB_ID} .mf-hub-brand img{width:34px;height:34px;border-radius:8px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
-      #${HUB_ID} .mf-hub-brand span{font-size:9px;font-weight:700;letter-spacing:.14em;opacity:.75;text-shadow:1px 1px #000}
-      #${HUB_ID} .mf-hub-rail hr{width:34px;border:none;border-top:2px solid rgba(255,255,255,.14);margin:5px 0}
-      #${HUB_ID} .mf-hub-navbtn{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:74px;height:60px;border:2px solid rgba(0,0,0,.75);border-radius:10px;background:rgba(10,12,16,.6);backdrop-filter:blur(6px);color:#fff;cursor:pointer;transition:background-color .12s ease,border-color .12s ease;padding:6px 2px}
+      #${HUB_ID} .mf-hub-rail{position:absolute;left:18px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px;pointer-events:auto;width:178px;align-items:stretch}
+      #${HUB_ID} .mf-hub-brand{display:flex;flex-direction:row;align-items:center;gap:9px;margin-bottom:8px;user-select:none}
+      #${HUB_ID} .mf-hub-brand img{width:28px;height:28px;border-radius:7px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
+      #${HUB_ID} .mf-hub-brand span{font-size:11px;font-weight:700;letter-spacing:.14em;opacity:.75;text-shadow:1px 1px #000}
+      #${HUB_ID} .mf-hub-rail hr{width:100%;border:none;border-top:2px solid rgba(255,255,255,.14);margin:5px 0}
+      #${HUB_ID} .mf-hub-navbtn{position:relative;display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:11px;width:178px;height:50px;border:2px solid rgba(0,0,0,.75);border-radius:10px;background:rgba(10,12,16,.6);backdrop-filter:blur(6px);color:#fff;cursor:pointer;transition:background-color .12s ease,border-color .12s ease;padding:0 15px}
       #${HUB_ID} .mf-hub-navbtn:hover{background:rgba(46,50,60,.72);border-color:rgba(255,255,255,.35)}
       #${HUB_ID} .mf-hub-navbtn[data-active="true"]{border-color:#fff;background:rgba(60,64,76,.8)}
-      #${HUB_ID} .mf-hub-navbtn svg{width:21px;height:21px;flex:none}
-      #${HUB_ID} .mf-hub-navbtn small{font-size:9.5px;font-weight:600;letter-spacing:.03em;opacity:.85;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      #${HUB_ID} .mf-hub-flyout{position:absolute;left:82px;top:50%;transform:translateY(-50%) translateX(-4px);display:flex;flex-direction:column;gap:5px;min-width:172px;padding:7px;border:2px solid rgba(0,0,0,.75);border-radius:10px;background:rgba(12,14,18,.92);backdrop-filter:blur(9px);opacity:0;visibility:hidden;transition:opacity .12s ease,transform .12s ease,visibility .12s;pointer-events:none}
+      #${HUB_ID} .mf-hub-navbtn svg{width:20px;height:20px;flex:none}
+      #${HUB_ID} .mf-hub-navbtn small{font-size:13.5px;font-weight:700;letter-spacing:.03em;opacity:.92;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #${HUB_ID} .mf-hub-flyout{position:absolute;left:186px;top:50%;transform:translateY(-50%) translateX(-4px);display:flex;flex-direction:column;gap:5px;min-width:172px;padding:7px;border:2px solid rgba(0,0,0,.75);border-radius:10px;background:rgba(12,14,18,.92);backdrop-filter:blur(9px);opacity:0;visibility:hidden;transition:opacity .12s ease,transform .12s ease,visibility .12s;pointer-events:none}
       #${HUB_ID} .mf-hub-navbtn:hover .mf-hub-flyout,#${HUB_ID} .mf-hub-navbtn:focus-within .mf-hub-flyout{opacity:1;visibility:visible;transform:translateY(-50%) translateX(0);pointer-events:auto}
       #${HUB_ID} .mf-hub-fly{display:flex;align-items:center;gap:9px;width:100%;border:none;border-radius:7px;background:transparent;color:#fff;font-size:12.5px;font-weight:600;padding:8px 10px;cursor:pointer;text-align:left}
       #${HUB_ID} .mf-hub-fly:hover{background:rgba(255,255,255,.12)}
       #${HUB_ID} .mf-hub-fly svg{width:15px;height:15px;opacity:.8;flex:none}
 
-      #${HUB_ID} .mf-hub-main{position:absolute;left:118px;right:368px;top:0;bottom:0;overflow-y:auto;overflow-x:hidden;pointer-events:auto;padding:34px 8px 42px 10px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent}
+      #${HUB_ID} .mf-hub-main{position:absolute;left:214px;right:368px;top:0;bottom:0;overflow-y:auto;overflow-x:hidden;pointer-events:auto;padding:34px 8px 42px 10px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent}
       #${HUB_ID} .mf-hub-main::-webkit-scrollbar{width:8px}
       #${HUB_ID} .mf-hub-main::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:4px}
       #${HUB_ID} .mf-hub-sec{margin:0 0 26px;max-width:900px}
@@ -19665,7 +19666,7 @@ const state = {
       #${HUB_ID} .mf-hub-star[data-on="true"]{color:#ffd75e}
       #${HUB_ID} .mf-hub-star svg{width:14px;height:14px}
 
-      #${HUB_ID} .mf-hub-picker{position:absolute;left:118px;top:50%;transform:translateY(-50%);z-index:3;width:380px;max-height:70vh;overflow-y:auto;padding:14px;border:3px solid rgba(0,0,0,.85);border-radius:12px;background:rgba(11,13,17,.95);backdrop-filter:blur(10px);pointer-events:auto;box-shadow:0 18px 44px rgba(0,0,0,.55)}
+      #${HUB_ID} .mf-hub-picker{position:absolute;left:214px;top:50%;transform:translateY(-50%);z-index:3;width:380px;max-height:70vh;overflow-y:auto;padding:14px;border:3px solid rgba(0,0,0,.85);border-radius:12px;background:rgba(11,13,17,.95);backdrop-filter:blur(10px);pointer-events:auto;box-shadow:0 18px 44px rgba(0,0,0,.55)}
       #${HUB_ID} .mf-hub-picker h3{margin:0 0 10px;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.9)}
       #${HUB_ID} .mf-hub-pickrow{display:flex;align-items:center;gap:9px;width:100%;border:none;border-radius:8px;background:transparent;color:#fff;padding:6px 8px;cursor:pointer;text-align:left;font-size:13px;font-weight:600}
       #${HUB_ID} .mf-hub-pickrow:hover{background:rgba(255,255,255,.09)}
@@ -19915,7 +19916,7 @@ const state = {
       canvas.style.width = ''; canvas.style.height = '';
       canvas.style.position = ''; canvas.style.margin = '';
     };
-    if (state.expanded) { clear(); return; }
+    if (state.expanded) { clear(); syncChipTracker(canvas); return; }
     const winW = 150, winH = 245;
     const bw = canvas.width, bh = canvas.height;
     if (!bw || !bh) return;
@@ -19935,6 +19936,55 @@ const state = {
     const ty = winH - 2 - frac.bottom * cssH;
     canvas.style.transform = `translate(${tx}px, ${ty}px)`;
     canvas.style.transformOrigin = 'top left';
+    syncChipTracker(canvas);
+  }
+
+  // el sitio congela el ancla del head-tracking en el PRIMER syncToVisible: lee
+  // getBoundingClientRect una vez y jamas vuelve a leerlo (i ||= syncToVisible, cortocircuito).
+  // cuando el hub muda el canvas a su escenario, el ancla queda en la posicion nativa y la
+  // cabeza mira hacia un punto que ya no existe. el manager del renderer vive en los deps
+  // del useEffect del componente dueno del canvas (fiber de react): rellamar syncToVisible
+  // tras cada fit re-ancla con la geometria real — es el metodo del sitio, no un parche a ciegas
+  const chipTrackers = new WeakMap();
+
+  function findChipTracker(canvas) {
+    let tracker = chipTrackers.get(canvas);
+    if (tracker !== undefined) return tracker;
+    tracker = null;
+    try {
+      const fiberKey = Object.keys(canvas).find(key => key.startsWith('__reactFiber$'));
+      for (let fiber = fiberKey && canvas[fiberKey], depth = 0; fiber && depth < 14 && !tracker; depth += 1, fiber = fiber.return) {
+        for (let hook = fiber.memoizedState, i = 0; hook && i < 24 && !tracker; i += 1, hook = hook.next) {
+          const st = hook.memoizedState;
+          const cands = [st, st?.current, ...(Array.isArray(st?.deps) ? st.deps : [])];
+          for (const cand of cands) {
+            if (cand && typeof cand === 'object' && cand.guiPlayer && typeof cand.syncToVisible === 'function') {
+              tracker = cand;
+              break;
+            }
+          }
+        }
+      }
+    } catch (_) { tracker = null; }
+    if (tracker) chipTrackers.set(canvas, tracker);
+    return tracker;
+  }
+
+  // sin offscreen el setSize del metodo revienta, y un rect de 0px es el guard del
+  // sitio para "todavia invisible": en ambos casos el proximo fit reintenta
+  function syncChipTracker(canvas) {
+    const tracker = findChipTracker(canvas);
+    if (!tracker || !tracker.offscreen) return;
+    try { tracker.syncToVisible(canvas); } catch (_) {}
+  }
+
+  // el ancla es coordenada de viewport: si la ventana cambia de tamano el escenario
+  // se mueve (50vh) y el ancla queda mirando el lugar viejo hasta el proximo fit
+  function onChipResize() {
+    clearTimeout(state.chipResizeTimer);
+    state.chipResizeTimer = setTimeout(() => {
+      if (state.enabled && state.chipCanvas?.isConnected) syncChipTracker(state.chipCanvas);
+    }, 120);
   }
 
   function clearChipMarks() {
@@ -20029,8 +20079,16 @@ const state = {
       if (child === node || child === info) continue;
       mark(child, !child.contains(canvas) && child.querySelector('button,p') ? 'mf-hub-chipinfo' : 'mf-hub-chipextra');
     }
-    // el avatar vive DENTRO de la tarjeta (en flujo): no hay que pelar ancestros ni
-    // escapar del cubo, asi que los filtros nativos de la tarjeta no molestan
+    // el escenario flota en la mitad del eje y: pelar el cromo de los ancestros (borde,
+    // fondo y sobre todo backdrop-filter, que volveria el absolute local a la tarjeta)
+    for (let anc = row.parentElement; anc && anc !== right; anc = anc.parentElement) {
+      mark(anc, 'mf-hub-chipcard');
+      for (const child of anc.children) {
+        if (child.contains(node) || child.contains(info)) continue;
+        mark(child, 'mf-hub-chipextra');
+      }
+    }
+    state.chipCanvas = canvas;
     fitChipCanvas(canvas, frac);
   }
 
@@ -20559,6 +20617,8 @@ const state = {
     document.removeEventListener('keydown', onKeydown);
     window.removeEventListener('popstate', schedule);
     window.removeEventListener('hashchange', schedule);
+    window.removeEventListener('resize', onChipResize);
+    clearTimeout(state.chipResizeTimer);
     try { chrome.storage.onChanged.removeListener(onStorage); } catch (_) {}
     if (globalThis[KEY]?.destroy === destroy) delete globalThis[KEY];
   }
@@ -20566,6 +20626,7 @@ const state = {
   document.addEventListener(CONFIG_EVENT, onConfig);
   window.addEventListener('popstate', schedule);
   window.addEventListener('hashchange', schedule);
+  window.addEventListener('resize', onChipResize);
   document.addEventListener('keydown', onKeydown);
   try {
     chrome.storage.onChanged.addListener(onStorage);
