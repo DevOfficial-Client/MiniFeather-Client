@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006053557
+// @version      4.19.0.20261006054419
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 663f16015c49ea3bc0f42f3556f77697132396f9
- * builtAt : 2026-10-06T05:36:17.578Z
+ * commit  : 1980fba00a365dc373d9e94b202708d27bc19b9d
+ * builtAt : 2026-10-06T05:44:37.779Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"663f16015c49ea3bc0f42f3556f77697132396f9","builtAt":"2026-10-06T05:36:17.578Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"1980fba00a365dc373d9e94b202708d27bc19b9d","builtAt":"2026-10-06T05:44:37.779Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -116062,6 +116062,83 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return TILE_SIZE;
     }
 
+    // miniblox renombró media vanilla: el nether es "hell", su netherite es
+    // "infernium", los items llevaban _item y los bloques conservan nombres
+    // pre-1.13. al juego todo esto le da igual (solo ve la spritesheet final),
+    // así que el convertidor traduce frame→nombre moderno del pack y cualquier
+    // resource pack de MC real viste también el nether/netherite de miniblox.
+    const FRAME_ALIASES = {
+        // nether de miniblox → nether real
+        hellstone: 'netherrack',
+        hell_brick: 'nether_brick',
+        hell_bricks: 'nether_bricks',
+        cracked_hell_bricks: 'cracked_nether_bricks',
+        chiseled_hell_bricks: 'chiseled_nether_bricks',
+        red_hell_bricks: 'red_nether_bricks',
+        hell_fungus: 'crimson_fungus',
+        hell_fungus_block: 'nether_wart_block',
+        hell_fungus_stage0: 'nether_wart_stage0',
+        hell_fungus_stage1: 'nether_wart_stage1',
+        hell_fungus_stage2: 'nether_wart_stage2',
+        hell_gold_ore: 'nether_gold_ore',
+        hell_marble_ore: 'nether_quartz_ore',
+        hell_portal: 'nether_portal',
+        hell_sprouts: 'nether_sprouts',
+        hell_star: 'nether_star',
+        // infernium (el tier del nether de miniblox) → netherite
+        infernium_ingot: 'netherite_ingot',
+        infernium_block: 'netherite_block',
+        infernium_ore: 'ancient_debris_side',
+        infernium_axe: 'netherite_axe',
+        infernium_pickaxe: 'netherite_pickaxe',
+        infernium_shovel: 'netherite_shovel',
+        infernium_sword: 'netherite_sword',
+        infernium_hoe: 'netherite_hoe',
+        infernium_helmet: 'netherite_helmet',
+        infernium_chestplate: 'netherite_chestplate',
+        infernium_leggings: 'netherite_leggings',
+        infernium_boots: 'netherite_boots',
+        // items que miniblox llama X_item o con nombre viejo
+        ghost_tear: 'ghast_tear',
+        chain_item: 'chain',
+        flower_pot_item: 'flower_pot',
+        comparator_item: 'comparator',
+        repeater_item: 'repeater',
+        lantern_item: 'lantern',
+        soul_lantern_item: 'soul_lantern',
+        kelp_item: 'kelp',
+        seagrass_item: 'seagrass',
+        sea_pickle_item: 'sea_pickle',
+        sugar_cane_item: 'sugar_cane',
+        turtle_egg_item: 'turtle_egg',
+        item_frame_item: 'item_frame',
+        lever_item: 'lever',
+        brewing_stand_item: 'brewing_stand',
+        potion_bottle_drinkable: 'potion',
+        potion_bottle_splash: 'splash_potion',
+        potion_bottle_lingering: 'lingering_potion',
+        seeds_wheat: 'wheat_seeds',
+        sign: 'oak_sign',
+        // bloques con nombre pre-1.13
+        workbench_front: 'crafting_table_front',
+        workbench_side: 'crafting_table_side',
+        workbench_top: 'crafting_table_top',
+        stone_slab_side: 'smooth_stone',
+        stone_slab_top: 'smooth_stone',
+        dispenser_front_horizontal: 'dispenser_front',
+        dropper_front_horizontal: 'dropper_front',
+        pumpkin_stem_disconnected: 'pumpkin_stem',
+        melon_stem_disconnected: 'melon_stem',
+        piston_top_normal: 'piston_top',
+        silver_shulker_box: 'light_gray_shulker_box',
+        book_normal: 'book',
+        book_writable: 'writable_book',
+        book_written: 'written_book',
+        book_enchanted: 'enchanted_book',
+        grass_path_side: 'dirt_path_side',
+        grass_path_top: 'dirt_path_top'
+    };
+
     function buildLookup(customFiles) {
         const lookup = new Map();
         const lower = new Map();
@@ -116098,16 +116175,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             const viaBed = dirMap.get('bed/' + baseName.slice(0, bedSlash).toLowerCase());
             if (viaBed) return viaBed;
         }
-        // miniblox aún nombra cosas como MC pre-1.13: tabla chica hacia los
-        // nombres modernos que sí traen los packs de hoy.
-        const FRAME_ALIASES = {
-            book_normal: 'book',
-            book_writable: 'writable_book',
-            book_written: 'written_book',
-            book_enchanted: 'enchanted_book',
-            grass_path_side: 'dirt_path_side',
-            grass_path_top: 'dirt_path_top'
-        };
+        // nombre viejo/renombrado → nombre moderno que trae el pack
         const aliased = FRAME_ALIASES[baseName.toLowerCase()];
         if (aliased) return findSprite(aliased, search);
         return null;
