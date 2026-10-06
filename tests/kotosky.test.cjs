@@ -176,8 +176,42 @@ test('arranca inactivo y expone su api', () => {
   const api = loadModule(h.sandbox);
   assert.ok(api, 'api global presente');
   assert.deepEqual(JSON.stringify(api.status()), JSON.stringify({
-    enabled: false, loaded: false, failed: false, strength: 1, mix: 0, mounted: false
+    enabled: false, loaded: false, failed: false, strength: 1, forceNight: false, mix: 0, mounted: false
   }));
+});
+
+test('fallback de assets: si el paquete no trae las caras, las va a buscar a raw.githubusercontent', () => {
+  const h = makeSandbox();
+  const game = makeGame({ sunY: -0.5 });
+  installGame(h.sandbox, game);
+  const api = loadModule(h.sandbox);
+  configEvent(h.sandbox, { enabled: true });
+  h.advance(2100); h.flushTimeouts();
+  // primer origen (paquete de la extensión) falla para todas las caras
+  for (const img of FakeImage.instances.splice(0)) img.onerror();
+  assert.equal(api.status().loaded, false, 'sin cargar tras el primer intento');
+  // segundo origen (raw.githubusercontent) sirve
+  const second = FakeImage.instances.splice(0);
+  assert.equal(second.length, 6, '6 reintentos con el segundo origen');
+  for (const img of second) {
+    assert.ok(img.src.includes('raw.githubusercontent.com'), 'la segunda URL es raw.githubusercontent');
+    assert.equal(img.crossOrigin, 'anonymous', 'la URL remota pide CORS (WebGL la exige)');
+    img.onload();
+  }
+  h.pump();
+  assert.equal(api.status().loaded, true);
+  assert.equal(game.gameScene.ambientMeshes.children.length, 1, 'domo montado con las caras remotas');
+});
+
+test('forceNight: el foto-cielo se puede probar a cualquier hora', () => {
+  const { h, mesh, api } = bootAtNight({ sunY: 0.5 });   // pleno día
+  configEvent(h.sandbox, { forceNight: true });
+  for (let i = 0; i < 120; i++) h.pump();
+  assert.ok(api.status().mix > 0.98, `forceNight → mix 1 (${api.status().mix.toFixed(2)})`);
+  assert.equal(mesh.visible, true);
+  configEvent(h.sandbox, { forceNight: false });
+  for (let i = 0; i < 200; i++) h.pump();
+  assert.equal(mesh.visible, false, 'forceNight off vuelve al ciclo normal (día → oculto)');
 });
 
 test('de noche monta el domo y lo funde a mix 1', () => {
@@ -269,14 +303,18 @@ test('re-ejecución (hot reload) no duplica domos', () => {
   assert.equal(game.gameScene.ambientMeshes.children.length, 1, 'exactamente un domo');
 });
 
-test('fail-open: una cara que no carga deja el módulo inerte, sin domo', () => {
+test('fail-open: si ningún origen sirve las caras, el módulo queda inerte y sin domo', () => {
   const h = makeSandbox();
   const game = makeGame({ sunY: -0.5 });
   installGame(h.sandbox, game);
   const api = loadModule(h.sandbox);
   configEvent(h.sandbox, { enabled: true });
   h.advance(2100); h.flushTimeouts();
-  FakeImage.instances[2].onerror();
+  // agotar TODOS los orígenes de todas las caras (paquete + github)
+  let guard = 0;
+  while (FakeImage.instances.length && guard++ < 10) {
+    for (const img of FakeImage.instances.splice(0)) img.onerror();
+  }
   h.pump(); h.pump();
   assert.equal(api.status().failed, true);
   assert.equal(game.gameScene.ambientMeshes.children.length, 0);
