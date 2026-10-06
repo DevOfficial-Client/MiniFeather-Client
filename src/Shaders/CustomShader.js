@@ -11,6 +11,10 @@
         enabled: localStorage.getItem('miniblox_customshader') === 'true',
         preset: localStorage.getItem('miniblox_customshader_preset') || 'spooklementary',
         strength: parseFloat(localStorage.getItem('miniblox_customshader_strength') || '0.5'),
+        gray: (() => {
+            const g = parseFloat(localStorage.getItem('miniblox_customshader_gray'));
+            return Number.isFinite(g) ? g : 0.25;
+        })(),
         renderScale: parseFloat(localStorage.getItem('miniblox_customshader_renderscale') || '1.0'),
         game: null,
         scene: null,
@@ -1998,6 +2002,9 @@
             liveUniforms[key] = { value: initial };
         }
 
+        // gris global del usuario, común a TODOS los presets
+        liveUniforms.uMfGray = { value: Math.max(0, Math.min(0.9, state.gray)) };
+
         const wrapper = function (shader) {
 
             originalOnBeforeCompile(shader);
@@ -2036,13 +2043,23 @@
                 !shader.fragmentShader.includes('mfXrayColor') &&
                 !shader.fragmentShader.includes('mfGvHash') &&
                 !shader.fragmentShader.includes('mfNfHash')) {
-                shader.fragmentShader = preset.fragmentCode + '\n' + shader.fragmentShader;
+                shader.fragmentShader = 'uniform float uMfGray;\n' + preset.fragmentCode + '\n' + shader.fragmentShader;
             }
 
             if (preset.postMain && !shader.fragmentShader.includes('mfPostMainInjected')) {
                 shader.fragmentShader = injectBeforeMainEnd(
                     shader.fragmentShader,
                     'float mfPostMainInjected = 1.0;\n' + preset.postMain
+                );
+            }
+
+            // el gris va AL FINAL de main, después del postMain del preset;
+            // marcador propio porque 'uMfGray' ya quedó escrito por el prepend
+            if (!shader.fragmentShader.includes('mfGrayApply')) {
+                shader.fragmentShader = injectBeforeMainEnd(
+                    shader.fragmentShader,
+                    'float mfGrayApply = uMfGray;\n' +
+                    'gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722))), mfGrayApply);'
                 );
             }
         };
@@ -2302,6 +2319,7 @@
                 enabled: state.enabled,
                 preset: state.preset,
                 strength: state.strength,
+                gray: state.gray,
                 renderScale: state.renderScale,
                 hookedCount: state.hooked.size
             };
@@ -2340,6 +2358,14 @@
             state.strength = Math.max(0, Math.min(1, parseFloat(cfg.strength) || 0));
             localStorage.setItem('miniblox_customshader_strength', String(state.strength));
 
+        }
+
+        if (cfg.gray !== undefined) {
+            state.gray = Math.max(0, Math.min(0.9, parseFloat(cfg.gray) || 0));
+            localStorage.setItem('miniblox_customshader_gray', String(state.gray));
+            for (const [, entry] of state.hooked) {
+                if (entry.liveUniforms.uMfGray) entry.liveUniforms.uMfGray.value = state.gray;
+            }
         }
 
         if (cfg.renderScale !== undefined) {
