@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006181032
+// @version      4.19.0.20261006181056
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 17f813a3ec4ad1e2a7a3e471da9edfd828d2987e
- * builtAt : 2026-10-06T18:10:55.929Z
+ * commit  : 89fbc75be195d3da4f8b248e3d497b2abeaa4434
+ * builtAt : 2026-10-06T19:38:33.543Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"17f813a3ec4ad1e2a7a3e471da9edfd828d2987e","builtAt":"2026-10-06T18:10:55.929Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"89fbc75be195d3da4f8b248e3d497b2abeaa4434","builtAt":"2026-10-06T19:38:33.543Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19608,7 +19608,7 @@ const state = {
       #${HUB_ID}{position:fixed;inset:0;z-index:6;pointer-events:none;font-family:inherit;color:#fff}
       #${HUB_ID}::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:calc(.88 + var(--mf-beat,0)*.12);
         background:radial-gradient(130% 100% at 50% 0%,rgba(0,0,0,.12) 0%,rgba(0,0,0,.32) 60%,rgba(0,0,0,.52) 100%)}
-      #${HUB_ID} .mf-hub-rail{position:absolute;left:18px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px;pointer-events:auto;width:178px;align-items:stretch}
+      #${HUB_ID} .mf-hub-rail{position:absolute;left:18px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px;pointer-events:auto;width:178px;align-items:stretch;z-index:2}
       #${HUB_ID} .mf-hub-brand{display:flex;flex-direction:row;align-items:center;gap:9px;margin-bottom:8px;user-select:none}
       #${HUB_ID} .mf-hub-brand img{width:28px;height:28px;border-radius:7px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
       #${HUB_ID} .mf-hub-brand span{font-size:11px;font-weight:700;letter-spacing:.14em;opacity:.75;text-shadow:1px 1px #000}
