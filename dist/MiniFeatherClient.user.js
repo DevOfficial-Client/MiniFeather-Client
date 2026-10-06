@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006045322
+// @version      4.19.0.20261006051504
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : f7c312ca7ad64626379a0fd9e7f98a7002a9b500
- * builtAt : 2026-10-06T04:53:37.672Z
+ * commit  : f0c84ec7ec5346084b0713f175a75fc7d4d13360
+ * builtAt : 2026-10-06T05:15:21.642Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"f7c312ca7ad64626379a0fd9e7f98a7002a9b500","builtAt":"2026-10-06T04:53:37.672Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"f0c84ec7ec5346084b0713f175a75fc7d4d13360","builtAt":"2026-10-06T05:15:21.642Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -116002,6 +116002,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             || lower.get(baseName.toLowerCase())
             || null;
     }
+
+    function spriteForFrame(fileName, search) {
+        const baseName = fileName.replace(/\.png$/, '');
+        const direct = findSprite(baseName, search);
+        if (direct) return direct;
+        // frames.json lleva rutas propias (bed/black.png): el zip guarda el
+        // archivo pelado (black.png) en entity/bed/. sin este fallback esas
+        // 26 llaves jamás matchean y el pack "no encuentra los bloques".
+        const slash = baseName.lastIndexOf('/');
+        if (slash === -1) return null;
+        return findSprite(baseName.slice(slash + 1), search);
+    }
+
     function fetchImage(src) {
         return new Promise((resolve) => {
             const img = new Image();
@@ -116062,7 +116075,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             const rotated = data.rotated || false;
 
             const baseName = fileName.replace(/\.png$/, '');
-            const customImg = findSprite(baseName, search);
+            const customImg = spriteForFrame(fileName, search);
 
             if (customImg) {
                 if (rotated) {
@@ -116284,7 +116297,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                     i.onerror = rej;
                     i.src = blobUrl;
                 });
-                const baseName = entry.name.split('/').pop().replace(/\.png$/i, '');
+                // zips hechos por herramientas de Windows traen rutas con
+                // backslash: sin normalizar, el basename sale con toda la ruta
+                // adentro y el matching da CERO bloques.
+                const normalized = entry.name.replace(/\\/g, '/');
+                const baseName = normalized.split('/').pop().replace(/\.png$/i, '');
                 return { name: baseName, img };
             } catch (_) {
                 return null;
