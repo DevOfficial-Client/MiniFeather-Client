@@ -779,6 +779,9 @@
     deferredExposure: 0.8,
     deferredSaturation: 1.0,
     deferredBloom: 0.13,
+    waterStyle: false,
+    waterStyleAlpha: 0.12,
+    waterStyleTintMix: 0.85,
     customShader: false,
     customShaderPreset: 'spooklementary',
     customShaderStrength: 0.5,
@@ -3711,6 +3714,7 @@
       { page: 'shaders', key: 'customShader', title: t('navShaders'), desc: t('shadersDesc'), tags: [] },
       { page: 'shaders', key: 'antiTear', title: 'anti-tear (vanilla fix)', desc: 'clamps miniblox motion blur + temporal god rays so frames never ghost', tags: ['new'] },
       { page: 'shaders', key: 'deferredPipeline', title: 'deferred pipeline (iterationt)', desc: 'bloom + AgX faithful to Tahnass\'s IterationT pack', tags: ['new'] },
+      { page: 'shaders', key: 'waterStyle', title: 'water style', desc: 'agua clara con tinte verdoso: opacidad y fuerza del tinte ajustables', tags: ['new'] },
       { page: 'movement', key: 'autoSprint', title: t('autoSprint'), desc: t('autoSprintDesc'), tags: ['pvp'] },
       { page: 'movement', key: 'safeSneak', title: t('safeSneak'), desc: t('safeSneakDesc'), tags: ['pvp'] },
       { page: 'movement', key: 'antiAfk', title: t('antiAfk'), desc: t('antiAfkDesc'), tags: [] },
@@ -5143,6 +5147,25 @@
         },
         cloudsPackNoise: !!settings.cloudsPackNoise
       })
+    }));
+  }
+
+  function sendWaterStyleConfig(enabled = settings.waterStyle) {
+    document.dispatchEvent(new CustomEvent('minifeather:waterstyle-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        alpha: Number(settings.waterStyleAlpha ?? 0.12),
+        tintMix: Number(settings.waterStyleTintMix ?? 0.85)
+      })
+    }));
+  }
+
+  function initWaterStyleModule() {
+    registerModule('waterStyle', () => createLifecycle({
+      enable() { sendWaterStyleConfig(true); },
+      disable() { sendWaterStyleConfig(false); },
+      refresh() { sendWaterStyleConfig(MODULES.get('waterStyle')?.enabled === true); },
+      destroy() { sendWaterStyleConfig(false); }
     }));
   }
 
@@ -8444,6 +8467,24 @@
           <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">mata los &quot;desgarros&quot; del juego base: motion blur con jitter + god rays temporales dejan bandas y puntitas en vanilla (repro y todo). runtime only, no toca tus settings ni la nube</div>
           <div class="mf-toggle-grid">
             ${renderToggle('antiTear', 'anti-tear (vanilla fix)', 'neutraliza motion blur + god rays high temporales de miniblox')}
+          </div>
+        </div>
+
+        <div class="mf-card">
+          <div class="mf-card-title">Water Style</div>
+          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">agua clara con tinte verdoso (la lava queda intacta). opacidad 0 = invisible, s&uacute;belo si te marea tanto viento</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('waterStyle', 'water style', 'agua 100% transparente con tinte verdoso')}
+          </div>
+          <div class="mf-shader-strength" style="margin-bottom:10px;margin-top:10px;">
+            <span style="min-width:90px;font-size:12px;">opacidad</span>
+            <input id="mf-ws-alpha" type="range" min="0" max="0.9" step="0.02" value="${Number(settings.waterStyleAlpha ?? 0.12)}">
+            <span id="mf-ws-alpha-value">${Math.round(Number(settings.waterStyleAlpha ?? 0.12) * 100)}%</span>
+          </div>
+          <div class="mf-shader-strength">
+            <span style="min-width:90px;font-size:12px;">tinte</span>
+            <input id="mf-ws-tint" type="range" min="0" max="1" step="0.05" value="${Number(settings.waterStyleTintMix ?? 0.85)}">
+            <span id="mf-ws-tint-value">${Math.round(Number(settings.waterStyleTintMix ?? 0.85) * 100)}%</span>
           </div>
         </div>
 
@@ -12264,6 +12305,25 @@
         saveSettings(true);
       });
     }
+    const wsMap = {
+      alpha: { key: 'waterStyleAlpha', fmt: v => Math.round(v * 100) + '%' },
+      tint: { key: 'waterStyleTintMix', fmt: v => Math.round(v * 100) + '%' }
+    };
+    for (const [name, { key, fmt }] of Object.entries(wsMap)) {
+      const slider = panel.querySelector(`#mf-ws-${name}`);
+      if (!slider) continue;
+      slider.addEventListener('input', () => {
+        const value = parseFloat(slider.value);
+        settings[key] = value;
+        guiSettings[key] = value;
+        const valueLabel = panel.querySelector(`#mf-ws-${name}-value`);
+        if (valueLabel) valueLabel.textContent = fmt(value);
+        sendWaterStyleConfig();
+      });
+      slider.addEventListener('change', () => {
+        saveSettings(true);
+      });
+    }
     const CLOUD_PRESETS = {
       default:   { coverage: 0.5, scale: 0.012, wind: 0.02, thickness: 30, height: 128, opacity: 0.9 },
       overcast:  { coverage: 0.75, scale: 0.02, wind: 0.03, thickness: 60, height: 128, opacity: 0.95 },
@@ -13785,6 +13845,7 @@
     setModuleEnabled('fullBright', settings.fullBright);
     sendDeferredConfig();
     sendAntiTearConfig();
+    setModuleEnabled('waterStyle', settings.waterStyle);
     sendCritterSkinsConfig();
     setModuleEnabled('autoRespawn', settings.autoRespawn);
     setModuleEnabled('autoReconnect', settings.autoReconnect);
@@ -14490,6 +14551,7 @@
     initGuiPatchModule();
     initMenuHubModule();
     initCustomShaderModule();
+    initWaterStyleModule();
     initAntiTearModule();
     initZoomModule();
     initCameraOverhaulModule();
