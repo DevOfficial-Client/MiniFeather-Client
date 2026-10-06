@@ -189,7 +189,10 @@ const SKINS = [
 
   async function getActiveSpritesheetUrl() {
   const { mfCustomSpritesheetUrl } = await chrome.storage.local.get(["mfCustomSpritesheetUrl"]);
-  if (mfCustomSpritesheetUrl) return mfCustomSpritesheetUrl;
+  // dnr no traga redirects a data: — esos los sirve el interceptor in-page
+  // (TextureInterceptor) leyendo localStorage. si le paso un dataurl la regla
+  // se invalida y con suerte solo cae esa... o el batch entero. ni jugar.
+  if (mfCustomSpritesheetUrl && !String(mfCustomSpritesheetUrl).startsWith("data:")) return mfCustomSpritesheetUrl;
   try {
     const res = await fetch(SPRITESHEET_FALLBACK_URL, { method: "HEAD" });
     if (res.ok) return SPRITESHEET_FALLBACK_URL;
@@ -220,11 +223,6 @@ const SKINS = [
   { id: 10017, from: "/textures/entity/villager/villager.png", to: "entity/villager/villager.png" },
   { id: 10018, from: "/textures/entity/iron_golem/iron_golem.png", to: "entity/iron_golem/iron_golem.png" },
   { id: 10019, from: "/textures/entity/chest/normal_double.png", to: "entity/chest/normal_double.png" }
-  ];
-
-  const TEXTURE_PACK_RULE_IDS = [
-  SPRITESHEET_RULE_ID,
-  ...EXTRA_TEXTURES.map(texture => texture.id)
   ];
 
   const LOCAL_TEXTURES = [
@@ -652,11 +650,21 @@ const SKINS = [
       }]
     : [];
 
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: TEXTURE_PACK_RULE_IDS,
-    addRules: [
-      ...spritesheetRules,
-      ...EXTRA_TEXTURES.map(texture => ({
+  // dos llamadas separadas: si una regla sale invalidada (url muerta, etc.)
+  // que caiga SOLO ese grupo y no arrastre los redirects de mobs/armor con ella.
+  try {
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [SPRITESHEET_RULE_ID],
+      addRules: spritesheetRules
+    });
+  } catch (error) {
+    console.warn("minifeather bg spritesheet rule rejected:", error?.message || error);
+  }
+
+  try {
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: EXTRA_TEXTURES.map(texture => texture.id),
+      addRules: EXTRA_TEXTURES.map(texture => ({
         id: texture.id,
         priority: 1,
         action: { type: "redirect", redirect: { url: TEXTURE_PACK_REDIRECT_BASE + texture.to } },
@@ -666,8 +674,10 @@ const SKINS = [
           resourceTypes: ["image", "other"]
         }
       }))
-    ]
-  });
+    });
+  } catch (error) {
+    console.warn("minifeather bg extra texture rules rejected:", error?.message || error);
+  }
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

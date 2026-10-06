@@ -55,9 +55,28 @@
     var ACTIVE_KEY = 'mf_custom_textures_active';
     var RES_KEY = 'mf_custom_textures_resolution';
 
+    function mfKillBrokenAtlas(reason) {
+        // atlas custom persistido roto: si lo servimos, el juego se queda sin
+        // sheet en CADA reload (el interceptor se reinstala desde localStorage)
+        // y ni "reload" lo cura. fail-open: tirar el flag y dejar pasar la red
+        // de verdad. la ia de turno prefiere un mundo vanilla a uno blanco.
+        if (!mfKillBrokenAtlas.warned) {
+            mfKillBrokenAtlas.warned = true;
+            console.warn('minifeather texturepack custom atlas roto (' + reason + ') — lo suelto y dejo pasar la red real');
+        }
+        try { localStorage.removeItem(ACTIVE_KEY); } catch (_) {}
+        return null;
+    }
+
     function getDataUrl() {
         if (localStorage.getItem(ACTIVE_KEY) !== 'true') return null;
-        return localStorage.getItem(KEY);
+        var d = localStorage.getItem(KEY);
+        if (!d) return null;
+        var PREFIX = 'data:image/png;base64,';
+        if (d.length > 8 * 1024 * 1024) return mfKillBrokenAtlas('demasiado grande (' + d.length + ' chars)');
+        if (d.slice(0, PREFIX.length) !== PREFIX) return mfKillBrokenAtlas('no es un data url png');
+        try { atob(d.slice(PREFIX.length)); } catch (_) { return mfKillBrokenAtlas('base64 corrupto'); }
+        return d;
     }
 
     function getPatterns() {
@@ -151,9 +170,13 @@
         var dataUrl = (url.indexOf('spritesheet') !== -1 || url.indexOf('texturepacks/default') !== -1)
             ? getDataUrl() : null;
         if (dataUrl && url && matches(url)) {
-            return Promise.resolve(new Response(dataUrlToBlob(dataUrl), {
-                headers: { 'Content-Type': 'image/png' }
-            }));
+            try {
+                return Promise.resolve(new Response(dataUrlToBlob(dataUrl), {
+                    headers: { 'Content-Type': 'image/png' }
+                }));
+            } catch (e) {
+                console.warn('minifeather texturepack fallo armando el atlas custom (' + e + ') — fetch real');
+            }
         }
         if (url && mfNetBlocked(url)) {
             return Promise.reject(new TypeError('Failed to fetch'));
