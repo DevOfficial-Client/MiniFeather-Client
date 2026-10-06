@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006200349
+// @version      4.19.0.20261006201106
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 63c98459d29ec9bed1ee8a9e5d1b5ab7e40ca036
- * builtAt : 2026-10-06T20:04:05.512Z
+ * commit  : 23c57e17b4e891d18e650db96da043f9997c8a9d
+ * builtAt : 2026-10-06T20:11:26.620Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"63c98459d29ec9bed1ee8a9e5d1b5ab7e40ca036","builtAt":"2026-10-06T20:04:05.512Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"23c57e17b4e891d18e650db96da043f9997c8a9d","builtAt":"2026-10-06T20:11:26.620Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -14808,6 +14808,27 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"63c98459d29ec9bed1ee8a9e5d1b5a
         });
     }
 
+    // skins que llegan cortadas por el cable: un data-url de png al que le falta
+    // el final (IEND) hace que chrome lo rechace con ERR_INVALID_URL y el jugador
+    // cae al skin default. lo que no llegó no se recupera, pero la consola al
+    // menos cuenta qué pasó en vez de un error criptico de red
+    var dataSkinWarned = false;
+    function looksTruncatedPngDataUrl(value) {
+        if (value.lastIndexOf('data:image/png;base64,', 0) !== 0) return false;
+        var b64 = value.slice(22);
+        if (!b64 || b64.length % 4 === 1) return true;
+        try {
+            // todo png termina con IEND + crc fijo AE 42 60 82; los últimos 12
+            // chars de base64 son 3 grupos enteros y alcanzan para verlo
+            var tail = atob(b64.slice(-12));
+            var n = tail.length;
+            if (n >= 4 &&
+                tail.charCodeAt(n - 4) === 0xAE && tail.charCodeAt(n - 3) === 0x42 &&
+                tail.charCodeAt(n - 2) === 0x60 && tail.charCodeAt(n - 1) === 0x82) return false;
+        } catch (_) {}
+        return true;
+    }
+
     function patchImageSrc() {
         if (patched) return true;
 
@@ -14828,6 +14849,11 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"63c98459d29ec9bed1ee8a9e5d1b5a
                 if (typeof value !== 'string') {
                     originalSet.call(this, value);
                     return;
+                }
+
+                if (!dataSkinWarned && looksTruncatedPngDataUrl(value)) {
+                    dataSkinWarned = true;
+                    warn('una skin llegó truncada por la red (data-url incompleta) — se usa el skin default; el cliente no puede recuperarla');
                 }
 
                 var match = value.match(SKIN_PATH_REGEX) || value.match(SKIN_PATH_REGEX_DEEP);
@@ -46965,6 +46991,9 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
     closeBar();
   }
   function findChatInput() {
+    // corremos en todos los frames (all_frames) y alguno no tiene body todavia:
+    // sin body no hay chat que buscar, y document.body.contains revienta
+    if (!document.body) return null;
     if (state.chatInputEl && document.body.contains(state.chatInputEl) && state.chatInputEl.offsetParent !== null) {
       return state.chatInputEl;
     }
@@ -47445,7 +47474,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
       injectBarStyle();
       if (!state.scanTimer) {
         state.scanTimer = window.setInterval(() => {
-          if (state.enabled) { ensureChat(); ensureButton(); attachInputHooks(); rescanChat(); }
+          if (state.enabled && document.body) { ensureChat(); ensureButton(); attachInputHooks(); rescanChat(); }
         }, 1200);
       }
       ensureChat();
