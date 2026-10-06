@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006214225
+// @version      4.19.0.20261006220332
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 7deb372171d7cf4231e5b3f0d058ab12a7e564dc
- * builtAt : 2026-10-06T21:42:43.123Z
+ * commit  : 3b487c6067c61fedbec2110327369272f56618f9
+ * builtAt : 2026-10-06T22:03:53.633Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"7deb372171d7cf4231e5b3f0d058ab12a7e564dc","builtAt":"2026-10-06T21:42:43.124Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"3b487c6067c61fedbec2110327369272f56618f9","builtAt":"2026-10-06T22:03:53.633Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -89796,6 +89796,32 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             shader.uniforms.uMfWaterAlpha = liveUniforms.uMfWaterAlpha;
             shader.uniforms.uMfWaterTintMix = liveUniforms.uMfWaterTintMix;
             shader.uniforms.uMfWaterTint = liveUniforms.uMfWaterTint;
+
+            // superficie VIVA aunque el juego tenga "water shaders" apagado: el
+            // setting gatea el define en compilación y el uniform en runtime.
+            // Forzar ambos es seguro porque TODOS los raymarch que muestrean
+            // texturas (SSR/refracción/sun trace) están gated además por
+            // reflectionEnabled>0.5, que sigue en 0 si el motor no captura —
+            // corren los fallbacks analíticos (olas, cielo, destello del sol).
+            // Si el usuario enciende el setting del juego, los reflejos SSR
+            // reales aparecen solos (nuestro tint los preserva vía el mix).
+            // Los uniforms nuestros van en el header (alcance global; el tail
+            // antes del fog es statement-only dentro de main).
+            const header =
+                '#define USE_WATER_SHADERS\n' +
+                'uniform float uMfWaterAlpha;\n' +
+                'uniform float uMfWaterTintMix;\n' +
+                'uniform vec3 uMfWaterTint;\n';
+            if (!shader.vertexShader.includes('USE_WATER_SHADERS')) {
+                shader.vertexShader = '#define USE_WATER_SHADERS\n' + shader.vertexShader;
+            }
+            if (!shader.fragmentShader.includes('uMfWaterAlpha')) {
+                shader.fragmentShader = header + shader.fragmentShader;
+            }
+            if (shader.uniforms.waterShadersEnabled) {
+                shader.uniforms.waterShadersEnabled.value = 1;
+            }
+
             const stamp = 'float mfWaterStyle = 1.0;\n' + FRAG_TAIL;
             if (!shader.fragmentShader.includes('mfWaterStyle')) {
                 // ANTES del fog: así la niebla del juego mezcla el agua tintada
@@ -89854,6 +89880,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 for (const m of mats) {
                     if (m?.userData && m.userData.waterShadersEnabled !== undefined) {
                         if (hookMaterial(m)) added++;
+                        // el onChange del juego pone esto en 0 si su setting está
+                        // apagado; la superficie viva es parte de nuestro look
+                        if (state.hooked.has(m)) m.userData.waterShadersEnabled.value = 1;
                     }
                 }
             });
@@ -127761,7 +127790,7 @@ function normalize(entry) {
 
         <div class="mf-card">
           <div class="mf-card-title">Water Style</div>
-          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">agua clara con tinte verdoso (la lava queda intacta). opacidad 0 = invisible, s&uacute;belo si te marea tanto viento</div>
+          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">agua clara con tinte verdoso + olas y destello del sol siempre activos (la lava queda intacta). para REFLEJOS del mundo en el agua enciende &quot;water shaders&quot; en los gr&aacute;ficos del juego &mdash; el tinte los conserva</div>
           <div class="mf-toggle-grid">
             ${renderToggle('waterStyle', 'water style', 'agua 100% transparente con tinte verdoso')}
           </div>
