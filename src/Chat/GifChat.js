@@ -494,6 +494,9 @@
     closeBar();
   }
   function findChatInput() {
+    // corremos en todos los frames (all_frames) y alguno no tiene body todavia:
+    // sin body no hay chat que buscar, y document.body.contains revienta
+    if (!document.body) return null;
     if (state.chatInputEl && document.body.contains(state.chatInputEl) && state.chatInputEl.offsetParent !== null) {
       return state.chatInputEl;
     }
@@ -974,7 +977,7 @@
       injectBarStyle();
       if (!state.scanTimer) {
         state.scanTimer = window.setInterval(() => {
-          if (state.enabled) { ensureChat(); ensureButton(); attachInputHooks(); rescanChat(); }
+          if (state.enabled && document.body) { ensureChat(); ensureButton(); attachInputHooks(); rescanChat(); }
         }, 1200);
       }
       ensureChat();
