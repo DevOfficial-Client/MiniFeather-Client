@@ -37,6 +37,7 @@ Authors recovered from metadata embedded inside the `.emotecraft` files themselv
 | MF_Deferred shader | JS port of **IterationT 3.2.0** by Tahnass — redistribution permission pending | `src/Shaders/`, `src/Core/mirror.js` |
 | Shader data textures | IterationT 3.2.0 (Tahnass) | `assets/shadertextures/` |
 | PBR maps | **Removed from the package** (2026-10-01): the previously bundled maps derived from work © 2020 RRe36 (All Rights Reserved) could not be redistributed. PBR is available in-client via Modrinth presets: [UltimaCraft PBR](https://modrinth.com/resourcepack/ultimacraft-pbr) (CC-BY-NC-4.0), [SPBR](https://modrinth.com/resourcepack/spbr) (GPL-3.0) and [Vanilla Normals Renewed](https://github.com/Poudingue/Vanilla-Normals-Renewed) | — |
+| Nighttime sky cubemap (6 faces, astrophotography) | **koto** — "nighttime sky by koto" 1.0 (Minecraft Bedrock skybox pack, `overworld_cubemap` format; converted from BMP to PNG). Engine code in `MF_KotoSky` is ours; the sky photos are koto's. If you are the author and want it removed, contact us. | `assets/koto_sky/`, `src/Shaders/MF_KotoSky.js` |
 
 ## Libraries & fonts
 
