@@ -7,22 +7,24 @@
     const TAG = 'minifeather waterstyle';
 
     // ─────────────────────────────────────────────────────────────────────
-    // Agua 100% transparente con tinte verdoso + OLAS NOTORIAS y ondas que
-    // reaccionan al jugador (v3). El juego renderiza el fluido con UN material
-    // compartido (agua + lava) cuyo onBeforeCompile inyecta el shader de
-    // olas/refracciones (`water_shader_v53`); se identifica porque es el único
-    // con userData.waterShadersEnabled. Envolvemos su onBeforeCompile y:
+    // Agua TRANSPARENTE Y CRISTALINA pero con MUCHA TURBULENCIA (v4). El
+    // juego renderiza el fluido con UN material compartido (agua + lava) cuyo
+    // onBeforeCompile inyecta el shader de olas/refracciones
+    // (`water_shader_v53`); se identifica porque es el único con
+    // userData.waterShadersEnabled. Envolvemos su onBeforeCompile y:
     //   1. fuerza la rama fancy (USE_WATER_SHADERS) aunque el setting del
     //      juego esté apagado — seguro: los raymarch de texturas están gated
     //      por reflectionEnabled>0.5 y corren fallbacks analíticos;
-    //   2. amplifica la amplitud de las olas de AGUA (kinds 1 y 2; la lava
-    //      usa kind 0 y no se toca) × uMfWaveScale;
-    //   3. suma un anillo radial centrado en el jugador DENTRO de
-    //      waterWaveHeight — así también perturba la normal que calcula el
-    //      juego con la misma función, y el brillo del sol titila con las
-    //      olas. Gated kind>=0.5 para que la lava jamás reaccione.
-    //   4. al final del fragment: re-tinte por luminancia + alfa fijo
-    //      (uMfWater*), ANTES del fog del template.
+    //   2. amplifica la amplitud de las olas del juego (kinds 1 y 2; lava
+    //      pide kind 0 y no se toca) × uMfWaveScale;
+    //   3. SUMA mfTurbulence: chop de alta frecuencia cruzado con crestas
+    //      picudas (los senos del juego solos son swell liso; escalados siguen
+    //      siendo liso). Dentro de waterWaveHeight → la normal que ilumina la
+    //      superficie también hierve y el destello del sol danza;
+    //   4. anillo radial centrado en el jugador (uMfPlayerRipple suavizado a
+    //      1 en agua / 0.15 en tierra, tick 10Hz);
+    //   5. al final del fragment: re-tinte por luminancia + alfa fijo,
+    //      ANTES del fog del template.
     // El juego hace tick de userData.time en fixedUpdate sin importar su
     // setting, así que la animación corre siempre.
     // ─────────────────────────────────────────────────────────────────────
@@ -75,6 +77,20 @@
         uniform float uMfWaveScale;
         uniform vec3 uMfPlayerPos;
         uniform float uMfPlayerRipple;
+        // TURBULENCIA: los 3 senos del juego son swell lento y liso; esto es
+        // chop — tres trenes cruzados de alta frecuencia (λ≈2-3 bloques, el
+        // techo antes de que la malla por-bloque aliasee) con fase que deambula
+        // (seno dentro del seno) para que no se vea de tapicería, y skew
+        // cuadrático que empina las crestas y aplasta los valles: agua que
+        // SE APILA, no que se hunde
+        float mfTurbulence(vec2 p, float t) {
+            float tt = t * 11.0;
+            float h = sin(dot(p, vec2( 2.2,  1.5)) + tt) * 0.50;
+            h += sin(dot(p, vec2(-1.9,  2.6)) + tt * 1.37 + sin(dot(p, vec2( 2.2,  1.5)) * 0.7 - tt * 0.61) * 1.2) * 0.35;
+            h += sin(dot(p, vec2( 2.9, -1.2)) - tt * 1.71 + sin(dot(p, vec2(-1.9,  2.6)) * 0.5 + tt * 0.43) * 0.9) * 0.30;
+            h += h * 0.35 * h;
+            return h * 0.028;
+        }
         // anillo radial que nace del jugador; kind>=0.5 = agua (la lava pide
         // kind 0.0 y sale por el if de una). El módulo suaviza
         // uMfPlayerRipple hacia 1 en agua / 0.15 en tierra
@@ -151,12 +167,13 @@
                 shader.uniforms.waterShadersEnabled.value = 1;
             }
 
-            // olas notorias + reacción al jugador: parcheo waterWaveHeight del
-            // propio juego — la normal que ilumina la superficie sale de la
-            // MISMA función (waterWaveNormal la llama), así que el brillo del
-            // sol titila con las olas y el anillo. Si el bundle cambia y los
-            // marcadores ya no están, el agua queda vanilla en vez de no
-            // compilar (fail-open, la lección del CustomShader)
+            // olas notorias + turbulencia + reacción al jugador: parcheo
+            // waterWaveHeight del propio juego — la normal que ilumina la
+            // superficie sale de la MISMA función (waterWaveNormal la llama),
+            // así que el brillo del sol titila con el chop y el anillo. Si el
+            // bundle cambia y los marcadores ya no están, el agua queda
+            // vanilla en vez de no compilar (fail-open, la lección del
+            // CustomShader)
             if (!shader.vertexShader.includes('mfPlayerRipple(p, t, kind)')) {
                 let vs = shader.vertexShader;
                 const ampOrig = 'float amp = kind < 0.5 ? 0.01 : (kind < 1.5 ? 0.045 : 0.03);';
@@ -165,7 +182,8 @@
                         'float amp = kind < 0.5 ? 0.01 : (kind < 1.5 ? 0.045 * uMfWaveScale : 0.03 * uMfWaveScale);');
                 }
                 if (vs.includes('return w * amp;')) {
-                    vs = vs.replace('return w * amp;', 'return w * amp + mfPlayerRipple(p, t, kind);');
+                    vs = vs.replace('return w * amp;',
+                        'return w * amp + mfTurbulence(p, t) * uMfWaveScale + mfPlayerRipple(p, t, kind);');
                 }
                 shader.vertexShader = vs;
             }
@@ -189,7 +207,7 @@
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v2';
+            return base + '_mfws_v3';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
