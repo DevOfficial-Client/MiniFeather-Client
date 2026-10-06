@@ -10,6 +10,9 @@
 // que lee el repo ve hashes y coordenadas, nada más.
 // mismo patrón que MF_Moderation: cache en localStorage, fetch en boot +
 // poll lento (las temporadas no corren: caminan), fail-open total.
+// ambiente (2026-10-05, pedido del usuario): nieve en navidad, hojas en otoño,
+// luciérnagas y estrellas fugaces de noche — canvas propio que SOLO corre con
+// evento/noche activa y pestaña visible; nada de rAF eternos (lección de perf).
 (function () {
   'use strict';
   if (window.__MF_Seasonal) return;
@@ -36,8 +39,24 @@
   var identityHashes = null; // { uuidHash, nameHash } — calculados async
   var hashingIdentity = '';
   var activeEventId = null;
+  var activeEventDef = null; // evento activo de hoy (para el ambiente)
   var giftDone = {};         // eventId ya regalado en esta sesión
   var applying = false;
+
+  // --- ambiente: constantes del motor de partículas ----------------------------
+
+  var AMBIENT_TYPES = ['snow', 'leaves', 'fireflies', 'meteors'];
+  var NIGHT_ONLY = { fireflies: 1, meteors: 1 }; // efectos de luz: no existen de día
+  function clampAmbientDensity(n) {
+    var v = Number(n);
+    if (!isFinite(v)) return 1;
+    return Math.max(0.2, Math.min(1.5, v));
+  }
+  function clampHour(n) {
+    var v = Math.round(Number(n));
+    if (!isFinite(v)) return 0;
+    return Math.max(0, Math.min(23, v));
+  }
 
   // --- config: normalizar (privacy by design incluida) ------------------------
 
@@ -71,6 +90,12 @@
       if (!e.id || !start || !end) continue;
       var fx = e.effects || {};
       var targets = [];
+      // ambiente del evento: lista blanca, máx 3 tipos simultáneos
+      var ambient = [];
+      var ambIn = Array.isArray(fx.ambient) ? fx.ambient : [];
+      for (var a = 0; a < ambIn.length && ambient.length < 3; a++) {
+        if (AMBIENT_TYPES.indexOf(ambIn[a]) >= 0 && ambient.indexOf(ambIn[a]) < 0) ambient.push(ambIn[a]);
+      }
       var tIn = Array.isArray(e.targets) ? e.targets : [];
       for (var k = 0; k < tIn.length; k++) {
         var t = tIn[k] || {};
@@ -101,12 +126,30 @@
           vignette: /^#[0-9a-fA-F]{6}$/.test(fx.vignette || '') ? fx.vignette : null,
           vignetteStrength: clampStrength(fx.vignetteStrength),
           heartRain: !!fx.heartRain,
-          loginToast: String(fx.loginToast || '').slice(0, 120)
+          loginToast: String(fx.loginToast || '').slice(0, 120),
+          ambient: ambient,
+          ambientDensity: clampAmbientDensity(fx.ambientDensity)
         },
         targets: targets.slice(0, 50)
       });
     }
-    return { v: 1, events: events };
+    // noches: ambiente siempre-encendido fuera de eventos (luciérnagas, meteors)
+    var night = null;
+    if (raw.night && typeof raw.night === 'object') {
+      var nAmb = [];
+      var nIn = Array.isArray(raw.night.ambient) ? raw.night.ambient : [];
+      for (var b = 0; b < nIn.length && nAmb.length < 3; b++) {
+        if (AMBIENT_TYPES.indexOf(nIn[b]) >= 0 && nAmb.indexOf(nIn[b]) < 0) nAmb.push(nIn[b]);
+      }
+      if (nAmb.length) {
+        var hours = Array.isArray(raw.night.hours) &&
+          isFinite(Number(raw.night.hours[0])) && isFinite(Number(raw.night.hours[1]))
+          ? [clampHour(raw.night.hours[0]), clampHour(raw.night.hours[1])]
+          : [18, 6];
+        night = { ambient: nAmb, hours: hours, density: clampAmbientDensity(raw.night.density) };
+      }
+    }
+    return { v: 1, events: events, night: night };
   }
 
   function hashOf(n) {
@@ -214,6 +257,308 @@
     } catch (_) { return ''; }
   }
 
+  // --- ambiente: motor de partículas ------------------------------------------
+  // UN canvas, UN rAF que solo corre con algo que dibujar y pestaña visible.
+  // sprites pre-renderizados (drawImage barato), densidad escalada por área,
+  // prefers-reduced-motion apaga todo y los sandboxes sin canvas 2d fail-open.
+
+  var nightCfg = null;       // { ambient:[], hours:[h1,h2], density } del config
+  var ambientCanvas = null, ambientCtx = null;
+  var ambientRaf = 0, ambientParts = [], ambientMeteors = [];
+  var ambientTypes = [];      // tipos activos ahora mismo (evento ∪ noche)
+  var ambientDensity = 1;
+  var ambientW = 0, ambientH = 0, ambientDpr = 1;
+  var meteorTimer = 0, lastFrame = 0;
+  var sprites = {};
+
+  function reducedMotion() {
+    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (_) { return false; }
+  }
+
+  function inNightHours() {
+    var w = (nightCfg && nightCfg.hours) || [18, 6];
+    var h = new Date().getHours();
+    return w[0] <= w[1] ? (h >= w[0] && h < w[1]) : (h >= w[0] || h < w[1]);
+  }
+
+  function computeAmbientTypes() {
+    var types = [];
+    var push = function (t) { if (types.indexOf(t) < 0) types.push(t); };
+    if (activeEventDef && activeEventDef.effects.ambient) {
+      for (var i = 0; i < activeEventDef.effects.ambient.length; i++) push(activeEventDef.effects.ambient[i]);
+    }
+    var night = inNightHours();
+    if (night && nightCfg) {
+      for (var j = 0; j < nightCfg.ambient.length; j++) push(nightCfg.ambient[j]);
+    }
+    if (!night) {
+      // los de luz no pintan de día, vengan de donde vengan
+      types = types.filter(function (t) { return !NIGHT_ONLY[t]; });
+    }
+    return types;
+  }
+
+  function ambientSprite(kind, size) {
+    var key = kind + ':' + size;
+    if (sprites[key]) return sprites[key];
+    var c = document.createElement('canvas');
+    c.width = c.height = size;
+    var x = c.getContext ? c.getContext('2d') : null;
+    if (!x) return null;
+    var r = size / 2;
+    if (kind === 'snow') {
+      var g = x.createRadialGradient(r, r, 0, r, r, r);
+      g.addColorStop(0, 'rgba(255,255,255,.95)');
+      g.addColorStop(0.55, 'rgba(240,248,255,.55)');
+      g.addColorStop(1, 'rgba(240,248,255,0)');
+      x.fillStyle = g;
+      x.fillRect(0, 0, size, size);
+    } else if (kind === 'firefly') {
+      g = x.createRadialGradient(r, r, 0, r, r, r);
+      g.addColorStop(0, 'rgba(235,255,170,.95)');
+      g.addColorStop(0.3, 'rgba(200,255,120,.5)');
+      g.addColorStop(1, 'rgba(180,255,100,0)');
+      x.fillStyle = g;
+      x.fillRect(0, 0, size, size);
+    } else if (kind === 'leaf') {
+      x.translate(r, r);
+      x.fillStyle = 'rgba(0,0,0,0)';
+      x.beginPath();
+      x.ellipse(0, 0, r, r * 0.52, 0, 0, Math.PI * 2);
+      x.fillStyle = size % 2 ? '#d68438' : (size % 3 ? '#c05a2a' : '#e0a33c');
+      x.fill();
+      x.strokeStyle = 'rgba(90,40,10,.5)';
+      x.lineWidth = 1;
+      x.beginPath();
+      x.moveTo(-r, 0);
+      x.lineTo(r, 0);
+      x.stroke();
+    }
+    sprites[key] = c;
+    return c;
+  }
+
+  function ambientResize() {
+    if (!ambientCanvas || !ambientCtx) return;
+    ambientDpr = Math.min(1.5, window.devicePixelRatio || 1);
+    ambientW = window.innerWidth;
+    ambientH = window.innerHeight;
+    ambientCanvas.width = Math.round(ambientW * ambientDpr);
+    ambientCanvas.height = Math.round(ambientH * ambientDpr);
+    ambientCtx.setTransform(ambientDpr, 0, 0, ambientDpr, 0, 0);
+  }
+
+  function spawnAmbient() {
+    ambientParts.length = 0;
+    var area = ambientW * ambientH || 1;
+    var dens = ambientDensity;
+    var snow = ambientTypes.indexOf('snow') >= 0;
+    var leaves = ambientTypes.indexOf('leaves') >= 0;
+    var flies = ambientTypes.indexOf('fireflies') >= 0;
+    if (snow) {
+      var n = Math.max(24, Math.min(130, Math.round(area / 11000 * dens)));
+      for (var i = 0; i < n; i++) {
+        ambientParts.push({
+          t: 'snow', x: Math.random() * ambientW, y: Math.random() * ambientH,
+          r: 1.4 + Math.random() * 2.4, vy: 22 + Math.random() * 38,
+          sway: 8 + Math.random() * 18, ph: Math.random() * Math.PI * 2,
+          a: 0.45 + Math.random() * 0.45
+        });
+      }
+    }
+    if (leaves) {
+      var m = Math.max(14, Math.min(70, Math.round(area / 20000 * dens)));
+      for (var j = 0; j < m; j++) {
+        var s = 5 + Math.random() * 5;
+        ambientParts.push({
+          t: 'leaf', x: Math.random() * ambientW, y: Math.random() * ambientH,
+          r: s, vy: 26 + Math.random() * 30, vx: -14 + Math.random() * 28,
+          rot: Math.random() * Math.PI * 2, vr: -1.6 + Math.random() * 3.2,
+          ph: Math.random() * Math.PI * 2, a: 0.75 + Math.random() * 0.25,
+          seed: Math.floor(Math.random() * 7)
+        });
+      }
+    }
+    if (flies) {
+      var f = Math.max(6, Math.min(18, Math.round(area / 70000 * dens)));
+      for (var k = 0; k < f; k++) {
+        ambientParts.push({
+          t: 'fly', x: Math.random() * ambientW, y: ambientH * 0.25 + Math.random() * ambientH * 0.7,
+          vx: -8 + Math.random() * 16, vy: -6 + Math.random() * 12,
+          ph: Math.random() * Math.PI * 2, blink: 0.7 + Math.random() * 1.6,
+          r: 2.5 + Math.random() * 2.5, turn: 0
+        });
+      }
+    }
+  }
+
+  function spawnMeteor() {
+    var fromLeft = Math.random() < 0.5;
+    ambientMeteors.push({
+      x: ambientW * (fromLeft ? 0.15 : 0.35) + Math.random() * ambientW * 0.5,
+      y: Math.random() * ambientH * 0.28,
+      vx: (fromLeft ? 1 : -1) * (280 + Math.random() * 180),
+      vy: 140 + Math.random() * 90,
+      len: 90 + Math.random() * 70, life: 0, max: 1.1
+    });
+  }
+
+  function ambientFrame(now) {
+    ambientRaf = 0;
+    if (!ambientCtx) return;
+    var dt = lastFrame ? Math.min(0.05, (now - lastFrame) / 1000) : 0.016;
+    lastFrame = now;
+    var ctx = ambientCtx;
+    ctx.clearRect(0, 0, ambientW, ambientH);
+    var i, p, spr, sway;
+    for (i = ambientParts.length - 1; i >= 0; i--) {
+      p = ambientParts[i];
+      if (p.t === 'snow') {
+        p.ph += dt * 1.4;
+        sway = Math.sin(p.ph) * p.sway * dt;
+        p.x += sway;
+        p.y += p.vy * dt;
+        if (p.y > ambientH + 6) { p.y = -8; p.x = Math.random() * ambientW; }
+        if (p.x < -8) p.x = ambientW + 6; else if (p.x > ambientW + 8) p.x = -6;
+        spr = ambientSprite('snow', 16);
+        if (spr) {
+          ctx.globalAlpha = p.a;
+          ctx.drawImage(spr, p.x - p.r * 2, p.y - p.r * 2, p.r * 4, p.r * 4);
+        }
+      } else if (p.t === 'leaf') {
+        p.ph += dt * 2;
+        p.rot += p.vr * dt;
+        p.x += (p.vx + Math.sin(p.ph) * 26) * dt;
+        p.y += p.vy * dt;
+        if (p.y > ambientH + 12) { p.y = -14; p.x = Math.random() * ambientW; }
+        if (p.x < -16) p.x = ambientW + 12; else if (p.x > ambientW + 16) p.x = -12;
+        spr = ambientSprite('leaf', 12 + (p.seed % 3) * 2);
+        if (spr) {
+          ctx.globalAlpha = p.a;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.drawImage(spr, -p.r, -p.r * 0.52, p.r * 2, p.r * 1.04);
+          ctx.restore();
+        }
+      } else if (p.t === 'fly') {
+        p.turn -= dt * 1.2;
+        if (p.turn <= 0) {
+          p.turn = 0.6 + Math.random() * 1.8;
+          p.vx = Math.max(-14, Math.min(14, p.vx + (Math.random() * 22 - 11)));
+          p.vy = Math.max(-10, Math.min(10, p.vy + (Math.random() * 16 - 8)));
+        }
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.ph += dt * p.blink;
+        if (p.x < 20 || p.x > ambientW - 20) p.vx *= -1;
+        if (p.y < ambientH * 0.15 || p.y > ambientH - 30) p.vy *= -1;
+        var glow = Math.max(0, Math.sin(p.ph));
+        spr = ambientSprite('firefly', 26);
+        if (spr && glow > 0.05) {
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = 0.25 + glow * 0.75;
+          ctx.drawImage(spr, p.x - p.r * 3, p.y - p.r * 3, p.r * 6, p.r * 6);
+          ctx.globalCompositeOperation = 'source-over';
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+    // meteoros: aparecen solos, cruzan y mueren
+    meteorTimer -= dt;
+    if (ambientTypes.indexOf('meteors') >= 0 && meteorTimer <= 0 && ambientMeteors.length < 2) {
+      spawnMeteor();
+      meteorTimer = 4 + Math.random() * 7;
+    }
+    for (i = ambientMeteors.length - 1; i >= 0; i--) {
+      p = ambientMeteors[i];
+      p.life += dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      var fade = Math.max(0, 1 - p.life / p.max);
+      if (fade <= 0 || p.x < -p.len || p.x > ambientW + p.len || p.y > ambientH + p.len) {
+        ambientMeteors.splice(i, 1);
+        continue;
+      }
+      var nx = p.vx / (Math.hypot(p.vx, p.vy) || 1), ny = p.vy / (Math.hypot(p.vx, p.vy) || 1);
+      var grad = ctx.createLinearGradient(p.x, p.y, p.x - nx * p.len, p.y - ny * p.len);
+      grad.addColorStop(0, 'rgba(255,255,255,' + (0.9 * fade) + ')');
+      grad.addColorStop(0.35, 'rgba(200,225,255,' + (0.45 * fade) + ')');
+      grad.addColorStop(1, 'rgba(200,225,255,0)');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - nx * p.len, p.y - ny * p.len);
+      ctx.stroke();
+    }
+    if (ambientParts.length || ambientMeteors.length) {
+      ambientRaf = window.requestAnimationFrame(ambientFrame);
+    }
+  }
+
+  function syncAmbient() {
+    var want = (!reducedMotion() && ambientTypes.length) ? 1 : 0;
+    if (!want) {
+      if (ambientRaf) { try { window.cancelAnimationFrame(ambientRaf); } catch (_) {} ambientRaf = 0; }
+      lastFrame = 0;
+      if (ambientCanvas) { try { ambientCanvas.remove(); } catch (_) {} ambientCanvas = null; ambientCtx = null; }
+      ambientParts.length = 0;
+      ambientMeteors.length = 0;
+      return;
+    }
+    try {
+      if (!ambientCanvas) {
+        ambientCanvas = document.createElement('canvas');
+        ambientCanvas.id = 'mf-seasonal-ambient';
+        ambientCanvas.style.cssText = 'position:fixed;inset:0;z-index:2147482996;pointer-events:none';
+        (document.body || document.documentElement).appendChild(ambientCanvas);
+        ambientCtx = ambientCanvas.getContext ? ambientCanvas.getContext('2d') : null;
+        if (!ambientCtx) { try { ambientCanvas.remove(); } catch (_) {} ambientCanvas = null; return; }
+        ambientResize();
+        spawnAmbient();
+        window.addEventListener('resize', function () {
+          if (!ambientCanvas) return;
+          ambientResize();
+          spawnAmbient();
+        });
+        document.addEventListener('visibilitychange', function () {
+          // pestaña oculta: congelar (nada de rAF cobrando CPU en segundo plano)
+          if (document.hidden && ambientRaf) {
+            try { window.cancelAnimationFrame(ambientRaf); } catch (_) {}
+            ambientRaf = 0;
+            lastFrame = 0;
+          } else if (!document.hidden && ambientParts.length && !ambientRaf) {
+            ambientRaf = window.requestAnimationFrame(ambientFrame);
+          }
+        });
+      }
+      if (!ambientRaf) ambientRaf = window.requestAnimationFrame(ambientFrame);
+    } catch (_) { failOpenAmbient(); }
+  }
+
+  function failOpenAmbient() {
+    ambientRaf = 0;
+    ambientTypes = [];
+    try { if (ambientCanvas) ambientCanvas.remove(); } catch (_) {}
+    ambientCanvas = null; ambientCtx = null;
+  }
+
+  // cruzar el umbral de noche/día sin esperar al evaluate de 10 min
+  setInterval(function () {
+    try {
+      if (!nightCfg) return;
+      var types = computeAmbientTypes();
+      if (types.join() !== ambientTypes.join()) {
+        ambientTypes = types;
+        ambientDensity = (nightCfg ? nightCfg.density : 1) * (activeEventDef ? activeEventDef.effects.ambientDensity : 1);
+        ambientDensity = Math.max(0.2, Math.min(1.5, ambientDensity));
+        syncAmbient();
+        if (ambientTypes.length) spawnAmbient();
+      }
+    } catch (_) {}
+  }, 60000);
+
   // --- identidad + matching ----------------------------------------------------
 
   function currentIdentity() {
@@ -269,10 +614,20 @@
     applying = true;
     try {
       var n = cfg && cfg.cfg ? cfg.cfg : null;
-      if (!n) { setVignette(null, 0); return; }
+      if (!n) { setVignette(null, 0); activeEventDef = null; nightCfg = null; ambientTypes = []; syncAmbient(); return; }
       var ev = activeEvent(n);
       activeEventId = ev ? ev.id : null;
+      activeEventDef = ev || null;
+      nightCfg = n.night || null;
       setVignette(ev ? ev.effects.vignette : null, ev ? ev.effects.vignetteStrength : 0);
+      try {
+        ambientTypes = computeAmbientTypes();
+        ambientDensity = (nightCfg ? nightCfg.density : 1) * (ev ? ev.effects.ambientDensity : 1);
+        ambientDensity = Math.max(0.2, Math.min(1.5, ambientDensity));
+        var wasEmpty = !ambientParts.length && !ambientMeteors.length;
+        syncAmbient();
+        if (ambientTypes.length && wasEmpty) spawnAmbient();
+      } catch (_) { failOpenAmbient(); }
 
       // saludo de ventana: una vez por día por evento
       var shown = readJSON(SHOWN_KEY) || {};
@@ -351,6 +706,11 @@
 
   // api mínima de consola (y para tests): la config manda, esto solo lee
   window.__MF_SEASONAL_STATE__ = function () {
-    return { activeEventId: activeEventId, identity: identitySeen ? { name: identitySeen.name, hashed: !!identityHashes } : null };
+    return {
+      activeEventId: activeEventId,
+      ambient: ambientTypes.slice(),
+      night: inNightHours(),
+      identity: identitySeen ? { name: identitySeen.name, hashed: !!identityHashes } : null
+    };
   };
 })();
