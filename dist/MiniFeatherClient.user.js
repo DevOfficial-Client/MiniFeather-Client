@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006203336
+// @version      4.19.0.20261006203709
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 54a36251f435663f60559a2e81ddeb23ce84bb0e
- * builtAt : 2026-10-06T20:33:56.076Z
+ * commit  : bd6837050886ffa3bb0c8304ed85c8eb32d0abc7
+ * builtAt : 2026-10-06T20:37:22.172Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"54a36251f435663f60559a2e81ddeb23ce84bb0e","builtAt":"2026-10-06T20:33:56.076Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"bd6837050886ffa3bb0c8304ed85c8eb32d0abc7","builtAt":"2026-10-06T20:37:22.172Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -83973,19 +83973,18 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     if (!x) return null;
     var r = size / 2;
     if (kind === 'snow') {
-      var g = x.createRadialGradient(r, r, 0, r, r, r);
-      g.addColorStop(0, 'rgba(255,255,255,.95)');
-      g.addColorStop(0.55, 'rgba(240,248,255,.55)');
-      g.addColorStop(1, 'rgba(240,248,255,0)');
-      x.fillStyle = g;
-      x.fillRect(0, 0, size, size);
+      // cuadrado plano estilo partícula de minecraft: nada de gradientes suaves
+      x.fillStyle = 'rgba(240,248,255,.95)';
+      x.fillRect(1, 1, size - 2, size - 2);
     } else if (kind === 'firefly') {
-      g = x.createRadialGradient(r, r, 0, r, r, r);
-      g.addColorStop(0, 'rgba(235,255,170,.95)');
-      g.addColorStop(0.3, 'rgba(200,255,120,.5)');
-      g.addColorStop(1, 'rgba(180,255,100,0)');
-      x.fillStyle = g;
+      // bloom PIXELADO: cuadrados concéntricos, el glow también es cuadrado
+      var step = size / 3;
+      x.fillStyle = 'rgba(190,255,110,.22)';
       x.fillRect(0, 0, size, size);
+      x.fillStyle = 'rgba(215,255,140,.45)';
+      x.fillRect(step * 0.5, step * 0.5, size - step, size - step);
+      x.fillStyle = 'rgba(245,255,200,.95)';
+      x.fillRect(step, step, step, step);
     } else if (kind === 'leaf') {
       x.translate(r, r);
       x.fillStyle = 'rgba(0,0,0,0)';
@@ -84012,6 +84011,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     ambientCanvas.width = Math.round(ambientW * ambientDpr);
     ambientCanvas.height = Math.round(ambientH * ambientDpr);
     ambientCtx.setTransform(ambientDpr, 0, 0, ambientDpr, 0, 0);
+    ambientCtx.imageSmoothingEnabled = false; // píxeles cuadrados, no manchas
   }
 
   function spawnAmbient() {
