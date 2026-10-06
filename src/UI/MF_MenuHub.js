@@ -24,7 +24,7 @@
     enabled: false, destroyed: false, root: null, style: null, observer: null,
     timer: 0, marks: new Set(), hub: null, expanded: false, layoutRight: null,
     language: 'en', pins: readPins(), nav: new Map(), sections: [], games: [],
-    recentCard: null, signature: '', prevSignature: '', chipLastSeen: 0, chipScanFails: 0
+    recentCard: null, signature: '', prevSignature: '', chipLastSeen: 0, chipLastPaint: 0
   };
 
   const L10N = {
@@ -418,13 +418,6 @@
     canvas.style.transformOrigin = 'top left';
   }
 
-  // chip de perfil, modo logueado incluido: nada de selectores de profundidad (el sitio
-  // re-anida entre renders y entre logged-in/logged-out). se marca estructuralmente:
-  //  - canvas del skin = el mas grande del panel (los demas son iconos)
-  //  - se sube desde el canvas hasta un ancestro con un hermano "de datos" -> ese hermano
-  //    es la caja de info y el camino completo hacia arriba se deja transparente
-  //  - hermanos con datos = cajitas apiladas; relleno sin datos = fuera
-  // sin canvas (el render es asincrono y a veces no existe): la tira de perfil como cajita
   function clearChipMarks() {
     for (const entry of [...state.marks]) {
       if (String(entry[1]).startsWith('mf-hub-chip')) {
@@ -434,11 +427,11 @@
     }
   }
 
-  function markChipStatic(right) {
-    const strip = right.firstElementChild;
-    if (strip) mark(strip.firstElementChild || strip, 'mf-hub-chipinfo');
-    // un canvas mudo no aporta nada a la vista: fuera
-    for (const c of right.querySelectorAll('canvas')) mark(c, 'mf-hub-chipextra');
+  // modo estatico: NO marcar nada. la tarjeta nativa se ve como nacio — su estilo de
+  // siempre es el unico que es correcto en TODAS las variantes de nesting que el sitio
+  // inventa. las marcas finas solo existen para el camino con personaje
+  function markChipStatic() {
+    clearChipMarks();
   }
 
   function markChip(right) {
@@ -450,26 +443,26 @@
     if (!canvas || !best) {
       // durante un re-render de react el canvas puede estar desmontado UN instante:
       // alternar aca pestañea a ritmo de sync. histeresis por tiempo: si lo vimos hace
-      // poco, conservar las marcas; si nunca hubo o lleva rato fuera, modo estatico
+      // poco, conservar las marcas; si nunca hubo o lleva rato fuera, tarjeta nativa
       const gone = performance.now() - (state.chipLastSeen || 0);
       if (state.chipLastSeen && gone < 1200) return;
-      clearChipMarks();
-      markChipStatic(right);
+      markChipStatic();
       return;
     }
     state.chipLastSeen = performance.now();
     // juzgar por CONTENIDO, no por presencia: un canvas mudo (render asincrono que no
-    // llego, webgl entre frames) no da personaje. unos scans vacios de gracia y, si
-    // sigue mudo, modo estatico HASTA que pinte de verdad — nada de ir-y-volver
+    // llego, webgl con preserveDrawingBuffer en pestana de fondo) no da personaje.
+    // gracia por TIEMPO, no por syncs: en una pagina quieta los syncs no corren y un
+    // contador en syncs dejaria marcas huerfanas minutos enteros
     const frac = figureFractions(canvas);
     if (!frac) {
-      state.chipScanFails += 1;
-      if (state.chipScanFails < 5) return;
-      clearChipMarks();
-      markChipStatic(right);
-      return;
+      if (performance.now() - (state.chipLastPaint || 0) > 1500) {
+        markChipStatic();
+        return;
+      }
+      return;   // pinto hace poco: aguantar las marcas que hay, puede volver a pintar
     }
-    state.chipScanFails = 0;
+    state.chipLastPaint = performance.now();
     // las marcas del sync anterior son veneno si la tarjeta cambio de forma: re-marcar
     clearChipMarks();
     let node = canvas.parentElement;
@@ -820,13 +813,16 @@
     return aside;
   }
 
-  // el pill vive debajo de la caja de datos, cuya altura cambia con nivel/xp logueado:
-  // medir al final de cada sync (en buildAside el layout todavia no asienta)
+  // el pill vive debajo de la tarjeta de perfil, cuya altura cambia con nivel/xp logueado:
+  // medir al final de cada sync (en buildAside el layout todavia no asienta). en modo
+  // estatico no hay caja marcada: se mide la tira nativa directamente
   function positionAside() {
     const aside = state.hub?.querySelector('.mf-hub-aside');
-    const infoBox = document.querySelector('.mf-hub-chipinfo');
-    if (!aside || !infoBox) return;
-    const top = infoBox.getBoundingClientRect().bottom;
+    if (!aside) return;
+    const box = document.querySelector('.mf-hub-chipinfo') ||
+      document.querySelector('.mf-hub-right')?.firstElementChild?.firstElementChild;
+    if (!box) return;
+    const top = box.getBoundingClientRect().bottom;
     if (top > 40) aside.style.top = Math.round(top + 12) + 'px';
   }
 
