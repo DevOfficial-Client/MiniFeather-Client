@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006210252
+// @version      4.19.0.20261006211716
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : a502002a7da74f32a73106cde82d7f46a61e0fc4
- * builtAt : 2026-10-06T21:03:58.723Z
+ * commit  : 09dea6f6c1744c8f439f658780fbd451f9846ea3
+ * builtAt : 2026-10-06T21:17:35.645Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"a502002a7da74f32a73106cde82d7f46a61e0fc4","builtAt":"2026-10-06T21:03:58.723Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"09dea6f6c1744c8f439f658780fbd451f9846ea3","builtAt":"2026-10-06T21:17:35.645Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19546,7 +19546,7 @@ const state = {
   const state = {
     enabled: false, destroyed: false, root: null, style: null, observer: null,
     timer: 0, marks: new Set(), hub: null, expanded: false, layoutRight: null,
-    language: 'en', pins: readPins(), nav: new Map(), sections: [], games: [], community: [],
+    language: 'en', pins: readPins(), nav: new Map(), sections: [], games: [], community: [], chipStage: null,
     recentCard: null, signature: '', prevSignature: '', chipLastSeen: 0, chipLastPaint: 0
   };
 
@@ -19666,10 +19666,10 @@ const state = {
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}::-webkit-scrollbar{display:none}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:not(:first-child){display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>*:not(:first-child){display:none!important}
-      /* el chip va vertical estilo perfil movil: datos arriba en su cajita y el personaje
-         flota en la MITAD del eje y (compromiso entre el piso descartado y la tarjeta).
-         el sync pinta .mf-hub-chiprow/.mf-hub-chipinfo/.mf-hub-chipavatar segun donde esten
-         HOY los nodos, porque el nesting cambia bajo tus pies */
+      /* el chip va vertical estilo perfil movil: caja de datos compacta arriba y el
+         personaje INDEPENDIENTE debajo (paper doll: fixed bajo la tarjeta, sin caja).
+         el sync pinta .mf-hub-chiprow/.mf-hub-chipinfo/.mf-hub-chipavatar segun donde
+         esten HOY los nodos, porque el nesting cambia bajo tus pies */
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chiprow{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important;pointer-events:auto!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipextra{display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipinfo{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px);padding:12px!important;align-self:stretch!important}
@@ -19677,7 +19677,15 @@ const state = {
          pero RELATIVE (ancla de badges y ventana) y overflow:hidden como cinturon de
          seguridad: si el fit se desmadra un frame, el personaje se recorta en el borde del
          escenario en vez de pisar la caja de datos */
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:absolute!important;top:calc(50vh - 142px)!important;left:50%!important;transform:translateX(-50%)!important;margin:0!important;width:150px!important;height:245px!important;flex:none!important;overflow:hidden!important;border:2px solid rgba(0,0,0,.8)!important;border-radius:12px!important;background:linear-gradient(180deg,rgba(26,31,42,.5),rgba(11,13,19,.78))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),inset 0 -22px 26px -20px rgba(120,170,255,calc(.18 + var(--mf-beat,0)*.3)),0 14px 34px rgba(0,0,0,.45),0 0 calc(var(--mf-beat,0)*26px) rgba(120,170,255,calc(var(--mf-beat,0)*.28))!important;pointer-events:auto!important}
+      /* el personaje ya NO vive en la tarjeta ni centrado en pantalla: PAPER DOLL
+         INDEPENDIENTE — fixed DEBAJO de la tarjeta (markChip escribe el top midiendo el
+         borde inferior por sync; el alto de la tarjeta cambia con el login), SIN marco.
+         la caja invisible conserva overflow:hidden como cinturon (un fit desmadrado se
+         recorta ahi y no pisa el resto de la pantalla) y una sombra eliptica pisa el
+         piso, latiendo suave con --mf-beat. top:240px = fallback hasta la 1ra medicion.
+         sigue siendo hijo DOM de la tarjeta: el click burbujea y abre el perfil */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:fixed!important;top:240px!important;right:105px!important;left:auto!important;bottom:auto!important;transform:none!important;margin:0!important;width:150px!important;height:245px!important;flex:none!important;overflow:hidden!important;border:none!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;pointer-events:auto!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar::after{content:"";position:absolute;left:50%;bottom:2px;width:92px;height:11px;transform:translateX(-50%);background:radial-gradient(50% 50% at 50% 50%,rgba(0,0,0,calc(.55 + var(--mf-beat,0)*.25)),transparent 72%);pointer-events:none}
       /* ventana(s) absolutas entre el canvas y la caja: llenan la caja sin pintar nada
          propio (su borde de color de nivel era el rectangulo flotante) */
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipcard{border:none!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important;pointer-events:auto!important}
@@ -20224,9 +20232,10 @@ const state = {
   function markChipStatic(right) {
     clearChipMarks();
     restoreChipCanvas(right);
+    if (state.chipStage) { try { state.chipStage.style.top = ''; } catch (_) {} state.chipStage = null; }
   }
 
-  // estructura del chip: fila arriba, tarjeta de datos arriba, escenario a 50vh.
+  // estructura del chip: fila arriba, tarjeta de datos arriba, escenario paper doll.
   // SOLO necesita que el canvas exista — el contenido (frac) es condicion del fit,
   // no de las marcas. sin esto, un remount de react nace sin marcas y el fit inline
   // del canvas se ancla al contenedor equivocado: personaje arriba y ENCIMA de la
@@ -20315,7 +20324,7 @@ const state = {
         markChipStatic(right);
         return;
       }
-      // pinto hace poco: estructura marcada (tarjeta arriba, escenario a 50vh) y el
+      // pinto hace poco: estructura marcada (tarjeta arriba, escenario colgado) y el
       // escenario se ve vacio un instante — infinitamente mejor que el personaje
       // pisando la tarjeta. si el walk falla, tarjeta nativa
       clearChipMarks();
@@ -20325,9 +20334,19 @@ const state = {
     state.chipLastPaint = performance.now();
     // las marcas del sync anterior son veneno si la tarjeta cambio de forma: re-marcar
     clearChipMarks();
-    if (!markChipStructure(right, canvas)) { markChipStatic(right); return; }
+    const struct = markChipStructure(right, canvas);
+    if (!struct) { markChipStatic(right); return; }
+    state.chipStage = struct.node;
     state.chipCanvas = canvas;
     fitChipCanvas(canvas, frac);
+    // paper doll: colgar el escenario justo debajo de la tarjeta midiendo su borde
+    // inferior por sync. sin tarjeta medible (boot), manda el fallback del CSS
+    if (state.expanded) struct.node.style.top = '';
+    else {
+      const card = struct.row.parentElement;
+      const bottom = card ? card.getBoundingClientRect().bottom : 0;
+      if (bottom > 40) struct.node.style.top = Math.round(bottom + 10) + 'px';
+    }
   }
 
   function forwardClick(nativeNode) {
@@ -20718,6 +20737,7 @@ const state = {
     // personaje queda recortado/desplazado en la tarjeta nativa hasta que react lo remonte.
     // con snapshot: se le devuelven al sitio los SUYOS, no un vacio que rompe su layout
     restoreChipCanvas(state.layoutRight);
+    if (state.chipStage) { try { state.chipStage.style.top = ''; } catch (_) {} state.chipStage = null; }
     state.root?.classList.remove(ROOT_CLASS, EXPANDED_CLASS);
     state.root = null;
     state.layoutRight = null;
