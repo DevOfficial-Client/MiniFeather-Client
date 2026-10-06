@@ -31,15 +31,30 @@ test('el hub esta cableado al panel: default on, config, init llamado y toggle',
 });
 
 test('el head-tracking del chip se re-ancla tras cada fit del canvas', () => {
-  // el sitio congela el ancla del mouse en el primer syncToVisible; el hub debe
-  // re-llamarlo via el manager que vive en la fiber de react, no parchear a ciegas
+  // el sitio congela el ancla del mouse en el primer syncToVisible; el hub escribe
+  // positionOnScreen directamente via el manager que vive en la fiber de react.
+  // NO puede llamar syncToVisible: resizea el bitmap (borra el buffer pintado) y
+  // toca la camara con el rect ya fitteado — camino al personaje chico y huerfano
   assert.match(source, /function findChipTracker\(canvas\)/);
   assert.match(source, /__reactFiber\$/);
   assert.match(source, /cand\.guiPlayer && typeof cand\.syncToVisible === 'function'/);
   assert.match(source, /function syncChipTracker\(canvas\)/);
-  assert.match(source, /try \{ tracker\.syncToVisible\(canvas\); \} catch \(_\) \{\}/);
+  assert.match(source, /pos\.set\(r\.x \+ r\.width \/ 2, r\.y - 0\.7475 \* r\.height\)/);
+  assert.doesNotMatch(source, /tracker\.syncToVisible\(/);
+  assert.match(source, /if \(!\(r\.width > 0 && r\.height > 0\)\) return;/);
   // el fit en ambas ramas (escenario y expanded) re-ancla
-  assert.ok((source.match(/syncChipTracker\(canvas\)/g) || []).length >= 3, 'fitChipCanvas debe re-anclar en escenario y expanded');
+  assert.ok((source.match(/syncChipTracker\(canvas\)/g) || []).length >= 2, 'fitChipCanvas debe re-anclar en escenario y expanded');
+  // al degradar a estatico restaura los estilos inline del sitio (snapshot), no un
+  // vacio: el sitio tambien usa inline width/height/left en el canvas
+  assert.match(source, /function markChipStatic\(right\)/);
+  assert.ok((source.match(/markChipStatic\(right\)/g) || []).length >= 5, 'todas las degradaciones deben restaurar estilos');
+  assert.match(source, /const FIT_PROPS = \['transform', 'transformOrigin', 'left', 'top', 'right', 'bottom', 'width', 'height', 'position', 'margin'\]/);
+  assert.match(source, /function snapshotChipCanvas\(canvas\)/);
+  assert.match(source, /function restoreChipCanvas\(right\)/);
+  assert.match(source, /snapshotChipCanvas\(canvas\);/);
+  assert.match(source, /restoreChipCanvas\(state\.layoutRight\);/);
+  assert.match(source, /chipFitSnapshot = new WeakMap/);
+  assert.match(source, /if \(!snap\) continue;/);   // canvas nunca fitteado = intocado
   // resize: el ancla es viewport, el escenario se mueve con la ventana
   assert.match(source, /window\.addEventListener\('resize', onChipResize\)/);
   assert.match(source, /window\.removeEventListener\('resize', onChipResize\)/);

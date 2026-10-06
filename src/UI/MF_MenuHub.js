@@ -473,12 +473,35 @@
     return frac;
   }
 
+  // el sitio TAMBIEN usa inline width/height/left/position en el canvas: limpiar a
+  // secas romperia su layout. snapshot antes del primer fit y devolverle los SUYOS
+  // al degradar a estatico o al restaurar
+  const FIT_PROPS = ['transform', 'transformOrigin', 'left', 'top', 'right', 'bottom', 'width', 'height', 'position', 'margin'];
+  const chipFitSnapshot = new WeakMap();
+
+  function snapshotChipCanvas(canvas) {
+    if (chipFitSnapshot.has(canvas)) return;
+    const snap = {};
+    for (const prop of FIT_PROPS) snap[prop] = canvas.style.getPropertyValue(prop);
+    chipFitSnapshot.set(canvas, snap);
+  }
+
+  function restoreChipCanvas(right) {
+    if (!right) return;
+    for (const c of right.querySelectorAll('canvas')) {
+      const snap = chipFitSnapshot.get(c);
+      if (!snap) continue;   // nunca fitteado = nunca tocado
+      for (const prop of FIT_PROPS) c.style[prop] = snap[prop];
+    }
+  }
+
   // ajuste por sync: la figura entera, centrada y con los pies en el piso de la ventana.
   // control total del canvas: tamano explicito con el aspect del BUFFER (el sitio estira la
   // caja con left/right y deforma al personaje) y translate puro, sin confiar en los
   // offsets nativos (left:-18px, bottom:-151px...) porque su origen cambia con cada variante.
   // offsetWidth/Height ignoran transforms pero aca ni los usamos: el buffer manda.
   function fitChipCanvas(canvas, frac) {
+    snapshotChipCanvas(canvas);
     const clear = () => {
       canvas.style.transform = '';
       canvas.style.transformOrigin = '';
@@ -511,11 +534,11 @@
   }
 
   // el sitio congela el ancla del head-tracking en el PRIMER syncToVisible: lee
-  // getBoundingClientRect una vez y jamas vuelve a leerlo (i ||= syncToVisible, cortocircuito).
-  // cuando el hub muda el canvas a su escenario, el ancla queda en la posicion nativa y la
-  // cabeza mira hacia un punto que ya no existe. el manager del renderer vive en los deps
-  // del useEffect del componente dueno del canvas (fiber de react): rellamar syncToVisible
-  // tras cada fit re-ancla con la geometria real — es el metodo del sitio, no un parche a ciegas
+  // getBoundingClientRect una vez y jamas vuelve a leerlo (i ||= syncToVisible, cortocircuito),
+  // y su path setCanvas escribe el ancla con offsets que IGNORAN transforms. cuando el hub
+  // muda el canvas a su escenario, la cabeza mira hacia un punto que ya no existe. el manager
+  // del renderer vive en los deps del useEffect del componente dueno del canvas (fiber de
+  // react): re-escribir el ancla tras cada fit con la geometria real
   const chipTrackers = new WeakMap();
 
   function findChipTracker(canvas) {
@@ -541,12 +564,20 @@
     return tracker;
   }
 
-  // sin offscreen el setSize del metodo revienta, y un rect de 0px es el guard del
-  // sitio para "todavia invisible": en ambos casos el proximo fit reintenta
+  // re-ancla el head-tracking escribiendo guiPlayer.positionOnScreen DIRECTAMENTE
+  // con la formula del sitio (centro-x, y - 0.7475*alto; ft/2 = 0.7475 medido en vivo).
+  // NO llamar syncToVisible: ademas de anclar, resizea el bitmap (e.width=BORRA el
+  // buffer pintado), toca camera.aspect y el tamano del renderer con el rect YA
+  // fitteado — el sitio nunca hace eso; un buffer vacio >1.5s degradaba a estatico
+  // dejando estilos inline huerfanos = personaje chico y fuera del escenario
   function syncChipTracker(canvas) {
-    const tracker = findChipTracker(canvas);
-    if (!tracker || !tracker.offscreen) return;
-    try { tracker.syncToVisible(canvas); } catch (_) {}
+    const pos = findChipTracker(canvas)?.guiPlayer?.positionOnScreen;
+    if (!pos || typeof pos.set !== 'function') return;
+    try {
+      const r = canvas.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0)) return;
+      pos.set(r.x + r.width / 2, r.y - 0.7475 * r.height);
+    } catch (_) {}
   }
 
   // el ancla es coordenada de viewport: si la ventana cambia de tamano el escenario
@@ -569,9 +600,13 @@
 
   // modo estatico: NO marcar nada. la tarjeta nativa se ve como nacio — su estilo de
   // siempre es el unico que es correcto en TODAS las variantes de nesting que el sitio
-  // inventa. las marcas finas solo existen para el camino con personaje
-  function markChipStatic() {
+  // inventa. las marcas finas solo existen para el camino con personaje.
+  // y devuelve los estilos inline del fit: un canvas fitteado con marcas fuera queda
+  // huerfano (absolute + translate de un contenedor viejo) y en pagina quieta no hay
+  // sync que lo cure — el personaje pintaba chico y fuera del escenario para siempre
+  function markChipStatic(right) {
     clearChipMarks();
+    restoreChipCanvas(right);
   }
 
   function markChip(right) {
@@ -586,7 +621,7 @@
       // poco, conservar las marcas; si nunca hubo o lleva rato fuera, tarjeta nativa
       const gone = performance.now() - (state.chipLastSeen || 0);
       if (state.chipLastSeen && gone < 1200) return;
-      markChipStatic();
+      markChipStatic(right);
       return;
     }
     state.chipLastSeen = performance.now();
@@ -597,7 +632,7 @@
     const frac = figureFractions(canvas);
     if (!frac) {
       if (performance.now() - (state.chipLastPaint || 0) > 1500) {
-        markChipStatic();
+        markChipStatic(right);
         return;
       }
       return;   // pinto hace poco: aguantar las marcas que hay, puede volver a pintar
@@ -614,7 +649,7 @@
       windows.push(node);
       node = node.parentElement;
     }
-    if (!node || node === right || !node.parentElement) { markChipStatic(); return; }
+    if (!node || node === right || !node.parentElement) { markChipStatic(right); return; }
     // fila = ancestro con un hermano ESTATICO que tenga button/p (la columna de datos).
     // los badges de nivel/racha son absolute y contienen p: sin el filtro de position
     // el walk los confunde con la columna y marca chiprow en la caja del avatar
@@ -627,7 +662,7 @@
       if (data) { row = parent; info = data; break; }
       probe = parent;
     }
-    if (!row) { markChipStatic(); return; }
+    if (!row) { markChipStatic(right); return; }
     mark(row, 'mf-hub-chiprow');
     mark(node, 'mf-hub-chipavatar');
     mark(info, 'mf-hub-chipinfo');
@@ -1048,14 +1083,9 @@
     removeHub();
     clearMarks();
     // fitChipCanvas deja estilos inline en el canvas del chip: sin esta limpieza el
-    // personaje queda recortado/desplazado en la tarjeta nativa hasta que react lo remonte
-    if (state.layoutRight) {
-      for (const c of state.layoutRight.querySelectorAll('canvas')) {
-        for (const prop of ['transform', 'transformOrigin', 'left', 'top', 'right', 'bottom', 'width', 'height', 'position', 'margin']) {
-          c.style[prop] = '';
-        }
-      }
-    }
+    // personaje queda recortado/desplazado en la tarjeta nativa hasta que react lo remonte.
+    // con snapshot: se le devuelven al sitio los SUYOS, no un vacio que rompe su layout
+    restoreChipCanvas(state.layoutRight);
     state.root?.classList.remove(ROOT_CLASS, EXPANDED_CLASS);
     state.root = null;
     state.layoutRight = null;
