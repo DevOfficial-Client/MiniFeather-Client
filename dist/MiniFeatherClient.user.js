@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006031947
+// @version      4.19.0.20261006044330
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : edce4d79cdbcf0e6976ab28de6cbd0b00efa90e7
- * builtAt : 2026-10-06T03:20:05.634Z
+ * commit  : 127b966f2a6469a1ee5dddcae1692a605fe19b42
+ * builtAt : 2026-10-06T04:43:45.347Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"edce4d79cdbcf0e6976ab28de6cbd0b00efa90e7","builtAt":"2026-10-06T03:20:05.634Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"127b966f2a6469a1ee5dddcae1692a605fe19b42","builtAt":"2026-10-06T04:43:45.347Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -19549,13 +19549,25 @@ const state = {
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chiprow{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipextra{display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .mf-hub-chipinfo{border:2px solid rgba(0,0,0,.75)!important;border-radius:10px!important;background:rgba(10,12,16,.62)!important;backdrop-filter:blur(7px);padding:12px!important;align-self:stretch!important}
-      /* caja del avatar en flujo pero RELATIVE: los badges de nivel/racha y la ventana del
-         render son absolute con offsets negativos y dependen de este ancla; forzarla static
-         los suelta y terminan flotando donde sea (bug del rectangulo azul del 2026-10-05) */
-      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:relative!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;width:150px!important;height:245px!important;flex:none!important;align-self:center!important;overflow:visible!important;border:none!important;border-radius:0!important;background:transparent!important}
-      /* ventana(s) absolutas entre el canvas y la caja: llenan la caja pero SIN recortar
-         (overflow:hidden nativo) ni pintar su borde de nivel encima del personaje */
+      /* caja del avatar = ESCENARIO visible: marco propio con brillo en el piso, en flujo
+         pero RELATIVE (ancla de badges y ventana) y overflow:hidden como cinturon de
+         seguridad: si el fit se desmadra un frame, el personaje se recorta en el borde del
+         escenario en vez de pisar la caja de datos */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipavatar{position:relative!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;width:150px!important;height:245px!important;flex:none!important;align-self:center!important;overflow:hidden!important;border:2px solid rgba(0,0,0,.8)!important;border-radius:12px!important;background:linear-gradient(180deg,rgba(26,31,42,.5),rgba(11,13,19,.78))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),inset 0 -22px 26px -20px rgba(120,170,255,.18)!important}
+      /* ventana(s) absolutas entre el canvas y la caja: llenan la caja sin pintar nada
+         propio (su borde de color de nivel era el rectangulo flotante) */
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipwindow{position:absolute!important;inset:0!important;width:auto!important;height:auto!important;overflow:visible!important;border:none!important;border-radius:0!important;padding:0!important;background:transparent!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipwindow :not(canvas){border:none!important;background:none!important;box-shadow:none!important}
+      /* badges nativos (nivel/racha/logros): fijados DENTRO del escenario en esquinas
+         fijas por orden de llegada, en vez de colgando con offsets negativos que quedan
+         a medio flotar cuando la caja deja de ser cuadrada */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipbadge0{top:5px!important;left:5px!important;right:auto!important;bottom:auto!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipbadge1{top:5px!important;right:5px!important;left:auto!important;bottom:auto!important}
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipbadge2{bottom:5px!important;right:5px!important;top:auto!important;left:auto!important}
+      /* cromo suelto: cajas absolute grandes que no contienen al canvas (ventanas
+         hermanas del sitio con su propio render/borde) = decoracion de un layout que ya
+         no existe; fuera */
+      #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS} .mf-hub-chipchrome{display:none!important}
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div,
       #react.${ROOT_CLASS}:not(.${EXPANDED_CLASS}) .${RIGHT_CLASS}>*:first-child>div>div{flex-direction:column!important;align-items:center!important}
       /* el transform del canvas lo escribe JS en cada sync (fitChipCanvas): medir en CSS
@@ -19829,6 +19841,7 @@ const state = {
       canvas.style.left = ''; canvas.style.top = '';
       canvas.style.right = ''; canvas.style.bottom = '';
       canvas.style.width = ''; canvas.style.height = '';
+      canvas.style.position = ''; canvas.style.margin = '';
     };
     if (state.expanded) { clear(); return; }
     const winW = 150, winH = 245;
@@ -19838,6 +19851,8 @@ const state = {
     if (!(figH > 0 && figH <= 1)) return;
     const cssH = (winH * 0.86) / figH;
     const cssW = cssH * (bw / bh);
+    canvas.style.position = 'absolute';
+    canvas.style.margin = '0';
     canvas.style.left = '0px';
     canvas.style.top = '0px';
     canvas.style.right = 'auto';
@@ -19924,6 +19939,20 @@ const state = {
     mark(node, 'mf-hub-chipavatar');
     mark(info, 'mf-hub-chipinfo');
     for (const win of windows) if (win !== node) mark(win, 'mf-hub-chipwindow');
+    // hijos de la caja: badges nativos chicos se fijan adentro por orden (nivel, racha,
+    // logros); cualquier otra caja absolute grande que no contenga al canvas es cromo de
+    // un layout que ya no existe (ventanas hermanas con su borde de nivel) y se esconde
+    let badgeIdx = 0;
+    for (const child of node.children) {
+      if (child === canvas || canvas.contains(child) || windows.includes(child)) continue;
+      const cs = getComputedStyle(child);
+      if (cs.position !== 'absolute' && cs.position !== 'fixed') continue;
+      if (child.offsetWidth <= 48 && child.offsetHeight <= 48 && badgeIdx < 3) {
+        mark(child, 'mf-hub-chipbadge' + badgeIdx++);
+        continue;
+      }
+      mark(child, 'mf-hub-chipchrome');
+    }
     for (const child of row.children) {
       if (child === node || child === info) continue;
       mark(child, !child.contains(canvas) && child.querySelector('button,p') ? 'mf-hub-chipinfo' : 'mf-hub-chipextra');
@@ -20297,7 +20326,7 @@ const state = {
     // personaje queda recortado/desplazado en la tarjeta nativa hasta que react lo remonte
     if (state.layoutRight) {
       for (const c of state.layoutRight.querySelectorAll('canvas')) {
-        for (const prop of ['transform', 'transformOrigin', 'left', 'top', 'right', 'bottom', 'width', 'height']) {
+        for (const prop of ['transform', 'transformOrigin', 'left', 'top', 'right', 'bottom', 'width', 'height', 'position', 'margin']) {
           c.style[prop] = '';
         }
       }
