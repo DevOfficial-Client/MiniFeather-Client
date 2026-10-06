@@ -702,11 +702,45 @@
         // (humanoid/<mat>.png → layer_1, humanoid_leggings/<mat>.png → layer_2)
         // para que el interceptor siga siendo tonto y por suffix-match.
         const alias = {};
+        // lanzas y mazo: vanilla desde MC 26.x (miniblox las tomó de ahí) —
+        // item/<mat>_spear[_in_hand].png → spear/<mat>_spear[_in_hand].png, y
+        // la lanza netherite del pack es la infernium del juego.
+        for (const p of Object.keys(out)) {
+            let m = /^item\/([a-z]+)_spear(_in_hand)?\.png$/.exec(p);
+            if (m) {
+                const mat = m[1] === 'netherite' ? 'infernium' : m[1];
+                alias['spear/' + mat + '_spear' + (m[2] || '') + '.png'] = out[p];
+                continue;
+            }
+            if (p === 'item/mace.png') { alias['mace.png'] = out[p]; continue; }
+            // renombres de layout MC → paths que pide miniblox
+            if (p === 'entity/projectiles/arrow.png') { alias['entity/arrow.png'] = out[p]; continue; }
+            if (p === 'entity/snow_golem.png' || p === 'entity/snow_golem/snow_golem.png') { alias['entity/snowman/snowman.png'] = out[p]; continue; }
+            if (p === 'entity/chicken.png' || p === 'entity/chicken/chicken_temperate.png') { alias['entity/chicken/chicken.png'] = out[p]; continue; }
+            if (p === 'entity/experience/experience_orb.png') { alias['entity/experience_orb.png'] = out[p]; continue; }
+            // mobs con variantes de clima (1.21+): la temperate es la default
+            m = /^entity\/([a-z]+)\/\1_temperate\.png$/.exec(p);
+            if (m) { alias['entity/' + m[1] + '/' + m[1] + '.png'] = out[p]; continue; }
+            // gatos con prefijo (cat_black.png → black.png), sin babies
+            m = /^entity\/cat\/cat_([a-z_]+)\.png$/.exec(p);
+            if (m && !/_baby$/.test(m[1])) alias['entity/cat/' + m[1] + '.png'] = out[p];
+        }
         for (const p of Object.keys(out)) {
             let m = /^entity\/equipment\/humanoid\/(.+)\.png$/.exec(p);
-            if (m) { alias['models/armor/' + m[1] + '_layer_1.png'] = out[p]; continue; }
+            if (m) {
+                alias['models/armor/' + m[1] + '_layer_1.png'] = out[p];
+                if (m[1] === 'netherite') alias['models/armor/infernium_layer_1.png'] = out[p];
+                continue;
+            }
             m = /^entity\/equipment\/humanoid_leggings\/(.+)\.png$/.exec(p);
-            if (m) { alias['models/armor/' + m[1] + '_layer_2.png'] = out[p]; continue; }
+            if (m) {
+                alias['models/armor/' + m[1] + '_layer_2.png'] = out[p];
+                if (m[1] === 'netherite') alias['models/armor/infernium_layer_2.png'] = out[p];
+                continue;
+            }
+            // armor en layout viejo pero ya con netherite: el infernium del juego
+            m = /^models\/armor\/netherite_layer_([12])\.png$/.exec(p);
+            if (m) { alias['models/armor/infernium_layer_' + m[1] + '.png'] = out[p]; continue; }
             // aldeas: el juego usa entity/villager/<prof>.png pelado; los packs
             // modernos van por profession/ y renombraron priest→cleric y
             // smith→toolsmith (el 'smith' de miniblox era el de herramientas).
@@ -717,7 +751,10 @@
                 if (m[1] === 'toolsmith') alias['entity/villager/smith.png'] = out[p];
             }
         }
-        Object.assign(out, alias);
+        // el path real del pack siempre gana sobre un alias que caiga igual
+        for (const k of Object.keys(alias)) {
+            if (!out[k]) out[k] = alias[k];
+        }
         return out;
     }
 
