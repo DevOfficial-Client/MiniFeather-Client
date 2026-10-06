@@ -47,6 +47,17 @@ test('la gui respira con la musica: tap del howl html5 en rama y fail-open', () 
   assert.ok((source.match(/var\(--mf-beat,0\)/g) || []).length >= 4);
 });
 
+test('la estructura del chip se marca aunque el canvas este mudo', () => {
+  // un remount de react nace sin marcas y el fit inline del canvas se ancla al
+  // contenedor equivocado: personaje arriba y encima de la tarjeta. las marcas
+  // estructurales solo necesitan que el canvas EXISTA; el contenido decide el fit
+  assert.match(source, /function markChipStructure\(right, canvas\)/);
+  assert.ok((source.match(/markChipStructure\(right, canvas\)/g) || []).length >= 3, 'estructura en el camino mudo Y en el pintado');
+  assert.match(source, /if \(!markChipStructure\(right, canvas\)\) markChipStatic\(right\);/);
+  // el fit (y solo el fit) sigue condicionado al contenido del canvas
+  assert.match(source, /state\.chipCanvas = canvas;\s*\n\s*fitChipCanvas\(canvas, frac\);/);
+});
+
 test('el head-tracking del chip se re-ancla tras cada fit del canvas', () => {
   // el sitio congela el ancla del mouse en el primer syncToVisible; el hub escribe
   // positionOnScreen directamente via el manager que vive en la fiber de react.
