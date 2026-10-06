@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006193818
+// @version      4.19.0.20261006195259
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : aceb5fec8a22b88b40feb868558729493be65887
- * builtAt : 2026-10-06T19:39:16.377Z
+ * commit  : e7f899fca9df913017bf9ae8b2137e500b3ecc0a
+ * builtAt : 2026-10-06T19:53:29.500Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"aceb5fec8a22b88b40feb868558729493be65887","builtAt":"2026-10-06T19:39:16.377Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"e7f899fca9df913017bf9ae8b2137e500b3ecc0a","builtAt":"2026-10-06T19:53:29.500Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -87692,11 +87692,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 shader.uniforms[key] = liveUniforms[key];
             }
 
-            if (preset.vertexCode && !shader.vertexShader.includes('uPhTime') &&
-                !shader.vertexShader.includes('uCsTime') &&
-                !shader.vertexShader.includes('mfCrDepth') &&
-                !shader.vertexShader.includes('uGvTime') &&
-                !shader.vertexShader.includes('uNfTime')) {
+            // los marcadores son los varyings mf*WorldPos que TODO preset declara en su
+            // vertexCode; los time uniforms viven solo en el fragment y no sirven aqui
+            if (preset.vertexCode && !shader.vertexShader.includes('mfPhWorldPos') &&
+                !shader.vertexShader.includes('mfCsWorldPos') &&
+                !shader.vertexShader.includes('mfCrWorldPos') &&
+                !shader.vertexShader.includes('mfGvWorldPos') &&
+                !shader.vertexShader.includes('mfNfWorldPos')) {
                 shader.vertexShader = preset.vertexCode + '\n' + shader.vertexShader;
             }
 
