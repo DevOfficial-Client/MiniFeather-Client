@@ -307,19 +307,18 @@
     if (!x) return null;
     var r = size / 2;
     if (kind === 'snow') {
-      var g = x.createRadialGradient(r, r, 0, r, r, r);
-      g.addColorStop(0, 'rgba(255,255,255,.95)');
-      g.addColorStop(0.55, 'rgba(240,248,255,.55)');
-      g.addColorStop(1, 'rgba(240,248,255,0)');
-      x.fillStyle = g;
-      x.fillRect(0, 0, size, size);
+      // cuadrado plano estilo partícula de minecraft: nada de gradientes suaves
+      x.fillStyle = 'rgba(240,248,255,.95)';
+      x.fillRect(1, 1, size - 2, size - 2);
     } else if (kind === 'firefly') {
-      g = x.createRadialGradient(r, r, 0, r, r, r);
-      g.addColorStop(0, 'rgba(235,255,170,.95)');
-      g.addColorStop(0.3, 'rgba(200,255,120,.5)');
-      g.addColorStop(1, 'rgba(180,255,100,0)');
-      x.fillStyle = g;
+      // bloom PIXELADO: cuadrados concéntricos, el glow también es cuadrado
+      var step = size / 3;
+      x.fillStyle = 'rgba(190,255,110,.22)';
       x.fillRect(0, 0, size, size);
+      x.fillStyle = 'rgba(215,255,140,.45)';
+      x.fillRect(step * 0.5, step * 0.5, size - step, size - step);
+      x.fillStyle = 'rgba(245,255,200,.95)';
+      x.fillRect(step, step, step, step);
     } else if (kind === 'leaf') {
       x.translate(r, r);
       x.fillStyle = 'rgba(0,0,0,0)';
@@ -346,6 +345,7 @@
     ambientCanvas.width = Math.round(ambientW * ambientDpr);
     ambientCanvas.height = Math.round(ambientH * ambientDpr);
     ambientCtx.setTransform(ambientDpr, 0, 0, ambientDpr, 0, 0);
+    ambientCtx.imageSmoothingEnabled = false; // píxeles cuadrados, no manchas
   }
 
   function spawnAmbient() {
