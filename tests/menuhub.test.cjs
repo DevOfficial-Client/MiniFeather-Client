@@ -103,9 +103,20 @@ function buildFakeMiniblox() {
     ['survival', '1.1M', 'Survival'], ['eggwars', '1.1M', 'EggWars'], ['skywars', '1.1M', 'Skywars'],
     ['creative', '352k', 'Creative'], ['parkour', '148k', 'Parkour']
   ]) games.append(card('a', `/game/${slug}`, plays, name));
-  const customs = document.createElement('div');  // "top custom games": botones con imagen
-  for (const name of ['KIT PVP JAPAN', 'one block survival', 'Pillars of Fortune']) {
-    customs.append(card('button', null, '16', name));
+  const customs = document.createElement('div');  // "servers de la comunidad": div role=button con splash de mundo
+  for (const [id, players, name] of [
+    ['2942026', '14', 'mace PvP'], ['3052708', '3', 'TNT Tag'], ['2999999', '7', 'KIT PVP JAPAN']
+  ]) {
+    const node = document.createElement('div');
+    node.setAttribute('role', 'button');
+    const splash = document.createElement('img');
+    splash.src = `https://session.coolmathblox.ca/world-splash/${id}.jpg`;
+    const p1 = document.createElement('p');
+    p1.textContent = name;
+    const p2 = document.createElement('p');
+    p2.textContent = players;
+    node.append(splash, p1, p2);
+    customs.append(node);
   }
   center.append(worlds, games, customs);
 
@@ -126,7 +137,7 @@ function buildFakeMiniblox() {
   shell.append(nav, center, right);
   react.append(shell);
 
-  return { dom, react, nav, center, right, worlds, games };
+  return { dom, react, nav, center, right, worlds, games, customs };
 }
 
 function bootHub(dom) {
@@ -204,6 +215,35 @@ test('los favoritos persisten en localStorage y re-renderizan la fila', () => {
   const favTexts = [...document.querySelectorAll('#mf-hub-root .mf-hub-fav span')].map(node => node.textContent);
   assert.ok(favTexts.includes('Skywars'), 'la fila de favoritos muestra el pin');
   assert.equal(document.querySelectorAll('#mf-hub-root .mf-hub-big').length, 3, 'discover completa el hueco del pin');
+});
+
+test('los servers de la comunidad se fijan en favoritos con clave w:<id>', () => {
+  const fake = buildFakeMiniblox();
+  const { document } = fake.dom.window;
+  bootHub(fake.dom);
+  const hub = document.getElementById('mf-hub-root');
+
+  hub.querySelector('.mf-hub-add').click();
+  const picker = document.getElementById('mf-hub-picker');
+  assert.ok([...picker.querySelectorAll('h3')].some(h => h.textContent === 'Comunidad'),
+    'picker con grupo comunidad');
+  const rows = [...picker.querySelectorAll('.mf-hub-pickrow')];
+  const mace = rows.find(row => row.textContent.includes('mace PvP'));
+  assert.ok(mace, 'server de comunidad listado en el picker');
+
+  mace.querySelector('.mf-hub-star').click();
+  const pins = JSON.parse(fake.dom.window.localStorage.getItem('mf_menuhub_pins_v1'));
+  assert.ok(pins.includes('w:2942026'), 'pin persistido con clave w:<id>');
+
+  // la fila de favoritos muestra el server con su splash y reenvia el click al nodo nativo
+  let clicks = 0;
+  fake.customs.children[0].addEventListener('click', () => { clicks += 1; });
+  const fav = [...document.querySelectorAll('#mf-hub-root .mf-hub-fav')]
+    .find(c => c.textContent.includes('mace PvP'));
+  assert.ok(fav, 'favorito de comunidad en la fila');
+  assert.ok(fav.querySelector('img').src.includes('2942026'), 'favorito con splash del server');
+  fav.click();
+  assert.equal(clicks, 1, 'click reenviado a la tarjeta nativa del server');
 });
 
 test('destroy deja la pantalla como si nada', () => {
