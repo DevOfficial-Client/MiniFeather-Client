@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261006044418
+// @version      4.19.0.20261006045432
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 828015ab0636e68ca7152614e5e525d55df4b942
- * builtAt : 2026-10-06T04:44:37.136Z
+ * commit  : 03b73c3c64f3ff78e807840986d5c93874b3c783
+ * builtAt : 2026-10-06T04:54:51.232Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"828015ab0636e68ca7152614e5e525d55df4b942","builtAt":"2026-10-06T04:44:37.136Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"03b73c3c64f3ff78e807840986d5c93874b3c783","builtAt":"2026-10-06T04:54:51.232Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -11541,9 +11541,28 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"828015ab0636e68ca7152614e5e525
     var ACTIVE_KEY = 'mf_custom_textures_active';
     var RES_KEY = 'mf_custom_textures_resolution';
 
+    function mfKillBrokenAtlas(reason) {
+        // atlas custom persistido roto: si lo servimos, el juego se queda sin
+        // sheet en CADA reload (el interceptor se reinstala desde localStorage)
+        // y ni "reload" lo cura. fail-open: tirar el flag y dejar pasar la red
+        // de verdad. la ia de turno prefiere un mundo vanilla a uno blanco.
+        if (!mfKillBrokenAtlas.warned) {
+            mfKillBrokenAtlas.warned = true;
+            console.warn('minifeather texturepack custom atlas roto (' + reason + ') — lo suelto y dejo pasar la red real');
+        }
+        try { localStorage.removeItem(ACTIVE_KEY); } catch (_) {}
+        return null;
+    }
+
     function getDataUrl() {
         if (localStorage.getItem(ACTIVE_KEY) !== 'true') return null;
-        return localStorage.getItem(KEY);
+        var d = localStorage.getItem(KEY);
+        if (!d) return null;
+        var PREFIX = 'data:image/png;base64,';
+        if (d.length > 8 * 1024 * 1024) return mfKillBrokenAtlas('demasiado grande (' + d.length + ' chars)');
+        if (d.slice(0, PREFIX.length) !== PREFIX) return mfKillBrokenAtlas('no es un data url png');
+        try { atob(d.slice(PREFIX.length)); } catch (_) { return mfKillBrokenAtlas('base64 corrupto'); }
+        return d;
     }
 
     function getPatterns() {
@@ -11637,9 +11656,13 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"828015ab0636e68ca7152614e5e525
         var dataUrl = (url.indexOf('spritesheet') !== -1 || url.indexOf('texturepacks/default') !== -1)
             ? getDataUrl() : null;
         if (dataUrl && url && matches(url)) {
-            return Promise.resolve(new Response(dataUrlToBlob(dataUrl), {
-                headers: { 'Content-Type': 'image/png' }
-            }));
+            try {
+                return Promise.resolve(new Response(dataUrlToBlob(dataUrl), {
+                    headers: { 'Content-Type': 'image/png' }
+                }));
+            } catch (e) {
+                console.warn('minifeather texturepack fallo armando el atlas custom (' + e + ') — fetch real');
+            }
         }
         if (url && mfNetBlocked(url)) {
             return Promise.reject(new TypeError('Failed to fetch'));
@@ -116695,6 +116718,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     const TAG = 'minifeather texturepack';
     const ATLAS_SIZE = 1024;
+    // 4096 es el techo seguro: GPUs de laptop iGPU y móviles suelen cortar ahí.
+    // un atlas 8192+ se crea bien en canvas y reventar arrive en la subida GL.
+    const MAX_ATLAS_SIZE = 4096;
     const TILE_SIZE = 16;
     const STORAGE_KEY = 'mf_custom_textures';
     const ACTIVE_KEY = 'mf_custom_textures_active';
@@ -116718,11 +116744,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return null;
     }
 
-    function detectResolution(customFiles) {
-        for (const img of customFiles.values()) {
-            if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-                return img.naturalWidth;
-            }
+    function detectResolution(customFiles, frames) {
+        // solo cuentan sprites que de verdad van al atlas: el pack.png (icono
+        // 128/256) o cualquier png suelto del zip no define la resolución del
+        // pack. antes el primer png del zip decidía el scale y un icono grande
+        // pintaba un atlas gigante que reventaba en GPUs viejas.
+        for (const [name, img] of customFiles) {
+            if (frames && !frames[name + '.png']) continue;
+            const w = img.naturalWidth;
+            if (w > 0 && w % TILE_SIZE === 0) return w;
         }
         return TILE_SIZE;
     }
@@ -116768,8 +116798,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             return null;
         }
 
-        const resolution = detectResolution(customFiles);
-        const scale = resolution / TILE_SIZE;
+        const resolution = detectResolution(customFiles, frames);
+        // si el atlas capado se queda corto para la resolución pedida, el
+        // effective scale manda: los sprites se reescalan al slot (downscale
+        // automático) y nadie revienta por un atlas de 16k.
+        const scale = Math.min(resolution / TILE_SIZE, MAX_ATLAS_SIZE / ATLAS_SIZE);
         const atlasSize = ATLAS_SIZE * scale;
 
         void 0;
@@ -116818,6 +116851,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             } else {
                 stats.placeholder++;
             }
+        }
+
+        // sin vanilla de base Y sin matches el canvas queda transparente:
+        // aplicarlo es regalar un mundo invisible sobre fondo blanco.
+        if (!vanilla && stats.custom === 0) {
+            console.error(`${TAG} atlas vacío (sin base vanilla y sin matches) — no aplico nada`);
+            return null;
         }
 
         const dataUrl = canvas.toDataURL('image/png');
@@ -116896,9 +116936,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
         const code = `(function(){
             var KEY = ${JSON.stringify(STORAGE_KEY)};
+            var ACTIVE_KEY = ${JSON.stringify(ACTIVE_KEY)};
             var RES_KEY = ${JSON.stringify(RES_KEY)};
             var dataUrl = localStorage.getItem(KEY);
             if (!dataUrl) { console.warn('minifeather texturepack No dataUrl in localStorage'); return; }
+            var PREFIX = 'data:image/png;base64,';
+            if (dataUrl.slice(0, PREFIX.length) !== PREFIX) { console.warn('minifeather texturepack dataUrl raro, no intercepto'); return; }
 
             var res = parseInt(localStorage.getItem(RES_KEY)) || 16;
             var patterns = ['/textures/spritesheet'];
@@ -116922,7 +116965,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             window.fetch = function(input, init){
                 var url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
                 if(matches(url)){
-                    return Promise.resolve(new Response(dataUrlToBlob(dataUrl),{headers:{'Content-Type':'image/png'}}));
+                    try {
+                        return Promise.resolve(new Response(dataUrlToBlob(dataUrl),{headers:{'Content-Type':'image/png'}}));
+                    } catch (e) {
+                        // atlas roto en vivo: soltar el flag y dejar pasar la
+                        // red real, como dios manda.
+                        console.warn('minifeather texturepack atlas roto en fetch (' + e + ') — red real');
+                        try { localStorage.removeItem(ACTIVE_KEY); } catch (_) {}
+                    }
                 }
                 return origFetch.apply(this, arguments);
             };
@@ -117248,6 +117298,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
         if (!result) {
             return { success: false, error: 'Generation failed' };
+        }
+
+        // probar que el atlas de verdad decodifica ANTES de activarlo: un
+        // dataUrl muerto en localStorage es un interceptor roto que sobrevive
+        // a todos los reloads del mundo.
+        const sanity = await fetchImage(result.dataUrl);
+        if (!sanity) {
+            return { success: false, error: 'Generated atlas failed to decode' };
         }
 
         const saved = saveToStorage(result.dataUrl);
