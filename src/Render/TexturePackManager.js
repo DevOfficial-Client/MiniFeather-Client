@@ -61,6 +61,19 @@
             || lower.get(baseName.toLowerCase())
             || null;
     }
+
+    function spriteForFrame(fileName, search) {
+        const baseName = fileName.replace(/\.png$/, '');
+        const direct = findSprite(baseName, search);
+        if (direct) return direct;
+        // frames.json lleva rutas propias (bed/black.png): el zip guarda el
+        // archivo pelado (black.png) en entity/bed/. sin este fallback esas
+        // 26 llaves jamás matchean y el pack "no encuentra los bloques".
+        const slash = baseName.lastIndexOf('/');
+        if (slash === -1) return null;
+        return findSprite(baseName.slice(slash + 1), search);
+    }
+
     function fetchImage(src) {
         return new Promise((resolve) => {
             const img = new Image();
@@ -121,7 +134,7 @@
             const rotated = data.rotated || false;
 
             const baseName = fileName.replace(/\.png$/, '');
-            const customImg = findSprite(baseName, search);
+            const customImg = spriteForFrame(fileName, search);
 
             if (customImg) {
                 if (rotated) {
@@ -343,7 +356,11 @@
                     i.onerror = rej;
                     i.src = blobUrl;
                 });
-                const baseName = entry.name.split('/').pop().replace(/\.png$/i, '');
+                // zips hechos por herramientas de Windows traen rutas con
+                // backslash: sin normalizar, el basename sale con toda la ruta
+                // adentro y el matching da CERO bloques.
+                const normalized = entry.name.replace(/\\/g, '/');
+                const baseName = normalized.split('/').pop().replace(/\.png$/i, '');
                 return { name: baseName, img };
             } catch (_) {
                 return null;
