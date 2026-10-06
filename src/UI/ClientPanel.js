@@ -8494,7 +8494,7 @@
 
         <div class="mf-card">
           <div class="mf-card-title">Water Style</div>
-          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">agua clara con tinte verdoso (la lava queda intacta). opacidad 0 = invisible, s&uacute;belo si te marea tanto viento</div>
+          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">agua clara con tinte verdoso + olas y destello del sol siempre activos (la lava queda intacta). para REFLEJOS del mundo en el agua enciende &quot;water shaders&quot; en los gr&aacute;ficos del juego &mdash; el tinte los conserva</div>
           <div class="mf-toggle-grid">
             ${renderToggle('waterStyle', 'water style', 'agua 100% transparente con tinte verdoso')}
           </div>

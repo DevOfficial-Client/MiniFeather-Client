@@ -91,6 +91,32 @@
             shader.uniforms.uMfWaterAlpha = liveUniforms.uMfWaterAlpha;
             shader.uniforms.uMfWaterTintMix = liveUniforms.uMfWaterTintMix;
             shader.uniforms.uMfWaterTint = liveUniforms.uMfWaterTint;
+
+            // superficie VIVA aunque el juego tenga "water shaders" apagado: el
+            // setting gatea el define en compilación y el uniform en runtime.
+            // Forzar ambos es seguro porque TODOS los raymarch que muestrean
+            // texturas (SSR/refracción/sun trace) están gated además por
+            // reflectionEnabled>0.5, que sigue en 0 si el motor no captura —
+            // corren los fallbacks analíticos (olas, cielo, destello del sol).
+            // Si el usuario enciende el setting del juego, los reflejos SSR
+            // reales aparecen solos (nuestro tint los preserva vía el mix).
+            // Los uniforms nuestros van en el header (alcance global; el tail
+            // antes del fog es statement-only dentro de main).
+            const header =
+                '#define USE_WATER_SHADERS\n' +
+                'uniform float uMfWaterAlpha;\n' +
+                'uniform float uMfWaterTintMix;\n' +
+                'uniform vec3 uMfWaterTint;\n';
+            if (!shader.vertexShader.includes('USE_WATER_SHADERS')) {
+                shader.vertexShader = '#define USE_WATER_SHADERS\n' + shader.vertexShader;
+            }
+            if (!shader.fragmentShader.includes('uMfWaterAlpha')) {
+                shader.fragmentShader = header + shader.fragmentShader;
+            }
+            if (shader.uniforms.waterShadersEnabled) {
+                shader.uniforms.waterShadersEnabled.value = 1;
+            }
+
             const stamp = 'float mfWaterStyle = 1.0;\n' + FRAG_TAIL;
             if (!shader.fragmentShader.includes('mfWaterStyle')) {
                 // ANTES del fog: así la niebla del juego mezcla el agua tintada
@@ -149,6 +175,9 @@
                 for (const m of mats) {
                     if (m?.userData && m.userData.waterShadersEnabled !== undefined) {
                         if (hookMaterial(m)) added++;
+                        // el onChange del juego pone esto en 0 si su setting está
+                        // apagado; la superficie viva es parte de nuestro look
+                        if (state.hooked.has(m)) m.userData.waterShadersEnabled.value = 1;
                     }
                 }
             });
