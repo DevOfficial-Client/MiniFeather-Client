@@ -87,7 +87,7 @@
         // para olas de λ~1.5 bloque. La turbulencia FINA sigue en el fragment
         // (uMfChop) a resolución de píxel.
         float mfTurbulence(vec2 p, float t) {
-            float tt = t * 9.0;
+            float tt = t * 2.2;
             float h = sin(dot(p, vec2( 1.15,  0.80)) + tt) * 0.45;
             h += sin(dot(p, vec2(-0.95,  1.30)) + tt * 1.31 + sin(dot(p, vec2( 0.45, -0.35)) + tt * 0.53) * 1.1) * 0.35;
             h += sin(dot(p, vec2( 1.45, -0.60)) - tt * 1.67 + sin(dot(p, vec2(-0.40,  0.50)) + tt * 0.41) * 0.9) * 0.30;
@@ -110,10 +110,10 @@
     // titilan el brillo del sol, la transparencia y los reflejos
     const FRAG_CHOP = `// mf chop: turbulencia fina por-pixel
         vec3 normal = normalize(vWorldNormal + vec3(
-            sin(dot(vWorldPosition.xz, vec2( 5.3,  3.7)) + time * 2.9) * 0.32 +
-            sin(dot(vWorldPosition.xz, vec2(-4.1,  6.9)) + time * 3.7) * 0.24,
+            sin(dot(vWorldPosition.xz, vec2( 5.3,  3.7)) + time * 0.36) * 0.32 +
+            sin(dot(vWorldPosition.xz, vec2(-4.1,  6.9)) + time * 0.45) * 0.24,
             0.0,
-            sin(dot(vWorldPosition.xz, vec2( 6.9, -2.9)) + time * 3.3) * 0.32
+            sin(dot(vWorldPosition.xz, vec2( 6.9, -2.9)) + time * 0.40) * 0.32
         ) * uMfChop);`;
 
     const FRAG_TAIL = `
@@ -252,7 +252,7 @@
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v5';
+            return base + '_mfws_v6';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
