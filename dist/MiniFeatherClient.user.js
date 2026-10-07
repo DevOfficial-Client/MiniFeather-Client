@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007022837
+// @version      4.19.0.20261007032624
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 83905d3568038b4fc085bbbae509513d1d4b92f3
- * builtAt : 2026-10-07T02:28:49.897Z
+ * commit  : f0e0598760acbcf5a7320d849d25b0fddbfee3e5
+ * builtAt : 2026-10-07T03:26:43.819Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"83905d3568038b4fc085bbbae509513d1d4b92f3","builtAt":"2026-10-07T02:28:49.897Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"f0e0598760acbcf5a7320d849d25b0fddbfee3e5","builtAt":"2026-10-07T03:26:43.819Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -89869,6 +89869,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         enabled: localStorage.getItem('mf_waterstyle') === 'true',
         alpha: readNum('mf_waterstyle_alpha', 0.12),
         tintMix: readNum('mf_waterstyle_tintmix', 0.85),
+        acrylic: readNum('mf_waterstyle_acrylic', 0.55),
         waveScale: readNum('mf_waterstyle_wavescale', 2.0),
         game: null,
         scanTimer: 0,
@@ -89988,13 +89989,24 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     `;
 
     const FRAG_TAIL = `
-        // mf water style: tinte verde por luminancia + alfa fijo. vColor.r < 0.49
-        // es el gate agua/lava del propio shader del juego; lava pasa de largo.
+        // mf water style: tinte verde por luminancia + acabado ACRÍLICO + alfa.
+        // vColor.r < 0.49 es el gate agua/lava del propio shader del juego;
+        // lava pasa de largo.
         #ifdef USE_COLOR
         if (vColor.r < 0.49) {
             float mfWsLum = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
             gl_FragColor.rgb = mix(gl_FragColor.rgb, mfWsLum * uMfWaterTint, uMfWaterTintMix);
-            gl_FragColor.a = uMfWaterAlpha;
+            // acrílico: placa lechosa (blanco verdoso) que se acentúa a ángulos
+            // rasantes — mirar de cerca = cristal, mirar de lado = placa
+            float mfAv = clamp(dot(normalize(vWorldNormal),
+                normalize(cameraPosition - vWorldPosition + vec3(0.0001))), 0.0, 1.0);
+            float mfMilky = uMfAcrylic * (0.16 + 0.62 * pow(1.0 - mfAv, 2.0));
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.86, 0.94, 0.90), mfMilky);
+            // brillo plástico: micro-boost solo en luces
+            gl_FragColor.rgb += uMfAcrylic *
+                pow(max(gl_FragColor.rgb - 0.35, vec3(0.0)), vec3(3.0)) * 0.8;
+            // la lechosidad difunde: sube el alfa (más placa = menos transparencia)
+            gl_FragColor.a = mix(uMfWaterAlpha, 0.92, mfMilky);
         }
         #endif
     `;
@@ -90010,6 +90022,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             uMfWaterAlpha: { value: state.alpha },
             uMfWaterTintMix: { value: state.tintMix },
             uMfWaterTint: { value: TINT.slice() },
+            uMfAcrylic: { value: state.acrylic },
             uMfWaveScale: { value: state.waveScale },
             uMfChop: { value: 0.35 * state.waveScale },
             uMfPlayerPos: { value: [0, 0, 0] },
@@ -90021,6 +90034,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             shader.uniforms.uMfWaterAlpha = liveUniforms.uMfWaterAlpha;
             shader.uniforms.uMfWaterTintMix = liveUniforms.uMfWaterTintMix;
             shader.uniforms.uMfWaterTint = liveUniforms.uMfWaterTint;
+            shader.uniforms.uMfAcrylic = liveUniforms.uMfAcrylic;
             shader.uniforms.uMfWaveScale = liveUniforms.uMfWaveScale;
             shader.uniforms.uMfChop = liveUniforms.uMfChop;
             shader.uniforms.uMfPlayerPos = liveUniforms.uMfPlayerPos;
@@ -90048,6 +90062,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                     'uniform float uMfWaterAlpha;\n' +
                     'uniform float uMfWaterTintMix;\n' +
                     'uniform vec3 uMfWaterTint;\n' +
+                    'uniform float uMfAcrylic;\n' +
                     shader.fragmentShader;
             }
             if (shader.uniforms.waterShadersEnabled) {
@@ -90125,7 +90140,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v7';
+            return base + '_mfws_v8';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
@@ -90305,6 +90320,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         for (const [, entry] of state.hooked) {
             entry.liveUniforms.uMfWaterAlpha.value = state.alpha;
             entry.liveUniforms.uMfWaterTintMix.value = state.tintMix;
+            entry.liveUniforms.uMfAcrylic.value = state.acrylic;
             entry.liveUniforms.uMfWaveScale.value = state.waveScale;
             entry.liveUniforms.uMfChop.value = 0.35 * state.waveScale;
         }
@@ -90368,6 +90384,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 localStorage.setItem('mf_waterstyle_tintmix', String(state.tintMix));
             }
         }
+        if (cfg && cfg.acrylic !== undefined) {
+            const ac = parseFloat(cfg.acrylic);
+            if (Number.isFinite(ac)) {
+                state.acrylic = Math.max(0, Math.min(1, ac));
+                localStorage.setItem('mf_waterstyle_acrylic', String(state.acrylic));
+            }
+        }
         if (cfg && cfg.waveScale !== undefined) {
             const w = parseFloat(cfg.waveScale);
             if (Number.isFinite(w)) {
@@ -90391,6 +90414,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             hooked: state.hooked.size,
             alpha: state.alpha,
             tintMix: state.tintMix,
+            acrylic: state.acrylic,
             waveScale: state.waveScale,
             tint: TINT.slice()
         };
@@ -121008,6 +121032,7 @@ function normalize(entry) {
     waterStyleAlpha: 0.12,
     waterStyleTintMix: 0.85,
     waterStyleWaveScale: 2.0,
+    waterStyleAcrylic: 0.55,
     kotoSky: false,
     kotoSkyStrength: 1.0,
     customShader: false,
@@ -125391,7 +125416,8 @@ function normalize(entry) {
         enabled: !!enabled,
         alpha: Number(settings.waterStyleAlpha ?? 0.12),
         tintMix: Number(settings.waterStyleTintMix ?? 0.85),
-        waveScale: Number(settings.waterStyleWaveScale ?? 2.0)
+        waveScale: Number(settings.waterStyleWaveScale ?? 2.0),
+        acrylic: Number(settings.waterStyleAcrylic ?? 0.55)
       })
     }));
   }
@@ -128763,6 +128789,11 @@ function normalize(entry) {
             <span style="min-width:90px;font-size:12px;">ondas</span>
             <input id="mf-ws-wave" type="range" min="1" max="4" step="0.1" value="${Number(settings.waterStyleWaveScale ?? 2.0)}">
             <span id="mf-ws-wave-value">${Number(settings.waterStyleWaveScale ?? 2.0).toFixed(1)}&times;</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-top:10px;">
+            <span style="min-width:90px;font-size:12px;">acr&iacute;lico</span>
+            <input id="mf-ws-acr" type="range" min="0" max="1" step="0.05" value="${Number(settings.waterStyleAcrylic ?? 0.55)}">
+            <span id="mf-ws-acr-value">${Math.round(Number(settings.waterStyleAcrylic ?? 0.55) * 100)}%</span>
           </div>
         </div>
 
@@ -132603,7 +132634,8 @@ function normalize(entry) {
     const wsMap = {
       alpha: { key: 'waterStyleAlpha', fmt: v => Math.round(v * 100) + '%' },
       tint: { key: 'waterStyleTintMix', fmt: v => Math.round(v * 100) + '%' },
-      wave: { key: 'waterStyleWaveScale', fmt: v => v.toFixed(1) + '\u00d7' }
+      wave: { key: 'waterStyleWaveScale', fmt: v => v.toFixed(1) + '\u00d7' },
+      acr: { key: 'waterStyleAcrylic', fmt: v => Math.round(v * 100) + '%' }
     };
     for (const [name, { key, fmt }] of Object.entries(wsMap)) {
       const slider = panel.querySelector(`#mf-ws-${name}`);
