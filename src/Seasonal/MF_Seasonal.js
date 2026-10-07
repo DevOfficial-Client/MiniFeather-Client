@@ -438,9 +438,9 @@
         p.y += p.vy * dt;
         if (p.y > ambientH + 6) { p.y = -8; p.x = Math.random() * ambientW; }
         if (p.x < -8) p.x = ambientW + 6; else if (p.x > ambientW + 8) p.x = -6;
-        ctx.globalAlpha = p.a;
+        ctx.globalAlpha = p.a * 0.5;
         ctx.fillStyle = '#f0f8ff';
-        ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2); // un misero pixel (pedido literal)
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1); // un misero pixel (y ahora casi imperceptible)
       } else if (p.t === 'leaf') {
         p.ph += dt * 2;
         p.rot += p.vr * dt;
@@ -471,9 +471,9 @@
         if (p.y < ambientH * 0.15 || p.y > ambientH - 30) p.vy *= -1;
         var glow = Math.max(0, Math.sin(p.ph));
         if (glow > 0.08) {
-          ctx.globalAlpha = 0.3 + glow * 0.7;
+          ctx.globalAlpha = 0.12 + glow * 0.42;
           ctx.fillStyle = '#e6ff9e';
-          ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2); // un misero pixel que parpadea
+          ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1); // un misero pixel que parpadea, apenas se nota
         }
       }
     }

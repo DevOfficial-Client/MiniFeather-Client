@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007012342
+// @version      4.19.0.20261007012356
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 66ac8f0f46cd12edeae0acd6ef17b0a90baf59f8
- * builtAt : 2026-10-07T01:23:55.853Z
+ * commit  : 34466614828ce8b01cd9141f37a2f707d430a657
+ * builtAt : 2026-10-07T02:05:54.526Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"66ac8f0f46cd12edeae0acd6ef17b0a90baf59f8","builtAt":"2026-10-07T01:23:55.853Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"34466614828ce8b01cd9141f37a2f707d430a657","builtAt":"2026-10-07T02:05:54.526Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -84238,9 +84238,9 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         p.y += p.vy * dt;
         if (p.y > ambientH + 6) { p.y = -8; p.x = Math.random() * ambientW; }
         if (p.x < -8) p.x = ambientW + 6; else if (p.x > ambientW + 8) p.x = -6;
-        ctx.globalAlpha = p.a;
+        ctx.globalAlpha = p.a * 0.5;
         ctx.fillStyle = '#f0f8ff';
-        ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2); // un misero pixel (pedido literal)
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1); // un misero pixel (y ahora casi imperceptible)
       } else if (p.t === 'leaf') {
         p.ph += dt * 2;
         p.rot += p.vr * dt;
@@ -84271,9 +84271,9 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         if (p.y < ambientH * 0.15 || p.y > ambientH - 30) p.vy *= -1;
         var glow = Math.max(0, Math.sin(p.ph));
         if (glow > 0.08) {
-          ctx.globalAlpha = 0.3 + glow * 0.7;
+          ctx.globalAlpha = 0.12 + glow * 0.42;
           ctx.fillStyle = '#e6ff9e';
-          ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2); // un misero pixel que parpadea
+          ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1); // un misero pixel que parpadea, apenas se nota
         }
       }
     }
