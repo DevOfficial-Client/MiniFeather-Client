@@ -18,7 +18,13 @@
       inventoryParticles: false, lighting: 'Classic',
       dynamicLighting: false, globalIllumination: 'Off',
       clouds: 'None', stars: true, atmosphericSky: false,
-      grassWave: false, fastRender: true, entities: 'Fastest',
+      grassWave: false,
+      // fastRender y entities FUERA a propósito: cambian la forma del
+      // pipeline de chunks y el mergeGeometries de tile entities recibe
+      // sets de atributos distintos → camas/cofres DESAPARECEN del mundo
+      // (reporte 2026-10-07: "desaparecen de la nada", vuelven al apagar
+      // el client). resolution/renderDistance/particles son los wins
+      // grandes y no tocan geometría.
       godRays: 'Off', bloom: 0, eyeAdaptation: 0, waterShaders: false,
       shadows: 'None', volumetricFog: false, emissiveFogGlow: false,
       motionBlur: false, footstepParticles: false, acrylicEffect: false
