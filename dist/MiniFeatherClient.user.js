@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007032608
+// @version      4.19.0.20261007032938
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 24098352fcc1adf087da6fc4cf004a4481af114c
- * builtAt : 2026-10-07T03:26:25.217Z
+ * commit  : 3a11ad41d8ea5a25dd4f5c816304eab463d73024
+ * builtAt : 2026-10-07T03:29:56.194Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"24098352fcc1adf087da6fc4cf004a4481af114c","builtAt":"2026-10-07T03:26:25.217Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"3a11ad41d8ea5a25dd4f5c816304eab463d73024","builtAt":"2026-10-07T03:29:56.194Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -90795,17 +90795,18 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     // así que nada de perseguir objetos: los shaders culpables se apagan a
     // nivel GL capturando las locations por nombre. el propio bundle confiesa
     // las salidas de emergencia: "uVelocityScale ... 0 disables (exact
-    // passthrough)" tiene early-out en el shader, el historial del fog/god
-    // rays solo se mezcla si uTemporal > 0.5 && uHistoryWeight > 0.001 (el
-    // weight baja en cámara rápida pero en cámara lenta igualmente mezcla
-    // historial viejo = el ghosting), y el voxel GI se gatea entero con
-    // "uGIEnabled // 0 = off (skip all GI work)" — su volumen es una caja
+    // passthrough)" tiene early-out en el shader, y el voxel GI se gatea entero
+    // con "uGIEnabled // 0 = off (skip all GI work)" — su volumen es una caja
     // cámara-relativa de ~96 bloques cuya grilla de voxeles se ve como puntos
-    // alineados al acercarse a los bloques (el reporte del usuario). esto no
-    // toca settings ni la nube.
+    // alineados al acercarse a los bloques (el reporte del usuario).
+    //
+    // v4: uHistoryWeight FUE desde clamps — el historial del fog/god rays es
+    // lo que suaviza el dither del raymarch a media resolución; sin él los god
+    // rays se ven crudos y granulosos (el usuario los quiere intactos y con
+    // razón: el suavizado vanilla es lo que siempre estuvo ahí). esto no toca
+    // settings ni la nube.
     const CLAMPS = {
         uVelocityScale: 0,   // motion blur → copia exacta del frame
-        uHistoryWeight: 0,   // fog/god rays → sin historial, solo frame actual
         uGIEnabled: 0        // voxel GI → el shader saltea todo el trabajo GI
     };
 
@@ -90884,7 +90885,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 // los prototipos sobreviven a cambios de mundo y contexto, así
                 // que el keeper solo reporta: si el juego nunca pide nuestras
                 // uniforms algo anda raro (offscreen rendering, bundle nuevo)
-                if (state.hooked && !state.hits.uVelocityScale && !state.hits.uHistoryWeight && !state.hits.uGIEnabled) {
+                if (state.hooked && !state.hits.uVelocityScale && !state.hits.uGIEnabled) {
                     const t = performance.now();
                     if (t - state.warnAt > 30000) {
                         state.warnAt = t;
@@ -90893,7 +90894,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 }
             }, 3000);
         }
-        console.info(TAG, 'activo — uVelocityScale→0 (passthrough) + uHistoryWeight→0 (sin historial) + uGIEnabled→0 (sin voxel GI)');
+        console.info(TAG, 'activo — uVelocityScale→0 (passthrough) + uGIEnabled→0 (sin voxel GI); fog/god rays intactos');
         return true;
     }
 
@@ -90909,7 +90910,6 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             enabled: state.enabled,
             hooked: state.hooked,
             motionBlur: !!state.hits.uVelocityScale,
-            godRays: !!state.hits.uHistoryWeight,
             gi: !!state.hits.uGIEnabled,
             hits: { ...state.hits }
         };
