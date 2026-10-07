@@ -1766,19 +1766,27 @@
 
     const LS_PACK_NOISE = 'miniblox_clouds_packnoise';
 
+    // ruido de nubes del pack: el bin viaja en la extensión, pero este módulo
+    // corre en la página (MAIN world) donde chrome.runtime no existe — la
+    // base de assets la manda el panel en cada config (shaderAssetsBase).
     const packNoise = {
         enabled: localStorage.getItem(LS_PACK_NOISE) === 'true',
+        base: '',
+        bytes: null,
         texture: null,
+        original: null,
         loading: false,
-        failed: false
+        retryTimer: 0
     };
 
     function fetchPackTexture(file) {
-        const url = typeof chrome !== 'undefined' && chrome.runtime?.getURL
-            ? chrome.runtime.getURL('assets/shadertextures/' + file)
-            : null;
-        if (!url) return Promise.resolve(null);
-        return fetch(url)
+        if (!packNoise.base) {
+            // sin base no hay transporte: fail LOUD (esto antes moría en
+            // silencio y el toggle no hacía nada jamás)
+            console.warn(`${TAG} pack noise sin shaderAssetsBase — ¿el panel no mandó la base de assets?`);
+            return Promise.resolve(null);
+        }
+        return fetch(packNoise.base + file)
             .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
             .then(buf => new Uint8Array(buf));
     }
@@ -1831,46 +1839,68 @@
         }
     }
 
+    // aplica el ruido del pack a la malla de nubes actual. false = aún no
+    // puede (malla inexistente, bin sin bajar, constructor no robado aún) —
+    // el retry lo reintenta; la textura se construye lazy para no depender
+    // de que las nubes existan YA (en el menú no existen)
     function applyPackNoiseToMesh() {
-        if (!packNoise.enabled || !packNoise.texture) return false;
+        if (!packNoise.enabled) return false;
         const mesh = resolveClouds();
         if (!mesh) return false;
         const u = mesh.material?.uniforms;
-        if (u?.uNoiseTex && packNoise.texture) {
-            if (u.uNoiseTex.value !== packNoise.texture) {
-                u.uNoiseTex.value = packNoise.texture;
-                void 0;
-            }
-            return true;
+        if (!u?.uNoiseTex) return false;
+        if (!packNoise.texture) {
+            if (!packNoise.bytes) return false;
+            packNoise.texture = buildPack3DTexture(packNoise.bytes, 128, 128, 128);
+            if (!packNoise.texture) return false;
+            packNoise.bytes = null;   // la textura vive sola desde aquí
         }
-        return false;
+        if (u.uNoiseTex.value !== packNoise.texture) {
+            packNoise.original = u.uNoiseTex.value;   // vanilla para el restore
+            u.uNoiseTex.value = packNoise.texture;
+        }
+        return true;
     }
 
-    function setPackNoise(enabled) {
+    function stopPackNoiseRetry() {
+        if (packNoise.retryTimer) { clearInterval(packNoise.retryTimer); packNoise.retryTimer = 0; }
+    }
+
+    function startPackNoiseRetry() {
+        if (packNoise.retryTimer) return;
+        packNoise.retryTimer = setInterval(() => {
+            if (applyPackNoiseToMesh() || !packNoise.enabled) stopPackNoiseRetry();
+        }, 2000);
+        setTimeout(stopPackNoiseRetry, 60000);
+    }
+
+    function setPackNoise(enabled, base) {
+        if (base) packNoise.base = String(base);
         packNoise.enabled = !!enabled;
         localStorage.setItem(LS_PACK_NOISE, String(packNoise.enabled));
 
-        if (packNoise.enabled && !packNoise.texture && !packNoise.loading && !packNoise.failed) {
-            packNoise.loading = true;
-            fetchPackTexture('CloudNoise_128_128_128.bin')
-                .then(bytes => {
-                    packNoise.texture = bytes
-                        ? buildPack3DTexture(bytes, 128, 128, 128)
-                        : null;
-                    packNoise.failed = packNoise.texture === null;
-                })
-                .catch(() => { packNoise.failed = true; })
-                .finally(() => {
-                    packNoise.loading = false;
-                    applyPackNoiseToMesh();
-                });
-        } else if (packNoise.enabled && packNoise.texture) {
-            applyPackNoiseToMesh();
-        } else if (!packNoise.enabled && packNoise.texture) {
-
+        if (packNoise.enabled) {
+            if (applyPackNoiseToMesh()) { stopPackNoiseRetry(); return; }
+            if (!packNoise.bytes && !packNoise.texture && !packNoise.loading) {
+                packNoise.loading = true;
+                fetchPackTexture('CloudNoise_128_128_128.bin')
+                    .then(bytes => { packNoise.bytes = bytes; })
+                    .catch(() => console.warn(`${TAG} pack noise: no se pudo traer CloudNoise_128_128_128.bin`))
+                    .finally(() => {
+                        packNoise.loading = false;
+                        if (!applyPackNoiseToMesh()) startPackNoiseRetry();
+                    });
+            } else {
+                // bytes ya en mano (o en vuelo): las nubes aún no existen
+                startPackNoiseRetry();
+            }
+        } else {
+            stopPackNoiseRetry();
             const mesh = resolveClouds();
             const u = mesh?.material?.uniforms;
-            if (u?.uNoiseTex) u.uNoiseTex.value.needsUpdate = true;
+            if (u?.uNoiseTex && packNoise.original && u.uNoiseTex.value === packNoise.texture) {
+                u.uNoiseTex.value = packNoise.original;   // devolver el vanilla
+            }
         }
     }
 
@@ -2388,11 +2418,17 @@
         }
 
         if (cfg.clouds && typeof cfg.clouds === 'object') {
-            const pending = () => applyClouds(cfg.clouds);
+            const pending = () => {
+                const ok = applyClouds(cfg.clouds);
+                // la malla pudo recrearse (dimensión/rejoin): reaprovechamos
+                // este momento para devolverle el ruido del pack si toca
+                if (ok && packNoise.enabled) applyPackNoiseToMesh();
+                return ok;
+            };
             if (!pending()) {
 
                 const retry = setInterval(() => {
-                    if (applyClouds(cfg.clouds) || !state.enabled) clearInterval(retry);
+                    if (pending() || !state.enabled) clearInterval(retry);
                 }, 2000);
                 setTimeout(() => clearInterval(retry), 60000);
             }
@@ -2403,7 +2439,7 @@
         }
 
         if (cfg.cloudsPackNoise !== undefined) {
-            setPackNoise(!!cfg.cloudsPackNoise);
+            setPackNoise(!!cfg.cloudsPackNoise, cfg.shaderAssetsBase);
         }
 
         if (cfg.postfx && typeof cfg.postfx === 'object') {

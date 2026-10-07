@@ -42,7 +42,9 @@
         forcedUntil: 0,
         afterRainUntil: 0,
         showFactor: 0,
+        lift: 0,
         rainReadFailLogged: false,
+        nwLogged: false,
         logged: false,
         destroyed: false
     };
@@ -222,7 +224,17 @@
         // (silent-failure de IterationT: mejor arco de más que nunca)
         let factorTarget = 1;
         const forced = state.forcedUntil > nowMs;
+        // NoWeather parchea getRainStrength a () => 0: la señal existe pero
+        // jamás anuncia lluvia → el arco sería invisible para siempre y el
+        // fail-open de abajo no salta. mismo espíritu: degradar a "siempre"
+        const noWeather = !!(window.MiniFeatherNoWeather && window.MiniFeatherNoWeather.enabled);
         if (state.mode === 'rain' && !forced) {
+            if (noWeather) {
+                if (!state.nwLogged) {
+                    state.nwLogged = true;
+                    console.warn(TAG, 'NoWeather activo — sin lluvia real, el modo post-lluvia degrada a "siempre"');
+                }
+            } else {
             const world = state.game?.world;
             if (typeof world?.getRainStrength === 'function') {
                 let strength = 0;
@@ -244,6 +256,7 @@
                     console.warn(TAG, 'sin world.getRainStrength — modo post-lluvia degrada a "siempre"');
                 }
             }
+            }
         }
         // fades suaves: entra ~6s, sale ~12s
         const tau = factorTarget > state.showFactor ? 6 : 12;
@@ -255,11 +268,16 @@
             if (sd && Number.isFinite(sd.x)) {
                 const mag = Math.hypot(sd.x, sd.y, sd.z) || 1;
                 const sx = sd.x / mag, sy = sd.y / mag, sz = sd.z / mag;
-                // física: sin sol sobre el horizonte no hay arcoíris
-                const lift = Math.max(0, Math.min(1, (sy - 0.02) / 0.18));
+                // física: sin sol sobre el horizonte no hay arcoíris —
+                // force() se salta también este gating: es comando de
+                // demo/diagnóstico, si fuerza de noche el arco SE ve
+                const liftNat = Math.max(0, Math.min(1, (sy - 0.02) / 0.18));
                 const sl = state.fluidMat.userData.uSunLight;
                 state.sunLight = sl ? sl.value : 1;
-                state.U.uMfRbI.value = state.intensity * lift * state.sunLight * state.showFactor;
+                const lift = forced ? 1 : liftNat;
+                const sunNow = forced ? 1 : state.sunLight;
+                state.lift = lift;
+                state.U.uMfRbI.value = state.intensity * lift * sunNow * state.showFactor;
                 // anti-sol y base: z=anti-sol, y≈arriba proyectado, x=y×z
                 const ax = -sx, ay = -sy, az = -sz;
                 const d = ay;                      // up·anti con up=(0,1,0)
@@ -328,13 +346,21 @@
     }
 
     function status() {
+        const sd = state.fluidMat?.userData?.sunDirection;
         return {
             enabled: state.enabled,
             mesh: !!state.mesh,
+            fluidMat: !!state.fluidMat,
+            sunDir: !!(sd && Number.isFinite(sd.x)),
             intensity: state.intensity,
             mode: state.mode,
             raining: state.rainActive,
-            showFactor: Math.round(state.showFactor * 100) / 100
+            showFactor: Math.round(state.showFactor * 100) / 100,
+            lift: Math.round((state.lift || 0) * 100) / 100,
+            sunLight: Math.round((state.sunLight || 0) * 100) / 100,
+            uMfRbI: state.U ? Math.round(state.U.uMfRbI.value * 1000) / 1000 : 0,
+            forced: state.forcedUntil > performance.now(),
+            noWeather: !!(window.MiniFeatherNoWeather && window.MiniFeatherNoWeather.enabled)
         };
     }
 
