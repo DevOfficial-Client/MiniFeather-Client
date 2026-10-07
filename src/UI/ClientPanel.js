@@ -8737,7 +8737,7 @@
             <span id="mf-cloud-coverage-value">${Math.round(Number(settings.cloudsCoverage ?? 0.5) * 100)}%</span>
           </div>
           <div class="mf-toggle-grid" style="margin-bottom:10px;">
-            ${renderToggle('cloudsPackNoise', t('cloudsPackNoise'), t('cloudsPackNoiseHint'), () => sendCloudsConfig())}
+            ${renderToggle('cloudsPackNoise', t('cloudsPackNoise'), t('cloudsPackNoiseHint'))}
           </div>
           <div class="mf-shader-strength" style="margin-bottom:10px;">
             <span style="min-width:90px;font-size:12px;">${t('cloudsScale')}</span>
@@ -12554,20 +12554,18 @@
         saveSettings(true);
       });
     }
+    // el FLIP del setting lo hace el handler genérico de .mf-toggle; este
+    // bloque solo reenvía la config al módulo (deferred: después del change
+    // del genérico) porque lifecycle.enable() es no-op si customShader ya
+    // estaba activo. voltear el setting aquí también = doble flip = el
+    // toggle nunca encendía
     const packNoiseToggle = panel.querySelector('.mf-toggle[data-key="cloudsPackNoise"]');
     if (packNoiseToggle) {
-      const syncPackNoiseToggle = () => {
-        const cb = packNoiseToggle.querySelector('.mf-switch-hidden');
-        if (cb) cb.checked = !!settings.cloudsPackNoise;
-      };
       packNoiseToggle.addEventListener('click', () => {
-        settings.cloudsPackNoise = !settings.cloudsPackNoise;
-        guiSettings.cloudsPackNoise = settings.cloudsPackNoise;
-        syncPackNoiseToggle();
-        saveSettings(true);
-        sendCustomShaderConfig(true);
+        setTimeout(() => {
+          if (settings.customShader) sendCustomShaderConfig(true);
+        }, 0);
       });
-      syncPackNoiseToggle();
     }
     const shapeCanvas = panel.querySelector('#mf-cloud-shape-canvas');
     if (shapeCanvas) {
