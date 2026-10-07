@@ -3719,6 +3719,7 @@
       { page: 'shaders', key: 'antiTear', title: 'anti-tear (vanilla fix)', desc: 'clamps miniblox motion blur + temporal god rays so frames never ghost', tags: ['new'] },
       { page: 'shaders', key: 'deferredPipeline', title: 'deferred pipeline (iterationt)', desc: 'bloom + AgX faithful to Tahnass\'s IterationT pack', tags: ['new'] },
       { page: 'shaders', key: 'waterStyle', title: 'water style', desc: 'agua clara con tinte verdoso: opacidad y fuerza del tinte ajustables', tags: ['new'] },
+      { page: 'shaders', key: 'rainbow', title: 'arcoiris procedural', desc: 'arco anclado al anti-sol con espectro, secundario y banda de Alexander', tags: ['new'] },
       { page: 'shaders', key: 'kotoSky', title: 'koto sky', desc: 'cielo nocturno real con vía láctea (pack "nighttime sky" de koto): aparece al anochecer y se apaga con lluvia', tags: ['new'] },
       { page: 'movement', key: 'autoSprint', title: t('autoSprint'), desc: t('autoSprintDesc'), tags: ['pvp'] },
       { page: 'movement', key: 'safeSneak', title: t('safeSneak'), desc: t('safeSneakDesc'), tags: ['pvp'] },
@@ -5196,6 +5197,24 @@
       disable() { sendKotoSkyConfig(false); },
       refresh() { sendKotoSkyConfig(MODULES.get('kotoSky')?.enabled === true); },
       destroy() { sendKotoSkyConfig(false); }
+    }));
+  }
+
+  function sendRainbowConfig(enabled = settings.rainbow) {
+    document.dispatchEvent(new CustomEvent('minifeather:rainbow-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        intensity: Number(settings.rainbowIntensity ?? 0.7)
+      })
+    }));
+  }
+
+  function initRainbowModule() {
+    registerModule('rainbow', () => createLifecycle({
+      enable() { sendRainbowConfig(true); },
+      disable() { sendRainbowConfig(false); },
+      refresh() { sendRainbowConfig(MODULES.get('rainbow')?.enabled === true); },
+      destroy() { sendRainbowConfig(false); }
     }));
   }
 
@@ -8548,6 +8567,19 @@
             <span style="min-width:90px;font-size:12px;">intensidad</span>
             <input id="mf-ks-strength" type="range" min="0" max="1" step="0.05" value="${Number(settings.kotoSkyStrength ?? 1)}">
             <span id="mf-ks-strength-value">${Math.round(Number(settings.kotoSkyStrength ?? 1) * 100)}%</span>
+          </div>
+        </div>
+
+        <div class="mf-card">
+          <div class="mf-card-title">Arco&iacute;ris procedural</div>
+          <div class="mf-muted" style="margin-bottom:8px;font-size:11px;">arco&iacute;ris real: c&iacute;rculo de 42&deg; alrededor del anti-sol, espectro violeta&rarr;rojo, secundario invertido al 32% y banda oscura de Alexander. solo sale con el sol sobre el horizonte</div>
+          <div class="mf-toggle-grid">
+            ${renderToggle('rainbow', 'arcoiris procedural', 'arco&iacute;ris f&iacute;sico anclado al anti-sol')}
+          </div>
+          <div class="mf-shader-strength" style="margin-top:10px;">
+            <span style="min-width:90px;font-size:12px;">intensidad</span>
+            <input id="mf-rb-int" type="range" min="0" max="1" step="0.05" value="${Number(settings.rainbowIntensity ?? 0.7)}">
+            <span id="mf-rb-int-value">${Math.round(Number(settings.rainbowIntensity ?? 0.7) * 100)}%</span>
           </div>
         </div>
 
@@ -12348,6 +12380,18 @@
         saveSettings(true);
       });
     }
+    const rbSlider = panel.querySelector('#mf-rb-int');
+    rbSlider?.addEventListener('input', () => {
+      const value = parseFloat(rbSlider.value);
+      settings.rainbowIntensity = value;
+      guiSettings.rainbowIntensity = value;
+      const valueLabel = panel.querySelector('#mf-rb-int-value');
+      if (valueLabel) valueLabel.textContent = Math.round(value * 100) + '%';
+      sendRainbowConfig();
+    });
+    rbSlider?.addEventListener('change', () => {
+      saveSettings(true);
+    });
     const defMap = {
       exp: { key: 'deferredExposure', fmt: v => v.toFixed(2) },
       sat: { key: 'deferredSaturation', fmt: v => v.toFixed(2) },
@@ -13931,6 +13975,7 @@
     sendDeferredConfig();
     sendAntiTearConfig();
     setModuleEnabled('waterStyle', settings.waterStyle);
+    setModuleEnabled('rainbow', settings.rainbow);
     setModuleEnabled('kotoSky', settings.kotoSky);
     sendKotoSkyConfig();
     sendCritterSkinsConfig();
@@ -14639,6 +14684,7 @@
     initMenuHubModule();
     initCustomShaderModule();
     initWaterStyleModule();
+    initRainbowModule();
     initKotoSkyModule();
     initAntiTearModule();
     initZoomModule();
