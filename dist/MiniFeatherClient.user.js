@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007162000
+// @version      4.19.0.20261007162918
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 557df3b54a77fa24a4e186ac5aeb137edb10860e
- * builtAt : 2026-10-07T16:20:15.207Z
+ * commit  : 98a0ebdb1010f35fedc9f83b923e3c7e644e5dfe
+ * builtAt : 2026-10-07T16:29:35.891Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"557df3b54a77fa24a4e186ac5aeb137edb10860e","builtAt":"2026-10-07T16:20:15.207Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"98a0ebdb1010f35fedc9f83b923e3c7e644e5dfe","builtAt":"2026-10-07T16:29:35.891Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -129493,7 +129493,7 @@ function normalize(entry) {
             <span id="mf-cloud-coverage-value">${Math.round(Number(settings.cloudsCoverage ?? 0.5) * 100)}%</span>
           </div>
           <div class="mf-toggle-grid" style="margin-bottom:10px;">
-            ${renderToggle('cloudsPackNoise', t('cloudsPackNoise'), t('cloudsPackNoiseHint'), () => sendCloudsConfig())}
+            ${renderToggle('cloudsPackNoise', t('cloudsPackNoise'), t('cloudsPackNoiseHint'))}
           </div>
           <div class="mf-shader-strength" style="margin-bottom:10px;">
             <span style="min-width:90px;font-size:12px;">${t('cloudsScale')}</span>
@@ -133306,20 +133306,18 @@ function normalize(entry) {
         saveSettings(true);
       });
     }
+    // el FLIP del setting lo hace el handler genérico de .mf-toggle; este
+    // bloque solo reenvía la config al módulo (deferred: después del change
+    // del genérico) porque lifecycle.enable() es no-op si customShader ya
+    // estaba activo. voltear el setting aquí también = doble flip = el
+    // toggle nunca encendía
     const packNoiseToggle = panel.querySelector('.mf-toggle[data-key="cloudsPackNoise"]');
     if (packNoiseToggle) {
-      const syncPackNoiseToggle = () => {
-        const cb = packNoiseToggle.querySelector('.mf-switch-hidden');
-        if (cb) cb.checked = !!settings.cloudsPackNoise;
-      };
       packNoiseToggle.addEventListener('click', () => {
-        settings.cloudsPackNoise = !settings.cloudsPackNoise;
-        guiSettings.cloudsPackNoise = settings.cloudsPackNoise;
-        syncPackNoiseToggle();
-        saveSettings(true);
-        sendCustomShaderConfig(true);
+        setTimeout(() => {
+          if (settings.customShader) sendCustomShaderConfig(true);
+        }, 0);
       });
-      syncPackNoiseToggle();
     }
     const shapeCanvas = panel.querySelector('#mf-cloud-shape-canvas');
     if (shapeCanvas) {
