@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007003126
+// @version      4.19.0.20261007011705
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 07f3c5bdb1325f144a0e7292853a43c1a560522c
- * builtAt : 2026-10-07T00:31:40.390Z
+ * commit  : c201dfc9dde058e6cd1034be715751c6689e8c79
+ * builtAt : 2026-10-07T01:21:16.236Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"07f3c5bdb1325f144a0e7292853a43c1a560522c","builtAt":"2026-10-07T00:31:40.390Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"c201dfc9dde058e6cd1034be715751c6689e8c79","builtAt":"2026-10-07T01:21:16.236Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -90727,189 +90727,122 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
     const TAG = 'minifeather antitear';
 
-    // el juego acumula el frame anterior para motion blur / god rays high sin
-    // chequear si el píxel del historial todavía representa lo mismo
-    // (disocclusion), y encima le mete jitter por píxel (IGN) esperando que un
-    // denoiser temporal que NO existe lo limpie. resultado: bandas diagonales
-    // translúcidas + estática punteada que la ia de turno se tragó en vanilla
-    // con la misma gpu del usuario. esto no toca settings ni la nube de la
-    // cuenta: clava los passes en runtime y listo.
-    const MEDIUM_GOD_RAY_TIER = { steps: 12, occlusionSteps: 4, resolutionScale: 0.5, temporal: false, maxDistance: 200 };
+    // los "desgarros" de miniblox: el manager de post vive en el closure del
+    // bundle y es inalcanzable desde game (lección de la fase 1 del deferred),
+    // así que nada de perseguir objetos: los shaders culpables se apagan a
+    // nivel GL capturando las locations por nombre. el propio bundle confiesa
+    // la salida de emergencia: "uVelocityScale ... 0 disables (exact
+    // passthrough)" tiene early-out en el shader, y el historial del fog/god
+    // rays solo se mezcla si uTemporal > 0.5 && uHistoryWeight > 0.001 (el
+    // weight baja en cámara rápida pero en cámara lenta igualmente mezcla
+    // historial viejo = el ghosting). esto no toca settings ni la nube.
+    const CLAMPS = {
+        uVelocityScale: 0,   // motion blur → copia exacta del frame
+        uHistoryWeight: 0    // fog/god rays → sin historial, solo frame actual
+    };
 
     const state = {
         enabled: false,
-        game: null,
+        hooked: false,
         keeperTimer: 0,
         warnAt: 0,
-        restore: [],
-        motionBlurPass: null,
-        fogPass: null
+        orig: null,
+        locNames: new Map(),   // WebGLUniformLocation → nombre clampeable
+        hits: {}               // nombre → cuántas escrituras fueron clampeadas
     };
 
-    function findGame() {
+    // ojo: las locations las cachea three al linkear cada programa, así que un
+    // hook tardío (mundo ya cargado) no ve las uniforms hasta el próximo relink
+    // (cambio de mundo, context loss). en el arranque normal el mirror corre
+    // antes del engine y la captura agarrá todo desde el primer "compiling
+    // shaders". three además cachea uploads escalares: con clampear el primer
+    // upload el 0 se queda pegado en la gpu.
+
+    function hookContextProtos() {
+        if (state.hooked) return true;
+        const proto = typeof WebGL2RenderingContext !== 'undefined' && WebGL2RenderingContext.prototype;
+        if (!proto) return false;
+        const origGet = proto.getUniformLocation;
+        const origF = proto.uniform1f;
+        const origI = proto.uniform1i;
+        if (typeof origGet !== 'function' || typeof origF !== 'function') return false;
         try {
-            const root = document.getElementById('react');
-            if (!root) return null;
-            for (const key in root) {
-                if (!key.startsWith('__reactContainer') && !key.startsWith('__reactFiber')) continue;
-                const fiber = root[key];
-                const cand = fiber?.updateQueue?.baseState?.element?.props?.game;
-                if (cand && cand.player) return cand;
-            }
-        } catch (_) {}
-        return null;
-    }
-
-    // los passes viven en el manager de post del juego (recreado por mundo).
-    // bfs acotado desde el game object: los shaders no están colgando de la
-    // escena three, así que corto las ramas gordas y pongo techo de nodos.
-    const SKIP_KEYS = new Set(['parent', 'children', 'world', 'scene', 'player', 'players', 'entities', 'domElement', 'chat']);
-    const MAX_NODES = 8000;
-    const MAX_DEPTH = 5;
-
-    function isMotionBlurPass(o) {
-        return Object.prototype.hasOwnProperty.call(o, '_prevViewProj') &&
-            Object.prototype.hasOwnProperty.call(o, '_blur') &&
-            Object.prototype.hasOwnProperty.call(o, '_target');
-    }
-
-    function isFogPass(o) {
-        return Object.prototype.hasOwnProperty.call(o, '_godRayTier') &&
-            Object.prototype.hasOwnProperty.call(o, '_raymarch');
-    }
-
-    function findPasses(game) {
-        const out = {};
-        if (!game) return out;
-        const seen = new Set();
-        let budget = MAX_NODES;
-        const queue = [[game, 0]];
-        seen.add(game);
-        while (queue.length && budget > 0 && !(out.motionBlur && out.fog)) {
-            const [node, depth] = queue.shift();
-            budget--;
-            let props;
-            try { props = Object.getOwnPropertyNames(node); } catch (_) { continue; }
-            for (const k of props) {
-                if (SKIP_KEYS.has(k) || k.startsWith('__react') || k.startsWith('__MF')) continue;
-                let v;
-                try { v = node[k]; } catch (_) { continue; }
-                if (!v || typeof v !== 'object') continue;
-                if (seen.has(v)) continue;
-                seen.add(v);
-                if (!out.motionBlur && isMotionBlurPass(v)) out.motionBlur = v;
-                if (!out.fog && isFogPass(v)) out.fog = v;
-                if (out.motionBlur && out.fog) return out;
-                if (depth < MAX_DEPTH && budget > 0) queue.push([v, depth + 1]);
-            }
-        }
-        return out;
-    }
-
-    function clampMotionBlur(pass) {
-        const hadOwn = Object.prototype.hasOwnProperty.call(pass, 'enabled');
-        const prev = hadOwn ? pass.enabled : undefined;
-        const restore = () => {
-            try { delete pass.enabled; } catch (_) {}
-            if (hadOwn) { try { pass.enabled = prev; } catch (_) {} }
-        };
-        try {
-            Object.defineProperty(pass, 'enabled', {
-                configurable: true,
-                enumerable: true,
-                get() { return false; },
-                set() {} // el frame escribe enabled cada frame y el composer lo pregunta; ambos pierden
-            });
-            state.restore.push(restore);
-            state.motionBlurPass = pass;
-            return true;
-        } catch (_) { return false; }
-    }
-
-    function clampGodRays(pass) {
-        let current = null;
-        try { current = pass._godRayTier; } catch (_) {}
-        const restore = () => {
-            try { delete pass._godRayTier; } catch (_) {}
-            try { pass._godRayTier = current; } catch (_) {}
-        };
-        try {
-            Object.defineProperty(pass, '_godRayTier', {
-                configurable: true,
-                enumerable: true,
-                get() { return current; },
-                set(v) {
-                    // high es el tier temporal a media resolución; medium hace lo
-                    // mismo sin historial. off/null pasa de largo.
-                    current = (v && v.temporal === true) ? MEDIUM_GOD_RAY_TIER : v;
+            proto.getUniformLocation = function (program, name) {
+                const loc = origGet.call(this, program, name);
+                if (loc && Object.prototype.hasOwnProperty.call(CLAMPS, name)) {
+                    state.locNames.set(loc, name);
                 }
-            });
-            state.restore.push(restore);
-            state.fogPass = pass;
+                return loc;
+            };
+            const wrapUpload = (orig) => function (loc, v) {
+                const name = state.locNames.get(loc);
+                if (name !== undefined) {
+                    const clamped = CLAMPS[name];
+                    if (v !== clamped) state.hits[name] = (state.hits[name] || 0) + 1;
+                    v = clamped;
+                }
+                return orig.call(this, loc, v);
+            };
+            proto.uniform1f = wrapUpload(origF);
+            proto.uniform1i = wrapUpload(origI);
+            state.orig = { getUniformLocation: origGet, uniform1f: origF, uniform1i: origI };
+            state.hooked = true;
             return true;
-        } catch (_) { return false; }
-    }
-
-    function unhookAll() {
-        for (const fn of state.restore) { try { fn(); } catch (_) {} }
-        state.restore = [];
-        state.motionBlurPass = null;
-        state.fogPass = null;
-    }
-
-    function hookPasses() {
-        // sin throttle: el interval de 3s ya es el límite de abuso
-        state.game = findGame() || state.game;
-        if (!state.game) return status();
-        const passes = findPasses(state.game);
-        if (!passes.motionBlur && !passes.fog) {
-            const t = performance.now();
-            if (t - state.warnAt > 30000) {
-                state.warnAt = t;
-                console.info(TAG, 'manager de post no encontrado todavía (offscreen rendering? otro mundo?) — reintento');
-            }
-            return status();
+        } catch (_) {
+            return false;
         }
-        if (passes.motionBlur && passes.motionBlur !== state.motionBlurPass) clampMotionBlur(passes.motionBlur);
-        if (passes.fog && passes.fog !== state.fogPass) clampGodRays(passes.fog);
-        return status();
     }
 
-    function loadPrefs() {
-        // sin prefs: el default del cliente es ON y el panel manda el evento
+    function unhookContextProtos() {
+        if (!state.hooked || !state.orig) return;
+        const proto = WebGL2RenderingContext.prototype;
+        try {
+            proto.getUniformLocation = state.orig.getUniformLocation;
+            proto.uniform1f = state.orig.uniform1f;
+            proto.uniform1i = state.orig.uniform1i;
+        } catch (_) {}
+        state.orig = null;
+        state.hooked = false;
+        state.locNames = new Map();
+        state.hits = {};
     }
 
     function enable() {
         state.enabled = true;
-        loadPrefs();
-        hookPasses();
+        hookContextProtos();
         if (!state.keeperTimer) {
             state.keeperTimer = setInterval(() => {
                 if (!state.enabled) return;
-                // re-escaneo siempre: el juego recrea el manager por cambio de
-                // mundo y los passes viejos quedan clampeados pero huérfanos
-                hookPasses();
+                // los prototipos sobreviven a cambios de mundo y contexto, así
+                // que el keeper solo reporta: si el juego nunca pide nuestras
+                // uniforms algo anda raro (offscreen rendering, bundle nuevo)
+                if (state.hooked && !state.hits.uVelocityScale && !state.hits.uHistoryWeight) {
+                    const t = performance.now();
+                    if (t - state.warnAt > 30000) {
+                        state.warnAt = t;
+                        console.info(TAG, 'aún no veo las uniforms objetivo (¿offscreen rendering? ¿cambió el bundle?) — fail-open, el juego renderiza normal');
+                    }
+                }
             }, 3000);
         }
-        console.info(TAG, 'activo — caza de passes en curso (motion blur + god rays temporal)');
+        console.info(TAG, 'activo — uVelocityScale→0 (passthrough) + uHistoryWeight→0 (sin historial)');
         return true;
     }
 
     function disable() {
         state.enabled = false;
         if (state.keeperTimer) { clearInterval(state.keeperTimer); state.keeperTimer = 0; }
-        unhookAll();
-        // reset completo: el game object de un mundo viejo no sirve para el próximo
-        state.game = null;
+        unhookContextProtos();
         return true;
     }
 
     function status() {
         return {
             enabled: state.enabled,
-            motionBlur: !!state.motionBlurPass,
-            godRays: !!state.fogPass,
-            game: !!state.game
+            hooked: state.hooked,
+            motionBlur: !!state.hits.uVelocityScale,
+            godRays: !!state.hits.uHistoryWeight,
+            hits: { ...state.hits }
         };
     }
 
