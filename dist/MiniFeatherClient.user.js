@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007071230
+// @version      4.19.0.20261007072621
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 23bfec87897d1715a51b8c2738e2494cd42f5dfb
- * builtAt : 2026-10-07T07:12:45.399Z
+ * commit  : 98c44e48975a3956ec9fbcf73371a6a36820a15d
+ * builtAt : 2026-10-07T07:26:36.254Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"23bfec87897d1715a51b8c2738e2494cd42f5dfb","builtAt":"2026-10-07T07:12:45.399Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"98c44e48975a3956ec9fbcf73371a6a36820a15d","builtAt":"2026-10-07T07:26:36.254Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -90311,7 +90311,14 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     `;
 
     function buildCurtainMaterial(fluidMat) {
+        // copy() de three serializa userData con JSON.stringify → el fluido
+        // guarda ahí texturas vivas del juego que no serializan y cada clon
+        // llueve "Unable to serialize Texture". se vacía solo durante el
+        // clon y se restaura: el juego sigue siendo dueño del original
+        const ud = fluidMat.userData;
+        fluidMat.userData = {};
         const m = fluidMat.clone();
+        fluidMat.userData = ud;
         // SIN marcador de fluido: el clon copia userData y el scan se
         // engancharía a sí mismo en bucle
         m.userData = {};
@@ -90711,7 +90718,14 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     }
 
     function buildMaterial(fluidMat) {
+        // copy() de three serializa userData con JSON.stringify y el fluido
+        // guarda ahí datos vivos con texturas que no serializan → lluvia de
+        // "THREE.Texture: Unable to serialize Texture" por clon. el clon
+        // tira ese userData de todos modos: se vacía solo durante el clon
+        const ud = fluidMat.userData;
+        fluidMat.userData = {};
         const m = fluidMat.clone();
+        fluidMat.userData = ud;     // el juego sigue siendo dueño del original
         m.userData = {};            // sin marcador de fluido — higiene del scan ajeno
         m.__mfSkipHook = true;      // inmune al scan del CustomShader (Phong ∈ SAFE_MATERIALS)
         try { m.color?.setRGB?.(0, 0, 0); } catch (_) {}
