@@ -275,6 +275,16 @@
     try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (_) { return false; }
   }
 
+  // las particulas viven SOLO en el menu: MF_MenuHub deja su clase raiz en #react
+  // mientras el hub esta arriba y la quita al entrar a partida — senal gratuita y
+  // sin acoplar modulos. si menuHub esta apagado, no hay ambiente (es su territorio)
+  function menuVisible() {
+    try {
+      var react = document.getElementById('react');
+      return !!(react && react.classList && react.classList.contains('mf-hub'));
+    } catch (_) { return false; }
+  }
+
   function inNightHours() {
     var w = (nightCfg && nightCfg.hours) || [18, 6];
     var h = new Date().getHours();
@@ -406,6 +416,14 @@
   function ambientFrame(now) {
     ambientRaf = 0;
     if (!ambientCtx) return;
+    if (!menuVisible()) {  // salio del menu: nada de particulas sobre la partida
+      try { ambientCtx.clearRect(0, 0, ambientW, ambientH); } catch (_) {}
+      try { ambientCanvas.remove(); } catch (_) {}
+      ambientCanvas = null; ambientCtx = null;
+      ambientParts.length = 0; ambientMeteors.length = 0;
+      lastFrame = 0;
+      return;
+    }
     var dt = lastFrame ? Math.min(0.05, (now - lastFrame) / 1000) : 0.016;
     lastFrame = now;
     var ctx = ambientCtx;
@@ -420,11 +438,9 @@
         p.y += p.vy * dt;
         if (p.y > ambientH + 6) { p.y = -8; p.x = Math.random() * ambientW; }
         if (p.x < -8) p.x = ambientW + 6; else if (p.x > ambientW + 8) p.x = -6;
-        spr = ambientSprite('snow', 16);
-        if (spr) {
-          ctx.globalAlpha = p.a;
-          ctx.drawImage(spr, p.x - p.r * 2, p.y - p.r * 2, p.r * 4, p.r * 4);
-        }
+        ctx.globalAlpha = p.a;
+        ctx.fillStyle = '#f0f8ff';
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2); // un misero pixel (pedido literal)
       } else if (p.t === 'leaf') {
         p.ph += dt * 2;
         p.rot += p.vr * dt;
@@ -454,12 +470,10 @@
         if (p.x < 20 || p.x > ambientW - 20) p.vx *= -1;
         if (p.y < ambientH * 0.15 || p.y > ambientH - 30) p.vy *= -1;
         var glow = Math.max(0, Math.sin(p.ph));
-        spr = ambientSprite('firefly', 26);
-        if (spr && glow > 0.05) {
-          ctx.globalCompositeOperation = 'lighter';
-          ctx.globalAlpha = 0.25 + glow * 0.75;
-          ctx.drawImage(spr, p.x - p.r * 3, p.y - p.r * 3, p.r * 6, p.r * 6);
-          ctx.globalCompositeOperation = 'source-over';
+        if (glow > 0.08) {
+          ctx.globalAlpha = 0.3 + glow * 0.7;
+          ctx.fillStyle = '#e6ff9e';
+          ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2); // un misero pixel que parpadea
         }
       }
     }
@@ -498,7 +512,7 @@
   }
 
   function syncAmbient() {
-    var want = (!reducedMotion() && ambientTypes.length) ? 1 : 0;
+    var want = (!reducedMotion() && ambientTypes.length && menuVisible()) ? 1 : 0;
     if (!want) {
       if (ambientRaf) { try { window.cancelAnimationFrame(ambientRaf); } catch (_) {} ambientRaf = 0; }
       lastFrame = 0;
@@ -710,6 +724,7 @@
       activeEventId: activeEventId,
       ambient: ambientTypes.slice(),
       night: inNightHours(),
+      menu: menuVisible(),
       identity: identitySeen ? { name: identitySeen.name, hashed: !!identityHashes } : null
     };
   };
