@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007162918
+// @version      4.19.0.20261007164733
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 98a0ebdb1010f35fedc9f83b923e3c7e644e5dfe
- * builtAt : 2026-10-07T16:29:35.891Z
+ * commit  : 8e71f5cbbc4c1837370dc6a6733b9cf80f8cf02c
+ * builtAt : 2026-10-07T16:48:07.834Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"98a0ebdb1010f35fedc9f83b923e3c7e644e5dfe","builtAt":"2026-10-07T16:29:35.891Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"8e71f5cbbc4c1837370dc6a6733b9cf80f8cf02c","builtAt":"2026-10-07T16:48:07.835Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -90678,6 +90678,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         lift: 0,
         rainReadFailLogged: false,
         nwLogged: false,
+        whyLogged: false,
+        whyHintLogged: false,
         logged: false,
         destroyed: false
     };
@@ -90776,22 +90778,45 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         m.depthTest = true;         // el terreno oculta el arco
         m.side = 2;                 // DoubleSide
         m.fog = false;              // el arcoíris no se niebla (está "en el cielo")
-        const U = { uMfRbI: { value: 0 } };
+        const U = {
+            uMfRbI: { value: 0 },
+            // sunDirection normalizado, copiado cada frame desde el userData
+            // vivo del fluido (objeto plano {x,y,z}: al setValueV3f le da igual)
+            uMfSunDir: { value: { x: 0, y: 1, z: 0 } }
+        };
         m.onBeforeCompile = (shader) => {
             shader.uniforms.uMfRbI = U.uMfRbI;
-            shader.vertexShader = 'attribute float arad;\nvarying float vR;\n' + shader.vertexShader;
-            if (shader.vertexShader.includes('#include <begin_vertex>')) {
-                shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>',
-                    '#include <begin_vertex>\n        vR = arad;');
-            }
+            shader.uniforms.uMfSunDir = U.uMfSunDir;
+            // el anillo se ancla EN LA GPU: cameraPosition + anti-sol ×
+            // RB_DIST con base ortonormal en el vertex. cero dependencia del
+            // objeto cámara del juego — cameraPosition es el uniform built-in
+            // que KotoSky ya demostró que existe y llega actualizado aquí
+            shader.vertexShader =
+                'attribute float arad;\n' +
+                'varying float vR;\n' +
+                'uniform vec3 uMfSunDir;\n' +
+                shader.vertexShader;
+            shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', [
+                '#include <begin_vertex>',
+                '        vR = arad;',
+                '        vec3 mfZ = -normalize(uMfSunDir);',
+                '        vec3 mfUp = vec3(0.0, 1.0, 0.0);',
+                '        vec3 mfY = normalize(mfUp - mfZ * dot(mfUp, mfZ));',
+                '        vec3 mfX = cross(mfY, mfZ);',
+                '        transformed = cameraPosition + mfZ * ' + RB_DIST.toFixed(1) +
+                    ' + mfX * position.x + mfY * position.y;'
+            ].join('\n'));
             shader.fragmentShader = RING_FS + shader.fragmentShader;
             if (shader.fragmentShader.includes('vec3 totalEmissiveRadiance = emissive;')) {
                 shader.fragmentShader = shader.fragmentShader.replace(
                     'vec3 totalEmissiveRadiance = emissive;',
                     'vec3 totalEmissiveRadiance = vec3(0.0);\n    ' + RING_EMISSIVE);
+            } else {
+                // anti silent-failure: sin el ancla este arco es aditivo negro
+                console.warn(TAG, 'ancla del emissive NO encontrada en el phong — reporta esto');
             }
         };
-        m.customProgramCacheKey = () => 'mf_rainbow_v1';
+        m.customProgramCacheKey = () => 'mf_rainbow_v2';
         return { mat: m, U };
     }
 
@@ -90895,12 +90920,15 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         const tau = factorTarget > state.showFactor ? 6 : 12;
         state.showFactor += (factorTarget - state.showFactor) * (1 - Math.exp(-dt / tau));
 
-        const cam = state.game?.gameScene?.camera;
-        if (cam && state.mesh && state.fluidMat) {
+        if (state.mesh && state.fluidMat) {
             const sd = state.fluidMat.userData.sunDirection;
             if (sd && Number.isFinite(sd.x)) {
                 const mag = Math.hypot(sd.x, sd.y, sd.z) || 1;
-                const sx = sd.x / mag, sy = sd.y / mag, sz = sd.z / mag;
+                const sy = sd.y / mag;
+                // sol vivo para el vertex shader (el anclaje es GPU-side)
+                state.U.uMfSunDir.value.x = sd.x / mag;
+                state.U.uMfSunDir.value.y = sy;
+                state.U.uMfSunDir.value.z = sd.z / mag;
                 // física: sin sol sobre el horizonte no hay arcoíris —
                 // force() se salta también este gating: es comando de
                 // demo/diagnóstico, si fuerza de noche el arco SE ve
@@ -90911,20 +90939,18 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 const sunNow = forced ? 1 : state.sunLight;
                 state.lift = lift;
                 state.U.uMfRbI.value = state.intensity * lift * sunNow * state.showFactor;
-                // anti-sol y base: z=anti-sol, y≈arriba proyectado, x=y×z
-                const ax = -sx, ay = -sy, az = -sz;
-                const d = ay;                      // up·anti con up=(0,1,0)
-                let yx = -ax * d, yy = 1 - ay * d, yz = -az * d;
-                const yl = Math.hypot(yx, yy, yz) || 1;
-                yx /= yl; yy /= yl; yz /= yl;
-                const xx = yy * az - yz * ay, xy = yz * ax - yx * az, xz = yx * ay - yy * ax;
-                state.mesh.matrix.set(
-                    xx, yx, ax, cam.x + ax * RB_DIST,
-                    xy, yy, ay, cam.y + ay * RB_DIST,
-                    xz, yz, az, cam.z + az * RB_DIST,
-                    0, 0, 0, 1
-                );
-                state.mesh.matrixWorldNeedsUpdate = true;
+            }
+            // diagnóstico anti-silencio: con el módulo pidiendo arco (fade
+            // completo) y emissive aún en 0, decir UNA vez qué factor es
+            if (!state.whyLogged && state.showFactor > 0.9 && state.U.uMfRbI.value <= 0) {
+                state.whyLogged = true;
+                if (!sd || !Number.isFinite(sd.x)) {
+                    console.warn(TAG, 'arco en 0: el fluido no publica sunDirection');
+                } else if (state.sunLight <= 0) {
+                    console.warn(TAG, 'arco en 0: uSunLight=0 (¿noche del juego?) — MF_Rainbow.force() lo salta');
+                } else {
+                    console.warn(TAG, 'arco en 0: sol bajo el horizonte (lift=0) — MF_Rainbow.force() lo salta');
+                }
             }
         }
         state.raf = requestAnimationFrame(frame);
@@ -90933,6 +90959,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     function enable() {
         state.enabled = true;
         localStorage.setItem('mf_rainbow', 'true');
+        if (!state.whyHintLogged && state.mode === 'rain') {
+            state.whyHintLogged = true;
+            console.info(TAG, 'modo post-lluvia: el arco aparece al PARAR la lluvia (~2.5 min); MF_Rainbow.force() lo muestra ya, o cambia a "siempre" en el panel');
+        }
         if (!state.scanTimer) state.scanTimer = setInterval(scan, 2000);
         if (!state.raf) state.raf = requestAnimationFrame(frame);
         scan();
