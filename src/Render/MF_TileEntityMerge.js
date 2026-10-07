@@ -21,6 +21,7 @@
         game: null,
         timer: 0,
         patched: null,
+        watched: null,
         logged: new Set(),
         destroyed: false
     };
@@ -108,21 +109,107 @@
         state.patched = { ter, orig, wrapped };
     }
 
+    // ── v2: watcher del updateChunkMesh ──────────────────────────────────
+    // el merge siguió fallando con muebles alineados → diffea EN CALIENTE
+    // los sets del opaco vs cada mueble del chunk justo después del intento:
+    // si vuelve a fallar, la consola dice el par y los atributos exactos
+    // duck-typing de Map (el juego usa una SUBCLASE de Map para meshes, y
+    // instanceof cruza reinos mal en los tests)
+    function looksLikeManager(o) {
+        return !!(o && o.meshes && typeof o.meshes.values === 'function' &&
+            typeof o.updateChunkMesh === 'function');
+    }
+
+    function findChunkManager(game) {
+        let cm = game.chunkRenderManager || game.chunkManager;
+        if (looksLikeManager(cm)) return cm;
+        const q = [[game, 0]];
+        const seen = new WeakSet();
+        let visited = 0;
+        while (q.length && visited < 4000) {
+            const [o, d] = q.shift();
+            if (!o || (typeof o !== 'object' && typeof o !== 'function') || d > 4 || seen.has(o)) continue;
+            seen.add(o); visited++;
+            if (looksLikeManager(o)) return o;
+            let keys = [];
+            try { keys = Object.keys(o).slice(0, 60); } catch (_) { continue; }
+            for (const k of keys) {
+                let v; try { v = o[k]; } catch (_) { continue; }
+                if (v && (typeof v === 'object' || typeof v === 'function') && !v.isMesh) q.push([v, d + 1]);
+            }
+        }
+        return null;
+    }
+
+    function attrNames(geo) {
+        return geo?.attributes ? Object.keys(geo.attributes).sort() : null;
+    }
+
+    function kindOf(te) {
+        return te?.name || (typeof te?.getName === 'function' && te.getName()) || te?.constructor?.name || '?';
+    }
+
+    function diffChunk(cm, meshResult) {
+        if (!meshResult || meshResult.chunkX === undefined ||
+            !(cm?.meshes && typeof cm.meshes.values === 'function')) return;
+        let rec = null;
+        for (const r of cm.meshes.values()) {
+            if (r?.pos && r.pos.x === meshResult.chunkX && r.pos.z === meshResult.chunkZ) { rec = r; break; }
+        }
+        if (!rec?.tileEntities?.size) return;
+        const op = attrNames(rec.opaque?.geometry);
+        if (!op) return;
+        for (const te of rec.tileEntities.values()) {
+            const ta = attrNames(te.root?.geometry || te.geometry);
+            if (!ta) continue;
+            const falta = op.filter(a => !ta.includes(a));
+            const sobra = ta.filter(a => !op.includes(a));
+            if (falta.length || sobra.length) {
+                const kind = kindOf(te);
+                logOnce(kind + '|diff', `${kind}: MISMATCH REAL — opaco=[${op.join(',')}] ` +
+                    `mueble=[${ta.join(',')}] falta=[${falta.join(',')}] sobra=[${sobra.join(',')}]`);
+            }
+        }
+    }
+
+    function watchMerge(cm) {
+        if (state.watched || typeof cm?.updateChunkMesh !== 'function') return;
+        const orig = cm.updateChunkMesh;
+        const wrapped = function (meshResult) {
+            const r = orig.apply(this, arguments);
+            try { diffChunk(this, meshResult); } catch (_) {}
+            return r;
+        };
+        cm.updateChunkMesh = wrapped;
+        state.watched = { cm, orig, wrapped };
+        console.info(TAG, '✔ watcher del updateChunkMesh: si el merge vuelve a fallar, la consola dice el par exacto');
+    }
+
     function tick() {
-        if (state.destroyed || state.patched) { if (state.timer) { clearInterval(state.timer); state.timer = 0; } return; }
+        if (state.destroyed) return;
+        // listo cuando el guardián está puesto y el watcher armado (o el
+        // chunk manager no apareció tras 10 intentos: bfs con tope)
+        if (state.patched && (state.watched || (state.cmTries || 0) >= 10)) {
+            if (state.timer) { clearInterval(state.timer); state.timer = 0; }
+            return;
+        }
         const game = state.game || findGame();
         if (!game) return;
         state.game = game;
         const ter = game.gameScene?.tileEntityRenderer;
         if (!ter) return;
+        patch(ter);
+        if ((state.cmTries || 0) < 10) {
+            const cm = findChunkManager(game);
+            if (cm) watchMerge(cm);
+            else state.cmTries = (state.cmTries || 0) + 1;
+        }
         // cm es opcional (solo alimenta el sweep): si el juego lo renombra,
         // el fix sigue vivo porque tileEntityModels es el mapa autoritativo
-        const cm = game.chunkRenderManager || game.chunkManager;
-        patch(ter);
-        sweep(ter, cm);
-        if (state.patched) {
+        sweep(ter, game.chunkRenderManager || game.chunkManager);
+        if (state.patched && !state.armedLogged) {
+            state.armedLogged = true;
             console.info(TAG, '✔ geometrías de tile entities alineadas al set de 9 antes del merge');
-            if (state.timer) { clearInterval(state.timer); state.timer = 0; }
         }
     }
 
@@ -138,6 +225,10 @@
             try { state.patched.ter.rebuildTileEntity = state.patched.orig; } catch (_) {}
             state.patched = null;
         }
+        if (state.watched) {
+            try { state.watched.cm.updateChunkMesh = state.watched.orig; } catch (_) {}
+            state.watched = null;
+        }
     }
 
     document.addEventListener('minifeather:temerge-config', (ev) => {
@@ -151,7 +242,11 @@
     // red de seguridad: nace ENCENDIDO — su trabajo es que el merge jamás
     // vea sets desalineados, no es un feature opcional
     enable();
-    window.MF_TileEntityMerge = { enable, disable, get aligned() { return !!state.patched; } };
+    window.MF_TileEntityMerge = {
+        enable, disable,
+        get aligned() { return !!state.patched; },
+        get watching() { return !!state.watched; }
+    };
     window.__MF_TEMERGE_SCOPE__ = { destroy() { state.destroyed = true; disable(); } };
     console.info(TAG, 'módulo cargado (siempre encendido: guarda del mergeGeometries)');
 })();
