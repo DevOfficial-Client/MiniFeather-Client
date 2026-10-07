@@ -104,6 +104,7 @@
     "waterStyleStill": 0.0,
     "rainbow": false,
     "rainbowIntensity": 0.7,
+    "rainbowMode": "rain",
     "deferredPipeline": false,
     "deferredExposure": 0.8,
     "deferredSaturation": 1.0,
