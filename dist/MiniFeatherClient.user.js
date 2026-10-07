@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007211245
+// @version      4.19.0.20261007211259
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : df498a4ae344e7649b8329515f930c7a672cd094
- * builtAt : 2026-10-07T21:12:58.946Z
+ * commit  : 5276caf54e33d69c803950158434f0ad5e61a173
+ * builtAt : 2026-10-07T21:20:37.615Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"df498a4ae344e7649b8329515f930c7a672cd094","builtAt":"2026-10-07T21:12:58.946Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"5276caf54e33d69c803950158434f0ad5e61a173","builtAt":"2026-10-07T21:20:37.615Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -90802,6 +90802,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     const RB_DIST = 500;
     const RB_DEG_IN = 39.5;     // borde interno del anillo (dentro del primario)
     const RB_DEG_OUT = 53.5;    // borde externo (fuera del secundario)
+    // sol sintético para mundos donde NADIE publica la dirección del sol
+    // (water shaders apagados): alto y fijo — el arco siempre tiene ancla
+    const SUN_FALLBACK = { x: 0.35, y: 0.82, z: 0.45 };
 
     const state = {
         enabled: localStorage.getItem('mf_rainbow') === 'true',
@@ -90826,6 +90829,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         nwLogged: false,
         whyLogged: false,
         whyHintLogged: false,
+        fallbackLogged: false,
+        dirLight: null,
+        dirLightTried: false,
         logged: false,
         destroyed: false
     };
@@ -90833,6 +90839,25 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     function readNum(key, fallback) {
         const v = parseFloat(localStorage.getItem(key));
         return Number.isFinite(v) ? v : fallback;
+    }
+
+    // cadena de anclaje solar: fluido → directional light de la escena →
+    // sintético. el sol de la escena existe en TODO mundo (con o sin water
+    // shaders), así que el arco siempre tiene dónde colgarse
+    function resolveSun() {
+        const sd = state.fluidMat?.userData?.sunDirection;
+        if (sd && Number.isFinite(sd.x)) return sd;
+        if (!state.dirLight && !state.dirLightTried && state.game?.gameScene?.scene?.traverse) {
+            state.dirLightTried = true;
+            try {
+                state.game.gameScene.scene.traverse((o) => {
+                    if (!state.dirLight && o.isDirectionalLight && o.position) state.dirLight = o;
+                });
+            } catch (_) {}
+        }
+        const lp = state.dirLight?.position;
+        if (lp && Number.isFinite(lp.x) && (Math.abs(lp.x) + Math.abs(lp.y) + Math.abs(lp.z)) > 1e-4) return lp;
+        return SUN_FALLBACK;
     }
 
     function findGame() {
@@ -90976,15 +91001,17 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             state.game?.gameScene || state.game?.scene || null;
         if (!scene?.traverse) return;
 
-        // material del fluido: clon base + datos del sol vivos (lo actualiza el juego)
+        // material del fluido: clon base + datos del sol vivos (lo actualiza
+        // el juego). sunDirection es OPCIONAL: si el mundo no lo publica
+        // (water shaders apagados), resolveSun() cae a la light de la escena
+        // o al sol sintético
         let fluidMat = null, meshCtor = null, geoCtor = null, attrCtor = null;
         try {
             scene.traverse((o) => {
                 if (fluidMat) return;
                 const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
                 for (const m of mats) {
-                    if (m?.userData && m.userData.waterShadersEnabled !== undefined &&
-                        m.userData.sunDirection && o.geometry) {
+                    if (m?.userData && m.userData.waterShadersEnabled !== undefined && o.geometry) {
                         fluidMat = m;
                         meshCtor = o.constructor;
                         geoCtor = o.geometry.constructor;
@@ -91067,7 +91094,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         state.showFactor += (factorTarget - state.showFactor) * (1 - Math.exp(-dt / tau));
 
         if (state.mesh && state.fluidMat) {
-            const sd = state.fluidMat.userData.sunDirection;
+            const sd = resolveSun();
             if (sd && Number.isFinite(sd.x)) {
                 const mag = Math.hypot(sd.x, sd.y, sd.z) || 1;
                 const sy = sd.y / mag;
@@ -91090,13 +91117,17 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             // completo) y emissive aún en 0, decir UNA vez qué factor es
             if (!state.whyLogged && state.showFactor > 0.9 && state.U.uMfRbI.value <= 0) {
                 state.whyLogged = true;
-                if (!sd || !Number.isFinite(sd.x)) {
-                    console.warn(TAG, 'arco en 0: el fluido no publica sunDirection');
-                } else if (state.sunLight <= 0) {
+                if (state.sunLight <= 0) {
                     console.warn(TAG, 'arco en 0: uSunLight=0 (¿noche del juego?) — MF_Rainbow.force() lo salta');
                 } else {
                     console.warn(TAG, 'arco en 0: sol bajo el horizonte (lift=0) — MF_Rainbow.force() lo salta');
                 }
+            }
+            // aviso una vez si el fluido no publica sol y colgamos del
+            // fallback (light de escena o sintético)
+            if (!state.fallbackLogged && !state.fluidMat?.userData?.sunDirection) {
+                state.fallbackLogged = true;
+                console.info(TAG, 'sin sunDirection del fluido (¿water shaders apagados?) — anclando al sol de la escena');
             }
         }
         state.raf = requestAnimationFrame(frame);
