@@ -70,26 +70,25 @@ test('arranca inactivo y expone su api', () => {
   assert.equal(s.hooked, false);
 });
 
-test('enable clampa los uploads de uVelocityScale y uHistoryWeight (uVelocityScale=0 es passthrough exacto según el shader del juego)', () => {
+test('enable clampa los uploads de uVelocityScale y uGIEnabled (uVelocityScale=0 es passthrough exacto según el shader del juego)', () => {
   const { sandbox } = makeSandbox();
   vm.runInContext(SRC, sandbox, { filename: 'src/Render/MF_AntiTear.js' });
   configEvent(sandbox, true);
   const gl = new sandbox.WebGL2RenderingContext();
   const prog = { id: 'mb' };
   const locVel = gl.getUniformLocation(prog, 'uVelocityScale');
-  const locHist = gl.getUniformLocation({ id: 'fog' }, 'uHistoryWeight');
   const locGI = gl.getUniformLocation({ id: 'chunk' }, 'uGIEnabled');
+  const locHist = gl.getUniformLocation({ id: 'fog' }, 'uHistoryWeight');
   gl.uniform1f(locVel, 0.65);   // lo que el juego le metería al blur
-  gl.uniform1f(locHist, 0.9);   // historial del fog/god rays
   gl.uniform1f(locGI, 1.0);     // voxel GI prendido
+  gl.uniform1f(locHist, 0.9);   // historial del fog/god rays — NO se toca
   const vel = sandbox.__uploads.find(u => u.name === 'uVelocityScale');
-  const hist = sandbox.__uploads.find(u => u.name === 'uHistoryWeight');
   const gi = sandbox.__uploads.find(u => u.name === 'uGIEnabled');
+  const hist = sandbox.__uploads.find(u => u.name === 'uHistoryWeight');
   assert.equal(vel.v, 0, 'motion blur → passthrough exacto');
-  assert.equal(hist.v, 0, 'fog/god rays → sin historial');
   assert.equal(gi.v, 0, 'voxel GI → off (skip all GI work)');
+  assert.equal(hist.v, 0.9, 'god rays/fog intocables: el historial va vanilla');
   assert.equal(sandbox.MF_AntiTear.status().motionBlur, true);
-  assert.equal(sandbox.MF_AntiTear.status().godRays, true);
   assert.equal(sandbox.MF_AntiTear.status().gi, true);
 });
 
