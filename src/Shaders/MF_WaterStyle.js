@@ -81,18 +81,41 @@
         uniform float uMfWaveScale;
         uniform vec3 uMfPlayerPos;
         uniform float uMfPlayerRipple;
-        // TURBULENCIA band-limited (lección v4/v5): en geometría SIN subdividir
-        // (vértices por bloque) nada de ~π rad/bloque. Con geometría subdividida
-        // (mfSub=1, spacing 1/3 de bloque) el módulo escala p ×2.2 → headroom
-        // para olas de λ~1.5 bloque. La turbulencia FINA sigue en el fragment
-        // (uMfChop) a resolución de píxel.
+        // hash/ruido value sin senos (determinista en coords de mundo grandes,
+        // C1 por el smoothstep → normales por diferencia finita limpias)
+        float mfHash(vec2 p) {
+            p = 50.0 * fract(p * 0.3183099 + vec2(0.71, 0.113));
+            return -1.0 + 2.0 * fract(p.x * p.y * (p.x + p.y));
+        }
+        float mfNoise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            return mix(mix(mfHash(i), mfHash(i + vec2(1.0, 0.0)), u.x),
+                       mix(mfHash(i + vec2(0.0, 1.0)), mfHash(i + vec2(1.0, 1.0)), u.x), u.y);
+        }
+        // MAR POR VIENTO (v7): ruido FBM advectado + warp del dominio + rachas.
+        // Cero trenes, cero periodicidad — el warp hace que nunca se repita ni
+        // se reconozca una célula. Las octavas finas (mfSub) solo se abren
+        // donde la malla subdividida las puede representar (lección v4/v5);
+        // en vértices por bloque solo corre la base (λ~4.4 bloques)
+        float mfWindWaves(vec2 p, float t) {
+            vec2 wind = vec2(0.8, 0.6);
+            vec2 warp = vec2(
+                mfNoise(p * 0.35 + vec2( t * 0.10, -t * 0.08)),
+                mfNoise(p * 0.35 + vec2(-t * 0.09,  t * 0.12))
+            ) * 0.9;
+            vec2 q = (p + warp) * 0.45;
+            float h = mfNoise(q - wind * t * 0.42) * 0.62;
+            h += mfNoise(q * 2.1 - wind * t * 0.60 + 7.3) * (0.30 * mfSub);
+            h += mfNoise(q * 4.4 - wind * t * 0.80 + 3.1) * (0.22 * mfSub);
+            // rachas: parches donde el viento sopla más fuerte (ruido lento
+            // derivando con el viento) — unas zonas en calma, otras bravas
+            h *= 1.0 + mfNoise(p * 0.16 + wind * t * 0.06) * 0.5;
+            return h;
+        }
         float mfTurbulence(vec2 p, float t) {
-            float tt = t * 2.2;
-            float h = sin(dot(p, vec2( 1.15,  0.80)) + tt) * 0.45;
-            h += sin(dot(p, vec2(-0.95,  1.30)) + tt * 1.31 + sin(dot(p, vec2( 0.45, -0.35)) + tt * 0.53) * 1.1) * 0.35;
-            h += sin(dot(p, vec2( 1.45, -0.60)) - tt * 1.67 + sin(dot(p, vec2(-0.40,  0.50)) + tt * 0.41) * 0.9) * 0.30;
-            h += h * 0.25 * h;
-            return h * 0.030;
+            return mfWindWaves(p, t) * 0.050;
         }
         // anillo radial que nace del jugador; kind>=0.5 = agua (la lava pide
         // kind 0.0 y sale por el if de una)
@@ -104,17 +127,31 @@
         }
     `;
 
-    // chop por-píxel: reemplaza el normal liso de renderWaterColor por uno con
-    // micro-olas de alta frecuencia (per-píxel = resolución total, cero
-    // aliasing de malla). Al estar ANTES de NdotV/fresnel/refracción/SSR,
+    // chop por-píxel: reemplaza el normal liso de renderWaterColor por ruido
+    // advectado (per-píxel = resolución total, cero aliasing de malla, cero
+    // trenes reconocibles). Al estar ANTES de NdotV/fresnel/refracción/SSR,
     // titilan el brillo del sol, la transparencia y los reflejos
-    const FRAG_CHOP = `// mf chop: turbulencia fina por-pixel
-        vec3 normal = normalize(vWorldNormal + vec3(
-            sin(dot(vWorldPosition.xz, vec2( 5.3,  3.7)) + time * 0.36) * 0.32 +
-            sin(dot(vWorldPosition.xz, vec2(-4.1,  6.9)) + time * 0.45) * 0.24,
-            0.0,
-            sin(dot(vWorldPosition.xz, vec2( 6.9, -2.9)) + time * 0.40) * 0.32
-        ) * uMfChop);`;
+    const FRAG_CHOP = `// mf chop: turbulencia fina por-pixel (ruido advectado)
+        vec2 mfCq = vWorldPosition.xz * 1.9;
+        mfCq += vec2(mfFNoise(mfCq * 0.29 + time * 0.03)) * 0.8;
+        float mfC = mfFNoise(mfCq - vec2(0.9, 0.6) * time * 0.55) * 0.7
+                  + mfFNoise(mfCq * 2.3 - vec2(0.9, 0.6) * time * 0.80 + 4.7) * 0.3;
+        vec3 normal = normalize(vWorldNormal + vec3(mfC, 0.0, mfC * 0.8) * uMfChop);`;
+
+    // ruido para el fragment (copia propia: el fragment no ve funciones del vertex)
+    const FRAG_NOISE = `
+        float mfFHash(vec2 p) {
+            p = 50.0 * fract(p * 0.3183099 + vec2(0.71, 0.113));
+            return -1.0 + 2.0 * fract(p.x * p.y * (p.x + p.y));
+        }
+        float mfFNoise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            return mix(mix(mfFHash(i), mfFHash(i + vec2(1.0, 0.0)), u.x),
+                       mix(mfFHash(i + vec2(0.0, 1.0)), mfFHash(i + vec2(1.0, 1.0)), u.x), u.y);
+        }
+    `;
 
     const FRAG_TAIL = `
         // mf water style: tinte verde por luminancia + alfa fijo. vColor.r < 0.49
@@ -215,15 +252,17 @@
                     vs = vs.replace(s3Orig, 'cos(p.x * 0.8 + p.y * 2.0 + t * 0.9) * 0.20;');
                 }
                 if (vs.includes('return w * amp;')) {
+                    // los 3 senos del juego son swell regular (patrón): queda
+                    // al 25% como piso de mar de fondo; el viento es el ruido
                     vs = vs.replace('return w * amp;',
-                        'return w * amp + mfTurbulence(p, t) * uMfWaveScale + mfPlayerRipple(p, t, kind);');
+                        'return w * amp * 0.25 + mfTurbulence(p, t) * uMfWaveScale + mfPlayerRipple(p, t, kind);');
                 }
                 shader.vertexShader = vs;
             }
 
             // chop por-pixel (turbulencia fina, sin aliasing de malla)
             if (!shader.fragmentShader.includes('uMfChop')) {
-                shader.fragmentShader = 'uniform float uMfChop;\n' + shader.fragmentShader;
+                shader.fragmentShader = FRAG_NOISE + 'uniform float uMfChop;\n' + shader.fragmentShader;
             }
             if (!shader.fragmentShader.includes('mf chop') &&
                 shader.fragmentShader.includes('vec3 normal = normalize(vWorldNormal);')) {
@@ -252,7 +291,7 @@
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v6';
+            return base + '_mfws_v7';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
