@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007062624
+// @version      4.19.0.20261007063411
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 8a29f8ddab3570407bd1443dd559d7c9c0679cbe
- * builtAt : 2026-10-07T06:26:41.939Z
+ * commit  : 936729b97d04577001984698c60d9879a9a2ce66
+ * builtAt : 2026-10-07T06:34:28.966Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"8a29f8ddab3570407bd1443dd559d7c9c0679cbe","builtAt":"2026-10-07T06:26:41.939Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"936729b97d04577001984698c60d9879a9a2ce66","builtAt":"2026-10-07T06:34:28.966Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -90601,13 +90601,21 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     const state = {
         enabled: localStorage.getItem('mf_rainbow') === 'true',
         intensity: readNum('mf_rainbow_intensity', 0.7),
+        mode: localStorage.getItem('mf_rainbow_mode') || 'rain',   // 'rain' | 'always'
         game: null,
         fluidMat: null,
         scanTimer: 0,
         raf: 0,
+        lastFrameAt: 0,
         mesh: null,
         U: null,
         sunLight: 1,
+        // ciclo post-lluvia: mientras llueve el arco se esconde; al PARAR
+        // arranca una ventana de ~2.5 min con fade suave y se va
+        rainActive: false,
+        afterRainUntil: 0,
+        showFactor: 0,
+        rainReadFailLogged: false,
         logged: false,
         destroyed: false
     };
@@ -90770,7 +90778,42 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     function frame() {
         state.raf = 0;
         if (!state.enabled || state.destroyed) return;
-        const cam = state.game?.gameScene?.camera || state.game?.gameScene?.camera;
+        const nowMs = performance.now();
+        const dt = Math.min(0.5, Math.max(0.001, (nowMs - (state.lastFrameAt || nowMs)) / 1000));
+        state.lastFrameAt = nowMs;
+
+        // ciclo de lluvia: getRainStrength del world (el mismo método que
+        // parchea NoWeather — señal 0..1). sin señal → fail-open a "siempre"
+        // (silent-failure de IterationT: mejor arco de más que nunca)
+        let factorTarget = 1;
+        const world = state.game?.world;
+        if (state.mode === 'rain') {
+            if (typeof world?.getRainStrength === 'function') {
+                let strength = 0;
+                try { strength = world.getRainStrength() || 0; } catch (_) {}
+                const raining = strength > 0.15;
+                if (raining) {
+                    state.rainActive = true;
+                    state.afterRainUntil = 0;
+                    factorTarget = 0;
+                } else if (state.rainActive) {
+                    // acaba de parar: ventana de arcoíris post-lluvia
+                    state.rainActive = false;
+                    state.afterRainUntil = nowMs + 150000;
+                }
+                factorTarget = (state.afterRainUntil > nowMs) ? 1 : 0;
+            } else {
+                if (!state.rainReadFailLogged) {
+                    state.rainReadFailLogged = true;
+                    console.warn(TAG, 'sin world.getRainStrength — modo post-lluvia degrada a "siempre"');
+                }
+            }
+        }
+        // fades suaves: entra ~6s, sale ~12s
+        const tau = factorTarget > state.showFactor ? 6 : 12;
+        state.showFactor += (factorTarget - state.showFactor) * (1 - Math.exp(-dt / tau));
+
+        const cam = state.game?.gameScene?.camera;
         if (cam && state.mesh && state.fluidMat) {
             const sd = state.fluidMat.userData.sunDirection;
             if (sd && Number.isFinite(sd.x)) {
@@ -90779,7 +90822,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 // física: sin sol sobre el horizonte no hay arcoíris
                 const lift = Math.max(0, Math.min(1, (sy - 0.02) / 0.18));
                 const sl = state.fluidMat.userData.uSunLight;
-                state.U.uMfRbI.value = state.intensity * lift * (sl ? sl.value : 1);
+                state.sunLight = sl ? sl.value : 1;
+                state.U.uMfRbI.value = state.intensity * lift * state.sunLight * state.showFactor;
                 // anti-sol y base: z=anti-sol, y≈arriba proyectado, x=y×z
                 const ax = -sx, ay = -sy, az = -sz;
                 const d = ay;                      // up·anti con up=(0,1,0)
@@ -90828,10 +90872,22 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 localStorage.setItem('mf_rainbow_intensity', String(state.intensity));
             }
         }
+        if (cfg && cfg.mode !== undefined) {
+            state.mode = cfg.mode === 'always' ? 'always' : 'rain';
+            localStorage.setItem('mf_rainbow_mode', state.mode);
+            if (state.mode === 'always') state.showFactor = 1;
+        }
     }
 
     function status() {
-        return { enabled: state.enabled, mesh: !!state.mesh, intensity: state.intensity };
+        return {
+            enabled: state.enabled,
+            mesh: !!state.mesh,
+            intensity: state.intensity,
+            mode: state.mode,
+            raining: state.rainActive,
+            showFactor: Math.round(state.showFactor * 100) / 100
+        };
     }
 
     function destroy() {
@@ -125819,7 +125875,8 @@ function normalize(entry) {
     document.dispatchEvent(new CustomEvent('minifeather:rainbow-config', {
       detail: JSON.stringify({
         enabled: !!enabled,
-        intensity: Number(settings.rainbowIntensity ?? 0.7)
+        intensity: Number(settings.rainbowIntensity ?? 0.7),
+        mode: settings.rainbowMode === 'always' ? 'always' : 'rain'
       })
     }));
   }
@@ -129195,6 +129252,13 @@ function normalize(entry) {
             <span style="min-width:90px;font-size:12px;">intensidad</span>
             <input id="mf-rb-int" type="range" min="0" max="1" step="0.05" value="${Number(settings.rainbowIntensity ?? 0.7)}">
             <span id="mf-rb-int-value">${Math.round(Number(settings.rainbowIntensity ?? 0.7) * 100)}%</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-top:10px;">
+            <span style="min-width:90px;font-size:12px;">cuando</span>
+            <select id="mf-rb-mode" class="mf-select" style="flex:1;">
+              <option value="rain" ${(settings.rainbowMode === 'always' ? '' : 'selected')}>despu&eacute;s de la lluvia</option>
+              <option value="always" ${(settings.rainbowMode === 'always' ? 'selected' : '')}>siempre</option>
+            </select>
           </div>
         </div>
 
@@ -132995,6 +133059,13 @@ function normalize(entry) {
         saveSettings(true);
       });
     }
+    const rbMode = panel.querySelector('#mf-rb-mode');
+    rbMode?.addEventListener('change', () => {
+      settings.rainbowMode = rbMode.value === 'always' ? 'always' : 'rain';
+      guiSettings.rainbowMode = settings.rainbowMode;
+      saveSettings(true);
+      sendRainbowConfig();
+    });
     const rbSlider = panel.querySelector('#mf-rb-int');
     rbSlider?.addEventListener('input', () => {
       const value = parseFloat(rbSlider.value);
