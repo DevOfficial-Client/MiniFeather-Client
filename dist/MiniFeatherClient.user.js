@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007072621
+// @version      4.19.0.20261007162000
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 98c44e48975a3956ec9fbcf73371a6a36820a15d
- * builtAt : 2026-10-07T07:26:36.254Z
+ * commit  : 557df3b54a77fa24a4e186ac5aeb137edb10860e
+ * builtAt : 2026-10-07T16:20:15.207Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"98c44e48975a3956ec9fbcf73371a6a36820a15d","builtAt":"2026-10-07T07:26:36.254Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"557df3b54a77fa24a4e186ac5aeb137edb10860e","builtAt":"2026-10-07T16:20:15.207Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -87943,19 +87943,27 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
     const LS_PACK_NOISE = 'miniblox_clouds_packnoise';
 
+    // ruido de nubes del pack: el bin viaja en la extensión, pero este módulo
+    // corre en la página (MAIN world) donde chrome.runtime no existe — la
+    // base de assets la manda el panel en cada config (shaderAssetsBase).
     const packNoise = {
         enabled: localStorage.getItem(LS_PACK_NOISE) === 'true',
+        base: '',
+        bytes: null,
         texture: null,
+        original: null,
         loading: false,
-        failed: false
+        retryTimer: 0
     };
 
     function fetchPackTexture(file) {
-        const url = typeof chrome !== 'undefined' && chrome.runtime?.getURL
-            ? chrome.runtime.getURL('assets/shadertextures/' + file)
-            : null;
-        if (!url) return Promise.resolve(null);
-        return fetch(url)
+        if (!packNoise.base) {
+            // sin base no hay transporte: fail LOUD (esto antes moría en
+            // silencio y el toggle no hacía nada jamás)
+            console.warn(`${TAG} pack noise sin shaderAssetsBase — ¿el panel no mandó la base de assets?`);
+            return Promise.resolve(null);
+        }
+        return fetch(packNoise.base + file)
             .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
             .then(buf => new Uint8Array(buf));
     }
@@ -88008,46 +88016,68 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         }
     }
 
+    // aplica el ruido del pack a la malla de nubes actual. false = aún no
+    // puede (malla inexistente, bin sin bajar, constructor no robado aún) —
+    // el retry lo reintenta; la textura se construye lazy para no depender
+    // de que las nubes existan YA (en el menú no existen)
     function applyPackNoiseToMesh() {
-        if (!packNoise.enabled || !packNoise.texture) return false;
+        if (!packNoise.enabled) return false;
         const mesh = resolveClouds();
         if (!mesh) return false;
         const u = mesh.material?.uniforms;
-        if (u?.uNoiseTex && packNoise.texture) {
-            if (u.uNoiseTex.value !== packNoise.texture) {
-                u.uNoiseTex.value = packNoise.texture;
-                void 0;
-            }
-            return true;
+        if (!u?.uNoiseTex) return false;
+        if (!packNoise.texture) {
+            if (!packNoise.bytes) return false;
+            packNoise.texture = buildPack3DTexture(packNoise.bytes, 128, 128, 128);
+            if (!packNoise.texture) return false;
+            packNoise.bytes = null;   // la textura vive sola desde aquí
         }
-        return false;
+        if (u.uNoiseTex.value !== packNoise.texture) {
+            packNoise.original = u.uNoiseTex.value;   // vanilla para el restore
+            u.uNoiseTex.value = packNoise.texture;
+        }
+        return true;
     }
 
-    function setPackNoise(enabled) {
+    function stopPackNoiseRetry() {
+        if (packNoise.retryTimer) { clearInterval(packNoise.retryTimer); packNoise.retryTimer = 0; }
+    }
+
+    function startPackNoiseRetry() {
+        if (packNoise.retryTimer) return;
+        packNoise.retryTimer = setInterval(() => {
+            if (applyPackNoiseToMesh() || !packNoise.enabled) stopPackNoiseRetry();
+        }, 2000);
+        setTimeout(stopPackNoiseRetry, 60000);
+    }
+
+    function setPackNoise(enabled, base) {
+        if (base) packNoise.base = String(base);
         packNoise.enabled = !!enabled;
         localStorage.setItem(LS_PACK_NOISE, String(packNoise.enabled));
 
-        if (packNoise.enabled && !packNoise.texture && !packNoise.loading && !packNoise.failed) {
-            packNoise.loading = true;
-            fetchPackTexture('CloudNoise_128_128_128.bin')
-                .then(bytes => {
-                    packNoise.texture = bytes
-                        ? buildPack3DTexture(bytes, 128, 128, 128)
-                        : null;
-                    packNoise.failed = packNoise.texture === null;
-                })
-                .catch(() => { packNoise.failed = true; })
-                .finally(() => {
-                    packNoise.loading = false;
-                    applyPackNoiseToMesh();
-                });
-        } else if (packNoise.enabled && packNoise.texture) {
-            applyPackNoiseToMesh();
-        } else if (!packNoise.enabled && packNoise.texture) {
-
+        if (packNoise.enabled) {
+            if (applyPackNoiseToMesh()) { stopPackNoiseRetry(); return; }
+            if (!packNoise.bytes && !packNoise.texture && !packNoise.loading) {
+                packNoise.loading = true;
+                fetchPackTexture('CloudNoise_128_128_128.bin')
+                    .then(bytes => { packNoise.bytes = bytes; })
+                    .catch(() => console.warn(`${TAG} pack noise: no se pudo traer CloudNoise_128_128_128.bin`))
+                    .finally(() => {
+                        packNoise.loading = false;
+                        if (!applyPackNoiseToMesh()) startPackNoiseRetry();
+                    });
+            } else {
+                // bytes ya en mano (o en vuelo): las nubes aún no existen
+                startPackNoiseRetry();
+            }
+        } else {
+            stopPackNoiseRetry();
             const mesh = resolveClouds();
             const u = mesh?.material?.uniforms;
-            if (u?.uNoiseTex) u.uNoiseTex.value.needsUpdate = true;
+            if (u?.uNoiseTex && packNoise.original && u.uNoiseTex.value === packNoise.texture) {
+                u.uNoiseTex.value = packNoise.original;   // devolver el vanilla
+            }
         }
     }
 
@@ -88565,11 +88595,17 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         }
 
         if (cfg.clouds && typeof cfg.clouds === 'object') {
-            const pending = () => applyClouds(cfg.clouds);
+            const pending = () => {
+                const ok = applyClouds(cfg.clouds);
+                // la malla pudo recrearse (dimensión/rejoin): reaprovechamos
+                // este momento para devolverle el ruido del pack si toca
+                if (ok && packNoise.enabled) applyPackNoiseToMesh();
+                return ok;
+            };
             if (!pending()) {
 
                 const retry = setInterval(() => {
-                    if (applyClouds(cfg.clouds) || !state.enabled) clearInterval(retry);
+                    if (pending() || !state.enabled) clearInterval(retry);
                 }, 2000);
                 setTimeout(() => clearInterval(retry), 60000);
             }
@@ -88580,7 +88616,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         }
 
         if (cfg.cloudsPackNoise !== undefined) {
-            setPackNoise(!!cfg.cloudsPackNoise);
+            setPackNoise(!!cfg.cloudsPackNoise, cfg.shaderAssetsBase);
         }
 
         if (cfg.postfx && typeof cfg.postfx === 'object') {
@@ -90639,7 +90675,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         forcedUntil: 0,
         afterRainUntil: 0,
         showFactor: 0,
+        lift: 0,
         rainReadFailLogged: false,
+        nwLogged: false,
         logged: false,
         destroyed: false
     };
@@ -90819,7 +90857,17 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         // (silent-failure de IterationT: mejor arco de más que nunca)
         let factorTarget = 1;
         const forced = state.forcedUntil > nowMs;
+        // NoWeather parchea getRainStrength a () => 0: la señal existe pero
+        // jamás anuncia lluvia → el arco sería invisible para siempre y el
+        // fail-open de abajo no salta. mismo espíritu: degradar a "siempre"
+        const noWeather = !!(window.MiniFeatherNoWeather && window.MiniFeatherNoWeather.enabled);
         if (state.mode === 'rain' && !forced) {
+            if (noWeather) {
+                if (!state.nwLogged) {
+                    state.nwLogged = true;
+                    console.warn(TAG, 'NoWeather activo — sin lluvia real, el modo post-lluvia degrada a "siempre"');
+                }
+            } else {
             const world = state.game?.world;
             if (typeof world?.getRainStrength === 'function') {
                 let strength = 0;
@@ -90841,6 +90889,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                     console.warn(TAG, 'sin world.getRainStrength — modo post-lluvia degrada a "siempre"');
                 }
             }
+            }
         }
         // fades suaves: entra ~6s, sale ~12s
         const tau = factorTarget > state.showFactor ? 6 : 12;
@@ -90852,11 +90901,16 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             if (sd && Number.isFinite(sd.x)) {
                 const mag = Math.hypot(sd.x, sd.y, sd.z) || 1;
                 const sx = sd.x / mag, sy = sd.y / mag, sz = sd.z / mag;
-                // física: sin sol sobre el horizonte no hay arcoíris
-                const lift = Math.max(0, Math.min(1, (sy - 0.02) / 0.18));
+                // física: sin sol sobre el horizonte no hay arcoíris —
+                // force() se salta también este gating: es comando de
+                // demo/diagnóstico, si fuerza de noche el arco SE ve
+                const liftNat = Math.max(0, Math.min(1, (sy - 0.02) / 0.18));
                 const sl = state.fluidMat.userData.uSunLight;
                 state.sunLight = sl ? sl.value : 1;
-                state.U.uMfRbI.value = state.intensity * lift * state.sunLight * state.showFactor;
+                const lift = forced ? 1 : liftNat;
+                const sunNow = forced ? 1 : state.sunLight;
+                state.lift = lift;
+                state.U.uMfRbI.value = state.intensity * lift * sunNow * state.showFactor;
                 // anti-sol y base: z=anti-sol, y≈arriba proyectado, x=y×z
                 const ax = -sx, ay = -sy, az = -sz;
                 const d = ay;                      // up·anti con up=(0,1,0)
@@ -90925,13 +90979,21 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     }
 
     function status() {
+        const sd = state.fluidMat?.userData?.sunDirection;
         return {
             enabled: state.enabled,
             mesh: !!state.mesh,
+            fluidMat: !!state.fluidMat,
+            sunDir: !!(sd && Number.isFinite(sd.x)),
             intensity: state.intensity,
             mode: state.mode,
             raining: state.rainActive,
-            showFactor: Math.round(state.showFactor * 100) / 100
+            showFactor: Math.round(state.showFactor * 100) / 100,
+            lift: Math.round((state.lift || 0) * 100) / 100,
+            sunLight: Math.round((state.sunLight || 0) * 100) / 100,
+            uMfRbI: state.U ? Math.round(state.U.uMfRbI.value * 1000) / 1000 : 0,
+            forced: state.forcedUntil > performance.now(),
+            noWeather: !!(window.MiniFeatherNoWeather && window.MiniFeatherNoWeather.enabled)
         };
     }
 
@@ -125870,7 +125932,15 @@ function normalize(entry) {
           height: Number(settings.cloudsHeight ?? 128),
           opacity: Number(settings.cloudsOpacity ?? 0.9)
         },
-        cloudsPackNoise: !!settings.cloudsPackNoise
+        cloudsPackNoise: !!settings.cloudsPackNoise,
+        // el módulo vive en la página (MAIN world) y no ve chrome.runtime:
+        // la base de los assets de shaders viaja en el evento (como waterSplash)
+        shaderAssetsBase: (() => {
+          try {
+            const url = chrome.runtime.getURL('assets/shadertextures/');
+            return (url && !url.includes('://invalid/')) ? url : '';
+          } catch (_) { return ''; }
+        })()
       })
     }));
   }
