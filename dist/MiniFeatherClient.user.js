@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007043427
+// @version      4.19.0.20261007052557
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : e3a9353dd7970a48f854e888238ba439b01cc922
- * builtAt : 2026-10-07T04:34:40.527Z
+ * commit  : bee09911ae22805e022de3d30542b785bf63b622
+ * builtAt : 2026-10-07T05:26:10.756Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"e3a9353dd7970a48f854e888238ba439b01cc922","builtAt":"2026-10-07T04:34:40.527Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"bee09911ae22805e022de3d30542b785bf63b622","builtAt":"2026-10-07T05:26:10.756Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -89822,21 +89822,25 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         // en vértices por bloque solo corre la base (λ~4.4 bloques)
         float mfWindWaves(vec2 p, float t) {
             vec2 wind = vec2(0.8, 0.6);
+            // warp EVOLUCIONA rápido: el campo no solo se traslada, se
+            // REMODELA — sin esto la superficie parece congelada aunque el
+            // patrón derive (lección v8: advección sola = "1009 por hora" XD)
             vec2 warp = vec2(
-                mfNoise(p * 0.35 + vec2( t * 0.10, -t * 0.08)),
-                mfNoise(p * 0.35 + vec2(-t * 0.09,  t * 0.12))
+                mfNoise(p * 0.35 + vec2( t * 0.28, -t * 0.24)),
+                mfNoise(p * 0.35 + vec2(-t * 0.26,  t * 0.30))
             ) * 0.9;
             vec2 q = (p + warp) * 0.45;
-            float h = mfNoise(q - wind * t * 0.42) * 0.62;
-            h += mfNoise(q * 2.1 - wind * t * 0.60 + 7.3) * (0.30 * mfSub);
-            h += mfNoise(q * 4.4 - wind * t * 0.80 + 3.1) * (0.22 * mfSub);
-            // rachas: parches donde el viento sopla más fuerte (ruido lento
-            // derivando con el viento) — unas zonas en calma, otras bravas
-            h *= 1.0 + mfNoise(p * 0.16 + wind * t * 0.06) * 0.5;
+            float h = mfNoise(q - wind * t * 0.75) * 0.72;
+            h += mfNoise(q * 2.1 - wind * t * 1.05 + 7.3) * (0.30 * mfSub);
+            h += mfNoise(q * 4.4 - wind * t * 1.40 + 3.1) * (0.22 * mfSub);
+            // rachas presentes sin dejar el mar en calma muerta
+            h *= 1.0 + mfNoise(p * 0.16 + wind * t * 0.10) * 0.45;
             return h;
         }
+        // amplitud 0.10: waveBlend ancla las orillas, así que el interior puede
+        // ondear ±3px sin abrir huecos contra el terreno (a 2x; a 4x = tormenta)
         float mfTurbulence(vec2 p, float t) {
-            return mfWindWaves(p, t) * 0.050;
+            return mfWindWaves(p, t) * 0.10;
         }
         // anillo radial que nace del jugador; kind>=0.5 = agua (la lava pide
         // kind 0.0 y sale por el if de una)
@@ -90026,7 +90030,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v8';
+            return base + '_mfws_v9';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
