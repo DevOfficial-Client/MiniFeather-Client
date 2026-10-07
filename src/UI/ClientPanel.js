@@ -5166,7 +5166,8 @@
         tintMix: Number(settings.waterStyleTintMix ?? 0.85),
         waveScale: Number(settings.waterStyleWaveScale ?? 2.0),
         acrylic: Number(settings.waterStyleAcrylic ?? 0.55),
-        caustics: Number(settings.waterStyleCaustics ?? 0.8)
+        caustics: Number(settings.waterStyleCaustics ?? 0.8),
+        still: Number(settings.waterStyleStill ?? 0.0)
       })
     }));
   }
@@ -8529,6 +8530,11 @@
             <span style="min-width:90px;font-size:12px;">c&aacute;usticas</span>
             <input id="mf-ws-cau" type="range" min="0" max="1" step="0.05" value="${Number(settings.waterStyleCaustics ?? 0.8)}">
             <span id="mf-ws-cau-value">${Math.round(Number(settings.waterStyleCaustics ?? 0.8) * 100)}%</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-top:10px;">
+            <span style="min-width:90px;font-size:12px;">estancada</span>
+            <input id="mf-ws-stil" type="range" min="0" max="1" step="0.05" value="${Number(settings.waterStyleStill ?? 0.0)}">
+            <span id="mf-ws-stil-value">${Math.round(Number(settings.waterStyleStill ?? 0.0) * 100)}%</span>
           </div>
         </div>
 
@@ -12367,7 +12373,8 @@
       tint: { key: 'waterStyleTintMix', fmt: v => Math.round(v * 100) + '%' },
       wave: { key: 'waterStyleWaveScale', fmt: v => v.toFixed(1) + '\u00d7' },
       acr: { key: 'waterStyleAcrylic', fmt: v => Math.round(v * 100) + '%' },
-      cau: { key: 'waterStyleCaustics', fmt: v => Math.round(v * 100) + '%' }
+      cau: { key: 'waterStyleCaustics', fmt: v => Math.round(v * 100) + '%' },
+      stil: { key: 'waterStyleStill', fmt: v => Math.round(v * 100) + '%' }
     };
     for (const [name, { key, fmt }] of Object.entries(wsMap)) {
       const slider = panel.querySelector(`#mf-ws-${name}`);

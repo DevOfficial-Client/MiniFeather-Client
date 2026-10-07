@@ -101,6 +101,7 @@
     "waterStyleWaveScale": 2.0,
     "waterStyleAcrylic": 0.55,
     "waterStyleCaustics": 0.8,
+    "waterStyleStill": 0.0,
     "deferredPipeline": false,
     "deferredExposure": 0.8,
     "deferredSaturation": 1.0,
