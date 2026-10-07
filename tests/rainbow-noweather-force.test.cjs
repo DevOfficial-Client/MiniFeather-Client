@@ -100,7 +100,7 @@ function makeTickCtx({ sun, sunLight, rain }) {
   };
   ctx.window = ctx;
   vm.createContext(ctx);
-  return { ctx, fluidMat, fluidUD };
+  return { ctx, fluidMat, fluidUD, game };
 }
 
 // hace avanzar el reloj y bombea los frames acumulados; paso chico porque
@@ -174,6 +174,21 @@ test('de noche SIN force el arco sigue apagado (la física se queda intacta)', (
   const st = ctx.MF_Rainbow.status();
   assert.ok(st.showFactor > 0.9, 'degradado a siempre: showFactor=' + st.showFactor);
   assert.equal(st.uMfRbI, 0, 'pero de noche el gating solar lo mantiene en 0');
+});
+
+test('sin objeto cámara del juego: el anclaje es GPU-side, el arco no depende de ella', () => {
+  const { ctx, game } = makeTickCtx({ sun: DAY, sunLight: 1, rain: () => 0 });
+  ctx.MiniFeatherNoWeather = { enabled: true };
+  vm.runInContext(SRC_RB, ctx, { filename: 'MF_Rainbow.js' });
+  ctx.MF_Rainbow.enable();
+  // saboteamos la ruta vieja: si el frame loop aún dependiera del objeto
+  // cámara, uMfRbI se quedaría en 0 y el arco sería invisible (el bug real
+  // que motivó el anclaje por vertex shader con cameraPosition)
+  delete game.gameScene.camera;
+  drive(ctx, 40000);
+  const st = ctx.MF_Rainbow.status();
+  assert.ok(st.showFactor > 0.9, 'showFactor=' + st.showFactor);
+  assert.ok(st.uMfRbI > 0.3, 'sin cámara el arco EMITE igual: uMfRbI=' + st.uMfRbI);
 });
 
 test('status() diagnostico: expone fluidMat/sunDir/sunLight para reportes del usuario', () => {
