@@ -40,7 +40,10 @@
         scanTimer: 0,
         tickTimer: 0,
         lastScan: 0,
-        hooked: new Map(),      // material → { orig, origKey, liveUniforms }
+        hooked: new Map(),      // material → { orig, origKey, liveUniforms, origGeo, cloneGeo }
+        subdiv: localStorage.getItem('mf_waterstyle_subdiv') !== 'false',
+        subBudget: 0,
+        subLogged: false,
         destroyed: false
     };
 
@@ -74,17 +77,15 @@
     }
 
     const WAVE_GLSL = `
+        attribute float mfSub;
         uniform float uMfWaveScale;
         uniform vec3 uMfPlayerPos;
         uniform float uMfPlayerRipple;
-        // TURBULENCIA (v5) band-limited: la malla del fluido tiene vértices
-        // por bloque, así que TODO lo que pase de ~π rad/bloque aliassea en
-        // picos — "paneles", la lección v4 (la v4 iba a 2.7-3.2 rad/bloque y
-        // hasta el seno medio del juego, 2.8 rad/bloque, se volvía sierra al
-        // amplificarlo). Los trenes de aquí van a λ≥3.5 bloques; la
-        // turbulencia FINA vive en el fragment como perturbación de normal
-        // por-píxel (uMfChop), donde la resolución es la del píxel y no hay
-        // malla que engañar
+        // TURBULENCIA band-limited (lección v4/v5): en geometría SIN subdividir
+        // (vértices por bloque) nada de ~π rad/bloque. Con geometría subdividida
+        // (mfSub=1, spacing 1/3 de bloque) el módulo escala p ×2.2 → headroom
+        // para olas de λ~1.5 bloque. La turbulencia FINA sigue en el fragment
+        // (uMfChop) a resolución de píxel.
         float mfTurbulence(vec2 p, float t) {
             float tt = t * 9.0;
             float h = sin(dot(p, vec2( 1.15,  0.80)) + tt) * 0.45;
@@ -94,8 +95,7 @@
             return h * 0.030;
         }
         // anillo radial que nace del jugador; kind>=0.5 = agua (la lava pide
-        // kind 0.0 y sale por el if de una). Frecuencia espacial 1.2 rad/bloque
-        // (la v4 usaba 2.0 y también Panels Mode cerca del jugador)
+        // kind 0.0 y sale por el if de una)
         float mfPlayerRipple(vec2 p, float t, float kind) {
             if (kind < 0.5) return 0.0;
             float mfD = length(p - uMfPlayerPos.xz);
@@ -194,7 +194,12 @@
                 let vs = shader.vertexShader;
                 const ampOrig = 'float amp = kind < 0.5 ? 0.01 : (kind < 1.5 ? 0.045 : 0.03);';
                 if (vs.includes(ampOrig)) {
+                    // frecuencia adaptativa: p se escala ×2.2 SOLO en geometría
+                    // subdividida (mfSub=1) — la que no lo está mantiene sus
+                    // frecuencias seguras para vértices por bloque. La lava
+                    // (kind 0) nunca escala: churn vanilla
                     vs = vs.replace(ampOrig,
+                        'p *= 1.0 + (kind < 0.5 ? 0.0 : mfSub) * 1.2;\n          ' +
                         'float amp = kind < 0.5 ? 0.01 : (kind < 1.5 ? 0.045 * uMfWaveScale : 0.03 * uMfWaveScale);');
                 }
                 // los senos 2 y 3 del juego van a 2.8 y 2.15 rad/bloque: al
@@ -247,7 +252,7 @@
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v4';
+            return base + '_mfws_v5';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
@@ -261,9 +266,128 @@
         if (!entry) return;
         try { m.onBeforeCompile = entry.orig; } catch (_) {}
         try { m.customProgramCacheKey = entry.origKey; } catch (_) {}
+        // devolver la geometría original y liberar la subdividida
+        if (entry.cloneGeo) {
+            try { if (m.geometry === entry.cloneGeo) m.geometry = entry.origGeo; } catch (_) {}
+            try { entry.cloneGeo.dispose(); } catch (_) {}
+        }
         m.__mfWaterStyleHooked = false;
         m.needsUpdate = true;
         state.hooked.delete(m);
+    }
+
+    // ── subdivisión de la geometría del fluido (v6) ───────────────────────
+    // la malla del juego viene con vértices por bloque (mesher WASM); el techo
+    // de Nyquist de esa rejilla amarra la frecuencia de olas representable.
+    // Subdividir cada triángulo en n×n con atributos interpolados
+    // bariacéntricamente da spacing 1/n de bloque y el shader (mfSub) sube
+    // frecuencias solo ahí. El desplazamiento depende SOLO de la posición de
+    // mundo → duplicar vértices en bordes de triángulo no genera grietas.
+    function subdivideGeometry(orig) {
+        try {
+            const pos = orig.attributes.position;
+            if (!pos) return null;
+            const index = orig.index;
+            const triCount = Math.floor((index ? index.count : pos.count) / 3);
+            if (!triCount || triCount > 60000) return null;   // malla monstruo: mejor no
+            const n = triCount > 20000 ? 2 : 3;               // océanos: 2×, lo demás: 3×
+            const vertsPerTri = (n + 1) * (n + 2) / 2;
+            const outCount = triCount * vertsPerTri;
+
+            // lattice bariacéntrico (i,j,k) con i+j+k=n, indexado por filas:
+            // la fila i tiene (n-i+1) puntos, start(i) = i*(n+1) - i*(i-1)/2.
+            // (con i*n - i*(i-1)/2 las filas se solapaban y collisonaban
+            // índices → triángulos degenerados/invertidos, bug del test)
+            const latIdx = (i, j) => i * (n + 1) - (i * (i - 1)) / 2 + j;
+
+            const geo = new orig.constructor();
+            // clase PLANA de position para todos los atributos nuevos: si
+            // algún atributo de origen viniera interleavado, a.constructor
+            // esperaría un InterleavedBuffer y reventaría
+            const PA = orig.attributes.position.constructor;
+            for (const name in orig.attributes) {
+                const a = orig.attributes[name];
+                if (!a || typeof a.getX !== 'function') return null;
+                const out = new Float32Array(outCount * a.itemSize);
+                geo.setAttribute(name, new PA(out, a.itemSize, a.normalized));
+            }
+            // marca de subdivisión: el shader la lee para escalar frecuencias
+            // (los vértices SIN este atributo leen 0.0 por spec de WebGL)
+            geo.setAttribute('mfSub', new PA(new Float32Array(outCount).fill(1), 1));
+
+            const idxOut = new Uint32Array(triCount * n * n * 3);
+            const read = (attr, vi, comp) =>
+                comp === 0 ? attr.getX(vi) : comp === 1 ? attr.getY(vi)
+                : comp === 2 ? attr.getZ(vi) : attr.getW(vi);
+
+            let ii = 0;
+            for (let tri = 0; tri < triCount; tri++) {
+                const ia = index ? index.getX(tri * 3) : tri * 3;
+                const ib = index ? index.getX(tri * 3 + 1) : tri * 3 + 1;
+                const ic = index ? index.getX(tri * 3 + 2) : tri * 3 + 2;
+                const base = tri * vertsPerTri;
+                for (const name in orig.attributes) {
+                    const a = orig.attributes[name];
+                    const out = geo.attributes[name].array;
+                    const sz = a.itemSize;
+                    for (let i = 0; i <= n; i++) {
+                        for (let j = 0; i + j <= n; j++) {
+                            const k = n - i - j;
+                            const vi = base + latIdx(i, j);
+                            for (let c = 0; c < sz; c++) {
+                                out[vi * sz + c] = (read(a, ia, c) * i +
+                                    read(a, ib, c) * j + read(a, ic, c) * k) / n;
+                            }
+                        }
+                    }
+                }
+                for (let i = 0; i < n; i++) {
+                    for (let j = 0; i + j < n; j++) {
+                        // winding del padre preservado: (i,j)→(i+1,j)→(i,j+1)
+                        // recorre el lattice en la MISMA orientación que A→B→C
+                        // (invertirlo = triángulos inside-out con FrontSide,
+                        // agua invisible — bug agarrado por el test del stub)
+                        idxOut[ii++] = base + latIdx(i, j);
+                        idxOut[ii++] = base + latIdx(i + 1, j);
+                        idxOut[ii++] = base + latIdx(i, j + 1);
+                        if (i + j < n - 1) {
+                            idxOut[ii++] = base + latIdx(i, j + 1);
+                            idxOut[ii++] = base + latIdx(i + 1, j);
+                            idxOut[ii++] = base + latIdx(i + 1, j + 1);
+                        }
+                    }
+                }
+            }
+            if (ii !== idxOut.length) return null;
+            geo.setIndex(new (orig.attributes.position.constructor)(
+                idxOut, 1));
+            geo.computeBoundingSphere();
+            geo.computeBoundingBox();
+            return geo;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function maybeSubdivide(m, entry) {
+        const g = m.geometry;
+        if (!g || g === entry.cloneGeo) return;
+        if (g.__mfSubFailed) return;
+        if (state.subBudget <= 0) return;
+        const clone = subdivideGeometry(g);
+        state.subBudget--;
+        if (clone) {
+            entry.origGeo = g;
+            entry.cloneGeo = clone;
+            m.geometry = clone;
+            if (!state.subLogged) {
+                state.subLogged = true;
+                console.info(TAG, '✔ geometría del fluido subdividida (' +
+                    g.attributes.position.count + ' → ' + clone.attributes.position.count + ' vértices) — olas de alta frecuencia activas');
+            }
+        } else {
+            g.__mfSubFailed = true;
+        }
     }
 
     function scan() {
@@ -280,15 +404,20 @@
         if (!scene?.traverse) return;
 
         let added = 0;
+        state.subBudget = 3;   // presupuesto por pasada: sin hitches al cargar océanos
         try {
             scene.traverse((o) => {
                 const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
                 for (const m of mats) {
                     if (m?.userData && m.userData.waterShadersEnabled !== undefined) {
                         if (hookMaterial(m)) added++;
-                        // el onChange del juego pone esto en 0 si su setting está
-                        // apagado; la superficie viva es parte de nuestro look
-                        if (state.hooked.has(m)) m.userData.waterShadersEnabled.value = 1;
+                        const entry = state.hooked.get(m);
+                        if (entry) {
+                            // el onChange del juego pone esto en 0 si su setting está
+                            // apagado; la superficie viva es parte de nuestro look
+                            m.userData.waterShadersEnabled.value = 1;
+                            if (state.subdiv) maybeSubdivide(m, entry);
+                        }
                     }
                 }
             });
