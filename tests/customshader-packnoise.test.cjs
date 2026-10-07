@@ -13,6 +13,7 @@ const vm = require('node:vm');
 
 const ROOT = path.join(__dirname, '..');
 const SRC_CS = fs.readFileSync(path.join(ROOT, 'src', 'Shaders', 'CustomShader.js'), 'utf8');
+const SRC_PANEL = fs.readFileSync(path.join(ROOT, 'src', 'UI', 'ClientPanel.js'), 'utf8');
 
 const BASE = 'chrome-extension://fakeid/assets/shadertextures/';
 const FILE = 'CloudNoise_128_128_128.bin';
@@ -175,4 +176,18 @@ test('flujo menú→mundo: sin nubes el bin se baja igual y al aparecer la malla
   const tex = uniforms.uNoiseTex.value;
   assert.ok(tex instanceof Fake3DTex, 'textura construida lazy al aparecer la malla');
   assert.equal(tex.image.data.byteLength, NOISE.byteLength, 'bin completo de 128³×4');
+});
+
+test('panel: el toggle de pack noise NO voltea el setting (doble flip = nunca encendía)', () => {
+  // el handler genérico de .mf-toggle ya hace el flip; si el bloque manual
+  // también lo voltea, el click neto es cero y "el toggle no deja activar"
+  assert.ok(!SRC_PANEL.includes('settings.cloudsPackNoise = !settings.cloudsPackNoise'),
+    'flip manual del setting detectado — lo hace el handler genérico');
+  // el bloque manual solo reenvía la config, deferred tras el change genérico
+  const block = SRC_PANEL.match(/packNoiseToggle[\s\S]{0,600}?\}\);\s*\}/);
+  assert.ok(block, 'bloque packNoiseToggle presente');
+  assert.ok(block[0].includes('setTimeout'), 'reenvío deferred (tras el flip del genérico)');
+  assert.ok(block[0].includes('sendCustomShaderConfig'), 'reenvía la config al módulo');
+  // y no queda el fantasma sendCloudsConfig (función que nunca existió)
+  assert.ok(!SRC_PANEL.includes('sendCloudsConfig'), 'referencia muerta a sendCloudsConfig');
 });
