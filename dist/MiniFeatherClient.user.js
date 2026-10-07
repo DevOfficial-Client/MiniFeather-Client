@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007070743
+// @version      4.19.0.20261007071230
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : d85c0019a7c261985e386ea1852d566b361c1fe7
- * builtAt : 2026-10-07T07:08:01.957Z
+ * commit  : 23bfec87897d1715a51b8c2738e2494cd42f5dfb
+ * builtAt : 2026-10-07T07:12:45.399Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"d85c0019a7c261985e386ea1852d566b361c1fe7","builtAt":"2026-10-07T07:08:01.957Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"23bfec87897d1715a51b8c2738e2494cd42f5dfb","builtAt":"2026-10-07T07:12:45.399Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -89809,7 +89809,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     }
 
     const WAVE_GLSL = `
-        attribute float mfSub;
+        attribute float emissive;   // canal libre del fluido: 1 = subdividida
         uniform float uMfWaveScale;
         uniform float uMfStill;
         uniform vec3 uMfPlayerPos;
@@ -89843,8 +89843,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             ) * 0.9;
             vec2 q = (p + warp) * 0.45;
             float h = mfNoise(q - wind * t * 0.75) * 0.72;
-            h += mfNoise(q * 2.1 - wind * t * 1.05 + 7.3) * (0.30 * mfSub);
-            h += mfNoise(q * 4.4 - wind * t * 1.40 + 3.1) * (0.22 * mfSub);
+            h += mfNoise(q * 2.1 - wind * t * 1.05 + 7.3) * (0.30 * min(emissive, 1.0));
+            h += mfNoise(q * 4.4 - wind * t * 1.40 + 3.1) * (0.22 * min(emissive, 1.0));
             // rachas presentes sin dejar el mar en calma muerta
             h *= 1.0 + mfNoise(p * 0.16 + wind * t * 0.10) * 0.45;
             return h;
@@ -89992,7 +89992,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                     // frecuencias seguras para vértices por bloque. La lava
                     // (kind 0) nunca escala: churn vanilla
                     vs = vs.replace(ampOrig,
-                        'p *= 1.0 + (kind < 0.5 ? 0.0 : mfSub) * 1.2;\n          ' +
+                        'p *= 1.0 + (kind < 0.5 ? 0.0 : min(emissive, 1.0)) * 1.2;\n          ' +
                         'float amp = kind < 0.5 ? 0.01 : (kind < 1.5 ? 0.045 * uMfWaveScale : 0.03 * uMfWaveScale);');
                 }
                 // estancada: el reloj del swell del juego también se congela
@@ -90064,7 +90064,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v10';
+            return base + '_mfws_v11';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
@@ -90124,9 +90124,12 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 const out = new Float32Array(outCount * a.itemSize);
                 geo.setAttribute(name, new PA(out, a.itemSize, a.normalized));
             }
-            // marca de subdivisión: el shader la lee para escalar frecuencias
-            // (los vértices SIN este atributo leen 0.0 por spec de WebGL)
-            geo.setAttribute('mfSub', new PA(new Float32Array(outCount).fill(1), 1));
+            // marca de subdivisión empaquetada en el canal emissive: el shader
+            // del agua NUNCA lo lee y así la geometría conserva el MISMO set de
+            // atributos que el resto del chunk — el mergeGeometries del juego
+            // exige sets idénticos y un atributo nuevo reventaba el rebuild
+            // ('all geometries have the same number of attributes')
+            if (!orig.attributes.emissive) return null;   // sin canal libre: no subdividir
 
             const idxOut = new Uint32Array(triCount * n * n * 3);
             const read = (attr, vi, comp) =>
@@ -90172,6 +90175,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 }
             }
             if (ii !== idxOut.length) return null;
+            // marcador DESPUÉS de la interpolación (que lo pisaría): 1 =
+            // geometría subdividida → el shader escala frecuencias ×2.2
+            geo.attributes.emissive.array.fill(1.0);
             geo.setIndex(new (orig.attributes.position.constructor)(
                 idxOut, 1));
             geo.computeBoundingSphere();
