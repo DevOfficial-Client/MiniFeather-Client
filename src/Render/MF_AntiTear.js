@@ -10,14 +10,19 @@
     // bundle y es inalcanzable desde game (lección de la fase 1 del deferred),
     // así que nada de perseguir objetos: los shaders culpables se apagan a
     // nivel GL capturando las locations por nombre. el propio bundle confiesa
-    // la salida de emergencia: "uVelocityScale ... 0 disables (exact
-    // passthrough)" tiene early-out en el shader, y el historial del fog/god
+    // las salidas de emergencia: "uVelocityScale ... 0 disables (exact
+    // passthrough)" tiene early-out en el shader, el historial del fog/god
     // rays solo se mezcla si uTemporal > 0.5 && uHistoryWeight > 0.001 (el
     // weight baja en cámara rápida pero en cámara lenta igualmente mezcla
-    // historial viejo = el ghosting). esto no toca settings ni la nube.
+    // historial viejo = el ghosting), y el voxel GI se gatea entero con
+    // "uGIEnabled // 0 = off (skip all GI work)" — su volumen es una caja
+    // cámara-relativa de ~96 bloques cuya grilla de voxeles se ve como puntos
+    // alineados al acercarse a los bloques (el reporte del usuario). esto no
+    // toca settings ni la nube.
     const CLAMPS = {
         uVelocityScale: 0,   // motion blur → copia exacta del frame
-        uHistoryWeight: 0    // fog/god rays → sin historial, solo frame actual
+        uHistoryWeight: 0,   // fog/god rays → sin historial, solo frame actual
+        uGIEnabled: 0        // voxel GI → el shader saltea todo el trabajo GI
     };
 
     const state = {
@@ -95,7 +100,7 @@
                 // los prototipos sobreviven a cambios de mundo y contexto, así
                 // que el keeper solo reporta: si el juego nunca pide nuestras
                 // uniforms algo anda raro (offscreen rendering, bundle nuevo)
-                if (state.hooked && !state.hits.uVelocityScale && !state.hits.uHistoryWeight) {
+                if (state.hooked && !state.hits.uVelocityScale && !state.hits.uHistoryWeight && !state.hits.uGIEnabled) {
                     const t = performance.now();
                     if (t - state.warnAt > 30000) {
                         state.warnAt = t;
@@ -104,7 +109,7 @@
                 }
             }, 3000);
         }
-        console.info(TAG, 'activo — uVelocityScale→0 (passthrough) + uHistoryWeight→0 (sin historial)');
+        console.info(TAG, 'activo — uVelocityScale→0 (passthrough) + uHistoryWeight→0 (sin historial) + uGIEnabled→0 (sin voxel GI)');
         return true;
     }
 
@@ -121,6 +126,7 @@
             hooked: state.hooked,
             motionBlur: !!state.hits.uVelocityScale,
             godRays: !!state.hits.uHistoryWeight,
+            gi: !!state.hits.uGIEnabled,
             hits: { ...state.hits }
         };
     }
