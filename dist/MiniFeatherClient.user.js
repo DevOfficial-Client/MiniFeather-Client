@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007063924
+// @version      4.19.0.20261007065747
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : c1c020015c70b95b97139810dfd59fca3909bc09
- * builtAt : 2026-10-07T06:39:37.685Z
+ * commit  : 69e308fb2edb0c1cfb50352abcf0a929e6db74f8
+ * builtAt : 2026-10-07T06:58:09.139Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"c1c020015c70b95b97139810dfd59fca3909bc09","builtAt":"2026-10-07T06:39:37.685Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"69e308fb2edb0c1cfb50352abcf0a929e6db74f8","builtAt":"2026-10-07T06:58:09.139Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -88134,6 +88134,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
         if (material.__mfSkipHook) return false;
 
+        // el material del fluido pertenece a WaterStyle (MF_WaterStyle): con
+        // "water shaders" del juego encendido, el shader del agua ya va al
+        // límite del compilador D3D (los fallos de ANGLE llegan con LOG VACÍO
+        // — 'shader failed to COMPILE. log: sin log') y apilar un preset +
+        // uMfGray encima lo tira. Además el grade quedaba doble
+        if (material.userData && material.userData.waterShadersEnabled !== undefined) return false;
+
         const preset = PRESETS[state.preset];
         if (!preset) return false;
 
@@ -90302,6 +90309,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         // SIN marcador de fluido: el clon copia userData y el scan se
         // engancharía a sí mismo en bucle
         m.userData = {};
+        // inmune al scan del CustomShader (Phong ∈ SAFE_MATERIALS): apilar un
+        // preset sobre la cortina = shader gigante = ANGLE compila con log vacío
+        m.__mfSkipHook = true;
         try { m.color?.setRGB?.(0, 0, 0); } catch (_) {}
         try { m.emissive?.setRGB?.(0, 0, 0); } catch (_) {}
         try { m.map = null; } catch (_) {}
@@ -90697,6 +90707,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     function buildMaterial(fluidMat) {
         const m = fluidMat.clone();
         m.userData = {};            // sin marcador de fluido — higiene del scan ajeno
+        m.__mfSkipHook = true;      // inmune al scan del CustomShader (Phong ∈ SAFE_MATERIALS)
         try { m.color?.setRGB?.(0, 0, 0); } catch (_) {}
         try { m.emissive?.setRGB?.(0, 0, 0); } catch (_) {}
         try { m.map = null; } catch (_) {}
