@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007032624
+// @version      4.19.0.20261007032608
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : f0e0598760acbcf5a7320d849d25b0fddbfee3e5
- * builtAt : 2026-10-07T03:26:43.819Z
+ * commit  : 24098352fcc1adf087da6fc4cf004a4481af114c
+ * builtAt : 2026-10-07T03:26:25.217Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"f0e0598760acbcf5a7320d849d25b0fddbfee3e5","builtAt":"2026-10-07T03:26:43.819Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"24098352fcc1adf087da6fc4cf004a4481af114c","builtAt":"2026-10-07T03:26:25.217Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -75577,23 +75577,13 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     'use strict';
 
     const W = globalThis;
-    const previous = W.MF_BetterPlayerLayers;
-    let previousManualEnabled = false;
-    try { previousManualEnabled = previous?.getState?.().manualEnabled === true; } catch {}
-    try { previous?.destroy?.(); } catch {}
-    let manualEnabled = previousManualEnabled;
-    let realisticEnabled = false;
     let enabled = false;
-    let destroyed = false;
-    let timer = 0;
     const injectedFirstPersonParts = new Map();
-    const pixelCache = new WeakMap();
-    const overlayKeyCache = new WeakMap();
 
     const EXTREME = Object.freeze({
-        inflate: 0.40,
+        inflate: 0.64,
         nativeInflate: 0.20,
-        depth: 0.20,
+        depth: 0.095,
         alphaThreshold: 8
     });
 
@@ -75641,17 +75631,13 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         mesh: null,
         signature: '',
         bindings: [],
-        nativeLayers: new Map(),
-        nextBuildAt: 0,
         firstPerson: {
             renderer: null,
             arm: null,
             generated: null,
             geometry: null,
             material: null,
-            signature: '',
-            flatLayer: null,
-            nextBuildAt: 0
+            signature: ''
         }
     };
 
@@ -75743,12 +75729,11 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             } catch {}
         }
 
-        return player.mesh ? player : null;
+        return null;
     }
 
     function firstMaterial(material) {
-        const source = Array.isArray(material) ? material.find(Boolean) ?? null : material ?? null;
-        return source?.__realMaterial ?? source;
+        return Array.isArray(material) ? material.find(Boolean) ?? null : material ?? null;
     }
 
     function findHandRenderer(game) {
@@ -75872,10 +75857,6 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         const height = Number(image.height ?? image.videoHeight ?? image.naturalHeight ?? 0);
         if (!width || !height) return null;
 
-        const signature = `${width}:${height}:${image.currentSrc ?? image.src ?? ''}`;
-        const cached = pixelCache.get(map);
-        if (cached?.image === image && cached.signature === signature) return cached.pixels;
-
         const canvas = document.createElement('canvas');
         canvas.width = 64;
         canvas.height = 64;
@@ -75887,9 +75868,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
         try {
             context.drawImage(image, 0, 0, width, height, 0, 0, 64, 64);
-            const pixels = context.getImageData(0, 0, 64, 64).data;
-            pixelCache.set(map, { image, signature, pixels });
-            return pixels;
+            return context.getImageData(0, 0, 64, 64).data;
         } catch {
             return null;
         }
@@ -75947,15 +75926,15 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         ];
     }
 
-    function textureQuad(x, y, flipY = true) {
+    function textureQuad(x, y) {
         const u0 = x / 64;
         const u1 = (x + 1) / 64;
-        const v0 = flipY ? 1 - y / 64 : y / 64;
-        const v1 = flipY ? 1 - (y + 1) / 64 : (y + 1) / 64;
-        return [[u0, v0], [u1, v0], [u0, v1], [u1, v1]];
+        const v0 = 1 - y / 64;
+        const v1 = 1 - (y + 1) / 64;
+        return [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
     }
 
-    function pushQuad(positions, uvs, indices, points, texcoords, outward) {
+    function pushQuad(positions, uvs, indices, points, texcoords) {
         const base = positions.length / 3;
 
         for (let i = 0; i < 4; i++) {
@@ -75963,36 +75942,30 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             uvs.push(texcoords[i][0], texcoords[i][1]);
         }
 
-        const a = points[1].map((value, i) => value - points[0][i]);
-        const b = points[2].map((value, i) => value - points[0][i]);
-        const cross = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-        const reverse = outward && cross.reduce((sum, value, i) => sum + value * outward[i], 0) < 0;
-        if (reverse) indices.push(base, base + 2, base + 1, base + 2, base + 3, base + 1);
-        else indices.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
+        indices.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
     }
 
-    function pushTile(positions, uvs, indices, outer, normal, texcoords, exposed) {
+    function pushTile(positions, uvs, indices, outer, normal, texcoords) {
         const depth = EXTREME.depth / 16;
         const inner = outer.map(point => shifted(point, normal, -depth));
 
-        pushQuad(positions, uvs, indices, outer, texcoords, normal);
+        pushQuad(positions, uvs, indices, outer, texcoords);
 
-        const centerU = (texcoords[0][0] + texcoords[3][0]) * 0.5;
-        const centerV = (texcoords[0][1] + texcoords[3][1]) * 0.5;
+        const centerU = (texcoords[0][0] + texcoords[2][0]) * 0.5;
+        const centerV = (texcoords[0][1] + texcoords[2][1]) * 0.5;
         const sideUv = [[centerU, centerV], [centerU, centerV], [centerU, centerV], [centerU, centerV]];
-        const center = [0, 1, 2].map(axis => outer.reduce((sum, point) => sum + point[axis], 0) / 4);
-        for (const [side, [a, b]] of [[0, [0, 1]], [1, [1, 3]], [2, [3, 2]], [3, [2, 0]]]) {
-            if (!exposed[side]) continue;
-            const outward = [0, 1, 2].map(axis => (outer[a][axis] + outer[b][axis]) / 2 - center[axis]);
-            pushQuad(positions, uvs, indices, [outer[a], outer[b], inner[a], inner[b]], sideUv, outward);
-        }
+
+        pushQuad(positions, uvs, indices, [outer[0], outer[1], inner[0], inner[1]], sideUv);
+        pushQuad(positions, uvs, indices, [outer[1], outer[3], inner[1], inner[3]], sideUv);
+        pushQuad(positions, uvs, indices, [outer[3], outer[2], inner[3], inner[2]], sideUv);
+        pushQuad(positions, uvs, indices, [outer[2], outer[0], inner[2], inner[0]], sideUv);
     }
 
     function sourcePixel(start, length, index) {
         return length >= 0 ? start + index : start - index - 1;
     }
 
-    function buildGeometry(referenceGeometry, overlay, pixels, flipY = true) {
+    function buildGeometry(referenceGeometry, overlay, pixels) {
         const position = referenceGeometry?.attributes?.position;
         if (!position || position.count < 48) return null;
 
@@ -76013,8 +75986,6 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             if (!width || !height) continue;
 
             const corners = [0, 1, 2, 3].map(i => vertexPosition(position, overlayStart + faceIndex * 4 + i));
-            const occupied = (x, y) => x >= 0 && x < width && y >= 0 && y < height &&
-                pixelAlpha(pixels, sourcePixel(startX, widthSigned, x), sourcePixel(startY, heightSigned, y)) >= EXTREME.alphaThreshold;
 
             for (let py = 0; py < height; py++) {
                 const sy = sourcePixel(startY, heightSigned, py);
@@ -76043,9 +76014,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
                     if (quad.some(point => !point)) continue;
 
                     const outer = quad.map(point => shifted(point, face.normal, extraInflate));
-                    pushTile(positions, uvs, indices, outer, face.normal, textureQuad(sx, sy, flipY), [
-                        !occupied(px, py - 1), !occupied(px + 1, py), !occupied(px, py + 1), !occupied(px - 1, py)
-                    ]);
+                    pushTile(positions, uvs, indices, outer, face.normal, textureQuad(sx, sy));
                 }
             }
         }
@@ -76108,132 +76077,6 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         ].join(':');
     }
 
-    function nativeGeometry(object) {
-        return object?.__mfFirstPersonGeometry?.source ?? object?.geometry;
-    }
-
-    function assignNativeGeometry(object, geometry) {
-        const firstPerson = object?.__mfFirstPersonGeometry;
-        if (firstPerson) {
-            const previous = firstPerson.source;
-            firstPerson.source = geometry;
-            if (object.geometry === previous) object.geometry = geometry;
-        } else if (object) object.geometry = geometry;
-    }
-
-    function triangleUVKey(uv, a, b, c) {
-        return [a, b, c].map(index => `${uv.getX(index).toFixed(6)},${uv.getY(index).toFixed(6)}`).sort().join('|');
-    }
-
-    function overlayTriangleKeys(geometry) {
-        const uv = geometry?.attributes?.uv;
-        const index = geometry?.index?.array;
-        const count = geometry?.attributes?.position?.count ?? 0;
-        if (!uv || !index || count < 48) return null;
-        const cached = overlayKeyCache.get(geometry);
-        if (cached?.uv === uv && cached.index === index && cached.version === uv.version) return cached.keys;
-        const overlayStart = count - 24;
-        const keys = new Set();
-        const baseKeys = new Set();
-        for (let i = 0; i + 2 < index.length; i += 3) {
-            const a = index[i], b = index[i + 1], c = index[i + 2];
-            const key = triangleUVKey(uv, a, b, c);
-            if (a >= overlayStart && b >= overlayStart && c >= overlayStart) keys.add(key);
-            else baseKeys.add(key);
-        }
-        for (const key of baseKeys) keys.delete(key);
-        const result = keys.size ? keys : null;
-        overlayKeyCache.set(geometry, { uv, index, version: uv.version, keys: result });
-        return result;
-    }
-
-    function filterFlatLayer(object, specs) {
-        const original = nativeGeometry(object);
-        const index = original?.index?.array;
-        const uv = original?.attributes?.uv;
-        if (!original?.clone || !index || !uv || !specs.length) return null;
-        const skinIndex = original.attributes.skinIndex;
-        const skinWeight = original.attributes.skinWeight;
-        const overlayStart = (original.attributes.position?.count ?? 0) - 24;
-        const indices = [];
-        const groups = (original.groups ?? []).map(group => ({ original: group, start: null, count: 0 }));
-        let removed = 0;
-        for (let i = 0; i + 2 < index.length; i += 3) {
-            const a = index[i], b = index[i + 1], c = index[i + 2];
-            const key = triangleUVKey(uv, a, b, c);
-            const isOverlay = specs.some(spec => {
-                if (!spec.keys?.has(key)) return false;
-                if (spec.bone == null) return a >= overlayStart && b >= overlayStart && c >= overlayStart;
-                return skinIndex && skinWeight && [a, b, c].every(vertex =>
-                    skinIndex.getX(vertex) === spec.bone && skinWeight.getX(vertex) > 0.999);
-            });
-            if (isOverlay) removed++;
-            else {
-                for (const group of groups) {
-                    if (i < group.original.start || i + 3 > group.original.start + group.original.count) continue;
-                    if (group.start == null) group.start = indices.length;
-                    group.count += 3;
-                }
-                indices.push(a, b, c);
-            }
-        }
-        // Keep unknown layouts untouched, and never strip a complete player model.
-        if (!removed || !indices.length) return null;
-        let geometry;
-        try {
-            geometry = original.clone();
-            geometry.setIndex(indices);
-            if (groups.length) geometry.groups = groups.filter(group => group.count > 0).map(group => ({
-                start: group.start, count: group.count, materialIndex: group.original.materialIndex
-            }));
-            geometry.setDrawRange?.(0, indices.length);
-            geometry.computeBoundingSphere?.();
-            assignNativeGeometry(object, geometry);
-            return { object, original, geometry };
-        } catch {
-            try { geometry?.dispose?.(); } catch {}
-            return null;
-        }
-    }
-
-    function restoreFlatLayer(entry) {
-        if (!entry) return;
-        if (nativeGeometry(entry.object) === entry.geometry) assignNativeGeometry(entry.object, entry.original);
-        try { entry.geometry.dispose?.(); } catch {}
-    }
-
-    function synchronizeFlatLayers() {
-        const sourceGeometry = object => {
-            const entry = state.nativeLayers.get(object);
-            return entry && nativeGeometry(object) === entry.geometry ? entry.original : nativeGeometry(object);
-        };
-        const candidates = new Map();
-        const body = state.mesh?.skinnedBody;
-        const bones = body?.skeleton?.bones;
-        if (body && Array.isArray(bones)) {
-            const specs = state.bindings.map(binding => ({
-                bone: bones.indexOf(binding.target),
-                keys: overlayTriangleKeys(sourceGeometry(binding.reference))
-            })).filter(spec => spec.bone >= 0 && spec.keys);
-            if (specs.length) candidates.set(body, specs);
-        }
-        for (const binding of state.bindings) {
-            if (!binding.reference?.parent) continue;
-            const keys = overlayTriangleKeys(sourceGeometry(binding.reference));
-            if (keys) candidates.set(binding.reference, [{ keys }]);
-        }
-        for (const [object, entry] of state.nativeLayers) {
-            if (candidates.has(object) && nativeGeometry(object) === entry.geometry) continue;
-            restoreFlatLayer(entry);
-            state.nativeLayers.delete(object);
-        }
-        for (const [object, specs] of candidates) {
-            if (state.nativeLayers.has(object)) continue;
-            const entry = filterFlatLayer(object, specs);
-            if (entry) state.nativeLayers.set(object, entry);
-        }
-    }
-
     function firstPersonSignature(renderer, mesh) {
         const arm = renderer?.rightArm;
         return [
@@ -76249,7 +76092,6 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     function cleanupFirstPerson() {
         const fp = state.firstPerson;
 
-        restoreFlatLayer(fp.flatLayer);
         try { fp.generated?.removeFromParent?.(); } catch {}
         try { fp.geometry?.dispose?.(); } catch {}
         try { fp.material?.dispose?.(); } catch {}
@@ -76260,8 +76102,6 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         fp.geometry = null;
         fp.material = null;
         fp.signature = '';
-        fp.flatLayer = null;
-        fp.nextBuildAt = 0;
     }
 
     function rebuildFirstPerson(renderer, mesh) {
@@ -76289,7 +76129,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         const definition = model.parts[overlayName];
         if (!definition?.uvs?.length) return false;
 
-        const geometry = buildGeometry(arm.geometry, { definition }, pixels, sourceMaterial?.map?.flipY !== false);
+        const geometry = buildGeometry(arm.geometry, { definition }, pixels);
         if (!geometry) return false;
 
         const material = cloneMaterial(arm);
@@ -76327,8 +76167,6 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         fp.generated = generated;
         fp.geometry = geometry;
         fp.material = material;
-        const keys = overlayTriangleKeys(nativeGeometry(arm));
-        if (keys) fp.flatLayer = filterFlatLayer(arm, [{ keys }]);
         fp.signature = firstPersonSignature(renderer, mesh);
         return true;
     }
@@ -76353,12 +76191,9 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         const detached = fp.generated && fp.generated.parent !== arm;
         const changed = renderer !== fp.renderer || arm !== fp.arm || signature !== fp.signature;
 
-        if ((!fp.generated || detached || changed) && (changed || performance.now() >= fp.nextBuildAt)) {
+        if (!fp.generated || detached || changed) {
             cleanupFirstPerson();
-            if (!rebuildFirstPerson(renderer, mesh)) {
-                fp.signature = signature;
-                fp.nextBuildAt = performance.now() + 1000;
-            }
+            rebuildFirstPerson(renderer, mesh);
         }
     }
 
@@ -76374,7 +76209,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             const reference = mesh?.meshes?.[layout.reference];
             values.push(
                 reference?.geometry?.uuid ?? '',
-                materialSignature(reference?.material)
+                firstMaterial(reference?.material)?.map?.uuid ?? ''
             );
         }
 
@@ -76382,8 +76217,6 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     }
 
     function cleanup() {
-        for (const entry of state.nativeLayers.values()) restoreFlatLayer(entry);
-        state.nativeLayers.clear();
         for (const binding of state.bindings) {
             try { binding.generated?.removeFromParent?.(); } catch {}
             try { binding.geometry?.dispose?.(); } catch {}
@@ -76392,7 +76225,6 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
         state.bindings = [];
         state.signature = '';
-        state.nextBuildAt = 0;
     }
 
     function build(mesh) {
@@ -76412,7 +76244,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
             if (!reference?.geometry || !target?.add || !overlay) continue;
 
-            const geometry = buildGeometry(reference.geometry, overlay, pixels, source.map.flipY !== false);
+            const geometry = buildGeometry(reference.geometry, overlay, pixels);
             if (!geometry) continue;
 
             const material = cloneMaterial(reference);
@@ -76444,26 +76276,14 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
                 continue;
             }
 
-            bindings.push({ generated, geometry, material, target, reference });
+            bindings.push({ generated, geometry, material, target });
         }
+
+        if (!bindings.length) return false;
 
         state.bindings = bindings;
-        synchronizeFlatLayers();
         state.signature = modelSignature(mesh);
         return true;
-    }
-
-    function syncMaterial(reference, material) {
-        const source = firstMaterial(reference?.material);
-        if (!source || !material) return;
-        try { material.color?.copy?.(source.color); } catch {}
-        try { material.emissive?.copy?.(source.emissive); } catch {}
-        if (source.opacity != null) material.opacity = source.opacity;
-        if (source.emissiveIntensity != null) material.emissiveIntensity = source.emissiveIntensity;
-        if (source.map !== material.map) {
-            material.map = source.map;
-            material.needsUpdate = true;
-        }
     }
 
     function syncVisibility() {
@@ -76476,13 +76296,11 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
         for (const binding of state.bindings) {
             binding.generated.visible = visible && binding.target?.visible !== false;
-            syncMaterial(binding.reference, binding.material);
         }
-        syncMaterial(state.firstPerson.arm, state.firstPerson.material);
     }
 
     function synchronize() {
-        if (!enabled || destroyed) return;
+        if (!enabled) return;
 
         const game = findGame();
         if (!game?.player) {
@@ -76496,13 +76314,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
         const entity = findLocalEntity(game);
         const mesh = entity?.mesh;
-        if (!mesh?.meshes || !mesh?.model?.parts) {
-            cleanup();
-            cleanupFirstPerson();
-            state.entity = null;
-            state.mesh = null;
-            return;
-        }
+        if (!mesh?.meshes || !mesh?.model?.parts) return;
 
         const meshChanged = mesh !== state.mesh;
         state.game = game;
@@ -76510,25 +76322,17 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         state.mesh = mesh;
 
         const signature = modelSignature(mesh);
-        const now = performance.now();
-        if ((meshChanged || signature !== state.signature) && (meshChanged || now >= state.nextBuildAt)) {
+        if (meshChanged || signature !== state.signature) {
             cleanup();
-            if (!build(mesh)) state.nextBuildAt = now + 1000;
+            build(mesh);
         }
 
         syncVisibility();
-        synchronizeFlatLayers();
         synchronizeFirstPerson(game, mesh);
     }
 
     function setEnabled(value) {
-        manualEnabled = value === true;
-        updateEnabled();
-    }
-
-    function updateEnabled() {
-        if (destroyed) return;
-        const next = manualEnabled || realisticEnabled;
+        const next = Boolean(value);
         if (enabled === next) {
             if (enabled) synchronize();
             return;
@@ -76549,7 +76353,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         state.mesh = null;
     }
 
-    function onConfig(event) {
+    document.addEventListener('minifeather:better-player-layers-config', event => {
         let detail = event.detail;
 
         try {
@@ -76558,46 +76362,10 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             detail = null;
         }
 
-        if (typeof detail?.enabled === 'boolean') setEnabled(detail.enabled);
-    }
+        setEnabled(detail?.enabled === true);
+    });
 
-    function destroy() {
-        if (destroyed) return;
-        manualEnabled = false;
-        realisticEnabled = false;
-        updateEnabled();
-        destroyed = true;
-        W.clearInterval(timer);
-        document.removeEventListener('minifeather:better-player-layers-config', onConfig);
-        if (W.MF_BetterPlayerLayers === api) delete W.MF_BetterPlayerLayers;
-    }
-
-    const api = {
-        enable: () => setEnabled(true),
-        disable: () => setEnabled(false),
-        refresh: synchronize,
-        setRealisticOptions(options = {}) {
-            realisticEnabled = options.enabled === true;
-            updateEnabled();
-        },
-        getState: () => ({
-            enabled,
-            manualEnabled,
-            realisticEnabled,
-            parts: state.bindings.length,
-            firstPersonLayer: Boolean(state.firstPerson.generated),
-            flatReplacements: state.nativeLayers.size + Number(Boolean(state.firstPerson.flatLayer)),
-            inflate: EXTREME.inflate,
-            depth: EXTREME.depth,
-            destroyed
-        }),
-        destroy
-    };
-
-    W.MF_BetterPlayerLayers = api;
-    document.addEventListener('minifeather:better-player-layers-config', onConfig);
-    timer = W.setInterval(synchronize, 250);
-    updateEnabled();
+    W.setInterval(synchronize, 250);
 })();
 
 //# sourceURL=MF:src/Render/BetterPlayerLayers.js
@@ -76605,287 +76373,405 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 /* ==== mf module: src/Render/BetterPlayerLayersArmorPatch.js ==== */
 (() => {
     'use strict';
-    const W = globalThis;
-    try { W.MF_BetterPlayerLayersArmor?.destroy?.(); } catch {}
 
-    const EVENT = 'minifeather:better-player-layers-config';
-    const MAX_VERTICES = 48000;
+    const W = globalThis;
+    const CONFIG = Object.freeze({
+        scale: 1.035,
+        scanMs: 250
+    });
+
     const state = {
-        manual: false, realistic: false, destroyed: false, game: null,
-        armor: new Map(), timer: 0, lastScan: -Infinity, lastGameScan: -Infinity,
-        pixels: new WeakMap(), failures: new WeakMap()
+        enabled: false,
+        game: null,
+        entity: null,
+        root: null,
+        armor: new Map()
     };
 
-    function isEnabled() {
-        // A Realistic skin switch must not implicitly turn on armor relief.
-        return state.manual || state.realistic || W.MF_BetterPlayerLayers?.getState?.().manualEnabled === true;
-    }
-    function findGame() {
-        for (const game of [W.__MINIBLOX_GAME__, W.__MB?.game, W.Game, W.game, state.game]) {
-            if (game?.player && game.world) return game;
-        }
-        const now = performance.now();
-        if (now - state.lastGameScan < 1500) return null;
-        state.lastGameScan = now;
-        const element = document.querySelector('#react') || document.querySelector('#root');
+    const isGame = g => Boolean(g && typeof g === 'object' && g.player && g.world);
+
+    function findGameInReact(element) {
         if (!element) return null;
-        const queue = Object.keys(element).filter(k => /^__react(?:Fiber|Container|InternalInstance)\$/.test(k)).map(k => element[k]);
-        const seen = new Set();
-        for (let i = 0; i < queue.length && i < 1200; i++) {
-            const fiber = queue[i];
-            if (!fiber || seen.has(fiber)) continue;
-            seen.add(fiber);
-            for (const value of [fiber.stateNode, fiber.memoizedProps, fiber.pendingProps, fiber.memoizedState]) {
-                for (const game of [value, value?.game]) if (game?.player && game.world) return game;
+
+        let keys = [];
+        try { keys = Object.keys(element); } catch { return null; }
+
+        for (const key of keys) {
+            if (
+                !key.startsWith('__reactFiber$') &&
+                !key.startsWith('__reactContainer$') &&
+                !key.startsWith('__reactInternalInstance$')
+            ) continue;
+
+            let root;
+            try { root = element[key]; } catch { continue; }
+
+            const queue = [root];
+            const seen = new Set();
+            let count = 0;
+
+            while (queue.length && count++ < 1200) {
+                const fiber = queue.shift();
+                if (!fiber || seen.has(fiber)) continue;
+                seen.add(fiber);
+
+                const candidates = [
+                    fiber.stateNode,
+                    fiber.stateNode?.game,
+                    fiber.memoizedProps,
+                    fiber.memoizedProps?.game,
+                    fiber.pendingProps,
+                    fiber.pendingProps?.game,
+                    fiber.memoizedState,
+                    fiber.memoizedState?.game
+                ];
+
+                for (const candidate of candidates) {
+                    if (isGame(candidate)) return candidate;
+                    if (isGame(candidate?.game)) return candidate.game;
+                }
+
+                if (fiber.child) queue.push(fiber.child);
+                if (fiber.sibling) queue.push(fiber.sibling);
             }
-            if (fiber.child) queue.push(fiber.child);
-            if (fiber.sibling) queue.push(fiber.sibling);
         }
+
         return null;
     }
-    function localEntity(game) {
-        const id = game?.player?.id;
-        for (const get of [() => game?.world?.getPlayerById?.(id), () => game?.world?.players?.get?.(id), () => game?.world?.entities?.get?.(id)]) {
-            try { const entity = get(); if (entity?.mesh) return entity; } catch {}
-        }
-        return game?.player?.mesh ? game.player : null;
-    }
-    function sourceGeometry(object) {
-        return object.__mfFirstPersonGeometry?.source || object.geometry;
-    }
-    function assignGeometry(object, geometry) {
-        const firstPerson = object.__mfFirstPersonGeometry;
-        if (firstPerson) {
-            // F5 keeps the binding but renders its unfiltered source. Update
-            // both pointers then; do not leave a disposed relief on screen.
-            const previous = firstPerson.source;
-            firstPerson.source = geometry;
-            if (object.geometry === previous) object.geometry = geometry;
-        }
-        else object.geometry = geometry;
-    }
-    function armorObjects(root) {
-        // Use native armor registries, never unknown cosmetics or held items.
-        const objects = new Set(), registry = root?.skinnedArmor || root?.armorMesh;
-        for (const object of Object.values(registry || {})) {
-            if (!object?.geometry || !object.parent || object.userData?._equipped === false) continue;
-            if (object.visible === false && !object.__mfFirstPersonGeometry) continue;
-            objects.add(object);
-        }
-        return objects;
-    }
-    function firstMaterial(object) {
-        const material = object.__realMaterial || object.material;
-        return Array.isArray(material) ? material.find(Boolean) : material;
-    }
-    function readTexture(map) {
-        const image = map?.image;
-        const width = Number(image?.naturalWidth || image?.width || 0), height = Number(image?.naturalHeight || image?.height || 0);
-        if (!width || !height) return null;
-        const cached = state.pixels.get(map);
-        if (cached?.image === image && cached.width === width && cached.height === height) return cached;
-        // Logical armor texels, not thousands of HD-pack microvoxels.
-        const w = Math.min(64, width), h = Math.max(1, Math.round(height * w / width));
-        if (h > 128) return null;
-        let data;
-        try {
-            if (image.data && image.data.length === width * height * 4) {
-                data = new Uint8ClampedArray(w * h * 4);
-                for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-                    const from = (Math.min(height - 1, Math.floor(y * height / h)) * width + Math.floor(x * width / w)) * 4;
-                    data.set(image.data.subarray(from, from + 4), (y * w + x) * 4);
-                }
-            } else {
-                const canvas = document.createElement('canvas');
-                canvas.width = w; canvas.height = h;
-                const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                if (!ctx) return null;
-                ctx.imageSmoothingEnabled = false;
-                ctx.drawImage(image, 0, 0, width, height, 0, 0, w, h);
-                data = ctx.getImageData(0, 0, w, h).data;
-            }
-        } catch { return null; }
-        const pixels = { image, width, height, w, h, data, flipY: map.flipY !== false };
-        state.pixels.set(map, pixels);
-        return pixels;
-    }
-    function component(attribute, vertex, channel) {
-        if (attribute.array) return attribute.array[vertex * attribute.itemSize + channel];
-        if (attribute.data?.array) return attribute.data.array[vertex * attribute.data.stride + attribute.offset + channel];
-        return [attribute.getX, attribute.getY, attribute.getZ, attribute.getW][channel].call(attribute, vertex);
-    }
-    const blend = (v, u, w) => v[0] * (1 - u) * (1 - w) + v[1] * u * (1 - w) + v[2] * (1 - u) * w + v[3] * u * w;
-    const point = (corners, u, v) => [0, 1, 2].map(c => blend(corners.map(p => p[c]), u, v));
-    const shift = (p, n, d) => p.map((v, i) => v + n[i] * d);
 
-    function pixelDepth(pixels, uv) {
-        const x = Math.min(pixels.w - 1, Math.max(0, Math.floor(uv[0] * pixels.w)));
-        const y = Math.min(pixels.h - 1, Math.max(0, Math.floor((pixels.flipY ? 1 - uv[1] : uv[1]) * pixels.h)));
-        const i = (y * pixels.w + x) * 4;
-        if (pixels.data[i + 3] < 8) return -1;
-        const light = (pixels.data[i] * 0.2126 + pixels.data[i + 1] * 0.7152 + pixels.data[i + 2] * 0.0722) / 255;
-        return (0.06 + Math.round(light * 2) * 0.06) / 16;
+    function findGame() {
+        for (const candidate of [
+            W.__MINIBLOX_GAME__,
+            W.__MB?.game,
+            W.Game,
+            W.game,
+            state.game
+        ]) {
+            if (isGame(candidate)) return candidate;
+        }
+
+        const game =
+            findGameInReact(document.querySelector('#react')) ||
+            findGameInReact(document.querySelector('#root'));
+
+        if (game) W.__MINIBLOX_GAME__ = game;
+        return game;
     }
-    function buildRelief(original, pixels) {
-        const attributes = original?.attributes, position = attributes?.position, uv = attributes?.uv, index = original?.index;
-        if (!position || !uv || position.count < 4 || position.count % 4 || position.count > 1024) return null;
-        // Reject future/custom non-quad topology rather than guessing.
-        if (!index || index.count !== position.count / 4 * 6) return null;
-        for (let q = 0; q < position.count / 4; q++) {
-            const expected = [0, 1, 2, 2, 1, 3];
-            for (let i = 0; i < 6; i++) if (index.getX(q * 6 + i) !== q * 4 + expected[i]) return null;
+
+    function findLocalEntity(game) {
+        const player = game?.player;
+        if (!player) return null;
+
+        for (const getter of [
+            () => game.world?.getPlayerById?.(player.id),
+            () => game.world?.players?.get?.(player.id),
+            () => game.world?.entities?.get?.(player.id)
+        ]) {
+            try {
+                const entity = getter();
+                if (entity?.mesh) return entity;
+            } catch {}
         }
-        if (Object.values(attributes).some(a => !a || a.itemSize > 4 || a.count !== position.count)) return null;
-        const arrays = Object.fromEntries(Object.keys(attributes).map(k => [k, []]));
-        if (!arrays.normal) arrays.normal = [];
-        const indices = [], groups = [];
-        let group = null;
-        function emit(points, texcoords, normal, faceVertex) {
-            const base = arrays.position.length / 3;
-            if (base + 4 > MAX_VERTICES) throw new Error('ARMOR_VERTEX_BUDGET');
-            for (let i = 0; i < 4; i++) {
-                arrays.position.push(...points[i]); arrays.uv.push(...texcoords[i]); arrays.normal.push(...normal);
-                for (const [name, attribute] of Object.entries(attributes)) {
-                    if (['position', 'normal', 'uv'].includes(name)) continue;
-                    // Native armor faces are rigidly weighted to one animated bone.
-                    for (let c = 0; c < attribute.itemSize; c++) arrays[name].push(component(attribute, faceVertex, c));
-                }
-            }
-            const a = points[1].map((v, i) => v - points[0][i]), b = points[2].map((v, i) => v - points[0][i]);
-            const cross = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-            const forward = cross.reduce((sum, v, i) => sum + v * normal[i], 0) >= 0;
-            indices.push(...(forward ? [base, base + 1, base + 2, base + 2, base + 1, base + 3] : [base, base + 2, base + 1, base + 2, base + 3, base + 1]));
-        }
-        let geometry = null;
+
         try {
-            for (let start = 0; start < position.count; start += 4) {
-                const corners = [0, 1, 2, 3].map(i => [position.getX(start + i), position.getY(start + i), position.getZ(start + i)]);
-                const tex = [0, 1, 2, 3].map(i => [uv.getX(start + i), uv.getY(start + i)]);
-                const texAt = (u, v) => [0, 1].map(c => blend(tex.map(p => p[c]), u, v));
-                const faceIndex = start / 4 * 6;
-                const materialIndex = (original.groups || []).find(g => faceIndex >= g.start && faceIndex < g.start + g.count)?.materialIndex || 0;
-                if (!group || group.materialIndex !== materialIndex) {
-                    group = { start: indices.length, count: 0, materialIndex }; groups.push(group);
-                }
-                const before = indices.length;
-                const columns = Math.max(1, Math.round(Math.hypot((tex[1][0] - tex[0][0]) * pixels.w, (tex[1][1] - tex[0][1]) * pixels.h)));
-                const rows = Math.max(1, Math.round(Math.hypot((tex[2][0] - tex[0][0]) * pixels.w, (tex[2][1] - tex[0][1]) * pixels.h)));
-                if (columns > 64 || rows > 64) return null;
-                const normal = attributes.normal ? [attributes.normal.getX(start), attributes.normal.getY(start), attributes.normal.getZ(start)] : (() => {
-                    const a = corners[1].map((v, i) => v - corners[0][i]), b = corners[2].map((v, i) => v - corners[0][i]);
-                    const n = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-                    const length = Math.hypot(...n); return n.map(v => v / (length || 1));
-                })();
-                const depth = new Float32Array(columns * rows);
-                for (let y = 0; y < rows; y++) for (let x = 0; x < columns; x++) depth[y * columns + x] = pixelDepth(pixels, texAt((x + 0.5) / columns, (y + 0.5) / rows));
-                const at = (x, y) => x < 0 || y < 0 || x >= columns || y >= rows ? 0 : Math.max(0, depth[y * columns + x]);
-                for (let y = 0; y < rows; y++) for (let x = 0; x < columns; x++) {
-                    const height = depth[y * columns + x];
-                    if (height < 0) continue;
-                    const u0 = x / columns, u1 = (x + 1) / columns, v0 = y / rows, v1 = (y + 1) / rows;
-                    const base = [point(corners, u0, v0), point(corners, u1, v0), point(corners, u0, v1), point(corners, u1, v1)];
-                    const outer = base.map(p => shift(p, normal, height));
-                    emit(outer, [texAt(u0, v0), texAt(u1, v0), texAt(u0, v1), texAt(u1, v1)], normal, start);
-                    const center = texAt((x + 0.5) / columns, (y + 0.5) / rows);
-                    for (const [a, b, lower] of [[0, 1, at(x, y - 1)], [1, 3, at(x + 1, y)], [3, 2, at(x, y + 1)], [2, 0, at(x - 1, y)]]) {
-                        if (height <= lower + 1e-7) continue;
-                        const tangent = base[b].map((v, i) => v - base[a][i]);
-                        let sideNormal = [tangent[1] * normal[2] - tangent[2] * normal[1], tangent[2] * normal[0] - tangent[0] * normal[2], tangent[0] * normal[1] - tangent[1] * normal[0]];
-                        const length = Math.hypot(...sideNormal); if (!length) continue;
-                        sideNormal = sideNormal.map(v => v / length);
-                        const centerPoint = point(corners, (u0 + u1) / 2, (v0 + v1) / 2);
-                        if (sideNormal.reduce((sum, v, i) => sum + v * (base[a][i] - centerPoint[i]), 0) < 0) sideNormal = sideNormal.map(v => -v);
-                        emit([outer[a], outer[b], shift(base[a], normal, lower), shift(base[b], normal, lower)], [center, center, center, center], sideNormal, start);
-                    }
-                }
-                group.count += indices.length - before;
+            for (const entity of game.world?.entities?.values?.() ?? []) {
+                if (!entity?.mesh) continue;
+                if (String(entity.id) === String(player.id)) return entity;
+                if (player.uuid && entity.uuid && String(entity.uuid) === String(player.uuid)) return entity;
+                if (player.name && entity.name && String(entity.name) === String(player.name)) return entity;
             }
-            if (!indices.length) return null;
-            geometry = new original.constructor();
-            for (const [name, values] of Object.entries(arrays)) {
-                const source = attributes[name] || attributes.position;
-                const Typed = source.array?.constructor || Float32Array, Attribute = source.constructor;
-                geometry.setAttribute(name, new Attribute(new Typed(values), name === 'normal' ? 3 : source.itemSize, source.normalized === true));
-            }
-            geometry.setIndex(indices);
-            for (const group of groups) if (group.count) geometry.addGroup?.(group.start, group.count, group.materialIndex);
-            geometry.computeBoundingBox?.(); geometry.computeBoundingSphere?.();
-            if (original.boundingSphere && geometry.boundingSphere?.copy) {
-                geometry.boundingSphere.copy(original.boundingSphere); geometry.boundingSphere.radius += 0.025;
-            }
-            return geometry;
-        } catch { try { geometry?.dispose?.(); } catch {} return null; }
+        } catch {}
+
+        return player?.mesh ? player : null;
     }
-    function restore(object, entry) {
-        if (sourceGeometry(object) === entry.generated) assignGeometry(object, entry.original);
-        try { entry.generated.dispose?.(); } catch {}
+
+    function collectObjects(root) {
+        const result = [];
+        const queue = [root];
+        const seen = new WeakSet();
+
+        while (queue.length) {
+            const object = queue.shift();
+            if (!object || typeof object !== 'object' || seen.has(object)) continue;
+            seen.add(object);
+            result.push(object);
+
+            if (Array.isArray(object.children)) {
+                for (const child of object.children) queue.push(child);
+            }
+        }
+
+        return result;
     }
+
+    function knownSkinObjects(mesh) {
+        const set = new WeakSet();
+
+        try {
+            for (const object of Object.values(mesh?.meshes ?? {})) {
+                if (object && typeof object === 'object') set.add(object);
+            }
+        } catch {}
+
+        for (const candidate of [
+            mesh?.skinnedBody,
+            mesh?.model,
+            mesh?.skeleton,
+            mesh?.hatMesh,
+            mesh?.capeMesh,
+            mesh?.elytraMesh
+        ]) {
+            if (!candidate || typeof candidate !== 'object') continue;
+            try {
+                for (const object of collectObjects(candidate)) set.add(object);
+            } catch {}
+        }
+
+        return set;
+    }
+
+    function isArmorMesh(object, root, skinObjects) {
+        if (!object?.geometry || object.visible === false) return false;
+        if (!(object.isSkinnedMesh === true || object.type === 'SkinnedMesh')) return false;
+        if (!object.parent) return false;
+        if (skinObjects.has(object)) return false;
+        if (object.__mfArmorShell === true) return false;
+
+        const pos = object.geometry?.attributes?.position;
+        if (!pos || pos.count < 12) return false;
+
+        const name = String(object.name || '').toLowerCase();
+        if (/cape|elytra|wing|skin|body|shell/.test(name)) return false;
+        if (object === root?.skinnedBody) return false;
+
+        return true;
+    }
+
+    function cloneMaterial(material) {
+        let copy;
+        try { copy = material?.clone?.(); } catch { copy = null; }
+        if (!copy) return null;
+
+        copy.side = 2;
+        copy.transparent = material.transparent;
+        copy.opacity = material.opacity;
+        copy.alphaTest = material.alphaTest;
+        copy.depthWrite = material.depthWrite;
+        copy.depthTest = material.depthTest;
+        copy.polygonOffset = true;
+        copy.polygonOffsetFactor = 1;
+        copy.polygonOffsetUnits = 1;
+        copy.needsUpdate = true;
+
+        return copy;
+    }
+
+    function createShellMaterials(material) {
+        if (Array.isArray(material)) {
+            return material.map(cloneMaterial).filter(Boolean);
+        }
+
+        return cloneMaterial(material);
+    }
+
+    function createShell(object) {
+        const material = createShellMaterials(object.material);
+        if (!material) return null;
+
+        let shell;
+        try {
+            shell = new object.constructor(object.geometry, material);
+        } catch {
+            return null;
+        }
+
+        shell.__mfArmorShell = true;
+        shell.name = `${object.name || 'armor'}__mf_shell`;
+        shell.frustumCulled = false;
+        shell.castShadow = object.castShadow;
+        shell.receiveShadow = object.receiveShadow;
+        shell.renderOrder = (object.renderOrder || 0) + 0.01;
+        shell.visible = object.visible;
+        shell.matrixAutoUpdate = object.matrixAutoUpdate;
+
+        try { shell.position.copy(object.position); } catch {}
+        try { shell.quaternion.copy(object.quaternion); } catch {}
+        try { shell.scale.copy(object.scale).multiplyScalar(CONFIG.scale); } catch {}
+        try { shell.rotation.copy(object.rotation); } catch {}
+
+        try {
+            if (object.isSkinnedMesh && object.skeleton) {
+                shell.bindMode = object.bindMode;
+                shell.bindMatrix.copy(object.bindMatrix);
+                shell.bindMatrixInverse.copy(object.bindMatrixInverse);
+                shell.bind(object.skeleton, object.bindMatrix);
+            }
+        } catch {}
+
+        try {
+            if (object.parent) object.parent.add(shell);
+        } catch {
+            try {
+                if (Array.isArray(material)) material.forEach(m => m?.dispose?.());
+                else material?.dispose?.();
+            } catch {}
+            return null;
+        }
+
+        return shell;
+    }
+
+    function syncShell(entry) {
+        const object = entry.object;
+        const shell = entry.shell;
+
+        if (!object || !shell) return;
+
+        try { shell.visible = object.visible; } catch {}
+        try { shell.position.copy(object.position); } catch {}
+        try { shell.quaternion.copy(object.quaternion); } catch {}
+        try { shell.scale.copy(object.scale).multiplyScalar(CONFIG.scale); } catch {}
+        try { shell.rotation.copy(object.rotation); } catch {}
+        try { shell.matrixWorldNeedsUpdate = true; } catch {}
+
+        try {
+            if (object.isSkinnedMesh && object.skeleton && shell.skeleton !== object.skeleton) {
+                shell.bindMode = object.bindMode;
+                shell.bind(object.skeleton, object.bindMatrix);
+            }
+        } catch {}
+    }
+
+    function patchArmor(object) {
+        const existing = state.armor.get(object);
+        if (existing) {
+            syncShell(existing);
+            return true;
+        }
+
+        const shell = createShell(object);
+        if (!shell) return false;
+
+        state.armor.set(object, { object, shell });
+        syncShell({ object, shell });
+        return true;
+    }
+
+    function disposeMaterial(material) {
+        try {
+            if (Array.isArray(material)) {
+                for (const entry of material) entry?.dispose?.();
+            } else {
+                material?.dispose?.();
+            }
+        } catch {}
+    }
+
+    function restoreObject(object, entry) {
+        try {
+            if (entry.shell?.parent) entry.shell.parent.remove(entry.shell);
+        } catch {}
+
+        disposeMaterial(entry.shell?.material);
+    }
+
     function restoreAll() {
-        for (const [object, entry] of state.armor) restore(object, entry);
-        state.armor.clear(); state.failures = new WeakMap();
+        for (const [object, entry] of state.armor) restoreObject(object, entry);
+        state.armor.clear();
+        state.entity = null;
+        state.root = null;
     }
-    function patch(object, now) {
-        const previous = state.armor.get(object), effective = sourceGeometry(object);
-        const original = previous && effective === previous.generated ? previous.original : effective;
-        const map = firstMaterial(object)?.map;
-        if (previous && original === previous.original && previous.map === map && previous.image === map?.image) return;
-        if (previous) { restore(object, previous); state.armor.delete(object); }
-        const failure = state.failures.get(object);
-        if (failure?.original === original && failure.map === map && failure.image === map?.image && now - failure.at < 5000) return;
-        const pixels = readTexture(map), generated = pixels && buildRelief(original, pixels);
-        if (!generated) { state.failures.set(object, { original, map, image: map?.image, at: now }); return; }
-        assignGeometry(object, generated);
-        state.armor.set(object, { original, generated, map, image: map.image });
-        state.failures.delete(object);
+
+    function isLayerEnabled() {
+        try {
+            const mod = W.MF_BetterPlayerLayers;
+            if (mod && typeof mod.getState === 'function') {
+                const info = mod.getState();
+                if (typeof info?.enabled === 'boolean') return info.enabled;
+            }
+        } catch {}
+        return state.enabled;
     }
+
     function synchronize() {
-        if (state.destroyed) return;
-        if (!isEnabled()) { if (state.armor.size) restoreAll(); return; }
-        const now = performance.now();
-        if (now - state.lastScan < 350) return;
-        state.lastScan = now;
-        const game = findGame(), root = localEntity(game)?.mesh;
+        if (!state.enabled && !isLayerEnabled()) return;
+
+        const game = findGame();
+        if (!game?.player) {
+            restoreAll();
+            state.game = null;
+            return;
+        }
+
+        const entity = findLocalEntity(game);
+        const root = entity?.mesh;
+        if (!root) return;
+
+        if (root !== state.root) {
+            restoreAll();
+            state.root = root;
+        }
+
         state.game = game;
-        const current = armorObjects(root);
-        for (const [object, entry] of state.armor) if (!current.has(object)) { restore(object, entry); state.armor.delete(object); }
-        for (const object of current) patch(object, now);
-    }
-    function refresh() {
-        if (isEnabled()) {
-            if (!state.timer) state.timer = W.setInterval(synchronize, 400);
-            state.lastScan = -Infinity; synchronize();
-        } else {
-            if (state.timer) W.clearInterval(state.timer);
-            state.timer = 0; restoreAll(); state.game = null;
+        state.entity = entity;
+
+        const skinObjects = knownSkinObjects(root);
+        const current = new Set();
+
+        for (const object of collectObjects(root)) {
+            if (!isArmorMesh(object, root, skinObjects)) continue;
+            current.add(object);
+            patchArmor(object);
+        }
+
+        for (const [object, entry] of [...state.armor]) {
+            if (!current.has(object) || !object.parent) {
+                restoreObject(object, entry);
+                state.armor.delete(object);
+            } else {
+                syncShell(entry);
+            }
         }
     }
-    function setEnabled(value) { if (state.destroyed) return; state.manual = !!value; refresh(); }
-    function setRealisticOptions(options = {}) {
-        if (state.destroyed || state.realistic === !!options.enabled) return;
-        state.realistic = !!options.enabled; refresh();
+
+    function setEnabled(value) {
+        const next = Boolean(value);
+        if (state.enabled === next) {
+            if (next) synchronize();
+            return;
+        }
+
+        state.enabled = next;
+
+        if (next) {
+            synchronize();
+        } else {
+            restoreAll();
+            state.game = null;
+        }
     }
-    function onConfig(event) {
+
+    document.addEventListener('minifeather:better-player-layers-config', event => {
         let detail = event.detail;
-        if (typeof detail === 'string') try { detail = JSON.parse(detail); } catch { return; }
+        try {
+            if (typeof detail === 'string') detail = JSON.parse(detail);
+        } catch {
+            detail = null;
+        }
         if (typeof detail?.enabled === 'boolean') setEnabled(detail.enabled);
-    }
-    function destroy() {
-        if (state.destroyed) return;
-        state.destroyed = true;
-        if (state.timer) W.clearInterval(state.timer);
-        state.timer = 0; restoreAll();
-        document.removeEventListener(EVENT, onConfig);
-        if (W.MF_BetterPlayerLayersArmor === api) delete W.MF_BetterPlayerLayersArmor;
-    }
-    const api = Object.freeze({
-        enable: () => setEnabled(true), disable: () => setEnabled(false),
-        setRealisticOptions, synchronize, destroy,
-        getState: () => ({ enabled: isEnabled(), manualEnabled: state.manual, realisticEnabled: state.realistic,
-            armorMeshes: state.armor.size, vertices: [...state.armor.values()].reduce((n, e) => n + e.generated.attributes.position.count, 0),
-            reliefPixels: 0.18, materialMode: 'native', extraDrawCalls: 0 })
     });
-    W.MF_BetterPlayerLayersArmor = api;
-    document.addEventListener(EVENT, onConfig);
+
+    W.MF_BetterPlayerLayersArmor = {
+        enable: () => setEnabled(true),
+        disable: () => setEnabled(false),
+        getState: () => ({
+            enabled: state.enabled || isLayerEnabled(),
+            armorMeshes: state.armor.size,
+            scale: CONFIG.scale
+        })
+    };
+
+    W.setInterval(synchronize, CONFIG.scanMs);
 })();
 
 //# sourceURL=MF:src/Render/BetterPlayerLayersArmorPatch.js
@@ -93184,7 +93070,6 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 (() => {
   'use strict';
 
-  const REALISTIC_PLAYER_FEATURES_VERSION = 1;
   const W = globalThis;
   const EVENT_NAME = 'minifeather:realistic-config';
   try { W.MF_RealisticMode?.destroy?.(); } catch (_) {}
@@ -93193,9 +93078,6 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     enabled: false,
     level: 'medium',
     custom: null,
-    skinLayers: true,
-    armorRelief: true,
-    firstPersonBody: true,
     adaptiveScale: 1,
     fpsEma: 60,
     lastFrameAt: 0,
@@ -93348,12 +93230,6 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     }
   }
 
-  function applyPlayerFeatures() {
-    W.MF_BetterPlayerLayers?.setRealisticOptions?.({ enabled: state.enabled && state.skinLayers });
-    W.MF_BetterPlayerLayersArmor?.setRealisticOptions?.({ enabled: state.enabled && state.armorRelief });
-    W.MF_RealisticFirstPerson?.configure?.({ enabled: state.enabled && state.firstPersonBody });
-  }
-
   function playerPosition(game) {
     const p = game?.player?.pos || game?.player?.position || game?.player?.getPosition?.() || game?.player?.mesh?.position;
     if (!p) return null;
@@ -93406,7 +93282,6 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     const now = performance.now();
     if (!force && now - state.lastScan < 1800) return;
     state.lastScan = now;
-    applyPlayerFeatures();
     const game = findGame();
     const p = currentProfile();
     if (!game || !p) return;
@@ -93480,12 +93355,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
   function setEnabled(value) {
     const next = !!value;
     if (state.enabled === next) {
-      applyPlayerFeatures();
       applyCompanions(true);
       return;
     }
     state.enabled = next;
-    applyPlayerFeatures();
     if (next) {
       state.lastFrameAt = 0;
       applyProfile(); scan(true); applyCompanions(true);
@@ -93511,9 +93384,6 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     if (!c || typeof c !== 'object') return;
 
     const wasEnabled = state.enabled;
-    if ('skinLayers' in c) state.skinLayers = !!c.skinLayers;
-    if ('armorRelief' in c) state.armorRelief = !!c.armorRelief;
-    if ('firstPersonBody' in c) state.firstPersonBody = !!c.firstPersonBody;
     state.level = profiles()?.normalizeLevel?.(c.level) || 'medium';
     state.custom = profiles()?.clampCustom?.(c.custom || state.custom || {}) || c.custom || null;
     if (!(state.custom?.optimizeFps ?? state.custom?.adaptive)) state.adaptiveScale = 1;
@@ -93554,11 +93424,6 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
       enabled: state.enabled, level: state.level, optimizeFps: !!(state.custom?.optimizeFps ?? state.custom?.adaptive), targetFps: Math.round(Number(state.custom?.targetFps) || 60), adaptiveScale: state.adaptiveScale, fps: Math.round(state.fpsEma),
       fluids: state.fluidCount, shadowMaterials: state.shadowMaterials, clouds: W.MF_RealisticClouds?.count?.() || 0,
       renderDistance: W.MF_RealisticRenderDistance?.getState?.() || null,
-      playerFeatures: {
-        skinLayers: state.enabled && state.skinLayers,
-        armorRelief: state.enabled && state.armorRelief,
-        firstPersonBody: state.enabled && state.firstPersonBody
-      },
       wetness: W.MF_RealisticWetness?.getState?.() || null, stars: state.stars.size, snowy: state.snowy
     })
   });
@@ -109673,11 +109538,6 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticTitle": "Realistic Mode",
     "experimentalRealisticDesc": "Natural lighting, detailed sun/moon shadows, clearer animated water, persistent wet surfaces, weather-reactive volumetric clouds, block surface depth, brighter stars, snowy-biome auroras and coordinated leaf wind.",
     "experimentalRealisticQuality": "Realistic quality",
-    "experimentalRealisticPlayerTitle": "Player appearance",
-    "experimentalRealisticPlayerDesc": "Independent options for every quality preset. Add depth to skin outer layers and armor while preserving their colors; show your body in first person without changing the camera.",
-    "experimentalRealisticSkinLayersLabel": "3D skin layers",
-    "experimentalRealisticArmorReliefLabel": "Armor relief",
-    "experimentalRealisticFirstPersonLabel": "First-person body",
     "experimentalWetnessTitle": "Wet surfaces",
     "experimentalWetnessDesc": "Rain and nearby world water darken blocks and add a reflective wet sheen. Moisture remains after the source disappears and dries gradually.",
     "experimentalWetnessDryTime": "Drying duration",
@@ -110511,11 +110371,6 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticTitle": "Modo realista",
     "experimentalRealisticDesc": "Iluminación natural, sombras detalladas del sol y la luna, agua animada más clara, superficies mojadas persistentes, nubes volumétricas que reaccionan al clima, profundidad en bloques, estrellas más brillantes, auroras en biomas nevados y viento coordinado en las hojas.",
     "experimentalRealisticQuality": "Calidad realista",
-    "experimentalRealisticPlayerTitle": "Aspecto del jugador",
-    "experimentalRealisticPlayerDesc": "Opciones independientes para todas las calidades. Da relieve a la segunda capa de la skin y a la armadura conservando sus colores; muestra tu cuerpo en primera persona sin cambiar la cámara.",
-    "experimentalRealisticSkinLayersLabel": "Capas 3D de la skin",
-    "experimentalRealisticArmorReliefLabel": "Relieve de armadura",
-    "experimentalRealisticFirstPersonLabel": "Cuerpo en primera persona",
     "experimentalWetnessTitle": "Superficies mojadas",
     "experimentalWetnessDesc": "La lluvia y el agua cercana del mundo oscurecen los bloques y añaden un brillo húmedo. La humedad permanece y se seca gradualmente.",
     "experimentalWetnessDryTime": "Duración del secado",
@@ -111368,11 +111223,6 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticTitle": "リアルモード",
     "experimentalRealisticDesc": "自然な光、投影シャドウ、透明で動く水、天候に反応する立体的な雲、ブロックの奥行き、明るい星、雪原のオーロラ、連動する葉の風を追加します。",
     "experimentalRealisticQuality": "リアル品質",
-    "experimentalRealisticPlayerTitle": "プレイヤーの外観",
-    "experimentalRealisticPlayerDesc": "すべての画質で個別に設定できます。スキンの外側のレイヤーと防具に元の色を保った立体感を加え、カメラを変更せずに一人称で身体を表示します。",
-    "experimentalRealisticSkinLayersLabel": "スキンの3Dレイヤー",
-    "experimentalRealisticArmorReliefLabel": "防具の立体感",
-    "experimentalRealisticFirstPersonLabel": "一人称の身体表示",
     "experimentalRealisticLow": "低",
     "experimentalRealisticMedium": "中",
     "experimentalRealisticHigh": "高",
@@ -112220,11 +112070,6 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticTitle": "Modalità realistica",
     "experimentalRealisticDesc": "Illuminazione naturale, ombre proiettate, acqua trasparente animata, nuvole volumetriche reattive al meteo, profondità dei blocchi, stelle più luminose, aurore nei biomi innevati e vento coordinato sulle foglie.",
     "experimentalRealisticQuality": "Qualità realistica",
-    "experimentalRealisticPlayerTitle": "Aspetto del giocatore",
-    "experimentalRealisticPlayerDesc": "Opzioni indipendenti per ogni qualità. Aggiunge rilievo agli strati esterni della skin e all'armatura mantenendone i colori; mostra il corpo in prima persona senza modificare la telecamera.",
-    "experimentalRealisticSkinLayersLabel": "Strati 3D della skin",
-    "experimentalRealisticArmorReliefLabel": "Rilievo dell'armatura",
-    "experimentalRealisticFirstPersonLabel": "Corpo in prima persona",
     "experimentalRealisticLow": "Bassa",
     "experimentalRealisticMedium": "Media",
     "experimentalRealisticHigh": "Alta",
@@ -113101,11 +112946,6 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticTitle": "现实模式",
     "experimentalRealisticDesc": "自然采光、详细的太阳/moon shadows、更清澈的动画水、持续潮湿的表面、天气反应性体积云、块表面深度、更明亮的星星、雪域生物群落极光和协调的叶风。",
     "experimentalRealisticQuality": "逼真的品质",
-    "experimentalRealisticPlayerTitle": "玩家外观",
-    "experimentalRealisticPlayerDesc": "各画质均可独立设置。在保留原有颜色的同时，为皮肤外层和盔甲增加立体感；无需更改摄像机即可在第一人称中显示身体。",
-    "experimentalRealisticSkinLayersLabel": "3D皮肤外层",
-    "experimentalRealisticArmorReliefLabel": "盔甲立体效果",
-    "experimentalRealisticFirstPersonLabel": "第一人称身体",
     "experimentalWetnessTitle": "潮湿的表面",
     "experimentalWetnessDesc": "雨水和附近的世界水会使方块变暗并添加反射性的湿光泽。当来源消失并逐渐干燥后，水分仍然存在。",
     "experimentalWetnessDryTime": "干燥时间",
@@ -113942,11 +113782,6 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticTitle": "Mode réaliste",
     "experimentalRealisticDesc": "Éclairage naturel, soleil détaillé /moon shadows, eau animée plus claire, surfaces humides persistantes, nuages volumétriques réactifs aux intempéries, profondeur de surface de bloc, étoiles plus brillantes, aurores boréales enneigées et vent de feuille coordonné.",
     "experimentalRealisticQuality": "Qualité réaliste",
-    "experimentalRealisticPlayerTitle": "Apparence du joueur",
-    "experimentalRealisticPlayerDesc": "Options indépendantes pour chaque qualité. Donne du relief aux couches externes de la skin et à l'armure en conservant leurs couleurs ; affiche votre corps en vue à la première personne sans changer la caméra.",
-    "experimentalRealisticSkinLayersLabel": "Couches 3D de la skin",
-    "experimentalRealisticArmorReliefLabel": "Relief de l'armure",
-    "experimentalRealisticFirstPersonLabel": "Corps à la première personne",
     "experimentalWetnessTitle": "Surfaces mouillées",
     "experimentalWetnessDesc": "La pluie et l'eau du monde voisin assombrissent les blocs et ajoutent un éclat humide réfléchissant. L'humidité reste après la disparition de la source et sèche progressivement.",
     "experimentalWetnessDryTime": "Durée de séchage",
@@ -114783,11 +114618,6 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticTitle": "Realistischer Modus",
     "experimentalRealisticDesc": "Natürliches Licht, detaillierte Sonne/moon shadows, klareres, animiertes Wasser, anhaltend nasse Oberflächen, wetterreaktive volumetrische Wolken, Blockoberflächentiefe, hellere Sterne, Schneebiom-Auroren und koordinierter Blattwind.",
     "experimentalRealisticQuality": "Realistische Qualität",
-    "experimentalRealisticPlayerTitle": "Spieler-Aussehen",
-    "experimentalRealisticPlayerDesc": "Unabhängige Optionen für jede Qualitätsstufe. Verleiht äußeren Skin-Ebenen und Rüstung Tiefe bei unveränderten Farben; zeigt deinen Körper in der Ego-Perspektive, ohne die Kamera zu verändern.",
-    "experimentalRealisticSkinLayersLabel": "3D-Skin-Ebenen",
-    "experimentalRealisticArmorReliefLabel": "Rüstungsrelief",
-    "experimentalRealisticFirstPersonLabel": "Körper in Ego-Perspektive",
     "experimentalWetnessTitle": "Nasse Oberflächen",
     "experimentalWetnessDesc": "Regen und nahegelegenes Wasser verdunkeln die Blöcke und verleihen ihnen einen reflektierenden, nassen Glanz. Feuchtigkeit bleibt bestehen, nachdem die Quelle verschwunden ist und allmählich trocknet.",
     "experimentalWetnessDryTime": "Trocknungsdauer",
@@ -115624,11 +115454,6 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticTitle": "Modo realista",
     "experimentalRealisticDesc": "Iluminação natural, sol /moon shadows detalhado, água animada mais clara, superfícies molhadas persistentes, nuvens volumétricas reativas ao clima, profundidade da superfície do bloco, estrelas mais brilhantes, auroras do bioma nevado e vento foliar coordenado.",
     "experimentalRealisticQuality": "Qualidade realista",
-    "experimentalRealisticPlayerTitle": "Aparência do jogador",
-    "experimentalRealisticPlayerDesc": "Opções independentes para todas as qualidades. Adiciona relevo às camadas externas da skin e à armadura preservando suas cores; mostra seu corpo em primeira pessoa sem alterar a câmera.",
-    "experimentalRealisticSkinLayersLabel": "Camadas 3D da skin",
-    "experimentalRealisticArmorReliefLabel": "Relevo da armadura",
-    "experimentalRealisticFirstPersonLabel": "Corpo em primeira pessoa",
     "experimentalWetnessTitle": "Superfícies molhadas",
     "experimentalWetnessDesc": "A chuva e a água do mundo próximo escurecem os blocos e adicionam um brilho reflexivo molhado. A umidade permanece após a fonte desaparecer e secar gradualmente.",
     "experimentalWetnessDryTime": "Duração da secagem",
@@ -116465,11 +116290,6 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticTitle": "Реалистичный режим",
     "experimentalRealisticDesc": "Естественное освещение, детализированное солнце/moon shadows, более чистая анимированная вода, постоянные влажные поверхности, объемные облака, реагирующие на погоду, глубина поверхности блоков, более яркие звезды, полярные сияния в снежном биоме и скоординированный ветер из листьев.",
     "experimentalRealisticQuality": "Реалистичное качество",
-    "experimentalRealisticPlayerTitle": "Внешний вид игрока",
-    "experimentalRealisticPlayerDesc": "Независимые настройки для любого качества. Добавляет объём внешнему слою скина и броне, сохраняя их цвета; показывает тело от первого лица без изменения камеры.",
-    "experimentalRealisticSkinLayersLabel": "3D-слои скина",
-    "experimentalRealisticArmorReliefLabel": "Рельеф брони",
-    "experimentalRealisticFirstPersonLabel": "Тело от первого лица",
     "experimentalWetnessTitle": "Влажные поверхности",
     "experimentalWetnessDesc": "Дождь и вода из близлежащего мира затемняют блоки и добавляют отражающий влажный блеск. Влага остается после исчезновения источника и постепенно высыхает.",
     "experimentalWetnessDryTime": "Продолжительность сушки",
@@ -117306,11 +117126,6 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticTitle": "사실적 모드",
     "experimentalRealisticDesc": "자연 채광, 상세한 태양/moon shadows, 더 선명하게 움직이는 물, 지속적으로 젖은 표면, 날씨에 반응하는 체적 구름, 블록 표면 깊이, 더 밝은 별, 눈 덮인 생물 군계 오로라 및 조화로운 나뭇잎 바람.",
     "experimentalRealisticQuality": "현실적인 품질",
-    "experimentalRealisticPlayerTitle": "플레이어 외형",
-    "experimentalRealisticPlayerDesc": "모든 품질에서 개별 설정이 가능합니다. 원래 색상을 유지하면서 스킨의 바깥 레이어와 갑옷에 입체감을 더하고, 카메라를 바꾸지 않고 1인칭에서 몸을 표시합니다.",
-    "experimentalRealisticSkinLayersLabel": "3D 스킨 레이어",
-    "experimentalRealisticArmorReliefLabel": "갑옷 입체 효과",
-    "experimentalRealisticFirstPersonLabel": "1인칭 몸 표시",
     "experimentalWetnessTitle": "젖은 표면",
     "experimentalWetnessDesc": "비와 근처의 세계 물은 블록을 어둡게 하고 반사되는 젖은 광택을 추가합니다. 근원이 사라진 후에도 수분은 남아 있다가 서서히 건조됩니다.",
     "experimentalWetnessDryTime": "건조시간",
@@ -121079,9 +120894,6 @@ function normalize(entry) {
     pageZoomEnabled: true,
     experimentalRealistic: false,
     experimentalRealisticLevel: 'medium',
-    experimentalRealisticSkinLayers: true,
-    experimentalRealisticArmorRelief: true,
-    experimentalRealisticFirstPerson: true,
     experimentalWetDrySeconds: 180,
     experimentalRealisticCustom: { ...REALISTIC_CUSTOM_DEFAULTS },
     experimentalAurora: false,
@@ -128450,24 +128262,6 @@ function normalize(entry) {
     `;
   }
 
-  function renderRealisticPlayerControls() {
-    const features = [
-      ['experimentalRealisticSkinLayers', 'experimentalRealisticSkinLayersLabel'],
-      ['experimentalRealisticArmorRelief', 'experimentalRealisticArmorReliefLabel'],
-      ['experimentalRealisticFirstPerson', 'experimentalRealisticFirstPersonLabel']
-    ];
-    return `
-      <div class="mf-card" id="mf-realistic-player-section">
-        <div class="mf-card-title">${escapeHtml(t('experimentalRealisticPlayerTitle'))}</div>
-        <div class="mf-muted" style="font-size:11px;line-height:1.5;margin-bottom:8px;">${escapeHtml(t('experimentalRealisticPlayerDesc'))}</div>
-        ${features.map(([key, label]) => `
-          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;font-size:11px;">
-            <span>${escapeHtml(t(label))}</span>
-            <input type="checkbox" data-mf-realistic-player-key="${key}" ${guiSettings[key] !== false ? 'checked' : ''}>
-          </label>`).join('')}
-      </div>`;
-  }
-
   function renderRealisticCustomControls() {
     const c = clampRealisticCustom(guiSettings.experimentalRealisticCustom || settings.experimentalRealisticCustom);
     const slider = (key, labelKey, min, max, step, suffix = '%') => {
@@ -128640,7 +128434,6 @@ function normalize(entry) {
             }).join('')}
           </div>
         </div>
-        ${renderRealisticPlayerControls()}
         ${renderRealisticCustomControls()}
         <div class="mf-card" id="mf-realistic-wetness-section">
           <div class="mf-card-title">💧 ${escapeHtml(t('experimentalWetnessTitle'))}</div>
@@ -130965,10 +130758,6 @@ function normalize(entry) {
         });
         const customSection = panel.querySelector('#mf-realistic-custom-section');
         if (customSection) customSection.style.display = String(guiSettings.experimentalRealisticLevel || settings.experimentalRealisticLevel) === 'custom' ? 'block' : 'none';
-        panel.querySelectorAll('[data-mf-realistic-player-key]').forEach(input => {
-          const key = String(input.dataset.mfRealisticPlayerKey || '');
-          if (key in guiSettings) input.checked = guiSettings[key] !== false;
-        });
         const incomingCustom = clampRealisticCustom(guiSettings.experimentalRealisticCustom || settings.experimentalRealisticCustom);
         panel.querySelectorAll('[data-mf-realistic-custom]').forEach(input => { const key = String(input.dataset.mfRealisticCustom || ''); if (key in incomingCustom) input.value = String(incomingCustom[key]); });
         panel.querySelectorAll('[data-mf-realistic-custom-check]').forEach(input => { const key = String(input.dataset.mfRealisticCustomCheck || ''); if (key in incomingCustom) input.checked = !!incomingCustom[key]; });
@@ -133219,17 +133008,6 @@ function normalize(entry) {
       });
     });
 
-    panel.querySelectorAll('[data-mf-realistic-player-key]').forEach(input => {
-      const key = String(input.dataset.mfRealisticPlayerKey || '');
-      if (!['experimentalRealisticSkinLayers', 'experimentalRealisticArmorRelief', 'experimentalRealisticFirstPerson'].includes(key)) return;
-      input.addEventListener('change', () => {
-        guiSettings[key] = input.checked;
-        settings[key] = input.checked;
-        saveSettings(true);
-        applyGuiSettings();
-      });
-    });
-
     const refreshRealisticCustomUi = () => {
       const c = clampRealisticCustom(guiSettings.experimentalRealisticCustom || settings.experimentalRealisticCustom);
       guiSettings.experimentalRealisticCustom = { ...c };
@@ -134250,9 +134028,6 @@ function normalize(entry) {
       new CustomEvent('minifeather:realistic-config', {
         detail: JSON.stringify({
           enabled: !!settings.experimentalRealistic,
-          skinLayers: settings.experimentalRealisticSkinLayers !== false,
-          armorRelief: settings.experimentalRealisticArmorRelief !== false,
-          firstPersonBody: settings.experimentalRealisticFirstPerson !== false,
           level: String(settings.experimentalRealisticLevel) === 'extreme'
             ? 'ultra'
             : (['low', 'medium', 'high', 'ultra', 'custom'].includes(String(settings.experimentalRealisticLevel))
