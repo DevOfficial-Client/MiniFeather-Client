@@ -26,28 +26,36 @@ function makeSandbox({ withWebGL = true } = {}) {
     clearInterval() {},
     CustomEvent: class { constructor(type, opts) { this.type = type; this.detail = opts && opts.detail; } }
   };
-  if (withWebGL) {
-    // imita el par getUniformLocation/uniform1f: locations son objetos nuevos
-    // por (programa, nombre) y uniform1f registra lo que llega a "la gpu"
-    const uploads = [];
-    const locations = new Map();
-    class FakeWebGL2RenderingContext {}
-    FakeWebGL2RenderingContext.prototype.getUniformLocation = function (program, name) {
-      const key = program.id + ':' + name;
-      if (!locations.has(key)) locations.set(key, { program: program.id, name });
-      return locations.get(key);
-    };
-    FakeWebGL2RenderingContext.prototype.uniform1f = function (loc, v) {
-      uploads.push({ name: loc.name, v });
-      return undefined;
-    };
-    FakeWebGL2RenderingContext.prototype.uniform1i = function (loc, v) {
-      uploads.push({ name: loc.name, v });
-      return undefined;
-    };
-    sandbox.WebGL2RenderingContext = FakeWebGL2RenderingContext;
-    sandbox.__uploads = uploads;
-  }
+    if (withWebGL) {
+      // imita el par getUniformLocation/uniform*: locations son objetos nuevos
+      // por (programa, nombre) y los uploads registran lo que llega a "la gpu"
+      const uploads = [];
+      const locations = new Map();
+      class FakeWebGL2RenderingContext {}
+      FakeWebGL2RenderingContext.prototype.getUniformLocation = function (program, name) {
+        const key = program.id + ':' + name;
+        if (!locations.has(key)) locations.set(key, { program: program.id, name });
+        return locations.get(key);
+      };
+      FakeWebGL2RenderingContext.prototype.uniform1f = function (loc, v) {
+        uploads.push({ name: loc.name, v });
+        return undefined;
+      };
+      FakeWebGL2RenderingContext.prototype.uniform1i = function (loc, v) {
+        uploads.push({ name: loc.name, v });
+        return undefined;
+      };
+      FakeWebGL2RenderingContext.prototype.uniform3f = function (loc, x, y, z) {
+        uploads.push({ name: loc.name, v: [x, y, z] });
+        return undefined;
+      };
+      FakeWebGL2RenderingContext.prototype.uniform3fv = function (loc, arr) {
+        uploads.push({ name: loc.name, v: Array.from(arr) });
+        return undefined;
+      };
+      sandbox.WebGL2RenderingContext = FakeWebGL2RenderingContext;
+      sandbox.__uploads = uploads;
+    }
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
@@ -70,26 +78,53 @@ test('arranca inactivo y expone su api', () => {
   assert.equal(s.hooked, false);
 });
 
-test('enable clampa los uploads de uVelocityScale y uGIEnabled (uVelocityScale=0 es passthrough exacto según el shader del juego)', () => {
+test('enable clampa uVelocityScale, uFogGIEnabled y manda uGIOrigin al infinito (el cull del propio shader apaga el GI)', () => {
   const { sandbox } = makeSandbox();
   vm.runInContext(SRC, sandbox, { filename: 'src/Render/MF_AntiTear.js' });
   configEvent(sandbox, true);
   const gl = new sandbox.WebGL2RenderingContext();
-  const prog = { id: 'mb' };
-  const locVel = gl.getUniformLocation(prog, 'uVelocityScale');
-  const locGI = gl.getUniformLocation({ id: 'chunk' }, 'uGIEnabled');
+  const locVel = gl.getUniformLocation({ id: 'mb' }, 'uVelocityScale');
+  const locFogGI = gl.getUniformLocation({ id: 'fog' }, 'uFogGIEnabled');
+  const locOrigin = gl.getUniformLocation({ id: 'chunk' }, 'uGIOrigin');
   const locHist = gl.getUniformLocation({ id: 'fog' }, 'uHistoryWeight');
-  gl.uniform1f(locVel, 0.65);   // lo que el juego le metería al blur
-  gl.uniform1f(locGI, 1.0);     // voxel GI prendido
-  gl.uniform1f(locHist, 0.9);   // historial del fog/god rays — NO se toca
+  gl.uniform1f(locVel, 0.65);      // lo que el juego le metería al blur
+  gl.uniform1f(locFogGI, 1.0);     // término GI del fog
+  gl.uniform3f(locOrigin, -1480.0, 71.0, 212.0); // volumen cámara-relativo real
+  gl.uniform1f(locHist, 0.9);      // historial del fog/god rays — NO se toca
   const vel = sandbox.__uploads.find(u => u.name === 'uVelocityScale');
-  const gi = sandbox.__uploads.find(u => u.name === 'uGIEnabled');
+  const foggi = sandbox.__uploads.find(u => u.name === 'uFogGIEnabled');
+  const origin = sandbox.__uploads.find(u => u.name === 'uGIOrigin');
   const hist = sandbox.__uploads.find(u => u.name === 'uHistoryWeight');
   assert.equal(vel.v, 0, 'motion blur → passthrough exacto');
-  assert.equal(gi.v, 0, 'voxel GI → off (skip all GI work)');
+  assert.equal(foggi.v, 0, 'término GI del fog → off');
+  assert.deepEqual(origin.v, [1e9, 1e9, 1e9], 'volumen GI al infinito → cull del shader');
   assert.equal(hist.v, 0.9, 'god rays/fog intocables: el historial va vanilla');
-  assert.equal(sandbox.MF_AntiTear.status().motionBlur, true);
-  assert.equal(sandbox.MF_AntiTear.status().gi, true);
+  const st = sandbox.MF_AntiTear.status();
+  assert.equal(st.motionBlur, true);
+  assert.equal(st.gi, true);
+  assert.equal(st.fogGi, true);
+});
+
+test('uGIOrigin también se clampa por array (uniform3fv)', () => {
+  const { sandbox } = makeSandbox();
+  vm.runInContext(SRC, sandbox, { filename: 'src/Render/MF_AntiTear.js' });
+  configEvent(sandbox, true);
+  const gl = new sandbox.WebGL2RenderingContext();
+  const locOrigin = gl.getUniformLocation({ id: 'chunk' }, 'uGIOrigin');
+  gl.uniform3fv(locOrigin, [1.0, 2.0, 3.0]);
+  const origin = sandbox.__uploads.find(u => u.name === 'uGIOrigin');
+  assert.deepEqual(origin.v, [1e9, 1e9, 1e9], '3fv también al infinito');
+});
+
+test('uGIEnabled (que el juego real nunca pide) no rompe nada si apareciera', () => {
+  const { sandbox } = makeSandbox();
+  vm.runInContext(SRC, sandbox, { filename: 'src/Render/MF_AntiTear.js' });
+  configEvent(sandbox, true);
+  const gl = new sandbox.WebGL2RenderingContext();
+  const loc = gl.getUniformLocation({ id: 'chunk' }, 'uGIEnabled');
+  gl.uniform1f(loc, 1.0);
+  const gi = sandbox.__uploads.find(u => u.name === 'uGIEnabled');
+  assert.equal(gi.v, 1.0, 'no está en clamps → pasa intacto (el juego real ni lo pide)');
 });
 
 test('las demás uniforms pasan intactas (los otros módulos usan el mismo contexto)', () => {
