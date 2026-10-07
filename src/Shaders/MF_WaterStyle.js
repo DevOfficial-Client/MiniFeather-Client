@@ -584,7 +584,14 @@
     `;
 
     function buildCurtainMaterial(fluidMat) {
+        // copy() de three serializa userData con JSON.stringify → el fluido
+        // guarda ahí texturas vivas del juego que no serializan y cada clon
+        // llueve "Unable to serialize Texture". se vacía solo durante el
+        // clon y se restaura: el juego sigue siendo dueño del original
+        const ud = fluidMat.userData;
+        fluidMat.userData = {};
         const m = fluidMat.clone();
+        fluidMat.userData = ud;
         // SIN marcador de fluido: el clon copia userData y el scan se
         // engancharía a sí mismo en bucle
         m.userData = {};
