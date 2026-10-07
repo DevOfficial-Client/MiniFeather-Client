@@ -121,7 +121,14 @@
     }
 
     function buildMaterial(fluidMat) {
+        // copy() de three serializa userData con JSON.stringify y el fluido
+        // guarda ahí datos vivos con texturas que no serializan → lluvia de
+        // "THREE.Texture: Unable to serialize Texture" por clon. el clon
+        // tira ese userData de todos modos: se vacía solo durante el clon
+        const ud = fluidMat.userData;
+        fluidMat.userData = {};
         const m = fluidMat.clone();
+        fluidMat.userData = ud;     // el juego sigue siendo dueño del original
         m.userData = {};            // sin marcador de fluido — higiene del scan ajeno
         m.__mfSkipHook = true;      // inmune al scan del CustomShader (Phong ∈ SAFE_MATERIALS)
         try { m.color?.setRGB?.(0, 0, 0); } catch (_) {}
