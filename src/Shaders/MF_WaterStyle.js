@@ -82,7 +82,7 @@
     }
 
     const WAVE_GLSL = `
-        attribute float mfSub;
+        attribute float emissive;   // canal libre del fluido: 1 = subdividida
         uniform float uMfWaveScale;
         uniform float uMfStill;
         uniform vec3 uMfPlayerPos;
@@ -116,8 +116,8 @@
             ) * 0.9;
             vec2 q = (p + warp) * 0.45;
             float h = mfNoise(q - wind * t * 0.75) * 0.72;
-            h += mfNoise(q * 2.1 - wind * t * 1.05 + 7.3) * (0.30 * mfSub);
-            h += mfNoise(q * 4.4 - wind * t * 1.40 + 3.1) * (0.22 * mfSub);
+            h += mfNoise(q * 2.1 - wind * t * 1.05 + 7.3) * (0.30 * min(emissive, 1.0));
+            h += mfNoise(q * 4.4 - wind * t * 1.40 + 3.1) * (0.22 * min(emissive, 1.0));
             // rachas presentes sin dejar el mar en calma muerta
             h *= 1.0 + mfNoise(p * 0.16 + wind * t * 0.10) * 0.45;
             return h;
@@ -265,7 +265,7 @@
                     // frecuencias seguras para vértices por bloque. La lava
                     // (kind 0) nunca escala: churn vanilla
                     vs = vs.replace(ampOrig,
-                        'p *= 1.0 + (kind < 0.5 ? 0.0 : mfSub) * 1.2;\n          ' +
+                        'p *= 1.0 + (kind < 0.5 ? 0.0 : min(emissive, 1.0)) * 1.2;\n          ' +
                         'float amp = kind < 0.5 ? 0.01 : (kind < 1.5 ? 0.045 * uMfWaveScale : 0.03 * uMfWaveScale);');
                 }
                 // estancada: el reloj del swell del juego también se congela
@@ -337,7 +337,7 @@
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v10';
+            return base + '_mfws_v11';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
@@ -397,9 +397,12 @@
                 const out = new Float32Array(outCount * a.itemSize);
                 geo.setAttribute(name, new PA(out, a.itemSize, a.normalized));
             }
-            // marca de subdivisión: el shader la lee para escalar frecuencias
-            // (los vértices SIN este atributo leen 0.0 por spec de WebGL)
-            geo.setAttribute('mfSub', new PA(new Float32Array(outCount).fill(1), 1));
+            // marca de subdivisión empaquetada en el canal emissive: el shader
+            // del agua NUNCA lo lee y así la geometría conserva el MISMO set de
+            // atributos que el resto del chunk — el mergeGeometries del juego
+            // exige sets idénticos y un atributo nuevo reventaba el rebuild
+            // ('all geometries have the same number of attributes')
+            if (!orig.attributes.emissive) return null;   // sin canal libre: no subdividir
 
             const idxOut = new Uint32Array(triCount * n * n * 3);
             const read = (attr, vi, comp) =>
@@ -445,6 +448,9 @@
                 }
             }
             if (ii !== idxOut.length) return null;
+            // marcador DESPUÉS de la interpolación (que lo pisaría): 1 =
+            // geometría subdividida → el shader escala frecuencias ×2.2
+            geo.attributes.emissive.array.fill(1.0);
             geo.setIndex(new (orig.attributes.position.constructor)(
                 idxOut, 1));
             geo.computeBoundingSphere();
