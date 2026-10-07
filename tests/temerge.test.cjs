@@ -89,6 +89,7 @@ test('mueble cojo al crearse: termina con los 9 atributos y formatos del juego',
   const { ctx, ter, logs } = makeCtx();
   vm.runInContext(SRC, ctx, { filename: 'MF_TileEntityMerge.js' });
   assert.equal(ctx.MF_TileEntityMerge.aligned, true, 'wrap instalado al cargar');
+  assert.equal(ctx.MF_TileEntityMerge.watching, true, 'watcher del updateChunkMesh armado');
 
   ter.rebuildTileEntity({ name: 'chest', pos: { x: 1, y: 64, z: 2 } });
   const model = [...ter.tileEntityModels.values()][0];
@@ -130,10 +131,33 @@ test('extras: se reportan pero NO se quitan (romperían shaders scene-only)', ()
 });
 
 test('disable restaura el rebuildTileEntity original (unwrap por conducta)', () => {
-  const { ctx, ter } = makeCtx();
+  const { ctx, ter, cm } = makeCtx();
   vm.runInContext(SRC, ctx, { filename: 'MF_TileEntityMerge.js' });
   const wrapped = ter.rebuildTileEntity;
+  const wrappedCm = cm.updateChunkMesh;
   ctx.MF_TileEntityMerge.disable();
   assert.notEqual(ter.rebuildTileEntity, wrapped, 'rebuild des-envuelto');
+  assert.notEqual(cm.updateChunkMesh, wrappedCm, 'watcher des-envuelto');
   assert.equal(ctx.MF_TileEntityMerge.aligned, false);
+  assert.equal(ctx.MF_TileEntityMerge.watching, false);
+});
+
+test('mismatch real tras el merge: el watcher lo reporta con el par exacto', () => {
+  const { ctx, ter, cm, logs } = makeCtx();
+  vm.runInContext(SRC, ctx, { filename: 'MF_TileEntityMerge.js' });
+  // chunk con opaco de 9 y un mueble cojo insertado POR DEBAJO del guardián
+  // (el escenario que se le escapó a la v1)
+  const lame = makeLameModel('chest/normal');
+  cm.meshes.set('z', { pos: { x: 3, z: 4 }, opaque: { geometry: lameFakeOpaque() },
+    tileEntities: new Map([['p', lame]]) });
+  cm.updateChunkMesh({ chunkX: 3, chunkZ: 4 });
+  assert.ok(logs.some((l) => l.includes('MISMATCH REAL') && l.includes('falta=[')), 'diff exacto en consola');
+  function lameFakeOpaque() {
+    const g = new Geo();
+    g.setAttribute('position', new Attr(new Float32Array(3), 3));
+    for (const n of ['color', 'normal', 'uv', 'overlayUV', 'animation', 'light', 'wave', 'emissive']) {
+      g.setAttribute(n, new Attr(new Float32Array(3), 3));
+    }
+    return g;
+  }
 });
