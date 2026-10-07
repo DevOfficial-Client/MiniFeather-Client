@@ -5207,7 +5207,8 @@
     document.dispatchEvent(new CustomEvent('minifeather:rainbow-config', {
       detail: JSON.stringify({
         enabled: !!enabled,
-        intensity: Number(settings.rainbowIntensity ?? 0.7)
+        intensity: Number(settings.rainbowIntensity ?? 0.7),
+        mode: settings.rainbowMode === 'always' ? 'always' : 'rain'
       })
     }));
   }
@@ -8602,6 +8603,13 @@
             <span style="min-width:90px;font-size:12px;">intensidad</span>
             <input id="mf-rb-int" type="range" min="0" max="1" step="0.05" value="${Number(settings.rainbowIntensity ?? 0.7)}">
             <span id="mf-rb-int-value">${Math.round(Number(settings.rainbowIntensity ?? 0.7) * 100)}%</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-top:10px;">
+            <span style="min-width:90px;font-size:12px;">cuando</span>
+            <select id="mf-rb-mode" class="mf-select" style="flex:1;">
+              <option value="rain" ${(settings.rainbowMode === 'always' ? '' : 'selected')}>despu&eacute;s de la lluvia</option>
+              <option value="always" ${(settings.rainbowMode === 'always' ? 'selected' : '')}>siempre</option>
+            </select>
           </div>
         </div>
 
@@ -12406,6 +12414,13 @@
         saveSettings(true);
       });
     }
+    const rbMode = panel.querySelector('#mf-rb-mode');
+    rbMode?.addEventListener('change', () => {
+      settings.rainbowMode = rbMode.value === 'always' ? 'always' : 'rain';
+      guiSettings.rainbowMode = settings.rainbowMode;
+      saveSettings(true);
+      sendRainbowConfig();
+    });
     const rbSlider = panel.querySelector('#mf-rb-int');
     rbSlider?.addEventListener('input', () => {
       const value = parseFloat(rbSlider.value);

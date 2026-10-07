@@ -27,13 +27,21 @@
     const state = {
         enabled: localStorage.getItem('mf_rainbow') === 'true',
         intensity: readNum('mf_rainbow_intensity', 0.7),
+        mode: localStorage.getItem('mf_rainbow_mode') || 'rain',   // 'rain' | 'always'
         game: null,
         fluidMat: null,
         scanTimer: 0,
         raf: 0,
+        lastFrameAt: 0,
         mesh: null,
         U: null,
         sunLight: 1,
+        // ciclo post-lluvia: mientras llueve el arco se esconde; al PARAR
+        // arranca una ventana de ~2.5 min con fade suave y se va
+        rainActive: false,
+        afterRainUntil: 0,
+        showFactor: 0,
+        rainReadFailLogged: false,
         logged: false,
         destroyed: false
     };
@@ -196,7 +204,42 @@
     function frame() {
         state.raf = 0;
         if (!state.enabled || state.destroyed) return;
-        const cam = state.game?.gameScene?.camera || state.game?.gameScene?.camera;
+        const nowMs = performance.now();
+        const dt = Math.min(0.5, Math.max(0.001, (nowMs - (state.lastFrameAt || nowMs)) / 1000));
+        state.lastFrameAt = nowMs;
+
+        // ciclo de lluvia: getRainStrength del world (el mismo método que
+        // parchea NoWeather — señal 0..1). sin señal → fail-open a "siempre"
+        // (silent-failure de IterationT: mejor arco de más que nunca)
+        let factorTarget = 1;
+        const world = state.game?.world;
+        if (state.mode === 'rain') {
+            if (typeof world?.getRainStrength === 'function') {
+                let strength = 0;
+                try { strength = world.getRainStrength() || 0; } catch (_) {}
+                const raining = strength > 0.15;
+                if (raining) {
+                    state.rainActive = true;
+                    state.afterRainUntil = 0;
+                    factorTarget = 0;
+                } else if (state.rainActive) {
+                    // acaba de parar: ventana de arcoíris post-lluvia
+                    state.rainActive = false;
+                    state.afterRainUntil = nowMs + 150000;
+                }
+                factorTarget = (state.afterRainUntil > nowMs) ? 1 : 0;
+            } else {
+                if (!state.rainReadFailLogged) {
+                    state.rainReadFailLogged = true;
+                    console.warn(TAG, 'sin world.getRainStrength — modo post-lluvia degrada a "siempre"');
+                }
+            }
+        }
+        // fades suaves: entra ~6s, sale ~12s
+        const tau = factorTarget > state.showFactor ? 6 : 12;
+        state.showFactor += (factorTarget - state.showFactor) * (1 - Math.exp(-dt / tau));
+
+        const cam = state.game?.gameScene?.camera;
         if (cam && state.mesh && state.fluidMat) {
             const sd = state.fluidMat.userData.sunDirection;
             if (sd && Number.isFinite(sd.x)) {
@@ -205,7 +248,8 @@
                 // física: sin sol sobre el horizonte no hay arcoíris
                 const lift = Math.max(0, Math.min(1, (sy - 0.02) / 0.18));
                 const sl = state.fluidMat.userData.uSunLight;
-                state.U.uMfRbI.value = state.intensity * lift * (sl ? sl.value : 1);
+                state.sunLight = sl ? sl.value : 1;
+                state.U.uMfRbI.value = state.intensity * lift * state.sunLight * state.showFactor;
                 // anti-sol y base: z=anti-sol, y≈arriba proyectado, x=y×z
                 const ax = -sx, ay = -sy, az = -sz;
                 const d = ay;                      // up·anti con up=(0,1,0)
@@ -254,10 +298,22 @@
                 localStorage.setItem('mf_rainbow_intensity', String(state.intensity));
             }
         }
+        if (cfg && cfg.mode !== undefined) {
+            state.mode = cfg.mode === 'always' ? 'always' : 'rain';
+            localStorage.setItem('mf_rainbow_mode', state.mode);
+            if (state.mode === 'always') state.showFactor = 1;
+        }
     }
 
     function status() {
-        return { enabled: state.enabled, mesh: !!state.mesh, intensity: state.intensity };
+        return {
+            enabled: state.enabled,
+            mesh: !!state.mesh,
+            intensity: state.intensity,
+            mode: state.mode,
+            raining: state.rainActive,
+            showFactor: Math.round(state.showFactor * 100) / 100
+        };
     }
 
     function destroy() {
