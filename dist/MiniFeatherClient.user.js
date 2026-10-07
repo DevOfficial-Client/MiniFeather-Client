@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007164733
+// @version      4.19.0.20261007171512
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 8e71f5cbbc4c1837370dc6a6733b9cf80f8cf02c
- * builtAt : 2026-10-07T16:48:07.834Z
+ * commit  : 6100cbfaecff110541cbe29b979ad3cb6269b24e
+ * builtAt : 2026-10-07T17:15:29.949Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"8e71f5cbbc4c1837370dc6a6733b9cf80f8cf02c","builtAt":"2026-10-07T16:48:07.835Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"6100cbfaecff110541cbe29b979ad3cb6269b24e","builtAt":"2026-10-07T17:15:29.949Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -50328,7 +50328,13 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
       inventoryParticles: false, lighting: 'Classic',
       dynamicLighting: false, globalIllumination: 'Off',
       clouds: 'None', stars: true, atmosphericSky: false,
-      grassWave: false, fastRender: true, entities: 'Fastest',
+      grassWave: false,
+      // fastRender y entities FUERA a propósito: cambian la forma del
+      // pipeline de chunks y el mergeGeometries de tile entities recibe
+      // sets de atributos distintos → camas/cofres DESAPARECEN del mundo
+      // (reporte 2026-10-07: "desaparecen de la nada", vuelven al apagar
+      // el client). resolution/renderDistance/particles son los wins
+      // grandes y no tocan geometría.
       godRays: 'Off', bloom: 0, eyeAdaptation: 0, waterShaders: false,
       shadows: 'None', volumetricFog: false, emissiveFogGlow: false,
       motionBlur: false, footstepParticles: false, acrylicEffect: false
