@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007002224
+// @version      4.19.0.20261007003126
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : e7aff2b945ebabc985262f41d414a3c34fa22f76
- * builtAt : 2026-10-07T00:22:48.689Z
+ * commit  : 07f3c5bdb1325f144a0e7292853a43c1a560522c
+ * builtAt : 2026-10-07T00:31:40.390Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"e7aff2b945ebabc985262f41d414a3c34fa22f76","builtAt":"2026-10-07T00:22:48.689Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"07f3c5bdb1325f144a0e7292853a43c1a560522c","builtAt":"2026-10-07T00:31:40.390Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -89807,7 +89807,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         // para olas de λ~1.5 bloque. La turbulencia FINA sigue en el fragment
         // (uMfChop) a resolución de píxel.
         float mfTurbulence(vec2 p, float t) {
-            float tt = t * 9.0;
+            float tt = t * 2.2;
             float h = sin(dot(p, vec2( 1.15,  0.80)) + tt) * 0.45;
             h += sin(dot(p, vec2(-0.95,  1.30)) + tt * 1.31 + sin(dot(p, vec2( 0.45, -0.35)) + tt * 0.53) * 1.1) * 0.35;
             h += sin(dot(p, vec2( 1.45, -0.60)) - tt * 1.67 + sin(dot(p, vec2(-0.40,  0.50)) + tt * 0.41) * 0.9) * 0.30;
@@ -89830,10 +89830,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     // titilan el brillo del sol, la transparencia y los reflejos
     const FRAG_CHOP = `// mf chop: turbulencia fina por-pixel
         vec3 normal = normalize(vWorldNormal + vec3(
-            sin(dot(vWorldPosition.xz, vec2( 5.3,  3.7)) + time * 2.9) * 0.32 +
-            sin(dot(vWorldPosition.xz, vec2(-4.1,  6.9)) + time * 3.7) * 0.24,
+            sin(dot(vWorldPosition.xz, vec2( 5.3,  3.7)) + time * 0.36) * 0.32 +
+            sin(dot(vWorldPosition.xz, vec2(-4.1,  6.9)) + time * 0.45) * 0.24,
             0.0,
-            sin(dot(vWorldPosition.xz, vec2( 6.9, -2.9)) + time * 3.3) * 0.32
+            sin(dot(vWorldPosition.xz, vec2( 6.9, -2.9)) + time * 0.40) * 0.32
         ) * uMfChop);`;
 
     const FRAG_TAIL = `
@@ -89972,7 +89972,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v5';
+            return base + '_mfws_v6';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
