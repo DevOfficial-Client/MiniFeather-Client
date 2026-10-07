@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007032938
+// @version      4.19.0.20261007043427
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 3a11ad41d8ea5a25dd4f5c816304eab463d73024
- * builtAt : 2026-10-07T03:29:56.194Z
+ * commit  : e3a9353dd7970a48f854e888238ba439b01cc922
+ * builtAt : 2026-10-07T04:34:40.527Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"3a11ad41d8ea5a25dd4f5c816304eab463d73024","builtAt":"2026-10-07T03:29:56.194Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"e3a9353dd7970a48f854e888238ba439b01cc922","builtAt":"2026-10-07T04:34:40.527Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -90793,22 +90793,27 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     // los "desgarros" de miniblox: el manager de post vive en el closure del
     // bundle y es inalcanzable desde game (lección de la fase 1 del deferred),
     // así que nada de perseguir objetos: los shaders culpables se apagan a
-    // nivel GL capturando las locations por nombre. el propio bundle confiesa
-    // las salidas de emergencia: "uVelocityScale ... 0 disables (exact
-    // passthrough)" tiene early-out en el shader, y el voxel GI se gatea entero
-    // con "uGIEnabled // 0 = off (skip all GI work)" — su volumen es una caja
-    // cámara-relativa de ~96 bloques cuya grilla de voxeles se ve como puntos
-    // alineados al acercarse a los bloques (el reporte del usuario).
+    // nivel GL capturando las locations por nombre.
     //
-    // v4: uHistoryWeight FUE desde clamps — el historial del fog/god rays es
-    // lo que suaviza el dither del raymarch a media resolución; sin él los god
-    // rays se ven crudos y granulosos (el usuario los quiere intactos y con
-    // razón: el suavizado vanilla es lo que siempre estuvo ahí). esto no toca
-    // settings ni la nube.
-    const CLAMPS = {
+    // hallazgos en vivo (log de getUniformLocation durante un re-join real):
+    // - el juego JAMÁS pide "uGIEnabled" (el compilador lo elimina de los
+    //   programas: el GI va horneado por variante), así que ese clamp era
+    //   fantasma. lo que SÍ pide: uGITex, uGIOrigin, uGIInvExtent y
+    //   uFogGIEnabled. el propio bundle confiesa el cull: el volumen GI es una
+    //   caja cámara-relativa de ~96 bloques y "every fragment beyond it has all
+    //   its cone samples fall outside and return vec4(0.0)" — mandar uGIOrigin
+    //   al infinito apaga el GI con el cull de bordes del propio shader (los
+    //   puntos en grilla al acercarse a los bloques son la grilla de voxeles
+    //   magnificada, con la radiancia solar inyectada como tinte amarillo).
+    // - "uVelocityScale ... 0 disables (exact passthrough)" tiene early-out
+    //   literal en el shader del motion blur.
+    // - uHistoryWeight NO se toca: ese historial es lo que suaviza el dither
+    //   del raymarch y los god rays van intactos (pedido del usuario).
+    const CLAMP_1F = {
         uVelocityScale: 0,   // motion blur → copia exacta del frame
-        uGIEnabled: 0        // voxel GI → el shader saltea todo el trabajo GI
+        uFogGIEnabled: 0     // término GI del fog pass → 0
     };
+    const GI_OFF_ORIGIN = [1e9, 1e9, 1e9]; // uGIOrigin → todo fragmento fuera del volumen
 
     const state = {
         enabled: false,
@@ -90823,38 +90828,53 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     // ojo: las locations las cachea three al linkear cada programa, así que un
     // hook tardío (mundo ya cargado) no ve las uniforms hasta el próximo relink
     // (cambio de mundo, context loss). en el arranque normal el mirror corre
-    // antes del engine y la captura agarrá todo desde el primer "compiling
+    // antes del engine y la captura agarra todo desde el primer "compiling
     // shaders". three además cachea uploads escalares: con clampear el primer
-    // upload el 0 se queda pegado en la gpu.
+    // upload el valor queda pegado en la gpu hasta que el juego cambie el
+    // valor (y ahí el clamp vuelve a aplicarse).
 
     function hookContextProtos() {
         if (state.hooked) return true;
         const proto = typeof WebGL2RenderingContext !== 'undefined' && WebGL2RenderingContext.prototype;
         if (!proto) return false;
         const origGet = proto.getUniformLocation;
-        const origF = proto.uniform1f;
-        const origI = proto.uniform1i;
-        if (typeof origGet !== 'function' || typeof origF !== 'function') return false;
+        const orig1f = proto.uniform1f;
+        const orig1i = proto.uniform1i;
+        const orig3f = proto.uniform3f;
+        const orig3fv = proto.uniform3fv;
+        if (typeof origGet !== 'function' || typeof orig1f !== 'function') return false;
         try {
             proto.getUniformLocation = function (program, name) {
                 const loc = origGet.call(this, program, name);
-                if (loc && Object.prototype.hasOwnProperty.call(CLAMPS, name)) {
+                if (loc && (Object.prototype.hasOwnProperty.call(CLAMP_1F, name) || name === 'uGIOrigin')) {
                     state.locNames.set(loc, name);
                 }
                 return loc;
             };
-            const wrapUpload = (orig) => function (loc, v) {
+            const wrapScalar = (orig) => function (loc, v) {
                 const name = state.locNames.get(loc);
                 if (name !== undefined) {
-                    const clamped = CLAMPS[name];
+                    const clamped = CLAMP_1F[name];
                     if (v !== clamped) state.hits[name] = (state.hits[name] || 0) + 1;
                     v = clamped;
                 }
                 return orig.call(this, loc, v);
             };
-            proto.uniform1f = wrapUpload(origF);
-            proto.uniform1i = wrapUpload(origI);
-            state.orig = { getUniformLocation: origGet, uniform1f: origF, uniform1i: origI };
+            proto.uniform1f = wrapScalar(orig1f);
+            proto.uniform1i = wrapScalar(orig1i);
+            const wrapVec3 = (orig) => function (loc, x, y, z) {
+                const name = state.locNames.get(loc);
+                if (name === 'uGIOrigin') {
+                    // el volumen completo al infinito: el cull del shader hace el resto
+                    state.hits[name] = (state.hits[name] || 0) + 1;
+                    if (arguments.length > 2) return orig.call(this, loc, GI_OFF_ORIGIN[0], GI_OFF_ORIGIN[1], GI_OFF_ORIGIN[2]);
+                    return orig.call(this, loc, GI_OFF_ORIGIN);
+                }
+                return orig.apply(this, arguments);
+            };
+            if (typeof orig3f === 'function') proto.uniform3f = wrapVec3(orig3f);
+            if (typeof orig3fv === 'function') proto.uniform3fv = wrapVec3(orig3fv);
+            state.orig = { getUniformLocation: origGet, uniform1f: orig1f, uniform1i: orig1i, uniform3f: orig3f, uniform3fv: orig3fv };
             state.hooked = true;
             return true;
         } catch (_) {
@@ -90869,6 +90889,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             proto.getUniformLocation = state.orig.getUniformLocation;
             proto.uniform1f = state.orig.uniform1f;
             proto.uniform1i = state.orig.uniform1i;
+            if (state.orig.uniform3f) proto.uniform3f = state.orig.uniform3f;
+            if (state.orig.uniform3fv) proto.uniform3fv = state.orig.uniform3fv;
         } catch (_) {}
         state.orig = null;
         state.hooked = false;
@@ -90885,7 +90907,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 // los prototipos sobreviven a cambios de mundo y contexto, así
                 // que el keeper solo reporta: si el juego nunca pide nuestras
                 // uniforms algo anda raro (offscreen rendering, bundle nuevo)
-                if (state.hooked && !state.hits.uVelocityScale && !state.hits.uGIEnabled) {
+                if (state.hooked && !state.hits.uVelocityScale && !state.hits.uGIOrigin && !state.hits.uFogGIEnabled) {
                     const t = performance.now();
                     if (t - state.warnAt > 30000) {
                         state.warnAt = t;
@@ -90894,7 +90916,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 }
             }, 3000);
         }
-        console.info(TAG, 'activo — uVelocityScale→0 (passthrough) + uGIEnabled→0 (sin voxel GI); fog/god rays intactos');
+        console.info(TAG, 'activo — uVelocityScale→0 (passthrough) + uGIOrigin→infinito (GI apagado por cull) + uFogGIEnabled→0; fog y god rays intactos');
         return true;
     }
 
@@ -90910,7 +90932,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             enabled: state.enabled,
             hooked: state.hooked,
             motionBlur: !!state.hits.uVelocityScale,
-            gi: !!state.hits.uGIEnabled,
+            gi: !!state.hits.uGIOrigin,
+            fogGi: !!state.hits.uFogGIEnabled,
             hits: { ...state.hits }
         };
     }
