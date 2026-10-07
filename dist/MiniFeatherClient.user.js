@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007063411
+// @version      4.19.0.20261007063924
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 936729b97d04577001984698c60d9879a9a2ce66
- * builtAt : 2026-10-07T06:34:28.966Z
+ * commit  : c1c020015c70b95b97139810dfd59fca3909bc09
+ * builtAt : 2026-10-07T06:39:37.685Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"936729b97d04577001984698c60d9879a9a2ce66","builtAt":"2026-10-07T06:34:28.966Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"c1c020015c70b95b97139810dfd59fca3909bc09","builtAt":"2026-10-07T06:39:37.685Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -90613,6 +90613,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         // ciclo post-lluvia: mientras llueve el arco se esconde; al PARAR
         // arranca una ventana de ~2.5 min con fade suave y se va
         rainActive: false,
+        forcedUntil: 0,
         afterRainUntil: 0,
         showFactor: 0,
         rainReadFailLogged: false,
@@ -90786,8 +90787,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         // parchea NoWeather — señal 0..1). sin señal → fail-open a "siempre"
         // (silent-failure de IterationT: mejor arco de más que nunca)
         let factorTarget = 1;
-        const world = state.game?.world;
-        if (state.mode === 'rain') {
+        const forced = state.forcedUntil > nowMs;
+        if (state.mode === 'rain' && !forced) {
+            const world = state.game?.world;
             if (typeof world?.getRainStrength === 'function') {
                 let strength = 0;
                 try { strength = world.getRainStrength() || 0; } catch (_) {}
@@ -90879,6 +90881,18 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         }
     }
 
+    // fuerza la ventana del arco (aunque llueva y aunque el modo sea post-
+    // lluvia); si el módulo estaba apagado se enciende al vuelo
+    function force(ms) {
+        const dur = Number.isFinite(ms) && ms > 0 ? ms : 150000;
+        const now = performance.now();
+        state.forcedUntil = now + dur;
+        if (!state.enabled) enable();
+        if (!state.raf) state.raf = requestAnimationFrame(frame);
+        console.info(TAG, 'arcoíris forzado ' + Math.round(dur / 1000) + 's — MF_Rainbow.force([ms]) para repetir');
+        return true;
+    }
+
     function status() {
         return {
             enabled: state.enabled,
@@ -90906,7 +90920,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         } catch (_) {}
     });
 
-    window.MF_Rainbow = { enable, disable, setConfig, status, destroy };
+    window.MF_Rainbow = { enable, disable, setConfig, force, status, destroy };
     window.__MF_RAINBOW_SCOPE__ = { destroy };
     console.info(TAG, 'módulo cargado (inactivo hasta minifeather:rainbow-config {enabled:true})');
 })();
