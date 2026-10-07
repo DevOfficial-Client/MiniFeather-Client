@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007052557
+// @version      4.19.0.20261007054707
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : bee09911ae22805e022de3d30542b785bf63b622
- * builtAt : 2026-10-07T05:26:10.756Z
+ * commit  : 0d6ae7b699b9713c717d70ec1157a883d58ae6a5
+ * builtAt : 2026-10-07T05:47:26.322Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"bee09911ae22805e022de3d30542b785bf63b622","builtAt":"2026-10-07T05:26:10.756Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"0d6ae7b699b9713c717d70ec1157a883d58ae6a5","builtAt":"2026-10-07T05:47:26.322Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -89761,10 +89761,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         scanTimer: 0,
         tickTimer: 0,
         lastScan: 0,
-        hooked: new Map(),      // material → { orig, origKey, liveUniforms, origGeo, cloneGeo }
+        hooked: new Map(),      // material → { orig, origKey, liveUniforms, origGeo, cloneGeo, curtain }
         subdiv: localStorage.getItem('mf_waterstyle_subdiv') !== 'false',
         subBudget: 0,
         subLogged: false,
+        caustics: readNum('mf_waterstyle_caustics', 0.8),
+        cauBudget: 0,
+        cauLogged: false,
         destroyed: false
     };
 
@@ -90035,7 +90038,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
 
-        state.hooked.set(m, { orig, origKey, liveUniforms });
+        state.hooked.set(m, { orig, origKey, liveUniforms, mat: m });
         return true;
     }
 
@@ -90049,6 +90052,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             try { if (m.geometry === entry.cloneGeo) m.geometry = entry.origGeo; } catch (_) {}
             try { entry.cloneGeo.dispose(); } catch (_) {}
         }
+        disposeCurtain(entry);
         m.__mfWaterStyleHooked = false;
         m.needsUpdate = true;
         state.hooked.delete(m);
@@ -90168,6 +90172,187 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         }
     }
 
+    // ── cortina de cáusticas (v10) ─────────────────────────────────────────
+    // la sombra/luz del agua sobre el fondo: paredes verticales que cuelgan
+    // de cada triángulo SUPERIOR del agua hacia abajo, dibujadas aditivas con
+    // depth test contra el terreno → el patrón aterriza en el fondo y en
+    // paredes sumergidas sin necesitar el depth texture del juego (clase
+    // estática, inalcanzable — lección IterationT). El patrón es la MISMA
+    // fiebre de viento de la superficie (parámetros idénticos) → las líneas
+    // de luz viajan coherentes con las olas de arriba; ridge−base = luz y
+    // sombra alternadas.
+    const CURTAIN_DEPTH = 16;
+
+    function buildCurtainGeometry(srcGeo) {
+        try {
+            const pos = srcGeo.attributes.position, nor = srcGeo.attributes.normal;
+            if (!pos || !nor || typeof pos.getX !== 'function') return null;
+            const light = srcGeo.attributes.light || null;
+            const index = srcGeo.index;
+            const triCount = Math.floor((index ? index.count : pos.count) / 3);
+            if (!triCount || triCount > 40000) return null;
+
+            const maxVerts = triCount * 18;   // 3 paredes × 6 vértices por tri
+            const P = new Float32Array(maxVerts * 3);
+            const L = new Float32Array(maxVerts * 3);
+            const F = new Float32Array(maxVerts);
+            let vi = 0;
+            const V = (attr, t, i) => {
+                const k = index ? index.getX(t * 3 + i) : t * 3 + i;
+                return [attr.getX(k), attr.getY(k), attr.getZ(k)];
+            };
+            for (let t = 0; t < triCount; t++) {
+                const a = V(pos, t, 0), b = V(pos, t, 1), c = V(pos, t, 2);
+                const n = V(nor, t, 0);
+                if (n[1] < 0.5) continue;      // solo caras superiores del agua
+                const l0 = light ? V(light, t, 0) : [1, 0, 1];
+                const l1 = light ? V(light, t, 1) : l0;
+                const l2 = light ? V(light, t, 2) : l0;
+                const al = [(l0[0] + l1[0] + l2[0]) / 3, (l0[1] + l1[1] + l2[1]) / 3, (l0[2] + l1[2] + l2[2]) / 3];
+                for (const [p, q] of [[a, b], [b, c], [c, a]]) {
+                    if (vi + 6 > maxVerts) break;
+                    const pd = [p[0], p[1] - CURTAIN_DEPTH, p[2]];
+                    const qd = [q[0], q[1] - CURTAIN_DEPTH, q[2]];
+                    for (const [v, f] of [[p, 0], [q, 0], [qd, 1], [p, 0], [qd, 1], [pd, 1]]) {
+                        P[vi * 3] = v[0]; P[vi * 3 + 1] = v[1]; P[vi * 3 + 2] = v[2];
+                        L[vi * 3] = al[0]; L[vi * 3 + 1] = al[1]; L[vi * 3 + 2] = al[2];
+                        F[vi] = f;
+                        vi++;
+                    }
+                }
+            }
+            if (vi < 6) return null;
+            const PA = pos.constructor;
+            const geo = new srcGeo.constructor();
+            geo.setAttribute('position', new PA(P.subarray(0, vi * 3), 3));
+            geo.setAttribute('alight', new PA(L.subarray(0, vi * 3), 3));
+            geo.setAttribute('afade', new PA(F.subarray(0, vi), 1));
+            geo.computeBoundingSphere();
+            return geo;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    const CURTAIN_NOISE = `
+        uniform float uMfCauTime;
+        uniform float uMfSun;
+        uniform float uMfCaustics;
+        varying vec3 vMfLight;
+        varying float vMfFade;
+        varying vec3 vMfWPos;
+        float mfCHash(vec2 p) {
+            p = 50.0 * fract(p * 0.3183099 + vec2(0.71, 0.113));
+            return -1.0 + 2.0 * fract(p.x * p.y * (p.x + p.y));
+        }
+        float mfCNoise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            return mix(mix(mfCHash(i), mfCHash(i + vec2(1.0, 0.0)), u.x),
+                       mix(mfCHash(i + vec2(0.0, 1.0)), mfCHash(i + vec2(1.0, 1.0)), u.x), u.y);
+        }
+    `;
+
+    const CURTAIN_EMISSIVE = `
+        // la misma fiebre de viento que la superficie (parámetros idénticos a
+        // mfWindWaves, uMfCauTime = time*0.12 como waveT) — ridges donde h
+        // cruza cero; (ridge - base) da luz Y sombra con un solo pase aditivo
+        vec2 mfcWind = vec2(0.8, 0.6);
+        vec2 mfcWarp = vec2(
+            mfCNoise(vMfWPos.xz * 0.35 + vec2( uMfCauTime * 0.28, -uMfCauTime * 0.24)),
+            mfCNoise(vMfWPos.xz * 0.35 + vec2(-uMfCauTime * 0.26,  uMfCauTime * 0.30))
+        ) * 0.9;
+        vec2 mfcQ = (vMfWPos.xz + mfcWarp) * 0.45;
+        float mfcH = mfCNoise(mfcQ - mfcWind * uMfCauTime * 0.75) * 0.72
+                   + mfCNoise(mfcQ * 2.1 - mfcWind * uMfCauTime * 1.05 + 7.3) * 0.30;
+        float mfcRidge = pow(max(1.0 - abs(mfcH * 1.35), 0.0), 3.0);
+        float mfcFade = exp(-vMfFade * 2.6);
+        float mfcSky = smoothstep(0.55, 0.9, vMfLight.x / 15.0);
+        float mfcAmt = (mfcRidge - 0.22) * mfcFade * mfcSky * uMfSun * uMfCaustics;
+        totalEmissiveRadiance = vec3(0.62, 0.95, 0.86) * mfcAmt;
+    `;
+
+    function buildCurtainMaterial(fluidMat) {
+        const m = fluidMat.clone();
+        // SIN marcador de fluido: el clon copia userData y el scan se
+        // engancharía a sí mismo en bucle
+        m.userData = {};
+        try { m.color?.setRGB?.(0, 0, 0); } catch (_) {}
+        try { m.emissive?.setRGB?.(0, 0, 0); } catch (_) {}
+        try { m.map = null; } catch (_) {}
+        m.vertexColors = false;
+        m.transparent = true;
+        m.blending = 2;          // AdditiveBlending (constante numérica, sin THREE)
+        m.depthWrite = false;
+        m.depthTest = true;      // el depth del terreno decide dónde aterriza
+        m.side = 2;              // DoubleSide
+        m.fog = false;           // fog aditivo = bruma gris sumada, no gracias
+        const U = {
+            uMfCauTime: { value: 0 },
+            uMfSun: { value: 1 },
+            uMfCaustics: { value: state.caustics }
+        };
+        m.onBeforeCompile = (shader) => {
+            shader.uniforms.uMfCauTime = U.uMfCauTime;
+            shader.uniforms.uMfSun = U.uMfSun;
+            shader.uniforms.uMfCaustics = U.uMfCaustics;
+            shader.vertexShader = 'attribute vec3 alight;\nattribute float afade;\nvarying vec3 vMfLight;\nvarying float vMfFade;\nvarying vec3 vMfWPos;\n' + shader.vertexShader;
+            if (shader.vertexShader.includes('#include <begin_vertex>')) {
+                shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>',
+                    '#include <begin_vertex>\n        vMfLight = alight;\n        vMfFade = afade;\n        vMfWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+            }
+            shader.fragmentShader = CURTAIN_NOISE + shader.fragmentShader;
+            if (shader.fragmentShader.includes('vec3 totalEmissiveRadiance = emissive;')) {
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    'vec3 totalEmissiveRadiance = emissive;',
+                    'vec3 totalEmissiveRadiance = vec3(0.0);\n    ' + CURTAIN_EMISSIVE);
+            }
+        };
+        m.customProgramCacheKey = () => 'mf_curtain_v1';
+        return { mat: m, U };
+    }
+
+    function disposeCurtain(entry) {
+        if (!entry.curtain) return;
+        try { entry.curtain.parent?.remove(entry.curtain); } catch (_) {}
+        try { entry.curtain.geometry.dispose(); } catch (_) {}
+        try { entry.curtain.material.dispose(); } catch (_) {}
+        entry.curtain = null;
+        entry.curtainU = null;
+        entry.curtainSrc = null;
+    }
+
+    function maybeBuildCurtain(scene, m, entry) {
+        const src = entry.origGeo || m.geometry;
+        if (!src) return;
+        if (entry.curtain && entry.curtainSrc === src) return;   // al día
+        disposeCurtain(entry);
+        const geo = buildCurtainGeometry(src);
+        entry.curtainSrc = src;
+        if (!geo) return;
+        const { mat, U } = buildCurtainMaterial(m);
+        let curtain = null;
+        try { curtain = new m.constructor(geo, mat); } catch (_) {
+            try { geo.dispose(); } catch (_) {}
+            try { mat.dispose(); } catch (_) {}
+            return;
+        }
+        curtain.renderOrder = -1;    // antes del agua: la superficie mezcla ENCIMA
+        try {
+            m.updateMatrixWorld?.(true);
+            curtain.matrixAutoUpdate = false;
+            curtain.matrix.copy(m.matrixWorld);
+        } catch (_) {}
+        scene.add(curtain);
+        entry.curtain = curtain;
+        entry.curtainU = U;
+        if (!state.cauLogged) {
+            state.cauLogged = true;
+            console.info(TAG, '✔ cortina de cáusticas (' + geo.attributes.position.count + ' vértices) — luz y sombra de las olas en el fondo');
+        }
+    }
+
     function scan() {
         if (!state.enabled || state.destroyed) return;
         const now = performance.now();
@@ -90183,6 +90368,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
         let added = 0;
         state.subBudget = 3;   // presupuesto por pasada: sin hitches al cargar océanos
+        state.cauBudget = 2;
         try {
             scene.traverse((o) => {
                 const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
@@ -90195,6 +90381,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                             // apagado; la superficie viva es parte de nuestro look
                             m.userData.waterShadersEnabled.value = 1;
                             if (state.subdiv) maybeSubdivide(m, entry);
+                            if (state.caustics > 0.001 && state.cauBudget > 0) {
+                                state.cauBudget--;
+                                maybeBuildCurtain(scene, m, entry);
+                            }
                         }
                     }
                 }
@@ -90236,6 +90426,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             // deja el efecto local de todos modos — "el agua te nota")
             const target = p?.inWater ? 1 : 0.15;
             u.uMfPlayerRipple.value += (target - u.uMfPlayerRipple.value) * 0.18;
+            // la cortina sigue el reloj y el sol del material del fluido
+            if (entry.curtainU) {
+                const ud = entry.mat?.userData;
+                if (ud?.time) entry.curtainU.uMfCauTime.value = ud.time.value * 0.12;
+                if (ud?.uSunLight) entry.curtainU.uMfSun.value = ud.uSunLight.value;
+                entry.curtainU.uMfCaustics.value = state.caustics;
+            }
         }
     }
 
@@ -90281,6 +90478,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 localStorage.setItem('mf_waterstyle_acrylic', String(state.acrylic));
             }
         }
+        if (cfg && cfg.caustics !== undefined) {
+            const c = parseFloat(cfg.caustics);
+            if (Number.isFinite(c)) {
+                state.caustics = Math.max(0, Math.min(1, c));
+                localStorage.setItem('mf_waterstyle_caustics', String(state.caustics));
+            }
+        }
         if (cfg && cfg.waveScale !== undefined) {
             const w = parseFloat(cfg.waveScale);
             if (Number.isFinite(w)) {
@@ -90305,6 +90509,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             alpha: state.alpha,
             tintMix: state.tintMix,
             acrylic: state.acrylic,
+            caustics: state.caustics,
             waveScale: state.waveScale,
             tint: TINT.slice()
         };
@@ -125256,7 +125461,8 @@ function normalize(entry) {
         alpha: Number(settings.waterStyleAlpha ?? 0.12),
         tintMix: Number(settings.waterStyleTintMix ?? 0.85),
         waveScale: Number(settings.waterStyleWaveScale ?? 2.0),
-        acrylic: Number(settings.waterStyleAcrylic ?? 0.55)
+        acrylic: Number(settings.waterStyleAcrylic ?? 0.55),
+        caustics: Number(settings.waterStyleCaustics ?? 0.8)
       })
     }));
   }
@@ -128614,6 +128820,11 @@ function normalize(entry) {
             <span style="min-width:90px;font-size:12px;">acr&iacute;lico</span>
             <input id="mf-ws-acr" type="range" min="0" max="1" step="0.05" value="${Number(settings.waterStyleAcrylic ?? 0.55)}">
             <span id="mf-ws-acr-value">${Math.round(Number(settings.waterStyleAcrylic ?? 0.55) * 100)}%</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-top:10px;">
+            <span style="min-width:90px;font-size:12px;">c&aacute;usticas</span>
+            <input id="mf-ws-cau" type="range" min="0" max="1" step="0.05" value="${Number(settings.waterStyleCaustics ?? 0.8)}">
+            <span id="mf-ws-cau-value">${Math.round(Number(settings.waterStyleCaustics ?? 0.8) * 100)}%</span>
           </div>
         </div>
 
@@ -132451,7 +132662,8 @@ function normalize(entry) {
       alpha: { key: 'waterStyleAlpha', fmt: v => Math.round(v * 100) + '%' },
       tint: { key: 'waterStyleTintMix', fmt: v => Math.round(v * 100) + '%' },
       wave: { key: 'waterStyleWaveScale', fmt: v => v.toFixed(1) + '\u00d7' },
-      acr: { key: 'waterStyleAcrylic', fmt: v => Math.round(v * 100) + '%' }
+      acr: { key: 'waterStyleAcrylic', fmt: v => Math.round(v * 100) + '%' },
+      cau: { key: 'waterStyleCaustics', fmt: v => Math.round(v * 100) + '%' }
     };
     for (const [name, { key, fmt }] of Object.entries(wsMap)) {
       const slider = panel.querySelector(`#mf-ws-${name}`);
