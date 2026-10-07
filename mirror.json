@@ -101,6 +101,7 @@
     "src/Render/MF_Rainbow.js",
     "src/Shaders/MF_KotoSky.js",
     "src/Render/MF_AntiTear.js",
+    "src/Render/MF_TileEntityMerge.js",
     "src/Experimental/Realistic/RealisticProfiles.js",
     "src/Experimental/Realistic/ShadowSystem.js",
     "src/Experimental/Realistic/ShadowFilterPatch.js",
