@@ -5154,7 +5154,15 @@
           height: Number(settings.cloudsHeight ?? 128),
           opacity: Number(settings.cloudsOpacity ?? 0.9)
         },
-        cloudsPackNoise: !!settings.cloudsPackNoise
+        cloudsPackNoise: !!settings.cloudsPackNoise,
+        // el módulo vive en la página (MAIN world) y no ve chrome.runtime:
+        // la base de los assets de shaders viaja en el evento (como waterSplash)
+        shaderAssetsBase: (() => {
+          try {
+            const url = chrome.runtime.getURL('assets/shadertextures/');
+            return (url && !url.includes('://invalid/')) ? url : '';
+          } catch (_) { return ''; }
+        })()
       })
     }));
   }
