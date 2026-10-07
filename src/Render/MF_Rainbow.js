@@ -123,6 +123,7 @@
     function buildMaterial(fluidMat) {
         const m = fluidMat.clone();
         m.userData = {};            // sin marcador de fluido — higiene del scan ajeno
+        m.__mfSkipHook = true;      // inmune al scan del CustomShader (Phong ∈ SAFE_MATERIALS)
         try { m.color?.setRGB?.(0, 0, 0); } catch (_) {}
         try { m.emissive?.setRGB?.(0, 0, 0); } catch (_) {}
         try { m.map = null; } catch (_) {}

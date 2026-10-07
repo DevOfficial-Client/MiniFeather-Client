@@ -582,6 +582,9 @@
         // SIN marcador de fluido: el clon copia userData y el scan se
         // engancharía a sí mismo en bucle
         m.userData = {};
+        // inmune al scan del CustomShader (Phong ∈ SAFE_MATERIALS): apilar un
+        // preset sobre la cortina = shader gigante = ANGLE compila con log vacío
+        m.__mfSkipHook = true;
         try { m.color?.setRGB?.(0, 0, 0); } catch (_) {}
         try { m.emissive?.setRGB?.(0, 0, 0); } catch (_) {}
         try { m.map = null; } catch (_) {}
