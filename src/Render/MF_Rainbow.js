@@ -39,6 +39,7 @@
         // ciclo post-lluvia: mientras llueve el arco se esconde; al PARAR
         // arranca una ventana de ~2.5 min con fade suave y se va
         rainActive: false,
+        forcedUntil: 0,
         afterRainUntil: 0,
         showFactor: 0,
         rainReadFailLogged: false,
@@ -212,8 +213,9 @@
         // parchea NoWeather — señal 0..1). sin señal → fail-open a "siempre"
         // (silent-failure de IterationT: mejor arco de más que nunca)
         let factorTarget = 1;
-        const world = state.game?.world;
-        if (state.mode === 'rain') {
+        const forced = state.forcedUntil > nowMs;
+        if (state.mode === 'rain' && !forced) {
+            const world = state.game?.world;
             if (typeof world?.getRainStrength === 'function') {
                 let strength = 0;
                 try { strength = world.getRainStrength() || 0; } catch (_) {}
@@ -305,6 +307,18 @@
         }
     }
 
+    // fuerza la ventana del arco (aunque llueva y aunque el modo sea post-
+    // lluvia); si el módulo estaba apagado se enciende al vuelo
+    function force(ms) {
+        const dur = Number.isFinite(ms) && ms > 0 ? ms : 150000;
+        const now = performance.now();
+        state.forcedUntil = now + dur;
+        if (!state.enabled) enable();
+        if (!state.raf) state.raf = requestAnimationFrame(frame);
+        console.info(TAG, 'arcoíris forzado ' + Math.round(dur / 1000) + 's — MF_Rainbow.force([ms]) para repetir');
+        return true;
+    }
+
     function status() {
         return {
             enabled: state.enabled,
@@ -332,7 +346,7 @@
         } catch (_) {}
     });
 
-    window.MF_Rainbow = { enable, disable, setConfig, status, destroy };
+    window.MF_Rainbow = { enable, disable, setConfig, force, status, destroy };
     window.__MF_RAINBOW_SCOPE__ = { destroy };
     console.info(TAG, 'módulo cargado (inactivo hasta minifeather:rainbow-config {enabled:true})');
 })();
