@@ -14848,6 +14848,7 @@
     document.getElementById('mf-clean-hud-style')?.remove();
     document.getElementById('mf-risk-warning-style')?.remove();
 
+    window.removeEventListener(MF_CONFIG_REQ, onConfigRequest);
     overlay = null;
     panel = null;
     guiReady = false;
@@ -14948,6 +14949,129 @@
       });
     });
   }
+
+  // comando de consola: MF_Config.saveDefaults() baja un defaults.json con la
+  // config ACTUAL, y MF_Config.defaults() la devuelve (y la printea). la
+  // consola de devtools vive en el MAIN world y este panel en el aislado, así
+  // que el comando visible es un shim inyectado que pide por CustomEvent —
+  // mismo truco del mirror, pero con ida y vuelta. en el userscript/APK todo
+  // ya es MAIN world: el shim ve window.MF_Config y se raja solo.
+  const MF_CONFIG_REQ = 'mf:config:req:v1';
+  const MF_CONFIG_RES = 'mf:config:res:v1';
+  function fetchDefaultsTemplate() {
+    return new Promise(resolve => {
+      const fallback = () => resolve(null);
+      let url = 'defaults.json';
+      try { url = chrome.runtime.getURL('defaults.json'); } catch (_) {}
+      try {
+        fetch(url, { cache: 'no-store' })
+          .then(res => (res.ok ? res.json() : null))
+          .then(json => resolve(json && typeof json === 'object' && !Array.isArray(json) ? json : null))
+          .catch(fallback);
+      } catch (_) { fallback(); }
+    });
+  }
+  function buildDefaultsObject(template) {
+    const out = { _note: 'tu config actual, disfrazada de defaults.json — MF_Config.saveDefaults()' };
+    const claimed = new Set();
+    for (const section in template) {
+      if (section.startsWith('_')) continue;
+      const vals = template[section];
+      if (!vals || typeof vals !== 'object' || Array.isArray(vals)) continue;
+      const filled = {};
+      for (const key in vals) {
+        claimed.add(key);
+        filled[key] = Object.prototype.hasOwnProperty.call(settings, key) ? settings[key] : vals[key];
+      }
+      out[section] = filled;
+    }
+    const extra = {};
+    for (const key of Object.keys(settings).sort()) {
+      if (!claimed.has(key)) extra[key] = settings[key];
+    }
+    if (Object.keys(extra).length) out.other = extra;
+    return out;
+  }
+  async function buildDefaults() {
+    return buildDefaultsObject((await fetchDefaultsTemplate()) || {});
+  }
+  function saveDefaultsFile(out) {
+    const json = JSON.stringify(out, null, 2) + '\n';
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'defaults.json';
+    (document.body || document.documentElement).appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    console.info('minifeather: defaults.json bajado (' + Math.round(json.length / 1024) + ' KB, ' + Object.keys(out).filter(k => !k.startsWith('_')).length + ' secciones)');
+  }
+  const MF_CONFIG_SHIM = "(function () {\n\
+    if (window.MF_Config) return;\n\
+    var seq = 0;\n\
+    var waiting = {};\n\
+    window.addEventListener('mf:config:res:v1', function (ev) {\n\
+      var d; try { d = JSON.parse(ev.detail); } catch (_) { return; }\n\
+      var w = waiting[d.id];\n\
+      if (!w) return;\n\
+      delete waiting[d.id];\n\
+      if (d.ok) w(true, d.data); else w(false, d.err);\n\
+    });\n\
+    function ask(cmd) {\n\
+      return new Promise(function (resolve, reject) {\n\
+        var id = ++seq;\n\
+        var done = false;\n\
+        waiting[id] = function (ok, payload) {\n\
+          done = true;\n\
+          if (ok) { try { resolve(JSON.parse(payload)); } catch (_) { resolve(null); } }\n\
+          else reject(new Error('MF_Config: ' + payload));\n\
+        };\n\
+        window.dispatchEvent(new CustomEvent('mf:config:req:v1', { detail: JSON.stringify({ id: id, cmd: cmd }) }));\n\
+        setTimeout(function () {\n\
+          if (!done) { delete waiting[id]; reject(new Error('MF_Config: el panel no contestó — ¿sigue vivo el client?')); }\n\
+        }, 3000);\n\
+      });\n\
+    }\n\
+    window.MF_Config = {\n\
+      defaults: function () { return ask('defaults'); },\n\
+      saveDefaults: function () { return ask('save'); }\n\
+    };\n\
+  })();";
+  function onConfigRequest(ev) {
+    let req; try { req = JSON.parse(ev.detail); } catch (_) { return; }
+    if (!req || typeof req.id === 'undefined') return;
+    const reply = (ok, data) => {
+      try { window.dispatchEvent(new CustomEvent(MF_CONFIG_RES, { detail: JSON.stringify({ id: req.id, ok: ok, data: data }) })); } catch (_) {}
+    };
+    buildDefaults()
+      .then(out => {
+        if (req.cmd === 'save') saveDefaultsFile(out);
+        reply(true, JSON.stringify(out));
+      })
+      .catch(err => reply(false, String((err && err.message) || err)));
+  }
+  window.addEventListener(MF_CONFIG_REQ, onConfigRequest);
+  window.MF_Config = {
+    async defaults() {
+      const out = await buildDefaults();
+      console.log(JSON.stringify(out, null, 2));
+      console.info('minifeather: esa es tu config actual — MF_Config.saveDefaults() la baja como defaults.json');
+      return out;
+    },
+    async saveDefaults() {
+      const out = await buildDefaults();
+      saveDefaultsFile(out);
+      return out;
+    }
+  };
+  try {
+    const s = document.createElement('script');
+    s.textContent = MF_CONFIG_SHIM;
+    (document.head || document.documentElement).appendChild(s);
+    s.remove();
+  } catch (_) {}
 
   globalThis.__MINIFEATHER_CONTENT__ = { destroy };
   boot();
