@@ -1,6 +1,6 @@
-// mf antitear: clamp runtime del motion blur + god rays temporal del juego
-// base (los "desgarros" vanilla), restore limpio y re-hook cuando el juego
-// recrea su manager de post por cambio de mundo.
+// mf antitear v2: el manager de post del juego es inalcanzable (closure del
+// bundle), así que el clamp vive en los prototipos WebGL2: captura las
+// locations de uVelocityScale/uHistoryWeight por nombre y aplasta sus uploads.
 // run: node tests/antitear.test.cjs
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -11,34 +11,8 @@ const vm = require('node:vm');
 const ROOT = path.join(__dirname, '..');
 const SRC = fs.readFileSync(path.join(ROOT, 'src', 'Render', 'MF_AntiTear.js'), 'utf8');
 
-// imita lo que la ia de turno encontró en el bundle de miniblox: passes con
-// props propias firmadas y un frame que reescribe enabled/_godRayTier cada tick
-function makeMotionBlurPass() {
-  return {
-    enabled: true,
-    _blur: {},
-    _copy: {},
-    _quad: {},
-    _target: {},
-    _prevViewProj: {},
-    hasMotion: true
-  };
-}
-
-function makeFogPass(tier) {
-  return {
-    enabled: true,
-    _raymarch: {},
-    _composite: {},
-    _quad: {},
-    _fogTargets: {},
-    _godRayTier: tier || null
-  };
-}
-
-function makeSandbox() {
+function makeSandbox({ withWebGL = true } = {}) {
   const docListeners = {};
-  const timers = [];
   const sandbox = {
     console: { log() {}, info() {}, warn() {}, error() {} },
     document: {
@@ -48,34 +22,36 @@ function makeSandbox() {
       dispatchEvent(evt) { for (const fn of docListeners[evt.type] || []) fn(evt); return true; }
     },
     performance: { now: () => Date.now() },
-    setInterval(fn) { timers.push(fn); return timers.length; },
+    setInterval() { return 1; },
     clearInterval() {},
     CustomEvent: class { constructor(type, opts) { this.type = type; this.detail = opts && opts.detail; } }
   };
+  if (withWebGL) {
+    // imita el par getUniformLocation/uniform1f: locations son objetos nuevos
+    // por (programa, nombre) y uniform1f registra lo que llega a "la gpu"
+    const uploads = [];
+    const locations = new Map();
+    class FakeWebGL2RenderingContext {}
+    FakeWebGL2RenderingContext.prototype.getUniformLocation = function (program, name) {
+      const key = program.id + ':' + name;
+      if (!locations.has(key)) locations.set(key, { program: program.id, name });
+      return locations.get(key);
+    };
+    FakeWebGL2RenderingContext.prototype.uniform1f = function (loc, v) {
+      uploads.push({ name: loc.name, v });
+      return undefined;
+    };
+    FakeWebGL2RenderingContext.prototype.uniform1i = function (loc, v) {
+      uploads.push({ name: loc.name, v });
+      return undefined;
+    };
+    sandbox.WebGL2RenderingContext = FakeWebGL2RenderingContext;
+    sandbox.__uploads = uploads;
+  }
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
-  return { sandbox, docListeners, timers };
-}
-
-// game object con la forma que el módulo espera: fiber falso -> props.game
-function makeGameWithPasses() {
-  const mb = makeMotionBlurPass();
-  const fog = makeFogPass({ steps: 18, occlusionSteps: 6, resolutionScale: 0.5, temporal: true, maxDistance: 260 });
-  const game = { player: { pos: {} }, post: { motionBlurPass: mb, fogPass: fog } };
-  return { game, mb, fog };
-}
-
-function installGame(sandbox, game) {
-  sandbox.document.getElementById = (id) => {
-    if (id !== 'react') return null;
-    return { __reactContainer$test: { updateQueue: { baseState: { element: { props: { game } } } } } };
-  };
-}
-
-// status() nace en el realm de la vm: deepEqual de node odia prototipos ajenos
-function statusJson(api) {
-  return JSON.stringify(api.status());
+  return { sandbox, docListeners };
 }
 
 function configEvent(sandbox, enabled) {
@@ -89,72 +65,73 @@ test('arranca inactivo y expone su api', () => {
   vm.runInContext(SRC, sandbox, { filename: 'src/Render/MF_AntiTear.js' });
   assert.ok(sandbox.MF_AntiTear, 'api global presente');
   assert.ok(sandbox.__MF_ANTI_TEAR__, 'guard de re-ejecución presente');
-  assert.equal(statusJson(sandbox.MF_AntiTear), JSON.stringify({ enabled: false, motionBlur: false, godRays: false, game: false }));
+  const s = sandbox.MF_AntiTear.status();
+  assert.equal(s.enabled, false);
+  assert.equal(s.hooked, false);
 });
 
-test('enable clampa el motion blur aunque el frame lo reescriba cada tick', () => {
+test('enable clampa los uploads de uVelocityScale y uHistoryWeight (uVelocityScale=0 es passthrough exacto según el shader del juego)', () => {
   const { sandbox } = makeSandbox();
-  const { game, mb } = makeGameWithPasses();
-  installGame(sandbox, game);
   vm.runInContext(SRC, sandbox, { filename: 'src/Render/MF_AntiTear.js' });
   configEvent(sandbox, true);
-  // el frame del juego: pass.enabled = setting && hasMotion
-  mb.enabled = true;
-  assert.equal(mb.enabled, false, 'el setter se traga la escritura del frame');
+  const gl = new sandbox.WebGL2RenderingContext();
+  const prog = { id: 'mb' };
+  const locVel = gl.getUniformLocation(prog, 'uVelocityScale');
+  const locHist = gl.getUniformLocation({ id: 'fog' }, 'uHistoryWeight');
+  gl.uniform1f(locVel, 0.65);   // lo que el juego le metería al blur
+  gl.uniform1f(locHist, 0.9);   // historial del fog/god rays
+  const vel = sandbox.__uploads.find(u => u.name === 'uVelocityScale');
+  const hist = sandbox.__uploads.find(u => u.name === 'uHistoryWeight');
+  assert.equal(vel.v, 0, 'motion blur → passthrough exacto');
+  assert.equal(hist.v, 0, 'fog/god rays → sin historial');
   assert.equal(sandbox.MF_AntiTear.status().motionBlur, true);
+  assert.equal(sandbox.MF_AntiTear.status().godRays, true);
 });
 
-test('god rays high cae a medium (sin temporal), off pasa de largo', () => {
+test('las demás uniforms pasan intactas (los otros módulos usan el mismo contexto)', () => {
   const { sandbox } = makeSandbox();
-  const { game, fog } = makeGameWithPasses();
-  installGame(sandbox, game);
   vm.runInContext(SRC, sandbox, { filename: 'src/Render/MF_AntiTear.js' });
   configEvent(sandbox, true);
-  fog._godRayTier = { steps: 18, occlusionSteps: 6, resolutionScale: 0.5, temporal: true, maxDistance: 260 };
-  assert.equal(fog._godRayTier.temporal, false, 'high temporal → medium no temporal');
-  assert.equal(fog._godRayTier.steps, 12);
-  fog._godRayTier = null; // god rays off
-  assert.equal(fog._godRayTier, null, 'off no se toca');
+  const gl = new sandbox.WebGL2RenderingContext();
+  const loc = gl.getUniformLocation({ id: 'otro' }, 'uGodRayStrength');
+  gl.uniform1f(loc, 0.42);
+  const up = sandbox.__uploads.find(u => u.name === 'uGodRayStrength');
+  assert.equal(up.v, 0.42, 'uniform ajena sin tocar');
 });
 
-test('disable restaura los descriptores y el juego vuelve a su config', () => {
+test('disable restaura los prototipos: la gpu vuelve a recibir los valores reales', () => {
   const { sandbox } = makeSandbox();
-  const { game, mb, fog } = makeGameWithPasses();
-  const tier = { steps: 18, occlusionSteps: 6, resolutionScale: 0.5, temporal: true, maxDistance: 260 };
-  fog._godRayTier = tier;
-  installGame(sandbox, game);
   vm.runInContext(SRC, sandbox, { filename: 'src/Render/MF_AntiTear.js' });
   configEvent(sandbox, true);
   configEvent(sandbox, false);
-  mb.enabled = true;
-  assert.equal(mb.enabled, true, 'enabled vuelve a ser una propiedad común');
-  fog._godRayTier = tier;
-  assert.equal(fog._godRayTier.temporal, true, 'tier high pasa sin filtro');
-  assert.equal(statusJson(sandbox.MF_AntiTear), JSON.stringify({ enabled: false, motionBlur: false, godRays: false, game: false }));
+  const gl = new sandbox.WebGL2RenderingContext();
+  const loc = gl.getUniformLocation({ id: 'mb' }, 'uVelocityScale');
+  gl.uniform1f(loc, 0.65);
+  const up = sandbox.__uploads.find(u => u.name === 'uVelocityScale');
+  assert.equal(up.v, 0.65, 'sin clamp tras disable');
+  assert.equal(sandbox.MF_AntiTear.status().hooked, false);
 });
 
-test('el keeper re-engancha cuando el juego recrea el manager (cambio de mundo)', async () => {
-  const { sandbox, timers } = makeSandbox();
-  const { game, mb } = makeGameWithPasses();
-  installGame(sandbox, game);
+test('sin WebGL2 en el entorno no explota (fail-open, ctx viejos incluidos)', () => {
+  const { sandbox } = makeSandbox({ withWebGL: false });
   vm.runInContext(SRC, sandbox, { filename: 'src/Render/MF_AntiTear.js' });
   configEvent(sandbox, true);
-  assert.equal(sandbox.MF_AntiTear.status().motionBlur, true);
-  // nuevo mundo: passes nuevos sin clamp
-  const fresh = makeGameWithPasses();
-  game.post = fresh.game.post;
-  assert.equal(fresh.mb.enabled, true, 'los passes frescos nacen limpios');
-  const keeper = timers[timers.length - 1];
-  keeper();
-  assert.equal(fresh.mb.enabled, false, 'el keeper los clampa en el próximo tick');
-  assert.equal(sandbox.MF_AntiTear.status().motionBlur, true);
-});
-
-test('sin juego a la vista no explota (fail-open)', () => {
-  const { sandbox } = makeSandbox();
-  vm.runInContext(SRC, sandbox, { filename: 'src/Render/MF_AntiTear.js' });
-  configEvent(sandbox, true);
-  assert.equal(statusJson(sandbox.MF_AntiTear), JSON.stringify({ enabled: true, motionBlur: false, godRays: false, game: false }));
+  const s = sandbox.MF_AntiTear.status();
+  assert.equal(s.enabled, true);
+  assert.equal(s.hooked, false, 'no hay proto que hookear');
   configEvent(sandbox, false);
   assert.equal(sandbox.MF_AntiTear.status().enabled, false);
+});
+
+test('re-enable vuelve a hookear después de un disable', () => {
+  const { sandbox } = makeSandbox();
+  vm.runInContext(SRC, sandbox, { filename: 'src/Render/MF_AntiTear.js' });
+  configEvent(sandbox, true);
+  configEvent(sandbox, false);
+  configEvent(sandbox, true);
+  const gl = new sandbox.WebGL2RenderingContext();
+  const loc = gl.getUniformLocation({ id: 'mb' }, 'uVelocityScale');
+  gl.uniform1f(loc, 0.65);
+  const up = sandbox.__uploads.find(u => u.name === 'uVelocityScale');
+  assert.equal(up.v, 0, 'clamp activo otra vez');
 });
