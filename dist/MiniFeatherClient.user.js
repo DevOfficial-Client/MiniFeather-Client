@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007021744
+// @version      4.19.0.20261007022013
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 314008bbd4b12fc09a7e8303ea104a1ec24b21a6
- * builtAt : 2026-10-07T02:17:58.090Z
+ * commit  : 64bb7bbb1db1fdcf56b868e01660e05d6b5aec73
+ * builtAt : 2026-10-07T02:20:36.315Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"314008bbd4b12fc09a7e8303ea104a1ec24b21a6","builtAt":"2026-10-07T02:17:58.090Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"64bb7bbb1db1fdcf56b868e01660e05d6b5aec73","builtAt":"2026-10-07T02:20:36.315Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -90770,14 +90770,19 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     // bundle y es inalcanzable desde game (lección de la fase 1 del deferred),
     // así que nada de perseguir objetos: los shaders culpables se apagan a
     // nivel GL capturando las locations por nombre. el propio bundle confiesa
-    // la salida de emergencia: "uVelocityScale ... 0 disables (exact
-    // passthrough)" tiene early-out en el shader, y el historial del fog/god
+    // las salidas de emergencia: "uVelocityScale ... 0 disables (exact
+    // passthrough)" tiene early-out en el shader, el historial del fog/god
     // rays solo se mezcla si uTemporal > 0.5 && uHistoryWeight > 0.001 (el
     // weight baja en cámara rápida pero en cámara lenta igualmente mezcla
-    // historial viejo = el ghosting). esto no toca settings ni la nube.
+    // historial viejo = el ghosting), y el voxel GI se gatea entero con
+    // "uGIEnabled // 0 = off (skip all GI work)" — su volumen es una caja
+    // cámara-relativa de ~96 bloques cuya grilla de voxeles se ve como puntos
+    // alineados al acercarse a los bloques (el reporte del usuario). esto no
+    // toca settings ni la nube.
     const CLAMPS = {
         uVelocityScale: 0,   // motion blur → copia exacta del frame
-        uHistoryWeight: 0    // fog/god rays → sin historial, solo frame actual
+        uHistoryWeight: 0,   // fog/god rays → sin historial, solo frame actual
+        uGIEnabled: 0        // voxel GI → el shader saltea todo el trabajo GI
     };
 
     const state = {
@@ -90855,7 +90860,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 // los prototipos sobreviven a cambios de mundo y contexto, así
                 // que el keeper solo reporta: si el juego nunca pide nuestras
                 // uniforms algo anda raro (offscreen rendering, bundle nuevo)
-                if (state.hooked && !state.hits.uVelocityScale && !state.hits.uHistoryWeight) {
+                if (state.hooked && !state.hits.uVelocityScale && !state.hits.uHistoryWeight && !state.hits.uGIEnabled) {
                     const t = performance.now();
                     if (t - state.warnAt > 30000) {
                         state.warnAt = t;
@@ -90864,7 +90869,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 }
             }, 3000);
         }
-        console.info(TAG, 'activo — uVelocityScale→0 (passthrough) + uHistoryWeight→0 (sin historial)');
+        console.info(TAG, 'activo — uVelocityScale→0 (passthrough) + uHistoryWeight→0 (sin historial) + uGIEnabled→0 (sin voxel GI)');
         return true;
     }
 
@@ -90881,6 +90886,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             hooked: state.hooked,
             motionBlur: !!state.hits.uVelocityScale,
             godRays: !!state.hits.uHistoryWeight,
+            gi: !!state.hits.uGIEnabled,
             hits: { ...state.hits }
         };
     }
