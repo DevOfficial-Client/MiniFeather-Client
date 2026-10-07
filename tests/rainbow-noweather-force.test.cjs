@@ -191,6 +191,33 @@ test('sin objeto cámara del juego: el anclaje es GPU-side, el arco no depende d
   assert.ok(st.uMfRbI > 0.3, 'sin cámara el arco EMITE igual: uMfRbI=' + st.uMfRbI);
 });
 
+test('sin sunDirection del fluido: ancla al sol de la escena y EMITE igual', () => {
+  const { ctx, game, fluidUD } = makeTickCtx({ sun: DAY, sunLight: 1, rain: () => 0 });
+  ctx.MiniFeatherNoWeather = { enabled: true };
+  vm.runInContext(SRC_RB, ctx, { filename: 'MF_Rainbow.js' });
+  // el server sin water shaders borra el sunDirection del userData vivo;
+  // la escena tiene directional light (el sol existe en todo mundo)
+  delete fluidUD.sunDirection;
+  game.gameScene.scene.add({ isDirectionalLight: true, position: { x: 0.3, y: 0.9, z: 0.2 } });
+  ctx.MF_Rainbow.enable();
+  drive(ctx, 40000);
+  const st = ctx.MF_Rainbow.status();
+  assert.ok(st.showFactor > 0.9, 'showFactor=' + st.showFactor);
+  assert.ok(st.uMfRbI > 0.3, 'sin sol del fluido el arco EMITE igual: uMfRbI=' + st.uMfRbI);
+});
+
+test('sin NINGUNA fuente de sol: sol sintético — el arco existe en donde sea', () => {
+  const { ctx, game, fluidUD } = makeTickCtx({ sun: DAY, sunLight: 1, rain: () => 0 });
+  ctx.MiniFeatherNoWeather = { enabled: true };
+  vm.runInContext(SRC_RB, ctx, { filename: 'MF_Rainbow.js' });
+  // mundo sin sunDirection del fluido y sin luces direccionales
+  delete fluidUD.sunDirection;
+  ctx.MF_Rainbow.enable();
+  drive(ctx, 40000);
+  const st = ctx.MF_Rainbow.status();
+  assert.ok(st.uMfRbI > 0.3, 'con sol sintético el arco EMITE: uMfRbI=' + st.uMfRbI);
+});
+
 test('status() diagnostico: expone fluidMat/sunDir/sunLight para reportes del usuario', () => {
   const { ctx } = makeTickCtx({ sun: DAY, sunLight: 0.8, rain: () => 0 });
   vm.runInContext(SRC_RB, ctx, { filename: 'MF_Rainbow.js' });
