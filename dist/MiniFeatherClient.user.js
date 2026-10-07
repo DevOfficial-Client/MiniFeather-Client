@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007054707
+// @version      4.19.0.20261007060129
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 0d6ae7b699b9713c717d70ec1157a883d58ae6a5
- * builtAt : 2026-10-07T05:47:26.322Z
+ * commit  : 06ed26cb938ae7910357a5ab4ea0cdd8d02b7cbb
+ * builtAt : 2026-10-07T06:01:43.225Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"0d6ae7b699b9713c717d70ec1157a883d58ae6a5","builtAt":"2026-10-07T05:47:26.322Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"06ed26cb938ae7910357a5ab4ea0cdd8d02b7cbb","builtAt":"2026-10-07T06:01:43.225Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -89756,6 +89756,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         alpha: readNum('mf_waterstyle_alpha', 0.12),
         tintMix: readNum('mf_waterstyle_tintmix', 0.85),
         acrylic: readNum('mf_waterstyle_acrylic', 0.55),
+        still: readNum('mf_waterstyle_still', 0.0),
         waveScale: readNum('mf_waterstyle_wavescale', 2.0),
         game: null,
         scanTimer: 0,
@@ -89803,6 +89804,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     const WAVE_GLSL = `
         attribute float mfSub;
         uniform float uMfWaveScale;
+        uniform float uMfStill;
         uniform vec3 uMfPlayerPos;
         uniform float uMfPlayerRipple;
         // hash/ruido value sin senos (determinista en coords de mundo grandes,
@@ -89860,11 +89862,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     // trenes reconocibles). Al estar ANTES de NdotV/fresnel/refracción/SSR,
     // titilan el brillo del sol, la transparencia y los reflejos
     const FRAG_CHOP = `// mf chop: turbulencia fina por-pixel (ruido advectado)
+        float mfStillF = 1.0 - uMfStill;
         vec2 mfCq = vWorldPosition.xz * 1.9;
-        mfCq += vec2(mfFNoise(mfCq * 0.29 + time * 0.03)) * 0.8;
-        float mfC = mfFNoise(mfCq - vec2(0.9, 0.6) * time * 0.55) * 0.7
-                  + mfFNoise(mfCq * 2.3 - vec2(0.9, 0.6) * time * 0.80 + 4.7) * 0.3;
-        vec3 normal = normalize(vWorldNormal + vec3(mfC, 0.0, mfC * 0.8) * uMfChop);`;
+        mfCq += vec2(mfFNoise(mfCq * 0.29 + time * mfStillF * 0.03)) * 0.8;
+        float mfC = mfFNoise(mfCq - vec2(0.9, 0.6) * time * mfStillF * 0.55) * 0.7
+                  + mfFNoise(mfCq * 2.3 - vec2(0.9, 0.6) * time * mfStillF * 0.80 + 4.7) * 0.3;
+        // estancada: el chop también amaina (35% residual = textura de vidrio quieto)
+        vec3 normal = normalize(vWorldNormal + vec3(mfC, 0.0, mfC * 0.8) * uMfChop * (0.35 + 0.65 * mfStillF));`;
 
     // ruido para el fragment (copia propia: el fragment no ve funciones del vertex)
     const FRAG_NOISE = `
@@ -89916,6 +89920,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             uMfWaterTintMix: { value: state.tintMix },
             uMfWaterTint: { value: TINT.slice() },
             uMfAcrylic: { value: state.acrylic },
+            uMfStill: { value: state.still },
             uMfWaveScale: { value: state.waveScale },
             uMfChop: { value: 0.35 * state.waveScale },
             uMfPlayerPos: { value: [0, 0, 0] },
@@ -89928,6 +89933,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             shader.uniforms.uMfWaterTintMix = liveUniforms.uMfWaterTintMix;
             shader.uniforms.uMfWaterTint = liveUniforms.uMfWaterTint;
             shader.uniforms.uMfAcrylic = liveUniforms.uMfAcrylic;
+            shader.uniforms.uMfStill = liveUniforms.uMfStill;
             shader.uniforms.uMfWaveScale = liveUniforms.uMfWaveScale;
             shader.uniforms.uMfChop = liveUniforms.uMfChop;
             shader.uniforms.uMfPlayerPos = liveUniforms.uMfPlayerPos;
@@ -89956,6 +89962,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                     'uniform float uMfWaterTintMix;\n' +
                     'uniform vec3 uMfWaterTint;\n' +
                     'uniform float uMfAcrylic;\n' +
+                    'uniform float uMfStill;\n' +
                     shader.fragmentShader;
             }
             if (shader.uniforms.waterShadersEnabled) {
@@ -89981,6 +89988,12 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                         'p *= 1.0 + (kind < 0.5 ? 0.0 : mfSub) * 1.2;\n          ' +
                         'float amp = kind < 0.5 ? 0.01 : (kind < 1.5 ? 0.045 * uMfWaveScale : 0.03 * uMfWaveScale);');
                 }
+                // estancada: el reloj del swell del juego también se congela
+                // (la lava tiene su propio lavaWaveT y sigue hirviendo)
+                const wtOrig = 'float waveT = time * 0.12;';
+                if (vs.includes(wtOrig)) {
+                    vs = vs.replace(wtOrig, 'float waveT = time * 0.12 * (1.0 - uMfStill);');
+                }
                 // los senos 2 y 3 del juego van a 2.8 y 2.15 rad/bloque: al
                 // amplificar el amp se volvían sierra por-vértice (paneles).
                 // sus coeficientes se doman — la textura media la repone
@@ -89995,9 +90008,12 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 }
                 if (vs.includes('return w * amp;')) {
                     // los 3 senos del juego son swell regular (patrón): queda
-                    // al 25% como piso de mar de fondo; el viento es el ruido
+                    // al 25% como piso de mar de fondo; el viento es el ruido.
+                    // MODO ESTANCADA: el anillo del jugador usa reloj PROPIO
+                    // (time*0.12 directo) para seguir vivo cuando el resto
+                    // está congelado; la forma se aplana a 15% (estanque)
                     vs = vs.replace('return w * amp;',
-                        'return w * amp * 0.25 + mfTurbulence(p, t) * uMfWaveScale + mfPlayerRipple(p, t, kind);');
+                        'return w * amp * 0.25 + mfTurbulence(p, t) * uMfWaveScale * (1.0 - uMfStill * 0.85) + mfPlayerRipple(p, time * 0.12, kind);');
                 }
                 shader.vertexShader = vs;
             }
@@ -90012,6 +90028,14 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                     'vec3 normal = normalize(vWorldNormal);',
                     FRAG_CHOP
                 );
+            }
+
+            // estancada total: también congela la animación de FRAMES de la
+            // textura del agua (el scroll vanilla del líquido)
+            const frOrig = 'float frame = mod(floor(time / vAnimation.y), vAnimation.x);';
+            if (shader.fragmentShader.includes(frOrig)) {
+                shader.fragmentShader = shader.fragmentShader.replace(frOrig,
+                    'float frame = mod(floor(time * (1.0 - uMfStill) / vAnimation.y), vAnimation.x);');
             }
 
             const stamp = 'float mfWaterStyle = 1.0;\n' + FRAG_TAIL;
@@ -90033,7 +90057,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v9';
+            return base + '_mfws_v10';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
@@ -90401,6 +90425,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             entry.liveUniforms.uMfWaterAlpha.value = state.alpha;
             entry.liveUniforms.uMfWaterTintMix.value = state.tintMix;
             entry.liveUniforms.uMfAcrylic.value = state.acrylic;
+            entry.liveUniforms.uMfStill.value = state.still;
             entry.liveUniforms.uMfWaveScale.value = state.waveScale;
             entry.liveUniforms.uMfChop.value = 0.35 * state.waveScale;
         }
@@ -90429,7 +90454,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             // la cortina sigue el reloj y el sol del material del fluido
             if (entry.curtainU) {
                 const ud = entry.mat?.userData;
-                if (ud?.time) entry.curtainU.uMfCauTime.value = ud.time.value * 0.12;
+                if (ud?.time) entry.curtainU.uMfCauTime.value = ud.time.value * 0.12 * (1.0 - state.still);
                 if (ud?.uSunLight) entry.curtainU.uMfSun.value = ud.uSunLight.value;
                 entry.curtainU.uMfCaustics.value = state.caustics;
             }
@@ -90478,6 +90503,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 localStorage.setItem('mf_waterstyle_acrylic', String(state.acrylic));
             }
         }
+        if (cfg && cfg.still !== undefined) {
+            const st = parseFloat(cfg.still);
+            if (Number.isFinite(st)) {
+                state.still = Math.max(0, Math.min(1, st));
+                localStorage.setItem('mf_waterstyle_still', String(state.still));
+            }
+        }
         if (cfg && cfg.caustics !== undefined) {
             const c = parseFloat(cfg.caustics);
             if (Number.isFinite(c)) {
@@ -90510,6 +90542,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             tintMix: state.tintMix,
             acrylic: state.acrylic,
             caustics: state.caustics,
+            still: state.still,
             waveScale: state.waveScale,
             tint: TINT.slice()
         };
@@ -125462,7 +125495,8 @@ function normalize(entry) {
         tintMix: Number(settings.waterStyleTintMix ?? 0.85),
         waveScale: Number(settings.waterStyleWaveScale ?? 2.0),
         acrylic: Number(settings.waterStyleAcrylic ?? 0.55),
-        caustics: Number(settings.waterStyleCaustics ?? 0.8)
+        caustics: Number(settings.waterStyleCaustics ?? 0.8),
+        still: Number(settings.waterStyleStill ?? 0.0)
       })
     }));
   }
@@ -128825,6 +128859,11 @@ function normalize(entry) {
             <span style="min-width:90px;font-size:12px;">c&aacute;usticas</span>
             <input id="mf-ws-cau" type="range" min="0" max="1" step="0.05" value="${Number(settings.waterStyleCaustics ?? 0.8)}">
             <span id="mf-ws-cau-value">${Math.round(Number(settings.waterStyleCaustics ?? 0.8) * 100)}%</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-top:10px;">
+            <span style="min-width:90px;font-size:12px;">estancada</span>
+            <input id="mf-ws-stil" type="range" min="0" max="1" step="0.05" value="${Number(settings.waterStyleStill ?? 0.0)}">
+            <span id="mf-ws-stil-value">${Math.round(Number(settings.waterStyleStill ?? 0.0) * 100)}%</span>
           </div>
         </div>
 
@@ -132663,7 +132702,8 @@ function normalize(entry) {
       tint: { key: 'waterStyleTintMix', fmt: v => Math.round(v * 100) + '%' },
       wave: { key: 'waterStyleWaveScale', fmt: v => v.toFixed(1) + '\u00d7' },
       acr: { key: 'waterStyleAcrylic', fmt: v => Math.round(v * 100) + '%' },
-      cau: { key: 'waterStyleCaustics', fmt: v => Math.round(v * 100) + '%' }
+      cau: { key: 'waterStyleCaustics', fmt: v => Math.round(v * 100) + '%' },
+      stil: { key: 'waterStyleStill', fmt: v => Math.round(v * 100) + '%' }
     };
     for (const [name, { key, fmt }] of Object.entries(wsMap)) {
       const slider = panel.querySelector(`#mf-ws-${name}`);
