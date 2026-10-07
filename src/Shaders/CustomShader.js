@@ -1957,6 +1957,13 @@
 
         if (material.__mfSkipHook) return false;
 
+        // el material del fluido pertenece a WaterStyle (MF_WaterStyle): con
+        // "water shaders" del juego encendido, el shader del agua ya va al
+        // límite del compilador D3D (los fallos de ANGLE llegan con LOG VACÍO
+        // — 'shader failed to COMPILE. log: sin log') y apilar un preset +
+        // uMfGray encima lo tira. Además el grade quedaba doble
+        if (material.userData && material.userData.waterShadersEnabled !== undefined) return false;
+
         const preset = PRESETS[state.preset];
         if (!preset) return false;
 
