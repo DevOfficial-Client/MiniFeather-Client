@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261007171512
+// @version      4.19.0.20261007173448
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 6100cbfaecff110541cbe29b979ad3cb6269b24e
- * builtAt : 2026-10-07T17:15:29.949Z
+ * commit  : 46246ba7d8221f40712bdaf083935a149f603b41
+ * builtAt : 2026-10-07T17:35:02.289Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"6100cbfaecff110541cbe29b979ad3cb6269b24e","builtAt":"2026-10-07T17:15:29.949Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"46246ba7d8221f40712bdaf083935a149f603b41","builtAt":"2026-10-07T17:35:02.289Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -88685,12 +88685,38 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             origCompile.call(this, shader);
             if (this.getShaderParameter(shader, this.COMPILE_STATUS)) return;
             try {
-                const log = this.getShaderInfoLog(shader) || 'sin log';
+                const rawLog = (this.getShaderInfoLog(shader) || '').trim();
+                // log vacío = límite de tamaño del compilador D3D (lección
+                // 69e308fb), no typo de GLSL
+                const log = rawLog || 'sin log → límite de tamaño del compilador, casi seguro';
                 const src = shaderSources.get(shader) || '';
-
-                const numbered = src.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n');
+                const lines = src.split('\n');
+                const markers = [...new Set(src.match(/\bu(?:Cs|Mf)[A-Za-z0-9]*\b/g) || [])].sort();
+                // el head es prelude de three (inútil): la cola es donde vive
+                // lo inyectado y donde el límite muerde
+                const tail = lines.slice(-45)
+                    .map((l, i) => `${lines.length - 45 + i + 1}: ${l}`).join('\n');
                 console.error('minifeather shader failed to COMPILE. log:', log,
-                    '\n— numbered source —\n', numbered.slice(0, 4000));
+                    '\n— lineas:', lines.length,
+                    '\n— marcadores mf:', markers.join(', ') || '(ninguno: shader del juego sin inyección)',
+                    '\n— cola del source —\n', tail);
+
+                // fail-open por módulo dueño: log vacío + marcadores propios
+                // = nuestra inyección empujó el shader over the limit → el
+                // módulo se apaga SOLO antes de dejar la escena rota
+                if (!rawLog && !window.__MF_SHADER_AUTOCUT__) {
+                    const owner =
+                        markers.some(m => m.startsWith('uCs') || m === 'uMfGray' || m === 'uMfShapeMix') ? 'custom-shader' :
+                        markers.some(m => ['uMfWave', 'uMfChop', 'uMfCau', 'uMfSun', 'uMfStill'].includes(m)) ? 'waterstyle' :
+                        markers.some(m => m === 'uMfRbI' || m === 'mfRbPal' || m === 'uMfSunDir') ? 'rainbow' : null;
+                    if (owner) {
+                        window.__MF_SHADER_AUTOCUT__ = true;
+                        console.warn(TAG, `shader reventado por límite del compilador D3D con inyección de ${owner} — módulo apagado SOLO (fail-open); reactiva con otro preset o menos fuerza`);
+                        document.dispatchEvent(new CustomEvent('minifeather:' + owner + '-config', {
+                            detail: JSON.stringify({ enabled: false })
+                        }));
+                    }
+                }
             } catch (_) {}
         };
 
