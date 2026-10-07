@@ -783,6 +783,7 @@
     waterStyleAlpha: 0.12,
     waterStyleTintMix: 0.85,
     waterStyleWaveScale: 2.0,
+    waterStyleAcrylic: 0.55,
     kotoSky: false,
     kotoSkyStrength: 1.0,
     customShader: false,
@@ -5166,7 +5167,8 @@
         enabled: !!enabled,
         alpha: Number(settings.waterStyleAlpha ?? 0.12),
         tintMix: Number(settings.waterStyleTintMix ?? 0.85),
-        waveScale: Number(settings.waterStyleWaveScale ?? 2.0)
+        waveScale: Number(settings.waterStyleWaveScale ?? 2.0),
+        acrylic: Number(settings.waterStyleAcrylic ?? 0.55)
       })
     }));
   }
@@ -8538,6 +8540,11 @@
             <span style="min-width:90px;font-size:12px;">ondas</span>
             <input id="mf-ws-wave" type="range" min="1" max="4" step="0.1" value="${Number(settings.waterStyleWaveScale ?? 2.0)}">
             <span id="mf-ws-wave-value">${Number(settings.waterStyleWaveScale ?? 2.0).toFixed(1)}&times;</span>
+          </div>
+          <div class="mf-shader-strength" style="margin-top:10px;">
+            <span style="min-width:90px;font-size:12px;">acr&iacute;lico</span>
+            <input id="mf-ws-acr" type="range" min="0" max="1" step="0.05" value="${Number(settings.waterStyleAcrylic ?? 0.55)}">
+            <span id="mf-ws-acr-value">${Math.round(Number(settings.waterStyleAcrylic ?? 0.55) * 100)}%</span>
           </div>
         </div>
 
@@ -12378,7 +12385,8 @@
     const wsMap = {
       alpha: { key: 'waterStyleAlpha', fmt: v => Math.round(v * 100) + '%' },
       tint: { key: 'waterStyleTintMix', fmt: v => Math.round(v * 100) + '%' },
-      wave: { key: 'waterStyleWaveScale', fmt: v => v.toFixed(1) + '\u00d7' }
+      wave: { key: 'waterStyleWaveScale', fmt: v => v.toFixed(1) + '\u00d7' },
+      acr: { key: 'waterStyleAcrylic', fmt: v => Math.round(v * 100) + '%' }
     };
     for (const [name, { key, fmt }] of Object.entries(wsMap)) {
       const slider = panel.querySelector(`#mf-ws-${name}`);

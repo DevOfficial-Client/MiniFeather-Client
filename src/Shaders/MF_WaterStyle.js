@@ -35,6 +35,7 @@
         enabled: localStorage.getItem('mf_waterstyle') === 'true',
         alpha: readNum('mf_waterstyle_alpha', 0.12),
         tintMix: readNum('mf_waterstyle_tintmix', 0.85),
+        acrylic: readNum('mf_waterstyle_acrylic', 0.55),
         waveScale: readNum('mf_waterstyle_wavescale', 2.0),
         game: null,
         scanTimer: 0,
@@ -154,13 +155,24 @@
     `;
 
     const FRAG_TAIL = `
-        // mf water style: tinte verde por luminancia + alfa fijo. vColor.r < 0.49
-        // es el gate agua/lava del propio shader del juego; lava pasa de largo.
+        // mf water style: tinte verde por luminancia + acabado ACRÍLICO + alfa.
+        // vColor.r < 0.49 es el gate agua/lava del propio shader del juego;
+        // lava pasa de largo.
         #ifdef USE_COLOR
         if (vColor.r < 0.49) {
             float mfWsLum = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
             gl_FragColor.rgb = mix(gl_FragColor.rgb, mfWsLum * uMfWaterTint, uMfWaterTintMix);
-            gl_FragColor.a = uMfWaterAlpha;
+            // acrílico: placa lechosa (blanco verdoso) que se acentúa a ángulos
+            // rasantes — mirar de cerca = cristal, mirar de lado = placa
+            float mfAv = clamp(dot(normalize(vWorldNormal),
+                normalize(cameraPosition - vWorldPosition + vec3(0.0001))), 0.0, 1.0);
+            float mfMilky = uMfAcrylic * (0.16 + 0.62 * pow(1.0 - mfAv, 2.0));
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.86, 0.94, 0.90), mfMilky);
+            // brillo plástico: micro-boost solo en luces
+            gl_FragColor.rgb += uMfAcrylic *
+                pow(max(gl_FragColor.rgb - 0.35, vec3(0.0)), vec3(3.0)) * 0.8;
+            // la lechosidad difunde: sube el alfa (más placa = menos transparencia)
+            gl_FragColor.a = mix(uMfWaterAlpha, 0.92, mfMilky);
         }
         #endif
     `;
@@ -176,6 +188,7 @@
             uMfWaterAlpha: { value: state.alpha },
             uMfWaterTintMix: { value: state.tintMix },
             uMfWaterTint: { value: TINT.slice() },
+            uMfAcrylic: { value: state.acrylic },
             uMfWaveScale: { value: state.waveScale },
             uMfChop: { value: 0.35 * state.waveScale },
             uMfPlayerPos: { value: [0, 0, 0] },
@@ -187,6 +200,7 @@
             shader.uniforms.uMfWaterAlpha = liveUniforms.uMfWaterAlpha;
             shader.uniforms.uMfWaterTintMix = liveUniforms.uMfWaterTintMix;
             shader.uniforms.uMfWaterTint = liveUniforms.uMfWaterTint;
+            shader.uniforms.uMfAcrylic = liveUniforms.uMfAcrylic;
             shader.uniforms.uMfWaveScale = liveUniforms.uMfWaveScale;
             shader.uniforms.uMfChop = liveUniforms.uMfChop;
             shader.uniforms.uMfPlayerPos = liveUniforms.uMfPlayerPos;
@@ -214,6 +228,7 @@
                     'uniform float uMfWaterAlpha;\n' +
                     'uniform float uMfWaterTintMix;\n' +
                     'uniform vec3 uMfWaterTint;\n' +
+                    'uniform float uMfAcrylic;\n' +
                     shader.fragmentShader;
             }
             if (shader.uniforms.waterShadersEnabled) {
@@ -291,7 +306,7 @@
         m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
-            return base + '_mfws_v7';
+            return base + '_mfws_v8';
         };
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
@@ -471,6 +486,7 @@
         for (const [, entry] of state.hooked) {
             entry.liveUniforms.uMfWaterAlpha.value = state.alpha;
             entry.liveUniforms.uMfWaterTintMix.value = state.tintMix;
+            entry.liveUniforms.uMfAcrylic.value = state.acrylic;
             entry.liveUniforms.uMfWaveScale.value = state.waveScale;
             entry.liveUniforms.uMfChop.value = 0.35 * state.waveScale;
         }
@@ -534,6 +550,13 @@
                 localStorage.setItem('mf_waterstyle_tintmix', String(state.tintMix));
             }
         }
+        if (cfg && cfg.acrylic !== undefined) {
+            const ac = parseFloat(cfg.acrylic);
+            if (Number.isFinite(ac)) {
+                state.acrylic = Math.max(0, Math.min(1, ac));
+                localStorage.setItem('mf_waterstyle_acrylic', String(state.acrylic));
+            }
+        }
         if (cfg && cfg.waveScale !== undefined) {
             const w = parseFloat(cfg.waveScale);
             if (Number.isFinite(w)) {
@@ -557,6 +580,7 @@
             hooked: state.hooked.size,
             alpha: state.alpha,
             tintMix: state.tintMix,
+            acrylic: state.acrylic,
             waveScale: state.waveScale,
             tint: TINT.slice()
         };
