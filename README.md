@@ -6,7 +6,7 @@
 
 *¿Buscando un cliente de Miniblox legítimo — gratis, con código abierto y sin historias raras? Estás en el lugar correcto.*
 
-**[Install](#how-to-install) · [Is it legit?](#is-this-legit) · [Features](#features) · [Screenshots](#screenshots) · [Website](https://devofficial-client.github.io/MiniFeather-Client/)** + landing en docs/ para GitHub Pages)
+**[Install](#how-to-install) · [Is it legit?](#is-this-legit) · [Features](#features) · [Screenshots](#screenshots) · [Website](https://devofficial-client.github.io/MiniFeather-Client/)**
 
 > [!IMPORTANT]
 > **By downloading, installing or using MiniFeather Client, you explicitly declare that you have read the [EULA](EULA.md) and accepted its terms and conditions.** If you do not agree, do not download or use the client.
@@ -37,7 +37,7 @@ Short answer: **yes — this is the open one.**
 
 If you got here by searching for *legit Miniblox.io clients*: hi. You found one — the one you can read before you run it.
 
---- + landing en docs/ para GitHub Pages)
+---
 
 ## Features
 
