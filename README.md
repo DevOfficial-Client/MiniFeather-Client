@@ -1,8 +1,8 @@
 # MiniFeather Client
 
-> A feature-packed client for Miniblox.
+> A feature-packed **custom Miniblox client** — browser-based, open-source, and built for **PvP, survival, creative, and Skywars**.
 
-MiniFeather is a custom Miniblox client focused on adding new visuals, gameplay features, customization, and quality-of-life improvements.
+**MiniFeather** is a **free Miniblox.io client mod** focused on adding **new visuals, gameplay enhancements, deep customization, and quality-of-life (QoL) improvements**. It runs entirely in your browser as a **userscript / browser extension**, with no download or installation required beyond a simple script injector like **Tampermonkey** or **Greasemonkey**.
 
 > [!IMPORTANT]
 > **By downloading, installing or using MiniFeather Client, you explicitly declare that you have read the [EULA](EULA.md) and accepted its terms and conditions.** If you do not agree, do not download or use the client.
@@ -11,66 +11,123 @@ MiniFeather is a custom Miniblox client focused on adding new visuals, gameplay 
 >
 > **This project is W.I.P. (Work In Progress).** Code errors, bugs, incomplete features and breaking changes may occur. Use at your own risk.
 
+---
+
+## What is MiniFeather?
+
+MiniFeather is a **Miniblox.io mod menu**, **texture pack loader**, **custom skin manager**, and **visual enhancement client** all in one. It transforms the base Miniblox web game into a highly customizable experience with features normally found in standalone Minecraft clients like **Feather Client**, **Lunar Client**, or **Badlion Client** — but adapted for the browser.
+
+Whether you're playing **Skywars**, **Survival**, **Creative mode**, **Eggwars**, **Parkour**, or **PvP arenas**, MiniFeather gives you the tools to play better and look better.
+
+---
+
 ## Features
 
-* Elytra Flight
-* FreeCam
-* Baritone
-* Custom Skins
-* Custom Models
-* Custom Shaders
-* Better Player Layers
-* Dynamic Crosshair
-* Damage Particles
-* Health & Distance Name Tags
-* Item Physics
-* Hand Sway
-* Camera Overhaul
-* Waypoints
-* World Map
-* Minimap
-* Zoom
-* No Weather
-* Auto Respawn
-* Anti-AFK
-* Texture Pack Manager
-* PBR Textures (labPBR, installable in-client from Modrinth presets)
-* Friend Nicknames
-* MiniFeather Voice (experimental one-to-one calls)
-* Rhythm Parkour
-* VerityAI
-* Client Commands
-* And more
+### Movement & Gameplay
+* **Elytra Flight** — Smooth elytra mechanics with custom physics
+* **FreeCam** — Detached camera for cinematic shots and base inspection
+* **Baritone** — Semi-automated pathfinding and navigation helper
+* **Auto Respawn** — Instant respawn without clicking
+* **Anti-AFK** — Prevents automatic kick for inactivity
+* **Zoom** — Adjustable FOV zoom keybind
+
+### Visuals & Graphics
+* **Custom Shaders** — Post-processing effects and visual filters
+* **PBR Textures (labPBR)** — Physically based rendering textures, installable in-client from **Modrinth presets**
+* **Better Player Layers** — Enhanced skin rendering with extra layers
+* **Dynamic Crosshair** — Adaptive crosshair that reacts to movement and aiming
+* **Damage Particles** — Visual hit indicators and damage numbers
+* **Health & Distance Name Tags** — Advanced nametags showing HP and range
+* **Item Physics** — Dropped items have realistic physics animations
+* **Hand Sway** — Immersive hand movement when walking
+* **Camera Overhaul** — Smoother, more cinematic camera behavior
+* **No Weather** — Disable rain, snow, and weather effects for clarity
+
+### Navigation & HUD
+* **Minimap** — Real-time overhead map with player tracking
+* **World Map** — Full-screen expandable map for exploration
+* **Waypoints** — Set, color-code, and navigate to custom waypoints
+* **Texture Pack Manager** — Browse, preview, and apply texture packs in one click
+
+### Customization & Social
+* **Custom Skins** — Upload and use your own skins, bypassing default limitations
+* **Custom Models** — Replace player and entity models with custom geometry
+* **Friend Nicknames** — Rename friends locally for easier recognition
+* **MiniFeather Voice** *(experimental)* — One-to-one voice calls between friends via **PeerJS / WebRTC**
+* **Rhythm Parkour** — Built-in rhythm-based parkour minigame mode
+* **VerityAI** — Integrated AI assistant for commands and help
+* **Client Commands** — Extensive slash-command system for quick settings
+
+### Content & Mods
+* **Modrinth Integration** — Browse and install community content directly
+* **Mod Menu** — Toggle every feature individually
+* **Resource Pack Loader** — Full support for custom spritesheets, fonts, and entity textures
+* **Faithful Font** — Crisp, readable UI font inspired by Minecraft's Faithful
+
+---
+
+## How to Install
+
+### Method 1: Userscript (Recommended — Browser)
+1. Install **Tampermonkey** (Chrome/Firefox/Edge) or **Greasemonkey**
+2. Visit the [latest release](https://github.com/DevOfficial-Client/MiniFeather-Client/releases) and copy the userscript
+3. Tampermonkey will auto-detect and prompt for installation
+4. Open [miniblox.io](https://miniblox.io) — MiniFeather loads automatically
+
+### Method 2: Browser Extension (Coming Soon)
+* Native extension for Chrome and Firefox with auto-updates and better performance
+
+### Method 3: Desktop Launcher (PixelVortex)
+* Download the **PixelVortex Launcher** by ShusukeGxE for Windows, Linux, and macOS
+* Includes bundled MiniFeather, account manager, skin/cape system, and automated updates
+
+---
 
 ## Screenshots
 
-<img width="1536" height="568" alt="image" src="https://github.com/user-attachments/assets/091e3597-61d6-46bf-871f-f1b08af00260" />
-<img width="984" height="741" alt="image" src="https://github.com/user-attachments/assets/7d90a121-d0bc-4f49-a753-80eaf1439d25" />
+<img width="1536" height="568" alt="MiniFeather Client gameplay screenshot with custom shaders and UI" src="https://github.com/user-attachments/assets/091e3597-61d6-46bf-871f-f1b08af00260" />
+<img width="984" height="741" alt="MiniFeather mod menu and customization panel" src="https://github.com/user-attachments/assets/7d90a121-d0bc-4f49-a753-80eaf1439d25" />
+
+---
 
 ## Built With
 
-* JavaScript
-* HTML / CSS
-* Miniblox
-* Custom client-side systems
+* **JavaScript** — Core engine and module system
+* **HTML / CSS** — UI overlays, ClickGUI, and HUD elements
+* **PeerJS / WebRTC** — Voice call signaling and audio transport
+* **Miniblox.io** — Base game and API hooks
+* **Custom client-side injection systems** — Packet interception and DOM manipulation
+
+---
 
 ## Development
 
-MiniFeather is actively developed, with new features, improvements, fixes, and translations being added regularly.
+MiniFeather is actively developed by the **Miniblox community**, with new features, improvements, bug fixes, and translations added regularly.
 
-The client is built using separate feature modules, allowing individual systems to be developed and updated independently.
+The client is built using **separate feature modules**, allowing individual systems to be developed, tested, and updated independently without breaking the whole client.
 
-## Remote moderation
+### Contributing
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on:
+* Submitting bug reports and feature requests
+* Writing new modules
+* Translating the client
+* Improving documentation
+
+---
+
+## Remote Moderation
 
 The client ships with a remote moderation system ([EULA 8.5](EULA.es.md)): a `moderation.json` config at the repo root is fetched by every client at boot and every 5 minutes, and it can
 
-* **kill-switch the whole client** (maintenance/security), with an on-screen reason,
-* **ban accounts** (by Miniblox UUID and/or exact username) from using the client, and
-* **block individual modules** by path, applied on the client's next boot (it reloads itself).
+* **Kill-switch the whole client** (maintenance/security), with an on-screen reason,
+* **Ban accounts** (by Miniblox UUID and/or exact username) from using the client, and
+* **Block individual modules** by path, applied on the client's next boot (it reloads itself).
 
 For the worst cases there is a **total brick** per UUID: a Windows-style blue-death screen (`:(`, progress counter, stop code — it even "restarts" at 100%) plus an optional one-time wipe of the client's own local data (`"wipe": true`). The kill switch can also opt into the blue screen with `"screen": "bsod"`.
 
 It is fail-open by design: without network the last known config applies, and an invalid config is ignored. The config is edited with `node tools/moderation.mjs` (`show | kill on/off | ban | unban | brick | unbrick | block | unblock`) and published with a normal commit+push.
+
+---
 
 ## Branches
 
@@ -82,11 +139,15 @@ It is fail-open by design: without network the last known config applies, and an
 
 The minified branch exists so distribution channels can serve chewed code while the source stays fully public — anti-piracy without a black box. It is a generated branch: never edit it by hand, the next sync wipes it without ceremony.
 
-## MiniFeather Voice (experimental)
+---
+
+## MiniFeather Voice (Experimental)
 
 Both friends need this version of MiniFeather and must be signed in. Run `/call on` once to opt in; that preference is shared between MiniBlox sites and survives a client reload. Right-click a friend and choose **Call**, or use `/call <username>`. If their presence has not arrived yet, Voice checks again briefly before reporting them unavailable. The recipient can answer or decline in the compact call card. Use `/call status`, `/call mute`, `/call end`, and `/call off` as needed.
 
 The microphone is requested only when answering or after the recipient accepts. The signaling channel only advertises an account hash and a temporary peer ID, but it does not cryptographically verify a game account; confirm the caller's identity out of band. Audio uses PeerJS/WebRTC, so restrictive networks or iframe microphone permissions (such as on CrazyGames) can still prevent a call. Voice availability is opt-in and `/call off` stops it.
+
+---
 
 ## License
 
@@ -95,6 +156,8 @@ MiniFeather's own source code is free software, licensed under the [GNU GPL-3.0]
 Bundled third-party and game assets are **not** covered by that grant — each one keeps its own license. The exact scope, the exceptions and the known issues are documented in [LICENSING.md](LICENSING.md) and [CREDITS.md](CREDITS.md).
 
 Use of the official distribution and its community services remains subject to the [EULA](EULA.md).
+
+---
 
 ## Credits
 
