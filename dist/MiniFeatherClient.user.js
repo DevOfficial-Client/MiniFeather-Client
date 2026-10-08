@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261008011515
+// @version      4.19.0.20261008020833
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : e8c806112f3f3ab5bf36551de0b2893a3d03c26b
- * builtAt : 2026-10-08T01:15:31.346Z
+ * commit  : 1e686ffbd477b9b8cfbcfb03003813c7aecac134
+ * builtAt : 2026-10-08T02:08:45.397Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"e8c806112f3f3ab5bf36551de0b2893a3d03c26b","builtAt":"2026-10-08T01:15:31.346Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"1e686ffbd477b9b8cfbcfb03003813c7aecac134","builtAt":"2026-10-08T02:08:45.397Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -35251,6 +35251,252 @@ const state = {
 })();
 
 //# sourceURL=MF:src/Render/FullBright.js
+
+/* ==== mf module: src/Render/MF_NoAuraTrail.js ==== */
+(function () {
+    'use strict';
+
+    // re-ejecución (hot-reload): despedir el scope anterior antes de nada
+    try { window.__MF_NOAURATRAIL_SCOPE__?.destroy?.(); } catch (_) {}
+
+    const TAG = 'minifeather no-auras-trails';
+
+    // ─────────────────────────────────────────────────────────────────────
+    // BLOQUEADOR DE AURAS Y TRAILS — el juego guarda los cosméticos de cada
+    // jugador en profile.effects.{aura,trail} (llegan con el paquete del
+    // perfil) y su loop de render hace, por jugador:
+    //   Dj[profile.effects.aura]?.effect?.update(world, player)
+    //   Oj[profile.effects.trail]?.effect?.update(world, player)
+    // con guard NATIVO: campo vacío → el juego solo no dibuja nada. Así que
+    // el bloqueo más limpio que existe es de datos: vaciar esos campos en
+    // los perfiles (menos el propio, si se quiere) y devolver los originales
+    // al apagar. Cero contacto con registros/spawners del juego, cero riesgo
+    // de romper otras partículas (daño, críticos, clima, las nuestras).
+    // ─────────────────────────────────────────────────────────────────────
+
+    const state = {
+        enabled: localStorage.getItem('mf_noauratrail') === 'true',
+        auras: localStorage.getItem('mf_noauratrail_auras') !== 'false',
+        trails: localStorage.getItem('mf_noauratrail_trails') !== 'false',
+        keepOwn: localStorage.getItem('mf_noauratrail_keepown') !== 'false',
+        game: null,
+        entityMap: null,
+        sweepTimer: 0,
+        lastStats: { players: 0, auras: 0, trails: 0, restored: 0 },
+        destroyed: false
+    };
+
+    // originales por objeto effects: el servidor manda los valores al
+    // entrar al mundo, los guardamos la primera vez que los vemos para
+    // poder devolverlos intactos al apagar
+    const originals = new WeakMap();
+
+    function findGame() {
+        try {
+            const root = document.getElementById('react');
+            if (!root) return null;
+            for (const key in root) {
+                if (!key.startsWith('__reactContainer') && !key.startsWith('__reactFiber')) continue;
+                const fiber = root[key];
+                const cand = fiber?.updateQueue?.baseState?.element?.props?.game;
+                if (cand && cand.player) return cand;
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    function isMapLike(value) {
+        return !!(value && typeof value.get === 'function' && typeof value.values === 'function');
+    }
+
+    function looksLikeEntityMap(value) {
+        if (!isMapLike(value)) return false;
+        let checked = 0, found = 0;
+        try {
+            for (const ent of value.values()) {
+                checked++;
+                if (ent && ent.pos) found++;
+                if (checked >= 12) break;
+            }
+        } catch { return false; }
+        return checked > 0 && found > 0;
+    }
+
+    // entityMap: rutas conocidas primero, BFS corto después (mismo
+    // heurístico que HealthNameTags — si aquel ve entidades, este también)
+    function resolveEntityMap(game) {
+        if (isMapLike(state.entityMap)) return state.entityMap;
+        for (const candidate of [
+            game?.world?.entitiesDump,
+            game?.world?.entities,
+            game?.world?.entityMap,
+            game?.entityManager?.entities
+        ]) {
+            if (looksLikeEntityMap(candidate)) { state.entityMap = candidate; return candidate; }
+        }
+        const world = game?.world;
+        if (!world) return null;
+        const queue = [{ value: world, depth: 0 }];
+        const seen = new WeakSet();
+        let visited = 0;
+        while (queue.length && visited < 240) {
+            const { value, depth } = queue.shift();
+            visited++;
+            if (!value || typeof value !== 'object' || seen.has(value)) continue;
+            seen.add(value);
+            if (looksLikeEntityMap(value)) { state.entityMap = value; return value; }
+            if (depth >= 3) continue;
+            for (const k in value) {
+                try {
+                    const v = value[k];
+                    if (v && typeof v === 'object') queue.push({ value: v, depth: depth + 1 });
+                } catch (_) {}
+            }
+        }
+        return null;
+    }
+
+    function isOwnPlayer(ent, game) {
+        if (!game?.player) return false;
+        if (ent === game.player) return true;
+        const a = ent?.id, b = game.player.id;
+        return a !== undefined && a !== null && String(a) === String(b);
+    }
+
+    function restoreEffects(effects) {
+        const orig = originals.get(effects);
+        if (!orig) return false;
+        try {
+            if ('aura' in orig) effects.aura = orig.aura;
+            if ('trail' in orig) effects.trail = orig.trail;
+        } catch (_) {}
+        originals.delete(effects);
+        return true;
+    }
+
+    function restoreAll() {
+        if (!isMapLike(state.entityMap)) return 0;
+        let restored = 0;
+        try {
+            for (const ent of state.entityMap.values()) {
+                const effects = ent?.profile?.effects;
+                if (effects && restoreEffects(effects)) restored++;
+            }
+        } catch (_) {}
+        return restored;
+    }
+
+    // un pase por todas las entidades: vacía lo que toca, devuelve lo que
+    // ya no bloquea (por si giraste una opción con el módulo vivo)
+    function sweepNow() {
+        const game = state.game?.player ? state.game : (state.game = findGame());
+        if (!game) return state.lastStats;
+        if (game !== state.game) state.game = game;
+        const map = resolveEntityMap(game);
+        if (!map) return state.lastStats;
+        let players = 0, auras = 0, trails = 0;
+        try {
+            for (const ent of map.values()) {
+                const effects = ent?.profile?.effects;
+                if (!effects || typeof effects !== 'object') continue;
+                players++;
+
+                if (isOwnPlayer(ent, game) && state.keepOwn) {
+                    restoreEffects(effects);
+                    continue;
+                }
+
+                if (!originals.has(effects) && (effects.aura != null || effects.trail != null)) {
+                    originals.set(effects, { aura: effects.aura, trail: effects.trail });
+                }
+                const orig = originals.get(effects);
+                if (!orig) continue;
+
+                const wantAura = state.auras ? null : orig.aura;
+                const wantTrail = state.trails ? null : orig.trail;
+                if (effects.aura !== wantAura) effects.aura = wantAura;
+                if (effects.trail !== wantTrail) effects.trail = wantTrail;
+                // cuenta solo cosméticos que EXISTÍAN (un campo que ya venía
+                // vacío no es un aura bloqueada, es un jugador sin gusto XD)
+                if (wantAura === null && orig.aura != null) auras++;
+                if (wantTrail === null && orig.trail != null) trails++;
+            }
+        } catch (_) {}
+        state.lastStats = { players, auras, trails, restored: state.lastStats.restored };
+        return state.lastStats;
+    }
+
+    function enable() {
+        state.enabled = true;
+        localStorage.setItem('mf_noauratrail', 'true');
+        if (!state.sweepTimer) state.sweepTimer = setInterval(sweepNow, 1500);
+        sweepNow();
+    }
+
+    function disable() {
+        state.enabled = false;
+        localStorage.setItem('mf_noauratrail', 'false');
+        if (state.sweepTimer) { clearInterval(state.sweepTimer); state.sweepTimer = 0; }
+        state.lastStats.restored = restoreAll();
+    }
+
+    function setConfig(cfg) {
+        if (!cfg) return;
+        if (cfg.auras !== undefined) {
+            state.auras = cfg.auras !== false;
+            localStorage.setItem('mf_noauratrail_auras', String(state.auras));
+        }
+        if (cfg.trails !== undefined) {
+            state.trails = cfg.trails !== false;
+            localStorage.setItem('mf_noauratrail_trails', String(state.trails));
+        }
+        if (cfg.keepOwn !== undefined) {
+            state.keepOwn = cfg.keepOwn !== false;
+            localStorage.setItem('mf_noauratrail_keepown', String(state.keepOwn));
+        }
+        if (state.enabled) sweepNow();
+    }
+
+    function status() {
+        return {
+            enabled: state.enabled,
+            auras: state.auras,
+            trails: state.trails,
+            keepOwn: state.keepOwn,
+            game: !!state.game?.player,
+            entityMap: isMapLike(state.entityMap),
+            ...state.lastStats
+        };
+    }
+
+    function destroy() {
+        state.destroyed = true;
+        if (state.sweepTimer) { clearInterval(state.sweepTimer); state.sweepTimer = 0; }
+        try { restoreAll(); } catch (_) {}
+        try { delete window.MF_NoAuraTrail; } catch (_) {}
+        try { delete window.__MF_NOAURATRAIL_SCOPE__; } catch (_) {}
+    }
+
+    document.addEventListener('minifeather:no-auratrail-config', (ev) => {
+        try {
+            const cfg = JSON.parse(ev.detail || '{}');
+            if (cfg.enabled === true) enable();
+            else if (cfg.enabled === false) disable();
+            setConfig(cfg);
+        } catch (_) {}
+    });
+
+    window.MF_NoAuraTrail = { enable, disable, setConfig, sweepNow, status, destroy };
+    window.__MF_NOAURATRAIL_SCOPE__ = { destroy };
+
+    // si quedó encendido de la sesión anterior (userscript/APK, donde el
+    // panel no siempre abre primero), arrancar solo — es data limpia
+    if (state.enabled) enable();
+
+    console.info(TAG, 'módulo cargado (inactivo hasta minifeather:no-auratrail-config {enabled:true})');
+})();
+
+//# sourceURL=MF:src/Render/MF_NoAuraTrail.js
 
 /* ==== mf module: src/Render/LeafWind.js ==== */
 (function () {
@@ -121836,6 +122082,10 @@ function normalize(entry) {
     itemPhysics: false,
     noWeather: false,
     fullBright: false,
+    noAuraTrail: false,
+    noAuraTrailAuras: true,
+    noAuraTrailTrails: true,
+    noAuraTrailKeepOwn: true,
     fullBrightFloor: 0.16,
     fullBrightNatural: true,
     antiAfk: false,
@@ -124830,6 +125080,7 @@ function normalize(entry) {
       { page: 'render', key: 'critterSkins', title: 'critter variants (cats/wolves)', desc: 'wolf variant textures (persistent per entity) + pack cat models', tags: ['new'] },
       { page: 'render', key: 'crittersMobs', title: t('crittersMobs'), desc: t('crittersMobsDesc'), tags: ['new'] },
       { page: 'render', key: 'allayPets', title: t('allayPets'), desc: t('allayPetsDesc'), tags: ['new'] },
+      { page: 'render', key: 'noAuraTrail', title: 'bloquear auras y trails', desc: 'esconde auras y trails de otros jugadores: menos part&iacute;culas y menos ruido visual', tags: ['new'] },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc'), tags: [] },
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc'), tags: [] },
       { page: 'render', key: 'fullBright', title: t('fullBright'), desc: t('fullBrightDesc'), tags: [] },
@@ -124897,6 +125148,7 @@ function normalize(entry) {
     itemPhysics:'<path d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>',
     noWeather:'<path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6 11.5 3.5 3.5 0 0 0 7 18Z"/><path d="M4 4l16 16"/>',
     fullBright:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>',
+    noAuraTrail:'<path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4Z"/><path d="M4 20 20 4"/>',
     vanillaAnimations:'<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>',
       playerAnims:'<circle cx="12" cy="12" r="3"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>',
       headLag:'<circle cx="14" cy="9" r="4"/><path d="M10 15h8v6h-8z"/><path d="M7 6a8 8 0 0 0-3 4M4 14a8 8 0 0 0 1 4"/>',
@@ -124983,6 +125235,8 @@ function normalize(entry) {
     experimentalBetterAnimationCape: ['......#.','..y...#.','.rr.....','rrRr....','rRRrR...','rrRRrr..','.rRRrR..','..rrr...'],
     deferredPipeline: ['........','...yy...','..y##y..','.y#oo#y.','.y#oo#y.','..y##y..','...yy...','........'],
     antiTear: ['..BBBB..','.BbbbbB.','BbybbybB','BbbkkbbB','BbkkkkbB','BbkbbkbB','.BbbbbB.','..BBBB..'],
+    noAuraTrail: ['...v.r..','..vvv.r.','.vvVvvr.','..vvv.r.','...v..r.','......r.','.....r..','....r...'],
+    rainbow: ['........','..rygv..','.ry..gv.','.r....v.','.r....v.','.r....v.','.r....v.','........'],
     allayPets: ['..bbbb..','.bBBBBb.','bB#BB#Bb','bBBBBBBb','.bB##Bb.','..bBBb..','.bb..bb.','........'],
     itemPhysics: ['..yyyy..','.yYYyYy.','yYy##yYy','yYy##yYy','.yYYyYy.','..yyyy..','...oo...','....o...'],
     noWeather: ['..BBBB..','.BbbbbB.','BbbbbbbB','BBBBBBBB','...bb...','..bb....','.bb.....','RRRRRRRR'],
@@ -125193,6 +125447,8 @@ function normalize(entry) {
     keys: 'keystrokes', keystrokes: 'keystrokes',
     noweather: 'noWeather', weather: 'noWeather',
     fullbright: 'fullBright', bright: 'fullBright', brightness: 'fullBright',
+    aura: 'noAuraTrail', auras: 'noAuraTrail', trail: 'noAuraTrail', trails: 'noAuraTrail',
+    noaura: 'noAuraTrail', notrail: 'noAuraTrail',
     leafwind: 'leafWind', leaves: 'leafWind', foliage: 'leafWind',
     pat: 'patPat', patpat: 'patPat',
     ping: 'pingCounter', pingcounter: 'pingCounter',
@@ -126351,6 +126607,26 @@ function normalize(entry) {
       disable() { sendRainbowConfig(false); },
       refresh() { sendRainbowConfig(MODULES.get('rainbow')?.enabled === true); },
       destroy() { sendRainbowConfig(false); }
+    }));
+  }
+
+  function sendNoAuraTrailConfig(enabled = settings.noAuraTrail) {
+    document.dispatchEvent(new CustomEvent('minifeather:no-auratrail-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        auras: settings.noAuraTrailAuras !== false,
+        trails: settings.noAuraTrailTrails !== false,
+        keepOwn: settings.noAuraTrailKeepOwn !== false
+      })
+    }));
+  }
+
+  function initNoAuraTrailModule() {
+    registerModule('noAuraTrail', () => createLifecycle({
+      enable() { sendNoAuraTrailConfig(true); },
+      disable() { sendNoAuraTrailConfig(false); },
+      refresh() { sendNoAuraTrailConfig(MODULES.get('noAuraTrail')?.enabled === true); },
+      destroy() { sendNoAuraTrailConfig(false); }
     }));
   }
 
@@ -127610,6 +127886,51 @@ function normalize(entry) {
     panel?.querySelector('.mf-zoom-backdrop')?.remove();
   }
 
+  function openNoAuraTrailSettings() {
+    if (!panel) return;
+    closeFeatureSettings();
+
+    const rows = [
+      { key: 'noAuraTrailAuras', label: 'Bloquear auras', hint: 'los halos de part&iacute;culas alrededor del cuerpo' },
+      { key: 'noAuraTrailTrails', label: 'Bloquear trails', hint: 'las estelas de part&iacute;culas al caminar' },
+      { key: 'noAuraTrailKeepOwn', label: 'Dejar los m&iacute;os', hint: 'tus propias auras y trails siguen visibles' }
+    ];
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-feature-modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="mf-feature-modal" role="dialog" aria-modal="true">
+        <div class="mf-feature-modal-title">Auras y trails</div>
+        <div class="mf-feature-modal-desc">quita cosm&eacute;ticos de part&iacute;culas de otros jugadores (menos ruido, menos overdraw)</div>
+        ${rows.map(row => `
+          <div class="mf-feature-modal-row" title="${row.hint}">
+            <span>${row.label}</span>
+            <button type="button" class="mf-feature-state ${settings[row.key] !== false ? 'enabled' : 'disabled'}" data-noat-opt="${row.key}" style="position:static;width:110px;border:0;cursor:pointer;">${settings[row.key] !== false ? 'On' : 'Off'}</button>
+          </div>
+        `).join('')}
+        <div class="mf-feature-modal-actions">
+          <button type="button" class="mf-btn primary" data-feature-close>Done</button>
+        </div>
+      </div>
+    `;
+    panel.appendChild(backdrop);
+
+    backdrop.querySelectorAll('[data-noat-opt]').forEach(button => {
+      button.addEventListener('click', () => {
+        const key = button.dataset.noatOpt;
+        settings[key] = settings[key] === false;
+        guiSettings[key] = settings[key];
+        saveSettings(true);
+        sendNoAuraTrailConfig(MODULES.get('noAuraTrail')?.enabled === true);
+        button.textContent = settings[key] !== false ? 'On' : 'Off';
+        button.className = `mf-feature-state ${settings[key] !== false ? 'enabled' : 'disabled'}`;
+      });
+    });
+    backdrop.querySelector('[data-feature-close]')?.addEventListener('click', closeFeatureSettings);
+    backdrop.addEventListener('mousedown', event => { if (event.target === backdrop) closeFeatureSettings(); });
+    featureSettingsCleanup = () => backdrop.remove();
+  }
+
   function openZoomSettings() {
     if (!panel) return;
     closeZoomSettings();
@@ -128621,7 +128942,7 @@ function normalize(entry) {
   }
 
   const FEATURE_ADVANCED_SETTINGS = new Set([
-    'fullBright','titanTiny','patPat','antiAfk','idlePlayerBot','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight'
+    'fullBright','titanTiny','patPat','antiAfk','idlePlayerBot','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight','noAuraTrail'
   ]);
 
   function closeFeatureSettings() {
@@ -128915,7 +129236,8 @@ function normalize(entry) {
         fullBright: openFullBrightSettings,
         titanTiny: openTitanTinySettings, patPat: openPatPatSettings, antiAfk: openAntiAfkSettings, idlePlayerBot: openIdlePlayerBotSettings, zoom: openZoomSettings,
         cameraOverhaul: openCameraOverhaulSettings, elytraFlight: openElytraFlightSettings, dynamicCrosshair: openDynamicCrosshairSettings,
-        freelook: openFreelookSettings, freecam: openFreecamSettings, blockHighlight: openBlockHighlightSettings, armorHud: openArmorHudSettings
+        freelook: openFreelookSettings, freecam: openFreecamSettings, blockHighlight: openBlockHighlightSettings, armorHud: openArmorHudSettings,
+        noAuraTrail: openNoAuraTrailSettings
       };
       if (key === 'freecam' && !requestFreecamAccess()) { showFreecamDenied(); return; }
       advanced[key]?.();
@@ -135812,6 +136134,7 @@ function normalize(entry) {
     initDuckMobsModule();
     initCrittersMobsModule();
     initAllayPetsModule();
+    initNoAuraTrailModule();
     initGifChatModule();
     initNoWeatherModule();
     initFullBrightModule();
