@@ -709,6 +709,10 @@
     itemPhysics: false,
     noWeather: false,
     fullBright: false,
+    noAuraTrail: false,
+    noAuraTrailAuras: true,
+    noAuraTrailTrails: true,
+    noAuraTrailKeepOwn: true,
     fullBrightFloor: 0.16,
     fullBrightNatural: true,
     antiAfk: false,
@@ -3703,6 +3707,7 @@
       { page: 'render', key: 'critterSkins', title: 'critter variants (cats/wolves)', desc: 'wolf variant textures (persistent per entity) + pack cat models', tags: ['new'] },
       { page: 'render', key: 'crittersMobs', title: t('crittersMobs'), desc: t('crittersMobsDesc'), tags: ['new'] },
       { page: 'render', key: 'allayPets', title: t('allayPets'), desc: t('allayPetsDesc'), tags: ['new'] },
+      { page: 'render', key: 'noAuraTrail', title: 'bloquear auras y trails', desc: 'esconde auras y trails de otros jugadores: menos part&iacute;culas y menos ruido visual', tags: ['new'] },
       { page: 'render', key: 'itemPhysics', title: t('itemPhysics'), desc: t('itemPhysicsDesc'), tags: [] },
       { page: 'render', key: 'noWeather', title: t('noWeather'), desc: t('noWeatherDesc'), tags: [] },
       { page: 'render', key: 'fullBright', title: t('fullBright'), desc: t('fullBrightDesc'), tags: [] },
@@ -3770,6 +3775,7 @@
     itemPhysics:'<path d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>',
     noWeather:'<path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6 11.5 3.5 3.5 0 0 0 7 18Z"/><path d="M4 4l16 16"/>',
     fullBright:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>',
+    noAuraTrail:'<path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4Z"/><path d="M4 20 20 4"/>',
     vanillaAnimations:'<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>',
       playerAnims:'<circle cx="12" cy="12" r="3"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>',
       headLag:'<circle cx="14" cy="9" r="4"/><path d="M10 15h8v6h-8z"/><path d="M7 6a8 8 0 0 0-3 4M4 14a8 8 0 0 0 1 4"/>',
@@ -3856,6 +3862,8 @@
     experimentalBetterAnimationCape: ['......#.','..y...#.','.rr.....','rrRr....','rRRrR...','rrRRrr..','.rRRrR..','..rrr...'],
     deferredPipeline: ['........','...yy...','..y##y..','.y#oo#y.','.y#oo#y.','..y##y..','...yy...','........'],
     antiTear: ['..BBBB..','.BbbbbB.','BbybbybB','BbbkkbbB','BbkkkkbB','BbkbbkbB','.BbbbbB.','..BBBB..'],
+    noAuraTrail: ['...v.r..','..vvv.r.','.vvVvvr.','..vvv.r.','...v..r.','......r.','.....r..','....r...'],
+    rainbow: ['........','..rygv..','.ry..gv.','.r....v.','.r....v.','.r....v.','.r....v.','........'],
     allayPets: ['..bbbb..','.bBBBBb.','bB#BB#Bb','bBBBBBBb','.bB##Bb.','..bBBb..','.bb..bb.','........'],
     itemPhysics: ['..yyyy..','.yYYyYy.','yYy##yYy','yYy##yYy','.yYYyYy.','..yyyy..','...oo...','....o...'],
     noWeather: ['..BBBB..','.BbbbbB.','BbbbbbbB','BBBBBBBB','...bb...','..bb....','.bb.....','RRRRRRRR'],
@@ -4066,6 +4074,8 @@
     keys: 'keystrokes', keystrokes: 'keystrokes',
     noweather: 'noWeather', weather: 'noWeather',
     fullbright: 'fullBright', bright: 'fullBright', brightness: 'fullBright',
+    aura: 'noAuraTrail', auras: 'noAuraTrail', trail: 'noAuraTrail', trails: 'noAuraTrail',
+    noaura: 'noAuraTrail', notrail: 'noAuraTrail',
     leafwind: 'leafWind', leaves: 'leafWind', foliage: 'leafWind',
     pat: 'patPat', patpat: 'patPat',
     ping: 'pingCounter', pingcounter: 'pingCounter',
@@ -5224,6 +5234,26 @@
       disable() { sendRainbowConfig(false); },
       refresh() { sendRainbowConfig(MODULES.get('rainbow')?.enabled === true); },
       destroy() { sendRainbowConfig(false); }
+    }));
+  }
+
+  function sendNoAuraTrailConfig(enabled = settings.noAuraTrail) {
+    document.dispatchEvent(new CustomEvent('minifeather:no-auratrail-config', {
+      detail: JSON.stringify({
+        enabled: !!enabled,
+        auras: settings.noAuraTrailAuras !== false,
+        trails: settings.noAuraTrailTrails !== false,
+        keepOwn: settings.noAuraTrailKeepOwn !== false
+      })
+    }));
+  }
+
+  function initNoAuraTrailModule() {
+    registerModule('noAuraTrail', () => createLifecycle({
+      enable() { sendNoAuraTrailConfig(true); },
+      disable() { sendNoAuraTrailConfig(false); },
+      refresh() { sendNoAuraTrailConfig(MODULES.get('noAuraTrail')?.enabled === true); },
+      destroy() { sendNoAuraTrailConfig(false); }
     }));
   }
 
@@ -6483,6 +6513,51 @@
     panel?.querySelector('.mf-zoom-backdrop')?.remove();
   }
 
+  function openNoAuraTrailSettings() {
+    if (!panel) return;
+    closeFeatureSettings();
+
+    const rows = [
+      { key: 'noAuraTrailAuras', label: 'Bloquear auras', hint: 'los halos de part&iacute;culas alrededor del cuerpo' },
+      { key: 'noAuraTrailTrails', label: 'Bloquear trails', hint: 'las estelas de part&iacute;culas al caminar' },
+      { key: 'noAuraTrailKeepOwn', label: 'Dejar los m&iacute;os', hint: 'tus propias auras y trails siguen visibles' }
+    ];
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-feature-modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="mf-feature-modal" role="dialog" aria-modal="true">
+        <div class="mf-feature-modal-title">Auras y trails</div>
+        <div class="mf-feature-modal-desc">quita cosm&eacute;ticos de part&iacute;culas de otros jugadores (menos ruido, menos overdraw)</div>
+        ${rows.map(row => `
+          <div class="mf-feature-modal-row" title="${row.hint}">
+            <span>${row.label}</span>
+            <button type="button" class="mf-feature-state ${settings[row.key] !== false ? 'enabled' : 'disabled'}" data-noat-opt="${row.key}" style="position:static;width:110px;border:0;cursor:pointer;">${settings[row.key] !== false ? 'On' : 'Off'}</button>
+          </div>
+        `).join('')}
+        <div class="mf-feature-modal-actions">
+          <button type="button" class="mf-btn primary" data-feature-close>Done</button>
+        </div>
+      </div>
+    `;
+    panel.appendChild(backdrop);
+
+    backdrop.querySelectorAll('[data-noat-opt]').forEach(button => {
+      button.addEventListener('click', () => {
+        const key = button.dataset.noatOpt;
+        settings[key] = settings[key] === false;
+        guiSettings[key] = settings[key];
+        saveSettings(true);
+        sendNoAuraTrailConfig(MODULES.get('noAuraTrail')?.enabled === true);
+        button.textContent = settings[key] !== false ? 'On' : 'Off';
+        button.className = `mf-feature-state ${settings[key] !== false ? 'enabled' : 'disabled'}`;
+      });
+    });
+    backdrop.querySelector('[data-feature-close]')?.addEventListener('click', closeFeatureSettings);
+    backdrop.addEventListener('mousedown', event => { if (event.target === backdrop) closeFeatureSettings(); });
+    featureSettingsCleanup = () => backdrop.remove();
+  }
+
   function openZoomSettings() {
     if (!panel) return;
     closeZoomSettings();
@@ -7494,7 +7569,7 @@
   }
 
   const FEATURE_ADVANCED_SETTINGS = new Set([
-    'fullBright','titanTiny','patPat','antiAfk','idlePlayerBot','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight'
+    'fullBright','titanTiny','patPat','antiAfk','idlePlayerBot','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight','noAuraTrail'
   ]);
 
   function closeFeatureSettings() {
@@ -7788,7 +7863,8 @@
         fullBright: openFullBrightSettings,
         titanTiny: openTitanTinySettings, patPat: openPatPatSettings, antiAfk: openAntiAfkSettings, idlePlayerBot: openIdlePlayerBotSettings, zoom: openZoomSettings,
         cameraOverhaul: openCameraOverhaulSettings, elytraFlight: openElytraFlightSettings, dynamicCrosshair: openDynamicCrosshairSettings,
-        freelook: openFreelookSettings, freecam: openFreecamSettings, blockHighlight: openBlockHighlightSettings, armorHud: openArmorHudSettings
+        freelook: openFreelookSettings, freecam: openFreecamSettings, blockHighlight: openBlockHighlightSettings, armorHud: openArmorHudSettings,
+        noAuraTrail: openNoAuraTrailSettings
       };
       if (key === 'freecam' && !requestFreecamAccess()) { showFreecamDenied(); return; }
       advanced[key]?.();
@@ -14685,6 +14761,7 @@
     initDuckMobsModule();
     initCrittersMobsModule();
     initAllayPetsModule();
+    initNoAuraTrailModule();
     initGifChatModule();
     initNoWeatherModule();
     initFullBrightModule();

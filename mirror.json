@@ -34,6 +34,7 @@
     "src/Render/ItemPhysics.js",
     "src/Render/NoWeather.js",
     "src/Render/FullBright.js",
+    "src/Render/MF_NoAuraTrail.js",
     "src/Render/LeafWind.js",
     "src/Render/TaczGuns.js",
     "src/Render/TinyModels.js",
