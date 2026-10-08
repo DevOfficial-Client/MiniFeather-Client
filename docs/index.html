@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniFeather — Legit Miniblox.io Client | FPS Boost, Texture Packs, Shaders</title>
+<meta name="description" content="The legit Miniblox.io client: open source (GPL-3.0), 100% client-side. FPS boost, texture packs, shaders, Baritone, minimap, custom skins. Chrome, userscript, Android, iOS, Windows, Linux.">
+<meta name="keywords" content="miniblox client, miniblox.io client, legit miniblox client, best miniblox client, miniblox mod, miniblox extension, miniblox userscript, miniblox fps boost, miniblox texture packs, cliente de miniblox, cliente legit de miniblox">
+<meta name="robots" content="index,follow">
+<meta name="theme-color" content="#0d1117">
+<link rel="canonical" href="https://devofficial-client.github.io/MiniFeather-Client/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="MiniFeather Client">
+<meta property="og:title" content="MiniFeather — the legit Miniblox.io client">
+<meta property="og:description" content="Open source (GPL-3.0), 100% client-side. FPS boost, texture packs, shaders, minimap, custom skins &amp; 60+ modules. Every platform.">
+<meta property="og:url" content="https://devofficial-client.github.io/MiniFeather-Client/">
+<meta property="og:image" content="https://github.com/user-attachments/assets/091e3597-61d6-46bf-871f-f1b08af00260">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="MiniFeather — the legit Miniblox.io client">
+<meta name="twitter:description" content="Open source, client-side, no account grabbing. FPS boost, texture packs, shaders &amp; 60+ modules for Miniblox.io.">
+<meta name="twitter:image" content="https://github.com/user-attachments/assets/091e3597-61d6-46bf-871f-f1b08af00260">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "MiniFeather Client",
+  "applicationCategory": "GameApplication",
+  "operatingSystem": "Web, Android, iOS, Windows, Linux",
+  "description": "The legit Miniblox.io client: open source under GPL-3.0, 100% client-side. FPS boost, texture packs, custom shaders, Baritone, minimap, waypoints and 60+ modules.",
+  "url": "https://devofficial-client.github.io/MiniFeather-Client/",
+  "downloadUrl": "https://github.com/DevOfficial-Client/MiniFeather-Client/releases/tag/apk-latest",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is MiniFeather a legit Miniblox.io client?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. MiniFeather is fully open source under GPL-3.0, 100% client-side, with no account stealing, no miners and no paywalls. The entire source code is public on GitHub, so you can read every line before running it." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is the Miniblox client safe to install?",
+      "acceptedAnswer": { "@type": "Answer", "text": "The client never takes over your login: you sign into miniblox.io as usual, and everything stored on your machine is documented in plain language in the EULA. It also ships a declared remote-moderation kill-switch that protects users from broken builds." }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I install the Miniblox client?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Desktop: install Tampermonkey or Violentmonkey, then open the MiniFeather userscript from the GitHub repo. Android: download the APK from the rolling builds release. iOS: use the free Userscripts Safari app with the same userscript URL. Windows MSI and Linux packages are on the same release." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is MiniFeather free?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes — free as in freedom (GPL-3.0) and as in beer. No ads, no paywalls, no premium locked features." }
+    }
+  ]
+}
+</script>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: #0d1117; color: #e6edf3; line-height: 1.6;
+  }
+  a { color: #8ab4ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 96px 0 48px; text-align: center;
+    background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(99,102,241,.25), transparent), #0d1117; }
+  h1 { font-size: clamp(1.9rem, 5vw, 3rem); letter-spacing: -.02em; }
+  h1 .feather { color: #a5b4fc; }
+  .tagline { margin: 16px auto 8px; max-width: 640px; color: #b6c2cf; font-size: 1.15rem; }
+  .chips { margin: 20px 0 32px; }
+  .chips span { display: inline-block; margin: 4px; padding: 4px 12px; border: 1px solid #30363d;
+    border-radius: 999px; background: #161b22; font-size: .85rem; color: #9aa7b5; }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn { padding: 12px 24px; border-radius: 10px; font-weight: 600; border: 1px solid #30363d; }
+  .btn:hover { text-decoration: none; }
+  .btn-primary { background: #6366f1; border-color: #6366f1; color: #fff; }
+  .btn-primary:hover { background: #818cf8; }
+  .btn-ghost { background: #161b22; color: #e6edf3; }
+  section { padding: 40px 0; }
+  h2 { font-size: 1.5rem; margin-bottom: 20px; letter-spacing: -.01em; }
+  .cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; }
+  .card h3 { font-size: 1.05rem; margin-bottom: 8px; }
+  .card p { color: #b6c2cf; font-size: .95rem; }
+  ul.feats { columns: 2; column-gap: 32px; padding-left: 20px; color: #c9d4e0; }
+  ul.feats li { margin: 4px 0; break-inside: avoid; }
+  .install { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; }
+  .install ol, .install ul { margin: 8px 0 16px 22px; }
+  .install h3 { margin-top: 12px; font-size: 1rem; }
+  .es { color: #9aa7b5; font-style: italic; margin-top: 24px; }
+  footer { border-top: 1px solid #21262d; margin-top: 40px; padding: 32px 0; color: #8b949e; font-size: .9rem; }
+  footer p + p { margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>MiniFeather Client <span class="feather">🪶</span></h1>
+    <p class="tagline">The <strong>legit Miniblox.io client</strong> — open source under GPL-3.0 and 100% client-side.
+    FPS boost, texture packs, shaders and 60+ modules for the browser voxel game.</p>
+    <div class="chips">
+      <span>Open source · GPL-3.0</span><span>Client-side only</span><span>No account grabbing</span>
+      <span>No miners</span><span>No paywalls</span><span>Self-updating</span>
+    </div>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/DevOfficial-Client/MiniFeather-Client">Source on GitHub</a>
+      <a class="btn btn-ghost" href="https://github.com/DevOfficial-Client/MiniFeather-Client/releases/tag/apk-latest">Downloads</a>
+      <a class="btn btn-ghost" href="https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js">Userscript</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section id="legit">
+  <h2>Is it legit?</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>📖 Read before you run</h3>
+      <p>The full source code is public on GitHub under GPL-3.0 — every module, and the minifier that
+      generates the distributed branch. Anti-piracy without a black box.</p>
+    </div>
+    <div class="card">
+      <h3>🔐 Your account is yours</h3>
+      <p>Sign into Miniblox exactly like you always do. Nothing is hidden: everything the client keeps
+      on your machine is listed in plain language in the EULA.</p>
+    </div>
+    <div class="card">
+      <h3>🛡️ Declared kill-switch</h3>
+      <p>A public, documented remote-moderation config protects users from broken or abused builds.
+      It's in the EULA (§8.5), not in small print.</p>
+    </div>
+    <div class="card">
+      <h3>💸 Free, actually</h3>
+      <p>No ads, no miners, no premium locked features. Free as in freedom and as in beer,
+      on every platform.</p>
+    </div>
+  </div>
+  <p class="es">¿Buscando un cliente de Miniblox legítimo, gratis y con el código a la vista? Este es.</p>
+</section>
+
+<section id="features">
+  <h2>Features</h2>
+  <ul class="feats">
+    <li>FPS Boost</li>
+    <li>Texture Pack Manager</li>
+    <li>PBR textures (labPBR, Modrinth presets)</li>
+    <li>Custom shaders</li>
+    <li>Water &amp; sky overhaul</li>
+    <li>Custom skins, capes &amp; models</li>
+    <li>Fresh Animations-style mobs</li>
+    <li>World Map, Minimap &amp; Waypoints</li>
+    <li>Baritone</li>
+    <li>FreeCam &amp; Zoom</li>
+    <li>Camera overhaul &amp; hand sway</li>
+    <li>Damage particles</li>
+    <li>Health &amp; distance name tags</li>
+    <li>Item physics</li>
+    <li>Mob ragdolls</li>
+    <li>Auto respawn &amp; Anti-AFK</li>
+    <li>Voice calls (1-to-1)</li>
+    <li>…and <a href="https://github.com/DevOfficial-Client/MiniFeather-Client#features">60+ more</a></li>
+  </ul>
+</section>
+
+<section id="install">
+  <h2>Install</h2>
+  <div class="install">
+    <h3>🖥️ Desktop — userscript (easiest)</h3>
+    <ol>
+      <li>Install <a href="https://www.tampermonkey.net/">Tampermonkey</a> or <a href="https://violentmonkey.github.io/">Violentmonkey</a>.</li>
+      <li>Open the <a href="https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js">MiniFeather userscript</a> — it auto-updates afterwards.</li>
+      <li>Play at <a href="https://miniblox.io">miniblox.io</a>.</li>
+    </ol>
+    <h3>🤖 Android (APK)</h3>
+    <ul><li>From the rolling <a href="https://github.com/DevOfficial-Client/MiniFeather-Client/releases/tag/apk-latest">builds release</a>.</li></ul>
+    <h3>🍎 iOS (Safari)</h3>
+    <ul><li>Install the free <a href="https://github.com/quoid/userscripts">Userscripts</a> app, allow it on <code>miniblox.io</code>, add the same userscript URL.</li></ul>
+    <h3>🪟 Windows / 🐧 Linux</h3>
+    <ul><li>MSI (Tauri) and AppImage/deb packages live on the same <a href="https://github.com/DevOfficial-Client/MiniFeather-Client/releases/tag/apk-latest">release</a>.</li></ul>
+  </div>
+</section>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    <p><strong>MiniFeather Client</strong> — built different. Made by the Miniblox community for the Miniblox community.</p>
+    <p>
+      <a href="https://github.com/DevOfficial-Client/MiniFeather-Client">GitHub</a> ·
+      <a href="https://github.com/DevOfficial-Client/MiniFeather-Client/blob/main/LICENSE">GPL-3.0</a> ·
+      <a href="https://github.com/DevOfficial-Client/MiniFeather-Client/blob/main/EULA-TLDR.en.md">EULA (TL;DR)</a> ·
+      <a href="https://github.com/DevOfficial-Client/MiniFeather-Client/blob/main/CREDITS.md">Credits</a>
+    </p>
+    <p>Not affiliated with or endorsed by the Miniblox team. Miniblox is a trademark of its respective owners.</p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,8 +1,12 @@
-# MiniFeather Client
+# MiniFeather Client — the legit Miniblox.io client
 
 > A feature-packed **custom Miniblox client** — browser-based, open-source, and built for **PvP, survival, creative, and Skywars**.
 
-**MiniFeather** is a **free Miniblox.io client mod** focused on adding **new visuals, gameplay enhancements, deep customization, and quality-of-life (QoL) improvements**. It runs entirely in your browser as a **userscript / browser extension**, with no download or installation required beyond a simple script injector like **Tampermonkey** or **Greasemonkey**.
+**MiniFeather** is a **free Miniblox.io client mod** focused on adding **new visuals, gameplay enhancements, deep customization, and quality-of-life (QoL) improvements**. It runs entirely in your browser as a **userscript / browser extension** — and it's the **open one**: 100% client-side, no account grabbing, no miners, no paywalls, full source readable in this repository under [GPL-3.0](LICENSE).
+
+*¿Buscando un cliente de Miniblox legítimo — gratis, con código abierto y sin historias raras? Estás en el lugar correcto.*
+
+**[Install](#how-to-install) · [Is it legit?](#is-this-legit) · [Features](#features) · [Screenshots](#screenshots) · [Website](https://devofficial-client.github.io/MiniFeather-Client/)** + landing en docs/ para GitHub Pages)
 
 > [!IMPORTANT]
 > **By downloading, installing or using MiniFeather Client, you explicitly declare that you have read the [EULA](EULA.md) and accepted its terms and conditions.** If you do not agree, do not download or use the client.
@@ -20,6 +24,20 @@ MiniFeather is a **Miniblox.io mod menu**, **texture pack loader**, **custom ski
 Whether you're playing **Skywars**, **Survival**, **Creative mode**, **Eggwars**, **Parkour**, or **PvP arenas**, MiniFeather gives you the tools to play better and look better.
 
 ---
+
+## Is this legit?
+
+Short answer: **yes — this is the open one.**
+
+* **Full source code, [GPL-3.0](LICENSE).** Every module ships readable in this repo, and the distributed [`minified`](https://github.com/DevOfficial-Client/MiniFeather-Client/tree/minified) branch is chewed by a [public workflow](.github/workflows/publish-minified.yml) — anti-piracy without a black box.
+* **No account stealing.** You sign into Miniblox exactly like you always do; everything the client keeps on your machine is listed in plain language in the [EULA](EULA-TLDR.en.md), and the code is public so anyone can check.
+* **No miners, no ads, no paywalls.** Free as in freedom and as in beer.
+* **Declared remote moderation** ([EULA 8.5](EULA.md)) — a public kill-switch config that protects users from broken or abused builds. Documented, not hidden. See [Remote Moderation](#remote-moderation).
+* **Made by the Miniblox community**, actively developed, with tests.
+
+If you got here by searching for *legit Miniblox.io clients*: hi. You found one — the one you can read before you run it.
+
+--- + landing en docs/ para GitHub Pages)
 
 ## Features
 
@@ -68,18 +86,27 @@ Whether you're playing **Skywars**, **Survival**, **Creative mode**, **Eggwars**
 
 ## How to Install
 
+Free on every platform, and every package updates itself.
+
 ### Method 1: Userscript (Recommended — Browser)
-1. Install **Tampermonkey** (Chrome/Firefox/Edge) or **Greasemonkey**
-2. Visit the [latest release](https://github.com/DevOfficial-Client/MiniFeather-Client/releases) and copy the userscript
-3. Tampermonkey will auto-detect and prompt for installation
-4. Open [miniblox.io](https://miniblox.io) — MiniFeather loads automatically
+1. Install **[Tampermonkey](https://www.tampermonkey.net/)** (Chrome/Edge/Firefox) or **[Violentmonkey](https://violentmonkey.github.io/)**
+2. Open [dist/MiniFeatherClient.user.js (raw)](https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js) — the manager installs it, and from then on it auto-updates on its own
+3. Open [miniblox.io](https://miniblox.io) — MiniFeather loads automatically
 
-### Method 2: Browser Extension (Coming Soon)
-* Native extension for Chrome and Firefox with auto-updates and better performance
+### Method 2: Android (APK)
+* Grab it from the rolling [builds release](https://github.com/DevOfficial-Client/MiniFeather-Client/releases/tag/apk-latest) — the **Windows MSI** and the **Linux AppImage/deb** live there too
 
-### Method 3: Desktop Launcher (PixelVortex)
+### Method 3: iOS (Safari)
+* Install the free **[Userscripts](https://github.com/quoid/userscripts)** app, allow it on `miniblox.io`, and add a new script from the same userscript URL
+
+### Method 4: Chrome/Chromium Extension
+* The full MV3 extension can be loaded unpacked straight from this repository (`chrome://extensions` → Developer mode → Load unpacked)
+
+### Method 5: Desktop Launcher (PixelVortex)
 * Download the **PixelVortex Launcher** by ShusukeGxE for Windows, Linux, and macOS
 * Includes bundled MiniFeather, account manager, skin/cape system, and automated updates
+
+Packaging details for every target live in [README-mobile.md](README-mobile.md).
 
 ---
 
