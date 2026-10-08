@@ -93,8 +93,22 @@ jobs:
             linux-installer/dist/*.AppImage
             linux-installer/dist/*.deb
 
+  browser-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: pack chrome + firefox zips
+        run: node tools/build-browser-zips.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: browser-extension
+          path: dist/MiniFeather-Client-*-*.zip
+
   release:
-    needs: [android-apk, windows-msi, linux-electron]
+    needs: [android-apk, windows-msi, linux-electron, browser-extension]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
@@ -111,10 +125,12 @@ jobs:
           - **android apk** (debug-signed): install allowing unknown sources. shows the eula on first launch.
           - **windows msi** (tauri + webview2): wix license page with the full legal eula.
           - **linux** appimage (universal) + deb (electron).
+          - **chrome zip**: the MV3 extension tree. unzip and load it unpacked (chrome://extensions, developer mode, load unpacked).
+          - **firefox zip**: same tree with a cross-browser manifest (event-page background + gecko id, firefox 128+). load temporary via about:debugging, or sign it with web-ext for a permanent install.
 
           the client inside every package **hot-updates itself from github** (hotload), no reinstalls needed.
           the eula ships inside all packages in both flavors: human tl;dr + full legal text, english and spanish."
-          mapfile -t FILES < <(find artifacts -type f \( -name '*.apk' -o -name '*.msi' -o -name '*.AppImage' -o -name '*.deb' \))
+          mapfile -t FILES < <(find artifacts -type f \( -name '*.apk' -o -name '*.msi' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.zip' \))
           VERSION=$(node -p "require('./manifest.json').version")
           for i in "${!FILES[@]}"; do
             case "${FILES[$i]}" in
