@@ -77,7 +77,7 @@ function makeCtx() {
     clearInterval() {},
     setTimeout: () => 1,
     clearTimeout() {},
-    Uint8Array, Float32Array
+    Uint8Array, Uint16Array, Float32Array
   };
   ctx.window = ctx;
   ctx.globalThis = ctx;
@@ -160,4 +160,87 @@ test('mismatch real tras el merge: el watcher lo reporta con el par exacto', () 
     }
     return g;
   }
+});
+
+test('v3: extra del opaco (mfLeaf) se aprende, se rellena en el mueble y se re-intenta el merge', () => {
+  const { ctx, cm, logs } = makeCtx();
+  // updateChunkMesh contable: el wrap llama orig, repara y re-intenta (orig directo)
+  const calls = [];
+  cm.updateChunkMesh = function (meshResult) { calls.push(meshResult); };
+  vm.runInContext(SRC, ctx, { filename: 'MF_TileEntityMerge.js' });
+
+  // opaco de 9 + mfLeaf (la firma exacta del log del usuario), mueble ya con 9
+  const opaqueGeo = new Geo();
+  opaqueGeo.setAttribute('position', new Attr(new Float32Array(3), 3));
+  for (const n of ['color', 'normal', 'uv', 'overlayUV', 'animation', 'light', 'wave', 'emissive']) {
+    opaqueGeo.setAttribute(n, new Attr(new Float32Array(3), 3));
+  }
+  opaqueGeo.setAttribute('mfLeaf', new Attr(new Float32Array(3), 1));
+  const mueble = makeLameModel('bed');
+  // alinear a los 9 base como dejaría el guardián v1
+  mueble.root.geometry.setAttribute('color', new Attr(new Uint8Array(8 * 4).fill(255), 4, true));
+  mueble.root.geometry.setAttribute('overlayUV', new Attr(new Float32Array(8 * 2), 2));
+  mueble.root.geometry.setAttribute('animation', new Attr(new Uint8Array(8 * 2), 2));
+  mueble.root.geometry.setAttribute('light', new Attr(new Uint8Array(8 * 3).fill(255), 3, true));
+  mueble.root.geometry.setAttribute('wave', new Attr(new Float32Array(8), 1));
+  mueble.root.geometry.setAttribute('emissive', new Attr(new Uint8Array(8), 1, true));
+
+  cm.meshes.set('c1', { pos: { x: 1, z: 2 }, opaque: { geometry: opaqueGeo },
+    tileEntities: new Map([['p', mueble]]) });
+
+  const result = { chunkX: 1, chunkZ: 2 };
+  cm.updateChunkMesh(result);
+
+  const leaf = mueble.root.geometry.attributes.mfLeaf;
+  assert.ok(leaf, 'mfLeaf rellenado en el mueble');
+  assert.equal(leaf.array.length, 8, 'un valor por vértice');
+  assert.equal(leaf.itemSize, 1);
+  assert.equal(leaf.array.constructor, Float32Array, 'ctor del array igual al del opaco (exigencia del merge)');
+  assert.equal(calls.length, 2, 'merge re-intentado una vez tras el relleno');
+  assert.equal(ctx.MF_TileEntityMerge.status().mergeRetries, 1);
+  assert.ok(logs.some((l) => l.includes('aprendido del opaco: mfLeaf')), 'aprendizaje documentado');
+  assert.ok(logs.some((l) => l.includes('MISMATCH REAL') && l.includes('mfLeaf')), 'diff con el culpable nombrado');
+
+  // segundo remesh del mismo chunk: ya no hay mismatch, no hay tercer intento
+  cm.updateChunkMesh(result);
+  assert.equal(calls.length, 3, 'sin re-intento adicional cuando ya está alineado');
+});
+
+test('v3: rig skinned cojo (sin skinIndex) se repara y el render no muere', () => {
+  const { ctx, logs } = makeCtx();
+  // escena con un SkinnedMesh estilo NA del juego: applyBoneTransform en el
+  // PROTOTYPE (como la clase real) leyendo skinIndex del geometry — sin el
+  // guard, TypeError en cada frame
+  const skinnedGeo = new Geo();
+  skinnedGeo.setAttribute('position', new Attr(new Float32Array(4 * 3), 3));
+  function NAFake() {}
+  NAFake.prototype.applyBoneTransform = function (index, vector) {
+    const si = this.geometry.attributes.skinIndex;   // undefined antes del guard
+    void si.array[index * 4];
+    return vector;
+  };
+  const skinned = new NAFake();
+  skinned.isSkinnedMesh = true;
+  skinned.skeleton = { bones: [{}, {}, {}] };
+  skinned.geometry = skinnedGeo;
+  const scene = { traverse(cb) { cb(skinned); } };
+  const reactRoot = ctx.document.getElementById('react');
+  const fiber = reactRoot['__reactContainer$test'];
+  fiber.updateQueue.baseState.element.props.game.gameScene.scene = scene;
+
+  vm.runInContext(SRC, ctx, { filename: 'MF_TileEntityMerge.js' });
+
+  assert.ok(ctx.MF_TileEntityMerge.status().rigProtos >= 1, 'prototype del rig parcheado');
+  assert.doesNotThrow(() => skinned.applyBoneTransform(1, { x: 0, y: 0, z: 0 }));
+  const si = skinnedGeo.attributes.skinIndex;
+  const sw = skinnedGeo.attributes.skinWeight;
+  assert.ok(si && sw, 'skin attrs rellenados');
+  assert.equal(si.array.constructor, Uint16Array);
+  assert.equal(si.array.length, 4 * 4);
+  assert.equal(sw.array[0], 1, 'peso 1 en el hueso 0 (receta del builder del juego)');
+  assert.equal(ctx.MF_TileEntityMerge.status().rigRepairs, 1);
+  assert.ok(logs.some((l) => l.includes('render salvado')));
+  // segunda llamada ya no cuenta reparación
+  skinned.applyBoneTransform(1, { x: 0, y: 0, z: 0 });
+  assert.equal(ctx.MF_TileEntityMerge.status().rigRepairs, 1);
 });
