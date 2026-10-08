@@ -1,8 +1,12 @@
-# MiniFeather Client
+# MiniFeather Client — the legit Miniblox.io client
 
-> A feature-packed client for Miniblox.
+> Open source (GPL-3.0) · 100% client-side · No account grabbing, no miners, no black boxes
 
-MiniFeather is a custom Miniblox client focused on adding new visuals, gameplay features, customization, and quality-of-life improvements.
+MiniFeather is a custom client for [**Miniblox.io**](https://miniblox.io) — the browser voxel game — focused on adding new visuals, gameplay features, customization, and quality-of-life improvements. Everything the client does lives in this repository, readable, under a free license.
+
+*¿Buscando un cliente de Miniblox legítimo — gratis, con código abierto y sin historias raras? Estás en el lugar correcto.*
+
+**[Install](#install) · [Is it legit?](#is-this-legit) · [Features](#features) · [Screenshots](#screenshots) · [Website](https://devofficial-client.github.io/MiniFeather-Client/)**
 
 > [!IMPORTANT]
 > **By downloading, installing or using MiniFeather Client, you explicitly declare that you have read the [EULA](EULA.md) and accepted its terms and conditions.** If you do not agree, do not download or use the client.
@@ -10,6 +14,36 @@ MiniFeather is a custom Miniblox client focused on adding new visuals, gameplay 
 > The EULA is also available in [Español](EULA.es.md), with a friendly TL;DR in [English](EULA-TLDR.en.md) and [Spanish](EULA-TLDR.md).
 >
 > **This project is W.I.P. (Work In Progress).** Code errors, bugs, incomplete features and breaking changes may occur. Use at your own risk.
+
+## Install
+
+Free on every platform, and every package updates itself.
+
+**Desktop — userscript (easiest)**
+
+1. Install a userscript manager: [Tampermonkey](https://www.tampermonkey.net/) (Chrome/Edge/Firefox) or [Violentmonkey](https://violentmonkey.github.io/).
+2. Open [dist/MiniFeatherClient.user.js (raw)](https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js) — the manager installs it, and from then on it auto-updates.
+3. Play at [miniblox.io](https://miniblox.io).
+
+**Android (APK)** — from the rolling [builds release](https://github.com/DevOfficial-Client/MiniFeather-Client/releases/tag/apk-latest) (the Windows MSI and the Linux AppImage/deb live there too).
+
+**iOS (Safari)** — install the free [Userscripts](https://github.com/quoid/userscripts) app, allow it on `miniblox.io`, and add a new script from the same userscript URL.
+
+**Chrome/Chromium extension** — the full MV3 extension can be loaded unpacked straight from this repository (`chrome://extensions` → Developer mode → Load unpacked).
+
+Packaging details for every target live in [README-mobile.md](README-mobile.md).
+
+## Is this legit?
+
+Short answer: **yes — this is the open one.**
+
+* **Full source code, [GPL-3.0](LICENSE).** Every module ships readable in this repo, and the distributed [`minified`](https://github.com/DevOfficial-Client/MiniFeather-Client/tree/minified) branch is chewed by a [public workflow](.github/workflows/publish-minified.yml) — anti-piracy without a black box.
+* **No account stealing.** You sign into Miniblox exactly like you always do; everything the client keeps on your machine is listed in plain language in the [EULA](EULA-TLDR.en.md), and the code is public so anyone can check.
+* **No miners, no ads, no paywalls.** Free as in freedom and as in beer.
+* **Declared remote moderation** ([EULA 8.5](EULA.md)) — a public kill-switch config that protects users from broken or abused builds. Documented, not hidden. See [Remote moderation](#remote-moderation).
+* **Made by the Miniblox community**, actively developed, with tests.
+
+If you got here by searching for *legit Miniblox.io clients*: hi. You found one — the one you can read before you run it.
 
 ## Features
 
