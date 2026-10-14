@@ -6,7 +6,7 @@
   const BUILTIN_PLAYERS = {
     '6eb7369a-551e-406a-9a63-6db7a358e1e5': { name: 'ShusukeGxE_', rank: 'dev' },
     'shusukegxe_': { rank: 'dev' },
-    'angrywolfx': { rank: 'dev' }
+    'c4201f43-2de9-4275-930a-301fae4cce6c': { rank: 'dev' }
   };
   const LIVE_DB_URL = 'https://raw.githubusercontent.com/shusukegxe/mfaccs/main/accounts.json';
   const PUSH_TOPIC = 'mf-skins-updates-v1';
@@ -80,6 +80,7 @@
     ranks.byName = byName;
     state.ranksVersion++;
     state.ranksReady = true;
+    try { document.dispatchEvent(new CustomEvent('minifeather:ranks-updated')); } catch (_) {}
     return true;
   }
   function localDbUrl() {
@@ -142,7 +143,8 @@
       es.onopen = function () { pushRetry = 0; };
     } catch (_) {}
   }  globalThis.__MF_NATIVE_CUSTOM_RANKS__ = {
-    get defs() { return ranks.defs; }
+    get defs() { return ranks.defs; },
+    getRank: rankOf
   };
 
   function rankOf(value) {
@@ -552,6 +554,7 @@
     try { patchChatLog(game); } catch (_) {}
   }
 
+  applyRanksDb({});
   installEarlyDataHook();
   installNativeResolver();
   loadRanksFromDb();

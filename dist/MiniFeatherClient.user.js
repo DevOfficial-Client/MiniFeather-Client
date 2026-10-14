@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261008011526
+// @version      4.19.0.20261008011539
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : eaa6014ae73105800711925539e71ced323a29b3
- * builtAt : 2026-10-08T01:15:38.992Z
+ * commit  : 917f29bc86a2c00a8a1bccbd395433aed4dba1f5
+ * builtAt : 2026-10-14T17:29:33.571Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"eaa6014ae73105800711925539e71ced323a29b3","builtAt":"2026-10-08T01:15:38.992Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"917f29bc86a2c00a8a1bccbd395433aed4dba1f5","builtAt":"2026-10-14T17:29:33.571Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -15547,6 +15547,7 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"eaa6014ae73105800711925539e71c
             });
             if (!r.ok) return null;
             const j = await r.json();
+            if (readSession() !== session) return null;
             if (j && typeof j.uuid === 'string') {
                 state.uuid = j.uuid.toLowerCase();
                 state.username = j.username || null;
@@ -15558,34 +15559,48 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"eaa6014ae73105800711925539e71c
         } catch (e) { log('accounts/me falló:', e?.message || e); }
         return null;
     }
+    function syncSession(session) {
+        if (state.session === session) return false;
+        state.session = session;
+        state.uuid = null;
+        state.username = null;
+        state.rank = null;
+        state.loadedAt = 0;
+        return true;
+    }
     function watchSession() {
-        let last = readSession();
         setInterval(() => {
             const cur = readSession();
-            if (cur !== last) {
-                last = cur;
-                state.session = cur;
-                state.uuid = null;
-                state.loadedAt = 0;
+            if (syncSession(cur)) {
                 if (cur) fetchMe();
             }
         }, 1500);
     }
     async function getAccount(force) {
-        if (!force && state.uuid) return { ...state };
-        if (!readSession()) { fromGameProfile(); return { ...state }; }
+        const session = readSession();
+        syncSession(session);
+        if (!force && state.uuid) return accountSnapshot();
+        if (!session) { fromGameProfile(); return accountSnapshot(); }
         await fetchMe();
+        if (readSession() !== session) {
+            syncSession(readSession());
+            return accountSnapshot();
+        }
         if (!state.uuid) fromGameProfile();
-        return { ...state };
+        return accountSnapshot();
     }
-    // jerarquía canónica de rangos minifeather (nivel numérico, de menos a más;
-    // mfdev y mfowner comparten el tope 201... hasta que llega mfdevgf con 9183,
-    // porque la jerarquía manda pero la novia del dev manda más). los ranks llegan
-    // como string del server/bot de discord y se comparan case-insensitive,
-    // porque el casing nunca sobrevive un mensaje de discord.
-    // nota de campo: el rango con más autoridad del sistema se llama mfdevgf y
-    // vale 9183. los números llegaron así por especificación y se aplican tal
-    // cual. a estas horas la especificación no se discute: se compila.
+    function accountSnapshot() {
+        const account = { ...state };
+        try {
+            const rank = window.__MF_NATIVE_CUSTOM_RANKS__?.getRank?.(account);
+            if (typeof rank === 'string' && rank) account.rank = rank;
+        } catch (_) {}
+        return account;
+    }
+    function publishAccount(acc) {
+        const detail = JSON.stringify({ uuid: acc.uuid, username: acc.username, rank: acc.rank, session: !!acc.session, rankLevel: rankLevel(acc.rank), rankLabel: rankLabel(acc.rank) });
+        document.dispatchEvent(new CustomEvent('minifeather:accounts-data', { detail }));
+    }
     const RANK_HIERARCHY = {
         mfuser:   { level: 50,   label: 'MFUser' },
         premium:  { level: 51,   label: 'Premium' },
@@ -15618,10 +15633,11 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"eaa6014ae73105800711925539e71c
         rankAtLeast
     };
     document.addEventListener('minifeather:accounts-request', () => {
-        getAccount(true).then(acc => {
-            const detail = JSON.stringify({ uuid: acc.uuid, username: acc.username, rank: acc.rank, session: !!acc.session, rankLevel: rankLevel(acc.rank), rankLabel: rankLabel(acc.rank) });
-            document.dispatchEvent(new CustomEvent('minifeather:accounts-data', { detail }));
-        });
+        getAccount(true).then(publishAccount);
+    });
+    document.addEventListener('minifeather:ranks-updated', () => {
+        syncSession(readSession());
+        if (state.uuid) publishAccount(accountSnapshot());
     });
     state.session = readSession();
     if (state.session) fetchMe();
@@ -18168,7 +18184,7 @@ const state = {
   const BUILTIN_PLAYERS = {
     '6eb7369a-551e-406a-9a63-6db7a358e1e5': { name: 'ShusukeGxE_', rank: 'dev' },
     'shusukegxe_': { rank: 'dev' },
-    'angrywolfx': { rank: 'dev' }
+    'c4201f43-2de9-4275-930a-301fae4cce6c': { rank: 'dev' }
   };
   const LIVE_DB_URL = 'https://raw.githubusercontent.com/shusukegxe/mfaccs/main/accounts.json';
   const PUSH_TOPIC = 'mf-skins-updates-v1';
@@ -18242,6 +18258,7 @@ const state = {
     ranks.byName = byName;
     state.ranksVersion++;
     state.ranksReady = true;
+    try { document.dispatchEvent(new CustomEvent('minifeather:ranks-updated')); } catch (_) {}
     return true;
   }
   function localDbUrl() {
@@ -18304,7 +18321,8 @@ const state = {
       es.onopen = function () { pushRetry = 0; };
     } catch (_) {}
   }  globalThis.__MF_NATIVE_CUSTOM_RANKS__ = {
-    get defs() { return ranks.defs; }
+    get defs() { return ranks.defs; },
+    getRank: rankOf
   };
 
   function rankOf(value) {
@@ -18714,6 +18732,7 @@ const state = {
     try { patchChatLog(game); } catch (_) {}
   }
 
+  applyRanksDb({});
   installEarlyDataHook();
   installNativeResolver();
   loadRanksFromDb();
