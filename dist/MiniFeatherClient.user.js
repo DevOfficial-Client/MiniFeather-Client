@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261023154756
+// @version      4.19.0.20261023163213
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 777d46b09ba585ad0721fd88fb33467896492a51
- * builtAt : 2026-10-23T16:30:48.223Z
+ * commit  : cb02b7b10a8cdf8d0e254c60f45aacf945114c03
+ * builtAt : 2026-10-23T16:41:22.734Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"777d46b09ba585ad0721fd88fb33467896492a51","builtAt":"2026-10-23T16:30:48.223Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"cb02b7b10a8cdf8d0e254c60f45aacf945114c03","builtAt":"2026-10-23T16:41:22.734Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -23184,6 +23184,7 @@ requestAnimationFrame(loop);
 /* ==== mf module: src/Render/TitanTiny.js ==== */
 (function () {
     'use strict';
+    const TITAN_NAMETAG_DECORATOR_VERSION = 1;
 
     const CONFIG = {
         minScale: 0.01,
@@ -24324,7 +24325,8 @@ requestAnimationFrame(loop);
             }
             if (typeof fn !== 'function') continue;
 
-            const source = getFunctionSource(fn);
+            const nativeRenderer = globalThis.MiniFeatherNativeNameTagsCore?.getNativeRenderer?.(fn);
+            const source = getFunctionSource(typeof nativeRenderer === 'function' ? nativeRenderer : fn);
             if (!source || !source.includes('nameTagText')) continue;
 
             let score = 0;
@@ -25746,6 +25748,7 @@ requestAnimationFrame(loop);
     'use strict';
 
     const EVENT_CONFIG = 'minifeather:healthnametags-config';
+    const NAMETAG_ORIGINAL_RENDERER_VERSION = 1;
 
     function sameId(a, b) {
         if (a === undefined || a === null || b === undefined || b === null) return false;
@@ -25753,6 +25756,7 @@ requestAnimationFrame(loop);
     }
 
     function createCore() {
+        const nativeRenderers = new WeakMap();
         const state = {
             game: null,
             entityMap: null,
@@ -25940,6 +25944,7 @@ requestAnimationFrame(loop);
                     this.nameTagText = baseText;
                 }
             };
+            nativeRenderers.set(record.wrapper, original);
             try {
                 mesh[method] = record.wrapper;
             } catch {
@@ -26037,6 +26042,16 @@ requestAnimationFrame(loop);
         return {
             registerDecorator,
             setDecoratorEnabled,
+            // Discovery needs the native function's source, not the text-only
+            // wrapper. Drawing must still call the live decorated method.
+            getNativeRenderer(renderer) {
+                for (let depth = 0; depth < 8; depth++) {
+                    const original = nativeRenderers.get(renderer);
+                    if (typeof original !== 'function') break;
+                    renderer = original;
+                }
+                return renderer;
+            },
             refresh() {
                 refreshPlayers(true);
             },

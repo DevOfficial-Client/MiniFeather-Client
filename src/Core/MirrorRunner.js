@@ -115,6 +115,8 @@
       'src/Chat/ClientCommands.js': ['COMPLETION_CONTEXT_VERSION = 3', 'BARITONE_PLACEMENT_COMMANDS_VERSION = 1',
         'BARITONE_PATH_COMMANDS_VERSION = 1'],
       'src/Render/FullBright.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
+      'src/Render/TitanTiny.js': 'TITAN_NAMETAG_DECORATOR_VERSION = 1',
+      'src/Render/HealthNameTags.js': 'NAMETAG_ORIGINAL_RENDERER_VERSION = 1',
       'src/UI/ClientPanel.js': ['FULLBRIGHT_SETTINGS_VERSION = 1', 'experimentalRealisticFirstPerson', 'FIRST_PERSON_MODULE_VERSION = 1', 'CAPE_SETTINGS_VERSION = 1', 'HALLOWEEN_UI_VERSION = 4', 'UI_LAYOUT_FIX_VERSION = 1'],
       'src/I18n/Translations.js': ['"fullBrightSettings"', '"experimentalRealisticFirstPersonLabel"', '"firstPersonDesc"', '"capePhysics"', '"halloweenTheme"', '"halloweenHomeSubtitle"'],
       'src/Experimental/Realistic/FirstPersonModel.js': /FIRST_PERSON_MODEL_VERSION\s*=\s*4/.test(MIRROR.code[firstPersonPath] || '')

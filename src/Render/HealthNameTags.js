@@ -2,6 +2,7 @@
     'use strict';
 
     const EVENT_CONFIG = 'minifeather:healthnametags-config';
+    const NAMETAG_ORIGINAL_RENDERER_VERSION = 1;
 
     function sameId(a, b) {
         if (a === undefined || a === null || b === undefined || b === null) return false;
@@ -9,6 +10,7 @@
     }
 
     function createCore() {
+        const nativeRenderers = new WeakMap();
         const state = {
             game: null,
             entityMap: null,
@@ -196,6 +198,7 @@
                     this.nameTagText = baseText;
                 }
             };
+            nativeRenderers.set(record.wrapper, original);
             try {
                 mesh[method] = record.wrapper;
             } catch {
@@ -293,6 +296,16 @@
         return {
             registerDecorator,
             setDecoratorEnabled,
+            // Discovery needs the native function's source, not the text-only
+            // wrapper. Drawing must still call the live decorated method.
+            getNativeRenderer(renderer) {
+                for (let depth = 0; depth < 8; depth++) {
+                    const original = nativeRenderers.get(renderer);
+                    if (typeof original !== 'function') break;
+                    renderer = original;
+                }
+                return renderer;
+            },
             refresh() {
                 refreshPlayers(true);
             },

@@ -1,5 +1,6 @@
 (function () {
     'use strict';
+    const TITAN_NAMETAG_DECORATOR_VERSION = 1;
 
     const CONFIG = {
         minScale: 0.01,
@@ -1140,7 +1141,8 @@
             }
             if (typeof fn !== 'function') continue;
 
-            const source = getFunctionSource(fn);
+            const nativeRenderer = globalThis.MiniFeatherNativeNameTagsCore?.getNativeRenderer?.(fn);
+            const source = getFunctionSource(typeof nativeRenderer === 'function' ? nativeRenderer : fn);
             if (!source || !source.includes('nameTagText')) continue;
 
             let score = 0;
