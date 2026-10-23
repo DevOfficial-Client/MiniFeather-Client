@@ -88,6 +88,15 @@
       list.splice(Math.min(b, list.length), 0, bp);
     }
     var files = (ov && ov.files && typeof ov.files === 'object') ? ov.files : {};
+    var realisticPath = 'src/Experimental/Realistic/RealisticMode.js';
+    var firstPersonPath = 'src/Experimental/Realistic/FirstPersonModel.js';
+    if (list.indexOf(realisticPath) >= 0 && MIRROR.code[firstPersonPath]) {
+      var firstAt = list.indexOf(firstPersonPath);
+      if (firstAt < 0 || firstAt > list.indexOf(realisticPath)) {
+        if (firstAt >= 0) list.splice(firstAt, 1);
+        list.splice(list.indexOf(realisticPath), 0, firstPersonPath);
+      }
+    }
     // An older cached module list must still load the local Baritone dependencies.
     var navigationPath = 'src/Movement/Baritone.js';
     if (list.indexOf(navigationPath) >= 0 && MIRROR.code[navigationPath] &&
@@ -106,8 +115,21 @@
       'src/Chat/ClientCommands.js': ['COMPLETION_CONTEXT_VERSION = 3', 'BARITONE_PLACEMENT_COMMANDS_VERSION = 1',
         'BARITONE_PATH_COMMANDS_VERSION = 1'],
       'src/Render/FullBright.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
-      'src/UI/ClientPanel.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
-      'src/I18n/Translations.js': '"fullBrightSettings"',
+      'src/UI/ClientPanel.js': ['FULLBRIGHT_SETTINGS_VERSION = 1', 'experimentalRealisticFirstPerson', 'FIRST_PERSON_MODULE_VERSION = 1', 'CAPE_SETTINGS_VERSION = 1', 'HALLOWEEN_UI_VERSION = 4'],
+      'src/I18n/Translations.js': ['"fullBrightSettings"', '"experimentalRealisticFirstPersonLabel"', '"firstPersonDesc"', '"capePhysics"', '"halloweenTheme"', '"halloweenHomeSubtitle"'],
+      'src/Experimental/Realistic/FirstPersonModel.js': /FIRST_PERSON_MODEL_VERSION\s*=\s*4/.test(MIRROR.code[firstPersonPath] || '')
+        ? 'FIRST_PERSON_MODEL_VERSION = 4' : 'FIRST_PERSON_MODEL_VERSION = 3',
+      'src/Experimental/Realistic/RealisticMode.js': [/REALISTIC_PLAYER_FEATURES_VERSION\s*=\s*2/.test(MIRROR.code[realisticPath] || '')
+        ? 'REALISTIC_PLAYER_FEATURES_VERSION = 2' : 'REALISTIC_PLAYER_FEATURES_VERSION = 1', 'setRealisticOptions'],
+      'src/Render/BetterPlayerLayers.js': ['setRealisticOptions', 'SKIN_LAYERS_3D_VERSION = 2'],
+      'src/Render/BetterPlayerLayersArmorPatch.js': 'setRealisticOptions',
+      'src/PlayerAnims/MF_PlayerAnims.js': 'MF_RealisticFirstPerson',
+      'src/PlayerAnims/MF_FreshAnims.js': 'MF_RealisticFirstPerson',
+      'src/PlayerAnims/HeadLag.js': 'MF_RealisticFirstPerson',
+      'src/Render/HandSway.js': 'MF_RealisticFirstPerson',
+      'src/Cosmetics/CustomSkins.js': 'CUSTOM_SKIN_DEFAULTS_VERSION = 1',
+      'src/Studio/MF_Facial.js': 'FACIAL_LEGACY_CLEANUP_VERSION = 1',
+      'src/Render/BetterAnimationCape.js': 'BETTER_CAPE_PHYSICS_VERSION = 3',
       'src/Movement/Baritone.js': /BARITONE_NAVIGATION_VERSION = 7/.test(MIRROR.code[navigationPath] || '')
         ? 'BARITONE_NAVIGATION_VERSION = 7' : /BARITONE_NAVIGATION_VERSION = 6/.test(MIRROR.code[navigationPath] || '')
           ? 'BARITONE_NAVIGATION_VERSION = 6' : /BARITONE_NAVIGATION_VERSION = 5/.test(MIRROR.code[navigationPath] || '')

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261015185718
+// @version      4.19.0.20261015185732
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : db844a09310b3d81ddf4037c8e522c242e222716
- * builtAt : 2026-10-15T18:57:32.185Z
+ * commit  : 9cce5c4a60d05aff6215b490c54a293f1142334c
+ * builtAt : 2026-10-23T15:44:09.769Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"db844a09310b3d81ddf4037c8e522c242e222716","builtAt":"2026-10-15T18:57:32.185Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"9cce5c4a60d05aff6215b490c54a293f1142334c","builtAt":"2026-10-23T15:44:09.769Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -1501,6 +1501,17 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"db844a09310b3d81ddf4037c8e522c
 
 (function () {
   function __mfRunDocStart() {
+/* ==== mf module: src/Core/SeasonalFlags.js ==== */
+(() => {
+  'use strict';
+
+  const HALLOWEEN_ENABLED = true; // Set false to retire the whole event without deleting it.
+
+  globalThis.__MF_SEASONAL_FLAGS__ = Object.freeze({ halloween: HALLOWEEN_ENABLED });
+})();
+
+//# sourceURL=MF:src/Core/SeasonalFlags.js
+
 /* ==== mf module: src/Core/SplashScreen.js ==== */
 (() => {
   'use strict';
@@ -1530,12 +1541,16 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"db844a09310b3d81ddf4037c8e522c
   const TOTAL_MS = 2850;
   const MIN_VISIBLE_MS = 220;
   const LOGO_URL = chrome.runtime.getURL('assets/icon.png');
+  const HALLOWEEN_ASSETS = chrome.runtime.getURL('assets/ui/halloween/');
+  const halloweenAvailable = globalThis.__MF_SEASONAL_FLAGS__?.halloween === true;
   let root = null;
   let style = null;
   let endTimer = 0;
   let playToken = 0;
   let startedAt = 0;
   let destroyed = false;
+  let halloweenTheme = halloweenAvailable;
+  let halloweenMotion = true;
   const eventController = new AbortController();
 
   function makeStyle() {
@@ -1557,6 +1572,25 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"db844a09310b3d81ddf4037c8e522c
         #${ROOT_ID} .mf-splash-feather{position:absolute;z-index:2;left:0;top:0;width:77px;height:77px;opacity:0;will-change:transform,opacity;animation:mfSplashFeather ${TOTAL_MS}ms linear both}
         #${ROOT_ID} .mf-splash-feather svg{display:block;width:100%;height:100%}
         #${ROOT_ID} .mf-splash-stars{position:absolute;inset:0;background:radial-gradient(circle at 21% 39%,#8ed9ff 0 1px,transparent 2px),radial-gradient(circle at 36% 61%,#aedfff 0 1px,transparent 2px),radial-gradient(circle at 69% 31%,#8ed9ff 0 1px,transparent 2px),radial-gradient(circle at 81% 63%,#b7e9ff 0 1px,transparent 2px);opacity:0;animation:mfSplashStars ${TOTAL_MS}ms linear both}
+        #${ROOT_ID} .mf-splash-season,#${ROOT_ID} .mf-splash-halloween{display:none}
+        #${ROOT_ID}[data-halloween="on"]{background:radial-gradient(ellipse at 50% 42%,#3c294b 0%,#21162f 49%,#0c0914 100%)}
+        #${ROOT_ID}[data-halloween="on"]::before{inset:auto 0 0;height:42vh;background:url("${HALLOWEEN_ASSETS}night-scene.svg") center top/cover no-repeat;image-rendering:pixelated;opacity:.6}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-logo{background:#30213f;box-shadow:inset 0 0 0 1px #ffc08060,0 13px 27px #0e091b80,0 0 32px #ff9c3818}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-face{background-image:linear-gradient(180deg,#fff0ce 4%,#ffe0aa 43%,#ffb36c 87%,#e58a45 100%);-webkit-text-stroke-color:#ffe0a860}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-depth{color:#784257;text-shadow:1px 1px #65354d,2px 2px #502b43,3px 3px #3b2035,5px 8px 15px #0007}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-streak{background:linear-gradient(90deg,transparent,#f3a45b 18%,#ffe5b7 55%,#bd8ee1 82%,transparent);box-shadow:0 0 8px #ffaf5130}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-stars{background:radial-gradient(circle at 21% 39%,#ffca80 0 1px,transparent 2px),radial-gradient(circle at 36% 61%,#d6b4ed 0 1px,transparent 2px),radial-gradient(circle at 69% 31%,#ffdca0 0 1px,transparent 2px),radial-gradient(circle at 81% 63%,#d6b4ed 0 1px,transparent 2px)}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-feather path:nth-child(1){fill:#fff0d1}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-feather path:nth-child(2){fill:#deb0ed}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-feather path:nth-child(3){stroke:#ffe6b2}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-feather path:nth-child(4){stroke:#ecb36f}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-season{display:block;margin-bottom:12px;color:#dfb6e0;font-size:12px;letter-spacing:.3em;font-weight:650}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-halloween{display:block;position:absolute;inset:0;pointer-events:none;image-rendering:pixelated}
+        #${ROOT_ID} .mf-splash-pumpkin{position:absolute;width:96px;height:96px;bottom:7vh;left:12vw}
+        #${ROOT_ID} .mf-splash-ghost{position:absolute;width:72px;height:72px;right:15vw;top:22vh}
+        #${ROOT_ID}[data-halloween-motion="on"] .mf-splash-ghost{animation:mfSplashGhost 2.8s ease-in-out both}
+        @keyframes mfSplashGhost{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+        @media(prefers-reduced-motion:reduce){#${ROOT_ID} .mf-splash-ghost{animation:none!important}}
         @keyframes mfSplashVisibility{0%{opacity:0}7%,84%{opacity:1}100%{opacity:0}}
         @keyframes mfSplashLogo{0%,13%{opacity:0;transform:translate3d(0,18px,0) scale(.82)}31%{opacity:1;transform:translate3d(0,-3px,0) scale(1.025)}38%,100%{opacity:1;transform:translate3d(0,0,0) scale(1)}}
         @keyframes mfSplashTitle{0%,22%{opacity:0;transform:perspective(780px) translate3d(0,19px,0) rotateX(14deg)}42%{opacity:1;transform:perspective(780px) translate3d(0,-2px,0) rotateX(-2deg)}48%,100%{opacity:1;transform:perspective(780px) translate3d(0,0,0) rotateX(0)}}
@@ -1572,8 +1606,32 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"db844a09310b3d81ddf4037c8e522c
     const element = document.createElement('div');
     element.id = ROOT_ID;
     element.setAttribute('role', 'presentation');
-    element.innerHTML = `<div class="mf-splash-stars"></div><div class="mf-splash-stage"><div class="mf-splash-logo"><img src="${LOGO_URL}" alt="" decoding="async" fetchpriority="high"></div><div class="mf-splash-copy"><div class="mf-splash-word" aria-label="MiniFeather"><span class="mf-splash-depth" aria-hidden="true"><span class="mf-mini">Mini</span>Feather</span><span class="mf-splash-face"><span class="mf-mini">Mini</span>Feather</span></div><div class="mf-splash-streak"></div></div></div><div class="mf-splash-feather" aria-hidden="true"><svg viewBox="0 0 90 60" xmlns="http://www.w3.org/2000/svg"><path d="M3 37C14 19 34 7 63 3c10-1 18 1 24 5-7 16-21 29-42 35-16 5-30 3-42-3 10-1 18-4 25-8-10 3-18 5-25 5Z" fill="#dff4ff"/><path d="M24 29C38 16 57 10 82 6c-9 11-23 21-40 25-8 2-13 2-18-2Z" fill="#9ddcff"/><path d="M5 39C29 31 53 18 83 7M26 26l-8-9m20 4-8-11m20 7-3-11m14 7 1-8M34 30l-8 10m18-14-6 12m18-17-4 13m17-21-3 11" fill="none" stroke="#f7fcff" stroke-width="1.8" stroke-linecap="round"/><path d="M4 39-4 53" fill="none" stroke="#73caff" stroke-width="2" stroke-linecap="round"/></svg></div>`;
+    element.setAttribute('data-halloween', halloweenTheme ? 'on' : 'off');
+    element.setAttribute('data-halloween-motion', halloweenTheme && halloweenMotion ? 'on' : 'off');
+    element.innerHTML = `<div class="mf-splash-stars"></div>
+      <div class="mf-splash-stage">
+        <div class="mf-splash-logo"><img src="${LOGO_URL}" alt="" decoding="async" fetchpriority="high"></div>
+        <div class="mf-splash-copy">
+          ${halloweenAvailable ? '<span class="mf-splash-season" aria-hidden="true">HALLOWEEN</span>' : ''}
+          <div class="mf-splash-word" aria-label="MiniFeather">
+            <span class="mf-splash-depth" aria-hidden="true"><span class="mf-mini">Mini</span>Feather</span>
+            <span class="mf-splash-face"><span class="mf-mini">Mini</span>Feather</span>
+          </div><div class="mf-splash-streak"></div>
+        </div>
+      </div>
+      ${halloweenAvailable ? `<div class="mf-splash-halloween" aria-hidden="true">
+        <img class="mf-splash-pumpkin" src="${HALLOWEEN_ASSETS}pumpkin.svg" alt="">
+        <img class="mf-splash-ghost" src="${HALLOWEEN_ASSETS}ghost.svg" alt="">
+      </div>` : ''}
+      <div class="mf-splash-feather" aria-hidden="true"><svg viewBox="0 0 90 60" xmlns="http://www.w3.org/2000/svg"><path d="M3 37C14 19 34 7 63 3c10-1 18 1 24 5-7 16-21 29-42 35-16 5-30 3-42-3 10-1 18-4 25-8-10 3-18 5-25 5Z" fill="#dff4ff"/><path d="M24 29C38 16 57 10 82 6c-9 11-23 21-40 25-8 2-13 2-18-2Z" fill="#9ddcff"/><path d="M5 39C29 31 53 18 83 7M26 26l-8-9m20 4-8-11m20 7-3-11m14 7 1-8M34 30l-8 10m18-14-6 12m18-17-4 13m17-21-3 11" fill="none" stroke="#f7fcff" stroke-width="1.8" stroke-linecap="round"/><path d="M4 39-4 53" fill="none" stroke="#73caff" stroke-width="2" stroke-linecap="round"/></svg></div>`;
     return element;
+  }
+
+  function applyAppearance(settings) {
+    halloweenTheme = halloweenAvailable && settings?.halloweenTheme !== false;
+    halloweenMotion = settings?.halloweenAnimations !== false;
+    root?.setAttribute('data-halloween', halloweenTheme ? 'on' : 'off');
+    root?.setAttribute('data-halloween-motion', halloweenTheme && halloweenMotion ? 'on' : 'off');
   }
 
   function removeRoot() {
@@ -1621,11 +1679,12 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"db844a09310b3d81ddf4037c8e522c
 
   function play({ force = false } = {}) {
     if (destroyed) return;
-    if (force) { startAnimation(); return; }
     try {
       chrome.storage.local.get(['settings'], data => {
-        if (destroyed || data?.settings?.startupAnimation === false) return;
-        if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+        if (destroyed) return;
+        applyAppearance(data?.settings);
+        if (!force && data?.settings?.startupAnimation === false) return;
+        if (!force && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
         startAnimation();
       });
     } catch (_) { startAnimation(); }
@@ -1638,6 +1697,7 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"db844a09310b3d81ddf4037c8e522c
     clearTimeout(endTimer);
     endTimer = 0;
     eventController.abort();
+    try { chrome.storage.onChanged.removeListener(onStorage); } catch (_) {}
     removeRoot();
     if (globalThis.__MINIFEATHER_SPLASH__?.destroy === destroy) delete globalThis.__MINIFEATHER_SPLASH__;
   }
@@ -1649,17 +1709,18 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"db844a09310b3d81ddf4037c8e522c
     event.stopImmediatePropagation();
     skip();
   }, { capture: true, signal: eventController.signal });
-  try {
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'local' || !changes.settings?.newValue) return;
-      if (changes.settings.newValue.startupAnimation === false && root) {
-        playToken++;
-        clearTimeout(endTimer);
-        endTimer = 0;
-        removeRoot();
-      }
-    });
-  } catch (_) {}
+  function onStorage(changes, area) {
+    if (destroyed) return;
+    if (area !== 'local' || !changes.settings?.newValue) return;
+    applyAppearance(changes.settings.newValue);
+    if (changes.settings.newValue.startupAnimation === false && root) {
+      playToken++;
+      clearTimeout(endTimer);
+      endTimer = 0;
+      removeRoot();
+    }
+  }
+  try { chrome.storage.onChanged.addListener(onStorage); } catch (_) {}
   globalThis.__MINIFEATHER_SPLASH__ = { play, skip, destroy };
   play();
 })();
@@ -13716,6 +13777,7 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"db844a09310b3d81ddf4037c8e522c
 /* ==== mf module: src/Cosmetics/CustomSkins.js ==== */
 (function () {
     'use strict';
+    var CUSTOM_SKIN_DEFAULTS_VERSION = 1;
     if (window.__MF_CustomSkins) return;
     window.__MF_CustomSkins = true;
 
@@ -13825,7 +13887,6 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"db844a09310b3d81ddf4037c8e522c
         players: {
 
             '6eb7369a-551e-406a-9a63-6db7a358e1e5': { skin: 'custom:mf_estebangxe' },
-            'c4201f43-2de9-4275-930a-301fae4cce6c': { skin: 'custom:mf_angrywolfx' },
 
             'eve': { skin: 'custom:mf_eve' }
         }
@@ -42013,603 +42074,800 @@ const VEGETATION_PASS_THROUGH = new Set([
 (() => {
     'use strict';
 
+    const BETTER_CAPE_PHYSICS_VERSION = 3;
     const EVENT_CONFIG = 'minifeather:better-animation-cape-config';
-    const DEPTH_SCALE = 0.64;
-    const BACK_OFFSET = 0.060;
-    const COLLISION_GAP = 0.026;
-    const SEGMENTS = 10;
-    const BODY_PARTS = [
-        'head',
-        'torso',
-        'rightArmTop', 'rightArmBottom',
-        'leftArmTop', 'leftArmBottom',
-        'rightLegTop', 'rightLegBottom',
-        'leftLegTop', 'leftLegBottom'
+    const ROWS = 16, COLS = 4, STEP = 1 / 90, MAX_STEPS = 5;
+    const GAP = 0.025, BACK_OFFSET = 0.022, MAX_DISTANCE = 48, MAX_CAPES = 24;
+    const DEFAULTS = Object.freeze({
+        movement: 'simulation-v2', style: 'smooth', wind: 'waves',
+        windStrength: 0.65, gravity: 10, strength: 1
+    });
+    const PARTS = [
+        ['head', 'headPivot'], ['torso', 'torso'],
+        ['rightArmTop', 'rightShoulderJoint'], ['rightArmBottom', 'rightElbowJoint'],
+        ['leftArmTop', 'leftShoulderJoint'], ['leftArmBottom', 'leftElbowJoint'],
+        ['rightLegTop', 'rightHipJoint'], ['rightLegBottom', 'rightKneeJoint'],
+        ['leftLegTop', 'leftHipJoint'], ['leftLegBottom', 'leftKneeJoint']
     ];
-
+    const previous = globalThis.BetterAnimationCape;
+    let previousEnabled = false, previousOptions = {};
+    try {
+        previousEnabled = previous?.enabled === true;
+        previousOptions = previous?.getState?.().options || {};
+        if (previous?.destroy) previous.destroy();
+        else previous?.setEnabled?.(false);
+    } catch {}
     const state = {
-        enabled: false,
-        game: null,
-        scanAt: 0,
-        hooks: new Map(),
-        capes: new Map()
+        enabled: false, destroyed: false, game: null, scanTime: -Infinity, timer: 0,
+        hooks: new Map(), capes: new Map(), options: { ...DEFAULTS },
+        geometryBuilds: 0, steps: 0, updates: 0, error: ''
     };
-
-    function isGame(value) {
-        return !!(value && typeof value === 'object' && value.player && value.world);
-    }
+    const boundsCache = new WeakMap();
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const now = () => globalThis.performance?.now?.() ?? Date.now();
+    const finite = (value, fallback, min, max) => {
+        if (typeof value !== 'number' && typeof value !== 'string') return fallback;
+        const number = Number(value);
+        return Number.isFinite(number) ? clamp(number, min, max) : fallback;
+    };
+    const validGame = game => !!(game?.player && game?.world);
 
     function findGame() {
-        for (const candidate of [globalThis.miniblox, globalThis.__MINIBLOX_GAME__, state.game]) {
-            if (isGame(candidate)) return (state.game = candidate);
+        for (const game of [globalThis.__MINIBLOX_GAME__, globalThis.__MB?.game, globalThis.miniblox, globalThis.Game, globalThis.game]) {
+            if (validGame(game)) return (state.game = game);
         }
-
-        try {
-            const react = document.querySelector('#react');
-            if (!react) return null;
-            for (const root of Object.values(react)) {
-                const game = root?.updateQueue?.baseState?.element?.props?.game;
-                if (isGame(game)) {
-                    globalThis.__MINIBLOX_GAME__ = game;
-                    return (state.game = game);
+        const root = document.querySelector?.('#react') || document.querySelector?.('#root');
+        if (root) {
+            for (const key of Object.keys(root)) {
+                if (!key.startsWith('__react')) continue;
+                const queue = [root[key]], seen = new Set();
+                for (let at = 0; at < queue.length && at < 1000; at++) {
+                    const fiber = queue[at];
+                    if (!fiber || seen.has(fiber)) continue;
+                    seen.add(fiber);
+                    for (const value of [fiber.stateNode, fiber.memoizedProps, fiber.pendingProps, fiber.updateQueue?.baseState?.element?.props]) {
+                        const game = validGame(value) ? value : value?.game;
+                        if (validGame(game)) return (state.game = game);
+                    }
+                    if (fiber.child) queue.push(fiber.child);
+                    if (fiber.sibling) queue.push(fiber.sibling);
+                    if (fiber.return) queue.push(fiber.return);
                 }
             }
-        } catch {}
+        }
         return null;
     }
 
-    function addEntity(out, seen, entity) {
-        if (!entity || typeof entity !== 'object' || !entity.mesh || seen.has(entity)) return;
-        seen.add(entity);
-        out.push(entity);
+    function point(matrix, x, y, z) {
+        const m = matrix.elements || matrix;
+        return [m[0] * x + m[4] * y + m[8] * z + m[12],
+            m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14]];
     }
 
-    function collectPlayerEntities(game) {
+    function bounds(geometry) {
+        const position = geometry?.attributes?.position;
+        if (!position || !ArrayBuffer.isView(position.array) || position.isInterleavedBufferAttribute) return null;
+        const cached = boundsCache.get(geometry);
+        if (cached?.attribute === position && cached.version === position.version) return cached;
+        let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+        for (let i = 0; i < position.count; i++) {
+            const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
+            if (![x, y, z].every(Number.isFinite)) return null;
+            minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+            minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+        }
+        const result = { minX, minY, minZ, maxX, maxY, maxZ, attribute: position, version: position.version };
+        boundsCache.set(geometry, result);
+        return result;
+    }
+
+    function clip(polygon, axis, value, above) {
         const out = [];
-        const seen = new WeakSet();
-
-        const pushIterable = value => {
-            try {
-                if (value?.values) {
-                    for (const entity of value.values()) addEntity(out, seen, entity);
-                } else if (Array.isArray(value)) {
-                    for (const entity of value) addEntity(out, seen, entity);
-                }
-            } catch {}
-        };
-
-        pushIterable(game?.world?.players);
-        pushIterable(game?.world?.entities);
-        pushIterable(game?.world?.entitiesDump);
-        pushIterable(game?.world?.loadedEntityList);
-        addEntity(out, seen, game?.player);
+        for (let i = 0; i < polygon.length; i++) {
+            const a = polygon[i], b = polygon[(i + 1) % polygon.length];
+            const insideA = above ? a[axis] >= value - 1e-8 : a[axis] <= value + 1e-8;
+            const insideB = above ? b[axis] >= value - 1e-8 : b[axis] <= value + 1e-8;
+            if (insideA) out.push(a);
+            if (insideA !== insideB) {
+                const t = (value - a[axis]) / (b[axis] - a[axis]);
+                out.push(a.map((component, index) => component + (b[index] - component) * t));
+            }
+        }
         return out;
     }
 
-    function geometryParts(cape) {
-        const parts = [];
-        try {
-            cape?.traverse?.(object => {
-                const geometry = object?.geometry;
-                const position = geometry?.attributes?.position;
-                const array = position?.array;
-                if (!geometry || !position || !array || array.length < 3) return;
-
-                const base = new Float32Array(array.length);
-                base.set(array);
-
-                let minX = Infinity;
-                let maxX = -Infinity;
-                let minY = Infinity;
-                let maxY = -Infinity;
-                let minZ = Infinity;
-                let maxZ = -Infinity;
-
-                for (let i = 0; i < base.length; i += 3) {
-                    const x = base[i];
-                    const y = base[i + 1];
-                    const z = base[i + 2];
-                    if (x < minX) minX = x;
-                    if (x > maxX) maxX = x;
-                    if (y < minY) minY = y;
-                    if (y > maxY) maxY = y;
-                    if (z < minZ) minZ = z;
-                    if (z > maxZ) maxZ = z;
+    function clothGeometry(original) {
+        const box = bounds(original), position = original?.attributes?.position;
+        if (!box || position.count > 45000 || box.maxY - box.minY < 0.05 || box.maxX - box.minX < 0.02 ||
+            original.isInstancedBufferGeometry || Object.keys(original.morphAttributes || {}).length ||
+            original.attributes.skinIndex) return null;
+        const names = Object.keys(original.attributes);
+        // Put position first so clipping interpolates the correct coordinates.
+        names.splice(names.indexOf('position'), 1); names.unshift('position');
+        if (names.some(name => !ArrayBuffer.isView(original.attributes[name].array) ||
+            original.attributes[name].isInterleavedBufferAttribute || original.attributes[name].count !== position.count)) return null;
+        const attributes = names.map(name => original.attributes[name]);
+        const index = original.index?.array || Array.from({ length: position.count }, (_, i) => i);
+        const count = index.length - index.length % 3, hidden = new Set(), quads = new Map();
+        const materialAt = at => original.groups?.find(group => at >= group.start && at < group.start + group.count)?.materialIndex ?? 0;
+        // Miniblox builds many capes from tiny closed cubes. Remove only paired,
+        // opposite internal faces; keep transparency holes and outside borders.
+        if (box.maxZ - box.minZ > 1e-5 && original.attributes.normal) {
+            for (let at = 0; at + 5 < count; at += 6) {
+                const vertices = [...new Set(Array.from(index.slice(at, at + 6)))];
+                if (vertices.length !== 4) continue;
+                const normal = original.attributes.normal, id = vertices[0];
+                const n = [normal.getX(id), normal.getY(id), normal.getZ(id)];
+                const axis = n.findIndex(value => Math.abs(value) > 0.999);
+                if (axis < 0) continue;
+                const extrema = [0, 1, 2].map(component => vertices.map(vertex => position.array[vertex * 3 + component]));
+                if (Math.max(...extrema[axis]) - Math.min(...extrema[axis]) > 1e-7) continue;
+                const key = axis + ':' + extrema.map(values => Math.min(...values).toFixed(6) + ',' + Math.max(...values).toFixed(6)).join(':') + ':' + materialAt(at);
+                const other = quads.get(key);
+                if (other && other.sign !== Math.sign(n[axis])) {
+                    for (let i = 0; i < 6; i++) { hidden.add(at + i); hidden.add(other.at + i); }
+                    quads.delete(key);
+                } else quads.set(key, { at, sign: Math.sign(n[axis]) });
+            }
+        }
+        const arrays = names.map(() => []), indices = [], groups = [];
+        const dx = (box.maxX - box.minX) / COLS, dy = (box.maxY - box.minY) / ROWS;
+        const read = id => attributes.flatMap(attribute => Array.from(attribute.array.slice(id * attribute.itemSize, (id + 1) * attribute.itemSize)));
+        let vertices = 0;
+        const vertexCache = new Map();
+        const emit = (polygon, material) => {
+            for (let i = 1; i + 1 < polygon.length; i++) {
+                const a = polygon[0], b = polygon[i], c = polygon[i + 1];
+                const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+                const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+                if (Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) < 1e-10) continue;
+                const start = indices.length;
+                for (const vertex of [a, b, c]) {
+                    const key = vertex.map(value => value.toFixed(7)).join(',');
+                    const cached = state.options.style === 'smooth' ? vertexCache.get(key) : undefined;
+                    if (cached !== undefined) { indices.push(cached); continue; }
+                    let offset = 0;
+                    for (let attr = 0; attr < attributes.length; attr++) {
+                        for (let k = 0; k < attributes[attr].itemSize; k++) arrays[attr].push(vertex[offset++]);
+                    }
+                    if (state.options.style === 'smooth') vertexCache.set(key, vertices);
+                    indices.push(vertices++);
                 }
-
-                parts.push({
-                    object,
-                    geometry,
-                    position,
-                    base,
-                    minX,
-                    maxX,
-                    minY,
-                    maxY,
-                    minZ,
-                    maxZ,
-                    centerX: (minX + maxX) * 0.5,
-                    centerZ: (minZ + maxZ) * 0.5
-                });
-            });
-        } catch {}
-        return parts;
-    }
-
-    function entityPosition(entity, mesh) {
-        const p = entity?.pos || entity?.position || mesh?.position;
-        const x = Number(p?.x);
-        const y = Number(p?.y);
-        const z = Number(p?.z);
-        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
-        return { x, y, z };
-    }
-
-    function makeArray(value = 0) {
-        const a = new Float32Array(SEGMENTS);
-        if (value) a.fill(value);
-        return a;
-    }
-
-    function captureCape(cape, entity, mesh) {
-        const existing = state.capes.get(cape);
-        if (existing) return existing;
-
-        const parts = geometryParts(cape);
-        if (!parts.length) return null;
-
-        const now = performance.now();
-        const pos = entityPosition(entity, mesh);
-        const data = {
-            parts,
-            back: makeArray(),
-            backVelocity: makeArray(),
-            side: makeArray(),
-            sideVelocity: makeArray(),
-            vertical: makeArray(),
-            verticalVelocity: makeArray(),
-            twist: makeArray(),
-            twistVelocity: makeArray(),
-            speed: 0,
-            verticalSpeed: 0,
-            forwardSpeed: 0,
-            lateralSpeed: 0,
-            acceleration: 0,
-            turnSpeed: 0,
-            previousSpeed: 0,
-            previousPosition: pos,
-            previousYaw: Number(mesh?.rotation?.y) || 0,
-            lastTime: now,
-            phase: Math.random() * Math.PI * 2,
-            contact: 0
+                const group = groups[groups.length - 1];
+                if (group?.materialIndex === material) group.count += 3;
+                else groups.push({ start, count: 3, materialIndex: material });
+            }
         };
-        state.capes.set(cape, data);
-        return data;
+        for (let at = 0; at + 2 < count; at += 3) {
+            if (hidden.has(at)) continue;
+            const triangle = [read(index[at]), read(index[at + 1]), read(index[at + 2])];
+            const x0 = Math.min(...triangle.map(v => v[0])), x1 = Math.max(...triangle.map(v => v[0]));
+            const y0 = Math.min(...triangle.map(v => v[1])), y1 = Math.max(...triangle.map(v => v[1]));
+            if (x1 - x0 <= dx + 1e-7 && y1 - y0 <= dy + 1e-7) emit(triangle, materialAt(at));
+            else {
+                const loX = clamp(Math.floor((x0 - box.minX) / dx), 0, COLS - 1);
+                const hiX = clamp(Math.ceil((x1 - box.minX) / dx) - 1, loX, COLS - 1);
+                const loY = clamp(Math.floor((y0 - box.minY) / dy), 0, ROWS - 1);
+                const hiY = clamp(Math.ceil((y1 - box.minY) / dy) - 1, loY, ROWS - 1);
+                for (let y = loY; y <= hiY; y++) for (let x = loX; x <= hiX; x++) {
+                    let polygon = clip(triangle, 0, box.minX + x * dx, true);
+                    polygon = clip(polygon, 0, box.minX + (x + 1) * dx, false);
+                    polygon = clip(polygon, 1, box.minY + y * dy, true);
+                    polygon = clip(polygon, 1, box.minY + (y + 1) * dy, false);
+                    emit(polygon, materialAt(at));
+                }
+            }
+            if (vertices > 70000) return null;
+        }
+        if (!vertices) return null;
+        const geometry = new original.constructor();
+        geometry.clearGroups?.();
+        for (let at = 0; at < names.length; at++) {
+            const attribute = attributes[at];
+            geometry.setAttribute(names[at], new attribute.constructor(new attribute.array.constructor(arrays[at]), attribute.itemSize, attribute.normalized));
+        }
+        geometry.setIndex(indices);
+        if (original.groups?.length) for (const group of groups) geometry.addGroup(group.start, group.count, group.materialIndex);
+        geometry.setDrawRange?.(0, indices.length);
+        if (!geometry.attributes.normal) geometry.computeVertexNormals?.();
+        geometry.computeBoundingBox?.(); geometry.computeBoundingSphere?.();
+        if (geometry.boundingSphere) geometry.boundingSphere.radius += (box.maxY - box.minY) * 2 + BACK_OFFSET;
+        return geometry;
     }
 
-    function restoreCape(cape, data = state.capes.get(cape)) {
+    function restoreRotation(data) {
+        if (data?.cape.rotation && data.cape.rotation.x === data.appliedRotation) data.cape.rotation.x = data.nativeRotation;
+        if (data) data.appliedRotation = null;
+    }
+
+    function releaseCape(cape) {
+        const data = state.capes.get(cape);
         if (!data) return;
+        restoreRotation(data);
         for (const part of data.parts) {
-            try {
-                part.position.array.set(part.base);
-                part.position.needsUpdate = true;
-                part.geometry.computeVertexNormals?.();
-            } catch {}
+            if (part.object.geometry === part.geometry) part.object.geometry = part.original;
+            part.geometry.dispose?.();
         }
         state.capes.delete(cape);
     }
 
-    function spring(value, velocity, target, stiffness, damping, dt) {
-        velocity += ((target - value) * stiffness - velocity * damping) * dt;
-        value += velocity * dt;
-        return [value, velocity];
-    }
-
-    function normalizeAngle(value) {
-        while (value > Math.PI) value -= Math.PI * 2;
-        while (value < -Math.PI) value += Math.PI * 2;
-        return value;
-    }
-
-    function updateMotion(entity, mesh, data, dt) {
-        const pos = entityPosition(entity, mesh);
-        let speed = data.speed;
-        let verticalSpeed = data.verticalSpeed;
-        let forwardSpeed = data.forwardSpeed;
-        let lateralSpeed = data.lateralSpeed;
-        const yaw = Number(mesh?.rotation?.y);
-
-        if (pos && data.previousPosition) {
-            const dx = pos.x - data.previousPosition.x;
-            const dy = pos.y - data.previousPosition.y;
-            const dz = pos.z - data.previousPosition.z;
-            const invDt = 1 / Math.max(0.001, dt);
-            speed = Math.min(14, Math.hypot(dx, dz) * invDt);
-            verticalSpeed = Math.max(-12, Math.min(12, dy * invDt));
-
-            if (Number.isFinite(yaw)) {
-                const rightX = Math.cos(yaw);
-                const rightZ = -Math.sin(yaw);
-                const forwardX = -Math.sin(yaw);
-                const forwardZ = -Math.cos(yaw);
-                lateralSpeed = (dx * rightX + dz * rightZ) * invDt;
-                forwardSpeed = (dx * forwardX + dz * forwardZ) * invDt;
-            }
-        }
-
-        if (pos) data.previousPosition = pos;
-
-        data.previousSpeed = data.speed;
-        data.speed += (speed - data.speed) * Math.min(1, dt * 11);
-        data.verticalSpeed += (verticalSpeed - data.verticalSpeed) * Math.min(1, dt * 10);
-        data.forwardSpeed += (forwardSpeed - data.forwardSpeed) * Math.min(1, dt * 10);
-        data.lateralSpeed += (lateralSpeed - data.lateralSpeed) * Math.min(1, dt * 10);
-        data.acceleration += (((data.speed - data.previousSpeed) / Math.max(0.001, dt)) - data.acceleration) * Math.min(1, dt * 8);
-
-        if (Number.isFinite(yaw)) {
-            const turn = normalizeAngle(yaw - data.previousYaw) / Math.max(0.001, dt);
-            data.turnSpeed += (Math.max(-8, Math.min(8, turn)) - data.turnSpeed) * Math.min(1, dt * 10);
-            data.previousYaw = yaw;
-        }
-    }
-
-    function simulateCloth(data, entity, dt, time) {
-        const speedFactor = Math.min(1, data.speed / 6.2);
-        const crouch = entity?.sneak === true || entity?.sneaking === true || entity?.crouching === true;
-        const targetBack = Math.max(
-            0,
-            Math.min(
-                0.28,
-                data.speed * 0.018 +
-                Math.max(0, data.acceleration) * 0.004 +
-                Math.max(0, -data.verticalSpeed) * 0.010 +
-                (crouch ? 0.025 : 0)
-            )
-        );
-        const targetSide = Math.max(-0.14, Math.min(0.14, data.lateralSpeed * 0.012 - data.turnSpeed * 0.008));
-        const targetVertical = Math.max(-0.09, Math.min(0.13, -data.verticalSpeed * 0.010));
-        const targetTwist = Math.max(-0.11, Math.min(0.11, -data.turnSpeed * 0.010 - data.lateralSpeed * 0.006));
-
-        const steps = Math.max(1, Math.min(5, Math.ceil(dt / 0.012)));
-        const h = dt / steps;
-
-        for (let step = 0; step < steps; step++) {
-            for (let i = 0; i < SEGMENTS; i++) {
-                const t = i / (SEGMENTS - 1);
-                const anchored = t * t;
-                const lower = t * t * t;
-                const parentBack = i === 0 ? 0 : data.back[i - 1];
-                const parentSide = i === 0 ? 0 : data.side[i - 1];
-                const parentVertical = i === 0 ? 0 : data.vertical[i - 1];
-                const parentTwist = i === 0 ? 0 : data.twist[i - 1];
-                const turbulence = (
-                    Math.sin(time * (3.8 + speedFactor * 4.4) + data.phase + i * 0.72) * 0.55 +
-                    Math.sin(time * (6.7 + speedFactor * 6.3) + data.phase * 0.43 + i * 1.19) * 0.28
-                ) * (0.0018 + speedFactor * 0.0045) * lower;
-
-                const backTarget = targetBack * anchored + parentBack * (0.11 + t * 0.18) + turbulence;
-                const sideTarget = targetSide * anchored + parentSide * (0.12 + t * 0.20) + turbulence * 0.35;
-                const verticalTarget = targetVertical * anchored + parentVertical * (0.10 + t * 0.16);
-                const twistTarget = targetTwist * anchored + parentTwist * (0.14 + t * 0.18) + turbulence * 0.8;
-                const stiffness = 130 - t * 68;
-                const damping = 21 - t * 7;
-
-                [data.back[i], data.backVelocity[i]] = spring(data.back[i], data.backVelocity[i], backTarget, stiffness, damping, h);
-                [data.side[i], data.sideVelocity[i]] = spring(data.side[i], data.sideVelocity[i], sideTarget, stiffness * 0.80, damping * 0.95, h);
-                [data.vertical[i], data.verticalVelocity[i]] = spring(data.vertical[i], data.verticalVelocity[i], verticalTarget, stiffness * 0.74, damping, h);
-                [data.twist[i], data.twistVelocity[i]] = spring(data.twist[i], data.twistVelocity[i], twistTarget, stiffness * 0.67, damping * 0.92, h);
-
-                if (i > 0) {
-                    const maxBackDelta = 0.050 + t * 0.016;
-                    const maxSideDelta = 0.040 + t * 0.014;
-                    const maxVerticalDelta = 0.034 + t * 0.012;
-                    const maxTwistDelta = 0.045;
-
-                    data.back[i] = Math.max(data.back[i - 1] - maxBackDelta, Math.min(data.back[i - 1] + maxBackDelta, data.back[i]));
-                    data.side[i] = Math.max(data.side[i - 1] - maxSideDelta, Math.min(data.side[i - 1] + maxSideDelta, data.side[i]));
-                    data.vertical[i] = Math.max(data.vertical[i - 1] - maxVerticalDelta, Math.min(data.vertical[i - 1] + maxVerticalDelta, data.vertical[i]));
-                    data.twist[i] = Math.max(data.twist[i - 1] - maxTwistDelta, Math.min(data.twist[i - 1] + maxTwistDelta, data.twist[i]));
+    function captureCape(cape, mesh, entity) {
+        cape.updateWorldMatrix?.(true, true);
+        if (!cape.matrixWorld?.clone || !Array.from(cape.matrixWorld.elements).every(Number.isFinite) ||
+            Math.abs(cape.matrixWorld.determinant?.() ?? 1) < 1e-15) return null;
+        const inverse = cape.matrixWorld.clone().invert(), parts = [];
+        const box = { minX: Infinity, minY: Infinity, minZ: Infinity, maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity };
+        cape.traverse?.(object => {
+            if (!object?.geometry?.attributes?.position || object.isSkinnedMesh || object.isInstancedMesh) return;
+            const original = object.geometry, geometry = clothGeometry(original);
+            if (!geometry) return;
+            object.updateWorldMatrix?.(true, false);
+            const matrix = inverse.clone().multiply(object.matrixWorld), position = geometry.attributes.position;
+            const rest = new Float32Array(position.array.length);
+            for (let vertex = 0; vertex < position.count; vertex++) {
+                const p = point(matrix, position.getX(vertex), position.getY(vertex), position.getZ(vertex));
+                rest.set(p, vertex * 3);
+                for (let axis = 0; axis < 3; axis++) {
+                    const key = ['X', 'Y', 'Z'][axis];
+                    box['min' + key] = Math.min(box['min' + key], p[axis]);
+                    box['max' + key] = Math.max(box['max' + key], p[axis]);
                 }
             }
-        }
-    }
-
-    function applyMatrix(elements, x, y, z) {
-        const w = elements[3] * x + elements[7] * y + elements[11] * z + elements[15];
-        const iw = w && w !== 1 ? 1 / w : 1;
-        return {
-            x: (elements[0] * x + elements[4] * y + elements[8] * z + elements[12]) * iw,
-            y: (elements[1] * x + elements[5] * y + elements[9] * z + elements[13]) * iw,
-            z: (elements[2] * x + elements[6] * y + elements[10] * z + elements[14]) * iw
+            const normals = new Float32Array(geometry.attributes.normal.array);
+            parts.push({ object, original, geometry, rest, normals, matrix, samples: null });
+        });
+        if (!parts.length) return null;
+        const data = {
+            cape, mesh, entity, parts, box, points: new Float64Array((ROWS + 1) * (COLS + 1) * 3),
+            old: new Float64Array((ROWS + 1) * (COLS + 1) * 3), normals: new Float32Array((ROWS + 1) * (COLS + 1) * 3),
+            local: new Float64Array((ROWS + 1) * (COLS + 1) * 3), visualLocal: new Float64Array((ROWS + 1) * (COLS + 1) * 3),
+            renderPoints: new Float64Array((ROWS + 1) * (COLS + 1) * 3), inverse: cape.matrixWorld.clone(),
+            anchors: new Float64Array((COLS + 1) * 3), previousAnchors: new Float64Array((COLS + 1) * 3),
+            constraints: [], accumulator: 0, lastTime: null, origin: null, velocity: [0, 0, 0], classicAngle: 0,
+            initialized: false, nativeRotation: null, appliedRotation: null, contacts: 0
         };
+        for (const part of parts) {
+            part.samples = new Float32Array(part.rest.length);
+            part.ids = new Uint16Array(part.rest.length / 3 * 4);
+            part.weights = new Float32Array(part.ids.length);
+            part.inverse = part.object.matrixWorld.clone();
+            for (let v = 0; v < part.rest.length; v += 3) {
+                part.samples[v] = clamp((part.rest[v] - box.minX) / Math.max(0.001, box.maxX - box.minX), 0, 1) * COLS;
+                part.samples[v + 1] = clamp((box.maxY - part.rest[v + 1]) / Math.max(0.001, box.maxY - box.minY), 0, 1) * ROWS;
+                part.samples[v + 2] = part.rest[v + 2] - (box.minZ + box.maxZ) / 2;
+                const x = part.samples[v], y = part.samples[v + 1];
+                const col = Math.min(COLS - 1, Math.floor(x)), row = Math.min(ROWS - 1, Math.floor(y));
+                const u = x - col, t = y - row, at = v / 3 * 4;
+                part.ids.set([node(row, col), node(row, col + 1), node(row + 1, col), node(row + 1, col + 1)], at);
+                part.weights.set([(1 - u) * (1 - t), u * (1 - t), (1 - u) * t, u * t], at);
+            }
+            part.object.geometry = part.geometry;
+        }
+        state.geometryBuilds++;
+        state.capes.set(cape, data);
+        return data;
     }
 
-    function geometryObjects(root) {
-        const out = [];
-        if (!root) return out;
-        try {
-            if (root.geometry?.attributes?.position) out.push(root);
-            root.traverse?.(object => {
-                if (object !== root && object?.geometry?.attributes?.position) out.push(object);
-            });
-        } catch {}
+    const node = (row, col) => (row * (COLS + 1) + col) * 3;
+
+    function resetSimulation(data, matrix) {
+        const { box, points, old } = data;
+        for (let row = 0; row <= ROWS; row++) for (let col = 0; col <= COLS; col++) {
+            const p = point(matrix, box.minX + (box.maxX - box.minX) * col / COLS,
+                box.maxY - (box.maxY - box.minY) * row / ROWS, (box.minZ + box.maxZ) / 2 + BACK_OFFSET);
+            points.set(p, node(row, col)); old.set(p, node(row, col));
+        }
+        data.constraints.length = 0;
+        const add = (a, b, kind, stiffness) => data.constraints.push({
+            a, b, kind, stiffness, length: Math.hypot(points[a] - points[b], points[a + 1] - points[b + 1], points[a + 2] - points[b + 2])
+        });
+        for (let row = 0; row <= ROWS; row++) for (let col = 0; col <= COLS; col++) {
+            const a = node(row, col);
+            if (col < COLS) add(a, node(row, col + 1), 'width', 1);
+            if (row < ROWS) add(a, node(row + 1, col), 'length', 1);
+            if (row < ROWS && col < COLS) {
+                add(a, node(row + 1, col + 1), 'shear', 0.28);
+                add(node(row, col + 1), node(row + 1, col), 'shear', 0.28);
+            }
+            if (row + 2 <= ROWS) add(a, node(row + 2, col), 'bend', 0.6);
+        }
+        data.accumulator = 0; data.velocity.fill(0); data.classicAngle = 0; data.initialized = true;
+        data.visualInitialized = false;
+    }
+
+    function colliders(mesh, cape) {
+        const out = [], seen = new Set(), origin = [cape.matrixWorld.elements[12], cape.matrixWorld.elements[13], cape.matrixWorld.elements[14]];
+        const add = (object, bone) => {
+            if (!object?.geometry || seen.has(object)) return;
+            const box = bounds(object.geometry);
+            if (!box) return;
+            seen.add(object);
+            const root = bone || object;
+            root.updateWorldMatrix?.(true, false);
+            object.updateMatrix?.();
+            const matrix = root.matrixWorld?.clone?.();
+            if (!matrix) return;
+            if (bone && object !== bone && object.matrix) matrix.multiply(object.matrix);
+            const inverse = matrix.clone().invert();
+            if (!Array.from(inverse.elements).every(Number.isFinite)) return;
+            const local = point(inverse, ...origin);
+            // The side occupied by the cape is the back, even for mirrored rigs.
+            out.push({ box, matrix, inverse, sign: local[2] >= (box.minZ + box.maxZ) / 2 ? 1 : -1 });
+        };
+        for (const [name, bone] of PARTS) add(mesh.meshes?.[name], mesh[bone]);
+        if (mesh.skinnedArmor?.chestplate?.userData?._equipped === true) add(mesh.armorMesh?.chestplate, mesh.torso);
         return out;
     }
 
-    function buildCollider(object, capeWorldPosition) {
-        const geometry = object?.geometry;
-        if (!geometry) return null;
-        try {
-            geometry.computeBoundingBox?.();
-            const box = geometry.boundingBox;
-            if (!box || !object?.matrixWorld?.clone) return null;
-            object.updateWorldMatrix?.(true, false);
-            const matrix = object.matrixWorld.clone();
-            const inverse = matrix.clone().invert();
-            const capeLocal = applyMatrix(inverse.elements, capeWorldPosition.x, capeWorldPosition.y, capeWorldPosition.z);
-            const centerZ = (box.min.z + box.max.z) * 0.5;
-            return {
-                matrix,
-                inverse,
-                minX: box.min.x,
-                maxX: box.max.x,
-                minY: box.min.y,
-                maxY: box.max.y,
-                minZ: box.min.z,
-                maxZ: box.max.z,
-                sign: capeLocal.z >= centerZ ? 1 : -1
-            };
-        } catch {
-            return null;
+    function collide(data, collision, matrix) {
+        const depth = (data.box.maxZ - data.box.minZ) / 2;
+        const cm = matrix.elements;
+        for (const collider of collision) {
+            const im = collider.inverse.elements;
+            // Transform thickness once per collider, not for every cloth point.
+            const gap = (GAP + depth) * Math.hypot(
+                im[0] * cm[8] + im[4] * cm[9] + im[8] * cm[10],
+                im[1] * cm[8] + im[5] * cm[9] + im[9] * cm[10],
+                im[2] * cm[8] + im[6] * cm[9] + im[10] * cm[10]);
+            collider.safeZ = collider.sign > 0 ? collider.box.maxZ + gap : collider.box.minZ - gap;
+        }
+        for (let at = (COLS + 1) * 3; at < data.points.length; at += 3) {
+            let px = data.points[at], py = data.points[at + 1], pz = data.points[at + 2];
+            let vx = px - data.old[at], vy = py - data.old[at + 1], vz = pz - data.old[at + 2];
+            for (const collider of collision) {
+                const im = collider.inverse.elements, b = collider.box;
+                const x = im[0] * px + im[4] * py + im[8] * pz + im[12];
+                const y = im[1] * px + im[5] * py + im[9] * pz + im[13];
+                if (x < b.minX - 0.015 || x > b.maxX + 0.015 || y < b.minY - 0.015 || y > b.maxY + 0.015) continue;
+                const z = im[2] * px + im[6] * py + im[10] * pz + im[14];
+                const safe = collider.safeZ;
+                if (collider.sign > 0 ? z >= safe : z <= safe) continue;
+                // A limb is a finite volume, not an infinite one-sided wall.
+                if (z < b.minZ - 0.06 || z > b.maxZ + 0.06) continue;
+                const m = collider.matrix.elements;
+                px = m[0] * x + m[4] * y + m[8] * safe + m[12];
+                py = m[1] * x + m[5] * y + m[9] * safe + m[13];
+                pz = m[2] * x + m[6] * y + m[10] * safe + m[14];
+                const length = Math.hypot(im[2], im[6], im[10]) || 1;
+                const nx = im[2] / length * collider.sign, ny = im[6] / length * collider.sign, nz = im[10] / length * collider.sign;
+                const inward = Math.min(0, vx * nx + vy * ny + vz * nz);
+                vx -= nx * inward; vy -= ny * inward; vz -= nz * inward;
+                data.contacts++;
+            }
+            data.old[at] = px - vx; data.old[at + 1] = py - vy; data.old[at + 2] = pz - vz;
+            data.points[at] = px; data.points[at + 1] = py; data.points[at + 2] = pz;
         }
     }
 
-    function collectColliders(mesh, cape) {
-        try {
-            cape.updateWorldMatrix?.(true, false);
-            const elements = cape.matrixWorld?.elements;
-            if (!elements) return [];
-            const capeWorldPosition = { x: elements[12], y: elements[13], z: elements[14] };
-            const colliders = [];
-            const seen = new Set();
+    function stabilizeSheet(data, matrix) {
+        const p = data.points, local = data.local, im = data.inverse.elements, m = matrix.elements, b = data.box;
+        const width = b.maxX - b.minX, segment = (b.maxY - b.minY) / ROWS;
+        const centerX = (b.minX + b.maxX) / 2, back = (b.minZ + b.maxZ) / 2 + BACK_OFFSET;
+        for (let at = 0; at < p.length; at += 3) {
+            const x = p[at], y = p[at + 1], z = p[at + 2];
+            local[at] = im[0] * x + im[4] * y + im[8] * z + im[12];
+            local[at + 1] = im[1] * x + im[5] * y + im[9] * z + im[13];
+            local[at + 2] = im[2] * x + im[6] * y + im[10] * z + im[14];
+        }
+        let cx = centerX, cy = b.maxY, cz = back, previousX = 0, previousY = -1, previousZ = 0;
+        const cosLimit = 0.9396926208, sinLimit = 0.3420201433;
+        // Keep the sheet ordered instead of resolving all vertex pairs. A
+        // bounded bend and monotone rows prevent hairpins and face inversions.
+        for (let row = 1; row <= ROWS; row++) {
+            let meanX = 0, meanY = 0, meanZ = 0;
+            for (let col = 0; col <= COLS; col++) {
+                const at = node(row, col);
+                meanX += local[at]; meanY += local[at + 1]; meanZ += local[at + 2];
+            }
+            meanX /= COLS + 1; meanY /= COLS + 1; meanZ /= COLS + 1;
+            const sway = width * 0.35 * row / ROWS;
+            let dx = clamp(meanX, centerX - sway, centerX + sway) - cx;
+            let dy = Math.min(-segment * 0.30, meanY - cy), dz = Math.max(back, meanZ) - cz;
+            let length = Math.hypot(dx, dy, dz) || segment;
+            dx /= length; dy /= length; dz /= length;
+            const dot = dx * previousX + dy * previousY + dz * previousZ;
+            if (dot < cosLimit) {
+                let tx = dx - previousX * dot, ty = dy - previousY * dot, tz = dz - previousZ * dot;
+                const tangent = Math.hypot(tx, ty, tz);
+                if (tangent > 1e-8) { tx /= tangent; ty /= tangent; tz /= tangent; }
+                else { tx = 0; ty = -previousZ; tz = previousY; }
+                dx = previousX * cosLimit + tx * sinLimit;
+                dy = previousY * cosLimit + ty * sinLimit;
+                dz = previousZ * cosLimit + tz * sinLimit;
+            }
+            dy = Math.min(-0.30, dy);
+            dz = Math.max((back - cz) / segment, dz);
+            length = Math.hypot(dx, dy, dz) || 1;
+            dx /= length; dy /= length; dz /= length;
+            cx += dx * segment; cy += dy * segment; cz += dz * segment;
+            previousX = dx; previousY = dy; previousZ = dz;
+            for (let col = 0; col <= COLS; col++) {
+                const at = node(row, col), parent = node(row - 1, col);
+                const offset = (col / COLS - 0.5) * width;
+                const variation = clamp(local[at] - meanX - offset, -width / COLS * 0.08, width / COLS * 0.08);
+                const x = cx + offset + variation;
+                const maxDepth = Math.sqrt(Math.max(0, (segment * 1.3) ** 2 - (cy - local[parent + 1]) ** 2 - (x - local[parent]) ** 2));
+                const ripple = clamp(local[at + 2] - meanZ, -segment * 0.22, segment * 0.22);
+                local[at] = x; local[at + 1] = cy;
+                local[at + 2] = clamp(Math.max(back, cz + ripple), local[parent + 2] - maxDepth, local[parent + 2] + maxDepth);
+            }
+        }
+        for (let at = (COLS + 1) * 3; at < p.length; at += 3) {
+            const x = local[at], y = local[at + 1], z = local[at + 2];
+            const wx = m[0] * x + m[4] * y + m[8] * z + m[12];
+            const wy = m[1] * x + m[5] * y + m[9] * z + m[13];
+            const wz = m[2] * x + m[6] * y + m[10] * z + m[14];
+            // Positional safety corrections must not become new velocities.
+            data.old[at] += wx - p[at]; data.old[at + 1] += wy - p[at + 1]; data.old[at + 2] += wz - p[at + 2];
+            p[at] = wx; p[at + 1] = wy; p[at + 2] = wz;
+        }
+    }
 
-            for (const name of BODY_PARTS) {
-                const root = mesh?.meshes?.[name] || mesh?.[name];
-                if (!root) continue;
-                for (const object of geometryObjects(root)) {
-                    if (seen.has(object)) continue;
-                    seen.add(object);
-                    const collider = buildCollider(object, capeWorldPosition);
-                    if (collider) colliders.push(collider);
+    function constrain(data, reverse) {
+        const p = data.points, fixed = (COLS + 1) * 3;
+        for (let i = 0; i < data.constraints.length; i++) {
+            const link = data.constraints[reverse ? data.constraints.length - 1 - i : i];
+            const a = link.a, b = link.b;
+            const x = p[b] - p[a], y = p[b + 1] - p[a + 1], z = p[b + 2] - p[a + 2];
+            const length = Math.sqrt(x * x + y * y + z * z);
+            if (!(length > 1e-9)) continue;
+            let target = link.length;
+            if (link.kind === 'bend') {
+                target *= state.options.movement === 'dungeons' ? 0.975 : 0.91;
+                if (length >= target) continue;
+            }
+            const aWeight = a < fixed ? 0 : 1, bWeight = b < fixed ? 0 : 1;
+            const weights = aWeight + bWeight;
+            if (!weights) continue;
+            const amount = (length - target) / length * link.stiffness / weights;
+            p[a] += x * amount * aWeight; p[b] -= x * amount * bWeight;
+            p[a + 1] += y * amount * aWeight; p[b + 1] -= y * amount * bWeight;
+            p[a + 2] += z * amount * aWeight; p[b + 2] -= z * amount * bWeight;
+        }
+    }
+
+    function simulationStep(data, matrix, collision, water, time, anchorFraction) {
+        const p = data.points, old = data.old, options = state.options;
+        const m = matrix.elements, scale = Math.hypot(m[4], m[5], m[6]);
+        const damping = Math.exp(-(water ? 16 : 5.5) * STEP);
+        const wind = options.wind === 'waves' ? options.windStrength * (water ? 0.12 : 1) : 0;
+        const gravity = options.gravity * (water ? 0.16 : 1) * scale;
+        const strength = options.strength * (options.movement === 'dungeons' ? 0.65 : 1);
+        for (let row = 1; row <= ROWS; row++) for (let col = 0; col <= COLS; col++) {
+            const at = node(row, col), down = row / ROWS;
+            const wave = Math.sin(time * 2.8 - down * 5.2 + col * 0.38) * wind * scale * down;
+            for (let axis = 0; axis < 3; axis++) {
+                const value = p[at + axis];
+                const carried = data.velocity[axis] * STEP;
+                const force = axis === 1 ? -gravity - data.velocity[1] * 1.25 * strength :
+                    -data.velocity[axis] * (water ? 3.8 : 2.1) * strength + (m[axis] * 0.7 + m[8 + axis] * 0.25) * wave;
+                p[at + axis] += carried + (value - old[at + axis] - carried) * damping + force * STEP * STEP;
+                old[at + axis] = value;
+            }
+        }
+        const inverse = state.options.movement === 'simulation' || state.options.movement === 'dungeons' ? matrix.clone().invert() : null;
+        // The ordered-sheet pass resolves bends and spacing directly, so the
+        // distance solver no longer needs eight repeated full-grid passes.
+        for (let iteration = 0; iteration < 5; iteration++) {
+            for (let i = 0; i < data.anchors.length; i++) {
+                p[i] = data.previousAnchors[i] + (data.anchors[i] - data.previousAnchors[i]) * anchorFraction;
+            }
+            constrain(data, iteration % 2 === 1);
+            if (inverse) {
+                for (let row = 1; row <= ROWS; row++) for (let col = 0; col <= COLS; col++) {
+                    const at = node(row, col), local = point(inverse, p[at], p[at + 1], p[at + 2]);
+                    local[0] = data.box.minX + (data.box.maxX - data.box.minX) * col / COLS;
+                    p.set(point(matrix, ...local), at);
                 }
             }
-
-            return colliders;
-        } catch {
-            return [];
+            if (iteration === 1 || iteration === 4) collide(data, collision, matrix);
         }
+        state.steps++;
     }
 
-    function resolveCollision(world, colliders, down) {
-        let contact = 0;
-        const marginX = 0.018 + down * 0.010;
-        const marginY = 0.018 + down * 0.008;
-        const gap = COLLISION_GAP + down * 0.010;
-        let point = world;
-
-        for (let pass = 0; pass < 3; pass++) {
-            let moved = false;
-            for (const collider of colliders) {
-                const local = applyMatrix(collider.inverse.elements, point.x, point.y, point.z);
-                if (local.x < collider.minX - marginX || local.x > collider.maxX + marginX) continue;
-                if (local.y < collider.minY - marginY || local.y > collider.maxY + marginY) continue;
-
-                const safeZ = collider.sign > 0 ? collider.maxZ + gap : collider.minZ - gap;
-                const penetration = collider.sign > 0 ? safeZ - local.z : local.z - safeZ;
-                if (penetration <= 0) continue;
-
-                local.z = safeZ;
-                point = applyMatrix(collider.matrix.elements, local.x, local.y, local.z);
-                contact = Math.max(contact, penetration);
-                moved = true;
+    function classic(data, matrix, water, time, dt) {
+        const m = matrix.elements;
+        const forward = -(data.velocity[0] * m[8] + data.velocity[1] * m[9] + data.velocity[2] * m[10]) / Math.max(1e-6, Math.hypot(m[8], m[9], m[10]));
+        const target = clamp(Math.max(0, forward) * 0.10 * state.options.strength - data.velocity[1] * 0.025, 0, water ? 0.5 : 1.1);
+        data.classicAngle += (target - data.classicAngle) * (1 - Math.exp(-8 * dt));
+        const b = data.box, length = b.maxY - b.minY, height = length / ROWS;
+        let y = b.maxY, z = (b.minZ + b.maxZ) / 2 + BACK_OFFSET;
+        for (let row = 0; row <= ROWS; row++) {
+            if (row) {
+                const angle = data.classicAngle * (0.35 + row / ROWS * 0.65);
+                y -= Math.cos(angle) * height; z += Math.sin(angle) * height;
             }
-            if (!moved) break;
+            for (let col = 0; col <= COLS; col++) {
+                const flutter = state.options.wind === 'waves' ? Math.sin(time * 3 - row * 0.4) * state.options.windStrength * 0.004 * row / ROWS : 0;
+                data.points.set(point(matrix, b.minX + (b.maxX - b.minX) * col / COLS, y, z + flutter), node(row, col));
+            }
         }
-
-        return { point, contact };
     }
 
-    function sample(array, t) {
-        const p = Math.max(0, Math.min(SEGMENTS - 1, t * (SEGMENTS - 1)));
-        const i = Math.floor(p);
-        const j = Math.min(SEGMENTS - 1, i + 1);
-        const f = p - i;
-        return array[i] * (1 - f) + array[j] * f;
+    function updateSimulation(data, matrix, entity, dt, time, collision) {
+        data.inverse.copy(matrix).invert();
+        const center = point(matrix, (data.box.minX + data.box.maxX) / 2, data.box.maxY, (data.box.minZ + data.box.maxZ) / 2 + BACK_OFFSET);
+        const movement = data.origin ? Math.hypot(...center.map((value, i) => value - data.origin[i])) : 0;
+        const m = matrix.elements;
+        const widthScale = Math.hypot(m[0], m[1], m[2]), heightScale = Math.hypot(m[4], m[5], m[6]);
+        const resized = Math.abs(widthScale - (data.widthScale ?? widthScale)) > 1e-5 ||
+            Math.abs(heightScale - (data.heightScale ?? heightScale)) > 1e-5;
+        const reset = !data.initialized || resized || movement > Math.max(2, (data.box.maxY - data.box.minY) * heightScale * 3);
+        if (reset) {
+            resetSimulation(data, matrix); data.origin = center;
+            data.widthScale = widthScale; data.heightScale = heightScale;
+        }
+        data.previousAnchors.set(data.anchors);
+        for (let col = 0; col <= COLS; col++) data.anchors.set(point(matrix,
+            data.box.minX + (data.box.maxX - data.box.minX) * col / COLS, data.box.maxY,
+            (data.box.minZ + data.box.maxZ) / 2 + BACK_OFFSET), col * 3);
+        if (reset || data.lastTime === null) data.previousAnchors.set(data.anchors);
+        if (data.origin && dt > 0) {
+            const alpha = 1 - Math.exp(-12 * dt);
+            for (let i = 0; i < 3; i++) {
+                const change = (clamp((center[i] - data.origin[i]) / dt, -25, 25) - data.velocity[i]) * alpha;
+                data.velocity[i] += clamp(change, -35 * dt, 35 * dt);
+            }
+        }
+        data.origin = center;
+        let water = entity?.inWater === true || entity?.swimming === true;
+        try { water ||= entity?.isInWater?.() === true; } catch {}
+        if (state.options.movement === 'classic') {
+            classic(data, matrix, water, time, dt);
+            collide(data, collision, matrix);
+        }
+        else {
+            data.accumulator = Math.min(STEP * MAX_STEPS, data.accumulator + dt);
+            let remaining = data.accumulator, steps = 0;
+            while (data.accumulator >= STEP - 1e-8 && steps++ < MAX_STEPS) {
+                const fraction = remaining > 0 ? clamp((remaining - data.accumulator + STEP) / remaining, 0, 1) : 1;
+                simulationStep(data, matrix, collision, water, time, fraction);
+                data.accumulator -= STEP;
+            }
+        }
+        data.points.set(data.anchors, 0);
+        stabilizeSheet(data, matrix);
+        for (let at = 0; at < data.points.length; at++) {
+            if (!Number.isFinite(data.points[at])) { resetSimulation(data, matrix); break; }
+        }
     }
 
-    function applyCapeStyle(entity, mesh) {
-        if (!state.enabled) return;
-        const cape = mesh?.capeMesh;
-        if (!cape) return;
-
-        const data = captureCape(cape, entity, mesh);
-        if (!data) return;
-
-        const now = performance.now();
-        const time = now / 1000;
-        const dt = Math.max(0.001, Math.min(0.05, (now - data.lastTime) / 1000));
-        data.lastTime = now;
-
-        updateMotion(entity, mesh, data, dt);
-        simulateCloth(data, entity, dt, time);
-
-        cape.updateWorldMatrix?.(true, false);
-        const colliders = collectColliders(mesh, cape);
-        const sign = Number(cape?.position?.z) < 0 ? -1 : 1;
-        data.contact = 0;
-
+    function renderCloth(data, matrix, dt) {
+        const local = data.visualLocal, p = data.renderPoints, n = data.normals, m = matrix.elements, im = data.inverse.elements;
+        let alpha = data.visualInitialized ? 1 - Math.exp(-24 * dt) : 1, largestDelta = 0;
+        for (let at = 0; at < p.length; at += 3) {
+            const x = data.points[at], y = data.points[at + 1], z = data.points[at + 2];
+            p[at] = im[0] * x + im[4] * y + im[8] * z + im[12];
+            p[at + 1] = im[1] * x + im[5] * y + im[9] * z + im[13];
+            p[at + 2] = im[2] * x + im[6] * y + im[10] * z + im[14];
+            if (at >= (COLS + 1) * 3 && data.visualInitialized) {
+                const dx = p[at] - local[at], dy = p[at + 1] - local[at + 1], dz = p[at + 2] - local[at + 2];
+                largestDelta = Math.max(largestDelta, dx * dx + dy * dy + dz * dz);
+            }
+        }
+        if (largestDelta > 1e-12) {
+            const maxMotion = (data.box.maxY - data.box.minY) * 2.5 * Math.min(dt, 1 / 30);
+            // One blend for the whole sheet preserves ordering and spacing;
+            // an isolated late frame must not dump all accumulated motion.
+            alpha = Math.min(alpha, maxMotion / Math.sqrt(largestDelta));
+        }
+        for (let at = 0; at < p.length; at += 3) {
+            const blend = at < (COLS + 1) * 3 ? 1 : alpha;
+            local[at] += (p[at] - local[at]) * blend;
+            local[at + 1] += (p[at + 1] - local[at + 1]) * blend;
+            local[at + 2] += (p[at + 2] - local[at + 2]) * blend;
+            p[at] = m[0] * local[at] + m[4] * local[at + 1] + m[8] * local[at + 2] + m[12];
+            p[at + 1] = m[1] * local[at] + m[5] * local[at + 1] + m[9] * local[at + 2] + m[13];
+            p[at + 2] = m[2] * local[at] + m[6] * local[at + 1] + m[10] * local[at + 2] + m[14];
+        }
+        data.visualInitialized = true;
+        for (let row = 0; row <= ROWS; row++) for (let col = 0; col <= COLS; col++) {
+            const at = node(row, col), left = node(row, Math.max(0, col - 1)), right = node(row, Math.min(COLS, col + 1));
+            const up = node(Math.max(0, row - 1), col), down = node(Math.min(ROWS, row + 1), col);
+            const xx = p[right] - p[left], xy = p[right + 1] - p[left + 1], xz = p[right + 2] - p[left + 2];
+            const yx = p[up] - p[down], yy = p[up + 1] - p[down + 1], yz = p[up + 2] - p[down + 2];
+            const nx = xy * yz - xz * yy, ny = xz * yx - xx * yz, nz = xx * yy - xy * yx;
+            const length = Math.hypot(nx, ny, nz) || 1;
+            n[at] = nx / length; n[at + 1] = ny / length; n[at + 2] = nz / length;
+        }
+        const depthScale = Math.hypot(m[8], m[9], m[10]);
         for (const part of data.parts) {
-            const object = part.object;
-            object?.updateWorldMatrix?.(true, false);
-            const matrix = object?.matrixWorld?.clone?.();
-            if (!matrix?.invert) continue;
-            const inverse = matrix.clone().invert();
-            const array = part.position.array;
-            const base = part.base;
-            const spanY = Math.max(0.0001, part.maxY - part.minY);
-            const spanX = Math.max(0.0001, part.maxX - part.minX);
-
-            for (let i = 0; i < array.length; i += 3) {
-                const baseX = base[i];
-                const baseY = base[i + 1];
-                const baseZ = base[i + 2];
-                const down = Math.max(0, Math.min(1, (part.maxY - baseY) / spanY));
-                const across = (baseX - part.centerX) / spanX;
-                const anchored = down * down;
-                const back = sample(data.back, down);
-                const side = sample(data.side, down);
-                const vertical = sample(data.vertical, down);
-                const twist = sample(data.twist, down);
-                const thinZ = part.centerZ + (baseZ - part.centerZ) * DEPTH_SCALE;
-                const edgeFlex = across * twist * anchored;
-                const tinyFlutter = (
-                    Math.sin(time * (5.2 + data.speed * 0.48) + data.phase + down * 8.4 + across * 1.7) +
-                    Math.sin(time * (8.9 + data.speed * 0.31) + data.phase * 0.37 + down * 13.1) * 0.42
-                ) * (0.0008 + Math.min(1, data.speed / 6) * 0.0023) * down * down * down;
-
-                let x = baseX + side * anchored + edgeFlex * 0.45;
-                let y = baseY + vertical * anchored - Math.abs(edgeFlex) * 0.035;
-                let z = thinZ + sign * (BACK_OFFSET + back + Math.abs(edgeFlex) * 0.30 + tinyFlutter);
-
-                if (colliders.length) {
-                    const world = applyMatrix(matrix.elements, x, y, z);
-                    const resolved = resolveCollision(world, colliders, down);
-                    if (resolved.contact > 0) {
-                        const local = applyMatrix(inverse.elements, resolved.point.x, resolved.point.y, resolved.point.z);
-                        x = local.x;
-                        y = local.y;
-                        z = local.z;
-                        data.contact = Math.max(data.contact, resolved.contact);
-                        const segment = Math.min(SEGMENTS - 1, Math.round(down * (SEGMENTS - 1)));
-                        data.backVelocity[segment] *= 0.22;
-                        data.sideVelocity[segment] *= 0.60;
-                        data.verticalVelocity[segment] *= 0.72;
-                    }
+            part.object.updateWorldMatrix?.(true, false);
+            part.inverse.copy(part.object.matrixWorld).invert();
+            const im = part.inverse.elements, pm = part.object.matrixWorld.elements;
+            const position = part.geometry.attributes.position, normal = part.geometry.attributes.normal;
+            const out = position.array, normals = normal.array, ids = part.ids, weights = part.weights;
+            for (let at = 0, sample = 0; at < part.samples.length; at += 3, sample += 4) {
+                const a = ids[sample], b = ids[sample + 1], c = ids[sample + 2], d = ids[sample + 3];
+                const w0 = weights[sample], w1 = weights[sample + 1], w2 = weights[sample + 2], w3 = weights[sample + 3];
+                let wx = p[a] * w0 + p[b] * w1 + p[c] * w2 + p[d] * w3;
+                let wy = p[a + 1] * w0 + p[b + 1] * w1 + p[c + 1] * w2 + p[d + 1] * w3;
+                let wz = p[a + 2] * w0 + p[b + 2] * w1 + p[c + 2] * w2 + p[d + 2] * w3;
+                const sx = n[a] * w0 + n[b] * w1 + n[c] * w2 + n[d] * w3;
+                const sy = n[a + 1] * w0 + n[b + 1] * w1 + n[c + 1] * w2 + n[d + 1] * w3;
+                const sz = n[a + 2] * w0 + n[b + 2] * w1 + n[c + 2] * w2 + n[d + 2] * w3;
+                const length = Math.hypot(sx, sy, sz) || 1, depth = part.samples[at + 2] * depthScale / length;
+                wx += sx * depth; wy += sy * depth; wz += sz * depth;
+                out[at] = im[0] * wx + im[4] * wy + im[8] * wz + im[12];
+                out[at + 1] = im[1] * wx + im[5] * wy + im[9] * wz + im[13];
+                out[at + 2] = im[2] * wx + im[6] * wy + im[10] * wz + im[14];
+                if (state.options.style === 'blocky') continue;
+                const nx = part.normals[at], ny = part.normals[at + 1], nz = part.normals[at + 2];
+                let vx = sx / length * nz, vy = sy / length * nz, vz = sz / length * nz;
+                if (Math.abs(nz) < 0.9) {
+                    const xx = p[b] - p[a], xy = p[b + 1] - p[a + 1], xz = p[b + 2] - p[a + 2];
+                    const yx = p[a] - p[c], yy = p[a + 1] - p[c + 1], yz = p[a + 2] - p[c + 2];
+                    const tx = Math.hypot(xx, xy, xz) || 1, ty = Math.hypot(yx, yy, yz) || 1;
+                    vx += xx / tx * nx + yx / ty * ny;
+                    vy += xy / tx * nx + yy / ty * ny;
+                    vz += xz / tx * nx + yz / ty * ny;
                 }
-
-                array[i] = x;
-                array[i + 1] = y;
-                array[i + 2] = z;
+                const lx = pm[0] * vx + pm[1] * vy + pm[2] * vz;
+                const ly = pm[4] * vx + pm[5] * vy + pm[6] * vz;
+                const lz = pm[8] * vx + pm[9] * vy + pm[10] * vz;
+                const normLength = Math.hypot(lx, ly, lz) || 1;
+                normals[at] = lx / normLength; normals[at + 1] = ly / normLength; normals[at + 2] = lz / normLength;
             }
-
-            part.position.needsUpdate = true;
-            part.geometry.computeVertexNormals?.();
-            part.geometry.computeBoundingSphere?.();
+            position.needsUpdate = true;
+            if (state.options.style === 'blocky') part.geometry.computeVertexNormals?.();
+            else normal.needsUpdate = true;
         }
     }
 
-    function ensureRenderHook(entity) {
-        const mesh = entity?.mesh;
+    function animate(entity, mesh) {
+        if (!state.enabled || state.destroyed) return;
+        const cape = mesh.capeMesh;
+        if (!cape || cape.visible === false || mesh.visible === false) return;
+        let data = state.capes.get(cape);
+        if (data && (data.mesh !== mesh || data.parts.some(part => part.object.geometry !== part.geometry))) {
+            releaseCape(cape); data = null;
+        }
+        if (!data) data = captureCape(cape, mesh, entity);
+        if (!data) return;
+        const time = now(), dt = data.lastTime === null ? 0 : (time - data.lastTime) / 1000;
+        if (!(dt >= 0) || dt > 0.25) data.initialized = false;
+        if (dt === 0 && data.lastTime !== null) return;
+        data.nativeRotation = cape.rotation.x;
+        const targetPose = entity?.sneak === true || entity?.sneaking === true || entity?.crouching === true ? -0.5 : 0;
+        data.poseAngle = data.poseAngle === undefined || !data.initialized ? targetPose :
+            data.poseAngle + (targetPose - data.poseAngle) * (1 - Math.exp(-14 * Math.max(0, dt)));
+        if (Math.abs(data.poseAngle - targetPose) < 1e-7) data.poseAngle = targetPose;
+        data.appliedRotation = data.poseAngle;
+        cape.rotation.x = data.appliedRotation;
+        cape.updateWorldMatrix?.(true, true);
+        const matrix = cape.matrixWorld;
+        if (!Array.from(matrix.elements).every(Number.isFinite) || Math.abs(matrix.determinant?.() ?? 1) < 1e-15) return;
+        data.contacts = 0;
+        updateSimulation(data, matrix, entity, clamp(Number.isFinite(dt) ? dt : 0, 0, STEP * MAX_STEPS), time / 1000, colliders(mesh, cape));
+        renderCloth(data, matrix, clamp(Number.isFinite(dt) ? dt : 0, 0, 0.25));
+        data.lastTime = time; state.updates++;
+    }
+
+    function releaseMesh(mesh) {
+        for (const [cape, data] of state.capes) if (data.mesh === mesh) releaseCape(cape);
+    }
+
+    function unhook(mesh, hook) {
+        releaseMesh(mesh);
+        if (mesh.render === hook.wrapper) mesh.render = hook.original;
+        if (hook.clearWrapper && mesh.clear === hook.clearWrapper) mesh.clear = hook.clearOriginal;
+        state.hooks.delete(mesh);
+    }
+
+    function hookMesh(entity) {
+        const mesh = entity.mesh;
         if (!mesh || typeof mesh.render !== 'function') return;
-
         const existing = state.hooks.get(mesh);
-        if (existing && mesh.render === existing.wrapper) return;
-
-        const original = mesh.render;
-        const wrapper = function (...args) {
-            const result = original.apply(this, args);
-            try { applyCapeStyle(entity, mesh); } catch {}
+        if (existing && mesh.render === existing.wrapper) { existing.entity = entity; return; }
+        const hook = { original: mesh.render, entity, wrapper: null };
+        hook.wrapper = function () {
+            for (const data of state.capes.values()) if (data.mesh === mesh) restoreRotation(data);
+            const result = hook.original.apply(this, arguments);
+            if (state.hooks.get(mesh) !== hook || !state.enabled || state.destroyed) return result;
+            try { animate(hook.entity, mesh); state.error = ''; }
+            catch (error) { releaseMesh(mesh); state.error = String(error?.message || error).slice(0, 200); }
             return result;
         };
-
-        try {
-            mesh.render = wrapper;
-            state.hooks.set(mesh, { original, wrapper, entity });
-        } catch {}
+        if (typeof mesh.clear === 'function') {
+            hook.clearOriginal = mesh.clear;
+            hook.clearWrapper = function () { releaseMesh(mesh); return hook.clearOriginal.apply(this, arguments); };
+            mesh.clear = hook.clearWrapper;
+        }
+        mesh.render = hook.wrapper; state.hooks.set(mesh, hook);
     }
 
-    function synchronize(force = false) {
-        if (!state.enabled) return;
-        const now = performance.now();
-        if (!force && now < state.scanAt) return;
-        state.scanAt = now + 180;
-
-        const game = findGame();
-        if (!game) return;
-        state.game = game;
-
-        const entities = collectPlayerEntities(game);
-        const activeMeshes = new Set();
+    function synchronize() {
+        if (!state.enabled || state.destroyed) return;
+        const game = findGame(), entities = [], seen = new Set(), playerPosition = game?.player?.pos;
+        if (game) {
+            for (const collection of [game.world.players, game.world.entities, game.world.entitiesDump, game.world.loadedEntityList]) {
+                try {
+                    for (const entity of collection?.values?.() || []) {
+                        if (entity?.mesh?.capeMesh && !seen.has(entity.mesh)) { seen.add(entity.mesh); entities.push(entity); }
+                    }
+                } catch {}
+            }
+            if (game.player?.mesh?.capeMesh && !seen.has(game.player.mesh)) entities.push(game.player);
+        }
+        const distance = entity => {
+            const p = entity.pos || entity.position;
+            return p && playerPosition ? Math.hypot(p.x - playerPosition.x, p.y - playerPosition.y, p.z - playerPosition.z) : 0;
+        };
+        entities.sort((a, b) => distance(a) - distance(b));
+        const active = new Set();
         for (const entity of entities) {
-            activeMeshes.add(entity.mesh);
-            ensureRenderHook(entity);
+            if (active.size >= MAX_CAPES || distance(entity) > MAX_DISTANCE) continue;
+            active.add(entity.mesh); hookMesh(entity);
         }
-
-        for (const [mesh, hook] of [...state.hooks]) {
-            if (activeMeshes.has(mesh)) continue;
-            try {
-                if (mesh.render === hook.wrapper) mesh.render = hook.original;
-            } catch {}
-            const cape = mesh?.capeMesh;
-            if (cape) restoreCape(cape);
-            state.hooks.delete(mesh);
-        }
-    }
-
-    function restoreAll() {
-        for (const [mesh, hook] of state.hooks) {
-            try {
-                if (mesh.render === hook.wrapper) mesh.render = hook.original;
-            } catch {}
-        }
-        state.hooks.clear();
-
-        for (const [cape, data] of [...state.capes]) restoreCape(cape, data);
+        for (const [mesh, hook] of state.hooks) if (!active.has(mesh)) unhook(mesh, hook);
+        for (const [cape, data] of state.capes) if (data.mesh.capeMesh !== cape) releaseCape(cape);
+        state.scanTime = now();
     }
 
     function setEnabled(value) {
-        const enabled = value === true;
-        if (state.enabled === enabled) {
-            if (enabled) synchronize(true);
-            return;
-        }
-
-        state.enabled = enabled;
-        if (enabled) {
-            state.scanAt = 0;
-            synchronize(true);
-        } else {
-            restoreAll();
-            state.game = null;
-            state.scanAt = 0;
-        }
-    }
-
-    function readConfig(detail) {
-        try {
-            const config = typeof detail === 'string' ? JSON.parse(detail) : detail;
-            setEnabled(config?.enabled === true);
-        } catch {}
-    }
-
-    function loop() {
+        if (state.destroyed) return;
+        state.enabled = value === true;
         if (state.enabled) {
-            try { synchronize(false); } catch {}
+            if (!state.timer) state.timer = setInterval(synchronize, 350);
+            synchronize();
+        } else {
+            if (state.timer) clearInterval(state.timer);
+            state.timer = 0;
+            for (const [mesh, hook] of state.hooks) unhook(mesh, hook);
+            for (const cape of [...state.capes.keys()]) releaseCape(cape);
+            state.game = null;
         }
-        requestAnimationFrame(loop);
     }
 
-    document.addEventListener(EVENT_CONFIG, event => readConfig(event.detail));
+    function configure(config = {}) {
+        if (!config || typeof config !== 'object' || state.destroyed) return;
+        const oldStyle = state.options.style, oldMovement = state.options.movement;
+        for (const key of ['movement', 'style', 'wind']) {
+            const allowed = key === 'movement' ? ['simulation-v2', 'simulation', 'classic', 'dungeons'] : key === 'style' ? ['smooth', 'blocky'] : ['waves', 'none'];
+            if (allowed.includes(config[key])) state.options[key] = config[key];
+        }
+        for (const [key, max] of [['windStrength', 2], ['gravity', 30], ['strength', 2]]) {
+            if (key in config) state.options[key] = finite(config[key], state.options[key], 0, max);
+        }
+        if (oldStyle !== state.options.style) {
+            for (const cape of [...state.capes.keys()]) releaseCape(cape);
+        } else if (oldMovement !== state.options.movement) {
+            for (const data of state.capes.values()) data.initialized = false;
+        }
+        if (typeof config.enabled === 'boolean') setEnabled(config.enabled);
+    }
 
-    globalThis.BetterAnimationCape = {
-        setEnabled,
-        synchronize: () => synchronize(true),
+    function onConfig(event) {
+        let config = event.detail;
+        if (typeof config === 'string') try { config = JSON.parse(config); } catch { return; }
+        configure(config);
+    }
+
+    function destroy() {
+        if (state.destroyed) return;
+        setEnabled(false); state.destroyed = true;
+        document.removeEventListener(EVENT_CONFIG, onConfig);
+        if (globalThis.BetterAnimationCape === api) delete globalThis.BetterAnimationCape;
+    }
+
+    const api = {
+        configure, setEnabled, synchronize, destroy,
         get enabled() { return state.enabled; },
-        get depthScale() { return DEPTH_SCALE; },
-        get backOffset() { return BACK_OFFSET; }
+        get depthScale() { return 1; },
+        get backOffset() { return BACK_OFFSET; },
+        getState: () => ({
+            version: BETTER_CAPE_PHYSICS_VERSION, enabled: state.enabled, destroyed: state.destroyed,
+            options: { ...state.options }, capes: state.capes.size, hooks: state.hooks.size,
+            nodesPerCape: (ROWS + 1) * (COLS + 1), geometryBuilds: state.geometryBuilds,
+            steps: state.steps, updates: state.updates, error: state.error,
+            vertices: [...state.capes.values()].reduce((count, data) => count + data.parts.reduce((sum, part) => sum + part.geometry.attributes.position.count, 0), 0),
+            contacts: [...state.capes.values()].reduce((count, data) => count + data.contacts, 0)
+        })
     };
-
-    requestAnimationFrame(loop);
+    globalThis.BetterAnimationCape = api;
+    document.addEventListener(EVENT_CONFIG, onConfig);
+    configure({ ...previousOptions, enabled: previousEnabled });
 })();
 
 //# sourceURL=MF:src/Render/BetterAnimationCape.js
@@ -74290,6 +74548,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         state.rafId = requestAnimationFrame(tick);
     }
     function setEnabled(enabled) {
+        if (globalThis.MF_RealisticFirstPerson?.getState?.().enabled) enabled = false;
         enabled = enabled === true || enabled === 'true';
         if (enabled === state.enabled) return;
         state.enabled = enabled;
@@ -74550,6 +74809,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     }
 
     function setEnabled(enabled) {
+        if (globalThis.MF_RealisticFirstPerson?.getState?.().enabled) enabled = false;
         enabled = enabled === true || enabled === 'true';
         if (enabled === state.enabled) return;
         state.enabled = enabled;
@@ -75329,6 +75589,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     }
 
     function setEnabled(enabled) {
+        if (globalThis.MF_RealisticFirstPerson?.getState?.().enabled) enabled = false;
         enabled = enabled === true || enabled === 'true';
         if (enabled === state.enabled) return;
         state.enabled = enabled;
@@ -75407,6 +75668,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     };
 
     function setEnabled(enabled) {
+        if (globalThis.MF_RealisticFirstPerson?.getState?.().enabled) enabled = false;
         state.enabled = enabled === true;
         try {
             localStorage.setItem('miniblox_handsway', String(state.enabled));
@@ -75602,12 +75864,17 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     'use strict';
 
     const W = globalThis;
+    const SKIN_LAYERS_3D_VERSION = 2;
     const previous = W.MF_BetterPlayerLayers;
     let previousManualEnabled = false;
-    try { previousManualEnabled = previous?.getState?.().manualEnabled === true; } catch {}
+    let previousRealisticEnabled = false;
+    try {
+        previousManualEnabled = previous?.getState?.().manualEnabled === true;
+        previousRealisticEnabled = previous?.getState?.().realisticEnabled === true;
+    } catch {}
     try { previous?.destroy?.(); } catch {}
     let manualEnabled = previousManualEnabled;
-    let realisticEnabled = false;
+    let realisticEnabled = previousRealisticEnabled;
     let enabled = false;
     let destroyed = false;
     let timer = 0;
@@ -75617,8 +75884,8 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
     const EXTREME = Object.freeze({
         inflate: 0.40,
-        nativeInflate: 0.20,
-        depth: 0.20,
+        nativeInflate: 0,
+        depth: 0.40,
         alphaThreshold: 8
     });
 
@@ -75897,7 +76164,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         const height = Number(image.height ?? image.videoHeight ?? image.naturalHeight ?? 0);
         if (!width || !height) return null;
 
-        const signature = `${width}:${height}:${image.currentSrc ?? image.src ?? ''}`;
+        const signature = `${width}:${height}:${image.currentSrc ?? image.src ?? ''}:${map.version ?? 0}`;
         const cached = pixelCache.get(map);
         if (cached?.image === image && cached.signature === signature) return cached.pixels;
 
@@ -76022,7 +76289,6 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         if (!position || position.count < 48) return null;
 
         const overlayStart = position.count - 24;
-        const extraInflate = Math.max(0, EXTREME.inflate - EXTREME.nativeInflate) / 16;
         const positions = [];
         const uvs = [];
         const indices = [];
@@ -76038,6 +76304,14 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             if (!width || !height) continue;
 
             const corners = [0, 1, 2, 3].map(i => vertexPosition(position, overlayStart + faceIndex * 4 + i));
+            // Measure the native shell instead of assuming that every model
+            // inflates its hat and sleeves by the same amount. The voxel's
+            // inner surface sits on the base skin, not on a floating 2D shell.
+            const baseCorners = [0, 1, 2, 3].map(i => vertexPosition(position, overlayStart - 24 + faceIndex * 4 + i));
+            const shellOffset = corners.reduce((sum, point, i) => sum + point.reduce((dot, value, axis) =>
+                dot + (value - baseCorners[i][axis]) * face.normal[axis], 0), 0) / 4;
+            if (!Number.isFinite(shellOffset) || shellOffset < -0.001 || shellOffset > 2 / 16) return null;
+            const extraInflate = EXTREME.inflate / 16 - shellOffset;
             const occupied = (x, y) => x >= 0 && x < width && y >= 0 && y < height &&
                 pixelAlpha(pixels, sourcePixel(startX, widthSigned, x), sourcePixel(startY, heightSigned, y)) >= EXTREME.alphaThreshold;
 
@@ -76127,6 +76401,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         return [
             source?.uuid ?? '',
             map?.uuid ?? '',
+            map?.version ?? 0,
             image?.currentSrc ?? image?.src ?? '',
             String(image?.width ?? image?.naturalWidth ?? ''),
             String(image?.height ?? image?.naturalHeight ?? '')
@@ -76394,6 +76669,9 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             String(mesh?.entity?.profile?.cosmetics?.skin ?? ''),
             String(detectSkinny(mesh))
         ];
+        const body = mesh?.skinnedBody;
+        const owned = state.nativeLayers.get(body);
+        values.push(body?.uuid ?? '', (owned && nativeGeometry(body) === owned.geometry ? owned.original : nativeGeometry(body))?.uuid ?? '');
 
         for (const layout of PARTS) {
             const reference = mesh?.meshes?.[layout.reference];
@@ -76418,6 +76696,105 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         state.bindings = [];
         state.signature = '';
         state.nextBuildAt = 0;
+    }
+
+    function combineWithNativeRig(mesh, bindings) {
+        const body = mesh.skinnedBody;
+        const bones = body?.skeleton?.bones;
+        const inverses = body?.skeleton?.boneInverses;
+        const original = nativeGeometry(body);
+        if (!body || !Array.isArray(bones) || !Array.isArray(inverses) || !original?.clone ||
+            !original.attributes?.skinIndex || !original.attributes?.skinWeight ||
+            Array.isArray(body.material) || Object.keys(original.morphAttributes || {}).length) return false;
+        const bodyMap = firstMaterial(body.__realMaterial || body.material)?.map;
+        if (!bindings.length || bindings.some(binding => binding.material.map !== bodyMap)) return false;
+
+        const transforms = [];
+        for (const binding of bindings) {
+            const bone = bones.indexOf(binding.target);
+            if (bone < 0 || !inverses[bone]?.clone) return false;
+            try {
+                const matrix = inverses[bone].clone().invert();
+                binding.reference.updateMatrix?.();
+                if (binding.reference.matrix) matrix.multiply(binding.reference.matrix);
+                if (body.bindMatrixInverse) matrix.premultiply(body.bindMatrixInverse);
+                if (matrix.elements?.length !== 16 || !Array.from(matrix.elements).every(Number.isFinite)) return false;
+                transforms.push({ bone, matrix });
+            } catch { return false; }
+        }
+
+        const baseCount = original.attributes.position?.count;
+        const extraCount = bindings.reduce((sum, binding) => sum + binding.geometry.attributes.position.count, 0);
+        if (!baseCount || baseCount + extraCount > 100000) return false;
+        let geometry;
+        try {
+            geometry = original.clone();
+            for (const [name, attribute] of Object.entries(original.attributes)) {
+                if (!ArrayBuffer.isView(attribute.array) || attribute.count !== baseCount || attribute.isInterleavedBufferAttribute) {
+                    geometry.dispose?.(); return false;
+                }
+                const array = new attribute.array.constructor((baseCount + extraCount) * attribute.itemSize);
+                array.set(attribute.array);
+                let offset = baseCount;
+                for (let part = 0; part < bindings.length; part++) {
+                    const input = bindings[part].geometry.attributes[name];
+                    const { bone, matrix } = transforms[part];
+                    const m = matrix.elements;
+                    const position = bindings[part].geometry.attributes.position;
+                    for (let vertex = 0; vertex < position.count; vertex++) {
+                        const at = (offset + vertex) * attribute.itemSize;
+                        if (name === 'position') {
+                            const x = position.getX(vertex), y = position.getY(vertex), z = position.getZ(vertex);
+                            array[at] = m[0] * x + m[4] * y + m[8] * z + m[12];
+                            array[at + 1] = m[1] * x + m[5] * y + m[9] * z + m[13];
+                            array[at + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+                        } else if (name === 'skinIndex') array[at] = bone;
+                        else if (name === 'skinWeight') array[at] = 1;
+                        else if (input?.array && input.itemSize === attribute.itemSize) {
+                            for (let component = 0; component < attribute.itemSize; component++) {
+                                array[at + component] = input.array[vertex * input.itemSize + component];
+                            }
+                        }
+                    }
+                    offset += position.count;
+                }
+                geometry.setAttribute(name, new attribute.constructor(array, attribute.itemSize, attribute.normalized));
+            }
+            const indices = original.index ? Array.from(original.index.array) : Array.from({ length: baseCount }, (_, i) => i);
+            const baseIndices = indices.length;
+            let offset = baseCount;
+            for (const binding of bindings) {
+                for (const index of binding.geometry.index.array) indices.push(offset + index);
+                offset += binding.geometry.attributes.position.count;
+            }
+            geometry.setIndex(indices);
+            if (geometry.groups?.length && geometry.addGroup) geometry.addGroup(baseIndices, indices.length - baseIndices, 0);
+            geometry.setDrawRange?.(0, indices.length);
+            geometry.computeVertexNormals?.();
+            geometry.computeBoundingBox?.();
+            geometry.computeBoundingSphere?.();
+        } catch {
+            geometry?.dispose?.();
+            return false;
+        }
+
+        const existing = state.nativeLayers.get(body);
+        if (existing) {
+            assignNativeGeometry(body, geometry);
+            existing.geometry.dispose?.();
+            existing.geometry = geometry;
+        } else {
+            assignNativeGeometry(body, geometry);
+            state.nativeLayers.set(body, { object: body, original, geometry });
+        }
+        for (const binding of bindings) {
+            binding.generated.removeFromParent?.();
+            binding.material.dispose?.();
+            binding.material = null;
+            binding.generated = null;
+            binding.combined = true;
+        }
+        return true;
     }
 
     function build(mesh) {
@@ -76474,6 +76851,10 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
         state.bindings = bindings;
         synchronizeFlatLayers();
+        const bones = mesh.skinnedBody?.skeleton?.bones;
+        // Native Miniblox can keep the head separate from its skinned body.
+        // Merge only the parts present in that rig; the head stays on its pivot.
+        if (Array.isArray(bones)) combineWithNativeRig(mesh, bindings.filter(binding => bones.includes(binding.target)));
         state.signature = modelSignature(mesh);
         return true;
     }
@@ -76500,6 +76881,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             (mesh.skinnedBody ? mesh.skinnedBody.visible !== false : true);
 
         for (const binding of state.bindings) {
+            if (binding.combined) continue;
             binding.generated.visible = visible && binding.target?.visible !== false;
             syncMaterial(binding.reference, binding.material);
         }
@@ -76609,7 +76991,9 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
             enabled,
             manualEnabled,
             realisticEnabled,
+            version: SKIN_LAYERS_3D_VERSION,
             parts: state.bindings.length,
+            rigBoundParts: state.bindings.filter(binding => binding.combined).length,
             firstPersonLayer: Boolean(state.firstPerson.generated),
             flatReplacements: state.nativeLayers.size + Number(Boolean(state.firstPerson.flatLayer)),
             inflate: EXTREME.inflate,
@@ -94262,11 +94646,637 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
 //# sourceURL=MF:src/Experimental/Realistic/RenderDistanceSystem.js
 
+/* ==== mf module: src/Experimental/Realistic/FirstPersonModel.js ==== */
+(() => {
+  'use strict';
+
+  const FIRST_PERSON_MODEL_VERSION = 4;
+  const CONFIG_EVENT = 'minifeather:realistic-config';
+  const MODULE_EVENT = 'minifeather:firstperson-config';
+  const W = globalThis;
+  let previous = {};
+  try { previous = W.MF_RealisticFirstPerson?.getState?.() || {}; } catch (_) {}
+  try { W.MF_RealisticFirstPerson?.destroy?.(); } catch (_) {}
+
+  const state = {
+    enabled: false,
+    manualEnabled: previous.manualEnabled === true,
+    realisticEnabled: previous.realisticEnabled === true,
+    nativeHands: previous.nativeHands === true,
+    active: false,
+    reason: 'disabled',
+    game: null,
+    mesh: null,
+    hook: null,
+    handHook: null,
+    modelHands: false,
+    mainItemMode: 'none',
+    offItemMode: 'none',
+    bodyOffset: null,
+    timer: 0,
+    renderCount: 0,
+    error: '',
+    destroyed: false,
+    lastGameScan: -Infinity,
+    visibility: new Map(),
+    handVisibility: new Map(),
+    transforms: new Map(),
+    materials: new Map(),
+    geometry: new Map()
+  };
+
+  const isGame = value => !!(value?.player && value?.world);
+
+  function findGame() {
+    for (const game of [W.__MINIBLOX_GAME__, W.__MB?.game, W.Game, W.game, W.miniblox, W.miniblox?.game]) {
+      if (isGame(game)) return (state.game = game);
+    }
+    const now = W.performance?.now?.() ?? Date.now();
+    if (now - state.lastGameScan < 1200) return isGame(state.game) ? state.game : null;
+    state.lastGameScan = now;
+    const root = document.querySelector?.('#react') || document.querySelector?.('#root');
+    if (!root) return null;
+    for (const key of Object.keys(root)) {
+      if (!/^__react(Fiber|Container|InternalInstance)\$/.test(key)) continue;
+      const queue = [root[key]], visited = new Set();
+      for (let index = 0; index < queue.length && index < 1000; index++) {
+        const fiber = queue[index];
+        if (!fiber || visited.has(fiber)) continue;
+        visited.add(fiber);
+        const candidates = [fiber.stateNode, fiber.memoizedProps, fiber.pendingProps, fiber.memoizedState,
+          fiber.updateQueue?.baseState?.element?.props];
+        for (const candidate of candidates) {
+          if (isGame(candidate)) return (state.game = candidate);
+          if (isGame(candidate?.game)) return (state.game = candidate.game);
+        }
+        if (fiber.child) queue.push(fiber.child);
+        if (fiber.sibling) queue.push(fiber.sibling);
+        if (fiber.return) queue.push(fiber.return);
+      }
+    }
+    return null;
+  }
+
+  function localMesh(game) {
+    const player = game?.player;
+    if (!player) return null;
+    for (const getter of [
+      () => game.world.getPlayerById?.(player.id),
+      () => game.world.players?.get?.(player.id),
+      () => game.world.entities?.get?.(player.id),
+      () => player
+    ]) {
+      try { const mesh = getter()?.mesh; if (mesh?.skeleton && typeof mesh.render === 'function') return mesh; } catch (_) {}
+    }
+    return null;
+  }
+
+  function collect(root) {
+    const objects = [], queue = [root], seen = new Set();
+    for (let index = 0; index < queue.length && index < 260; index++) {
+      const object = queue[index];
+      if (!object || seen.has(object)) continue;
+      seen.add(object); objects.push(object);
+      if (Array.isArray(object.children)) queue.push(...object.children);
+    }
+    return objects;
+  }
+
+  function eligibility(game, mesh) {
+    const player = game?.player;
+    if (!state.enabled || state.destroyed) return 'disabled';
+    if (!player || !mesh) return 'waiting for player';
+    if (Number(player.perspective) !== 0) return 'third person';
+    if (W.MF_FREECAM?.active) return 'freecam';
+    if (mesh.renderArmorOnly === true) return 'invisible player';
+    if (player.sleeping || player.dead || player.deathTime > 0) return 'inactive player';
+    try {
+      if (player.getHealth?.() <= 0 || player.mode?.isSpectator?.() || player.isSpectator?.() ||
+        player.isSpectatingOtherPlayer?.()) return 'spectator';
+      if (typeof game.inGame === 'function' && !game.inGame()) return 'outside world';
+    } catch (_) { return 'waiting for player'; }
+    const camera = game.gameScene?.camera || game.gameScene?.axesHelper?.parent;
+    const position = player.pos || player.position;
+    if (camera?.getWorldPosition && camera.position?.clone && position) {
+      try {
+        const point = camera.getWorldPosition(camera.position.clone());
+        const distance = Math.hypot(point.x - position.x, point.z - position.z);
+        if (distance > Math.max(1.5, Number(player.width || 0.6) * 3)) return 'detached camera';
+      } catch (_) { return 'waiting for camera'; }
+    }
+    if (mesh.model?.foldHead && !mesh.skinnedBody?.geometry?.attributes?.skinIndex) return 'unsupported head rig';
+    return '';
+  }
+
+  function visibility(object, value) {
+    if (!object || object.visible === value) return;
+    if (!state.visibility.has(object)) state.visibility.set(object, { before: object.visible, applied: value });
+    else state.visibility.get(object).applied = value;
+    object.visible = value;
+  }
+
+  function transform(target, values) {
+    if (!target || Object.keys(values).some(key => !Number.isFinite(target[key]) || !Number.isFinite(values[key]))) return;
+    const before = {}, applied = {};
+    for (const [key, value] of Object.entries(values)) { before[key] = target[key]; applied[key] = value; }
+    state.transforms.set(target, { before, applied });
+    Object.assign(target, applied);
+  }
+
+  function restoreFrame() {
+    for (const [object, saved] of state.visibility) {
+      if (object.visible === saved.applied) object.visible = saved.before;
+    }
+    state.visibility.clear();
+    for (const [object, saved] of state.materials) {
+      // Native visibility runs before entity render. Switching perspective or
+      // disabling shadows restores the skin and clears this native snapshot;
+      // never put the old shadow-only material back after that transition.
+      if (object.material === saved.applied && object.__realMaterial === saved.applied) object.material = saved.before;
+    }
+    state.materials.clear();
+    for (const [target, saved] of state.transforms) {
+      // Do not undo a pose supplied by another renderer/module after ours.
+      if (Object.keys(saved.applied).every(key => target[key] === saved.applied[key])) Object.assign(target, saved.before);
+    }
+    state.transforms.clear();
+    for (const [object, binding] of state.geometry) {
+      if (object.geometry === binding.filtered) object.geometry = binding.source;
+    }
+    if (state.mesh) state.mesh.__mfFirstPersonActive = false;
+    state.active = false;
+    state.modelHands = false;
+    state.bodyOffset = null;
+  }
+
+  function releaseBinding(object, binding) {
+    if (object.geometry === binding.filtered) object.geometry = binding.source;
+    if (object.__mfFirstPersonGeometry === binding) delete object.__mfFirstPersonGeometry;
+    try { binding.filtered?.dispose?.(); } catch (_) {}
+  }
+
+  function releaseGeometry() {
+    for (const [object, binding] of state.geometry) releaseBinding(object, binding);
+    state.geometry.clear();
+  }
+
+  function isUnder(bone, root) {
+    for (let node = bone, depth = 0; node && depth < 30; node = node.parent, depth++) {
+      if (node === root) return true;
+    }
+    return false;
+  }
+
+  function hideBones(mesh, bones) {
+    const head = [mesh.headPivot].filter(Boolean);
+    const neckOwnsBody = [mesh.body, mesh.torso, mesh.leftShoulder, mesh.rightShoulder, mesh.leftHip, mesh.rightHip]
+      .some(part => part && isUnder(part, mesh.neck));
+    if (mesh.neck && !neckOwnsBody && !bones.some(bone => head.some(root => isUnder(bone, root)))) head.push(mesh.neck);
+    const arms = state.nativeHands ? [mesh.leftShoulder, mesh.rightShoulder,
+      mesh.leftShoulderJoint, mesh.rightShoulderJoint, mesh.leftElbowJoint, mesh.rightElbowJoint].filter(Boolean) : [];
+    const roots = [...head, ...arms];
+    const hidden = new Set();
+    for (let index = 0; index < bones.length; index++) {
+      if (roots.some(root => isUnder(bones[index], root))) hidden.add(index);
+    }
+    return hidden;
+  }
+
+  function filterGeometry(object, mesh) {
+    const bones = object.skeleton?.bones;
+    let binding = state.geometry.get(object);
+    let source = binding?.source || object.geometry;
+    if (binding && object.geometry !== binding.filtered && object.geometry !== binding.source) {
+      source = object.geometry;
+      binding.source = source;
+    }
+    const attribute = source?.attributes?.skinIndex;
+    if (!Array.isArray(bones) || !attribute || !source.clone || !source.setIndex) return;
+    const hidden = hideBones(mesh, bones);
+    if (!hidden.size) return;
+    const key = [...hidden].join(',');
+    if (!binding) {
+      binding = { source, filtered: null, filteredSource: null, key: '' };
+      state.geometry.set(object, binding);
+      object.__mfFirstPersonGeometry = binding;
+    }
+    if (binding.filteredSource !== source || binding.key !== key) {
+      try { binding.filtered?.dispose?.(); } catch (_) {}
+      binding.filtered = null;
+      binding.source = source;
+      binding.filteredSource = source;
+      binding.key = key;
+      const weights = source.attributes.skinWeight;
+      const read = (attr, index, component) => attr.array?.[index * attr.itemSize + component] ??
+        [attr.getX, attr.getY, attr.getZ, attr.getW][component]?.call(attr, index);
+      const hiddenVertex = index => {
+        for (let component = 0; component < Math.min(4, attribute.itemSize); component++) {
+          if (hidden.has(read(attribute, index, component)) && (!weights || read(weights, index, component) > 0.0001)) return true;
+        }
+        return false;
+      };
+      const originalIndex = source.index;
+      const count = originalIndex?.count ?? source.attributes.position?.count ?? 0;
+      const readIndex = index => originalIndex ? originalIndex.array?.[index] ?? originalIndex.getX(index) : index;
+      const indices = [];
+      for (let index = 0; index + 2 < count; index += 3) {
+        const a = readIndex(index), b = readIndex(index + 1), c = readIndex(index + 2);
+        if (!hiddenVertex(a) && !hiddenVertex(b) && !hiddenVertex(c)) indices.push(a, b, c);
+      }
+      if (indices.length < count) {
+        const filtered = source.clone();
+        filtered.setIndex(indices);
+        // Rebuild material groups in the filtered triangle order rather than reusing old offsets.
+        if (Array.isArray(source.groups) && source.groups.length && filtered.clearGroups && filtered.addGroup) {
+          filtered.clearGroups();
+          let output = 0;
+          for (const group of source.groups) {
+            const start = output;
+            const end = Math.min(count, group.start + group.count);
+            for (let index = group.start; index + 2 < end; index += 3) {
+              if (!hiddenVertex(readIndex(index)) && !hiddenVertex(readIndex(index + 1)) && !hiddenVertex(readIndex(index + 2))) output += 3;
+            }
+            if (output > start) filtered.addGroup(start, output - start, group.materialIndex);
+          }
+        }
+        filtered.setDrawRange?.(0, indices.length);
+        binding.filtered = filtered;
+      }
+    }
+    if (binding.filtered) object.geometry = binding.filtered;
+  }
+
+  function restoreNativeMaterials(objects) {
+    for (const object of objects) {
+      if (object.__realMaterial && object.material !== object.__realMaterial) {
+        state.materials.set(object, { before: object.material, applied: object.__realMaterial });
+        object.material = object.__realMaterial;
+      }
+    }
+  }
+
+  function retainMaterialUpdates() {
+    for (const [object, saved] of state.materials) {
+      if (object.material && object.material !== saved.applied && object.material !== saved.before) {
+        // Armor and skin can replace their material during native animation/render updates.
+        object.__realMaterial = object.material;
+        saved.applied = object.material;
+      }
+    }
+  }
+
+  function findHandRenderer(game) {
+    for (const camera of [game?.gameScene?.axesHelper?.parent, game?.gameScene?.camera]) {
+      for (const child of camera?.children || []) {
+        if (typeof child?.update === 'function' && typeof child.updateArmAnimation === 'function' && child.item && child.rightArm) return child;
+      }
+    }
+    return null;
+  }
+
+  function restoreHandVisibility() {
+    for (const [object, saved] of state.handVisibility) {
+      if (object.visible === saved.applied) object.visible = saved.before;
+    }
+    state.handVisibility.clear();
+    state.mainItemMode = 'none';
+    state.offItemMode = 'none';
+  }
+
+  function handVisibility(object, value) {
+    if (!object || object.visible === value) return;
+    state.handVisibility.set(object, { before: object.visible, applied: value });
+    object.visible = value;
+  }
+
+  function detachHandRenderer() {
+    restoreHandVisibility();
+    const hook = state.handHook;
+    if (hook && hook.renderer.update === hook.wrapper) hook.renderer.update = hook.original;
+    state.handHook = null;
+  }
+
+  function drawable(root, excluded = []) {
+    const queue = [root], seen = new Set();
+    for (let index = 0; index < queue.length && index < 100; index++) {
+      const object = queue[index];
+      if (!object || seen.has(object) || object.visible === false || excluded.includes(object)) continue;
+      seen.add(object);
+      const material = object.__realMaterial || object.material;
+      const materials = Array.isArray(material) ? material : [material];
+      const geometry = object.geometry;
+      const triangles = geometry?.attributes?.position?.count >= 3 &&
+        (geometry.index == null || geometry.index.count >= 3) && (geometry.drawRange?.count ?? Infinity) >= 3 &&
+        (!object.isInstancedMesh || object.count > 0);
+      if ((triangles || object.isSprite) && materials.some(value => {
+        if (!value || value.visible === false || value.colorWrite === false || value.opacity === 0) return false;
+        if (!value.map) return true;
+        const image = value.map.image;
+        return !!image && image.complete !== false && image.width > 0 && image.height > 0;
+      })) return true;
+      if (Array.isArray(object.children)) queue.push(...object.children);
+    }
+    return false;
+  }
+
+  function hasModelArms(mesh) {
+    const bones = mesh.skinnedBody?.skeleton?.bones;
+    return [mesh.leftShoulder, mesh.rightShoulder].every(shoulder => shoulder &&
+      ((Array.isArray(bones) && mesh.skinnedBody?.geometry?.attributes?.position?.count > 0 && bones.some(bone => isUnder(bone, shoulder))) ||
+        drawable(shoulder, [mesh.leftHand, mesh.rightHand])));
+  }
+
+  function maskHands(game, mesh, renderer) {
+    restoreHandVisibility();
+    if (state.nativeHands || !hasModelArms(mesh)) return;
+    handVisibility(renderer.rightArm, false);
+    handVisibility(renderer.leftArm, false);
+    // Only replace a HUD object with a drawable world copy. An empty hand,
+    // loading texture or unsupported offhand TESR must not hide an item.
+    const main = drawable(mesh.rightHand), off = drawable(mesh.leftHand);
+    if (main) handVisibility(renderer.item, false);
+    if (off) handVisibility(renderer.offHandSwing, false);
+    state.mainItemMode = main ? 'model' : renderer.item.visible ? 'overlay' : 'none';
+    state.offItemMode = off ? 'model' : renderer.offHandSwing?.visible ? 'overlay' : 'none';
+  }
+
+  function synchronizeHands(game, mesh) {
+    state.modelHands = !state.nativeHands && hasModelArms(mesh);
+    const renderer = state.modelHands ? findHandRenderer(game) : null;
+    if (renderer !== state.handHook?.renderer) {
+      detachHandRenderer();
+      if (renderer) {
+        const original = renderer.update;
+        const wrapper = function () {
+          // The HUD updates before entity render. Restore before that update,
+          // not after it, so slot changes/F5 never revive a stale HUD item.
+          restoreHandVisibility();
+          const result = original.apply(this, arguments);
+          try {
+            if (state.enabled && !state.destroyed && state.handHook?.renderer === this &&
+              state.mesh && !eligibility(state.game, state.mesh)) maskHands(state.game, state.mesh, this);
+          } catch (_) { restoreHandVisibility(); }
+          return result;
+        };
+        state.handHook = { renderer, original, wrapper };
+        renderer.update = wrapper;
+      }
+    }
+    if (renderer) maskHands(game, mesh, renderer);
+  }
+
+  function alignModel(game, mesh) {
+    const player = game.player;
+    if (player.ridingEntity || mesh.entity?.ridingEntity || mesh.glideAmount > 0.001 || mesh.emoteAmount > 0.02) return;
+    const yaw = Number(player.yaw);
+    const position = mesh.position;
+    const camera = game.gameScene?.camera;
+    if (!position || !Number.isFinite(yaw)) return;
+    const scale = Math.abs(Number(mesh.scale?.x ?? 1) * Number(mesh.skeleton?.scale?.x ?? 0.95) / 0.95);
+    if (!(scale > 0) || !Number.isFinite(scale)) return;
+    let dy = -0.035 * scale;
+    // The native eye is just below the middle of the head, not at the neck.
+    // Measure a yaw-only anchor so looking up/down cannot pump the body height.
+    if (mesh.neck?.localToWorld && camera?.getWorldPosition && position.clone) {
+      const eye = position.clone(), anchor = position.clone();
+      anchor.x = 0; anchor.y = 0.25; anchor.z = 0;
+      mesh.neck.localToWorld(anchor);
+      camera.getWorldPosition(eye);
+      if (Number.isFinite(eye.y - anchor.y)) dy = Math.max(-0.08 * scale, Math.min(0, eye.y - anchor.y));
+    }
+    const dx = Math.sin(yaw) * 0.21 * scale, dz = Math.cos(yaw) * 0.21 * scale;
+    let local = { x: position.x + dx, y: position.y + dy, z: position.z + dz };
+    if (position.clone && mesh.getWorldPosition && mesh.parent?.worldToLocal) {
+      local = mesh.getWorldPosition(position.clone());
+      local.x += dx; local.y += dy; local.z += dz;
+      mesh.parent.worldToLocal(local);
+    }
+    transform(position, { x: local.x, y: local.y, z: local.z });
+    if (mesh.body?.quaternion && mesh.neck?.quaternion && mesh.body.parent === mesh.neck.parent) {
+      const q = mesh.neck.quaternion;
+      transform(mesh.body.quaternion, { x: q.x, y: q.y, z: q.z, w: q.w });
+    }
+    state.bodyOffset = { x: dx, y: dy, z: dz };
+  }
+
+  function applyFrame(game, mesh) {
+    state.reason = eligibility(game, mesh);
+    if (state.reason) { detachHandRenderer(); return; }
+    visibility(mesh, true);
+    // The native visibility/LOD controller can hide body meshes independently
+    // from the player root. Showing only that root never unhides its children.
+    visibility(mesh.skeleton, true);
+    visibility(mesh.body, true);
+    visibility(mesh.skinnedBody, true);
+    visibility(mesh.lodBody, false);
+    for (const object of Object.values(mesh.lodArmor || {})) visibility(object, false);
+    for (const object of Object.values(mesh.skinnedRig || {})) visibility(object, true);
+    if (!mesh.skinnedBody) {
+      for (const [name, object] of Object.entries(mesh.meshes || {})) {
+        if (/torso|leg/i.test(name)) visibility(object, true);
+      }
+    }
+    for (const [name, object] of Object.entries(mesh.skinnedArmor || {})) {
+      if (name !== 'helmet' && object.userData?._equipped === true) visibility(object, true);
+    }
+    visibility(mesh.headPivot, false);
+    visibility(mesh.meshes?.head, false);
+    visibility(mesh.skinnedArmor?.helmet, false);
+    visibility(mesh.armorMesh?.helmet, false);
+    visibility(mesh.playerHeadMesh, false);
+    visibility(mesh.pumpkinHeadMesh, false);
+    if (state.nativeHands) {
+      visibility(mesh.leftShoulder, false);
+      visibility(mesh.rightShoulder, false);
+      visibility(mesh.leftHand, false);
+      visibility(mesh.rightHand, false);
+    } else {
+      visibility(mesh.leftShoulder, true);
+      visibility(mesh.rightShoulder, true);
+      visibility(mesh.leftHand, true);
+      visibility(mesh.rightHand, true);
+    }
+    const objects = collect(mesh), live = new Set(objects);
+    for (const [object, binding] of state.geometry) {
+      if (!live.has(object)) { releaseBinding(object, binding); state.geometry.delete(object); }
+    }
+    restoreNativeMaterials(objects);
+    for (const object of objects) {
+      if (object.isSkinnedMesh || (object.geometry?.attributes?.skinIndex && object.skeleton?.bones)) filterGeometry(object, mesh);
+    }
+    alignModel(game, mesh);
+    synchronizeHands(game, mesh);
+    state.active = true;
+    mesh.__mfFirstPersonActive = true;
+  }
+
+  function applySafely(game, mesh) {
+    try {
+      applyFrame(game, mesh);
+      state.error = '';
+    } catch (error) {
+      restoreFrame();
+      detachHandRenderer();
+      state.reason = 'unsupported body rig';
+      state.error = String(error?.message || error).slice(0, 200);
+    }
+  }
+
+  function nativeVisibility(game) {
+    const player = game?.player;
+    if (!player) return;
+    let target = player;
+    const visited = new Set();
+    for (let depth = 0; target && depth < 8; target = Object.getPrototypeOf(target), depth++) {
+      for (const name of Object.getOwnPropertyNames(target)) {
+        if (name === 'constructor' || visited.has(name)) continue;
+        visited.add(name);
+        const descriptor = Object.getOwnPropertyDescriptor(target, name);
+        const method = descriptor?.value;
+        if (typeof method !== 'function') continue;
+        const source = Function.prototype.toString.call(method);
+        if (source.includes('__realMaterial') && source.includes('perspective')) {
+          try { method.call(player); } catch (_) {}
+          return;
+        }
+      }
+    }
+  }
+
+  function detach() {
+    restoreFrame();
+    detachHandRenderer();
+    releaseGeometry();
+    const hook = state.hook;
+    if (hook && hook.mesh.render === hook.wrapper) hook.mesh.render = hook.original;
+    if (state.mesh) delete state.mesh.__mfFirstPersonActive;
+    state.mesh = null;
+    state.hook = null;
+    nativeVisibility(state.game);
+  }
+
+  function sync() {
+    if (state.destroyed) return;
+    if (!state.enabled) {
+      if (state.mesh) detach();
+      state.reason = 'disabled';
+      return;
+    }
+    disableConflictingAnimations();
+    const game = findGame(), mesh = localMesh(game);
+    if (!mesh || mesh !== state.mesh) {
+      detach();
+      state.game = game;
+      if (!mesh) { state.reason = 'waiting for player'; return; }
+      const original = mesh.render;
+      const wrapper = function () {
+        state.renderCount++;
+        const wasActive = state.active;
+        restoreFrame();
+        if (!eligibility(state.game, this)) restoreNativeMaterials(collect(this));
+        else if (wasActive) nativeVisibility(state.game);
+        const result = original.apply(this, arguments);
+        retainMaterialUpdates();
+        if (state.enabled && !state.destroyed && state.mesh === this) applySafely(state.game, this);
+        return result;
+      };
+      state.mesh = mesh;
+      state.hook = { mesh, original, wrapper };
+      mesh.render = wrapper;
+    }
+    const wasActive = state.active;
+    restoreFrame();
+    if (wasActive && eligibility(game, mesh)) nativeVisibility(game);
+    applySafely(game, mesh);
+  }
+
+  function disableConflictingAnimations() {
+    for (const name of ['MF_PlayerAnims', 'MF_FreshAnims', 'MF_HeadLag']) {
+      try { if (W[name]?.enabled) W[name].setEnabled(false); } catch (_) {}
+    }
+    try { if (W.MF_HandSway?.enabled) W.MF_HandSway.enabled = false; } catch (_) {}
+  }
+
+  function updateEnabled() {
+    if (state.destroyed) return;
+    state.enabled = state.manualEnabled || state.realisticEnabled;
+    if (state.enabled) disableConflictingAnimations();
+    if (state.enabled && !state.timer) state.timer = W.setInterval(sync, 700);
+    if (!state.enabled && state.timer) { W.clearInterval(state.timer); state.timer = 0; }
+    sync();
+  }
+
+  function configure(config) {
+    if (state.destroyed || !config || typeof config !== 'object') return;
+    if ('enabled' in config) state.manualEnabled = config.enabled === true;
+    if ('nativeHands' in config) state.nativeHands = !!config.nativeHands;
+    updateEnabled();
+  }
+
+  function setRealisticOptions(config = {}) {
+    if (state.destroyed) return;
+    state.realisticEnabled = config.enabled === true;
+    updateEnabled();
+  }
+
+  function onModuleConfig(event) {
+    let config = event.detail;
+    if (typeof config === 'string') try { config = JSON.parse(config); } catch (_) { return; }
+    configure(config);
+  }
+
+  function onConfig(event) {
+    let config = event.detail;
+    if (typeof config === 'string') try { config = JSON.parse(config); } catch (_) { return; }
+    if (!config || typeof config !== 'object' || typeof config.enabled !== 'boolean') return;
+    // Also listen directly: an older hot-updated Realistic controller may not
+    // yet call this companion API, but the saved UI configuration is canonical.
+    setRealisticOptions({ enabled: config.enabled && config.firstPersonBody !== false });
+  }
+
+  function destroy() {
+    if (state.destroyed) return;
+    state.enabled = false;
+    state.manualEnabled = false;
+    state.realisticEnabled = false;
+    if (state.timer) W.clearInterval(state.timer);
+    state.timer = 0;
+    detach();
+    state.destroyed = true;
+    document.removeEventListener?.(CONFIG_EVENT, onConfig, true);
+    document.removeEventListener?.(MODULE_EVENT, onModuleConfig, true);
+    if (W.MF_RealisticFirstPerson === api) delete W.MF_RealisticFirstPerson;
+  }
+
+  const api = Object.freeze({
+    configure, setRealisticOptions, sync, destroy,
+    enable: () => configure({ enabled: true }),
+    disable: () => configure({ enabled: false }),
+    getState: () => ({ version: FIRST_PERSON_MODEL_VERSION, enabled: state.enabled, active: state.active, nativeHands: state.nativeHands,
+      manualEnabled: state.manualEnabled, realisticEnabled: state.realisticEnabled,
+      handsMode: state.modelHands ? 'model' : 'native-overlay', mainItemMode: state.mainItemMode, offItemMode: state.offItemMode,
+      handRendererFound: !!state.handHook, bodyOffset: state.bodyOffset,
+      reason: state.reason, error: state.error, renderCount: state.renderCount,
+      hooked: !!state.hook && state.hook.mesh.render === state.hook.wrapper,
+      playerFound: !!state.mesh, bodyVisible: state.mesh?.skinnedBody?.visible ?? null,
+      modelVisible: state.mesh?.visible ?? null, skeletonVisible: state.mesh?.skeleton?.visible ?? null,
+      bodyTriangles: (state.mesh?.skinnedBody?.geometry?.index?.count ?? 0) / 3,
+      materialColorWrite: (Array.isArray(state.mesh?.skinnedBody?.material) ? state.mesh.skinnedBody.material[0] : state.mesh?.skinnedBody?.material)?.colorWrite ?? null,
+      filteredMeshes: [...state.geometry.values()].filter(binding => !!binding.filtered).length })
+  });
+  W.MF_RealisticFirstPerson = api;
+  document.addEventListener?.(CONFIG_EVENT, onConfig, true);
+  document.addEventListener?.(MODULE_EVENT, onModuleConfig, true);
+  updateEnabled();
+})();
+
+//# sourceURL=MF:src/Experimental/Realistic/FirstPersonModel.js
+
 /* ==== mf module: src/Experimental/Realistic/RealisticMode.js ==== */
 (() => {
   'use strict';
 
-  const REALISTIC_PLAYER_FEATURES_VERSION = 1;
+  const REALISTIC_PLAYER_FEATURES_VERSION = 2;
   const W = globalThis;
   const EVENT_NAME = 'minifeather:realistic-config';
   try { W.MF_RealisticMode?.destroy?.(); } catch (_) {}
@@ -94433,7 +95443,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
   function applyPlayerFeatures() {
     W.MF_BetterPlayerLayers?.setRealisticOptions?.({ enabled: state.enabled && state.skinLayers });
     W.MF_BetterPlayerLayersArmor?.setRealisticOptions?.({ enabled: state.enabled && state.armorRelief });
-    W.MF_RealisticFirstPerson?.configure?.({ enabled: state.enabled && state.firstPersonBody });
+    W.MF_RealisticFirstPerson?.setRealisticOptions?.({ enabled: state.enabled && state.firstPersonBody });
   }
 
   function playerPosition(game) {
@@ -99674,6 +100684,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
 (function () {
     'use strict';
+    const FACIAL_LEGACY_CLEANUP_VERSION = 1;
     if (window.__MF_Facial) return;
     const TAG = 'minifeather facial';
 
@@ -99695,6 +100706,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         tex: null,
 
         frameCache: new Map(),
+        faceGeneration: 0,
         dirty: true
     };
 
@@ -100058,6 +101070,52 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             }
         } catch {}
         return null;
+    }
+
+    function isRetiredLocalFacePack(id) {
+        if (String(id).toLowerCase() !== 'angrywolfx') return false;
+        const uuid = currentPlayerUuid();
+        return uuid === 'c4201f43-2de9-4275-930a-301fae4cce6c' || uuid === '481511cf-be21-4c1c-9ad1-aa8cba0d0d26';
+    }
+
+    function isRetiredLocalFaceReference(value) {
+        const match = typeof value === 'string' ? value.match(/^fs:([^/]+)\//i) : null;
+        return !!match && isRetiredLocalFacePack(match[1]);
+    }
+
+    function isRetiredSavedFacial(name) {
+        const frames = state.library[name]?.frames;
+        return Array.isArray(frames) && frames.some(frame => isRetiredLocalFaceReference(frame?.face));
+    }
+
+    function clearRetiredLocalFaceConfig() {
+        let changed = false;
+        for (const key of ['front', 'left', 'right', 'up', 'down', 'blinkClosed', 'browFace']) {
+            if (!isRetiredLocalFaceReference(auto[key])) continue;
+            auto[key] = '';
+            changed = true;
+        }
+        if (changed) {
+            state.faceGeneration++;
+            if (state.baseHead && state.tex) autoStop(true);
+            auto.on = false;
+            if (auto._raf) cancelAnimationFrame(auto._raf);
+            auto._raf = null;
+            auto._blinkCache = null;
+            auto._blinkCacheZone = null;
+            auto._blinkUntil = 0;
+            auto._browUntil = 0;
+            auto._browPainted = false;
+            auto._zone = 'front';
+            state.frameCache.clear();
+            saveAuto();
+        }
+        const lastKey = LS_KEY + '_last';
+        try {
+            const last = localStorage.getItem(lastKey);
+            if (last && isRetiredSavedFacial(last)) localStorage.removeItem(lastKey);
+        } catch {}
+        return changed;
     }
 
     const packIndex = [];
@@ -100816,6 +101874,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         auto._blinkCache = null; auto._blinkCacheZone = null; auto._zone = 'front';
         auto._browUntil = 0; auto._browPainted = false;
         auto._refYaw = null; auto._refPitch = null; auto._lastT = 0;
+        clearRetiredLocalFaceConfig();
     }
     function saveAuto() {
         try {
@@ -100897,9 +101956,11 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         if (!force && auto._zone === zone) return;
         auto._zone = zone;
         const name = zone === 'front' ? (auto.front || null) : auto[zone] || null;
+        const generation = state.faceGeneration;
         try {
             let fr = null;
             if (name) fr = await resolveFace(resolveAutoName(name)).catch(() => null);
+            if (generation !== state.faceGeneration || isRetiredLocalFaceReference(name)) return;
             if (!fr) fr = state.baseHead ? { canvas: state.baseHead, kind: 'head' } : { canvas: blankFace(), kind: 'face' };
             paintFace({ canvas: fr.canvas, kind: fr.kind });
         } catch {}
@@ -101060,6 +102121,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     function autoTick() {
         if (!auto.on) { auto._raf = null; return; }
         const now = performance.now();
+        const generation = state.faceGeneration;
 
         chatQuestionWatch();
         if (auto._browUntil) {
@@ -101075,7 +102137,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                     broadcastFacial('brow');
                     debugBrow('pintando ceja (quedan ' + Math.round(auto._browUntil - now) + 'ms)');
                     getBrowCanvas().then(fr => {
-                        if (fr && auto.on && auto._browUntil) {
+                        if (fr && auto.on && auto._browUntil && generation === state.faceGeneration) {
                             try { paintFace({ canvas: fr.canvas, kind: fr.kind }); }
                             catch (e) {
 
@@ -101103,7 +102165,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 broadcastFacial('blink');
                 getBlinkCanvas().then(cv => {
 
-                    if (cv && auto.on && auto._blinkUntil && performance.now() < auto._blinkUntil) {
+                    if (cv && auto.on && auto._blinkUntil && performance.now() < auto._blinkUntil && generation === state.faceGeneration) {
 
                         try { paintFace({ canvas: cv, kind: auto._blinkCacheKind || 'face' }); }
                         catch (e) {
@@ -101134,6 +102196,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     }
 
     async function autoStart() {
+        if (clearRetiredLocalFaceConfig()) return { ok: false, error: 'The automatic face from your previous skin has been removed.' };
         try { ensureSession(); } catch (e) { return { ok: false, error: e.message }; }
         stop(false);
         auto.on = true;
@@ -102435,7 +103498,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                     if (g?.player?.mesh) {
                         clearInterval(boot);
                         if (wantAuto) { auto.on = false; autoStart().then(r => { if (r.ok) void 0; }); }
-                        else if (last && state.library[last]) {
+                        else if (last && state.library[last] && !isRetiredSavedFacial(last)) {
                             play(last).then(r => {
                                 if (r.ok) void 0;
                             });
@@ -102467,11 +103530,12 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         if (skinWatch.busy) return null;
         skinWatch.busy = true;
         try {
+            clearRetiredLocalFaceConfig();
             const skinId = currentSkinId();
             if (!skinId) return null;
 
             const uid = currentPlayerUuid();
-            let pack = uid ? packIndex.find(p => p.uuid === uid) : null;
+            let pack = uid ? packIndex.find(p => p.uuid === uid && !isRetiredLocalFacePack(p.id)) : null;
             if (pack && pack.id !== skinId) {
                 if (skinWatch.uuidDone) return null;
                 skinWatch.uuidDone = true;
@@ -102479,7 +103543,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
                 debugBrow('uuid skin: facial-only (skin intacta: ' + skinId + ')');
             } else {
-                pack = packIndex.find(p => p.id === skinId);
+                pack = packIndex.find(p => p.id === skinId && !isRetiredLocalFacePack(p.id));
             }
             if (!pack) { skinWatch.lastApplied = null; return null; }
             const pid = pack.id;
@@ -102521,7 +103585,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
             if (!auto.on && !skinWatch.userOff && !skinWatch.uuidDone) {
                 const uid = currentPlayerUuid();
-                const byUuid = uid ? packIndex.find(p => p.uuid === uid) : null;
+                const byUuid = uid ? packIndex.find(p => p.uuid === uid && !isRetiredLocalFacePack(p.id)) : null;
                 if (byUuid && skinWatch.lastApplied !== byUuid.id) {
                     void 0;
                     applyPackForSkin(true).catch(() => {});
@@ -110760,6 +111824,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticSkinLayersLabel": "3D skin layers",
     "experimentalRealisticArmorReliefLabel": "Armor relief",
     "experimentalRealisticFirstPersonLabel": "First-person body",
+    "firstPerson": "First Person",
+    "firstPersonDesc": "See your animated body in first person. Also available in Realistic. Disables custom animations, but keeps Vanilla Animations available.",
     "experimentalWetnessTitle": "Wet surfaces",
     "experimentalWetnessDesc": "Rain and nearby world water darken blocks and add a reflective wet sheen. Moisture remains after the source disappears and dries gradually.",
     "experimentalWetnessDryTime": "Drying duration",
@@ -110869,6 +111935,21 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalAnimatedItemsDesc": "Animates compatible MiniBlox item textures while preserving blocks, collisions and item logic.",
     "experimentalBetterAnimationCapeTitle": "Better Animation Cape",
     "experimentalBetterAnimationCapeDesc": "Adds segmented cloth physics, inertia, gravity response and live collision against the MiniBlox player model while keeping the native cape system.",
+    "capePhysics": "Cloth physics",
+    "capeStyle": "Rendering style",
+    "capeWind": "Wind",
+    "capeWindStrength": "Wind strength",
+    "capeGravity": "Gravity",
+    "capeMovementStrength": "Motion strength",
+    "capeModeV2": "Simulation V2",
+    "capeModeSimulation": "Simulation",
+    "capeModeClassic": "Classic",
+    "capeModeDungeons": "Dungeons",
+    "capeStyleSmooth": "Smooth",
+    "capeStyleBlocky": "Blocky",
+    "capeWindWaves": "Waves",
+    "capeWindNone": "None",
+    "capeReset": "Reset",
     "panelCustomization": "Panel customization",
     "panelCustomizationDesc": "Customize the panel accent and background colors.",
     "panelAccentColor": "Accent color",
@@ -111598,6 +112679,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticSkinLayersLabel": "Capas 3D de la skin",
     "experimentalRealisticArmorReliefLabel": "Relieve de armadura",
     "experimentalRealisticFirstPersonLabel": "Cuerpo en primera persona",
+    "firstPerson": "First Person",
+    "firstPersonDesc": "Ve tu cuerpo animado en primera persona. También disponible en Realistic. Desactiva las animaciones personalizadas, pero permite Vanilla Animations.",
     "experimentalWetnessTitle": "Superficies mojadas",
     "experimentalWetnessDesc": "La lluvia y el agua cercana del mundo oscurecen los bloques y añaden un brillo húmedo. La humedad permanece y se seca gradualmente.",
     "experimentalWetnessDryTime": "Duración del secado",
@@ -111707,6 +112790,21 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalAnimatedItemsDesc": "Anima las texturas de los objetos compatibles de MiniBlox sin modificar bloques, colisiones ni la lógica de los objetos.",
     "experimentalBetterAnimationCapeTitle": "Better Animation Cape",
     "experimentalBetterAnimationCapeDesc": "Agrega física de tela segmentada, inercia, reacción a la gravedad y colisión en vivo contra el modelo del jugador de MiniBlox manteniendo el sistema nativo de capa.",
+    "capePhysics": "Física de la tela",
+    "capeStyle": "Estilo de renderizado",
+    "capeWind": "Viento",
+    "capeWindStrength": "Fuerza del viento",
+    "capeGravity": "Gravedad",
+    "capeMovementStrength": "Intensidad del movimiento",
+    "capeModeV2": "Simulación V2",
+    "capeModeSimulation": "Simulación",
+    "capeModeClassic": "Clásico",
+    "capeModeDungeons": "Dungeons",
+    "capeStyleSmooth": "Suave",
+    "capeStyleBlocky": "Por bloques",
+    "capeWindWaves": "Ondas",
+    "capeWindNone": "Ninguno",
+    "capeReset": "Restablecer",
     "panelCustomization": "Personalización del panel",
     "panelCustomizationDesc": "Personaliza el color principal y el fondo del panel.",
     "panelAccentColor": "Color principal",
@@ -112455,6 +113553,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticSkinLayersLabel": "スキンの3Dレイヤー",
     "experimentalRealisticArmorReliefLabel": "防具の立体感",
     "experimentalRealisticFirstPersonLabel": "一人称の身体表示",
+    "firstPerson": "一人称表示",
+    "firstPersonDesc": "一人称で動く自分の体を表示します。Realisticでも利用可能です。独自アニメーションを無効にしますが、Vanilla Animationsは使用できます。",
     "experimentalRealisticLow": "低",
     "experimentalRealisticMedium": "中",
     "experimentalRealisticHigh": "高",
@@ -112497,6 +113597,21 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalAnimatedItemsDesc": "MiniBloxに存在する対応アイテムのテクスチャだけをアニメーション化します。ブロック、当たり判定、アイテムの動作は変更しません。",
     "experimentalBetterAnimationCapeTitle": "Better Animation Cape",
     "experimentalBetterAnimationCapeDesc": "セグメント化された布の物理演算、慣性、重力反応、MiniBloxプレイヤーモデルとの連続衝突を追加しつつ、ネイティブのケープシステムは維持します。",
+    "capePhysics": "布の物理演算",
+    "capeStyle": "描画スタイル",
+    "capeWind": "風",
+    "capeWindStrength": "風の強さ",
+    "capeGravity": "重力",
+    "capeMovementStrength": "動きの強さ",
+    "capeModeV2": "シミュレーション V2",
+    "capeModeSimulation": "シミュレーション",
+    "capeModeClassic": "クラシック",
+    "capeModeDungeons": "Dungeons",
+    "capeStyleSmooth": "滑らか",
+    "capeStyleBlocky": "ブロック状",
+    "capeWindWaves": "波",
+    "capeWindNone": "なし",
+    "capeReset": "リセット",
     "panelCustomization": "パネルのカスタマイズ",
     "panelCustomizationDesc": "パネルのアクセントカラーと背景色を変更できます。",
     "panelAccentColor": "アクセントカラー",
@@ -113307,6 +114422,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticSkinLayersLabel": "Strati 3D della skin",
     "experimentalRealisticArmorReliefLabel": "Rilievo dell'armatura",
     "experimentalRealisticFirstPersonLabel": "Corpo in prima persona",
+    "firstPerson": "Prima persona",
+    "firstPersonDesc": "Mostra il corpo animato in prima persona. Disponibile anche in Realistic. Disattiva le animazioni personalizzate, ma consente Vanilla Animations.",
     "experimentalRealisticLow": "Bassa",
     "experimentalRealisticMedium": "Media",
     "experimentalRealisticHigh": "Alta",
@@ -113807,6 +114924,21 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalTinyTakeoverDesc": "Sostituisce i baby mob con i modelli Tiny Takeover ridisegnati (cucciolo di lupo incluso), renderizzati lato client con animazioni di camminata, seduta e coda.",
     "experimentalBetterAnimationCapeTitle": "Mantello di animazione migliore",
     "experimentalBetterAnimationCapeDesc": "Aggiunge fisica del tessuto segmentato, inerzia, risposta alla gravità e collisione dal vivo contro il modello del giocatore MiniBlox mantenendo il sistema nativo del mantello.",
+    "capePhysics": "Fisica del tessuto",
+    "capeStyle": "Stile di rendering",
+    "capeWind": "Vento",
+    "capeWindStrength": "Intensità del vento",
+    "capeGravity": "Gravità",
+    "capeMovementStrength": "Intensità del movimento",
+    "capeModeV2": "Simulazione V2",
+    "capeModeSimulation": "Simulazione",
+    "capeModeClassic": "Classico",
+    "capeModeDungeons": "Dungeons",
+    "capeStyleSmooth": "Fluido",
+    "capeStyleBlocky": "A blocchi",
+    "capeWindWaves": "Onde",
+    "capeWindNone": "Nessuno",
+    "capeReset": "Ripristina",
     "navAccounts": "Conti",
     "accYourAccount": "Il tuo account Miniblox",
     "accUsername": "Nome utente",
@@ -114188,6 +115320,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticSkinLayersLabel": "3D皮肤外层",
     "experimentalRealisticArmorReliefLabel": "盔甲立体效果",
     "experimentalRealisticFirstPersonLabel": "第一人称身体",
+    "firstPerson": "第一人称",
+    "firstPersonDesc": "在第一人称中显示自己的动画身体。也可在Realistic中启用。禁用自定义动画，但保留Vanilla Animations。",
     "experimentalWetnessTitle": "潮湿的表面",
     "experimentalWetnessDesc": "雨水和附近的世界水会使方块变暗并添加反射性的湿光泽。当来源消失并逐渐干燥后，水分仍然存在。",
     "experimentalWetnessDryTime": "干燥时间",
@@ -114297,6 +115431,21 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalAnimatedItemsDesc": "对兼容的 MiniBlox 项目纹理进行动画处理，同时保留块、碰撞和项目逻辑。",
     "experimentalBetterAnimationCapeTitle": "更好的动画斗篷",
     "experimentalBetterAnimationCapeDesc": "添加分段布料物理、惯性、重力响应和针对 MiniBlox 玩家模型的实时碰撞，同时保留原生斗篷系统。",
+    "capePhysics": "布料物理",
+    "capeStyle": "渲染样式",
+    "capeWind": "风",
+    "capeWindStrength": "风力",
+    "capeGravity": "重力",
+    "capeMovementStrength": "运动强度",
+    "capeModeV2": "模拟 V2",
+    "capeModeSimulation": "模拟",
+    "capeModeClassic": "经典",
+    "capeModeDungeons": "Dungeons",
+    "capeStyleSmooth": "平滑",
+    "capeStyleBlocky": "方块",
+    "capeWindWaves": "波浪",
+    "capeWindNone": "无",
+    "capeReset": "重置",
     "panelCustomization": "面板定制",
     "panelCustomizationDesc": "自定义面板强调色和背景颜色。",
     "panelAccentColor": "强调色",
@@ -115029,6 +116178,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticSkinLayersLabel": "Couches 3D de la skin",
     "experimentalRealisticArmorReliefLabel": "Relief de l'armure",
     "experimentalRealisticFirstPersonLabel": "Corps à la première personne",
+    "firstPerson": "Première personne",
+    "firstPersonDesc": "Affiche votre corps animé à la première personne. Également disponible dans Realistic. Désactive les animations personnalisées, mais autorise Vanilla Animations.",
     "experimentalWetnessTitle": "Surfaces mouillées",
     "experimentalWetnessDesc": "La pluie et l'eau du monde voisin assombrissent les blocs et ajoutent un éclat humide réfléchissant. L'humidité reste après la disparition de la source et sèche progressivement.",
     "experimentalWetnessDryTime": "Durée de séchage",
@@ -115138,6 +116289,21 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalAnimatedItemsDesc": "Anime les textures d'éléments MiniBlox compatibles tout en préservant les blocs, les collisions et la logique des éléments.",
     "experimentalBetterAnimationCapeTitle": "Meilleure cape d'animation",
     "experimentalBetterAnimationCapeDesc": "Ajoute la physique des tissus segmentés, l'inertie, la réponse gravitationnelle et la collision en direct contre le modèle de lecteur MiniBlox tout en conservant le système de cape natif.",
+    "capePhysics": "Physique du tissu",
+    "capeStyle": "Style de rendu",
+    "capeWind": "Vent",
+    "capeWindStrength": "Force du vent",
+    "capeGravity": "Gravité",
+    "capeMovementStrength": "Intensité du mouvement",
+    "capeModeV2": "Simulation V2",
+    "capeModeSimulation": "Simulation",
+    "capeModeClassic": "Classique",
+    "capeModeDungeons": "Dungeons",
+    "capeStyleSmooth": "Lisse",
+    "capeStyleBlocky": "En blocs",
+    "capeWindWaves": "Vagues",
+    "capeWindNone": "Aucun",
+    "capeReset": "Réinitialiser",
     "panelCustomization": "Personnalisation du panneau",
     "panelCustomizationDesc": "Personnalisez les couleurs d’accent et d’arrière-plan du panneau.",
     "panelAccentColor": "Couleur d'accentuation",
@@ -115870,6 +117036,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticSkinLayersLabel": "3D-Skin-Ebenen",
     "experimentalRealisticArmorReliefLabel": "Rüstungsrelief",
     "experimentalRealisticFirstPersonLabel": "Körper in Ego-Perspektive",
+    "firstPerson": "Ego-Perspektive",
+    "firstPersonDesc": "Zeigt deinen animierten Körper aus der Ego-Perspektive. Auch in Realistic verfügbar. Deaktiviert eigene Animationen, lässt Vanilla Animations aber verfügbar.",
     "experimentalWetnessTitle": "Nasse Oberflächen",
     "experimentalWetnessDesc": "Regen und nahegelegenes Wasser verdunkeln die Blöcke und verleihen ihnen einen reflektierenden, nassen Glanz. Feuchtigkeit bleibt bestehen, nachdem die Quelle verschwunden ist und allmählich trocknet.",
     "experimentalWetnessDryTime": "Trocknungsdauer",
@@ -115979,6 +117147,21 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalAnimatedItemsDesc": "Animiert kompatible MiniBlox-Artikeltexturen unter Beibehaltung von Blöcken, Kollisionen und Artikellogik.",
     "experimentalBetterAnimationCapeTitle": "Besserer Animationsumhang",
     "experimentalBetterAnimationCapeDesc": "Fügt segmentierte Stoffphysik, Trägheit, Schwerkraftreaktion und Live-Kollision gegen das MiniBlox-Spielermodell hinzu, während das native Umhangsystem beibehalten wird.",
+    "capePhysics": "Stoffphysik",
+    "capeStyle": "Darstellungsstil",
+    "capeWind": "Wind",
+    "capeWindStrength": "Windstärke",
+    "capeGravity": "Schwerkraft",
+    "capeMovementStrength": "Bewegungsstärke",
+    "capeModeV2": "Simulation V2",
+    "capeModeSimulation": "Simulation",
+    "capeModeClassic": "Klassisch",
+    "capeModeDungeons": "Dungeons",
+    "capeStyleSmooth": "Glatt",
+    "capeStyleBlocky": "Blockartig",
+    "capeWindWaves": "Wellen",
+    "capeWindNone": "Keiner",
+    "capeReset": "Zurücksetzen",
     "panelCustomization": "Panel-Anpassung",
     "panelCustomizationDesc": "Passen Sie die Panel-Akzent- und Hintergrundfarben an.",
     "panelAccentColor": "Akzentfarbe",
@@ -116711,6 +117894,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticSkinLayersLabel": "Camadas 3D da skin",
     "experimentalRealisticArmorReliefLabel": "Relevo da armadura",
     "experimentalRealisticFirstPersonLabel": "Corpo em primeira pessoa",
+    "firstPerson": "Primeira pessoa",
+    "firstPersonDesc": "Mostra seu corpo animado em primeira pessoa. Também disponível no Realistic. Desativa animações personalizadas, mas permite Vanilla Animations.",
     "experimentalWetnessTitle": "Superfícies molhadas",
     "experimentalWetnessDesc": "A chuva e a água do mundo próximo escurecem os blocos e adicionam um brilho reflexivo molhado. A umidade permanece após a fonte desaparecer e secar gradualmente.",
     "experimentalWetnessDryTime": "Duração da secagem",
@@ -116820,6 +118005,21 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalAnimatedItemsDesc": "Anima texturas de itens MiniBlox compatíveis enquanto preserva blocos, colisões e lógica de itens.",
     "experimentalBetterAnimationCapeTitle": "Melhor Capa de Animação",
     "experimentalBetterAnimationCapeDesc": "Adiciona física de tecido segmentada, inércia, resposta à gravidade e colisão ao vivo contra o modelo do player MiniBlox, mantendo o sistema de capa nativo.",
+    "capePhysics": "Física do tecido",
+    "capeStyle": "Estilo de renderização",
+    "capeWind": "Vento",
+    "capeWindStrength": "Força do vento",
+    "capeGravity": "Gravidade",
+    "capeMovementStrength": "Intensidade do movimento",
+    "capeModeV2": "Simulação V2",
+    "capeModeSimulation": "Simulação",
+    "capeModeClassic": "Clássico",
+    "capeModeDungeons": "Dungeons",
+    "capeStyleSmooth": "Suave",
+    "capeStyleBlocky": "Em blocos",
+    "capeWindWaves": "Ondas",
+    "capeWindNone": "Nenhum",
+    "capeReset": "Redefinir",
     "panelCustomization": "Personalização do painel",
     "panelCustomizationDesc": "Personalize o destaque do painel e as cores de fundo.",
     "panelAccentColor": "Cor de destaque",
@@ -117552,6 +118752,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticSkinLayersLabel": "3D-слои скина",
     "experimentalRealisticArmorReliefLabel": "Рельеф брони",
     "experimentalRealisticFirstPersonLabel": "Тело от первого лица",
+    "firstPerson": "От первого лица",
+    "firstPersonDesc": "Показывает ваше анимированное тело от первого лица. Также доступно в Realistic. Отключает пользовательские анимации, но оставляет доступным Vanilla Animations.",
     "experimentalWetnessTitle": "Влажные поверхности",
     "experimentalWetnessDesc": "Дождь и вода из близлежащего мира затемняют блоки и добавляют отражающий влажный блеск. Влага остается после исчезновения источника и постепенно высыхает.",
     "experimentalWetnessDryTime": "Продолжительность сушки",
@@ -117661,6 +118863,21 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalAnimatedItemsDesc": "Анимирует совместимые текстуры предметов MiniBlox, сохраняя при этом блоки, коллизии и логику предметов.",
     "experimentalBetterAnimationCapeTitle": "Лучшая анимационная накидка",
     "experimentalBetterAnimationCapeDesc": "Добавляет сегментированную физику ткани, инерцию, реакцию гравитации и живое столкновение с моделью игрока MiniBlox, сохраняя при этом родную систему плащей.",
+    "capePhysics": "Физика ткани",
+    "capeStyle": "Стиль отображения",
+    "capeWind": "Ветер",
+    "capeWindStrength": "Сила ветра",
+    "capeGravity": "Гравитация",
+    "capeMovementStrength": "Сила движения",
+    "capeModeV2": "Симуляция V2",
+    "capeModeSimulation": "Симуляция",
+    "capeModeClassic": "Классический",
+    "capeModeDungeons": "Dungeons",
+    "capeStyleSmooth": "Плавный",
+    "capeStyleBlocky": "Блочный",
+    "capeWindWaves": "Волны",
+    "capeWindNone": "Нет",
+    "capeReset": "Сбросить",
     "panelCustomization": "Настройка панели",
     "panelCustomizationDesc": "Настройте акцент панели и цвета фона.",
     "panelAccentColor": "Акцентный цвет",
@@ -118393,6 +119610,8 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalRealisticSkinLayersLabel": "3D 스킨 레이어",
     "experimentalRealisticArmorReliefLabel": "갑옷 입체 효과",
     "experimentalRealisticFirstPersonLabel": "1인칭 몸 표시",
+    "firstPerson": "1인칭",
+    "firstPersonDesc": "1인칭에서 움직이는 자신의 몸을 표시합니다. Realistic에서도 사용할 수 있습니다. 사용자 지정 애니메이션은 끄지만 Vanilla Animations는 계속 사용할 수 있습니다.",
     "experimentalWetnessTitle": "젖은 표면",
     "experimentalWetnessDesc": "비와 근처의 세계 물은 블록을 어둡게 하고 반사되는 젖은 광택을 추가합니다. 근원이 사라진 후에도 수분은 남아 있다가 서서히 건조됩니다.",
     "experimentalWetnessDryTime": "건조시간",
@@ -118502,6 +119721,21 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "experimentalAnimatedItemsDesc": "블록, 충돌 및 항목 논리를 유지하면서 호환 가능한 MiniBlox 항목 텍스처를 애니메이션화합니다.",
     "experimentalBetterAnimationCapeTitle": "더 나은 애니메이션 케이프",
     "experimentalBetterAnimationCapeDesc": "기본 망토 시스템을 유지하면서 MiniBlox 플레이어 모델에 대해 분할된 천 물리학, 관성, 중력 반응 및 실시간 충돌을 추가합니다.",
+    "capePhysics": "천 물리 효과",
+    "capeStyle": "렌더링 스타일",
+    "capeWind": "바람",
+    "capeWindStrength": "바람 세기",
+    "capeGravity": "중력",
+    "capeMovementStrength": "움직임 강도",
+    "capeModeV2": "시뮬레이션 V2",
+    "capeModeSimulation": "시뮬레이션",
+    "capeModeClassic": "클래식",
+    "capeModeDungeons": "Dungeons",
+    "capeStyleSmooth": "부드럽게",
+    "capeStyleBlocky": "블록형",
+    "capeWindWaves": "물결",
+    "capeWindNone": "없음",
+    "capeReset": "초기화",
     "panelCustomization": "패널 사용자 정의",
     "panelCustomizationDesc": "패널 강조 및 배경 색상을 사용자 정의합니다.",
     "panelAccentColor": "악센트 색상",
@@ -118875,6 +120109,90 @@ globalThis.MINIFEATHER_TRANSLATIONS={
     "localGamesCopied": "복사됨"
   }
 };
+
+const halloweenUI = {
+  en: {
+    "halloweenTheme": "Halloween theme", "halloweenTitle": "Midnight Harvest",
+    "halloweenEyebrow": "Optional seasonal appearance", "halloweenRibbon": "HALLOWEEN NIGHTS",
+    "halloweenHomeSubtitle": "Your next adventure starts here",
+    "halloweenThemeDesc": "Glowing pumpkins, violet nights and pixel-art creatures. A seasonal look for MiniFeather.",
+    "halloweenAnimations": "Animate decorations",
+    "halloweenNote": "Visual changes only. Turn the theme off to restore your custom colors. Your world and gameplay stay unchanged."
+  },
+  es: {
+    "halloweenTheme": "Tema de Halloween", "halloweenTitle": "Cosecha de medianoche",
+    "halloweenEyebrow": "Diseño de temporada opcional", "halloweenRibbon": "NOCHES DE HALLOWEEN",
+    "halloweenHomeSubtitle": "Tu próxima aventura empieza aquí",
+    "halloweenThemeDesc": "Calabazas encendidas, noches violetas y criaturas pixel art. Un diseño de temporada para MiniFeather.",
+    "halloweenAnimations": "Animar las decoraciones",
+    "halloweenNote": "Solo cambia el diseño. Al desactivarlo vuelven tus colores personalizados. Tu mundo y la jugabilidad no cambian."
+  },
+  ja: {
+    "halloweenTheme": "ハロウィンテーマ", "halloweenTitle": "真夜中の収穫祭",
+    "halloweenEyebrow": "任意の季節テーマ", "halloweenRibbon": "ハロウィンの夜",
+    "halloweenHomeSubtitle": "次の冒険はここから始まる",
+    "halloweenThemeDesc": "光るカボチャ、紫色の夜、ピクセルアートの仲間たち。MiniFeatherの季節限定デザインです。",
+    "halloweenAnimations": "飾りをアニメーション表示",
+    "halloweenNote": "見た目だけが変わります。無効にすると設定済みの色に戻ります。ワールドやゲームプレイは変わりません。"
+  },
+  it: {
+    "halloweenTheme": "Tema di Halloween", "halloweenTitle": "Raccolto di mezzanotte",
+    "halloweenEyebrow": "Aspetto stagionale facoltativo", "halloweenRibbon": "NOTTI DI HALLOWEEN",
+    "halloweenHomeSubtitle": "La tua prossima avventura inizia qui",
+    "halloweenThemeDesc": "Zucche luminose, notti viola e creature in pixel art. Un aspetto stagionale per MiniFeather.",
+    "halloweenAnimations": "Anima le decorazioni",
+    "halloweenNote": "Cambia solo l'aspetto. Disattiva il tema per ripristinare i tuoi colori. Il mondo e il gioco restano invariati."
+  },
+  zh: {
+    "halloweenTheme": "万圣节主题", "halloweenTitle": "午夜丰收",
+    "halloweenEyebrow": "可选节日外观", "halloweenRibbon": "万圣节之夜",
+    "halloweenHomeSubtitle": "你的下一场冒险从这里开始",
+    "halloweenThemeDesc": "发光的南瓜、紫色的夜晚和像素风小生物，为MiniFeather增添节日气氛。",
+    "halloweenAnimations": "播放装饰动画",
+    "halloweenNote": "仅改变界面外观。关闭后恢复你的自定义颜色，不会改变世界或游戏玩法。"
+  },
+  fr: {
+    "halloweenTheme": "Thème d'Halloween", "halloweenTitle": "Moisson de minuit",
+    "halloweenEyebrow": "Apparence saisonnière facultative", "halloweenRibbon": "NUITS D'HALLOWEEN",
+    "halloweenHomeSubtitle": "Votre prochaine aventure commence ici",
+    "halloweenThemeDesc": "Citrouilles lumineuses, nuits violettes et créatures en pixel art. Un style de saison pour MiniFeather.",
+    "halloweenAnimations": "Animer les décorations",
+    "halloweenNote": "Seule l'apparence change. Désactivez le thème pour retrouver vos couleurs. Le monde et le jeu restent inchangés."
+  },
+  de: {
+    "halloweenTheme": "Halloween-Design", "halloweenTitle": "Mitternachtsernte",
+    "halloweenEyebrow": "Optionales saisonales Design", "halloweenRibbon": "HALLOWEEN-NÄCHTE",
+    "halloweenHomeSubtitle": "Dein nächstes Abenteuer beginnt hier",
+    "halloweenThemeDesc": "Leuchtende Kürbisse, violette Nächte und Pixel-Art-Kreaturen. Ein saisonales Design für MiniFeather.",
+    "halloweenAnimations": "Dekorationen animieren",
+    "halloweenNote": "Nur das Aussehen ändert sich. Nach dem Ausschalten gelten wieder deine Farben. Welt und Spielmechanik bleiben unverändert."
+  },
+  pt: {
+    "halloweenTheme": "Tema de Halloween", "halloweenTitle": "Colheita da meia-noite",
+    "halloweenEyebrow": "Visual sazonal opcional", "halloweenRibbon": "NOITES DE HALLOWEEN",
+    "halloweenHomeSubtitle": "Sua próxima aventura começa aqui",
+    "halloweenThemeDesc": "Abóboras iluminadas, noites violetas e criaturas em pixel art. Um visual de temporada para o MiniFeather.",
+    "halloweenAnimations": "Animar as decorações",
+    "halloweenNote": "Só muda o visual. Desative o tema para restaurar suas cores. O mundo e a jogabilidade continuam iguais."
+  },
+  ru: {
+    "halloweenTheme": "Тема Хэллоуина", "halloweenTitle": "Полночный урожай",
+    "halloweenEyebrow": "Необязательная сезонная тема", "halloweenRibbon": "НОЧИ ХЭЛЛОУИНА",
+    "halloweenHomeSubtitle": "Новое приключение начинается здесь",
+    "halloweenThemeDesc": "Светящиеся тыквы, фиолетовые ночи и пиксельные существа. Сезонный облик MiniFeather.",
+    "halloweenAnimations": "Анимировать украшения",
+    "halloweenNote": "Меняется только оформление. Отключите тему, чтобы вернуть свои цвета. Мир и игровой процесс не меняются."
+  },
+  ko: {
+    "halloweenTheme": "할로윈 테마", "halloweenTitle": "한밤의 수확제",
+    "halloweenEyebrow": "선택 가능한 계절 테마", "halloweenRibbon": "할로윈의 밤",
+    "halloweenHomeSubtitle": "다음 모험이 여기서 시작됩니다",
+    "halloweenThemeDesc": "빛나는 호박, 보랏빛 밤과 픽셀 아트 친구들. MiniFeather의 계절 테마입니다.",
+    "halloweenAnimations": "장식 애니메이션 켜기",
+    "halloweenNote": "디자인만 바뀝니다. 테마를 끄면 사용자 지정 색상으로 돌아갑니다. 월드와 게임 플레이는 바뀌지 않습니다."
+  }
+};
+for (const [language, entries] of Object.entries(halloweenUI)) Object.assign(globalThis.MINIFEATHER_TRANSLATIONS[language], entries);
 })();
 
 //# sourceURL=MF:src/I18n/Translations.js
@@ -121328,6 +122646,298 @@ function normalize(entry) {
 
 //# sourceURL=MF:src/UI/TitleScreen.js
 
+/* ==== mf module: src/UI/HalloweenTheme.js ==== */
+(() => {
+  'use strict';
+
+  const KEY = '__MF_HALLOWEEN_UI__';
+  const CONFIG_EVENT = 'minifeather:halloween-ui-config';
+  const REQUEST_EVENT = 'minifeather:halloween-ui-request';
+  const BASE_ID = 'mf-halloween-preview-style';
+  const STYLE_ID = 'mf-halloween-ui-style';
+  const ATTRIBUTE = 'data-mf-halloween-ui';
+  const MOTION_ATTRIBUTE = 'data-mf-halloween-motion';
+  try { globalThis[KEY]?.destroy?.(); } catch (_) {}
+  if (globalThis.__MF_SEASONAL_FLAGS__?.halloween !== true) return;
+
+  const asset = name => chrome.runtime.getURL(`assets/ui/halloween/${name}.svg`);
+  const pumpkin = asset('pumpkin'), ghost = asset('ghost'), bat = asset('bat'), web = asset('web');
+  const lantern = asset('lantern'), potion = asset('potion'), witchHat = asset('witch-hat'), garland = asset('garland');
+  const nightScene = asset('night-scene');
+  // Match the native menu by its game links and sibling navigation, never by a
+  // generated Chakra class. These selectors stop matching when React mounts a world.
+  const nativeShell = '#react:not(.mf-classic-title):not(.mf-hub)>div:has(>div a[href^="/game/"]):has(>div button)';
+  const nativeCenter = `${nativeShell}>div:has(a[href^="/game/"])`;
+  const languages = new Set(['en', 'es', 'ja', 'it', 'zh', 'fr', 'de', 'pt', 'ru', 'ko']);
+  let enabled = false, motion = true, destroyed = false, themeStyle = null, language = 'en', paintedLanguage = '';
+
+  const baseStyle = document.createElement('style');
+  baseStyle.id = BASE_ID;
+  baseStyle.textContent = `
+    #mf-gui .mf-halloween-settings{overflow:hidden;border-color:#644464;background:linear-gradient(120deg,#251a30,#17131f)}
+    #mf-gui .mf-halloween-heading{display:flex;align-items:center;gap:18px;min-height:142px}
+    #mf-gui .mf-halloween-copy{flex:1;min-width:0;padding:5px 0 12px}
+    #mf-gui .mf-halloween-eyebrow{display:block;color:#ffb15b;font-size:10px;letter-spacing:.13em;text-transform:uppercase;margin-bottom:9px}
+    #mf-gui .mf-halloween-copy h3{margin:0 0 10px;color:#fff0d7;font-size:22px;line-height:1.25}
+    #mf-gui .mf-halloween-copy p{margin:0;max-width:58ch;color:#c4b2d0;font-size:12px;line-height:1.7}
+    #mf-gui .mf-halloween-art{position:relative;flex:0 0 224px;height:150px;overflow:hidden;contain:paint;image-rendering:pixelated;border:1px solid #644464;border-radius:7px;background:url("${nightScene}") right center/auto 150px no-repeat,#21182f;box-shadow:inset 0 0 0 3px #191322}
+    #mf-gui .mf-halloween-art::after{content:"";position:absolute;bottom:3px;left:10px;right:8px;height:6px;background:#0d0b15;box-shadow:0 -4px #423044}
+    #mf-gui .mf-halloween-art img{position:absolute;display:block;object-fit:contain;image-rendering:pixelated}
+    #mf-gui .mf-halloween-pumpkin{width:80px;height:80px;right:12px;bottom:5px;z-index:2}
+    #mf-gui .mf-halloween-ghost{width:62px;height:62px;left:24px;bottom:24px;z-index:1}
+    #mf-gui .mf-halloween-bat{width:52px;height:52px;left:10px;top:4px;z-index:1}
+    #mf-gui .mf-halloween-settings .mf-settings-row{gap:18px;border-color:#49344e;padding-block:13px}
+    #mf-gui .mf-halloween-settings .mf-settings-label{color:#f1e3f6}
+    #mf-gui .mf-halloween-settings .mf-switch{position:relative;display:inline-flex;flex:none;width:44px;height:24px;cursor:pointer}
+    #mf-gui .mf-halloween-settings .mf-switch input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1}
+    #mf-gui .mf-halloween-settings .mf-slider{display:block;box-sizing:border-box;width:44px;height:24px;border:1px solid #805774;border-radius:4px;background:#3b2c48;pointer-events:none}
+    #mf-gui .mf-halloween-settings .mf-slider::before{content:"";position:absolute;left:4px;top:4px;width:16px;height:16px;background:#c9bad6;box-shadow:inset 0 -3px #9985ac;transition:transform 140ms ease,background-color 140ms ease}
+    #mf-gui .mf-halloween-settings input:checked+.mf-slider{background:#9b5b31;border-color:#f8b46e}
+    #mf-gui .mf-halloween-settings input:checked+.mf-slider::before{background:#ffe1a7;box-shadow:inset 0 -3px #eeb664;transform:translateX(20px)}
+    #mf-gui .mf-halloween-settings .mf-halloween-note{font-size:11px;line-height:1.65;color:#bca9c6;margin:12px 0 0}
+    #mf-gui .mf-halloween-settings input:focus-visible+span{outline:2px solid #ffd28b;outline-offset:4px}
+    #mf-gui .mf-halloween-ribbon{display:none;position:relative;isolation:isolate;align-items:center;gap:16px;flex:none;min-height:108px;box-sizing:border-box;overflow:hidden;margin:14px 20px 8px;padding:26px 22px 14px;border:1px solid #ae7658;border-radius:8px;background:linear-gradient(90deg,#332037f5 0,#332037ed 42%,#21182f10 85%),url("${nightScene}") right center/auto 100% no-repeat,#21182f;box-shadow:inset 0 2px #ffc98e35,inset 0 -3px #13101b80,0 5px 15px #09061133;color:#f6d9b0;pointer-events:none;image-rendering:pixelated}
+    #mf-gui .mf-halloween-ribbon::before{content:"";position:absolute;inset:0 0 auto;height:32px;background:url("${garland}") left top/240px 32px repeat-x;opacity:.86;pointer-events:none}
+    #mf-gui .mf-halloween-ribbon img{display:block;object-fit:contain;image-rendering:pixelated;flex:none}
+    #mf-gui .mf-halloween-ribbon-pumpkin{width:64px;height:64px}
+    #mf-gui .mf-halloween-ribbon-copy{position:relative;z-index:1;display:flex;flex-direction:column;gap:8px;min-width:0;max-width:70%}
+    #mf-gui .mf-halloween-ribbon-copy>span{font-size:9px;line-height:1.3;letter-spacing:.16em;color:#dba6c7}
+    #mf-gui .mf-halloween-ribbon-copy>strong{font-size:23px;line-height:1.2;letter-spacing:.02em;color:#ffe4b0;text-shadow:1px 2px #170f21;font-weight:800}
+    #mf-gui .mf-halloween-ribbon-art{position:absolute;inset:0 0 0 auto;width:250px;pointer-events:none}
+    #mf-gui .mf-halloween-ribbon-art img{position:absolute}
+    #mf-gui .mf-halloween-ribbon-bat{width:44px;height:44px;right:160px;top:14px}
+    #mf-gui .mf-halloween-ribbon-ghost{width:52px;height:52px;right:82px;bottom:13px}
+    #mf-gui .mf-halloween-ribbon-lantern{width:40px;height:40px;right:14px;top:24px}
+    @media(max-width:640px){#mf-gui .mf-halloween-art{flex-basis:112px}#mf-gui .mf-halloween-pumpkin{width:68px;height:68px;right:0}#mf-gui .mf-halloween-ghost{width:45px;height:45px;left:0}#mf-gui .mf-halloween-bat{width:40px;height:40px;left:0}#mf-gui .mf-halloween-copy h3{font-size:18px}}
+    @media(max-width:800px){#mf-gui .mf-halloween-ribbon{min-height:94px;margin:10px 12px 4px;padding:25px 12px 12px;gap:10px}#mf-gui .mf-halloween-ribbon-pumpkin{width:48px;height:48px}#mf-gui .mf-halloween-ribbon-copy>strong{font-size:18px}#mf-gui .mf-halloween-ribbon-copy>span{font-size:8px;letter-spacing:.08em}#mf-gui .mf-halloween-ribbon-art{width:140px}#mf-gui .mf-halloween-ribbon-bat{right:105px;width:32px;height:32px}#mf-gui .mf-halloween-ribbon-ghost{right:36px;width:40px;height:40px}#mf-gui .mf-halloween-ribbon-lantern{right:4px;width:28px;height:28px}}
+    @media(max-width:520px){#mf-gui .mf-halloween-ribbon-copy{max-width:calc(100% - 56px)}#mf-gui .mf-halloween-ribbon-copy>strong{font-size:16px}#mf-gui .mf-halloween-ribbon-art{display:none}#mf-gui .mf-halloween-ribbon{background-position:right bottom}}
+    @media(prefers-reduced-motion:reduce){#mf-gui .mf-halloween-settings .mf-slider::before{transition:none}}
+  `;
+  (document.head || document.documentElement).appendChild(baseStyle);
+
+  const css = `
+    html[${ATTRIBUTE}="on"]{--mf-global-accent:#ff963e!important;--mf-global-panel:#17101f!important}
+    html[${ATTRIBUTE}="on"] #mf-gui{
+      --mf-ui-accent:#ff963e!important;--mf-ui-panel:#17101f!important;--mf-accent:#ff963e!important;
+      --mf-accent2:#ffc579!important;--mf-bg:#17101f!important;--mf-text:#f5eaf7!important;--mf-sub:#c0adca!important;
+      background:linear-gradient(145deg,#271a32 0,#17101f 42%,#1c1424 100%)!important;
+      border:2px solid #a66e54!important;border-radius:10px!important;
+      box-shadow:0 25px 80px #09050ec9,0 0 0 1px #2c182d,inset 0 0 0 3px #402938!important;color:#f5eaf7!important
+    }
+    html[${ATTRIBUTE}="on"] #mf-gui::after{content:"";position:absolute;inset:auto 0 0;height:5px;z-index:5;pointer-events:none;background:repeating-linear-gradient(90deg,#88523f 0 12px,#c28a5d 12px 15px,#402738 15px 30px);opacity:.8}
+    html[${ATTRIBUTE}="on"] #mf-gui-content{background:linear-gradient(#1c1325f5,#150f1fde),url("${nightScene}") right bottom/auto 260px no-repeat,#181020!important}
+    html[${ATTRIBUTE}="on"] #mf-gui-overlay{background:rgba(9,5,16,.62)!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-halloween-ribbon{display:flex}
+    html[${ATTRIBUTE}="on"] #mf-gui-topbar{
+      position:relative;background:linear-gradient(90deg,#42283d,#281c33 65%,#392338)!important;
+      border-bottom:2px solid #a36c53!important;isolation:isolate
+    }
+    html[${ATTRIBUTE}="on"] #mf-gui-topbar::before{
+      content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;opacity:.44;
+      background:url("${web}") left top/82px 82px no-repeat,url("${bat}") right 102px top -5px/46px 46px no-repeat
+    }
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feather-nav-main{min-width:0;max-width:calc(100% - 104px)}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feather-icon-tabs{min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain;padding-bottom:3px}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feather-icon-tabs::-webkit-scrollbar{display:none}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feather-icon-tab{flex:none}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feather-main-tab,
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feather-icon-tab,
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feather-tool{
+      background:linear-gradient(#3b2944,#25192f)!important;border:1px solid #70506c!important;border-radius:6px!important;box-shadow:inset 0 2px #ac7d862b,inset 0 -2px #120e1e50
+    }
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feather-main-tab.active,
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feather-icon-tab.active{
+      background:linear-gradient(180deg,#764a48,#3e273d)!important;border-color:#dda36b!important;border-bottom:3px solid #ffb358!important;
+      box-shadow:inset 0 2px #ffe0a64d,inset 0 -7px #b35c2824!important;color:#ffdeae!important
+    }
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feather-close{background:#2b1b32!important;border-color:#ad735f!important;box-shadow:inset 0 1px #e1b18a30}
+    html[${ATTRIBUTE}="on"] #mf-gui #mf-feather-filterbar{background:#22172d!important;border-color:#624151!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feather-category{color:#c9b4d2!important;border:1px solid #5e405c!important;border-radius:5px!important;background:#2b1e35!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feather-category.active{background:#55313d!important;color:#ffcc8c!important;box-shadow:inset 0 -2px #d47b3f}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-card,
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-toggle{
+      background:linear-gradient(150deg,#302039,#1c1526 85%)!important;border-color:#765069!important;
+      box-shadow:inset 0 1px #bb8b9d26,inset 0 -3px #0c091c33;border-radius:7px!important
+    }
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-card-title{display:flex;align-items:center;gap:9px;color:#f7ce91!important;letter-spacing:.045em}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-card>.mf-card-title::before{content:"";display:block;flex:none;width:20px;height:24px;background:url("${lantern}") center/contain no-repeat;image-rendering:pixelated;pointer-events:none}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-halloween-settings{border-color:#a36b55!important;background:linear-gradient(120deg,#38233d,#211729 72%)!important;box-shadow:inset 0 3px #ffc78025!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-toggle{--mf-hw-card-glyph:url("${pumpkin}");transition:border-color 140ms ease,background-color 140ms ease!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-toggle:hover{border-color:#d69b69!important;background:linear-gradient(160deg,#422b44,#2b1c31)!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feature-icon{position:relative;isolation:isolate;filter:none}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feature-icon::before{content:"";position:absolute;z-index:-1;left:50%;top:50%;transform:translate(-50%,-50%);width:72px;height:68px;border:1px solid #85607580;border-radius:15px 15px 7px 7px;background:radial-gradient(ellipse at 50% 35%,#7d516047,transparent 80%),linear-gradient(#422c4755,#20182a88);box-shadow:inset 0 2px #cd9a7d24;pointer-events:none}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feature-icon::after{content:"";position:absolute;left:50%;bottom:2px;transform:translateX(-50%);width:82px;height:3px;background:linear-gradient(90deg,transparent,#b17a5a 20%,#e9b572 50%,#b17a5a 80%,transparent);pointer-events:none}
+    html[${ATTRIBUTE}="on"] #mf-gui ::-webkit-scrollbar-thumb{background:#76506e!important;border:2px solid #211729!important;border-radius:7px!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-toggle-copy strong{color:#f5eaf7!important}
+    html[${ATTRIBUTE}="on"] #mf-gui :is(.mf-feather-module-grid,.mf-toggle-grid)>.mf-toggle{position:relative}
+    html[${ATTRIBUTE}="on"] #mf-gui :is(.mf-feather-module-grid,.mf-toggle-grid)>.mf-toggle::before{content:"";position:absolute;left:0;top:0;width:58px;height:58px;background:url("${web}") center/contain no-repeat;opacity:.45;pointer-events:none}
+    html[${ATTRIBUTE}="on"] #mf-gui :is(.mf-feather-module-grid,.mf-toggle-grid)>.mf-toggle::after{content:"";position:absolute;left:10px;top:10px;width:22px;height:22px;background:var(--mf-hw-card-glyph) center/contain no-repeat;image-rendering:pixelated;pointer-events:none}
+    html[${ATTRIBUTE}="on"] #mf-gui :is(.mf-feather-module-grid,.mf-toggle-grid)>.mf-toggle:nth-child(4n+2){--mf-hw-card-glyph:url("${lantern}")}
+    html[${ATTRIBUTE}="on"] #mf-gui :is(.mf-feather-module-grid,.mf-toggle-grid)>.mf-toggle:nth-child(4n+3){--mf-hw-card-glyph:url("${potion}")}
+    html[${ATTRIBUTE}="on"] #mf-gui :is(.mf-feather-module-grid,.mf-toggle-grid)>.mf-toggle:nth-child(4n){--mf-hw-card-glyph:url("${witchHat}")}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-toggle:has(.mf-switch-hidden:checked){
+      border-color:#e2a263!important;box-shadow:inset 0 2px #ffd39a40,inset 3px 0 #f0a54c,inset 0 -3px #ce732533!important
+    }
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-toggle:has(.mf-switch-hidden:checked) .mf-feature-state.enabled{
+      background:linear-gradient(#744526,#583321)!important;border-color:#d79751!important;color:#ffe2a8!important
+    }
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feature-state.disabled{background:#2e223b!important;border:1px solid #65445d;color:#c2b1cf!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-toggle>.mf-feature-state.enabled::before{content:"";position:absolute;left:8px;width:13px;height:13px;background:url("${pumpkin}") center/contain no-repeat;image-rendering:pixelated;pointer-events:none}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feature-settings,
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feature-favorite{background:#3b2843!important;border:1px solid #75506b!important;box-shadow:inset 0 1px #e0ac9a24}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feature-favorite.active{background:#68394d!important;border-color:#e5a27c!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-feature-settings:hover{background:#66405b!important;border-color:#ffc583!important}
+    html[${ATTRIBUTE}="on"] #mf-gui input:not([type="checkbox"]):not([type="range"]):not([type="color"]),
+    html[${ATTRIBUTE}="on"] #mf-gui select{background-color:#140f1d!important;border-color:#67445f!important;color:#f0e1f4!important}
+    html[${ATTRIBUTE}="on"] #mf-gui input::placeholder{color:#a08dab!important}
+    html[${ATTRIBUTE}="on"] #mf-gui #mf-gui-search{border:1px solid #79546f!important;box-shadow:inset 0 2px #0c081a66!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-active-count:not(:empty){color:#c4dba0;background:#273127;border:1px solid #657857;border-radius:5px;padding:6px 8px}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-settings-row{border-color:#4b334c!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-btn:not(.primary):not(.danger){background:#302137!important;border-color:#70506c!important;color:#eee0f1!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-btn.primary,
+    html[${ATTRIBUTE}="on"] .mf-feature-modal .mf-btn.primary,
+    html[${ATTRIBUTE}="on"] #mf-update-banner [data-mf-update-primary]{
+      background:linear-gradient(180deg,#ffb45b,#e47e2c)!important;border-color:#ffc786!important;
+      color:#28151a!important;box-shadow:inset 0 1px #ffe1a8!important;text-shadow:none!important
+    }
+    html[${ATTRIBUTE}="on"] #mf-gui :is(button,input,select):focus-visible{outline:2px solid #ffd69a!important;outline-offset:3px!important}
+    html[${ATTRIBUTE}="on"] #mf-gui :is(input[type="checkbox"],input[type="range"]){accent-color:#ffa54e!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-slider{background:#47334f!important;border-color:#79516c!important}
+    html[${ATTRIBUTE}="on"] #mf-gui input:checked+.mf-slider{background:#cc7837!important}
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-muted,
+    html[${ATTRIBUTE}="on"] #mf-gui .mf-toggle-copy>span{color:#c0adca!important}
+    html[${ATTRIBUTE}="on"] .mf-feature-modal,
+    html[${ATTRIBUTE}="on"] #mf-update-banner,
+    html[${ATTRIBUTE}="on"] #mf-polish-tooltip{
+      --mf-ui-accent:#ff963e!important;--mf-ui-panel:#21152b!important;--mf-accent:#ff963e!important;
+      background-color:#21152b!important;border-color:#a76954!important;color:#f5e6ef!important
+    }
+    html[${ATTRIBUTE}="on"] .mf-feature-modal{background-image:url("${web}"),linear-gradient(135deg,#302038,#1d1429)!important;background-position:right top,center!important;background-size:70px 70px,auto!important;background-repeat:no-repeat!important;box-shadow:inset 0 3px #efbc8130,0 24px 80px #08050ec0!important}
+    html[${ATTRIBUTE}="on"] .mf-feature-modal-title{display:flex;align-items:center;gap:10px;color:#ffdfaa}
+    html[${ATTRIBUTE}="on"] .mf-feature-modal-title::before{content:"";width:25px;height:28px;flex:none;background:url("${lantern}") center/contain no-repeat;image-rendering:pixelated;pointer-events:none}
+    html[${ATTRIBUTE}="on"] .mf-feature-modal-row{border-color:#67445e!important}
+    html[${ATTRIBUTE}="on"] #mf-hub-root{--mf-global-accent:#ff963e!important;--mf-global-panel:#17101f!important}
+    html[${ATTRIBUTE}="on"] #mf-hub-root::before{background:linear-gradient(115deg,#23102f70,transparent 60%,#2f182340)!important}
+    html[${ATTRIBUTE}="on"] #mf-hub-root :is(.mf-hub-navbtn,.mf-hub-friendspill,.mf-hub-picker,.mf-hub-flyout){background:linear-gradient(145deg,#302037ed,#1b1325ed)!important;border-color:#79506b!important;backdrop-filter:none!important}
+    html[${ATTRIBUTE}="on"] #mf-hub-root .mf-hub-navbtn[data-active="true"]{background:linear-gradient(100deg,#65394b,#34213a)!important;border-color:#e0a36a!important;box-shadow:inset 3px 0 #ffa34c}
+    html[${ATTRIBUTE}="on"] #mf-hub-root .mf-hub-navbtn:hover{border-color:#ffc583!important;color:#ffe1b4!important}
+    html[${ATTRIBUTE}="on"] #mf-hub-root :is(.mf-hub-continue,.mf-hub-big,.mf-hub-fav){border-color:#775264!important;border-radius:8px!important}
+    html[${ATTRIBUTE}="on"] #mf-hub-root :is(.mf-hub-continue,.mf-hub-big,.mf-hub-fav):hover{border-color:#ffc583!important}
+    html[${ATTRIBUTE}="on"] #mf-hub-root .mf-hub-contplay{background:#ffc583!important;color:#291825!important;border-color:#8e593e!important}
+    html[${ATTRIBUTE}="on"] #mf-hub-root .mf-hub-sechead h2{color:#ffe0ae!important}
+    html[${ATTRIBUTE}="on"] #mf-hub-root .mf-hub-brand span{color:#ffdaac;opacity:1}
+    html[${ATTRIBUTE}="on"] :is(#mf-hub-root .mf-hub-main,${nativeCenter})::before{
+      content:var(--mf-hw-home-title) "\\A" var(--mf-hw-home-subtitle);white-space:pre-line;
+      display:flex;align-items:center;box-sizing:border-box;flex:none;min-height:174px;margin:0 0 26px;padding:30px 36% 30px 24px;
+      border:1px solid #a27465;border-radius:9px;color:#ffe6ba;
+      font-family:inherit;font-size:clamp(17px,1.7vw,25px);font-weight:700;line-height:1.65;letter-spacing:.025em;
+      background:linear-gradient(90deg,#24192ff5 0,#24192fe6 36%,#24192f00 76%),url("${nightScene}") right center/auto 100% no-repeat,#21182f;
+      box-shadow:inset 0 3px #f9c98530,0 7px 18px #100a1940;image-rendering:pixelated;pointer-events:none
+    }
+    html[${ATTRIBUTE}="on"] ${nativeShell}>div:not(:has(a[href^="/game/"])) button{
+      background-color:#281c32!important;border-color:#a27465!important;color:#ffe9ce!important
+    }
+    html[${ATTRIBUTE}="on"] ${nativeCenter} :is(a[href^="/game/"],[role="button"]){border-color:#92617b!important}
+    html[${ATTRIBUTE}="on"] ${nativeCenter} :is(a[href^="/game/"],[role="button"]):hover{border-color:#ffc583!important}
+    html[${ATTRIBUTE}="on"] #react.mf-classic-title :is(.mf-classic-title-button,.mf-classic-title-play,.mf-classic-title-back){
+      background:rgba(39,20,45,.87)!important;border-color:#b06a43!important;box-shadow:inset 0 2px #e1a56b35!important;color:#ffedce!important
+    }
+    html[${ATTRIBUTE}="on"] #react.mf-classic-title :is(.mf-classic-title-button,.mf-classic-title-play,.mf-classic-title-back):hover{
+      background:#674038!important;border-color:#ffbb69!important
+    }
+    html[${ATTRIBUTE}="on"] #react.mf-classic-title .mf-classic-title-brand::after{
+      content:"";display:block;width:44px;height:44px;flex:none;background:url("${pumpkin}") center/contain no-repeat;image-rendering:pixelated
+    }
+    html[${ATTRIBUTE}="on"] #react.mf-classic-title .mf-classic-title-play{background:linear-gradient(#ffc575,#df852f)!important;color:#2c1822!important;text-shadow:none!important;border-color:#ffd29a!important;box-shadow:inset 0 -4px #a4562c,0 5px 20px #100a1950!important}
+    html[${ATTRIBUTE}="on"] #react.mf-classic-title .mf-classic-title-account{background-color:#24192fed!important;border-color:#a27465!important}
+    @media(min-width:1100px) and (min-height:640px){
+      html[${ATTRIBUTE}="on"] #react.mf-classic-title:not(.mf-classic-title-choosing) .mf-classic-title-shell::before{
+        content:var(--mf-hw-home-title) "\\A" var(--mf-hw-home-subtitle);white-space:pre-line;position:fixed;left:50%;top:16%;transform:translateX(-50%);
+        box-sizing:border-box;width:min(480px,calc(100vw - 660px));min-height:170px;padding:24px 120px 24px 24px;
+        border:1px solid #a27465;border-radius:8px;color:#ffe6ba;font-size:22px;line-height:1.65;font-weight:700;text-shadow:1px 2px #120c1b;
+        background:linear-gradient(90deg,#24192ff5,#24192fa0 50%,transparent),url("${nightScene}") right center/auto 100% no-repeat,#21182f;
+        box-shadow:inset 0 3px #f9c98530;image-rendering:pixelated;pointer-events:none
+      }
+    }
+    @media(max-width:700px){html[${ATTRIBUTE}="on"] ${nativeCenter}::before{padding:20px 32% 20px 16px;min-height:132px;font-size:16px;margin-bottom:18px}}
+    @media(max-width:800px){html[${ATTRIBUTE}="on"] #react.mf-classic-title .mf-classic-title-brand::after{display:none}}
+    html[${ATTRIBUTE}="on"][${MOTION_ATTRIBUTE}="on"] #mf-gui .mf-halloween-ghost{animation:mfHalloweenFloat 5s ease-in-out infinite}
+    html[${ATTRIBUTE}="on"][${MOTION_ATTRIBUTE}="on"] #mf-gui .mf-halloween-bat{animation:mfHalloweenBat 7s ease-in-out infinite}
+    html[${ATTRIBUTE}="on"][${MOTION_ATTRIBUTE}="on"] #mf-gui .mf-halloween-ribbon-ghost{animation:mfHalloweenFloat 5s ease-in-out infinite}
+    html[${ATTRIBUTE}="on"][${MOTION_ATTRIBUTE}="on"] #mf-gui .mf-halloween-ribbon-bat{animation:mfHalloweenBat 7s ease-in-out infinite}
+    @keyframes mfHalloweenFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+    @keyframes mfHalloweenBat{0%,100%{transform:translate(0,0) rotate(-5deg)}50%{transform:translate(5px,3px) rotate(5deg)}}
+    @media(max-width:800px){html[${ATTRIBUTE}="on"] #mf-gui .mf-toggle>.mf-feature-state.enabled::before{display:none}}
+    @media(prefers-reduced-motion:reduce){html[${ATTRIBUTE}="on"] #mf-gui :is(.mf-halloween-ghost,.mf-halloween-bat,.mf-halloween-ribbon-ghost,.mf-halloween-ribbon-bat){animation:none!important}html[${ATTRIBUTE}="on"] #mf-gui .mf-toggle{transition:none!important}}
+  `;
+
+  function localizedCSS() {
+    const dictionary = globalThis.MINIFEATHER_TRANSLATIONS?.[language] || {};
+    const quote = value => '"' + value.replace(/[\\"\x00-\x1f]/g, char => `\\${char.charCodeAt(0).toString(16)} `) + '"';
+    const title = typeof dictionary.halloweenTitle === 'string' ? dictionary.halloweenTitle : 'Midnight Harvest';
+    const subtitle = typeof dictionary.halloweenHomeSubtitle === 'string' ? dictionary.halloweenHomeSubtitle : 'Your next adventure starts here';
+    return `html[${ATTRIBUTE}="on"]{--mf-hw-home-title:${quote(title)};--mf-hw-home-subtitle:${quote(subtitle)}}`;
+  }
+
+  function attribute(name, value) {
+    const root = document.documentElement;
+    if (!root) return;
+    if (value === null) { if (root.hasAttribute(name)) root.removeAttribute(name); }
+    else if (root.getAttribute(name) !== value) root.setAttribute(name, value);
+  }
+
+  function synchronizeMotion() {
+    attribute(MOTION_ATTRIBUTE, enabled && motion && !document.hidden ? 'on' : null);
+  }
+
+  function configure(value) {
+    if (destroyed || !value || typeof value !== 'object') return;
+    if (globalThis.__MF_SEASONAL_FLAGS__?.halloween !== true) enabled = false;
+    else if (typeof value.enabled === 'boolean') enabled = value.enabled;
+    if (typeof value.motion === 'boolean') motion = value.motion;
+    if (typeof value.language === 'string' && languages.has(value.language)) language = value.language;
+    if (enabled) {
+      if (!themeStyle?.isConnected) {
+        themeStyle = document.createElement('style');
+        themeStyle.id = STYLE_ID;
+        (document.head || document.documentElement).appendChild(themeStyle);
+      }
+      if (!themeStyle.textContent || paintedLanguage !== language) {
+        themeStyle.textContent = css + localizedCSS();
+        paintedLanguage = language;
+      }
+      attribute(ATTRIBUTE, 'on');
+    } else {
+      attribute(ATTRIBUTE, null);
+      themeStyle?.remove(); themeStyle = null;
+    }
+    synchronizeMotion();
+  }
+
+  function onConfig(event) {
+    let value = event.detail;
+    try { if (typeof value === 'string') value = JSON.parse(value); } catch (_) { return; }
+    configure(value);
+  }
+
+  function destroy() {
+    if (destroyed) return;
+    configure({ enabled: false }); destroyed = true;
+    baseStyle.remove();
+    document.removeEventListener(CONFIG_EVENT, onConfig);
+    document.removeEventListener('visibilitychange', synchronizeMotion);
+    if (globalThis[KEY] === api) delete globalThis[KEY];
+  }
+
+  const api = { version: 4, configure, destroy, getState: () => ({ enabled, motion, language, activeStyle: !!themeStyle?.isConnected }) };
+  globalThis[KEY] = api;
+  document.addEventListener(CONFIG_EVENT, onConfig);
+  document.addEventListener('visibilitychange', synchronizeMotion);
+  document.dispatchEvent(new CustomEvent(REQUEST_EVENT));
+})();
+
+//# sourceURL=MF:src/UI/HalloweenTheme.js
+
 /* ==== mf module: src/UI/ClientPanel.js ==== */
 (function () {
   'use strict';
@@ -122076,6 +123686,7 @@ function normalize(entry) {
     elytraFlightValues: cloneElytraFlightValues(ELYTRA_FLIGHT_PRESETS.normal),
     dynamicCrosshair: false,
     dynamicCrosshairSize: 28,
+    firstPerson: false,
     vanillaAnimations: false,
     playerAnims: true,
     headLag: false,
@@ -122156,6 +123767,8 @@ function normalize(entry) {
     cloudsShapeMix: 0.85,
     cloudsShapeTile: 512,
     panelAccentColor: '#ef3b3b',
+    halloweenTheme: true,
+    halloweenAnimations: true,
     panelBackgroundColor: '#0e1115',
     panelScale: 68,
     pageZoomEnabled: true,
@@ -122178,6 +123791,12 @@ function normalize(entry) {
     experimentalTinyTakeover: false,
     experimentalAnimatedItems: false,
     experimentalBetterAnimationCape: false,
+    experimentalBetterAnimationCapeMovement: 'simulation-v2',
+    experimentalBetterAnimationCapeStyle: 'smooth',
+    experimentalBetterAnimationCapeWind: 'waves',
+    experimentalBetterAnimationCapeWindStrength: 0.65,
+    experimentalBetterAnimationCapeGravity: 10,
+    experimentalBetterAnimationCapeStrength: 1,
     experimentalPbr: false,
 
     language: detectClientLanguage()
@@ -122199,6 +123818,7 @@ function normalize(entry) {
     const root = document.documentElement;
     root?.style.setProperty('--mf-global-accent', accent);
     root?.style.setProperty('--mf-global-panel', background);
+    sendHalloweenThemeConfig();
 
     if (!panel) return;
     panel.style.setProperty('--mf-ui-accent', accent);
@@ -122206,6 +123826,16 @@ function normalize(entry) {
     panel.style.setProperty('--mf-accent', accent);
     panel.style.setProperty('--mf-accent2', `color-mix(in srgb, ${accent} 82%, white 18%)`);
     panel.style.setProperty('--mf-bg', background);
+  }
+
+  function isHalloweenAvailable() {
+    return globalThis.__MF_SEASONAL_FLAGS__?.halloween === true;
+  }
+
+  function sendHalloweenThemeConfig() {
+    document.dispatchEvent(new CustomEvent('minifeather:halloween-ui-config', {
+      detail: JSON.stringify({ version: HALLOWEEN_UI_VERSION, enabled: isHalloweenAvailable() && settings.halloweenTheme === true, motion: settings.halloweenAnimations !== false, language: settings.language })
+    }));
   }
 
   function clampPanelScale(value) {
@@ -122397,6 +124027,41 @@ function normalize(entry) {
     if (!module) return;
     if (enabled) module.enable();
     else module.disable();
+  }
+
+  const FIRST_PERSON_MODULE_VERSION = 1;
+  const FIRST_PERSON_CONFLICTS = ['playerAnims', 'freshAnims', 'headLag', 'handSway'];
+
+  function enforceFirstPersonCompatibility() {
+    const enabled = settings.firstPerson === true ||
+      (settings.experimentalRealistic === true && settings.experimentalRealisticFirstPerson !== false);
+    if (!enabled) return;
+    let changed = false;
+    for (const key of FIRST_PERSON_CONFLICTS) {
+      if (settings[key] || guiSettings[key]) changed = true;
+      settings[key] = false;
+      guiSettings[key] = false;
+    }
+    if (changed) saveSettings(true);
+  }
+
+  function syncFirstPersonControls() {
+    if (!panel) return;
+    for (const key of ['firstPerson', ...FIRST_PERSON_CONFLICTS]) {
+      const label = panel.querySelector(`.mf-toggle[data-key="${key}"]`);
+      if (!label) continue;
+      const enabled = guiSettings[key] === true;
+      const input = label.querySelector('input');
+      if (input) input.checked = enabled;
+      label.classList.toggle('enabled', enabled);
+      label.classList.toggle('disabled', !enabled);
+      const state = label.querySelector('.mf-feature-state');
+      if (state) {
+        state.textContent = t(enabled ? 'enabled' : 'disabled');
+        state.classList.toggle('enabled', enabled);
+        state.classList.toggle('disabled', !enabled);
+      }
+    }
   }
 
   function destroyModules() {
@@ -125025,6 +126690,7 @@ function normalize(entry) {
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc'), tags: [] },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc'), tags: [] },
       { page: 'render', key: 'betterPlayerLayers', title: t('betterPlayerLayers'), desc: t('betterPlayerLayersDesc'), tags: [] },
+      { page: 'render', key: 'firstPerson', title: t('firstPerson'), desc: t('firstPersonDesc'), tags: ['new'] },
       { page: 'render', key: 'experimentalBetterAnimationCape', title: t('experimentalBetterAnimationCapeTitle'), desc: t('experimentalBetterAnimationCapeDesc'), tags: [] },
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc'), tags: ['pvp'] },
       { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc'), tags: ['pvp'] },
@@ -125197,6 +126863,7 @@ function normalize(entry) {
     vanillaAnimations: ['..nnnn..','.nNNNNn.','..n##n..','.nnnnnn.','n.nrrn.n','..nNNn..','..N..N..','.N....N.'],
     handSway: ['...n....','..nn.n..','..nn.nn.','.nnnnnn.','nnnnnnnn','.nnNNNn.','..NNNN..','...NN...'],
     playerAnims: ['..nnnn..','.nN##Nn.','..nnnn..','.bbnnrr.','bbbnrrr.','..bnnr..','..N..N..','.N....N.'],
+    firstPerson: ['..bbbb..','.bB##Bb.','bB....Bb','b..nn..b','...nn...','..rRr...','..rRr...','..N.N...'],
     headLag: ['........','.b..nnnn','b..nN##n','.b..nnnn','..b.....','........','........','........'],
     freshAnims: ['..gggg..','.gggggg.','.gkGGkg.','.gkGGkg.','.ggkkgg.','.gGkkGg.','.gGkkGg.','.gg..gg.'],
     zoom: ['..BBBB..','.BbbbbB.','Bb....bB','Bb.##.bB','.BbbbbB.','..BBBBB.','.....BB.','......BB'],
@@ -125347,6 +127014,15 @@ function normalize(entry) {
               <button class="mf-feather-tool" type="button" title="${t('grid')}">${iconSvg('grid')}</button>
             </div>
           </div>
+          ${isHalloweenAvailable() ? `<div class="mf-halloween-ribbon" aria-hidden="true">
+            <img class="mf-halloween-ribbon-pumpkin" src="${chrome.runtime.getURL('assets/ui/halloween/pumpkin.svg')}" alt="">
+            <div class="mf-halloween-ribbon-copy"><span>${t('halloweenRibbon')}</span><strong>${t('halloweenTitle')}</strong></div>
+            <div class="mf-halloween-ribbon-art">
+              <img class="mf-halloween-ribbon-bat" src="${chrome.runtime.getURL('assets/ui/halloween/bat.svg')}" alt="">
+              <img class="mf-halloween-ribbon-ghost" src="${chrome.runtime.getURL('assets/ui/halloween/ghost.svg')}" alt="">
+              <img class="mf-halloween-ribbon-lantern" src="${chrome.runtime.getURL('assets/ui/halloween/lantern.svg')}" alt="">
+            </div>
+          </div>` : ''}
           <div id="mf-gui-page"></div>
         </div>
       </div>
@@ -125405,6 +127081,7 @@ function normalize(entry) {
     ping: 'pingCounter', pingcounter: 'pingCounter',
     titan: 'titanTiny', tiny: 'titanTiny', titantiny: 'titanTiny',
     vanilla: 'vanillaAnimations', vanillaanimations: 'vanillaAnimations',
+    firstperson: 'firstPerson', firstpersonbody: 'firstPerson',
     leaf: 'leafWind', leafwind: 'leafWind', wind: 'leafWind',
     hand: 'handSway', handsway: 'handSway', sway: 'handSway',
     headlag: 'headLag', head: 'headLag', lag: 'headLag', cabeza: 'headLag', cuello: 'headLag',
@@ -125420,7 +127097,7 @@ function normalize(entry) {
     cameraOverhaul: 'cameraOverhaul', elytraFlight: 'elytraFlight', coordinates: 'coordinates',
     dynamicCrosshair: 'dynamicCrosshair', cpsCounter: 'cpsCounter', damageParticles: 'damageParticles',
     distanceNameTags: 'distanceNameTags', fpsCounter: 'fpsCounter', freelook: 'freelook', freecam: 'freecam',
-    guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers',
+    guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers', firstPerson: 'firstPerson',
     healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
     keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs', crittersMobs: 'crittersMobs', allayPets: 'allayPets',
     horror: 'horror', terror: 'horror', spooky: 'horror', herobrine: 'horror', dweller: 'horror',
@@ -126055,6 +127732,88 @@ function normalize(entry) {
     }));
   }
 
+  const CAPE_SETTINGS_VERSION = 1;
+  const HALLOWEEN_UI_VERSION = 4;
+  let betterCapeSettingsCleanup = null;
+
+  function sendBetterCapeConfig() {
+    document.dispatchEvent(new CustomEvent('minifeather:better-animation-cape-config', {
+      detail: JSON.stringify({ enabled: !!settings.experimentalBetterAnimationCape,
+        movement: settings.experimentalBetterAnimationCapeMovement, style: settings.experimentalBetterAnimationCapeStyle,
+        wind: settings.experimentalBetterAnimationCapeWind, windStrength: settings.experimentalBetterAnimationCapeWindStrength,
+        gravity: settings.experimentalBetterAnimationCapeGravity, strength: settings.experimentalBetterAnimationCapeStrength })
+    }));
+  }
+
+  function closeBetterCapeSettings() {
+    betterCapeSettingsCleanup?.();
+    betterCapeSettingsCleanup = null;
+  }
+
+  function openBetterCapeSettings() {
+    if (!panel) return;
+    closeBetterCapeSettings();
+    const prefix = 'experimentalBetterAnimationCape';
+    const selects = [
+      ['Movement', 'capePhysics', [['simulation-v2', 'capeModeV2'], ['simulation', 'capeModeSimulation'], ['classic', 'capeModeClassic'], ['dungeons', 'capeModeDungeons']]],
+      ['Style', 'capeStyle', [['smooth', 'capeStyleSmooth'], ['blocky', 'capeStyleBlocky']]],
+      ['Wind', 'capeWind', [['waves', 'capeWindWaves'], ['none', 'capeWindNone']]]
+    ];
+    const sliders = [['WindStrength', 'capeWindStrength', 0, 2, 0.05, 0.65], ['Gravity', 'capeGravity', 0, 30, 0.5, 10],
+      ['Strength', 'capeMovementStrength', 0, 2, 0.05, 1]];
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop mf-cape-backdrop';
+    backdrop.innerHTML = `<div class="mf-tt-dialog" role="dialog" aria-modal="true" style="max-height:85vh;overflow:auto">
+      <div class="mf-tt-head"><div class="mf-tt-title">${t('experimentalBetterAnimationCapeTitle')}</div>
+        <button type="button" class="mf-close" data-cape-close aria-label="${t('close')}">×</button></div>
+      ${selects.map(([key, label, options]) => `<label class="mf-tt-row"><span>${t(label)}</span>
+        <select class="mf-co-number" data-cape-select="${key}">${options.map(([value, text]) =>
+          `<option value="${value}" ${settings[prefix + key] === value ? 'selected' : ''}>${t(text)}</option>`).join('')}</select></label>`).join('')}
+      ${sliders.map(([key, label, min, max, step, fallback]) => {
+        const parsed = Number(settings[prefix + key]);
+        const value = Number.isFinite(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
+        return `<label class="mf-co-control"><span class="mf-co-control-head"><span>${t(label)}</span>
+          <output data-cape-value="${key}">${value}</output></span>
+          <input class="mf-co-range" data-cape-range="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"></label>`;
+      }).join('')}
+      <button type="button" class="mf-btn secondary" data-cape-reset>${t('capeReset')}</button>
+    </div>`;
+    panel.appendChild(backdrop);
+    const persist = () => { saveSettings(true); sendBetterCapeConfig(); };
+    for (const select of backdrop.querySelectorAll('[data-cape-select]')) {
+      select.addEventListener('change', () => {
+        settings[prefix + select.dataset.capeSelect] = guiSettings[prefix + select.dataset.capeSelect] = select.value;
+        persist();
+      });
+    }
+    for (const range of backdrop.querySelectorAll('[data-cape-range]')) {
+      range.addEventListener('input', () => {
+        const key = range.dataset.capeRange;
+        settings[prefix + key] = guiSettings[prefix + key] = Number(range.value);
+        backdrop.querySelector(`[data-cape-value="${key}"]`).textContent = range.value;
+        sendBetterCapeConfig();
+      });
+      range.addEventListener('change', persist);
+    }
+    backdrop.querySelector('[data-cape-reset]').addEventListener('click', () => {
+      const defaults = { Movement: 'simulation-v2', Style: 'smooth', Wind: 'waves', WindStrength: 0.65, Gravity: 10, Strength: 1 };
+      for (const [key, value] of Object.entries(defaults)) settings[prefix + key] = guiSettings[prefix + key] = value;
+      persist(); openBetterCapeSettings();
+    });
+    const onKey = event => {
+      if (event.code !== 'Escape') return;
+      event.preventDefault(); event.stopImmediatePropagation(); closeBetterCapeSettings();
+    };
+    betterCapeSettingsCleanup = () => {
+      saveSettings(true);
+      document.removeEventListener('keydown', onKey, true);
+      backdrop.remove();
+    };
+    document.addEventListener('keydown', onKey, true);
+    backdrop.querySelector('[data-cape-close]').addEventListener('click', closeBetterCapeSettings);
+    backdrop.addEventListener('mousedown', event => { if (event.target === backdrop) closeBetterCapeSettings(); });
+  }
+
   function closeFullBrightSettings() {
     fullBrightSettingsCleanup?.();
     fullBrightSettingsCleanup = null;
@@ -126182,6 +127941,18 @@ function normalize(entry) {
   function sendPlayerAnimsConfig(enabled = settings.playerAnims) {
     document.dispatchEvent(new CustomEvent('minifeather:playeranims-config', {
       detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initFirstPersonModule() {
+    const send = enabled => document.dispatchEvent(new CustomEvent('minifeather:firstperson-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+    registerModule('firstPerson', () => createLifecycle({
+      enable: () => send(true),
+      disable: () => send(false),
+      refresh: () => send(MODULES.get('firstPerson')?.enabled === true),
+      destroy: () => send(false)
     }));
   }
 
@@ -128828,7 +130599,7 @@ function normalize(entry) {
   }
 
   const FEATURE_ADVANCED_SETTINGS = new Set([
-    'fullBright','titanTiny','patPat','antiAfk','idlePlayerBot','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight'
+    'fullBright','titanTiny','patPat','antiAfk','idlePlayerBot','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight','experimentalBetterAnimationCape'
   ]);
 
   function closeFeatureSettings() {
@@ -129120,6 +130891,7 @@ function normalize(entry) {
       closeFeatureSettings();
       const advanced = {
         fullBright: openFullBrightSettings,
+        experimentalBetterAnimationCape: openBetterCapeSettings,
         titanTiny: openTitanTinySettings, patPat: openPatPatSettings, antiAfk: openAntiAfkSettings, idlePlayerBot: openIdlePlayerBotSettings, zoom: openZoomSettings,
         cameraOverhaul: openCameraOverhaulSettings, elytraFlight: openElytraFlightSettings, dynamicCrosshair: openDynamicCrosshairSettings,
         freelook: openFreelookSettings, freecam: openFreecamSettings, blockHighlight: openBlockHighlightSettings, armorHud: openArmorHudSettings
@@ -129395,6 +131167,7 @@ function normalize(entry) {
               t('vanillaAnimations'),
               t('vanillaAnimationsDesc')
             )}
+            ${renderToggle('firstPerson', t('firstPerson'), t('firstPersonDesc'))}
             ${renderToggle(
               'handSway',
               t('handSway'),
@@ -130608,6 +132381,35 @@ function normalize(entry) {
             </select>
           </div>
         </div>
+        ${isHalloweenAvailable() ? `<div class="mf-card mf-halloween-settings">
+          <div class="mf-halloween-heading">
+            <div class="mf-halloween-copy">
+              <span class="mf-halloween-eyebrow">${t('halloweenEyebrow')}</span>
+              <h3>${t('halloweenTitle')}</h3>
+              <p>${t('halloweenThemeDesc')}</p>
+            </div>
+            <div class="mf-halloween-art" aria-hidden="true">
+              <img class="mf-halloween-bat" src="${chrome.runtime.getURL('assets/ui/halloween/bat.svg')}" alt="">
+              <img class="mf-halloween-ghost" src="${chrome.runtime.getURL('assets/ui/halloween/ghost.svg')}" alt="">
+              <img class="mf-halloween-pumpkin" src="${chrome.runtime.getURL('assets/ui/halloween/pumpkin.svg')}" alt="">
+            </div>
+          </div>
+          <div class="mf-settings-row">
+            <span class="mf-settings-label" id="mf-halloween-theme-label">${t('halloweenTheme')}</span>
+            <label class="mf-switch" style="margin-left:auto;">
+              <input type="checkbox" id="mf-halloween-theme" aria-labelledby="mf-halloween-theme-label" aria-describedby="mf-halloween-note" ${settings.halloweenTheme === true ? 'checked' : ''}>
+              <span class="mf-slider"></span>
+            </label>
+          </div>
+          <div class="mf-settings-row">
+            <span class="mf-settings-label" id="mf-halloween-animations-label">${t('halloweenAnimations')}</span>
+            <label class="mf-switch" style="margin-left:auto;">
+              <input type="checkbox" id="mf-halloween-animations" aria-labelledby="mf-halloween-animations-label" ${settings.halloweenAnimations !== false ? 'checked' : ''}>
+              <span class="mf-slider"></span>
+            </label>
+          </div>
+          <p class="mf-halloween-note" id="mf-halloween-note">${t('halloweenNote')}</p>
+        </div>` : ''}
         <div class="mf-card">
           <div class="mf-card-title">${t('panelCustomization')}</div>
           <div class="mf-muted">${t('panelCustomizationDesc')}</div>
@@ -131199,6 +133001,7 @@ function normalize(entry) {
   function hideGUI() {
     if (!overlay || !panel) return;
     closeFullBrightSettings();
+    closeBetterCapeSettings();
     closeTitanTinySettings();
     closePatPatSettings();
     closeAntiAfkSettings();
@@ -132096,6 +133899,10 @@ function normalize(entry) {
       applyGuiSettings();
       const panel = document.getElementById('mf-gui');
       if (panel) {
+        const halloweenToggle = panel.querySelector('#mf-halloween-theme');
+        const halloweenMotion = panel.querySelector('#mf-halloween-animations');
+        if (halloweenToggle) halloweenToggle.checked = settings.halloweenTheme === true;
+        if (halloweenMotion) halloweenMotion.checked = settings.halloweenAnimations !== false;
         panel.querySelectorAll('.mf-toggle[data-key]').forEach(label => {
           const key = label.dataset.key;
           const input = label.querySelector('input');
@@ -132134,7 +133941,7 @@ function normalize(entry) {
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
     'waterSplash', 'shineAmbience', 'patPat', 'duckMobs', 'crittersMobs', 'allayPets', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
     'safeSneak', 'autoRespawn', 'autoReconnect', 'idlePlayerBot', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
-    'dynamicCrosshair', 'vanillaAnimations', 'leafWind', 'handSway', 'betterPlayerLayers',
+    'dynamicCrosshair', 'vanillaAnimations', 'firstPerson', 'leafWind', 'handSway', 'betterPlayerLayers',
     'chatVideos', 'chatLinks', 'chatMemes', 'clientChat', 'rhythmParkour', 'guiPatch',
     'customShader', 'freelook', 'blockHighlight', 'discord', 'supportAds',
     'experimentalRealistic', 'experimentalAurora', 'experimentalGrassFlowers',
@@ -133513,6 +135320,16 @@ function normalize(entry) {
 
     bindThemeColor('#mf-panel-accent-color', '#mf-panel-accent-text', 'panelAccentColor', DEFAULT_SETTINGS.panelAccentColor);
     bindThemeColor('#mf-panel-background-color', '#mf-panel-background-text', 'panelBackgroundColor', DEFAULT_SETTINGS.panelBackgroundColor);
+    const bindHalloweenSetting = (selector, key) => {
+      panel.querySelector(selector)?.addEventListener('change', event => {
+        settings[key] = event.target.checked === true;
+        guiSettings[key] = settings[key];
+        saveSettings(true);
+        sendHalloweenThemeConfig();
+      });
+    };
+    bindHalloweenSetting('#mf-halloween-theme', 'halloweenTheme');
+    bindHalloweenSetting('#mf-halloween-animations', 'halloweenAnimations');
     const scaleInput = panel.querySelector('#mf-panel-scale');
     const scaleValue = panel.querySelector('#mf-panel-scale-value');
     scaleInput?.addEventListener('input', () => {
@@ -133537,6 +135354,10 @@ function normalize(entry) {
 
     panel.querySelector('#mf-panel-custom-reset')?.addEventListener('click', () => {
       settings.panelAccentColor = DEFAULT_SETTINGS.panelAccentColor;
+      settings.halloweenTheme = DEFAULT_SETTINGS.halloweenTheme;
+      settings.halloweenAnimations = DEFAULT_SETTINGS.halloweenAnimations;
+      guiSettings.halloweenTheme = settings.halloweenTheme;
+      guiSettings.halloweenAnimations = settings.halloweenAnimations;
       settings.panelBackgroundColor = DEFAULT_SETTINGS.panelBackgroundColor;
       settings.panelScale = DEFAULT_SETTINGS.panelScale;
       guiSettings.panelAccentColor = settings.panelAccentColor;
@@ -134052,6 +135873,9 @@ function normalize(entry) {
       event.preventDefault();
       event.stopPropagation();
       openFullBrightSettings();
+    });
+    panel.querySelector('.mf-toggle[data-key="experimentalBetterAnimationCape"]')?.addEventListener('contextmenu', event => {
+      event.preventDefault(); event.stopPropagation(); openBetterCapeSettings();
     });
     zoomToggle?.addEventListener('contextmenu', event => {
       event.preventDefault();
@@ -135320,11 +137144,14 @@ function normalize(entry) {
   }
 
   function applyGuiSettings() {
+    sendHalloweenThemeConfig();
     if (experimentalTierOk === false) {
       for (const k of NSB_BOOLEAN_KEYS) {
         if (k.startsWith('experimental')) { settings[k] = false; guiSettings[k] = false; }
       }
     }
+    enforceFirstPersonCompatibility();
+    syncFirstPersonControls();
     sendLanguageConfig();
     if (!settings.idlePlayerBot) sessionRiskAcceptances.delete('idlePlayerBot');
     setModuleEnabled('rebrand', settings.rebrand);
@@ -135386,6 +137213,7 @@ function normalize(entry) {
     setModuleEnabled('freshAnims', settings.freshAnims);
     setModuleEnabled('leafWind', settings.leafWind);
     setModuleEnabled('handSway', settings.handSway);
+    setModuleEnabled('firstPerson', settings.firstPerson);
     setModuleEnabled('betterPlayerLayers', settings.betterPlayerLayers);
     setModuleEnabled('guiPatch', settings.guiPatch);
     document.dispatchEvent(
@@ -135467,11 +137295,7 @@ function normalize(entry) {
         detail: JSON.stringify({ enabled: !!settings.experimentalAnimatedItems })
       })
     );
-    document.dispatchEvent(
-      new CustomEvent('minifeather:better-animation-cape-config', {
-        detail: JSON.stringify({ enabled: !!settings.experimentalBetterAnimationCape })
-      })
-    );
+    sendBetterCapeConfig();
     document.dispatchEvent(
       new CustomEvent('minifeather:pbr-config', {
         detail: JSON.stringify({ enabled: !!settings.experimentalPbr })
@@ -136061,6 +137885,7 @@ function normalize(entry) {
     initFullBrightModule();
     initVanillaAnimationsModule();
     initPlayerAnimsModule();
+    initFirstPersonModule();
     initLeafWindModule();
     initHandSwayModule();
     initHorrorModule();
@@ -136158,6 +137983,7 @@ function normalize(entry) {
     fontObserver = null;
     chatObserver?.disconnect();
     closeFullBrightSettings();
+    closeBetterCapeSettings();
     chatObserver = null;
     restoreChatContent();
     restoreChatContent = () => {};
@@ -136186,6 +138012,8 @@ function normalize(entry) {
     document.getElementById('mf-risk-warning-style')?.remove();
 
     window.removeEventListener(MF_CONFIG_REQ, onConfigRequest);
+    document.removeEventListener('minifeather:halloween-ui-request', sendHalloweenThemeConfig);
+    document.dispatchEvent(new CustomEvent('minifeather:halloween-ui-config', { detail: JSON.stringify({ enabled: false }) }));
     overlay = null;
     panel = null;
     guiReady = false;
@@ -136390,6 +138218,7 @@ function normalize(entry) {
       .catch(err => reply(false, String((err && err.message) || err)));
   }
   window.addEventListener(MF_CONFIG_REQ, onConfigRequest);
+  document.addEventListener('minifeather:halloween-ui-request', sendHalloweenThemeConfig);
   window.MF_Config = {
     async defaults() {
       const out = await buildDefaults();

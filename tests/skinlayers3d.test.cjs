@@ -51,6 +51,7 @@ function fixture(width = 2, height = 1) {
   const positions = new Float32Array(48 * 3);
   // Native overlay's top-face corners follow FACE_LAYOUT.
   positions.set([1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0], 24 * 3);
+  positions.set([1, 1 - 0.2 / 16, 1, 0, 1 - 0.2 / 16, 1, 1, 1 - 0.2 / 16, 0, 0, 1 - 0.2 / 16, 0]);
   reference.setAttribute('position', new Attribute(positions, 3));
   reference.setAttribute('uv', new Attribute(new Float32Array(48 * 2), 2));
   const pixels = new Uint8ClampedArray(64 * 64 * 4);
@@ -316,4 +317,170 @@ test('flat-layer filtering preserves material group indices after removed triang
   assert.deepEqual(original.groups, [{ start: 0, count: 6, materialIndex: 1 }, { start: 6, count: 6, materialIndex: 2 }]);
   f.e.config(false);
   assert.equal(f.reference.geometry, original);
+});
+
+test('voxel depth starts on the base skin even when the native shell inflation changes', () => {
+  for (const nativeInflate of [0.1, 0.2, 0.5, 1]) {
+    const f = fixture(1);
+    f.opaque(0);
+    for (let vertex = 0; vertex < 4; vertex++) f.reference.attributes.position.array[(24 + vertex) * 3 + 1] =
+      f.reference.attributes.position.getY(vertex) + nativeInflate / 16;
+    const geometry = geometryApi.buildGeometry(f.reference, f.overlay, f.pixels);
+    const ys = Array.from(geometry.attributes.position.array).filter((_, index) => index % 3 === 1);
+    const base = f.reference.attributes.position.getY(0);
+    assert.ok(Math.abs(Math.min(...ys) - base) < 1e-6, 'inner wall must touch the native base skin');
+    assert.ok(Math.abs(Math.max(...ys) - base - 0.4 / 16) < 1e-6, 'extrusion thickness is independent of the old shell');
+  }
+});
+
+test('texture updates invalidate only the cached skin and replace owned geometry once', () => {
+  const f = playerEnvironment();
+  f.e.config(true);
+  const first = f.pivot.children[0];
+  f.material.map.version = 1;
+  f.e.tick();
+  assert.equal(f.e.reads, 2);
+  assert.notEqual(f.pivot.children[0], first);
+  assert.equal(first.geometry.disposed, true);
+  f.e.tick(); f.e.tick();
+  assert.equal(f.e.reads, 2);
+});
+
+function nativeRigEnvironment() {
+  const THREE = require('three');
+  const f = playerEnvironment();
+  addNativeTriangles(f.reference.geometry);
+  const geometry = new THREE.BufferGeometry();
+  for (const [name, attribute] of Object.entries(f.reference.geometry.attributes)) {
+    geometry.setAttribute(name, new THREE.BufferAttribute(attribute.array.slice(), attribute.itemSize));
+  }
+  geometry.setIndex(f.reference.geometry.index.array);
+  geometry.computeVertexNormals();
+  const texture = new THREE.Texture({ width: 64, height: 64, src: 'local-skin.png' });
+  const material = new THREE.MeshBasicMaterial({ map: texture, alphaTest: 0.01 });
+  const bone = new THREE.Bone();
+  bone.position.set(0.3, 0.7, -0.2);
+  const root = new THREE.Group();
+  root.add(bone); root.updateMatrixWorld(true);
+  const skeleton = new THREE.Skeleton([bone]);
+  const reference = new THREE.Mesh(geometry, material);
+  const bodyGeometry = geometry.clone();
+  bodyGeometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(new Uint16Array(48 * 4), 4));
+  const weights = new Float32Array(48 * 4);
+  for (let i = 0; i < 48; i++) weights[i * 4] = 1;
+  bodyGeometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(weights, 4));
+  bodyGeometry.applyMatrix4(bone.matrixWorld);
+  const body = new THREE.SkinnedMesh(bodyGeometry, material);
+  root.add(body);
+  body.bind(skeleton, new THREE.Matrix4());
+  f.mesh.headPivot = bone;
+  f.mesh.meshes.head = reference;
+  f.mesh.skinnedBody = body;
+  return { ...f, THREE, bone, root, skeleton, body, bodyGeometry, reference, material };
+}
+
+test('real Three.js skin weights keep extruded pixels on the native bone through rotation and scaling, without extra meshes', () => {
+  const f = nativeRigEnvironment();
+  f.e.config(true);
+  const api = f.e.sandbox.MF_BetterPlayerLayers;
+  assert.equal(api.getState().rigBoundParts, 1);
+  assert.equal(f.bone.children.length, 0, 'the native skinned mesh draws the voxels');
+  const generated = f.body.geometry;
+  assert.notEqual(generated, f.bodyGeometry);
+  assert.equal(generated.index.count, 36, 'base skin plus extruded faces, not the duplicated flat overlay');
+  const index = 48;
+  assert.equal(generated.attributes.skinIndex.getX(index), 0);
+  assert.equal(generated.attributes.skinWeight.getX(index), 1);
+  const local = new f.THREE.Vector3().fromBufferAttribute(generated.attributes.position, index)
+    .applyMatrix4(f.skeleton.boneInverses[0]);
+  for (const angle of [0, 0.4, 1.5, -0.8]) {
+    f.bone.rotation.set(angle, angle / 2, -angle / 3);
+    f.bone.scale.setScalar(0.85);
+    f.root.updateMatrixWorld(true); f.skeleton.update();
+    const actual = f.body.applyBoneTransform(index, new f.THREE.Vector3().fromBufferAttribute(generated.attributes.position, index));
+    const expected = local.clone().applyMatrix4(f.bone.matrixWorld);
+    assert.ok(actual.distanceTo(expected) < 1e-6);
+    f.e.tick();
+    assert.equal(f.body.geometry, generated, 'animation does not rebuild geometry');
+  }
+  f.e.config(false);
+  assert.equal(f.body.geometry, f.bodyGeometry);
+  assert.equal(f.body.material, f.material);
+});
+
+test('native rig merging respects First Person ownership and restores the original without disposing it', () => {
+  const f = nativeRigEnvironment();
+  const firstPerson = f.bodyGeometry.clone();
+  f.body.__mfFirstPersonGeometry = { source: f.bodyGeometry, filtered: firstPerson };
+  f.body.geometry = firstPerson;
+  let originalDisposed = false, firstPersonDisposed = false;
+  f.bodyGeometry.addEventListener('dispose', () => { originalDisposed = true; });
+  firstPerson.addEventListener('dispose', () => { firstPersonDisposed = true; });
+  f.e.config(true);
+  const combined = f.body.__mfFirstPersonGeometry.source;
+  assert.notEqual(combined, f.bodyGeometry);
+  assert.equal(f.body.geometry, firstPerson);
+  let combinedDisposed = false;
+  combined.addEventListener('dispose', () => { combinedDisposed = true; });
+  f.e.tick();
+  assert.equal(f.body.__mfFirstPersonGeometry.source, combined);
+  f.e.config(false);
+  assert.equal(f.body.__mfFirstPersonGeometry.source, f.bodyGeometry);
+  assert.equal(f.body.geometry, firstPerson);
+  assert.equal(combinedDisposed, true);
+  assert.equal(originalDisposed, false);
+  assert.equal(firstPersonDisposed, false);
+});
+
+test('native rigs with a separate head merge body layers and retain the head on its own pivot', () => {
+  const f = nativeRigEnvironment();
+  const headPivot = new f.THREE.Bone();
+  f.root.add(headPivot);
+  const head = f.reference.clone();
+  headPivot.add(head);
+  f.mesh.headPivot = headPivot;
+  f.mesh.torso = f.bone;
+  f.mesh.meshes = { head, torso: f.reference };
+  f.mesh.model.parts.torso2 = f.overlay.definition;
+  f.e.config(true);
+  const status = f.e.sandbox.MF_BetterPlayerLayers.getState();
+  assert.equal(status.parts, 2);
+  assert.equal(status.rigBoundParts, 1);
+  assert.equal(f.bone.children.length, 0);
+  assert.equal(headPivot.children.length, 2, 'separate native head and its bone-attached pixel geometry');
+  assert.equal(head.geometry.index.count, 6, 'the native flat head overlay is replaced');
+  assert.equal(f.body.geometry.index.count, 36);
+  const generated = headPivot.children.find(object => object !== head);
+  headPivot.rotation.y = 0.7;
+  f.root.updateMatrixWorld(true);
+  assert.deepEqual(generated.matrixWorld.elements, headPivot.matrixWorld.elements);
+  f.e.config(false);
+  assert.equal(headPivot.children.length, 1);
+  assert.equal(f.body.geometry, f.bodyGeometry);
+});
+
+test('actual First Person filters the rig-bound head voxels and composes cleanup in either enable order', () => {
+  const firstPersonSource = fs.readFileSync(path.join(__dirname, '../src/Experimental/Realistic/FirstPersonModel.js'), 'utf8');
+  for (const layersFirst of [true, false]) {
+    const f = nativeRigEnvironment();
+    f.mesh.skeleton = f.root;
+    f.mesh.children = [f.body];
+    f.mesh.render = function () {};
+    Object.assign(f.e.sandbox.Game.player, { perspective: 0, yaw: 0, width: 0.6, pos: { x: 0, y: 0, z: 0 } });
+    vm.runInNewContext(firstPersonSource, f.e.sandbox);
+    const firstPerson = f.e.sandbox.MF_RealisticFirstPerson;
+    if (layersFirst) f.e.config(true);
+    firstPerson.enable();
+    if (!layersFirst) f.e.config(true);
+    f.mesh.render();
+    assert.equal(firstPerson.getState().error, '');
+    assert.equal(f.e.sandbox.MF_BetterPlayerLayers.getState().rigBoundParts, 1);
+    assert.equal(f.body.geometry.index.count, 0, 'head and all its voxels are removed from the first-person view');
+    f.e.config(false);
+    f.mesh.render();
+    firstPerson.disable();
+    assert.equal(f.body.geometry, f.bodyGeometry);
+    assert.equal(f.body.__mfFirstPersonGeometry, undefined);
+    assert.equal(f.body.material, f.material);
+  }
 });

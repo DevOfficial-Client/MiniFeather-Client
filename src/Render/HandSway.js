@@ -32,6 +32,7 @@
     };
 
     function setEnabled(enabled) {
+        if (globalThis.MF_RealisticFirstPerson?.getState?.().enabled) enabled = false;
         state.enabled = enabled === true;
         try {
             localStorage.setItem('miniblox_handsway', String(state.enabled));

@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const REALISTIC_PLAYER_FEATURES_VERSION = 1;
+  const REALISTIC_PLAYER_FEATURES_VERSION = 2;
   const W = globalThis;
   const EVENT_NAME = 'minifeather:realistic-config';
   try { W.MF_RealisticMode?.destroy?.(); } catch (_) {}
@@ -168,7 +168,7 @@
   function applyPlayerFeatures() {
     W.MF_BetterPlayerLayers?.setRealisticOptions?.({ enabled: state.enabled && state.skinLayers });
     W.MF_BetterPlayerLayersArmor?.setRealisticOptions?.({ enabled: state.enabled && state.armorRelief });
-    W.MF_RealisticFirstPerson?.configure?.({ enabled: state.enabled && state.firstPersonBody });
+    W.MF_RealisticFirstPerson?.setRealisticOptions?.({ enabled: state.enabled && state.firstPersonBody });
   }
 
   function playerPosition(game) {

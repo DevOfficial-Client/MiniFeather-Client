@@ -17,7 +17,7 @@ function fixture({ modules = true } = {}) {
   const attach = () => {
     sandbox.MF_BetterPlayerLayers = { setRealisticOptions: value => calls.skinLayers.push(value.enabled) };
     sandbox.MF_BetterPlayerLayersArmor = { setRealisticOptions: value => calls.armorRelief.push(value.enabled) };
-    sandbox.MF_RealisticFirstPerson = { configure: value => calls.firstPersonBody.push(value.enabled) };
+    sandbox.MF_RealisticFirstPerson = { setRealisticOptions: value => calls.firstPersonBody.push(value.enabled) };
   };
   const sandbox = {
     performance: { now: () => now },
@@ -129,9 +129,92 @@ test('all ten supported languages include the player adaptation labels and expla
     for (const key of [
       'experimentalRealisticPlayerTitle', 'experimentalRealisticPlayerDesc',
       'experimentalRealisticSkinLayersLabel', 'experimentalRealisticArmorReliefLabel',
-      'experimentalRealisticFirstPersonLabel'
+      'experimentalRealisticFirstPersonLabel', 'firstPerson', 'firstPersonDesc'
     ]) {
       assert.ok(typeof translations[language][key] === 'string' && translations[language][key].length > 0, `${language}: ${key}`);
     }
+  }
+});
+
+test('First Person is a standalone Render module, while the Realistic option remains available', () => {
+  assert.match(panelSource, /firstPerson: false/);
+  assert.match(panelSource, /page: 'render', key: 'firstPerson'/);
+  assert.match(panelSource, /renderToggle\('firstPerson', t\('firstPerson'\), t\('firstPersonDesc'\)\)/);
+  assert.match(panelSource, /registerModule\('firstPerson'/);
+  assert.match(panelSource, /initFirstPersonModule\(\);/);
+  assert.match(panelSource, /setModuleEnabled\('firstPerson', settings.firstPerson\)/);
+  const mirror = JSON.parse(read('mirror.json')).mainStart;
+  assert.ok(mirror.indexOf('src/Experimental/Realistic/FirstPersonModel.js') >= 0);
+  assert.ok(mirror.indexOf('src/Experimental/Realistic/FirstPersonModel.js') < mirror.indexOf('src/Experimental/Realistic/RealisticMode.js'));
+  assert.equal(JSON.parse(read('defaults.json')).render.firstPerson, false);
+});
+
+test('UI conflict guard saves actual disabled animation toggles, from either owner, and leaves Vanilla unchanged', () => {
+  const match = panelSource.match(/  function enforceFirstPersonCompatibility\(\) \{[\s\S]*?\n  \}/);
+  assert.ok(match);
+  const conflicts = ['playerAnims', 'freshAnims', 'headLag', 'handSway'];
+  for (const scenario of [
+    { firstPerson: true },
+    { experimentalRealistic: true, experimentalRealisticFirstPerson: true },
+    { experimentalRealistic: true, experimentalRealisticFirstPerson: false },
+    { firstPerson: false, experimentalRealistic: false }
+  ]) {
+    const settings = { ...Object.fromEntries(conflicts.map(key => [key, true])), vanillaAnimations: true, ...scenario };
+    const guiSettings = { ...settings };
+    let saves = 0;
+    const apply = vm.runInNewContext(`(${match[0]})`, { settings, guiSettings,
+      FIRST_PERSON_CONFLICTS: conflicts, saveSettings: () => saves++ });
+    apply();
+    const enabled = settings.firstPerson === true || (settings.experimentalRealistic === true && settings.experimentalRealisticFirstPerson !== false);
+    for (const key of conflicts) {
+      assert.equal(settings[key], !enabled);
+      assert.equal(guiSettings[key], !enabled);
+    }
+    assert.equal(settings.vanillaAnimations, true);
+    assert.equal(guiSettings.vanillaAnimations, true);
+    assert.equal(saves, enabled ? 1 : 0);
+    apply();
+    assert.equal(saves, enabled ? 1 : 0, 'unchanged settings are not written every time');
+  }
+});
+
+test('each custom animation setter refuses reactivation while First Person owns the model', () => {
+  for (const file of ['src/PlayerAnims/MF_PlayerAnims.js', 'src/PlayerAnims/MF_FreshAnims.js', 'src/PlayerAnims/HeadLag.js', 'src/Render/HandSway.js']) {
+    const match = read(file).match(/    function setEnabled\(enabled\) \{[\s\S]*?\n    \}/);
+    assert.ok(match, file);
+    const state = { enabled: false };
+    let writes = 0;
+    const sandbox = {
+      state, MF_RealisticFirstPerson: { getState: () => ({ enabled: true }) },
+      localStorage: { setItem() { writes++; } }, document: { dispatchEvent() {} },
+      CustomEvent: class {}, requestAnimationFrame() { assert.fail(`${file} must not start an animation`); }
+    };
+    const setEnabled = vm.runInNewContext(`(${match[0]})`, sandbox);
+    setEnabled(true);
+    assert.equal(state.enabled, false, file);
+    if (file.endsWith('HandSway.js')) assert.equal(writes, 1);
+  }
+});
+
+test('First Person compatibility updates rendered toggle labels without rebuilding the entire GUI', () => {
+  const match = panelSource.match(/  function syncFirstPersonControls\(\) \{[\s\S]*?\n  \}/);
+  assert.ok(match);
+  const conflicts = ['playerAnims', 'freshAnims', 'headLag', 'handSway'];
+  const guiSettings = { firstPerson: true, ...Object.fromEntries(conflicts.map(key => [key, false])) };
+  const labels = new Map();
+  const classes = () => ({ values: new Map(), toggle(name, enabled) { this.values.set(name, enabled); } });
+  for (const key of ['firstPerson', ...conflicts]) {
+    const input = { checked: key !== 'firstPerson' };
+    const state = { textContent: '', classList: classes() };
+    labels.set(key, { input, state, classList: classes(), querySelector: query => query === 'input' ? input : state });
+  }
+  const panel = { querySelector(query) { return labels.get(query.match(/data-key="([^"]+)"/)[1]); } };
+  vm.runInNewContext(`(${match[0]})()`, { panel, guiSettings, FIRST_PERSON_CONFLICTS: conflicts, t: key => key });
+  for (const [key, label] of labels) {
+    const enabled = key === 'firstPerson';
+    assert.equal(label.input.checked, enabled);
+    assert.equal(label.state.textContent, enabled ? 'enabled' : 'disabled');
+    assert.equal(label.state.classList.values.get('enabled'), enabled);
+    assert.equal(label.classList.values.get('disabled'), !enabled);
   }
 });

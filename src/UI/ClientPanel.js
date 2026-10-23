@@ -745,6 +745,7 @@
     elytraFlightValues: cloneElytraFlightValues(ELYTRA_FLIGHT_PRESETS.normal),
     dynamicCrosshair: false,
     dynamicCrosshairSize: 28,
+    firstPerson: false,
     vanillaAnimations: false,
     playerAnims: true,
     headLag: false,
@@ -825,6 +826,8 @@
     cloudsShapeMix: 0.85,
     cloudsShapeTile: 512,
     panelAccentColor: '#ef3b3b',
+    halloweenTheme: true,
+    halloweenAnimations: true,
     panelBackgroundColor: '#0e1115',
     panelScale: 68,
     pageZoomEnabled: true,
@@ -847,6 +850,12 @@
     experimentalTinyTakeover: false,
     experimentalAnimatedItems: false,
     experimentalBetterAnimationCape: false,
+    experimentalBetterAnimationCapeMovement: 'simulation-v2',
+    experimentalBetterAnimationCapeStyle: 'smooth',
+    experimentalBetterAnimationCapeWind: 'waves',
+    experimentalBetterAnimationCapeWindStrength: 0.65,
+    experimentalBetterAnimationCapeGravity: 10,
+    experimentalBetterAnimationCapeStrength: 1,
     experimentalPbr: false,
 
     language: detectClientLanguage()
@@ -868,6 +877,7 @@
     const root = document.documentElement;
     root?.style.setProperty('--mf-global-accent', accent);
     root?.style.setProperty('--mf-global-panel', background);
+    sendHalloweenThemeConfig();
 
     if (!panel) return;
     panel.style.setProperty('--mf-ui-accent', accent);
@@ -875,6 +885,16 @@
     panel.style.setProperty('--mf-accent', accent);
     panel.style.setProperty('--mf-accent2', `color-mix(in srgb, ${accent} 82%, white 18%)`);
     panel.style.setProperty('--mf-bg', background);
+  }
+
+  function isHalloweenAvailable() {
+    return globalThis.__MF_SEASONAL_FLAGS__?.halloween === true;
+  }
+
+  function sendHalloweenThemeConfig() {
+    document.dispatchEvent(new CustomEvent('minifeather:halloween-ui-config', {
+      detail: JSON.stringify({ version: HALLOWEEN_UI_VERSION, enabled: isHalloweenAvailable() && settings.halloweenTheme === true, motion: settings.halloweenAnimations !== false, language: settings.language })
+    }));
   }
 
   function clampPanelScale(value) {
@@ -1066,6 +1086,41 @@
     if (!module) return;
     if (enabled) module.enable();
     else module.disable();
+  }
+
+  const FIRST_PERSON_MODULE_VERSION = 1;
+  const FIRST_PERSON_CONFLICTS = ['playerAnims', 'freshAnims', 'headLag', 'handSway'];
+
+  function enforceFirstPersonCompatibility() {
+    const enabled = settings.firstPerson === true ||
+      (settings.experimentalRealistic === true && settings.experimentalRealisticFirstPerson !== false);
+    if (!enabled) return;
+    let changed = false;
+    for (const key of FIRST_PERSON_CONFLICTS) {
+      if (settings[key] || guiSettings[key]) changed = true;
+      settings[key] = false;
+      guiSettings[key] = false;
+    }
+    if (changed) saveSettings(true);
+  }
+
+  function syncFirstPersonControls() {
+    if (!panel) return;
+    for (const key of ['firstPerson', ...FIRST_PERSON_CONFLICTS]) {
+      const label = panel.querySelector(`.mf-toggle[data-key="${key}"]`);
+      if (!label) continue;
+      const enabled = guiSettings[key] === true;
+      const input = label.querySelector('input');
+      if (input) input.checked = enabled;
+      label.classList.toggle('enabled', enabled);
+      label.classList.toggle('disabled', !enabled);
+      const state = label.querySelector('.mf-feature-state');
+      if (state) {
+        state.textContent = t(enabled ? 'enabled' : 'disabled');
+        state.classList.toggle('enabled', enabled);
+        state.classList.toggle('disabled', !enabled);
+      }
+    }
   }
 
   function destroyModules() {
@@ -3694,6 +3749,7 @@
       { page: 'render', key: 'rebrand', title: t('rebrand'), desc: t('rebrandDesc'), tags: [] },
       { page: 'render', key: 'titanTiny', title: t('titanTiny'), desc: t('titanTinyDesc'), tags: [] },
       { page: 'render', key: 'betterPlayerLayers', title: t('betterPlayerLayers'), desc: t('betterPlayerLayersDesc'), tags: [] },
+      { page: 'render', key: 'firstPerson', title: t('firstPerson'), desc: t('firstPersonDesc'), tags: ['new'] },
       { page: 'render', key: 'experimentalBetterAnimationCape', title: t('experimentalBetterAnimationCapeTitle'), desc: t('experimentalBetterAnimationCapeDesc'), tags: [] },
       { page: 'render', key: 'healthNameTags', title: t('healthNameTags'), desc: t('healthNameTagsDesc'), tags: ['pvp'] },
       { page: 'render', key: 'distanceNameTags', title: t('distanceNameTags'), desc: t('distanceNameTagsDesc'), tags: ['pvp'] },
@@ -3866,6 +3922,7 @@
     vanillaAnimations: ['..nnnn..','.nNNNNn.','..n##n..','.nnnnnn.','n.nrrn.n','..nNNn..','..N..N..','.N....N.'],
     handSway: ['...n....','..nn.n..','..nn.nn.','.nnnnnn.','nnnnnnnn','.nnNNNn.','..NNNN..','...NN...'],
     playerAnims: ['..nnnn..','.nN##Nn.','..nnnn..','.bbnnrr.','bbbnrrr.','..bnnr..','..N..N..','.N....N.'],
+    firstPerson: ['..bbbb..','.bB##Bb.','bB....Bb','b..nn..b','...nn...','..rRr...','..rRr...','..N.N...'],
     headLag: ['........','.b..nnnn','b..nN##n','.b..nnnn','..b.....','........','........','........'],
     freshAnims: ['..gggg..','.gggggg.','.gkGGkg.','.gkGGkg.','.ggkkgg.','.gGkkGg.','.gGkkGg.','.gg..gg.'],
     zoom: ['..BBBB..','.BbbbbB.','Bb....bB','Bb.##.bB','.BbbbbB.','..BBBBB.','.....BB.','......BB'],
@@ -4016,6 +4073,15 @@
               <button class="mf-feather-tool" type="button" title="${t('grid')}">${iconSvg('grid')}</button>
             </div>
           </div>
+          ${isHalloweenAvailable() ? `<div class="mf-halloween-ribbon" aria-hidden="true">
+            <img class="mf-halloween-ribbon-pumpkin" src="${chrome.runtime.getURL('assets/ui/halloween/pumpkin.svg')}" alt="">
+            <div class="mf-halloween-ribbon-copy"><span>${t('halloweenRibbon')}</span><strong>${t('halloweenTitle')}</strong></div>
+            <div class="mf-halloween-ribbon-art">
+              <img class="mf-halloween-ribbon-bat" src="${chrome.runtime.getURL('assets/ui/halloween/bat.svg')}" alt="">
+              <img class="mf-halloween-ribbon-ghost" src="${chrome.runtime.getURL('assets/ui/halloween/ghost.svg')}" alt="">
+              <img class="mf-halloween-ribbon-lantern" src="${chrome.runtime.getURL('assets/ui/halloween/lantern.svg')}" alt="">
+            </div>
+          </div>` : ''}
           <div id="mf-gui-page"></div>
         </div>
       </div>
@@ -4074,6 +4140,7 @@
     ping: 'pingCounter', pingcounter: 'pingCounter',
     titan: 'titanTiny', tiny: 'titanTiny', titantiny: 'titanTiny',
     vanilla: 'vanillaAnimations', vanillaanimations: 'vanillaAnimations',
+    firstperson: 'firstPerson', firstpersonbody: 'firstPerson',
     leaf: 'leafWind', leafwind: 'leafWind', wind: 'leafWind',
     hand: 'handSway', handsway: 'handSway', sway: 'handSway',
     headlag: 'headLag', head: 'headLag', lag: 'headLag', cabeza: 'headLag', cuello: 'headLag',
@@ -4089,7 +4156,7 @@
     cameraOverhaul: 'cameraOverhaul', elytraFlight: 'elytraFlight', coordinates: 'coordinates',
     dynamicCrosshair: 'dynamicCrosshair', cpsCounter: 'cpsCounter', damageParticles: 'damageParticles',
     distanceNameTags: 'distanceNameTags', fpsCounter: 'fpsCounter', freelook: 'freelook', freecam: 'freecam',
-    guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers',
+    guiPatch: 'guiPatch', handSway: 'handSway', betterPlayerLayers: 'betterPlayerLayers', firstPerson: 'firstPerson',
     healthNameTags: 'healthNameTags', blockHighlight: 'blockHighlight', itemPhysics: 'itemPhysics',
     keystrokes: 'keystrokes', noWeather: 'noWeather', fullBright: 'fullBright', leafWind: 'leafWind', patPat: 'patPat', duckMobs: 'duckMobs', crittersMobs: 'crittersMobs', allayPets: 'allayPets',
     horror: 'horror', terror: 'horror', spooky: 'horror', herobrine: 'horror', dweller: 'horror',
@@ -4724,6 +4791,88 @@
     }));
   }
 
+  const CAPE_SETTINGS_VERSION = 1;
+  const HALLOWEEN_UI_VERSION = 4;
+  let betterCapeSettingsCleanup = null;
+
+  function sendBetterCapeConfig() {
+    document.dispatchEvent(new CustomEvent('minifeather:better-animation-cape-config', {
+      detail: JSON.stringify({ enabled: !!settings.experimentalBetterAnimationCape,
+        movement: settings.experimentalBetterAnimationCapeMovement, style: settings.experimentalBetterAnimationCapeStyle,
+        wind: settings.experimentalBetterAnimationCapeWind, windStrength: settings.experimentalBetterAnimationCapeWindStrength,
+        gravity: settings.experimentalBetterAnimationCapeGravity, strength: settings.experimentalBetterAnimationCapeStrength })
+    }));
+  }
+
+  function closeBetterCapeSettings() {
+    betterCapeSettingsCleanup?.();
+    betterCapeSettingsCleanup = null;
+  }
+
+  function openBetterCapeSettings() {
+    if (!panel) return;
+    closeBetterCapeSettings();
+    const prefix = 'experimentalBetterAnimationCape';
+    const selects = [
+      ['Movement', 'capePhysics', [['simulation-v2', 'capeModeV2'], ['simulation', 'capeModeSimulation'], ['classic', 'capeModeClassic'], ['dungeons', 'capeModeDungeons']]],
+      ['Style', 'capeStyle', [['smooth', 'capeStyleSmooth'], ['blocky', 'capeStyleBlocky']]],
+      ['Wind', 'capeWind', [['waves', 'capeWindWaves'], ['none', 'capeWindNone']]]
+    ];
+    const sliders = [['WindStrength', 'capeWindStrength', 0, 2, 0.05, 0.65], ['Gravity', 'capeGravity', 0, 30, 0.5, 10],
+      ['Strength', 'capeMovementStrength', 0, 2, 0.05, 1]];
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mf-tt-backdrop mf-cape-backdrop';
+    backdrop.innerHTML = `<div class="mf-tt-dialog" role="dialog" aria-modal="true" style="max-height:85vh;overflow:auto">
+      <div class="mf-tt-head"><div class="mf-tt-title">${t('experimentalBetterAnimationCapeTitle')}</div>
+        <button type="button" class="mf-close" data-cape-close aria-label="${t('close')}">×</button></div>
+      ${selects.map(([key, label, options]) => `<label class="mf-tt-row"><span>${t(label)}</span>
+        <select class="mf-co-number" data-cape-select="${key}">${options.map(([value, text]) =>
+          `<option value="${value}" ${settings[prefix + key] === value ? 'selected' : ''}>${t(text)}</option>`).join('')}</select></label>`).join('')}
+      ${sliders.map(([key, label, min, max, step, fallback]) => {
+        const parsed = Number(settings[prefix + key]);
+        const value = Number.isFinite(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
+        return `<label class="mf-co-control"><span class="mf-co-control-head"><span>${t(label)}</span>
+          <output data-cape-value="${key}">${value}</output></span>
+          <input class="mf-co-range" data-cape-range="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"></label>`;
+      }).join('')}
+      <button type="button" class="mf-btn secondary" data-cape-reset>${t('capeReset')}</button>
+    </div>`;
+    panel.appendChild(backdrop);
+    const persist = () => { saveSettings(true); sendBetterCapeConfig(); };
+    for (const select of backdrop.querySelectorAll('[data-cape-select]')) {
+      select.addEventListener('change', () => {
+        settings[prefix + select.dataset.capeSelect] = guiSettings[prefix + select.dataset.capeSelect] = select.value;
+        persist();
+      });
+    }
+    for (const range of backdrop.querySelectorAll('[data-cape-range]')) {
+      range.addEventListener('input', () => {
+        const key = range.dataset.capeRange;
+        settings[prefix + key] = guiSettings[prefix + key] = Number(range.value);
+        backdrop.querySelector(`[data-cape-value="${key}"]`).textContent = range.value;
+        sendBetterCapeConfig();
+      });
+      range.addEventListener('change', persist);
+    }
+    backdrop.querySelector('[data-cape-reset]').addEventListener('click', () => {
+      const defaults = { Movement: 'simulation-v2', Style: 'smooth', Wind: 'waves', WindStrength: 0.65, Gravity: 10, Strength: 1 };
+      for (const [key, value] of Object.entries(defaults)) settings[prefix + key] = guiSettings[prefix + key] = value;
+      persist(); openBetterCapeSettings();
+    });
+    const onKey = event => {
+      if (event.code !== 'Escape') return;
+      event.preventDefault(); event.stopImmediatePropagation(); closeBetterCapeSettings();
+    };
+    betterCapeSettingsCleanup = () => {
+      saveSettings(true);
+      document.removeEventListener('keydown', onKey, true);
+      backdrop.remove();
+    };
+    document.addEventListener('keydown', onKey, true);
+    backdrop.querySelector('[data-cape-close]').addEventListener('click', closeBetterCapeSettings);
+    backdrop.addEventListener('mousedown', event => { if (event.target === backdrop) closeBetterCapeSettings(); });
+  }
+
   function closeFullBrightSettings() {
     fullBrightSettingsCleanup?.();
     fullBrightSettingsCleanup = null;
@@ -4851,6 +5000,18 @@
   function sendPlayerAnimsConfig(enabled = settings.playerAnims) {
     document.dispatchEvent(new CustomEvent('minifeather:playeranims-config', {
       detail: JSON.stringify({ enabled: !!enabled })
+    }));
+  }
+
+  function initFirstPersonModule() {
+    const send = enabled => document.dispatchEvent(new CustomEvent('minifeather:firstperson-config', {
+      detail: JSON.stringify({ enabled: !!enabled })
+    }));
+    registerModule('firstPerson', () => createLifecycle({
+      enable: () => send(true),
+      disable: () => send(false),
+      refresh: () => send(MODULES.get('firstPerson')?.enabled === true),
+      destroy: () => send(false)
     }));
   }
 
@@ -7497,7 +7658,7 @@
   }
 
   const FEATURE_ADVANCED_SETTINGS = new Set([
-    'fullBright','titanTiny','patPat','antiAfk','idlePlayerBot','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight'
+    'fullBright','titanTiny','patPat','antiAfk','idlePlayerBot','zoom','armorHud','cameraOverhaul','elytraFlight','dynamicCrosshair','freelook','freecam','blockHighlight','experimentalBetterAnimationCape'
   ]);
 
   function closeFeatureSettings() {
@@ -7789,6 +7950,7 @@
       closeFeatureSettings();
       const advanced = {
         fullBright: openFullBrightSettings,
+        experimentalBetterAnimationCape: openBetterCapeSettings,
         titanTiny: openTitanTinySettings, patPat: openPatPatSettings, antiAfk: openAntiAfkSettings, idlePlayerBot: openIdlePlayerBotSettings, zoom: openZoomSettings,
         cameraOverhaul: openCameraOverhaulSettings, elytraFlight: openElytraFlightSettings, dynamicCrosshair: openDynamicCrosshairSettings,
         freelook: openFreelookSettings, freecam: openFreecamSettings, blockHighlight: openBlockHighlightSettings, armorHud: openArmorHudSettings
@@ -8064,6 +8226,7 @@
               t('vanillaAnimations'),
               t('vanillaAnimationsDesc')
             )}
+            ${renderToggle('firstPerson', t('firstPerson'), t('firstPersonDesc'))}
             ${renderToggle(
               'handSway',
               t('handSway'),
@@ -9277,6 +9440,35 @@
             </select>
           </div>
         </div>
+        ${isHalloweenAvailable() ? `<div class="mf-card mf-halloween-settings">
+          <div class="mf-halloween-heading">
+            <div class="mf-halloween-copy">
+              <span class="mf-halloween-eyebrow">${t('halloweenEyebrow')}</span>
+              <h3>${t('halloweenTitle')}</h3>
+              <p>${t('halloweenThemeDesc')}</p>
+            </div>
+            <div class="mf-halloween-art" aria-hidden="true">
+              <img class="mf-halloween-bat" src="${chrome.runtime.getURL('assets/ui/halloween/bat.svg')}" alt="">
+              <img class="mf-halloween-ghost" src="${chrome.runtime.getURL('assets/ui/halloween/ghost.svg')}" alt="">
+              <img class="mf-halloween-pumpkin" src="${chrome.runtime.getURL('assets/ui/halloween/pumpkin.svg')}" alt="">
+            </div>
+          </div>
+          <div class="mf-settings-row">
+            <span class="mf-settings-label" id="mf-halloween-theme-label">${t('halloweenTheme')}</span>
+            <label class="mf-switch" style="margin-left:auto;">
+              <input type="checkbox" id="mf-halloween-theme" aria-labelledby="mf-halloween-theme-label" aria-describedby="mf-halloween-note" ${settings.halloweenTheme === true ? 'checked' : ''}>
+              <span class="mf-slider"></span>
+            </label>
+          </div>
+          <div class="mf-settings-row">
+            <span class="mf-settings-label" id="mf-halloween-animations-label">${t('halloweenAnimations')}</span>
+            <label class="mf-switch" style="margin-left:auto;">
+              <input type="checkbox" id="mf-halloween-animations" aria-labelledby="mf-halloween-animations-label" ${settings.halloweenAnimations !== false ? 'checked' : ''}>
+              <span class="mf-slider"></span>
+            </label>
+          </div>
+          <p class="mf-halloween-note" id="mf-halloween-note">${t('halloweenNote')}</p>
+        </div>` : ''}
         <div class="mf-card">
           <div class="mf-card-title">${t('panelCustomization')}</div>
           <div class="mf-muted">${t('panelCustomizationDesc')}</div>
@@ -9868,6 +10060,7 @@
   function hideGUI() {
     if (!overlay || !panel) return;
     closeFullBrightSettings();
+    closeBetterCapeSettings();
     closeTitanTinySettings();
     closePatPatSettings();
     closeAntiAfkSettings();
@@ -10765,6 +10958,10 @@
       applyGuiSettings();
       const panel = document.getElementById('mf-gui');
       if (panel) {
+        const halloweenToggle = panel.querySelector('#mf-halloween-theme');
+        const halloweenMotion = panel.querySelector('#mf-halloween-animations');
+        if (halloweenToggle) halloweenToggle.checked = settings.halloweenTheme === true;
+        if (halloweenMotion) halloweenMotion.checked = settings.halloweenAnimations !== false;
         panel.querySelectorAll('.mf-toggle[data-key]').forEach(label => {
           const key = label.dataset.key;
           const input = label.querySelector('input');
@@ -10803,7 +11000,7 @@
     'coordinates', 'titanTiny', 'healthNameTags', 'distanceNameTags', 'damageParticles',
     'waterSplash', 'shineAmbience', 'patPat', 'duckMobs', 'crittersMobs', 'allayPets', 'itemPhysics', 'noWeather', 'fullBright', 'antiAfk', 'autoSprint',
     'safeSneak', 'autoRespawn', 'autoReconnect', 'idlePlayerBot', 'zoom', 'freecam', 'cameraOverhaul', 'elytraFlight',
-    'dynamicCrosshair', 'vanillaAnimations', 'leafWind', 'handSway', 'betterPlayerLayers',
+    'dynamicCrosshair', 'vanillaAnimations', 'firstPerson', 'leafWind', 'handSway', 'betterPlayerLayers',
     'chatVideos', 'chatLinks', 'chatMemes', 'clientChat', 'rhythmParkour', 'guiPatch',
     'customShader', 'freelook', 'blockHighlight', 'discord', 'supportAds',
     'experimentalRealistic', 'experimentalAurora', 'experimentalGrassFlowers',
@@ -12182,6 +12379,16 @@
 
     bindThemeColor('#mf-panel-accent-color', '#mf-panel-accent-text', 'panelAccentColor', DEFAULT_SETTINGS.panelAccentColor);
     bindThemeColor('#mf-panel-background-color', '#mf-panel-background-text', 'panelBackgroundColor', DEFAULT_SETTINGS.panelBackgroundColor);
+    const bindHalloweenSetting = (selector, key) => {
+      panel.querySelector(selector)?.addEventListener('change', event => {
+        settings[key] = event.target.checked === true;
+        guiSettings[key] = settings[key];
+        saveSettings(true);
+        sendHalloweenThemeConfig();
+      });
+    };
+    bindHalloweenSetting('#mf-halloween-theme', 'halloweenTheme');
+    bindHalloweenSetting('#mf-halloween-animations', 'halloweenAnimations');
     const scaleInput = panel.querySelector('#mf-panel-scale');
     const scaleValue = panel.querySelector('#mf-panel-scale-value');
     scaleInput?.addEventListener('input', () => {
@@ -12206,6 +12413,10 @@
 
     panel.querySelector('#mf-panel-custom-reset')?.addEventListener('click', () => {
       settings.panelAccentColor = DEFAULT_SETTINGS.panelAccentColor;
+      settings.halloweenTheme = DEFAULT_SETTINGS.halloweenTheme;
+      settings.halloweenAnimations = DEFAULT_SETTINGS.halloweenAnimations;
+      guiSettings.halloweenTheme = settings.halloweenTheme;
+      guiSettings.halloweenAnimations = settings.halloweenAnimations;
       settings.panelBackgroundColor = DEFAULT_SETTINGS.panelBackgroundColor;
       settings.panelScale = DEFAULT_SETTINGS.panelScale;
       guiSettings.panelAccentColor = settings.panelAccentColor;
@@ -12721,6 +12932,9 @@
       event.preventDefault();
       event.stopPropagation();
       openFullBrightSettings();
+    });
+    panel.querySelector('.mf-toggle[data-key="experimentalBetterAnimationCape"]')?.addEventListener('contextmenu', event => {
+      event.preventDefault(); event.stopPropagation(); openBetterCapeSettings();
     });
     zoomToggle?.addEventListener('contextmenu', event => {
       event.preventDefault();
@@ -13989,11 +14203,14 @@
   }
 
   function applyGuiSettings() {
+    sendHalloweenThemeConfig();
     if (experimentalTierOk === false) {
       for (const k of NSB_BOOLEAN_KEYS) {
         if (k.startsWith('experimental')) { settings[k] = false; guiSettings[k] = false; }
       }
     }
+    enforceFirstPersonCompatibility();
+    syncFirstPersonControls();
     sendLanguageConfig();
     if (!settings.idlePlayerBot) sessionRiskAcceptances.delete('idlePlayerBot');
     setModuleEnabled('rebrand', settings.rebrand);
@@ -14055,6 +14272,7 @@
     setModuleEnabled('freshAnims', settings.freshAnims);
     setModuleEnabled('leafWind', settings.leafWind);
     setModuleEnabled('handSway', settings.handSway);
+    setModuleEnabled('firstPerson', settings.firstPerson);
     setModuleEnabled('betterPlayerLayers', settings.betterPlayerLayers);
     setModuleEnabled('guiPatch', settings.guiPatch);
     document.dispatchEvent(
@@ -14136,11 +14354,7 @@
         detail: JSON.stringify({ enabled: !!settings.experimentalAnimatedItems })
       })
     );
-    document.dispatchEvent(
-      new CustomEvent('minifeather:better-animation-cape-config', {
-        detail: JSON.stringify({ enabled: !!settings.experimentalBetterAnimationCape })
-      })
-    );
+    sendBetterCapeConfig();
     document.dispatchEvent(
       new CustomEvent('minifeather:pbr-config', {
         detail: JSON.stringify({ enabled: !!settings.experimentalPbr })
@@ -14730,6 +14944,7 @@
     initFullBrightModule();
     initVanillaAnimationsModule();
     initPlayerAnimsModule();
+    initFirstPersonModule();
     initLeafWindModule();
     initHandSwayModule();
     initHorrorModule();
@@ -14827,6 +15042,7 @@
     fontObserver = null;
     chatObserver?.disconnect();
     closeFullBrightSettings();
+    closeBetterCapeSettings();
     chatObserver = null;
     restoreChatContent();
     restoreChatContent = () => {};
@@ -14855,6 +15071,8 @@
     document.getElementById('mf-risk-warning-style')?.remove();
 
     window.removeEventListener(MF_CONFIG_REQ, onConfigRequest);
+    document.removeEventListener('minifeather:halloween-ui-request', sendHalloweenThemeConfig);
+    document.dispatchEvent(new CustomEvent('minifeather:halloween-ui-config', { detail: JSON.stringify({ enabled: false }) }));
     overlay = null;
     panel = null;
     guiReady = false;
@@ -15059,6 +15277,7 @@
       .catch(err => reply(false, String((err && err.message) || err)));
   }
   window.addEventListener(MF_CONFIG_REQ, onConfigRequest);
+  document.addEventListener('minifeather:halloween-ui-request', sendHalloweenThemeConfig);
   window.MF_Config = {
     async defaults() {
       const out = await buildDefaults();

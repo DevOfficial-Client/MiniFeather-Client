@@ -42,6 +42,7 @@
         "https://miniblox.online/*"
       ],
       "js": [
+        "src/Core/SeasonalFlags.js",
         "src/Core/SplashScreen.js"
       ],
       "run_at": "document_start"
@@ -121,6 +122,7 @@
         "https://miniblox.online/*"
       ],
       "js": [
+        "src/Core/SeasonalFlags.js",
         "src/Chat/ClientChat.js",
         "src/I18n/Translations.js",
         "src/Libraries/jszip.min.js",
@@ -129,6 +131,7 @@
         "src/Core/AutoUpdater.js",
         "src/Experimental/ExperimentalRegistry.js",
         "src/UI/TitleScreen.js",
+        "src/UI/HalloweenTheme.js",
         "src/UI/ClientPanel.js",
         "src/UI/PanelPolish.js",
         "src/UI/InteractionSounds.js"

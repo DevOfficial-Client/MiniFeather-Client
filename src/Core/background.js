@@ -850,7 +850,7 @@ const SKINS = [
   const HOT_KEY = 'mfHotCache';
   const HOT_APPLIED = 'mfHotAppliedCommit';
   const MIRROR_KEY = 'mfMirrorCache';
-  const MIRROR_BOOTSTRAP_RE = /^src\/Core\/(mirror|MirrorRunner|HotLoader|SplashScreen)\.js$/;
+  const MIRROR_BOOTSTRAP_RE = /^src\/Core\/(mirror|MirrorRunner|HotLoader|SplashScreen|SeasonalFlags)\.js$/;
 
   async function readHotList() {
     try {

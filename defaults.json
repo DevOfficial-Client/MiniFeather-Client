@@ -28,6 +28,7 @@
     "clientChatMentions": true
   },
   "render": {
+    "firstPerson": false,
     "vanillaAnimations": false,
     "playerAnims": true,
     "leafWind": true,
@@ -159,6 +160,8 @@
     "cloudsShapeTile": 512
   },
   "panel": {
+    "halloweenTheme": true,
+    "halloweenAnimations": true,
     "panelAccentColor": "#ef3b3b",
     "panelBackgroundColor": "#0e1115",
     "panelScale": 68,
@@ -179,6 +182,12 @@
     "experimentalTinyTakeover": false,
     "experimentalAnimatedItems": false,
     "experimentalBetterAnimationCape": false,
+    "experimentalBetterAnimationCapeMovement": "simulation-v2",
+    "experimentalBetterAnimationCapeStyle": "smooth",
+    "experimentalBetterAnimationCapeWind": "waves",
+    "experimentalBetterAnimationCapeWindStrength": 0.65,
+    "experimentalBetterAnimationCapeGravity": 10,
+    "experimentalBetterAnimationCapeStrength": 1,
     "experimentalPbr": false
   },
   "world": {

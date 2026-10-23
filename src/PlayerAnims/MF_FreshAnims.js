@@ -732,6 +732,7 @@
     }
 
     function setEnabled(enabled) {
+        if (globalThis.MF_RealisticFirstPerson?.getState?.().enabled) enabled = false;
         enabled = enabled === true || enabled === 'true';
         if (enabled === state.enabled) return;
         state.enabled = enabled;

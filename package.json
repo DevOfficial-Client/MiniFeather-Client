@@ -10,6 +10,8 @@
   },
   "devDependencies": {
     "jsdom": "^30.1.2",
-    "terser": "^5.31.0"
+    "playwright-core": "1.64.0",
+    "terser": "^5.31.0",
+    "three": "0.180.0"
   }
 }

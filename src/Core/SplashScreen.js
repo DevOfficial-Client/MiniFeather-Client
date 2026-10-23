@@ -26,12 +26,16 @@
   const TOTAL_MS = 2850;
   const MIN_VISIBLE_MS = 220;
   const LOGO_URL = chrome.runtime.getURL('assets/icon.png');
+  const HALLOWEEN_ASSETS = chrome.runtime.getURL('assets/ui/halloween/');
+  const halloweenAvailable = globalThis.__MF_SEASONAL_FLAGS__?.halloween === true;
   let root = null;
   let style = null;
   let endTimer = 0;
   let playToken = 0;
   let startedAt = 0;
   let destroyed = false;
+  let halloweenTheme = halloweenAvailable;
+  let halloweenMotion = true;
   const eventController = new AbortController();
 
   function makeStyle() {
@@ -53,6 +57,25 @@
         #${ROOT_ID} .mf-splash-feather{position:absolute;z-index:2;left:0;top:0;width:77px;height:77px;opacity:0;will-change:transform,opacity;animation:mfSplashFeather ${TOTAL_MS}ms linear both}
         #${ROOT_ID} .mf-splash-feather svg{display:block;width:100%;height:100%}
         #${ROOT_ID} .mf-splash-stars{position:absolute;inset:0;background:radial-gradient(circle at 21% 39%,#8ed9ff 0 1px,transparent 2px),radial-gradient(circle at 36% 61%,#aedfff 0 1px,transparent 2px),radial-gradient(circle at 69% 31%,#8ed9ff 0 1px,transparent 2px),radial-gradient(circle at 81% 63%,#b7e9ff 0 1px,transparent 2px);opacity:0;animation:mfSplashStars ${TOTAL_MS}ms linear both}
+        #${ROOT_ID} .mf-splash-season,#${ROOT_ID} .mf-splash-halloween{display:none}
+        #${ROOT_ID}[data-halloween="on"]{background:radial-gradient(ellipse at 50% 42%,#3c294b 0%,#21162f 49%,#0c0914 100%)}
+        #${ROOT_ID}[data-halloween="on"]::before{inset:auto 0 0;height:42vh;background:url("${HALLOWEEN_ASSETS}night-scene.svg") center top/cover no-repeat;image-rendering:pixelated;opacity:.6}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-logo{background:#30213f;box-shadow:inset 0 0 0 1px #ffc08060,0 13px 27px #0e091b80,0 0 32px #ff9c3818}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-face{background-image:linear-gradient(180deg,#fff0ce 4%,#ffe0aa 43%,#ffb36c 87%,#e58a45 100%);-webkit-text-stroke-color:#ffe0a860}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-depth{color:#784257;text-shadow:1px 1px #65354d,2px 2px #502b43,3px 3px #3b2035,5px 8px 15px #0007}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-streak{background:linear-gradient(90deg,transparent,#f3a45b 18%,#ffe5b7 55%,#bd8ee1 82%,transparent);box-shadow:0 0 8px #ffaf5130}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-stars{background:radial-gradient(circle at 21% 39%,#ffca80 0 1px,transparent 2px),radial-gradient(circle at 36% 61%,#d6b4ed 0 1px,transparent 2px),radial-gradient(circle at 69% 31%,#ffdca0 0 1px,transparent 2px),radial-gradient(circle at 81% 63%,#d6b4ed 0 1px,transparent 2px)}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-feather path:nth-child(1){fill:#fff0d1}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-feather path:nth-child(2){fill:#deb0ed}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-feather path:nth-child(3){stroke:#ffe6b2}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-feather path:nth-child(4){stroke:#ecb36f}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-season{display:block;margin-bottom:12px;color:#dfb6e0;font-size:12px;letter-spacing:.3em;font-weight:650}
+        #${ROOT_ID}[data-halloween="on"] .mf-splash-halloween{display:block;position:absolute;inset:0;pointer-events:none;image-rendering:pixelated}
+        #${ROOT_ID} .mf-splash-pumpkin{position:absolute;width:96px;height:96px;bottom:7vh;left:12vw}
+        #${ROOT_ID} .mf-splash-ghost{position:absolute;width:72px;height:72px;right:15vw;top:22vh}
+        #${ROOT_ID}[data-halloween-motion="on"] .mf-splash-ghost{animation:mfSplashGhost 2.8s ease-in-out both}
+        @keyframes mfSplashGhost{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+        @media(prefers-reduced-motion:reduce){#${ROOT_ID} .mf-splash-ghost{animation:none!important}}
         @keyframes mfSplashVisibility{0%{opacity:0}7%,84%{opacity:1}100%{opacity:0}}
         @keyframes mfSplashLogo{0%,13%{opacity:0;transform:translate3d(0,18px,0) scale(.82)}31%{opacity:1;transform:translate3d(0,-3px,0) scale(1.025)}38%,100%{opacity:1;transform:translate3d(0,0,0) scale(1)}}
         @keyframes mfSplashTitle{0%,22%{opacity:0;transform:perspective(780px) translate3d(0,19px,0) rotateX(14deg)}42%{opacity:1;transform:perspective(780px) translate3d(0,-2px,0) rotateX(-2deg)}48%,100%{opacity:1;transform:perspective(780px) translate3d(0,0,0) rotateX(0)}}
@@ -68,8 +91,32 @@
     const element = document.createElement('div');
     element.id = ROOT_ID;
     element.setAttribute('role', 'presentation');
-    element.innerHTML = `<div class="mf-splash-stars"></div><div class="mf-splash-stage"><div class="mf-splash-logo"><img src="${LOGO_URL}" alt="" decoding="async" fetchpriority="high"></div><div class="mf-splash-copy"><div class="mf-splash-word" aria-label="MiniFeather"><span class="mf-splash-depth" aria-hidden="true"><span class="mf-mini">Mini</span>Feather</span><span class="mf-splash-face"><span class="mf-mini">Mini</span>Feather</span></div><div class="mf-splash-streak"></div></div></div><div class="mf-splash-feather" aria-hidden="true"><svg viewBox="0 0 90 60" xmlns="http://www.w3.org/2000/svg"><path d="M3 37C14 19 34 7 63 3c10-1 18 1 24 5-7 16-21 29-42 35-16 5-30 3-42-3 10-1 18-4 25-8-10 3-18 5-25 5Z" fill="#dff4ff"/><path d="M24 29C38 16 57 10 82 6c-9 11-23 21-40 25-8 2-13 2-18-2Z" fill="#9ddcff"/><path d="M5 39C29 31 53 18 83 7M26 26l-8-9m20 4-8-11m20 7-3-11m14 7 1-8M34 30l-8 10m18-14-6 12m18-17-4 13m17-21-3 11" fill="none" stroke="#f7fcff" stroke-width="1.8" stroke-linecap="round"/><path d="M4 39-4 53" fill="none" stroke="#73caff" stroke-width="2" stroke-linecap="round"/></svg></div>`;
+    element.setAttribute('data-halloween', halloweenTheme ? 'on' : 'off');
+    element.setAttribute('data-halloween-motion', halloweenTheme && halloweenMotion ? 'on' : 'off');
+    element.innerHTML = `<div class="mf-splash-stars"></div>
+      <div class="mf-splash-stage">
+        <div class="mf-splash-logo"><img src="${LOGO_URL}" alt="" decoding="async" fetchpriority="high"></div>
+        <div class="mf-splash-copy">
+          ${halloweenAvailable ? '<span class="mf-splash-season" aria-hidden="true">HALLOWEEN</span>' : ''}
+          <div class="mf-splash-word" aria-label="MiniFeather">
+            <span class="mf-splash-depth" aria-hidden="true"><span class="mf-mini">Mini</span>Feather</span>
+            <span class="mf-splash-face"><span class="mf-mini">Mini</span>Feather</span>
+          </div><div class="mf-splash-streak"></div>
+        </div>
+      </div>
+      ${halloweenAvailable ? `<div class="mf-splash-halloween" aria-hidden="true">
+        <img class="mf-splash-pumpkin" src="${HALLOWEEN_ASSETS}pumpkin.svg" alt="">
+        <img class="mf-splash-ghost" src="${HALLOWEEN_ASSETS}ghost.svg" alt="">
+      </div>` : ''}
+      <div class="mf-splash-feather" aria-hidden="true"><svg viewBox="0 0 90 60" xmlns="http://www.w3.org/2000/svg"><path d="M3 37C14 19 34 7 63 3c10-1 18 1 24 5-7 16-21 29-42 35-16 5-30 3-42-3 10-1 18-4 25-8-10 3-18 5-25 5Z" fill="#dff4ff"/><path d="M24 29C38 16 57 10 82 6c-9 11-23 21-40 25-8 2-13 2-18-2Z" fill="#9ddcff"/><path d="M5 39C29 31 53 18 83 7M26 26l-8-9m20 4-8-11m20 7-3-11m14 7 1-8M34 30l-8 10m18-14-6 12m18-17-4 13m17-21-3 11" fill="none" stroke="#f7fcff" stroke-width="1.8" stroke-linecap="round"/><path d="M4 39-4 53" fill="none" stroke="#73caff" stroke-width="2" stroke-linecap="round"/></svg></div>`;
     return element;
+  }
+
+  function applyAppearance(settings) {
+    halloweenTheme = halloweenAvailable && settings?.halloweenTheme !== false;
+    halloweenMotion = settings?.halloweenAnimations !== false;
+    root?.setAttribute('data-halloween', halloweenTheme ? 'on' : 'off');
+    root?.setAttribute('data-halloween-motion', halloweenTheme && halloweenMotion ? 'on' : 'off');
   }
 
   function removeRoot() {
@@ -117,11 +164,12 @@
 
   function play({ force = false } = {}) {
     if (destroyed) return;
-    if (force) { startAnimation(); return; }
     try {
       chrome.storage.local.get(['settings'], data => {
-        if (destroyed || data?.settings?.startupAnimation === false) return;
-        if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+        if (destroyed) return;
+        applyAppearance(data?.settings);
+        if (!force && data?.settings?.startupAnimation === false) return;
+        if (!force && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
         startAnimation();
       });
     } catch (_) { startAnimation(); }
@@ -134,6 +182,7 @@
     clearTimeout(endTimer);
     endTimer = 0;
     eventController.abort();
+    try { chrome.storage.onChanged.removeListener(onStorage); } catch (_) {}
     removeRoot();
     if (globalThis.__MINIFEATHER_SPLASH__?.destroy === destroy) delete globalThis.__MINIFEATHER_SPLASH__;
   }
@@ -145,17 +194,18 @@
     event.stopImmediatePropagation();
     skip();
   }, { capture: true, signal: eventController.signal });
-  try {
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'local' || !changes.settings?.newValue) return;
-      if (changes.settings.newValue.startupAnimation === false && root) {
-        playToken++;
-        clearTimeout(endTimer);
-        endTimer = 0;
-        removeRoot();
-      }
-    });
-  } catch (_) {}
+  function onStorage(changes, area) {
+    if (destroyed) return;
+    if (area !== 'local' || !changes.settings?.newValue) return;
+    applyAppearance(changes.settings.newValue);
+    if (changes.settings.newValue.startupAnimation === false && root) {
+      playToken++;
+      clearTimeout(endTimer);
+      endTimer = 0;
+      removeRoot();
+    }
+  }
+  try { chrome.storage.onChanged.addListener(onStorage); } catch (_) {}
   globalThis.__MINIFEATHER_SPLASH__ = { play, skip, destroy };
   play();
 })();

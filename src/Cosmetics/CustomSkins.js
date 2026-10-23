@@ -1,5 +1,6 @@
 (function () {
     'use strict';
+    var CUSTOM_SKIN_DEFAULTS_VERSION = 1;
     if (window.__MF_CustomSkins) return;
     window.__MF_CustomSkins = true;
 
@@ -109,7 +110,6 @@
         players: {
 
             '6eb7369a-551e-406a-9a63-6db7a358e1e5': { skin: 'custom:mf_estebangxe' },
-            'c4201f43-2de9-4275-930a-301fae4cce6c': { skin: 'custom:mf_angrywolfx' },
 
             'eve': { skin: 'custom:mf_eve' }
         }

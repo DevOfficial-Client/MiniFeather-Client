@@ -1,6 +1,7 @@
 
 (function () {
     'use strict';
+    const FACIAL_LEGACY_CLEANUP_VERSION = 1;
     if (window.__MF_Facial) return;
     const TAG = 'minifeather facial';
 
@@ -22,6 +23,7 @@
         tex: null,
 
         frameCache: new Map(),
+        faceGeneration: 0,
         dirty: true
     };
 
@@ -385,6 +387,52 @@
             }
         } catch {}
         return null;
+    }
+
+    function isRetiredLocalFacePack(id) {
+        if (String(id).toLowerCase() !== 'angrywolfx') return false;
+        const uuid = currentPlayerUuid();
+        return uuid === 'c4201f43-2de9-4275-930a-301fae4cce6c' || uuid === '481511cf-be21-4c1c-9ad1-aa8cba0d0d26';
+    }
+
+    function isRetiredLocalFaceReference(value) {
+        const match = typeof value === 'string' ? value.match(/^fs:([^/]+)\//i) : null;
+        return !!match && isRetiredLocalFacePack(match[1]);
+    }
+
+    function isRetiredSavedFacial(name) {
+        const frames = state.library[name]?.frames;
+        return Array.isArray(frames) && frames.some(frame => isRetiredLocalFaceReference(frame?.face));
+    }
+
+    function clearRetiredLocalFaceConfig() {
+        let changed = false;
+        for (const key of ['front', 'left', 'right', 'up', 'down', 'blinkClosed', 'browFace']) {
+            if (!isRetiredLocalFaceReference(auto[key])) continue;
+            auto[key] = '';
+            changed = true;
+        }
+        if (changed) {
+            state.faceGeneration++;
+            if (state.baseHead && state.tex) autoStop(true);
+            auto.on = false;
+            if (auto._raf) cancelAnimationFrame(auto._raf);
+            auto._raf = null;
+            auto._blinkCache = null;
+            auto._blinkCacheZone = null;
+            auto._blinkUntil = 0;
+            auto._browUntil = 0;
+            auto._browPainted = false;
+            auto._zone = 'front';
+            state.frameCache.clear();
+            saveAuto();
+        }
+        const lastKey = LS_KEY + '_last';
+        try {
+            const last = localStorage.getItem(lastKey);
+            if (last && isRetiredSavedFacial(last)) localStorage.removeItem(lastKey);
+        } catch {}
+        return changed;
     }
 
     const packIndex = [];
@@ -1143,6 +1191,7 @@
         auto._blinkCache = null; auto._blinkCacheZone = null; auto._zone = 'front';
         auto._browUntil = 0; auto._browPainted = false;
         auto._refYaw = null; auto._refPitch = null; auto._lastT = 0;
+        clearRetiredLocalFaceConfig();
     }
     function saveAuto() {
         try {
@@ -1224,9 +1273,11 @@
         if (!force && auto._zone === zone) return;
         auto._zone = zone;
         const name = zone === 'front' ? (auto.front || null) : auto[zone] || null;
+        const generation = state.faceGeneration;
         try {
             let fr = null;
             if (name) fr = await resolveFace(resolveAutoName(name)).catch(() => null);
+            if (generation !== state.faceGeneration || isRetiredLocalFaceReference(name)) return;
             if (!fr) fr = state.baseHead ? { canvas: state.baseHead, kind: 'head' } : { canvas: blankFace(), kind: 'face' };
             paintFace({ canvas: fr.canvas, kind: fr.kind });
         } catch {}
@@ -1387,6 +1438,7 @@
     function autoTick() {
         if (!auto.on) { auto._raf = null; return; }
         const now = performance.now();
+        const generation = state.faceGeneration;
 
         chatQuestionWatch();
         if (auto._browUntil) {
@@ -1402,7 +1454,7 @@
                     broadcastFacial('brow');
                     debugBrow('pintando ceja (quedan ' + Math.round(auto._browUntil - now) + 'ms)');
                     getBrowCanvas().then(fr => {
-                        if (fr && auto.on && auto._browUntil) {
+                        if (fr && auto.on && auto._browUntil && generation === state.faceGeneration) {
                             try { paintFace({ canvas: fr.canvas, kind: fr.kind }); }
                             catch (e) {
 
@@ -1430,7 +1482,7 @@
                 broadcastFacial('blink');
                 getBlinkCanvas().then(cv => {
 
-                    if (cv && auto.on && auto._blinkUntil && performance.now() < auto._blinkUntil) {
+                    if (cv && auto.on && auto._blinkUntil && performance.now() < auto._blinkUntil && generation === state.faceGeneration) {
 
                         try { paintFace({ canvas: cv, kind: auto._blinkCacheKind || 'face' }); }
                         catch (e) {
@@ -1461,6 +1513,7 @@
     }
 
     async function autoStart() {
+        if (clearRetiredLocalFaceConfig()) return { ok: false, error: 'The automatic face from your previous skin has been removed.' };
         try { ensureSession(); } catch (e) { return { ok: false, error: e.message }; }
         stop(false);
         auto.on = true;
@@ -2762,7 +2815,7 @@
                     if (g?.player?.mesh) {
                         clearInterval(boot);
                         if (wantAuto) { auto.on = false; autoStart().then(r => { if (r.ok) void 0; }); }
-                        else if (last && state.library[last]) {
+                        else if (last && state.library[last] && !isRetiredSavedFacial(last)) {
                             play(last).then(r => {
                                 if (r.ok) void 0;
                             });
@@ -2794,11 +2847,12 @@
         if (skinWatch.busy) return null;
         skinWatch.busy = true;
         try {
+            clearRetiredLocalFaceConfig();
             const skinId = currentSkinId();
             if (!skinId) return null;
 
             const uid = currentPlayerUuid();
-            let pack = uid ? packIndex.find(p => p.uuid === uid) : null;
+            let pack = uid ? packIndex.find(p => p.uuid === uid && !isRetiredLocalFacePack(p.id)) : null;
             if (pack && pack.id !== skinId) {
                 if (skinWatch.uuidDone) return null;
                 skinWatch.uuidDone = true;
@@ -2806,7 +2860,7 @@
 
                 debugBrow('uuid skin: facial-only (skin intacta: ' + skinId + ')');
             } else {
-                pack = packIndex.find(p => p.id === skinId);
+                pack = packIndex.find(p => p.id === skinId && !isRetiredLocalFacePack(p.id));
             }
             if (!pack) { skinWatch.lastApplied = null; return null; }
             const pid = pack.id;
@@ -2848,7 +2902,7 @@
 
             if (!auto.on && !skinWatch.userOff && !skinWatch.uuidDone) {
                 const uid = currentPlayerUuid();
-                const byUuid = uid ? packIndex.find(p => p.uuid === uid) : null;
+                const byUuid = uid ? packIndex.find(p => p.uuid === uid && !isRetiredLocalFacePack(p.id)) : null;
                 if (byUuid && skinWatch.lastApplied !== byUuid.id) {
                     void 0;
                     applyPackForSkin(true).catch(() => {});

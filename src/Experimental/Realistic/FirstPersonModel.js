@@ -1,14 +1,19 @@
 (() => {
   'use strict';
 
-  const FIRST_PERSON_MODEL_VERSION = 3;
+  const FIRST_PERSON_MODEL_VERSION = 4;
   const CONFIG_EVENT = 'minifeather:realistic-config';
+  const MODULE_EVENT = 'minifeather:firstperson-config';
   const W = globalThis;
+  let previous = {};
+  try { previous = W.MF_RealisticFirstPerson?.getState?.() || {}; } catch (_) {}
   try { W.MF_RealisticFirstPerson?.destroy?.(); } catch (_) {}
 
   const state = {
     enabled: false,
-    nativeHands: false,
+    manualEnabled: previous.manualEnabled === true,
+    realisticEnabled: previous.realisticEnabled === true,
+    nativeHands: previous.nativeHands === true,
     active: false,
     reason: 'disabled',
     game: null,
@@ -508,6 +513,7 @@
       state.reason = 'disabled';
       return;
     }
+    disableConflictingAnimations();
     const game = findGame(), mesh = localMesh(game);
     if (!mesh || mesh !== state.mesh) {
       detach();
@@ -535,13 +541,39 @@
     applySafely(game, mesh);
   }
 
-  function configure(config) {
-    if (state.destroyed || !config || typeof config !== 'object') return;
-    if ('enabled' in config) state.enabled = !!config.enabled;
-    if ('nativeHands' in config) state.nativeHands = !!config.nativeHands;
+  function disableConflictingAnimations() {
+    for (const name of ['MF_PlayerAnims', 'MF_FreshAnims', 'MF_HeadLag']) {
+      try { if (W[name]?.enabled) W[name].setEnabled(false); } catch (_) {}
+    }
+    try { if (W.MF_HandSway?.enabled) W.MF_HandSway.enabled = false; } catch (_) {}
+  }
+
+  function updateEnabled() {
+    if (state.destroyed) return;
+    state.enabled = state.manualEnabled || state.realisticEnabled;
+    if (state.enabled) disableConflictingAnimations();
     if (state.enabled && !state.timer) state.timer = W.setInterval(sync, 700);
     if (!state.enabled && state.timer) { W.clearInterval(state.timer); state.timer = 0; }
     sync();
+  }
+
+  function configure(config) {
+    if (state.destroyed || !config || typeof config !== 'object') return;
+    if ('enabled' in config) state.manualEnabled = config.enabled === true;
+    if ('nativeHands' in config) state.nativeHands = !!config.nativeHands;
+    updateEnabled();
+  }
+
+  function setRealisticOptions(config = {}) {
+    if (state.destroyed) return;
+    state.realisticEnabled = config.enabled === true;
+    updateEnabled();
+  }
+
+  function onModuleConfig(event) {
+    let config = event.detail;
+    if (typeof config === 'string') try { config = JSON.parse(config); } catch (_) { return; }
+    configure(config);
   }
 
   function onConfig(event) {
@@ -550,23 +582,29 @@
     if (!config || typeof config !== 'object' || typeof config.enabled !== 'boolean') return;
     // Also listen directly: an older hot-updated Realistic controller may not
     // yet call this companion API, but the saved UI configuration is canonical.
-    configure({ enabled: config.enabled && config.firstPersonBody !== false });
+    setRealisticOptions({ enabled: config.enabled && config.firstPersonBody !== false });
   }
 
   function destroy() {
     if (state.destroyed) return;
     state.enabled = false;
+    state.manualEnabled = false;
+    state.realisticEnabled = false;
     if (state.timer) W.clearInterval(state.timer);
     state.timer = 0;
     detach();
     state.destroyed = true;
     document.removeEventListener?.(CONFIG_EVENT, onConfig, true);
+    document.removeEventListener?.(MODULE_EVENT, onModuleConfig, true);
     if (W.MF_RealisticFirstPerson === api) delete W.MF_RealisticFirstPerson;
   }
 
   const api = Object.freeze({
-    configure, sync, destroy,
+    configure, setRealisticOptions, sync, destroy,
+    enable: () => configure({ enabled: true }),
+    disable: () => configure({ enabled: false }),
     getState: () => ({ version: FIRST_PERSON_MODEL_VERSION, enabled: state.enabled, active: state.active, nativeHands: state.nativeHands,
+      manualEnabled: state.manualEnabled, realisticEnabled: state.realisticEnabled,
       handsMode: state.modelHands ? 'model' : 'native-overlay', mainItemMode: state.mainItemMode, offItemMode: state.offItemMode,
       handRendererFound: !!state.handHook, bodyOffset: state.bodyOffset,
       reason: state.reason, error: state.error, renderCount: state.renderCount,
@@ -579,4 +617,6 @@
   });
   W.MF_RealisticFirstPerson = api;
   document.addEventListener?.(CONFIG_EVENT, onConfig, true);
+  document.addEventListener?.(MODULE_EVENT, onModuleConfig, true);
+  updateEnabled();
 })();

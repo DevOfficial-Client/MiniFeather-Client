@@ -70,3 +70,6 @@ android/.gradle/
 android/app/build/
 android/local.properties
 android/app/src/main/assets/mf/
+
+# Local visual checks for the optional seasonal UI.
+/artifacts/halloween-ui/

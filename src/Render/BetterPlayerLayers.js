@@ -2,12 +2,17 @@
     'use strict';
 
     const W = globalThis;
+    const SKIN_LAYERS_3D_VERSION = 2;
     const previous = W.MF_BetterPlayerLayers;
     let previousManualEnabled = false;
-    try { previousManualEnabled = previous?.getState?.().manualEnabled === true; } catch {}
+    let previousRealisticEnabled = false;
+    try {
+        previousManualEnabled = previous?.getState?.().manualEnabled === true;
+        previousRealisticEnabled = previous?.getState?.().realisticEnabled === true;
+    } catch {}
     try { previous?.destroy?.(); } catch {}
     let manualEnabled = previousManualEnabled;
-    let realisticEnabled = false;
+    let realisticEnabled = previousRealisticEnabled;
     let enabled = false;
     let destroyed = false;
     let timer = 0;
@@ -17,8 +22,8 @@
 
     const EXTREME = Object.freeze({
         inflate: 0.40,
-        nativeInflate: 0.20,
-        depth: 0.20,
+        nativeInflate: 0,
+        depth: 0.40,
         alphaThreshold: 8
     });
 
@@ -297,7 +302,7 @@
         const height = Number(image.height ?? image.videoHeight ?? image.naturalHeight ?? 0);
         if (!width || !height) return null;
 
-        const signature = `${width}:${height}:${image.currentSrc ?? image.src ?? ''}`;
+        const signature = `${width}:${height}:${image.currentSrc ?? image.src ?? ''}:${map.version ?? 0}`;
         const cached = pixelCache.get(map);
         if (cached?.image === image && cached.signature === signature) return cached.pixels;
 
@@ -422,7 +427,6 @@
         if (!position || position.count < 48) return null;
 
         const overlayStart = position.count - 24;
-        const extraInflate = Math.max(0, EXTREME.inflate - EXTREME.nativeInflate) / 16;
         const positions = [];
         const uvs = [];
         const indices = [];
@@ -438,6 +442,14 @@
             if (!width || !height) continue;
 
             const corners = [0, 1, 2, 3].map(i => vertexPosition(position, overlayStart + faceIndex * 4 + i));
+            // Measure the native shell instead of assuming that every model
+            // inflates its hat and sleeves by the same amount. The voxel's
+            // inner surface sits on the base skin, not on a floating 2D shell.
+            const baseCorners = [0, 1, 2, 3].map(i => vertexPosition(position, overlayStart - 24 + faceIndex * 4 + i));
+            const shellOffset = corners.reduce((sum, point, i) => sum + point.reduce((dot, value, axis) =>
+                dot + (value - baseCorners[i][axis]) * face.normal[axis], 0), 0) / 4;
+            if (!Number.isFinite(shellOffset) || shellOffset < -0.001 || shellOffset > 2 / 16) return null;
+            const extraInflate = EXTREME.inflate / 16 - shellOffset;
             const occupied = (x, y) => x >= 0 && x < width && y >= 0 && y < height &&
                 pixelAlpha(pixels, sourcePixel(startX, widthSigned, x), sourcePixel(startY, heightSigned, y)) >= EXTREME.alphaThreshold;
 
@@ -527,6 +539,7 @@
         return [
             source?.uuid ?? '',
             map?.uuid ?? '',
+            map?.version ?? 0,
             image?.currentSrc ?? image?.src ?? '',
             String(image?.width ?? image?.naturalWidth ?? ''),
             String(image?.height ?? image?.naturalHeight ?? '')
@@ -794,6 +807,9 @@
             String(mesh?.entity?.profile?.cosmetics?.skin ?? ''),
             String(detectSkinny(mesh))
         ];
+        const body = mesh?.skinnedBody;
+        const owned = state.nativeLayers.get(body);
+        values.push(body?.uuid ?? '', (owned && nativeGeometry(body) === owned.geometry ? owned.original : nativeGeometry(body))?.uuid ?? '');
 
         for (const layout of PARTS) {
             const reference = mesh?.meshes?.[layout.reference];
@@ -818,6 +834,105 @@
         state.bindings = [];
         state.signature = '';
         state.nextBuildAt = 0;
+    }
+
+    function combineWithNativeRig(mesh, bindings) {
+        const body = mesh.skinnedBody;
+        const bones = body?.skeleton?.bones;
+        const inverses = body?.skeleton?.boneInverses;
+        const original = nativeGeometry(body);
+        if (!body || !Array.isArray(bones) || !Array.isArray(inverses) || !original?.clone ||
+            !original.attributes?.skinIndex || !original.attributes?.skinWeight ||
+            Array.isArray(body.material) || Object.keys(original.morphAttributes || {}).length) return false;
+        const bodyMap = firstMaterial(body.__realMaterial || body.material)?.map;
+        if (!bindings.length || bindings.some(binding => binding.material.map !== bodyMap)) return false;
+
+        const transforms = [];
+        for (const binding of bindings) {
+            const bone = bones.indexOf(binding.target);
+            if (bone < 0 || !inverses[bone]?.clone) return false;
+            try {
+                const matrix = inverses[bone].clone().invert();
+                binding.reference.updateMatrix?.();
+                if (binding.reference.matrix) matrix.multiply(binding.reference.matrix);
+                if (body.bindMatrixInverse) matrix.premultiply(body.bindMatrixInverse);
+                if (matrix.elements?.length !== 16 || !Array.from(matrix.elements).every(Number.isFinite)) return false;
+                transforms.push({ bone, matrix });
+            } catch { return false; }
+        }
+
+        const baseCount = original.attributes.position?.count;
+        const extraCount = bindings.reduce((sum, binding) => sum + binding.geometry.attributes.position.count, 0);
+        if (!baseCount || baseCount + extraCount > 100000) return false;
+        let geometry;
+        try {
+            geometry = original.clone();
+            for (const [name, attribute] of Object.entries(original.attributes)) {
+                if (!ArrayBuffer.isView(attribute.array) || attribute.count !== baseCount || attribute.isInterleavedBufferAttribute) {
+                    geometry.dispose?.(); return false;
+                }
+                const array = new attribute.array.constructor((baseCount + extraCount) * attribute.itemSize);
+                array.set(attribute.array);
+                let offset = baseCount;
+                for (let part = 0; part < bindings.length; part++) {
+                    const input = bindings[part].geometry.attributes[name];
+                    const { bone, matrix } = transforms[part];
+                    const m = matrix.elements;
+                    const position = bindings[part].geometry.attributes.position;
+                    for (let vertex = 0; vertex < position.count; vertex++) {
+                        const at = (offset + vertex) * attribute.itemSize;
+                        if (name === 'position') {
+                            const x = position.getX(vertex), y = position.getY(vertex), z = position.getZ(vertex);
+                            array[at] = m[0] * x + m[4] * y + m[8] * z + m[12];
+                            array[at + 1] = m[1] * x + m[5] * y + m[9] * z + m[13];
+                            array[at + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+                        } else if (name === 'skinIndex') array[at] = bone;
+                        else if (name === 'skinWeight') array[at] = 1;
+                        else if (input?.array && input.itemSize === attribute.itemSize) {
+                            for (let component = 0; component < attribute.itemSize; component++) {
+                                array[at + component] = input.array[vertex * input.itemSize + component];
+                            }
+                        }
+                    }
+                    offset += position.count;
+                }
+                geometry.setAttribute(name, new attribute.constructor(array, attribute.itemSize, attribute.normalized));
+            }
+            const indices = original.index ? Array.from(original.index.array) : Array.from({ length: baseCount }, (_, i) => i);
+            const baseIndices = indices.length;
+            let offset = baseCount;
+            for (const binding of bindings) {
+                for (const index of binding.geometry.index.array) indices.push(offset + index);
+                offset += binding.geometry.attributes.position.count;
+            }
+            geometry.setIndex(indices);
+            if (geometry.groups?.length && geometry.addGroup) geometry.addGroup(baseIndices, indices.length - baseIndices, 0);
+            geometry.setDrawRange?.(0, indices.length);
+            geometry.computeVertexNormals?.();
+            geometry.computeBoundingBox?.();
+            geometry.computeBoundingSphere?.();
+        } catch {
+            geometry?.dispose?.();
+            return false;
+        }
+
+        const existing = state.nativeLayers.get(body);
+        if (existing) {
+            assignNativeGeometry(body, geometry);
+            existing.geometry.dispose?.();
+            existing.geometry = geometry;
+        } else {
+            assignNativeGeometry(body, geometry);
+            state.nativeLayers.set(body, { object: body, original, geometry });
+        }
+        for (const binding of bindings) {
+            binding.generated.removeFromParent?.();
+            binding.material.dispose?.();
+            binding.material = null;
+            binding.generated = null;
+            binding.combined = true;
+        }
+        return true;
     }
 
     function build(mesh) {
@@ -874,6 +989,10 @@
 
         state.bindings = bindings;
         synchronizeFlatLayers();
+        const bones = mesh.skinnedBody?.skeleton?.bones;
+        // Native Miniblox can keep the head separate from its skinned body.
+        // Merge only the parts present in that rig; the head stays on its pivot.
+        if (Array.isArray(bones)) combineWithNativeRig(mesh, bindings.filter(binding => bones.includes(binding.target)));
         state.signature = modelSignature(mesh);
         return true;
     }
@@ -900,6 +1019,7 @@
             (mesh.skinnedBody ? mesh.skinnedBody.visible !== false : true);
 
         for (const binding of state.bindings) {
+            if (binding.combined) continue;
             binding.generated.visible = visible && binding.target?.visible !== false;
             syncMaterial(binding.reference, binding.material);
         }
@@ -1009,7 +1129,9 @@
             enabled,
             manualEnabled,
             realisticEnabled,
+            version: SKIN_LAYERS_3D_VERSION,
             parts: state.bindings.length,
+            rigBoundParts: state.bindings.filter(binding => binding.combined).length,
             firstPersonLayer: Boolean(state.firstPerson.generated),
             flatReplacements: state.nativeLayers.size + Number(Boolean(state.firstPerson.flatLayer)),
             inflate: EXTREME.inflate,

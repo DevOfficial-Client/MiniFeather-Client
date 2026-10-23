@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="224" viewBox="0 0 320 112" shape-rendering="crispEdges">
+  <path fill="#21182f" d="M0 0h320v112H0z"/>
+  <path fill="#30213e" d="M0 26h64V16h64v14h58V12h74v12h60v88H0z"/>
+  <path fill="#423050" d="M0 57h28V45h28v8h36V39h44v10h34V32h48v9h42V33h42v16h18v63H0z"/>
+  <path fill="#f5d698" d="M249 11h22v4h8v8h4v22h-4v8h-8v4h-22v-4h-8v-8h-4V23h4v-8h8z"/>
+  <path fill="#d9b57f" d="M249 17h6v6h-6zm20 20h8v8h-8zm-24 7h6v6h-6z"/>
+  <path fill="#fff0c1" d="M251 11h18v2h-18zm-10 12h2v20h-2z"/>
+  <path fill="#bca0bf" d="M28 16h2v2h-2zm41 20h2v2h-2zM109 9h2v2h-2zm62 10h2v2h-2zm35-12h2v2h-2zm94 21h2v2h-2zM145 44h2v2h-2z"/>
+  <path fill="#f5d698" d="M190 24h2v2h2v2h-2v2h-2v-2h-2v-2h2zM72 12h2v2h2v2h-2v2h-2v-2h-2v-2h2z"/>
+  <path fill="#35213e" d="M259 26h4v2h4v-2h4v2h4v2h-4v2h-4v2h-4v-2h-4v-2h-4v-2h4zM216 39h4v2h4v-2h4v2h4v2h-4v2h-8v-2h-4z"/>
+  <path fill="#20172d" d="M0 77h24V67h28v9h20V63h36v7h26V57h28v10h20V53h24v15h32V60h32v12h28V62h22v50H0z"/>
+  <path fill="#161222" d="M202 47h4v-4h4v4h4v21h10V39h4v-5h4v5h4v-5h4v5h4v29h10V47h4v-4h4v4h4v52h-64z"/>
+  <path fill="#6b4152" d="M209 55h3v7h-3zm23-8h4v8h-4zm20 22h4v8h-4z"/>
+  <path fill="#eeb36e" d="M232 48h2v5h-2zm-23 8h2v5h-2zm43 14h2v5h-2z"/>
+  <path fill="#171321" d="M0 94h28v-6h34v4h40v-6h50v6h48v-8h52v6h42v-8h26v30H0z"/>
+  <path fill="#302036" d="M0 103h44v-3h34v4h60v-4h24v4h62v-5h46v5h50v8H0z"/>
+  <path fill="#181420" d="M174 77h3v24h-3zm-8-7h3v6h6v3h-9zm12 0h3v10h-5v-3h2zM296 66h3v36h-3zm-9-8h3v10h8v3h-11zm12-9h3v14h-4v-3h1z"/>
+  <path fill="#4d694a" d="M261 86h4v6h-4zm19 7h4v4h-4zm-33 3h4v3h-4z"/>
+  <path fill="#983f2c" d="M255 94h3v-3h12v3h3v10h-3v3h-12v-3h-3zm20 6h2v-3h10v3h2v7h-2v2h-10v-2h-2z"/>
+  <path fill="#de7831" d="M258 94h12v9h-3v2h-7v-2h-2zm19 6h10v6h-2v1h-6v-1h-2z"/>
+  <path fill="#ffb457" d="M259 93h4v3h-4zm5 3h3v4h-3zm14 4h3v2h-3z"/>
+  <path fill="#261824" d="M259 98h3v2h-3zm6 0h3v2h-3zm-5 4h7v2h-7zm19 1h2v2h-2zm5 0h2v2h-2z"/>
+  <path fill="#ffdfa1" d="M260 98h1v1h-1zm6 0h1v1h-1zm-5 4h5v1h-5zm19 1h1v1h-1zm5 0h1v1h-1z"/>
+</svg>
