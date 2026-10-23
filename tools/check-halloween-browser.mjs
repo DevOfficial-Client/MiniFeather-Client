@@ -43,7 +43,12 @@ const contentTypes = { '.png': 'image/png', '.svg': 'image/svg+xml', '.ttf': 'fo
 await context.route('**/*', route => {
   const url = new URL(route.request().url());
   if (url.origin !== 'https://miniblox.io' || route.request().method() !== 'GET') return route.abort();
-  if (url.pathname === '/__mf_halloween_preview__') return route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#201b30"><div id="react"><button>Settings</button><button>Play</button></div></body></html>' });
+  if (url.pathname === '/__mf_halloween_preview__') return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#201b30"><div id="react">
+    <img id="native-logo" src="/assets/miniblox-logo-preview.svg" alt="Miniblox">
+    <img id="sized-logo" src="/assets/miniblox-logo-preview.svg" alt="Miniblox" style="width:96px;height:48px">
+    <div id="responsive-slot" style="width:200px"><img id="responsive-logo" src="/assets/miniblox-logo-preview.svg" alt="Miniblox" style="width:100%;height:auto"></div>
+    <button>Settings</button><button>Play</button></div></body></html>` });
+  if (url.pathname === '/assets/miniblox-logo-preview.svg') return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="64"><rect width="128" height="64" fill="#8a75ac"/></svg>' });
   if (url.pathname === '/') return route.fulfill({ contentType: 'text/html', body: homeFixture });
   if (url.pathname === '/defaults.json') return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ other: fileDefaults }) });
   if (!url.pathname.startsWith('/assets/')) return route.abort();
@@ -83,6 +88,40 @@ const loadUI = async ({ halloweenAvailable = true } = {}) => {
 
 try {
   await loadUI();
+  // Sample opening frames, not only the final pose: neither fade may replace
+  // the positioning transform. This also covers dragging after animation fill.
+  for (const reducedMotion of ['no-preference', 'reduce']) {
+    await page.emulateMedia({ reducedMotion });
+    await page.keyboard.press('ShiftRight');
+    await page.locator('#mf-gui').waitFor({ state: 'detached' });
+    const frames = await page.evaluate(async () => {
+      document.dispatchEvent(new CustomEvent('minifeather:open-panel'));
+      const samples = [], start = performance.now();
+      await new Promise(resolve => {
+        const sample = () => {
+          const box = document.getElementById('mf-gui').getBoundingClientRect();
+          samples.push({ x: box.x + box.width / 2 - innerWidth / 2, y: box.y + box.height / 2 - innerHeight / 2 });
+          if (performance.now() - start < 230) requestAnimationFrame(sample); else resolve();
+        };
+        requestAnimationFrame(sample);
+      });
+      return samples;
+    });
+    assert.ok(frames.length >= 2);
+    assert.ok(frames.every(({ x, y }) => Math.abs(x) < 1 && y >= -1 && y < 8), JSON.stringify(frames));
+    const drag = await page.evaluate(() => {
+      const panel = document.getElementById('mf-gui'), topbar = document.getElementById('mf-gui-topbar');
+      const start = panel.getBoundingClientRect(), x = start.left + 400, y = start.top + 30;
+      topbar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: x, clientY: y }));
+      document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x + 25, clientY: y + 25 }));
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      const end = panel.getBoundingClientRect();
+      const result = { x: end.left - parseFloat(panel.style.left), y: end.top - parseFloat(panel.style.top) };
+      topbar.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      return result;
+    });
+    assert.ok(Math.abs(drag.x) < 1 && Math.abs(drag.y) < 1, JSON.stringify(drag));
+  }
   await page.locator('#mf-gui [data-page="settings"]').click();
   await page.locator('#mf-halloween-theme').waitFor({ state: 'attached' });
   assert.equal(await page.locator('html').getAttribute('data-mf-halloween-ui'), null);
@@ -112,6 +151,8 @@ try {
   await page.locator('#mf-gui-page').evaluate(element => { element.scrollTop = 0; });
   await page.locator('#mf-gui').screenshot({ path: path.join(output, 'modules-on.png') });
   const moduleCard = page.locator('.mf-toggle[data-key="rebrand"]');
+  const nativeLogoBox = await page.locator('#native-logo').evaluate(element => ({ width: element.width, height: element.height }));
+  const sizedLogoBox = await page.locator('#sized-logo').evaluate(element => ({ width: element.width, height: element.height }));
   const icon = await moduleCard.locator('.mf-feature-icon img').getAttribute('src');
   const checked = await moduleCard.locator('input').isChecked();
   await moduleCard.locator('[data-mf-favorite]').click();
@@ -125,12 +166,30 @@ try {
   await page.locator('[data-feature-close]').click();
   await moduleCard.locator('.mf-feature-icon').click();
   assert.equal(await moduleCard.locator('input').isChecked(), !checked);
+  await page.locator('#native-logo').evaluate(async element => { await element.decode(); });
+  assert.deepEqual(await page.locator('#native-logo').evaluate(element => ({ width: element.width, height: element.height })), nativeLogoBox);
+  await page.locator('#sized-logo').evaluate(async element => { await element.decode(); });
+  assert.deepEqual(await page.locator('#sized-logo').evaluate(element => ({ width: element.width, height: element.height })), sizedLogoBox);
+  await page.locator('#responsive-logo').evaluate(async element => { await element.decode(); });
+  assert.deepEqual(await page.locator('#responsive-logo').evaluate(element => ({ width: element.width, height: element.height })), { width: 200, height: 100 });
+  await page.locator('#responsive-slot').evaluate(element => { element.style.width = '100px'; });
+  assert.deepEqual(await page.locator('#responsive-logo').evaluate(element => ({ width: element.width, height: element.height })), { width: 100, height: 50 });
+  // Local CSS zoom regression, not a claim of testing Chrome's extension zoom API.
+  await page.locator('#react').evaluate(element => { element.style.zoom = '.6'; });
+  const zoomedLogo = await page.locator('#native-logo').boundingBox();
+  assert.ok(Math.abs(zoomedLogo.width - nativeLogoBox.width * .6) < 1);
+  assert.ok(Math.abs(zoomedLogo.height - nativeLogoBox.height * .6) < 1);
+  await page.locator('#react').evaluate(element => { element.style.removeProperty('zoom'); });
   await moduleCard.locator('[data-mf-settings]').click();
   await page.locator('.mf-feature-modal').waitFor({ state: 'visible' });
   assert.equal(await page.locator('[data-feature-enabled]').evaluate(element => getComputedStyle(element, '::before').content), 'none');
   await page.locator('[data-feature-close]').click();
   await moduleCard.locator('.mf-feature-icon').click();
   assert.equal(await moduleCard.locator('input').isChecked(), checked);
+  await page.locator('#native-logo').evaluate(async element => { await element.decode(); });
+  assert.equal(await page.locator('#native-logo').getAttribute('width'), null);
+  assert.equal(await page.locator('#native-logo').getAttribute('height'), null);
+  assert.deepEqual(await page.locator('#native-logo').evaluate(element => ({ width: element.width, height: element.height })), nativeLogoBox);
   assert.equal(await moduleCard.locator('.mf-feature-icon img').getAttribute('src'), icon);
   assert.equal(await moduleCard.evaluate(element => {
     const rect = element.getBoundingClientRect();
@@ -277,6 +336,8 @@ try {
     defaultEnabled: true, explicitOptOutPersists: true, nativeMenuFixture: true, realMenuHub: true,
     classicTitleNavigation: true, worldCanvasUnchanged: true, startupReveal: true, decorativeBanner: true,
     moduleToggleAndFavorites: true, moduleSettings: true, moduleIconsPreserved: true,
+    nativeLogoSlotPreserved: true, responsiveLogoSizing: true, cssZoomLogoSizing: true,
+    openingFramesCentered: true, draggingAfterOpening: true,
     narrowNavigation: true, centralOffSwitch: true, savedOnCannotBypassOffSwitch: true,
     seasonalControlsHiddenWhenRetired: true, normalStartupWhenRetired: true,
     preferencesPreservedForNextSeason: true, errors, screenshots: output }, null, 2));

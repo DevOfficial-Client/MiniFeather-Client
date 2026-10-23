@@ -296,7 +296,7 @@ test('MirrorRunner rejects old cape physics and controls cached before the Wavey
   const mirror = FAKE_MIRROR();
   const files = {}, guards = {
     'src/Render/BetterAnimationCape.js': ['BETTER_CAPE_PHYSICS_VERSION = 3'],
-    'src/UI/ClientPanel.js': ['FULLBRIGHT_SETTINGS_VERSION = 1', 'experimentalRealisticFirstPerson', 'FIRST_PERSON_MODULE_VERSION = 1', 'CAPE_SETTINGS_VERSION = 1', 'HALLOWEEN_UI_VERSION = 4'],
+    'src/UI/ClientPanel.js': ['FULLBRIGHT_SETTINGS_VERSION = 1', 'experimentalRealisticFirstPerson', 'FIRST_PERSON_MODULE_VERSION = 1', 'CAPE_SETTINGS_VERSION = 1', 'HALLOWEEN_UI_VERSION = 4', 'UI_LAYOUT_FIX_VERSION = 1'],
     'src/I18n/Translations.js': ['"fullBrightSettings"', '"experimentalRealisticFirstPersonLabel"', '"firstPersonDesc"', '"capePhysics"', '"halloweenTheme"', '"halloweenHomeSubtitle"']
   };
   for (const [p, markers] of Object.entries(guards)) {
