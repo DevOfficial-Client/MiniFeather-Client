@@ -209,7 +209,7 @@ test('MirrorRunner inserts the bundled first-person dependency omitted by an old
   const sb = execRunnerSandbox({ mirror, overrides: {
     v: 1, buckets: { mainStart: plan }, files: { [REALISTIC_PATH]: 'globalThis.legacyRealistic = true;' }, ok: {}
   } });
-  assert.deepEqual(sb.__executed.map(entry => entry.path), ['m/c.js', FIRST_PERSON_PATH, REALISTIC_PATH, 'm/a.js']);
+  assert.deepEqual(sb.__executed.map(entry => entry.path), ['m/c.js', FIRST_PERSON_PATH, REALISTIC_PATH, 'm/b.js', 'm/a.js']);
   assert.equal(sb.globalThis.modernRealistic, true, 'local coordinator must run after its new dependency');
   assert.equal(sb.globalThis.legacyRealistic, undefined);
 });
@@ -277,6 +277,63 @@ test('MirrorRunner player-version guards remain optional when the local bundle p
   assert.equal(sb.__executed.some(entry => entry.path === FIRST_PERSON_PATH), false);
 });
 
+test('MirrorRunner rejects cached controllers that predate independent First Person ownership', () => {
+  const mirror = FAKE_MIRROR();
+  mirror.lists.mainStart.push(FIRST_PERSON_PATH, REALISTIC_PATH);
+  mirror.code[FIRST_PERSON_PATH] = '// FIRST_PERSON_MODEL_VERSION = 4\nglobalThis.independentFirstPerson = true;';
+  mirror.code[REALISTIC_PATH] = '// REALISTIC_PLAYER_FEATURES_VERSION = 2\nglobalThis.leasedRealistic = true;';
+  const sb = execRunnerSandbox({ mirror, overrides: { v: 1, files: {
+    [FIRST_PERSON_PATH]: '// FIRST_PERSON_MODEL_VERSION = 3\nglobalThis.oldFirstPerson = true;',
+    [REALISTIC_PATH]: '// REALISTIC_PLAYER_FEATURES_VERSION = 1\nglobalThis.oldRealistic = true;'
+  }, ok: {} } });
+  assert.equal(sb.globalThis.independentFirstPerson, true);
+  assert.equal(sb.globalThis.leasedRealistic, true);
+  assert.equal(sb.globalThis.oldFirstPerson, undefined);
+  assert.equal(sb.globalThis.oldRealistic, undefined);
+});
+
+test('MirrorRunner rejects old cape physics and controls cached before the Wavey-style adaptation', () => {
+  const mirror = FAKE_MIRROR();
+  const files = {}, guards = {
+    'src/Render/BetterAnimationCape.js': ['BETTER_CAPE_PHYSICS_VERSION = 3'],
+    'src/UI/ClientPanel.js': ['FULLBRIGHT_SETTINGS_VERSION = 1', 'experimentalRealisticFirstPerson', 'FIRST_PERSON_MODULE_VERSION = 1', 'CAPE_SETTINGS_VERSION = 1', 'HALLOWEEN_UI_VERSION = 4'],
+    'src/I18n/Translations.js': ['"fullBrightSettings"', '"experimentalRealisticFirstPersonLabel"', '"firstPersonDesc"', '"capePhysics"', '"halloweenTheme"', '"halloweenHomeSubtitle"']
+  };
+  for (const [p, markers] of Object.entries(guards)) {
+    mirror.lists.mainStart.push(p);
+    mirror.code[p] = markers.map(marker => '// ' + marker).join('\n') + '\nglobalThis.modernCape = (globalThis.modernCape || 0) + 1;';
+    files[p] = markers.slice(0, -1).map(marker => '// ' + marker).join('\n') + '\nglobalThis.oldCape = true;';
+    if (p === 'src/Render/BetterAnimationCape.js') files[p] = '// BETTER_CAPE_PHYSICS_VERSION = 2\nglobalThis.oldCape = true;';
+  }
+  const sb = execRunnerSandbox({ mirror, overrides: { v: 1, files, ok: {} } });
+  assert.equal(sb.globalThis.modernCape, 3); assert.equal(sb.globalThis.oldCape, undefined);
+});
+
+test('MirrorRunner does not restore a removed forced skin through an old CustomSkins override', () => {
+  const p = 'src/Cosmetics/CustomSkins.js';
+  const mirror = FAKE_MIRROR();
+  mirror.lists.mainStart.push(p);
+  mirror.code[p] = '// CUSTOM_SKIN_DEFAULTS_VERSION = 1\nglobalThis.nativeSkinDefault = true;';
+  const old = execRunnerSandbox({ mirror, overrides: { v: 1, files: { [p]: 'globalThis.forcedOldSkin = true;' }, ok: {} } });
+  assert.equal(old.globalThis.nativeSkinDefault, true);
+  assert.equal(old.globalThis.forcedOldSkin, undefined);
+  const modern = execRunnerSandbox({ mirror, overrides: { v: 1, files: {
+    [p]: '// CUSTOM_SKIN_DEFAULTS_VERSION = 1\nglobalThis.compatibleSkinDefault = true;'
+  }, ok: {} } });
+  assert.equal(modern.globalThis.compatibleSkinDefault, true);
+  assert.equal(modern.globalThis.nativeSkinDefault, undefined);
+});
+
+test('MirrorRunner rejects cached facial code that can resume the retired developer face', () => {
+  const p = 'src/Studio/MF_Facial.js';
+  const mirror = FAKE_MIRROR();
+  mirror.lists.mainStart.push(p);
+  mirror.code[p] = '// FACIAL_LEGACY_CLEANUP_VERSION = 1\nglobalThis.nativeFacePreserved = true;';
+  const old = execRunnerSandbox({ mirror, overrides: { v: 1, files: { [p]: 'globalThis.oldFaceResumed = true;' }, ok: {} } });
+  assert.equal(old.globalThis.nativeFacePreserved, true);
+  assert.equal(old.globalThis.oldFaceResumed, undefined);
+});
+
 test('MirrorRunner still enforces moderation on an inserted first-person dependency and the coordinator', () => {
   const moderationPath = 'src/Core/MF_Moderation.js';
   for (const locked of [false, true]) {
@@ -289,7 +346,7 @@ test('MirrorRunner still enforces moderation on an inserted first-person depende
     } });
     assert.equal(sb.globalThis.firstPersonLoaded, undefined);
     assert.equal(sb.globalThis.modernRealistic, locked ? undefined : true);
-    assert.deepEqual(sb.__executed.map(entry => entry.path), locked ? [moderationPath] : [moderationPath, REALISTIC_PATH, 'm/a.js']);
+    assert.deepEqual(sb.__executed.map(entry => entry.path), locked ? [moderationPath] : [moderationPath, 'm/b.js', 'm/c.js', REALISTIC_PATH, 'm/a.js']);
   }
 });
 
@@ -312,6 +369,21 @@ test('background: trackedFilesFromManifest excluye mirror.js generado', () => {
   }
 });
 
+test('seasonal release flags stay local and are not replayed from a remote mirror cache', () => {
+  const bg = source('src/Core/background.js');
+  const fn = namedFunction(bg, 'bucketizeContentScripts');
+  const matcher = bg.match(/const MIRROR_BOOTSTRAP_RE = (\/[^\r\n]+\/);/);
+  assert.ok(matcher);
+  const manifest = JSON.parse(source('manifest.json'));
+  const buckets = vm.runInNewContext(`const MIRROR_BOOTSTRAP_RE = ${matcher[1]}; (${fn})(${JSON.stringify(manifest)})`);
+  const paths = Object.values(buckets).flat();
+  assert.equal(paths.includes('src/Core/SeasonalFlags.js'), false);
+  assert.equal(paths.includes('src/UI/HalloweenTheme.js'), true);
+  assert.equal(paths.includes('src/UI/ClientPanel.js'), true);
+  const tracked = vm.runInNewContext(`(${namedFunction(bg, 'trackedFilesFromManifest')})(${JSON.stringify(manifest)})`);
+  assert.equal(tracked.filter(file => file === 'src/Core/SeasonalFlags.js').length, 1);
+});
+
 test('build-mobile: el userscript empota los módulos de mirror.json y no el runner', async () => {
   const distPath = path.join(ROOT, 'dist', 'MiniFeatherClient.user.js');
   const before = fs.existsSync(distPath) ? fs.readFileSync(distPath, 'utf8') : null;
@@ -324,6 +396,10 @@ test('build-mobile: el userscript empota los módulos de mirror.json y no el run
     assert.ok(bundle.includes(`==== mf module: ${list.mainStart[list.mainStart.length - 1]} ====`), 'último módulo del mirror falta');
     assert.ok(!bundle.includes('==== mf module: src/Core/MirrorRunner.js ===='), 'MirrorRunner no debe ir en el bundle');
     assert.ok(!bundle.includes('==== mf module: src/Core/mirror.js ===='), 'mirror.js no debe ir en el bundle');
+    const flagHeader = '==== mf module: src/Core/SeasonalFlags.js ====';
+    assert.equal(bundle.split(flagHeader).length - 1, 1, 'seasonal flags must be bundled once');
+    assert.ok(bundle.indexOf(flagHeader) < bundle.indexOf('==== mf module: src/Core/SplashScreen.js ===='));
+    assert.ok(bundle.indexOf(flagHeader) < bundle.indexOf('==== mf module: src/UI/HalloweenTheme.js ===='));
     // orden: FriendNicknames (primer módulo) antes que los bridges iso
     const firstIdx = bundle.indexOf(`==== mf module: ${list.mainStart[0]} ====`);
     const bridgeIdx = bundle.indexOf('==== mf module: src/P2P/MF_VoiceSignalBridge.js ====');

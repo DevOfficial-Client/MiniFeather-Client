@@ -207,9 +207,13 @@ test('disable and hot reload restore hooks, materials and geometry and free owne
   assert.equal(f.timers.size, 0);
   f.api.configure({ enabled: true });
   vm.runInNewContext(source, f.sandbox);
+  const next = f.sandbox.MF_RealisticFirstPerson;
+  assert.notEqual(f.mesh.render, f.nativeRender);
+  assert.equal(f.timers.size, 1);
+  assert.equal(next.getState().manualEnabled, true);
+  next.destroy();
   assert.equal(f.mesh.render, f.nativeRender);
   assert.equal(f.timers.size, 0);
-  assert.equal(f.sandbox.MF_RealisticFirstPerson.getState().enabled, false);
 });
 
 test('armor relief can update shared source geometry while the first-person filter is active', () => {
@@ -371,7 +375,7 @@ test('native visibility before entity render works both with shadows on and off'
       assert.equal(f.mesh.skinnedBody.geometry, filtered);
     }
     const status = f.api.getState();
-    assert.equal(status.version, 3);
+    assert.equal(status.version, 4);
     assert.equal(status.renderCount, 4);
     assert.equal(status.playerFound, true);
     assert.equal(status.hooked, true);
@@ -769,15 +773,66 @@ test('destroy and reinjection restore all HUD methods and scoped model transform
   const hooked = f.hud.update;
   assert.notEqual(hooked, f.nativeHudUpdate);
   vm.runInNewContext(source, f.sandbox);
-  assert.equal(f.hud.update, f.nativeHudUpdate);
-  assert.equal(f.hud.rightArm.visible, true);
-  assert.equal(f.mesh.position.y, 0);
-  assert.equal(f.mesh.position.z, 0);
+  assert.notEqual(f.hud.update, f.nativeHudUpdate);
+  assert.equal(f.hud.rightArm.visible, false);
+  assert.equal(f.sandbox.MF_RealisticFirstPerson.getState().manualEnabled, true);
   const nextApi = f.sandbox.MF_RealisticFirstPerson;
   nextApi.configure({ enabled: true });
   assert.notEqual(f.hud.update, hooked, 'reloading creates one fresh hook, not a chain of old wrappers');
   nextApi.destroy();
   assert.equal(f.hud.update, f.nativeHudUpdate);
   assert.equal(f.hud.rightArm.visible, true);
+  assert.equal(f.mesh.position.y, 0);
+  assert.equal(f.mesh.position.z, 0);
   assert.equal(f.timers.size, 0);
+});
+
+test('standalone First Person and Realistic own independent switches across reconfiguration and reload', () => {
+  const f = fixture();
+  const dispatch = (name, config) => {
+    for (const callback of f.listeners.get(name) || []) callback({ detail: JSON.stringify(config) });
+  };
+  dispatch('minifeather:firstperson-config', { enabled: true });
+  dispatch('minifeather:realistic-config', { enabled: true, firstPersonBody: true });
+  dispatch('minifeather:firstperson-config', { enabled: false });
+  assert.equal(f.api.getState().enabled, true);
+  assert.equal(f.api.getState().manualEnabled, false);
+  assert.equal(f.api.getState().realisticEnabled, true);
+  dispatch('minifeather:realistic-config', { enabled: false });
+  assert.equal(f.api.getState().enabled, false);
+  dispatch('minifeather:firstperson-config', { enabled: true });
+  dispatch('minifeather:realistic-config', { enabled: false });
+  assert.equal(f.api.getState().enabled, true);
+  vm.runInNewContext(source, f.sandbox);
+  const next = f.sandbox.MF_RealisticFirstPerson;
+  assert.equal(next.getState().manualEnabled, true);
+  assert.equal(f.timers.size, 1);
+  assert.equal(f.listeners.get('minifeather:firstperson-config').size, 1);
+  next.destroy();
+  assert.equal(f.listeners.get('minifeather:firstperson-config').size, 0);
+  assert.equal(f.mesh.render, f.nativeRender);
+});
+
+test('enabling either First Person owner stops custom animations and never calls Vanilla Animations', () => {
+  for (const owner of ['manual', 'realistic']) {
+    const f = fixture();
+    const stopped = [];
+    for (const name of ['MF_PlayerAnims', 'MF_FreshAnims', 'MF_HeadLag']) {
+      f.sandbox[name] = { enabled: true, setEnabled(value) { this.enabled = value; stopped.push(name); } };
+    }
+    let handEnabled = true;
+    f.sandbox.MF_HandSway = {
+      get enabled() { return handEnabled; },
+      set enabled(value) { handEnabled = value; stopped.push('MF_HandSway'); }
+    };
+    f.sandbox.VanillaAnimations = { enabled: true, setEnabled() { throw new Error('Vanilla must not be disabled'); } };
+    if (owner === 'manual') f.api.enable();
+    else f.api.setRealisticOptions({ enabled: true });
+    assert.deepEqual(stopped.sort(), ['MF_PlayerAnims', 'MF_FreshAnims', 'MF_HeadLag', 'MF_HandSway'].sort());
+    assert.equal(f.sandbox.VanillaAnimations.enabled, true);
+    f.api.sync();
+    assert.equal(stopped.length, 4, 'no redundant config or state events every tick');
+    f.api.disable(); f.api.setRealisticOptions({ enabled: false });
+    assert.equal(handEnabled, false, 'disabling First Person does not silently re-enable custom animations');
+  }
 });

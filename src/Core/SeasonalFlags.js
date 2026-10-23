@@ -1,0 +1,1 @@
+(()=>{"use strict";const HALLOWEEN_ENABLED=!0;globalThis.__MF_SEASONAL_FLAGS__=Object.freeze({halloween:!0})})();
