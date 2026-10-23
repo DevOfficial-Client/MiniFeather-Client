@@ -309,6 +309,27 @@ test('MirrorRunner rejects old cape physics and controls cached before the Wavey
   assert.equal(sb.globalThis.modernCape, 3); assert.equal(sb.globalThis.oldCape, undefined);
 });
 
+test('MirrorRunner rejects old nametag wrappers and scale discovery but accepts compatible overrides', () => {
+  const guards = {
+    'src/Render/TitanTiny.js': 'TITAN_NAMETAG_DECORATOR_VERSION = 1',
+    'src/Render/HealthNameTags.js': 'NAMETAG_ORIGINAL_RENDERER_VERSION = 1'
+  };
+  const mirror = FAKE_MIRROR(), oldFiles = {}, currentFiles = {};
+  for (const [p, marker] of Object.entries(guards)) {
+    assert.ok(source(p).includes(marker));
+    mirror.lists.mainStart.push(p);
+    mirror.code[p] = `// ${marker}\nglobalThis.bundledNameTagFix = (globalThis.bundledNameTagFix || 0) + 1;`;
+    oldFiles[p] = 'globalThis.oldNameTagWrapper = true;';
+    currentFiles[p] = `// ${marker}\nglobalThis.currentNameTagOverride = (globalThis.currentNameTagOverride || 0) + 1;`;
+  }
+  const old = execRunnerSandbox({ mirror, overrides: { v: 1, files: oldFiles, ok: {} } });
+  assert.equal(old.globalThis.bundledNameTagFix, 2);
+  assert.equal(old.globalThis.oldNameTagWrapper, undefined);
+  const current = execRunnerSandbox({ mirror, overrides: { v: 1, files: currentFiles, ok: {} } });
+  assert.equal(current.globalThis.currentNameTagOverride, 2);
+  assert.equal(current.globalThis.bundledNameTagFix, undefined);
+});
+
 test('MirrorRunner does not restore a removed forced skin through an old CustomSkins override', () => {
   const p = 'src/Cosmetics/CustomSkins.js';
   const mirror = FAKE_MIRROR();
