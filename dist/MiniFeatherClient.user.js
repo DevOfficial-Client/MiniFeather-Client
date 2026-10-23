@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261023154730
+// @version      4.19.0.20261023154756
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 40f6afe4dc32a0f11f5d6b0f5641486d69a366e1
- * builtAt : 2026-10-23T15:47:56.102Z
+ * commit  : 777d46b09ba585ad0721fd88fb33467896492a51
+ * builtAt : 2026-10-23T16:30:48.223Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"40f6afe4dc32a0f11f5d6b0f5641486d69a366e1","builtAt":"2026-10-23T15:47:56.102Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"777d46b09ba585ad0721fd88fb33467896492a51","builtAt":"2026-10-23T16:30:48.223Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -123620,7 +123620,7 @@ function normalize(entry) {
   const DEFAULT_SETTINGS = {
     rebrand: true,
     classicTitle: false,
-    menuHub: true,
+    menuHub: false,
     supportAds: false,
     startupAnimation: true,
     discord: true,
@@ -123934,6 +123934,9 @@ function normalize(entry) {
 
   const LOGO_ALT_NAMES = ['miniblox'];
   const LOGO_SOURCE_NAMES = ['miniblox-icon', 'miniblox-logo', 'pwa-icon-192.png'];
+  const UI_LAYOUT_FIX_VERSION = 1;
+  const logoLayouts = new WeakMap();
+  const pendingLogos = new Map();
 
   let settings = { ...DEFAULT_SETTINGS };
   let guiSettings = { ...DEFAULT_SETTINGS };
@@ -124391,24 +124394,86 @@ function normalize(entry) {
     return matchesAlt || matchesSource;
   }
 
+  function preserveLogoLayout(img) {
+    if (logoLayouts.has(img)) return true;
+    const width = img.width, height = img.height;
+    if (!(width > 0 && height > 0)) return false;
+
+    // Keep the native slot, not the replacement file's intrinsic 799x805 size.
+    // HTML dimensions remain overridable by the game's responsive CSS.
+    const changes = [];
+    for (const [name, value] of [['width', width], ['height', height]]) {
+      if (img.hasAttribute(name)) continue;
+      img.setAttribute(name, String(value));
+      changes.push({ name, applied: img.getAttribute(name) });
+    }
+    const computed = getComputedStyle(img);
+    for (const [name, value, needed] of [
+      ['aspect-ratio', `${width} / ${height}`, !computed.aspectRatio || computed.aspectRatio.includes('auto')],
+      ['object-fit', 'contain', !computed.objectFit || computed.objectFit === 'fill']
+    ]) {
+      if (!needed) continue;
+      const original = img.style.getPropertyValue(name);
+      const priority = img.style.getPropertyPriority(name);
+      img.style.setProperty(name, value);
+      changes.push({ name, original, priority, applied: img.style.getPropertyValue(name), style: true });
+    }
+    logoLayouts.set(img, changes);
+    return true;
+  }
+
+  function restoreLogoLayout(img) {
+    for (const change of logoLayouts.get(img) || []) {
+      if (change.style) {
+        if (img.style.getPropertyValue(change.name) !== change.applied || img.style.getPropertyPriority(change.name)) continue;
+        if (change.original) img.style.setProperty(change.name, change.original, change.priority);
+        else img.style.removeProperty(change.name);
+      } else if (img.getAttribute(change.name) === change.applied) {
+        img.removeAttribute(change.name);
+      }
+    }
+    logoLayouts.delete(img);
+  }
+
+  function replaceLogoImage(img) {
+    if (!preserveLogoLayout(img)) {
+      if (!img.complete && !pendingLogos.has(img)) {
+        const cancel = () => {
+          img.removeEventListener('load', loaded);
+          img.removeEventListener('error', cancel);
+          pendingLogos.delete(img);
+        };
+        const loaded = () => {
+          cancel();
+          if (settings.rebrand && img.isConnected && isLogoImage(img)) replaceLogoImage(img);
+        };
+        pendingLogos.set(img, cancel);
+        img.addEventListener('load', loaded, { once: true });
+        img.addEventListener('error', cancel, { once: true });
+      }
+      return;
+    }
+    pendingLogos.get(img)?.();
+    img.dataset.mfLogoTarget = '1';
+    if (!img.hasAttribute('data-mf-original-src')) img.dataset.mfOriginalSrc = img.getAttribute('src') || '';
+    if (!img.hasAttribute('data-mf-original-srcset')) img.dataset.mfOriginalSrcset = img.getAttribute('srcset') || '';
+
+    if (img.getAttribute('src') !== currentLogo) img.setAttribute('src', currentLogo);
+    if (img.hasAttribute('srcset')) img.setAttribute('srcset', currentLogo);
+
+    const picture = img.closest('picture');
+    picture?.querySelectorAll('source').forEach(source => {
+      if (!source.hasAttribute('data-mf-original-srcset')) {
+        source.dataset.mfOriginalSrcset = source.getAttribute('srcset') || '';
+      }
+      if (source.getAttribute('srcset') !== currentLogo) source.setAttribute('srcset', currentLogo);
+    });
+  }
+
   function replaceLogo() {
+    for (const [img, cancel] of pendingLogos) if (!img.isConnected) cancel();
     document.querySelectorAll('img').forEach(img => {
-      if (!isLogoImage(img)) return;
-
-      img.dataset.mfLogoTarget = '1';
-      if (!img.hasAttribute('data-mf-original-src')) img.dataset.mfOriginalSrc = img.getAttribute('src') || '';
-      if (!img.hasAttribute('data-mf-original-srcset')) img.dataset.mfOriginalSrcset = img.getAttribute('srcset') || '';
-
-      if (img.getAttribute('src') !== currentLogo) img.setAttribute('src', currentLogo);
-      if (img.hasAttribute('srcset')) img.setAttribute('srcset', currentLogo);
-
-      const picture = img.closest('picture');
-      picture?.querySelectorAll('source').forEach(source => {
-        if (!source.hasAttribute('data-mf-original-srcset')) {
-          source.dataset.mfOriginalSrcset = source.getAttribute('srcset') || '';
-        }
-        source.setAttribute('srcset', currentLogo);
-      });
+      if (isLogoImage(img)) replaceLogoImage(img);
     });
   }
 
@@ -124510,6 +124575,7 @@ function normalize(entry) {
 
   function restoreRebrand() {
     document.title = ORIGINALS.title;
+    for (const cancel of pendingLogos.values()) cancel();
 
     document.querySelectorAll("link[rel*='icon'][data-mf-original-href]").forEach(icon => {
       const original = icon.dataset.mfOriginalHref || '';
@@ -124529,6 +124595,7 @@ function normalize(entry) {
       delete img.dataset.mfLogoTarget;
       delete img.dataset.mfOriginalSrc;
       delete img.dataset.mfOriginalSrcset;
+      restoreLogoLayout(img);
     });
 
     document.querySelectorAll('source[data-mf-original-srcset]').forEach(source => {
@@ -132987,8 +133054,8 @@ function normalize(entry) {
     });
     try {
       panel.animate(
-        [{ opacity: 0, transform: 'scale(.975) translateY(8px)' }, { opacity: 1, transform: 'none' }],
-        { duration: 150, easing: 'cubic-bezier(.2,.9,.3,1)' }
+        [{ opacity: 0 }, { opacity: 1 }],
+        { duration: window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 0 : 150, easing: 'cubic-bezier(.2,.9,.3,1)' }
       );
     } catch (_) {}
     startDashboardUpdater();
@@ -138272,8 +138339,8 @@ function normalize(entry) {
       animation:mfPanelIn 190ms cubic-bezier(.2,.78,.25,1) both;
     }
     @keyframes mfPanelIn {
-      from { opacity:0; transform:translate(-50%,calc(-50% + 7px)) scale(.992); }
-      to { opacity:1; transform:translate(-50%,-50%) scale(1); }
+      from { opacity:0; translate:0 7px; }
+      to { opacity:1; translate:0 0; }
     }
     @keyframes mfModalIn {
       from { opacity:0; transform:translateY(8px) scale(.985); }

@@ -23,8 +23,8 @@
       animation:mfPanelIn 190ms cubic-bezier(.2,.78,.25,1) both;
     }
     @keyframes mfPanelIn {
-      from { opacity:0; transform:translate(-50%,calc(-50% + 7px)) scale(.992); }
-      to { opacity:1; transform:translate(-50%,-50%) scale(1); }
+      from { opacity:0; translate:0 7px; }
+      to { opacity:1; translate:0 0; }
     }
     @keyframes mfModalIn {
       from { opacity:0; transform:translateY(8px) scale(.985); }

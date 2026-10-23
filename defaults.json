@@ -3,6 +3,7 @@
   "general": {
     "rebrand": true,
     "classicTitle": false,
+    "menuHub": false,
     "supportAds": false,
     "startupAnimation": true,
     "discord": true,

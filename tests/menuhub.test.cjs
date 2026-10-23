@@ -15,8 +15,9 @@ const translationsSource = fs.readFileSync(path.join(rootDir, 'src/I18n/Translat
 const mirrorList = JSON.parse(fs.readFileSync(path.join(rootDir, 'mirror.json'), 'utf8'));
 const mirrorBundle = fs.readFileSync(path.join(rootDir, 'src/Core/mirror.js'), 'utf8');
 
-test('el hub esta cableado al panel: default on, config, init llamado y toggle', () => {
-  assert.match(panel, /menuHub: true/);
+test('el hub esta cableado al panel: default off, config, init llamado y toggle', () => {
+  assert.match(panel, /menuHub: false/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(rootDir, 'defaults.json'), 'utf8')).general.menuHub, false);
   assert.match(panel, /minifeather:menuhub-config/);
   assert.match(panel, /function initMenuHubModule\(\)/);
   assert.match(panel, /initMenuHubModule\(\);/);
