@@ -5,10 +5,11 @@ import { readFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import seasonalFlags from '../tests/helpers/seasonal-flags.cjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const flagsSource = readFileSync(path.join(root, 'src/Core/SeasonalFlags.js'), 'utf8');
-const flags = enabled => flagsSource.replace(/const HALLOWEEN_ENABLED = (?:true|false);/, `const HALLOWEEN_ENABLED = ${enabled};`);
+const flags = enabled => seasonalFlags.withHalloween(flagsSource, enabled);
 const output = path.join(root, 'artifacts', 'halloween-ui');
 mkdirSync(output, { recursive: true });
 const defaults = JSON.parse(readFileSync(path.join(root, 'defaults.json'), 'utf8'));
@@ -240,7 +241,7 @@ try {
   await page.setViewportSize({ width: 1366, height: 900 });
   await page.goto('https://miniblox.io/');
   for (const file of ['src/Core/SeasonalFlags.js', 'src/I18n/Translations.js', 'src/UI/HalloweenTheme.js']) {
-    await page.addScriptTag({ content: readFileSync(path.join(root, file), 'utf8') });
+    await page.addScriptTag({ content: file === 'src/Core/SeasonalFlags.js' ? flags(true) : readFileSync(path.join(root, file), 'utf8') });
   }
   await page.evaluate(() => {
     window.__MF_HALLOWEEN_UI__.configure({ enabled: true, language: 'es', motion: false });
@@ -307,6 +308,11 @@ try {
 
   // Simulate the future update by changing only the flag in memory, never the
   // working source file. Previously saved ON preferences must not bypass it.
+  const retiredAssetRequests = [];
+  const recordRetiredAsset = request => {
+    if (request.url().includes('/assets/ui/halloween/')) retiredAssetRequests.push(request.url());
+  };
+  page.on('request', recordRetiredAsset);
   await page.evaluate(async () => chrome.storage.local.set({ settings: { halloweenTheme: true, halloweenAnimations: true, startupAnimation: true } }));
   await loadUI({ halloweenAvailable: false });
   await page.locator('#mf-gui [data-page="settings"]').click();
@@ -326,6 +332,8 @@ try {
   });
   await page.screenshot({ path: path.join(output, 'startup-normal.png') });
   await page.evaluate(() => window.__MINIFEATHER_SPLASH__.destroy());
+  assert.deepEqual(retiredAssetRequests, [], 'retired decorations must not load artwork');
+  page.off('request', recordRetiredAsset);
   await loadUI();
   await page.locator('#mf-gui [data-page="settings"]').click();
   assert.equal(await page.locator('#mf-halloween-theme').isChecked(), true);
@@ -340,7 +348,7 @@ try {
     openingFramesCentered: true, draggingAfterOpening: true,
     narrowNavigation: true, centralOffSwitch: true, savedOnCannotBypassOffSwitch: true,
     seasonalControlsHiddenWhenRetired: true, normalStartupWhenRetired: true,
-    preferencesPreservedForNextSeason: true, errors, screenshots: output }, null, 2));
+    preferencesPreservedForNextSeason: true, noRetiredArtworkRequests: true, errors, screenshots: output }, null, 2));
 } catch (error) {
   await page.screenshot({ path: path.join(output, 'failed.png') }).catch(() => {});
   console.error(JSON.stringify({ errors, state: await page.evaluate(() => ({

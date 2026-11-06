@@ -122,7 +122,7 @@ test('old animation wrappers remain safe after modules are removed', () => {
   assert.equal(staleSkeleton.call(mesh.skeleton), 'skeleton-updated');
 });
 
-test('WebGL cleanup frees only old detached contexts without reacquiring them', () => {
+test('WebGL registry forgets detached canvases without destroying their contexts or reacquiring them', () => {
   const code = source('src/Render/TextureInterceptor.js');
   const prefix = code.slice(0, code.indexOf("    var KEY = 'mf_custom_textures';")) + '\n})();';
   let lost = 0;
@@ -149,7 +149,8 @@ test('WebGL cleanup frees only old detached contexts without reacquiring them', 
   old.__mfGLTrackedAt -= 30000;
   for (let i = 0; i < 9; i++) new Canvas(true).getContext('webgl2');
   new Canvas(true).getContext('webgl2');
-  assert.equal(lost, 1);
+  assert.equal(lost, 0, 'detached does not mean unused');
   assert.equal(old.calls, 1);
+  assert.equal(old.__mfIsGL, false, 'a later getContext can register the canvas again');
   assert.equal(window.__MF_GL_CANVASES__.length, 10);
 });

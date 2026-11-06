@@ -16,6 +16,7 @@ function objectLiteral(name) {
 test('every ClickGUI module has a colored source icon', () => {
   const palette = objectLiteral('PIXEL_PALETTE');
   const icons = objectLiteral('MF_PIXEL_ICONS');
+  const aliases = objectLiteral('MF_PIXEL_ICON_ALIASES');
   const index = source.match(/function getModuleIndex\(\) \{[\s\S]*?return \[([\s\S]*?)\];/);
   assert.ok(index, 'module index was not found');
 
@@ -27,7 +28,7 @@ test('every ClickGUI module has a colored source icon', () => {
   assert.ok(keys.size >= 45);
 
   for (const key of keys) {
-    const rows = icons[key];
+    const rows = icons[aliases[key] || key];
     assert.ok(rows, `${key} is missing an icon`);
     assert.equal(rows.length, 8, `${key} must have 8 rows`);
     for (const row of rows) {
@@ -38,6 +39,18 @@ test('every ClickGUI module has a colored source icon', () => {
     }
     assert.match(rows.join(''), /[bBgGrRyYoOpPvVtTnN]/, `${key} should use color`);
   }
+});
+
+test('Rainbow resolves its colored pixel-art asset instead of the unknown-module fallback', () => {
+  const aliases = objectLiteral('MF_PIXEL_ICON_ALIASES');
+  const icons = objectLiteral('MF_PIXEL_ICONS');
+  const fn = source.match(/  function iconSvg\([^]*?\n  \}/)?.[0];
+  assert.ok(fn);
+  const render = vm.runInNewContext(fn + '; iconSvg', {
+    MF_PIXEL_ICON_ALIASES: aliases, MF_PIXEL_ICONS: icons, MF_SVG_ICONS: {},
+    pixelIconPng: (name, className) => `png:${name}:${className}`
+  });
+  assert.equal(render('rainbow', 'fixture'), 'png:shaders:fixture');
 });
 
 test('ClickGUI loads real transparent PNG assets instead of inline pixel SVGs', () => {

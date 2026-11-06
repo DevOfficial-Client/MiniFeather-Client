@@ -334,6 +334,33 @@ test('brick with wipe: clears mf:* and respects mf:moderation:*', async () => {
   assert.equal(verdict.wiped, true, 'wipe flagged so it never runs twice');
 });
 
+test('a non-wipe verdict preserves client data after restarting', () => {
+  const cached = { killSwitch: { active: false }, bannedAccounts: [],
+    brickedAccounts: [{ name: 'locked-only', wipe: false }], blockedModules: {} };
+  const first = makeSandbox({ ls: {
+    'mf:pageZoom': '1.5',
+    [CFG_KEY]: { v: 1, ts: 0, hash: 'seed', cfg: cached }
+  }, mirrorRunnerMode: true });
+  runMod(first.sandbox);
+  first.sandbox.document.dispatchEvent({ type: 'minifeather:client-chat-identity',
+    detail: JSON.stringify({ username: 'locked-only' }) });
+  assert.equal(first.store.get('mf:pageZoom'), '1.5');
+  const second = makeSandbox({ ls: Object.fromEntries(first.store), mirrorRunnerMode: true });
+  runMod(second.sandbox);
+  assert.equal(second.store.get('mf:pageZoom'), '1.5');
+});
+
+test('legacy unfinished verdicts never imply permission to wipe; explicit pending wipes resume once', () => {
+  for (const explicit of [false, true]) {
+    const verdict = { name: 'legacy', wiped: false };
+    if (explicit) verdict.wipeRequested = true;
+    const f = makeSandbox({ ls: { [BRICK_KEY]: verdict, 'mf:pageZoom': '1.5' }, mirrorRunnerMode: true });
+    runMod(f.sandbox);
+    assert.equal(f.store.has('mf:pageZoom'), !explicit);
+    if (explicit) assert.equal(JSON.parse(f.store.get(BRICK_KEY)).wiped, true);
+  }
+});
+
 test('unbrick: like the unban, the remote config rules', async () => {
   const cached = {
     killSwitch: { active: false, reason: '', screen: 'overlay' },

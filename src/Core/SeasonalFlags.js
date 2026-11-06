@@ -1,1 +1,1 @@
-(()=>{"use strict";const HALLOWEEN_ENABLED=!0;globalThis.__MF_SEASONAL_FLAGS__=Object.freeze({halloween:!0})})();
+(()=>{"use strict";const HALLOWEEN_ENABLED=!1;globalThis.__MF_SEASONAL_FLAGS__=Object.freeze({halloween:!1});try{document.dispatchEvent(new CustomEvent("minifeather:seasonal-flags-changed"))}catch(_){}})();
