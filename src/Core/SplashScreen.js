@@ -23,11 +23,13 @@
 
   const ROOT_ID = 'mf-startup-splash';
   const STYLE_ID = 'mf-startup-splash-style';
+  // An old controller can be absent while its overlay remains in the DOM.
+  for (const node of document.querySelectorAll?.(`#${ROOT_ID},#${STYLE_ID}`) || []) node.remove();
   const TOTAL_MS = 2850;
   const MIN_VISIBLE_MS = 220;
   const LOGO_URL = chrome.runtime.getURL('assets/icon.png');
   const HALLOWEEN_ASSETS = chrome.runtime.getURL('assets/ui/halloween/');
-  const halloweenAvailable = globalThis.__MF_SEASONAL_FLAGS__?.halloween === true;
+  let halloweenAvailable = globalThis.__MF_SEASONAL_FLAGS__?.halloween === true;
   let root = null;
   let style = null;
   let endTimer = 0;
@@ -113,10 +115,25 @@
   }
 
   function applyAppearance(settings) {
+    halloweenAvailable = globalThis.__MF_SEASONAL_FLAGS__?.halloween === true;
     halloweenTheme = halloweenAvailable && settings?.halloweenTheme !== false;
     halloweenMotion = settings?.halloweenAnimations !== false;
     root?.setAttribute('data-halloween', halloweenTheme ? 'on' : 'off');
     root?.setAttribute('data-halloween-motion', halloweenTheme && halloweenMotion ? 'on' : 'off');
+    if (!halloweenAvailable) removeSeasonalArtwork();
+  }
+
+  function removeSeasonalArtwork() {
+    for (const node of root?.querySelectorAll('.mf-splash-halloween,.mf-splash-season') || []) node.remove();
+  }
+
+  function onSeasonalFlags() {
+    halloweenAvailable = globalThis.__MF_SEASONAL_FLAGS__?.halloween === true;
+    if (halloweenAvailable) return;
+    halloweenTheme = false;
+    root?.setAttribute('data-halloween', 'off');
+    root?.setAttribute('data-halloween-motion', 'off');
+    removeSeasonalArtwork();
   }
 
   function removeRoot() {
@@ -188,6 +205,7 @@
   }
 
   document.addEventListener('minifeather:splash-replay', () => play({ force: true }), { signal: eventController.signal });
+  document.addEventListener('minifeather:seasonal-flags-changed', onSeasonalFlags, { signal: eventController.signal });
   window.addEventListener('keydown', event => {
     if (event.code !== 'Escape' || !root) return;
     event.preventDefault();

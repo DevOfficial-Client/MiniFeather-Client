@@ -87,6 +87,16 @@
       if (!MIRROR.code[bp]) continue;
       list.splice(Math.min(b, list.length), 0, bp);
     }
+    // Cached lists may omit the flag or place it after the effects. Both run
+    // in MAIN; the isolated UI's globals are not visible to seasonal effects.
+    var seasonalFlagsPath = 'src/Core/SeasonalFlags.js';
+    var seasonalPath = 'src/Seasonal/MF_Seasonal.js';
+    var flagsAt = list.indexOf(seasonalFlagsPath);
+    var seasonalAt = list.indexOf(seasonalPath);
+    if (MIRROR.code[seasonalFlagsPath] && seasonalAt >= 0 && (flagsAt < 0 || flagsAt > seasonalAt)) {
+      if (flagsAt >= 0) list.splice(flagsAt, 1);
+      list.splice(list.indexOf(seasonalPath), 0, seasonalFlagsPath);
+    }
     var files = (ov && ov.files && typeof ov.files === 'object') ? ov.files : {};
     var realisticPath = 'src/Experimental/Realistic/RealisticMode.js';
     var firstPersonPath = 'src/Experimental/Realistic/FirstPersonModel.js';
@@ -112,12 +122,21 @@
       });
     }
     var requiredMarkers = {
+      'src/Seasonal/MF_Seasonal.js': 'SEASONAL_HALLOWEEN_GATE_VERSION = 2',
+      'src/Core/MF_Moderation.js': 'MODERATION_WIPE_INTENT_VERSION = 1',
+      'src/Render/LeafWind.js': 'RENDER_RESOURCE_LIFECYCLE_VERSION = 1',
+      'src/Render/TextureInterceptor.js': 'RENDER_RESOURCE_LIFECYCLE_VERSION = 1',
+      'src/Shaders/CustomShader.js': ['RENDER_RESOURCE_LIFECYCLE_VERSION = 1', 'SHADER_DEFAULTS_VERSION = 1'],
+      'src/Shaders/MF_WaterStyle.js': 'RENDER_RESOURCE_LIFECYCLE_VERSION = 1',
+      'src/Studio/MF_Peer.js': 'PEER_POSE_VALIDATION_VERSION = 1',
+      'src/Render/CameraOverhaul.js': 'CAMERA_ANGLE_VALIDATION_VERSION = 1',
+      'src/World/RhythmParkour.js': 'RHYTHM_PEER_TEXT_VERSION = 1',
       'src/Chat/ClientCommands.js': ['COMPLETION_CONTEXT_VERSION = 3', 'BARITONE_PLACEMENT_COMMANDS_VERSION = 1',
         'BARITONE_PATH_COMMANDS_VERSION = 1'],
       'src/Render/FullBright.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
       'src/Render/TitanTiny.js': 'TITAN_NAMETAG_DECORATOR_VERSION = 1',
       'src/Render/HealthNameTags.js': 'NAMETAG_ORIGINAL_RENDERER_VERSION = 1',
-      'src/UI/ClientPanel.js': ['FULLBRIGHT_SETTINGS_VERSION = 1', 'experimentalRealisticFirstPerson', 'FIRST_PERSON_MODULE_VERSION = 1', 'CAPE_SETTINGS_VERSION = 1', 'HALLOWEEN_UI_VERSION = 4', 'UI_LAYOUT_FIX_VERSION = 1'],
+      'src/UI/ClientPanel.js': ['FULLBRIGHT_SETTINGS_VERSION = 1', 'experimentalRealisticFirstPerson', 'FIRST_PERSON_MODULE_VERSION = 1', 'CAPE_SETTINGS_VERSION = 1', 'HALLOWEEN_UI_VERSION = 4', 'UI_LAYOUT_FIX_VERSION = 1', 'PIXEL_ICON_ALIAS_VERSION = 1'],
       'src/I18n/Translations.js': ['"fullBrightSettings"', '"experimentalRealisticFirstPersonLabel"', '"firstPersonDesc"', '"capePhysics"', '"halloweenTheme"', '"halloweenHomeSubtitle"'],
       'src/Experimental/Realistic/FirstPersonModel.js': /FIRST_PERSON_MODEL_VERSION\s*=\s*4/.test(MIRROR.code[firstPersonPath] || '')
         ? 'FIRST_PERSON_MODEL_VERSION = 4' : 'FIRST_PERSON_MODEL_VERSION = 3',
@@ -130,7 +149,7 @@
       'src/PlayerAnims/HeadLag.js': 'MF_RealisticFirstPerson',
       'src/Render/HandSway.js': 'MF_RealisticFirstPerson',
       'src/Cosmetics/CustomSkins.js': 'CUSTOM_SKIN_DEFAULTS_VERSION = 1',
-      'src/Studio/MF_Facial.js': 'FACIAL_LEGACY_CLEANUP_VERSION = 1',
+      'src/Studio/MF_Facial.js': ['FACIAL_LEGACY_CLEANUP_VERSION = 1', 'FACIAL_METADATA_TEXT_VERSION = 1'],
       'src/Render/BetterAnimationCape.js': 'BETTER_CAPE_PHYSICS_VERSION = 3',
       'src/Movement/Baritone.js': /BARITONE_NAVIGATION_VERSION = 7/.test(MIRROR.code[navigationPath] || '')
         ? 'BARITONE_NAVIGATION_VERSION = 7' : /BARITONE_NAVIGATION_VERSION = 6/.test(MIRROR.code[navigationPath] || '')
@@ -166,7 +185,11 @@
           continue;
         }
       }
-      var useRemote = !!files[p] && typeof files[p] === 'string' && !fails[p];
+      var useRemote =
+        p !== seasonalFlagsPath &&
+        !!files[p] &&
+        typeof files[p] === 'string' &&
+        !fails[p];
       var marker = requiredMarkers[p];
       var markers = Array.isArray(marker) ? marker : marker ? [marker] : [];
       // markers are compared whitespace-free: the minified distribution ships

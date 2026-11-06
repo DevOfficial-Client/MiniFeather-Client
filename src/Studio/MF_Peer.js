@@ -1,6 +1,7 @@
 
 (function () {
 'use strict';
+const PEER_POSE_VALIDATION_VERSION = 1;
 
 const TAG = 'minifeather p2p';
 const PEERJS_CDN = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
@@ -200,6 +201,7 @@ const state = {
     }
 
     function spawnPuppet(p) {
+    if (!validPose(p)) return;
     const CM = window.MF_CustomModels;
     if (!CM) return;
     try { CM.despawn('verity'); } catch {}
@@ -210,7 +212,7 @@ const state = {
         puppet: true,
         anim: p.anim || 'idle'
     });
-    state.puppetTarget = { x: p.x, y: p.y, z: p.z, yaw: p.yaw || 0 };
+    state.puppetTarget = { x: p.x, y: p.y, z: p.z, yaw: normalizeAngle(p.yaw ?? 0) };
     log('puppet de verity spawneada en (' + p.x + ', ' + p.y + ', ' + p.z + ')');
     }
 
@@ -221,29 +223,39 @@ const state = {
 
     function onSyncGuest(msg) {
     const p = msg.p;
-    if (!p) return;
+    if (!validPose(p)) return;
     state.lastFrameIn = performance.now();
     if (!window.MF_CustomModels?.getRecord?.('verity')) {
         spawnPuppet(p);
         return;
     }
-    state.puppetTarget = { x: p.x, y: p.y, z: p.z, yaw: p.yaw };
+    state.puppetTarget = { x: p.x, y: p.y, z: p.z, yaw: normalizeAngle(p.yaw ?? 0) };
     if (p.anim) {
         try { window.MF_CustomModels?.setAnim('verity', p.anim); } catch {}
     }
     }
 
+    function normalizeAngle(value) {
+    if (!Number.isFinite(value)) return 0;
+    const turn = Math.PI * 2;
+    return ((value + Math.PI) % turn + turn) % turn - Math.PI;
+    }
+
+    function validPose(p) {
+    return !!p && [p.x, p.y, p.z].every(value => Number.isFinite(value) && Math.abs(value) <= 30000000) &&
+        (p.yaw === undefined || Number.isFinite(p.yaw));
+    }
+
     function puppetTick() {
     const rec = window.MF_CustomModels?.getRecord?.('verity');
-    if (!rec?.root || !state.puppetTarget || rec.puppet !== true) return;
+    if (!rec?.root || !validPose(state.puppetTarget) || rec.puppet !== true) return;
     const L = 0.25;
     rec.root.position.x += (state.puppetTarget.x - rec.root.position.x) * L;
     rec.root.position.y += (state.puppetTarget.y - rec.root.position.y) * L;
     rec.root.position.z += (state.puppetTarget.z - rec.root.position.z) * L;
-    let dyaw = state.puppetTarget.yaw - (rec.yaw || 0);
-    while (dyaw > Math.PI) dyaw -= Math.PI * 2;
-    while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-    rec.yaw = (rec.yaw || 0) + dyaw * L;
+    const currentYaw = normalizeAngle(rec.yaw);
+    const dyaw = normalizeAngle(normalizeAngle(state.puppetTarget.yaw) - currentYaw);
+    rec.yaw = normalizeAngle(currentYaw + dyaw * L);
     rec.root.rotation.y = rec.yaw;
     }
 
@@ -359,6 +371,7 @@ const state = {
     }
 
     for (const [id, r] of ents.remote) {
+        if (!validPose(r)) { ents.remote.delete(id); continue; }
         if (now - r.seenAt > 3000) {
             try { CM.despawn(id); } catch {}
             ents.remote.delete(id);
@@ -392,10 +405,9 @@ const state = {
         rec.root.position.x += (r.x - rec.root.position.x) * L;
         rec.root.position.y += (r.y - rec.root.position.y) * L;
         rec.root.position.z += (r.z - rec.root.position.z) * L;
-        let dyaw = r.yaw - (rec.yaw || 0);
-        while (dyaw > Math.PI) dyaw -= Math.PI * 2;
-        while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-        rec.yaw = (rec.yaw || 0) + dyaw * L;
+        const currentYaw = normalizeAngle(rec.yaw);
+        const dyaw = normalizeAngle(normalizeAngle(r.yaw) - currentYaw);
+        rec.yaw = normalizeAngle(currentYaw + dyaw * L);
         rec.root.rotation.y = rec.yaw;
     }
 
@@ -569,14 +581,14 @@ const state = {
             const now = performance.now();
             const seen = new Set();
             for (const e of msg.ents) {
-                if (!e?.id || !e?.file) continue;
+                if (!e?.id || !e?.file || !validPose(e)) continue;
                 const pid = 'peer_' + e.id;
                 seen.add(pid);
                 const prev = ents.remote.get(pid);
                 ents.remote.set(pid, {
                     id: pid, srcId: e.id, file: e.file,
                     x: +e.x || 0, y: +e.y || 0, z: +e.z || 0,
-                    yaw: +e.yaw || 0, anim: e.anim || null,
+                    yaw: normalizeAngle(e.yaw ?? 0), anim: e.anim || null,
                     texture: e.texture || null,
                     scale: +e.scale || 1, height: +e.height || 0,
                     seenAt: now

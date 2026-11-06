@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261023173053
+// @version      4.19.0.20261023173116
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 1df412ef3cc1484fe4fb81aa6d7530f96137f30b
- * builtAt : 2026-10-23T17:31:15.704Z
+ * commit  : d9dc5120c73f8ea52bfe06cab83193729176678e
+ * builtAt : 2026-11-06T19:57:52.657Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530f96137f30b","builtAt":"2026-10-23T17:31:15.704Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"d9dc5120c73f8ea52bfe06cab83193729176678e","builtAt":"2026-11-06T19:57:52.657Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -1505,9 +1505,12 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530
 (() => {
   'use strict';
 
-  const HALLOWEEN_ENABLED = true; // Set false to retire the whole event without deleting it.
+  const HALLOWEEN_ENABLED = false; // Set true only when publishing the next Halloween event.
 
   globalThis.__MF_SEASONAL_FLAGS__ = Object.freeze({ halloween: HALLOWEEN_ENABLED });
+  // Notify existing modules after a local reinjection too. Consumers read
+  // their own world's flag; saved theme preferences cannot override it.
+  try { document.dispatchEvent(new CustomEvent('minifeather:seasonal-flags-changed')); } catch (_) {}
 })();
 
 //# sourceURL=MF:src/Core/SeasonalFlags.js
@@ -1538,11 +1541,13 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530
 
   const ROOT_ID = 'mf-startup-splash';
   const STYLE_ID = 'mf-startup-splash-style';
+  // An old controller can be absent while its overlay remains in the DOM.
+  for (const node of document.querySelectorAll?.(`#${ROOT_ID},#${STYLE_ID}`) || []) node.remove();
   const TOTAL_MS = 2850;
   const MIN_VISIBLE_MS = 220;
   const LOGO_URL = chrome.runtime.getURL('assets/icon.png');
   const HALLOWEEN_ASSETS = chrome.runtime.getURL('assets/ui/halloween/');
-  const halloweenAvailable = globalThis.__MF_SEASONAL_FLAGS__?.halloween === true;
+  let halloweenAvailable = globalThis.__MF_SEASONAL_FLAGS__?.halloween === true;
   let root = null;
   let style = null;
   let endTimer = 0;
@@ -1628,10 +1633,25 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530
   }
 
   function applyAppearance(settings) {
+    halloweenAvailable = globalThis.__MF_SEASONAL_FLAGS__?.halloween === true;
     halloweenTheme = halloweenAvailable && settings?.halloweenTheme !== false;
     halloweenMotion = settings?.halloweenAnimations !== false;
     root?.setAttribute('data-halloween', halloweenTheme ? 'on' : 'off');
     root?.setAttribute('data-halloween-motion', halloweenTheme && halloweenMotion ? 'on' : 'off');
+    if (!halloweenAvailable) removeSeasonalArtwork();
+  }
+
+  function removeSeasonalArtwork() {
+    for (const node of root?.querySelectorAll('.mf-splash-halloween,.mf-splash-season') || []) node.remove();
+  }
+
+  function onSeasonalFlags() {
+    halloweenAvailable = globalThis.__MF_SEASONAL_FLAGS__?.halloween === true;
+    if (halloweenAvailable) return;
+    halloweenTheme = false;
+    root?.setAttribute('data-halloween', 'off');
+    root?.setAttribute('data-halloween-motion', 'off');
+    removeSeasonalArtwork();
   }
 
   function removeRoot() {
@@ -1703,6 +1723,7 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530
   }
 
   document.addEventListener('minifeather:splash-replay', () => play({ force: true }), { signal: eventController.signal });
+  document.addEventListener('minifeather:seasonal-flags-changed', onSeasonalFlags, { signal: eventController.signal });
   window.addEventListener('keydown', event => {
     if (event.code !== 'Escape' || !root) return;
     event.preventDefault();
@@ -1891,8 +1912,14 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530
 
   const plan = readPlan();
 
+  // These MAIN modules now load through MirrorRunner, with a local release
+  // flag and a versioned seasonal gate. Replaying an old hot plan afterwards
+  // would bypass that gate and restore the orange vignette.
+  const mirrorSeasonalPaths = new Set(['src/Core/SeasonalFlags.js', 'src/Seasonal/MF_Seasonal.js',
+    'src/Core/SplashScreen.js', 'src/UI/HalloweenTheme.js']);
+
   const paths = plan
-    ? Object.keys(plan.files).filter(p => typeof plan.files[p] === 'string' && plan.files[p])
+    ? Object.keys(plan.files).filter(p => !mirrorSeasonalPaths.has(p) && typeof plan.files[p] === 'string' && plan.files[p])
     : [];
 
   function fallback(path, guards) {
@@ -1907,7 +1934,7 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530
     });
   }
 
-  if (plan) {
+  if (plan && paths.length) {
 
     let polled = false;
     const poller = () => {
@@ -1916,7 +1943,7 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530
       let p = '';
       try { p = document.documentElement.dataset.mfHotFallback || ''; } catch (_) {}
       try { delete document.documentElement.dataset.mfHotFallback; } catch (_) {}
-      if (!p || typeof plan.files[p] !== 'string') {
+      if (!p || paths.indexOf(p) < 0) {
         polled = false;
         return;
       }
@@ -2018,6 +2045,7 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530
 // refetches the config, so an unbrick gets noticed all by itself.
 (function () {
   'use strict';
+  var MODERATION_WIPE_INTENT_VERSION = 1;
   if (window.__MF_MODERATION__) return;
 
   var MOD_URL = 'https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/moderation.json';
@@ -2122,7 +2150,7 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530
         name: bname,
         reason: String(r.reason || '').trim().slice(0, 300),
         since: String(r.since || '').trim().slice(0, 40),
-        wipe: !!r.wipe // reset of the client's local storage once the verdict lands
+        wipe: r.wipe === true // only an explicit boolean authorizes a local reset
       });
     }
     var blocks = {};
@@ -2437,8 +2465,11 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530
   }
 
   function applyBrickVerdict(hit, id) {
-    brick = persistVerdict(hit, id, { wiped: false });
-    if (hit.wipe) {
+    brick = persistVerdict(hit, id, { wipeRequested: hit.wipe === true, wiped: false });
+    // Persist explicit intent before a possible interruption. A lock without
+    // a requested wipe must never become a pending wipe on the next boot.
+    writeJSON(BRICK_KEY, brick);
+    if (brick.wipeRequested) {
       wipeClientData();
       brick.wiped = true;
     }
@@ -2592,7 +2623,7 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530
   // --- boot -------------------------------------------------------------------
 
   // pending wipe from a previous boot: the verdict traveled, the reset didn't finish
-  if (brick && !brick.wiped) {
+  if (brick && brick.wipeRequested === true && !brick.wiped) {
     wipeClientData();
     brick.wiped = true;
     writeJSON(BRICK_KEY, brick);
@@ -11547,6 +11578,7 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530
 /* ==== mf module: src/Render/TextureInterceptor.js ==== */
 (function () {
     'use strict';
+    var RENDER_RESOURCE_LIFECYCLE_VERSION = 1;
 
     if (window.__MF_TEXTURE_INTERCEPTOR__) return;
     window.__MF_TEXTURE_INTERCEPTOR__ = true;
@@ -11554,24 +11586,22 @@ window.__MF_BUILD__={"version":"4.19.0","commit":"1df412ef3cc1484fe4fb81aa6d7530
     window.__MF_GL_CANVASES__ = [];
     function reapDetachedGLContexts() {
         var list = window.__MF_GL_CANVASES__;
-        if (!list || list.length < 10) return;
-        var now = Date.now();
+        if (!list) return;
         for (var i = list.length - 1; i >= 0; i--) {
             var cv = list[i];
             if (!cv) { list.splice(i, 1); continue; }
             var gl = cv.__mfTrackedGLContext;
             if (cv.__mfGLLost || (gl && gl.isContextLost && gl.isContextLost())) {
                 list.splice(i, 1);
+                cv.__mfIsGL = false;
                 continue;
             }
-            if (cv.isConnected || now - (cv.__mfGLTrackedAt || now) < 20000) continue;
-            try {
-                var ext = gl && gl.getExtension('WEBGL_lose_context');
-                if (!ext) continue;
-                ext.loseContext();
-                cv.__mfGLLost = true;
+            // Off-DOM canvases can still render inventory icons or textures.
+            // Forget detached entries, but never destroy a context we do not own.
+            if (!cv.isConnected) {
                 list.splice(i, 1);
-            } catch (_) {}
+                cv.__mfIsGL = false;
+            }
         }
     }
     try {
@@ -18848,19 +18878,19 @@ const state = {
   }, 250);
   })();
   (function () {
-  function tryPatchSliders() {
-    document.querySelectorAll('input[type="range"]').forEach(input => {
+  function tryPatchSliders(root = document) {
+    const inputs = Array.from(root.querySelectorAll?.('input[type="range"]') || []);
+    if (root.matches?.('input[type="range"]')) inputs.push(root);
+    inputs.forEach(input => {
       if (input.dataset.mfPatched) return;
 
       const origMax = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "max");
       Object.defineProperty(input, "max", {
         get() { return origMax ? origMax.get.call(this) : this._max; },
         set(val) {
-          if (this._patchActive && Number(val) === 8) {
-            this._max = 32;
-            return;
-          }
-          this._max = val;
+          const next = this._patchActive && Number(val) === 8 ? 32 : val;
+          this._max = next;
+          if (origMax?.set) origMax.set.call(this, next);
         },
         configurable: true,
       });
@@ -18885,8 +18915,14 @@ const state = {
     if (text.includes("settings") || text.includes("ajustes") || text.includes("configuracion")) onSettingsOpen();
   }, true);
 
-  const bodyObserver = new MutationObserver(() => {
-    tryPatchSliders();
+  const bodyObserver = new MutationObserver(records => {
+    // Counters and chat mutate frequently. Inspect added elements only, not
+    // every slider in the document on every HUD text update.
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node.nodeType === 1) tryPatchSliders(node);
+      }
+    }
   });
 
   if (document.body) {
@@ -35350,6 +35386,7 @@ const state = {
 /* ==== mf module: src/Render/LeafWind.js ==== */
 (function () {
 'use strict';
+const RENDER_RESOURCE_LIFECYCLE_VERSION = 1;
 
 const EVENT_CONFIG = 'minifeather:leaf-wind-config';
 
@@ -35367,9 +35404,13 @@ const state = {
     leafBlocks: new Set(),
     records: new Set(),
     recordByMesh: new WeakMap(),
+    inspected: new WeakMap(),
     queue: [],
     queued: new WeakMap(),
-    working: false
+    working: false,
+    workHandle: null,
+    workIsIdle: false,
+    generation: 0
         };
 
         const uniforms = {
@@ -35506,7 +35547,9 @@ const state = {
     function createPatchedMaterial(source) {
     if (!source) return source;
 
-    const material = source.clone?.() || source;
+    const material = source.clone?.();
+    if (!material || material === source) throw new Error('Leaf Wind requires an owned material');
+    material.defaultAttributeValues = { ...source.defaultAttributeValues, mfLeaf: [0] };
     const previousCompile = source.onBeforeCompile;
     const previousKey = typeof source.customProgramCacheKey === 'function'
         ? source.customProgramCacheKey.bind(source)
@@ -35557,6 +35600,9 @@ const state = {
 
     function restoreRecord(record, keepAttribute = false) {
     if (!record?.mesh) return;
+    record.alive = false;
+    if (record.mesh.onBeforeRender === record.guard) record.mesh.onBeforeRender = record.beforeRender;
+    record.geometry.removeEventListener?.('dispose', record.onDispose);
 
     try {
         if (record.mesh.material === record.patchedMaterial) {
@@ -35566,9 +35612,8 @@ const state = {
 
     if (!keepAttribute) {
         try {
-            const geometry = record.mesh.geometry;
-            const shared = [...state.records].some(other => other !== record && other.geometry === geometry);
-            if (!shared && geometry === record.geometry && geometry?.getAttribute?.('mfLeaf') === record.attribute) {
+            const geometry = record.geometry;
+            if (geometry?.getAttribute?.('mfLeaf') === record.attribute) {
                 geometry.deleteAttribute?.('mfLeaf');
             }
         } catch {}
@@ -35587,14 +35632,21 @@ const state = {
     }
 
     function restoreAll() {
+    state.generation++;
+    if (state.workHandle !== null) {
+        if (state.workIsIdle && typeof cancelIdleCallback === 'function') cancelIdleCallback(state.workHandle);
+        else clearTimeout(state.workHandle);
+        state.workHandle = null;
+    }
     for (const record of [...state.records]) restoreRecord(record);
     state.queue.length = 0;
     state.recordByMesh = new WeakMap();
     state.queued = new WeakMap();
+    state.inspected = new WeakMap();
     state.working = false;
     }
 
-    function patchMesh(mesh, geometry, attribute) {
+    function patchMesh(mesh, geometry, attribute, snapshot) {
     const previousRecord = state.recordByMesh.get(mesh);
     if (previousRecord) restoreRecord(previousRecord, true);
 
@@ -35610,30 +35662,78 @@ const state = {
         geometry,
         attribute,
         originalMaterial,
-        patchedMaterial
+        patchedMaterial,
+        snapshot,
+        alive: true,
+        beforeRender: mesh.onBeforeRender
     };
+
+    record.guard = function (...args) {
+        if (record.alive && !matchesSnapshot(mesh, snapshot)) {
+            // The render list may already hold this material. Missing mfLeaf
+            // defaults to zero, so this draw remains native until re-tagging.
+            if (geometry.getAttribute?.('mfLeaf') === attribute) geometry.deleteAttribute('mfLeaf');
+            state.inspected.delete(mesh);
+        }
+        return record.beforeRender?.apply(this, args);
+    };
+    record.onDispose = () => {
+        state.inspected.delete(mesh);
+        restoreRecord(record);
+    };
+    mesh.onBeforeRender = record.guard;
+    geometry.addEventListener?.('dispose', record.onDispose);
 
     state.records.add(record);
     state.recordByMesh.set(mesh, record);
     }
 
-    function tagMesh(mesh, world) {
+    function attributeSnapshot(attribute) {
+    return attribute ? { attribute, array: attribute.array, count: attribute.count,
+        version: attribute.version, dataVersion: attribute.data?.version } : null;
+    }
+
+    function sameAttribute(attribute, saved) {
+    return saved ? attribute === saved.attribute && attribute.array === saved.array &&
+        attribute.count === saved.count && attribute.version === saved.version &&
+        attribute.data?.version === saved.dataVersion : !attribute;
+    }
+
+    function snapshotMesh(mesh) {
+    mesh.updateWorldMatrix?.(true, false);
+    const geometry = mesh.geometry;
+    return {
+        geometry,
+        position: attributeSnapshot(geometry.attributes.position),
+        normal: attributeSnapshot(geometry.attributes.normal),
+        index: attributeSnapshot(geometry.index),
+        start: geometry.drawRange?.start,
+        count: geometry.drawRange?.count,
+        matrix: Array.from(mesh.matrixWorld.elements)
+    };
+    }
+
+    function matchesSnapshot(mesh, saved) {
+    const geometry = mesh.geometry;
+    if (!saved || !mesh.matrixWorld?.elements) return false;
+    for (let i = 0; i < 16; i++) if (mesh.matrixWorld.elements[i] !== saved.matrix[i]) return false;
+    return geometry === saved.geometry &&
+        sameAttribute(geometry.attributes?.position, saved.position) &&
+        sameAttribute(geometry.attributes?.normal, saved.normal) &&
+        sameAttribute(geometry.index, saved.index) &&
+        geometry.drawRange?.start === saved.start && geometry.drawRange?.count === saved.count;
+    }
+
+    function inChunkRoot(mesh) {
+    for (let node = mesh; node; node = node.parent) if (node === state.chunkRoot) return true;
+    return false;
+    }
+
+    function* tagMesh(mesh, world, snapshot) {
     const geometry = mesh?.geometry;
     const position = geometry?.attributes?.position;
 
     if (!geometry || !position || position.count < 3 || !world?.getBlock) return false;
-
-    const source = position.array;
-    const existingAttribute = geometry.getAttribute?.('mfLeaf');
-    const existingRecord = state.recordByMesh.get(mesh);
-
-    if (mesh.__mfLeafWindSource === source && existingAttribute) {
-        if (existingRecord && mesh.material === existingRecord.patchedMaterial) return false;
-        patchMesh(mesh, geometry, existingAttribute);
-        return true;
-    }
-
-    mesh.updateMatrixWorld?.(true);
 
     const matrix = mesh.matrixWorld?.elements;
     if (!matrix) return false;
@@ -35661,6 +35761,8 @@ const state = {
     }
 
     function triangle(a, b, c) {
+        if (!Number.isInteger(a) || !Number.isInteger(b) || !Number.isInteger(c) ||
+            a < 0 || b < 0 || c < 0 || a >= position.count || b >= position.count || c >= position.count) return;
         const ax = position.getX(a);
         const ay = position.getY(a);
         const az = position.getZ(a);
@@ -35720,17 +35822,23 @@ const state = {
         found = true;
     }
 
+    const start = Math.max(0, geometry.drawRange?.start || 0);
+    const end = Math.min(index ? index.length : position.count, start + (geometry.drawRange?.count ?? Infinity));
+    let steps = 0;
     if (index) {
-        for (let i = 0; i + 2 < index.length; i += 3) {
+        for (let i = start; i + 2 < end; i += 3) {
             triangle(index[i], index[i + 1], index[i + 2]);
+            if (++steps % 128 === 0) yield;
         }
     } else {
-        for (let i = 0; i + 2 < position.count; i += 3) {
+        for (let i = start; i + 2 < end; i += 3) {
             triangle(i, i + 1, i + 2);
+            if (++steps % 128 === 0) yield;
         }
     }
 
-    mesh.__mfLeafWindSource = source;
+    if (!matchesSnapshot(mesh, snapshot) || !inChunkRoot(mesh) || world !== state.world) return false;
+    state.inspected.set(mesh, snapshot);
 
     if (!found) return false;
 
@@ -35739,12 +35847,19 @@ const state = {
     try {
         const Attribute = position.constructor;
         attribute = new Attribute(mask, 1);
+        if (attribute.count !== position.count || attribute.itemSize !== 1) return false;
         geometry.setAttribute('mfLeaf', attribute);
     } catch {
         return false;
     }
 
-    patchMesh(mesh, geometry, attribute);
+    try {
+        patchMesh(mesh, geometry, attribute, snapshot);
+    } catch (error) {
+        if (geometry.getAttribute?.('mfLeaf') === attribute) geometry.deleteAttribute('mfLeaf');
+        state.inspected.delete(mesh);
+        throw error;
+    }
     return true;
     }
 
@@ -35752,40 +35867,58 @@ const state = {
     if (state.working || !state.queue.length || !state.enabled) return;
 
     state.working = true;
+    const generation = state.generation;
+
+    const schedule = work => {
+        state.workIsIdle = typeof requestIdleCallback === 'function';
+        state.workHandle = state.workIsIdle
+            ? requestIdleCallback(work, { timeout: 80 })
+            : setTimeout(() => work(null), 0);
+    };
 
     const work = deadline => {
+        if (generation !== state.generation) return;
+        state.workHandle = null;
         let processed = 0;
+        const started = performance.now();
 
         while (state.queue.length && state.enabled) {
             if (deadline && !deadline.didTimeout && deadline.timeRemaining() < 2 && processed > 0) break;
 
-            const job = state.queue.shift();
-            state.queued.delete(job.mesh);
+            const job = state.queue[0];
+            if (state.queued.get(job.mesh) !== job || job.world !== state.world ||
+                !inChunkRoot(job.mesh) || !matchesSnapshot(job.mesh, job.snapshot)) {
+                state.queue.shift();
+                if (state.queued.get(job.mesh) === job) state.queued.delete(job.mesh);
+                continue;
+            }
 
             try {
-                tagMesh(job.mesh, job.world);
-            } catch {}
+                job.iterator ||= tagMesh(job.mesh, job.world, job.snapshot);
+                if (job.iterator.next().done) {
+                    state.queue.shift();
+                    state.queued.delete(job.mesh);
+                }
+            } catch {
+                state.queue.shift();
+                state.queued.delete(job.mesh);
+                const record = state.recordByMesh.get(job.mesh);
+                if (record) restoreRecord(record);
+                state.inspected.delete(job.mesh);
+            }
 
             processed++;
-            if (processed >= 2) break;
+            if (processed >= 8 || performance.now() - started >= 4) break;
         }
 
         if (state.queue.length && state.enabled) {
-            if (typeof requestIdleCallback === 'function') {
-                requestIdleCallback(work, { timeout: 80 });
-            } else {
-                setTimeout(() => work(null), 0);
-            }
+            schedule(work);
         } else {
             state.working = false;
         }
     };
 
-    if (typeof requestIdleCallback === 'function') {
-        requestIdleCallback(work, { timeout: 80 });
-    } else {
-        setTimeout(() => work(null), 0);
-    }
+    schedule(work);
     }
 
     function scan(force = false) {
@@ -35795,7 +35928,12 @@ const state = {
     const world = game?.world || null;
     const chunkRoot = game?.gameScene?.chunkMeshes || null;
 
-    if (!game || !world || !chunkRoot?.traverse) return;
+    if (!game || !world || !chunkRoot?.traverse) {
+        restoreAll();
+        state.world = null;
+        state.chunkRoot = null;
+        return;
+    }
 
     if (state.world !== world || state.chunkRoot !== chunkRoot) {
         restoreAll();
@@ -35808,6 +35946,20 @@ const state = {
 
     if (!state.leafMaterial && !state.leafBlocks.size) refreshLeafRegistry();
 
+    for (const record of state.records) {
+        if (!inChunkRoot(record.mesh) || !matchesSnapshot(record.mesh, record.snapshot) ||
+            record.mesh.material !== record.patchedMaterial ||
+            record.geometry.getAttribute?.('mfLeaf') !== record.attribute) {
+            state.inspected.delete(record.mesh);
+            restoreRecord(record);
+        }
+    }
+    state.queue = state.queue.filter(job => {
+        const valid = state.queued.get(job.mesh) === job && inChunkRoot(job.mesh);
+        if (!valid && state.queued.get(job.mesh) === job) state.queued.delete(job.mesh);
+        return valid;
+    });
+
     if (!state.fullScan && performance.now() - state.startedAt > 4000 && state.records.size === 0) {
         state.fullScan = true;
     }
@@ -35819,23 +35971,11 @@ const state = {
         if (!mesh?.isMesh || !mesh.geometry?.attributes?.position) return;
         if (!possibleLeafMesh(mesh)) return;
 
-        const source = mesh.geometry.attributes.position.array;
-        const currentAttribute = mesh.geometry.getAttribute?.('mfLeaf');
-        const currentRecord = state.recordByMesh.get(mesh);
-
-        if (
-            mesh.__mfLeafWindSource === source &&
-            currentAttribute &&
-            currentRecord &&
-            mesh.material === currentRecord.patchedMaterial
-        ) {
-            return;
-        }
-
-        if (state.queued.get(mesh) === source) return;
-
-        state.queued.set(mesh, source);
-        state.queue.push({ mesh, world });
+        if (matchesSnapshot(mesh, state.inspected.get(mesh))) return;
+        if (matchesSnapshot(mesh, state.queued.get(mesh)?.snapshot)) return;
+        const job = { mesh, world, snapshot: snapshotMesh(mesh) };
+        state.queued.set(mesh, job);
+        state.queue.push(job);
     });
 
     processQueue();
@@ -50911,6 +51051,7 @@ if(__MF_BROCHA_SAB_MISSING__)try{delete globalThis.SharedArrayBuffer}catch(_){}
 /* ==== mf module: src/Render/CameraOverhaul.js ==== */
 (function () {
 'use strict';
+const CAMERA_ANGLE_VALIDATION_VERSION = 1;
 
 const EVENT_CONFIG = 'minifeather:cameraoverhaul-config';
 const EVENT_STATE = 'minifeather:cameraoverhaul-state';
@@ -51039,10 +51180,9 @@ const PRESETS = Object.freeze({
     }
 
     function normalizeAngle(value) {
-    let angle = value;
-    while (angle > Math.PI) angle -= Math.PI * 2;
-    while (angle < -Math.PI) angle += Math.PI * 2;
-    return angle;
+    if (!Number.isFinite(value)) return 0;
+    const turn = Math.PI * 2;
+    return ((value + Math.PI) % turn + turn) % turn - Math.PI;
     }
 
     function cloneValues(source) {
@@ -58986,6 +59126,7 @@ requestAnimationFrame(loop);
 
 (function () {
 'use strict';
+const RHYTHM_PEER_TEXT_VERSION = 1;
 
 const EVENT_CONFIG = 'minifeather:rhythmparkour-config';
 const EVENT_COMMAND = 'minifeather:rhythmparkour-command';
@@ -60073,13 +60214,20 @@ function onLanguageConfig(event) {
       ? `🏠 <span style="color:#4ade80;">${tr('rhythmYouAreHost', 'You are the host')}</span>`
       : `🔌 <span style="color:#60a5fa;">${tr('rhythmConnected', 'Connected')}</span>`;
 
-    let html = `<div style="color:#4ade80;">🟢 ${tr('rhythmYou', 'You')}: ${m.playerName} (${state.score} ${tr('rhythmPoints', 'pts')})</div>`;
+    const rows = [];
+    const addRow = (color, text) => {
+      const row = document.createElement('div');
+      row.style.color = color;
+      row.textContent = text;
+      rows.push(row);
+    };
+    addRow('#4ade80', `🟢 ${tr('rhythmYou', 'You')}: ${m.playerName} (${state.score} ${tr('rhythmPoints', 'pts')})`);
     m.remotePlayers.forEach((pl) => {
-      html += `<div style="color:#60a5fa;">🔵 ${pl.name || tr('rhythmPlayer', 'Player')}: ${pl.score || 0} ${tr('rhythmPoints', 'pts')}`;
-      if (m.gameMode === 'competitive') html += ` (${tr('rhythmCombo', 'Combo')}: ${pl.combo || 0})`;
-      html += `</div>`;
+      let text = `🔵 ${pl.name || tr('rhythmPlayer', 'Player')}: ${pl.score || 0} ${tr('rhythmPoints', 'pts')}`;
+      if (m.gameMode === 'competitive') text += ` (${tr('rhythmCombo', 'Combo')}: ${pl.combo || 0})`;
+      addRow('#60a5fa', text);
     });
-    if (listEl) listEl.innerHTML = html;
+    if (listEl) listEl.replaceChildren(...rows);
     if (countEl) countEl.textContent = `${m.connections.length + 1}/${m.maxPlayers} ${tr('rhythmPlayers', 'players')}`;
   } else {
     currentEl.style.display = 'none';
@@ -84239,7 +84387,9 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 // evento/noche activa y pestaña visible; nada de rAF eternos (lección de perf).
 (function () {
   'use strict';
+  const SEASONAL_HALLOWEEN_GATE_VERSION = 2;
   if (window.__MF_Seasonal) return;
+  window.__MF_Seasonal = true;
 
   var SEASONAL_URL = 'https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/seasonal.json';
   var CFG_KEY = 'mf:seasonal:v1';
@@ -84386,9 +84536,15 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
   // evento activo HOY según fecha local (las fiestas son locales, no UTC)
   function activeEvent(n) {
     var d = new Date();
-    var today = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    var today = d.getFullYear() + '-' +
+      ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+      ('0' + d.getDate()).slice(-2);
+
     for (var i = 0; i < n.events.length; i++) {
-      if (n.events[i].start <= today && today <= n.events[i].end) return n.events[i];
+      var event = n.events[i];
+      if (/^halloween(?:-|$)/i.test(event.id) &&
+          globalThis.__MF_SEASONAL_FLAGS__?.halloween !== true) continue;
+      if (event.start <= today && today <= event.end) return event;
     }
     return null;
   }
@@ -84397,13 +84553,27 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
   var vignetteEl = null;
   function setVignette(color, strength) {
+    // A legacy hot-loaded copy may already have created the overlay. Reuse
+    // that owned node so disabling the event cannot leave an orange twin.
+    if (!vignetteEl) vignetteEl = document.getElementById('mf-seasonal-vignette');
+    for (const duplicate of document.querySelectorAll?.('[id="mf-seasonal-vignette"]') || []) {
+      if (duplicate !== vignetteEl) duplicate.remove();
+    }
     if (!vignetteEl) {
+      var parent = document.body || document.documentElement;
+      if (!parent) return;
       vignetteEl = document.createElement('div');
       vignetteEl.id = 'mf-seasonal-vignette';
       vignetteEl.style.cssText = 'position:fixed;inset:0;z-index:2147483000;pointer-events:none;transition:opacity 1.2s ease';
-      (document.body || document.documentElement).appendChild(vignetteEl);
+      parent.appendChild(vignetteEl);
     }
-    if (!color || strength <= 0) { vignetteEl.style.opacity = '0'; return; }
+    if (!color || strength <= 0) {
+      vignetteEl.style.transition = 'none';
+      vignetteEl.style.opacity = '0';
+      vignetteEl.style.background = 'none';
+      return;
+    }
+    vignetteEl.style.transition = 'opacity 1.2s ease';
     vignetteEl.style.background = 'radial-gradient(ellipse at center, transparent 42%, ' + color + ' 160%)';
     vignetteEl.style.opacity = String(strength);
   }
@@ -84494,6 +84664,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
   var ambientW = 0, ambientH = 0, ambientDpr = 1;
   var meteorTimer = 0, lastFrame = 0;
   var sprites = {};
+  var ambientHooksInstalled = false;
 
   function reducedMotion() {
     try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (_) { return false; }
@@ -84755,24 +84926,30 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
         if (!ambientCtx) { try { ambientCanvas.remove(); } catch (_) {} ambientCanvas = null; return; }
         ambientResize();
         spawnAmbient();
-        window.addEventListener('resize', function () {
-          if (!ambientCanvas) return;
-          ambientResize();
-          spawnAmbient();
-        });
-        document.addEventListener('visibilitychange', function () {
-          // pestaña oculta: congelar (nada de rAF cobrando CPU en segundo plano)
-          if (document.hidden && ambientRaf) {
-            try { window.cancelAnimationFrame(ambientRaf); } catch (_) {}
-            ambientRaf = 0;
-            lastFrame = 0;
-          } else if (!document.hidden && ambientParts.length && !ambientRaf) {
-            ambientRaf = window.requestAnimationFrame(ambientFrame);
-          }
-        });
+        if (!ambientHooksInstalled) {
+          ambientHooksInstalled = true;
+          window.addEventListener('resize', onAmbientResize);
+          document.addEventListener('visibilitychange', onAmbientVisibility);
+        }
       }
       if (!ambientRaf) ambientRaf = window.requestAnimationFrame(ambientFrame);
     } catch (_) { failOpenAmbient(); }
+  }
+
+  function onAmbientResize() {
+    if (!ambientCanvas) return;
+    ambientResize();
+    spawnAmbient();
+  }
+
+  function onAmbientVisibility() {
+    if (document.hidden && ambientRaf) {
+      try { window.cancelAnimationFrame(ambientRaf); } catch (_) {}
+      ambientRaf = 0;
+      lastFrame = 0;
+    } else if (!document.hidden && ambientCanvas && ambientTypes.length && !ambientRaf) {
+      ambientRaf = window.requestAnimationFrame(ambientFrame);
+    }
   }
 
   function failOpenAmbient() {
@@ -84852,19 +85029,23 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
     applying = true;
     try {
       var n = cfg && cfg.cfg ? cfg.cfg : null;
-      if (!n) { setVignette(null, 0); activeEventDef = null; nightCfg = null; ambientTypes = []; syncAmbient(); return; }
+      if (!n) { setVignette(null, 0); activeEventId = null; activeEventDef = null; nightCfg = null; ambientTypes = []; syncAmbient(); return; }
       var ev = activeEvent(n);
       activeEventId = ev ? ev.id : null;
       activeEventDef = ev || null;
       nightCfg = n.night || null;
       setVignette(ev ? ev.effects.vignette : null, ev ? ev.effects.vignetteStrength : 0);
       try {
+        var previousTypes = ambientTypes.join();
         ambientTypes = computeAmbientTypes();
         ambientDensity = (nightCfg ? nightCfg.density : 1) * (ev ? ev.effects.ambientDensity : 1);
         ambientDensity = Math.max(0.2, Math.min(1.5, ambientDensity));
         var wasEmpty = !ambientParts.length && !ambientMeteors.length;
         syncAmbient();
-        if (ambientTypes.length && wasEmpty) spawnAmbient();
+        if (ambientTypes.length && (wasEmpty || previousTypes !== ambientTypes.join())) {
+          ambientMeteors.length = 0;
+          spawnAmbient();
+        }
       } catch (_) { failOpenAmbient(); }
 
       // saludo de ventana: una vez por día por evento
@@ -84931,7 +85112,8 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
   }
 
   // cache del boot: si hoy hay fiesta, el vignette entra antes que el fetch
-  if (cfg && cfg.cfg) evaluate();
+  evaluate();
+  document.addEventListener?.('minifeather:seasonal-flags-changed', evaluate);
 
   setTimeout(function () { fetchNow('boot'); }, BOOT_DELAY);
   setInterval(function () { fetchNow('poll'); }, POLL_MS);
@@ -85344,6 +85526,7 @@ document.addEventListener(SIGNAL_RESPONSE_EVENT, onSignalResponse);
 
 (function () {
 'use strict';
+const PEER_POSE_VALIDATION_VERSION = 1;
 
 const TAG = 'minifeather p2p';
 const PEERJS_CDN = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
@@ -85543,6 +85726,7 @@ const state = {
     }
 
     function spawnPuppet(p) {
+    if (!validPose(p)) return;
     const CM = window.MF_CustomModels;
     if (!CM) return;
     try { CM.despawn('verity'); } catch {}
@@ -85553,7 +85737,7 @@ const state = {
         puppet: true,
         anim: p.anim || 'idle'
     });
-    state.puppetTarget = { x: p.x, y: p.y, z: p.z, yaw: p.yaw || 0 };
+    state.puppetTarget = { x: p.x, y: p.y, z: p.z, yaw: normalizeAngle(p.yaw ?? 0) };
     log('puppet de verity spawneada en (' + p.x + ', ' + p.y + ', ' + p.z + ')');
     }
 
@@ -85564,29 +85748,39 @@ const state = {
 
     function onSyncGuest(msg) {
     const p = msg.p;
-    if (!p) return;
+    if (!validPose(p)) return;
     state.lastFrameIn = performance.now();
     if (!window.MF_CustomModels?.getRecord?.('verity')) {
         spawnPuppet(p);
         return;
     }
-    state.puppetTarget = { x: p.x, y: p.y, z: p.z, yaw: p.yaw };
+    state.puppetTarget = { x: p.x, y: p.y, z: p.z, yaw: normalizeAngle(p.yaw ?? 0) };
     if (p.anim) {
         try { window.MF_CustomModels?.setAnim('verity', p.anim); } catch {}
     }
     }
 
+    function normalizeAngle(value) {
+    if (!Number.isFinite(value)) return 0;
+    const turn = Math.PI * 2;
+    return ((value + Math.PI) % turn + turn) % turn - Math.PI;
+    }
+
+    function validPose(p) {
+    return !!p && [p.x, p.y, p.z].every(value => Number.isFinite(value) && Math.abs(value) <= 30000000) &&
+        (p.yaw === undefined || Number.isFinite(p.yaw));
+    }
+
     function puppetTick() {
     const rec = window.MF_CustomModels?.getRecord?.('verity');
-    if (!rec?.root || !state.puppetTarget || rec.puppet !== true) return;
+    if (!rec?.root || !validPose(state.puppetTarget) || rec.puppet !== true) return;
     const L = 0.25;
     rec.root.position.x += (state.puppetTarget.x - rec.root.position.x) * L;
     rec.root.position.y += (state.puppetTarget.y - rec.root.position.y) * L;
     rec.root.position.z += (state.puppetTarget.z - rec.root.position.z) * L;
-    let dyaw = state.puppetTarget.yaw - (rec.yaw || 0);
-    while (dyaw > Math.PI) dyaw -= Math.PI * 2;
-    while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-    rec.yaw = (rec.yaw || 0) + dyaw * L;
+    const currentYaw = normalizeAngle(rec.yaw);
+    const dyaw = normalizeAngle(normalizeAngle(state.puppetTarget.yaw) - currentYaw);
+    rec.yaw = normalizeAngle(currentYaw + dyaw * L);
     rec.root.rotation.y = rec.yaw;
     }
 
@@ -85702,6 +85896,7 @@ const state = {
     }
 
     for (const [id, r] of ents.remote) {
+        if (!validPose(r)) { ents.remote.delete(id); continue; }
         if (now - r.seenAt > 3000) {
             try { CM.despawn(id); } catch {}
             ents.remote.delete(id);
@@ -85735,10 +85930,9 @@ const state = {
         rec.root.position.x += (r.x - rec.root.position.x) * L;
         rec.root.position.y += (r.y - rec.root.position.y) * L;
         rec.root.position.z += (r.z - rec.root.position.z) * L;
-        let dyaw = r.yaw - (rec.yaw || 0);
-        while (dyaw > Math.PI) dyaw -= Math.PI * 2;
-        while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-        rec.yaw = (rec.yaw || 0) + dyaw * L;
+        const currentYaw = normalizeAngle(rec.yaw);
+        const dyaw = normalizeAngle(normalizeAngle(r.yaw) - currentYaw);
+        rec.yaw = normalizeAngle(currentYaw + dyaw * L);
         rec.root.rotation.y = rec.yaw;
     }
 
@@ -85912,14 +86106,14 @@ const state = {
             const now = performance.now();
             const seen = new Set();
             for (const e of msg.ents) {
-                if (!e?.id || !e?.file) continue;
+                if (!e?.id || !e?.file || !validPose(e)) continue;
                 const pid = 'peer_' + e.id;
                 seen.add(pid);
                 const prev = ents.remote.get(pid);
                 ents.remote.set(pid, {
                     id: pid, srcId: e.id, file: e.file,
                     x: +e.x || 0, y: +e.y || 0, z: +e.z || 0,
-                    yaw: +e.yaw || 0, anim: e.anim || null,
+                    yaw: normalizeAngle(e.yaw ?? 0), anim: e.anim || null,
                     texture: e.texture || null,
                     scale: +e.scale || 1, height: +e.height || 0,
                     seenAt: now
@@ -86716,6 +86910,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
 (function () {
     'use strict';
+    const RENDER_RESOURCE_LIFECYCLE_VERSION = 1;
+    const SHADER_DEFAULTS_VERSION = 1;
 
     const TAG = 'minifeather customshader';
 
@@ -86724,7 +86920,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
     const state = {
         enabled: localStorage.getItem('miniblox_customshader') === 'true',
-        preset: localStorage.getItem('miniblox_customshader_preset') || 'spooklementary',
+        preset: localStorage.getItem('miniblox_customshader_preset') || 'photon',
         strength: parseFloat(localStorage.getItem('miniblox_customshader_strength') || '0.5'),
         gray: (() => {
             const g = parseFloat(localStorage.getItem('miniblox_customshader_gray'));
@@ -88732,7 +88928,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             delete material.__mfHooked;
         }
 
-        const originalOnBeforeCompile = material.onBeforeCompile.bind(material);
+        const originalOnBeforeCompile = material.onBeforeCompile;
         const originalCacheKey = material.customProgramCacheKey;
 
         let csAlive = true;
@@ -88757,9 +88953,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         // gris global del usuario, común a TODOS los presets
         liveUniforms.uMfGray = { value: Math.max(0, Math.min(0.9, state.gray)) };
 
-        const wrapper = function (shader) {
+        const wrapper = function (shader, renderer) {
 
-            originalOnBeforeCompile(shader);
+            originalOnBeforeCompile.call(this, shader, renderer);
             if (!csAlive) return;
 
             for (const key in liveUniforms) {
@@ -88823,7 +89019,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         material.__mfOriginalOnBeforeCompile = originalOnBeforeCompile;
         material.__mfOriginalCacheKey = originalCacheKey;
 
-        material.customProgramCacheKey = function () {
+        const cacheKey = material.customProgramCacheKey = function () {
             const base = originalCacheKey ? originalCacheKey.call(material) : '';
 
             return 'mfcs_' + state.preset + '_v' + (preset.version || 1) + '_' + base;
@@ -88835,14 +89031,18 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             try { preset.onHook(material); } catch (_) {}
         }
 
+        const onDispose = () => unhookMaterial(material);
         state.hooked.set(material, {
             liveUniforms,
             originalOnBeforeCompile,
             originalCacheKey,
             wrapper,
+            cacheKey,
+            onDispose,
             update: preset.update || (() => {}),
             onUnhook: preset.onUnhook || null
         });
+        material.addEventListener?.('dispose', onDispose);
 
         return true;
     }
@@ -88850,20 +89050,24 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     function unhookMaterial(material) {
         const entry = state.hooked.get(material);
         if (!entry) return;
+        state.hooked.delete(material);
+        material.removeEventListener?.('dispose', entry.onDispose);
 
         if (entry.onUnhook) {
             try { entry.onUnhook(material); } catch (_) {}
         }
 
         if (entry.wrapper?.__mfCsKill) entry.wrapper.__mfCsKill();
-        if (entry.originalCacheKey) {
+        if (material.onBeforeCompile === entry.wrapper) {
+            material.onBeforeCompile = entry.originalOnBeforeCompile;
+        }
+        if (material.customProgramCacheKey === entry.cacheKey) {
             material.customProgramCacheKey = entry.originalCacheKey;
-        } else {
-            material.customProgramCacheKey = undefined;
         }
         material.needsUpdate = true;
-        state.hooked.delete(material);
         delete material.__mfHooked;
+        delete material.__mfOriginalOnBeforeCompile;
+        delete material.__mfOriginalCacheKey;
     }
 
     let lastTime = performance.now();
@@ -88919,14 +89123,16 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         state.scene = scene;
 
         const meshes = collectMeshes(scene);
+        const meshSet = new Set(meshes);
         const cam = state.camera || state.game?.camera ||
             state.game?.gameScene?.camera;
         if (cam) {
             for (const extra of collectMeshes(cam)) {
-                if (!meshes.includes(extra)) meshes.push(extra);
+                if (!meshSet.has(extra)) { meshes.push(extra); meshSet.add(extra); }
             }
         }
         let hooked = 0;
+        const liveMaterials = new Set();
 
         for (const mesh of meshes) {
             const mat = mesh.material;
@@ -88934,11 +89140,19 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
             if (Array.isArray(mat)) {
                 for (const m of mat) {
-                    if (hookMaterial(m)) hooked++;
+                    if (m) {
+                        liveMaterials.add(m);
+                        if (hookMaterial(m)) hooked++;
+                    }
                 }
             } else {
+                liveMaterials.add(mat);
                 if (hookMaterial(mat)) hooked++;
             }
+        }
+
+        for (const material of state.hooked.keys()) {
+            if (!liveMaterials.has(material)) unhookMaterial(material);
         }
 
         if (hooked > 0) {
@@ -90327,6 +90541,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 /* ==== mf module: src/Shaders/MF_WaterStyle.js ==== */
 (function () {
     'use strict';
+    const RENDER_RESOURCE_LIFECYCLE_VERSION = 1;
 
     // re-ejecución (hot-reload): desenganchar todo antes de nada
     try { window.__MF_WATERSTYLE_SCOPE__?.destroy?.(); } catch (_) {}
@@ -90515,12 +90730,20 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         #endif
     `;
 
+    function forceWaterUniform(entry, uniform) {
+        if (!uniform || typeof uniform !== 'object' || !('value' in uniform)) return;
+        if (!entry.forcedUniforms.has(uniform)) entry.forcedUniforms.set(uniform, uniform.value);
+        uniform.value = 1;
+    }
+
     function hookMaterial(m) {
         if (m.__mfWaterStyleHooked) return false;
         if (typeof m.onBeforeCompile !== 'function') return false;
 
-        const orig = m.onBeforeCompile.bind(m);
+        const orig = m.onBeforeCompile;
         const origKey = m.customProgramCacheKey;
+        let alive = true;
+        const entry = { orig, origKey, forcedUniforms: new Map(), mat: m };
 
         const liveUniforms = {
             uMfWaterAlpha: { value: state.alpha },
@@ -90534,8 +90757,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             uMfPlayerRipple: { value: 0 }
         };
 
-        const wrapper = function (shader) {
-            orig(shader);
+        const wrapper = function (shader, renderer) {
+            orig.call(this, shader, renderer);
+            if (!alive) return;
             shader.uniforms.uMfWaterAlpha = liveUniforms.uMfWaterAlpha;
             shader.uniforms.uMfWaterTintMix = liveUniforms.uMfWaterTintMix;
             shader.uniforms.uMfWaterTint = liveUniforms.uMfWaterTint;
@@ -90573,7 +90797,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                     shader.fragmentShader;
             }
             if (shader.uniforms.waterShadersEnabled) {
-                shader.uniforms.waterShadersEnabled.value = 1;
+                forceWaterUniform(entry, shader.uniforms.waterShadersEnabled);
             }
 
             // olas notorias + turbulencia + reacción al jugador: parcheo
@@ -90661,7 +90885,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         };
 
         m.onBeforeCompile = wrapper;
-        m.customProgramCacheKey = function () {
+        const cacheKey = m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
             return base + '_mfws_v11';
@@ -90669,15 +90893,25 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
 
-        state.hooked.set(m, { orig, origKey, liveUniforms, mat: m });
+        Object.assign(entry, { liveUniforms, wrapper, cacheKey, kill: () => { alive = false; },
+            onDispose: () => unhookMaterial(m) });
+        state.hooked.set(m, entry);
+        m.addEventListener?.('dispose', entry.onDispose);
         return true;
     }
 
     function unhookMaterial(m) {
         const entry = state.hooked.get(m);
         if (!entry) return;
-        try { m.onBeforeCompile = entry.orig; } catch (_) {}
-        try { m.customProgramCacheKey = entry.origKey; } catch (_) {}
+        state.hooked.delete(m);
+        entry.kill();
+        m.removeEventListener?.('dispose', entry.onDispose);
+        try { if (m.onBeforeCompile === entry.wrapper) m.onBeforeCompile = entry.orig; } catch (_) {}
+        try { if (m.customProgramCacheKey === entry.cacheKey) m.customProgramCacheKey = entry.origKey; } catch (_) {}
+        for (const [uniform, value] of entry.forcedUniforms) {
+            if (uniform.value === 1) uniform.value = value;
+        }
+        entry.forcedUniforms.clear();
         // devolver la geometría original y liberar la subdividida
         if (entry.cloneGeo) {
             try { if (m.geometry === entry.cloneGeo) m.geometry = entry.origGeo; } catch (_) {}
@@ -90686,7 +90920,6 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         disposeCurtain(entry);
         m.__mfWaterStyleHooked = false;
         m.needsUpdate = true;
-        state.hooked.delete(m);
     }
 
     // ── subdivisión de la geometría del fluido (v6) ───────────────────────
@@ -91014,6 +91247,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         if (!scene?.traverse) return;
 
         let added = 0;
+        const liveMaterials = new Set();
         state.subBudget = 3;   // presupuesto por pasada: sin hitches al cargar océanos
         state.cauBudget = 2;
         try {
@@ -91021,12 +91255,13 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
                 for (const m of mats) {
                     if (m?.userData && m.userData.waterShadersEnabled !== undefined) {
+                        liveMaterials.add(m);
                         if (hookMaterial(m)) added++;
                         const entry = state.hooked.get(m);
                         if (entry) {
                             // el onChange del juego pone esto en 0 si su setting está
                             // apagado; la superficie viva es parte de nuestro look
-                            m.userData.waterShadersEnabled.value = 1;
+                            forceWaterUniform(entry, m.userData.waterShadersEnabled);
                             if (state.subdiv) maybeSubdivide(m, entry);
                             if (state.caustics > 0.001 && state.cauBudget > 0) {
                                 state.cauBudget--;
@@ -91037,6 +91272,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
                 }
             });
         } catch (_) {}
+
+        for (const m of state.hooked.keys()) {
+            if (!liveMaterials.has(m)) unhookMaterial(m);
+        }
 
         if (added > 0) {
             console.info(TAG, '✔ enganchado al material del fluido (' + added + ' nuevo/s, ' + state.hooked.size + ' total)');
@@ -100700,6 +100939,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 (function () {
     'use strict';
     const FACIAL_LEGACY_CLEANUP_VERSION = 1;
+    const FACIAL_METADATA_TEXT_VERSION = 1;
     if (window.__MF_Facial) return;
     const TAG = 'minifeather facial';
 
@@ -100707,6 +100947,12 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     const LS_KEY = 'minifeather_facials_v1';
     const FACE = { x: 8, y: 8, w: 8, h: 8 };
     const FACE_OV = { x: 40, y: 8, w: 8, h: 8 };
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, char => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[char]);
+    }
 
     const state = {
         open: false,
@@ -102924,7 +103170,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         for (const n of names) {
             const nf = state.library[n]?.frames?.length ?? 0;
             const it = el('div', 'mff-item' + (state.playing === n ? ' on' : '') + (editing === n ? ' editing' : ''));
-            it.innerHTML = `<span class="nm">${n}</span><span class="meta">${nf}f</span>
+            it.innerHTML = `<span class="nm">${escapeHtml(n)}</span><span class="meta">${nf}f</span>
                 <button data-x="edit" title="Edit">✎</button>
                 <button data-x="play" title="Play on loop">▶</button>
                 <button data-x="del" title="Delete">✕</button>`;
@@ -102945,7 +103191,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         const fsel = root.querySelector('#mff-face');
         if (fsel) {
             const cur = fsel.value;
-            fsel.innerHTML = faceOptions().map(o => `<option value="${o.v}">${o.t}</option>`).join('');
+            fsel.innerHTML = faceOptions().map(o => `<option value="${escapeHtml(o.v)}">${escapeHtml(o.t)}</option>`).join('');
             if (cur) fsel.value = cur;
         }
 
@@ -102977,10 +103223,10 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         frames.forEach((f, i) => {
             const row = el('div', 'mff-frame');
             row.innerHTML = `
-                <select data-k="face">${faceOptions().map(o => `<option value="${o.v}" ${o.v === f.face ? 'selected' : ''}>${o.t}</option>`).join('')}</select>
-                    <input data-k="holdMs" type="number" min="20" step="20" value="${f.holdMs ?? 400}" title="Hold (ms)">
-                        <input data-k="blendMs" type="number" min="0" step="20" value="${f.blendMs ?? 0}" title="Transition (ms)">
-                            <img class="thumb" data-thumb="${f.face}" title="Face preview" alt="">
+                <select data-k="face">${faceOptions().map(o => `<option value="${escapeHtml(o.v)}" ${o.v === f.face ? 'selected' : ''}>${escapeHtml(o.t)}</option>`).join('')}</select>
+                    <input data-k="holdMs" type="number" min="20" step="20" value="${escapeHtml(f.holdMs ?? 400)}" title="Hold (ms)">
+                        <input data-k="blendMs" type="number" min="0" step="20" value="${escapeHtml(f.blendMs ?? 0)}" title="Transition (ms)">
+                            <img class="thumb" data-thumb="${escapeHtml(f.face)}" title="Face preview" alt="">
                                 <button data-x="rm" title="Remove frame">✕</button>`;
             row.querySelector('[data-k="face"]').onchange = (e) => { f.face = e.target.value; renderFrames(); };
             row.querySelector('[data-k="holdMs"]').onchange = (e) => { f.holdMs = +e.target.value || 400; };
@@ -103049,7 +103295,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         for (const p of packIndex) {
             const it = el('div', 'mff-item' + (packSel === p.id ? ' editing' : ''));
             const tag = p.server ? 'server' : (p.custom ? 'zip' : 'custom');
-            it.innerHTML = `<span class="nm">${p.name || p.id}${p.custom ? ' <span class="meta">(zip)</span>' : ''}</span>
+            it.innerHTML = `<span class="nm">${escapeHtml(p.name || p.id)}${p.custom ? ' <span class="meta">(zip)</span>' : ''}</span>
                 <span class="meta">${tag}</span>`;
             it.onclick = () => { packSel = p.id; renderPacksTab(); };
             list.appendChild(it);
@@ -103063,8 +103309,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             } else {
                 const cur = currentSkinId();
                 det.innerHTML = `
-                    <div style="font-weight:700;font-size:13px;margin-bottom:2px">${p.name || p.id}</div>
-                        <div style="color:#8a8a96;margin-bottom:8px">id: ${p.id}${p.author ? ' · by ' + p.author : ''} · v${p.version || 1} · ${p.server ? 'server skin (activates when you wear it in the wardrobe)' : p.custom ? 'ZIP imported' : 'custom (mypacks)'}</div>
+                    <div style="font-weight:700;font-size:13px;margin-bottom:2px">${escapeHtml(p.name || p.id)}</div>
+                        <div style="color:#8a8a96;margin-bottom:8px">id: ${escapeHtml(p.id)}${p.author ? ' · by ' + escapeHtml(p.author) : ''} · v${escapeHtml(p.version || 1)} · ${p.server ? 'server skin (activates when you wear it in the wardrobe)' : p.custom ? 'ZIP imported' : 'custom (mypacks)'}</div>
                             <div class="mff-row" style="flex-wrap:wrap">
   <button data-pk="apply" title="Wear the pack's skin (builtin only)">👕 Use skin</button>
   <button data-pk="release" title="Remove the custom skin and go back to the server one">↩ Remove skin</button>
@@ -103072,7 +103318,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
   <button data-pk="export" title="Download the pack as a ZIP (pack.json + PNGs)">📤 Export ZIP</button>
   ${p.custom ? '<button data-pk="del" title="Delete the imported pack">🗑</button>' : ''}
   </div>
-      <div style="color:#8a8a96;margin-top:8px;font-size:10px">${cur === p.id ? '✓ this skin is worn — the face animates on its own' : 'the face animates when skin ' + p.id + ' is in use'}</div>`;
+      <div style="color:#8a8a96;margin-top:8px;font-size:10px">${cur === p.id ? '✓ this skin is worn — the face animates on its own' : 'the face animates when skin ' + escapeHtml(p.id) + ' is in use'}</div>`;
                 det.querySelector('[data-pk="release"]').onclick = async () => {
                     try {
                         const ok = await releasePackSkin();
@@ -122673,7 +122919,15 @@ function normalize(entry) {
   const ATTRIBUTE = 'data-mf-halloween-ui';
   const MOTION_ATTRIBUTE = 'data-mf-halloween-motion';
   try { globalThis[KEY]?.destroy?.(); } catch (_) {}
-  if (globalThis.__MF_SEASONAL_FLAGS__?.halloween !== true) return;
+  // Old hot-loaded controllers may be gone while their CSS still exists.
+  // Remove only our owned styles/attributes, never the user's color settings.
+  for (const node of document.querySelectorAll(`#${BASE_ID},#${STYLE_ID}`)) node.remove();
+  document.documentElement?.removeAttribute(ATTRIBUTE);
+  document.documentElement?.removeAttribute(MOTION_ATTRIBUTE);
+  if (globalThis.__MF_SEASONAL_FLAGS__?.halloween !== true) {
+    for (const node of document.querySelectorAll('.mf-halloween-ribbon,.mf-halloween-settings')) node.remove();
+    return;
+  }
 
   const asset = name => chrome.runtime.getURL(`assets/ui/halloween/${name}.svg`);
   const pumpkin = asset('pumpkin'), ghost = asset('ghost'), bat = asset('bat'), web = asset('web');
@@ -122935,11 +123189,19 @@ function normalize(entry) {
     configure(value);
   }
 
+  function onSeasonalFlags() {
+    if (globalThis.__MF_SEASONAL_FLAGS__?.halloween === true) return;
+    configure({ enabled: false });
+    baseStyle.remove();
+    for (const node of document.querySelectorAll('.mf-halloween-ribbon,.mf-halloween-settings')) node.remove();
+  }
+
   function destroy() {
     if (destroyed) return;
     configure({ enabled: false }); destroyed = true;
     baseStyle.remove();
     document.removeEventListener(CONFIG_EVENT, onConfig);
+    document.removeEventListener('minifeather:seasonal-flags-changed', onSeasonalFlags);
     document.removeEventListener('visibilitychange', synchronizeMotion);
     if (globalThis[KEY] === api) delete globalThis[KEY];
   }
@@ -122947,6 +123209,7 @@ function normalize(entry) {
   const api = { version: 4, configure, destroy, getState: () => ({ enabled, motion, language, activeStyle: !!themeStyle?.isConnected }) };
   globalThis[KEY] = api;
   document.addEventListener(CONFIG_EVENT, onConfig);
+  document.addEventListener('minifeather:seasonal-flags-changed', onSeasonalFlags);
   document.addEventListener('visibilitychange', synchronizeMotion);
   document.dispatchEvent(new CustomEvent(REQUEST_EVENT));
 })();
@@ -123744,7 +124007,7 @@ function normalize(entry) {
     kotoSky: false,
     kotoSkyStrength: 1.0,
     customShader: false,
-    customShaderPreset: 'spooklementary',
+    customShaderPreset: 'photon',
     customShaderStrength: 0.5,
     customShaderGray: 0.25,
     customShaderRenderScale: 1.0,
@@ -126875,10 +127138,15 @@ function normalize(entry) {
   };
 
   function iconSvg(name, className = '') {
+    name = MF_PIXEL_ICON_ALIASES[name] || name;
     if (MF_PIXEL_ICONS[name]) return pixelIconPng(name, className);
     const key = MF_SVG_ICONS[name] ? name : 'grid';
     return `<svg class="mf-svg-icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${MF_SVG_ICONS[key]}</svg>`;
   }
+  const PIXEL_ICON_ALIAS_VERSION = 1;
+  const MF_PIXEL_ICON_ALIASES = {
+    rainbow: 'shaders'
+  };
   const PIXEL_PALETTE = {
     '.': null,
     'k': '#1c2430', '-': '#536174', '+': '#b4c4d1', '#': '#f2e9d0',
@@ -128305,7 +128573,7 @@ function normalize(entry) {
   }
 
   function sendCustomShaderConfig(enabled = settings.customShader) {
-    const preset = settings.customShaderPreset || 'spooklementary';
+    const preset = settings.customShaderPreset || 'photon';
     const fx = {};
     const spookFx = ['vhs', 'crt', 'cel', 'fog', 'grain', 'glitch', 'flash', 'sharp'];
     const ufFx = ['ufsat', 'ufcontrast', 'uftone'];
@@ -131650,7 +131918,7 @@ function normalize(entry) {
   function renderShadersPage() {
     const strength = Number(settings.customShaderStrength) || 0.5;
     const renderScale = Number(settings.customShaderRenderScale) || 1.0;
-    const preset = settings.customShaderPreset || 'spooklementary';
+    const preset = settings.customShaderPreset || 'photon';
     const isUltrafast = preset === 'ultrafast';
     const isPhoton = preset === 'photon';
     const isComplementary = preset === 'complementaryInspired';

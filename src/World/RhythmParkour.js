@@ -1,6 +1,7 @@
 
 (function () {
 'use strict';
+const RHYTHM_PEER_TEXT_VERSION = 1;
 
 const EVENT_CONFIG = 'minifeather:rhythmparkour-config';
 const EVENT_COMMAND = 'minifeather:rhythmparkour-command';
@@ -1088,13 +1089,20 @@ function onLanguageConfig(event) {
       ? `🏠 <span style="color:#4ade80;">${tr('rhythmYouAreHost', 'You are the host')}</span>`
       : `🔌 <span style="color:#60a5fa;">${tr('rhythmConnected', 'Connected')}</span>`;
 
-    let html = `<div style="color:#4ade80;">🟢 ${tr('rhythmYou', 'You')}: ${m.playerName} (${state.score} ${tr('rhythmPoints', 'pts')})</div>`;
+    const rows = [];
+    const addRow = (color, text) => {
+      const row = document.createElement('div');
+      row.style.color = color;
+      row.textContent = text;
+      rows.push(row);
+    };
+    addRow('#4ade80', `🟢 ${tr('rhythmYou', 'You')}: ${m.playerName} (${state.score} ${tr('rhythmPoints', 'pts')})`);
     m.remotePlayers.forEach((pl) => {
-      html += `<div style="color:#60a5fa;">🔵 ${pl.name || tr('rhythmPlayer', 'Player')}: ${pl.score || 0} ${tr('rhythmPoints', 'pts')}`;
-      if (m.gameMode === 'competitive') html += ` (${tr('rhythmCombo', 'Combo')}: ${pl.combo || 0})`;
-      html += `</div>`;
+      let text = `🔵 ${pl.name || tr('rhythmPlayer', 'Player')}: ${pl.score || 0} ${tr('rhythmPoints', 'pts')}`;
+      if (m.gameMode === 'competitive') text += ` (${tr('rhythmCombo', 'Combo')}: ${pl.combo || 0})`;
+      addRow('#60a5fa', text);
     });
-    if (listEl) listEl.innerHTML = html;
+    if (listEl) listEl.replaceChildren(...rows);
     if (countEl) countEl.textContent = `${m.connections.length + 1}/${m.maxPlayers} ${tr('rhythmPlayers', 'players')}`;
   } else {
     currentEl.style.display = 'none';

@@ -1,5 +1,6 @@
 (function () {
 'use strict';
+const CAMERA_ANGLE_VALIDATION_VERSION = 1;
 
 const EVENT_CONFIG = 'minifeather:cameraoverhaul-config';
 const EVENT_STATE = 'minifeather:cameraoverhaul-state';
@@ -128,10 +129,9 @@ const PRESETS = Object.freeze({
     }
 
     function normalizeAngle(value) {
-    let angle = value;
-    while (angle > Math.PI) angle -= Math.PI * 2;
-    while (angle < -Math.PI) angle += Math.PI * 2;
-    return angle;
+    if (!Number.isFinite(value)) return 0;
+    const turn = Math.PI * 2;
+    return ((value + Math.PI) % turn + turn) % turn - Math.PI;
     }
 
     function cloneValues(source) {

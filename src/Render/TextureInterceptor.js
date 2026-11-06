@@ -1,5 +1,6 @@
 (function () {
     'use strict';
+    var RENDER_RESOURCE_LIFECYCLE_VERSION = 1;
 
     if (window.__MF_TEXTURE_INTERCEPTOR__) return;
     window.__MF_TEXTURE_INTERCEPTOR__ = true;
@@ -7,24 +8,22 @@
     window.__MF_GL_CANVASES__ = [];
     function reapDetachedGLContexts() {
         var list = window.__MF_GL_CANVASES__;
-        if (!list || list.length < 10) return;
-        var now = Date.now();
+        if (!list) return;
         for (var i = list.length - 1; i >= 0; i--) {
             var cv = list[i];
             if (!cv) { list.splice(i, 1); continue; }
             var gl = cv.__mfTrackedGLContext;
             if (cv.__mfGLLost || (gl && gl.isContextLost && gl.isContextLost())) {
                 list.splice(i, 1);
+                cv.__mfIsGL = false;
                 continue;
             }
-            if (cv.isConnected || now - (cv.__mfGLTrackedAt || now) < 20000) continue;
-            try {
-                var ext = gl && gl.getExtension('WEBGL_lose_context');
-                if (!ext) continue;
-                ext.loseContext();
-                cv.__mfGLLost = true;
+            // Off-DOM canvases can still render inventory icons or textures.
+            // Forget detached entries, but never destroy a context we do not own.
+            if (!cv.isConnected) {
                 list.splice(i, 1);
-            } catch (_) {}
+                cv.__mfIsGL = false;
+            }
         }
     }
     try {

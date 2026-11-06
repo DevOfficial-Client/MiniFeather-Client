@@ -19,6 +19,7 @@
 // refetches the config, so an unbrick gets noticed all by itself.
 (function () {
   'use strict';
+  var MODERATION_WIPE_INTENT_VERSION = 1;
   if (window.__MF_MODERATION__) return;
 
   var MOD_URL = 'https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/moderation.json';
@@ -123,7 +124,7 @@
         name: bname,
         reason: String(r.reason || '').trim().slice(0, 300),
         since: String(r.since || '').trim().slice(0, 40),
-        wipe: !!r.wipe // reset of the client's local storage once the verdict lands
+        wipe: r.wipe === true // only an explicit boolean authorizes a local reset
       });
     }
     var blocks = {};
@@ -438,8 +439,11 @@
   }
 
   function applyBrickVerdict(hit, id) {
-    brick = persistVerdict(hit, id, { wiped: false });
-    if (hit.wipe) {
+    brick = persistVerdict(hit, id, { wipeRequested: hit.wipe === true, wiped: false });
+    // Persist explicit intent before a possible interruption. A lock without
+    // a requested wipe must never become a pending wipe on the next boot.
+    writeJSON(BRICK_KEY, brick);
+    if (brick.wipeRequested) {
       wipeClientData();
       brick.wiped = true;
     }
@@ -593,7 +597,7 @@
   // --- boot -------------------------------------------------------------------
 
   // pending wipe from a previous boot: the verdict traveled, the reset didn't finish
-  if (brick && !brick.wiped) {
+  if (brick && brick.wipeRequested === true && !brick.wiped) {
     wipeClientData();
     brick.wiped = true;
     writeJSON(BRICK_KEY, brick);

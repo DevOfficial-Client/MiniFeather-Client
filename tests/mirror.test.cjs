@@ -112,6 +112,53 @@ const FAKE_MIRROR = () => ({
   }
 });
 
+test('seasonal local flag wins over remote caches and always precedes effects', () => {
+  const flagPath = 'src/Core/SeasonalFlags.js';
+  const seasonalPath = 'src/Seasonal/MF_Seasonal.js';
+  for (const cachedList of [[seasonalPath], [seasonalPath, flagPath]]) {
+    const mirror = { v: 1, lists: { mainStart: [flagPath, seasonalPath] }, ok: {}, code: {
+      [flagPath]: '(function(){globalThis.releaseFlag = false;})();',
+      [seasonalPath]: '(function(){const SEASONAL_HALLOWEEN_GATE_VERSION = 2; globalThis.fixedSeasonal = true; globalThis.seasonalOrange = globalThis.releaseFlag === true;})();'
+    } };
+    const sb = execRunnerSandbox({ mirror, overrides: { v: 1,
+      buckets: { mainStart: cachedList }, files: {
+        [flagPath]: 'globalThis.releaseFlag = true;',
+        [seasonalPath]: '(function(){const SEASONAL_HALLOWEEN_GATE_VERSION = 1; globalThis.oldSeasonal = true; globalThis.seasonalOrange = true;})();'
+      } } });
+    assert.equal(sb.releaseFlag, false);
+    assert.equal(sb.fixedSeasonal, true);
+    assert.equal(sb.oldSeasonal, undefined);
+    assert.equal(sb.seasonalOrange, false);
+    assert.deepEqual(sb.__executed.map(entry => entry.path), [flagPath, seasonalPath]);
+  }
+});
+
+test('render and behavioral fixes cannot be replaced by older cached modules', () => {
+  const fixes = {
+    'src/UI/ClientPanel.js': 'PIXEL_ICON_ALIAS_VERSION',
+    'src/Core/MF_Moderation.js': 'MODERATION_WIPE_INTENT_VERSION',
+    'src/Render/LeafWind.js': 'RENDER_RESOURCE_LIFECYCLE_VERSION',
+    'src/Render/TextureInterceptor.js': 'RENDER_RESOURCE_LIFECYCLE_VERSION',
+    'src/Shaders/CustomShader.js': 'RENDER_RESOURCE_LIFECYCLE_VERSION',
+    'src/Shaders/MF_WaterStyle.js': 'RENDER_RESOURCE_LIFECYCLE_VERSION',
+    'src/Studio/MF_Peer.js': 'PEER_POSE_VALIDATION_VERSION',
+    'src/Render/CameraOverhaul.js': 'CAMERA_ANGLE_VALIDATION_VERSION',
+    'src/World/RhythmParkour.js': 'RHYTHM_PEER_TEXT_VERSION',
+    'src/Studio/MF_Facial.js': 'FACIAL_METADATA_TEXT_VERSION'
+  };
+  for (const [p, marker] of Object.entries(fixes)) {
+    assert.ok(source(p).includes(marker + ' = 1'), p);
+    const mirror = { v: 1, lists: { mainStart: [p] }, ok: {},
+      code: { [p]: `(function(){const ${marker} = 1; globalThis.usedFixed = true;})();` } };
+    const old = execRunnerSandbox({ mirror, overrides: { v: 1, files: { [p]: 'globalThis.usedOld = true;' } } });
+    assert.equal(old.usedOld, undefined, p);
+    assert.equal(old.usedFixed, true, p);
+    const fresh = execRunnerSandbox({ mirror, overrides: { v: 1,
+      files: { [p]: `(function(){const ${marker}=1;globalThis.usedFresh=true;})();` } } });
+    assert.equal(fresh.usedFresh, true, p);
+  }
+});
+
 test('MirrorRunner: orden del manifest, override remoto y fallback bundled', () => {
   const sb = execRunnerSandbox({
     mirror: FAKE_MIRROR(),

@@ -15,7 +15,9 @@
 // evento/noche activa y pestaña visible; nada de rAF eternos (lección de perf).
 (function () {
   'use strict';
+  const SEASONAL_HALLOWEEN_GATE_VERSION = 2;
   if (window.__MF_Seasonal) return;
+  window.__MF_Seasonal = true;
 
   var SEASONAL_URL = 'https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/seasonal.json';
   var CFG_KEY = 'mf:seasonal:v1';
@@ -162,9 +164,15 @@
   // evento activo HOY según fecha local (las fiestas son locales, no UTC)
   function activeEvent(n) {
     var d = new Date();
-    var today = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    var today = d.getFullYear() + '-' +
+      ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+      ('0' + d.getDate()).slice(-2);
+
     for (var i = 0; i < n.events.length; i++) {
-      if (n.events[i].start <= today && today <= n.events[i].end) return n.events[i];
+      var event = n.events[i];
+      if (/^halloween(?:-|$)/i.test(event.id) &&
+          globalThis.__MF_SEASONAL_FLAGS__?.halloween !== true) continue;
+      if (event.start <= today && today <= event.end) return event;
     }
     return null;
   }
@@ -173,13 +181,27 @@
 
   var vignetteEl = null;
   function setVignette(color, strength) {
+    // A legacy hot-loaded copy may already have created the overlay. Reuse
+    // that owned node so disabling the event cannot leave an orange twin.
+    if (!vignetteEl) vignetteEl = document.getElementById('mf-seasonal-vignette');
+    for (const duplicate of document.querySelectorAll?.('[id="mf-seasonal-vignette"]') || []) {
+      if (duplicate !== vignetteEl) duplicate.remove();
+    }
     if (!vignetteEl) {
+      var parent = document.body || document.documentElement;
+      if (!parent) return;
       vignetteEl = document.createElement('div');
       vignetteEl.id = 'mf-seasonal-vignette';
       vignetteEl.style.cssText = 'position:fixed;inset:0;z-index:2147483000;pointer-events:none;transition:opacity 1.2s ease';
-      (document.body || document.documentElement).appendChild(vignetteEl);
+      parent.appendChild(vignetteEl);
     }
-    if (!color || strength <= 0) { vignetteEl.style.opacity = '0'; return; }
+    if (!color || strength <= 0) {
+      vignetteEl.style.transition = 'none';
+      vignetteEl.style.opacity = '0';
+      vignetteEl.style.background = 'none';
+      return;
+    }
+    vignetteEl.style.transition = 'opacity 1.2s ease';
     vignetteEl.style.background = 'radial-gradient(ellipse at center, transparent 42%, ' + color + ' 160%)';
     vignetteEl.style.opacity = String(strength);
   }
@@ -270,6 +292,7 @@
   var ambientW = 0, ambientH = 0, ambientDpr = 1;
   var meteorTimer = 0, lastFrame = 0;
   var sprites = {};
+  var ambientHooksInstalled = false;
 
   function reducedMotion() {
     try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (_) { return false; }
@@ -531,24 +554,30 @@
         if (!ambientCtx) { try { ambientCanvas.remove(); } catch (_) {} ambientCanvas = null; return; }
         ambientResize();
         spawnAmbient();
-        window.addEventListener('resize', function () {
-          if (!ambientCanvas) return;
-          ambientResize();
-          spawnAmbient();
-        });
-        document.addEventListener('visibilitychange', function () {
-          // pestaña oculta: congelar (nada de rAF cobrando CPU en segundo plano)
-          if (document.hidden && ambientRaf) {
-            try { window.cancelAnimationFrame(ambientRaf); } catch (_) {}
-            ambientRaf = 0;
-            lastFrame = 0;
-          } else if (!document.hidden && ambientParts.length && !ambientRaf) {
-            ambientRaf = window.requestAnimationFrame(ambientFrame);
-          }
-        });
+        if (!ambientHooksInstalled) {
+          ambientHooksInstalled = true;
+          window.addEventListener('resize', onAmbientResize);
+          document.addEventListener('visibilitychange', onAmbientVisibility);
+        }
       }
       if (!ambientRaf) ambientRaf = window.requestAnimationFrame(ambientFrame);
     } catch (_) { failOpenAmbient(); }
+  }
+
+  function onAmbientResize() {
+    if (!ambientCanvas) return;
+    ambientResize();
+    spawnAmbient();
+  }
+
+  function onAmbientVisibility() {
+    if (document.hidden && ambientRaf) {
+      try { window.cancelAnimationFrame(ambientRaf); } catch (_) {}
+      ambientRaf = 0;
+      lastFrame = 0;
+    } else if (!document.hidden && ambientCanvas && ambientTypes.length && !ambientRaf) {
+      ambientRaf = window.requestAnimationFrame(ambientFrame);
+    }
   }
 
   function failOpenAmbient() {
@@ -628,19 +657,23 @@
     applying = true;
     try {
       var n = cfg && cfg.cfg ? cfg.cfg : null;
-      if (!n) { setVignette(null, 0); activeEventDef = null; nightCfg = null; ambientTypes = []; syncAmbient(); return; }
+      if (!n) { setVignette(null, 0); activeEventId = null; activeEventDef = null; nightCfg = null; ambientTypes = []; syncAmbient(); return; }
       var ev = activeEvent(n);
       activeEventId = ev ? ev.id : null;
       activeEventDef = ev || null;
       nightCfg = n.night || null;
       setVignette(ev ? ev.effects.vignette : null, ev ? ev.effects.vignetteStrength : 0);
       try {
+        var previousTypes = ambientTypes.join();
         ambientTypes = computeAmbientTypes();
         ambientDensity = (nightCfg ? nightCfg.density : 1) * (ev ? ev.effects.ambientDensity : 1);
         ambientDensity = Math.max(0.2, Math.min(1.5, ambientDensity));
         var wasEmpty = !ambientParts.length && !ambientMeteors.length;
         syncAmbient();
-        if (ambientTypes.length && wasEmpty) spawnAmbient();
+        if (ambientTypes.length && (wasEmpty || previousTypes !== ambientTypes.join())) {
+          ambientMeteors.length = 0;
+          spawnAmbient();
+        }
       } catch (_) { failOpenAmbient(); }
 
       // saludo de ventana: una vez por día por evento
@@ -707,7 +740,8 @@
   }
 
   // cache del boot: si hoy hay fiesta, el vignette entra antes que el fetch
-  if (cfg && cfg.cfg) evaluate();
+  evaluate();
+  document.addEventListener?.('minifeather:seasonal-flags-changed', evaluate);
 
   setTimeout(function () { fetchNow('boot'); }, BOOT_DELAY);
   setInterval(function () { fetchNow('poll'); }, POLL_MS);

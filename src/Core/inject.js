@@ -609,19 +609,19 @@
   }, 250);
   })();
   (function () {
-  function tryPatchSliders() {
-    document.querySelectorAll('input[type="range"]').forEach(input => {
+  function tryPatchSliders(root = document) {
+    const inputs = Array.from(root.querySelectorAll?.('input[type="range"]') || []);
+    if (root.matches?.('input[type="range"]')) inputs.push(root);
+    inputs.forEach(input => {
       if (input.dataset.mfPatched) return;
 
       const origMax = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "max");
       Object.defineProperty(input, "max", {
         get() { return origMax ? origMax.get.call(this) : this._max; },
         set(val) {
-          if (this._patchActive && Number(val) === 8) {
-            this._max = 32;
-            return;
-          }
-          this._max = val;
+          const next = this._patchActive && Number(val) === 8 ? 32 : val;
+          this._max = next;
+          if (origMax?.set) origMax.set.call(this, next);
         },
         configurable: true,
       });
@@ -646,8 +646,14 @@
     if (text.includes("settings") || text.includes("ajustes") || text.includes("configuracion")) onSettingsOpen();
   }, true);
 
-  const bodyObserver = new MutationObserver(() => {
-    tryPatchSliders();
+  const bodyObserver = new MutationObserver(records => {
+    // Counters and chat mutate frequently. Inspect added elements only, not
+    // every slider in the document on every HUD text update.
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node.nodeType === 1) tryPatchSliders(node);
+      }
+    }
   });
 
   if (document.body) {

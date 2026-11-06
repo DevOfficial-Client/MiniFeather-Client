@@ -9,7 +9,15 @@
   const ATTRIBUTE = 'data-mf-halloween-ui';
   const MOTION_ATTRIBUTE = 'data-mf-halloween-motion';
   try { globalThis[KEY]?.destroy?.(); } catch (_) {}
-  if (globalThis.__MF_SEASONAL_FLAGS__?.halloween !== true) return;
+  // Old hot-loaded controllers may be gone while their CSS still exists.
+  // Remove only our owned styles/attributes, never the user's color settings.
+  for (const node of document.querySelectorAll(`#${BASE_ID},#${STYLE_ID}`)) node.remove();
+  document.documentElement?.removeAttribute(ATTRIBUTE);
+  document.documentElement?.removeAttribute(MOTION_ATTRIBUTE);
+  if (globalThis.__MF_SEASONAL_FLAGS__?.halloween !== true) {
+    for (const node of document.querySelectorAll('.mf-halloween-ribbon,.mf-halloween-settings')) node.remove();
+    return;
+  }
 
   const asset = name => chrome.runtime.getURL(`assets/ui/halloween/${name}.svg`);
   const pumpkin = asset('pumpkin'), ghost = asset('ghost'), bat = asset('bat'), web = asset('web');
@@ -271,11 +279,19 @@
     configure(value);
   }
 
+  function onSeasonalFlags() {
+    if (globalThis.__MF_SEASONAL_FLAGS__?.halloween === true) return;
+    configure({ enabled: false });
+    baseStyle.remove();
+    for (const node of document.querySelectorAll('.mf-halloween-ribbon,.mf-halloween-settings')) node.remove();
+  }
+
   function destroy() {
     if (destroyed) return;
     configure({ enabled: false }); destroyed = true;
     baseStyle.remove();
     document.removeEventListener(CONFIG_EVENT, onConfig);
+    document.removeEventListener('minifeather:seasonal-flags-changed', onSeasonalFlags);
     document.removeEventListener('visibilitychange', synchronizeMotion);
     if (globalThis[KEY] === api) delete globalThis[KEY];
   }
@@ -283,6 +299,7 @@
   const api = { version: 4, configure, destroy, getState: () => ({ enabled, motion, language, activeStyle: !!themeStyle?.isConnected }) };
   globalThis[KEY] = api;
   document.addEventListener(CONFIG_EVENT, onConfig);
+  document.addEventListener('minifeather:seasonal-flags-changed', onSeasonalFlags);
   document.addEventListener('visibilitychange', synchronizeMotion);
   document.dispatchEvent(new CustomEvent(REQUEST_EVENT));
 })();

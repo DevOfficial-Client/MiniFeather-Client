@@ -1,5 +1,6 @@
 (function () {
 'use strict';
+const RENDER_RESOURCE_LIFECYCLE_VERSION = 1;
 
 const EVENT_CONFIG = 'minifeather:leaf-wind-config';
 
@@ -17,9 +18,13 @@ const state = {
     leafBlocks: new Set(),
     records: new Set(),
     recordByMesh: new WeakMap(),
+    inspected: new WeakMap(),
     queue: [],
     queued: new WeakMap(),
-    working: false
+    working: false,
+    workHandle: null,
+    workIsIdle: false,
+    generation: 0
         };
 
         const uniforms = {
@@ -156,7 +161,9 @@ const state = {
     function createPatchedMaterial(source) {
     if (!source) return source;
 
-    const material = source.clone?.() || source;
+    const material = source.clone?.();
+    if (!material || material === source) throw new Error('Leaf Wind requires an owned material');
+    material.defaultAttributeValues = { ...source.defaultAttributeValues, mfLeaf: [0] };
     const previousCompile = source.onBeforeCompile;
     const previousKey = typeof source.customProgramCacheKey === 'function'
         ? source.customProgramCacheKey.bind(source)
@@ -207,6 +214,9 @@ const state = {
 
     function restoreRecord(record, keepAttribute = false) {
     if (!record?.mesh) return;
+    record.alive = false;
+    if (record.mesh.onBeforeRender === record.guard) record.mesh.onBeforeRender = record.beforeRender;
+    record.geometry.removeEventListener?.('dispose', record.onDispose);
 
     try {
         if (record.mesh.material === record.patchedMaterial) {
@@ -216,9 +226,8 @@ const state = {
 
     if (!keepAttribute) {
         try {
-            const geometry = record.mesh.geometry;
-            const shared = [...state.records].some(other => other !== record && other.geometry === geometry);
-            if (!shared && geometry === record.geometry && geometry?.getAttribute?.('mfLeaf') === record.attribute) {
+            const geometry = record.geometry;
+            if (geometry?.getAttribute?.('mfLeaf') === record.attribute) {
                 geometry.deleteAttribute?.('mfLeaf');
             }
         } catch {}
@@ -237,14 +246,21 @@ const state = {
     }
 
     function restoreAll() {
+    state.generation++;
+    if (state.workHandle !== null) {
+        if (state.workIsIdle && typeof cancelIdleCallback === 'function') cancelIdleCallback(state.workHandle);
+        else clearTimeout(state.workHandle);
+        state.workHandle = null;
+    }
     for (const record of [...state.records]) restoreRecord(record);
     state.queue.length = 0;
     state.recordByMesh = new WeakMap();
     state.queued = new WeakMap();
+    state.inspected = new WeakMap();
     state.working = false;
     }
 
-    function patchMesh(mesh, geometry, attribute) {
+    function patchMesh(mesh, geometry, attribute, snapshot) {
     const previousRecord = state.recordByMesh.get(mesh);
     if (previousRecord) restoreRecord(previousRecord, true);
 
@@ -260,30 +276,78 @@ const state = {
         geometry,
         attribute,
         originalMaterial,
-        patchedMaterial
+        patchedMaterial,
+        snapshot,
+        alive: true,
+        beforeRender: mesh.onBeforeRender
     };
+
+    record.guard = function (...args) {
+        if (record.alive && !matchesSnapshot(mesh, snapshot)) {
+            // The render list may already hold this material. Missing mfLeaf
+            // defaults to zero, so this draw remains native until re-tagging.
+            if (geometry.getAttribute?.('mfLeaf') === attribute) geometry.deleteAttribute('mfLeaf');
+            state.inspected.delete(mesh);
+        }
+        return record.beforeRender?.apply(this, args);
+    };
+    record.onDispose = () => {
+        state.inspected.delete(mesh);
+        restoreRecord(record);
+    };
+    mesh.onBeforeRender = record.guard;
+    geometry.addEventListener?.('dispose', record.onDispose);
 
     state.records.add(record);
     state.recordByMesh.set(mesh, record);
     }
 
-    function tagMesh(mesh, world) {
+    function attributeSnapshot(attribute) {
+    return attribute ? { attribute, array: attribute.array, count: attribute.count,
+        version: attribute.version, dataVersion: attribute.data?.version } : null;
+    }
+
+    function sameAttribute(attribute, saved) {
+    return saved ? attribute === saved.attribute && attribute.array === saved.array &&
+        attribute.count === saved.count && attribute.version === saved.version &&
+        attribute.data?.version === saved.dataVersion : !attribute;
+    }
+
+    function snapshotMesh(mesh) {
+    mesh.updateWorldMatrix?.(true, false);
+    const geometry = mesh.geometry;
+    return {
+        geometry,
+        position: attributeSnapshot(geometry.attributes.position),
+        normal: attributeSnapshot(geometry.attributes.normal),
+        index: attributeSnapshot(geometry.index),
+        start: geometry.drawRange?.start,
+        count: geometry.drawRange?.count,
+        matrix: Array.from(mesh.matrixWorld.elements)
+    };
+    }
+
+    function matchesSnapshot(mesh, saved) {
+    const geometry = mesh.geometry;
+    if (!saved || !mesh.matrixWorld?.elements) return false;
+    for (let i = 0; i < 16; i++) if (mesh.matrixWorld.elements[i] !== saved.matrix[i]) return false;
+    return geometry === saved.geometry &&
+        sameAttribute(geometry.attributes?.position, saved.position) &&
+        sameAttribute(geometry.attributes?.normal, saved.normal) &&
+        sameAttribute(geometry.index, saved.index) &&
+        geometry.drawRange?.start === saved.start && geometry.drawRange?.count === saved.count;
+    }
+
+    function inChunkRoot(mesh) {
+    for (let node = mesh; node; node = node.parent) if (node === state.chunkRoot) return true;
+    return false;
+    }
+
+    function* tagMesh(mesh, world, snapshot) {
     const geometry = mesh?.geometry;
     const position = geometry?.attributes?.position;
 
     if (!geometry || !position || position.count < 3 || !world?.getBlock) return false;
-
-    const source = position.array;
-    const existingAttribute = geometry.getAttribute?.('mfLeaf');
-    const existingRecord = state.recordByMesh.get(mesh);
-
-    if (mesh.__mfLeafWindSource === source && existingAttribute) {
-        if (existingRecord && mesh.material === existingRecord.patchedMaterial) return false;
-        patchMesh(mesh, geometry, existingAttribute);
-        return true;
-    }
-
-    mesh.updateMatrixWorld?.(true);
 
     const matrix = mesh.matrixWorld?.elements;
     if (!matrix) return false;
@@ -311,6 +375,8 @@ const state = {
     }
 
     function triangle(a, b, c) {
+        if (!Number.isInteger(a) || !Number.isInteger(b) || !Number.isInteger(c) ||
+            a < 0 || b < 0 || c < 0 || a >= position.count || b >= position.count || c >= position.count) return;
         const ax = position.getX(a);
         const ay = position.getY(a);
         const az = position.getZ(a);
@@ -370,17 +436,23 @@ const state = {
         found = true;
     }
 
+    const start = Math.max(0, geometry.drawRange?.start || 0);
+    const end = Math.min(index ? index.length : position.count, start + (geometry.drawRange?.count ?? Infinity));
+    let steps = 0;
     if (index) {
-        for (let i = 0; i + 2 < index.length; i += 3) {
+        for (let i = start; i + 2 < end; i += 3) {
             triangle(index[i], index[i + 1], index[i + 2]);
+            if (++steps % 128 === 0) yield;
         }
     } else {
-        for (let i = 0; i + 2 < position.count; i += 3) {
+        for (let i = start; i + 2 < end; i += 3) {
             triangle(i, i + 1, i + 2);
+            if (++steps % 128 === 0) yield;
         }
     }
 
-    mesh.__mfLeafWindSource = source;
+    if (!matchesSnapshot(mesh, snapshot) || !inChunkRoot(mesh) || world !== state.world) return false;
+    state.inspected.set(mesh, snapshot);
 
     if (!found) return false;
 
@@ -389,12 +461,19 @@ const state = {
     try {
         const Attribute = position.constructor;
         attribute = new Attribute(mask, 1);
+        if (attribute.count !== position.count || attribute.itemSize !== 1) return false;
         geometry.setAttribute('mfLeaf', attribute);
     } catch {
         return false;
     }
 
-    patchMesh(mesh, geometry, attribute);
+    try {
+        patchMesh(mesh, geometry, attribute, snapshot);
+    } catch (error) {
+        if (geometry.getAttribute?.('mfLeaf') === attribute) geometry.deleteAttribute('mfLeaf');
+        state.inspected.delete(mesh);
+        throw error;
+    }
     return true;
     }
 
@@ -402,40 +481,58 @@ const state = {
     if (state.working || !state.queue.length || !state.enabled) return;
 
     state.working = true;
+    const generation = state.generation;
+
+    const schedule = work => {
+        state.workIsIdle = typeof requestIdleCallback === 'function';
+        state.workHandle = state.workIsIdle
+            ? requestIdleCallback(work, { timeout: 80 })
+            : setTimeout(() => work(null), 0);
+    };
 
     const work = deadline => {
+        if (generation !== state.generation) return;
+        state.workHandle = null;
         let processed = 0;
+        const started = performance.now();
 
         while (state.queue.length && state.enabled) {
             if (deadline && !deadline.didTimeout && deadline.timeRemaining() < 2 && processed > 0) break;
 
-            const job = state.queue.shift();
-            state.queued.delete(job.mesh);
+            const job = state.queue[0];
+            if (state.queued.get(job.mesh) !== job || job.world !== state.world ||
+                !inChunkRoot(job.mesh) || !matchesSnapshot(job.mesh, job.snapshot)) {
+                state.queue.shift();
+                if (state.queued.get(job.mesh) === job) state.queued.delete(job.mesh);
+                continue;
+            }
 
             try {
-                tagMesh(job.mesh, job.world);
-            } catch {}
+                job.iterator ||= tagMesh(job.mesh, job.world, job.snapshot);
+                if (job.iterator.next().done) {
+                    state.queue.shift();
+                    state.queued.delete(job.mesh);
+                }
+            } catch {
+                state.queue.shift();
+                state.queued.delete(job.mesh);
+                const record = state.recordByMesh.get(job.mesh);
+                if (record) restoreRecord(record);
+                state.inspected.delete(job.mesh);
+            }
 
             processed++;
-            if (processed >= 2) break;
+            if (processed >= 8 || performance.now() - started >= 4) break;
         }
 
         if (state.queue.length && state.enabled) {
-            if (typeof requestIdleCallback === 'function') {
-                requestIdleCallback(work, { timeout: 80 });
-            } else {
-                setTimeout(() => work(null), 0);
-            }
+            schedule(work);
         } else {
             state.working = false;
         }
     };
 
-    if (typeof requestIdleCallback === 'function') {
-        requestIdleCallback(work, { timeout: 80 });
-    } else {
-        setTimeout(() => work(null), 0);
-    }
+    schedule(work);
     }
 
     function scan(force = false) {
@@ -445,7 +542,12 @@ const state = {
     const world = game?.world || null;
     const chunkRoot = game?.gameScene?.chunkMeshes || null;
 
-    if (!game || !world || !chunkRoot?.traverse) return;
+    if (!game || !world || !chunkRoot?.traverse) {
+        restoreAll();
+        state.world = null;
+        state.chunkRoot = null;
+        return;
+    }
 
     if (state.world !== world || state.chunkRoot !== chunkRoot) {
         restoreAll();
@@ -458,6 +560,20 @@ const state = {
 
     if (!state.leafMaterial && !state.leafBlocks.size) refreshLeafRegistry();
 
+    for (const record of state.records) {
+        if (!inChunkRoot(record.mesh) || !matchesSnapshot(record.mesh, record.snapshot) ||
+            record.mesh.material !== record.patchedMaterial ||
+            record.geometry.getAttribute?.('mfLeaf') !== record.attribute) {
+            state.inspected.delete(record.mesh);
+            restoreRecord(record);
+        }
+    }
+    state.queue = state.queue.filter(job => {
+        const valid = state.queued.get(job.mesh) === job && inChunkRoot(job.mesh);
+        if (!valid && state.queued.get(job.mesh) === job) state.queued.delete(job.mesh);
+        return valid;
+    });
+
     if (!state.fullScan && performance.now() - state.startedAt > 4000 && state.records.size === 0) {
         state.fullScan = true;
     }
@@ -469,23 +585,11 @@ const state = {
         if (!mesh?.isMesh || !mesh.geometry?.attributes?.position) return;
         if (!possibleLeafMesh(mesh)) return;
 
-        const source = mesh.geometry.attributes.position.array;
-        const currentAttribute = mesh.geometry.getAttribute?.('mfLeaf');
-        const currentRecord = state.recordByMesh.get(mesh);
-
-        if (
-            mesh.__mfLeafWindSource === source &&
-            currentAttribute &&
-            currentRecord &&
-            mesh.material === currentRecord.patchedMaterial
-        ) {
-            return;
-        }
-
-        if (state.queued.get(mesh) === source) return;
-
-        state.queued.set(mesh, source);
-        state.queue.push({ mesh, world });
+        if (matchesSnapshot(mesh, state.inspected.get(mesh))) return;
+        if (matchesSnapshot(mesh, state.queued.get(mesh)?.snapshot)) return;
+        const job = { mesh, world, snapshot: snapshotMesh(mesh) };
+        state.queued.set(mesh, job);
+        state.queue.push(job);
     });
 
     processQueue();

@@ -2,6 +2,7 @@
 (function () {
     'use strict';
     const FACIAL_LEGACY_CLEANUP_VERSION = 1;
+    const FACIAL_METADATA_TEXT_VERSION = 1;
     if (window.__MF_Facial) return;
     const TAG = 'minifeather facial';
 
@@ -9,6 +10,12 @@
     const LS_KEY = 'minifeather_facials_v1';
     const FACE = { x: 8, y: 8, w: 8, h: 8 };
     const FACE_OV = { x: 40, y: 8, w: 8, h: 8 };
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, char => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[char]);
+    }
 
     const state = {
         open: false,
@@ -2226,7 +2233,7 @@
         for (const n of names) {
             const nf = state.library[n]?.frames?.length ?? 0;
             const it = el('div', 'mff-item' + (state.playing === n ? ' on' : '') + (editing === n ? ' editing' : ''));
-            it.innerHTML = `<span class="nm">${n}</span><span class="meta">${nf}f</span>
+            it.innerHTML = `<span class="nm">${escapeHtml(n)}</span><span class="meta">${nf}f</span>
                 <button data-x="edit" title="Edit">✎</button>
                 <button data-x="play" title="Play on loop">▶</button>
                 <button data-x="del" title="Delete">✕</button>`;
@@ -2247,7 +2254,7 @@
         const fsel = root.querySelector('#mff-face');
         if (fsel) {
             const cur = fsel.value;
-            fsel.innerHTML = faceOptions().map(o => `<option value="${o.v}">${o.t}</option>`).join('');
+            fsel.innerHTML = faceOptions().map(o => `<option value="${escapeHtml(o.v)}">${escapeHtml(o.t)}</option>`).join('');
             if (cur) fsel.value = cur;
         }
 
@@ -2279,10 +2286,10 @@
         frames.forEach((f, i) => {
             const row = el('div', 'mff-frame');
             row.innerHTML = `
-                <select data-k="face">${faceOptions().map(o => `<option value="${o.v}" ${o.v === f.face ? 'selected' : ''}>${o.t}</option>`).join('')}</select>
-                    <input data-k="holdMs" type="number" min="20" step="20" value="${f.holdMs ?? 400}" title="Hold (ms)">
-                        <input data-k="blendMs" type="number" min="0" step="20" value="${f.blendMs ?? 0}" title="Transition (ms)">
-                            <img class="thumb" data-thumb="${f.face}" title="Face preview" alt="">
+                <select data-k="face">${faceOptions().map(o => `<option value="${escapeHtml(o.v)}" ${o.v === f.face ? 'selected' : ''}>${escapeHtml(o.t)}</option>`).join('')}</select>
+                    <input data-k="holdMs" type="number" min="20" step="20" value="${escapeHtml(f.holdMs ?? 400)}" title="Hold (ms)">
+                        <input data-k="blendMs" type="number" min="0" step="20" value="${escapeHtml(f.blendMs ?? 0)}" title="Transition (ms)">
+                            <img class="thumb" data-thumb="${escapeHtml(f.face)}" title="Face preview" alt="">
                                 <button data-x="rm" title="Remove frame">✕</button>`;
             row.querySelector('[data-k="face"]').onchange = (e) => { f.face = e.target.value; renderFrames(); };
             row.querySelector('[data-k="holdMs"]').onchange = (e) => { f.holdMs = +e.target.value || 400; };
@@ -2351,7 +2358,7 @@
         for (const p of packIndex) {
             const it = el('div', 'mff-item' + (packSel === p.id ? ' editing' : ''));
             const tag = p.server ? 'server' : (p.custom ? 'zip' : 'custom');
-            it.innerHTML = `<span class="nm">${p.name || p.id}${p.custom ? ' <span class="meta">(zip)</span>' : ''}</span>
+            it.innerHTML = `<span class="nm">${escapeHtml(p.name || p.id)}${p.custom ? ' <span class="meta">(zip)</span>' : ''}</span>
                 <span class="meta">${tag}</span>`;
             it.onclick = () => { packSel = p.id; renderPacksTab(); };
             list.appendChild(it);
@@ -2365,8 +2372,8 @@
             } else {
                 const cur = currentSkinId();
                 det.innerHTML = `
-                    <div style="font-weight:700;font-size:13px;margin-bottom:2px">${p.name || p.id}</div>
-                        <div style="color:#8a8a96;margin-bottom:8px">id: ${p.id}${p.author ? ' · by ' + p.author : ''} · v${p.version || 1} · ${p.server ? 'server skin (activates when you wear it in the wardrobe)' : p.custom ? 'ZIP imported' : 'custom (mypacks)'}</div>
+                    <div style="font-weight:700;font-size:13px;margin-bottom:2px">${escapeHtml(p.name || p.id)}</div>
+                        <div style="color:#8a8a96;margin-bottom:8px">id: ${escapeHtml(p.id)}${p.author ? ' · by ' + escapeHtml(p.author) : ''} · v${escapeHtml(p.version || 1)} · ${p.server ? 'server skin (activates when you wear it in the wardrobe)' : p.custom ? 'ZIP imported' : 'custom (mypacks)'}</div>
                             <div class="mff-row" style="flex-wrap:wrap">
   <button data-pk="apply" title="Wear the pack's skin (builtin only)">👕 Use skin</button>
   <button data-pk="release" title="Remove the custom skin and go back to the server one">↩ Remove skin</button>
@@ -2374,7 +2381,7 @@
   <button data-pk="export" title="Download the pack as a ZIP (pack.json + PNGs)">📤 Export ZIP</button>
   ${p.custom ? '<button data-pk="del" title="Delete the imported pack">🗑</button>' : ''}
   </div>
-      <div style="color:#8a8a96;margin-top:8px;font-size:10px">${cur === p.id ? '✓ this skin is worn — the face animates on its own' : 'the face animates when skin ' + p.id + ' is in use'}</div>`;
+      <div style="color:#8a8a96;margin-top:8px;font-size:10px">${cur === p.id ? '✓ this skin is worn — the face animates on its own' : 'the face animates when skin ' + escapeHtml(p.id) + ' is in use'}</div>`;
                 det.querySelector('[data-pk="release"]').onclick = async () => {
                     try {
                         const ok = await releasePackSkin();

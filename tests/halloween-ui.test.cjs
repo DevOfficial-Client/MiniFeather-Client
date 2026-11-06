@@ -4,13 +4,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { JSDOM } = require('jsdom');
+const { withHalloween } = require('./helpers/seasonal-flags.cjs');
 
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const source = read('src/UI/HalloweenTheme.js');
 const panel = read('src/UI/ClientPanel.js');
 const flagsSource = read('src/Core/SeasonalFlags.js');
-const flags = enabled => flagsSource.replace(/const HALLOWEEN_ENABLED = (?:true|false);/, `const HALLOWEEN_ENABLED = ${enabled};`);
+const flags = enabled => withHalloween(flagsSource, enabled);
 
 function setup({ halloweenAvailable = true, omitFlags = false } = {}) {
   const dom = new JSDOM('<!doctype html><html><head></head><body><canvas id="world"></canvas><div id="mf-gui"></div></body></html>', {
@@ -178,6 +179,30 @@ test('decorations are local crisp pixel art, not scripts, external images or dat
   assert.doesNotMatch(garland, /<script|<foreignObject|data:|base64|onload=|onerror=|href=/i);
   assert.doesNotMatch(source, /fetch\(|XMLHttpRequest|WebSocket|\.innerHTML\s*=/);
   assert.doesNotMatch(source, /assets\/classic\/title\.png/);
+});
+
+test('retirement clears orphan Halloween styles and attributes even without the old API', t => {
+  const { dom, window, config, document } = setup(); t.after(() => dom.window.close());
+  config({ enabled: true });
+  document.getElementById('mf-gui').insertAdjacentHTML('beforeend', '<div class="mf-halloween-ribbon">Old banner</div><div class="mf-halloween-settings">Old settings</div>');
+  delete window.__MF_HALLOWEEN_UI__;
+  window.eval(flags(false));
+  window.eval(source);
+  assert.equal(document.querySelectorAll('#mf-halloween-ui-style,#mf-halloween-preview-style').length, 0);
+  assert.equal(document.documentElement.hasAttribute('data-mf-halloween-ui'), false);
+  assert.equal(document.documentElement.hasAttribute('data-mf-halloween-motion'), false);
+  assert.equal(document.querySelectorAll('.mf-halloween-ribbon,.mf-halloween-settings').length, 0);
+  assert.equal(document.documentElement.style.getPropertyValue('--mf-global-accent'), '#40bacb');
+});
+
+test('changing the central switch removes an active theme without waiting for another module event', t => {
+  const { dom, window, config, document } = setup(); t.after(() => dom.window.close());
+  config({ enabled: true });
+  window.eval(flags(false));
+  assert.equal(document.getElementById('mf-halloween-ui-style'), null);
+  assert.equal(document.documentElement.hasAttribute('data-mf-halloween-ui'), false);
+  config({ enabled: true });
+  assert.equal(document.documentElement.hasAttribute('data-mf-halloween-ui'), false);
 });
 
 test('the panel banner is decorative and keeps the existing module icons and controls', t => {

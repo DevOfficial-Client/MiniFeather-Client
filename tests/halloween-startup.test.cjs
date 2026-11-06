@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { JSDOM } = require('jsdom');
+const { withHalloween } = require('./helpers/seasonal-flags.cjs');
 
 const source = fs.readFileSync(path.join(__dirname, '../src/Core/SplashScreen.js'), 'utf8');
 const flagsSource = fs.readFileSync(path.join(__dirname, '../src/Core/SeasonalFlags.js'), 'utf8');
@@ -25,7 +26,7 @@ function setup(settings = {}, halloweenAvailable = true) {
       onChanged: { addListener: fn => listeners.add(fn), removeListener: fn => listeners.delete(fn) }
     }
   };
-  if (typeof halloweenAvailable === 'boolean') window.eval(flagsSource.replace(/const HALLOWEEN_ENABLED = (?:true|false);/, `const HALLOWEEN_ENABLED = ${halloweenAvailable};`));
+  if (typeof halloweenAvailable === 'boolean') window.eval(withHalloween(flagsSource, halloweenAvailable));
   window.eval(source);
   const change = next => { settings = { ...settings, ...next }; for (const fn of [...listeners]) fn({ settings: { newValue: settings } }, 'local'); };
   return { dom, window, listeners, timers, change, advance: ms => { now += ms; }, root: () => window.document.getElementById('mf-startup-splash') };
@@ -112,4 +113,25 @@ test('hot reinjection and destruction leave no old timer, listener or splash', t
   assert.equal(state.root(), null);
   assert.equal(state.listeners.size, 0);
   assert.equal(state.timers.size, 0);
+});
+
+test('retiring the central switch also retires a currently visible splash and forced replays', t => {
+  const state = setup(); t.after(() => state.dom.window.close());
+  state.window.eval(withHalloween(flagsSource, false));
+  assert.equal(state.root().getAttribute('data-halloween'), 'off');
+  assert.equal(state.root().querySelector('.mf-splash-halloween'), null);
+  state.window.__MINIFEATHER_SPLASH__.play({ force: true });
+  assert.equal(state.root().getAttribute('data-halloween'), 'off');
+  assert.equal(state.root().querySelector('.mf-splash-season'), null);
+});
+
+test('orphan splash markup cannot cover the normal startup after retirement', t => {
+  const state = setup(); t.after(() => state.dom.window.close());
+  delete state.window.__MINIFEATHER_SPLASH__;
+  state.window.eval(withHalloween(flagsSource, false));
+  state.window.eval(source);
+  assert.equal(state.window.document.querySelectorAll('#mf-startup-splash').length, 1);
+  assert.equal(state.window.document.querySelectorAll('#mf-startup-splash-style').length, 1);
+  assert.equal(state.root().getAttribute('data-halloween'), 'off');
+  assert.equal(state.root().querySelector('.mf-splash-halloween'), null);
 });

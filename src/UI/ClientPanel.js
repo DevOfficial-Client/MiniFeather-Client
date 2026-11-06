@@ -788,7 +788,7 @@
     kotoSky: false,
     kotoSkyStrength: 1.0,
     customShader: false,
-    customShaderPreset: 'spooklementary',
+    customShaderPreset: 'photon',
     customShaderStrength: 0.5,
     customShaderGray: 0.25,
     customShaderRenderScale: 1.0,
@@ -3919,10 +3919,15 @@
   };
 
   function iconSvg(name, className = '') {
+    name = MF_PIXEL_ICON_ALIASES[name] || name;
     if (MF_PIXEL_ICONS[name]) return pixelIconPng(name, className);
     const key = MF_SVG_ICONS[name] ? name : 'grid';
     return `<svg class="mf-svg-icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${MF_SVG_ICONS[key]}</svg>`;
   }
+  const PIXEL_ICON_ALIAS_VERSION = 1;
+  const MF_PIXEL_ICON_ALIASES = {
+    rainbow: 'shaders'
+  };
   const PIXEL_PALETTE = {
     '.': null,
     'k': '#1c2430', '-': '#536174', '+': '#b4c4d1', '#': '#f2e9d0',
@@ -5349,7 +5354,7 @@
   }
 
   function sendCustomShaderConfig(enabled = settings.customShader) {
-    const preset = settings.customShaderPreset || 'spooklementary';
+    const preset = settings.customShaderPreset || 'photon';
     const fx = {};
     const spookFx = ['vhs', 'crt', 'cel', 'fog', 'grain', 'glitch', 'flash', 'sharp'];
     const ufFx = ['ufsat', 'ufcontrast', 'uftone'];
@@ -8694,7 +8699,7 @@
   function renderShadersPage() {
     const strength = Number(settings.customShaderStrength) || 0.5;
     const renderScale = Number(settings.customShaderRenderScale) || 1.0;
-    const preset = settings.customShaderPreset || 'spooklementary';
+    const preset = settings.customShaderPreset || 'photon';
     const isUltrafast = preset === 'ultrafast';
     const isPhoton = preset === 'photon';
     const isComplementary = preset === 'complementaryInspired';

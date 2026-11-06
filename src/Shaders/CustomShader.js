@@ -1,6 +1,8 @@
 
 (function () {
     'use strict';
+    const RENDER_RESOURCE_LIFECYCLE_VERSION = 1;
+    const SHADER_DEFAULTS_VERSION = 1;
 
     const TAG = 'minifeather customshader';
 
@@ -9,7 +11,7 @@
 
     const state = {
         enabled: localStorage.getItem('miniblox_customshader') === 'true',
-        preset: localStorage.getItem('miniblox_customshader_preset') || 'spooklementary',
+        preset: localStorage.getItem('miniblox_customshader_preset') || 'photon',
         strength: parseFloat(localStorage.getItem('miniblox_customshader_strength') || '0.5'),
         gray: (() => {
             const g = parseFloat(localStorage.getItem('miniblox_customshader_gray'));
@@ -2017,7 +2019,7 @@
             delete material.__mfHooked;
         }
 
-        const originalOnBeforeCompile = material.onBeforeCompile.bind(material);
+        const originalOnBeforeCompile = material.onBeforeCompile;
         const originalCacheKey = material.customProgramCacheKey;
 
         let csAlive = true;
@@ -2042,9 +2044,9 @@
         // gris global del usuario, común a TODOS los presets
         liveUniforms.uMfGray = { value: Math.max(0, Math.min(0.9, state.gray)) };
 
-        const wrapper = function (shader) {
+        const wrapper = function (shader, renderer) {
 
-            originalOnBeforeCompile(shader);
+            originalOnBeforeCompile.call(this, shader, renderer);
             if (!csAlive) return;
 
             for (const key in liveUniforms) {
@@ -2108,7 +2110,7 @@
         material.__mfOriginalOnBeforeCompile = originalOnBeforeCompile;
         material.__mfOriginalCacheKey = originalCacheKey;
 
-        material.customProgramCacheKey = function () {
+        const cacheKey = material.customProgramCacheKey = function () {
             const base = originalCacheKey ? originalCacheKey.call(material) : '';
 
             return 'mfcs_' + state.preset + '_v' + (preset.version || 1) + '_' + base;
@@ -2120,14 +2122,18 @@
             try { preset.onHook(material); } catch (_) {}
         }
 
+        const onDispose = () => unhookMaterial(material);
         state.hooked.set(material, {
             liveUniforms,
             originalOnBeforeCompile,
             originalCacheKey,
             wrapper,
+            cacheKey,
+            onDispose,
             update: preset.update || (() => {}),
             onUnhook: preset.onUnhook || null
         });
+        material.addEventListener?.('dispose', onDispose);
 
         return true;
     }
@@ -2135,20 +2141,24 @@
     function unhookMaterial(material) {
         const entry = state.hooked.get(material);
         if (!entry) return;
+        state.hooked.delete(material);
+        material.removeEventListener?.('dispose', entry.onDispose);
 
         if (entry.onUnhook) {
             try { entry.onUnhook(material); } catch (_) {}
         }
 
         if (entry.wrapper?.__mfCsKill) entry.wrapper.__mfCsKill();
-        if (entry.originalCacheKey) {
+        if (material.onBeforeCompile === entry.wrapper) {
+            material.onBeforeCompile = entry.originalOnBeforeCompile;
+        }
+        if (material.customProgramCacheKey === entry.cacheKey) {
             material.customProgramCacheKey = entry.originalCacheKey;
-        } else {
-            material.customProgramCacheKey = undefined;
         }
         material.needsUpdate = true;
-        state.hooked.delete(material);
         delete material.__mfHooked;
+        delete material.__mfOriginalOnBeforeCompile;
+        delete material.__mfOriginalCacheKey;
     }
 
     let lastTime = performance.now();
@@ -2204,14 +2214,16 @@
         state.scene = scene;
 
         const meshes = collectMeshes(scene);
+        const meshSet = new Set(meshes);
         const cam = state.camera || state.game?.camera ||
             state.game?.gameScene?.camera;
         if (cam) {
             for (const extra of collectMeshes(cam)) {
-                if (!meshes.includes(extra)) meshes.push(extra);
+                if (!meshSet.has(extra)) { meshes.push(extra); meshSet.add(extra); }
             }
         }
         let hooked = 0;
+        const liveMaterials = new Set();
 
         for (const mesh of meshes) {
             const mat = mesh.material;
@@ -2219,11 +2231,19 @@
 
             if (Array.isArray(mat)) {
                 for (const m of mat) {
-                    if (hookMaterial(m)) hooked++;
+                    if (m) {
+                        liveMaterials.add(m);
+                        if (hookMaterial(m)) hooked++;
+                    }
                 }
             } else {
+                liveMaterials.add(mat);
                 if (hookMaterial(mat)) hooked++;
             }
+        }
+
+        for (const material of state.hooked.keys()) {
+            if (!liveMaterials.has(material)) unhookMaterial(material);
         }
 
         if (hooked > 0) {

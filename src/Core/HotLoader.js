@@ -161,8 +161,14 @@
 
   const plan = readPlan();
 
+  // These MAIN modules now load through MirrorRunner, with a local release
+  // flag and a versioned seasonal gate. Replaying an old hot plan afterwards
+  // would bypass that gate and restore the orange vignette.
+  const mirrorSeasonalPaths = new Set(['src/Core/SeasonalFlags.js', 'src/Seasonal/MF_Seasonal.js',
+    'src/Core/SplashScreen.js', 'src/UI/HalloweenTheme.js']);
+
   const paths = plan
-    ? Object.keys(plan.files).filter(p => typeof plan.files[p] === 'string' && plan.files[p])
+    ? Object.keys(plan.files).filter(p => !mirrorSeasonalPaths.has(p) && typeof plan.files[p] === 'string' && plan.files[p])
     : [];
 
   function fallback(path, guards) {
@@ -177,7 +183,7 @@
     });
   }
 
-  if (plan) {
+  if (plan && paths.length) {
 
     let polled = false;
     const poller = () => {
@@ -186,7 +192,7 @@
       let p = '';
       try { p = document.documentElement.dataset.mfHotFallback || ''; } catch (_) {}
       try { delete document.documentElement.dataset.mfHotFallback; } catch (_) {}
-      if (!p || typeof plan.files[p] !== 'string') {
+      if (!p || paths.indexOf(p) < 0) {
         polled = false;
         return;
       }

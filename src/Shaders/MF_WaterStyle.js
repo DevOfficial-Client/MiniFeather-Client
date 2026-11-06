@@ -1,5 +1,6 @@
 (function () {
     'use strict';
+    const RENDER_RESOURCE_LIFECYCLE_VERSION = 1;
 
     // re-ejecución (hot-reload): desenganchar todo antes de nada
     try { window.__MF_WATERSTYLE_SCOPE__?.destroy?.(); } catch (_) {}
@@ -188,12 +189,20 @@
         #endif
     `;
 
+    function forceWaterUniform(entry, uniform) {
+        if (!uniform || typeof uniform !== 'object' || !('value' in uniform)) return;
+        if (!entry.forcedUniforms.has(uniform)) entry.forcedUniforms.set(uniform, uniform.value);
+        uniform.value = 1;
+    }
+
     function hookMaterial(m) {
         if (m.__mfWaterStyleHooked) return false;
         if (typeof m.onBeforeCompile !== 'function') return false;
 
-        const orig = m.onBeforeCompile.bind(m);
+        const orig = m.onBeforeCompile;
         const origKey = m.customProgramCacheKey;
+        let alive = true;
+        const entry = { orig, origKey, forcedUniforms: new Map(), mat: m };
 
         const liveUniforms = {
             uMfWaterAlpha: { value: state.alpha },
@@ -207,8 +216,9 @@
             uMfPlayerRipple: { value: 0 }
         };
 
-        const wrapper = function (shader) {
-            orig(shader);
+        const wrapper = function (shader, renderer) {
+            orig.call(this, shader, renderer);
+            if (!alive) return;
             shader.uniforms.uMfWaterAlpha = liveUniforms.uMfWaterAlpha;
             shader.uniforms.uMfWaterTintMix = liveUniforms.uMfWaterTintMix;
             shader.uniforms.uMfWaterTint = liveUniforms.uMfWaterTint;
@@ -246,7 +256,7 @@
                     shader.fragmentShader;
             }
             if (shader.uniforms.waterShadersEnabled) {
-                shader.uniforms.waterShadersEnabled.value = 1;
+                forceWaterUniform(entry, shader.uniforms.waterShadersEnabled);
             }
 
             // olas notorias + turbulencia + reacción al jugador: parcheo
@@ -334,7 +344,7 @@
         };
 
         m.onBeforeCompile = wrapper;
-        m.customProgramCacheKey = function () {
+        const cacheKey = m.customProgramCacheKey = function () {
             let base = '';
             try { base = origKey ? String(origKey.call(m)) : ''; } catch (_) {}
             return base + '_mfws_v11';
@@ -342,15 +352,25 @@
         m.__mfWaterStyleHooked = true;
         m.needsUpdate = true;
 
-        state.hooked.set(m, { orig, origKey, liveUniforms, mat: m });
+        Object.assign(entry, { liveUniforms, wrapper, cacheKey, kill: () => { alive = false; },
+            onDispose: () => unhookMaterial(m) });
+        state.hooked.set(m, entry);
+        m.addEventListener?.('dispose', entry.onDispose);
         return true;
     }
 
     function unhookMaterial(m) {
         const entry = state.hooked.get(m);
         if (!entry) return;
-        try { m.onBeforeCompile = entry.orig; } catch (_) {}
-        try { m.customProgramCacheKey = entry.origKey; } catch (_) {}
+        state.hooked.delete(m);
+        entry.kill();
+        m.removeEventListener?.('dispose', entry.onDispose);
+        try { if (m.onBeforeCompile === entry.wrapper) m.onBeforeCompile = entry.orig; } catch (_) {}
+        try { if (m.customProgramCacheKey === entry.cacheKey) m.customProgramCacheKey = entry.origKey; } catch (_) {}
+        for (const [uniform, value] of entry.forcedUniforms) {
+            if (uniform.value === 1) uniform.value = value;
+        }
+        entry.forcedUniforms.clear();
         // devolver la geometría original y liberar la subdividida
         if (entry.cloneGeo) {
             try { if (m.geometry === entry.cloneGeo) m.geometry = entry.origGeo; } catch (_) {}
@@ -359,7 +379,6 @@
         disposeCurtain(entry);
         m.__mfWaterStyleHooked = false;
         m.needsUpdate = true;
-        state.hooked.delete(m);
     }
 
     // ── subdivisión de la geometría del fluido (v6) ───────────────────────
@@ -687,6 +706,7 @@
         if (!scene?.traverse) return;
 
         let added = 0;
+        const liveMaterials = new Set();
         state.subBudget = 3;   // presupuesto por pasada: sin hitches al cargar océanos
         state.cauBudget = 2;
         try {
@@ -694,12 +714,13 @@
                 const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
                 for (const m of mats) {
                     if (m?.userData && m.userData.waterShadersEnabled !== undefined) {
+                        liveMaterials.add(m);
                         if (hookMaterial(m)) added++;
                         const entry = state.hooked.get(m);
                         if (entry) {
                             // el onChange del juego pone esto en 0 si su setting está
                             // apagado; la superficie viva es parte de nuestro look
-                            m.userData.waterShadersEnabled.value = 1;
+                            forceWaterUniform(entry, m.userData.waterShadersEnabled);
                             if (state.subdiv) maybeSubdivide(m, entry);
                             if (state.caustics > 0.001 && state.cauBudget > 0) {
                                 state.cauBudget--;
@@ -710,6 +731,10 @@
                 }
             });
         } catch (_) {}
+
+        for (const m of state.hooked.keys()) {
+            if (!liveMaterials.has(m)) unhookMaterial(m);
+        }
 
         if (added > 0) {
             console.info(TAG, '✔ enganchado al material del fluido (' + added + ' nuevo/s, ' + state.hooked.size + ' total)');
