@@ -24,7 +24,7 @@ test('el hub esta cableado al panel: default off, config, init llamado y toggle'
   assert.match(panel, /setModuleEnabled\('menuHub', settings\.menuHub\)/);
   assert.match(panel, /renderToggle\(\s*'menuHub',/);
   assert.match(panel, /'rebrand', 'classicTitle', 'menuHub',/);
-  assert.match(panel, /menuHub: \['\.kkkkkk\.',/);
+  assert.match(panel, /const MF_PIXEL_ICON_NAMES = Object\.freeze\(\[[\s\S]*?'menuHub'/);
   assert.match(panel, /minifeather:open-panel/);
   assert.ok(fs.existsSync(path.join(rootDir, 'assets/ui/menuHub/00.png')));
   assert.ok(mirrorList.mainStart.includes('src/UI/MF_MenuHub.js'), 'el hub debe viajar en el mirror');

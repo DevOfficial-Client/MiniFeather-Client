@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { drawIcon } = require('../assets/generate-ui-pixel-icons.cjs');
 const zlib = require('node:zlib');
 
 const root = path.join(__dirname, '../assets/ui');
@@ -14,8 +15,8 @@ const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../manifest.js
 
 function rgbaPixels(bytes) {
   assert.deepEqual([...bytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
-  assert.equal(bytes.readUInt32BE(16), 32);
-  assert.equal(bytes.readUInt32BE(20), 32);
+  assert.equal(bytes.readUInt32BE(16), 64);
+  assert.equal(bytes.readUInt32BE(20), 64);
   assert.equal(bytes[25], 6);
   const compressed = [];
   for (let offset = 8; offset < bytes.length;) {
@@ -26,23 +27,22 @@ function rgbaPixels(bytes) {
     if (type === 'IEND') break;
   }
   const scanlines = zlib.inflateSync(Buffer.concat(compressed));
-  const pixels = Buffer.alloc(32 * 32 * 4);
-  for (let y = 0; y < 32; y++) {
-    assert.equal(scanlines[y * 129], 0, 'animation assets should use filter 0');
-    scanlines.copy(pixels, y * 128, y * 129 + 1, y * 129 + 129);
+  const pixels = Buffer.alloc(64 * 64 * 4);
+  for (let y = 0; y < 64; y++) {
+    assert.equal(scanlines[y * 257], 0, 'animation assets should use filter 0');
+    scanlines.copy(pixels, y * 256, y * 257 + 1, y * 257 + 257);
   }
   return pixels;
 }
 
-test('most module icons have six drawn 32px animation frames', () => {
+test('most module icons have six drawn 64px animation frames', () => {
   assert.ok(names.length >= 40);
   assert.equal(new Set(names).size, names.length);
   const weakFrames = [];
   const shortCycles = [];
   for (const name of names) {
     const original = fs.readFileSync(path.join(root, name, '00.png'));
-    const frame0 = fs.readFileSync(path.join(root, name, '00.png'));
-    assert.deepEqual(frame0, original, `${name} base frame changed`);
+    assert.deepEqual(original, drawIcon(name), name + ' base frame differs from its drawing');
     const originalPixels = rgbaPixels(original);
     const frames = [1, 2, 3, 4, 5].map(index => rgbaPixels(fs.readFileSync(path.join(root, name, `0${index}.png`))));
     for (const [index, frame] of frames.entries()) {
@@ -51,7 +51,7 @@ test('most module icons have six drawn 32px animation frames', () => {
         assert.ok(frame[offset + 3] === 0 || frame[offset + 3] === 255, `${name} lost hard pixel edges`);
         if (!frame.subarray(offset, offset + 4).equals(originalPixels.subarray(offset, offset + 4))) changed++;
       }
-      if (changed <= 10 || changed >= 900) weakFrames.push(`${name}:${index + 1} (${changed})`);
+      if (changed <= 10 || changed >= 3600) weakFrames.push(`${name}:${index + 1} (${changed})`);
     }
     if (new Set(frames.map(frame => frame.toString('hex'))).size < 4) shortCycles.push(name);
   }
@@ -60,11 +60,12 @@ test('most module icons have six drawn 32px animation frames', () => {
   assert.equal(fs.existsSync(path.join(root, 'patpat', '00.png')), true);
 });
 
-test('animation generator draws actions instead of moving a glint', () => {
-  const generator = fs.readFileSync(path.join(__dirname, '../assets/generate-ui-animations.cjs'), 'utf8');
-  assert.doesNotMatch(generator, /glintFrame|highlightColor/);
-  for (const action of ["case 'allayPets'", "case 'waterSplash'", "case 'antiAfk'", "case 'elytraFlight'", "case 'fpsCounter'"]) {
-    assert.ok(generator.includes(action), `${action} lacks a motion design`);
+test('committed animation frames match the icon drawings', () => {
+  for (const name of names) {
+    for (let frame = 1; frame <= 5; frame++) {
+      const file = path.join(root, name, '0' + frame + '.png');
+      assert.deepEqual(fs.readFileSync(file), drawIcon(name, frame), file);
+    }
   }
 });
 
