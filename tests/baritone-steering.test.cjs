@@ -130,6 +130,10 @@ function continuousWalking(options = {}) {
   return { ...h, api: h.context.Baritone, step, run, log, searchJobs, aimCalls, metrics, cell };
 }
 
+function assertGoalCell(player, x, y, z) {
+  assert.deepEqual([Math.floor(player.pos.x), Math.floor(player.pos.y + .01), Math.floor(player.pos.z)], [x, y, z]);
+}
+
 test('an off-center safe spawn does not turn back to its starting cell center', () => {
   const h = continuousWalking({ position: { x: .95 } });
   assert.equal(h.api.goto(10, 1, 0), true);
@@ -151,7 +155,7 @@ test('long straight routes keep walking and sprinting continuously instead of pu
   assert.ok(stats.sprintDuty > .85, JSON.stringify(stats));
   assert.ok(stats.elapsedMs < 13500, JSON.stringify(stats));
   assert.ok(stats.yawTravel < .1, JSON.stringify(stats));
-  assert.ok(Math.hypot(h.player.pos.x - 64.5, h.player.pos.z - .5) < .31);
+  assertGoalCell(h.player, 64, 1, 0);
   assert.ok(h.searchJobs.length >= 2, 'this includes a genuine segmented long-distance continuation');
   h.api.destroy();
 });
@@ -179,6 +183,17 @@ test('ordinary walking preserves the existing vertical camera angle', () => {
   h.api.destroy();
 });
 
+test('a small safe lateral offset does not cause corrections toward the drawn line', () => {
+  const yaw = -Math.PI / 2;
+  const h = continuousWalking({ yaw, position: { z: .60 } });
+  assert.equal(h.api.goto(14, 1, 0), true);
+  assert.equal(h.run(200), 'idle', JSON.stringify(h.api.debug()));
+  assertGoalCell(h.player, 14, 1, 0);
+  assert.ok(h.log.every(frame => frame.strafe === 0 && Math.abs(frame.yaw - yaw) < 1e-6));
+  assert.ok(Math.abs(h.player.pos.z - .60) < 1e-6);
+  h.api.destroy();
+});
+
 test('fractional lateral drift and ground inertia do not make the camera hunt passed waypoints', () => {
   const h = continuousWalking({ position: { x: .8, z: .78 }, motion: { x: .2, z: .05 } });
   assert.equal(h.api.goto(24, 1, 0), true);
@@ -187,7 +202,7 @@ test('fractional lateral drift and ground inertia do not make the camera hunt pa
   assert.equal(stats.backwardTicks, 0, JSON.stringify(stats));
   assert.ok(stats.yawTravel < 1, JSON.stringify(stats));
   assert.ok(stats.elapsedMs < 5600, JSON.stringify(stats));
-  assert.ok(Math.hypot(h.player.pos.x - 24.5, h.player.pos.z - .5) < .31);
+  assertGoalCell(h.player, 24, 1, 0);
   h.api.destroy();
 });
 
@@ -283,7 +298,7 @@ test('a supported partial-footprint start recenters safely instead of replanning
     assert.ok(stats.searches <= 4, JSON.stringify(stats));
     assert.ok(stats.elapsedMs < 4500, JSON.stringify(stats));
     assert.ok(h.log.every(frame => frame.onGround && frame.pos.y === 1), 'recovery never walks off the supported source cell');
-    assert.ok(Math.hypot(h.player.pos.x - 12.5, h.player.pos.z - .5) < .31);
+    assertGoalCell(h.player, 12, 1, 0);
     h.api.destroy();
   }
 });
@@ -510,15 +525,29 @@ test('safe partial-footprint edge recovery uses native A/D without changing the 
 
 test('a valid one-cell final goal stops naturally without demanding its exact center', () => {
   const yaw = -Math.PI / 2;
-  const h = continuousWalking({ position: { x: .8, z: .8 }, yaw });
+  const h = continuousWalking({ position: { x: .9, z: .9 }, yaw });
   assert.equal(h.api.goto(0, 1, 0), true);
   assert.equal(h.run(100), 'idle', JSON.stringify(h.api.debug()));
   assert.ok(h.searchJobs.some(job => job.result?.path?.length === 1), 'this exercises a route without a previous heading anchor');
   assert.ok(h.player.sent.every(packet => !(packet.up || packet.down || packet.left || packet.right || packet.jump)),
     'already being safely inside the final goal region does not require micro-centering inputs');
   assert.ok(h.log.every(frame => Math.abs(frame.yaw - yaw) < .000001), JSON.stringify(h.metrics()));
-  assert.ok(Math.hypot(h.player.pos.x - .5, h.player.pos.z - .5) < .46);
-  assert.deepEqual(h.player.pos, { x: .8, y: 1, z: .8 }, 'natural arrival never snaps the native player to a marker');
+  assert.deepEqual(h.player.pos, { x: .9, y: 1, z: .9 }, 'natural arrival never snaps the native player to a marker');
+  h.api.destroy();
+});
+
+test('a cleared mining destination is walkable and accepts arrival off-center', () => {
+  const h = continuousWalking({ blocks: [{ x: 1, y: 1, z: 0, name: 'stone' }] });
+  assert.equal(h.api.goto(1, 1, 0), true);
+  for (let i = 0; i < 40 && h.api.status !== 'mining'; i++) h.step();
+  assert.equal(h.api.status, 'mining');
+  h.world.cells.set('1,1,0', 'air');
+  h.player.pos = { x: 1.9, y: 1, z: .9 };
+  h.player.motion = { x: 0, y: 0, z: 0 };
+
+  h.step();
+  assert.equal(h.api.status, 'idle', JSON.stringify(h.api.debug()));
+  assert.deepEqual(h.player.pos, { x: 1.9, y: 1, z: .9 });
   h.api.destroy();
 });
 
@@ -530,11 +559,10 @@ test('terminal arrival with lateral momentum releases inputs once its safe natur
   h.player.motion.z += .10;
   const ready = () => {
     const p = h.player.pos, m = h.player.motion;
-    const currentRadius = Math.hypot(p.x - 8.5, p.z - .5);
     const vx = Math.abs(m.x) < .005 ? 0 : m.x, vz = Math.abs(m.z) < .005 ? 0 : m.z;
     const coast = { x: p.x + vx / (1 - .546), z: p.z + vz / (1 - .546) };
-    return Math.floor(p.x) === goal.x && Math.floor(p.z) === goal.z && currentRadius <= .45 &&
-      Math.floor(coast.x) === goal.x && Math.floor(coast.z) === goal.z && Math.hypot(coast.x - 8.5, coast.z - .5) <= .45;
+    return Math.floor(p.x) === goal.x && Math.floor(p.z) === goal.z &&
+      Math.floor(coast.x) === goal.x && Math.floor(coast.z) === goal.z;
   };
   for (let i = 0; i < 40 && !ready() && h.api.status !== 'idle'; i++) h.step();
   assert.equal(h.api.status, 'moving', 'the assertion observes the arrival decision before its native input tick');
@@ -547,7 +575,7 @@ test('terminal arrival with lateral momentum releases inputs once its safe natur
   assert.ok(h.player.sent.slice(releaseIndex).every(packet => !(packet.up || packet.down || packet.left || packet.right || packet.jump || packet.sprint)),
     'no extra S/A micro-corrections are sent after valid arrival');
   assert.ok(h.log.every(frame => Math.abs(frame.yaw - yaw) < .000001));
-  assert.ok(Math.hypot(h.player.pos.x - 8.5, h.player.pos.z - .5) < .46, 'ordinary native inertia settles inside the declared arrival region');
+  assertGoalCell(h.player, goal.x, goal.y, goal.z);
   h.api.destroy();
 });
 
@@ -574,7 +602,7 @@ test('natural terminal arrival still rejects unsafe coast outside the goal and h
   assert.ok(coasting.player.sent.at(-1).down, 'native braking is allowed when stopping immediately would miss the goal');
   assert.equal(coasting.run(100), 'idle', JSON.stringify(coasting.api.debug()));
   for (let i = 0; i < 20; i++) coasting.step();
-  assert.ok(Math.hypot(coasting.player.pos.x - .5, coasting.player.pos.z - .5) < .46);
+  assertGoalCell(coasting.player, 0, 1, 0);
   coasting.api.destroy();
 
   const hazard = continuousWalking({ narrow: true, position: { x: .65, z: .78 },

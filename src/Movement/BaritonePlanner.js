@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    const BARITONE_PLANNER_VERSION = 6;
+    const BARITONE_PLANNER_VERSION = 9;
     const ROOT = globalThis;
     const SQRT2 = Math.SQRT2;
     const DIRECTIONS = [
@@ -77,6 +77,7 @@
             allowSwim: options.allowSwim !== false,
             maxSubmergedSteps: Math.floor(clamp(options.maxSubmergedSteps, 12, 2, 48)),
             allowPlace: options.allowPlace === true,
+            preferExistingTerrain: options.preferExistingTerrain === true,
             placeBudget: Math.floor(clamp(options.placeBudget, 0, 0, 512)),
             placeCost: clamp(options.placeCost, 5, 2, 100),
             materialCost: clamp(options.materialCost, 0, 0, 100),
@@ -293,7 +294,8 @@
             const observe = liveCache(128);
             if (!navigate(from.x, from.y, from.z, defaults, observe)) return false;
             const directions = vertical ? [] : [[Math.sign(dx), Math.sign(dz)]];
-            return getNeighbors(from, { ...defaults, validationOnly: true }, observe, directions, vertical).some(next => {
+            const descendTo = toValue.action === 'mineDrop' ? to.y : null;
+            return getNeighbors(from, { ...defaults, validationOnly: true, descendTo }, observe, directions, vertical).some(next => {
                 if (next.x !== to.x || next.y !== to.y || next.z !== to.z) return false;
                 if (toValue.action === 'bridge') {
                     if (next.action === 'walk') return true;
@@ -301,11 +303,12 @@
                         next.placeBlocks.every(block => toValue.placeBlocks.some(planned =>
                             planned.x === block.x && planned.y === block.y && planned.z === block.z));
                 }
-                if (!['mine', 'mineJump'].includes(toValue.action)) return next.action === toValue.action;
+                if (!['mine', 'mineJump', 'mineDrop'].includes(toValue.action)) return next.action === toValue.action;
                 // Mining is checked before execution. Once some or all of the
                 // planned blocks disappear, the same edge may become walking;
                 // never silently add a newly appeared obstacle to that plan.
-                if (next.action === (toValue.action === 'mineJump' ? 'jump' : 'walk')) return true;
+                const clearedAction = toValue.action === 'mineDrop' ? 'drop' : toValue.action === 'mineJump' ? 'jump' : 'walk';
+                if (next.action === clearedAction) return true;
                 return next.action === toValue.action && Array.isArray(toValue.breakBlocks) &&
                     next.breakBlocks.every(block => toValue.breakBlocks.some(planned =>
                         planned.x === block.x && planned.y === block.y && planned.z === block.z));
@@ -315,7 +318,7 @@
         function getNeighbors(p, config, observeUnknown, directions = DIRECTIONS, includeVertical = true) {
             const output = [];
             const inWater = config.allowSwim && swim(p.x, p.y, p.z, observeUnknown);
-            const plannedClear = value => ['mine', 'mineJump'].includes(p.action) && p.breakBlocks?.some(block =>
+            const plannedClear = value => ['mine', 'mineJump', 'mineDrop'].includes(p.action) && p.breakBlocks?.some(block =>
                 block.x === value.x && block.y === value.y && block.z === value.z);
             for (const y of [p.y, p.y + 1]) {
                 const originCell = cell(p.x, y, p.z, observeUnknown);
@@ -377,15 +380,37 @@
                 const x = p.x + dx;
                 const z = p.z + dz;
                 const diagonal = dx !== 0 && dz !== 0;
+                if (!diagonal && !inWater && config.allowMine && config.maxDrop > 0 && config.descendTo != null && p.y > config.descendTo) {
+                    // Open one step beside the player. Keep the departure floor
+                    // intact and verify headroom and the floor below the landing.
+                    const step = floorAt(x, p.y - 1, z, observeUnknown, p);
+                    if (step?.breakable === true && support(step) &&
+                        dryClear(cell(x, p.y, z, observeUnknown)) && dryClear(cell(x, p.y + 1, z, observeUnknown)) &&
+                        support(floorAt(x, p.y - 2, z, observeUnknown, p))) {
+                        const block = { x, y: p.y - 1, z };
+                        add(x, block.y, z, 'mineDrop', 1.35 + excavationCost({ ...block, cell: step }, config), [block]);
+                    }
+                }
                 if (stand(x, p.y, z, observeUnknown, p)) {
                     if (!diagonal || (!inWater && stand(p.x + dx, p.y, p.z, observeUnknown, p) && stand(p.x, p.y, p.z + dz, observeUnknown, p))) {
                         add(x, p.y, z, inWater ? 'swim' : 'walk', inWater ? 1.7 : diagonal ? SQRT2 : 1);
                     }
                     continue;
                 }
-                // Turning corners during jumps or falls requires swept-box physics;
-                // only level walking is diagonal until that can be verified safely.
-                if (diagonal) continue;
+                if (diagonal) {
+                    // A one-block ascent can cross an open corner. Check both
+                    // side columns through the full jump height and leave a
+                    // supported approach on both sides. Drops remain cardinal.
+                    if (!inWater && support(floorAt(x, p.y, z, observeUnknown, p)) &&
+                        stand(x, p.y + 1, z, observeUnknown, p) &&
+                        dryClear(cell(p.x, p.y + 2, p.z, observeUnknown)) &&
+                        [[x, p.z], [p.x, z]].every(([sideX, sideZ]) =>
+                            stand(sideX, p.y, sideZ, observeUnknown, p) &&
+                            dryClear(cell(sideX, p.y + 2, sideZ, observeUnknown)))) {
+                        add(x, p.y + 1, z, 'jump', SQRT2 + 0.7);
+                    }
+                    continue;
+                }
 
                 if (addSwim(x, p.y, z, 1.5)) continue;
 
@@ -462,11 +487,13 @@
             const config = {
                 ...defaults,
                 allowMine: opts.allowMine == null ? defaults.allowMine : opts.allowMine === true,
+                descendTo: start && requestedGoal && requestedGoal.y < start.y ? requestedGoal.y : null,
                 fastWalk: opts.fastWalk == null ? defaults.fastWalk : opts.fastWalk === true,
                 allowGap: opts.allowGap == null ? defaults.allowGap : opts.allowGap !== false,
                 allowSwim: opts.allowSwim == null ? defaults.allowSwim : opts.allowSwim !== false,
                 maxSubmergedSteps: Math.floor(clamp(opts.maxSubmergedSteps, defaults.maxSubmergedSteps, 2, 48)),
                 allowPlace: opts.allowPlace == null ? defaults.allowPlace : opts.allowPlace === true,
+                preferExistingTerrain: opts.preferExistingTerrain ?? defaults.preferExistingTerrain,
                 placeBudget: Math.floor(clamp(opts.placeBudget, defaults.placeBudget, 0, 512)),
                 placeCost: clamp(opts.placeCost, defaults.placeCost, 2, 100),
                 materialCost: clamp(opts.materialCost, defaults.materialCost, 0, 100),
@@ -480,6 +507,8 @@
             };
             const began = now();
             const open = new Heap();
+            const construction = config.preferExistingTerrain && config.allowPlace && config.placeBudget > 0 ? new Heap() : null;
+            let deferConstruction = !!construction;
             const bestCosts = new Map();
             const expanded = new Map();
             let best = null;
@@ -504,6 +533,11 @@
             const stateKey = node => `${key(node)}${node._placed?.size ?
                 `|${[...node._placed].sort().join(';')}` : ''}${node._submergedSteps ? `|wet:${node._submergedSteps}` : ''}`;
             const job = { done: false, result: null, step, cancel, preview };
+
+            function nextFrontier() {
+                const building = construction?.items[0];
+                return !deferConstruction && building && (!open.size || open.less(building, open.items[0])) ? construction : open;
+            }
 
             function copyWaypoint(current) {
                 const point = { x: current.x, y: current.y, z: current.z, action: current.action };
@@ -553,12 +587,14 @@
                 // heuristic tile was a one-block dead end. These remain
                 // explicitly partial, not claimed globally optimal routes.
                 let scanned = 0;
-                for (const node of open.items) {
-                    // A live preview must not scan the entire search heap on
-                    // the rendering tick; full backoff runs only at completion.
-                    if (reason === 'preview' && scanned++ >= 256) break;
-                    const id = node._id ?? stateKey(node);
-                    if (node.g === bestCosts.get(id) && (expanded.get(id) ?? Infinity) > node.g) offer(node);
+                for (const queue of [open, deferConstruction ? null : construction]) {
+                    for (const node of queue?.items || []) {
+                        // A live preview must not scan the entire search heap on
+                        // the rendering tick; full backoff runs only at completion.
+                        if (reason === 'preview' && scanned++ >= 256) break;
+                        const id = node._id ?? stateKey(node);
+                        if (node.g === bestCosts.get(id) && (expanded.get(id) ?? Infinity) > node.g) offer(node);
+                    }
                 }
                 if (!choices.size) {
                     for (const scale of backoffScales) offer(partialCandidates.get(`frontier:${scale}`));
@@ -582,7 +618,7 @@
                     path: job.result.path.slice(0, maxWaypoints).map(copyWaypoint), pathLength: job.result.path.length
                 } : pathSnapshot(previewNode, maxWaypoints);
                 const tail = job.done ? job.result.path.at(-1) : previewNode;
-                const frontier = open.items[0];
+                const frontier = nextFrontier().items[0];
                 return {
                     path: snapshot.path, pathLength: snapshot.pathLength, truncated: snapshot.pathLength > maxWaypoints,
                     best: tail ? { x: tail.x, y: tail.y, z: tail.z } : null,
@@ -609,12 +645,13 @@
                     adjustedGoal: complete && !!node && key(node) !== key(requestedGoal),
                     elapsedMs: Math.max(0, now() - began)
                 };
-                job.result.fastWalk = complete && fastProbe?.current === node;
+                job.result.fastWalk = complete && fastProbe?.current === node && !fastProbe.mined;
                 job.result.cachedCells = observeUnknown.cache.size;
                 job.result.terrainReads = observeUnknown.cacheStats.reads;
                 job.result.cacheHits = observeUnknown.cacheStats.hits;
                 observeUnknown.cache.clear();
                 open.items.length = 0;
+                if (construction) construction.items.length = 0;
                 bestCosts.clear();
                 expanded.clear();
                 partialCandidates.clear();
@@ -632,14 +669,17 @@
                 const maxMs = clamp(budget.maxMs, 4, 0.1, 16);
                 const maxNodes = Math.floor(clamp(budget.maxNodes, 200, 1, 1000));
                 let count = 0;
-                while (open.size) {
+                while (open.size || construction?.size) {
                     if (now() - began >= config.maxTimeMs) return finish('time_budget');
                     if (visited >= config.maxNodesTotal) return finish('node_budget');
                     if (count >= maxNodes || now() - sliceBegan >= maxMs) return null;
+                    // Keep short existing-terrain routes ahead of bridges. Reuse
+                    // the same frontier if the local search needs construction.
+                    if (deferConstruction && (!open.size || visited >= 128)) deferConstruction = false;
                     if (fastProbe) {
                         // Distribute diagonal steps along the intended line.
-                        // Every completed dry probe uses exactly the minimum
-                        // cardinal/diagonal counts, attaining the octile bound.
+                        // A walk-only probe attains the octile bound. On short
+                        // straight routes we can also check one mining edge.
                         // Probe incrementally; any failed edge falls back to
                         // the unchanged A* frontier, reusing only its snapshot.
                         count++;
@@ -652,25 +692,38 @@
                         const dz = fastProbe.majorX ? diagonal ? fastProbe.sz : 0 : fastProbe.sz;
                         const x = current.x + dx;
                         const z = current.z + dz;
-                        const next = { x, y: current.y, z, action: 'walk' };
-                        if (config.blockedEdges?.has?.(edgeKey(current, next)) ||
-                            !stand(x, current.y, z, observeUnknown) ||
-                            (dx && dz && (!stand(x, current.y, current.z, observeUnknown) ||
-                                !stand(current.x, current.y, z, observeUnknown)))) {
+                        let next = { x, y: current.y, z, action: 'walk', cost: diagonal ? SQRT2 : 1 };
+                        if (config.blockedEdges?.has?.(edgeKey(current, next))) {
                             fastProbe = null;
                             continue;
                         }
-                        const g = current.g + (diagonal ? SQRT2 : 1);
+                        if (!stand(x, current.y, z, observeUnknown) ||
+                            (dx && dz && (!stand(x, current.y, current.z, observeUnknown) ||
+                                !stand(current.x, current.y, z, observeUnknown)))) {
+                            const obstacle = fastProbe.allowSingleMine && !fastProbe.mined &&
+                                getNeighbors(current, config, observeUnknown, [[dx, dz]], false).find(candidate =>
+                                    candidate.action === 'mine' && candidate.breakBlocks.length === 1);
+                            if (!obstacle) {
+                                fastProbe = null;
+                                continue;
+                            }
+                            next = obstacle;
+                            fastProbe.mined = true;
+                        }
+                        const g = current.g + next.cost;
                         const h = routeDistance(next, requestedGoal);
                         const record = { ...next, _id: key(next), _placeCount: 0, _submergedSteps: 0,
                             g, h, progress: h, f: g + h, parent: current, order: order++ };
                         fastProbe.current = record;
-                        best = record;
-                        rememberPartial(record);
+                        // Do not publish a mining shortcut unless its entire route is clear.
+                        if (!fastProbe.mined) {
+                            best = record;
+                            rememberPartial(record);
+                        }
                         if (goalKeys.has(key(record))) return finish('reached', true, record);
                         continue;
                     }
-                    const current = open.pop();
+                    const current = nextFrontier().pop();
                     const currentKey = current._id ?? stateKey(current);
                     if (current.g !== bestCosts.get(currentKey) || (expanded.get(currentKey) ?? Infinity) <= current.g) continue;
                     expanded.set(currentKey, current.g);
@@ -690,7 +743,8 @@
                         const progress = horizontalDistance(next, requestedGoal, radius) + Math.abs(next.y - requestedGoal.y) * 0.25;
                         const record = { ...next, _id: nextKey, g, h, progress, f: g + h, parent: current, order: order++ };
                         bestCosts.set(nextKey, g);
-                        open.push(record);
+                        const frontier = deferConstruction && next.action === 'bridge' ? construction : open;
+                        frontier.push(record);
                     }
                 }
                 return finish(sawUnknown ? 'unloaded_frontier' : 'unreachable');
@@ -729,11 +783,14 @@
             const dx = requestedGoal.x - start.x;
             const dz = requestedGoal.z - start.z;
             const edges = Math.max(Math.abs(dx), Math.abs(dz));
+            const allowSingleMine = config.preferExistingTerrain && config.allowMine && edges <= 32 && (!dx || !dz);
             if (config.fastWalk && edges > 0 && edges <= 128 && start.y === requestedGoal.y && radius === 0 &&
                 goalKeys.has(key(requestedGoal)) &&
-                stand(start.x, start.y, start.z, observeUnknown) && stand(requestedGoal.x, requestedGoal.y, requestedGoal.z, observeUnknown)) {
+                stand(start.x, start.y, start.z, observeUnknown) &&
+                (stand(requestedGoal.x, requestedGoal.y, requestedGoal.z, observeUnknown) ||
+                    (allowSingleMine && mineableGoal(requestedGoal.x, requestedGoal.y, requestedGoal.z, observeUnknown)))) {
                 fastProbe = { current: best, sx: Math.sign(dx), sz: Math.sign(dz), majorX: Math.abs(dx) >= Math.abs(dz),
-                    major: edges, minor: Math.min(Math.abs(dx), Math.abs(dz)), error: edges * 0.5 };
+                    major: edges, minor: Math.min(Math.abs(dx), Math.abs(dz)), error: edges * 0.5, allowSingleMine, mined: false };
             }
             // With a distant unloaded goal, exploring the loaded frontier still
             // yields a useful partial route. It is never reported as complete.

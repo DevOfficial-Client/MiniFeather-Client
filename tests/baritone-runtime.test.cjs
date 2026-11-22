@@ -52,7 +52,7 @@ test('real broker/adapter/planner/runtime navigate a simulated player through na
   assert.equal(h.api.goto(4, 1, 0), true);
   for (let i = 0; i < 200 && h.api.status !== 'idle' && h.api.status !== 'failed'; i++) h.step();
   assert.equal(h.api.status, 'idle', JSON.stringify(h.api.debug()));
-  assert.ok(Math.hypot(h.player.pos.x - 4.5, h.player.pos.z - .5) < .46);
+  assert.deepEqual([Math.floor(h.player.pos.x), Math.floor(h.player.pos.y), Math.floor(h.player.pos.z)], [4, 1, 0]);
   assert.ok(h.player.sent.some(packet => packet.up && Math.abs(packet.yaw + Math.PI / 2) < .1));
   assert.ok(h.player.sent.every((packet, i) => packet.sequenceNumber === 11 + i));
   assert.equal(h.api.debug().native.hooked, false);

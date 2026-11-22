@@ -227,6 +227,119 @@ test('one-block step triggers a bounded jump and completes only after landing', 
   assert.equal(h.api.debug().reason, 'Destination reached');
 });
 
+test('a missed takeoff in a one-block hole retries the same safe ledge before replanning', () => {
+  const h = harness();
+  h.api.setAutoMine(false);
+  for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) h.set(x, 1, z, stone);
+  assert.equal(h.api.goto(1, 2, 0), true);
+  h.advance(300);
+  assert.equal(h.controls.at(-1).jump, true);
+  h.advance(200);
+  assert.equal(h.controls.at(-1).jump, false);
+
+  // The native collector missed the first pulse, so the player never left the ground.
+  h.advance(600);
+  assert.equal(h.controls.at(-1).jump, true);
+  assert.equal(h.jobs.length, 1);
+  h.player.onGround = false;
+  h.advance(50);
+  assert.equal(h.controls.at(-1).jump, false);
+  h.moveTo({ x: 1, y: 2, z: 0 });
+  h.advance(50);
+  assert.equal(h.api.status, 'idle');
+});
+
+test('a landed jump does not carry its button press into the next walking waypoint', () => {
+  const h = harness();
+  h.set(1, 1, 0, stone);
+  h.set(2, 1, 0, stone);
+  h.api.goto(2, 2, 0);
+  h.advance(300);
+  assert.equal(h.controls.at(-1).jump, true);
+  h.moveTo({ x: 1, y: 2, z: 0 });
+  h.advance(50);
+  assert.ok(h.controls.at(-1).forward > 0);
+  assert.equal(h.controls.at(-1).jump, false);
+});
+
+test('landing below a planned gap replans from the bottom of the hole and finds the climb out', () => {
+  const h = harness();
+  h.player.pos.y = 2;
+  h.set(0, 1, 0, stone);
+  h.set(2, 1, 0, stone);
+  h.api.setAutoMine(false);
+  assert.equal(h.api.goto(2, 2, 0), true);
+  h.advance(300);
+  assert.equal(h.jobs[0].result.path.at(-1).action, 'gap');
+
+  h.moveTo({ x: 1, y: 1, z: 0 });
+  h.advance(50);
+  assert.equal(h.jobs.length, 2);
+  assert.equal(h.controls.at(-1).forward, 0);
+  h.advance(100);
+  const climb = h.jobs[1].result;
+  assert.equal(climb.complete, true);
+  assert.equal(climb.path[0].y, 1);
+  assert.equal(climb.path.at(-1).action, 'jump');
+});
+
+test('a drop keeps the edge heading instead of turning back toward the center in midair', () => {
+  const h = harness();
+  h.player.pos.y = 3;
+  h.set(0, 2, 0, stone);
+  assert.equal(h.api.goto(1, 1, 0), true);
+  h.advance(300);
+  assert.equal(h.jobs[0].result.path.at(-1).action, 'drop');
+  assert.ok(h.controls.at(-1).forward > 0);
+  assert.ok(Math.abs(h.player.yaw + Math.PI / 2) < .001);
+
+  h.player.onGround = false;
+  h.player.pos = { x: 1.75, y: 2.4, z: .5 };
+  h.advance(50);
+  assert.ok(Math.abs(h.player.yaw + Math.PI / 2) < .001);
+  assert.equal(h.controls.at(-1).forward, 0);
+  h.moveTo({ x: 1, y: 1, z: 0 });
+  h.advance(50);
+  assert.equal(h.api.status, 'idle');
+});
+
+test('mined stairs wait for confirmed clearance and recheck their landing before digging', () => {
+  for (const safeLanding of [true, false]) {
+    const h = harness();
+    h.player.pos.y = 2;
+    h.set(0, 1, 0, stone);
+    h.set(1, 1, 0, stone);
+    assert.equal(h.api.goto(1, 1, 0), true);
+    h.advance(250);
+    assert.equal(h.jobs[0].result.path.at(-1).action, 'mineDrop');
+    if (!safeLanding) h.set(1, 0, 0, air);
+    h.advance(50);
+    assert.equal(h.controls.at(-1).forward, 0);
+    assert.equal(h.interactions.some(event => event.type === 'mine' && event.target.y === 1), safeLanding);
+    if (!safeLanding) continue;
+    h.set(1, 1, 0, air);
+    h.advance(50);
+    assert.ok(h.controls.at(-1).forward > 0);
+    assert.equal(h.controls.at(-1).jump, false);
+    h.moveTo({ x: 1, y: 1, z: 0 });
+    h.advance(50);
+    assert.equal(h.api.status, 'idle');
+  }
+});
+
+test('a safe walking step can keep moving during a moderate camera turn', () => {
+  const h = harness({ aligned: false });
+  h.player.yaw = -Math.PI / 2 + .45;
+  h.player.motion = { x: 0, y: 0, z: 0 };
+  h.adapter.movementFactor = () => .1;
+  h.adapter.groundSlipperiness = () => .6;
+  assert.equal(h.api.goto(4, 1, 0), true);
+  h.advance(300);
+  const input = h.controls.at(-1);
+  assert.ok(input.forward > 0 && input.canStep(input));
+  assert.equal(input.sprint, false);
+});
+
 test('manual jump releases itself and all input at the end', () => {
   const h = harness();
   assert.equal(h.api.jump(300), true);
@@ -266,6 +379,25 @@ test('mining waits for actual world change, not an interaction return value', ()
   h.set(1, 1, 0, air); h.advance(50);
   assert.equal(h.api.status, 'idle');
   assert.match(h.api.debug().reason, /world confirmed/);
+});
+
+test('goto on a short straight route mines the one blocking block before continuing', () => {
+  const h = harness();
+  h.set(1, 1, 0, stone);
+  assert.equal(h.api.goto(4, 1, 0), true);
+  h.advance(300);
+  const path = h.jobs[0].result.path;
+  assert.ok(path.every(node => node.z === 0 && !node.placeBlocks));
+  assert.equal(h.interactions.at(-1)?.type, 'mine');
+  assert.equal(h.interactions.at(-1).target.x, 1);
+  assert.equal(h.controls.at(-1).forward, 0);
+
+  h.set(1, 1, 0, air);
+  h.advance(50);
+  assert.ok(h.controls.at(-1).forward > 0);
+  for (const point of path.slice(1)) { h.moveTo(point); h.advance(50); }
+  assert.equal(h.api.status, 'idle');
+  assert.equal(h.interactions.some(event => event.type === 'place'), false);
 });
 
 test('planned mining clears a tall wall from the head down to avoid occluded feet', () => {

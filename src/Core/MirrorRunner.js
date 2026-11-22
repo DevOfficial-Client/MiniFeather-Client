@@ -109,8 +109,12 @@
     }
     // An older cached module list must still load the local Baritone dependencies.
     var navigationPath = 'src/Movement/Baritone.js';
-    if (list.indexOf(navigationPath) >= 0 && MIRROR.code[navigationPath] &&
-        /BARITONE_NAVIGATION_VERSION = [234567]/.test(MIRROR.code[navigationPath])) {
+    function bundledVersion(path, symbol) {
+      var match = (MIRROR.code[path] || '').match(new RegExp('\\b' + symbol + '\\s*=\\s*(\\d+)\\b'));
+      return match ? Number(match[1]) : 0;
+    }
+    var navigationVersion = bundledVersion(navigationPath, 'BARITONE_NAVIGATION_VERSION');
+    if (list.indexOf(navigationPath) >= 0 && navigationVersion >= 2) {
       ['src/Movement/MovementAPI.js', 'src/Movement/BaritoneAdapter.js', 'src/Movement/BaritonePlanner.js',
         'src/Movement/BaritonePathRenderer.js'].forEach(function (dependency) {
         var at = list.indexOf(dependency);
@@ -136,6 +140,7 @@
       'src/Render/FullBright.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
       'src/Render/TitanTiny.js': 'TITAN_NAMETAG_DECORATOR_VERSION = 1',
       'src/Render/HealthNameTags.js': 'NAMETAG_ORIGINAL_RENDERER_VERSION = 1',
+      'src/HUD/GUIPatch.js': ['data-mf-gui-bar', 'mf-xp-track', '#react h3', 'rgb(211, 4, 11)', 'data-mf-gui-overlay'],
       'src/UI/ClientPanel.js': ['FULLBRIGHT_SETTINGS_VERSION = 1', 'experimentalRealisticFirstPerson', 'FIRST_PERSON_MODULE_VERSION = 1', 'CAPE_SETTINGS_VERSION = 1', 'HALLOWEEN_UI_VERSION = 4', 'UI_LAYOUT_FIX_VERSION = 1', 'PIXEL_ICON_ALIAS_VERSION = 1'],
       'src/I18n/Translations.js': ['"fullBrightSettings"', '"experimentalRealisticFirstPersonLabel"', '"firstPersonDesc"', '"capePhysics"', '"halloweenTheme"', '"halloweenHomeSubtitle"'],
       'src/Experimental/Realistic/FirstPersonModel.js': /FIRST_PERSON_MODEL_VERSION\s*=\s*4/.test(MIRROR.code[firstPersonPath] || '')
@@ -151,21 +156,15 @@
       'src/Cosmetics/CustomSkins.js': 'CUSTOM_SKIN_DEFAULTS_VERSION = 1',
       'src/Studio/MF_Facial.js': ['FACIAL_LEGACY_CLEANUP_VERSION = 1', 'FACIAL_METADATA_TEXT_VERSION = 1'],
       'src/Render/BetterAnimationCape.js': 'BETTER_CAPE_PHYSICS_VERSION = 3',
-      'src/Movement/Baritone.js': /BARITONE_NAVIGATION_VERSION = 7/.test(MIRROR.code[navigationPath] || '')
-        ? 'BARITONE_NAVIGATION_VERSION = 7' : /BARITONE_NAVIGATION_VERSION = 6/.test(MIRROR.code[navigationPath] || '')
-          ? 'BARITONE_NAVIGATION_VERSION = 6' : /BARITONE_NAVIGATION_VERSION = 5/.test(MIRROR.code[navigationPath] || '')
-          ? 'BARITONE_NAVIGATION_VERSION = 5' : /BARITONE_NAVIGATION_VERSION = 4/.test(MIRROR.code[navigationPath] || '')
-          ? 'BARITONE_NAVIGATION_VERSION = 4' : /BARITONE_NAVIGATION_VERSION = 3/.test(MIRROR.code[navigationPath] || '')
-            ? 'BARITONE_NAVIGATION_VERSION = 3' : 'BARITONE_NAVIGATION_VERSION = 2',
+      'src/Movement/Baritone.js': 'BARITONE_NAVIGATION_VERSION = ' + navigationVersion,
       'src/Movement/BaritoneAdapter.js': /BARITONE_ADAPTER_VERSION = 6/.test(MIRROR.code['src/Movement/BaritoneAdapter.js'] || '')
         ? 'BARITONE_ADAPTER_VERSION = 6' : /BARITONE_ADAPTER_VERSION = 5/.test(MIRROR.code['src/Movement/BaritoneAdapter.js'] || '')
           ? 'BARITONE_ADAPTER_VERSION = 5' : /BARITONE_ADAPTER_VERSION = 4/.test(MIRROR.code['src/Movement/BaritoneAdapter.js'] || '')
           ? 'BARITONE_ADAPTER_VERSION = 4' : 'BARITONE_ADAPTER_VERSION = 3',
-      'src/Movement/BaritonePlanner.js': /BARITONE_PLANNER_VERSION = 6/.test(MIRROR.code['src/Movement/BaritonePlanner.js'] || '')
-        ? 'BARITONE_PLANNER_VERSION = 6' : /BARITONE_PLANNER_VERSION = 5/.test(MIRROR.code['src/Movement/BaritonePlanner.js'] || '')
-          ? 'BARITONE_PLANNER_VERSION = 5' : /BARITONE_PLANNER_VERSION = 4/.test(MIRROR.code['src/Movement/BaritonePlanner.js'] || '')
-          ? 'BARITONE_PLANNER_VERSION = 4' : 'BARITONE_PLANNER_VERSION = 3',
-      'src/Movement/BaritonePathRenderer.js': 'BARITONE_PATH_RENDERER_VERSION = 1'
+      'src/Movement/BaritonePlanner.js': 'BARITONE_PLANNER_VERSION = ' +
+        bundledVersion('src/Movement/BaritonePlanner.js', 'BARITONE_PLANNER_VERSION'),
+      'src/Movement/BaritonePathRenderer.js': 'BARITONE_PATH_RENDERER_VERSION = ' +
+        bundledVersion('src/Movement/BaritonePathRenderer.js', 'BARITONE_PATH_RENDERER_VERSION')
     };
 
     var injected = 0, remote = 0, bundled = 0, gated = 0, moderated = 0;

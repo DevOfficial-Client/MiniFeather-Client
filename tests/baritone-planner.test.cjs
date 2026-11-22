@@ -172,7 +172,7 @@ test('walking segment smoothing honors excluded movement edges and keeps its rea
 });
 
 test('optional walking probes preserve octile-optimal cardinal, diagonal and mixed-slope route costs', () => {
-    assert.equal(api.version, 6);
+    assert.equal(api.version, 9);
     const w = world({ min: -160, max: 160, fastWalk: true, now: () => 0 });
     for (const goal of [pos(32), pos(-32), pos(0, 1, 32), pos(24, 1, -24), pos(4, 1, 2),
         pos(32, 1, 9), pos(-32, 1, 9), pos(9, 1, -32), pos(-9, 1, -32), pos(128, 1, 37)]) {
@@ -333,6 +333,51 @@ test('one-block step jumps require landing and departure headroom', () => {
     assert.equal(hasNeighbor(w.planner, pos(0), pos(1, 2), 'jump'), undefined);
 });
 
+test('a diagonal ascent into a clear ledge skips the extra cardinal waypoint', () => {
+    const w = world();
+    const start = pos(0), goal = pos(1, 2, 1);
+    w.set(1, 1, 1, stone);
+    const route = finish(w.planner.search(start, goal));
+    assert.equal(route.complete, true);
+    assert.equal(route.path.length, 2);
+    assert.equal(route.path[1].action, 'jump');
+    assert.ok(Math.abs(route.cost - (Math.SQRT2 + .7)) < 1e-9);
+    assert.equal(w.planner.validateTransition(start, route.path[1]), true);
+
+    // Later terrain changes must not let the player clip either orthogonal corner.
+    for (const [x, z] of [[1, 0], [0, 1]]) {
+        w.set(x, 3, z, stone);
+        assert.equal(w.planner.validateTransition(start, route.path[1]), false);
+        w.set(x, 3, z, air);
+    }
+});
+
+test('a single breakable block on a short straight route is planned without a detour', () => {
+    const w = world({ fastWalk: true, allowMine: true, preferExistingTerrain: true });
+    const start = pos(0), goal = pos(6);
+    w.set(2, 1, 0, stone);
+    const direct = finish(w.planner.search(start, goal));
+    assert.equal(direct.complete, true);
+    assert.ok(direct.path.every(node => node.z === 0));
+    assert.equal(direct.path.filter(node => node.action === 'mine').length, 1);
+    assert.equal(direct.path[2].breakBlocks[0].x, 2);
+    assert.equal(direct.visited, 6);
+
+    const noMine = finish(w.planner.search(start, goal, { allowMine: false }));
+    assert.equal(noMine.complete, true);
+    assert.ok(noMine.path.some(node => node.z !== 0));
+    assert.ok(noMine.path.every(node => !node.breakBlocks));
+});
+
+test('an available nearby route on existing ground wins over a cheap bridge', () => {
+    const w = world({ allowGap: false, allowPlace: true, placeBudget: 4, placeCost: 2, preferExistingTerrain: true });
+    for (let z = -2; z <= 2; z++) w.set(1, 0, z, air);
+    const route = finish(w.planner.search(pos(0), pos(2)));
+    assert.equal(route.complete, true);
+    assert.equal(route.placements, 0);
+    assert.ok(route.path.some(node => Math.abs(node.z) === 3));
+});
+
 test('diagonal paths cannot clip feet, head or missing support corners', () => {
     const w = world();
     assert.ok(hasNeighbor(w.planner, pos(0), pos(1, 1, 1), 'walk'));
@@ -359,6 +404,46 @@ test('drops are bounded to three blocks and their entire shaft must be clear', (
     w.set(1, -3, 0, stone);
     w.set(1, -1, 0, { ...air, hazard: true, name: 'water' });
     assert.equal(w.planner.neighbors(pos(0)).some(node => node.x === 1 && node.z === 0), false);
+});
+
+test('a lower destination can use a single mined step with a verified landing underneath', () => {
+    const w = world({ min: 0, max: 1, allowMine: true, goalRadius: 0 });
+    w.set(0, 1, 0, stone);
+    w.set(1, 1, 0, stone);
+    for (const x of [0, 1]) for (let y = 1; y <= 4; y++) w.set(x, y, 1, { ...stone, breakable: false });
+    const start = pos(0, 2), target = pos(1, 1);
+    const route = finish(w.planner.search(start, target));
+    assert.equal(route.complete, true);
+    assert.equal(route.path.length, 2);
+    const descent = route.path[1];
+    assert.equal(descent.action, 'mineDrop');
+    assert.equal(descent.breakBlocks.length, 1);
+    assert.equal(descent.breakBlocks[0].y, 1);
+    assert.equal(w.planner.validateTransition(start, descent), true);
+    assert.equal(finish(w.planner.search(start, target, { allowMine: false })).complete, false);
+    w.set(1, 1, 0, air);
+    assert.equal(w.planner.validateTransition(start, descent), true);
+    w.set(1, 0, 0, air);
+    assert.equal(w.planner.validateTransition(start, descent), false);
+});
+
+test('a tunnel below the start can be reached from an entrance behind the player', () => {
+    const w = world({ min: -3, max: 4, goalRadius: 0 });
+    const bedrock = { ...stone, breakable: false };
+    for (let x = -3; x <= 4; x++) {
+        if (x > -3 && x < 4) w.set(x, 3, 0, stone);
+        for (let y = 1; y <= 6; y++) {
+            w.set(x, y, -1, bedrock);
+            w.set(x, y, 1, bedrock);
+        }
+    }
+    for (let y = 1; y <= 6; y++) w.set(4, y, 0, bedrock);
+    const route = finish(w.planner.search(pos(0, 4), pos(3, 1)));
+    assert.equal(route.complete, true);
+    assert.equal(route.path[1].x, -1);
+    const entry = route.path.find(point => point.action === 'drop');
+    assert.deepEqual([entry.x, entry.y, entry.z], [-3, 1, 0]);
+    assert.deepEqual([route.goal.x, route.goal.y, route.goal.z], [3, 1, 0]);
 });
 
 test('cardinal one-block gaps require a known safe gap and clear jump arc', () => {

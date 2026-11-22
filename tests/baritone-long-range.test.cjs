@@ -27,6 +27,23 @@ function walkSegment(h, segment) {
   }
 }
 
+for (const rising of [true, false]) test(`a distant ${rising ? 'uphill' : 'downhill'} route uses the floor at its checkpoint`, () => {
+  const h = harness({ maxX: 48 });
+  const heightAt = x => rising ? 1 + Math.min(10, Math.floor(x / 3)) : 11 - Math.min(10, Math.floor(x / 3));
+  for (let x = 0; x <= 40; x++) for (let y = 1; y < heightAt(x); y++) h.set(x, y, 0, stone);
+  h.moveTo({ x: 0, y: heightAt(0), z: 0 });
+  h.api.setAutoMine(false);
+  h.api.setAutoPlace(false);
+  assert.equal(h.api.goto(40, heightAt(40), 0), true);
+  const first = finishJob(h);
+  assert.equal(first.goal.x, 32);
+  assert.equal(first.goal.y, heightAt(32));
+  assert.equal(first.job.result.complete, true);
+  assert.ok(first.job.result.path.some(point => point.action === (rising ? 'jump' : 'drop')));
+  assert.equal(h.api.goal.y, heightAt(40));
+  h.api.destroy();
+});
+
 function instrument(h, hold = () => false) {
   const factory = h.context.__MF_BARITONE_PLANNER__;
   h.context.__MF_BARITONE_PLANNER__ = { ...factory, create(...args) {

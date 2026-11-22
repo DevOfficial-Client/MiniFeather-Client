@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261106200145
+// @version      4.19.0.20261106200214
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 1d17e41c9becd66634f9ece24c057f9167af85fb
- * builtAt : 2026-11-06T20:02:13.342Z
+ * commit  : 10dba5ee576d8c3f179ae788a09f29dbdcff621a
+ * builtAt : 2026-11-22T03:48:26.326Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"1d17e41c9becd66634f9ece24c057f9167af85fb","builtAt":"2026-11-06T20:02:13.342Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"10dba5ee576d8c3f179ae788a09f29dbdcff621a","builtAt":"2026-11-22T03:48:26.326Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -53398,7 +53398,7 @@ requestAnimationFrame(loop);
 (function () {
     'use strict';
 
-    const BARITONE_PLANNER_VERSION = 6;
+    const BARITONE_PLANNER_VERSION = 9;
     const ROOT = globalThis;
     const SQRT2 = Math.SQRT2;
     const DIRECTIONS = [
@@ -53474,6 +53474,7 @@ requestAnimationFrame(loop);
             allowSwim: options.allowSwim !== false,
             maxSubmergedSteps: Math.floor(clamp(options.maxSubmergedSteps, 12, 2, 48)),
             allowPlace: options.allowPlace === true,
+            preferExistingTerrain: options.preferExistingTerrain === true,
             placeBudget: Math.floor(clamp(options.placeBudget, 0, 0, 512)),
             placeCost: clamp(options.placeCost, 5, 2, 100),
             materialCost: clamp(options.materialCost, 0, 0, 100),
@@ -53690,7 +53691,8 @@ requestAnimationFrame(loop);
             const observe = liveCache(128);
             if (!navigate(from.x, from.y, from.z, defaults, observe)) return false;
             const directions = vertical ? [] : [[Math.sign(dx), Math.sign(dz)]];
-            return getNeighbors(from, { ...defaults, validationOnly: true }, observe, directions, vertical).some(next => {
+            const descendTo = toValue.action === 'mineDrop' ? to.y : null;
+            return getNeighbors(from, { ...defaults, validationOnly: true, descendTo }, observe, directions, vertical).some(next => {
                 if (next.x !== to.x || next.y !== to.y || next.z !== to.z) return false;
                 if (toValue.action === 'bridge') {
                     if (next.action === 'walk') return true;
@@ -53698,11 +53700,12 @@ requestAnimationFrame(loop);
                         next.placeBlocks.every(block => toValue.placeBlocks.some(planned =>
                             planned.x === block.x && planned.y === block.y && planned.z === block.z));
                 }
-                if (!['mine', 'mineJump'].includes(toValue.action)) return next.action === toValue.action;
+                if (!['mine', 'mineJump', 'mineDrop'].includes(toValue.action)) return next.action === toValue.action;
                 // Mining is checked before execution. Once some or all of the
                 // planned blocks disappear, the same edge may become walking;
                 // never silently add a newly appeared obstacle to that plan.
-                if (next.action === (toValue.action === 'mineJump' ? 'jump' : 'walk')) return true;
+                const clearedAction = toValue.action === 'mineDrop' ? 'drop' : toValue.action === 'mineJump' ? 'jump' : 'walk';
+                if (next.action === clearedAction) return true;
                 return next.action === toValue.action && Array.isArray(toValue.breakBlocks) &&
                     next.breakBlocks.every(block => toValue.breakBlocks.some(planned =>
                         planned.x === block.x && planned.y === block.y && planned.z === block.z));
@@ -53712,7 +53715,7 @@ requestAnimationFrame(loop);
         function getNeighbors(p, config, observeUnknown, directions = DIRECTIONS, includeVertical = true) {
             const output = [];
             const inWater = config.allowSwim && swim(p.x, p.y, p.z, observeUnknown);
-            const plannedClear = value => ['mine', 'mineJump'].includes(p.action) && p.breakBlocks?.some(block =>
+            const plannedClear = value => ['mine', 'mineJump', 'mineDrop'].includes(p.action) && p.breakBlocks?.some(block =>
                 block.x === value.x && block.y === value.y && block.z === value.z);
             for (const y of [p.y, p.y + 1]) {
                 const originCell = cell(p.x, y, p.z, observeUnknown);
@@ -53774,15 +53777,37 @@ requestAnimationFrame(loop);
                 const x = p.x + dx;
                 const z = p.z + dz;
                 const diagonal = dx !== 0 && dz !== 0;
+                if (!diagonal && !inWater && config.allowMine && config.maxDrop > 0 && config.descendTo != null && p.y > config.descendTo) {
+                    // Open one step beside the player. Keep the departure floor
+                    // intact and verify headroom and the floor below the landing.
+                    const step = floorAt(x, p.y - 1, z, observeUnknown, p);
+                    if (step?.breakable === true && support(step) &&
+                        dryClear(cell(x, p.y, z, observeUnknown)) && dryClear(cell(x, p.y + 1, z, observeUnknown)) &&
+                        support(floorAt(x, p.y - 2, z, observeUnknown, p))) {
+                        const block = { x, y: p.y - 1, z };
+                        add(x, block.y, z, 'mineDrop', 1.35 + excavationCost({ ...block, cell: step }, config), [block]);
+                    }
+                }
                 if (stand(x, p.y, z, observeUnknown, p)) {
                     if (!diagonal || (!inWater && stand(p.x + dx, p.y, p.z, observeUnknown, p) && stand(p.x, p.y, p.z + dz, observeUnknown, p))) {
                         add(x, p.y, z, inWater ? 'swim' : 'walk', inWater ? 1.7 : diagonal ? SQRT2 : 1);
                     }
                     continue;
                 }
-                // Turning corners during jumps or falls requires swept-box physics;
-                // only level walking is diagonal until that can be verified safely.
-                if (diagonal) continue;
+                if (diagonal) {
+                    // A one-block ascent can cross an open corner. Check both
+                    // side columns through the full jump height and leave a
+                    // supported approach on both sides. Drops remain cardinal.
+                    if (!inWater && support(floorAt(x, p.y, z, observeUnknown, p)) &&
+                        stand(x, p.y + 1, z, observeUnknown, p) &&
+                        dryClear(cell(p.x, p.y + 2, p.z, observeUnknown)) &&
+                        [[x, p.z], [p.x, z]].every(([sideX, sideZ]) =>
+                            stand(sideX, p.y, sideZ, observeUnknown, p) &&
+                            dryClear(cell(sideX, p.y + 2, sideZ, observeUnknown)))) {
+                        add(x, p.y + 1, z, 'jump', SQRT2 + 0.7);
+                    }
+                    continue;
+                }
 
                 if (addSwim(x, p.y, z, 1.5)) continue;
 
@@ -53859,11 +53884,13 @@ requestAnimationFrame(loop);
             const config = {
                 ...defaults,
                 allowMine: opts.allowMine == null ? defaults.allowMine : opts.allowMine === true,
+                descendTo: start && requestedGoal && requestedGoal.y < start.y ? requestedGoal.y : null,
                 fastWalk: opts.fastWalk == null ? defaults.fastWalk : opts.fastWalk === true,
                 allowGap: opts.allowGap == null ? defaults.allowGap : opts.allowGap !== false,
                 allowSwim: opts.allowSwim == null ? defaults.allowSwim : opts.allowSwim !== false,
                 maxSubmergedSteps: Math.floor(clamp(opts.maxSubmergedSteps, defaults.maxSubmergedSteps, 2, 48)),
                 allowPlace: opts.allowPlace == null ? defaults.allowPlace : opts.allowPlace === true,
+                preferExistingTerrain: opts.preferExistingTerrain ?? defaults.preferExistingTerrain,
                 placeBudget: Math.floor(clamp(opts.placeBudget, defaults.placeBudget, 0, 512)),
                 placeCost: clamp(opts.placeCost, defaults.placeCost, 2, 100),
                 materialCost: clamp(opts.materialCost, defaults.materialCost, 0, 100),
@@ -53877,6 +53904,8 @@ requestAnimationFrame(loop);
             };
             const began = now();
             const open = new Heap();
+            const construction = config.preferExistingTerrain && config.allowPlace && config.placeBudget > 0 ? new Heap() : null;
+            let deferConstruction = !!construction;
             const bestCosts = new Map();
             const expanded = new Map();
             let best = null;
@@ -53901,6 +53930,11 @@ requestAnimationFrame(loop);
             const stateKey = node => `${key(node)}${node._placed?.size ?
                 `|${[...node._placed].sort().join(';')}` : ''}${node._submergedSteps ? `|wet:${node._submergedSteps}` : ''}`;
             const job = { done: false, result: null, step, cancel, preview };
+
+            function nextFrontier() {
+                const building = construction?.items[0];
+                return !deferConstruction && building && (!open.size || open.less(building, open.items[0])) ? construction : open;
+            }
 
             function copyWaypoint(current) {
                 const point = { x: current.x, y: current.y, z: current.z, action: current.action };
@@ -53950,12 +53984,14 @@ requestAnimationFrame(loop);
                 // heuristic tile was a one-block dead end. These remain
                 // explicitly partial, not claimed globally optimal routes.
                 let scanned = 0;
-                for (const node of open.items) {
-                    // A live preview must not scan the entire search heap on
-                    // the rendering tick; full backoff runs only at completion.
-                    if (reason === 'preview' && scanned++ >= 256) break;
-                    const id = node._id ?? stateKey(node);
-                    if (node.g === bestCosts.get(id) && (expanded.get(id) ?? Infinity) > node.g) offer(node);
+                for (const queue of [open, deferConstruction ? null : construction]) {
+                    for (const node of queue?.items || []) {
+                        // A live preview must not scan the entire search heap on
+                        // the rendering tick; full backoff runs only at completion.
+                        if (reason === 'preview' && scanned++ >= 256) break;
+                        const id = node._id ?? stateKey(node);
+                        if (node.g === bestCosts.get(id) && (expanded.get(id) ?? Infinity) > node.g) offer(node);
+                    }
                 }
                 if (!choices.size) {
                     for (const scale of backoffScales) offer(partialCandidates.get(`frontier:${scale}`));
@@ -53979,7 +54015,7 @@ requestAnimationFrame(loop);
                     path: job.result.path.slice(0, maxWaypoints).map(copyWaypoint), pathLength: job.result.path.length
                 } : pathSnapshot(previewNode, maxWaypoints);
                 const tail = job.done ? job.result.path.at(-1) : previewNode;
-                const frontier = open.items[0];
+                const frontier = nextFrontier().items[0];
                 return {
                     path: snapshot.path, pathLength: snapshot.pathLength, truncated: snapshot.pathLength > maxWaypoints,
                     best: tail ? { x: tail.x, y: tail.y, z: tail.z } : null,
@@ -54006,12 +54042,13 @@ requestAnimationFrame(loop);
                     adjustedGoal: complete && !!node && key(node) !== key(requestedGoal),
                     elapsedMs: Math.max(0, now() - began)
                 };
-                job.result.fastWalk = complete && fastProbe?.current === node;
+                job.result.fastWalk = complete && fastProbe?.current === node && !fastProbe.mined;
                 job.result.cachedCells = observeUnknown.cache.size;
                 job.result.terrainReads = observeUnknown.cacheStats.reads;
                 job.result.cacheHits = observeUnknown.cacheStats.hits;
                 observeUnknown.cache.clear();
                 open.items.length = 0;
+                if (construction) construction.items.length = 0;
                 bestCosts.clear();
                 expanded.clear();
                 partialCandidates.clear();
@@ -54029,14 +54066,17 @@ requestAnimationFrame(loop);
                 const maxMs = clamp(budget.maxMs, 4, 0.1, 16);
                 const maxNodes = Math.floor(clamp(budget.maxNodes, 200, 1, 1000));
                 let count = 0;
-                while (open.size) {
+                while (open.size || construction?.size) {
                     if (now() - began >= config.maxTimeMs) return finish('time_budget');
                     if (visited >= config.maxNodesTotal) return finish('node_budget');
                     if (count >= maxNodes || now() - sliceBegan >= maxMs) return null;
+                    // Keep short existing-terrain routes ahead of bridges. Reuse
+                    // the same frontier if the local search needs construction.
+                    if (deferConstruction && (!open.size || visited >= 128)) deferConstruction = false;
                     if (fastProbe) {
                         // Distribute diagonal steps along the intended line.
-                        // Every completed dry probe uses exactly the minimum
-                        // cardinal/diagonal counts, attaining the octile bound.
+                        // A walk-only probe attains the octile bound. On short
+                        // straight routes we can also check one mining edge.
                         // Probe incrementally; any failed edge falls back to
                         // the unchanged A* frontier, reusing only its snapshot.
                         count++;
@@ -54049,25 +54089,38 @@ requestAnimationFrame(loop);
                         const dz = fastProbe.majorX ? diagonal ? fastProbe.sz : 0 : fastProbe.sz;
                         const x = current.x + dx;
                         const z = current.z + dz;
-                        const next = { x, y: current.y, z, action: 'walk' };
-                        if (config.blockedEdges?.has?.(edgeKey(current, next)) ||
-                            !stand(x, current.y, z, observeUnknown) ||
-                            (dx && dz && (!stand(x, current.y, current.z, observeUnknown) ||
-                                !stand(current.x, current.y, z, observeUnknown)))) {
+                        let next = { x, y: current.y, z, action: 'walk', cost: diagonal ? SQRT2 : 1 };
+                        if (config.blockedEdges?.has?.(edgeKey(current, next))) {
                             fastProbe = null;
                             continue;
                         }
-                        const g = current.g + (diagonal ? SQRT2 : 1);
+                        if (!stand(x, current.y, z, observeUnknown) ||
+                            (dx && dz && (!stand(x, current.y, current.z, observeUnknown) ||
+                                !stand(current.x, current.y, z, observeUnknown)))) {
+                            const obstacle = fastProbe.allowSingleMine && !fastProbe.mined &&
+                                getNeighbors(current, config, observeUnknown, [[dx, dz]], false).find(candidate =>
+                                    candidate.action === 'mine' && candidate.breakBlocks.length === 1);
+                            if (!obstacle) {
+                                fastProbe = null;
+                                continue;
+                            }
+                            next = obstacle;
+                            fastProbe.mined = true;
+                        }
+                        const g = current.g + next.cost;
                         const h = routeDistance(next, requestedGoal);
                         const record = { ...next, _id: key(next), _placeCount: 0, _submergedSteps: 0,
                             g, h, progress: h, f: g + h, parent: current, order: order++ };
                         fastProbe.current = record;
-                        best = record;
-                        rememberPartial(record);
+                        // Do not publish a mining shortcut unless its entire route is clear.
+                        if (!fastProbe.mined) {
+                            best = record;
+                            rememberPartial(record);
+                        }
                         if (goalKeys.has(key(record))) return finish('reached', true, record);
                         continue;
                     }
-                    const current = open.pop();
+                    const current = nextFrontier().pop();
                     const currentKey = current._id ?? stateKey(current);
                     if (current.g !== bestCosts.get(currentKey) || (expanded.get(currentKey) ?? Infinity) <= current.g) continue;
                     expanded.set(currentKey, current.g);
@@ -54087,7 +54140,8 @@ requestAnimationFrame(loop);
                         const progress = horizontalDistance(next, requestedGoal, radius) + Math.abs(next.y - requestedGoal.y) * 0.25;
                         const record = { ...next, _id: nextKey, g, h, progress, f: g + h, parent: current, order: order++ };
                         bestCosts.set(nextKey, g);
-                        open.push(record);
+                        const frontier = deferConstruction && next.action === 'bridge' ? construction : open;
+                        frontier.push(record);
                     }
                 }
                 return finish(sawUnknown ? 'unloaded_frontier' : 'unreachable');
@@ -54126,11 +54180,14 @@ requestAnimationFrame(loop);
             const dx = requestedGoal.x - start.x;
             const dz = requestedGoal.z - start.z;
             const edges = Math.max(Math.abs(dx), Math.abs(dz));
+            const allowSingleMine = config.preferExistingTerrain && config.allowMine && edges <= 32 && (!dx || !dz);
             if (config.fastWalk && edges > 0 && edges <= 128 && start.y === requestedGoal.y && radius === 0 &&
                 goalKeys.has(key(requestedGoal)) &&
-                stand(start.x, start.y, start.z, observeUnknown) && stand(requestedGoal.x, requestedGoal.y, requestedGoal.z, observeUnknown)) {
+                stand(start.x, start.y, start.z, observeUnknown) &&
+                (stand(requestedGoal.x, requestedGoal.y, requestedGoal.z, observeUnknown) ||
+                    (allowSingleMine && mineableGoal(requestedGoal.x, requestedGoal.y, requestedGoal.z, observeUnknown)))) {
                 fastProbe = { current: best, sx: Math.sign(dx), sz: Math.sign(dz), majorX: Math.abs(dx) >= Math.abs(dz),
-                    major: edges, minor: Math.min(Math.abs(dx), Math.abs(dz)), error: edges * 0.5 };
+                    major: edges, minor: Math.min(Math.abs(dx), Math.abs(dz)), error: edges * 0.5, allowSingleMine, mined: false };
             }
             // With a distant unloaded goal, exploring the loaded frontier still
             // yields a useful partial route. It is never reported as complete.
@@ -54162,14 +54219,14 @@ requestAnimationFrame(loop);
 (function () {
   'use strict';
 
-  const BARITONE_PATH_RENDERER_VERSION = 1;
+  const BARITONE_PATH_RENDERER_VERSION = 2;
   const ROOT = globalThis, KEY = '__MF_BARITONE_PATH_RENDERER__';
   const MAX_NODES = 512, MAX_MARKERS = 64;
   const MAX_SEGMENTS = MAX_NODES + (MAX_MARKERS + 3) * 12;
   const instances = new Set();
   const PALETTE = {
     route: 0x75eea4, preview: 0x57beff, mine: 0xff6978,
-    place: 0xffbb55, goal: 0xffe25b, checkpoint: 0xb9a0ff, current: 0xffffff
+    place: 0xffbb55, goal: 0xffe25b, checkpoint: 0xb9a0ff
   };
   const finite = point => point && ['x', 'y', 'z'].every(axis =>
     Number.isFinite(point[axis]) && Math.abs(point[axis]) <= 30000000);
@@ -54427,7 +54484,6 @@ requestAnimationFrame(loop);
         if (previous) segment(previous, target, PALETTE.preview, .024);
         previous = target; nodes++;
       }
-      if (finite(path[index])) box(path[index], PALETTE.current, .18, .30);
       if (finite(data.goal)) box(data.goal, PALETTE.goal, .48, 1.9);
       if (finite(data.routeGoal) && (!finite(data.goal) || ['x', 'y', 'z'].some(axis => data.routeGoal[axis] !== data.goal[axis]))) {
         box(data.routeGoal, PALETTE.checkpoint, .32, .6);
@@ -54500,7 +54556,8 @@ requestAnimationFrame(loop);
 (function () {
   'use strict';
 
-  const BARITONE_NAVIGATION_VERSION = 7;
+  const BARITONE_NAVIGATION_VERSION = 10;
+  const CROSSING_ACTIONS = new Set(['jump', 'gap', 'mineJump', 'drop', 'mineDrop']);
 
   // Only the adapter depends on native APIs; the planner knows terrain, not obfuscated names.
   try { globalThis.Baritone?.destroy?.(); } catch (_) {}
@@ -54514,7 +54571,7 @@ requestAnimationFrame(loop);
     path: [], pathIndex: 0, following: null, action: null, actionPhase: 'idle',
     autoMine: true, autoPlace: true, search: null, searchResult: null, retries: 0, resumeAt: 0,
     progressAt: 0, progressPos: null, followPlanAt: 0, followGoal: null,
-    jumpUntil: 0, jumpedIndex: -1, bestGoalDistance: Infinity, blockedEdges: new Set(), players: new Map(),
+    jumpUntil: 0, pathJump: null, bestGoalDistance: Infinity, blockedEdges: new Set(), players: new Map(),
     scannedAt: 0, game: null, player: null, world: null, destroyed: false, timer: 0
   };
   let adapter = null, planner = null, pathRenderer = null, pathFactory = null, emitAt = 0;
@@ -54615,7 +54672,7 @@ requestAnimationFrame(loop);
       segmented: false, searchStart: null, breathingGoal: null, breathingSince: 0,
       footingTask: null, walkFailures: 0, walkYaw: null, walkFast: false,
       preview: null, lookahead: 32, checkpoints: [], frontierWatch: null,
-      jumpUntil: 0, jumpedIndex: -1, bestGoalDistance: Infinity, retries: 0, progressPos: null, searchResult: null });
+      jumpUntil: 0, pathJump: null, bestGoalDistance: Infinity, retries: 0, progressPos: null, searchResult: null });
     state.blockedEdges.clear(); setStatus(status, reason); emitState(true);
   }
   function bind(game) {
@@ -54636,7 +54693,8 @@ requestAnimationFrame(loop);
     const swimBudget = oxygen == null ? 12 : Math.max(2, Math.min(12, Math.floor(oxygen / 15)));
     const miningCosts = new Map();
     planner = globalThis.__MF_BARITONE_PLANNER__.create((x, y, z) => adapter.readCell(x, y, z), {
-      allowMine: state.autoMine, allowGap: true, allowSwim: true, fastWalk: true, terrainCacheLimit: 65536,
+      allowMine: state.autoMine, allowGap: true, allowSwim: true, fastWalk: true,
+      preferExistingTerrain: true, terrainCacheLimit: 65536,
       maxSubmergedSteps: swimBudget,
       allowPlace: state.autoPlace && budget > 0, placeBudget: Math.min(32, budget),
       miningCost(position, info) {
@@ -54657,7 +54715,7 @@ requestAnimationFrame(loop);
       const segmented = horizontal > horizon, factor = segmented ? horizon / horizontal : 1;
       return { segmented, goal: segmented ? {
         x: Math.round(start.x + (goal.x - start.x) * factor),
-        y: start.y + Math.max(-3, Math.min(3, goal.y - start.y)),
+        y: Math.round(start.y + (goal.y - start.y) * factor),
         z: Math.round(start.z + (goal.z - start.z) * factor)
       } : { ...goal } };
     };
@@ -54666,6 +54724,19 @@ requestAnimationFrame(loop);
     // known obstacle (which A* can route around) with an unloaded target chunk.
     while (horizon > 32 && [0, 1, -1].some(dy => !adapter.readCell(route.goal.x, route.goal.y + dy, route.goal.z)?.known)) {
       horizon = Math.max(32, horizon / 2); route = candidate(horizon);
+    }
+    if (route.segmented && start.y !== goal.y && adapter.readCell(route.goal.x, route.goal.y, route.goal.z)?.known) {
+      // The projected height may be inside a mountain or above the actual path.
+      const point = route.goal, direction = Math.sign(goal.y - start.y);
+      const minY = Math.min(start.y, goal.y), maxY = Math.max(start.y, goal.y);
+      for (let offset = 0; offset <= Math.min(24, maxY - minY); offset++) {
+        for (const y of offset ? [point.y + direction * offset, point.y - direction * offset] : [point.y]) {
+          if (y >= minY && y <= maxY && planner.canStand(point.x, y, point.z)) {
+            return { segmented: true, goal: { x: point.x, y, z: point.z } };
+          }
+        }
+      }
+      return { segmented: false, goal: { ...goal } };
     }
     return route;
   }
@@ -54696,7 +54767,7 @@ requestAnimationFrame(loop);
       state.bestGoalDistance = distance(state.player.pos, center(nextGoal));
       state.lookahead = 32; state.checkpoints = [];
     }
-    state.path = []; state.pathIndex = 0; state.jumpedIndex = -1; state.goal = nextGoal;
+    state.path = []; state.pathIndex = 0; state.pathJump = null; state.goal = nextGoal;
     const start = cell(state.player.pos);
     state.searchStart = { ...state.player.pos };
     const next = routeTarget(start, nextGoal);
@@ -54754,7 +54825,7 @@ requestAnimationFrame(loop);
     state.searchStart = { ...state.player.pos };
     state.searchResult = { ...result, globalComplete: !!result.complete && !state.segmented };
     state.effectiveGoal = result.goal || state.goal;
-    state.path = result.path; state.pathIndex = 0; state.jumpedIndex = -1;
+    state.path = result.path; state.pathIndex = 0; state.pathJump = null;
     extendPlanningHorizon(result);
     state.progressAt = now(); state.progressPos = { ...state.player.pos };
     setStatus('moving', 'Continuing the precalculated route'); updateVisual(now(), true); return true;
@@ -54809,7 +54880,7 @@ requestAnimationFrame(loop);
     state.preview = null;
     state.searchResult = { ...job.result, globalComplete: !!job.result?.complete && !state.segmented };
     state.effectiveGoal = job.result?.goal || state.goal;
-    state.path = job.result?.path || []; state.pathIndex = 0; state.jumpedIndex = -1;
+    state.path = job.result?.path || []; state.pathIndex = 0; state.pathJump = null;
     extendPlanningHorizon(job.result);
     state.progressAt = now(); state.progressPos = { ...state.player.pos };
     if (state.path.length) setStatus('moving', state.searchResult.globalComplete ? '' : 'Continuing toward the long-distance goal');
@@ -54961,7 +55032,7 @@ requestAnimationFrame(loop);
     }
     return state.walkYaw;
   }
-  function relativeWalking(target) {
+  function relativeWalking(target, lateralTolerance = .04) {
     const player = state.player, yaw = player.yaw;
     const dx = target.x - player.pos.x, dz = target.z - player.pos.z;
     const along = -Math.sin(yaw) * dx - Math.cos(yaw) * dz;
@@ -54969,7 +55040,7 @@ requestAnimationFrame(loop);
     const motion = player.motion;
     const lateralSpeed = Number.isFinite(motion?.x) && Number.isFinite(motion?.z) ?
       Math.cos(yaw) * motion.x - Math.sin(yaw) * motion.z : 0;
-    const correction = Math.abs(lateral) < .04 && Math.abs(lateralSpeed) < .015 ? 0 :
+    const correction = Math.abs(lateral) < lateralTolerance && Math.abs(lateralSpeed) < .015 ? 0 :
       Math.max(-1, Math.min(1, lateral * .85 - lateralSpeed * 3));
     return { forward: Math.abs(along) > .08 ? Math.sign(along) : 0, strafe: correction, along };
   }
@@ -55003,7 +55074,6 @@ requestAnimationFrame(loop);
         state.player.onGround === false || !state.effectiveGoal || typeof planner.canWalkSegment !== 'function') return false;
     const player = state.player, target = state.effectiveGoal, feet = cell(player.pos);
     if (feet.x !== target.x || feet.y !== target.y || feet.z !== target.z || Math.abs(player.pos.y - target.y) > .01 ||
-        Math.hypot(player.pos.x - target.x - .5, player.pos.z - target.z - .5) > .45 ||
         !state.path.slice(state.pathIndex).every(p => plainWalk(p) && p.y === target.y)) return false;
     const motion = player.motion;
     // A missing momentum API cannot authorize an early stop. Precise action
@@ -55021,7 +55091,7 @@ requestAnimationFrame(loop);
       if (!vx && !vz) break;
       x += vx; z += vz; vx *= drag; vz *= drag;
     }
-    if (vx || vz || Math.floor(x) !== target.x || Math.floor(z) !== target.z || Math.hypot(x - target.x - .5, z - target.z - .5) > .45) return false;
+    if (vx || vz || Math.floor(x) !== target.x || Math.floor(z) !== target.z) return false;
     coast.push({ x, y: target.y, z });
     // Native per-axis velocity truncation can bend the very last part of a
     // coast. Check its actual straight pieces, not a chord that cuts a corner.
@@ -55078,6 +55148,34 @@ requestAnimationFrame(loop);
     state.progressAt = time; state.progressPos = { ...player.pos };
     setStatus('moving', 'Regaining safe footing'); return true;
   }
+  function pathJumpInput(player, from, target, horizontal, aligned, time) {
+    if (!aligned || player.onGround === false || player.pos.y > from.y + .2 ||
+        horizontal >= (target.action === 'gap' ? 2.4 : 1.65)) return false;
+    const attempt = state.pathJump;
+    if (attempt && time < attempt.holdUntil) return true;
+    if (attempt && (attempt.count >= 2 || time < attempt.retryAt)) return false;
+    const source = cell(player.pos);
+    if (source.x !== from.x || source.y !== from.y || source.z !== from.z) return false;
+    // A command can miss a native input tick. Retry once from the same safe floor.
+    state.pathJump = { count: (attempt?.count ?? 0) + 1, holdUntil: time + 150, retryAt: time + 800 };
+    return true;
+  }
+  function currentWaypoint() {
+    const point = state.path[state.pathIndex];
+    if (!point) return point;
+    const feet = cell(state.player.pos);
+    const landed = CROSSING_ACTIONS.has(point.action) && state.player.onGround !== false &&
+      feet.x === point.x && feet.y === point.y && feet.z === point.z && Math.abs(state.player.pos.y - point.y) <= .01;
+    if ((!landed && point.action !== 'mine' && point.action !== 'bridge') ||
+        !planner.canStand(point.x, point.y, point.z)) return point;
+    // Once native terrain confirms the floor and clearance, steer like a walk.
+    const walk = { x: point.x, y: point.y, z: point.z, action: 'walk' };
+    if (landed) walk.landed = true;
+    state.path = state.path.slice();
+    state.path[state.pathIndex] = walk;
+    releaseTerrain();
+    return walk;
+  }
   function executePath(time) {
     const player = state.player;
     const remaining = state.goal ? distance(player.pos, center(state.goal)) : Infinity;
@@ -55087,7 +55185,7 @@ requestAnimationFrame(loop);
       state.retries = 0;
     }
     if (!state.path.length || state.pathIndex >= state.path.length) return routeComplete();
-    let target = state.path[state.pathIndex];
+    let target = currentWaypoint();
     const playerCell = cell(player.pos);
     const wet = adapter.swimmingState?.()?.inWater === true ||
       planner.canSwim?.(playerCell.x, playerCell.y, playerCell.z) === true;
@@ -55103,17 +55201,19 @@ requestAnimationFrame(loop);
         Number.isFinite(player.motion?.x) && Number.isFinite(player.motion?.z) && typeof adapter.groundSlipperiness === 'function';
       // Do not release at a dangerous high-speed crossing merely because it
       // briefly passed the center. The final dry goto uses the coast-safe rule.
-      const reached = !finalWalk && distance(player.pos, center(target)) < (target.action === 'swim' ? .48 : .30);
+      const insideTarget = playerCell.x === target.x && playerCell.y === target.y && playerCell.z === target.z;
+      const reached = !finalWalk && (distance(player.pos, center(target)) < (target.action === 'swim' ? .48 : .30) ||
+        (target.landed && insideTarget && safeWalkLine(player.pos, target)));
       // A starting cell is an anchor, not an instruction to turn back to its
       // exact center. Only a verified dry walking corridor may bypass it.
       const bypassStart = !wet && state.pathIndex === 0 && plainWalk(target) && plainWalk(next) &&
         playerCell.x === target.x && playerCell.y === target.y && playerCell.z === target.z && safeWalkLine(player.pos, next);
       const nearWalkingTurn = !wet && plainWalk(target) && plainWalk(next) && target.y === next.y &&
-        distance(player.pos, center(target)) < .45 && safeWalkLine(player.pos, next);
+        (insideTarget || distance(player.pos, center(target)) < .45) && safeWalkLine(player.pos, next);
       if (!reached && !bypassStart && !nearWalkingTurn && !passedWaypoint(player, target, previous, next)) break;
       releaseTerrain();
-      state.pathIndex++; state.jumpedIndex = -1; state.progressAt = time;
-      state.progressPos = { ...player.pos }; target = state.path[state.pathIndex];
+      state.pathIndex++; state.pathJump = null; state.progressAt = time;
+      state.progressPos = { ...player.pos }; target = currentWaypoint();
     }
     if (!target) return routeComplete();
     let walkingLine = false;
@@ -55121,13 +55221,13 @@ requestAnimationFrame(loop);
       // Pursue a few blocks ahead instead of alternating diagonal/cardinal
       // headings at every tile. Never skip an action or cut an unsafe corner.
       const limit = Math.min(state.path.length - 1, state.pathIndex + 6);
+      let lastWalk = state.pathIndex;
+      while (lastWalk < limit && plainWalk(state.path[lastWalk + 1]) && state.path[lastWalk + 1].y === target.y) lastWalk++;
       let steeringIndex = state.pathIndex;
-      for (let index = state.pathIndex; index <= limit; index++) {
-        const candidate = state.path[index];
-        if (!plainWalk(candidate) || candidate.y !== target.y ||
-            Math.hypot(candidate.x + .5 - player.pos.x, candidate.z + .5 - player.pos.z) > 3.2 ||
-            !safeWalkLine(player.pos, candidate)) break;
+      for (let index = lastWalk; index >= state.pathIndex; index--) {
+        if (!safeWalkLine(player.pos, state.path[index])) continue;
         steeringIndex = index; walkingLine = true;
+        break;
       }
       if (!walkingLine) {
         if (recoverFooting(time)) return;
@@ -55139,11 +55239,15 @@ requestAnimationFrame(loop);
       }
       state.footingTask = null; state.walkFailures = 0;
       if (steeringIndex !== state.pathIndex) {
-        state.pathIndex = steeringIndex; state.jumpedIndex = -1;
+        state.pathIndex = steeringIndex; state.pathJump = null;
         target = state.path[steeringIndex];
       }
     }
     const from = state.pathIndex ? state.path[state.pathIndex - 1] : cell(player.pos);
+    if (!wet && player.onGround !== false && playerCell.y !== from.y && playerCell.y !== target.y) {
+      // After landing off the planned staircase or gap, use the actual floor.
+      return beginSearch();
+    }
     if (target.breakBlocks?.length) {
       // Clear headroom first: the upper block can occlude the ray to the feet.
       const obstruction = [...target.breakBlocks].sort((a, b) => b.y - a.y).find(p => {
@@ -55153,6 +55257,13 @@ requestAnimationFrame(loop);
         const info = adapter.readCell(obstruction.x, obstruction.y, obstruction.z);
         if (!state.autoMine || !info?.known || !info.breakable || info.hazard) {
           return terrainFailed(from, target, 'Obstacle is no longer safe to mine');
+        }
+        if (target.action === 'mineDrop') {
+          if (player.onGround === false) return neutral();
+          if (playerCell.x !== from.x || playerCell.y !== from.y || playerCell.z !== from.z) return beginSearch();
+          if (!planner.validateTransition(from, target)) {
+            return terrainFailed(from, target, 'The planned descent no longer has a safe landing');
+          }
         }
         const task = terrainTask('mine', obstruction, time);
         chooseMiningTool(task, obstruction);
@@ -55178,9 +55289,11 @@ requestAnimationFrame(loop);
     }
     const horizontal = Math.hypot(target.x + 0.5 - player.pos.x, target.z + 0.5 - player.pos.z);
     const swimming = wet || target.action === 'swim';
-    const needsJump = ['jump', 'gap', 'mineJump'].includes(target.action) || target.y > player.pos.y + 0.5;
+    const needsJump = ['jump', 'gap', 'mineJump'].includes(target.action);
     const eye = adapter.eye();
-    const routeYaw = walkingLine && !needsJump ? walkingYaw(state.pathIndex) : null;
+    const crossingYaw = !swimming && CROSSING_ACTIONS.has(target.action)
+      ? Math.atan2(from.x - target.x, from.z - target.z) : null;
+    const routeYaw = walkingLine ? walkingYaw(state.pathIndex) : crossingYaw;
     if (!walkingLine) { state.walkYaw = null; state.walkFast = false; }
     const aimTarget = routeYaw == null ? center(target) :
       { x: player.pos.x - Math.sin(routeYaw) * 32, z: player.pos.z - Math.cos(routeYaw) * 32 };
@@ -55189,17 +55302,21 @@ requestAnimationFrame(loop);
         { mode: 'navigation', tolerance: .18, preservePitch: true });
     if (['native-camera-unresponsive', 'native-camera-not-responding'].includes(aim?.reason)) return stop('failed', aim.reason);
     const aligned = aim === true || aim?.aligned;
-    if (aligned && needsJump && state.jumpedIndex !== state.pathIndex && player.onGround !== false &&
-        horizontal < (target.action === 'gap' ? 2.4 : 1.65)) {
-      state.jumpUntil = time + 150; state.jumpedIndex = state.pathIndex;
-    }
+    const jumping = !swimming && needsJump && pathJumpInput(player, from, target, horizontal, aligned, time);
     const swimUp = swimming && (target.y > player.pos.y + .08 ||
       (target.action !== 'swim' && horizontal < 1.65 && target.y >= player.pos.y - .15));
     // Native water ascent uses jump; releasing it lets gravity sink the player.
-    const correction = walkingLine && !needsJump && aligned ? relativeWalking(center(target)) : null;
-    const applied = adapter.setControls({ forward: correction ? correction.forward : aligned && (!swimming || horizontal > .22) ? 1 : 0,
+    const turningWalk = walkingLine && Number.isFinite(aim?.yaw) &&
+      Math.abs(Math.atan2(Math.sin(routeYaw - aim.yaw), Math.cos(routeYaw - aim.yaw))) <= .65;
+    const correction = walkingLine && (aligned || turningWalk) ? relativeWalking(center(target), .14) : null;
+    // Keep the takeoff heading in the air. Coast into the landing instead
+    // of turning back toward its center if momentum carries us past it.
+    const crossingAdvance = crossingYaw == null ||
+      -(target.x + .5 - player.pos.x) * Math.sin(crossingYaw) -
+        (target.z + .5 - player.pos.z) * Math.cos(crossingYaw) > .15;
+    const applied = adapter.setControls({ forward: correction ? correction.forward : aligned && crossingAdvance && (!swimming || horizontal > .22) ? 1 : 0,
       strafe: correction?.strafe || 0, pulseStrafe: !!correction, canStep: correction ? safeWalkingInput : null,
-      jump: aligned && (swimming ? swimUp : time < state.jumpUntil),
+      jump: swimming ? !!aligned && swimUp : jumping,
       sprint: !swimming && aligned && (target.action === 'gap' || (target.action === 'walk' && horizontal > .8 &&
         (!correction || correction.forward > 0 && Math.abs(correction.strafe) < .6))),
       sneak: false, yaw: aim?.yaw, pitch: aim?.pitch });
@@ -95921,6 +96038,16 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
   let pendingTimer = null;
   let cachedGame = null;
   let lastGameScan = 0;
+  let barStyles = null;
+  const barOverlays = new Map();
+  const PATCHED_BAR = '[data-mf-gui-bar]';
+  const GUI_OVERLAY = '[data-mf-gui-overlay]';
+  const VITAL_ICON_SIZE = 22;
+  const XP_TRACK_HEIGHT = 8;
+  const NATIVE_VITAL_FILLS = {
+    'rgb(211, 4, 11)': 'healthBarRef',
+    'rgb(199, 129, 81)': 'foodBarRef'
+  };
 
   const GUI_BUNDLE_RE = /\/assets\/GuiHud[^/]*\.js(\?.*)?$/i;
   let guiBundleActive = false;
@@ -96067,98 +96194,84 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     return Math.abs(cx - center) < window.innerWidth * 0.25;
   }
 
+  function findBarFrame(element) {
+    const bounds = element.getBoundingClientRect();
+    let frame = element;
+    // The HUD puts the label and coloured fills in separate, overlapping grid cells.
+    for (let depth = 0; depth < 5; depth++) {
+      const parent = frame.parentElement;
+      if (!parent || parent === document.body || parent.id === 'react' || parent.querySelector(PATCHED_BAR)) break;
+      if (parseFloat(window.getComputedStyle(frame).borderTopWidth) > 0) break;
+      const rect = parent.getBoundingClientRect();
+      if (Math.abs(rect.left - bounds.left) > 6 || Math.abs(rect.right - bounds.right) > 6 ||
+          Math.abs(rect.top - bounds.top) > 6 || Math.abs(rect.bottom - bounds.bottom) > 6) break;
+      frame = parent;
+    }
+    return frame;
+  }
+
+  function removeBarOverlay(className) {
+    const patch = barOverlays.get(className);
+    if (!patch) return;
+    patch.overlay.remove();
+    delete patch.bar.dataset.mfGuiBar;
+    barOverlays.delete(className);
+  }
+
+  function mountBarOverlay(bar, className) {
+    const patch = barOverlays.get(className);
+    if (patch?.bar === bar && patch.overlay.parentElement === bar) return patch.overlay;
+    removeBarOverlay(className);
+
+    const overlay = document.createElement('div');
+    overlay.className = className;
+    overlay.dataset.mfGuiOverlay = '';
+    const position = window.getComputedStyle(bar).position;
+    bar.appendChild(overlay);
+    bar.dataset.mfGuiBar = !position || position === 'static' ? 'relative' : 'positioned';
+    barOverlays.set(className, { bar, overlay });
+    return overlay;
+  }
+
+  function alignBarOverlays(isMobile) {
+    const xp = barOverlays.get('mf-xp-icons');
+    const hearts = barOverlays.get('mf-hearts');
+    const food = barOverlays.get('mf-food');
+    const xpRect = xp?.bar.getBoundingClientRect();
+    const heartRect = hearts?.bar.getBoundingClientRect();
+    const foodRect = food?.bar.getBoundingClientRect();
+    const stack = !isMobile && xpRect?.height && heartRect?.height &&
+      xpRect.bottom <= heartRect.top + 4 && heartRect.left >= xpRect.left - 6 &&
+      heartRect.right <= xpRect.right + 6 &&
+      (!foodRect?.height || Math.abs(foodRect.bottom - heartRect.bottom) <= 8);
+    const bottom = stack ? Math.max(heartRect.bottom, foodRect?.bottom ?? heartRect.bottom) : 0;
+    const xpCenter = bottom - XP_TRACK_HEIGHT / 2;
+    const vitalCenter = bottom - XP_TRACK_HEIGHT - 2 - VITAL_ICON_SIZE / 2;
+
+    for (const [patch, rect, center] of [[xp, xpRect, xpCenter], [hearts, heartRect, vitalCenter], [food, foodRect, vitalCenter]]) {
+      if (!patch) continue;
+      const offset = stack && rect.height ? Math.round(center - (rect.top + rect.height / 2)) : 0;
+      const value = offset + 'px';
+      if (patch.overlay.style.getPropertyValue('--mf-bar-shift') !== value) {
+        patch.overlay.style.setProperty('--mf-bar-shift', value);
+      }
+    }
+  }
+
   function findOriginalBars() {
-    const result = { healthBar: null, foodBar: null };
-    try {
+    for (const fill of document.querySelectorAll('#react div[style*="grid-area"], #react div[style*="grid-row"]')) {
+      const slot = NATIVE_VITAL_FILLS[fill.style.backgroundColor];
+      if (!slot || state[slot]?.isConnected || fill.closest(PATCHED_BAR)) continue;
+      const grid = fill.parentElement;
+      if (grid?.style.display !== 'grid' || isInChatArea(grid)) continue;
 
-      if (state.healthBarRef && state.healthBarRef.isConnected) {
-        if (state.healthBarRef.querySelector('.mf-hearts')) {
-          result.healthBar = state.healthBarRef;
-        } else {
-          state.healthBarRef = null;
-        }
-      }
-      if (state.foodBarRef && state.foodBarRef.isConnected) {
-        if (state.foodBarRef.querySelector('.mf-food')) {
-          result.foodBar = state.foodBarRef;
-        } else {
-          state.foodBarRef = null;
-        }
-      }
-      if (result.healthBar && result.foodBar) return result;
-
-      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-      const textBars = [];
-      while (walker.nextNode()) {
-        const txt = walker.currentNode.textContent.trim();
-        if (txt.match(/^\d+\.?\d*\s*\/\s*\d+$/)) {
-          let el = walker.currentNode.parentElement;
-          for (let i = 0; i < 5 && el; i++) el = el.parentElement;
-          if (el && !el.dataset.mfReplaced && !isInChatArea(el) && isCenteredLikeHud(el)) textBars.push(el);
-        }
-      }
-      if (textBars.length >= 2) {
-        if (!result.healthBar) { result.healthBar = textBars[0]; state.healthBarRef = textBars[0]; }
-        if (!result.foodBar) { result.foodBar = textBars[1]; state.foodBarRef = textBars[1]; }
-        return result;
-      }
-
-      const allDivs = document.querySelectorAll('div');
-      const hudCandidates = [];
-      for (const el of allDivs) {
-        if (el.dataset.mfReplaced || el.dataset.mfXpReplaced) continue;
-        if (el.querySelector('.mf-hearts, .mf-food, .mf-xp-icons')) continue;
-        if (isInChatArea(el)) continue;
-
-        const ownText = Array.from(el.childNodes)
-          .filter(n => n.nodeType === 3)
-          .map(n => n.textContent.trim())
-          .join('');
-        if (ownText.match(/^\d+\.?\d*\s*\/\s*\d+$/) && isCenteredLikeHud(el)) {
-          hudCandidates.push(el);
-        }
-      }
-      if (hudCandidates.length >= 2) {
-        if (!result.healthBar) { result.healthBar = hudCandidates[0]; state.healthBarRef = hudCandidates[0]; }
-        if (!result.foodBar) { result.foodBar = hudCandidates[1]; state.foodBarRef = hudCandidates[1]; }
-      }
-
-      if (!result.healthBar || !result.foodBar) {
-        const bordered = [];
-        for (const el of allDivs) {
-          if (el.dataset.mfReplaced) continue;
-          if (el.querySelector('.mf-hearts, .mf-food')) continue;
-          if (isInChatArea(el)) continue;
-          const rect = el.getBoundingClientRect();
-          if (rect.width < 60 || rect.width > 400) continue;
-          if (rect.height < 15 || rect.height > 100) continue;
-          if (!isCenteredLikeHud(el)) continue;
-          try {
-            const s = window.getComputedStyle(el);
-
-            const hasBorder = s.border && s.border !== 'none' && s.border.includes('px');
-            const hasBg = s.backgroundColor && s.backgroundColor !== 'rgba(0, 0, 0, 0)' && s.backgroundColor !== 'transparent';
-            if (hasBorder || hasBg) {
-
-              if (rect.top > window.innerHeight * 0.4) {
-                bordered.push(el);
-              }
-            }
-          } catch (_) {}
-        }
-
-        bordered.sort((a, b) => {
-          const ra = a.getBoundingClientRect();
-          const rb = b.getBoundingClientRect();
-          return rb.bottom - ra.bottom || ra.left - rb.left;
-        });
-        if (bordered.length >= 2) {
-          if (!result.healthBar) { result.healthBar = bordered[0]; state.healthBarRef = bordered[0]; }
-          if (!result.foodBar) { result.foodBar = bordered[1]; state.foodBarRef = bordered[1]; }
-        }
-      }
-    } catch (_) {}
-    return result;
+      // The fill shrinks with the stat. The grid and its frame retain the full width.
+      const frame = findBarFrame(grid);
+      const { width, height } = frame.getBoundingClientRect();
+      if (width < 60 || height < 8 || !/^\d+(?:\.\d+)?\s*\/\s*\d+$/.test(frame.textContent.trim())) continue;
+      state[slot] = frame;
+      if (state.healthBarRef?.isConnected && state.foodBarRef?.isConnected) break;
+    }
   }
 
   function patchPlayerList() {
@@ -96214,12 +96327,29 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     return false;
   }
 
+  function findNativeXpBar(level) {
+    // Level zero still has a heading in the native XP bar, with empty text.
+    const expected = level > 0 ? String(level) : '';
+    for (const label of document.querySelectorAll('#react h3')) {
+      if (label.textContent.trim() !== expected || label.closest(PATCHED_BAR) || isInChatArea(label)) continue;
+      const cell = label.parentElement;
+      if (!cell) continue;
+      const frame = findBarFrame(cell);
+      if (frame.textContent.trim() !== expected || frame.contains(state.healthBarRef) ||
+          frame.contains(state.foodBarRef)) continue;
+      const rect = frame.getBoundingClientRect();
+      if (rect.height < 3 || rect.height > 32 || rect.width < Math.max(60, rect.height * 3) ||
+          rect.top < window.innerHeight * 0.5 || !isCenteredLikeHud(frame)) continue;
+      if (hasColoredBg(frame) || Array.from(frame.querySelectorAll('[style]')).some(hasColoredBg)) return frame;
+    }
+    return null;
+  }
+
   function patchXPBar() {
     let lastXpKey = '';
     let searchDelay = 100;
     let xpTimer = null;
 
-    // xpWork devuelve el retardo del siguiente ciclo; el trabajo de dentro no cambia
     const xpWork = () => {
       if (!canPatch()) return 100;
       const game = getGame();
@@ -96227,154 +96357,78 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
 
       if (!isGameReady(game)) return 100;
 
-      const experience = (game.info?.xp?.experience || 0);
+      const progress = Math.max(0, Math.min(1, Number(game.info.xp?.experience) || 0));
       const level = (game.info?.xp?.experienceLevel || 0);
       const isMobile = (game?.isMobile || false);
-      const iconSize = isMobile ? 12 : 16;
       const totalIcons = 18;
-      const filledIcons = Math.round(experience * totalIcons);
+      const filledIcons = Math.ceil(progress * totalIcons);
 
-      let xpBar = null;
-
-      if (state.xpBarRef && state.xpBarRef.isConnected) {
-        xpBar = state.xpBarRef;
-      }
-
+      const ghost = isGhostMode(game);
+      const previousBar = state.xpBarRef;
+      let xpBar = previousBar?.isConnected && previousBar.querySelector('h3') ? previousBar : null;
+      if (!xpBar && !ghost) xpBar = findNativeXpBar(level);
+      state.xpBarRef = xpBar;
       if (!xpBar) {
-        // en fantasma no hay barra que rastrear; el barrido completo se ahorra
-        if (!isGhostMode(game)) {
-          const allDivs = document.querySelectorAll('div');
-          for (const el of allDivs) {
-            if (el.classList.contains('mf-xp-icons') || el.closest('.mf-xp-icons')) continue;
-            if (el.classList.contains('mf-hearts') || el.closest('.mf-hearts')) continue;
-            if (el.classList.contains('mf-food') || el.closest('.mf-food')) continue;
-            if (el.dataset.mfReplaced || el.dataset.mfXpReplaced) continue;
-            if (isInChatArea(el)) continue;
-
-            if (el.querySelector('.mf-hearts, .mf-food')) continue;
-
-            const textContent = el.textContent.trim();
-            if (/^\d+\.?\d*\s*\/\s*\d+$/.test(textContent)) continue;
-
-            const h = el.offsetHeight;
-            const w = el.offsetWidth;
-
-            if (h < 3 || h > 25) continue;
-            if (w < 60 || w < h * 3) continue;
-
-            const rect = el.getBoundingClientRect();
-            if (rect.top < window.innerHeight * 0.5) continue;
-            if (!isCenteredLikeHud(el)) continue;
-
-            let colored = hasColoredBg(el);
-            if (!colored) {
-              for (const child of el.children) {
-                if (hasColoredBg(child)) { colored = true; break; }
-              }
-            }
-            if (!colored) continue;
-
-            xpBar = el;
-            state.xpBarRef = el;
-            break;
-          }
-        }
-        // ref perdido: cada reintento tarda el doble, con techo de 2s
+        removeBarOverlay('mf-xp-icons');
+        alignBarOverlays(isMobile);
         searchDelay = Math.min(searchDelay * 2, 2000);
         return searchDelay;
       }
 
-      // ref vivo: la búsqueda recupera el ritmo de siempre
       searchDelay = 100;
-
-      if (xpBar.querySelector('.mf-hearts, .mf-food')) return 100;
-
-      const ghost = isGhostMode(game);
       const guiOpacity = ghost ? 0.35 : 1;
-      const xpKey = filledIcons + ':' + level + ':' + isMobile + ':' + ghost;
-      const existing = xpBar.querySelector('.mf-xp-icons');
-      if (existing) {
-
-        existing.style.opacity = guiOpacity;
-        existing.style.transition = 'opacity 0.3s';
-        if (lastXpKey === xpKey) return 100;
+      const xpKey = [progress, level, isMobile, ghost, GUI_BASE].join(':');
+      const existing = barOverlays.get('mf-xp-icons')?.overlay;
+      if (existing?.parentElement === xpBar && lastXpKey === xpKey) {
+        alignBarOverlays(isMobile);
+        return 100;
       }
       lastXpKey = xpKey;
 
-      const nukeBg = (el) => {
-        if (!el) return;
-        el.style.background = 'transparent';
-        el.style.backgroundColor = 'transparent';
-        el.style.backgroundImage = 'none';
-        el.style.border = 'none';
-        el.style.boxShadow = 'none';
-        el.style.outline = 'none';
-      };
-
-      nukeBg(xpBar);
-      xpBar.dataset.mfXpReplaced = '1';
-
-      let container = xpBar.querySelector('.mf-xp-icons');
-      if (!container) {
-
-        xpBar.innerHTML = '';
-        container = document.createElement('div');
-        container.className = 'mf-xp-icons';
-        xpBar.appendChild(container);
-      } else {
-
-        container.innerHTML = '';
-      }
+      const container = mountBarOverlay(xpBar, 'mf-xp-icons');
+      container.replaceChildren();
 
       container.style.cssText = [
-        'display:flex', 'align-items:center', 'justify-content:center',
-        'gap:0', 'width:100%', 'height:100%', 'position:relative',
-        'background:rgba(0,0,0,0.5)',
-        'border:2px solid #1E1E1E',
-        'box-shadow:inset 1px 1px 0 #373737, inset -1px -1px 0 #373737'
+        'top:50%', 'bottom:auto', 'height:' + (isMobile ? 6 : XP_TRACK_HEIGHT) + 'px',
+        'transform:translateY(calc(-50% + var(--mf-bar-shift, 0px)))',
+        'opacity:' + guiOpacity, 'transition:opacity 0.3s'
       ].join(';');
 
-      for (let i = 1; i <= totalIcons; i++) {
-        const slot = document.createElement('div');
-        slot.style.cssText = 'position:relative;width:' + iconSize + 'px;height:' + iconSize + 'px;';
+      const track = document.createElement('img');
+      track.className = 'mf-xp-track';
+      track.src = GUI_BASE + 'exp/EXPVASSEL.png';
+      track.style.cssText = 'display:block;width:100%;height:100%;image-rendering:pixelated;object-fit:fill;';
+      container.appendChild(track);
 
-        const vessel = document.createElement('img');
-        vessel.src = GUI_BASE + 'exp/EXPVASSEL.png';
-        vessel.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;image-rendering:pixelated;object-fit:contain;';
-        slot.appendChild(vessel);
-
-        if (i <= filledIcons) {
-          const fill = document.createElement('img');
-          fill.src = GUI_BASE + 'exp/exp' + i + '.png';
-          fill.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;image-rendering:pixelated;object-fit:contain;';
-          slot.appendChild(fill);
-        }
-
-        container.appendChild(slot);
+      const fill = document.createElement('div');
+      fill.className = 'mf-xp-fill';
+      fill.style.cssText = 'position:absolute;inset:0;clip-path:inset(0 ' + ((1 - progress) * 100) + '% 0 0);';
+      const appendSegment = (file, left, width) => {
+        const segment = document.createElement('img');
+        segment.src = GUI_BASE + 'exp/' + file;
+        segment.style.cssText = 'position:absolute;top:0;height:100%;image-rendering:pixelated;object-fit:fill;' +
+          'left:' + (left / 182 * 100) + '%;width:' + (width / 182 * 100) + '%;';
+        fill.appendChild(segment);
+      };
+      // The track sprite is 182 pixels wide: eighteen 10px segments and a 2px join.
+      for (let i = 1; i <= filledIcons; i++) {
+        appendSegment('exp' + i + '.png', (i - 1) * 10 + (i > 9 ? 2 : 0), 10);
       }
-
-      const midImg = document.createElement('img');
-      midImg.src = GUI_BASE + 'exp/middle.png';
-      midImg.style.cssText = [
-        'position:absolute', 'left:50%', 'top:50%',
-        'transform:translate(-50%,-50%)',
-        'height:' + (iconSize + 4) + 'px', 'width:' + (iconSize + 4) + 'px',
-        'image-rendering:pixelated', 'object-fit:contain',
-        'pointer-events:none'
-      ].join(';');
-      container.appendChild(midImg);
+      if (filledIcons > 9) appendSegment('middle.png', 90, 2);
+      container.appendChild(fill);
 
       const levelText = document.createElement('span');
-      levelText.textContent = level;
+      levelText.textContent = level > 0 ? level : '';
       levelText.style.cssText = [
-        'position:absolute', 'left:50%', 'top:50%',
-        'transform:translate(-50%,-50%)',
+        'position:absolute', 'left:50%', 'bottom:calc(100% + 1px)',
+        'transform:translateX(-50%)',
         'color:#8DFC0F', 'font-weight:bold',
         'font-size:' + (isMobile ? '11px' : '13px'),
         'text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000',
         'pointer-events:none', 'z-index:2'
       ].join(';');
       container.appendChild(levelText);
+      alignBarOverlays(isMobile);
 
       return 100;
     };
@@ -96390,10 +96444,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
       disconnect: () => {
         clearTimeout(xpTimer);
         state.xpBarRef = null;
-        document.querySelectorAll('[data-mf-xp-replaced]').forEach(el => {
-          delete el.dataset.mfXpReplaced;
-        });
-        document.querySelectorAll('.mf-xp-icons').forEach(el => el.remove());
+        removeBarOverlay('mf-xp-icons');
       }
     });
   }
@@ -96472,7 +96523,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
       const health = game.info.health ?? 20;
       const food = game.info.food ?? 20;
       const absorption = game.info.absorption ?? 0;
-      const iconSize = 22;
+      const iconSize = VITAL_ICON_SIZE;
 
       const hardcore = game.serverInfo?.hardcore === true ||
                        game.serverInfo?.metadata?.hardcore === true;
@@ -96486,58 +96537,25 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
       };
       // refs ausentes o a medias: el rastreo lento se encarga, no este tick
       if ((!bars.healthBar || !bars.foodBar) && !ghost) startBarFinder();
+      if (!bars.healthBar) removeBarOverlay('mf-hearts');
+      if (!bars.foodBar) removeBarOverlay('mf-food');
 
-      const healthLive = !!(bars.healthBar && bars.healthBar.querySelector('.mf-hearts'));
-      const foodLive = !!(bars.foodBar && bars.foodBar.querySelector('.mf-food'));
-      const overlayKey = [health, food, absorption, hardcore, ghost, iconSize, healthLive, foodLive,
-        bars.healthBar === lastHealthBar, bars.foodBar === lastFoodBar].join(':');
-      // mismas cifras y mismas barras: esta ronda el dom descansa
-      if (overlayKey === lastOverlayKey) return;
+      const healthLive = !bars.healthBar || barOverlays.get('mf-hearts')?.overlay.parentElement === bars.healthBar;
+      const foodLive = !bars.foodBar || barOverlays.get('mf-food')?.overlay.parentElement === bars.foodBar;
+      const overlayKey = [health, food, absorption, hardcore, ghost, iconSize, GUI_BASE].join(':');
+      if (overlayKey === lastOverlayKey && healthLive && foodLive &&
+          bars.healthBar === lastHealthBar && bars.foodBar === lastFoodBar) return;
       lastOverlayKey = overlayKey;
-
-      const nuke = (el) => {
-        if (!el) return;
-        el.style.background = 'transparent';
-        el.style.backgroundColor = 'transparent';
-        el.style.backgroundImage = 'none';
-        el.style.border = 'none';
-        el.style.boxShadow = 'none';
-        el.style.outline = 'none';
-        el.dataset.mfReplaced = '1';
-      };
+      lastHealthBar = bars.healthBar;
+      lastFoodBar = bars.foodBar;
 
       if (bars.healthBar) {
-        const bar = bars.healthBar;
-        nuke(bar);
-        nuke(bar.parentElement);
-        nuke(bar.parentElement?.parentElement);
-
-        bar.querySelectorAll('*').forEach(child => {
-          if (child.classList.contains('mf-hearts') || child.closest('.mf-hearts')) return;
-          child.style.background = 'transparent';
-          child.style.backgroundColor = 'transparent';
-          child.style.backgroundImage = 'none';
-          child.style.border = 'none';
-          child.style.boxShadow = 'none';
-        });
-
-        let hearts = bar.querySelector('.mf-hearts');
-        if (!hearts) {
-          bar.innerHTML = '';
-          hearts = document.createElement('div');
-          hearts.className = 'mf-hearts';
-          bar.appendChild(hearts);
-        } else {
-          Array.from(bar.children).forEach(child => {
-            if (child !== hearts) child.remove();
-          });
-        }
-
-        hearts.innerHTML = '';
-        hearts.style.cssText = 'position:relative;display:flex;gap:2px;align-items:center;opacity:' + guiOpacity + ';transition:opacity 0.3s;';
+        const hearts = mountBarOverlay(bars.healthBar, 'mf-hearts');
+        hearts.replaceChildren();
+        hearts.style.cssText = 'display:flex;gap:2px;align-items:center;opacity:' + guiOpacity + ';transition:opacity 0.3s;';
 
         const redRow = document.createElement('div');
-        redRow.style.cssText = 'display:flex;gap:2px;align-items:center;';
+        redRow.style.cssText = 'display:flex;gap:2px;align-items:center;max-width:100%;';
         for (let i = 0; i < 10; i++) {
           const heartValue = health - i * 2;
           let iconFile;
@@ -96554,7 +96572,7 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
           img.src = GUI_BASE + iconFile;
           img.style.cssText = [
             'height:' + iconSize + 'px', 'width:' + iconSize + 'px',
-            'image-rendering:pixelated', 'object-fit:contain'
+            'image-rendering:pixelated', 'object-fit:contain', 'min-width:0'
           ].join(';');
           redRow.appendChild(img);
         }
@@ -96563,7 +96581,8 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
         const absorptionHearts = Math.ceil(absorption / 2);
         if (absorptionHearts > 0) {
           const goldRow = document.createElement('div');
-          goldRow.style.cssText = 'position:absolute;top:0;left:0;display:flex;gap:2px;align-items:center;pointer-events:none;';
+          goldRow.style.cssText = 'position:absolute;top:50%;left:0;transform:translateY(-50%);display:flex;' +
+            'gap:2px;align-items:center;max-width:100%;pointer-events:none;';
           for (let i = 0; i < absorptionHearts; i++) {
             const heartValue = absorption - i * 2;
             let iconFile;
@@ -96574,47 +96593,19 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
             img.src = GUI_BASE + iconFile;
             img.style.cssText = [
               'height:' + iconSize + 'px', 'width:' + iconSize + 'px',
-              'image-rendering:pixelated', 'object-fit:contain'
+              'image-rendering:pixelated', 'object-fit:contain', 'min-width:0'
             ].join(';');
             goldRow.appendChild(img);
           }
           hearts.appendChild(goldRow);
         }
-        lastHealthBar = bars.healthBar;
       }
 
       if (bars.foodBar) {
-        const bar = bars.foodBar;
-        nuke(bar);
-        nuke(bar.parentElement);
-        nuke(bar.parentElement?.parentElement);
-
-        bar.querySelectorAll('*').forEach(child => {
-          if (child.classList.contains('mf-food') || child.closest('.mf-food')) return;
-          child.style.background = 'transparent';
-          child.style.backgroundColor = 'transparent';
-          child.style.backgroundImage = 'none';
-          child.style.border = 'none';
-          child.style.boxShadow = 'none';
-        });
-
-        let foodIcons = bar.querySelector('.mf-food');
-        if (!foodIcons) {
-          bar.innerHTML = '';
-          foodIcons = document.createElement('div');
-          foodIcons.className = 'mf-food';
-          foodIcons.style.cssText = 'display:flex;gap:2px;align-items:center;flex-direction:row-reverse;';
-          bar.appendChild(foodIcons);
-        } else {
-          Array.from(bar.children).forEach(child => {
-            if (child !== foodIcons) child.remove();
-          });
-        }
-
-        foodIcons.style.opacity = guiOpacity;
-        foodIcons.style.transition = 'opacity 0.3s';
-
-        foodIcons.innerHTML = '';
+        const foodIcons = mountBarOverlay(bars.foodBar, 'mf-food');
+        foodIcons.style.cssText = 'display:flex;gap:2px;align-items:center;flex-direction:row-reverse;opacity:' +
+          guiOpacity + ';transition:opacity 0.3s;';
+        foodIcons.replaceChildren();
         for (let i = 0; i < 10; i++) {
           const foodValue = food - i * 2;
           let iconFile;
@@ -96625,12 +96616,12 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
           img.src = GUI_BASE + iconFile;
           img.style.cssText = [
             'height:' + iconSize + 'px', 'width:' + iconSize + 'px',
-            'image-rendering:pixelated', 'object-fit:contain'
+            'image-rendering:pixelated', 'object-fit:contain', 'min-width:0'
           ].join(';');
           foodIcons.appendChild(img);
         }
-        lastFoodBar = bars.foodBar;
       }
+      alignBarOverlays(game.isMobile);
     }, 200);
   }
 
@@ -96646,14 +96637,25 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     state.overlay = null;
     state.healthBarRef = null;
     state.foodBarRef = null;
-    document.querySelectorAll('[data-mf-replaced]').forEach(el => {
-      el.style.cssText = '';
-      delete el.dataset.mfReplaced;
-    });
+    removeBarOverlay('mf-hearts');
+    removeBarOverlay('mf-food');
   }
 
   function initPatches() {
+    barStyles = document.createElement('style');
+    // Hide the native paint while allowing overlays to inherit the game's HUD visibility.
+    barStyles.textContent = [
+      PATCHED_BAR + ' { background:transparent !important; border-color:transparent !important;' +
+        'box-shadow:none !important; color:transparent !important; text-shadow:none !important;' +
+        'overflow:visible !important; }',
+      '[data-mf-gui-bar="relative"] { position:relative !important; }',
+      PATCHED_BAR + ' > :not(' + GUI_OVERLAY + ') { visibility:hidden !important; }',
+      PATCHED_BAR + ' > ' + GUI_OVERLAY + ' { position:absolute;inset:0;pointer-events:none;box-sizing:border-box; }',
+      PATCHED_BAR + ' > :is(.mf-hearts, .mf-food) { transform:translateY(var(--mf-bar-shift, 0px)); }'
+    ].join('\n');
+    (document.head || document.documentElement).appendChild(barStyles);
     patchPlayerList();
+    patchXPBar();
     patchDebugStats();
     createHealthFoodOverlay();
   }
@@ -96663,7 +96665,6 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     state.enabled = true;
     // se rearma el vigía del bundle, que el disable lo mandó a dormir
     scriptObserver.observe(document.documentElement, { childList: true, subtree: true });
-    void 0;
     initPatches();
   }
 
@@ -96675,12 +96676,9 @@ log('cargado. /p2p host [codigo] | /p2p join <codigo> | /p2p off | /p2p status')
     state.observers = [];
     if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
     removeHealthFoodOverlay();
-    state.xpBarRef = null;
-    document.querySelectorAll('.wifi-icon-patch, .wifi-debug-icon, .mf-xp-icons, .mf-xp-level').forEach(el => el.remove());
-    document.querySelectorAll('[data-mf-xp-replaced]').forEach(el => {
-      el.style.cssText = '';
-      delete el.dataset.mfXpReplaced;
-    });
+    barStyles?.remove();
+    barStyles = null;
+    document.querySelectorAll('.wifi-icon-patch, .wifi-debug-icon').forEach(el => el.remove());
   }
 
   document.addEventListener('minifeather:guipatch-config', (e) => {

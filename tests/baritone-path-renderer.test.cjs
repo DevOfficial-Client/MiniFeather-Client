@@ -165,6 +165,7 @@ test('route, planning preview, excavation and placement use distinct vertex colo
     found.add((Math.round(colors[offset] * 255) << 16) | (Math.round(colors[offset + 1] * 255) << 8) | Math.round(colors[offset + 2] * 255));
   }
   for (const color of [0x75eea4, 0x57beff, 0xff6978, 0xffbb55, 0xffe25b]) assert.ok(found.has(color));
+  assert.equal(found.has(0xffffff), false, 'the active waypoint needs no white box');
   h.renderer.destroy();
 });
 

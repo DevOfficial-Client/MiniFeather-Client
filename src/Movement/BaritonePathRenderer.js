@@ -1,14 +1,14 @@
 (function () {
   'use strict';
 
-  const BARITONE_PATH_RENDERER_VERSION = 1;
+  const BARITONE_PATH_RENDERER_VERSION = 2;
   const ROOT = globalThis, KEY = '__MF_BARITONE_PATH_RENDERER__';
   const MAX_NODES = 512, MAX_MARKERS = 64;
   const MAX_SEGMENTS = MAX_NODES + (MAX_MARKERS + 3) * 12;
   const instances = new Set();
   const PALETTE = {
     route: 0x75eea4, preview: 0x57beff, mine: 0xff6978,
-    place: 0xffbb55, goal: 0xffe25b, checkpoint: 0xb9a0ff, current: 0xffffff
+    place: 0xffbb55, goal: 0xffe25b, checkpoint: 0xb9a0ff
   };
   const finite = point => point && ['x', 'y', 'z'].every(axis =>
     Number.isFinite(point[axis]) && Math.abs(point[axis]) <= 30000000);
@@ -266,7 +266,6 @@
         if (previous) segment(previous, target, PALETTE.preview, .024);
         previous = target; nodes++;
       }
-      if (finite(path[index])) box(path[index], PALETTE.current, .18, .30);
       if (finite(data.goal)) box(data.goal, PALETTE.goal, .48, 1.9);
       if (finite(data.routeGoal) && (!finite(data.goal) || ['x', 'y', 'z'].some(axis => data.routeGoal[axis] !== data.goal[axis]))) {
         box(data.routeGoal, PALETTE.checkpoint, .32, .6);

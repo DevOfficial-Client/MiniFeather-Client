@@ -1,7 +1,8 @@
 (function () {
   'use strict';
 
-  const BARITONE_NAVIGATION_VERSION = 7;
+  const BARITONE_NAVIGATION_VERSION = 10;
+  const CROSSING_ACTIONS = new Set(['jump', 'gap', 'mineJump', 'drop', 'mineDrop']);
 
   // Only the adapter depends on native APIs; the planner knows terrain, not obfuscated names.
   try { globalThis.Baritone?.destroy?.(); } catch (_) {}
@@ -15,7 +16,7 @@
     path: [], pathIndex: 0, following: null, action: null, actionPhase: 'idle',
     autoMine: true, autoPlace: true, search: null, searchResult: null, retries: 0, resumeAt: 0,
     progressAt: 0, progressPos: null, followPlanAt: 0, followGoal: null,
-    jumpUntil: 0, jumpedIndex: -1, bestGoalDistance: Infinity, blockedEdges: new Set(), players: new Map(),
+    jumpUntil: 0, pathJump: null, bestGoalDistance: Infinity, blockedEdges: new Set(), players: new Map(),
     scannedAt: 0, game: null, player: null, world: null, destroyed: false, timer: 0
   };
   let adapter = null, planner = null, pathRenderer = null, pathFactory = null, emitAt = 0;
@@ -116,7 +117,7 @@
       segmented: false, searchStart: null, breathingGoal: null, breathingSince: 0,
       footingTask: null, walkFailures: 0, walkYaw: null, walkFast: false,
       preview: null, lookahead: 32, checkpoints: [], frontierWatch: null,
-      jumpUntil: 0, jumpedIndex: -1, bestGoalDistance: Infinity, retries: 0, progressPos: null, searchResult: null });
+      jumpUntil: 0, pathJump: null, bestGoalDistance: Infinity, retries: 0, progressPos: null, searchResult: null });
     state.blockedEdges.clear(); setStatus(status, reason); emitState(true);
   }
   function bind(game) {
@@ -137,7 +138,8 @@
     const swimBudget = oxygen == null ? 12 : Math.max(2, Math.min(12, Math.floor(oxygen / 15)));
     const miningCosts = new Map();
     planner = globalThis.__MF_BARITONE_PLANNER__.create((x, y, z) => adapter.readCell(x, y, z), {
-      allowMine: state.autoMine, allowGap: true, allowSwim: true, fastWalk: true, terrainCacheLimit: 65536,
+      allowMine: state.autoMine, allowGap: true, allowSwim: true, fastWalk: true,
+      preferExistingTerrain: true, terrainCacheLimit: 65536,
       maxSubmergedSteps: swimBudget,
       allowPlace: state.autoPlace && budget > 0, placeBudget: Math.min(32, budget),
       miningCost(position, info) {
@@ -158,7 +160,7 @@
       const segmented = horizontal > horizon, factor = segmented ? horizon / horizontal : 1;
       return { segmented, goal: segmented ? {
         x: Math.round(start.x + (goal.x - start.x) * factor),
-        y: start.y + Math.max(-3, Math.min(3, goal.y - start.y)),
+        y: Math.round(start.y + (goal.y - start.y) * factor),
         z: Math.round(start.z + (goal.z - start.z) * factor)
       } : { ...goal } };
     };
@@ -167,6 +169,19 @@
     // known obstacle (which A* can route around) with an unloaded target chunk.
     while (horizon > 32 && [0, 1, -1].some(dy => !adapter.readCell(route.goal.x, route.goal.y + dy, route.goal.z)?.known)) {
       horizon = Math.max(32, horizon / 2); route = candidate(horizon);
+    }
+    if (route.segmented && start.y !== goal.y && adapter.readCell(route.goal.x, route.goal.y, route.goal.z)?.known) {
+      // The projected height may be inside a mountain or above the actual path.
+      const point = route.goal, direction = Math.sign(goal.y - start.y);
+      const minY = Math.min(start.y, goal.y), maxY = Math.max(start.y, goal.y);
+      for (let offset = 0; offset <= Math.min(24, maxY - minY); offset++) {
+        for (const y of offset ? [point.y + direction * offset, point.y - direction * offset] : [point.y]) {
+          if (y >= minY && y <= maxY && planner.canStand(point.x, y, point.z)) {
+            return { segmented: true, goal: { x: point.x, y, z: point.z } };
+          }
+        }
+      }
+      return { segmented: false, goal: { ...goal } };
     }
     return route;
   }
@@ -197,7 +212,7 @@
       state.bestGoalDistance = distance(state.player.pos, center(nextGoal));
       state.lookahead = 32; state.checkpoints = [];
     }
-    state.path = []; state.pathIndex = 0; state.jumpedIndex = -1; state.goal = nextGoal;
+    state.path = []; state.pathIndex = 0; state.pathJump = null; state.goal = nextGoal;
     const start = cell(state.player.pos);
     state.searchStart = { ...state.player.pos };
     const next = routeTarget(start, nextGoal);
@@ -255,7 +270,7 @@
     state.searchStart = { ...state.player.pos };
     state.searchResult = { ...result, globalComplete: !!result.complete && !state.segmented };
     state.effectiveGoal = result.goal || state.goal;
-    state.path = result.path; state.pathIndex = 0; state.jumpedIndex = -1;
+    state.path = result.path; state.pathIndex = 0; state.pathJump = null;
     extendPlanningHorizon(result);
     state.progressAt = now(); state.progressPos = { ...state.player.pos };
     setStatus('moving', 'Continuing the precalculated route'); updateVisual(now(), true); return true;
@@ -310,7 +325,7 @@
     state.preview = null;
     state.searchResult = { ...job.result, globalComplete: !!job.result?.complete && !state.segmented };
     state.effectiveGoal = job.result?.goal || state.goal;
-    state.path = job.result?.path || []; state.pathIndex = 0; state.jumpedIndex = -1;
+    state.path = job.result?.path || []; state.pathIndex = 0; state.pathJump = null;
     extendPlanningHorizon(job.result);
     state.progressAt = now(); state.progressPos = { ...state.player.pos };
     if (state.path.length) setStatus('moving', state.searchResult.globalComplete ? '' : 'Continuing toward the long-distance goal');
@@ -462,7 +477,7 @@
     }
     return state.walkYaw;
   }
-  function relativeWalking(target) {
+  function relativeWalking(target, lateralTolerance = .04) {
     const player = state.player, yaw = player.yaw;
     const dx = target.x - player.pos.x, dz = target.z - player.pos.z;
     const along = -Math.sin(yaw) * dx - Math.cos(yaw) * dz;
@@ -470,7 +485,7 @@
     const motion = player.motion;
     const lateralSpeed = Number.isFinite(motion?.x) && Number.isFinite(motion?.z) ?
       Math.cos(yaw) * motion.x - Math.sin(yaw) * motion.z : 0;
-    const correction = Math.abs(lateral) < .04 && Math.abs(lateralSpeed) < .015 ? 0 :
+    const correction = Math.abs(lateral) < lateralTolerance && Math.abs(lateralSpeed) < .015 ? 0 :
       Math.max(-1, Math.min(1, lateral * .85 - lateralSpeed * 3));
     return { forward: Math.abs(along) > .08 ? Math.sign(along) : 0, strafe: correction, along };
   }
@@ -504,7 +519,6 @@
         state.player.onGround === false || !state.effectiveGoal || typeof planner.canWalkSegment !== 'function') return false;
     const player = state.player, target = state.effectiveGoal, feet = cell(player.pos);
     if (feet.x !== target.x || feet.y !== target.y || feet.z !== target.z || Math.abs(player.pos.y - target.y) > .01 ||
-        Math.hypot(player.pos.x - target.x - .5, player.pos.z - target.z - .5) > .45 ||
         !state.path.slice(state.pathIndex).every(p => plainWalk(p) && p.y === target.y)) return false;
     const motion = player.motion;
     // A missing momentum API cannot authorize an early stop. Precise action
@@ -522,7 +536,7 @@
       if (!vx && !vz) break;
       x += vx; z += vz; vx *= drag; vz *= drag;
     }
-    if (vx || vz || Math.floor(x) !== target.x || Math.floor(z) !== target.z || Math.hypot(x - target.x - .5, z - target.z - .5) > .45) return false;
+    if (vx || vz || Math.floor(x) !== target.x || Math.floor(z) !== target.z) return false;
     coast.push({ x, y: target.y, z });
     // Native per-axis velocity truncation can bend the very last part of a
     // coast. Check its actual straight pieces, not a chord that cuts a corner.
@@ -579,6 +593,34 @@
     state.progressAt = time; state.progressPos = { ...player.pos };
     setStatus('moving', 'Regaining safe footing'); return true;
   }
+  function pathJumpInput(player, from, target, horizontal, aligned, time) {
+    if (!aligned || player.onGround === false || player.pos.y > from.y + .2 ||
+        horizontal >= (target.action === 'gap' ? 2.4 : 1.65)) return false;
+    const attempt = state.pathJump;
+    if (attempt && time < attempt.holdUntil) return true;
+    if (attempt && (attempt.count >= 2 || time < attempt.retryAt)) return false;
+    const source = cell(player.pos);
+    if (source.x !== from.x || source.y !== from.y || source.z !== from.z) return false;
+    // A command can miss a native input tick. Retry once from the same safe floor.
+    state.pathJump = { count: (attempt?.count ?? 0) + 1, holdUntil: time + 150, retryAt: time + 800 };
+    return true;
+  }
+  function currentWaypoint() {
+    const point = state.path[state.pathIndex];
+    if (!point) return point;
+    const feet = cell(state.player.pos);
+    const landed = CROSSING_ACTIONS.has(point.action) && state.player.onGround !== false &&
+      feet.x === point.x && feet.y === point.y && feet.z === point.z && Math.abs(state.player.pos.y - point.y) <= .01;
+    if ((!landed && point.action !== 'mine' && point.action !== 'bridge') ||
+        !planner.canStand(point.x, point.y, point.z)) return point;
+    // Once native terrain confirms the floor and clearance, steer like a walk.
+    const walk = { x: point.x, y: point.y, z: point.z, action: 'walk' };
+    if (landed) walk.landed = true;
+    state.path = state.path.slice();
+    state.path[state.pathIndex] = walk;
+    releaseTerrain();
+    return walk;
+  }
   function executePath(time) {
     const player = state.player;
     const remaining = state.goal ? distance(player.pos, center(state.goal)) : Infinity;
@@ -588,7 +630,7 @@
       state.retries = 0;
     }
     if (!state.path.length || state.pathIndex >= state.path.length) return routeComplete();
-    let target = state.path[state.pathIndex];
+    let target = currentWaypoint();
     const playerCell = cell(player.pos);
     const wet = adapter.swimmingState?.()?.inWater === true ||
       planner.canSwim?.(playerCell.x, playerCell.y, playerCell.z) === true;
@@ -604,17 +646,19 @@
         Number.isFinite(player.motion?.x) && Number.isFinite(player.motion?.z) && typeof adapter.groundSlipperiness === 'function';
       // Do not release at a dangerous high-speed crossing merely because it
       // briefly passed the center. The final dry goto uses the coast-safe rule.
-      const reached = !finalWalk && distance(player.pos, center(target)) < (target.action === 'swim' ? .48 : .30);
+      const insideTarget = playerCell.x === target.x && playerCell.y === target.y && playerCell.z === target.z;
+      const reached = !finalWalk && (distance(player.pos, center(target)) < (target.action === 'swim' ? .48 : .30) ||
+        (target.landed && insideTarget && safeWalkLine(player.pos, target)));
       // A starting cell is an anchor, not an instruction to turn back to its
       // exact center. Only a verified dry walking corridor may bypass it.
       const bypassStart = !wet && state.pathIndex === 0 && plainWalk(target) && plainWalk(next) &&
         playerCell.x === target.x && playerCell.y === target.y && playerCell.z === target.z && safeWalkLine(player.pos, next);
       const nearWalkingTurn = !wet && plainWalk(target) && plainWalk(next) && target.y === next.y &&
-        distance(player.pos, center(target)) < .45 && safeWalkLine(player.pos, next);
+        (insideTarget || distance(player.pos, center(target)) < .45) && safeWalkLine(player.pos, next);
       if (!reached && !bypassStart && !nearWalkingTurn && !passedWaypoint(player, target, previous, next)) break;
       releaseTerrain();
-      state.pathIndex++; state.jumpedIndex = -1; state.progressAt = time;
-      state.progressPos = { ...player.pos }; target = state.path[state.pathIndex];
+      state.pathIndex++; state.pathJump = null; state.progressAt = time;
+      state.progressPos = { ...player.pos }; target = currentWaypoint();
     }
     if (!target) return routeComplete();
     let walkingLine = false;
@@ -622,13 +666,13 @@
       // Pursue a few blocks ahead instead of alternating diagonal/cardinal
       // headings at every tile. Never skip an action or cut an unsafe corner.
       const limit = Math.min(state.path.length - 1, state.pathIndex + 6);
+      let lastWalk = state.pathIndex;
+      while (lastWalk < limit && plainWalk(state.path[lastWalk + 1]) && state.path[lastWalk + 1].y === target.y) lastWalk++;
       let steeringIndex = state.pathIndex;
-      for (let index = state.pathIndex; index <= limit; index++) {
-        const candidate = state.path[index];
-        if (!plainWalk(candidate) || candidate.y !== target.y ||
-            Math.hypot(candidate.x + .5 - player.pos.x, candidate.z + .5 - player.pos.z) > 3.2 ||
-            !safeWalkLine(player.pos, candidate)) break;
+      for (let index = lastWalk; index >= state.pathIndex; index--) {
+        if (!safeWalkLine(player.pos, state.path[index])) continue;
         steeringIndex = index; walkingLine = true;
+        break;
       }
       if (!walkingLine) {
         if (recoverFooting(time)) return;
@@ -640,11 +684,15 @@
       }
       state.footingTask = null; state.walkFailures = 0;
       if (steeringIndex !== state.pathIndex) {
-        state.pathIndex = steeringIndex; state.jumpedIndex = -1;
+        state.pathIndex = steeringIndex; state.pathJump = null;
         target = state.path[steeringIndex];
       }
     }
     const from = state.pathIndex ? state.path[state.pathIndex - 1] : cell(player.pos);
+    if (!wet && player.onGround !== false && playerCell.y !== from.y && playerCell.y !== target.y) {
+      // After landing off the planned staircase or gap, use the actual floor.
+      return beginSearch();
+    }
     if (target.breakBlocks?.length) {
       // Clear headroom first: the upper block can occlude the ray to the feet.
       const obstruction = [...target.breakBlocks].sort((a, b) => b.y - a.y).find(p => {
@@ -654,6 +702,13 @@
         const info = adapter.readCell(obstruction.x, obstruction.y, obstruction.z);
         if (!state.autoMine || !info?.known || !info.breakable || info.hazard) {
           return terrainFailed(from, target, 'Obstacle is no longer safe to mine');
+        }
+        if (target.action === 'mineDrop') {
+          if (player.onGround === false) return neutral();
+          if (playerCell.x !== from.x || playerCell.y !== from.y || playerCell.z !== from.z) return beginSearch();
+          if (!planner.validateTransition(from, target)) {
+            return terrainFailed(from, target, 'The planned descent no longer has a safe landing');
+          }
         }
         const task = terrainTask('mine', obstruction, time);
         chooseMiningTool(task, obstruction);
@@ -679,9 +734,11 @@
     }
     const horizontal = Math.hypot(target.x + 0.5 - player.pos.x, target.z + 0.5 - player.pos.z);
     const swimming = wet || target.action === 'swim';
-    const needsJump = ['jump', 'gap', 'mineJump'].includes(target.action) || target.y > player.pos.y + 0.5;
+    const needsJump = ['jump', 'gap', 'mineJump'].includes(target.action);
     const eye = adapter.eye();
-    const routeYaw = walkingLine && !needsJump ? walkingYaw(state.pathIndex) : null;
+    const crossingYaw = !swimming && CROSSING_ACTIONS.has(target.action)
+      ? Math.atan2(from.x - target.x, from.z - target.z) : null;
+    const routeYaw = walkingLine ? walkingYaw(state.pathIndex) : crossingYaw;
     if (!walkingLine) { state.walkYaw = null; state.walkFast = false; }
     const aimTarget = routeYaw == null ? center(target) :
       { x: player.pos.x - Math.sin(routeYaw) * 32, z: player.pos.z - Math.cos(routeYaw) * 32 };
@@ -690,17 +747,21 @@
         { mode: 'navigation', tolerance: .18, preservePitch: true });
     if (['native-camera-unresponsive', 'native-camera-not-responding'].includes(aim?.reason)) return stop('failed', aim.reason);
     const aligned = aim === true || aim?.aligned;
-    if (aligned && needsJump && state.jumpedIndex !== state.pathIndex && player.onGround !== false &&
-        horizontal < (target.action === 'gap' ? 2.4 : 1.65)) {
-      state.jumpUntil = time + 150; state.jumpedIndex = state.pathIndex;
-    }
+    const jumping = !swimming && needsJump && pathJumpInput(player, from, target, horizontal, aligned, time);
     const swimUp = swimming && (target.y > player.pos.y + .08 ||
       (target.action !== 'swim' && horizontal < 1.65 && target.y >= player.pos.y - .15));
     // Native water ascent uses jump; releasing it lets gravity sink the player.
-    const correction = walkingLine && !needsJump && aligned ? relativeWalking(center(target)) : null;
-    const applied = adapter.setControls({ forward: correction ? correction.forward : aligned && (!swimming || horizontal > .22) ? 1 : 0,
+    const turningWalk = walkingLine && Number.isFinite(aim?.yaw) &&
+      Math.abs(Math.atan2(Math.sin(routeYaw - aim.yaw), Math.cos(routeYaw - aim.yaw))) <= .65;
+    const correction = walkingLine && (aligned || turningWalk) ? relativeWalking(center(target), .14) : null;
+    // Keep the takeoff heading in the air. Coast into the landing instead
+    // of turning back toward its center if momentum carries us past it.
+    const crossingAdvance = crossingYaw == null ||
+      -(target.x + .5 - player.pos.x) * Math.sin(crossingYaw) -
+        (target.z + .5 - player.pos.z) * Math.cos(crossingYaw) > .15;
+    const applied = adapter.setControls({ forward: correction ? correction.forward : aligned && crossingAdvance && (!swimming || horizontal > .22) ? 1 : 0,
       strafe: correction?.strafe || 0, pulseStrafe: !!correction, canStep: correction ? safeWalkingInput : null,
-      jump: aligned && (swimming ? swimUp : time < state.jumpUntil),
+      jump: swimming ? !!aligned && swimUp : jumping,
       sprint: !swimming && aligned && (target.action === 'gap' || (target.action === 'walk' && horizontal > .8 &&
         (!correction || correction.forward > 0 && Math.abs(correction.strafe) < .6))),
       sneak: false, yaw: aim?.yaw, pitch: aim?.pitch });

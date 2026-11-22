@@ -6,6 +6,16 @@
   let pendingTimer = null;
   let cachedGame = null;
   let lastGameScan = 0;
+  let barStyles = null;
+  const barOverlays = new Map();
+  const PATCHED_BAR = '[data-mf-gui-bar]';
+  const GUI_OVERLAY = '[data-mf-gui-overlay]';
+  const VITAL_ICON_SIZE = 22;
+  const XP_TRACK_HEIGHT = 8;
+  const NATIVE_VITAL_FILLS = {
+    'rgb(211, 4, 11)': 'healthBarRef',
+    'rgb(199, 129, 81)': 'foodBarRef'
+  };
 
   const GUI_BUNDLE_RE = /\/assets\/GuiHud[^/]*\.js(\?.*)?$/i;
   let guiBundleActive = false;
@@ -152,98 +162,84 @@
     return Math.abs(cx - center) < window.innerWidth * 0.25;
   }
 
+  function findBarFrame(element) {
+    const bounds = element.getBoundingClientRect();
+    let frame = element;
+    // The HUD puts the label and coloured fills in separate, overlapping grid cells.
+    for (let depth = 0; depth < 5; depth++) {
+      const parent = frame.parentElement;
+      if (!parent || parent === document.body || parent.id === 'react' || parent.querySelector(PATCHED_BAR)) break;
+      if (parseFloat(window.getComputedStyle(frame).borderTopWidth) > 0) break;
+      const rect = parent.getBoundingClientRect();
+      if (Math.abs(rect.left - bounds.left) > 6 || Math.abs(rect.right - bounds.right) > 6 ||
+          Math.abs(rect.top - bounds.top) > 6 || Math.abs(rect.bottom - bounds.bottom) > 6) break;
+      frame = parent;
+    }
+    return frame;
+  }
+
+  function removeBarOverlay(className) {
+    const patch = barOverlays.get(className);
+    if (!patch) return;
+    patch.overlay.remove();
+    delete patch.bar.dataset.mfGuiBar;
+    barOverlays.delete(className);
+  }
+
+  function mountBarOverlay(bar, className) {
+    const patch = barOverlays.get(className);
+    if (patch?.bar === bar && patch.overlay.parentElement === bar) return patch.overlay;
+    removeBarOverlay(className);
+
+    const overlay = document.createElement('div');
+    overlay.className = className;
+    overlay.dataset.mfGuiOverlay = '';
+    const position = window.getComputedStyle(bar).position;
+    bar.appendChild(overlay);
+    bar.dataset.mfGuiBar = !position || position === 'static' ? 'relative' : 'positioned';
+    barOverlays.set(className, { bar, overlay });
+    return overlay;
+  }
+
+  function alignBarOverlays(isMobile) {
+    const xp = barOverlays.get('mf-xp-icons');
+    const hearts = barOverlays.get('mf-hearts');
+    const food = barOverlays.get('mf-food');
+    const xpRect = xp?.bar.getBoundingClientRect();
+    const heartRect = hearts?.bar.getBoundingClientRect();
+    const foodRect = food?.bar.getBoundingClientRect();
+    const stack = !isMobile && xpRect?.height && heartRect?.height &&
+      xpRect.bottom <= heartRect.top + 4 && heartRect.left >= xpRect.left - 6 &&
+      heartRect.right <= xpRect.right + 6 &&
+      (!foodRect?.height || Math.abs(foodRect.bottom - heartRect.bottom) <= 8);
+    const bottom = stack ? Math.max(heartRect.bottom, foodRect?.bottom ?? heartRect.bottom) : 0;
+    const xpCenter = bottom - XP_TRACK_HEIGHT / 2;
+    const vitalCenter = bottom - XP_TRACK_HEIGHT - 2 - VITAL_ICON_SIZE / 2;
+
+    for (const [patch, rect, center] of [[xp, xpRect, xpCenter], [hearts, heartRect, vitalCenter], [food, foodRect, vitalCenter]]) {
+      if (!patch) continue;
+      const offset = stack && rect.height ? Math.round(center - (rect.top + rect.height / 2)) : 0;
+      const value = offset + 'px';
+      if (patch.overlay.style.getPropertyValue('--mf-bar-shift') !== value) {
+        patch.overlay.style.setProperty('--mf-bar-shift', value);
+      }
+    }
+  }
+
   function findOriginalBars() {
-    const result = { healthBar: null, foodBar: null };
-    try {
+    for (const fill of document.querySelectorAll('#react div[style*="grid-area"], #react div[style*="grid-row"]')) {
+      const slot = NATIVE_VITAL_FILLS[fill.style.backgroundColor];
+      if (!slot || state[slot]?.isConnected || fill.closest(PATCHED_BAR)) continue;
+      const grid = fill.parentElement;
+      if (grid?.style.display !== 'grid' || isInChatArea(grid)) continue;
 
-      if (state.healthBarRef && state.healthBarRef.isConnected) {
-        if (state.healthBarRef.querySelector('.mf-hearts')) {
-          result.healthBar = state.healthBarRef;
-        } else {
-          state.healthBarRef = null;
-        }
-      }
-      if (state.foodBarRef && state.foodBarRef.isConnected) {
-        if (state.foodBarRef.querySelector('.mf-food')) {
-          result.foodBar = state.foodBarRef;
-        } else {
-          state.foodBarRef = null;
-        }
-      }
-      if (result.healthBar && result.foodBar) return result;
-
-      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-      const textBars = [];
-      while (walker.nextNode()) {
-        const txt = walker.currentNode.textContent.trim();
-        if (txt.match(/^\d+\.?\d*\s*\/\s*\d+$/)) {
-          let el = walker.currentNode.parentElement;
-          for (let i = 0; i < 5 && el; i++) el = el.parentElement;
-          if (el && !el.dataset.mfReplaced && !isInChatArea(el) && isCenteredLikeHud(el)) textBars.push(el);
-        }
-      }
-      if (textBars.length >= 2) {
-        if (!result.healthBar) { result.healthBar = textBars[0]; state.healthBarRef = textBars[0]; }
-        if (!result.foodBar) { result.foodBar = textBars[1]; state.foodBarRef = textBars[1]; }
-        return result;
-      }
-
-      const allDivs = document.querySelectorAll('div');
-      const hudCandidates = [];
-      for (const el of allDivs) {
-        if (el.dataset.mfReplaced || el.dataset.mfXpReplaced) continue;
-        if (el.querySelector('.mf-hearts, .mf-food, .mf-xp-icons')) continue;
-        if (isInChatArea(el)) continue;
-
-        const ownText = Array.from(el.childNodes)
-          .filter(n => n.nodeType === 3)
-          .map(n => n.textContent.trim())
-          .join('');
-        if (ownText.match(/^\d+\.?\d*\s*\/\s*\d+$/) && isCenteredLikeHud(el)) {
-          hudCandidates.push(el);
-        }
-      }
-      if (hudCandidates.length >= 2) {
-        if (!result.healthBar) { result.healthBar = hudCandidates[0]; state.healthBarRef = hudCandidates[0]; }
-        if (!result.foodBar) { result.foodBar = hudCandidates[1]; state.foodBarRef = hudCandidates[1]; }
-      }
-
-      if (!result.healthBar || !result.foodBar) {
-        const bordered = [];
-        for (const el of allDivs) {
-          if (el.dataset.mfReplaced) continue;
-          if (el.querySelector('.mf-hearts, .mf-food')) continue;
-          if (isInChatArea(el)) continue;
-          const rect = el.getBoundingClientRect();
-          if (rect.width < 60 || rect.width > 400) continue;
-          if (rect.height < 15 || rect.height > 100) continue;
-          if (!isCenteredLikeHud(el)) continue;
-          try {
-            const s = window.getComputedStyle(el);
-
-            const hasBorder = s.border && s.border !== 'none' && s.border.includes('px');
-            const hasBg = s.backgroundColor && s.backgroundColor !== 'rgba(0, 0, 0, 0)' && s.backgroundColor !== 'transparent';
-            if (hasBorder || hasBg) {
-
-              if (rect.top > window.innerHeight * 0.4) {
-                bordered.push(el);
-              }
-            }
-          } catch (_) {}
-        }
-
-        bordered.sort((a, b) => {
-          const ra = a.getBoundingClientRect();
-          const rb = b.getBoundingClientRect();
-          return rb.bottom - ra.bottom || ra.left - rb.left;
-        });
-        if (bordered.length >= 2) {
-          if (!result.healthBar) { result.healthBar = bordered[0]; state.healthBarRef = bordered[0]; }
-          if (!result.foodBar) { result.foodBar = bordered[1]; state.foodBarRef = bordered[1]; }
-        }
-      }
-    } catch (_) {}
-    return result;
+      // The fill shrinks with the stat. The grid and its frame retain the full width.
+      const frame = findBarFrame(grid);
+      const { width, height } = frame.getBoundingClientRect();
+      if (width < 60 || height < 8 || !/^\d+(?:\.\d+)?\s*\/\s*\d+$/.test(frame.textContent.trim())) continue;
+      state[slot] = frame;
+      if (state.healthBarRef?.isConnected && state.foodBarRef?.isConnected) break;
+    }
   }
 
   function patchPlayerList() {
@@ -299,12 +295,29 @@
     return false;
   }
 
+  function findNativeXpBar(level) {
+    // Level zero still has a heading in the native XP bar, with empty text.
+    const expected = level > 0 ? String(level) : '';
+    for (const label of document.querySelectorAll('#react h3')) {
+      if (label.textContent.trim() !== expected || label.closest(PATCHED_BAR) || isInChatArea(label)) continue;
+      const cell = label.parentElement;
+      if (!cell) continue;
+      const frame = findBarFrame(cell);
+      if (frame.textContent.trim() !== expected || frame.contains(state.healthBarRef) ||
+          frame.contains(state.foodBarRef)) continue;
+      const rect = frame.getBoundingClientRect();
+      if (rect.height < 3 || rect.height > 32 || rect.width < Math.max(60, rect.height * 3) ||
+          rect.top < window.innerHeight * 0.5 || !isCenteredLikeHud(frame)) continue;
+      if (hasColoredBg(frame) || Array.from(frame.querySelectorAll('[style]')).some(hasColoredBg)) return frame;
+    }
+    return null;
+  }
+
   function patchXPBar() {
     let lastXpKey = '';
     let searchDelay = 100;
     let xpTimer = null;
 
-    // xpWork devuelve el retardo del siguiente ciclo; el trabajo de dentro no cambia
     const xpWork = () => {
       if (!canPatch()) return 100;
       const game = getGame();
@@ -312,154 +325,78 @@
 
       if (!isGameReady(game)) return 100;
 
-      const experience = (game.info?.xp?.experience || 0);
+      const progress = Math.max(0, Math.min(1, Number(game.info.xp?.experience) || 0));
       const level = (game.info?.xp?.experienceLevel || 0);
       const isMobile = (game?.isMobile || false);
-      const iconSize = isMobile ? 12 : 16;
       const totalIcons = 18;
-      const filledIcons = Math.round(experience * totalIcons);
+      const filledIcons = Math.ceil(progress * totalIcons);
 
-      let xpBar = null;
-
-      if (state.xpBarRef && state.xpBarRef.isConnected) {
-        xpBar = state.xpBarRef;
-      }
-
+      const ghost = isGhostMode(game);
+      const previousBar = state.xpBarRef;
+      let xpBar = previousBar?.isConnected && previousBar.querySelector('h3') ? previousBar : null;
+      if (!xpBar && !ghost) xpBar = findNativeXpBar(level);
+      state.xpBarRef = xpBar;
       if (!xpBar) {
-        // en fantasma no hay barra que rastrear; el barrido completo se ahorra
-        if (!isGhostMode(game)) {
-          const allDivs = document.querySelectorAll('div');
-          for (const el of allDivs) {
-            if (el.classList.contains('mf-xp-icons') || el.closest('.mf-xp-icons')) continue;
-            if (el.classList.contains('mf-hearts') || el.closest('.mf-hearts')) continue;
-            if (el.classList.contains('mf-food') || el.closest('.mf-food')) continue;
-            if (el.dataset.mfReplaced || el.dataset.mfXpReplaced) continue;
-            if (isInChatArea(el)) continue;
-
-            if (el.querySelector('.mf-hearts, .mf-food')) continue;
-
-            const textContent = el.textContent.trim();
-            if (/^\d+\.?\d*\s*\/\s*\d+$/.test(textContent)) continue;
-
-            const h = el.offsetHeight;
-            const w = el.offsetWidth;
-
-            if (h < 3 || h > 25) continue;
-            if (w < 60 || w < h * 3) continue;
-
-            const rect = el.getBoundingClientRect();
-            if (rect.top < window.innerHeight * 0.5) continue;
-            if (!isCenteredLikeHud(el)) continue;
-
-            let colored = hasColoredBg(el);
-            if (!colored) {
-              for (const child of el.children) {
-                if (hasColoredBg(child)) { colored = true; break; }
-              }
-            }
-            if (!colored) continue;
-
-            xpBar = el;
-            state.xpBarRef = el;
-            break;
-          }
-        }
-        // ref perdido: cada reintento tarda el doble, con techo de 2s
+        removeBarOverlay('mf-xp-icons');
+        alignBarOverlays(isMobile);
         searchDelay = Math.min(searchDelay * 2, 2000);
         return searchDelay;
       }
 
-      // ref vivo: la búsqueda recupera el ritmo de siempre
       searchDelay = 100;
-
-      if (xpBar.querySelector('.mf-hearts, .mf-food')) return 100;
-
-      const ghost = isGhostMode(game);
       const guiOpacity = ghost ? 0.35 : 1;
-      const xpKey = filledIcons + ':' + level + ':' + isMobile + ':' + ghost;
-      const existing = xpBar.querySelector('.mf-xp-icons');
-      if (existing) {
-
-        existing.style.opacity = guiOpacity;
-        existing.style.transition = 'opacity 0.3s';
-        if (lastXpKey === xpKey) return 100;
+      const xpKey = [progress, level, isMobile, ghost, GUI_BASE].join(':');
+      const existing = barOverlays.get('mf-xp-icons')?.overlay;
+      if (existing?.parentElement === xpBar && lastXpKey === xpKey) {
+        alignBarOverlays(isMobile);
+        return 100;
       }
       lastXpKey = xpKey;
 
-      const nukeBg = (el) => {
-        if (!el) return;
-        el.style.background = 'transparent';
-        el.style.backgroundColor = 'transparent';
-        el.style.backgroundImage = 'none';
-        el.style.border = 'none';
-        el.style.boxShadow = 'none';
-        el.style.outline = 'none';
-      };
-
-      nukeBg(xpBar);
-      xpBar.dataset.mfXpReplaced = '1';
-
-      let container = xpBar.querySelector('.mf-xp-icons');
-      if (!container) {
-
-        xpBar.innerHTML = '';
-        container = document.createElement('div');
-        container.className = 'mf-xp-icons';
-        xpBar.appendChild(container);
-      } else {
-
-        container.innerHTML = '';
-      }
+      const container = mountBarOverlay(xpBar, 'mf-xp-icons');
+      container.replaceChildren();
 
       container.style.cssText = [
-        'display:flex', 'align-items:center', 'justify-content:center',
-        'gap:0', 'width:100%', 'height:100%', 'position:relative',
-        'background:rgba(0,0,0,0.5)',
-        'border:2px solid #1E1E1E',
-        'box-shadow:inset 1px 1px 0 #373737, inset -1px -1px 0 #373737'
+        'top:50%', 'bottom:auto', 'height:' + (isMobile ? 6 : XP_TRACK_HEIGHT) + 'px',
+        'transform:translateY(calc(-50% + var(--mf-bar-shift, 0px)))',
+        'opacity:' + guiOpacity, 'transition:opacity 0.3s'
       ].join(';');
 
-      for (let i = 1; i <= totalIcons; i++) {
-        const slot = document.createElement('div');
-        slot.style.cssText = 'position:relative;width:' + iconSize + 'px;height:' + iconSize + 'px;';
+      const track = document.createElement('img');
+      track.className = 'mf-xp-track';
+      track.src = GUI_BASE + 'exp/EXPVASSEL.png';
+      track.style.cssText = 'display:block;width:100%;height:100%;image-rendering:pixelated;object-fit:fill;';
+      container.appendChild(track);
 
-        const vessel = document.createElement('img');
-        vessel.src = GUI_BASE + 'exp/EXPVASSEL.png';
-        vessel.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;image-rendering:pixelated;object-fit:contain;';
-        slot.appendChild(vessel);
-
-        if (i <= filledIcons) {
-          const fill = document.createElement('img');
-          fill.src = GUI_BASE + 'exp/exp' + i + '.png';
-          fill.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;image-rendering:pixelated;object-fit:contain;';
-          slot.appendChild(fill);
-        }
-
-        container.appendChild(slot);
+      const fill = document.createElement('div');
+      fill.className = 'mf-xp-fill';
+      fill.style.cssText = 'position:absolute;inset:0;clip-path:inset(0 ' + ((1 - progress) * 100) + '% 0 0);';
+      const appendSegment = (file, left, width) => {
+        const segment = document.createElement('img');
+        segment.src = GUI_BASE + 'exp/' + file;
+        segment.style.cssText = 'position:absolute;top:0;height:100%;image-rendering:pixelated;object-fit:fill;' +
+          'left:' + (left / 182 * 100) + '%;width:' + (width / 182 * 100) + '%;';
+        fill.appendChild(segment);
+      };
+      // The track sprite is 182 pixels wide: eighteen 10px segments and a 2px join.
+      for (let i = 1; i <= filledIcons; i++) {
+        appendSegment('exp' + i + '.png', (i - 1) * 10 + (i > 9 ? 2 : 0), 10);
       }
-
-      const midImg = document.createElement('img');
-      midImg.src = GUI_BASE + 'exp/middle.png';
-      midImg.style.cssText = [
-        'position:absolute', 'left:50%', 'top:50%',
-        'transform:translate(-50%,-50%)',
-        'height:' + (iconSize + 4) + 'px', 'width:' + (iconSize + 4) + 'px',
-        'image-rendering:pixelated', 'object-fit:contain',
-        'pointer-events:none'
-      ].join(';');
-      container.appendChild(midImg);
+      if (filledIcons > 9) appendSegment('middle.png', 90, 2);
+      container.appendChild(fill);
 
       const levelText = document.createElement('span');
-      levelText.textContent = level;
+      levelText.textContent = level > 0 ? level : '';
       levelText.style.cssText = [
-        'position:absolute', 'left:50%', 'top:50%',
-        'transform:translate(-50%,-50%)',
+        'position:absolute', 'left:50%', 'bottom:calc(100% + 1px)',
+        'transform:translateX(-50%)',
         'color:#8DFC0F', 'font-weight:bold',
         'font-size:' + (isMobile ? '11px' : '13px'),
         'text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000',
         'pointer-events:none', 'z-index:2'
       ].join(';');
       container.appendChild(levelText);
+      alignBarOverlays(isMobile);
 
       return 100;
     };
@@ -475,10 +412,7 @@
       disconnect: () => {
         clearTimeout(xpTimer);
         state.xpBarRef = null;
-        document.querySelectorAll('[data-mf-xp-replaced]').forEach(el => {
-          delete el.dataset.mfXpReplaced;
-        });
-        document.querySelectorAll('.mf-xp-icons').forEach(el => el.remove());
+        removeBarOverlay('mf-xp-icons');
       }
     });
   }
@@ -557,7 +491,7 @@
       const health = game.info.health ?? 20;
       const food = game.info.food ?? 20;
       const absorption = game.info.absorption ?? 0;
-      const iconSize = 22;
+      const iconSize = VITAL_ICON_SIZE;
 
       const hardcore = game.serverInfo?.hardcore === true ||
                        game.serverInfo?.metadata?.hardcore === true;
@@ -571,58 +505,25 @@
       };
       // refs ausentes o a medias: el rastreo lento se encarga, no este tick
       if ((!bars.healthBar || !bars.foodBar) && !ghost) startBarFinder();
+      if (!bars.healthBar) removeBarOverlay('mf-hearts');
+      if (!bars.foodBar) removeBarOverlay('mf-food');
 
-      const healthLive = !!(bars.healthBar && bars.healthBar.querySelector('.mf-hearts'));
-      const foodLive = !!(bars.foodBar && bars.foodBar.querySelector('.mf-food'));
-      const overlayKey = [health, food, absorption, hardcore, ghost, iconSize, healthLive, foodLive,
-        bars.healthBar === lastHealthBar, bars.foodBar === lastFoodBar].join(':');
-      // mismas cifras y mismas barras: esta ronda el dom descansa
-      if (overlayKey === lastOverlayKey) return;
+      const healthLive = !bars.healthBar || barOverlays.get('mf-hearts')?.overlay.parentElement === bars.healthBar;
+      const foodLive = !bars.foodBar || barOverlays.get('mf-food')?.overlay.parentElement === bars.foodBar;
+      const overlayKey = [health, food, absorption, hardcore, ghost, iconSize, GUI_BASE].join(':');
+      if (overlayKey === lastOverlayKey && healthLive && foodLive &&
+          bars.healthBar === lastHealthBar && bars.foodBar === lastFoodBar) return;
       lastOverlayKey = overlayKey;
-
-      const nuke = (el) => {
-        if (!el) return;
-        el.style.background = 'transparent';
-        el.style.backgroundColor = 'transparent';
-        el.style.backgroundImage = 'none';
-        el.style.border = 'none';
-        el.style.boxShadow = 'none';
-        el.style.outline = 'none';
-        el.dataset.mfReplaced = '1';
-      };
+      lastHealthBar = bars.healthBar;
+      lastFoodBar = bars.foodBar;
 
       if (bars.healthBar) {
-        const bar = bars.healthBar;
-        nuke(bar);
-        nuke(bar.parentElement);
-        nuke(bar.parentElement?.parentElement);
-
-        bar.querySelectorAll('*').forEach(child => {
-          if (child.classList.contains('mf-hearts') || child.closest('.mf-hearts')) return;
-          child.style.background = 'transparent';
-          child.style.backgroundColor = 'transparent';
-          child.style.backgroundImage = 'none';
-          child.style.border = 'none';
-          child.style.boxShadow = 'none';
-        });
-
-        let hearts = bar.querySelector('.mf-hearts');
-        if (!hearts) {
-          bar.innerHTML = '';
-          hearts = document.createElement('div');
-          hearts.className = 'mf-hearts';
-          bar.appendChild(hearts);
-        } else {
-          Array.from(bar.children).forEach(child => {
-            if (child !== hearts) child.remove();
-          });
-        }
-
-        hearts.innerHTML = '';
-        hearts.style.cssText = 'position:relative;display:flex;gap:2px;align-items:center;opacity:' + guiOpacity + ';transition:opacity 0.3s;';
+        const hearts = mountBarOverlay(bars.healthBar, 'mf-hearts');
+        hearts.replaceChildren();
+        hearts.style.cssText = 'display:flex;gap:2px;align-items:center;opacity:' + guiOpacity + ';transition:opacity 0.3s;';
 
         const redRow = document.createElement('div');
-        redRow.style.cssText = 'display:flex;gap:2px;align-items:center;';
+        redRow.style.cssText = 'display:flex;gap:2px;align-items:center;max-width:100%;';
         for (let i = 0; i < 10; i++) {
           const heartValue = health - i * 2;
           let iconFile;
@@ -639,7 +540,7 @@
           img.src = GUI_BASE + iconFile;
           img.style.cssText = [
             'height:' + iconSize + 'px', 'width:' + iconSize + 'px',
-            'image-rendering:pixelated', 'object-fit:contain'
+            'image-rendering:pixelated', 'object-fit:contain', 'min-width:0'
           ].join(';');
           redRow.appendChild(img);
         }
@@ -648,7 +549,8 @@
         const absorptionHearts = Math.ceil(absorption / 2);
         if (absorptionHearts > 0) {
           const goldRow = document.createElement('div');
-          goldRow.style.cssText = 'position:absolute;top:0;left:0;display:flex;gap:2px;align-items:center;pointer-events:none;';
+          goldRow.style.cssText = 'position:absolute;top:50%;left:0;transform:translateY(-50%);display:flex;' +
+            'gap:2px;align-items:center;max-width:100%;pointer-events:none;';
           for (let i = 0; i < absorptionHearts; i++) {
             const heartValue = absorption - i * 2;
             let iconFile;
@@ -659,47 +561,19 @@
             img.src = GUI_BASE + iconFile;
             img.style.cssText = [
               'height:' + iconSize + 'px', 'width:' + iconSize + 'px',
-              'image-rendering:pixelated', 'object-fit:contain'
+              'image-rendering:pixelated', 'object-fit:contain', 'min-width:0'
             ].join(';');
             goldRow.appendChild(img);
           }
           hearts.appendChild(goldRow);
         }
-        lastHealthBar = bars.healthBar;
       }
 
       if (bars.foodBar) {
-        const bar = bars.foodBar;
-        nuke(bar);
-        nuke(bar.parentElement);
-        nuke(bar.parentElement?.parentElement);
-
-        bar.querySelectorAll('*').forEach(child => {
-          if (child.classList.contains('mf-food') || child.closest('.mf-food')) return;
-          child.style.background = 'transparent';
-          child.style.backgroundColor = 'transparent';
-          child.style.backgroundImage = 'none';
-          child.style.border = 'none';
-          child.style.boxShadow = 'none';
-        });
-
-        let foodIcons = bar.querySelector('.mf-food');
-        if (!foodIcons) {
-          bar.innerHTML = '';
-          foodIcons = document.createElement('div');
-          foodIcons.className = 'mf-food';
-          foodIcons.style.cssText = 'display:flex;gap:2px;align-items:center;flex-direction:row-reverse;';
-          bar.appendChild(foodIcons);
-        } else {
-          Array.from(bar.children).forEach(child => {
-            if (child !== foodIcons) child.remove();
-          });
-        }
-
-        foodIcons.style.opacity = guiOpacity;
-        foodIcons.style.transition = 'opacity 0.3s';
-
-        foodIcons.innerHTML = '';
+        const foodIcons = mountBarOverlay(bars.foodBar, 'mf-food');
+        foodIcons.style.cssText = 'display:flex;gap:2px;align-items:center;flex-direction:row-reverse;opacity:' +
+          guiOpacity + ';transition:opacity 0.3s;';
+        foodIcons.replaceChildren();
         for (let i = 0; i < 10; i++) {
           const foodValue = food - i * 2;
           let iconFile;
@@ -710,12 +584,12 @@
           img.src = GUI_BASE + iconFile;
           img.style.cssText = [
             'height:' + iconSize + 'px', 'width:' + iconSize + 'px',
-            'image-rendering:pixelated', 'object-fit:contain'
+            'image-rendering:pixelated', 'object-fit:contain', 'min-width:0'
           ].join(';');
           foodIcons.appendChild(img);
         }
-        lastFoodBar = bars.foodBar;
       }
+      alignBarOverlays(game.isMobile);
     }, 200);
   }
 
@@ -731,14 +605,25 @@
     state.overlay = null;
     state.healthBarRef = null;
     state.foodBarRef = null;
-    document.querySelectorAll('[data-mf-replaced]').forEach(el => {
-      el.style.cssText = '';
-      delete el.dataset.mfReplaced;
-    });
+    removeBarOverlay('mf-hearts');
+    removeBarOverlay('mf-food');
   }
 
   function initPatches() {
+    barStyles = document.createElement('style');
+    // Hide the native paint while allowing overlays to inherit the game's HUD visibility.
+    barStyles.textContent = [
+      PATCHED_BAR + ' { background:transparent !important; border-color:transparent !important;' +
+        'box-shadow:none !important; color:transparent !important; text-shadow:none !important;' +
+        'overflow:visible !important; }',
+      '[data-mf-gui-bar="relative"] { position:relative !important; }',
+      PATCHED_BAR + ' > :not(' + GUI_OVERLAY + ') { visibility:hidden !important; }',
+      PATCHED_BAR + ' > ' + GUI_OVERLAY + ' { position:absolute;inset:0;pointer-events:none;box-sizing:border-box; }',
+      PATCHED_BAR + ' > :is(.mf-hearts, .mf-food) { transform:translateY(var(--mf-bar-shift, 0px)); }'
+    ].join('\n');
+    (document.head || document.documentElement).appendChild(barStyles);
     patchPlayerList();
+    patchXPBar();
     patchDebugStats();
     createHealthFoodOverlay();
   }
@@ -748,7 +633,6 @@
     state.enabled = true;
     // se rearma el vigía del bundle, que el disable lo mandó a dormir
     scriptObserver.observe(document.documentElement, { childList: true, subtree: true });
-    void 0;
     initPatches();
   }
 
@@ -760,12 +644,9 @@
     state.observers = [];
     if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
     removeHealthFoodOverlay();
-    state.xpBarRef = null;
-    document.querySelectorAll('.wifi-icon-patch, .wifi-debug-icon, .mf-xp-icons, .mf-xp-level').forEach(el => el.remove());
-    document.querySelectorAll('[data-mf-xp-replaced]').forEach(el => {
-      el.style.cssText = '';
-      delete el.dataset.mfXpReplaced;
-    });
+    barStyles?.remove();
+    barStyles = null;
+    document.querySelectorAll('.wifi-icon-patch, .wifi-debug-icon').forEach(el => el.remove());
   }
 
   document.addEventListener('minifeather:guipatch-config', (e) => {
