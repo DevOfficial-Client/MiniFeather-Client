@@ -330,7 +330,8 @@ test('integración estática completa', () => {
   assert.match(panel, /setModuleEnabled\('kotoSky', settings\.kotoSky\)/, 'boot');
   assert.match(panel, /minifeather:kotosky-config/, 'evento de config');
   assert.match(panel, /koto: 'kotoSky', kotosky: 'kotoSky'/, 'aliases de comando');
-  assert.match(panel, /kotoSky: \['[kvb+.]{8}'/, 'icono pixel en el mapa');
+  assert.match(panel, /const MF_PIXEL_ICON_NAMES = Object\.freeze\(\[[\s\S]*?'kotoSky'/);
+  assert.equal(fs.readFileSync(path.join(ROOT, 'assets/ui/kotoSky/00.png')).readUInt32BE(16), 64);
 
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   assert.ok(

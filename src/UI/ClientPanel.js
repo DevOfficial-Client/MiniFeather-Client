@@ -3920,7 +3920,7 @@
 
   function iconSvg(name, className = '') {
     name = MF_PIXEL_ICON_ALIASES[name] || name;
-    if (MF_PIXEL_ICONS[name]) return pixelIconPng(name, className);
+    if (MF_PIXEL_ICONS.has(name)) return pixelIconPng(name, className);
     const key = MF_SVG_ICONS[name] ? name : 'grid';
     return `<svg class="mf-svg-icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${MF_SVG_ICONS[key]}</svg>`;
   }
@@ -3928,100 +3928,23 @@
   const MF_PIXEL_ICON_ALIASES = {
     rainbow: 'shaders'
   };
-  const PIXEL_PALETTE = {
-    '.': null,
-    'k': '#1c2430', '-': '#536174', '+': '#b4c4d1', '#': '#f2e9d0',
-    'b': '#61d8f5', 'B': '#317ca4', 'g': '#81d985', 'G': '#367c59',
-    'r': '#f17678', 'R': '#a43e51', 'y': '#f6d36c', 'Y': '#ae7d36',
-    'o': '#f0a05a', 'O': '#a76139', 'p': '#f49fbe', 'P': '#9f5599',
-    'v': '#b999f4', 'V': '#66509a', 't': '#64d9c3', 'T': '#32877f',
-    'n': '#e7bd91', 'N': '#8c6448',
-    'd': '#382a2a', 'D': '#674435', 'm': '#ad7652',
-    'M': '#d5a071', 'f': '#f0caa1', 's': '#85553c',
-    'a': 'var(--mf-ui-accent,#ef3b3b)'
-  };
-
-  const MF_PIXEL_ICONS = {
-    home: ['...yy...','..y##y..','.y####y.','y######y','y##kk##y','y##kk##y','yyyyyyyy','........'],
-    grid: ['bb..gg..','BB..GG..','........','yy..pp..','YY..PP..','........','........','........'],
-    close: ['r......r','.r....r.','..r..r..','...rr...','...rr...','..r..r..','.r....r.','r......r'],
-    search: ['..BBBB..','.BbbbbB.','Bb....bB','Bb....bB','.BbbbbB.','..BBBBB.','.....BB.','......BB'],
-    heart: ['.RR..RR.','RppRRppR','RppppppR','.RppppR.','..RppR..','...RR...','........','........'],
-    settings: ['..+kk+..','.+----+.','+-YyyY-+','k-YkkY-k','k-YkkY-k','+-YyyY-+','.+----+.','..+kk+..'],
-    hud: ['BBBBBBBB','BbbbbbbB','BbkkkbbB','BbbbbbbB','BbggbybB','BbbbbbbB','BBBBBBBB','........'],
-    classicTitle: ['..YYYY..','.YyyyyY.','Yy##y#yY','Yy##y#yY','Yy#yy#yY','Yy##y#yY','.YyyyyY.','..YYYY..'],
-    menuHub: ['.kkkkkk.','kyykkbbk','kyykkbbk','kkkkkkkk','kbbkkyyk','kbbkkyyk','.kkkkkk.','........'],
-    render: ['...vv...','..v##v..','.v#yy#v.','vvyyyyvv','.v#yy#v.','..v##v..','...vv...','........'],
-    cosmetics: ['..pppp..','.p#kk#p.','pPp##pPp','pPp##pPp','.Pp##pP.','.Pp##pP.','..PPPP..','........'],
-    chat: ['.BBBBBB.','BbbbbbbB','BbkbbkbB','BbbbbbbB','BbbbbbbB','.BBBBBB.','..BB....','.BB.....'],
-    waypoints: ['..OOOO..','.OooooO.','OooyyooO','Ooy##yoO','.OoyyoO.','..OooO..','...OO...','........'],
-    movement: ['...gg...','..g##g..','.g####g.','gg#gg#gg','..g##g..','..g##g..','.GG..GG.','........'],
-    world: ['..BBBB..','.BbbggB.','BbggggbB','BggBBggB','BgggBbbB','.BggbbB.','..BBBB..','........'],
-    about: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yyyy#yyY','Yyyy#yyY','Yyy###yY','.YyyyyY.','..YYYY..'],
-    shaders: ['........','..VVVV..','.VvvvvV.','VvbbbbvV','.VvvvvV.','..VVVV..','..tttt..','........'],
-    kotoSky: ['kkkkkkkv','kkk+kkvb','kkk+kbvv','kkkbvbvv','kb+bvvv.','k+bvv+k.','+kbvv+kk','kkbvvkk+'],
-    waterStyle: ['........','.kkkkkk.','kbbbbbbk','bbbbbbbb','bbgbbgbb','bggbbggb','BBBBBBBB','........'],
-    experimental: ['...++...','...++...','..+kk+..','..+kk+..','.kggggk.','kgtvgggk','kggggggk','.kkkkkk.'],
-    keystrokes: ['...BB...','..ByyB..','..BBBB..','.BB.BB..','B##BB##B','BBBBBBBB','........','........'],
-    fpsCounter: ['........','......gg','....g.gg','..g.g.gg','..g.g.gg','ggg.g.gg','GGGGGGGG','........'],
-    cpsCounter: ['..kkkk..','.kbbbbk.','kb#bbbk.','kb#bbbk.','kbBbbBk.','kbbkbbbk','kbbbbbbk','.kkkkkk.'],
-    pingCounter: ['.BBBBBB.','BB....BB','...BB...','..BBBB..','..B..B..','...bb...','...##...','........'],
-    guiPatch: ['.kkkkkk.','krrrrrrk','kr####rk','krbbrbrk','krbbbbrk','kr####rk','krrrrrrk','.kkkkkk.'],
-    armorHud: ['..kk..kk','.k++++k.','k+b##b+k','k+b##b+k','k+b##b+k','.k+bb+k.','..k++k..','...kk...'],
-    coordinates: ['..BBBB..','.BbbbbB.','Bb..o.bB','Bb.ooo.B','Bb..o.bB','.BbbbbB.','..BBBB..','........'],
-    dynamicCrosshair: ['...gg...','...gg...','........','gggRRggg','gggRRggg','........','...gg...','...gg...'],
-    rebrand: ['...bb...','..bb....','.bbbyy..','bbb#yy..','.bb#y...','..bb....','..BB....','........'],
-    titanTiny: ['.BBB.oo.','.B#B.oo.','.BBB.oo.','.Bbb.oo.','BBbbBoOo','BBbbBoOo','B.BB.o.o','........'],
-    betterPlayerLayers: ['..nNNn..','.pbbbbp.','pPbbbbPp','pPbttbPp','pPbttbPp','.pbbbbp.','..BBBB..','........'],
-    healthNameTags: ['.RR..RR.','RrrrrrrR','RrrrrrrR','.RrrrrR.','..RrrR..','...RR...','.kkkkkk.','krrrrrrk'],
-    distanceNameTags: ['..BBBB..','.BbbbbB.','Bbbb##bB','BbbbbbbB','.BbbbbB.','..BBBB..','yy....yy','YYYYYYYY'],
-    damageParticles: ['r..r..r.','.rr.rr..','..Rrr...','rrr#rrr.','..rrR...','.rr.rr..','r..r..r.','........'],
-    waterSplash: ['...bb...','...bb...','b..bb..b','.bbbbbb.','..BBBB..','b.BBB.b.','.BBBBB..','........'],
-    shineAmbience: ['...yy...','...yy...','.y.##.y.','yy####yy','yy####yy','.y.##.y.','...yy...','...yy...'],
-    leafWind: ['....gg..','...gGg..','..gGGg..','.gGGg...','..gg..g.','...ggg..','.g....g.','..gggg..'],
-    patPat: ['...nn...','..nnnn..','.nNnNnn.','nnnnnnnn','nppppppn','.nppppn.','..NNNN..','........'],
-    duckMobs: ['..yyyy..','.y####y.','y#k##k#y','y######y','.yoooooo','..yyyyy.','..O..O..','........'],
-    crittersMobs: ['.NN..NN.','NnnNNnnN','NnnnnnnN','NnkNNknN','NnnnnnnN','.Nn##nN.','..NNNN..','........'],
-    critterSkins: ['.k....k.','.kp..pk.','.++++++.','++++++++','++k++k++','++++++++','.++nn++.','..+kk+..'],
-    experimentalGrassFlowers: ['........','..#..y..','.#y#.yoy','..#..y..','..g..g..','.g.gg.g.','.gGgGgG.','.gg.gg..'],
-    experimentalBetterAnimationCape: ['......#.','..y...#.','.rr.....','rrRr....','rRRrR...','rrRRrr..','.rRRrR..','..rrr...'],
-    deferredPipeline: ['........','...yy...','..y##y..','.y#oo#y.','.y#oo#y.','..y##y..','...yy...','........'],
-    antiTear: ['..BBBB..','.BbbbbB.','BbybbybB','BbbkkbbB','BbkkkkbB','BbkbbkbB','.BbbbbB.','..BBBB..'],
-    allayPets: ['..bbbb..','.bBBBBb.','bB#BB#Bb','bBBBBBBb','.bB##Bb.','..bBBb..','.bb..bb.','........'],
-    itemPhysics: ['..yyyy..','.yYYyYy.','yYy##yYy','yYy##yYy','.yYYyYy.','..yyyy..','...oo...','....o...'],
-    noWeather: ['..BBBB..','.BbbbbB.','BbbbbbbB','BBBBBBBB','...bb...','..bb....','.bb.....','RRRRRRRR'],
-    fullBright: ['...yy...','y..yy..y','..yyyy..','.yy##yy.','.yy##yy.','..yyyy..','y..yy..y','...yy...'],
-    vanillaAnimations: ['..nnnn..','.nNNNNn.','..n##n..','.nnnnnn.','n.nrrn.n','..nNNn..','..N..N..','.N....N.'],
-    handSway: ['...n....','..nn.n..','..nn.nn.','.nnnnnn.','nnnnnnnn','.nnNNNn.','..NNNN..','...NN...'],
-    playerAnims: ['..nnnn..','.nN##Nn.','..nnnn..','.bbnnrr.','bbbnrrr.','..bnnr..','..N..N..','.N....N.'],
-    firstPerson: ['..bbbb..','.bB##Bb.','bB....Bb','b..nn..b','...nn...','..rRr...','..rRr...','..N.N...'],
-    headLag: ['........','.b..nnnn','b..nN##n','.b..nnnn','..b.....','........','........','........'],
-    freshAnims: ['..gggg..','.gggggg.','.gkGGkg.','.gkGGkg.','.ggkkgg.','.gGkkGg.','.gGkkGg.','.gg..gg.'],
-    zoom: ['..BBBB..','.BbbbbB.','Bb....bB','Bb.##.bB','.BbbbbB.','..BBBBB.','.....BB.','......BB'],
-    cameraOverhaul: ['..kkkk..','.k++++k.','k+BBBB+k','k+B##B+k','k+B##B+k','k+BBBB+k','.k++++k.','..kkkk..'],
-    elytraFlight: ['bb....bb','Bbb..bbB','BBbb.bbB','.BBbbBB.','..B##B..','..B##B..','..B..B..','........'],
-    freecam: ['..VVVV..','.VvvvvV.','Vv.bb.vV','VvbbbbvV','Vv.bb.vV','.VvvvvV.','..VVVV..','........'],
-    freelook: ['..BBBB..','.BbbbbB.','Bb....bB','Bb.##.bB','Bb.##.bB','.BbbbbB.','..BBBB..','........'],
-    blockHighlight: ['.tttttt.','tT....Tt','t.TttT.t','t.T..T.t','t.TttT.t','tT....Tt','.tttttt.','........'],
-    autoSprint: ['gg......','gGG.....','..gggg..','...gggg.','..gggGG.','.GG..GG.','GG....GG','........'],
-    safeSneak: ['........','..gg....','.gGGg...','..gGGg..','.gggggg.','gggggggg','GGGGGGGG','........'],
-    antiAfk: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yyyy#yyY','Yyyy#yyY','YyyyyyyY','.YyyyyY.','..YYYY..'],
-    autoRespawn: ['..gggg..','.g....g.','g..rr..g','g.rrrr.g','g..rr..g','.g....g.','..ggggg.','......gg'],
-    autoReconnect: ['..gggg..','.gg..gg.','g......g','g.....gg','g....gg.','g....g..','.gg..g..','..gggg..'],
-    idlePlayerBot: ['..BBBB..','.BbbbbB.','Bb#bb#bB','BbbbbbbB','.BbyybB.','..BbbB..','.BB..BB.','........'],
-    rhythmParkour: ['....yy..','....yy..','....y...','..yyY...','.yYYY...','..GGG...','.GGGGG..','GGGGGGGG'],
-    cloudsPackNoise: ['..BBBB..','.BbbbbB.','BbbBbbbB','BbbbbbBB','BBBBBBBB','..b..b..','.b....b.','........'],
-    chatVideos: ['.kkkkkk.','kBbbbbBk','kBb##bBk','kBb###Bk','kBb##bBk','kBbbbbBk','kBBBBBBk','.kkkkkk.'],
-    chatLinks: ['.tttt...','tT..Tt..','tT...Tt.','..ttttt.','.tT...Tt','..tT..Tt','...tttt.','........'],
-    chatMemes: ['..YYYY..','.YyyyyY.','Yyk..kyY','YyyyyyyY','Yy#yy#yY','Yyy##yyY','.YyyyyY.','..YYYY..'],
-    gifChat: ['.pppppp.','pPbbbbPp','pPbkbbPp','pPbkkbPp','pPbkbbPp','pPbbbbPp','.pppppp.','..p..p..'],
-    clientChat: ['.BBBBBB.','BbbbbbbB','BbyyyybB','BbbbbbbB','Bbbb##bB','.BBBBBB.','..BB....','.BB.....'],
-    clientChatMentions: ['.BBBBBB.','BbbbbbbB','Bbyyyybb','BbyBBybb','BbyyBybb','.ByyyyB.','..BB....','.BB.....'],
-    discord: ['.vvvvvv.','vV....Vv','vVv..vVv','vV#vv#Vv','vVvvvvVv','.VvvvvV.','..VVVV..','........'],
-    startupAnimation: ['...rr...','..r##r..','.r#yy#r.','rryyyyrr','.r#yy#r.','..r##r..','...rr...','........'],
-    supportAds: ['..YYYY..','.YyyyyY.','Yyy##yyY','Yy#y#yyY','Yyy##yyY','YyyyyyyY','.YyyyyY.','..YYYY..'],
-    horror: ['..vvvv..','.vvvvvv.','vv#vv#vv','vvvvvvvv','vvvvvvvv','vVkkkkVv','.v.v.v..','v..v..v.']
-  };
+  const MF_PIXEL_ICON_NAMES = Object.freeze([
+    'home', 'grid', 'close', 'search', 'heart', 'settings',
+    'hud', 'classicTitle', 'menuHub', 'render', 'cosmetics', 'accounts',
+    'youtubeMusic', 'chat', 'waypoints', 'movement', 'world', 'about',
+    'shaders', 'kotoSky', 'waterStyle', 'experimental', 'keystrokes', 'fpsCounter',
+    'cpsCounter', 'pingCounter', 'guiPatch', 'armorHud', 'coordinates', 'dynamicCrosshair',
+    'rebrand', 'titanTiny', 'betterPlayerLayers', 'healthNameTags', 'distanceNameTags', 'damageParticles',
+    'waterSplash', 'shineAmbience', 'leafWind', 'patPat', 'duckMobs', 'crittersMobs',
+    'critterSkins', 'experimentalGrassFlowers', 'experimentalBetterAnimationCape', 'deferredPipeline', 'antiTear', 'allayPets',
+    'itemPhysics', 'noWeather', 'fullBright', 'vanillaAnimations', 'handSway', 'playerAnims',
+    'firstPerson', 'headLag', 'freshAnims', 'zoom', 'cameraOverhaul', 'elytraFlight',
+    'freecam', 'freelook', 'blockHighlight', 'autoSprint', 'safeSneak', 'antiAfk',
+    'autoRespawn', 'autoReconnect', 'idlePlayerBot', 'rhythmParkour', 'cloudsPackNoise', 'chatVideos',
+    'chatLinks', 'chatMemes', 'gifChat', 'clientChat', 'clientChatMentions', 'discord',
+    'startupAnimation', 'supportAds', 'horror'
+  ]);
+  const MF_PIXEL_ICONS = new Set(MF_PIXEL_ICON_NAMES);
 
   const MF_ANIMATED_PIXEL_ICONS = Object.freeze([
     'keystrokes', 'fpsCounter', 'cpsCounter', 'pingCounter', 'guiPatch', 'armorHud',
@@ -4038,7 +3961,7 @@
   const MF_PIXEL_FRAME_COUNT = 6;
 
   function pixelIconPng(name, className = '') {
-    const folder = name === 'patPat' ? 'patpat' : name;
+    const folder = name === 'patPat' ? 'patpat' : name === 'headLag' ? 'headlag' : name;
     const animated = MF_ANIMATED_PIXEL_ICON_SET.has(name);
     const url = chrome.runtime.getURL(`assets/ui/${folder}/00.png`);
     const animationData = animated ? ` data-mf-animated-icon="${name}" data-mf-frame="0"` : '';
@@ -4096,14 +4019,6 @@
     `).join('');
   }
 
-  function featherNavIcon(page) {
-    const icons = {
-      hud: 'hud', render: 'render', shaders: 'shaders', experimental: 'experimental', cosmetics: 'cosmetics', chat: 'chat',
-      waypoints: 'waypoints', movement: 'movement', world: 'world', settings: 'settings', about: 'about'
-    };
-    return iconSvg(icons[page] || 'grid');
-  }
-
   function moduleIcon(key) {
     return iconSvg(key === 'customShader' ? 'shaders' : key);
   }
@@ -4120,7 +4035,7 @@
             <div class="mf-feather-icon-tabs">
               ${NAV_ITEMS.filter(item => item.id !== 'dashboard').map(item => `
                 <button class="mf-feather-icon-tab ${activePage === item.id && !searchQuery ? 'active' : ''}" data-page="${item.id}" title="${t(item.labelKey)}">
-                  <span class="mf-feather-tab-icon">${featherNavIcon(item.id)}</span>
+                  <span class="mf-feather-tab-icon">${iconSvg(item.id)}</span>
                 </button>
               `).join('')}
             </div>
