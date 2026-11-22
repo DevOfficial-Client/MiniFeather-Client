@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261122035557
+// @version      4.19.0.20261122042201
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 023735a39e1dbea4d908daefeff22127e4f14076
- * builtAt : 2026-11-22T04:21:03.343Z
+ * commit  : 95bf24c50a77c678719f3102d499953fe88da5a9
+ * builtAt : 2026-11-22T04:22:22.909Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"023735a39e1dbea4d908daefeff22127e4f14076","builtAt":"2026-11-22T04:21:03.343Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"95bf24c50a77c678719f3102d499953fe88da5a9","builtAt":"2026-11-22T04:22:22.909Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
