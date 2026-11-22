@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MiniFeather Client (Mobile)
 // @namespace    devofficial-client
-// @version      4.19.0.20261122035337
+// @version      4.19.0.20261122035557
 // @updateURL    https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @downloadURL  https://raw.githubusercontent.com/DevOfficial-Client/MiniFeather-Client/main/dist/MiniFeatherClient.user.js
 // @description  minifeather client for miniblox -- userscript for ios (userscripts app + safari), firefox android and desktop
@@ -14,12 +14,12 @@
 // ==/UserScript==
 /* minifeather client bundle (no extension)
  * version : 4.19.0
- * commit  : 8c72f6b33964a9b776dccd3f589553a8b75ac198
- * builtAt : 2026-11-22T03:55:56.922Z
+ * commit  : 023735a39e1dbea4d908daefeff22127e4f14076
+ * builtAt : 2026-11-22T04:21:03.343Z
  */
 (function () {
   "use strict";
-window.__MF_BUILD__={"version":"4.19.0","commit":"8c72f6b33964a9b776dccd3f589553a8b75ac198","builtAt":"2026-11-22T03:55:56.922Z","pinned":true};
+window.__MF_BUILD__={"version":"4.19.0","commit":"023735a39e1dbea4d908daefeff22127e4f14076","builtAt":"2026-11-22T04:21:03.343Z","pinned":true};
 
 /* ==== mf module: src/Core/CompatShim.js ==== */
 // minifeather compatshim. pretends to be chrome.* so the client feels at home outside an extension.
@@ -43162,8 +43162,6 @@ const VEGETATION_PASS_THROUGH = new Set([
     const PREF_KEY = 'minifeather.autoReconnect';
     const CHECK_INTERVAL_MS = 2000;
     const RECONNECT_DELAY_MS = 3000;
-    const MAX_RETRIES = 3;
-    const MANUAL_EXIT_GRACE_MS = 60000;
 
     if (window.__MF_AUTO_RECONNECT__) return;
 
@@ -43171,10 +43169,12 @@ const VEGETATION_PASS_THROUGH = new Set([
         enabled: loadPreference(),
         game: null,
         lastServerId: '',
-        wasInGame: false,
-        manualExitAt: 0,
-        retries: 0,
-        patched: false
+        joinedServerId: '',
+        disconnectedServerId: '',
+        manualExitActive: false,
+        leavingServerId: '',
+        timer: null,
+        retries: 0
     };
 
     function loadPreference() {
@@ -43196,7 +43196,7 @@ const VEGETATION_PASS_THROUGH = new Set([
     }
 
     function findGame() {
-        const direct = [globalThis.miniblox, globalThis.game];
+        const direct = [globalThis.miniblox, globalThis.game, globalThis.__MB?.game];
         for (const value of direct) if (isGame(value)) return value;
 
         const element = document.querySelector('#react');
@@ -43210,59 +43210,98 @@ const VEGETATION_PASS_THROUGH = new Set([
                 }
             } catch (_) {}
         }
-        return null;
+        const waypointsGame = globalThis.__MINIFEATHER_WAYPOINTS__?.game;
+        return isGame(waypointsGame) ? waypointsGame : null;
     }
 
-    // El motor marca con 'io client disconnect' la salida iniciada por el propio
-    // cliente (boton Leave). Un kick o caida del transporte llega con otro motivo.
-    function installDisconnectHook(game) {
-        if (state.patched || typeof game.disconnect !== 'function') return;
-        const original = game.disconnect;
-        game.disconnect = function (reason) {
-            try {
-                if (String(reason || '').includes('io client disconnect')) {
-                    state.manualExitAt = Date.now();
-                }
-            } catch (_) {}
-            return original.call(this, reason);
-        };
-        state.patched = true;
+    function activeServerId(game) {
+        if (window.__MINIFEATHER_LOCAL_GAMES__?.active ||
+            (typeof game.inGame === 'function' && !game.inGame())) return '';
+        return String(game.serverInfo?.serverId || '');
+    }
+
+    function clearReconnect() {
+        state.disconnectedServerId = '';
+        if (state.timer !== null) clearTimeout(state.timer);
+        state.timer = null;
+    }
+
+    function markManualExit(game) {
+        state.manualExitActive = true;
+        state.leavingServerId = activeServerId(game);
+        state.joinedServerId = '';
+        clearReconnect();
+    }
+
+    function recordDisconnect(game) {
+        if (state.enabled && !state.manualExitActive && !state.disconnectedServerId) {
+            state.disconnectedServerId = activeServerId(game) || state.joinedServerId;
+        }
+    }
+
+    function installHooks(game) {
+        function before(name, callback) {
+            const original = game[name];
+            if (typeof original !== 'function') return;
+            game[name] = function (...args) {
+                if (this === game) callback(...args);
+                return original.apply(this, args);
+            };
+        }
+
+        before('disconnect', reason => {
+            // Leave Game calls disconnect() without a reason. Kicks and
+            // transport failures use disconnect(reason) with a message.
+            if (reason == null || reason === '' || reason === 'io client disconnect') markManualExit(game);
+            else recordDisconnect(game);
+        });
+        before('onSocketDisconnect', reason => {
+            // A server-side close can arrive here directly, with no message.
+            if (reason === 'io client disconnect') markManualExit(game);
+            else recordDisconnect(game);
+        });
+        before('cancelConnection', () => markManualExit(game));
+        before('connect', () => {
+            clearReconnect();
+            state.joinedServerId = '';
+            state.manualExitActive = false;
+            state.leavingServerId = '';
+        });
     }
 
     function tick() {
         if (!state.enabled) return;
 
-        const game = state.game || findGame();
-        if (!isGame(game)) return;
-        state.game = game;
-        installDisconnectHook(game);
-
-        const serverId = String(game.serverInfo?.serverId || game.connectingServerId || '');
-        const inGame = typeof game.inGame === 'function' ? !!game.inGame() : !!serverId;
-
-        if (inGame && serverId) {
-            state.lastServerId = serverId;
-            state.wasInGame = true;
-            state.retries = 0;
+        if (!state.game) {
+            const game = findGame();
+            if (!game) return;
+            state.game = game;
+            installHooks(game);
+        }
+        const game = state.game;
+        const serverId = activeServerId(game);
+        if (serverId) {
+            if (serverId !== state.leavingServerId) {
+                state.joinedServerId = serverId;
+                state.lastServerId = serverId;
+                state.manualExitActive = false;
+                state.leavingServerId = '';
+                state.retries = 0;
+            }
             return;
         }
 
-        if (!state.wasInGame) return;
-
-        state.wasInGame = false;
-
-        if (Date.now() - state.manualExitAt < MANUAL_EXIT_GRACE_MS) return;
-        if (!state.lastServerId) return;
-        if (state.retries >= MAX_RETRIES) {
-            console.warn(TAG, `gave up after ${MAX_RETRIES} attempts`);
-            return;
-        }
-
-        state.retries++;
-        const target = state.lastServerId;
-        console.info(TAG, `disconnected — reconnecting to ${target} (attempt ${state.retries}/${MAX_RETRIES})`);
-        setTimeout(() => {
-            if (!state.enabled) return;
+        state.leavingServerId = '';
+        state.joinedServerId = '';
+        if (!state.disconnectedServerId || state.timer !== null) return;
+        const target = state.disconnectedServerId;
+        state.disconnectedServerId = '';
+        state.timer = setTimeout(() => {
+            state.timer = null;
+            if (!state.enabled || state.manualExitActive || activeServerId(game) ||
+                game.connectingServerId || window.__MINIFEATHER_LOCAL_GAMES__?.active) return;
+            state.retries++;
+            console.info(TAG, 'disconnected — reconnecting to', target);
             try {
                 game.connect(target);
             } catch (error) {
@@ -43271,13 +43310,19 @@ const VEGETATION_PASS_THROUGH = new Set([
         }, RECONNECT_DELAY_MS);
     }
 
+    function setEnabled(enabled) {
+        state.enabled = enabled;
+        if (!enabled) clearReconnect();
+        savePreference();
+    }
+
+    tick();
     setInterval(tick, CHECK_INTERVAL_MS);
 
     document.addEventListener('minifeather:auto-reconnect-config', event => {
         try {
             const detail = JSON.parse(typeof event.detail === 'string' ? event.detail : '{}');
-            state.enabled = detail.enabled === true;
-            savePreference();
+            setEnabled(detail.enabled === true);
         } catch (_) {}
     });
 
@@ -43290,17 +43335,16 @@ const VEGETATION_PASS_THROUGH = new Set([
                 enabled: state.enabled,
                 lastServerId: state.lastServerId,
                 retries: state.retries,
-                manualExitActive: Date.now() - state.manualExitAt < MANUAL_EXIT_GRACE_MS
+                manualExitActive: state.manualExitActive
             };
         },
         toggle(force) {
-            state.enabled = typeof force === 'boolean' ? force : !state.enabled;
-            savePreference();
+            setEnabled(typeof force === 'boolean' ? force : !state.enabled);
             return state.enabled;
         }
     };
 
-    window.__MF_AUTO_RECONNECT__ = true;
+    window.__MF_AUTO_RECONNECT__ = 2;
 })();
 
 //# sourceURL=MF:src/World/AutoReconnect.js

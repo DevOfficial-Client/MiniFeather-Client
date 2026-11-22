@@ -135,6 +135,7 @@
       'src/Studio/MF_Peer.js': 'PEER_POSE_VALIDATION_VERSION = 1',
       'src/Render/CameraOverhaul.js': 'CAMERA_ANGLE_VALIDATION_VERSION = 1',
       'src/World/RhythmParkour.js': 'RHYTHM_PEER_TEXT_VERSION = 1',
+      'src/World/AutoReconnect.js': '__MF_AUTO_RECONNECT__ = 2',
       'src/Chat/ClientCommands.js': ['COMPLETION_CONTEXT_VERSION = 3', 'BARITONE_PLACEMENT_COMMANDS_VERSION = 1',
         'BARITONE_PATH_COMMANDS_VERSION = 1'],
       'src/Render/FullBright.js': 'FULLBRIGHT_SETTINGS_VERSION = 1',
