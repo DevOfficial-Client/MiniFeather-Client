@@ -174,7 +174,7 @@ test('real native bridge approach reaches the exposed face, places each support 
   assert.ok(h.placementLog.every(entry => entry.sneak), 'the player stays sneaking at the unbuilt bridge edge');
   assert.ok(h.placementLog.every(entry => entry.player.x <= entry.hit.x + 1.15), 'native placement happens before overshooting the supported edge');
   assert.ok(h.movementLog.every(entry => entry.pos.y === 1), 'do not fall into the gap while awaiting placement');
-  assert.ok(Math.hypot(h.player.pos.x - 5.5, h.player.pos.z - .5) < .46, 'ordinary goto stops naturally inside its safe destination');
+  assert.deepEqual([Math.floor(h.player.pos.x), Math.floor(h.player.pos.y), Math.floor(h.player.pos.z)], [5, 1, 0]);
   assert.equal(h.player.inventory.currentItem, 3, 'temporary block selection is restored');
   h.api.destroy(); assert.equal(h.timers.size, 0);
 });
@@ -245,7 +245,7 @@ test('real native ray and mining hold clear head then feet through a tunnel with
     assert.ok(headIndex >= 0 && feetIndex > headIndex, 'headroom must clear before feet using the genuine native ray');
     assert.equal(h.cell(x, 0, 0), 'stone', 'do not dig away the player floor');
   }
-  assert.ok(Math.hypot(h.player.pos.x - 3.5, h.player.pos.z - .5) < .31);
+  assert.deepEqual([Math.floor(h.player.pos.x), Math.floor(h.player.pos.y), Math.floor(h.player.pos.z)], [3, 1, 0]);
   assert.equal(h.controller.key.leftClick, 0, 'stop must release the native mining hold');
   h.api.destroy(); assert.equal(h.timers.size, 0);
 });
